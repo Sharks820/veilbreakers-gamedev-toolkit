@@ -1,0 +1,8 @@
+fastmcp>=3.0.0
+pymeshlab>=2023.12
+xatlas>=0.0.9
+fast-simplification>=0.1.7
+Pillow>=10.0.0
+numpy>=1.24.0
+requests>=2.31.0
+websockets>=12.0
