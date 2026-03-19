@@ -14,9 +14,9 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **ARCH-03**: No raw exec() — all Blender commands dispatched through validated command handlers
 - [ ] **ARCH-04**: Every mutation tool returns viewport screenshot as visual proof
 - [ ] **ARCH-05**: Structured error responses with recovery suggestions on all tool failures
-- [ ] **ARCH-06**: FastMCP 3.0 server skeleton with stdio transport for all three servers
-- [ ] **ARCH-07**: Blender TCP socket bridge with timeout handling and reconnection
-- [ ] **ARCH-08**: Contact sheet rendering system (multiple frames/angles in single image)
+- [x] **ARCH-06**: FastMCP 3.0 server skeleton with stdio transport for all three servers
+- [x] **ARCH-07**: Blender TCP socket bridge with timeout handling and reconnection
+- [x] **ARCH-08**: Contact sheet rendering system (multiple frames/angles in single image)
 
 ### Mesh Topology & Editing
 
@@ -213,9 +213,9 @@ Deferred to future release.
 | ARCH-03 | Phase 1: Foundation & Server Architecture | Pending |
 | ARCH-04 | Phase 1: Foundation & Server Architecture | Pending |
 | ARCH-05 | Phase 1: Foundation & Server Architecture | Pending |
-| ARCH-06 | Phase 1: Foundation & Server Architecture | Pending |
-| ARCH-07 | Phase 1: Foundation & Server Architecture | Pending |
-| ARCH-08 | Phase 1: Foundation & Server Architecture | Pending |
+| ARCH-06 | Phase 1: Foundation & Server Architecture | Complete |
+| ARCH-07 | Phase 1: Foundation & Server Architecture | Complete |
+| ARCH-08 | Phase 1: Foundation & Server Architecture | Complete |
 | MESH-01 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
 | MESH-02 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
 | MESH-03 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
