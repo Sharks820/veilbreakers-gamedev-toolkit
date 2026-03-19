@@ -31,11 +31,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### UV Mapping
 
-- [ ] **UV-01**: UV quality analysis (stretch, overlap, island count, texel density, seam placement)
-- [ ] **UV-02**: Automatic UV unwrapping via xatlas with configurable quality
-- [ ] **UV-03**: UV island packing optimization
-- [ ] **UV-04**: Lightmap UV (UV2) generation for Unity
-- [ ] **UV-05**: Texel density equalization across islands
+- [x] **UV-01**: UV quality analysis (stretch, overlap, island count, texel density, seam placement)
+- [x] **UV-02**: Automatic UV unwrapping via xatlas with configurable quality
+- [x] **UV-03**: UV island packing optimization
+- [x] **UV-04**: Lightmap UV (UV2) generation for Unity
+- [x] **UV-05**: Texel density equalization across islands
 
 ### Texturing
 
@@ -224,11 +224,11 @@ Deferred to future release.
 | MESH-06 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
 | MESH-07 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
 | MESH-08 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
-| UV-01 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
-| UV-02 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
-| UV-03 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
-| UV-04 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
-| UV-05 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| UV-01 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
+| UV-02 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
+| UV-03 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
+| UV-04 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
+| UV-05 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
 | TEX-01 | Phase 3: Texturing & Asset Generation | Pending |
 | TEX-02 | Phase 3: Texturing & Asset Generation | Pending |
 | TEX-03 | Phase 3: Texturing & Asset Generation | Pending |
