@@ -667,15 +667,17 @@ def generate_animator_controller_script(
         from_idx = state_index.get(from_s)
         to_idx = state_index.get(to_s)
         if from_idx is not None and to_idx is not None:
+            safe_from = _sanitize_cs_identifier(from_s)
+            safe_to = _sanitize_cs_identifier(to_s)
             trans_code += f"""
-            var trans_{from_s}_{to_s} = state_{from_idx}.AddTransition(state_{to_idx});
-            trans_{from_s}_{to_s}.hasExitTime = {has_exit};"""
+            var trans_{safe_from}_{safe_to} = state_{from_idx}.AddTransition(state_{to_idx});
+            trans_{safe_from}_{safe_to}.hasExitTime = {has_exit};"""
             for cond in t.get("conditions", []):
                 c_param = cond.get("param", "")
                 c_mode = cond.get("mode", "Greater")
                 c_thresh = cond.get("threshold", 0)
                 trans_code += f"""
-            trans_{from_s}_{to_s}.AddCondition(AnimatorConditionMode.{c_mode}, {c_thresh}f, "{c_param}");"""
+            trans_{safe_from}_{safe_to}.AddCondition(AnimatorConditionMode.{c_mode}, {c_thresh}f, "{c_param}");"""
 
     # Build blend tree code
     bt_code = ""
@@ -697,19 +699,21 @@ def generate_animator_controller_script(
             if (btMotion_{bt_name}_{thresh} != null)
                 blendTree_{bt_name}.AddChild(btMotion_{bt_name}_{thresh}, {thresh}f);"""
 
+    safe_ctrl_name = _sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
+
     return f'''using UnityEngine;
 using UnityEditor;
 using UnityEditor.Animations;
 using System.IO;
 
-public static class VeilBreakers_AnimatorController_{name.replace(" ", "_")}
+public static class VeilBreakers_AnimatorController_{safe_ctrl_name}
 {{
-    [MenuItem("VeilBreakers/Scene/Create Animator/{name}")]
+    [MenuItem("VeilBreakers/Scene/Create Animator/{_sanitize_cs_string(name)}")]
     public static void Execute()
     {{
         try
         {{
-            string controllerPath = "Assets/Animations/{name}.controller";
+            string controllerPath = "Assets/Animations/{_sanitize_cs_string(name)}.controller";
             string dir = Path.GetDirectoryName(controllerPath);
             if (!AssetDatabase.IsValidFolder(dir))
             {{
@@ -736,9 +740,9 @@ public static class VeilBreakers_AnimatorController_{name.replace(" ", "_")}
 
             AssetDatabase.SaveAssets();
 
-            string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"create_animator\\", \\"name\\": \\"{name}\\", \\"controller_path\\": \\"" + controllerPath + "\\"}}";
+            string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"create_animator\\", \\"name\\": \\"{_sanitize_cs_string(name)}\\", \\"controller_path\\": \\"" + controllerPath + "\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
-            Debug.Log("[VeilBreakers] Animator controller '{name}' created at: " + controllerPath);
+            Debug.Log("[VeilBreakers] Animator controller '{_sanitize_cs_string(name)}' created at: " + controllerPath);
         }}
         catch (System.Exception ex)
         {{
@@ -912,9 +916,9 @@ using UnityEditor;
 using UnityEngine.Animations.Rigging;
 using System.IO;
 
-public static class VeilBreakers_AnimationRigging_{rig_name.replace(" ", "_")}
+public static class VeilBreakers_AnimationRigging_{_sanitize_cs_identifier(rig_name.replace(" ", "_").replace("-", "_"))}
 {{
-    [MenuItem("VeilBreakers/Scene/Setup Animation Rigging/{rig_name}")]
+    [MenuItem("VeilBreakers/Scene/Setup Animation Rigging/{_sanitize_cs_string(rig_name)}")]
     public static void Execute()
     {{
         try

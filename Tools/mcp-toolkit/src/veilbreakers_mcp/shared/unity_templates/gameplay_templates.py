@@ -761,11 +761,11 @@ def generate_behavior_tree_script(
 [CreateAssetMenu(menuName = "VeilBreakers/BehaviorTree/{safe_name}/{safe_nt}")]
 public class BT_{safe_nt}_{safe_name} : BT_Leaf_{safe_name}
 {{
-    public override NodeState Evaluate(BehaviorTreeRunner_{safe_name} runner)
+    public override NodeState_{safe_name} Evaluate(BehaviorTreeRunner_{safe_name} runner)
     {{
         // TODO: Implement {safe_nt} logic
         Debug.Log("[BT] {safe_nt} executing");
-        return NodeState.Success;
+        return NodeState_{safe_name}.Success;
     }}
 }}
 '''

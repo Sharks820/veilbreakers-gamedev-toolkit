@@ -24,6 +24,7 @@ def compose_contact_sheet(
         raise ValueError("No images to compose")
 
     images = [PILImage.open(p) for p in image_paths]
+    sheet = None
     try:
         w, h = images[0].size
         rows = math.ceil(len(images) / cols)
@@ -43,6 +44,8 @@ def compose_contact_sheet(
         sheet.save(buf, format="PNG", optimize=True)
         return buf.getvalue()
     finally:
+        if sheet is not None:
+            sheet.close()
         for img in images:
             img.close()
 
@@ -53,13 +56,19 @@ def resize_screenshot(
 ) -> bytes:
     """Resize a screenshot to fit within max_size while preserving aspect ratio."""
     img = PILImage.open(io.BytesIO(image_bytes))
-    if max(img.size) <= max_size:
-        return image_bytes
+    try:
+        if max(img.size) <= max_size:
+            return image_bytes
 
-    ratio = max_size / max(img.size)
-    new_size = (int(img.width * ratio), int(img.height * ratio))
-    img = img.resize(new_size, PILImage.Resampling.LANCZOS)
+        ratio = max_size / max(img.size)
+        new_size = (int(img.width * ratio), int(img.height * ratio))
+        resized = img.resize(new_size, PILImage.Resampling.LANCZOS)
+    finally:
+        img.close()
 
-    buf = io.BytesIO()
-    img.save(buf, format="PNG", optimize=True)
-    return buf.getvalue()
+    try:
+        buf = io.BytesIO()
+        resized.save(buf, format="PNG", optimize=True)
+        return buf.getvalue()
+    finally:
+        resized.close()

@@ -349,7 +349,7 @@ def _validate_ik_params(params: dict) -> dict:
         errors.append("bone_name must be a non-empty string")
 
     # chain_length
-    chain_length = params.get("chain_length", 0)
+    chain_length = params.get("chain_length", 2)
     if not isinstance(chain_length, (int, float)):
         errors.append("chain_length must be a number")
     elif chain_length < 1:

@@ -13,11 +13,11 @@ from ..security import validate_code
 
 
 def _make_module_proxy(mod):
-    """Create a read-only proxy of a module's public attributes.
+    """Create a fresh read-only-ish proxy of a module's public attributes.
 
-    Prevents sandboxed code from monkey-patching shared modules
-    (e.g., math.sin = lambda x: 'HACKED') which would corrupt the
-    host Blender process.
+    Returns a new SimpleNamespace each call so that sandbox mutations
+    (e.g., ``math.sin = lambda x: 'HACKED'``) only affect the current
+    execution and do not persist to subsequent sandbox runs.
     """
     ns = types.SimpleNamespace()
     for name in dir(mod):
@@ -88,29 +88,55 @@ _SAFE_BUILTINS = {
     "ZeroDivisionError": ZeroDivisionError,
 }
 
-# Frozen module proxies — created once, prevent monkey-patching of
-# real modules. bpy/mathutils/bmesh are passed as-is since they're
-# the purpose of the sandbox and need full mutability.
-_MATH_PROXY = _make_module_proxy(math)
-_RANDOM_PROXY = _make_module_proxy(random)
-_JSON_PROXY = _make_module_proxy(json_module)
-
 
 def _build_exec_globals() -> dict:
     """Build a fresh globals dict for each exec call.
 
     Returns a new dict with a fresh copy of _SAFE_BUILTINS each time,
-    preventing cross-execution builtins poisoning.
+    preventing cross-execution builtins poisoning.  Module proxies for
+    math/random/json are also created fresh so that monkey-patching
+    (e.g. ``math.sin = lambda x: 1``) does not persist across runs.
+
+    Includes a restricted __import__ so that ``import bpy`` and similar
+    statements work at runtime (they resolve from the pre-injected
+    sandbox modules rather than the real import machinery).
     """
-    return {
-        "__builtins__": dict(_SAFE_BUILTINS),
+    # Map of module names to sandbox-provided objects.
+    # bpy/mathutils/bmesh are passed as-is (need full mutability).
+    # math/random/json get fresh proxies each call to prevent poisoning.
+    sandbox_modules = {
         "bpy": bpy,
         "mathutils": mathutils,
         "bmesh": bmesh,
-        "math": _MATH_PROXY,
-        "random": _RANDOM_PROXY,
-        "json": _JSON_PROXY,
+        "math": _make_module_proxy(math),
+        "random": _make_module_proxy(random),
+        "json": _make_module_proxy(json_module),
     }
+
+    def _restricted_import(name, globals=None, locals=None, fromlist=(), level=0):
+        """Import hook that only resolves pre-approved sandbox modules.
+
+        This enables ``import bpy`` / ``from mathutils import Vector``
+        to work at runtime while blocking all other imports.
+        """
+        if level != 0:
+            raise ImportError("relative imports are not allowed")
+        root = name.split(".")[0]
+        mod = sandbox_modules.get(root)
+        if mod is None:
+            raise ImportError(
+                f"Import of '{name}' is not allowed in sandbox"
+            )
+        # For dotted imports like 'bpy.ops', return the root so
+        # attribute access resolves naturally.
+        return mod
+
+    builtins = dict(_SAFE_BUILTINS)
+    builtins["__import__"] = _restricted_import
+
+    result = {"__builtins__": builtins}
+    result.update(sandbox_modules)
+    return result
 
 
 def handle_execute_code(params: dict) -> dict:

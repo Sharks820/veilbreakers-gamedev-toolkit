@@ -397,6 +397,10 @@ def _astar(
     while open_set:
         f, g, cr, cc = heapq.heappop(open_set)
 
+        # Skip stale heap entries whose cost has been superseded
+        if g > g_score.get((cr, cc), float("inf")):
+            continue
+
         if cr == dr and cc == dc:
             # Reconstruct path
             path = [(cr, cc)]
