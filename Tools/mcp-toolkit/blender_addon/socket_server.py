@@ -8,6 +8,8 @@ import bpy
 
 from .handlers import COMMAND_HANDLERS
 
+MAX_MESSAGE_SIZE = 64 * 1024 * 1024  # 64 MB
+
 
 class BlenderMCPServer:
     def __init__(self, port: int = 9876):
@@ -48,24 +50,37 @@ class BlenderMCPServer:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self._server_socket.bind(("localhost", self.port))
-        self._server_socket.listen(1)
+        self._server_socket.listen(5)
         self._server_socket.settimeout(1.0)
-        while self.running:
+        try:
+            while self.running:
+                try:
+                    client, addr = self._server_socket.accept()
+                    threading.Thread(
+                        target=self._handle_client, args=(client,), daemon=True
+                    ).start()
+                except socket.timeout:
+                    continue
+                except OSError:
+                    if self.running:
+                        raise
+                    break
+        finally:
             try:
-                client, addr = self._server_socket.accept()
-                self._handle_client(client)
-            except socket.timeout:
-                continue
+                self._server_socket.close()
             except OSError:
-                if self.running:
-                    raise
-                break
+                pass
 
     def _handle_client(self, client_sock: socket.socket):
         """Background thread - NO bpy calls here."""
         try:
+            client_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
             length_bytes = self._receive_exactly(client_sock, 4)
             length = struct.unpack(">I", length_bytes)[0]
+            if length > MAX_MESSAGE_SIZE:
+                raise ValueError(
+                    f"Message too large: {length} bytes (max {MAX_MESSAGE_SIZE})"
+                )
             json_bytes = self._receive_exactly(client_sock, length)
             command = json.loads(json_bytes)
 
@@ -105,18 +120,21 @@ class BlenderMCPServer:
                 pass
 
     def _receive_exactly(self, sock: socket.socket, n: int) -> bytes:
-        data = b""
-        while len(data) < n:
-            chunk = sock.recv(n - len(data))
+        chunks: list[bytes] = []
+        received = 0
+        while received < n:
+            chunk = sock.recv(n - received)
             if not chunk:
                 raise ConnectionError("Connection closed")
-            data += chunk
-        return data
+            chunks.append(chunk)
+            received += len(chunk)
+        return b"".join(chunks)
 
     def _process_commands(self) -> float:
         """MAIN THREAD via bpy.app.timers - safe for bpy calls."""
         try:
-            while not self.command_queue.empty():
+            # Process one command per tick to avoid freezing Blender UI
+            if not self.command_queue.empty():
                 cmd, event, container = self.command_queue.get_nowait()
                 try:
                     cmd_type = cmd.get("type", "unknown")
@@ -143,6 +161,7 @@ class BlenderMCPServer:
                     }
                 finally:
                     event.set()
-        except queue.Empty:
-            pass
+        except Exception as e:
+            # Outer guard — prevents timer from being silently unregistered
+            print(f"[VeilBreakers MCP] Timer error: {e}")
         return 0.05

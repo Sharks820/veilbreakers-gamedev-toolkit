@@ -11,10 +11,11 @@ bl_info = {
 import bpy
 
 _server = None
+_auto_start_timer = None
 
 
-def _auto_start():
-    """Auto-start the MCP server after addon loads."""
+def _deferred_auto_start():
+    """One-shot timer: auto-start the MCP server after addon loads."""
     global _server
     try:
         from .socket_server import BlenderMCPServer
@@ -23,6 +24,7 @@ def _auto_start():
         print("[VeilBreakers MCP] Server auto-started on port 9876")
     except Exception as e:
         print(f"[VeilBreakers MCP] Auto-start failed: {e}")
+    return None  # Do not reschedule
 
 
 class VEILBREAKERS_OT_start_mcp_server(bpy.types.Operator):
@@ -85,13 +87,18 @@ _classes = (
 
 
 def register():
+    global _auto_start_timer
     for cls in _classes:
         bpy.utils.register_class(cls)
-    bpy.app.timers.register(lambda: (_auto_start(), None)[-1], first_interval=1.0)
+    _auto_start_timer = _deferred_auto_start
+    bpy.app.timers.register(_auto_start_timer, first_interval=1.0)
 
 
 def unregister():
-    global _server
+    global _server, _auto_start_timer
+    if _auto_start_timer is not None and bpy.app.timers.is_registered(_auto_start_timer):
+        bpy.app.timers.unregister(_auto_start_timer)
+        _auto_start_timer = None
     if _server is not None:
         _server.stop()
         _server = None
