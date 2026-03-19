@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "vb-blender": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-blender-mcp"],
+      "env": {
+        "BLENDER_PORT": "9876",
+        "BLENDER_HOST": "localhost"
+      }
+    }
+  }
+}
