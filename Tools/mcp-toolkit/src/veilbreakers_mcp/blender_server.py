@@ -1027,6 +1027,219 @@ async def concept_art(
     return "Unknown action"
 
 
+# ---------------------------------------------------------------------------
+# Compound tool: blender_rig
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def blender_rig(
+    action: Literal[
+        "analyze_mesh",        # RIG-01: Mesh analysis for rigging
+        "apply_template",      # RIG-02: Apply creature rig template
+        "build_custom",        # RIG-03: Custom rig from limb library
+        "setup_facial",        # RIG-04: Facial rig with expressions
+        "setup_ik",            # RIG-05: IK chain setup
+        "setup_spring_bones",  # RIG-06: Spring/jiggle bone system
+        "auto_weight",         # RIG-07: Auto weight painting
+        "test_deformation",    # RIG-08: Deformation test at 8 poses
+        "validate",            # RIG-09: Rig validation with grading
+        "fix_weights",         # RIG-10: Weight mirror/normalize/smooth
+        "setup_ragdoll",       # RIG-11: Ragdoll auto-setup
+        "retarget",            # RIG-12: Rig retargeting
+        "add_shape_keys",      # RIG-13: Shape keys for expressions/damage
+    ],
+    object_name: str,
+    # Template / custom rig params
+    template: str | None = None,
+    limb_types: list[str] | None = None,
+    # IK params
+    bone_name: str | None = None,
+    chain_length: int | None = None,
+    constraint_type: str | None = None,
+    pole_target: str | None = None,
+    pole_bone: str | None = None,
+    curve_points: list[list[float]] | None = None,
+    rotation_limits: dict | None = None,
+    # Spring bone params
+    bone_names: list[str] | None = None,
+    stiffness: float | None = None,
+    damping: float | None = None,
+    gravity: float | None = None,
+    # Weight params
+    armature_name: str | None = None,
+    operation: str | None = None,
+    direction: str | None = None,
+    factor: float | None = None,
+    repeat: int | None = None,
+    threshold: float | None = None,
+    # Deformation test params
+    pose_names: list[str] | None = None,
+    # Ragdoll params
+    bone_collider_map: dict | None = None,
+    preset: str | None = None,
+    # Retarget params
+    source_rig: str | None = None,
+    target_rig: str | None = None,
+    bone_mapping: dict | None = None,
+    # Shape key params
+    shape_key_name: str | None = None,
+    mode: str | None = None,
+    vertex_offsets: dict | None = None,
+    expression_name: str | None = None,
+    # Facial params
+    expressions: list[str] | None = None,
+    # Visual feedback
+    capture_viewport: bool = True,
+):
+    """Rig creatures for game animation with visual verification.
+
+    Actions:
+    - analyze_mesh: Analyze mesh proportions and recommend rig template (RIG-01)
+    - apply_template: Apply Rigify creature template (humanoid/quadruped/bird/etc.) (RIG-02)
+    - build_custom: Build custom rig from limb library (mix-and-match) (RIG-03)
+    - setup_facial: Add facial rig bones + monster expression presets (RIG-04)
+    - setup_ik: Add IK constraints (2-bone or spline for tails) (RIG-05)
+    - setup_spring_bones: Add spring/jiggle bones for secondary motion (RIG-06)
+    - auto_weight: Auto weight paint mesh to armature (RIG-07)
+    - test_deformation: Test deformation at 8 standard poses with contact sheet (RIG-08)
+    - validate: Validate rig quality (unweighted verts, symmetry, rolls) A-F grade (RIG-09)
+    - fix_weights: Normalize/clean/smooth/mirror weights (RIG-10)
+    - setup_ragdoll: Auto-generate ragdoll colliders and joints (RIG-11)
+    - retarget: Map bones between source and target rigs (RIG-12)
+    - add_shape_keys: Create expression/damage shape keys (RIG-13)
+    """
+    blender = get_blender_connection()
+
+    if action == "analyze_mesh":
+        result = await blender.send_command("rig_analyze", {"object_name": object_name})
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "apply_template":
+        params = {"object_name": object_name}
+        if template is not None:
+            params["template"] = template
+        result = await blender.send_command("rig_apply_template", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "build_custom":
+        params = {"object_name": object_name}
+        if limb_types is not None:
+            params["limb_types"] = limb_types
+        result = await blender.send_command("rig_build_custom", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "setup_facial":
+        params = {"rig_name": object_name}
+        if expressions is not None:
+            params["expressions"] = expressions
+        result = await blender.send_command("rig_setup_facial", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "setup_ik":
+        params = {"rig_name": object_name}
+        if bone_name is not None:
+            params["bone_name"] = bone_name
+        if chain_length is not None:
+            params["chain_length"] = chain_length
+        if constraint_type is not None:
+            params["constraint_type"] = constraint_type
+        if pole_target is not None:
+            params["pole_target"] = pole_target
+        if pole_bone is not None:
+            params["pole_target_bone"] = pole_bone
+        if curve_points is not None:
+            params["curve_points"] = len(curve_points) if isinstance(curve_points, list) else curve_points
+        if rotation_limits is not None:
+            params["joint_limits"] = rotation_limits
+        result = await blender.send_command("rig_setup_ik", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "setup_spring_bones":
+        params = {"rig_name": object_name}
+        if bone_names is not None:
+            params["bone_names"] = bone_names
+        if stiffness is not None:
+            params["stiffness"] = stiffness
+        if damping is not None:
+            params["damping"] = damping
+        if gravity is not None:
+            params["gravity"] = gravity
+        result = await blender.send_command("rig_setup_spring_bones", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "auto_weight":
+        params = {"mesh_name": object_name}
+        if armature_name is not None:
+            params["armature_name"] = armature_name
+        result = await blender.send_command("rig_auto_weight", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "test_deformation":
+        params = {"rig_name": object_name}
+        if pose_names is not None:
+            params["pose_names"] = pose_names
+        result = await blender.send_command("rig_test_deformation", params)
+        # Deformation test returns contact sheet -- always capture
+        return await _with_screenshot(blender, result, True)
+
+    elif action == "validate":
+        params = {"mesh_name": object_name}
+        if armature_name is not None:
+            params["armature_name"] = armature_name
+        result = await blender.send_command("rig_validate", params)
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "fix_weights":
+        params = {"mesh_name": object_name}
+        if operation is not None:
+            params["operation"] = operation
+        if direction is not None:
+            params["direction"] = direction
+        if factor is not None:
+            params["factor"] = factor
+        if repeat is not None:
+            params["repeat"] = repeat
+        if threshold is not None:
+            params["threshold"] = threshold
+        result = await blender.send_command("rig_fix_weights", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "setup_ragdoll":
+        params = {"rig_name": object_name}
+        if bone_collider_map is not None:
+            params["bone_collider_map"] = bone_collider_map
+        if preset is not None:
+            params["preset"] = preset
+        result = await blender.send_command("rig_setup_ragdoll", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "retarget":
+        params = {}
+        if source_rig is not None:
+            params["source_rig"] = source_rig
+        if target_rig is not None:
+            params["target_rig"] = target_rig
+        if bone_mapping is not None:
+            params["mapping"] = bone_mapping
+        result = await blender.send_command("rig_retarget", params)
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "add_shape_keys":
+        params = {"object_name": object_name}
+        if shape_key_name is not None:
+            params["shape_key_name"] = shape_key_name
+        if mode is not None:
+            params["mode"] = mode
+        if vertex_offsets is not None:
+            params["vertex_offsets"] = vertex_offsets
+        if expression_name is not None:
+            params["expression_name"] = expression_name
+        result = await blender.send_command("rig_add_shape_keys", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    return "Unknown action"
+
+
 def main():
     mcp.run(transport="stdio")
 

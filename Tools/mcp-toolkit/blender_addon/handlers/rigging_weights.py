@@ -1,0 +1,516 @@
+"""Weight painting, deformation testing, rig validation, and weight fix handlers.
+
+Provides four command handlers:
+  - handle_auto_weight: Parent mesh to armature with heat diffusion weight painting (RIG-07)
+  - handle_test_deformation: Pose rig at 8 standard poses and generate contact sheet (RIG-08)
+  - handle_validate_rig: Grade rig A-F based on weight/symmetry/roll analysis (RIG-09)
+  - handle_fix_weights: Normalize, clean zeros, smooth, and mirror weights (RIG-10)
+
+Pure-logic functions (_compute_rig_grade, _validate_rig_report,
+_validate_weight_fix_params) are separated for testability without Blender.
+"""
+
+from __future__ import annotations
+
+import math
+
+import bpy
+from mathutils import Euler
+
+from ._context import get_3d_context_override
+
+
+# ---------------------------------------------------------------------------
+# Deformation pose presets (8 standard poses)
+# ---------------------------------------------------------------------------
+
+DEFORMATION_POSES: dict[str, dict[str, tuple[float, float, float]]] = {
+    "t_pose": {},  # Default rest pose (no rotations)
+    "a_pose": {
+        "DEF-upper_arm.L": (0, 0, -0.785),
+        "DEF-upper_arm.R": (0, 0, 0.785),
+    },
+    "crouch": {
+        "DEF-thigh.L": (-1.2, 0, 0),
+        "DEF-thigh.R": (-1.2, 0, 0),
+        "DEF-shin.L": (1.0, 0, 0),
+        "DEF-shin.R": (1.0, 0, 0),
+    },
+    "reach_up": {
+        "DEF-upper_arm.L": (0, 0, 2.6),
+        "DEF-upper_arm.R": (0, 0, -2.6),
+    },
+    "twist_left": {
+        "DEF-spine.001": (0, 0.7, 0),
+        "DEF-spine.002": (0, 0.7, 0),
+    },
+    "twist_right": {
+        "DEF-spine.001": (0, -0.7, 0),
+        "DEF-spine.002": (0, -0.7, 0),
+    },
+    "extreme_bend": {
+        "DEF-forearm.L": (-2.0, 0, 0),
+        "DEF-forearm.R": (-2.0, 0, 0),
+    },
+    "action_pose": {
+        "DEF-thigh.L": (-0.8, 0, 0),
+        "DEF-thigh.R": (-0.3, 0, 0.3),
+        "DEF-upper_arm.L": (0.5, 0, 1.5),
+        "DEF-upper_arm.R": (-0.3, 0, -0.8),
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Pure-logic helpers (testable without Blender)
+# ---------------------------------------------------------------------------
+
+
+def _compute_rig_grade(
+    unweighted_pct: float,
+    non_normalized: int,
+    symmetry_issues: int,
+    roll_issues: int,
+) -> str:
+    """Compute rig quality grade from numeric thresholds.
+
+    Returns a single letter grade A-F.
+    """
+    if unweighted_pct > 10 or non_normalized > 100:
+        return "F"
+    if unweighted_pct > 5 or non_normalized > 50 or symmetry_issues > 5:
+        return "D"
+    if unweighted_pct > 1 or non_normalized > 10 or symmetry_issues > 2:
+        return "C"
+    if unweighted_pct > 0 or non_normalized > 0 or roll_issues > 2:
+        return "B"
+    return "A"
+
+
+def _validate_rig_report(
+    vertex_count: int,
+    vertex_group_names: list[str],
+    unweighted_vertex_indices: list[int],
+    weight_sums: list[float],
+    bone_names: list[str],
+    bone_rolls: dict[str, float],
+    bone_parents: dict[str, str | None],
+) -> dict:
+    """Build a rig validation report from extracted mesh/armature data.
+
+    Args:
+        vertex_count: Total vertices in the mesh.
+        vertex_group_names: Names of all vertex groups on the mesh.
+        unweighted_vertex_indices: Indices of vertices with no weight > 0.01.
+        weight_sums: Per-vertex total weight sums (length == vertex_count).
+        bone_names: All bone names in the armature.
+        bone_rolls: Mapping of bone name -> roll value (radians).
+        bone_parents: Mapping of bone name -> parent bone name (or None).
+
+    Returns:
+        Dict with vertex_count, bone_count, unweighted_vertices,
+        unweighted_percentage, non_normalized_vertices, symmetry_issues,
+        roll_issues, issues (list of strings), grade.
+    """
+    issues: list[str] = []
+
+    # -- Unweighted vertices --
+    unweighted_count = len(unweighted_vertex_indices)
+    unweighted_pct = (
+        (unweighted_count / vertex_count * 100) if vertex_count > 0 else 0.0
+    )
+
+    if unweighted_count > 0:
+        issues.append(
+            f"{unweighted_count} vertices ({unweighted_pct:.1f}%) have no weight"
+        )
+
+    # -- Non-normalized vertices --
+    non_normalized = 0
+    for ws in weight_sums:
+        if abs(ws - 1.0) > 0.01:
+            non_normalized += 1
+
+    if non_normalized > 0:
+        issues.append(f"{non_normalized} vertices are not normalized")
+
+    # -- Bone symmetry check (L/R pairs) --
+    left_bones = [n for n in bone_names if n.endswith(".L")]
+    right_bones_set = {n for n in bone_names if n.endswith(".R")}
+
+    symmetry_issues = 0
+    for lb in left_bones:
+        expected_right = lb[:-2] + ".R"
+        if expected_right not in right_bones_set:
+            symmetry_issues += 1
+            issues.append(f"Missing right counterpart for '{lb}'")
+
+    # -- Roll consistency (L bone roll should be negative of R bone roll) --
+    roll_issues = 0
+    roll_tolerance = 0.05  # radians
+    for lb in left_bones:
+        rb = lb[:-2] + ".R"
+        if rb in bone_rolls and lb in bone_rolls:
+            l_roll = bone_rolls[lb]
+            r_roll = bone_rolls[rb]
+            if abs(l_roll + r_roll) > roll_tolerance:
+                roll_issues += 1
+                issues.append(
+                    f"Roll mismatch: '{lb}' ({l_roll:.3f}) vs "
+                    f"'{rb}' ({r_roll:.3f})"
+                )
+
+    grade = _compute_rig_grade(
+        unweighted_pct, non_normalized, symmetry_issues, roll_issues
+    )
+
+    return {
+        "vertex_count": vertex_count,
+        "bone_count": len(bone_names),
+        "unweighted_vertices": unweighted_count,
+        "unweighted_percentage": round(unweighted_pct, 2),
+        "non_normalized_vertices": non_normalized,
+        "symmetry_issues": symmetry_issues,
+        "roll_issues": roll_issues,
+        "issues": issues,
+        "grade": grade,
+    }
+
+
+def _validate_weight_fix_params(operation: str, params: dict) -> dict:
+    """Validate weight fix operation type and parameters.
+
+    Args:
+        operation: One of "normalize", "clean_zeros", "smooth", "mirror".
+        params: Additional parameters for the operation.
+
+    Returns:
+        Dict with valid (bool), errors (list[str]), operation (str).
+    """
+    valid_operations = {"normalize", "clean_zeros", "smooth", "mirror"}
+    errors: list[str] = []
+
+    if operation not in valid_operations:
+        errors.append(
+            f"Unknown operation: '{operation}'. "
+            f"Valid: {sorted(valid_operations)}"
+        )
+        return {"valid": False, "errors": errors, "operation": operation}
+
+    if operation == "mirror":
+        direction = params.get("direction")
+        valid_directions = {"left_to_right", "right_to_left"}
+        if direction not in valid_directions:
+            errors.append(
+                f"'mirror' requires 'direction' param: one of {sorted(valid_directions)}"
+            )
+
+    if operation == "smooth":
+        factor = params.get("factor")
+        if factor is not None:
+            if not isinstance(factor, (int, float)) or not (0.0 <= factor <= 1.0):
+                errors.append("'smooth' factor must be between 0.0 and 1.0")
+        repeat = params.get("repeat")
+        if repeat is not None:
+            if not isinstance(repeat, int) or not (1 <= repeat <= 10):
+                errors.append("'smooth' repeat must be an integer between 1 and 10")
+
+    if operation == "clean_zeros":
+        threshold = params.get("threshold")
+        if threshold is not None:
+            if not isinstance(threshold, (int, float)) or not (0.0 <= threshold <= 0.1):
+                errors.append(
+                    "'clean_zeros' threshold must be between 0.0 and 0.1"
+                )
+
+    return {"valid": len(errors) == 0, "errors": errors, "operation": operation}
+
+
+# ---------------------------------------------------------------------------
+# Blender-dependent handlers
+# ---------------------------------------------------------------------------
+
+
+def handle_auto_weight(params: dict) -> dict:
+    """Parent mesh to armature with automatic weight painting (RIG-07).
+
+    Params:
+        mesh_name: Name of the mesh object.
+        armature_name: Name of the armature object.
+
+    Returns dict with vertex_group_count, vertex_groups, method, mesh, armature.
+    """
+    mesh_name = params.get("mesh_name")
+    armature_name = params.get("armature_name")
+
+    if not mesh_name:
+        raise ValueError("'mesh_name' is required")
+    if not armature_name:
+        raise ValueError("'armature_name' is required")
+
+    mesh_obj = bpy.data.objects.get(mesh_name)
+    if not mesh_obj or mesh_obj.type != "MESH":
+        raise ValueError(f"Mesh object not found: {mesh_name}")
+
+    arm_obj = bpy.data.objects.get(armature_name)
+    if not arm_obj or arm_obj.type != "ARMATURE":
+        raise ValueError(f"Armature object not found: {armature_name}")
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for weight painting")
+
+    # Deselect all, then select mesh and make armature active
+    bpy.ops.object.select_all(action="DESELECT")
+    mesh_obj.select_set(True)
+    arm_obj.select_set(True)
+    bpy.context.view_layer.objects.active = arm_obj
+
+    method = "auto"
+    try:
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.parent_set(type="ARMATURE_AUTO", xmirror=True)
+    except RuntimeError:
+        # Heat diffusion failed -- fall back to envelope weights
+        method = "envelope"
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.parent_set(type="ARMATURE_ENVELOPE")
+
+    # Gather vertex group info
+    vgroups = [vg.name for vg in mesh_obj.vertex_groups]
+
+    return {
+        "vertex_group_count": len(vgroups),
+        "vertex_groups": vgroups,
+        "method": method,
+        "mesh": mesh_name,
+        "armature": armature_name,
+    }
+
+
+def handle_test_deformation(params: dict) -> dict:
+    """Pose rig at standard poses and generate contact sheet (RIG-08).
+
+    Params:
+        rig_name: Name of the rig/armature object.
+        pose_names: Optional list of pose names to test (default: all 8).
+        mesh_name: Optional mesh name for contact sheet rendering.
+
+    Returns dict with poses_tested, pose_names, contact_sheet.
+    """
+    rig_name = params.get("rig_name")
+    if not rig_name:
+        raise ValueError("'rig_name' is required")
+
+    rig_obj = bpy.data.objects.get(rig_name)
+    if not rig_obj or rig_obj.type != "ARMATURE":
+        raise ValueError(f"Armature object not found: {rig_name}")
+
+    requested_poses = params.get("pose_names")
+    if requested_poses is None:
+        requested_poses = list(DEFORMATION_POSES.keys())
+
+    # Validate pose names
+    for pn in requested_poses:
+        if pn not in DEFORMATION_POSES:
+            raise ValueError(
+                f"Unknown pose: '{pn}'. Valid: {sorted(DEFORMATION_POSES.keys())}"
+            )
+
+    # Switch to pose mode
+    bpy.context.view_layer.objects.active = rig_obj
+    bpy.ops.object.mode_set(mode="POSE")
+
+    tested_poses: list[str] = []
+
+    for pose_name in requested_poses:
+        rotations = DEFORMATION_POSES[pose_name]
+
+        # Reset all pose bones to rest
+        for pb in rig_obj.pose.bones:
+            pb.rotation_euler = Euler((0, 0, 0))
+            pb.rotation_quaternion = (1, 0, 0, 0)
+
+        # Apply pose rotations
+        for bone_name, (rx, ry, rz) in rotations.items():
+            pb = rig_obj.pose.bones.get(bone_name)
+            if pb:
+                pb.rotation_mode = "XYZ"
+                pb.rotation_euler = Euler((rx, ry, rz))
+
+        # Update dependency graph
+        bpy.context.view_layer.update()
+
+        # Insert keyframe at frame = pose index for contact sheet
+        frame = len(tested_poses) + 1
+        bpy.context.scene.frame_set(frame)
+        for pb in rig_obj.pose.bones:
+            pb.keyframe_insert(data_path="rotation_euler", frame=frame)
+
+        tested_poses.append(pose_name)
+
+    # Reset to rest pose
+    for pb in rig_obj.pose.bones:
+        pb.rotation_euler = Euler((0, 0, 0))
+        pb.rotation_quaternion = (1, 0, 0, 0)
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Generate contact sheet via viewport handler
+    from .viewport import handle_render_contact_sheet
+
+    sheet_target = params.get("mesh_name", rig_name)
+    contact_result = handle_render_contact_sheet({
+        "object_name": sheet_target,
+        "frames": list(range(1, len(tested_poses) + 1)),
+        "resolution": params.get("resolution", [512, 512]),
+    })
+
+    return {
+        "poses_tested": len(tested_poses),
+        "pose_names": tested_poses,
+        "contact_sheet": contact_result.get("image", ""),
+    }
+
+
+def handle_validate_rig(params: dict) -> dict:
+    """Validate rig quality: weights, symmetry, rolls -- grade A-F (RIG-09).
+
+    Params:
+        mesh_name: Name of the mesh object (with vertex groups).
+        armature_name: Name of the armature object.
+
+    Returns validation report dict with grade and issues list.
+    """
+    mesh_name = params.get("mesh_name")
+    armature_name = params.get("armature_name")
+
+    if not mesh_name:
+        raise ValueError("'mesh_name' is required")
+    if not armature_name:
+        raise ValueError("'armature_name' is required")
+
+    mesh_obj = bpy.data.objects.get(mesh_name)
+    if not mesh_obj or mesh_obj.type != "MESH":
+        raise ValueError(f"Mesh object not found: {mesh_name}")
+
+    arm_obj = bpy.data.objects.get(armature_name)
+    if not arm_obj or arm_obj.type != "ARMATURE":
+        raise ValueError(f"Armature object not found: {armature_name}")
+
+    mesh_data = mesh_obj.data
+    vertex_count = len(mesh_data.vertices)
+    vertex_group_names = [vg.name for vg in mesh_obj.vertex_groups]
+
+    # Find unweighted vertices and compute weight sums
+    unweighted_indices: list[int] = []
+    weight_sums: list[float] = []
+
+    for v in mesh_data.vertices:
+        total = 0.0
+        has_significant = False
+        for g in v.groups:
+            w = g.weight
+            total += w
+            if w > 0.01:
+                has_significant = True
+        weight_sums.append(total)
+        if not has_significant:
+            unweighted_indices.append(v.index)
+
+    # Extract bone info from armature
+    bone_names = [b.name for b in arm_obj.data.bones]
+    bone_rolls: dict[str, float] = {}
+    bone_parents: dict[str, str | None] = {}
+
+    # Need edit mode to access bone rolls
+    bpy.context.view_layer.objects.active = arm_obj
+    bpy.ops.object.mode_set(mode="EDIT")
+    for ebone in arm_obj.data.edit_bones:
+        bone_rolls[ebone.name] = ebone.roll
+        bone_parents[ebone.name] = ebone.parent.name if ebone.parent else None
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    report = _validate_rig_report(
+        vertex_count,
+        vertex_group_names,
+        unweighted_indices,
+        weight_sums,
+        bone_names,
+        bone_rolls,
+        bone_parents,
+    )
+
+    report["mesh"] = mesh_name
+    report["armature"] = armature_name
+    return report
+
+
+def handle_fix_weights(params: dict) -> dict:
+    """Fix vertex weights: normalize, clean zeros, smooth, or mirror (RIG-10).
+
+    Params:
+        mesh_name: Name of the mesh object.
+        operation: One of "normalize", "clean_zeros", "smooth", "mirror".
+        direction: Required for "mirror" -- "left_to_right" or "right_to_left".
+        factor: Optional smooth factor (0.0-1.0, default 0.5).
+        repeat: Optional smooth repeat count (1-10, default 1).
+        threshold: Optional clean_zeros threshold (0.0-0.1, default 0.01).
+
+    Returns dict with operation, mesh, status.
+    """
+    mesh_name = params.get("mesh_name")
+    operation = params.get("operation")
+
+    if not mesh_name:
+        raise ValueError("'mesh_name' is required")
+    if not operation:
+        raise ValueError("'operation' is required")
+
+    mesh_obj = bpy.data.objects.get(mesh_name)
+    if not mesh_obj or mesh_obj.type != "MESH":
+        raise ValueError(f"Mesh object not found: {mesh_name}")
+
+    # Validate operation and params
+    validation = _validate_weight_fix_params(operation, params)
+    if not validation["valid"]:
+        raise ValueError("; ".join(validation["errors"]))
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for weight operations")
+
+    # Select and activate the mesh
+    bpy.ops.object.select_all(action="DESELECT")
+    mesh_obj.select_set(True)
+    bpy.context.view_layer.objects.active = mesh_obj
+
+    with bpy.context.temp_override(**ctx):
+        if operation == "normalize":
+            bpy.ops.object.vertex_group_normalize_all()
+
+        elif operation == "clean_zeros":
+            threshold = params.get("threshold", 0.01)
+            bpy.ops.object.vertex_group_clean(
+                group_select_mode="ALL", limit=threshold
+            )
+
+        elif operation == "smooth":
+            factor = params.get("factor", 0.5)
+            repeat = params.get("repeat", 1)
+            bpy.ops.object.vertex_group_smooth(
+                group_select_mode="ALL", factor=factor, repeat=repeat
+            )
+
+        elif operation == "mirror":
+            direction = params.get("direction")
+            use_mirror = direction == "left_to_right"
+            bpy.ops.object.vertex_group_mirror(
+                use_topology=False
+            )
+
+    return {
+        "operation": operation,
+        "mesh": mesh_name,
+        "status": "success",
+    }
