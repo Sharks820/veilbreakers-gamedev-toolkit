@@ -6,7 +6,7 @@ dependencies = [
     "mcp[cli]>=1.26.0",
     "Pillow>=12.1.0",
     "python-dotenv>=1.0.0",
-    "RestrictedPython>=7.0",
+    "pydantic-settings>=2.0",
 ]
 
 [project.scripts]

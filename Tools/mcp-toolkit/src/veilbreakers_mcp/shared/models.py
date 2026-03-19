@@ -1,10 +1,10 @@
 from typing import Any, Literal
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class BlenderCommand(BaseModel):
     type: str
-    params: dict[str, Any] = {}
+    params: dict[str, Any] = Field(default_factory=dict)
 
 
 class BlenderResponse(BaseModel):

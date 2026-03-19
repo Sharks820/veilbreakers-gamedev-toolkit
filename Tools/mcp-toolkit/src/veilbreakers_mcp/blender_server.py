@@ -1,11 +1,13 @@
+import atexit
 import json
+import os
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP, Image
 from veilbreakers_mcp.shared.blender_client import BlenderConnection, BlenderCommandError
 from veilbreakers_mcp.shared.config import Settings
 from veilbreakers_mcp.shared.security import validate_code
-from veilbreakers_mcp.shared.image_utils import compose_contact_sheet
+from veilbreakers_mcp.shared.image_utils import compose_contact_sheet, resize_screenshot
 
 settings = Settings()
 mcp = FastMCP(
@@ -18,7 +20,7 @@ _connection: BlenderConnection | None = None
 
 def get_blender_connection() -> BlenderConnection:
     global _connection
-    if _connection is None or not _connection.is_alive():
+    if _connection is None:
         _connection = BlenderConnection(
             host=settings.blender_host,
             port=settings.blender_port,
@@ -26,6 +28,16 @@ def get_blender_connection() -> BlenderConnection:
         )
         _connection.connect()
     return _connection
+
+
+def _cleanup_connection():
+    global _connection
+    if _connection is not None:
+        _connection.disconnect()
+        _connection = None
+
+
+atexit.register(_cleanup_connection)
 
 
 async def _with_screenshot(
@@ -37,8 +49,8 @@ async def _with_screenshot(
         try:
             screenshot_bytes = await blender.capture_viewport_bytes()
             parts.append(Image(data=screenshot_bytes, format="png"))
-        except Exception:
-            parts.append("[Screenshot capture failed - Blender viewport may not be visible]")
+        except (OSError, IOError, BlenderCommandError, ConnectionError) as e:
+            parts.append(f"[Screenshot capture failed: {e}]")
     return parts
 
 
@@ -65,9 +77,9 @@ async def blender_scene(
         return await _with_screenshot(blender, result)
     elif action == "configure":
         params = {}
-        if render_engine:
+        if render_engine is not None:
             params["render_engine"] = render_engine
-        if fps:
+        if fps is not None:
             params["fps"] = fps
         result = await blender.send_command("configure_scene", params)
         return await _with_screenshot(blender, result)
@@ -97,21 +109,27 @@ async def blender_object(
     - list: List all objects (no screenshot)
     """
     blender = get_blender_connection()
-    params = {}
-    if name:
-        params["name"] = name
-    if mesh_type:
-        params["mesh_type"] = mesh_type
-    if position:
-        params["position"] = position
-    if rotation:
-        params["rotation"] = rotation
-    if scale:
-        params["scale"] = scale
 
     if action == "list":
         result = await blender.send_command("list_objects")
         return json.dumps(result, indent=2, default=str)
+
+    if action in ("modify", "delete", "duplicate") and not name:
+        return f"ERROR: 'name' is required for action '{action}'"
+    if action == "create" and not mesh_type:
+        return "ERROR: 'mesh_type' is required for action 'create'"
+
+    params = {}
+    if name is not None:
+        params["name"] = name
+    if mesh_type is not None:
+        params["mesh_type"] = mesh_type
+    if position is not None:
+        params["position"] = position
+    if rotation is not None:
+        params["rotation"] = rotation
+    if scale is not None:
+        params["scale"] = scale
 
     cmd_map = {
         "create": "create_object",
@@ -142,21 +160,22 @@ async def blender_material(
     - list: List all materials (no screenshot)
     """
     blender = get_blender_connection()
+
+    if action == "list":
+        result = await blender.send_command("material_list")
+        return json.dumps(result, indent=2, default=str)
+
     params = {}
-    if name:
+    if name is not None:
         params["name"] = name
-    if object_name:
+    if object_name is not None:
         params["object_name"] = object_name
-    if base_color:
+    if base_color is not None:
         params["base_color"] = base_color
     if metallic is not None:
         params["metallic"] = metallic
     if roughness is not None:
         params["roughness"] = roughness
-
-    if action == "list":
-        result = await blender.send_command("material_list")
-        return json.dumps(result, indent=2, default=str)
 
     cmd_map = {
         "create": "material_create",
@@ -190,30 +209,41 @@ async def blender_viewport(
 
     if action == "screenshot":
         screenshot_bytes = await blender.capture_viewport_bytes()
-        return Image(data=screenshot_bytes, format="png")
+        resized = resize_screenshot(screenshot_bytes, max_size=max_size)
+        return Image(data=resized, format="png")
 
     elif action == "contact_sheet":
-        params = {}
-        if object_name:
-            params["object_name"] = object_name
-        if angles:
+        if not object_name:
+            return "ERROR: 'object_name' is required for contact_sheet"
+        params = {"object_name": object_name}
+        if angles is not None:
             params["angles"] = angles
-        if resolution:
+        if resolution is not None:
             params["resolution"] = resolution
         result = await blender.send_command("render_contact_sheet", params)
         paths = result.get("paths", [])
         if paths:
             sheet_bytes = compose_contact_sheet(paths)
+            # Clean up temp files
+            for p in paths:
+                try:
+                    os.unlink(p)
+                except OSError:
+                    pass
             return Image(data=sheet_bytes, format="png")
         return "No images rendered for contact sheet"
 
     elif action == "set_shading":
+        if not shading_type:
+            return "ERROR: 'shading_type' is required for set_shading"
         result = await blender.send_command(
             "set_shading", {"shading_type": shading_type}
         )
         return await _with_screenshot(blender, result)
 
     elif action == "navigate":
+        if not camera_position or not camera_target:
+            return "ERROR: 'camera_position' and 'camera_target' are required for navigate"
         result = await blender.send_command("navigate_camera", {
             "position": camera_position,
             "target": camera_target,
@@ -232,11 +262,11 @@ async def blender_execute(
 
     Code is AST-validated against a security whitelist before execution.
     Allowed imports: bpy, mathutils, bmesh, math, random, json.
-    Blocked: os, sys, subprocess, socket, exec, eval, getattr.
+    Blocked: os, sys, subprocess, socket, exec, eval, getattr, open.
     """
     is_safe, violations = validate_code(code)
     if not is_safe:
-        return f"SECURITY ERROR: Code validation failed:\n" + "\n".join(
+        return "SECURITY ERROR: Code validation failed:\n" + "\n".join(
             f"  - {v}" for v in violations
         )
 
@@ -247,7 +277,7 @@ async def blender_execute(
 
 @mcp.tool()
 async def blender_export(
-    format: Literal["fbx", "gltf"],
+    export_format: Literal["fbx", "gltf"],
     filepath: str,
     selected_only: bool = False,
     apply_modifiers: bool = True,
@@ -259,7 +289,7 @@ async def blender_export(
     - gltf: glTF 2.0 export
     """
     blender = get_blender_connection()
-    cmd = f"export_{format}"
+    cmd = f"export_{export_format}"
     result = await blender.send_command(cmd, {
         "filepath": filepath,
         "selected_only": selected_only,

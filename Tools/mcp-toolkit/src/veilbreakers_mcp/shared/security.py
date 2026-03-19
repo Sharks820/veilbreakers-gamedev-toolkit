@@ -1,7 +1,10 @@
 """AST-based security validator for Blender code execution.
 
-This is the addon-local copy - it runs inside Blender's Python
-environment and does not depend on the MCP package being installed.
+Validates user-submitted Python code against a strict allowlist before
+execution. Both the MCP server and the Blender addon maintain identical
+copies of this file — changes MUST be applied to both:
+  - src/veilbreakers_mcp/shared/security.py  (MCP server side)
+  - blender_addon/security.py                (Blender addon side)
 """
 import ast
 
@@ -12,21 +15,36 @@ ALLOWED_IMPORTS = frozenset({
     "mathutils.Quaternion", "mathutils.Color",
 })
 
+_ALLOWED_ROOTS = frozenset({m.split(".")[0] for m in ALLOWED_IMPORTS})
+
 BLOCKED_IMPORTS = frozenset({
     "os", "sys", "subprocess", "socket", "http", "urllib",
     "shutil", "ctypes", "importlib", "pathlib", "io",
     "pickle", "shelve", "tempfile", "glob", "fnmatch",
     "__builtins__", "builtins", "code", "codeop",
+    "signal", "multiprocessing", "_thread", "threading",
+    "webbrowser", "ftplib", "smtplib", "xmlrpc",
+    "struct", "atexit", "zipfile", "tarfile",
 })
 
 BLOCKED_FUNCTIONS = frozenset({
-    "exec", "eval", "compile", "getattr", "setattr", "delattr",
+    "exec", "eval", "compile",
+    "getattr", "setattr", "delattr",
+    "__import__",
+    "open", "input", "breakpoint", "help",
+    "globals", "locals", "vars", "dir",
 })
 
 BLOCKED_DUNDERS = frozenset({
     "__class__", "__bases__", "__subclasses__", "__import__",
     "__builtins__", "__globals__", "__code__", "__func__",
+    "__mro__", "__dict__", "__init_subclass__", "__set_name__",
+    "__del__", "__getattr__", "__getattribute__",
+    "__reduce__", "__reduce_ex__",
+    "__loader__", "__spec__",
 })
+
+MAX_CODE_LENGTH = 50_000
 
 
 class SecurityValidator(ast.NodeVisitor):
@@ -40,7 +58,7 @@ class SecurityValidator(ast.NodeVisitor):
                 self.violations.append(
                     f"Blocked import: '{alias.name}' (security restriction)"
                 )
-            elif module not in {m.split(".")[0] for m in ALLOWED_IMPORTS}:
+            elif module not in _ALLOWED_ROOTS:
                 self.violations.append(
                     f"Unknown import: '{alias.name}' (not in allowlist)"
                 )
@@ -52,6 +70,20 @@ class SecurityValidator(ast.NodeVisitor):
             if module in BLOCKED_IMPORTS:
                 self.violations.append(
                     f"Blocked import: 'from {node.module}' (security restriction)"
+                )
+            elif module not in _ALLOWED_ROOTS:
+                self.violations.append(
+                    f"Unknown import: 'from {node.module}' (not in allowlist)"
+                )
+        else:
+            self.violations.append(
+                "Blocked import: relative imports are not allowed"
+            )
+        for alias in node.names:
+            if alias.name == "*":
+                self.violations.append(
+                    f"Blocked: star import 'from {node.module or '.'} import *' "
+                    "(security restriction)"
                 )
         self.generic_visit(node)
 
@@ -80,6 +112,9 @@ def validate_code(code: str) -> tuple[bool, list[str]]:
     Returns:
         (is_safe, violations) tuple
     """
+    if len(code) > MAX_CODE_LENGTH:
+        return False, [f"Code too long: {len(code)} chars (max {MAX_CODE_LENGTH})"]
+
     try:
         tree = ast.parse(code)
     except SyntaxError as e:
