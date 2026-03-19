@@ -2,13 +2,7 @@ import os
 
 import bpy
 
-
-def _get_3d_context_override():
-    """Find a 3D Viewport area for operator context override."""
-    for area in bpy.context.screen.areas:
-        if area.type == "VIEW_3D":
-            return {"area": area, "region": area.regions[-1]}
-    return None
+from ._context import get_3d_context_override
 
 
 def handle_export_fbx(params: dict) -> dict:
@@ -24,15 +18,19 @@ def handle_export_fbx(params: dict) -> dict:
 
     os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
 
-    override = _get_3d_context_override()
+    override = get_3d_context_override()
+    # Unity-optimized FBX settings
     kwargs = {
         "filepath": filepath,
         "use_selection": selected_only,
         "use_mesh_modifiers": apply_modifiers,
         "apply_unit_scale": True,
+        "apply_scale_options": "FBX_SCALE_ALL",
         "bake_space_transform": True,
         "axis_forward": "-Z",
         "axis_up": "Y",
+        "add_leaf_bones": False,
+        "mesh_smooth_type": "FACE",
     }
 
     if override:
@@ -62,7 +60,7 @@ def handle_export_gltf(params: dict) -> dict:
 
     os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
 
-    override = _get_3d_context_override()
+    override = get_3d_context_override()
     kwargs = {
         "filepath": filepath,
         "use_selection": selected_only,

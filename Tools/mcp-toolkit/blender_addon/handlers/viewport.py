@@ -5,13 +5,7 @@ import uuid
 
 import bpy
 
-
-def _get_3d_context_override():
-    """Find a 3D Viewport area for operator context override."""
-    for area in bpy.context.screen.areas:
-        if area.type == "VIEW_3D":
-            return {"area": area, "region": area.regions[-1]}
-    return None
+from ._context import get_3d_context_override
 
 
 def _unique_temp_path(prefix: str, suffix: str = ".png") -> str:
@@ -39,7 +33,7 @@ def handle_get_viewport_screenshot(params: dict) -> dict:
         scene.render.resolution_y = max_size
 
         # Use context override for render.opengl (needs 3D viewport)
-        override = _get_3d_context_override()
+        override = get_3d_context_override()
         if override:
             with bpy.context.temp_override(**override):
                 bpy.ops.render.opengl(write_still=True)
