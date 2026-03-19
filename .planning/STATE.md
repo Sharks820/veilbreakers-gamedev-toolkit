@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-current_plan: 3 of 3 (COMPLETE)
-status: completed
-stopped_at: Completed 02-03-PLAN.md (mesh editing, booleans, retopology, sculpt)
-last_updated: "2026-03-19T03:33:07Z"
+current_plan: 1 of 4
+status: executing
+stopped_at: Completed 03-01-PLAN.md (PBR texture handlers, baking, validation)
+last_updated: "2026-03-19T04:08:35Z"
 progress:
   total_phases: 8
-  completed_phases: 1
-  total_plans: 6
-  completed_plans: 5
-  percent: 83
+  completed_phases: 2
+  total_plans: 10
+  completed_plans: 6
+  percent: 60
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -19,40 +19,42 @@ progress:
 ## Project Reference
 
 **Core Value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current Focus:** Phase 2 - Mesh, UV & Topology Pipeline (COMPLETE)
+**Current Focus:** Phase 3 - Texturing & Asset Generation
 
 ## Current Position
 
 **Milestone:** v1
-**Phase:** 2 - Mesh, UV & Topology Pipeline
-**Current Plan:** 3 of 3 (COMPLETE)
-**Status:** Phase 2 complete -- all 3 plans delivered
+**Phase:** 3 - Texturing & Asset Generation
+**Current Plan:** 1 of 4
+**Status:** Plan 03-01 complete (PBR texture handlers)
 
 ```
-Phase Progress: [██████████] 100% - Phase 2 complete, 5/6 plans done overall
+Phase Progress: [██░░░░░░░░] 25% - Phase 3: 1/4 plans done, 6/10 overall
 ```
 
 ## Performance Metrics
 
 | Metric | Value |
 |--------|-------|
-| Phases complete | 1/8 (Phase 2 all plans done, pending phase rollup) |
-| Plans complete | 5/6 (Phase 1: 3/3, Phase 2: 3/3) |
-| Requirements delivered | 16/128 (ARCH-01-08, MESH-01-08) |
+| Phases complete | 2/8 (Phase 1: 3/3, Phase 2: 3/3) |
+| Plans complete | 6/10 (Phase 1: 3/3, Phase 2: 3/3, Phase 3: 1/4) |
+| Requirements delivered | 19/128 (ARCH-01-08, MESH-01-08, TEX-01, TEX-07, TEX-10) |
 | Bug scans passed | 4 (3 Opus multi-agent + 1 comprehensive) |
-| Tests passing | 119 |
+| Tests passing | 157 |
 
 | Phase | Plan | Duration | Tasks | Files |
 |-------|------|----------|-------|-------|
 | 02 | 01 | 12min | 2 | 5 |
 | 02 | 02 | 14min | 2 | 6 |
 | 02 | 03 | 8min | 2 | 4 |
+| 03 | 01 | 10min | 2 | 3 |
 
 ## Completed Phases
 
 | Phase | Plans | Commits | Key Deliverables |
 |-------|-------|---------|-----------------|
 | 1 - Foundation | 3 | 9 | 6 MCP tools, 20 handlers, TCP bridge, AST security, contact sheets |
+| 2 - Mesh, UV & Topology | 3 | 6 | 8 mesh + 9 UV handlers, blender_mesh + blender_uv tools |
 
 ## Accumulated Context
 
@@ -72,14 +74,18 @@ Phase Progress: [██████████] 100% - Phase 2 complete, 5/6 pl
 | Boolean EXACT solver | Precision over speed for game assets requiring watertight geometry | 2 |
 | Combined selection criteria in single call | Select by material + normal direction in one operation | 2 |
 | Fail-fast on missing selection for extrude/inset | Helpful error message rather than silent no-op | 2 |
+| BSDF_INPUT_MAP uses 4.0+ names as primary with 3.x fallback | Forward-compatible; most users on Blender 4.x | 3 |
+| AO mixed via MixRGB Multiply (not direct BSDF input) | Principled BSDF has no AO input; multiply with albedo is standard PBR practice | 3 |
+| UV coverage via bmesh shoelace formula | More accurate than grid sampling; consistent with Phase 2 bmesh patterns | 3 |
 
 ### Architecture Notes
 - Tools/mcp-toolkit/ is the monorepo for all MCP servers
-- 8 compound tools covering 37+ actions
+- 8 compound tools covering 40 handler actions
 - Blender addon at blender_addon/ with queue+timer dispatch
 - Security: dual AST validation (server + addon), restricted builtins, module proxies
 - Mesh analysis uses bmesh-first pattern (no operator context needed)
 - Mesh editing: bmesh for extrude/inset/mirror/smooth, bpy.ops with temp_override for separate/join/boolean/retopo/sculpt-filters
+- Texture handlers: version-aware BSDF socket lookup, Cycles auto-switch for baking, pure-logic validation functions
 
 ### Blockers
 None currently.
@@ -87,9 +93,9 @@ None currently.
 ## Session Continuity
 
 **Last session:** 2026-03-19
-**Stopped at:** Completed 02-03-PLAN.md (mesh editing, booleans, retopology, sculpt)
-**Next action:** Phase 2 complete. Execute Phase 3 plans (rigging/animation) or next milestone phase.
-**Context to preserve:** Phase 2 delivered 8 mesh handlers + 9 UV handlers + blender_mesh (8 actions) + blender_uv (9 actions). 8 total MCP tools, 37 handlers. 119 unit tests all passing. Phase 2 complete with all 3 plans executed.
+**Stopped at:** Completed 03-01-PLAN.md (PBR texture handlers, baking, validation)
+**Next action:** Execute Plan 03-02 (surgical texture editing with Pillow) or remaining Phase 3 plans.
+**Context to preserve:** Phase 3 Plan 1 delivered 3 texture handlers (create_pbr, bake, validate) with BSDF_INPUT_MAP version-aware lookup. 40 total handlers, 157 tests passing. texture.py uses pure-logic extraction pattern -- _build_channel_config, _validate_texture_metadata, _validate_bake_params all testable without Blender.
 
 ---
 *State initialized: 2026-03-18*

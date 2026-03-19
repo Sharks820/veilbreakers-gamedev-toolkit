@@ -39,16 +39,16 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Texturing
 
-- [ ] **TEX-01**: PBR material creation from text description (albedo, normal, roughness, metallic, AO)
+- [x] **TEX-01**: PBR material creation from text description (albedo, normal, roughness, metallic, AO)
 - [ ] **TEX-02**: Surgical texture editing — mask UV/material region, apply changes to region only
 - [ ] **TEX-03**: AI texture inpainting on masked region (fix belt, change armor trim, etc.)
 - [ ] **TEX-04**: HSV adjustment on masked texture regions
 - [ ] **TEX-05**: Texture seam blending between UV islands
 - [ ] **TEX-06**: Procedural wear/damage map generation (convex=worn, concave=dirty, edges=chipped)
-- [ ] **TEX-07**: Texture baking high-poly to low-poly (normal, AO, curvature, thickness)
+- [x] **TEX-07**: Texture baking high-poly to low-poly (normal, AO, curvature, thickness)
 - [ ] **TEX-08**: AI texture upscaling via Real-ESRGAN (2x/4x)
 - [ ] **TEX-09**: Seamless tileable texture generation
-- [ ] **TEX-10**: Texture validation (resolution, format, UV coverage, compression suitability)
+- [x] **TEX-10**: Texture validation (resolution, format, UV coverage, compression suitability)
 
 ### Rigging
 
