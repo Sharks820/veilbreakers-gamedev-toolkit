@@ -71,6 +71,27 @@ from veilbreakers_mcp.shared.unity_templates.scene_templates import (
     generate_avatar_config_script,
     generate_animation_rigging_script,
 )
+from veilbreakers_mcp.shared.unity_templates.gameplay_templates import (
+    generate_mob_controller_script,
+    generate_aggro_system_script,
+    generate_patrol_route_script,
+    generate_spawn_system_script,
+    generate_behavior_tree_script,
+    generate_combat_ability_script,
+    generate_projectile_script,
+    _validate_mob_params,
+    _validate_spawn_params,
+    _validate_ability_params,
+    _validate_projectile_params,
+)
+from veilbreakers_mcp.shared.unity_templates.performance_templates import (
+    generate_scene_profiler_script,
+    generate_lod_setup_script,
+    generate_lightmap_bake_script,
+    generate_asset_audit_script,
+    generate_build_automation_script,
+    _validate_lod_screen_percentages,
+)
 
 logger = logging.getLogger("veilbreakers_mcp.unity")
 
@@ -2132,6 +2153,749 @@ async def _handle_scene_setup_animation_rigging(
             "next_steps": [
                 "Call mcp-unity recompile_scripts to compile the new script",
                 f'Call mcp-unity execute_menu_item with path "VeilBreakers/Scene/Setup Animation Rigging/{name}"',
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Gameplay tool -- compound tool covering MOB-01 through MOB-07
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def unity_gameplay(
+    action: Literal[
+        "create_mob_controller",     # MOB-01: FSM-based mob AI
+        "create_aggro_system",       # MOB-02: detection + threat + leash
+        "create_patrol_route",       # MOB-03: waypoints + dwell + deviation
+        "create_spawn_system",       # MOB-04: spawn points + waves
+        "create_behavior_tree",      # MOB-05: ScriptableObject BT scaffolding
+        "create_combat_ability",     # MOB-06: ability prefab data + executor
+        "create_projectile_system",  # MOB-07: trajectory + trail + impact
+    ],
+    name: str = "default",
+    # Mob controller params (MOB-01, MOB-02)
+    detection_range: float = 15.0,
+    attack_range: float = 3.0,
+    leash_distance: float = 30.0,
+    patrol_speed: float = 2.0,
+    chase_speed: float = 5.0,
+    flee_health_pct: float = 0.2,
+    # Aggro params (MOB-02)
+    decay_rate: float = 1.0,
+    max_threats: int = 5,
+    # Patrol params (MOB-03)
+    waypoint_count: int = 4,
+    dwell_time: float = 2.0,
+    random_deviation: float = 1.5,
+    # Spawn params (MOB-04)
+    max_count: int = 10,
+    respawn_timer: float = 30.0,
+    spawn_radius: float = 5.0,
+    wave_cooldown: float = 10.0,
+    wave_count: int = 3,
+    # Behavior tree params (MOB-05)
+    node_types: list[str] | None = None,
+    # Combat ability params (MOB-06)
+    damage: float = 25.0,
+    cooldown: float = 2.0,
+    ability_range: float = 3.0,
+    vfx_prefab: str = "",
+    sound_name: str = "",
+    hitbox_size: float = 1.0,
+    # Projectile params (MOB-07)
+    velocity: float = 20.0,
+    trajectory: str = "straight",
+    trail_width: float = 0.3,
+    impact_vfx: str = "",
+    lifetime: float = 5.0,
+) -> str:
+    """Unity Gameplay AI -- mob controllers, aggro, patrol, spawning, behavior trees, combat abilities, projectiles.
+
+    This compound tool generates C# runtime scripts for Unity gameplay AI
+    systems: FSM mob controllers, aggro/threat detection, waypoint patrol,
+    wave-based spawning, behavior trees, combat abilities, and projectiles.
+
+    Actions:
+    - create_mob_controller: FSM state machine with Patrol/Chase/Attack/Flee states (MOB-01)
+    - create_aggro_system: OverlapSphereNonAlloc threat detection with decay (MOB-02)
+    - create_patrol_route: NavMeshAgent waypoint patrol with dwell times (MOB-03)
+    - create_spawn_system: Wave-based spawning with max alive tracking (MOB-04)
+    - create_behavior_tree: ScriptableObject BT with Sequence/Selector/Leaf nodes (MOB-05)
+    - create_combat_ability: Ability ScriptableObject + executor with cooldown queue (MOB-06)
+    - create_projectile_system: Straight/arc/homing projectile with trail + impact VFX (MOB-07)
+
+    Args:
+        action: The gameplay action to perform.
+        name: Name for the generated script/system.
+        detection_range: Detection sphere radius (MOB-01, MOB-02).
+        attack_range: Attack engagement range (MOB-01).
+        leash_distance: Max distance from spawn before returning (MOB-01, MOB-02).
+        patrol_speed: NavMeshAgent patrol speed (MOB-01).
+        chase_speed: NavMeshAgent chase speed (MOB-01).
+        flee_health_pct: Health % threshold to trigger flee (MOB-01).
+        decay_rate: Threat decay per tick (MOB-02).
+        max_threats: Pre-allocated collider buffer size (MOB-02).
+        waypoint_count: Default waypoint slot count (MOB-03).
+        dwell_time: Dwell time at each waypoint in seconds (MOB-03).
+        random_deviation: Random offset radius per waypoint (MOB-03).
+        max_count: Maximum alive spawned instances (MOB-04).
+        respawn_timer: Delay before respawn after death (MOB-04).
+        spawn_radius: Random spawn position radius (MOB-04).
+        wave_cooldown: Delay between spawn waves (MOB-04).
+        wave_count: Number of wave slots (MOB-04).
+        node_types: Custom leaf node class names to scaffold (MOB-05).
+        damage: Base damage value (MOB-06).
+        cooldown: Cooldown duration in seconds (MOB-06).
+        ability_range: Ability effective range (MOB-06).
+        vfx_prefab: VFX prefab name/path (MOB-06).
+        sound_name: Audio clip name (MOB-06).
+        hitbox_size: Hitbox collider size (MOB-06).
+        velocity: Projectile speed (MOB-07).
+        trajectory: Trajectory type: straight/arc/homing (MOB-07).
+        trail_width: Trail renderer width (MOB-07).
+        impact_vfx: Impact VFX prefab name/path (MOB-07).
+        lifetime: Projectile auto-destroy time in seconds (MOB-07).
+    """
+    try:
+        if action == "create_mob_controller":
+            return await _handle_gameplay_mob_controller(
+                name, detection_range, attack_range, leash_distance,
+                patrol_speed, chase_speed, flee_health_pct,
+            )
+        elif action == "create_aggro_system":
+            return await _handle_gameplay_aggro_system(
+                name, detection_range, decay_rate, leash_distance, max_threats,
+            )
+        elif action == "create_patrol_route":
+            return await _handle_gameplay_patrol_route(
+                name, waypoint_count, dwell_time, random_deviation,
+            )
+        elif action == "create_spawn_system":
+            return await _handle_gameplay_spawn_system(
+                name, max_count, respawn_timer, spawn_radius, wave_cooldown, wave_count,
+            )
+        elif action == "create_behavior_tree":
+            return await _handle_gameplay_behavior_tree(name, node_types)
+        elif action == "create_combat_ability":
+            return await _handle_gameplay_combat_ability(
+                name, damage, cooldown, ability_range, vfx_prefab, sound_name, hitbox_size,
+            )
+        elif action == "create_projectile_system":
+            return await _handle_gameplay_projectile_system(
+                name, velocity, trajectory, trail_width, impact_vfx, lifetime,
+            )
+        else:
+            return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
+    except Exception as exc:
+        logger.exception("unity_gameplay action '%s' failed", action)
+        return json.dumps({"status": "error", "action": action, "message": str(exc)})
+
+
+# ---------------------------------------------------------------------------
+# Gameplay action handlers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_gameplay_mob_controller(
+    name: str,
+    detection_range: float,
+    attack_range: float,
+    leash_distance: float,
+    patrol_speed: float,
+    chase_speed: float,
+    flee_health_pct: float,
+) -> str:
+    """Create FSM-based mob controller (MOB-01)."""
+    error = _validate_mob_params(
+        detection_range, attack_range, leash_distance,
+        patrol_speed, chase_speed, flee_health_pct,
+    )
+    if error:
+        return json.dumps({"status": "error", "action": "create_mob_controller", "message": error})
+
+    script = generate_mob_controller_script(
+        name=name,
+        detection_range=detection_range,
+        attack_range=attack_range,
+        leash_distance=leash_distance,
+        patrol_speed=patrol_speed,
+        chase_speed=chase_speed,
+        flee_health_pct=flee_health_pct,
+    )
+    safe_name = name.replace(" ", "_").replace("-", "_")
+    script_path = f"Assets/Scripts/Runtime/AI/VeilBreakers_MobController_{safe_name}.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "create_mob_controller", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "create_mob_controller",
+            "name": name,
+            "script_path": abs_path,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                "Attach the generated MonoBehaviour to a GameObject in the scene",
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+async def _handle_gameplay_aggro_system(
+    name: str,
+    detection_range: float,
+    decay_rate: float,
+    leash_distance: float,
+    max_threats: int,
+) -> str:
+    """Create aggro/threat detection system (MOB-02)."""
+    script = generate_aggro_system_script(
+        name=name,
+        detection_range=detection_range,
+        decay_rate=decay_rate,
+        leash_distance=leash_distance,
+        max_threats=max_threats,
+    )
+    safe_name = name.replace(" ", "_").replace("-", "_")
+    script_path = f"Assets/Scripts/Runtime/AI/VeilBreakers_AggroSystem_{safe_name}.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "create_aggro_system", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "create_aggro_system",
+            "name": name,
+            "script_path": abs_path,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                "Attach the generated MonoBehaviour to a GameObject in the scene",
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+async def _handle_gameplay_patrol_route(
+    name: str,
+    waypoint_count: int,
+    dwell_time: float,
+    random_deviation: float,
+) -> str:
+    """Create waypoint patrol route (MOB-03)."""
+    script = generate_patrol_route_script(
+        name=name,
+        waypoint_count=waypoint_count,
+        dwell_time=dwell_time,
+        random_deviation=random_deviation,
+    )
+    safe_name = name.replace(" ", "_").replace("-", "_")
+    script_path = f"Assets/Scripts/Runtime/AI/VeilBreakers_PatrolRoute_{safe_name}.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "create_patrol_route", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "create_patrol_route",
+            "name": name,
+            "script_path": abs_path,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                "Attach the generated MonoBehaviour to a GameObject in the scene",
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+async def _handle_gameplay_spawn_system(
+    name: str,
+    max_count: int,
+    respawn_timer: float,
+    spawn_radius: float,
+    wave_cooldown: float,
+    wave_count: int,
+) -> str:
+    """Create wave-based spawn system (MOB-04)."""
+    error = _validate_spawn_params(max_count, respawn_timer, spawn_radius)
+    if error:
+        return json.dumps({"status": "error", "action": "create_spawn_system", "message": error})
+
+    script = generate_spawn_system_script(
+        name=name,
+        max_count=max_count,
+        respawn_timer=respawn_timer,
+        spawn_radius=spawn_radius,
+        wave_cooldown=wave_cooldown,
+        wave_count=wave_count,
+    )
+    safe_name = name.replace(" ", "_").replace("-", "_")
+    script_path = f"Assets/Scripts/Runtime/Spawning/VeilBreakers_SpawnManager_{safe_name}.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "create_spawn_system", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "create_spawn_system",
+            "name": name,
+            "script_path": abs_path,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                "Attach the generated MonoBehaviour to a GameObject in the scene",
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+async def _handle_gameplay_behavior_tree(
+    name: str,
+    node_types: list[str] | None,
+) -> str:
+    """Create behavior tree scaffolding (MOB-05)."""
+    script = generate_behavior_tree_script(
+        name=name,
+        node_types=node_types,
+    )
+    safe_name = name.replace(" ", "_").replace("-", "_")
+    script_path = f"Assets/Scripts/Runtime/BehaviorTree/VeilBreakers_BehaviorTree_{safe_name}.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "create_behavior_tree", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "create_behavior_tree",
+            "name": name,
+            "script_path": abs_path,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                "Attach the generated BehaviorTreeRunner MonoBehaviour to a GameObject in the scene",
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+async def _handle_gameplay_combat_ability(
+    name: str,
+    damage: float,
+    cooldown: float,
+    ability_range: float,
+    vfx_prefab: str,
+    sound_name: str,
+    hitbox_size: float,
+) -> str:
+    """Create combat ability data + executor (MOB-06)."""
+    error = _validate_ability_params(cooldown, damage)
+    if error:
+        return json.dumps({"status": "error", "action": "create_combat_ability", "message": error})
+
+    script = generate_combat_ability_script(
+        name=name,
+        damage=damage,
+        cooldown=cooldown,
+        ability_range=ability_range,
+        vfx_prefab=vfx_prefab,
+        sound_name=sound_name,
+        hitbox_size=hitbox_size,
+    )
+    safe_name = name.replace(" ", "_").replace("-", "_")
+    script_path = f"Assets/Scripts/Runtime/Combat/VeilBreakers_CombatAbility_{safe_name}.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "create_combat_ability", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "create_combat_ability",
+            "name": name,
+            "script_path": abs_path,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                "Attach the generated AbilityExecutor MonoBehaviour to a GameObject in the scene",
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+async def _handle_gameplay_projectile_system(
+    name: str,
+    velocity: float,
+    trajectory: str,
+    trail_width: float,
+    impact_vfx: str,
+    lifetime: float,
+) -> str:
+    """Create projectile system (MOB-07)."""
+    error = _validate_projectile_params(velocity, trajectory)
+    if error:
+        return json.dumps({"status": "error", "action": "create_projectile_system", "message": error})
+
+    script = generate_projectile_script(
+        name=name,
+        velocity=velocity,
+        trajectory=trajectory,
+        trail_width=trail_width,
+        impact_vfx=impact_vfx,
+        lifetime=lifetime,
+    )
+    safe_name = name.replace(" ", "_").replace("-", "_")
+    script_path = f"Assets/Scripts/Runtime/Combat/VeilBreakers_Projectile_{safe_name}.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "create_projectile_system", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "create_projectile_system",
+            "name": name,
+            "script_path": abs_path,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                "Attach the generated Projectile MonoBehaviour to a prefab",
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Performance tool -- compound tool covering PERF-01 through PERF-05
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def unity_performance(
+    action: Literal[
+        "profile_scene",        # PERF-01: frame time, draw calls, memory
+        "setup_lod_groups",     # PERF-02: auto-generate LODGroups
+        "bake_lightmaps",      # PERF-03: async lightmap baking
+        "audit_assets",        # PERF-04: find oversized/unused/uncompressed
+        "automate_build",      # PERF-05: build + size report
+    ],
+    # Profiler budgets (PERF-01)
+    target_frame_time_ms: float = 16.67,
+    max_draw_calls: int = 2000,
+    max_batches: int = 1000,
+    max_triangles: int = 2000000,
+    max_memory_mb: float = 2048.0,
+    # LOD params (PERF-02)
+    lod_count: int = 3,
+    screen_percentages: list[float] | None = None,
+    # Lightmap params (PERF-03)
+    lightmap_quality: str = "medium",
+    bounces: int = 2,
+    lightmap_resolution: int = 32,
+    # Asset audit params (PERF-04)
+    max_texture_size: int = 2048,
+    allowed_audio_formats: list[str] | None = None,
+    # Build params (PERF-05)
+    build_target: str = "StandaloneWindows64",
+    scenes: list[str] | None = None,
+    build_options: str = "None",
+) -> str:
+    """Unity Performance -- scene profiling, LOD setup, lightmap baking, asset audit, build automation.
+
+    This compound tool generates C# editor scripts for Unity performance
+    optimization: scene profiling with budget thresholds, automatic LODGroup
+    setup, async lightmap baking, asset auditing for oversized/unused/uncompressed
+    assets, and build pipeline automation with size reports.
+
+    Actions:
+    - profile_scene: Collect frame time/draw calls/memory and compare against budgets (PERF-01)
+    - setup_lod_groups: Auto-generate LODGroups for scene MeshRenderers (PERF-02)
+    - bake_lightmaps: Async lightmap baking with quality/bounces/resolution (PERF-03)
+    - audit_assets: Find oversized textures, uncompressed audio, unused assets (PERF-04)
+    - automate_build: Build pipeline with packed asset size report (PERF-05)
+
+    Args:
+        action: The performance action to perform.
+        target_frame_time_ms: Frame time budget in milliseconds (PERF-01).
+        max_draw_calls: Draw call budget (PERF-01).
+        max_batches: Batch count budget (PERF-01).
+        max_triangles: Triangle count budget (PERF-01).
+        max_memory_mb: Memory budget in MB (PERF-01).
+        lod_count: Number of LOD levels (PERF-02).
+        screen_percentages: Screen percentage thresholds per LOD level, must be strictly descending (PERF-02).
+        lightmap_quality: Quality preset name (PERF-03).
+        bounces: Number of light bounces (PERF-03).
+        lightmap_resolution: Lightmap texels per unit (PERF-03).
+        max_texture_size: Max texture dimension before flagging as oversized (PERF-04).
+        allowed_audio_formats: Allowed audio compression formats (PERF-04).
+        build_target: BuildTarget enum name e.g. StandaloneWindows64 (PERF-05).
+        scenes: Scene paths to include in build, defaults to build settings (PERF-05).
+        build_options: BuildOptions flags e.g. Development, None (PERF-05).
+    """
+    try:
+        if action == "profile_scene":
+            return await _handle_performance_profile_scene(
+                target_frame_time_ms, max_draw_calls, max_batches, max_triangles, max_memory_mb,
+            )
+        elif action == "setup_lod_groups":
+            return await _handle_performance_setup_lod_groups(
+                lod_count, screen_percentages,
+            )
+        elif action == "bake_lightmaps":
+            return await _handle_performance_bake_lightmaps(
+                lightmap_quality, bounces, lightmap_resolution,
+            )
+        elif action == "audit_assets":
+            return await _handle_performance_audit_assets(
+                max_texture_size, allowed_audio_formats,
+            )
+        elif action == "automate_build":
+            return await _handle_performance_automate_build(
+                build_target, scenes, build_options,
+            )
+        else:
+            return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
+    except Exception as exc:
+        logger.exception("unity_performance action '%s' failed", action)
+        return json.dumps({"status": "error", "action": action, "message": str(exc)})
+
+
+# ---------------------------------------------------------------------------
+# Performance action handlers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_performance_profile_scene(
+    target_frame_time_ms: float,
+    max_draw_calls: int,
+    max_batches: int,
+    max_triangles: int,
+    max_memory_mb: float,
+) -> str:
+    """Generate scene profiler editor script (PERF-01)."""
+    budgets = {
+        "frame_time": target_frame_time_ms,
+        "draw_calls": max_draw_calls,
+        "batches": max_batches,
+        "triangles": max_triangles,
+        "memory_mb": max_memory_mb,
+    }
+    script = generate_scene_profiler_script(budgets=budgets)
+    script_path = "Assets/Editor/Generated/Performance/VeilBreakers_SceneProfiler.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "profile_scene", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "profile_scene",
+            "script_path": abs_path,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                'Call mcp-unity execute_menu_item with path "VeilBreakers/Performance/Profile Scene"',
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+async def _handle_performance_setup_lod_groups(
+    lod_count: int,
+    screen_percentages: list[float] | None,
+) -> str:
+    """Generate LODGroup setup editor script (PERF-02)."""
+    pcts = screen_percentages or [0.6, 0.3, 0.15][:lod_count]
+
+    if not _validate_lod_screen_percentages(pcts):
+        return json.dumps({
+            "status": "error",
+            "action": "setup_lod_groups",
+            "message": f"screen_percentages must be strictly descending and all > 0, got: {pcts}",
+        })
+
+    script = generate_lod_setup_script(lod_count=lod_count, screen_percentages=pcts)
+    script_path = "Assets/Editor/Generated/Performance/VeilBreakers_LODSetup.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "setup_lod_groups", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "setup_lod_groups",
+            "script_path": abs_path,
+            "lod_count": len(pcts),
+            "screen_percentages": pcts,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                'Call mcp-unity execute_menu_item with path "VeilBreakers/Performance/Setup LODGroups"',
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+async def _handle_performance_bake_lightmaps(
+    lightmap_quality: str,
+    bounces: int,
+    lightmap_resolution: int,
+) -> str:
+    """Generate lightmap bake editor script (PERF-03)."""
+    script = generate_lightmap_bake_script(
+        quality=lightmap_quality,
+        bounces=bounces,
+        resolution=lightmap_resolution,
+    )
+    script_path = "Assets/Editor/Generated/Performance/VeilBreakers_LightmapBaker.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "bake_lightmaps", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "bake_lightmaps",
+            "script_path": abs_path,
+            "quality": lightmap_quality,
+            "bounces": bounces,
+            "resolution": lightmap_resolution,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                'Call mcp-unity execute_menu_item with path "VeilBreakers/Performance/Bake Lightmaps"',
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+async def _handle_performance_audit_assets(
+    max_texture_size: int,
+    allowed_audio_formats: list[str] | None,
+) -> str:
+    """Generate asset audit editor script (PERF-04)."""
+    formats = allowed_audio_formats or ["Vorbis", "AAC"]
+    script = generate_asset_audit_script(
+        max_texture_size=max_texture_size,
+        allowed_audio_formats=formats,
+    )
+    script_path = "Assets/Editor/Generated/Performance/VeilBreakers_AssetAudit.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "audit_assets", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "audit_assets",
+            "script_path": abs_path,
+            "max_texture_size": max_texture_size,
+            "allowed_audio_formats": formats,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                'Call mcp-unity execute_menu_item with path "VeilBreakers/Performance/Audit Assets"',
+            ],
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+async def _handle_performance_automate_build(
+    build_target: str,
+    scenes: list[str] | None,
+    build_options: str,
+) -> str:
+    """Generate build automation editor script (PERF-05)."""
+    scene_list = scenes or []
+    script = generate_build_automation_script(
+        target=build_target,
+        scenes=scene_list if scene_list else None,
+        options=build_options,
+    )
+    script_path = "Assets/Editor/Generated/Performance/VeilBreakers_BuildAutomation.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "automate_build", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "automate_build",
+            "script_path": abs_path,
+            "build_target": build_target,
+            "build_options": build_options,
+            "next_steps": [
+                "Call mcp-unity recompile_scripts to compile the new script",
+                'Call mcp-unity execute_menu_item with path "VeilBreakers/Performance/Build With Report"',
             ],
             "result_file": "Temp/vb_result.json",
         },
