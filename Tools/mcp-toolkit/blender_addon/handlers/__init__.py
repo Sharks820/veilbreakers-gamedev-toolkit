@@ -29,6 +29,12 @@ from .export import (
     handle_export_gltf,
 )
 from .execute import handle_execute_code
+from .mesh import (
+    handle_analyze_topology,
+    handle_auto_repair,
+    handle_check_game_ready,
+)
+# NOTE: UV handler imports will be added by Plan 02-02. Do not add prematurely.
 
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "ping": lambda params: {"status": "success", "result": "pong"},
@@ -57,4 +63,9 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "export_gltf": handle_export_gltf,
     # Code execution
     "execute_code": handle_execute_code,
+    # Mesh analysis and repair
+    "mesh_analyze_topology": handle_analyze_topology,
+    "mesh_auto_repair": handle_auto_repair,
+    "mesh_check_game_ready": handle_check_game_ready,
+    # NOTE: UV handler entries will be added by Plan 02-02.
 }

@@ -308,6 +308,58 @@ async def blender_export(
     return json.dumps(result, indent=2, default=str)
 
 
+@mcp.tool()
+async def blender_mesh(
+    action: Literal["analyze", "repair", "game_check"],
+    object_name: str,
+    merge_distance: float = 0.0001,
+    max_hole_sides: int = 8,
+    poly_budget: int = 50000,
+    platform: str = "pc",
+    capture_viewport: bool = True,
+):
+    """Mesh topology analysis, repair, and game-readiness validation.
+
+    Actions:
+    - analyze: Full topology analysis with A-F grading (non-manifold, n-gons, poles, loose geo, edge flow)
+    - repair: Auto-repair pipeline (remove doubles, fix normals, fill holes, remove loose, dissolve degenerate)
+    - game_check: Composite game-readiness check (topology + poly budget + UV + materials + naming + transforms)
+    """
+    blender = get_blender_connection()
+
+    if action == "analyze":
+        result = await blender.send_command(
+            "mesh_analyze_topology", {"object_name": object_name}
+        )
+        return [json.dumps(result, indent=2, default=str)]
+
+    elif action == "repair":
+        result = await blender.send_command(
+            "mesh_auto_repair",
+            {
+                "object_name": object_name,
+                "merge_distance": merge_distance,
+                "max_hole_sides": max_hole_sides,
+            },
+        )
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "game_check":
+        result = await blender.send_command(
+            "mesh_check_game_ready",
+            {
+                "object_name": object_name,
+                "poly_budget": poly_budget,
+                "platform": platform,
+            },
+        )
+        return [json.dumps(result, indent=2, default=str)]
+
+    return ["Unknown action"]
+
+# NOTE: blender_uv tool will be added by Plan 02-02. Do not add prematurely.
+
+
 def main():
     mcp.run(transport="stdio")
 
