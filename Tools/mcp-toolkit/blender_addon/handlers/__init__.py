@@ -34,7 +34,17 @@ from .mesh import (
     handle_auto_repair,
     handle_check_game_ready,
 )
-# NOTE: UV handler imports will be added by Plan 02-02. Do not add prematurely.
+from .uv import (  # noqa: F401, E402
+    handle_analyze_uv,
+    handle_unwrap_xatlas,
+    handle_unwrap_blender,
+    handle_pack_islands,
+    handle_generate_lightmap_uv,
+    handle_equalize_density,
+    handle_export_uv_layout,
+    handle_set_active_uv_layer,
+    handle_ensure_xatlas,
+)
 
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "ping": lambda params: {"status": "success", "result": "pong"},
@@ -67,5 +77,14 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "mesh_analyze_topology": handle_analyze_topology,
     "mesh_auto_repair": handle_auto_repair,
     "mesh_check_game_ready": handle_check_game_ready,
-    # NOTE: UV handler entries will be added by Plan 02-02.
+    # UV operations
+    "uv_analyze": handle_analyze_uv,
+    "uv_unwrap_xatlas": handle_unwrap_xatlas,
+    "uv_unwrap_blender": handle_unwrap_blender,
+    "uv_pack_islands": handle_pack_islands,
+    "uv_generate_lightmap": handle_generate_lightmap_uv,
+    "uv_equalize_density": handle_equalize_density,
+    "uv_export_layout": handle_export_uv_layout,
+    "uv_set_active_layer": handle_set_active_uv_layer,
+    "uv_ensure_xatlas": handle_ensure_xatlas,
 }
