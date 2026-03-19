@@ -357,7 +357,139 @@ async def blender_mesh(
 
     return ["Unknown action"]
 
-# NOTE: blender_uv tool will be added by Plan 02-02. Do not add prematurely.
+
+
+@mcp.tool()
+async def blender_uv(
+    action: Literal[
+        "analyze",
+        "unwrap",
+        "unwrap_blender",
+        "pack",
+        "lightmap",
+        "equalize",
+        "export_layout",
+        "set_layer",
+        "ensure_xatlas",
+    ],
+    object_name: str | None = None,
+    texture_size: int = 1024,
+    padding: int = 2,
+    resolution: int = 1024,
+    margin: float = 0.001,
+    layer_name: str | None = None,
+    method: str = "smart_project",
+    max_chart_area: float | None = None,
+    normal_deviation_weight: float | None = None,
+    max_iterations: int | None = None,
+    rotate_charts: bool = True,
+    target_density: float | None = None,
+    size: int = 1024,
+    opacity: float = 0.25,
+    capture_viewport: bool = True,
+):
+    """UV mapping analysis, unwrapping, packing, and optimization.
+
+    Actions:
+    - analyze: UV quality analysis (stretch, overlap, island count, texel density, seams)
+    - unwrap: Automatic UV unwrap via xatlas (high quality, configurable)
+    - unwrap_blender: Blender native UV unwrap (smart_project or angle_based)
+    - pack: UV island packing optimization
+    - lightmap: Generate lightmap UV2 for Unity (separate from UV1)
+    - equalize: Texel density equalization across all UV islands
+    - export_layout: Export UV layout as PNG image for visual review
+    - set_layer: Set active UV layer by name
+    - ensure_xatlas: Install xatlas into Blender Python if not present
+    """
+    blender = get_blender_connection()
+
+    if action == "analyze":
+        result = await blender.send_command(
+            "uv_analyze",
+            {"object_name": object_name, "texture_size": texture_size},
+        )
+        return [json.dumps(result, indent=2, default=str)]
+
+    elif action == "unwrap":
+        params = {
+            "object_name": object_name,
+            "padding": padding,
+            "resolution": resolution,
+            "rotate_charts": rotate_charts,
+        }
+        if max_chart_area is not None:
+            params["max_chart_area"] = max_chart_area
+        if normal_deviation_weight is not None:
+            params["normal_deviation_weight"] = normal_deviation_weight
+        if max_iterations is not None:
+            params["max_iterations"] = max_iterations
+        result = await blender.send_command("uv_unwrap_xatlas", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "unwrap_blender":
+        result = await blender.send_command(
+            "uv_unwrap_blender",
+            {"object_name": object_name, "method": method},
+        )
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "pack":
+        result = await blender.send_command(
+            "uv_pack_islands",
+            {"object_name": object_name, "margin": margin},
+        )
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "lightmap":
+        result = await blender.send_command(
+            "uv_generate_lightmap",
+            {"object_name": object_name, "padding": padding, "resolution": resolution},
+        )
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "equalize":
+        params_eq: dict = {
+            "object_name": object_name,
+            "texture_size": texture_size,
+        }
+        if target_density is not None:
+            params_eq["target_density"] = target_density
+        result = await blender.send_command("uv_equalize_density", params_eq)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "export_layout":
+        result = await blender.send_command(
+            "uv_export_layout",
+            {"object_name": object_name, "size": size, "opacity": opacity},
+        )
+        filepath = result.get("filepath")
+        if filepath and os.path.isfile(filepath):
+            try:
+                with open(filepath, "rb") as f:
+                    image_data = f.read()
+                return [
+                    json.dumps(result, indent=2, default=str),
+                    Image(data=image_data, format="png"),
+                ]
+            finally:
+                try:
+                    os.unlink(filepath)
+                except OSError:
+                    pass
+        return [json.dumps(result, indent=2, default=str)]
+
+    elif action == "set_layer":
+        result = await blender.send_command(
+            "uv_set_active_layer",
+            {"object_name": object_name, "layer_name": layer_name},
+        )
+        return [json.dumps(result, indent=2, default=str)]
+
+    elif action == "ensure_xatlas":
+        result = await blender.send_command("uv_ensure_xatlas", {})
+        return [json.dumps(result, indent=2, default=str)]
+
+    return ["Unknown action"]
 
 
 def main():
