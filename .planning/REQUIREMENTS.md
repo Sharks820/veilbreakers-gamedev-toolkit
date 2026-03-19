@@ -208,27 +208,140 @@ Deferred to future release.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ARCH-01 through ARCH-08 | Phase 1 | Pending |
-| MESH-01 through MESH-08 | Phase 2 | Pending |
-| UV-01 through UV-05 | Phase 2 | Pending |
-| TEX-01 through TEX-10 | Phase 3 | Pending |
-| RIG-01 through RIG-13 | Phase 4 | Pending |
-| ANIM-01 through ANIM-12 | Phase 5 | Pending |
-| ENV-01 through ENV-16 | Phase 6 | Pending |
-| VFX-01 through VFX-10 | Phase 7 | Pending |
-| AUD-01 through AUD-10 | Phase 7 | Pending |
-| UI-01 through UI-07 | Phase 7 | Pending |
-| SCENE-01 through SCENE-07 | Phase 7 | Pending |
-| MOB-01 through MOB-07 | Phase 8 | Pending |
-| PIPE-01 through PIPE-07 | Phase 3 | Pending |
-| PERF-01 through PERF-05 | Phase 8 | Pending |
-| CONC-01 through CONC-03 | Phase 3 | Pending |
+| ARCH-01 | Phase 1: Foundation & Server Architecture | Pending |
+| ARCH-02 | Phase 1: Foundation & Server Architecture | Pending |
+| ARCH-03 | Phase 1: Foundation & Server Architecture | Pending |
+| ARCH-04 | Phase 1: Foundation & Server Architecture | Pending |
+| ARCH-05 | Phase 1: Foundation & Server Architecture | Pending |
+| ARCH-06 | Phase 1: Foundation & Server Architecture | Pending |
+| ARCH-07 | Phase 1: Foundation & Server Architecture | Pending |
+| ARCH-08 | Phase 1: Foundation & Server Architecture | Pending |
+| MESH-01 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| MESH-02 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| MESH-03 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| MESH-04 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| MESH-05 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| MESH-06 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| MESH-07 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| MESH-08 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| UV-01 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| UV-02 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| UV-03 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| UV-04 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| UV-05 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| TEX-01 | Phase 3: Texturing & Asset Generation | Pending |
+| TEX-02 | Phase 3: Texturing & Asset Generation | Pending |
+| TEX-03 | Phase 3: Texturing & Asset Generation | Pending |
+| TEX-04 | Phase 3: Texturing & Asset Generation | Pending |
+| TEX-05 | Phase 3: Texturing & Asset Generation | Pending |
+| TEX-06 | Phase 3: Texturing & Asset Generation | Pending |
+| TEX-07 | Phase 3: Texturing & Asset Generation | Pending |
+| TEX-08 | Phase 3: Texturing & Asset Generation | Pending |
+| TEX-09 | Phase 3: Texturing & Asset Generation | Pending |
+| TEX-10 | Phase 3: Texturing & Asset Generation | Pending |
+| PIPE-01 | Phase 3: Texturing & Asset Generation | Pending |
+| PIPE-02 | Phase 3: Texturing & Asset Generation | Pending |
+| PIPE-03 | Phase 3: Texturing & Asset Generation | Pending |
+| PIPE-04 | Phase 3: Texturing & Asset Generation | Pending |
+| PIPE-05 | Phase 3: Texturing & Asset Generation | Pending |
+| PIPE-06 | Phase 3: Texturing & Asset Generation | Pending |
+| PIPE-07 | Phase 3: Texturing & Asset Generation | Pending |
+| CONC-01 | Phase 3: Texturing & Asset Generation | Pending |
+| CONC-02 | Phase 3: Texturing & Asset Generation | Pending |
+| CONC-03 | Phase 3: Texturing & Asset Generation | Pending |
+| RIG-01 | Phase 4: Rigging | Pending |
+| RIG-02 | Phase 4: Rigging | Pending |
+| RIG-03 | Phase 4: Rigging | Pending |
+| RIG-04 | Phase 4: Rigging | Pending |
+| RIG-05 | Phase 4: Rigging | Pending |
+| RIG-06 | Phase 4: Rigging | Pending |
+| RIG-07 | Phase 4: Rigging | Pending |
+| RIG-08 | Phase 4: Rigging | Pending |
+| RIG-09 | Phase 4: Rigging | Pending |
+| RIG-10 | Phase 4: Rigging | Pending |
+| RIG-11 | Phase 4: Rigging | Pending |
+| RIG-12 | Phase 4: Rigging | Pending |
+| RIG-13 | Phase 4: Rigging | Pending |
+| ANIM-01 | Phase 5: Animation | Pending |
+| ANIM-02 | Phase 5: Animation | Pending |
+| ANIM-03 | Phase 5: Animation | Pending |
+| ANIM-04 | Phase 5: Animation | Pending |
+| ANIM-05 | Phase 5: Animation | Pending |
+| ANIM-06 | Phase 5: Animation | Pending |
+| ANIM-07 | Phase 5: Animation | Pending |
+| ANIM-08 | Phase 5: Animation | Pending |
+| ANIM-09 | Phase 5: Animation | Pending |
+| ANIM-10 | Phase 5: Animation | Pending |
+| ANIM-11 | Phase 5: Animation | Pending |
+| ANIM-12 | Phase 5: Animation | Pending |
+| ENV-01 | Phase 6: Environment & World Building | Pending |
+| ENV-02 | Phase 6: Environment & World Building | Pending |
+| ENV-03 | Phase 6: Environment & World Building | Pending |
+| ENV-04 | Phase 6: Environment & World Building | Pending |
+| ENV-05 | Phase 6: Environment & World Building | Pending |
+| ENV-06 | Phase 6: Environment & World Building | Pending |
+| ENV-07 | Phase 6: Environment & World Building | Pending |
+| ENV-08 | Phase 6: Environment & World Building | Pending |
+| ENV-09 | Phase 6: Environment & World Building | Pending |
+| ENV-10 | Phase 6: Environment & World Building | Pending |
+| ENV-11 | Phase 6: Environment & World Building | Pending |
+| ENV-12 | Phase 6: Environment & World Building | Pending |
+| ENV-13 | Phase 6: Environment & World Building | Pending |
+| ENV-14 | Phase 6: Environment & World Building | Pending |
+| ENV-15 | Phase 6: Environment & World Building | Pending |
+| ENV-16 | Phase 6: Environment & World Building | Pending |
+| VFX-01 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| VFX-02 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| VFX-03 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| VFX-04 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| VFX-05 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| VFX-06 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| VFX-07 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| VFX-08 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| VFX-09 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| VFX-10 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| AUD-01 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| AUD-02 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| AUD-03 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| AUD-04 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| AUD-05 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| AUD-06 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| AUD-07 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| AUD-08 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| AUD-09 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| AUD-10 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| UI-01 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| UI-02 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| UI-03 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| UI-04 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| UI-05 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| UI-06 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| UI-07 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| SCENE-01 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| SCENE-02 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| SCENE-03 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| SCENE-04 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| SCENE-05 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| SCENE-06 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| SCENE-07 | Phase 7: VFX, Audio, UI & Unity Scene | Pending |
+| MOB-01 | Phase 8: Gameplay AI & Performance | Pending |
+| MOB-02 | Phase 8: Gameplay AI & Performance | Pending |
+| MOB-03 | Phase 8: Gameplay AI & Performance | Pending |
+| MOB-04 | Phase 8: Gameplay AI & Performance | Pending |
+| MOB-05 | Phase 8: Gameplay AI & Performance | Pending |
+| MOB-06 | Phase 8: Gameplay AI & Performance | Pending |
+| MOB-07 | Phase 8: Gameplay AI & Performance | Pending |
+| PERF-01 | Phase 8: Gameplay AI & Performance | Pending |
+| PERF-02 | Phase 8: Gameplay AI & Performance | Pending |
+| PERF-03 | Phase 8: Gameplay AI & Performance | Pending |
+| PERF-04 | Phase 8: Gameplay AI & Performance | Pending |
+| PERF-05 | Phase 8: Gameplay AI & Performance | Pending |
 
 **Coverage:**
-- v1 requirements: 120 total
-- Mapped to phases: 120
-- Unmapped: 0 ✓
+- v1 requirements: 128 total
+- Mapped to phases: 128
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-18*
-*Last updated: 2026-03-18 after research completion*
+*Last updated: 2026-03-18 after roadmap creation*
