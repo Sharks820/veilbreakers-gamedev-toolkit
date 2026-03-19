@@ -127,7 +127,13 @@ Plans:
   3. UI screens generated from text descriptions (UXML + USS) pass layout validation (no overlaps, zero-size, overflow) and WCAG contrast checks across 5 resolutions, with Gemini confirming visual quality
   4. Unity scenes import terrain heightmaps, scatter objects, configure lighting/fog/post-processing, bake NavMesh with agent settings, and set up Animator Controllers with blend trees
   5. Screenshot comparison detects visual regressions between scene versions, and Gemini visual review provides actionable quality assessments at every visual checkpoint
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 07-01-PLAN.md -- Unity MCP server foundation, auto-recompile/editor tools, Gemini review, Settings
+- [ ] 07-02-PLAN.md -- VFX system: particle templates, brand VFX, shaders, post-processing, screen effects
+- [ ] 07-03-PLAN.md -- Audio system: ElevenLabs AI generation, footstep/adaptive/mixer/pool C# templates
+- [ ] 07-04-PLAN.md -- UI system: UXML/USS generation, WCAG contrast, layout validation, screenshot diff
+- [ ] 07-05-PLAN.md -- Scene setup: terrain, scatter, lighting, NavMesh, animator, avatar, animation rigging
 
 ### Phase 8: Gameplay AI & Performance
 **Goal**: Claude can generate complete mob AI systems and optimize game performance -- the final integration layer that makes environments feel alive and the game run smoothly
@@ -151,7 +157,7 @@ Plans:
 | 4. Rigging | 0/4 | Planned | - |
 | 5. Animation | 0/4 | Planned | - |
 | 6. Environment & World Building | 0/4 | Planned | - |
-| 7. VFX, Audio, UI & Unity Scene | 0/? | Not started | - |
+| 7. VFX, Audio, UI & Unity Scene | 0/5 | Planned | - |
 | 8. Gameplay AI & Performance | 0/? | Not started | - |
 
 ---
