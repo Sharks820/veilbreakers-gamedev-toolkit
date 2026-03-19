@@ -50,6 +50,11 @@ from .uv import (  # noqa: F401, E402
     handle_set_active_uv_layer,
     handle_ensure_xatlas,
 )
+from .texture import (
+    handle_create_pbr_material,
+    handle_bake_textures,
+    handle_validate_texture,
+)
 
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "ping": lambda params: {"status": "success", "result": "pong"},
@@ -98,4 +103,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "uv_export_layout": handle_export_uv_layout,
     "uv_set_active_layer": handle_set_active_uv_layer,
     "uv_ensure_xatlas": handle_ensure_xatlas,
+    # Texture operations
+    "texture_create_pbr": handle_create_pbr_material,
+    "texture_bake": handle_bake_textures,
+    "texture_validate": handle_validate_texture,
 }
