@@ -33,6 +33,7 @@ BLOCKED_FUNCTIONS = frozenset({
     "__import__",
     "open", "input", "breakpoint", "help",
     "globals", "locals", "vars", "dir",
+    "format",  # str.format() can leak dunder info via format specifiers
 })
 
 # Block all dunder attribute access except a safe allowlist.
@@ -119,7 +120,7 @@ class SecurityValidator(ast.NodeVisitor):
                 f"Blocked function: '{node.func.id}()' (security restriction)"
             )
         # Block method calls where the method name matches a blocked function
-        # e.g., obj.exec(), obj.eval(), obj.compile()
+        # e.g., obj.exec(), obj.eval(), obj.compile(), str.format()
         if isinstance(node.func, ast.Attribute) and node.func.attr in BLOCKED_FUNCTIONS:
             self.violations.append(
                 f"Blocked method call: '.{node.func.attr}()' (security restriction)"
@@ -159,6 +160,10 @@ class SecurityValidator(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_AsyncFunctionDef(self, node):
+        self._check_decorators(node)
+        self.generic_visit(node)
+
+    def visit_ClassDef(self, node):
         self._check_decorators(node)
         self.generic_visit(node)
 
