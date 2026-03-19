@@ -165,6 +165,11 @@ async def blender_material(
         result = await blender.send_command("material_list")
         return json.dumps(result, indent=2, default=str)
 
+    if action == "assign" and (not name or not object_name):
+        return "ERROR: 'name' and 'object_name' are required for action 'assign'"
+    if action in ("modify",) and not name:
+        return "ERROR: 'name' is required for action 'modify'"
+
     params = {}
     if name is not None:
         params["name"] = name
