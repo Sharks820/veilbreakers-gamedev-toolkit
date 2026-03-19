@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "vb-blender": {
+      "command": "uv",
+      "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-blender-mcp"],
+      "env": {
+        "BLENDER_PORT": "9876",
+        "BLENDER_HOST": "localhost"
+      }
+    },
+    "vb-unity": {
+      "command": "uv",
+      "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-unity-mcp"],
+      "env": {
+        "UNITY_PROJECT_PATH": ""
+      }
+    }
+  }
+}
