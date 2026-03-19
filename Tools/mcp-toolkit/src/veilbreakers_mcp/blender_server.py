@@ -1443,6 +1443,419 @@ async def blender_animation(
     return "Unknown action"
 
 
+# ---------------------------------------------------------------------------
+# Compound tool: blender_environment
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def blender_environment(
+    action: Literal[
+        "generate_terrain",
+        "paint_terrain",
+        "carve_river",
+        "generate_road",
+        "create_water",
+        "export_heightmap",
+        "scatter_vegetation",
+        "scatter_props",
+        "create_breakable",
+    ],
+    # Common params
+    name: str | None = None,
+    terrain_name: str | None = None,
+    seed: int | None = None,
+    # generate_terrain params
+    terrain_type: str | None = None,
+    resolution: int | None = None,
+    height_scale: float | None = None,
+    scale: float | None = None,
+    erosion: str | None = None,
+    erosion_iterations: int | None = None,
+    octaves: int | None = None,
+    persistence: float | None = None,
+    lacunarity: float | None = None,
+    # paint_terrain params
+    biome_rules: list[dict] | None = None,
+    # carve_river params
+    source: list[int] | None = None,
+    destination: list[int] | None = None,
+    # road / water / river params
+    width: float | None = None,
+    depth: float | None = None,
+    waypoints: list[list[int]] | None = None,
+    grade_strength: float | None = None,
+    water_level: float | None = None,
+    # export_heightmap params
+    filepath: str | None = None,
+    # scatter_vegetation params
+    rules: list[dict] | None = None,
+    min_distance: float | None = None,
+    max_instances: int | None = None,
+    # scatter_props params
+    area_name: str | None = None,
+    buildings: list[dict] | None = None,
+    prop_density: float | None = None,
+    # create_breakable params
+    prop_type: str | None = None,
+    position: list[float] | None = None,
+    # Visual feedback
+    capture_viewport: bool = True,
+):
+    """Environment generation -- terrain, biomes, rivers, roads, water, vegetation scatter, prop scatter, breakable props.
+
+    Actions:
+    - generate_terrain: Create heightmap terrain mesh with optional erosion
+    - paint_terrain: Auto-paint biome materials based on slope/altitude
+    - carve_river: Carve river channel along A* path
+    - generate_road: Generate road between waypoints with grading
+    - create_water: Create water plane at specified level
+    - export_heightmap: Export terrain as 16-bit RAW for Unity
+    - scatter_vegetation: Biome-aware vegetation scatter using Poisson disk
+    - scatter_props: Context-aware prop placement near buildings
+    - create_breakable: Generate intact + damaged prop variants
+    """
+    blender = get_blender_connection()
+
+    if action == "generate_terrain":
+        params: dict = {}
+        if name is not None:
+            params["name"] = name
+        if terrain_type is not None:
+            params["terrain_type"] = terrain_type
+        if resolution is not None:
+            params["resolution"] = resolution
+        if height_scale is not None:
+            params["height_scale"] = height_scale
+        if scale is not None:
+            params["scale"] = scale
+        if seed is not None:
+            params["seed"] = seed
+        if erosion is not None:
+            params["erosion"] = erosion
+        if erosion_iterations is not None:
+            params["erosion_iterations"] = erosion_iterations
+        if octaves is not None:
+            params["octaves"] = octaves
+        if persistence is not None:
+            params["persistence"] = persistence
+        if lacunarity is not None:
+            params["lacunarity"] = lacunarity
+        result = await blender.send_command("env_generate_terrain", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "paint_terrain":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if biome_rules is not None:
+            params["biome_rules"] = biome_rules
+        if height_scale is not None:
+            params["height_scale"] = height_scale
+        result = await blender.send_command("env_paint_terrain", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "carve_river":
+        params = {}
+        if terrain_name is not None:
+            params["terrain_name"] = terrain_name
+        if source is not None:
+            params["source"] = source
+        if destination is not None:
+            params["destination"] = destination
+        if width is not None:
+            params["width"] = int(width)
+        if depth is not None:
+            params["depth"] = depth
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("env_carve_river", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_road":
+        params = {}
+        if terrain_name is not None:
+            params["terrain_name"] = terrain_name
+        if waypoints is not None:
+            params["waypoints"] = waypoints
+        if width is not None:
+            params["width"] = int(width)
+        if grade_strength is not None:
+            params["grade_strength"] = grade_strength
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("env_generate_road", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "create_water":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if water_level is not None:
+            params["water_level"] = water_level
+        if terrain_name is not None:
+            params["terrain_name"] = terrain_name
+        if width is not None:
+            params["width"] = width
+        if depth is not None:
+            params["depth"] = depth
+        result = await blender.send_command("env_create_water", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "export_heightmap":
+        params = {}
+        if terrain_name is not None:
+            params["terrain_name"] = terrain_name
+        if filepath is not None:
+            params["filepath"] = filepath
+        result = await blender.send_command("env_export_heightmap", params)
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "scatter_vegetation":
+        params = {}
+        if terrain_name is not None:
+            params["terrain_name"] = terrain_name
+        if rules is not None:
+            params["rules"] = rules
+        if min_distance is not None:
+            params["min_distance"] = min_distance
+        if seed is not None:
+            params["seed"] = seed
+        if max_instances is not None:
+            params["max_instances"] = max_instances
+        result = await blender.send_command("env_scatter_vegetation", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "scatter_props":
+        params = {}
+        if area_name is not None:
+            params["area_name"] = area_name
+        if buildings is not None:
+            params["buildings"] = buildings
+        if prop_density is not None:
+            params["prop_density"] = prop_density
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("env_scatter_props", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "create_breakable":
+        params = {}
+        if prop_type is not None:
+            params["prop_type"] = prop_type
+        if position is not None:
+            params["position"] = position
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("env_create_breakable", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    return "Unknown action"
+
+
+# ---------------------------------------------------------------------------
+# Compound tool: blender_worldbuilding
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def blender_worldbuilding(
+    action: Literal[
+        "generate_dungeon",
+        "generate_cave",
+        "generate_town",
+        "generate_building",
+        "generate_castle",
+        "generate_ruins",
+        "generate_interior",
+        "generate_modular_kit",
+    ],
+    # Common params (float to accommodate both grid dimensions and building dimensions)
+    name: str | None = None,
+    width: float | None = None,
+    height: float | None = None,
+    depth: float | None = None,
+    seed: int | None = None,
+    # Dungeon params
+    min_room_size: int | None = None,
+    max_depth: int | None = None,
+    cell_size: float | None = None,
+    wall_height: float | None = None,
+    # Cave params
+    fill_probability: float | None = None,
+    iterations: int | None = None,
+    # Town params
+    num_districts: int | None = None,
+    # Building params
+    floors: int | None = None,
+    style: str | None = None,
+    # Castle params
+    outer_size: float | None = None,
+    keep_size: float | None = None,
+    tower_count: int | None = None,
+    # Ruins params
+    damage_level: float | None = None,
+    # Interior params
+    room_type: str | None = None,
+    # Modular kit params
+    name_prefix: str | None = None,
+    pieces: list[str] | None = None,
+    # Visual feedback
+    capture_viewport: bool = True,
+):
+    """Worldbuilding generation -- dungeons, caves, towns, buildings, castles, ruins, interiors, modular kits.
+
+    Actions:
+    - generate_dungeon: BSP dungeon with rooms, corridors, doors
+    - generate_cave: Cellular automata cave system
+    - generate_town: Voronoi district town layout
+    - generate_building: Grammar-based building from style presets
+    - generate_castle: Castle with walls, towers, keep, gatehouse
+    - generate_ruins: Damaged building with debris
+    - generate_interior: Furnished room interior
+    - generate_modular_kit: Modular architecture kit pieces
+    """
+    blender = get_blender_connection()
+
+    if action == "generate_dungeon":
+        params: dict = {}
+        if name is not None:
+            params["name"] = name
+        if width is not None:
+            params["width"] = int(width)
+        if height is not None:
+            params["height"] = int(height)
+        if min_room_size is not None:
+            params["min_room_size"] = min_room_size
+        if max_depth is not None:
+            params["max_depth"] = max_depth
+        if seed is not None:
+            params["seed"] = seed
+        if cell_size is not None:
+            params["cell_size"] = cell_size
+        if wall_height is not None:
+            params["wall_height"] = wall_height
+        result = await blender.send_command("world_generate_dungeon", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_cave":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if width is not None:
+            params["width"] = int(width)
+        if height is not None:
+            params["height"] = int(height)
+        if fill_probability is not None:
+            params["fill_probability"] = fill_probability
+        if iterations is not None:
+            params["iterations"] = iterations
+        if seed is not None:
+            params["seed"] = seed
+        if cell_size is not None:
+            params["cell_size"] = cell_size
+        if wall_height is not None:
+            params["wall_height"] = wall_height
+        result = await blender.send_command("world_generate_cave", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_town":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if width is not None:
+            params["width"] = int(width)
+        if height is not None:
+            params["height"] = int(height)
+        if num_districts is not None:
+            params["num_districts"] = num_districts
+        if seed is not None:
+            params["seed"] = seed
+        if cell_size is not None:
+            params["cell_size"] = cell_size
+        result = await blender.send_command("world_generate_town", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_building":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if width is not None:
+            params["width"] = width
+        if depth is not None:
+            params["depth"] = depth
+        if floors is not None:
+            params["floors"] = floors
+        if style is not None:
+            params["style"] = style
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("world_generate_building", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_castle":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if outer_size is not None:
+            params["outer_size"] = outer_size
+        if keep_size is not None:
+            params["keep_size"] = keep_size
+        if tower_count is not None:
+            params["tower_count"] = tower_count
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("world_generate_castle", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_ruins":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if width is not None:
+            params["width"] = width
+        if depth is not None:
+            params["depth"] = depth
+        if floors is not None:
+            params["floors"] = floors
+        if style is not None:
+            params["style"] = style
+        if damage_level is not None:
+            params["damage_level"] = damage_level
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("world_generate_ruins", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_interior":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if room_type is not None:
+            params["room_type"] = room_type
+        if width is not None:
+            params["width"] = width
+        if depth is not None:
+            params["depth"] = depth
+        if height is not None:
+            params["height"] = height
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("world_generate_interior", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_modular_kit":
+        params = {}
+        if name_prefix is not None:
+            params["name_prefix"] = name_prefix
+        if cell_size is not None:
+            params["cell_size"] = cell_size
+        if pieces is not None:
+            params["pieces"] = pieces
+        result = await blender.send_command("world_generate_modular_kit", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    return "Unknown action"
+
+
 def main():
     mcp.run(transport="stdio")
 

@@ -11,6 +11,8 @@ dependencies = [
     "pydantic-settings>=2.0",
     "tripo3d>=0.3.12",
     "fal-client>=0.5.0",
+    "numpy>=1.26.0",
+    "opensimplex>=0.4.5",
 ]
 
 [project.scripts]
@@ -20,7 +22,6 @@ vb-blender-mcp = "veilbreakers_mcp.blender_server:main"
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24.0",
-    "numpy>=1.26.0",
     "ruff>=0.8.0",
 ]
 

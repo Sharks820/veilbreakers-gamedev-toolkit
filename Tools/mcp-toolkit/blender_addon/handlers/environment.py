@@ -1,0 +1,602 @@
+"""Environment handlers for terrain generation, biome painting, water, and export.
+
+Provides 6 command handlers:
+  - handle_generate_terrain: Heightmap -> bmesh grid terrain mesh
+  - handle_paint_terrain: Slope/altitude biome rules -> material slot assignment
+  - handle_carve_river: River channel carving along A* path
+  - handle_generate_road: A-to-B road with proper grading
+  - handle_create_water: Lake/ocean/pond plane with shoreline
+  - handle_export_heightmap: 16-bit Unity RAW export
+"""
+
+from __future__ import annotations
+
+import math
+import struct
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+
+import bpy
+import bmesh
+
+from ._terrain_noise import (
+    generate_heightmap,
+    compute_slope_map,
+    compute_biome_assignments,
+    carve_river_path,
+    generate_road_path,
+    TERRAIN_PRESETS,
+    BIOME_RULES,
+)
+from ._terrain_erosion import (
+    apply_hydraulic_erosion,
+    apply_thermal_erosion,
+)
+
+
+# ---------------------------------------------------------------------------
+# Validation helpers (pure logic -- testable without Blender)
+# ---------------------------------------------------------------------------
+
+_VALID_TERRAIN_TYPES = frozenset(TERRAIN_PRESETS.keys())
+_VALID_EROSION_MODES = frozenset({"none", "hydraulic", "thermal", "both"})
+_MAX_RESOLUTION = 1024
+
+
+def _validate_terrain_params(params: dict) -> dict:
+    """Validate and normalize terrain generation parameters.
+
+    Raises ValueError for invalid parameters. Returns normalized dict.
+    Pure logic -- no bpy dependency.
+    """
+    resolution = params.get("resolution", 129)
+    terrain_type = params.get("terrain_type", "mountains")
+    erosion = params.get("erosion", "none")
+
+    if resolution > _MAX_RESOLUTION:
+        raise ValueError(
+            f"Resolution {resolution} exceeds maximum {_MAX_RESOLUTION}. "
+            f"Use resolution <= {_MAX_RESOLUTION} to avoid memory issues."
+        )
+    if resolution < 3:
+        raise ValueError(
+            f"Resolution {resolution} is too small. Minimum is 3."
+        )
+
+    if terrain_type not in _VALID_TERRAIN_TYPES:
+        raise ValueError(
+            f"Unknown terrain_type '{terrain_type}'. "
+            f"Valid types: {sorted(_VALID_TERRAIN_TYPES)}"
+        )
+
+    if erosion not in _VALID_EROSION_MODES:
+        raise ValueError(
+            f"Unknown erosion mode '{erosion}'. "
+            f"Valid modes: {sorted(_VALID_EROSION_MODES)}"
+        )
+
+    return {
+        "name": params.get("name", "Terrain"),
+        "resolution": resolution,
+        "terrain_type": terrain_type,
+        "scale": params.get("scale", 100.0),
+        "height_scale": params.get("height_scale", 20.0),
+        "seed": params.get("seed", 0),
+        "octaves": params.get("octaves"),
+        "persistence": params.get("persistence"),
+        "lacunarity": params.get("lacunarity"),
+        "erosion": erosion,
+        "erosion_iterations": params.get("erosion_iterations", 500),
+    }
+
+
+def _export_heightmap_raw(
+    heightmap: np.ndarray,
+    flip_vertical: bool = True,
+) -> bytes:
+    """Convert a heightmap to 16-bit little-endian RAW bytes.
+
+    Pure logic -- no file I/O. Returns raw bytes suitable for writing
+    to a .raw file for Unity Terrain import.
+
+    Parameters
+    ----------
+    heightmap : np.ndarray
+        2D array with values in [0, 1].
+    flip_vertical : bool
+        Flip rows for Unity coordinate system compatibility.
+
+    Returns
+    -------
+    bytes
+        16-bit unsigned little-endian binary data.
+    """
+    hmap = heightmap.astype(np.float64).copy()
+
+    # Normalize to [0, 1]
+    hmin, hmax = hmap.min(), hmap.max()
+    if hmax - hmin > 1e-10:
+        hmap = (hmap - hmin) / (hmax - hmin)
+    else:
+        hmap = np.zeros_like(hmap)
+
+    if flip_vertical:
+        hmap = np.flipud(hmap)
+
+    # Convert to uint16 (0-65535)
+    hmap_u16 = (hmap * 65535).astype(np.uint16)
+
+    return hmap_u16.tobytes()
+
+
+# ---------------------------------------------------------------------------
+# Handler: generate_terrain
+# ---------------------------------------------------------------------------
+
+def handle_generate_terrain(params: dict) -> dict:
+    """Generate a terrain mesh from noise heightmap with optional erosion.
+
+    Params:
+        name (str, default "Terrain"): Object name.
+        resolution (int, default 129): Grid resolution (vertices per side).
+        terrain_type (str, default "mountains"): One of 6 terrain presets.
+        scale (float, default 100.0): Noise sampling scale.
+        height_scale (float, default 20.0): Vertical scale multiplier.
+        seed (int, default 0): Random seed.
+        octaves, persistence, lacunarity: Override preset values.
+        erosion (str, default "none"): none|hydraulic|thermal|both.
+        erosion_iterations (int, default 500): Erosion iteration count.
+
+    Returns dict with: name, vertex_count, terrain_type, resolution,
+        height_scale, erosion_applied.
+    """
+    validated = _validate_terrain_params(params)
+
+    name = validated["name"]
+    resolution = validated["resolution"]
+    terrain_type = validated["terrain_type"]
+    scale = validated["scale"]
+    height_scale = validated["height_scale"]
+    seed = validated["seed"]
+    erosion = validated["erosion"]
+    erosion_iters = validated["erosion_iterations"]
+
+    # Generate heightmap
+    heightmap = generate_heightmap(
+        width=resolution,
+        height=resolution,
+        scale=scale,
+        octaves=validated["octaves"],
+        persistence=validated["persistence"],
+        lacunarity=validated["lacunarity"],
+        seed=seed,
+        terrain_type=terrain_type,
+    )
+
+    # Apply erosion
+    erosion_applied = False
+    if erosion in ("hydraulic", "both"):
+        heightmap = apply_hydraulic_erosion(
+            heightmap, iterations=erosion_iters, seed=seed
+        )
+        erosion_applied = True
+    if erosion in ("thermal", "both"):
+        heightmap = apply_thermal_erosion(heightmap, iterations=max(erosion_iters // 50, 5))
+        erosion_applied = True
+
+    # Convert heightmap to Blender mesh
+    terrain_size = scale
+    rows, cols = heightmap.shape
+
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+
+    bmesh.ops.create_grid(
+        bm,
+        x_segments=cols - 1,
+        y_segments=rows - 1,
+        size=terrain_size / 2.0,
+        calc_uvs=True,
+    )
+
+    bm.verts.ensure_lookup_table()
+
+    # Set vertex Z from heightmap
+    for vert in bm.verts:
+        u = (vert.co.x + terrain_size / 2.0) / terrain_size
+        v = (vert.co.y + terrain_size / 2.0) / terrain_size
+        col_idx = int(u * (cols - 1))
+        row_idx = int(v * (rows - 1))
+        col_idx = max(0, min(col_idx, cols - 1))
+        row_idx = max(0, min(row_idx, rows - 1))
+        vert.co.z = float(heightmap[row_idx, col_idx]) * height_scale
+
+    bm.to_mesh(mesh)
+    vertex_count = len(bm.verts)
+    bm.free()
+
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+
+    return {
+        "name": obj.name,
+        "vertex_count": vertex_count,
+        "terrain_type": terrain_type,
+        "resolution": resolution,
+        "height_scale": height_scale,
+        "erosion_applied": erosion_applied,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: paint_terrain
+# ---------------------------------------------------------------------------
+
+def handle_paint_terrain(params: dict) -> dict:
+    """Auto-paint terrain with biome materials based on slope/altitude rules.
+
+    Params:
+        name (str): Existing terrain object name.
+        biome_rules (list of dict, optional): Biome rules with name, material,
+            min_alt, max_alt, min_slope, max_slope. Defaults to BIOME_RULES.
+        height_scale (float, default 20.0): Used to normalize altitude.
+
+    Returns dict with: name, material_count, biome_rules_applied.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("'name' is required")
+
+    biome_rules = params.get("biome_rules", BIOME_RULES)
+    height_scale = params.get("height_scale", 20.0)
+
+    obj = bpy.data.objects.get(name)
+    if obj is None:
+        raise ValueError(f"Object not found: {name}")
+    if obj.type != "MESH":
+        raise ValueError(f"Object '{name}' is type '{obj.type}', expected 'MESH'")
+
+    mesh = obj.data
+
+    # Create material slots
+    for rule in biome_rules:
+        mat_name = rule.get("material", rule["name"])
+        mat = bpy.data.materials.get(mat_name)
+        if mat is None:
+            mat = bpy.data.materials.new(name=mat_name)
+            mat.use_nodes = True
+        mesh.materials.append(mat)
+
+    # Assign faces using bmesh
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.faces.ensure_lookup_table()
+
+    for face in bm.faces:
+        center = face.calc_center_median()
+        altitude = center.z / height_scale if height_scale > 0 else 0.0
+        altitude = max(0.0, min(1.0, altitude))
+
+        # Slope from face normal
+        slope_rad = math.acos(max(-1.0, min(1.0, face.normal.z)))
+        slope_deg = math.degrees(slope_rad)
+
+        # First matching rule wins
+        for idx, rule in enumerate(biome_rules):
+            min_alt = rule.get("min_alt", 0.0)
+            max_alt = rule.get("max_alt", 1.0)
+            min_slope = rule.get("min_slope", 0.0)
+            max_slope = rule.get("max_slope", 90.0)
+
+            if (min_alt <= altitude <= max_alt
+                    and min_slope <= slope_deg <= max_slope):
+                face.material_index = idx
+                break
+
+    bm.to_mesh(mesh)
+    bm.free()
+
+    return {
+        "name": obj.name,
+        "material_count": len(mesh.materials),
+        "biome_rules_applied": len(biome_rules),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: carve_river
+# ---------------------------------------------------------------------------
+
+def handle_carve_river(params: dict) -> dict:
+    """Carve a river channel on an existing terrain mesh.
+
+    Params:
+        terrain_name (str): Existing terrain object name.
+        source (list of 2 ints): Start grid coordinate [row, col].
+        destination (list of 2 ints): End grid coordinate [row, col].
+        width (int, default 2): Channel width in cells.
+        depth (float, default 0.05): Channel depth.
+        seed (int, default 0): Random seed.
+
+    Returns dict with: name, path_length, depth.
+    """
+    terrain_name = params.get("terrain_name")
+    if not terrain_name:
+        raise ValueError("'terrain_name' is required")
+
+    source = tuple(params.get("source", [0, 0]))
+    destination = tuple(params.get("destination", [0, 0]))
+    width = params.get("width", 2)
+    depth = params.get("depth", 0.05)
+    seed = params.get("seed", 0)
+
+    obj = bpy.data.objects.get(terrain_name)
+    if obj is None:
+        raise ValueError(f"Object not found: {terrain_name}")
+
+    # Extract heightmap from mesh vertex Z
+    mesh = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.verts.ensure_lookup_table()
+
+    # Determine grid dimensions from vertex count (assumes square grid)
+    vert_count = len(bm.verts)
+    side = int(math.sqrt(vert_count))
+
+    # Extract heights
+    heights = np.array([v.co.z for v in bm.verts])
+    height_scale = heights.max() if heights.max() > 0 else 1.0
+    heightmap = (heights / height_scale).reshape(side, side)
+
+    # Carve river
+    path, carved = carve_river_path(
+        heightmap, source=source, dest=destination,
+        width=width, depth=depth, seed=seed,
+    )
+
+    # Apply back to mesh
+    carved_flat = carved.flatten()
+    for i, vert in enumerate(bm.verts):
+        if i < len(carved_flat):
+            vert.co.z = float(carved_flat[i]) * height_scale
+
+    bm.to_mesh(mesh)
+    bm.free()
+
+    return {
+        "name": terrain_name,
+        "path_length": len(path),
+        "depth": depth,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: generate_road
+# ---------------------------------------------------------------------------
+
+def handle_generate_road(params: dict) -> dict:
+    """Generate a road between waypoints on terrain with grading.
+
+    Params:
+        terrain_name (str): Existing terrain object name.
+        waypoints (list of [row, col]): Ordered waypoints.
+        width (int, default 3): Road width in cells.
+        grade_strength (float, default 0.8): Flattening intensity.
+        seed (int, default 0): Random seed.
+
+    Returns dict with: name, path_length, width.
+    """
+    terrain_name = params.get("terrain_name")
+    if not terrain_name:
+        raise ValueError("'terrain_name' is required")
+
+    waypoints = [tuple(wp) for wp in params.get("waypoints", [(0, 0), (0, 0)])]
+    width = params.get("width", 3)
+    grade_strength = params.get("grade_strength", 0.8)
+    seed = params.get("seed", 0)
+
+    obj = bpy.data.objects.get(terrain_name)
+    if obj is None:
+        raise ValueError(f"Object not found: {terrain_name}")
+
+    mesh = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.verts.ensure_lookup_table()
+
+    vert_count = len(bm.verts)
+    side = int(math.sqrt(vert_count))
+
+    heights = np.array([v.co.z for v in bm.verts])
+    height_scale = heights.max() if heights.max() > 0 else 1.0
+    heightmap = (heights / height_scale).reshape(side, side)
+
+    path, graded = generate_road_path(
+        heightmap, waypoints=waypoints,
+        width=width, grade_strength=grade_strength, seed=seed,
+    )
+
+    graded_flat = graded.flatten()
+    for i, vert in enumerate(bm.verts):
+        if i < len(graded_flat):
+            vert.co.z = float(graded_flat[i]) * height_scale
+
+    bm.to_mesh(mesh)
+    bm.free()
+
+    return {
+        "name": terrain_name,
+        "path_length": len(path),
+        "width": width,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: create_water
+# ---------------------------------------------------------------------------
+
+def handle_create_water(params: dict) -> dict:
+    """Create a water body (flat plane) at specified water level.
+
+    Params:
+        name (str, default "Water"): Water object name.
+        water_level (float, default 0.3): Water plane height (world Z).
+        terrain_name (str, optional): Reference terrain for sizing.
+        width (float, default 100.0): Water plane width.
+        depth (float, default 100.0): Water plane depth.
+        material_name (str, default "Water_Material"): Material name.
+
+    Returns dict with: name, water_level, area.
+    """
+    name = params.get("name", "Water")
+    water_level = params.get("water_level", 0.3)
+    terrain_name = params.get("terrain_name")
+    width = params.get("width", 100.0)
+    depth = params.get("depth", 100.0)
+    material_name = params.get("material_name", "Water_Material")
+
+    # If terrain specified, match its size
+    if terrain_name:
+        terrain_obj = bpy.data.objects.get(terrain_name)
+        if terrain_obj is not None:
+            dims = terrain_obj.dimensions
+            width = max(dims.x, width)
+            depth = max(dims.y, depth)
+
+    # Create water plane
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+
+    bmesh.ops.create_grid(
+        bm,
+        x_segments=1,
+        y_segments=1,
+        size=max(width, depth) / 2.0,
+        calc_uvs=True,
+    )
+
+    bm.to_mesh(mesh)
+    bm.free()
+
+    obj = bpy.data.objects.new(name, mesh)
+    obj.location = (0, 0, water_level)
+    bpy.context.collection.objects.link(obj)
+
+    # Create/assign water material
+    mat = bpy.data.materials.get(material_name)
+    if mat is None:
+        mat = bpy.data.materials.new(name=material_name)
+        mat.use_nodes = True
+        # Set transparent blue appearance
+        if mat.node_tree:
+            bsdf = mat.node_tree.nodes.get("Principled BSDF")
+            if bsdf:
+                # Base color: dark blue
+                base_color = bsdf.inputs.get("Base Color")
+                if base_color:
+                    base_color.default_value = (0.05, 0.15, 0.3, 1.0)
+                # Transmission
+                trans = bsdf.inputs.get("Transmission Weight") or bsdf.inputs.get("Transmission")
+                if trans:
+                    trans.default_value = 0.8
+                # Roughness
+                rough = bsdf.inputs.get("Roughness")
+                if rough:
+                    rough.default_value = 0.1
+    mesh.materials.append(mat)
+
+    area = width * depth
+
+    return {
+        "name": obj.name,
+        "water_level": water_level,
+        "area": area,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: export_heightmap
+# ---------------------------------------------------------------------------
+
+def handle_export_heightmap(params: dict) -> dict:
+    """Export terrain heightmap as 16-bit little-endian RAW for Unity.
+
+    Params:
+        terrain_name (str): Terrain object name.
+        filepath (str): Output file path (.raw).
+        flip_vertical (bool, default True): Flip for Unity coordinate system.
+        unity_compat (bool, default False): Resize to power-of-two+1.
+
+    Returns dict with: filepath, width, height, bit_depth, byte_order.
+    """
+    terrain_name = params.get("terrain_name")
+    if not terrain_name:
+        raise ValueError("'terrain_name' is required")
+
+    filepath = params.get("filepath")
+    if not filepath:
+        raise ValueError("'filepath' is required")
+
+    flip_vertical = params.get("flip_vertical", True)
+    unity_compat = params.get("unity_compat", False)
+
+    obj = bpy.data.objects.get(terrain_name)
+    if obj is None:
+        raise ValueError(f"Object not found: {terrain_name}")
+
+    mesh = obj.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.verts.ensure_lookup_table()
+
+    vert_count = len(bm.verts)
+    side = int(math.sqrt(vert_count))
+
+    heights = np.array([v.co.z for v in bm.verts])
+    bm.free()
+
+    # Normalize heights to [0, 1]
+    hmin, hmax = heights.min(), heights.max()
+    if hmax - hmin > 1e-10:
+        heightmap = (heights - hmin) / (hmax - hmin)
+    else:
+        heightmap = np.zeros_like(heights)
+
+    heightmap = heightmap.reshape(side, side)
+
+    # Unity compat: resize to nearest power-of-two + 1
+    if unity_compat:
+        target = _nearest_pot_plus_1(side)
+        if target != side:
+            # Simple nearest-neighbor resize
+            x_indices = np.round(np.linspace(0, side - 1, target)).astype(int)
+            y_indices = np.round(np.linspace(0, side - 1, target)).astype(int)
+            heightmap = heightmap[np.ix_(y_indices, x_indices)]
+
+    # Export
+    raw_bytes = _export_heightmap_raw(heightmap, flip_vertical=flip_vertical)
+
+    out_path = Path(filepath)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_bytes(raw_bytes)
+
+    rows, cols = heightmap.shape
+
+    return {
+        "filepath": str(out_path),
+        "width": cols,
+        "height": rows,
+        "bit_depth": 16,
+        "byte_order": "little-endian",
+    }
+
+
+def _nearest_pot_plus_1(n: int) -> int:
+    """Find nearest power-of-two + 1 >= n."""
+    pot = 1
+    while pot + 1 < n:
+        pot *= 2
+    return pot + 1
