@@ -50,7 +50,7 @@ Plans:
 - [ ] 02-03-PLAN.md -- Mesh editing, selection engine, booleans, retopology, sculpt operations
 
 ### Phase 3: Texturing & Asset Generation
-**Goal**: Claude can generate 3D models from text, create PBR texture sets, perform surgical texture edits, and run the full pipeline from AI generation through Unity-ready export
+**Goal**: Claude can generate 3D models from text, create PBR texture sets, perform surgical texture edits with seamless blending, and run the full pipeline from AI generation through Unity-ready export
 **Depends on**: Phase 2 (needs meshes with UVs for texturing)
 **Requirements**: TEX-01, TEX-02, TEX-03, TEX-04, TEX-05, TEX-06, TEX-07, TEX-08, TEX-09, TEX-10, PIPE-01, PIPE-02, PIPE-03, PIPE-04, PIPE-05, PIPE-06, PIPE-07, CONC-01, CONC-02, CONC-03
 **Success Criteria** (what must be TRUE):
@@ -59,7 +59,12 @@ Plans:
   3. Claude can mask a specific UV region of a textured model and apply targeted edits (recolor armor trim, inpaint a belt detail, blend seams) without affecting the rest
   4. The asset pipeline produces Unity-optimized FBX with LOD chains, and re-import validation confirms correct scale, orientation, bones, and materials
   5. Claude can generate concept art from text descriptions and extract color palettes for art direction consistency
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 03-01-PLAN.md -- PBR texturing, texture baking, and validation handlers (Blender-side)
+- [ ] 03-02-PLAN.md -- Surgical texture editing with seamless blending (MCP-side Pillow)
+- [ ] 03-03-PLAN.md -- Asset pipeline, AI 3D generation, LOD, catalog, export validation
+- [ ] 03-04-PLAN.md -- Concept art, compound MCP tool wiring, integration
 
 ### Phase 4: Rigging
 **Goal**: Claude can rig any creature type for game animation -- from humanoid to amorphous -- with deformation-tested weights, facial controls, and secondary motion physics
@@ -127,7 +132,7 @@ Plans:
 |-------|-------|--------|-----------|
 | 1. Foundation & Server Architecture | 3/3 | Complete | 2026-03-19 |
 | 2. Mesh, UV & Topology Pipeline | 0/3 | Planning complete | - |
-| 3. Texturing & Asset Generation | 0/? | Not started | - |
+| 3. Texturing & Asset Generation | 0/4 | Planning complete | - |
 | 4. Rigging | 0/? | Not started | - |
 | 5. Animation | 0/? | Not started | - |
 | 6. Environment & World Building | 0/? | Not started | - |
