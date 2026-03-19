@@ -15,4 +15,11 @@ class Settings(BaseSettings):
     # SQLite asset catalog database path
     asset_catalog_db: str = "assets.db"
 
+    # Unity project root path (for C# script generation)
+    unity_project_path: str = ""
+    # Google Gemini API key for visual review
+    gemini_api_key: str = ""
+    # ElevenLabs API key for AI audio generation
+    elevenlabs_api_key: str = ""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
