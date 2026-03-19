@@ -59,6 +59,25 @@ from .texture import (
     handle_get_seam_pixels,
 )
 from .pipeline_lod import handle_generate_lods
+from .rigging import (
+    handle_analyze_for_rigging,
+    handle_apply_rig_template,
+    handle_build_custom_rig,
+)
+from .rigging_weights import (
+    handle_auto_weight,
+    handle_test_deformation,
+    handle_validate_rig,
+    handle_fix_weights,
+)
+from .rigging_advanced import (
+    handle_setup_facial,
+    handle_setup_ik,
+    handle_setup_spring_bones,
+    handle_setup_ragdoll,
+    handle_retarget_rig,
+    handle_add_shape_keys,
+)
 
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "ping": lambda params: {"status": "success", "result": "pong"},
@@ -116,4 +135,20 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "texture_get_seam_pixels": handle_get_seam_pixels,
     # Pipeline operations
     "pipeline_generate_lods": handle_generate_lods,
+    # Rigging operations
+    "rig_analyze": handle_analyze_for_rigging,
+    "rig_apply_template": handle_apply_rig_template,
+    "rig_build_custom": handle_build_custom_rig,
+    # Rig weight/validation operations
+    "rig_auto_weight": handle_auto_weight,
+    "rig_test_deformation": handle_test_deformation,
+    "rig_validate": handle_validate_rig,
+    "rig_fix_weights": handle_fix_weights,
+    # Advanced rigging operations
+    "rig_setup_facial": handle_setup_facial,
+    "rig_setup_ik": handle_setup_ik,
+    "rig_setup_spring_bones": handle_setup_spring_bones,
+    "rig_setup_ragdoll": handle_setup_ragdoll,
+    "rig_retarget": handle_retarget_rig,
+    "rig_add_shape_keys": handle_add_shape_keys,
 }
