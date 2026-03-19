@@ -9,6 +9,7 @@
     "plan_check": true,
     "verifier": true,
     "nyquist_validation": true,
-    "bug_scan_after_phase": true
+    "bug_scan_after_phase": true,
+    "_auto_chain_active": true
   }
 }
