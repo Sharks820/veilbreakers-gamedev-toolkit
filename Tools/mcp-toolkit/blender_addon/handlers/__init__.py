@@ -78,6 +78,22 @@ from .rigging_advanced import (
     handle_retarget_rig,
     handle_add_shape_keys,
 )
+from .animation import (
+    handle_generate_walk,
+    handle_generate_fly,
+    handle_generate_idle,
+    handle_generate_attack,
+    handle_generate_reaction,
+    handle_generate_custom,
+)
+from .animation_export import (
+    handle_preview_animation,
+    handle_add_secondary_motion,
+    handle_extract_root_motion,
+    handle_retarget_mixamo,
+    handle_generate_ai_motion,
+    handle_batch_export,
+)
 
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "ping": lambda params: {"status": "success", "result": "pong"},
@@ -151,4 +167,18 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "rig_setup_ragdoll": handle_setup_ragdoll,
     "rig_retarget": handle_retarget_rig,
     "rig_add_shape_keys": handle_add_shape_keys,
+    # Animation operations
+    "anim_generate_walk": handle_generate_walk,
+    "anim_generate_fly": handle_generate_fly,
+    "anim_generate_idle": handle_generate_idle,
+    "anim_generate_attack": handle_generate_attack,
+    "anim_generate_reaction": handle_generate_reaction,
+    "anim_generate_custom": handle_generate_custom,
+    # Animation export/integration operations
+    "anim_preview": handle_preview_animation,
+    "anim_add_secondary_motion": handle_add_secondary_motion,
+    "anim_extract_root_motion": handle_extract_root_motion,
+    "anim_retarget_mixamo": handle_retarget_mixamo,
+    "anim_generate_ai_motion": handle_generate_ai_motion,
+    "anim_batch_export": handle_batch_export,
 }

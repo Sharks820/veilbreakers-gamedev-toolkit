@@ -2,7 +2,7 @@
 
 Tests cover:
 - Module imports without error
-- MCP tool count is 12
+- MCP tool count is 13
 - Each new compound tool is registered
 """
 
@@ -22,11 +22,11 @@ class TestBlenderServerModuleImports:
 class TestMCPToolCount:
     """Test that the correct number of tools are registered."""
 
-    def test_tool_count_is_12(self):
-        """MCP server should have exactly 12 tools registered."""
+    def test_tool_count_is_13(self):
+        """MCP server should have exactly 13 tools registered."""
         tool_count = len(mcp._tool_manager._tools)
-        assert tool_count == 12, (
-            f"Expected 12 tools, got {tool_count}. "
+        assert tool_count == 13, (
+            f"Expected 13 tools, got {tool_count}. "
             f"Registered tools: {sorted(mcp._tool_manager._tools.keys())}"
         )
 
@@ -49,6 +49,10 @@ class TestNewToolsRegistered:
     def test_blender_rig_registered(self):
         """blender_rig tool is registered in the MCP server."""
         assert "blender_rig" in mcp._tool_manager._tools
+
+    def test_blender_animation_registered(self):
+        """blender_animation tool is registered in the MCP server."""
+        assert "blender_animation" in mcp._tool_manager._tools
 
     def test_existing_tools_still_registered(self):
         """All 8 original tools are still registered."""

@@ -1240,6 +1240,209 @@ async def blender_rig(
     return "Unknown action"
 
 
+# ---------------------------------------------------------------------------
+# Compound tool: blender_animation
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def blender_animation(
+    action: Literal[
+        "generate_walk",       # ANIM-01: Procedural walk/run cycle
+        "generate_fly",        # ANIM-02: Procedural fly/hover cycle
+        "generate_idle",       # ANIM-03: Procedural idle animation
+        "generate_attack",     # ANIM-04: Attack animations (8 types)
+        "generate_reaction",   # ANIM-05: Death, hit, spawn animations
+        "generate_custom",     # ANIM-06: Custom animation from text
+        "preview",             # ANIM-07: Animation contact sheet preview
+        "add_secondary",       # ANIM-08: Secondary motion physics bake
+        "extract_root_motion", # ANIM-09: Root motion + animation events
+        "retarget_mixamo",     # ANIM-10: Mixamo animation retargeting
+        "generate_ai_motion",  # ANIM-11: AI motion generation (stub)
+        "batch_export",        # ANIM-12: Batch export as Unity clips
+    ],
+    object_name: str,
+    # Walk/run cycle params
+    gait: str | None = None,           # biped/quadruped/hexapod/arachnid/serpent
+    speed: str | None = None,          # walk/run
+    frame_count: int | None = None,
+    # Fly/hover params
+    frequency: float | None = None,
+    amplitude: float | None = None,
+    glide_ratio: float | None = None,
+    # Idle params
+    breathing_intensity: float | None = None,
+    # Attack params
+    attack_type: str | None = None,
+    intensity: float | None = None,
+    # Reaction params
+    reaction_type: str | None = None,
+    direction: str | None = None,
+    # Custom animation params
+    description: str | None = None,
+    # Preview params
+    action_name: str | None = None,
+    frame_step: int | None = None,
+    angles: list[str] | None = None,
+    resolution: int | None = None,
+    # Secondary motion params
+    bone_names: list[str] | None = None,
+    # Root motion params
+    hip_bone: str | None = None,
+    root_bone: str | None = None,
+    extract_rotation: bool | None = None,
+    # Mixamo retarget params
+    source_file: str | None = None,
+    # AI motion params
+    prompt: str | None = None,
+    model: str | None = None,
+    # Batch export params
+    output_dir: str | None = None,
+    naming: str | None = None,
+    actions: list[str] | None = None,
+    # Visual feedback
+    capture_viewport: bool = True,
+):
+    """Generate, preview, and export game-ready animations for rigged creatures.
+
+    Supports procedural gaits (5 types), combat animations (8 attack types + death/hit/spawn),
+    custom text-to-animation, contact sheet preview, secondary motion baking, root motion
+    extraction, Mixamo retargeting, and batch Unity FBX export.
+    """
+    blender = get_blender_connection()
+
+    if action == "generate_walk":
+        params = {"object_name": object_name}
+        if gait is not None:
+            params["gait"] = gait
+        if speed is not None:
+            params["speed"] = speed
+        if frame_count is not None:
+            params["frame_count"] = frame_count
+        result = await blender.send_command("anim_generate_walk", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_fly":
+        params = {"object_name": object_name}
+        if frequency is not None:
+            params["frequency"] = frequency
+        if amplitude is not None:
+            params["amplitude"] = amplitude
+        if glide_ratio is not None:
+            params["glide_ratio"] = glide_ratio
+        if frame_count is not None:
+            params["frame_count"] = frame_count
+        result = await blender.send_command("anim_generate_fly", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_idle":
+        params = {"object_name": object_name}
+        if frame_count is not None:
+            params["frame_count"] = frame_count
+        if breathing_intensity is not None:
+            params["breathing_intensity"] = breathing_intensity
+        result = await blender.send_command("anim_generate_idle", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_attack":
+        params = {"object_name": object_name}
+        if attack_type is not None:
+            params["attack_type"] = attack_type
+        if frame_count is not None:
+            params["frame_count"] = frame_count
+        if intensity is not None:
+            params["intensity"] = intensity
+        result = await blender.send_command("anim_generate_attack", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_reaction":
+        params = {"object_name": object_name}
+        if reaction_type is not None:
+            params["reaction_type"] = reaction_type
+        if direction is not None:
+            params["direction"] = direction
+        if frame_count is not None:
+            params["frame_count"] = frame_count
+        result = await blender.send_command("anim_generate_reaction", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_custom":
+        params = {"object_name": object_name}
+        if description is not None:
+            params["description"] = description
+        if frame_count is not None:
+            params["frame_count"] = frame_count
+        result = await blender.send_command("anim_generate_custom", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "preview":
+        params = {"object_name": object_name}
+        if action_name is not None:
+            params["action_name"] = action_name
+        if frame_step is not None:
+            params["frame_step"] = frame_step
+        if angles is not None:
+            params["angles"] = angles
+        if resolution is not None:
+            params["resolution"] = resolution
+        result = await blender.send_command("anim_preview", params)
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "add_secondary":
+        params = {"object_name": object_name}
+        if action_name is not None:
+            params["action_name"] = action_name
+        if bone_names is not None:
+            params["bone_names"] = bone_names
+        result = await blender.send_command("anim_add_secondary_motion", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "extract_root_motion":
+        params = {"object_name": object_name}
+        if action_name is not None:
+            params["action_name"] = action_name
+        if hip_bone is not None:
+            params["hip_bone"] = hip_bone
+        if root_bone is not None:
+            params["root_bone"] = root_bone
+        if extract_rotation is not None:
+            params["extract_rotation"] = extract_rotation
+        result = await blender.send_command("anim_extract_root_motion", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "retarget_mixamo":
+        params = {"object_name": object_name}
+        if source_file is not None:
+            params["source_file"] = source_file
+        if action_name is not None:
+            params["action_name"] = action_name
+        result = await blender.send_command("anim_retarget_mixamo", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_ai_motion":
+        params = {"object_name": object_name}
+        if prompt is not None:
+            params["prompt"] = prompt
+        if model is not None:
+            params["model"] = model
+        if frame_count is not None:
+            params["frame_count"] = frame_count
+        result = await blender.send_command("anim_generate_ai_motion", params)
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "batch_export":
+        params = {"object_name": object_name}
+        if output_dir is not None:
+            params["output_dir"] = output_dir
+        if naming is not None:
+            params["naming"] = naming
+        if actions is not None:
+            params["actions"] = actions
+        result = await blender.send_command("anim_batch_export", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    return "Unknown action"
+
+
 def main():
     mcp.run(transport="stdio")
 
