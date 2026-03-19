@@ -76,7 +76,12 @@ Plans:
   3. Facial rig controls work for monster-specific expressions (snarl, hiss, roar) and shape keys drive visible expression/damage state changes in the viewport
   4. Spring/jiggle bones produce visible secondary motion on tails, hair, capes, and chains during a simple animation test
   5. Rig validation reports zero critical issues (unweighted verts, broken symmetry, invalid bone rolls) and ragdoll auto-setup generates correct colliders and joint limits
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 04-01-PLAN.md -- Core rig templates (10 creatures), mesh analysis, custom rig builder
+- [ ] 04-02-PLAN.md -- Weight painting, deformation testing, rig validation, weight fix
+- [ ] 04-03-PLAN.md -- Advanced features: facial rig, IK, spring bones, ragdoll, retarget, shape keys
+- [ ] 04-04-PLAN.md -- Handler registration and blender_rig compound MCP tool wiring
 
 ### Phase 5: Animation
 **Goal**: Claude can generate, preview, and export game-ready animations for any rigged creature -- procedural gaits, combat moves, and AI-generated motion clips
@@ -133,7 +138,7 @@ Plans:
 | 1. Foundation & Server Architecture | 3/3 | Complete | 2026-03-19 |
 | 2. Mesh, UV & Topology Pipeline | 3/3 | Complete | 2026-03-19 |
 | 3. Texturing & Asset Generation | 1/4 | In Progress | - |
-| 4. Rigging | 0/? | Not started | - |
+| 4. Rigging | 0/4 | Planned | - |
 | 5. Animation | 0/? | Not started | - |
 | 6. Environment & World Building | 0/? | Not started | - |
 | 7. VFX, Audio, UI & Unity Scene | 0/? | Not started | - |
