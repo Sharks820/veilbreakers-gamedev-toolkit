@@ -27,7 +27,11 @@
   3. Sending a malformed or dangerous command returns a structured error with recovery suggestion -- no raw Python exec ever reaches Blender
   4. The contact sheet system renders a multi-angle/multi-frame composite image of any Blender scene object and returns it to Claude
   5. The Blender addon survives rapid sequential tool calls without main-thread deadlocks or dropped commands
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [x] 01-01-PLAN.md -- Foundation scaffold (uv project, TCP client, MCP server entry point)
+- [x] 01-02-PLAN.md -- Compound tools and Blender addon handler framework
+- [x] 01-03-PLAN.md -- Visual feedback system (screenshots, contact sheets)
 
 ### Phase 2: Mesh, UV & Topology Pipeline
 **Goal**: Claude can analyze any mesh for game-readiness, perform surgical edits, auto-repair topology issues, and produce clean UV layouts -- all with visual verification
@@ -39,7 +43,11 @@
   3. Auto-repair fixes common issues (doubles, normals, holes, loose geo) and the mesh passes game-readiness check afterward
   4. UV unwrapping produces islands with uniform texel density, no overlaps, and the UV layout is returned as a visual image for review
   5. A mesh that enters as raw AI output (e.g., from Tripo3D) exits as a game-ready asset passing all validation checks (poly budget, UVs, materials, naming)
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 02-01-PLAN.md -- Mesh analysis, auto-repair, and game-readiness check (blender_mesh tool)
+- [ ] 02-02-PLAN.md -- UV analysis, xatlas unwrapping, packing, lightmap, density equalization (blender_uv tool)
+- [ ] 02-03-PLAN.md -- Mesh editing, selection engine, booleans, retopology, sculpt operations
 
 ### Phase 3: Texturing & Asset Generation
 **Goal**: Claude can generate 3D models from text, create PBR texture sets, perform surgical texture edits, and run the full pipeline from AI generation through Unity-ready export
@@ -117,8 +125,8 @@
 
 | Phase | Plans | Status | Completed |
 |-------|-------|--------|-----------|
-| 1. Foundation & Server Architecture | 0/? | Not started | - |
-| 2. Mesh, UV & Topology Pipeline | 0/? | Not started | - |
+| 1. Foundation & Server Architecture | 3/3 | Complete | 2026-03-19 |
+| 2. Mesh, UV & Topology Pipeline | 0/3 | Planning complete | - |
 | 3. Texturing & Asset Generation | 0/? | Not started | - |
 | 4. Rigging | 0/? | Not started | - |
 | 5. Animation | 0/? | Not started | - |
