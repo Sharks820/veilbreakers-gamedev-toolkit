@@ -110,7 +110,12 @@ Plans:
   3. Dungeon/cave systems generate connected rooms with corridors, doors, spawn points, and loot placement -- the layout is navigable and architecturally coherent
   4. Vegetation scatter respects biome rules (tree types by altitude, grass density by slope) and props are context-aware (barrels near taverns, crates near docks)
   5. Modular architecture pieces snap together correctly (walls, floors, corners, doors, windows) and ruins generation convincingly damages existing structures
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 06-01-PLAN.md -- Terrain generation, erosion, biome painting, rivers/roads, water, heightmap export
+- [ ] 06-02-PLAN.md -- BSP dungeon, cellular automata caves, town layout generation
+- [ ] 06-03-PLAN.md -- Building grammar, castle/tower/bridge, ruins, interiors, modular kit
+- [ ] 06-04-PLAN.md -- Vegetation/prop scatter, handler registration, compound MCP tool wiring
 
 ### Phase 7: VFX, Audio, UI & Unity Scene
 **Goal**: Claude can set up complete Unity scenes with VFX, audio, UI screens, lighting, NavMesh, and animation controllers -- with Gemini-powered visual quality review at every step
@@ -145,7 +150,7 @@ Plans:
 | 3. Texturing & Asset Generation | 1/4 | In Progress | - |
 | 4. Rigging | 0/4 | Planned | - |
 | 5. Animation | 0/4 | Planned | - |
-| 6. Environment & World Building | 0/? | Not started | - |
+| 6. Environment & World Building | 0/4 | Planned | - |
 | 7. VFX, Audio, UI & Unity Scene | 0/? | Not started | - |
 | 8. Gameplay AI & Performance | 0/? | Not started | - |
 
