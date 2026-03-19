@@ -9,6 +9,25 @@ from veilbreakers_mcp.shared.blender_client import BlenderConnection, BlenderCom
 from veilbreakers_mcp.shared.config import Settings
 from veilbreakers_mcp.shared.security import validate_code
 from veilbreakers_mcp.shared.image_utils import compose_contact_sheet, resize_screenshot
+from veilbreakers_mcp.shared.texture_ops import (
+    apply_hsv_adjustment,
+    blend_seams,
+    generate_uv_mask,
+    make_tileable,
+    render_wear_map,
+    inpaint_texture,
+)
+from veilbreakers_mcp.shared.texture_validation import validate_texture_file
+from veilbreakers_mcp.shared.esrgan_runner import upscale_texture
+from veilbreakers_mcp.shared.tripo_client import TripoGenerator
+from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner
+from veilbreakers_mcp.shared.asset_catalog import AssetCatalog
+from veilbreakers_mcp.shared.fal_client import (
+    generate_concept_art,
+    extract_color_palette,
+    compose_style_board,
+    test_silhouette_readability,
+)
 
 logger = logging.getLogger("veilbreakers_mcp")
 
@@ -598,6 +617,414 @@ async def blender_uv(
         return [json.dumps(result, indent=2, default=str)]
 
     return ["Unknown action"]
+
+
+# ---------------------------------------------------------------------------
+# Compound tool: blender_texture
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def blender_texture(
+    action: Literal[
+        "create_pbr", "mask_region", "inpaint", "hsv_adjust",
+        "blend_seams", "generate_wear", "bake", "upscale",
+        "make_tileable", "validate",
+    ],
+    object_name: str | None = None,
+    # PBR creation params
+    name: str | None = None,
+    texture_dir: str | None = None,
+    texture_size: int = 1024,
+    # Mask / HSV / blend params
+    image_path: str | None = None,
+    mask_path: str | None = None,
+    material_index: int = 0,
+    feather_radius: int = 5,
+    hue_shift: float = 0.0,
+    saturation_scale: float = 1.0,
+    value_scale: float = 1.0,
+    blend_radius: int = 6,
+    # Inpaint params
+    prompt: str | None = None,
+    # Bake params
+    bake_type: str = "COMBINED",
+    source_object: str | None = None,
+    image_name: str | None = None,
+    margin: int = 16,
+    cage_extrusion: float = 0.1,
+    samples: int = 32,
+    # Upscale params
+    scale: int = 4,
+    model: str = "realesrgan-x4plus",
+    output_path: str | None = None,
+    # Tileable params
+    overlap_pct: float = 0.15,
+    capture_viewport: bool = True,
+):
+    """Comprehensive texture operations -- Blender-side and MCP-side.
+
+    Actions:
+    - create_pbr: Create full PBR material with image texture nodes
+    - mask_region: Generate UV mask for a material slot
+    - inpaint: AI texture inpainting (requires fal_key)
+    - hsv_adjust: HSV color adjustment on masked region
+    - blend_seams: Smooth UV seam boundaries
+    - generate_wear: Compute per-vertex curvature wear map
+    - bake: Bake texture maps (normal, AO, combined, etc.)
+    - upscale: AI upscale via Real-ESRGAN
+    - make_tileable: Make texture tile seamlessly
+    - validate: Validate textures on object or file
+    """
+    blender = get_blender_connection()
+
+    if action == "create_pbr":
+        params = {"name": name or "PBR_Material", "texture_size": texture_size}
+        if texture_dir:
+            params["texture_dir"] = texture_dir
+        if object_name:
+            params["object_name"] = object_name
+        result = await blender.send_command("texture_create_pbr", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "mask_region":
+        if not object_name:
+            return "ERROR: 'object_name' is required for mask_region"
+        # Get UV polygons from Blender for the material slot
+        uv_result = await blender.send_command(
+            "texture_get_uv_region",
+            {"object_name": object_name, "material_index": material_index},
+        )
+        polygons = uv_result.get("polygons", [])
+        mask_bytes = generate_uv_mask(polygons, texture_size, feather_radius)
+        return [
+            json.dumps({"polygons_count": len(polygons), "texture_size": texture_size}),
+            Image(data=mask_bytes, format="png"),
+        ]
+
+    elif action == "inpaint":
+        if not image_path or not mask_path:
+            return "ERROR: 'image_path' and 'mask_path' are required for inpaint"
+        with open(image_path, "rb") as f:
+            img_bytes = f.read()
+        with open(mask_path, "rb") as f:
+            msk_bytes = f.read()
+        result = inpaint_texture(img_bytes, msk_bytes, prompt or "", fal_key=settings.fal_key or None)
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "hsv_adjust":
+        if not image_path or not mask_path:
+            return "ERROR: 'image_path' and 'mask_path' are required for hsv_adjust"
+        with open(image_path, "rb") as f:
+            img_bytes = f.read()
+        with open(mask_path, "rb") as f:
+            msk_bytes = f.read()
+        result_bytes = apply_hsv_adjustment(
+            img_bytes, msk_bytes, hue_shift, saturation_scale, value_scale,
+        )
+        return Image(data=result_bytes, format="png")
+
+    elif action == "blend_seams":
+        if not object_name or not image_path:
+            return "ERROR: 'object_name' and 'image_path' are required for blend_seams"
+        # Get seam pixels from Blender
+        seam_result = await blender.send_command(
+            "texture_get_seam_pixels",
+            {"object_name": object_name, "texture_size": texture_size},
+        )
+        seam_pixels = [(p[0], p[1]) for p in seam_result.get("seam_pixels", [])]
+        with open(image_path, "rb") as f:
+            img_bytes = f.read()
+        result_bytes = blend_seams(img_bytes, seam_pixels, blend_radius)
+        return Image(data=result_bytes, format="png")
+
+    elif action == "generate_wear":
+        if not object_name:
+            return "ERROR: 'object_name' is required for generate_wear"
+        wear_result = await blender.send_command(
+            "texture_generate_wear", {"object_name": object_name},
+        )
+        curvature_data = {
+            int(k): v for k, v in wear_result.get("curvature_data", {}).items()
+        }
+        uv_data = wear_result.get("uv_data")
+        wear_bytes = render_wear_map(curvature_data, texture_size, uv_data)
+        return await _with_screenshot(blender, {
+            "object_name": object_name,
+            "vertex_count": wear_result.get("vertex_count", 0),
+            "texture_size": texture_size,
+        }, capture_viewport)
+
+    elif action == "bake":
+        if not object_name or not image_name:
+            return "ERROR: 'object_name' and 'image_name' are required for bake"
+        params = {
+            "object_name": object_name,
+            "bake_type": bake_type,
+            "image_name": image_name,
+            "margin": margin,
+            "cage_extrusion": cage_extrusion,
+            "samples": samples,
+        }
+        if source_object:
+            params["source_object"] = source_object
+        result = await blender.send_command("texture_bake", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "upscale":
+        if not image_path:
+            return "ERROR: 'image_path' is required for upscale"
+        result = await upscale_texture(
+            input_path=image_path,
+            scale=scale,
+            model=model,
+            esrgan_path=settings.realesrgan_path,
+            output_path=output_path,
+        )
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "make_tileable":
+        if not image_path:
+            return "ERROR: 'image_path' is required for make_tileable"
+        with open(image_path, "rb") as f:
+            img_bytes = f.read()
+        result_bytes = make_tileable(img_bytes, overlap_pct)
+        return Image(data=result_bytes, format="png")
+
+    elif action == "validate":
+        if image_path:
+            result = validate_texture_file(image_path)
+            return json.dumps(result, indent=2, default=str)
+        elif object_name:
+            result = await blender.send_command(
+                "texture_validate", {"object_name": object_name},
+            )
+            return await _with_screenshot(blender, result, capture_viewport)
+        return "ERROR: 'object_name' or 'image_path' is required for validate"
+
+    return "Unknown action"
+
+
+# ---------------------------------------------------------------------------
+# Compound tool: asset_pipeline
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def asset_pipeline(
+    action: Literal[
+        "generate_3d", "cleanup", "generate_lods", "validate_export",
+        "tag_metadata", "batch_process", "catalog_query", "catalog_add",
+    ],
+    # Common params
+    object_name: str | None = None,
+    # generate_3d params
+    prompt: str | None = None,
+    image_path: str | None = None,
+    output_dir: str = ".",
+    # cleanup params
+    poly_budget: int = 50000,
+    # generate_lods params
+    ratios: list[float] | None = None,
+    # validate_export params
+    filepath: str | None = None,
+    # tag_metadata params
+    asset_id: str | None = None,
+    output_path: str | None = None,
+    # batch_process params
+    object_names: list[str] | None = None,
+    steps: list[str] | None = None,
+    # catalog params
+    name: str | None = None,
+    asset_type: str | None = None,
+    path: str | None = None,
+    tags: list[str] | None = None,
+    status: str | None = None,
+    capture_viewport: bool = True,
+):
+    """Asset pipeline management -- 3D generation, processing, LODs, catalog.
+
+    Actions:
+    - generate_3d: Generate 3D model from text prompt or image via Tripo3D
+    - cleanup: Run repair -> UV -> PBR pipeline on AI-generated model
+    - generate_lods: Generate LOD chain (LOD0-LOD3) with decimation
+    - validate_export: Validate exported FBX/GLB file
+    - tag_metadata: Export asset metadata as JSON sidecar
+    - batch_process: Run pipeline for multiple objects
+    - catalog_query: Search asset catalog by type, tags, status
+    - catalog_add: Add asset to catalog database
+    """
+    blender = get_blender_connection()
+
+    if action == "generate_3d":
+        if not prompt and not image_path:
+            return "ERROR: 'prompt' or 'image_path' is required for generate_3d"
+        api_key = settings.tripo_api_key
+        if not api_key:
+            return json.dumps({
+                "status": "unavailable",
+                "error": "TRIPO_API_KEY not configured",
+            })
+        gen = TripoGenerator(api_key=api_key)
+        if image_path:
+            result = await gen.generate_from_image(image_path, output_dir)
+        else:
+            result = await gen.generate_from_text(prompt, output_dir)
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "cleanup":
+        if not object_name:
+            return "ERROR: 'object_name' is required for cleanup"
+        runner = PipelineRunner(blender, settings)
+        result = await runner.cleanup_ai_model(object_name, poly_budget)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_lods":
+        if not object_name:
+            return "ERROR: 'object_name' is required for generate_lods"
+        params = {"object_name": object_name}
+        if ratios:
+            params["ratios"] = ratios
+        result = await blender.send_command("pipeline_generate_lods", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "validate_export":
+        if not filepath:
+            return "ERROR: 'filepath' is required for validate_export"
+        runner = PipelineRunner(blender, settings)
+        result = await runner.validate_export(filepath)
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "tag_metadata":
+        if not asset_id or not output_path:
+            return "ERROR: 'asset_id' and 'output_path' are required for tag_metadata"
+        catalog = AssetCatalog(settings.asset_catalog_db)
+        try:
+            runner = PipelineRunner(blender, settings)
+            result = await runner.tag_metadata(asset_id, output_path, catalog)
+            return json.dumps(result, indent=2, default=str)
+        finally:
+            catalog.close()
+
+    elif action == "batch_process":
+        if not object_names:
+            return "ERROR: 'object_names' is required for batch_process"
+        runner = PipelineRunner(blender, settings)
+        result = await runner.batch_process(object_names, steps)
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "catalog_query":
+        catalog = AssetCatalog(settings.asset_catalog_db)
+        try:
+            results = catalog.query_assets(
+                asset_type=asset_type,
+                tags=tags,
+                status=status,
+            )
+            return json.dumps(results, indent=2, default=str)
+        finally:
+            catalog.close()
+
+    elif action == "catalog_add":
+        if not name or not asset_type or not path:
+            return "ERROR: 'name', 'asset_type', and 'path' are required for catalog_add"
+        catalog = AssetCatalog(settings.asset_catalog_db)
+        try:
+            new_id = catalog.add_asset(
+                name=name,
+                asset_type=asset_type,
+                path=path,
+                tags=tags,
+            )
+            return json.dumps({"asset_id": new_id, "status": "added"}, indent=2)
+        finally:
+            catalog.close()
+
+    return "Unknown action"
+
+
+# ---------------------------------------------------------------------------
+# Compound tool: concept_art
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def concept_art(
+    action: Literal["generate", "extract_palette", "style_board", "silhouette_test"],
+    # generate params
+    prompt: str | None = None,
+    style: str = "fantasy",
+    width: int = 1024,
+    height: int = 1024,
+    output_dir: str = ".",
+    # palette params
+    image_path: str | None = None,
+    num_colors: int = 8,
+    swatch_size: int = 64,
+    # style_board params
+    image_paths: list[str] | None = None,
+    palette_colors: list[dict] | None = None,
+    title: str = "Style Board",
+    annotations: list[str] | None = None,
+    board_width: int = 2048,
+    # silhouette params
+    threshold: int = 128,
+    min_contrast_ratio: float = 0.3,
+    distances: list[float] | None = None,
+):
+    """Concept art generation and visual analysis tools.
+
+    Actions:
+    - generate: Generate concept art via fal.ai FLUX
+    - extract_palette: Extract dominant color palette from image
+    - style_board: Compose reference style board from multiple images
+    - silhouette_test: Test shape readability at game distances
+    """
+    if action == "generate":
+        if not prompt:
+            return "ERROR: 'prompt' is required for generate"
+        result = generate_concept_art(
+            prompt=prompt,
+            style=style,
+            width=width,
+            height=height,
+            output_dir=output_dir,
+            fal_key=settings.fal_key or None,
+        )
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "extract_palette":
+        if not image_path:
+            return "ERROR: 'image_path' is required for extract_palette"
+        result = extract_color_palette(image_path, num_colors, swatch_size)
+        parts = [json.dumps({
+            "colors": result["colors"],
+        }, indent=2, default=str)]
+        if result.get("swatch_bytes"):
+            parts.append(Image(data=result["swatch_bytes"], format="png"))
+        return parts
+
+    elif action == "style_board":
+        if not image_paths:
+            return "ERROR: 'image_paths' is required for style_board"
+        board_bytes = compose_style_board(
+            images=image_paths,
+            palette_colors=palette_colors,
+            title=title,
+            annotations=annotations,
+            board_width=board_width,
+        )
+        return Image(data=board_bytes, format="png")
+
+    elif action == "silhouette_test":
+        if not image_path:
+            return "ERROR: 'image_path' is required for silhouette_test"
+        result = test_silhouette_readability(
+            image_path,
+            threshold=threshold,
+            min_contrast_ratio=min_contrast_ratio,
+            distances=distances,
+        )
+        return json.dumps(result, indent=2, default=str)
+
+    return "Unknown action"
 
 
 def main():

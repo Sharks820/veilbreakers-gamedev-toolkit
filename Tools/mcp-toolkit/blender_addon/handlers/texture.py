@@ -556,3 +556,224 @@ def _estimate_uv_coverage(obj: Any) -> float:
     # UV space is [0,1]x[0,1] = area 1.0
     # Coverage is total UV area (clamped to 100%)
     return min(total_uv_area * 100.0, 100.0)
+
+
+# ---------------------------------------------------------------------------
+# Handler: generate wear map (per-vertex curvature via bmesh)
+# ---------------------------------------------------------------------------
+
+def handle_generate_wear_map(params: dict) -> dict:
+    """Compute per-vertex curvature via bmesh for wear map generation.
+
+    Params:
+        object_name (str): Mesh object to analyze.
+
+    Returns:
+        Dict with object_name, vertex_count, curvature_data mapping
+        vertex_index to curvature value, and uv_data for texture rendering.
+    """
+    import bmesh
+
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("'object_name' is required")
+
+    obj = bpy.data.objects.get(object_name)
+    if obj is None:
+        raise ValueError(f"Object not found: {object_name}")
+    if obj.type != "MESH":
+        raise ValueError(f"Object '{object_name}' is type '{obj.type}', expected 'MESH'")
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.verts.ensure_lookup_table()
+    bm.faces.ensure_lookup_table()
+
+    # Compute per-vertex curvature as average angle defect:
+    # curvature = 2*pi - sum(face_angles_at_vertex) for boundary awareness
+    curvature_data: dict[int, float] = {}
+    for vert in bm.verts:
+        if not vert.link_faces:
+            curvature_data[vert.index] = 0.0
+            continue
+
+        # Sum the face angles at this vertex
+        angle_sum = 0.0
+        for face in vert.link_faces:
+            # Find the angle at this vertex in this face
+            for loop in face.loops:
+                if loop.vert == vert:
+                    angle_sum += loop.calc_angle()
+                    break
+
+        # Angle defect: positive = convex, negative = concave
+        curvature_data[vert.index] = 2.0 * math.pi - angle_sum
+
+    # Extract UV data for texture rendering
+    uv_data: list[list] = []
+    uv_layer = bm.loops.layers.uv.active
+    if uv_layer is not None:
+        for face in bm.faces:
+            face_uvs = []
+            for loop in face.loops:
+                uv = loop[uv_layer].uv
+                face_uvs.append((loop.vert.index, uv.x, uv.y))
+            uv_data.append(face_uvs)
+
+    vertex_count = len(bm.verts)
+    bm.free()
+
+    return {
+        "object_name": object_name,
+        "vertex_count": vertex_count,
+        "curvature_data": curvature_data,
+        "uv_data": uv_data,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: get UV region for material slot
+# ---------------------------------------------------------------------------
+
+def handle_get_uv_region(params: dict) -> dict:
+    """Extract UV polygons for a specific material slot via bmesh.
+
+    Params:
+        object_name (str): Mesh object to query.
+        material_index (int, default 0): Material slot index.
+
+    Returns:
+        Dict with object_name, material_index, polygons list of UV coordinate lists.
+    """
+    import bmesh
+
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("'object_name' is required")
+
+    material_index = params.get("material_index", 0)
+
+    obj = bpy.data.objects.get(object_name)
+    if obj is None:
+        raise ValueError(f"Object not found: {object_name}")
+    if obj.type != "MESH":
+        raise ValueError(f"Object '{object_name}' is type '{obj.type}', expected 'MESH'")
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.faces.ensure_lookup_table()
+
+    uv_layer = bm.loops.layers.uv.active
+    if uv_layer is None:
+        bm.free()
+        return {
+            "object_name": object_name,
+            "material_index": material_index,
+            "polygons": [],
+            "error": "No active UV layer",
+        }
+
+    polygons: list[list[list[float]]] = []
+    for face in bm.faces:
+        if face.material_index == material_index:
+            poly = []
+            for loop in face.loops:
+                uv = loop[uv_layer].uv
+                poly.append([uv.x, uv.y])
+            polygons.append(poly)
+
+    bm.free()
+
+    return {
+        "object_name": object_name,
+        "material_index": material_index,
+        "polygons": polygons,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: get seam pixel coordinates
+# ---------------------------------------------------------------------------
+
+def handle_get_seam_pixels(params: dict) -> dict:
+    """Extract UV seam edge pixel coordinates from a mesh.
+
+    Params:
+        object_name (str): Mesh object to query.
+        texture_size (int, default 1024): Texture resolution for pixel mapping.
+
+    Returns:
+        Dict with object_name, texture_size, seam_pixels list of [x, y] pairs.
+    """
+    import bmesh
+
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("'object_name' is required")
+
+    texture_size = params.get("texture_size", 1024)
+
+    obj = bpy.data.objects.get(object_name)
+    if obj is None:
+        raise ValueError(f"Object not found: {object_name}")
+    if obj.type != "MESH":
+        raise ValueError(f"Object '{object_name}' is type '{obj.type}', expected 'MESH'")
+
+    bm = bmesh.new()
+    bm.from_mesh(obj.data)
+    bm.edges.ensure_lookup_table()
+
+    uv_layer = bm.loops.layers.uv.active
+    if uv_layer is None:
+        bm.free()
+        return {
+            "object_name": object_name,
+            "texture_size": texture_size,
+            "seam_pixels": [],
+            "error": "No active UV layer",
+        }
+
+    seam_pixels: list[list[int]] = []
+    seen: set[tuple[int, int]] = set()
+
+    for edge in bm.edges:
+        if not edge.seam:
+            continue
+
+        # Get UV coordinates for this seam edge from adjacent loops
+        for loop in edge.link_loops:
+            uv_a = loop[uv_layer].uv
+            uv_b = loop.link_loop_next[uv_layer].uv
+
+            # Rasterize the edge into pixel coordinates using Bresenham-like sampling
+            x0 = int(uv_a.x * texture_size)
+            y0 = int((1.0 - uv_a.y) * texture_size)
+            x1 = int(uv_b.x * texture_size)
+            y1 = int((1.0 - uv_b.y) * texture_size)
+
+            # Clamp to texture bounds
+            x0 = max(0, min(x0, texture_size - 1))
+            y0 = max(0, min(y0, texture_size - 1))
+            x1 = max(0, min(x1, texture_size - 1))
+            y1 = max(0, min(y1, texture_size - 1))
+
+            # Simple line rasterization
+            dx = abs(x1 - x0)
+            dy = abs(y1 - y0)
+            steps = max(dx, dy, 1)
+            for s in range(steps + 1):
+                t = s / steps
+                px = round(x0 + t * (x1 - x0))
+                py = round(y0 + t * (y1 - y0))
+                key = (px, py)
+                if key not in seen:
+                    seen.add(key)
+                    seam_pixels.append([px, py])
+
+    bm.free()
+
+    return {
+        "object_name": object_name,
+        "texture_size": texture_size,
+        "seam_pixels": seam_pixels,
+    }

@@ -54,6 +54,9 @@ from .texture import (
     handle_create_pbr_material,
     handle_bake_textures,
     handle_validate_texture,
+    handle_generate_wear_map,
+    handle_get_uv_region,
+    handle_get_seam_pixels,
 )
 from .pipeline_lod import handle_generate_lods
 
@@ -108,6 +111,9 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "texture_create_pbr": handle_create_pbr_material,
     "texture_bake": handle_bake_textures,
     "texture_validate": handle_validate_texture,
+    "texture_generate_wear": handle_generate_wear_map,
+    "texture_get_uv_region": handle_get_uv_region,
+    "texture_get_seam_pixels": handle_get_seam_pixels,
     # Pipeline operations
     "pipeline_generate_lods": handle_generate_lods,
 }
