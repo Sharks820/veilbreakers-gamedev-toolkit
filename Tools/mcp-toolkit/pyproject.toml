@@ -18,6 +18,7 @@ vb-blender-mcp = "veilbreakers_mcp.blender_server:main"
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24.0",
+    "numpy>=1.26.0",
     "ruff>=0.8.0",
 ]
 
