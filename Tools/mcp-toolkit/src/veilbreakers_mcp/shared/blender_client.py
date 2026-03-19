@@ -82,21 +82,26 @@ class BlenderConnection:
             self.reconnect()
             if self._socket is None:
                 raise ConnectionError("Not connected to Blender")
-            command = BlenderCommand(type=command_type, params=params)
-            json_bytes = command.model_dump_json().encode("utf-8")
-            self._socket.sendall(struct.pack(">I", len(json_bytes)) + json_bytes)
-            length_bytes = self._receive_exactly(4)
-            length = struct.unpack(">I", length_bytes)[0]
-            if length > MAX_MESSAGE_SIZE:
-                raise ConnectionError(
-                    f"Response too large: {length} bytes (max {MAX_MESSAGE_SIZE})"
-                )
-            response_bytes = self._receive_exactly(length)
-            response_data = json.loads(response_bytes)
-            response = BlenderResponse(**response_data)
-            if response.status == "error":
-                raise BlenderCommandError(response)
-            return response.result
+            try:
+                command = BlenderCommand(type=command_type, params=params)
+                json_bytes = command.model_dump_json().encode("utf-8")
+                self._socket.sendall(struct.pack(">I", len(json_bytes)) + json_bytes)
+                length_bytes = self._receive_exactly(4)
+                length = struct.unpack(">I", length_bytes)[0]
+                if length > MAX_MESSAGE_SIZE:
+                    raise ConnectionError(
+                        f"Response too large: {length} bytes (max {MAX_MESSAGE_SIZE})"
+                    )
+                response_bytes = self._receive_exactly(length)
+                response_data = json.loads(response_bytes)
+                response = BlenderResponse(**response_data)
+                if response.status == "error":
+                    raise BlenderCommandError(response)
+                return response.result
+            finally:
+                # Server closes its end after each response — close ours too
+                # to avoid leaving half-open sockets between commands.
+                self.disconnect()
 
     async def send_command(
         self, command_type: str, params: dict[str, Any] | None = None

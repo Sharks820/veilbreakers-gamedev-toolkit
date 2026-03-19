@@ -30,7 +30,10 @@ def get_blender_connection() -> BlenderConnection:
             port=settings.blender_port,
             timeout=settings.blender_timeout,
         )
-        _connection.connect()
+        # No eager connect() -- the server uses connection-per-command,
+        # so _sync_send() calls reconnect() before each command.
+        # An eager connect() would open a socket that the server handles
+        # as a real client connection, wasting a server thread.
     return _connection
 
 

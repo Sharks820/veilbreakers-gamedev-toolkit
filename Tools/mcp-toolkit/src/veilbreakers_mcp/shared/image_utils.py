@@ -24,20 +24,27 @@ def compose_contact_sheet(
         raise ValueError("No images to compose")
 
     images = [PILImage.open(p) for p in image_paths]
-    w, h = images[0].size
-    rows = math.ceil(len(images) / cols)
-    sheet = PILImage.new("RGB", (w * cols, h * rows), bg_color)
+    try:
+        w, h = images[0].size
+        rows = math.ceil(len(images) / cols)
+        sheet = PILImage.new("RGB", (w * cols, h * rows), bg_color)
 
-    for i, img in enumerate(images):
-        x = (i % cols) * w
-        y = (i // cols) * h
-        if img.size != (w, h):
-            img = img.resize((w, h), PILImage.Resampling.LANCZOS)
-        sheet.paste(img, (x, y))
+        for i, img in enumerate(images):
+            x = (i % cols) * w
+            y = (i // cols) * h
+            if img.size != (w, h):
+                resized = img.resize((w, h), PILImage.Resampling.LANCZOS)
+                sheet.paste(resized, (x, y))
+                resized.close()
+            else:
+                sheet.paste(img, (x, y))
 
-    buf = io.BytesIO()
-    sheet.save(buf, format="PNG", optimize=True)
-    return buf.getvalue()
+        buf = io.BytesIO()
+        sheet.save(buf, format="PNG", optimize=True)
+        return buf.getvalue()
+    finally:
+        for img in images:
+            img.close()
 
 
 def resize_screenshot(
