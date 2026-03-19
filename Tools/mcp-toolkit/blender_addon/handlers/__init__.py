@@ -55,6 +55,7 @@ from .texture import (
     handle_bake_textures,
     handle_validate_texture,
 )
+from .pipeline_lod import handle_generate_lods
 
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "ping": lambda params: {"status": "success", "result": "pong"},
@@ -107,4 +108,6 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "texture_create_pbr": handle_create_pbr_material,
     "texture_bake": handle_bake_textures,
     "texture_validate": handle_validate_texture,
+    # Pipeline operations
+    "pipeline_generate_lods": handle_generate_lods,
 }

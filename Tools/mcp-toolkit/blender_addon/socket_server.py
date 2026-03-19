@@ -47,15 +47,16 @@ class BlenderMCPServer:
 
     def _server_loop(self):
         """Background thread - NO bpy calls here."""
-        self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._server_socket.bind(("localhost", self.port))
-        self._server_socket.listen(5)
-        self._server_socket.settimeout(1.0)
+        srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.bind(("localhost", self.port))
+        srv.listen(5)
+        srv.settimeout(1.0)
+        self._server_socket = srv
         try:
             while self.running:
                 try:
-                    client, addr = self._server_socket.accept()
+                    client, addr = srv.accept()
                     threading.Thread(
                         target=self._handle_client, args=(client,), daemon=True
                     ).start()
@@ -67,7 +68,7 @@ class BlenderMCPServer:
                     break
         finally:
             try:
-                self._server_socket.close()
+                srv.close()
             except OSError:
                 pass
 
