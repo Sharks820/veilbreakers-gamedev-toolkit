@@ -13,10 +13,13 @@ dependencies = [
     "fal-client>=0.5.0",
     "numpy>=1.26.0",
     "opensimplex>=0.4.5",
+    "elevenlabs>=2.39.0",
+    "google-genai>=1.0.0",
 ]
 
 [project.scripts]
 vb-blender-mcp = "veilbreakers_mcp.blender_server:main"
+vb-unity-mcp = "veilbreakers_mcp.unity_server:main"
 
 [dependency-groups]
 dev = [
