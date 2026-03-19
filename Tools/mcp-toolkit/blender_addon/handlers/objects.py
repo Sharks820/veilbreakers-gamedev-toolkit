@@ -1,13 +1,7 @@
 import bpy
 import bmesh
 
-
-def _get_3d_context_override():
-    """Find a 3D Viewport area for operator context override."""
-    for area in bpy.context.screen.areas:
-        if area.type == "VIEW_3D":
-            return {"area": area, "region": area.regions[-1]}
-    return None
+from ._context import get_3d_context_override
 
 
 def handle_create_object(params: dict) -> dict:
@@ -109,7 +103,7 @@ def _create_cone(name: str):
 
 def _create_torus(name: str):
     # bmesh doesn't have create_torus — requires operator with context override
-    override = _get_3d_context_override()
+    override = get_3d_context_override()
     if override:
         with bpy.context.temp_override(**override):
             bpy.ops.mesh.primitive_torus_add()
@@ -130,7 +124,7 @@ def _create_torus(name: str):
 
 def _create_monkey(name: str):
     # bmesh doesn't have create_monkey — requires operator
-    override = _get_3d_context_override()
+    override = get_3d_context_override()
     if override:
         with bpy.context.temp_override(**override):
             bpy.ops.mesh.primitive_monkey_add()

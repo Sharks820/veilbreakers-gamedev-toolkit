@@ -1,5 +1,6 @@
 import atexit
 import json
+import logging
 import os
 from typing import Literal
 
@@ -8,6 +9,8 @@ from veilbreakers_mcp.shared.blender_client import BlenderConnection, BlenderCom
 from veilbreakers_mcp.shared.config import Settings
 from veilbreakers_mcp.shared.security import validate_code
 from veilbreakers_mcp.shared.image_utils import compose_contact_sheet, resize_screenshot
+
+logger = logging.getLogger("veilbreakers_mcp")
 
 settings = Settings()
 mcp = FastMCP(
@@ -21,6 +24,7 @@ _connection: BlenderConnection | None = None
 def get_blender_connection() -> BlenderConnection:
     global _connection
     if _connection is None:
+        logger.info("Connecting to Blender at %s:%s", settings.blender_host, settings.blender_port)
         _connection = BlenderConnection(
             host=settings.blender_host,
             port=settings.blender_port,
@@ -228,14 +232,15 @@ async def blender_viewport(
         result = await blender.send_command("render_contact_sheet", params)
         paths = result.get("paths", [])
         if paths:
-            sheet_bytes = compose_contact_sheet(paths)
-            # Clean up temp files
-            for p in paths:
-                try:
-                    os.unlink(p)
-                except OSError:
-                    pass
-            return Image(data=sheet_bytes, format="png")
+            try:
+                sheet_bytes = compose_contact_sheet(paths)
+                return Image(data=sheet_bytes, format="png")
+            finally:
+                for p in paths:
+                    try:
+                        os.unlink(p)
+                    except OSError:
+                        pass
         return "No images rendered for contact sheet"
 
     elif action == "set_shading":
