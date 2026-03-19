@@ -61,7 +61,7 @@ Plans:
   5. Claude can generate concept art from text descriptions and extract color palettes for art direction consistency
 **Plans**: 4 plans
 Plans:
-- [ ] 03-01-PLAN.md -- PBR texturing, texture baking, and validation handlers (Blender-side)
+- [x] 03-01-PLAN.md -- PBR texturing, texture baking, and validation handlers (Blender-side)
 - [ ] 03-02-PLAN.md -- Surgical texture editing with seamless blending (MCP-side Pillow)
 - [ ] 03-03-PLAN.md -- Asset pipeline, AI 3D generation, LOD, catalog, export validation
 - [ ] 03-04-PLAN.md -- Concept art, compound MCP tool wiring, integration
@@ -131,8 +131,8 @@ Plans:
 | Phase | Plans | Status | Completed |
 |-------|-------|--------|-----------|
 | 1. Foundation & Server Architecture | 3/3 | Complete | 2026-03-19 |
-| 2. Mesh, UV & Topology Pipeline | 0/3 | Planning complete | - |
-| 3. Texturing & Asset Generation | 0/4 | Planning complete | - |
+| 2. Mesh, UV & Topology Pipeline | 3/3 | Complete | 2026-03-19 |
+| 3. Texturing & Asset Generation | 1/4 | In Progress | - |
 | 4. Rigging | 0/? | Not started | - |
 | 5. Animation | 0/? | Not started | - |
 | 6. Environment & World Building | 0/? | Not started | - |
@@ -141,4 +141,4 @@ Plans:
 
 ---
 *Roadmap created: 2026-03-18*
-*Last updated: 2026-03-18*
+*Last updated: 2026-03-19*
