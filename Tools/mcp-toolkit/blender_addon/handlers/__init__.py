@@ -33,6 +33,11 @@ from .mesh import (
     handle_analyze_topology,
     handle_auto_repair,
     handle_check_game_ready,
+    handle_select_geometry,
+    handle_edit_mesh,
+    handle_boolean_op,
+    handle_retopologize,
+    handle_sculpt,
 )
 from .uv import (  # noqa: F401, E402
     handle_analyze_uv,
@@ -77,6 +82,12 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "mesh_analyze_topology": handle_analyze_topology,
     "mesh_auto_repair": handle_auto_repair,
     "mesh_check_game_ready": handle_check_game_ready,
+    # Mesh editing (selection, edit, boolean, retopo, sculpt)
+    "mesh_select": handle_select_geometry,
+    "mesh_edit": handle_edit_mesh,
+    "mesh_boolean": handle_boolean_op,
+    "mesh_retopologize": handle_retopologize,
+    "mesh_sculpt": handle_sculpt,
     # UV operations
     "uv_analyze": handle_analyze_uv,
     "uv_unwrap_xatlas": handle_unwrap_xatlas,

@@ -310,20 +310,57 @@ async def blender_export(
 
 @mcp.tool()
 async def blender_mesh(
-    action: Literal["analyze", "repair", "game_check"],
+    action: Literal[
+        "analyze", "repair", "game_check",
+        "select", "edit", "boolean", "retopo", "sculpt"
+    ],
     object_name: str,
+    # Existing params (analyze/repair/game_check)
     merge_distance: float = 0.0001,
     max_hole_sides: int = 8,
     poly_budget: int = 50000,
     platform: str = "pc",
+    # Selection params
+    material_index: int | None = None,
+    material_name: str | None = None,
+    vertex_group: str | None = None,
+    face_normal_direction: list[float] | None = None,
+    normal_threshold: float = 0.7,
+    loose_parts: bool = False,
+    # Edit params
+    operation: str | None = None,
+    offset: list[float] | None = None,
+    thickness: float = 0.1,
+    depth: float = 0.0,
+    axis: str = "X",
+    separate_type: str = "SELECTED",
+    object_names: list[str] | None = None,
+    # Boolean params
+    cutter_name: str | None = None,
+    remove_cutter: bool = True,
+    # Retopo params
+    target_faces: int = 4000,
+    preserve_sharp: bool = True,
+    preserve_boundary: bool = True,
+    smooth_normals: bool = True,
+    use_symmetry: bool = False,
+    seed: int = 0,
+    # Sculpt params
+    strength: float = 0.5,
+    iterations: int = 3,
     capture_viewport: bool = True,
 ):
-    """Mesh topology analysis, repair, and game-readiness validation.
+    """Mesh topology analysis, repair, editing, booleans, retopology, and sculpting.
 
     Actions:
-    - analyze: Full topology analysis with A-F grading (non-manifold, n-gons, poles, loose geo, edge flow)
-    - repair: Auto-repair pipeline (remove doubles, fix normals, fill holes, remove loose, dissolve degenerate)
-    - game_check: Composite game-readiness check (topology + poly budget + UV + materials + naming + transforms)
+    - analyze: Full topology analysis with A-F grading
+    - repair: Auto-repair pipeline (remove doubles, fix normals, fill holes)
+    - game_check: Composite game-readiness validation
+    - select: Select geometry by material, vertex group, face normal, or loose parts
+    - edit: Surgical mesh editing (extrude, inset, mirror, separate, join)
+    - boolean: Boolean operations (union, difference, intersect) with another object
+    - retopo: Retopology via Quadriflow with target face count
+    - sculpt: Sculpt operations (smooth, inflate, flatten, crease)
     """
     blender = get_blender_connection()
 
@@ -354,6 +391,74 @@ async def blender_mesh(
             },
         )
         return [json.dumps(result, indent=2, default=str)]
+
+    elif action == "select":
+        params: dict = {"object_name": object_name}
+        if material_index is not None:
+            params["material_index"] = material_index
+        if material_name is not None:
+            params["material_name"] = material_name
+        if vertex_group is not None:
+            params["vertex_group"] = vertex_group
+        if face_normal_direction is not None:
+            params["face_normal_direction"] = face_normal_direction
+            params["normal_threshold"] = normal_threshold
+        if loose_parts:
+            params["loose_parts"] = loose_parts
+        result = await blender.send_command("mesh_select", params)
+        return [json.dumps(result, indent=2, default=str)]
+
+    elif action == "edit":
+        params = {"object_name": object_name}
+        if operation is not None:
+            params["operation"] = operation
+        if offset is not None:
+            params["offset"] = offset
+        params["thickness"] = thickness
+        params["depth"] = depth
+        params["axis"] = axis
+        params["separate_type"] = separate_type
+        if object_names is not None:
+            params["object_names"] = object_names
+        result = await blender.send_command("mesh_edit", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "boolean":
+        params = {
+            "object_name": object_name,
+            "operation": operation or "DIFFERENCE",
+            "remove_cutter": remove_cutter,
+        }
+        if cutter_name is not None:
+            params["cutter_name"] = cutter_name
+        result = await blender.send_command("mesh_boolean", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "retopo":
+        result = await blender.send_command(
+            "mesh_retopologize",
+            {
+                "object_name": object_name,
+                "target_faces": target_faces,
+                "preserve_sharp": preserve_sharp,
+                "preserve_boundary": preserve_boundary,
+                "smooth_normals": smooth_normals,
+                "use_symmetry": use_symmetry,
+                "seed": seed,
+            },
+        )
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "sculpt":
+        params = {
+            "object_name": object_name,
+            "strength": strength,
+            "iterations": iterations,
+        }
+        if operation is not None:
+            params["operation"] = operation
+        result = await blender.send_command("mesh_sculpt", params)
+        return await _with_screenshot(blender, result, capture_viewport)
 
     return ["Unknown action"]
 
