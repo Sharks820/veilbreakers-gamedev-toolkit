@@ -108,11 +108,7 @@ def _create_cone(name: str):
 
 
 def _create_torus(name: str):
-    # bmesh doesn't have create_torus — use a basic torus via Python math
-    mesh = bpy.data.meshes.new(name)
-    bm = bmesh.new()
-    # Fallback: create a cube and label it torus (proper torus needs manual verts)
-    # For now, use operator with context override if available
+    # bmesh doesn't have create_torus — requires operator with context override
     override = _get_3d_context_override()
     if override:
         with bpy.context.temp_override(**override):
@@ -120,9 +116,10 @@ def _create_torus(name: str):
         obj = bpy.context.active_object
         obj.name = name
         obj.data.name = name
-        bm.free()
         return obj
-    # Fallback: cube placeholder
+    # Fallback: cube placeholder when no 3D viewport available
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
     bmesh.ops.create_cube(bm, size=2.0)
     bm.to_mesh(mesh)
     bm.free()

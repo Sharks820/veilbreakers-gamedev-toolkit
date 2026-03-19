@@ -211,3 +211,98 @@ def test_syntax_error():
     safe, violations = validate_code("def broken(")
     assert safe is False
     assert any("Syntax error" in v for v in violations)
+
+
+# --- Bare name blocking ---
+
+def test_blocked_builtins_bare_name():
+    safe, violations = validate_code("b = __builtins__")
+    assert safe is False
+    assert any("__builtins__" in v for v in violations)
+
+
+# --- Dangerous bpy operations ---
+
+def test_blocked_bpy_execfile():
+    safe, violations = validate_code("bpy.utils.execfile('/tmp/evil.py')")
+    assert safe is False
+    assert any("execfile" in v for v in violations)
+
+
+def test_blocked_bpy_handlers():
+    safe, violations = validate_code("bpy.app.handlers.frame_change_post.append(f)")
+    assert safe is False
+    assert any("handlers" in v for v in violations)
+
+
+def test_blocked_bpy_script_run():
+    safe, violations = validate_code("bpy.ops.script.python_file_run(filepath='x')")
+    assert safe is False
+    assert any("python_file_run" in v for v in violations)
+
+
+def test_blocked_bpy_save_mainfile():
+    safe, violations = validate_code("bpy.ops.wm.save_as_mainfile(filepath='x')")
+    assert safe is False
+    assert any("save_as_mainfile" in v for v in violations)
+
+
+# --- Decorator bypass ---
+
+def test_blocked_decorator_exec():
+    safe, violations = validate_code("@exec\ndef f(): pass")
+    assert safe is False
+    assert any("decorator" in v.lower() for v in violations)
+
+
+def test_blocked_decorator_eval():
+    safe, violations = validate_code("@eval\ndef f(): pass")
+    assert safe is False
+
+
+# --- Method call bypass ---
+
+def test_blocked_method_call_exec():
+    safe, violations = validate_code("obj.exec('code')")
+    assert safe is False
+    assert any(".exec" in v for v in violations)
+
+
+def test_blocked_method_call_compile():
+    safe, violations = validate_code("obj.compile('code', 'f', 'exec')")
+    assert safe is False
+
+
+# --- Dunder allowlist (non-allowed dunders blocked) ---
+
+def test_blocked_dunder_code():
+    safe, violations = validate_code("f.__code__")
+    assert safe is False
+
+
+def test_blocked_dunder_func():
+    safe, violations = validate_code("f.__func__")
+    assert safe is False
+
+
+def test_blocked_dunder_import():
+    safe, violations = validate_code("x.__import__")
+    assert safe is False
+
+
+def test_allowed_dunder_name():
+    """__name__ is in the dunder allowlist and should pass."""
+    safe, violations = validate_code("x = bpy.__name__")
+    assert safe is True
+
+
+def test_allowed_dunder_len():
+    """__len__ is in the dunder allowlist and should pass."""
+    safe, violations = validate_code("x.__len__()")
+    assert safe is True
+
+
+def test_allowed_dunder_init():
+    """__init__ is in the dunder allowlist and should pass."""
+    safe, violations = validate_code("class Foo:\n    def __init__(self): pass")
+    assert safe is True
