@@ -45,7 +45,7 @@ Plans:
   5. A mesh that enters as raw AI output (e.g., from Tripo3D) exits as a game-ready asset passing all validation checks (poly budget, UVs, materials, naming)
 **Plans**: 3 plans
 Plans:
-- [ ] 02-01-PLAN.md -- Mesh analysis, auto-repair, and game-readiness check (blender_mesh tool)
+- [x] 02-01-PLAN.md -- Mesh analysis, auto-repair, and game-readiness check (blender_mesh tool)
 - [ ] 02-02-PLAN.md -- UV analysis, xatlas unwrapping, packing, lightmap, density equalization (blender_uv tool)
 - [ ] 02-03-PLAN.md -- Mesh editing, selection engine, booleans, retopology, sculpt operations
 

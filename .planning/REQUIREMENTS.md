@@ -20,14 +20,14 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Mesh Topology & Editing
 
-- [ ] **MESH-01**: Full topology analysis with A-F grading (non-manifold, n-gons, poles, edge flow, loose geo)
-- [ ] **MESH-02**: Auto-repair (remove doubles, fix normals, fill holes, remove loose, dissolve degenerate)
+- [x] **MESH-01**: Full topology analysis with A-F grading (non-manifold, n-gons, poles, edge flow, loose geo)
+- [x] **MESH-02**: Auto-repair (remove doubles, fix normals, fill holes, remove loose, dissolve degenerate)
 - [ ] **MESH-03**: Surgical mesh editing — select by material slot, vertex group, loose parts, face normal
 - [ ] **MESH-04**: Sculpt operations on selections (smooth, inflate, flatten, crease)
 - [ ] **MESH-05**: Boolean operations (add, subtract, intersect) for geometry modification
 - [ ] **MESH-06**: Extrude, inset, mirror, separate, join operations
 - [ ] **MESH-07**: Retopology with target face count preserving hard edges
-- [ ] **MESH-08**: Game-readiness check (poly budget, UV, materials, bones, naming)
+- [x] **MESH-08**: Game-readiness check (poly budget, UV, materials, bones, naming)
 
 ### UV Mapping
 
