@@ -286,6 +286,12 @@ def compute_slope_map(heightmap: np.ndarray) -> np.ndarray:
     np.ndarray
         2D array of slope values in degrees [0, 90].
     """
+    # np.gradient requires at least 2 elements per axis; a 1-pixel
+    # dimension has no neighbours so the slope is zero by definition.
+    rows, cols = heightmap.shape
+    if rows < 2 or cols < 2:
+        return np.zeros_like(heightmap)
+
     dy, dx = np.gradient(heightmap)
     magnitude = np.sqrt(dx ** 2 + dy ** 2)
     slope_rad = np.arctan(magnitude)
