@@ -145,7 +145,11 @@ Plans:
   3. Spawn systems respect max count, respawn timers, area bounds, and conditions -- mobs appear in the world at designated spawn points
   4. Scene profiling reports frame time, draw calls, batches, triangle count, and memory usage -- with actionable recommendations for optimization
   5. Auto-generated LOD chains, lightmap baking, and asset audit (unused assets, oversized textures) produce measurable performance improvements verified by before/after profiling data
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 08-01-PLAN.md -- Gameplay templates: mob controller, aggro, patrol, spawn, behavior tree, combat ability, projectile (MOB-01 to MOB-07)
+- [ ] 08-02-PLAN.md -- Performance templates: scene profiler, LOD setup, lightmap baking, asset audit, build automation (PERF-01 to PERF-05)
+- [ ] 08-03-PLAN.md -- Compound tool wiring: unity_gameplay + unity_performance in unity_server.py
 
 ## Progress
 
@@ -158,7 +162,7 @@ Plans:
 | 5. Animation | 0/4 | Planned | - |
 | 6. Environment & World Building | 0/4 | Planned | - |
 | 7. VFX, Audio, UI & Unity Scene | 0/5 | Planned | - |
-| 8. Gameplay AI & Performance | 0/? | Not started | - |
+| 8. Gameplay AI & Performance | 0/3 | Planned | - |
 
 ---
 *Roadmap created: 2026-03-18*
