@@ -699,9 +699,10 @@ public static class VeilBreakers_PostProcessing
             vignette.intensity.Override({vignette_intensity}f);
             vignette.smoothness.Override(0.3f);
 
-            // ScreenSpaceAmbientOcclusion (SSAO)
-            var ssao = profile.Add<ScreenSpaceAmbientOcclusion>();
-            ssao.intensity.Override({ao_intensity}f);
+            // NOTE: SSAO in URP is a Renderer Feature, not a Volume Override.
+            // Configure SSAO on the Universal Renderer Data asset instead:
+            //   UniversalRendererData > Add Renderer Feature > Screen Space Ambient Occlusion
+            //   Set intensity to {ao_intensity}
 
             // DepthOfField
             var dof = profile.Add<DepthOfField>();

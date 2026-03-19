@@ -47,7 +47,9 @@ def compare_screenshots(
 
     # Resize current to match reference if sizes differ
     if cur_img.size != ref_img.size:
+        original_cur = cur_img
         cur_img = cur_img.resize(ref_img.size, Image.LANCZOS)
+        original_cur.close()
 
     # Compute pixel-level difference
     diff = ImageChops.difference(ref_img, cur_img)
@@ -120,7 +122,9 @@ def generate_diff_image(
 
     # Resize current to match reference if sizes differ
     if cur_img.size != ref_img.size:
+        original_cur = cur_img
         cur_img = cur_img.resize(ref_img.size, Image.LANCZOS)
+        original_cur.close()
 
     # Compute difference
     diff = ImageChops.difference(ref_img, cur_img)

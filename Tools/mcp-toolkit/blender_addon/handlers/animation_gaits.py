@@ -1148,7 +1148,7 @@ REACTION_CONFIGS: dict[str, dict] = {
         "name": "spawn",
         "description": "Start curled/compressed, unfold to full pose",
         "bones": {
-            # Start compressed
+            # Start compressed (spine curl)
             "DEF-spine": {"channel": "rotation_euler", "axis": 0, "start_value": 1.0, "end_value": 0.0},
             "DEF-spine.001": {"channel": "rotation_euler", "axis": 0, "start_value": 0.8, "end_value": 0.0},
             "DEF-spine.002": {"channel": "rotation_euler", "axis": 0, "start_value": 0.6, "end_value": 0.0},
@@ -1156,8 +1156,9 @@ REACTION_CONFIGS: dict[str, dict] = {
             "DEF-upper_arm.R": {"channel": "rotation_euler", "axis": 0, "start_value": 1.2, "end_value": 0.0},
             "DEF-thigh.L": {"channel": "rotation_euler", "axis": 0, "start_value": 0.8, "end_value": 0.0},
             "DEF-thigh.R": {"channel": "rotation_euler", "axis": 0, "start_value": 0.8, "end_value": 0.0},
-            # Vertical rise
-            "DEF-spine.base": {"channel": "location", "axis": 2, "start_value": -0.3, "end_value": 0.0},
+            # Vertical rise (legs extending from crouched position)
+            "DEF-shin.L": {"channel": "rotation_euler", "axis": 0, "start_value": -0.8, "end_value": 0.0},
+            "DEF-shin.R": {"channel": "rotation_euler", "axis": 0, "start_value": -0.8, "end_value": 0.0},
         },
     },
 }

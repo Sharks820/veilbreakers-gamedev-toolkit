@@ -194,8 +194,8 @@ def evaluate_building_grammar(
     roof_z = base_z + floors * (wall_cfg["height_per_floor"] + slab_cfg["thickness"]) - slab_cfg["thickness"]
 
     if roof_cfg["type"] == "gabled":
-        ridge_height = math.tan(math.radians(roof_cfg["pitch"])) * (depth / 2)
         overhang = roof_cfg["overhang"]
+        ridge_height = math.tan(math.radians(roof_cfg["pitch"])) * (depth / 2 + overhang)
         ops.append({
             "type": "box",
             "position": [-overhang, -overhang, roof_z],
@@ -207,7 +207,7 @@ def evaluate_building_grammar(
         })
     elif roof_cfg["type"] == "pointed":
         overhang = roof_cfg["overhang"]
-        ridge_height = math.tan(math.radians(roof_cfg["pitch"])) * (depth / 2)
+        ridge_height = math.tan(math.radians(roof_cfg["pitch"])) * (depth / 2 + overhang)
         ops.append({
             "type": "box",
             "position": [-overhang, -overhang, roof_z],

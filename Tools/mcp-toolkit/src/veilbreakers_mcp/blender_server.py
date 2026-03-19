@@ -85,6 +85,7 @@ async def blender_scene(
     action: Literal["inspect", "clear", "configure", "list_objects"],
     render_engine: str | None = None,
     fps: int | None = None,
+    unit_scale: float | None = None,
 ):
     """Manage Blender scene state.
 
@@ -107,6 +108,8 @@ async def blender_scene(
             params["render_engine"] = render_engine
         if fps is not None:
             params["fps"] = fps
+        if unit_scale is not None:
+            params["unit_scale"] = unit_scale
         result = await blender.send_command("configure_scene", params)
         return await _with_screenshot(blender, result)
     elif action == "list_objects":
@@ -506,6 +509,7 @@ async def blender_uv(
     margin: float = 0.001,
     layer_name: str | None = None,
     method: str = "smart_project",
+    angle_limit: float = 66.0,
     max_chart_area: float | None = None,
     normal_deviation_weight: float | None = None,
     max_iterations: int | None = None,
@@ -556,7 +560,7 @@ async def blender_uv(
     elif action == "unwrap_blender":
         result = await blender.send_command(
             "uv_unwrap_blender",
-            {"object_name": object_name, "method": method},
+            {"object_name": object_name, "method": method, "angle_limit": angle_limit},
         )
         return await _with_screenshot(blender, result, capture_viewport)
 
@@ -748,11 +752,14 @@ async def blender_texture(
         }
         uv_data = wear_result.get("uv_data")
         wear_bytes = render_wear_map(curvature_data, texture_size, uv_data)
-        return await _with_screenshot(blender, {
-            "object_name": object_name,
-            "vertex_count": wear_result.get("vertex_count", 0),
-            "texture_size": texture_size,
-        }, capture_viewport)
+        return [
+            json.dumps({
+                "object_name": object_name,
+                "vertex_count": wear_result.get("vertex_count", 0),
+                "texture_size": texture_size,
+            }, indent=2, default=str),
+            Image(data=wear_bytes, format="png"),
+        ]
 
     elif action == "bake":
         if not object_name or not image_name:
@@ -1148,7 +1155,7 @@ async def blender_rig(
         if pole_bone is not None:
             params["pole_target_bone"] = pole_bone
         if curve_points is not None:
-            params["curve_points"] = len(curve_points) if isinstance(curve_points, list) else curve_points
+            params["curve_points"] = curve_points
         if rotation_limits is not None:
             params["joint_limits"] = rotation_limits
         result = await blender.send_command("rig_setup_ik", params)

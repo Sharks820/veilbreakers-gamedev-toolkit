@@ -308,7 +308,7 @@ QUADRUPED_BONES: dict[str, dict] = {
         "rigify_type": "",
     },
     "foot.R": {
-        "head": (-0.12, -0.05, 0.1),
+        "head": (-0.12, 0.05, 0.1),
         "tail": (-0.12, -0.05, 0.0),
         "roll": 0.0,
         "parent": "shin.R",
@@ -1745,7 +1745,7 @@ def _paw_leg_pair_bones(side: str = "front") -> dict[str, dict]:
                 "roll": 0.0, "parent": "thigh.R", "rigify_type": "",
             },
             "foot.R": {
-                "head": (-0.12, -0.05, 0.1), "tail": (-0.12, -0.05, 0.0),
+                "head": (-0.12, 0.05, 0.1), "tail": (-0.12, -0.05, 0.0),
                 "roll": 0.0, "parent": "shin.R", "rigify_type": "",
             },
         }

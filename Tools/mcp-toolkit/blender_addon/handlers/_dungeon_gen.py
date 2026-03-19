@@ -638,10 +638,11 @@ def generate_town_layout(
             }
         )
 
-    # Sort by area descending; tag the largest non-civic as residential
+    # Sort by area descending; tag the largest non-civic district that
+    # is not already assigned a specialist type as residential.
     by_area = sorted(districts, key=lambda d: len(d["cells"]), reverse=True)
     for d in by_area:
-        if d["type"] not in ("civic",):
+        if d["type"] not in ("civic", "commercial", "industrial"):
             d["type"] = "residential"
             break
 

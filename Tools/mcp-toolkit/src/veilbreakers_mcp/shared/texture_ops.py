@@ -681,5 +681,5 @@ def inpaint_texture(
     # fal_client.subscribe("fal-ai/flux/inpaint", ...)
     return {
         "status": "stub",
-        "message": "fal.ai API key not configured. Set fal_key to enable AI inpainting.",
+        "message": "AI inpainting not yet implemented. Full fal.ai FLUX integration planned for 03-04.",
     }

@@ -135,33 +135,35 @@ class BlenderMCPServer:
         """MAIN THREAD via bpy.app.timers - safe for bpy calls."""
         try:
             # Process one command per tick to avoid freezing Blender UI
-            if not self.command_queue.empty():
+            try:
                 cmd, event, container = self.command_queue.get_nowait()
-                try:
-                    cmd_type = cmd.get("type", "unknown")
-                    params = cmd.get("params", {})
-                    handler = COMMAND_HANDLERS.get(cmd_type)
-                    if handler is None:
-                        container["response"] = {
-                            "status": "error",
-                            "message": f"Unknown command: {cmd_type}",
-                        }
-                    else:
-                        result = handler(params)
-                        if isinstance(result, dict) and "status" in result:
-                            container["response"] = result
-                        else:
-                            container["response"] = {
-                                "status": "success",
-                                "result": result,
-                            }
-                except Exception as e:
+            except queue.Empty:
+                return 0.05
+            try:
+                cmd_type = cmd.get("type", "unknown")
+                params = cmd.get("params", {})
+                handler = COMMAND_HANDLERS.get(cmd_type)
+                if handler is None:
                     container["response"] = {
                         "status": "error",
-                        "message": str(e),
+                        "message": f"Unknown command: {cmd_type}",
                     }
-                finally:
-                    event.set()
+                else:
+                    result = handler(params)
+                    if isinstance(result, dict) and "status" in result:
+                        container["response"] = result
+                    else:
+                        container["response"] = {
+                            "status": "success",
+                            "result": result,
+                        }
+            except Exception as e:
+                container["response"] = {
+                    "status": "error",
+                    "message": str(e),
+                }
+            finally:
+                event.set()
         except Exception as e:
             # Outer guard — prevents timer from being silently unregistered
             print(f"[VeilBreakers MCP] Timer error: {e}")
