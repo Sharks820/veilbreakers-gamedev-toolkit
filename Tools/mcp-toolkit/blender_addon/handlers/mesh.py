@@ -1,11 +1,17 @@
-"""Mesh topology analysis, auto-repair, and game-readiness check handlers.
+"""Mesh topology analysis, auto-repair, game-readiness, and editing handlers.
 
 Provides:
 - handle_analyze_topology: Full topology analysis with A-F grading (MESH-01)
 - handle_auto_repair: Chained repair pipeline via bmesh.ops (MESH-02)
 - handle_check_game_ready: Composite game-readiness validation (MESH-08)
+- handle_select_geometry: Selection engine by material/vertex group/normal/loose (MESH-03)
+- handle_edit_mesh: Surgical edits -- extrude, inset, mirror, separate, join (MESH-06)
+- handle_boolean_op: Boolean operations -- union, difference, intersect (MESH-05)
+- handle_retopologize: Retopology via quadriflow with target face count (MESH-07)
+- handle_sculpt: Sculpt operations -- smooth, inflate, flatten, crease (MESH-04)
 
-All analysis uses bmesh for direct geometry access without operator context issues.
+Analysis uses bmesh for direct geometry access. Editing uses bmesh where possible,
+falls back to bpy.ops with temp_override for boolean, retopology, and sculpt filters.
 """
 
 from __future__ import annotations
@@ -15,6 +21,9 @@ import re
 
 import bmesh
 import bpy
+import mathutils
+
+from ._context import get_3d_context_override
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +110,82 @@ def _list_issues(m: dict) -> list[str]:
 def _is_default_name(name: str) -> bool:
     """Return True if *name* matches a default Blender object name."""
     return any(pat.match(name) for pat in _DEFAULT_NAME_PATTERNS)
+
+
+# ---------------------------------------------------------------------------
+# Pure-logic helpers for mesh editing (testable without Blender)
+# ---------------------------------------------------------------------------
+
+# Selection criteria keys recognised by handle_select_geometry.
+_SELECTION_KEYS = frozenset({
+    "material_index",
+    "material_name",
+    "vertex_group",
+    "face_normal_direction",
+    "normal_threshold",
+    "loose_parts",
+})
+
+# Valid edit operations for handle_edit_mesh.
+_EDIT_OPERATIONS = frozenset({"extrude", "inset", "mirror", "separate", "join"})
+
+# Valid sculpt operations for handle_sculpt.
+_SCULPT_OPERATIONS = {
+    "smooth": None,           # uses bmesh, no sculpt filter
+    "inflate": "INFLATE",
+    "flatten": "SURFACE_SMOOTH",
+    "crease": "SHARPEN",
+}
+
+_AXIS_MAP = {"X": 0, "Y": 1, "Z": 2}
+
+
+def _parse_selection_criteria(params: dict) -> dict:
+    """Extract selection criteria from params, ignoring non-criteria keys.
+
+    Returns dict with only the recognised selection keys that are present
+    in *params*.  For ``face_normal_direction`` without an explicit
+    ``normal_threshold``, the default 0.7 is injected.
+    """
+    criteria: dict = {}
+    for key in _SELECTION_KEYS:
+        if key in params:
+            criteria[key] = params[key]
+    # Inject default threshold when direction given without one.
+    if "face_normal_direction" in criteria and "normal_threshold" not in criteria:
+        criteria["normal_threshold"] = 0.7
+    return criteria
+
+
+def _validate_edit_operation(operation: str) -> None:
+    """Raise ``ValueError`` if *operation* is not a known edit operation."""
+    if operation not in _EDIT_OPERATIONS:
+        raise ValueError(
+            f"Unknown edit operation: {operation!r}. "
+            f"Valid: {sorted(_EDIT_OPERATIONS)}"
+        )
+
+
+def _axis_to_index(axis: str) -> int:
+    """Convert axis letter (X/Y/Z, case-insensitive) to integer index (0/1/2)."""
+    idx = _AXIS_MAP.get(axis.upper())
+    if idx is None:
+        raise ValueError(f"Invalid axis: {axis!r}. Valid: X, Y, Z")
+    return idx
+
+
+def _sculpt_operation_to_filter_type(operation: str) -> str | None:
+    """Map sculpt operation name to Blender mesh_filter type.
+
+    Returns ``None`` for ``"smooth"`` (handled via bmesh, not sculpt mode).
+    Raises ``ValueError`` for unknown operations.
+    """
+    if operation not in _SCULPT_OPERATIONS:
+        raise ValueError(
+            f"Unknown sculpt operation: {operation!r}. "
+            f"Valid: {sorted(_SCULPT_OPERATIONS)}"
+        )
+    return _SCULPT_OPERATIONS[operation]
 
 
 def _evaluate_game_readiness(
@@ -410,3 +495,485 @@ def handle_check_game_ready(params: dict) -> dict:
         rotation=rotation,
         scale=scale,
     )
+
+
+# ---------------------------------------------------------------------------
+# Mesh editing handlers (Plan 02-03)
+# ---------------------------------------------------------------------------
+
+
+def _get_mesh_object(name: str | None) -> object:
+    """Validate and return a mesh object by name."""
+    obj = bpy.data.objects.get(name)
+    if not obj or obj.type != "MESH":
+        raise ValueError(f"Mesh object not found: {name}")
+    return obj
+
+
+def handle_select_geometry(params: dict) -> dict:
+    """Select geometry by material, vertex group, face normal, or loose parts (MESH-03).
+
+    Params:
+        object_name: Name of the Blender mesh object.
+        material_index: Select faces with this material slot index.
+        material_name: Select faces with this material name (resolved to index).
+        vertex_group: Select vertices in this vertex group (and their linked faces).
+        face_normal_direction: [x, y, z] direction vector for face normal selection.
+        normal_threshold: Dot-product threshold for normal selection (default 0.7).
+        loose_parts: If True, select vertices with no linked faces.
+
+    Returns dict with selection counts and criteria used.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    criteria = _parse_selection_criteria(params)
+
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        bm.verts.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+
+        # Deselect all
+        for v in bm.verts:
+            v.select = False
+        for e in bm.edges:
+            e.select = False
+        for f in bm.faces:
+            f.select = False
+
+        # --- Material selection ---
+        mat_idx = criteria.get("material_index")
+        mat_name = criteria.get("material_name")
+        if mat_name is not None and mat_idx is None:
+            # Resolve material name to index
+            idx = obj.data.materials.find(mat_name)
+            if idx >= 0:
+                mat_idx = idx
+        if mat_idx is not None:
+            for f in bm.faces:
+                if f.material_index == mat_idx:
+                    f.select = True
+                    for v in f.verts:
+                        v.select = True
+                    for e in f.edges:
+                        e.select = True
+
+        # --- Vertex group selection ---
+        vg_name = criteria.get("vertex_group")
+        if vg_name is not None:
+            vg = obj.vertex_groups.get(vg_name)
+            if vg is not None:
+                deform_layer = bm.verts.layers.deform.active
+                if deform_layer is not None:
+                    group_idx = vg.index
+                    for v in bm.verts:
+                        weights = v[deform_layer]
+                        if group_idx in weights and weights[group_idx] > 0.0:
+                            v.select = True
+                    # Select faces where all verts are selected
+                    for f in bm.faces:
+                        if all(v.select for v in f.verts):
+                            f.select = True
+                            for e in f.edges:
+                                e.select = True
+
+        # --- Face normal direction selection ---
+        normal_dir = criteria.get("face_normal_direction")
+        if normal_dir is not None:
+            threshold = criteria.get("normal_threshold", 0.7)
+            direction = mathutils.Vector(normal_dir).normalized()
+            for f in bm.faces:
+                if f.normal.dot(direction) > threshold:
+                    f.select = True
+                    for v in f.verts:
+                        v.select = True
+                    for e in f.edges:
+                        e.select = True
+
+        # --- Loose parts selection ---
+        if criteria.get("loose_parts"):
+            for v in bm.verts:
+                if len(v.link_faces) == 0:
+                    v.select = True
+
+        # Count selections
+        selected_verts = sum(1 for v in bm.verts if v.select)
+        selected_edges = sum(1 for e in bm.edges if e.select)
+        selected_faces = sum(1 for f in bm.faces if f.select)
+
+        # Write selection state back
+        bm.to_mesh(obj.data)
+        obj.data.update()
+    finally:
+        bm.free()
+
+    return {
+        "object_name": name,
+        "selected_verts": selected_verts,
+        "selected_edges": selected_edges,
+        "selected_faces": selected_faces,
+        "criteria_used": criteria,
+    }
+
+
+def handle_edit_mesh(params: dict) -> dict:
+    """Surgical mesh editing: extrude, inset, mirror, separate, join (MESH-06).
+
+    Params:
+        object_name: Name of the Blender mesh object.
+        operation: One of "extrude", "inset", "mirror", "separate", "join".
+        offset: [x, y, z] translation for extrude (default [0, 0, 0.5]).
+        thickness: Inset thickness (default 0.1).
+        depth: Inset depth (default 0.0).
+        axis: Mirror axis -- "X", "Y", or "Z" (default "X").
+        separate_type: "SELECTED", "MATERIAL", or "LOOSE" (default "SELECTED").
+        object_names: List of object names to join into the target.
+
+    Returns dict with post-operation vertex/face counts.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    operation = params.get("operation")
+    _validate_edit_operation(operation)
+
+    if operation == "extrude":
+        offset = params.get("offset", [0, 0, 0.5])
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.faces.ensure_lookup_table()
+
+            selected_faces = [f for f in bm.faces if f.select]
+            if not selected_faces:
+                raise ValueError("No faces selected for extrude. Run 'select' first.")
+
+            result = bmesh.ops.extrude_face_region(bm, geom=selected_faces)
+            # Find extruded verts and translate
+            extruded_verts = [
+                g for g in result["geom"]
+                if isinstance(g, bmesh.types.BMVert)
+            ]
+            bmesh.ops.translate(
+                bm,
+                verts=extruded_verts,
+                vec=mathutils.Vector(offset),
+            )
+
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    elif operation == "inset":
+        thickness = params.get("thickness", 0.1)
+        depth = params.get("depth", 0.0)
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.faces.ensure_lookup_table()
+
+            selected_faces = [f for f in bm.faces if f.select]
+            if not selected_faces:
+                raise ValueError("No faces selected for inset. Run 'select' first.")
+
+            bmesh.ops.inset_region(
+                bm,
+                faces=selected_faces,
+                thickness=thickness,
+                depth=depth,
+            )
+
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    elif operation == "mirror":
+        axis = params.get("axis", "X")
+        axis_idx = _axis_to_index(axis)
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            bm.edges.ensure_lookup_table()
+            bm.faces.ensure_lookup_table()
+
+            all_geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
+            bmesh.ops.mirror(
+                bm,
+                geom=all_geom,
+                axis=axis_idx,
+                mirror_u=True,
+                mirror_v=True,
+            )
+
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    elif operation == "separate":
+        separate_type = params.get("separate_type", "SELECTED")
+        ctx = get_3d_context_override()
+        if ctx is None:
+            raise RuntimeError("No 3D Viewport available for separate operation")
+
+        # Ensure object mode first, then switch to edit mode
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.mode_set(mode="EDIT")
+            bpy.ops.mesh.separate(type=separate_type)
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+        vert_count = len(obj.data.vertices)
+        face_count = len(obj.data.polygons)
+
+    elif operation == "join":
+        object_names = params.get("object_names", [])
+        if not object_names:
+            raise ValueError("No object_names provided for join operation")
+
+        ctx = get_3d_context_override()
+        if ctx is None:
+            raise RuntimeError("No 3D Viewport available for join operation")
+
+        # Deselect all first
+        for o in bpy.data.objects:
+            o.select_set(False)
+
+        # Select all objects to join
+        for join_name in object_names:
+            join_obj = bpy.data.objects.get(join_name)
+            if join_obj and join_obj.type == "MESH":
+                join_obj.select_set(True)
+
+        # Set target as active and selected
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.join()
+
+        vert_count = len(obj.data.vertices)
+        face_count = len(obj.data.polygons)
+
+    else:
+        raise ValueError(f"Unhandled operation: {operation}")
+
+    return {
+        "object_name": name,
+        "operation": operation,
+        "vertex_count": vert_count,
+        "face_count": face_count,
+    }
+
+
+def handle_boolean_op(params: dict) -> dict:
+    """Boolean operations: union, difference, intersect (MESH-05).
+
+    Params:
+        object_name: Target mesh object name.
+        cutter_name: Cutter mesh object name.
+        operation: "UNION", "DIFFERENCE", or "INTERSECT" (default "DIFFERENCE").
+        remove_cutter: Remove cutter object after operation (default True).
+
+    Returns dict with post-operation vertex/face counts.
+    """
+    name = params.get("object_name")
+    target = _get_mesh_object(name)
+    cutter_name = params.get("cutter_name")
+    cutter = _get_mesh_object(cutter_name)
+    operation = params.get("operation", "DIFFERENCE").upper()
+
+    if operation not in ("UNION", "DIFFERENCE", "INTERSECT"):
+        raise ValueError(
+            f"Invalid boolean operation: {operation!r}. "
+            "Valid: UNION, DIFFERENCE, INTERSECT"
+        )
+
+    remove_cutter = params.get("remove_cutter", True)
+
+    # Add boolean modifier to target
+    mod = target.modifiers.new(name="Boolean", type="BOOLEAN")
+    mod.operation = operation
+    mod.object = cutter
+    mod.solver = "EXACT"
+
+    # Apply modifier
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for boolean operation")
+
+    bpy.context.view_layer.objects.active = target
+    target.select_set(True)
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.modifier_apply(modifier=mod.name)
+
+    # Optionally remove cutter
+    if remove_cutter:
+        bpy.data.objects.remove(cutter, do_unlink=True)
+
+    return {
+        "object_name": name,
+        "operation": operation,
+        "vertex_count": len(target.data.vertices),
+        "face_count": len(target.data.polygons),
+    }
+
+
+def handle_retopologize(params: dict) -> dict:
+    """Retopology via Quadriflow with target face count (MESH-07).
+
+    Params:
+        object_name: Name of the mesh object to retopologize.
+        target_faces: Target face count (default 4000).
+        preserve_sharp: Preserve sharp edges (default True).
+        preserve_boundary: Preserve boundary edges (default True).
+        smooth_normals: Smooth normals after retopology (default True).
+        use_symmetry: Use symmetry detection (default False).
+        seed: Random seed for Quadriflow (default 0).
+
+    Returns dict with before/after vertex/face counts and reduction ratio.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    target_faces = params.get("target_faces", 4000)
+    preserve_sharp = params.get("preserve_sharp", True)
+    preserve_boundary = params.get("preserve_boundary", True)
+    smooth_normals = params.get("smooth_normals", True)
+    use_symmetry = params.get("use_symmetry", False)
+    seed = params.get("seed", 0)
+
+    # Store before counts
+    before_verts = len(obj.data.vertices)
+    before_faces = len(obj.data.polygons)
+
+    # Set object as active and selected, ensure object mode
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for retopology")
+
+    try:
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.quadriflow_remesh(
+                target_faces=target_faces,
+                preserve_sharp=preserve_sharp,
+                preserve_boundary=preserve_boundary,
+                smooth_normals=smooth_normals,
+                use_mesh_symmetry=use_symmetry,
+                seed=seed,
+            )
+    except RuntimeError as exc:
+        if "canceled" in str(exc).lower():
+            raise RuntimeError(
+                f"Quadriflow retopology was canceled for '{name}'. "
+                "The mesh may have issues -- try running auto_repair first."
+            ) from exc
+        raise
+
+    after_verts = len(obj.data.vertices)
+    after_faces = len(obj.data.polygons)
+    reduction = round(after_faces / max(before_faces, 1), 3)
+
+    return {
+        "object_name": name,
+        "before": {"vertices": before_verts, "faces": before_faces},
+        "after": {"vertices": after_verts, "faces": after_faces},
+        "target_faces": target_faces,
+        "reduction_ratio": reduction,
+        "preserve_sharp": preserve_sharp,
+    }
+
+
+def handle_sculpt(params: dict) -> dict:
+    """Sculpt operations: smooth, inflate, flatten, crease (MESH-04).
+
+    Params:
+        object_name: Name of the mesh object to sculpt.
+        operation: One of "smooth", "inflate", "flatten", "crease".
+        strength: Operation strength (default 0.5).
+        iterations: Number of iterations (default 3).
+
+    Smooth uses bmesh (no mode switch). Inflate/flatten/crease use sculpt
+    mode mesh_filter operators.
+
+    Returns dict with operation details.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    operation = params.get("operation", "smooth")
+    strength = params.get("strength", 0.5)
+    iterations = params.get("iterations", 3)
+
+    filter_type = _sculpt_operation_to_filter_type(operation)
+
+    if filter_type is None:
+        # "smooth" -- use bmesh directly, no mode switch needed
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+
+            # Select all or use current selection
+            verts = [v for v in bm.verts if v.select] or bm.verts[:]
+
+            for _ in range(iterations):
+                bmesh.ops.smooth_vert(
+                    bm,
+                    verts=verts,
+                    factor=strength,
+                    use_axis_x=True,
+                    use_axis_y=True,
+                    use_axis_z=True,
+                )
+
+            bm.to_mesh(obj.data)
+            obj.data.update()
+        finally:
+            bm.free()
+    else:
+        # Inflate, flatten, crease -- require sculpt mode
+        ctx = get_3d_context_override()
+        if ctx is None:
+            raise RuntimeError("No 3D Viewport available for sculpt operation")
+
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.mode_set(mode="SCULPT")
+
+            filter_kwargs = {
+                "type": filter_type,
+                "strength": strength,
+                "iteration_count": iterations,
+            }
+
+            # Operation-specific params from plan
+            if operation == "flatten":
+                filter_kwargs["surface_smooth_shape_preservation"] = 0.5
+            elif operation == "crease":
+                filter_kwargs["sharpen_smooth_ratio"] = 0.35
+
+            bpy.ops.sculpt.mesh_filter(**filter_kwargs)
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+    return {
+        "object_name": name,
+        "operation": operation,
+        "strength": strength,
+        "iterations": iterations,
+    }
