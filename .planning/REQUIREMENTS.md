@@ -22,11 +22,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [x] **MESH-01**: Full topology analysis with A-F grading (non-manifold, n-gons, poles, edge flow, loose geo)
 - [x] **MESH-02**: Auto-repair (remove doubles, fix normals, fill holes, remove loose, dissolve degenerate)
-- [ ] **MESH-03**: Surgical mesh editing — select by material slot, vertex group, loose parts, face normal
-- [ ] **MESH-04**: Sculpt operations on selections (smooth, inflate, flatten, crease)
-- [ ] **MESH-05**: Boolean operations (add, subtract, intersect) for geometry modification
-- [ ] **MESH-06**: Extrude, inset, mirror, separate, join operations
-- [ ] **MESH-07**: Retopology with target face count preserving hard edges
+- [x] **MESH-03**: Surgical mesh editing — select by material slot, vertex group, loose parts, face normal
+- [x] **MESH-04**: Sculpt operations on selections (smooth, inflate, flatten, crease)
+- [x] **MESH-05**: Boolean operations (add, subtract, intersect) for geometry modification
+- [x] **MESH-06**: Extrude, inset, mirror, separate, join operations
+- [x] **MESH-07**: Retopology with target face count preserving hard edges
 - [x] **MESH-08**: Game-readiness check (poly budget, UV, materials, bones, naming)
 
 ### UV Mapping
@@ -218,11 +218,11 @@ Deferred to future release.
 | ARCH-08 | Phase 1: Foundation & Server Architecture | Complete |
 | MESH-01 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
 | MESH-02 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
-| MESH-03 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
-| MESH-04 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
-| MESH-05 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
-| MESH-06 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
-| MESH-07 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
+| MESH-03 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
+| MESH-04 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
+| MESH-05 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
+| MESH-06 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
+| MESH-07 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
 | MESH-08 | Phase 2: Mesh, UV & Topology Pipeline | Pending |
 | UV-01 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
 | UV-02 | Phase 2: Mesh, UV & Topology Pipeline | Complete |
