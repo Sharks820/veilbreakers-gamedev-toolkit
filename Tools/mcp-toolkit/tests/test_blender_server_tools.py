@@ -2,8 +2,8 @@
 
 Tests cover:
 - Module imports without error
-- MCP tool count is 13
-- Each new compound tool is registered
+- MCP tool count is 15
+- Each compound tool is registered (including blender_environment, blender_worldbuilding)
 """
 
 from veilbreakers_mcp.blender_server import mcp
@@ -22,17 +22,17 @@ class TestBlenderServerModuleImports:
 class TestMCPToolCount:
     """Test that the correct number of tools are registered."""
 
-    def test_tool_count_is_13(self):
-        """MCP server should have exactly 13 tools registered."""
+    def test_tool_count_is_15(self):
+        """MCP server should have exactly 15 tools registered."""
         tool_count = len(mcp._tool_manager._tools)
-        assert tool_count == 13, (
-            f"Expected 13 tools, got {tool_count}. "
+        assert tool_count == 15, (
+            f"Expected 15 tools, got {tool_count}. "
             f"Registered tools: {sorted(mcp._tool_manager._tools.keys())}"
         )
 
 
 class TestNewToolsRegistered:
-    """Test that each new compound tool is registered."""
+    """Test that each compound tool is registered."""
 
     def test_blender_texture_registered(self):
         """blender_texture tool is registered in the MCP server."""
@@ -53,6 +53,14 @@ class TestNewToolsRegistered:
     def test_blender_animation_registered(self):
         """blender_animation tool is registered in the MCP server."""
         assert "blender_animation" in mcp._tool_manager._tools
+
+    def test_blender_environment_registered(self):
+        """blender_environment tool is registered in the MCP server."""
+        assert "blender_environment" in mcp._tool_manager._tools
+
+    def test_blender_worldbuilding_registered(self):
+        """blender_worldbuilding tool is registered in the MCP server."""
+        assert "blender_worldbuilding" in mcp._tool_manager._tools
 
     def test_existing_tools_still_registered(self):
         """All 8 original tools are still registered."""

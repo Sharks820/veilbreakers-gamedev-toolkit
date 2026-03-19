@@ -94,6 +94,31 @@ from .animation_export import (
     handle_generate_ai_motion,
     handle_batch_export,
 )
+from .environment import (
+    handle_generate_terrain,
+    handle_paint_terrain,
+    handle_carve_river,
+    handle_generate_road,
+    handle_create_water,
+    handle_export_heightmap,
+)
+from .worldbuilding import (
+    handle_generate_building,
+    handle_generate_castle,
+    handle_generate_ruins,
+    handle_generate_interior,
+    handle_generate_modular_kit,
+)
+from .worldbuilding_layout import (
+    handle_generate_dungeon,
+    handle_generate_cave,
+    handle_generate_town,
+)
+from .environment_scatter import (
+    handle_scatter_vegetation,
+    handle_scatter_props,
+    handle_create_breakable,
+)
 
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "ping": lambda params: {"status": "success", "result": "pong"},
@@ -181,4 +206,25 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "anim_retarget_mixamo": handle_retarget_mixamo,
     "anim_generate_ai_motion": handle_generate_ai_motion,
     "anim_batch_export": handle_batch_export,
+    # Environment operations
+    "env_generate_terrain": handle_generate_terrain,
+    "env_paint_terrain": handle_paint_terrain,
+    "env_carve_river": handle_carve_river,
+    "env_generate_road": handle_generate_road,
+    "env_create_water": handle_create_water,
+    "env_export_heightmap": handle_export_heightmap,
+    # Environment scatter operations
+    "env_scatter_vegetation": handle_scatter_vegetation,
+    "env_scatter_props": handle_scatter_props,
+    "env_create_breakable": handle_create_breakable,
+    # Worldbuilding operations
+    "world_generate_building": handle_generate_building,
+    "world_generate_castle": handle_generate_castle,
+    "world_generate_ruins": handle_generate_ruins,
+    "world_generate_interior": handle_generate_interior,
+    "world_generate_modular_kit": handle_generate_modular_kit,
+    # Worldbuilding layout operations (dungeon/cave/town)
+    "world_generate_dungeon": handle_generate_dungeon,
+    "world_generate_cave": handle_generate_cave,
+    "world_generate_town": handle_generate_town,
 }
