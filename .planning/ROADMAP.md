@@ -93,7 +93,12 @@ Plans:
   3. Root motion is correctly extracted and animation events are placed at contact frames (footsteps, hit impacts) -- verified by data in the export
   4. AI-generated motion (HY-Motion/MotionGPT) can be retargeted onto custom rigs and Mixamo animations map correctly to creature bone structures
   5. Batch export produces separate Unity animation clips (.anim) with correct naming, and the contact sheet preview shows all clips in a review-friendly layout
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 05-01-PLAN.md -- Pure-logic keyframe engine, gait configs, attack/reaction generators
+- [ ] 05-02-PLAN.md -- Blender animation handlers: walk/fly/idle/attack/reaction/custom (ANIM-01 to ANIM-06)
+- [ ] 05-03-PLAN.md -- Export handlers: preview, secondary motion, root motion, retarget, AI stub, batch export (ANIM-07 to ANIM-12)
+- [ ] 05-04-PLAN.md -- Handler registration and blender_animation compound MCP tool wiring
 
 ### Phase 6: Environment & World Building
 **Goal**: Claude can generate complete game environments -- terrain, buildings, dungeons, vegetation, interiors -- from text descriptions, all textured and export-ready
@@ -139,7 +144,7 @@ Plans:
 | 2. Mesh, UV & Topology Pipeline | 3/3 | Complete | 2026-03-19 |
 | 3. Texturing & Asset Generation | 1/4 | In Progress | - |
 | 4. Rigging | 0/4 | Planned | - |
-| 5. Animation | 0/? | Not started | - |
+| 5. Animation | 0/4 | Planned | - |
 | 6. Environment & World Building | 0/? | Not started | - |
 | 7. VFX, Audio, UI & Unity Scene | 0/? | Not started | - |
 | 8. Gameplay AI & Performance | 0/? | Not started | - |
