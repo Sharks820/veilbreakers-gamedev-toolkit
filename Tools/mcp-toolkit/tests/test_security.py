@@ -306,3 +306,30 @@ def test_allowed_dunder_init():
     """__init__ is in the dunder allowlist and should pass."""
     safe, violations = validate_code("class Foo:\n    def __init__(self): pass")
     assert safe is True
+
+
+# --- Format string dunder bypass ---
+
+def test_blocked_format_method_call():
+    """str.format() blocked to prevent dunder info leak via format specifiers."""
+    safe, violations = validate_code("'{0.__class__}'.format(x)")
+    assert safe is False
+    assert any("format" in v for v in violations)
+
+
+def test_blocked_format_bare_call():
+    safe, violations = validate_code("format(42, 'd')")
+    assert safe is False
+
+
+# --- Class decorator bypass ---
+
+def test_blocked_class_decorator_exec():
+    safe, violations = validate_code("@exec\nclass Foo: pass")
+    assert safe is False
+    assert any("decorator" in v.lower() for v in violations)
+
+
+def test_blocked_class_decorator_eval():
+    safe, violations = validate_code("@eval\nclass Foo: pass")
+    assert safe is False
