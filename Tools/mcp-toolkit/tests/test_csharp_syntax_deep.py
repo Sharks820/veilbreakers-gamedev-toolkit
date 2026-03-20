@@ -130,6 +130,39 @@ from veilbreakers_mcp.shared.unity_templates.performance_templates import (
     generate_build_automation_script,
 )
 
+# ---------------------------------------------------------------------------
+# data_templates.py generators (Phase 11)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.data_templates import (
+    generate_so_definition,
+    generate_asset_creation_script,
+    generate_json_validator_script,
+    generate_json_loader_script,
+    generate_localization_setup_script,
+    generate_localization_entries_script,
+    generate_data_authoring_window,
+)
+
+# ---------------------------------------------------------------------------
+# pipeline_templates.py generators (Phase 11 -- C# only)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.pipeline_templates import (
+    generate_sprite_atlas_script,
+    generate_sprite_animation_script,
+    generate_sprite_editor_config_script,
+    generate_asset_postprocessor_script,
+)
+
+# ---------------------------------------------------------------------------
+# quality_templates.py generators (Phase 11)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.quality_templates import (
+    generate_poly_budget_check_script,
+    generate_master_material_script,
+    generate_texture_quality_check_script,
+    generate_aaa_validation_script,
+)
+
 
 # ===================================================================
 # Build a list of (name, callable, is_csharp) for every generator
@@ -368,6 +401,27 @@ ALL_GENERATORS: list[tuple[str, callable, str]] = [
     ("performance/lightmap_bake", lambda: generate_lightmap_bake_script(), "cs"),
     ("performance/asset_audit", lambda: generate_asset_audit_script(), "cs"),
     ("performance/build_automation", lambda: generate_build_automation_script(), "cs"),
+
+    # --- data (Phase 11) ---
+    ("data/so_definition", lambda: generate_so_definition("ItemConfig", namespace="VeilBreakers.Data", fields=[{"name": "itemName", "type": "string"}, {"name": "rarity", "type": "int", "default": "0"}], summary="Game item configuration"), "cs"),
+    ("data/asset_creation", lambda: generate_asset_creation_script("ItemConfig", namespace="VeilBreakers.Data", assets=[{"itemName": "Sword", "rarity": "1"}], category="Items"), "cs"),
+    ("data/json_validator", lambda: generate_json_validator_script("MonsterData", "Resources/Data/monsters.json", schema={"monster_id": {"type": "string", "required": True}}, wrapper_class="MonsterDataWrapper"), "cs"),
+    ("data/json_loader", lambda: generate_json_loader_script("MonsterData", namespace="VeilBreakers.Data", fields=[{"name": "monster_id", "type": "string"}, {"name": "base_hp", "type": "int"}], json_path="Data/monsters", is_array=True), "cs"),
+    ("data/localization_setup", lambda: generate_localization_setup_script(default_locale="en", locales=["es", "fr"], table_name="VeilBreakers_UI"), "cs"),
+    ("data/localization_entries", lambda: generate_localization_entries_script(table_name="VeilBreakers_UI", entries={"UI.MainMenu.Start": "Start Game", "Combat.Brand.Iron": "Iron"}, locale="en"), "cs"),
+    ("data/authoring_window", lambda: generate_data_authoring_window("ItemEditor", "ItemConfig", namespace="VeilBreakers.Data", fields=[{"name": "itemName", "type": "string", "label": "Item Name"}], category="Items"), "cs"),
+
+    # --- pipeline (Phase 11, C# only) ---
+    ("pipeline/sprite_atlas", lambda: generate_sprite_atlas_script("UIAtlas", "Assets/Art/Sprites/UI", padding=4), "cs"),
+    ("pipeline/sprite_animation", lambda: generate_sprite_animation_script("WalkAnim", "Assets/Art/Sprites/Walk", frame_rate=12, loop=True), "cs"),
+    ("pipeline/sprite_editor", lambda: generate_sprite_editor_config_script("Assets/test.png", pivot=(0.5, 0.0), border=(10, 10, 10, 10)), "cs"),
+    ("pipeline/asset_postprocessor", lambda: generate_asset_postprocessor_script("VBPostprocessor", version=1, texture_rules=[{"folder_pattern": "Sprites/", "settings_dict": {"textureType": "Sprite"}}]), "cs"),
+
+    # --- quality (Phase 11) ---
+    ("quality/poly_budget", lambda: generate_poly_budget_check_script("hero", "Assets/Characters"), "cs"),
+    ("quality/master_materials", lambda: generate_master_material_script(), "cs"),
+    ("quality/texture_check", lambda: generate_texture_quality_check_script("Assets", 10.24, True, True), "cs"),
+    ("quality/aaa_audit", lambda: generate_aaa_validation_script("Assets", "prop", True, True, True), "cs"),
 ]
 
 # Also test the non-C# generators separately for their own validity
@@ -457,6 +511,10 @@ _CS_BRACE_WHITELIST = {
     "0", "1", "2", "3", "i",
     # C# interpolated string variables (used in code_templates SO event channels)
     "value", "name",
+    # C# interpolated string variables (used in data_templates localization entries)
+    "added", "skipped", "failed",
+    # C# interpolated string variables (used in pipeline_templates sprite animation)
+    "sprites.Length",
 }
 
 
