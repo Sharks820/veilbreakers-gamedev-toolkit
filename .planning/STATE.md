@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
-stopped_at: Completed 16-02-PLAN.md (5 QA generators + 120 tests)
-last_updated: "2026-03-20T22:36:25.303Z"
-last_activity: 2026-03-20 -- Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators, 78 tests)
+stopped_at: Completed 16-04-PLAN.md (unity_qa tool wiring + 18 deep syntax tests, Phase 16 complete)
+last_updated: "2026-03-20T22:57:30Z"
+last_activity: 2026-03-20 -- Completed 16-04-PLAN.md (unity_qa tool wiring + 18 syntax tests, Phase 16 complete)
 progress:
   total_phases: 9
-  completed_phases: 7
-  total_plans: 30
-  completed_plans: 29
+  completed_phases: 8
+  total_plans: 33
+  completed_plans: 33
 ---
 
 ---
@@ -128,18 +128,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** v2.0 Phase 16 in progress (Quality Assurance & Testing)
+**Current focus:** v2.0 Phase 16 complete (Quality Assurance & Testing)
 
 ## Current Position
 
 Phase: 16 of 17 (Quality Assurance & Testing)
-Plan: 3 of 4 in current phase (3 complete)
-Status: Executing Phase 16
-Last activity: 2026-03-20 -- Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators, 78 tests)
+Plan: 4 of 4 in current phase (4 complete)
+Status: Phase 16 Complete
+Last activity: 2026-03-20 -- Completed 16-04-PLAN.md (unity_qa tool wiring + 18 deep syntax tests, Phase 16 complete)
 
 ```
-Phase Progress: [█████████████████████████████░] 32/33 plans complete
-v2.0 Progress:  [█████████████████████████████░] 32/33 plans complete
+Phase Progress: [██████████████████████████████] 33/33 plans complete
+v2.0 Progress:  [██████████████████████████████] 33/33 plans complete
 ```
 
 ## Performance Metrics
@@ -153,10 +153,10 @@ v2.0 Progress:  [█████████████████████
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 32 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-04, 16-01 through 16-03) |
-| v2.0 tests added | 3,409 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter + 84 ux-batch2 + 93 ux-batch1 + 283 tool-wiring-p15 + 118 qa-bridge + 111 qa-testing + 78 qa-observability) |
-| v2.0 total tests passing | 6,192 |
-| v2.0 MCP tools | 35 (15 Blender + 20 Unity) |
+| v2.0 plans completed | 33 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-04, 16-01 through 16-04) |
+| v2.0 tests added | 3,535 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter + 84 ux-batch2 + 93 ux-batch1 + 283 tool-wiring-p15 + 118 qa-bridge + 111 qa-testing + 78 qa-observability + 126 tool-wiring-p16) |
+| v2.0 total tests passing | 6,318 |
+| v2.0 MCP tools | 36 (15 Blender + 21 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
 | 09-03 duration | 11 min |
@@ -186,6 +186,7 @@ v2.0 Progress:  [█████████████████████
 | 16-02 duration | -- | 1 task | 2 files |
 | 16-03 duration | 19 min | 1 task | 2 files |
 | Phase 16 P02 | 23 min | 2 tasks | 2 files |
+| 16-04 duration | 19 min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -291,6 +292,8 @@ v2.0 Progress:  [█████████████████████
 | ProfilerRecorder.StartNew() for programmatic frame/draw/memory sampling | Provides min/avg/max over N frames vs single-frame UnityStats | 16 |
 | Python-side regex static analyzer with ANTI_PATTERNS dict | Simpler than Roslyn DLLs, works at code-gen time, no build dependency | 16 |
 | Brace-counting method body tracker for hot method detection | Pragmatic approach for single-file analysis without full C# AST parsing | 16 |
+| setup_bridge writes both server + commands scripts in single action | Natural pairing -- bridge is useless without command handlers | 16 |
+| analyze_code returns Python-side analysis without writing C# | Static analysis runs at code-gen time, no Unity compilation needed | 16 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -305,9 +308,9 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T22:36:25.295Z
-Stopped at: Completed 16-02-PLAN.md (5 QA generators + 120 tests)
-Next action: Continue Phase 16, plan 04 (tool wiring)
+Last session: 2026-03-20T22:57:30Z
+Stopped at: Completed 16-04-PLAN.md (unity_qa tool wiring + 18 deep syntax tests, Phase 16 complete)
+Next action: Phase 16 complete. All 33 v2.0 plans executed. Ready for Phase 17 or milestone completion.
 
 ---
 *State initialized: 2026-03-18*
