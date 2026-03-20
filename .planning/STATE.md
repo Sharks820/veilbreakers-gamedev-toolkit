@@ -46,8 +46,8 @@ v2.0 Progress:  [████████████████] 16/16 plans c
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
 | v2.0 plans completed | 16 (09-01, 09-02, 09-03, 10-01, 10-02, 10-03, 10-04, 11-01, 11-02, 11-03, 11-04, 12-01, 12-02, 12-03, 13-01, 13-02) |
-| v2.0 tests added | 1,315 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment) |
-| v2.0 total tests passing | 4,098 |
+| v2.0 tests added | 1,516 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content) |
+| v2.0 total tests passing | 4,299 |
 | v2.0 MCP tools | 31 (15 Blender + 16 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
@@ -62,6 +62,7 @@ v2.0 Progress:  [████████████████] 16/16 plans c
 | 12-01 duration | 13 min |
 | 12-02 duration | 11 min |
 | 12-03 duration | 11 min |
+| 13-01 duration | 17 min |
 | 13-02 duration | 11 min |
 
 ## Accumulated Context
@@ -116,6 +117,11 @@ v2.0 Progress:  [████████████████] 16/16 plans c
 | Pure-logic validation/computation helpers for testability | Separated _validate_* and _compute_* from bpy-dependent code | 13 |
 | Weapon generator dispatch table (_WEAPON_GENERATORS) | Clean extensibility for adding new weapon types | 13 |
 | Convex hull for collision mesh approximation | bmesh.ops.convex_hull for simplified weapon collision shapes | 13 |
+| Tuple return for multi-file content generators | (SO_cs, system_cs, uxml, uss) for UI-heavy systems, (SO_cs, system_cs) for code-only | 13 |
+| VB_ItemData matches items.json schema exactly | ItemType 0-5, ItemRarity 0-4, stat_buffs, corruptionChange, pathChange | 13 |
+| Brand loot affinity delegates, never reimplements | BrandSystem.GetEffectiveness with 1.5x weight boost on match | 13 |
+| Quest reward distribution via typed EventBus events | OnXPGained/OnCurrencyGained/OnItemReward for cross-system rewards | 13 |
+| Editor balancing tools use IMGUI OnGUI | Consistent with existing VeilBreakers editor window pattern | 13 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -130,10 +136,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T15:43:29Z
-Stopped at: Completed 13-02-PLAN.md
-Next action: Continue Phase 13
+Last session: 2026-03-20T15:49:29Z
+Stopped at: Completed 13-01-PLAN.md (content templates + 201 tests, 4,299 total)
+Next action: Continue Phase 13 (13-03 remaining)
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 13-02-PLAN.md (equipment handlers + 105 tests, 4,098 total)*
+*Last updated: 2026-03-20 -- Completed 13-01-PLAN.md (content templates + 201 tests, 4,299 total)*

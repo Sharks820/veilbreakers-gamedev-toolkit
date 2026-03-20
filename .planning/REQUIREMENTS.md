@@ -47,17 +47,17 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 ### Game Systems
 
 - [x] **GAME-01**: Claude can generate a complete save/load system (JSON/binary serialization, save slots, data migration)
-- [ ] **GAME-02**: Claude can generate inventory system (item database SO, UI slots, drag-and-drop, equipment, storage)
-- [ ] **GAME-03**: Claude can generate dialogue system (branching trees, dialogue UI, NPC interaction, YarnSpinner-compatible)
-- [ ] **GAME-04**: Claude can generate quest system (objectives, tracking, quest givers, quest log UI, completion rewards)
+- [x] **GAME-02**: Claude can generate inventory system (item database SO, UI slots, drag-and-drop, equipment, storage)
+- [x] **GAME-03**: Claude can generate dialogue system (branching trees, dialogue UI, NPC interaction, YarnSpinner-compatible)
+- [x] **GAME-04**: Claude can generate quest system (objectives, tracking, quest givers, quest log UI, completion rewards)
 - [x] **GAME-05**: Claude can generate health/damage system (HP component, damage numbers, death handling, respawn)
 - [x] **GAME-06**: Claude can generate character controller (first-person and third-person movement, camera follow)
 - [x] **GAME-07**: Claude can configure Input System (Input Action assets, action maps, control schemes, rebinding)
 - [x] **GAME-08**: Claude can generate game settings menu (graphics quality, audio volume, keybindings, accessibility)
-- [ ] **GAME-09**: Claude can generate loot table system (weighted random, rarity tiers, drop conditions)
-- [ ] **GAME-10**: Claude can generate crafting/recipe system (ingredient requirements, crafting stations, unlock progression)
-- [ ] **GAME-11**: Claude can generate skill tree / talent system (node graph, unlock dependencies, point allocation)
-- [ ] **GAME-12**: Claude can generate combat balancing tools (DPS calculator, encounter simulator, stat curve editor)
+- [x] **GAME-09**: Claude can generate loot table system (weighted random, rarity tiers, drop conditions)
+- [x] **GAME-10**: Claude can generate crafting/recipe system (ingredient requirements, crafting stations, unlock progression)
+- [x] **GAME-11**: Claude can generate skill tree / talent system (node graph, unlock dependencies, point allocation)
+- [x] **GAME-12**: Claude can generate combat balancing tools (DPS calculator, encounter simulator, stat curve editor)
 
 ### Camera & Cinematics
 
@@ -204,17 +204,17 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [x] **VB-05**: Claude can generate an experience/leveling system (XP gain from kills/quests, level-up triggers, stat scaling per level, per-hero-path progression curves)
 - [x] **VB-06**: Claude can generate a currency system (gold/souls/marks earning, spending, display, multiple currency types)
 - [x] **VB-07**: Claude can generate damage type system with 10 brand-specific damage types and elemental resistance calculations
-- [ ] **VB-08**: Claude can generate brand-specific loot affinity (IRON brand mobs drop IRON-themed gear, rarity-weighted per brand)
+- [x] **VB-08**: Claude can generate brand-specific loot affinity (IRON brand mobs drop IRON-themed gear, rarity-weighted per brand)
 - [ ] **VB-09**: Claude can generate a character creation/selection screen (choose hero path, customize appearance, name entry)
 - [ ] **VB-10**: Claude can generate boss AI behavior (multi-phase state machine, phase transitions at HP thresholds, unique attack patterns, enrage mechanics)
 
 ### RPG World Systems
 
-- [ ] **RPG-01**: Claude can generate a shop/merchant system (buy/sell UI, price display, equipment stat comparison, currency transactions, merchant inventory)
+- [x] **RPG-01**: Claude can generate a shop/merchant system (buy/sell UI, price display, equipment stat comparison, currency transactions, merchant inventory)
 - [ ] **RPG-02**: Claude can generate a fast travel/waypoint system (discover waypoints by visiting, teleport between unlocked points, loading transition)
 - [x] **RPG-03**: Claude can generate an interactable object framework (state machine for doors, chests, levers, switches with animations and sound)
 - [ ] **RPG-04**: Claude can generate environmental puzzle mechanics (lever sequences, pressure plates, key-and-lock, movable blocks, light beam puzzles)
-- [ ] **RPG-05**: Claude can generate a journal/codex/bestiary system (lore entries from world, monster compendium with stats/weaknesses, item encyclopedia)
+- [x] **RPG-05**: Claude can generate a journal/codex/bestiary system (lore entries from world, monster compendium with stats/weaknesses, item encyclopedia)
 - [ ] **RPG-06**: Claude can generate dungeon trap mechanics (pressure plates, dart walls, spike pits, falling rocks, poison gas, swinging blades)
 - [ ] **RPG-07**: Claude can generate spatial loot placement in dungeons (treasure chest positions, item drops in specific rooms, treasure room layouts)
 - [ ] **RPG-08**: Claude can generate a 2D world map screen from 3D terrain data (fog-of-war, location markers, player position, discovered areas)
@@ -276,13 +276,13 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | GAME-06 | Phase 12 | Complete |
 | GAME-07 | Phase 12 | Complete |
 | GAME-08 | Phase 12 | Complete |
-| GAME-02 | Phase 13 | Pending |
-| GAME-03 | Phase 13 | Pending |
-| GAME-04 | Phase 13 | Pending |
-| GAME-09 | Phase 13 | Pending |
-| GAME-10 | Phase 13 | Pending |
-| GAME-11 | Phase 13 | Pending |
-| GAME-12 | Phase 13 | Pending |
+| GAME-02 | Phase 13 | Complete |
+| GAME-03 | Phase 13 | Complete |
+| GAME-04 | Phase 13 | Complete |
+| GAME-09 | Phase 13 | Complete |
+| GAME-10 | Phase 13 | Complete |
+| GAME-11 | Phase 13 | Complete |
+| GAME-12 | Phase 13 | Complete |
 | CAM-01 | Phase 14 | Pending |
 | CAM-02 | Phase 14 | Pending |
 | CAM-03 | Phase 14 | Pending |
@@ -365,14 +365,14 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | VB-05 | Phase 12 | Complete |
 | VB-06 | Phase 12 | Complete |
 | VB-07 | Phase 12 | Complete |
-| VB-08 | Phase 13 | Pending |
+| VB-08 | Phase 13 | Complete |
 | VB-09 | Phase 15 | Pending |
 | VB-10 | Phase 15 | Pending |
-| RPG-01 | Phase 13 | Pending |
+| RPG-01 | Phase 13 | Complete |
 | RPG-02 | Phase 14 | Pending |
 | RPG-03 | Phase 12 | Complete |
 | RPG-04 | Phase 14 | Pending |
-| RPG-05 | Phase 13 | Pending |
+| RPG-05 | Phase 13 | Complete |
 | RPG-06 | Phase 14 | Pending |
 | RPG-07 | Phase 14 | Pending |
 | RPG-08 | Phase 15 | Pending |
