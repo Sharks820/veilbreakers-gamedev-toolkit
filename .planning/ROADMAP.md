@@ -189,12 +189,12 @@ Plans:
   3. Claude can modify Player Settings, Quality Settings, Physics settings, and Time/Graphics settings, and Unity reflects the changes without manual Editor interaction
   4. Claude can install a UPM package, configure import settings on an FBX (scale, compression, rig type) and a texture (max size, platform compression, sRGB), and the assets reimport correctly
   5. Claude can move/rename/delete assets while preserving .meta file GUID integrity, and material remapping on FBX import resolves to existing project materials
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 09-01: TBD
-- [ ] 09-02: TBD
-- [ ] 09-03: TBD
+- [ ] 09-01-PLAN.md -- Prefab, component, hierarchy, physics joints, NavMesh, bone sockets (unity_prefab tool)
+- [ ] 09-02-PLAN.md -- Project settings, packages, tags/layers, physics config (unity_settings tool)
+- [ ] 09-03-PLAN.md -- Asset operations, FBX/texture import, material remap, presets, asmdef (unity_assets tool)
 
 ### Phase 10: C# Programming Framework
 **Goal**: Claude can generate and modify arbitrary C# code for Unity -- MonoBehaviours, editor tools, tests, and reusable architecture patterns -- not limited to domain-specific templates
@@ -343,7 +343,7 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 6. Environment & World Building | v1.0 | 4/4 | Complete | 2026-03-19 |
 | 7. VFX, Audio, UI & Unity Scene | v1.0 | 5/5 | Complete | 2026-03-19 |
 | 8. Gameplay AI & Performance | v1.0 | 3/3 | Complete | 2026-03-19 |
-| 9. Unity Editor Deep Control | v2.0 | 0/3 | Not started | - |
+| 9. Unity Editor Deep Control | v2.0 | 0/3 | Planning complete | - |
 | 10. C# Programming Framework | v2.0 | 0/3 | Not started | - |
 | 11. Data Architecture & Asset Pipeline | v2.0 | 0/2 | Not started | - |
 | 12. Core Game Systems | v2.0 | 0/2 | Not started | - |
