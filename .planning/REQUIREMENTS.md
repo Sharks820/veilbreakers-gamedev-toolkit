@@ -197,13 +197,13 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### VeilBreakers Core Systems
 
-- [ ] **VB-01**: Claude can generate a player combat controller (light/heavy attack, dodge, block, combo chains, hit reactions, i-frames, stamina consumption)
-- [ ] **VB-02**: Claude can generate a player ability system with brand-specific ability slots, cooldown timers, mana/stamina resource management, and ability activation per combat brand
-- [ ] **VB-03**: Claude can generate the synergy detection engine (FULL/PARTIAL/NEUTRAL/ANTI tier evaluation, combo triggers, synergy UI feedback)
-- [ ] **VB-04**: Claude can generate corruption gameplay effects (stat modifiers, ability mutations, NPC reaction changes, threshold triggers at 25/50/75/100%)
-- [ ] **VB-05**: Claude can generate an experience/leveling system (XP gain from kills/quests, level-up triggers, stat scaling per level, per-hero-path progression curves)
-- [ ] **VB-06**: Claude can generate a currency system (gold/souls/marks earning, spending, display, multiple currency types)
-- [ ] **VB-07**: Claude can generate damage type system with 10 brand-specific damage types and elemental resistance calculations
+- [x] **VB-01**: Claude can generate a player combat controller (light/heavy attack, dodge, block, combo chains, hit reactions, i-frames, stamina consumption)
+- [x] **VB-02**: Claude can generate a player ability system with brand-specific ability slots, cooldown timers, mana/stamina resource management, and ability activation per combat brand
+- [x] **VB-03**: Claude can generate the synergy detection engine (FULL/PARTIAL/NEUTRAL/ANTI tier evaluation, combo triggers, synergy UI feedback)
+- [x] **VB-04**: Claude can generate corruption gameplay effects (stat modifiers, ability mutations, NPC reaction changes, threshold triggers at 25/50/75/100%)
+- [x] **VB-05**: Claude can generate an experience/leveling system (XP gain from kills/quests, level-up triggers, stat scaling per level, per-hero-path progression curves)
+- [x] **VB-06**: Claude can generate a currency system (gold/souls/marks earning, spending, display, multiple currency types)
+- [x] **VB-07**: Claude can generate damage type system with 10 brand-specific damage types and elemental resistance calculations
 - [ ] **VB-08**: Claude can generate brand-specific loot affinity (IRON brand mobs drop IRON-themed gear, rarity-weighted per brand)
 - [ ] **VB-09**: Claude can generate a character creation/selection screen (choose hero path, customize appearance, name entry)
 - [ ] **VB-10**: Claude can generate boss AI behavior (multi-phase state machine, phase transitions at HP thresholds, unique attack patterns, enrage mechanics)
@@ -358,13 +358,13 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | WORLD-09 | Phase 14 | Pending |
 | WORLD-10 | Phase 14 | Pending |
 
-| VB-01 | Phase 12 | Pending |
-| VB-02 | Phase 12 | Pending |
-| VB-03 | Phase 12 | Pending |
-| VB-04 | Phase 12 | Pending |
-| VB-05 | Phase 12 | Pending |
-| VB-06 | Phase 12 | Pending |
-| VB-07 | Phase 12 | Pending |
+| VB-01 | Phase 12 | Complete |
+| VB-02 | Phase 12 | Complete |
+| VB-03 | Phase 12 | Complete |
+| VB-04 | Phase 12 | Complete |
+| VB-05 | Phase 12 | Complete |
+| VB-06 | Phase 12 | Complete |
+| VB-07 | Phase 12 | Complete |
 | VB-08 | Phase 13 | Pending |
 | VB-09 | Phase 15 | Pending |
 | VB-10 | Phase 15 | Pending |

@@ -3,6 +3,21 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
+stopped_at: Completed 12-02-PLAN.md
+last_updated: "2026-03-20T13:39:17.549Z"
+last_activity: 2026-03-20 -- Completed 12-01-PLAN.md (7 core game system generators + 93 tests)
+progress:
+  total_phases: 9
+  completed_phases: 3
+  total_plans: 14
+  completed_plans: 13
+---
+
+---
+gsd_state_version: 1.0
+milestone: v2.0
+milestone_name: Complete Unity Game Development Coverage
+status: executing
 stopped_at: Completed 11-04-PLAN.md (Phase 11 complete)
 last_updated: "2026-03-20T12:48:42.858Z"
 last_activity: 2026-03-20 -- Completed 11-04-PLAN.md (MCP tool wiring + 15 syntax tests)
@@ -36,18 +51,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** v2.0 Phase 11 -- Data Architecture & Asset Pipeline
+**Current focus:** v2.0 Phase 12 -- Core Game Systems
 
 ## Current Position
 
-Phase: 11 of 17 (Data Architecture & Asset Pipeline) -- COMPLETE
-Plan: 4 of 4 in current phase (11-01, 11-02, 11-03, 11-04 complete)
-Status: Phase 11 Complete
-Last activity: 2026-03-20 -- Completed 11-04-PLAN.md (MCP tool wiring + 15 syntax tests)
+Phase: 12 of 17 (Core Game Systems)
+Plan: 2 of 3 in current phase (12-01, 12-02 complete)
+Status: Executing phase 12
+Last activity: 2026-03-20 -- Completed 12-01-PLAN.md (7 core game system generators + 93 tests)
 
 ```
 Phase Progress: [███████████████████████████████░░░░░░░░░] 65% overall (11/17 phases)
-v2.0 Progress:  [██████████] 100% (4/4 plans in phase 11)
+v2.0 Progress:  [██████░░░░] 67% (2/3 plans in phase 12)
 ```
 
 ## Performance Metrics
@@ -61,9 +76,9 @@ v2.0 Progress:  [██████████] 100% (4/4 plans in phase 11)
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 11 (09-01, 09-02, 09-03, 10-01, 10-02, 10-03, 10-04, 11-01, 11-02, 11-03, 11-04) |
-| v2.0 tests added | 932 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11) |
-| v2.0 total tests passing | 3,715 |
+| v2.0 plans completed | 13 (09-01, 09-02, 09-03, 10-01, 10-02, 10-03, 10-04, 11-01, 11-02, 11-03, 11-04, 12-01, 12-02) |
+| v2.0 tests added | 1,112 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat) |
+| v2.0 total tests passing | 3,895 |
 | v2.0 MCP tools | 30 (15 Blender + 15 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
@@ -75,6 +90,8 @@ v2.0 Progress:  [██████████] 100% (4/4 plans in phase 11)
 | 11-02 duration | 8 min |
 | 11-03 duration | 15 min |
 | 11-04 duration | 12 min |
+| 12-01 duration | 13 min |
+| 12-02 duration | 11 min |
 
 ## Accumulated Context
 
@@ -115,6 +132,9 @@ v2.0 Progress:  [██████████] 100% (4/4 plans in phase 11)
 | ITU-R BT.601 luminance for de-lighting | Industry standard weights, consistent with Blender | 11 |
 | ASSET_TYPE_BUDGETS as canonical budget source | Single source of truth for poly budgets across Python and C# | 11 |
 | C# interpolation vars whitelisted in f-string leak detector | added/skipped/failed/sprites.Length are legitimate C# $"..." interpolation, not Python f-string leaks | 11 |
+| VB delegation pattern: generated MonoBehaviours call existing static utility classes | Generated C# references BrandSystem/SynergySystem/CorruptionSystem by name, never reimplements | 12 |
+| Actual VeilBreakers API signatures over plan interfaces | Plan had simplified signatures; actual source uses Path enum, 10 brands, nested SynergyTier | 12 |
+| Extended damage types cover all 10 brands | BrandSystem has 10 brands (not 5 combat), damage type system matches full set | 12 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -129,10 +149,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T12:14:02Z
-Stopped at: Completed 11-04-PLAN.md (Phase 11 complete)
-Next action: Begin Phase 12 planning/execution
+Last session: 2026-03-20T13:39:17.545Z
+Stopped at: Completed 12-02-PLAN.md
+Next action: Continue Phase 12 (12-01 or 12-03)
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 11-04-PLAN.md (Phase 11 complete: MCP tool wiring + 3,715 tests)*
+*Last updated: 2026-03-20 -- Completed 12-02-PLAN.md (7 VB combat generators + 87 tests, 3,802 total)*
