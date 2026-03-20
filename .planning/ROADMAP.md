@@ -1,7 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-20 (Phase 15 planned)
+**Updated:** 2026-03-20 (Phase 16 planned)
 
 ## Milestones
 
@@ -35,7 +35,7 @@
 - [ ] **Phase 13: Content & Progression Systems** - Inventory, dialogue, quests, loot tables, crafting, skill trees, combat balancing, equipment systems
 - [ ] **Phase 14: Camera, Cinematics & Scene Management** - Cinemachine, Timeline, cutscenes, scene loading, lighting, probes, terrain detail, world design, RPG world systems
 - [ ] **Phase 15: Game UX & Encounter Design** - Minimap, tutorials, damage numbers, interaction prompts, encounter scripting, AI director
-- [ ] **Phase 16: Quality Assurance & Testing** - Test runner, automated play, profiling, memory leaks, static analysis, crash reporting, live inspection
+- [ ] **Phase 16: Quality Assurance & Testing** - Unity TCP bridge, test runner, automated play, profiling, memory leaks, static analysis, crash reporting, live inspection
 - [ ] **Phase 17: Build & Deploy Pipeline** - Multi-platform builds, Addressables, CI/CD, versioning, platform configs
 
 ## Phase Details
@@ -298,26 +298,29 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 15-01-PLAN.md -- Core UX templates: minimap (orthographic camera render texture), damage numbers (PrimeTween + pooling), interaction prompts (Input System rebind), PrimeTween sequences, TextMeshPro setup (UIX-01, UIX-03, UIX-04, SHDR-04, PIPE-10)
-- [ ] 15-02-PLAN.md -- Game screen & visual effect templates: tutorial system, accessibility (colorblind/subtitles/motor), character select, world map, rarity VFX, corruption VFX (UIX-02, ACC-01, VB-09, RPG-08, EQUIP-07, EQUIP-08)
-- [ ] 15-03-PLAN.md -- Encounter & boss AI templates: encounter scripting (waves/triggers), AI director (DDA), encounter simulator (Monte Carlo EditorWindow), boss AI (multi-phase FSM) (AID-01, AID-02, AID-03, VB-10)
-- [ ] 15-04-PLAN.md -- Compound tool wiring: unity_ux (12 actions) + unity_gameplay extensions (4 actions) + deep C# syntax tests (all 15 requirements)
+- [x] 15-01-PLAN.md -- Core UX templates: minimap (orthographic camera render texture), damage numbers (PrimeTween + pooling), interaction prompts (Input System rebind), PrimeTween sequences, TextMeshPro setup (UIX-01, UIX-03, UIX-04, SHDR-04, PIPE-10)
+- [x] 15-02-PLAN.md -- Game screen & visual effect templates: tutorial system, accessibility (colorblind/subtitles/motor), character select, world map, rarity VFX, corruption VFX (UIX-02, ACC-01, VB-09, RPG-08, EQUIP-07, EQUIP-08)
+- [x] 15-03-PLAN.md -- Encounter & boss AI templates: encounter scripting (waves/triggers), AI director (DDA), encounter simulator (Monte Carlo EditorWindow), boss AI (multi-phase FSM) (AID-01, AID-02, AID-03, VB-10)
+- [x] 15-04-PLAN.md -- Compound tool wiring: unity_ux (12 actions) + unity_gameplay extensions (4 actions) + deep C# syntax tests (all 15 requirements)
 
 ### Phase 16: Quality Assurance & Testing
-**Goal**: Claude can run tests, profile performance, detect memory leaks, analyze code quality, and inspect live game state -- closing the feedback loop on code correctness and runtime health
+**Goal**: Claude can run tests, profile performance, detect memory leaks, analyze code quality, and inspect live game state -- closing the feedback loop on code correctness and runtime health. Includes Unity TCP bridge addon that enables direct Editor communication.
 **Depends on**: Phase 10 (test framework setup), Phase 12 (game systems to test against)
-**Requirements**: QA-01, QA-02, QA-03, QA-04, QA-05, QA-06, QA-07, QA-08
+**Requirements**: QA-00, QA-01, QA-02, QA-03, QA-04, QA-05, QA-06, QA-07, QA-08
 **Success Criteria** (what must be TRUE):
-  1. Claude can trigger EditMode and PlayMode test runs through MCP and receive structured results with pass/fail counts, failure messages, and stack traces
-  2. Claude can script automated play sessions (navigate to point, interact with object, verify game state) and report whether integration scenarios pass
-  3. Claude can capture GPU profiling data and memory snapshots, detecting growing allocations that indicate memory leaks
-  4. Claude can run static code analysis using Roslyn analyzers to flag common Unity anti-patterns (Update allocations, string concat in hot paths, Camera.main usage)
-  5. Claude can set up crash reporting (Sentry/Unity Cloud Diagnostics), analytics telemetry events, and inspect live Play Mode state (variable values on GameObjects, behavior tree status)
-**Plans**: TBD
+  1. The VB Unity MCP server communicates directly with Unity Editor over TCP (port 9877), executing commands without mcp-unity dependency
+  2. Claude can trigger EditMode and PlayMode test runs through MCP and receive structured results with pass/fail counts, failure messages, and stack traces
+  3. Claude can script automated play sessions (navigate to point, interact with object, verify game state) and report whether integration scenarios pass
+  4. Claude can capture GPU profiling data and memory snapshots, detecting growing allocations that indicate memory leaks
+  5. Claude can run static code analysis to flag common Unity anti-patterns (Update allocations, string concat in hot paths, Camera.main usage)
+  6. Claude can set up crash reporting (Sentry), analytics telemetry events, and inspect live Play Mode state (variable values on GameObjects, behavior tree status)
+**Plans**: 4 plans
 
 Plans:
-- [ ] 16-01: TBD
-- [ ] 16-02: TBD
+- [ ] 16-01-PLAN.md -- Unity TCP bridge foundation: Python UnityConnection client, UnityCommand/UnityResponse models, C# bridge addon template generators (QA-00)
+- [ ] 16-02-PLAN.md -- QA template generators batch 1: test runner, automated play sessions, profiler, memory leak detector, static code analyzer (QA-01, QA-02, QA-03, QA-04, QA-05)
+- [ ] 16-03-PLAN.md -- QA template generators batch 2: crash reporting (Sentry), analytics/telemetry, live game state inspector (QA-06, QA-07, QA-08)
+- [ ] 16-04-PLAN.md -- Compound tool wiring: unity_qa (9 actions) + deep C# syntax tests (all 9 requirements)
 
 ### Phase 17: Build & Deploy Pipeline
 **Goal**: Claude can orchestrate complete build pipelines -- multi-platform builds, Addressable assets, CI/CD automation, versioning, and platform-specific configuration
@@ -357,8 +360,8 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 12. Core Game Systems | v2.0 | 3/3 | Complete | 2026-03-20 |
 | 13. Content & Progression Systems | v2.0 | 3/3 | Complete | 2026-03-20 |
 | 14. Camera, Cinematics & Scene Management | v2.0 | 5/5 | Complete | 2026-03-20 |
-| 15. Game UX & Encounter Design | 4/4 | Complete    | 2026-03-20 | - |
-| 16. Quality Assurance & Testing | v2.0 | 0/2 | Not started | - |
+| 15. Game UX & Encounter Design | v2.0 | 4/4 | Complete | 2026-03-20 |
+| 16. Quality Assurance & Testing | v2.0 | 0/4 | Planned | - |
 | 17. Build & Deploy Pipeline | v2.0 | 0/2 | Not started | - |
 
 ---
@@ -371,3 +374,4 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 *Phase 13 planned: 2026-03-20*
 *Phase 14 planned: 2026-03-20*
 *Phase 15 planned: 2026-03-20*
+*Phase 16 planned: 2026-03-20*
