@@ -253,6 +253,34 @@ from veilbreakers_mcp.shared.unity_templates.world_templates import (
     generate_terrain_building_blend_script,
 )
 
+# ---------------------------------------------------------------------------
+# ux_templates.py generators (Phase 15 -- Game UX)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.ux_templates import (
+    generate_minimap_script,
+    generate_damage_numbers_script,
+    generate_interaction_prompts_script,
+    generate_primetween_sequence_script,
+    generate_tmp_font_asset_script,
+    generate_tmp_component_script,
+    generate_tutorial_system_script,
+    generate_accessibility_script,
+    generate_character_select_script,
+    generate_world_map_script,
+    generate_rarity_vfx_script,
+    generate_corruption_vfx_script,
+)
+
+# ---------------------------------------------------------------------------
+# encounter_templates.py generators (Phase 15 -- Encounter & AI)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.encounter_templates import (
+    generate_encounter_system_script as generate_enc_system_script,
+    generate_ai_director_script,
+    generate_encounter_simulator_script as generate_enc_sim_script,
+    generate_boss_ai_script,
+)
+
 
 # ===================================================================
 # Build a list of (name, callable, is_csharp) for every generator
@@ -711,6 +739,41 @@ ALL_GENERATORS: list[tuple[str, callable, str]] = [
     ("world/terrain_blend_custom_runtime", lambda: generate_terrain_building_blend_script(
         blend_radius=3.0, depression_depth=0.2, vertex_color_falloff=2.0,
     )[1], "cs"),
+
+    # ===================================================================
+    # Phase 15: Game UX & Encounter Design
+    # ===================================================================
+
+    # --- ux/ -- ux_templates.py (12 generators, batch 1 + batch 2) ---
+    ("ux/minimap_editor", lambda: generate_minimap_script("TestMinimap")[0], "cs"),
+    ("ux/minimap_runtime", lambda: generate_minimap_script("TestMinimap")[1], "cs"),
+    ("ux/damage_numbers", lambda: generate_damage_numbers_script("TestDmgNum"), "cs"),
+    ("ux/interaction_prompts", lambda: generate_interaction_prompts_script("TestPrompt"), "cs"),
+    ("ux/primetween_panel_entrance", lambda: generate_primetween_sequence_script("panel_entrance"), "cs"),
+    ("ux/primetween_button_hover", lambda: generate_primetween_sequence_script("button_hover"), "cs"),
+    ("ux/primetween_notification", lambda: generate_primetween_sequence_script("notification_popup"), "cs"),
+    ("ux/primetween_screen_shake", lambda: generate_primetween_sequence_script("screen_shake"), "cs"),
+    ("ux/tmp_font_asset", lambda: generate_tmp_font_asset_script(), "cs"),
+    ("ux/tmp_component", lambda: generate_tmp_component_script("TestTMP"), "cs"),
+    ("ux/tutorial_data_so", lambda: generate_tutorial_system_script("TestTutorial")[0], "cs"),
+    ("ux/tutorial_manager", lambda: generate_tutorial_system_script("TestTutorial")[1], "cs"),
+    ("ux/accessibility_settings", lambda: generate_accessibility_script("TestAccess")[0], "cs"),
+    ("ux/accessibility_shader", lambda: generate_accessibility_script("TestAccess")[1], "shader"),
+    ("ux/accessibility_renderer_feature", lambda: generate_accessibility_script("TestAccess")[2], "cs"),
+    ("ux/character_select_data", lambda: generate_character_select_script()[0], "cs"),
+    ("ux/character_select_manager", lambda: generate_character_select_script()[1], "cs"),
+    ("ux/world_map_editor", lambda: generate_world_map_script("TestMap")[0], "cs"),
+    ("ux/world_map_runtime", lambda: generate_world_map_script("TestMap")[1], "cs"),
+    ("ux/rarity_vfx", lambda: generate_rarity_vfx_script("TestRarity"), "cs"),
+    ("ux/corruption_vfx", lambda: generate_corruption_vfx_script("TestCorrupt"), "cs"),
+
+    # --- encounter/ -- encounter_templates.py (4 generators) ---
+    ("encounter/wave_data_so", lambda: generate_enc_system_script("TestEnc")[0], "cs"),
+    ("encounter/encounter_manager", lambda: generate_enc_system_script("TestEnc")[1], "cs"),
+    ("encounter/ai_director", lambda: generate_ai_director_script("TestDirector"), "cs"),
+    ("encounter/simulator", lambda: generate_enc_sim_script("TestSim"), "cs"),
+    ("encounter/boss_ai_3phase", lambda: generate_boss_ai_script("TestBoss", phase_count=3), "cs"),
+    ("encounter/boss_ai_4phase", lambda: generate_boss_ai_script("TestBoss4", phase_count=4), "cs"),
 ]
 
 # Also test the non-C# generators separately for their own validity
@@ -742,6 +805,12 @@ NON_CS_GENERATORS: list[tuple[str, callable, str]] = [
     ("content/shop_uss", lambda: generate_shop_system_script()[3], "uss"),
     ("content/journal_uxml", lambda: generate_journal_system_script()[2], "uxml"),
     ("content/journal_uss", lambda: generate_journal_system_script()[3], "uss"),
+
+    # --- Phase 15 UX UXML/USS ---
+    ("ux/tutorial_uxml", lambda: generate_tutorial_system_script("TestTutorial")[2], "uxml"),
+    ("ux/tutorial_uss", lambda: generate_tutorial_system_script("TestTutorial")[3], "uss"),
+    ("ux/character_select_uxml", lambda: generate_character_select_script()[2], "uxml"),
+    ("ux/character_select_uss", lambda: generate_character_select_script()[3], "uss"),
 ]
 
 
@@ -821,6 +890,8 @@ _CS_BRACE_WHITELIST = {
     # C# interpolated string variables (used in world_templates probe/occlusion setup)
     "positions.Count",
     "occludeeCount",
+    # C# interpolated string variables (used in ux_templates character select)
+    "path.baseIntelligence",
 }
 
 
