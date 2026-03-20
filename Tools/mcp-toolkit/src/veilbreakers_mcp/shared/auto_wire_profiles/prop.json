@@ -1,0 +1,11 @@
+{
+  "prefab_type": "prop",
+  "description": "Environment prop prefab",
+  "components": [
+    {"type": "BoxCollider", "properties": {}},
+    {"type": "MeshFilter", "properties": {}},
+    {"type": "MeshRenderer", "properties": {}}
+  ],
+  "default_layer": "Default",
+  "default_tag": "Untagged"
+}

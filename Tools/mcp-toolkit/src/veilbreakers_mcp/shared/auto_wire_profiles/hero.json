@@ -1,0 +1,13 @@
+{
+  "prefab_type": "hero",
+  "description": "VeilBreakers hero/player prefab",
+  "components": [
+    {"type": "CapsuleCollider", "properties": {"height": 1.8, "radius": 0.4, "center": [0, 0.9, 0]}},
+    {"type": "CharacterController", "properties": {"height": 1.8, "radius": 0.4, "center": [0, 0.9, 0]}},
+    {"type": "Animator", "properties": {}},
+    {"type": "VeilBreakers.Combat.Combatant", "properties": {}},
+    {"type": "UnityEngine.AI.NavMeshAgent", "properties": {"enabled": false}}
+  ],
+  "default_layer": "Player",
+  "default_tag": "Player"
+}
