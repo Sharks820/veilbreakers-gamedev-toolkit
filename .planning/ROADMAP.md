@@ -350,7 +350,7 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 9. Unity Editor Deep Control | v2.0 | 3/3 | Complete | 2026-03-20 |
 | 10. C# Programming Framework | v2.0 | 4/4 | Complete | 2026-03-20 |
 | 11. Data Architecture & Asset Pipeline | v2.0 | 4/4 | Complete | 2026-03-20 |
-| 12. Core Game Systems | v2.0 | 0/3 | Not started | - |
+| 12. Core Game Systems | 2/3 | In Progress|  | - |
 | 13. Content & Progression Systems | v2.0 | 0/3 | Not started | - |
 | 14. Camera, Cinematics & Scene Management | v2.0 | 0/3 | Not started | - |
 | 15. Game UX & Encounter Design | v2.0 | 0/2 | Not started | - |
