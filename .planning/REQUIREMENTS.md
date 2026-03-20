@@ -122,6 +122,46 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [ ] **AID-02**: Claude can generate threat escalation / AI director (dynamic difficulty adjustment)
 - [ ] **AID-03**: Claude can simulate encounters for balance testing (run N encounters, report statistics)
 
+### Shader & Rendering
+
+- [ ] **SHDR-01**: Claude can write arbitrary HLSL/ShaderLab shaders (not just predefined templates)
+- [ ] **SHDR-02**: Claude can create custom URP ScriptableRendererFeatures and render passes
+- [ ] **SHDR-03**: Claude can manage shader variant stripping and keyword sets for build size optimization
+- [ ] **SHDR-04**: Claude can generate DOTween/LeanTween animation sequences for UI polish and game juice
+
+### 2D Systems
+
+- [ ] **TWO-01**: Claude can create and paint 2D Tilemaps with Tile Palettes and Rule Tiles
+- [ ] **TWO-02**: Claude can configure 2D Physics (Rigidbody2D, Collider2D, Physics2D settings, 2D joints)
+- [ ] **TWO-03**: Claude can configure Sprite Editor features (custom physics shapes, pivot, 9-slice borders)
+
+### Physics Advanced
+
+- [ ] **PHYS-01**: Claude can configure physics Joints (HingeJoint, SpringJoint, ConfigurableJoint, CharacterJoint, FixedJoint)
+- [ ] **PHYS-02**: Claude can set up NavMeshObstacle, Off-Mesh Links, and NavMesh Areas with cost configuration
+
+### Accessibility & Publishing
+
+- [ ] **ACC-01**: Claude can generate accessibility features (colorblind modes, subtitle sizing, screen reader tags, motor accessibility options)
+- [ ] **ACC-02**: Claude can generate store publishing metadata (screenshots, descriptions, content ratings, privacy policy templates)
+
+### Asset Pipeline Advanced
+
+- [ ] **PIPE-08**: Claude can generate AssetPostprocessor scripts for custom import pipelines
+- [ ] **PIPE-09**: Claude can generate Unity Presets for reusable import/component configuration templates
+- [ ] **PIPE-10**: Claude can configure TextMeshPro (font asset creation, TMP component setup, rich text, font fallbacks)
+
+### Video & Media
+
+- [ ] **MEDIA-01**: Claude can configure VideoPlayer component for video playback and render texture output
+- [ ] **MEDIA-02**: Claude can generate UnityWebRequest utilities for HTTP/REST API calls
+
+### Animation Advanced
+
+- [ ] **ANIMA-01**: Claude can edit Unity AnimationClips (add/remove keyframes, modify curves) programmatically
+- [ ] **ANIMA-02**: Claude can modify existing Animator Controllers (add/remove states, configure transitions, sub-state machines)
+- [ ] **ANIMA-03**: Claude can create Avatar Masks for animation layer filtering
+
 ## Out of Scope
 
 | Feature | Reason |
@@ -211,13 +251,32 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | BUILD-03 | Phase 17 | Pending |
 | BUILD-04 | Phase 17 | Pending |
 | BUILD-05 | Phase 17 | Pending |
+| SHDR-01 | Phase 10 | Pending |
+| SHDR-02 | Phase 10 | Pending |
+| SHDR-03 | Phase 17 | Pending |
+| SHDR-04 | Phase 15 | Pending |
+| TWO-01 | Phase 14 | Pending |
+| TWO-02 | Phase 14 | Pending |
+| TWO-03 | Phase 11 | Pending |
+| PHYS-01 | Phase 9 | Pending |
+| PHYS-02 | Phase 9 | Pending |
+| ACC-01 | Phase 15 | Pending |
+| ACC-02 | Phase 17 | Pending |
+| PIPE-08 | Phase 11 | Pending |
+| PIPE-09 | Phase 9 | Pending |
+| PIPE-10 | Phase 15 | Pending |
+| MEDIA-01 | Phase 14 | Pending |
+| MEDIA-02 | Phase 12 | Pending |
+| ANIMA-01 | Phase 14 | Pending |
+| ANIMA-02 | Phase 14 | Pending |
+| ANIMA-03 | Phase 14 | Pending |
 
 **Coverage:**
-- v2 requirements: 76 total (across 11 categories: EDIT, CODE, GAME, CAM, SCNE, DATA, BUILD, QA, IMP, UIX, AID)
-- Mapped to phases: 76/76
+- v2 requirements: 96 total (across 18 categories)
+- Mapped to phases: 96/96
 - Unmapped: 0
 
-**Note:** The previous count of "65 total" only covered the first 8 categories. The actual count including IMP (4), UIX (4), and AID (3) is 76.
+**Categories:** EDIT (15), CODE (10), GAME (12), CAM (4), SCNE (6), DATA (4), BUILD (7), QA (8), IMP (4), UIX (4), AID (3), SHDR (4), TWO (3), PHYS (2), ACC (2), PIPE (3), MEDIA (2), ANIMA (3)
 
 ---
 *Requirements defined: 2026-03-18 (v1), updated 2026-03-19 (v2 with traceability)*
