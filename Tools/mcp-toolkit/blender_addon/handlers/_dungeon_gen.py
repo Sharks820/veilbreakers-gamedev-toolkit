@@ -784,3 +784,180 @@ def _place_landmarks(
             }
         )
     return landmarks
+
+
+# ---------------------------------------------------------------------------
+# Multi-floor dungeon generation (WORLD-06)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class MultiFloorDungeon:
+    """Multi-floor dungeon with vertical connections between floors."""
+
+    width: int
+    height: int
+    num_floors: int
+    floors: list[DungeonLayout] = field(default_factory=list)
+    connections: list[dict] = field(default_factory=list)
+    total_rooms: int = 0
+
+
+def _place_connection_points(
+    width: int,
+    height: int,
+    num_transitions: int,
+    rng: random.Random,
+    min_room_size: int = 6,
+) -> list[tuple[int, int]]:
+    """Place 1--2 connection points per floor transition.
+
+    Returns grid coordinates that must fall within room cells.  The caller
+    must guarantee that the generated dungeon has a walkable cell at each
+    connection point -- :func:`generate_multi_floor_dungeon` enforces this.
+    """
+    points: list[tuple[int, int]] = []
+    margin = min_room_size + 2  # stay away from edges
+    for _ in range(num_transitions):
+        # Place 1-2 connections per transition
+        n_conns = rng.randint(1, 2)
+        for _ in range(n_conns):
+            cx = rng.randint(margin, width - margin - 1)
+            cy = rng.randint(margin, height - margin - 1)
+            points.append((cx, cy))
+    return points
+
+
+def generate_multi_floor_dungeon(
+    width: int = 64,
+    height: int = 64,
+    num_floors: int = 3,
+    min_room_size: int = 6,
+    max_depth: int = 5,
+    cell_size: float = 2.0,
+    wall_height: float = 3.0,
+    connection_types: Optional[list[str]] = None,
+    seed: int = 0,
+) -> MultiFloorDungeon:
+    """Generate a multi-floor dungeon with vertical connections.
+
+    Parameters
+    ----------
+    width, height : int
+        Grid dimensions for each floor.
+    num_floors : int
+        Number of dungeon floors (default 3).
+    min_room_size : int
+        Minimum room size for BSP.
+    max_depth : int
+        BSP partition depth.
+    cell_size : float
+        World-space size of each grid cell.
+    wall_height : float
+        Height of walls per floor.
+    connection_types : list of str, optional
+        Types of vertical connections: "staircase", "elevator", "ladder",
+        "pit_drop".  Defaults to ``["staircase"]``.
+    seed : int
+        Random seed for deterministic output.
+
+    Returns
+    -------
+    MultiFloorDungeon
+        Contains per-floor DungeonLayout, connection dicts, total_rooms.
+    """
+    if connection_types is None:
+        connection_types = ["staircase"]
+
+    rng = random.Random(seed)
+
+    # 1. Determine staircase/connection positions shared across floor transitions
+    num_transitions = num_floors - 1
+    connection_positions = _place_connection_points(
+        width, height, num_transitions, rng, min_room_size
+    )
+
+    # 2. Generate each floor
+    floors: list[DungeonLayout] = []
+    connections: list[dict] = []
+    total_rooms = 0
+
+    # Track which connection positions belong to which transition
+    conn_idx = 0
+    transition_conns: list[list[tuple[int, int]]] = []
+    for t in range(num_transitions):
+        n_conns = rng.randint(1, 2)
+        t_conns: list[tuple[int, int]] = []
+        for _ in range(n_conns):
+            if conn_idx < len(connection_positions):
+                t_conns.append(connection_positions[conn_idx])
+                conn_idx += 1
+        transition_conns.append(t_conns)
+
+    for floor_idx in range(num_floors):
+        floor_seed = seed + floor_idx * 1000
+        layout = generate_bsp_dungeon(
+            width=width,
+            height=height,
+            min_room_size=min_room_size,
+            max_depth=max_depth,
+            seed=floor_seed,
+        )
+
+        # Ensure connection points are walkable on this floor
+        # For transitions FROM this floor (floor_idx) and TO this floor (floor_idx - 1)
+        if floor_idx < num_transitions:
+            for cx, cy in transition_conns[floor_idx]:
+                if layout.grid[cy, cx] == 0:
+                    # Carve a small room at the connection point
+                    for dy in range(-1, 2):
+                        for dx in range(-1, 2):
+                            ny, nx = cy + dy, cx + dx
+                            if 0 < ny < height - 1 and 0 < nx < width - 1:
+                                layout.grid[ny, nx] = 1
+                    # Connect to nearest room
+                    nearest_room = min(
+                        layout.rooms,
+                        key=lambda r: abs(r.center[0] - cx) + abs(r.center[1] - cy),
+                    )
+                    rcx, rcy = nearest_room.center
+                    _carve_h_corridor(layout.grid, cy, cx, rcx)
+                    _carve_v_corridor(layout.grid, rcx, cy, rcy)
+
+        if floor_idx > 0:
+            for cx, cy in transition_conns[floor_idx - 1]:
+                if layout.grid[cy, cx] == 0:
+                    for dy in range(-1, 2):
+                        for dx in range(-1, 2):
+                            ny, nx = cy + dy, cx + dx
+                            if 0 < ny < height - 1 and 0 < nx < width - 1:
+                                layout.grid[ny, nx] = 1
+                    nearest_room = min(
+                        layout.rooms,
+                        key=lambda r: abs(r.center[0] - cx) + abs(r.center[1] - cy),
+                    )
+                    rcx, rcy = nearest_room.center
+                    _carve_h_corridor(layout.grid, cy, cx, rcx)
+                    _carve_v_corridor(layout.grid, rcx, cy, rcy)
+
+        floors.append(layout)
+        total_rooms += len(layout.rooms)
+
+    # 3. Build connection records
+    for t_idx, t_conns in enumerate(transition_conns):
+        conn_type = connection_types[t_idx % len(connection_types)]
+        for pos in t_conns:
+            connections.append({
+                "from_floor": t_idx,
+                "to_floor": t_idx + 1,
+                "position": pos,
+                "type": conn_type,
+            })
+
+    return MultiFloorDungeon(
+        width=width,
+        height=height,
+        num_floors=num_floors,
+        floors=floors,
+        connections=connections,
+        total_rooms=total_rooms,
+    )
