@@ -97,18 +97,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** v2.0 Phase 15 complete, ready for Phase 16
+**Current focus:** v2.0 Phase 16 in progress (Quality Assurance & Testing)
 
 ## Current Position
 
-Phase: 15 of 17 (Game UX & Encounter Design) -- PHASE COMPLETE
-Plan: 4 of 4 in current phase (all complete)
-Status: Phase 15 complete -- ready for Phase 16
-Last activity: 2026-03-20 -- Completed 15-04-PLAN.md (tool wiring + 31 syntax tests, Phase 15 complete)
+Phase: 16 of 17 (Quality Assurance & Testing)
+Plan: 1 of 4 in current phase (1 complete)
+Status: Executing Phase 16
+Last activity: 2026-03-20 -- Completed 16-01-PLAN.md (Unity TCP bridge foundation + 118 tests)
 
 ```
-Phase Progress: [██████████] 100% overall (29 plans, 29 complete)
-v2.0 Progress:  [████████████████████████████] 29/29 plans complete
+Phase Progress: [████████████████████████████░░] 30/33 plans complete
+v2.0 Progress:  [████████████████████████████░░] 30/33 plans complete
 ```
 
 ## Performance Metrics
@@ -122,9 +122,9 @@ v2.0 Progress:  [█████████████████████
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 29 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-04) |
-| v2.0 tests added | 3,102 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter + 84 ux-batch2 + 93 ux-batch1 + 283 tool-wiring-p15) |
-| v2.0 total tests passing | 5,885 |
+| v2.0 plans completed | 30 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-04, 16-01) |
+| v2.0 tests added | 3,220 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter + 84 ux-batch2 + 93 ux-batch1 + 283 tool-wiring-p15 + 118 qa-bridge) |
+| v2.0 total tests passing | 6,003 |
 | v2.0 MCP tools | 35 (15 Blender + 20 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
@@ -151,6 +151,7 @@ v2.0 Progress:  [█████████████████████
 | Phase 15 P01 | 9min | 2 tasks | 2 files |
 | Phase 15-02 P02 | 22 min | 2 tasks | 2 files |
 | Phase 15-04 P04 | 20 min | 2 tasks | 2 files |
+| 16-01 duration | 12 min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -246,6 +247,9 @@ v2.0 Progress:  [█████████████████████
 | Colorblind shader sRGB-to-linear before LMS matrix multiply | Industry standard for accurate color simulation | 15 |
 | Aliased encounter_templates import to avoid content_templates collision | Both modules export generate_encounter_simulator_script | 15 |
 | Encounter actions in existing unity_gameplay vs new compound tool | Natural extension of gameplay AI domain, avoids tool proliferation | 15 |
+| Raw triple-quoted string for MiniJSON C# template section | Avoids Python/C# single-quote char literal escaping conflicts in line-based templates | 16 |
+| Embedded MiniJSON parser in bridge commands template | JsonUtility cannot handle Dictionary<string,object>; MiniJSON is MIT single-file standard | 16 |
+| Connection-per-command pattern for UnityConnection | Mirrors BlenderConnection exactly; avoids stale sockets on Unity domain reload | 16 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -260,9 +264,9 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T20:25:09Z
-Stopped at: Completed 15-04-PLAN.md (tool wiring + 31 syntax tests, Phase 15 complete)
-Next action: Begin Phase 16
+Last session: 2026-03-20T22:02:21Z
+Stopped at: Completed 16-01-PLAN.md (Unity TCP bridge foundation + 118 tests)
+Next action: Continue Phase 16, plan 02
 
 ---
 *State initialized: 2026-03-18*
