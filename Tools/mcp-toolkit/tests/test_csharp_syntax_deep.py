@@ -189,6 +189,30 @@ from veilbreakers_mcp.shared.unity_templates.vb_combat_templates import (
     generate_damage_type_script,
 )
 
+# ---------------------------------------------------------------------------
+# content_templates.py generators (Phase 13 -- Content & Progression)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.content_templates import (
+    generate_inventory_system_script,
+    generate_dialogue_system_script,
+    generate_quest_system_script,
+    generate_loot_table_script,
+    generate_crafting_system_script,
+    generate_skill_tree_script,
+    generate_dps_calculator_script,
+    generate_encounter_simulator_script,
+    generate_stat_curve_editor_script,
+    generate_shop_system_script,
+    generate_journal_system_script,
+)
+
+# ---------------------------------------------------------------------------
+# equipment_templates.py generators (Phase 13 -- Equipment Attachment)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.equipment_templates import (
+    generate_equipment_attachment_script,
+)
+
 
 # ===================================================================
 # Build a list of (name, callable, is_csharp) for every generator
@@ -466,6 +490,30 @@ ALL_GENERATORS: list[tuple[str, callable, str]] = [
     ("vb/xp_leveling", lambda: generate_xp_leveling_script(), "cs"),
     ("vb/currency_system", lambda: generate_currency_system_script(), "cs"),
     ("vb/damage_types", lambda: generate_damage_type_script(), "cs"),
+
+    # --- content & progression (Phase 13) ---
+    ("content/inventory_item_so", lambda: generate_inventory_system_script()[0], "cs"),
+    ("content/inventory_system", lambda: generate_inventory_system_script()[1], "cs"),
+    ("content/dialogue_data", lambda: generate_dialogue_system_script()[0], "cs"),
+    ("content/dialogue_system", lambda: generate_dialogue_system_script()[1], "cs"),
+    ("content/quest_data", lambda: generate_quest_system_script()[0], "cs"),
+    ("content/quest_system", lambda: generate_quest_system_script()[1], "cs"),
+    ("content/loot_table", lambda: generate_loot_table_script(), "cs"),
+    ("content/crafting_recipe", lambda: generate_crafting_system_script()[0], "cs"),
+    ("content/crafting_system", lambda: generate_crafting_system_script()[1], "cs"),
+    ("content/skill_node", lambda: generate_skill_tree_script()[0], "cs"),
+    ("content/skill_tree", lambda: generate_skill_tree_script()[1], "cs"),
+    ("content/dps_calculator", lambda: generate_dps_calculator_script(), "cs"),
+    ("content/encounter_simulator", lambda: generate_encounter_simulator_script(), "cs"),
+    ("content/stat_curve_editor", lambda: generate_stat_curve_editor_script(), "cs"),
+    ("content/shop_merchant", lambda: generate_shop_system_script()[0], "cs"),
+    ("content/shop_system", lambda: generate_shop_system_script()[1], "cs"),
+    ("content/journal_data", lambda: generate_journal_system_script()[0], "cs"),
+    ("content/journal_system", lambda: generate_journal_system_script()[1], "cs"),
+
+    # --- equipment (Phase 13 -- EQUIP-06) ---
+    ("equipment/attachment", lambda: generate_equipment_attachment_script()[0], "cs"),
+    ("equipment/weapon_sheath", lambda: generate_equipment_attachment_script()[1], "cs"),
 ]
 
 # Also test the non-C# generators separately for their own validity
@@ -485,6 +533,18 @@ NON_CS_GENERATORS: list[tuple[str, callable, str]] = [
         "uxml",
     ),
     ("ui/uss_stylesheet", lambda: generate_uss_stylesheet(), "uss"),
+
+    # --- content UXML/USS (Phase 13) ---
+    ("content/inventory_uxml", lambda: generate_inventory_system_script()[2], "uxml"),
+    ("content/inventory_uss", lambda: generate_inventory_system_script()[3], "uss"),
+    ("content/dialogue_uxml", lambda: generate_dialogue_system_script()[2], "uxml"),
+    ("content/dialogue_uss", lambda: generate_dialogue_system_script()[3], "uss"),
+    ("content/quest_uxml", lambda: generate_quest_system_script()[2], "uxml"),
+    ("content/quest_uss", lambda: generate_quest_system_script()[3], "uss"),
+    ("content/shop_uxml", lambda: generate_shop_system_script()[2], "uxml"),
+    ("content/shop_uss", lambda: generate_shop_system_script()[3], "uss"),
+    ("content/journal_uxml", lambda: generate_journal_system_script()[2], "uxml"),
+    ("content/journal_uss", lambda: generate_journal_system_script()[3], "uss"),
 ]
 
 
