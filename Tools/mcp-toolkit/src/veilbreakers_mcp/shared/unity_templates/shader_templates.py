@@ -947,13 +947,13 @@ def _build_property_line(prop: dict) -> str:
         default = default or '(0,0,0,0)'
         return f'        {name} ("{display}", Vector) = {default}'
     elif ptype == '2D':
-        default = default or '"white" {{}}'
+        default = default or '"white" {}'
         return f'        {name} ("{display}", 2D) = {default}'
     elif ptype == '3D':
-        default = default or '"" {{}}'
+        default = default or '"" {}'
         return f'        {name} ("{display}", 3D) = {default}'
     elif ptype == 'Cube':
-        default = default or '"" {{}}'
+        default = default or '"" {}'
         return f'        {name} ("{display}", Cube) = {default}'
     elif ptype.startswith('Range'):
         default = default or '0'
