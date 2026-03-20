@@ -11,7 +11,7 @@ All v1 requirements delivered in 8 phases. See MILESTONES.md for details.
 
 ## v2 Requirements
 
-Requirements for v2.0 — closing every gap for complete Unity game development coverage.
+Requirements for v2.0 -- closing every gap for complete Unity game development coverage.
 
 ### Unity Editor Control
 
@@ -133,16 +133,91 @@ Requirements for v2.0 — closing every gap for complete Unity game development 
 
 ## Traceability
 
-Updated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (Populated by roadmapper) | | |
+| EDIT-01 | Phase 9 | Pending |
+| EDIT-02 | Phase 9 | Pending |
+| EDIT-03 | Phase 9 | Pending |
+| EDIT-04 | Phase 9 | Pending |
+| EDIT-05 | Phase 9 | Pending |
+| EDIT-06 | Phase 9 | Pending |
+| EDIT-07 | Phase 9 | Pending |
+| EDIT-08 | Phase 9 | Pending |
+| EDIT-09 | Phase 9 | Pending |
+| EDIT-10 | Phase 9 | Pending |
+| EDIT-11 | Phase 9 | Pending |
+| EDIT-12 | Phase 9 | Pending |
+| EDIT-13 | Phase 9 | Pending |
+| EDIT-14 | Phase 9 | Pending |
+| EDIT-15 | Phase 9 | Pending |
+| IMP-01 | Phase 9 | Pending |
+| IMP-02 | Phase 9 | Pending |
+| CODE-01 | Phase 10 | Pending |
+| CODE-02 | Phase 10 | Pending |
+| CODE-03 | Phase 10 | Pending |
+| CODE-04 | Phase 10 | Pending |
+| CODE-05 | Phase 10 | Pending |
+| CODE-06 | Phase 10 | Pending |
+| CODE-07 | Phase 10 | Pending |
+| CODE-08 | Phase 10 | Pending |
+| CODE-09 | Phase 10 | Pending |
+| CODE-10 | Phase 10 | Pending |
+| DATA-01 | Phase 11 | Pending |
+| DATA-02 | Phase 11 | Pending |
+| DATA-03 | Phase 11 | Pending |
+| DATA-04 | Phase 11 | Pending |
+| IMP-03 | Phase 11 | Pending |
+| IMP-04 | Phase 11 | Pending |
+| BUILD-06 | Phase 11 | Pending |
+| GAME-01 | Phase 12 | Pending |
+| GAME-05 | Phase 12 | Pending |
+| GAME-06 | Phase 12 | Pending |
+| GAME-07 | Phase 12 | Pending |
+| GAME-08 | Phase 12 | Pending |
+| GAME-02 | Phase 13 | Pending |
+| GAME-03 | Phase 13 | Pending |
+| GAME-04 | Phase 13 | Pending |
+| GAME-09 | Phase 13 | Pending |
+| GAME-10 | Phase 13 | Pending |
+| GAME-11 | Phase 13 | Pending |
+| GAME-12 | Phase 13 | Pending |
+| CAM-01 | Phase 14 | Pending |
+| CAM-02 | Phase 14 | Pending |
+| CAM-03 | Phase 14 | Pending |
+| CAM-04 | Phase 14 | Pending |
+| SCNE-01 | Phase 14 | Pending |
+| SCNE-02 | Phase 14 | Pending |
+| SCNE-03 | Phase 14 | Pending |
+| SCNE-04 | Phase 14 | Pending |
+| SCNE-05 | Phase 14 | Pending |
+| SCNE-06 | Phase 14 | Pending |
+| UIX-01 | Phase 15 | Pending |
+| UIX-02 | Phase 15 | Pending |
+| UIX-03 | Phase 15 | Pending |
+| UIX-04 | Phase 15 | Pending |
+| AID-01 | Phase 15 | Pending |
+| AID-02 | Phase 15 | Pending |
+| AID-03 | Phase 15 | Pending |
+| QA-01 | Phase 16 | Pending |
+| QA-02 | Phase 16 | Pending |
+| QA-03 | Phase 16 | Pending |
+| QA-04 | Phase 16 | Pending |
+| QA-05 | Phase 16 | Pending |
+| QA-06 | Phase 16 | Pending |
+| QA-07 | Phase 16 | Pending |
+| QA-08 | Phase 16 | Pending |
+| BUILD-01 | Phase 17 | Pending |
+| BUILD-02 | Phase 17 | Pending |
+| BUILD-03 | Phase 17 | Pending |
+| BUILD-04 | Phase 17 | Pending |
+| BUILD-05 | Phase 17 | Pending |
 
 **Coverage:**
-- v2 requirements: 65 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 65
+- v2 requirements: 76 total (across 11 categories: EDIT, CODE, GAME, CAM, SCNE, DATA, BUILD, QA, IMP, UIX, AID)
+- Mapped to phases: 76/76
+- Unmapped: 0
+
+**Note:** The previous count of "65 total" only covered the first 8 categories. The actual count including IMP (4), UIX (4), and AID (3) is 76.
 
 ---
-*Requirements defined: 2026-03-18 (v1), updated 2026-03-19 (v2)*
+*Requirements defined: 2026-03-18 (v1), updated 2026-03-19 (v2 with traceability)*
