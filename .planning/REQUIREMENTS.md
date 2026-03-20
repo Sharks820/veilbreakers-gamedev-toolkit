@@ -15,9 +15,9 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Unity Editor Control
 
-- [ ] **EDIT-01**: Claude can create, modify, and delete Prefabs programmatically (including nested prefabs and prefab variants)
-- [ ] **EDIT-02**: Claude can add, remove, and configure any Component on any GameObject (Rigidbody, Collider, AudioSource, Light, custom MonoBehaviours)
-- [ ] **EDIT-03**: Claude can manipulate scene hierarchy (create empties, rename, reparent, enable/disable, set layer/tag)
+- [x] **EDIT-01**: Claude can create, modify, and delete Prefabs programmatically (including nested prefabs and prefab variants)
+- [x] **EDIT-02**: Claude can add, remove, and configure any Component on any GameObject (Rigidbody, Collider, AudioSource, Light, custom MonoBehaviours)
+- [x] **EDIT-03**: Claude can manipulate scene hierarchy (create empties, rename, reparent, enable/disable, set layer/tag)
 - [x] **EDIT-04**: Claude can configure physics layers, layer collision matrix, and physics materials (friction, bounciness)
 - [x] **EDIT-05**: Claude can manage Player Settings (company name, product name, icon, splash, scripting backend, API compat, color space)
 - [x] **EDIT-06**: Claude can manage Build Settings (add/remove/reorder scenes, switch platform, set scripting defines)
@@ -137,8 +137,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Physics Advanced
 
-- [ ] **PHYS-01**: Claude can configure physics Joints (HingeJoint, SpringJoint, ConfigurableJoint, CharacterJoint, FixedJoint)
-- [ ] **PHYS-02**: Claude can set up NavMeshObstacle, Off-Mesh Links, and NavMesh Areas with cost configuration
+- [x] **PHYS-01**: Claude can configure physics Joints (HingeJoint, SpringJoint, ConfigurableJoint, CharacterJoint, FixedJoint)
+- [x] **PHYS-02**: Claude can set up NavMeshObstacle, Off-Mesh Links, and NavMesh Areas with cost configuration
 
 ### Accessibility & Publishing
 
@@ -174,7 +174,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 ### Equipment & Weapons
 
 - [ ] **EQUIP-01**: Claude can generate weapon meshes from text descriptions (swords, axes, maces, staffs, bows, daggers, shields) with proper grip points, trail VFX attachment points, and collision mesh
-- [ ] **EQUIP-02**: Claude can set up bone socket attachment system on character rigs (10 standard sockets: weapon_hand_R/L, shield_hand_L, back_weapon, hip_L/R, head, chest, spell_hand_R/L)
+- [x] **EQUIP-02**: Claude can set up bone socket attachment system on character rigs (10 standard sockets: weapon_hand_R/L, shield_hand_L, back_weapon, hip_L/R, head, chest, spell_hand_R/L)
 - [ ] **EQUIP-03**: Claude can split character mesh into modular parts (head, torso, upper arms, lower arms, upper legs, lower legs, feet) for armor swapping
 - [ ] **EQUIP-04**: Claude can generate armor/clothing meshes that fit character models using shape keys and vertex weight transfer
 - [ ] **EQUIP-05**: Claude can generate equipment preview icons (3D rendered turntable or flat icon) for inventory UI
@@ -237,9 +237,9 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| EDIT-01 | Phase 9 | Pending |
-| EDIT-02 | Phase 9 | Pending |
-| EDIT-03 | Phase 9 | Pending |
+| EDIT-01 | Phase 9 | Complete |
+| EDIT-02 | Phase 9 | Complete |
+| EDIT-03 | Phase 9 | Complete |
 | EDIT-04 | Phase 9 | Complete |
 | EDIT-05 | Phase 9 | Complete |
 | EDIT-06 | Phase 9 | Complete |
@@ -320,8 +320,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | TWO-01 | Phase 14 | Pending |
 | TWO-02 | Phase 14 | Pending |
 | TWO-03 | Phase 11 | Pending |
-| PHYS-01 | Phase 9 | Pending |
-| PHYS-02 | Phase 9 | Pending |
+| PHYS-01 | Phase 9 | Complete |
+| PHYS-02 | Phase 9 | Complete |
 | ACC-01 | Phase 15 | Pending |
 | ACC-02 | Phase 17 | Pending |
 | PIPE-08 | Phase 11 | Pending |
@@ -340,7 +340,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | AAA-05 | Phase 14 | Pending |
 | AAA-06 | Phase 11 | Pending |
 | EQUIP-01 | Phase 13 | Pending |
-| EQUIP-02 | Phase 9 | Pending |
+| EQUIP-02 | Phase 9 | Complete |
 | EQUIP-03 | Phase 13 | Pending |
 | EQUIP-04 | Phase 13 | Pending |
 | EQUIP-05 | Phase 13 | Pending |
