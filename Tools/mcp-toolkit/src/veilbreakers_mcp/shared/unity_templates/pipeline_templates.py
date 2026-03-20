@@ -520,8 +520,7 @@ public class VeilBreakers_Create{safe_name}Atlas
         AssetDatabase.Refresh();
 
         // Write result
-        var result = new {{ status = "success", atlas_path = "{safe_output}", source = "{safe_folder}" }};
-        string json = JsonUtility.ToJson(result);
+        string json = "{{\\"status\\": \\"success\\", \\"atlas_path\\": \\"{safe_output}\\", \\"source\\": \\"{safe_folder}\\"}}";
         File.WriteAllText(
             Path.Combine(Application.dataPath, "../Temp/vb_result.json"),
             json
@@ -655,14 +654,7 @@ public class VeilBreakers_Create{safe_name}Anim
         AssetDatabase.Refresh();
 
         // Write result
-        var result = new {{
-            status = "success",
-            clip_path = "{safe_output}",
-            frame_count = sprites.Length,
-            frame_rate = {frame_rate},
-            loop = {loop_str},
-        }};
-        string json = JsonUtility.ToJson(result);
+        string json = "{{\\"status\\": \\"success\\", \\"clip_path\\": \\"{safe_output}\\", \\"frame_count\\": " + sprites.Length + ", \\"frame_rate\\": {frame_rate}, \\"loop\\": {loop_str}}}";
         File.WriteAllText(
             Path.Combine(Application.dataPath, "../Temp/vb_result.json"),
             json
@@ -772,13 +764,7 @@ public class VeilBreakers_ConfigSprite{safe_class}
         importer.SaveAndReimport();
 
         // Write result
-        var result = new {{
-            status = "success",
-            sprite_path = "{safe_path}",
-            pixels_per_unit = {pixels_per_unit},
-            sprite_mode = {sprite_mode},
-        }};
-        string json = JsonUtility.ToJson(result);
+        string json = "{{\\"status\\": \\"success\\", \\"sprite_path\\": \\"{safe_path}\\", \\"pixels_per_unit\\": {pixels_per_unit}, \\"sprite_mode\\": {sprite_mode}}}";
         File.WriteAllText(
             Path.Combine(Application.dataPath, "../Temp/vb_result.json"),
             json
