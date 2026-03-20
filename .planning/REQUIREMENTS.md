@@ -112,7 +112,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 ### UI & UX Enhancements
 
 - [x] **UIX-01**: Claude can generate minimap/compass with world-space markers
-- [ ] **UIX-02**: Claude can generate tutorial/onboarding sequences with tooltip overlays
+- [x] **UIX-02**: Claude can generate tutorial/onboarding sequences with tooltip overlays
 - [x] **UIX-03**: Claude can generate damage number floating text system
 - [x] **UIX-04**: Claude can generate context-sensitive interaction prompts (press E to interact)
 
@@ -142,7 +142,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Accessibility & Publishing
 
-- [ ] **ACC-01**: Claude can generate accessibility features (colorblind modes, subtitle sizing, screen reader tags, motor accessibility options)
+- [x] **ACC-01**: Claude can generate accessibility features (colorblind modes, subtitle sizing, screen reader tags, motor accessibility options)
 - [ ] **ACC-02**: Claude can generate store publishing metadata (screenshots, descriptions, content ratings, privacy policy templates)
 
 ### Asset Pipeline Advanced
@@ -179,8 +179,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [x] **EQUIP-04**: Claude can generate armor/clothing meshes that fit character models using shape keys and vertex weight transfer
 - [x] **EQUIP-05**: Claude can generate equipment preview icons (3D rendered turntable or flat icon) for inventory UI
 - [x] **EQUIP-06**: Claude can set up Unity equipment attachment system (SkinnedMeshRenderer rebinding, bone socket parenting, sheathed weapon positioning with Multi-Parent Constraint)
-- [ ] **EQUIP-07**: Claude can apply rarity tier visual effects to equipment (Common gray, Rare blue, Epic purple, Legendary gold glow + particle effects)
-- [ ] **EQUIP-08**: Claude can apply corruption visual progression to equipment (0-100% corruption with increasing vein patterns, color shift, particle emission)
+- [x] **EQUIP-07**: Claude can apply rarity tier visual effects to equipment (Common gray, Rare blue, Epic purple, Legendary gold glow + particle effects)
+- [x] **EQUIP-08**: Claude can apply corruption visual progression to equipment (0-100% corruption with increasing vein patterns, color shift, particle emission)
 
 ### World Design & Composition
 
@@ -205,7 +205,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [x] **VB-06**: Claude can generate a currency system (gold/souls/marks earning, spending, display, multiple currency types)
 - [x] **VB-07**: Claude can generate damage type system with 10 brand-specific damage types and elemental resistance calculations
 - [x] **VB-08**: Claude can generate brand-specific loot affinity (IRON brand mobs drop IRON-themed gear, rarity-weighted per brand)
-- [ ] **VB-09**: Claude can generate a character creation/selection screen (choose hero path, customize appearance, name entry)
+- [x] **VB-09**: Claude can generate a character creation/selection screen (choose hero path, customize appearance, name entry)
 - [x] **VB-10**: Claude can generate boss AI behavior (multi-phase state machine, phase transitions at HP thresholds, unique attack patterns, enrage mechanics)
 
 ### RPG World Systems
@@ -217,7 +217,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [x] **RPG-05**: Claude can generate a journal/codex/bestiary system (lore entries from world, monster compendium with stats/weaknesses, item encyclopedia)
 - [x] **RPG-06**: Claude can generate dungeon trap mechanics (pressure plates, dart walls, spike pits, falling rocks, poison gas, swinging blades)
 - [x] **RPG-07**: Claude can generate spatial loot placement in dungeons (treasure chest positions, item drops in specific rooms, treasure room layouts)
-- [ ] **RPG-08**: Claude can generate a 2D world map screen from 3D terrain data (fog-of-war, location markers, player position, discovered areas)
+- [x] **RPG-08**: Claude can generate a 2D world map screen from 3D terrain data (fog-of-war, location markers, player position, discovered areas)
 - [x] **RPG-09**: Claude can generate a weather system with state management (rain, snow, fog, storms), smooth transitions, and optional gameplay effects
 - [x] **RPG-10**: Claude can generate a day/night runtime cycle (continuous time progression, lighting preset transitions, NPC schedule changes, enemy behavior shifts)
 - [x] **RPG-11**: Claude can generate friendly NPC placement markers inside buildings (shopkeeper positions, quest giver positions, bartender positions, guard positions)
@@ -294,7 +294,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | SCNE-05 | Phase 14 | Complete |
 | SCNE-06 | Phase 14 | Complete |
 | UIX-01 | Phase 15 | Complete |
-| UIX-02 | Phase 15 | Pending |
+| UIX-02 | Phase 15 | Complete |
 | UIX-03 | Phase 15 | Complete |
 | UIX-04 | Phase 15 | Complete |
 | AID-01 | Phase 15 | Complete |
@@ -322,7 +322,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | TWO-03 | Phase 11 | Complete |
 | PHYS-01 | Phase 9 | Complete |
 | PHYS-02 | Phase 9 | Complete |
-| ACC-01 | Phase 15 | Pending |
+| ACC-01 | Phase 15 | Complete |
 | ACC-02 | Phase 17 | Pending |
 | PIPE-08 | Phase 11 | Complete |
 | PIPE-09 | Phase 9 | Complete |
@@ -345,8 +345,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | EQUIP-04 | Phase 13 | Complete |
 | EQUIP-05 | Phase 13 | Complete |
 | EQUIP-06 | Phase 13 | Complete |
-| EQUIP-07 | Phase 15 | Pending |
-| EQUIP-08 | Phase 15 | Pending |
+| EQUIP-07 | Phase 15 | Complete |
+| EQUIP-08 | Phase 15 | Complete |
 | WORLD-01 | Phase 14 | Complete |
 | WORLD-02 | Phase 14 | Complete |
 | WORLD-03 | Phase 14 | Complete |
@@ -366,7 +366,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | VB-06 | Phase 12 | Complete |
 | VB-07 | Phase 12 | Complete |
 | VB-08 | Phase 13 | Complete |
-| VB-09 | Phase 15 | Pending |
+| VB-09 | Phase 15 | Complete |
 | VB-10 | Phase 15 | Complete |
 | RPG-01 | Phase 13 | Complete |
 | RPG-02 | Phase 14 | Complete |
@@ -375,7 +375,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | RPG-05 | Phase 13 | Complete |
 | RPG-06 | Phase 14 | Complete |
 | RPG-07 | Phase 14 | Complete |
-| RPG-08 | Phase 15 | Pending |
+| RPG-08 | Phase 15 | Complete |
 | RPG-09 | Phase 14 | Complete |
 | RPG-10 | Phase 14 | Complete |
 | RPG-11 | Phase 14 | Complete |
