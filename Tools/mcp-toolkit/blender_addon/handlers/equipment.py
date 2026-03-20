@@ -807,18 +807,18 @@ def handle_equipment_split_character(params: dict) -> dict:
                     v.select = True
                     break
 
+        # Track existing objects before separation
+        objects_before = set(bpy.data.objects[:])
+
         bpy.ops.object.mode_set(mode="EDIT")
         bpy.ops.mesh.separate(type="SELECTED")
         bpy.ops.object.mode_set(mode="OBJECT")
 
-        # Find the newly separated object
+        # Find the newly separated object by diffing before/after
         separated_name = f"{object_name}_{part_name}"
-        # Blender names separated objects with .001 suffix; rename
-        for candidate in bpy.data.objects:
-            if (candidate != obj
-                    and candidate.type == "MESH"
-                    and candidate.name.startswith(object_name)
-                    and candidate.name not in [p["name"] for p in result_parts]):
+        new_objects = [o for o in bpy.data.objects if o not in objects_before]
+        for candidate in new_objects:
+            if candidate.type == "MESH":
                 candidate.name = separated_name
                 # Ensure armature modifier on separated part
                 has_armature = any(
@@ -1055,23 +1055,24 @@ def handle_equipment_render_icon(params: dict) -> dict:
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_mode = "RGBA"
 
-    # Render
-    bpy.ops.render.render(write_still=True)
+    try:
+        # Render
+        bpy.ops.render.render(write_still=True)
+    finally:
+        # Restore original settings
+        scene.camera = original_camera
+        scene.render.resolution_x = original_res_x
+        scene.render.resolution_y = original_res_y
+        scene.render.film_transparent = original_film_transparent
+        scene.render.filepath = original_filepath
+        scene.render.image_settings.file_format = original_format
+        scene.render.image_settings.color_mode = original_color_mode
 
-    # Restore original settings
-    scene.camera = original_camera
-    scene.render.resolution_x = original_res_x
-    scene.render.resolution_y = original_res_y
-    scene.render.film_transparent = original_film_transparent
-    scene.render.filepath = original_filepath
-    scene.render.image_settings.file_format = original_format
-    scene.render.image_settings.color_mode = original_color_mode
+        # Clean up temporary objects
+        for temp_obj in temp_objects:
+            bpy.data.objects.remove(temp_obj, do_unlink=True)
 
-    # Clean up temporary objects
-    for temp_obj in temp_objects:
-        bpy.data.objects.remove(temp_obj, do_unlink=True)
-
-    bpy.context.view_layer.update()
+        bpy.context.view_layer.update()
 
     # Get file size (only using bpy-compatible approach)
     file_size = 0
