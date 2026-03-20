@@ -70,6 +70,7 @@ def _sanitize_cs_identifier(value: str) -> str:
 def generate_physics_settings_script(
     collision_matrix: dict[str, list[str]] | None = None,
     gravity: list[float] | None = None,
+    reset_all: bool = False,
 ) -> str:
     """Generate C# editor script for configuring physics layers and collision matrix.
 
@@ -77,6 +78,9 @@ def generate_physics_settings_script(
         collision_matrix: Dict mapping layer name to list of layers it should
             collide with. Pairs NOT in the matrix will have collisions ignored.
         gravity: Optional [x, y, z] gravity vector override.
+        reset_all: If true, first reset all layer pairs to collide (no ignore),
+            then apply the specified ignore rules. Default false (unspecified
+            pairs retain their current state).
 
     Returns:
         Complete C# source string.
@@ -113,11 +117,24 @@ def generate_physics_settings_script(
                 ignore = "false" if should_collide else "true"
                 collision_pairs += f'            if (layer_{safe_a} != -1 && layer_{safe_b} != -1) Physics.IgnoreLayerCollision(layer_{safe_a}, layer_{safe_b}, {ignore});\n'
 
+        # Optional: reset all 32x32 layer pairs before applying rules
+        reset_code = ""
+        if reset_all:
+            reset_code = """
+            // Reset all layer pairs to collide (undo any prior ignores)
+            for (int a = 0; a < 32; a++)
+                for (int b = a; b < 32; b++)
+                    Physics.IgnoreLayerCollision(a, b, false);
+"""
+
         collision_code = f"""
             var warnings = new System.Collections.Generic.List<string>();
+{reset_code}
             // Resolve layer indices
 {layer_resolves}
             // Configure collision matrix
+            // NOTE: Only the layer pairs listed below are modified.
+            // Unspecified pairs retain their current collision state.
 {collision_pairs}
             configuredLayers = {len(safe_layers)};"""
 
@@ -1101,7 +1118,9 @@ public static class VeilBreakers_SyncTagsLayers
             string fullPath = Path.GetFullPath(constantsPath).Replace("\\\\", "/");
 
             // Verify path stays within the Unity project Assets folder
-            if (!fullPath.StartsWith(Application.dataPath.Replace("\\\\", "/")))
+            // Append "/" to prevent matching directories like "AssetsEvil/"
+            string safeDataPath = Application.dataPath.Replace("\\\\", "/");
+            if (fullPath != safeDataPath && !fullPath.StartsWith(safeDataPath + "/"))
             {{
                 string errJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"sync_tags_layers\\", "
                     + "\\"message\\": \\"Path escapes project boundary: {safe_path}\\"}}";

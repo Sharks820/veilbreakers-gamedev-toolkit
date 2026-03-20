@@ -654,7 +654,14 @@ public static class VeilBreakers_DeletePrefab
         var changedAssets = new List<string>();
         try
         {{
-            Undo.RecordObject(AssetDatabase.LoadAssetAtPath<Object>("{safe_path}"), "Delete Prefab");
+            var asset = AssetDatabase.LoadAssetAtPath<Object>("{safe_path}");
+            if (asset == null)
+            {{
+                string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"delete_prefab\\", \\"message\\": \\"Asset not found: {safe_path}\\"}}";
+                File.WriteAllText("Temp/vb_result.json", json);
+                return;
+            }}
+            Undo.RecordObject(asset, "Delete Prefab");
             bool deleted = AssetDatabase.DeleteAsset("{safe_path}");
             if (deleted)
             {{
@@ -1522,6 +1529,19 @@ public static class VeilBreakers_VariantMatrix
 # ---------------------------------------------------------------------------
 
 
+# Known joint config keys mapped to their C# types
+_JOINT_FLOAT_KEYS = {
+    "breakForce", "breakTorque", "spring", "damper",
+    "minDistance", "maxDistance",
+}
+_JOINT_BOOL_KEYS = {
+    "enableCollision", "enablePreprocessing",
+}
+_JOINT_VECTOR3_KEYS = {
+    "anchor", "axis", "connectedAnchor",
+}
+
+
 def generate_joint_setup_script(
     selector: dict | str,
     joint_type: str,
@@ -1560,8 +1580,37 @@ def generate_joint_setup_script(
             }}
             var col = target.GetComponent<Collider>();
             if (col != null) col.material = physMat;''')
+        elif key in _JOINT_FLOAT_KEYS:
+            config_lines.append(f'            joint.{key} = {safe_val}f;')
+        elif key in _JOINT_BOOL_KEYS:
+            bool_val = "true" if str(val).lower() in ("true", "1", "yes") else "false"
+            config_lines.append(f'            joint.{key} = {bool_val};')
+        elif key in _JOINT_VECTOR3_KEYS:
+            parts = str(val).split(",")
+            if len(parts) == 3:
+                config_lines.append(
+                    f'            joint.{key} = new Vector3({parts[0].strip()}f, {parts[1].strip()}f, {parts[2].strip()}f);'
+                )
+            else:
+                config_lines.append(f'            // Skipped {safe_key}: expected 3 comma-separated values, got "{safe_val}"')
+        elif key == "useLimits":
+            bool_val = "true" if str(val).lower() in ("true", "1", "yes") else "false"
+            config_lines.append(f'            joint.useLimits = {bool_val};')
+        elif key == "limits":
+            # Expect dict-like with min/max or a "min,max" string
+            if isinstance(val, dict):
+                lmin = val.get("min", 0)
+                lmax = val.get("max", 0)
+            else:
+                lparts = str(val).split(",")
+                lmin = lparts[0].strip() if len(lparts) >= 1 else "0"
+                lmax = lparts[1].strip() if len(lparts) >= 2 else "0"
+            config_lines.append(f'            var limits = joint.limits;')
+            config_lines.append(f'            limits.min = {lmin}f;')
+            config_lines.append(f'            limits.max = {lmax}f;')
+            config_lines.append(f'            joint.limits = limits;')
         else:
-            config_lines.append(f'            // Config: {safe_key} = {safe_val}')
+            config_lines.append(f'            // Config (unrecognized): {safe_key} = {safe_val}')
     config_code = "\n".join(config_lines)
 
     return f'''using UnityEngine;
@@ -1969,13 +2018,18 @@ public static class VeilBreakers_ValidateProject
                 var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(path);
                 if (prefab == null) continue;
 
-                var components = prefab.GetComponents<Component>();
+                var components = prefab.GetComponentsInChildren<Component>(true);
                 foreach (var comp in components)
                 {
                     if (comp == null)
                     {
                         missingScripts++;
                         warnings.Add("Missing script on: " + path);
+                    }
+                    else
+                    {
+                        string childPath = GetHierarchyPath(comp.transform, prefab.transform);
+                        // Additional per-child naming/layer checks can go here
                     }
                 }
 
@@ -2016,6 +2070,20 @@ public static class VeilBreakers_ValidateProject
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.LogError("[VeilBreakers] Project validation failed: " + ex.Message);
         }
+    }
+
+    static string GetHierarchyPath(Transform child, Transform root)
+    {
+        if (child == root) return root.name;
+        var parts = new List<string>();
+        var current = child;
+        while (current != null && current != root)
+        {
+            parts.Add(current.name);
+            current = current.parent;
+        }
+        parts.Reverse();
+        return root.name + "/" + string.Join("/", parts);
     }
 }
 '''
