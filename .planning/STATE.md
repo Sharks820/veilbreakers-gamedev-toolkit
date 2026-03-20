@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
-stopped_at: Completed 14-04-PLAN.md (9 RPG world system generators + 143 tests)
-last_updated: "2026-03-20T17:37:02Z"
-last_activity: 2026-03-20 -- Completed 14-04-PLAN.md (9 RPG world system generators + 143 tests, 4764 total)
+stopped_at: Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, 5420 total)
+last_updated: "2026-03-20T18:08:21Z"
+last_activity: 2026-03-20 -- Completed 14-05-PLAN.md (tool wiring + integration tests, Phase 14 complete)
 progress:
   total_phases: 9
-  completed_phases: 5
-  total_plans: 24
-  completed_plans: 24
-  percent: 96
+  completed_phases: 6
+  total_plans: 25
+  completed_plans: 25
+  percent: 100
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -25,14 +25,14 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 
 ## Current Position
 
-Phase: 14 of 17 (Camera, Cinematics & Scene Management)
-Plan: 5 of 5 in current phase (14-01, 14-02, 14-03, 14-04 complete; 14-05 next)
-Status: Executing Phase 14
-Last activity: 2026-03-20 -- Completed 14-04-PLAN.md (9 RPG world system generators + 143 tests)
+Phase: 14 of 17 (Camera, Cinematics & Scene Management) -- COMPLETE
+Plan: 5 of 5 in current phase (all 5 plans complete)
+Status: Phase 14 Complete -- ready for Phase 15
+Last activity: 2026-03-20 -- Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, 5420 total)
 
 ```
-Phase Progress: [██████████████████████████████████████████] 96% overall (14/17 phases, plan 4/5)
-v2.0 Progress:  [████████████████████████] 24/24 plans complete
+Phase Progress: [██████████████████████████████████████████] 100% overall (14/17 phases complete, all plans done)
+v2.0 Progress:  [█████████████████████████] 25/25 plans complete
 ```
 
 ## Performance Metrics
@@ -46,10 +46,10 @@ v2.0 Progress:  [█████████████████████
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 24 (09-01 through 13-03, 14-01, 14-02, 14-03, 14-04, 14-05) |
-| v2.0 tests added | 2,070 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world) |
-| v2.0 total tests passing | 4,853 |
-| v2.0 MCP tools | 32 (15 Blender + 17 Unity) |
+| v2.0 plans completed | 25 (09-01 through 13-03, 14-01 through 14-05) |
+| v2.0 tests added | 2,637 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14) |
+| v2.0 total tests passing | 5,420 |
+| v2.0 MCP tools | 34 (15 Blender + 19 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
 | 09-03 duration | 11 min |
@@ -70,6 +70,7 @@ v2.0 Progress:  [█████████████████████
 | 14-02 duration | 7 min |
 | 14-03 duration | 17 min |
 | 14-04 duration | 17 min |
+| 14-05 duration | 19 min |
 
 ## Accumulated Context
 
@@ -147,6 +148,9 @@ v2.0 Progress:  [█████████████████████
 | Abstract base + subclass pattern for PuzzleMechanic/TrapBase | Extensible mechanics hierarchy with shared events/properties | 14 |
 | NPC placement via SO data + runtime manager triple return | ScriptableObject stores positions/roles, manager instantiates on Start | 14 |
 | Dungeon torch sconces at _torchSpacing intervals along path points | Wall-offset placement with warm orange point lights and fog setup | 14 |
+| unity_camera + unity_world compound tools with ns_kwargs dispatch | Matches established compound tool pattern from unity_content | 14 |
+| NPC placement triple-return to SO/ + Runtime/ + Editor/ paths | Triple-file generators need three output directories | 14 |
+| Storytelling props via blender_environment (not worldbuilding) | AAA-05 is environment decoration concern, not structural worldbuilding | 14 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -161,10 +165,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T17:37:02Z
-Stopped at: Completed 14-04-PLAN.md (9 RPG world system generators + 143 tests)
-Next action: Phase 14 Plan 05 (tool wiring + integration tests)
+Last session: 2026-03-20T18:08:21Z
+Stopped at: Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, Phase 14 complete)
+Next action: Phase 15 (next v2.0 phase)
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 14-04-PLAN.md (9 RPG world system generators + 143 tests)*
+*Last updated: 2026-03-20 -- Completed 14-05-PLAN.md (tool wiring + Phase 14 complete)*
