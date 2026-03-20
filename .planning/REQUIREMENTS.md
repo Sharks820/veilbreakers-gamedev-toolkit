@@ -24,12 +24,12 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [x] **EDIT-07**: Claude can configure Quality Settings (shadow distance/resolution, texture quality, AA, VSync, LOD bias)
 - [x] **EDIT-08**: Claude can install, remove, and update Unity packages via Package Manager (manifest.json + UPM)
 - [x] **EDIT-09**: Claude can create and manage custom Tags, Sorting Layers, and Physics Layers
-- [ ] **EDIT-10**: Claude can perform asset operations (move, rename, delete, duplicate, create folders) while preserving .meta/GUID integrity
+- [x] **EDIT-10**: Claude can perform asset operations (move, rename, delete, duplicate, create folders) while preserving .meta/GUID integrity
 - [x] **EDIT-11**: Claude can configure Time settings (fixed timestep), Graphics settings (render pipeline asset), and Editor preferences
-- [ ] **EDIT-12**: Claude can configure FBX ModelImporter settings on import (scale, mesh compression, normals, animation compression, rig)
-- [ ] **EDIT-13**: Claude can configure TextureImporter settings (max size, compression per platform, sRGB/linear, sprite mode, mip maps)
-- [ ] **EDIT-14**: Claude can remap materials on FBX import to existing project materials or auto-generate from imported textures
-- [ ] **EDIT-15**: Claude can create and manage Assembly Definition files (.asmdef) for compile time optimization
+- [x] **EDIT-12**: Claude can configure FBX ModelImporter settings on import (scale, mesh compression, normals, animation compression, rig)
+- [x] **EDIT-13**: Claude can configure TextureImporter settings (max size, compression per platform, sRGB/linear, sprite mode, mip maps)
+- [x] **EDIT-14**: Claude can remap materials on FBX import to existing project materials or auto-generate from imported textures
+- [x] **EDIT-15**: Claude can create and manage Assembly Definition files (.asmdef) for compile time optimization
 
 ### C# Programming
 
@@ -104,8 +104,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Import Pipeline
 
-- [ ] **IMP-01**: Claude can manage .meta files and GUIDs when moving/renaming assets (AssetDatabase.MoveAsset)
-- [ ] **IMP-02**: Claude can configure material remapping on FBX import (auto-generate from textures or remap to existing)
+- [x] **IMP-01**: Claude can manage .meta files and GUIDs when moving/renaming assets (AssetDatabase.MoveAsset)
+- [x] **IMP-02**: Claude can configure material remapping on FBX import (auto-generate from textures or remap to existing)
 - [ ] **IMP-03**: Claude can set up Git LFS rules, .gitignore, .gitattributes for Unity projects
 - [ ] **IMP-04**: Claude can configure normal map baking workflow (high-to-low with cage generation in one step)
 
@@ -148,7 +148,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 ### Asset Pipeline Advanced
 
 - [ ] **PIPE-08**: Claude can generate AssetPostprocessor scripts for custom import pipelines
-- [ ] **PIPE-09**: Claude can generate Unity Presets for reusable import/component configuration templates
+- [x] **PIPE-09**: Claude can generate Unity Presets for reusable import/component configuration templates
 - [ ] **PIPE-10**: Claude can configure TextMeshPro (font asset creation, TMP component setup, rich text, font fallbacks)
 
 ### Video & Media
@@ -246,14 +246,14 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | EDIT-07 | Phase 9 | Complete |
 | EDIT-08 | Phase 9 | Complete |
 | EDIT-09 | Phase 9 | Complete |
-| EDIT-10 | Phase 9 | Pending |
+| EDIT-10 | Phase 9 | Complete |
 | EDIT-11 | Phase 9 | Complete |
-| EDIT-12 | Phase 9 | Pending |
-| EDIT-13 | Phase 9 | Pending |
-| EDIT-14 | Phase 9 | Pending |
-| EDIT-15 | Phase 9 | Pending |
-| IMP-01 | Phase 9 | Pending |
-| IMP-02 | Phase 9 | Pending |
+| EDIT-12 | Phase 9 | Complete |
+| EDIT-13 | Phase 9 | Complete |
+| EDIT-14 | Phase 9 | Complete |
+| EDIT-15 | Phase 9 | Complete |
+| IMP-01 | Phase 9 | Complete |
+| IMP-02 | Phase 9 | Complete |
 | CODE-01 | Phase 10 | Pending |
 | CODE-02 | Phase 10 | Pending |
 | CODE-03 | Phase 10 | Pending |
@@ -325,7 +325,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | ACC-01 | Phase 15 | Pending |
 | ACC-02 | Phase 17 | Pending |
 | PIPE-08 | Phase 11 | Pending |
-| PIPE-09 | Phase 9 | Pending |
+| PIPE-09 | Phase 9 | Complete |
 | PIPE-10 | Phase 15 | Pending |
 | MEDIA-01 | Phase 14 | Pending |
 | MEDIA-02 | Phase 12 | Pending |
