@@ -7,18 +7,28 @@ go to ``Assets/Editor/Generated/World/`` and register under the
 ``Assets/Scripts/Runtime/WorldSystems/``.
 
 Exports:
-    generate_scene_creation_script       -- SCNE-01: scene creation + async loading
-    generate_scene_transition_script     -- SCNE-02: scene transition system (returns tuple)
-    generate_probe_setup_script          -- SCNE-03: reflection probes + light probes
-    generate_occlusion_setup_script      -- SCNE-04: occlusion culling setup
-    generate_environment_setup_script    -- SCNE-05: HDR skybox + GI
-    generate_terrain_detail_script       -- SCNE-06: terrain detail painting
-    generate_tilemap_setup_script        -- TWO-01: tilemap + rule tiles
-    generate_2d_physics_script           -- TWO-02: 2D physics configuration
-    generate_time_of_day_preset_script   -- WORLD-08: 8 time-of-day presets
+    generate_scene_creation_script          -- SCNE-01: scene creation + async loading
+    generate_scene_transition_script        -- SCNE-02: scene transition system (returns tuple)
+    generate_probe_setup_script             -- SCNE-03: reflection probes + light probes
+    generate_occlusion_setup_script         -- SCNE-04: occlusion culling setup
+    generate_environment_setup_script       -- SCNE-05: HDR skybox + GI
+    generate_terrain_detail_script          -- SCNE-06: terrain detail painting
+    generate_tilemap_setup_script           -- TWO-01: tilemap + rule tiles
+    generate_2d_physics_script              -- TWO-02: 2D physics configuration
+    generate_time_of_day_preset_script      -- WORLD-08: 8 time-of-day presets
+    generate_fast_travel_script             -- RPG-02: waypoint discovery + teleport
+    generate_puzzle_mechanics_script        -- RPG-04: 4 puzzle subclasses
+    generate_trap_system_script             -- RPG-06: 5 trap subclasses
+    generate_spatial_loot_script            -- RPG-07: room-based loot placement
+    generate_weather_system_script          -- RPG-09: weather state machine + particle lerp
+    generate_day_night_cycle_script         -- RPG-10: continuous time + lighting presets
+    generate_npc_placement_script           -- RPG-11: SO data + placement manager
+    generate_dungeon_lighting_script        -- RPG-12: torch sconces + atmospheric fog
+    generate_terrain_building_blend_script  -- RPG-13: vertex color + decal + depression
 
 Note: ``generate_scene_transition_script`` returns a **tuple** of two strings
-(editor_cs, runtime_cs).  All other generators return a single string.
+(editor_cs, runtime_cs).  RPG generators return tuples (editor_cs, runtime_cs)
+or triples (so_cs, runtime_cs, editor_cs) for NPC placement.
 """
 
 from __future__ import annotations
@@ -43,6 +53,43 @@ def _sanitize_cs_string(value: str) -> str:
 def _sanitize_cs_identifier(value: str) -> str:
     """Sanitize a value for use as a C# identifier."""
     return re.sub(r"[^a-zA-Z0-9_]", "", value)
+
+
+# ---------------------------------------------------------------------------
+# C# reserved words (needed by RPG generators for _safe_namespace)
+# ---------------------------------------------------------------------------
+
+_CS_RESERVED = frozenset({
+    "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char",
+    "checked", "class", "const", "continue", "decimal", "default", "delegate",
+    "do", "double", "else", "enum", "event", "explicit", "extern", "false",
+    "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit",
+    "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
+    "new", "null", "object", "operator", "out", "override", "params", "private",
+    "protected", "public", "readonly", "ref", "return", "sbyte", "sealed",
+    "short", "sizeof", "stackalloc", "static", "string", "struct", "switch",
+    "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
+    "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+})
+
+
+def _safe_namespace(ns: str) -> str:
+    """Sanitize a C# namespace to prevent code injection."""
+    sanitized = re.sub(r"[^a-zA-Z0-9_.]", "", ns)
+    sanitized = re.sub(r"\.{2,}", ".", sanitized).strip(".")
+    if not sanitized:
+        return "Generated"
+    segments = sanitized.split(".")
+    fixed: list[str] = []
+    for seg in segments:
+        if not seg:
+            continue
+        if seg[0].isdigit():
+            seg = f"_{seg}"
+        if seg in _CS_RESERVED:
+            seg = f"@{seg}"
+        fixed.append(seg)
+    return ".".join(fixed) or "Generated"
 
 
 # ---------------------------------------------------------------------------
@@ -1168,6 +1215,1420 @@ def generate_time_of_day_preset_script(
     return "\n".join(lines)
 
 
+# ===========================================================================
+# RPG World System Generators (RPG-02, 04, 06, 07, 09, 10, 11, 12, 13)
+# ===========================================================================
+
+
+# ---------------------------------------------------------------------------
+# RPG-02: Fast travel / waypoint system
+# ---------------------------------------------------------------------------
+
+
+def generate_fast_travel_script(
+    waypoint_prefab_path: str = "Prefabs/Waypoint",
+    teleport_fade_duration: float = 0.5,
+    save_key: str = "discoveredWaypoints",
+    namespace: str = "VeilBreakers.WorldSystems",
+) -> tuple[str, str]:
+    """Generate C# for a fast travel waypoint system.
+
+    Returns:
+        (editor_cs, runtime_cs) tuple.
+    """
+    ns = _safe_namespace(namespace)
+    safe_key = _sanitize_cs_string(save_key)
+
+    # ----- Runtime: VB_WaypointManager -----
+    rt: list[str] = []
+    rt.append("using System;")
+    rt.append("using System.Collections;")
+    rt.append("using System.Collections.Generic;")
+    rt.append("using UnityEngine;")
+    rt.append("using UnityEngine.Events;")
+    rt.append("using UnityEngine.SceneManagement;")
+    rt.append("")
+    rt.append("namespace " + ns)
+    rt.append("{")
+    rt.append("    [Serializable]")
+    rt.append("    public class WaypointSaveData")
+    rt.append("    {")
+    rt.append("        public List<string> discoveredWaypoints = new List<string>();")
+    rt.append("    }")
+    rt.append("")
+    rt.append("    /// <summary>")
+    rt.append("    /// Fast travel waypoint manager. Discovers waypoints on trigger,")
+    rt.append("    /// teleports player with loading transition, persists via JsonUtility.")
+    rt.append("    /// Generated by VeilBreakers MCP toolkit.")
+    rt.append("    /// </summary>")
+    rt.append("    public class VB_WaypointManager : MonoBehaviour")
+    rt.append("    {")
+    rt.append("        public static VB_WaypointManager Instance { get; private set; }")
+    rt.append("")
+    rt.append("        [Header(\"Waypoint Settings\")]")
+    rt.append("        [SerializeField] private float _teleportFadeDuration = " + str(teleport_fade_duration) + "f;")
+    rt.append("        [SerializeField] private string _saveKey = \"" + safe_key + "\";")
+    rt.append("")
+    rt.append("        [Header(\"Events\")]")
+    rt.append("        public UnityEvent<string> OnWaypointDiscovered;")
+    rt.append("        public UnityEvent<string> OnTeleportStarted;")
+    rt.append("        public UnityEvent<string> OnTeleportCompleted;")
+    rt.append("")
+    rt.append("        private List<string> _discoveredWaypoints = new List<string>();")
+    rt.append("        private bool _isTeleporting;")
+    rt.append("")
+    rt.append("        public IReadOnlyList<string> DiscoveredWaypoints => _discoveredWaypoints;")
+    rt.append("")
+    rt.append("        private void Awake()")
+    rt.append("        {")
+    rt.append("            if (Instance != null) { Destroy(gameObject); return; }")
+    rt.append("            Instance = this;")
+    rt.append("            DontDestroyOnLoad(gameObject);")
+    rt.append("            LoadDiscoveredWaypoints();")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        private void OnTriggerEnter(Collider other)")
+    rt.append("        {")
+    rt.append("            if (!other.CompareTag(\"Player\")) return;")
+    rt.append("            string waypointId = gameObject.name;")
+    rt.append("            if (!_discoveredWaypoints.Contains(waypointId))")
+    rt.append("            {")
+    rt.append("                _discoveredWaypoints.Add(waypointId);")
+    rt.append("                SaveDiscoveredWaypoints();")
+    rt.append("                OnWaypointDiscovered?.Invoke(waypointId);")
+    rt.append("            }")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        public void DiscoverWaypoint(string waypointId)")
+    rt.append("        {")
+    rt.append("            if (string.IsNullOrEmpty(waypointId)) return;")
+    rt.append("            if (!_discoveredWaypoints.Contains(waypointId))")
+    rt.append("            {")
+    rt.append("                _discoveredWaypoints.Add(waypointId);")
+    rt.append("                SaveDiscoveredWaypoints();")
+    rt.append("                OnWaypointDiscovered?.Invoke(waypointId);")
+    rt.append("            }")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        public bool IsDiscovered(string waypointId)")
+    rt.append("        {")
+    rt.append("            return _discoveredWaypoints.Contains(waypointId);")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        public void TeleportTo(string waypointId, string sceneName = null, Vector3 position = default)")
+    rt.append("        {")
+    rt.append("            if (_isTeleporting) return;")
+    rt.append("            if (!_discoveredWaypoints.Contains(waypointId)) return;")
+    rt.append("            StartCoroutine(TeleportRoutine(waypointId, sceneName, position));")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        private IEnumerator TeleportRoutine(string waypointId, string sceneName, Vector3 position)")
+    rt.append("        {")
+    rt.append("            _isTeleporting = true;")
+    rt.append("            OnTeleportStarted?.Invoke(waypointId);")
+    rt.append("            yield return new WaitForSeconds(_teleportFadeDuration);")
+    rt.append("")
+    rt.append("            if (!string.IsNullOrEmpty(sceneName))")
+    rt.append("            {")
+    rt.append("                AsyncOperation op = SceneManager.LoadSceneAsync(sceneName);")
+    rt.append("                op.allowSceneActivation = false;")
+    rt.append("                while (op.progress < 0.9f) yield return null;")
+    rt.append("                op.allowSceneActivation = true;")
+    rt.append("                yield return op;")
+    rt.append("            }")
+    rt.append("")
+    rt.append("            GameObject player = GameObject.FindWithTag(\"Player\");")
+    rt.append("            if (player != null && position != default)")
+    rt.append("                player.transform.position = position;")
+    rt.append("")
+    rt.append("            yield return new WaitForSeconds(_teleportFadeDuration);")
+    rt.append("            _isTeleporting = false;")
+    rt.append("            OnTeleportCompleted?.Invoke(waypointId);")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        private void SaveDiscoveredWaypoints()")
+    rt.append("        {")
+    rt.append("            WaypointSaveData data = new WaypointSaveData();")
+    rt.append("            data.discoveredWaypoints = new List<string>(_discoveredWaypoints);")
+    rt.append("            string json = JsonUtility.ToJson(data);")
+    rt.append("            PlayerPrefs.SetString(_saveKey, json);")
+    rt.append("            PlayerPrefs.Save();")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        private void LoadDiscoveredWaypoints()")
+    rt.append("        {")
+    rt.append("            string json = PlayerPrefs.GetString(_saveKey, \"\");")
+    rt.append("            if (!string.IsNullOrEmpty(json))")
+    rt.append("            {")
+    rt.append("                WaypointSaveData data = JsonUtility.FromJson<WaypointSaveData>(json);")
+    rt.append("                if (data != null && data.discoveredWaypoints != null)")
+    rt.append("                    _discoveredWaypoints = data.discoveredWaypoints;")
+    rt.append("            }")
+    rt.append("        }")
+    rt.append("    }")
+    rt.append("}")
+    runtime_cs = "\n".join(rt)
+
+    # ----- Editor -----
+    ed: list[str] = []
+    ed.append("using UnityEngine;")
+    ed.append("using UnityEditor;")
+    ed.append("")
+    ed.append("public static class VeilBreakers_FastTravelSetup")
+    ed.append("{")
+    ed.append("    [MenuItem(\"VeilBreakers/World/Setup Fast Travel\")]")
+    ed.append("    public static void Execute()")
+    ed.append("    {")
+    ed.append("        GameObject go = new GameObject(\"VB_WaypointManager\");")
+    ed.append("        go.AddComponent<" + ns + ".VB_WaypointManager>();")
+    ed.append("        Selection.activeGameObject = go;")
+    ed.append("        Debug.Log(\"[VeilBreakers] Fast travel waypoint manager created.\");")
+    ed.append("    }")
+    ed.append("}")
+    editor_cs = "\n".join(ed)
+
+    return (editor_cs, runtime_cs)
+
+
+# ---------------------------------------------------------------------------
+# RPG-04: Environmental puzzle mechanics
+# ---------------------------------------------------------------------------
+
+
+def generate_puzzle_mechanics_script(
+    puzzle_types: Optional[list[str]] = None,
+    namespace: str = "VeilBreakers.WorldSystems",
+) -> tuple[str, str]:
+    """Generate C# for environmental puzzle mechanics.
+
+    Returns:
+        (editor_cs, runtime_cs) tuple.
+    """
+    if puzzle_types is None:
+        puzzle_types = ["lever_sequence", "pressure_plate", "key_lock", "light_beam"]
+    ns = _safe_namespace(namespace)
+
+    rt: list[str] = []
+    rt.append("using System;")
+    rt.append("using System.Collections.Generic;")
+    rt.append("using UnityEngine;")
+    rt.append("using UnityEngine.Events;")
+    rt.append("")
+    rt.append("namespace " + ns)
+    rt.append("{")
+    # PuzzleMechanic abstract base
+    rt.append("    /// <summary>")
+    rt.append("    /// Abstract base class for all environmental puzzle mechanics.")
+    rt.append("    /// Generated by VeilBreakers MCP toolkit.")
+    rt.append("    /// </summary>")
+    rt.append("    public abstract class PuzzleMechanic : MonoBehaviour")
+    rt.append("    {")
+    rt.append("        [Header(\"Puzzle Base\")]")
+    rt.append("        [SerializeField] protected string _puzzleId;")
+    rt.append("        [SerializeField] protected bool _isReusable;")
+    rt.append("        public UnityEvent OnSolved;")
+    rt.append("        public UnityEvent OnReset;")
+    rt.append("        public abstract bool IsSolved { get; }")
+    rt.append("        public abstract void ResetPuzzle();")
+    rt.append("        protected void NotifySolved() { OnSolved?.Invoke(); }")
+    rt.append("    }")
+    rt.append("")
+
+    if "lever_sequence" in puzzle_types:
+        rt.append("    public class LeverSequencePuzzle : PuzzleMechanic")
+        rt.append("    {")
+        rt.append("        [SerializeField] private int[] _correctSequence;")
+        rt.append("        private List<int> _currentSequence = new List<int>();")
+        rt.append("        private bool _solved;")
+        rt.append("        public override bool IsSolved => _solved;")
+        rt.append("        public void ActivateLever(int leverIndex)")
+        rt.append("        {")
+        rt.append("            if (_solved) return;")
+        rt.append("            _currentSequence.Add(leverIndex);")
+        rt.append("            if (_currentSequence.Count == _correctSequence.Length)")
+        rt.append("            {")
+        rt.append("                bool correct = true;")
+        rt.append("                for (int i = 0; i < _correctSequence.Length; i++)")
+        rt.append("                    if (_currentSequence[i] != _correctSequence[i]) { correct = false; break; }")
+        rt.append("                if (correct) { _solved = true; NotifySolved(); }")
+        rt.append("                else _currentSequence.Clear();")
+        rt.append("            }")
+        rt.append("        }")
+        rt.append("        public override void ResetPuzzle() { _solved = false; _currentSequence.Clear(); OnReset?.Invoke(); }")
+        rt.append("    }")
+        rt.append("")
+
+    if "pressure_plate" in puzzle_types:
+        rt.append("    public class PressurePlatePuzzle : PuzzleMechanic")
+        rt.append("    {")
+        rt.append("        [SerializeField] private float _requiredWeight = 50f;")
+        rt.append("        [SerializeField] private float _tolerance = 5f;")
+        rt.append("        private float _currentWeight;")
+        rt.append("        private bool _solved;")
+        rt.append("        public override bool IsSolved => _solved;")
+        rt.append("        private void OnTriggerEnter(Collider other)")
+        rt.append("        {")
+        rt.append("            Rigidbody rb = other.attachedRigidbody;")
+        rt.append("            if (rb != null) _currentWeight += rb.mass;")
+        rt.append("            CheckSolved();")
+        rt.append("        }")
+        rt.append("        private void OnTriggerExit(Collider other)")
+        rt.append("        {")
+        rt.append("            Rigidbody rb = other.attachedRigidbody;")
+        rt.append("            if (rb != null) _currentWeight -= rb.mass;")
+        rt.append("        }")
+        rt.append("        private void CheckSolved()")
+        rt.append("        {")
+        rt.append("            if (_solved) return;")
+        rt.append("            if (Mathf.Abs(_currentWeight - _requiredWeight) <= _tolerance)")
+        rt.append("            { _solved = true; NotifySolved(); }")
+        rt.append("        }")
+        rt.append("        public override void ResetPuzzle() { _solved = false; _currentWeight = 0f; OnReset?.Invoke(); }")
+        rt.append("    }")
+        rt.append("")
+
+    if "key_lock" in puzzle_types:
+        rt.append("    public class KeyLockPuzzle : PuzzleMechanic")
+        rt.append("    {")
+        rt.append("        [SerializeField] private string _requiredKeyId;")
+        rt.append("        private bool _solved;")
+        rt.append("        public override bool IsSolved => _solved;")
+        rt.append("        public string RequiredKeyId => _requiredKeyId;")
+        rt.append("        public bool TryUnlock(string keyId)")
+        rt.append("        {")
+        rt.append("            if (_solved) return true;")
+        rt.append("            if (keyId == _requiredKeyId) { _solved = true; NotifySolved(); return true; }")
+        rt.append("            return false;")
+        rt.append("        }")
+        rt.append("        public override void ResetPuzzle() { _solved = false; OnReset?.Invoke(); }")
+        rt.append("    }")
+        rt.append("")
+
+    if "light_beam" in puzzle_types:
+        rt.append("    public class LightBeamPuzzle : PuzzleMechanic")
+        rt.append("    {")
+        rt.append("        [SerializeField] private Transform _lightSource;")
+        rt.append("        [SerializeField] private Transform _target;")
+        rt.append("        [SerializeField] private float _alignmentThreshold = 5f;")
+        rt.append("        [SerializeField] private LineRenderer _beamRenderer;")
+        rt.append("        private bool _solved;")
+        rt.append("        public override bool IsSolved => _solved;")
+        rt.append("        private void Update()")
+        rt.append("        {")
+        rt.append("            if (_solved || _lightSource == null || _target == null) return;")
+        rt.append("            Vector3 dirToTarget = (_target.position - _lightSource.position).normalized;")
+        rt.append("            float angle = Vector3.Angle(_lightSource.forward, dirToTarget);")
+        rt.append("            if (_beamRenderer != null)")
+        rt.append("            {")
+        rt.append("                _beamRenderer.SetPosition(0, _lightSource.position);")
+        rt.append("                _beamRenderer.SetPosition(1, _lightSource.position + _lightSource.forward * 20f);")
+        rt.append("            }")
+        rt.append("            if (angle <= _alignmentThreshold) { _solved = true; NotifySolved(); }")
+        rt.append("        }")
+        rt.append("        public override void ResetPuzzle() { _solved = false; OnReset?.Invoke(); }")
+        rt.append("    }")
+        rt.append("")
+
+    rt.append("}")
+    runtime_cs = "\n".join(rt)
+
+    ed: list[str] = []
+    ed.append("using UnityEngine;")
+    ed.append("using UnityEditor;")
+    ed.append("")
+    ed.append("public static class VeilBreakers_PuzzleSetup")
+    ed.append("{")
+    ed.append("    [MenuItem(\"VeilBreakers/World/Create Puzzle\")]")
+    ed.append("    public static void Execute()")
+    ed.append("    {")
+    ed.append("        GameObject go = new GameObject(\"VB_Puzzle\");")
+    ed.append("        go.AddComponent<" + ns + ".LeverSequencePuzzle>();")
+    ed.append("        Selection.activeGameObject = go;")
+    ed.append("        Debug.Log(\"[VeilBreakers] Puzzle mechanic created.\");")
+    ed.append("    }")
+    ed.append("}")
+    editor_cs = "\n".join(ed)
+
+    return (editor_cs, runtime_cs)
+
+
+# ---------------------------------------------------------------------------
+# RPG-06: Dungeon trap system
+# ---------------------------------------------------------------------------
+
+
+def generate_trap_system_script(
+    trap_types: Optional[list[str]] = None,
+    base_damage: float = 25.0,
+    cooldown: float = 3.0,
+    namespace: str = "VeilBreakers.WorldSystems",
+) -> tuple[str, str]:
+    """Generate C# for dungeon trap mechanics.
+
+    Returns:
+        (editor_cs, runtime_cs) tuple.
+    """
+    if trap_types is None:
+        trap_types = ["pressure_plate", "dart_wall", "spike_pit", "poison_gas", "swinging_blade"]
+    ns = _safe_namespace(namespace)
+
+    rt: list[str] = []
+    rt.append("using System;")
+    rt.append("using System.Collections;")
+    rt.append("using UnityEngine;")
+    rt.append("using UnityEngine.Events;")
+    rt.append("")
+    rt.append("namespace " + ns)
+    rt.append("{")
+    # TrapBase abstract
+    rt.append("    /// <summary>")
+    rt.append("    /// Abstract base class for all dungeon traps.")
+    rt.append("    /// Generated by VeilBreakers MCP toolkit.")
+    rt.append("    /// </summary>")
+    rt.append("    public abstract class TrapBase : MonoBehaviour")
+    rt.append("    {")
+    rt.append("        [Header(\"Trap Base\")]")
+    rt.append("        [SerializeField] protected float _damage = " + str(base_damage) + "f;")
+    rt.append("        [SerializeField] protected float _cooldown = " + str(cooldown) + "f;")
+    rt.append("        [SerializeField] protected bool _isArmed = true;")
+    rt.append("        public UnityEvent OnActivated;")
+    rt.append("        public UnityEvent OnReset;")
+    rt.append("        protected bool _onCooldown;")
+    rt.append("        public float Damage => _damage;")
+    rt.append("        public float Cooldown => _cooldown;")
+    rt.append("        public bool IsArmed => _isArmed;")
+    rt.append("        public abstract void Activate();")
+    rt.append("        public abstract void Reset();")
+    rt.append("        protected void ApplyDamage(GameObject target)")
+    rt.append("        {")
+    rt.append("            Debug.Log($\"[Trap] {name} dealt {_damage} damage to {target.name}\");")
+    rt.append("        }")
+    rt.append("        protected IEnumerator CooldownRoutine()")
+    rt.append("        {")
+    rt.append("            _onCooldown = true;")
+    rt.append("            yield return new WaitForSeconds(_cooldown);")
+    rt.append("            _onCooldown = false;")
+    rt.append("            _isArmed = true;")
+    rt.append("        }")
+    rt.append("    }")
+    rt.append("")
+
+    if "pressure_plate" in trap_types:
+        rt.append("    public class PressurePlateTrap : TrapBase")
+        rt.append("    {")
+        rt.append("        private void OnTriggerEnter(Collider other)")
+        rt.append("        {")
+        rt.append("            if (!_isArmed || _onCooldown) return;")
+        rt.append("            if (other.CompareTag(\"Player\")) { Activate(); ApplyDamage(other.gameObject); }")
+        rt.append("        }")
+        rt.append("        public override void Activate() { _isArmed = false; OnActivated?.Invoke(); StartCoroutine(CooldownRoutine()); }")
+        rt.append("        public override void Reset() { _isArmed = true; _onCooldown = false; OnReset?.Invoke(); }")
+        rt.append("    }")
+        rt.append("")
+
+    if "dart_wall" in trap_types:
+        rt.append("    public class DartWallTrap : TrapBase")
+        rt.append("    {")
+        rt.append("        [SerializeField] private GameObject _dartPrefab;")
+        rt.append("        [SerializeField] private Transform _spawnPoint;")
+        rt.append("        [SerializeField] private float _dartSpeed = 15f;")
+        rt.append("        public override void Activate()")
+        rt.append("        {")
+        rt.append("            if (!_isArmed || _onCooldown) return;")
+        rt.append("            _isArmed = false;")
+        rt.append("            if (_dartPrefab != null && _spawnPoint != null)")
+        rt.append("            {")
+        rt.append("                GameObject dart = Instantiate(_dartPrefab, _spawnPoint.position, _spawnPoint.rotation);")
+        rt.append("                Rigidbody rb = dart.GetComponent<Rigidbody>();")
+        rt.append("                if (rb != null) rb.velocity = _spawnPoint.forward * _dartSpeed;")
+        rt.append("                Destroy(dart, 5f);")
+        rt.append("            }")
+        rt.append("            OnActivated?.Invoke();")
+        rt.append("            StartCoroutine(CooldownRoutine());")
+        rt.append("        }")
+        rt.append("        public override void Reset() { _isArmed = true; _onCooldown = false; OnReset?.Invoke(); }")
+        rt.append("    }")
+        rt.append("")
+
+    if "spike_pit" in trap_types:
+        rt.append("    public class SpikePitTrap : TrapBase")
+        rt.append("    {")
+        rt.append("        [SerializeField] private Transform _coverTransform;")
+        rt.append("        [SerializeField] private float _fallDepth = 3f;")
+        rt.append("        private void OnTriggerEnter(Collider other)")
+        rt.append("        {")
+        rt.append("            if (!_isArmed || _onCooldown) return;")
+        rt.append("            if (other.CompareTag(\"Player\")) { Activate(); ApplyDamage(other.gameObject); }")
+        rt.append("        }")
+        rt.append("        public override void Activate()")
+        rt.append("        {")
+        rt.append("            _isArmed = false;")
+        rt.append("            if (_coverTransform != null) _coverTransform.gameObject.SetActive(false);")
+        rt.append("            OnActivated?.Invoke();")
+        rt.append("            StartCoroutine(CooldownRoutine());")
+        rt.append("        }")
+        rt.append("        public override void Reset()")
+        rt.append("        {")
+        rt.append("            _isArmed = true; _onCooldown = false;")
+        rt.append("            if (_coverTransform != null) _coverTransform.gameObject.SetActive(true);")
+        rt.append("            OnReset?.Invoke();")
+        rt.append("        }")
+        rt.append("    }")
+        rt.append("")
+
+    if "poison_gas" in trap_types:
+        rt.append("    public class PoisonGasTrap : TrapBase")
+        rt.append("    {")
+        rt.append("        [SerializeField] private ParticleSystem _gasParticles;")
+        rt.append("        [SerializeField] private float _gasDuration = 5f;")
+        rt.append("        [SerializeField] private float _tickInterval = 0.5f;")
+        rt.append("        [SerializeField] private float _damageRadius = 3f;")
+        rt.append("        public override void Activate()")
+        rt.append("        {")
+        rt.append("            if (!_isArmed || _onCooldown) return;")
+        rt.append("            _isArmed = false;")
+        rt.append("            if (_gasParticles != null) _gasParticles.Play();")
+        rt.append("            StartCoroutine(GasDamageRoutine());")
+        rt.append("            OnActivated?.Invoke();")
+        rt.append("        }")
+        rt.append("        private IEnumerator GasDamageRoutine()")
+        rt.append("        {")
+        rt.append("            float elapsed = 0f;")
+        rt.append("            while (elapsed < _gasDuration)")
+        rt.append("            {")
+        rt.append("                Collider[] hits = Physics.OverlapSphere(transform.position, _damageRadius);")
+        rt.append("                foreach (Collider hit in hits)")
+        rt.append("                    if (hit.CompareTag(\"Player\")) ApplyDamage(hit.gameObject);")
+        rt.append("                yield return new WaitForSeconds(_tickInterval);")
+        rt.append("                elapsed += _tickInterval;")
+        rt.append("            }")
+        rt.append("            if (_gasParticles != null) _gasParticles.Stop();")
+        rt.append("            StartCoroutine(CooldownRoutine());")
+        rt.append("        }")
+        rt.append("        public override void Reset() { _isArmed = true; _onCooldown = false; if (_gasParticles != null) _gasParticles.Stop(); OnReset?.Invoke(); }")
+        rt.append("    }")
+        rt.append("")
+
+    if "swinging_blade" in trap_types:
+        rt.append("    public class SwingingBladeTrap : TrapBase")
+        rt.append("    {")
+        rt.append("        [SerializeField] private float _swingAngle = 60f;")
+        rt.append("        [SerializeField] private float _swingSpeed = 2f;")
+        rt.append("        [SerializeField] private Transform _bladePivot;")
+        rt.append("        private bool _isSwinging;")
+        rt.append("        public override void Activate() { _isSwinging = true; OnActivated?.Invoke(); }")
+        rt.append("        private void Update()")
+        rt.append("        {")
+        rt.append("            if (!_isSwinging || _bladePivot == null) return;")
+        rt.append("            float angle = _swingAngle * Mathf.Sin(Time.time * _swingSpeed);")
+        rt.append("            _bladePivot.localRotation = Quaternion.Euler(0f, 0f, angle);")
+        rt.append("        }")
+        rt.append("        private void OnTriggerEnter(Collider other)")
+        rt.append("        {")
+        rt.append("            if (!_isSwinging) return;")
+        rt.append("            if (other.CompareTag(\"Player\")) ApplyDamage(other.gameObject);")
+        rt.append("        }")
+        rt.append("        public override void Reset()")
+        rt.append("        {")
+        rt.append("            _isSwinging = false; _isArmed = true; _onCooldown = false;")
+        rt.append("            if (_bladePivot != null) _bladePivot.localRotation = Quaternion.identity;")
+        rt.append("            OnReset?.Invoke();")
+        rt.append("        }")
+        rt.append("    }")
+        rt.append("")
+
+    rt.append("}")
+    runtime_cs = "\n".join(rt)
+
+    ed: list[str] = []
+    ed.append("using UnityEngine;")
+    ed.append("using UnityEditor;")
+    ed.append("")
+    ed.append("public static class VeilBreakers_TrapSetup")
+    ed.append("{")
+    ed.append("    [MenuItem(\"VeilBreakers/World/Create Trap\")]")
+    ed.append("    public static void Execute()")
+    ed.append("    {")
+    ed.append("        GameObject go = new GameObject(\"VB_Trap\");")
+    ed.append("        go.AddComponent<" + ns + ".PressurePlateTrap>();")
+    ed.append("        BoxCollider col = go.AddComponent<BoxCollider>();")
+    ed.append("        col.isTrigger = true;")
+    ed.append("        Selection.activeGameObject = go;")
+    ed.append("        Debug.Log(\"[VeilBreakers] Trap created.\");")
+    ed.append("    }")
+    ed.append("}")
+    editor_cs = "\n".join(ed)
+
+    return (editor_cs, runtime_cs)
+
+
+# ---------------------------------------------------------------------------
+# RPG-07: Spatial loot placement
+# ---------------------------------------------------------------------------
+
+
+def generate_spatial_loot_script(
+    chest_prefab_path: str = "Prefabs/TreasureChest",
+    loot_table_so_path: str = "Data/LootTables",
+    room_loot_density: float = 0.3,
+    namespace: str = "VeilBreakers.WorldSystems",
+) -> tuple[str, str]:
+    """Generate C# for spatial loot placement system.
+
+    Returns:
+        (editor_cs, runtime_cs) tuple.
+    """
+    ns = _safe_namespace(namespace)
+
+    rt: list[str] = []
+    rt.append("using System;")
+    rt.append("using System.Collections.Generic;")
+    rt.append("using UnityEngine;")
+    rt.append("")
+    rt.append("namespace " + ns)
+    rt.append("{")
+    rt.append("    [Serializable]")
+    rt.append("    public class LootEntry")
+    rt.append("    {")
+    rt.append("        public string itemId;")
+    rt.append("        public float weight = 1f;")
+    rt.append("        public int minCount = 1;")
+    rt.append("        public int maxCount = 1;")
+    rt.append("    }")
+    rt.append("")
+    rt.append("    [CreateAssetMenu(fileName = \"NewRoomLootTable\", menuName = \"VeilBreakers/Loot/Room Loot Table\")]")
+    rt.append("    public class VB_RoomLootTable : ScriptableObject")
+    rt.append("    {")
+    rt.append("        public string roomType;")
+    rt.append("        public LootEntry[] entries;")
+    rt.append("        public int minDrops = 1;")
+    rt.append("        public int maxDrops = 3;")
+    rt.append("    }")
+    rt.append("")
+    rt.append("    /// <summary>")
+    rt.append("    /// Manages treasure chest positions and room-based loot distribution.")
+    rt.append("    /// Generated by VeilBreakers MCP toolkit.")
+    rt.append("    /// </summary>")
+    rt.append("    public class VB_SpatialLootManager : MonoBehaviour")
+    rt.append("    {")
+    rt.append("        [Header(\"Chest Configuration\")]")
+    rt.append("        [SerializeField] private GameObject _chestPrefab;")
+    rt.append("        [SerializeField] private float _roomLootDensity = " + str(room_loot_density) + "f;")
+    rt.append("        [Header(\"Loot Tables\")]")
+    rt.append("        [SerializeField] private VB_RoomLootTable[] _lootTables;")
+    rt.append("        [Header(\"Treasure Rooms\")]")
+    rt.append("        [SerializeField] private string _treasureRoomTag = \"TreasureRoom\";")
+    rt.append("        private List<GameObject> _spawnedChests = new List<GameObject>();")
+    rt.append("")
+    rt.append("        private void Start() { SpawnChestsAtMarkers(); }")
+    rt.append("")
+    rt.append("        public void SpawnChestsAtMarkers()")
+    rt.append("        {")
+    rt.append("            foreach (Transform child in transform)")
+    rt.append("            {")
+    rt.append("                if (_chestPrefab == null) continue;")
+    rt.append("                GameObject chest = Instantiate(_chestPrefab, child.position, child.rotation);")
+    rt.append("                _spawnedChests.Add(chest);")
+    rt.append("            }")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        public LootEntry SelectLoot(string roomType)")
+    rt.append("        {")
+    rt.append("            VB_RoomLootTable table = FindTableForRoom(roomType);")
+    rt.append("            if (table == null || table.entries.Length == 0) return null;")
+    rt.append("            float totalWeight = 0f;")
+    rt.append("            foreach (LootEntry entry in table.entries) totalWeight += entry.weight;")
+    rt.append("            float roll = UnityEngine.Random.Range(0f, totalWeight);")
+    rt.append("            float cumulative = 0f;")
+    rt.append("            foreach (LootEntry entry in table.entries)")
+    rt.append("            {")
+    rt.append("                cumulative += entry.weight;")
+    rt.append("                if (roll <= cumulative) return entry;")
+    rt.append("            }")
+    rt.append("            return table.entries[table.entries.Length - 1];")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        public bool IsTreasureRoom(GameObject room)")
+    rt.append("        {")
+    rt.append("            return room.CompareTag(_treasureRoomTag) || room.name.Contains(\"Treasure\");")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        private VB_RoomLootTable FindTableForRoom(string roomType)")
+    rt.append("        {")
+    rt.append("            if (_lootTables == null) return null;")
+    rt.append("            foreach (VB_RoomLootTable table in _lootTables)")
+    rt.append("                if (table.roomType == roomType) return table;")
+    rt.append("            return null;")
+    rt.append("        }")
+    rt.append("    }")
+    rt.append("}")
+    runtime_cs = "\n".join(rt)
+
+    ed: list[str] = []
+    ed.append("using UnityEngine;")
+    ed.append("using UnityEditor;")
+    ed.append("")
+    ed.append("public static class VeilBreakers_SpatialLootSetup")
+    ed.append("{")
+    ed.append("    [MenuItem(\"VeilBreakers/World/Setup Spatial Loot\")]")
+    ed.append("    public static void Execute()")
+    ed.append("    {")
+    ed.append("        GameObject go = new GameObject(\"VB_SpatialLootManager\");")
+    ed.append("        go.AddComponent<" + ns + ".VB_SpatialLootManager>();")
+    ed.append("        for (int i = 0; i < 3; i++)")
+    ed.append("        {")
+    ed.append("            GameObject marker = new GameObject($\"ChestMarker_{i}\");")
+    ed.append("            marker.transform.SetParent(go.transform);")
+    ed.append("            marker.transform.localPosition = new Vector3(i * 3f, 0f, 0f);")
+    ed.append("        }")
+    ed.append("        Selection.activeGameObject = go;")
+    ed.append("        Debug.Log(\"[VeilBreakers] Spatial loot manager created.\");")
+    ed.append("    }")
+    ed.append("}")
+    editor_cs = "\n".join(ed)
+
+    return (editor_cs, runtime_cs)
+
+
+# ---------------------------------------------------------------------------
+# RPG-09: Weather system
+# ---------------------------------------------------------------------------
+
+
+def generate_weather_system_script(
+    weather_states: Optional[list[str]] = None,
+    transition_duration: float = 3.0,
+    default_state: str = "Clear",
+    namespace: str = "VeilBreakers.WorldSystems",
+) -> tuple[str, str]:
+    """Generate C# for a weather state machine with particle-based transitions.
+
+    Returns:
+        (editor_cs, runtime_cs) tuple.
+    """
+    if weather_states is None:
+        weather_states = ["Clear", "Rain", "Snow", "Fog", "Storm"]
+    ns = _safe_namespace(namespace)
+
+    rt: list[str] = []
+    rt.append("using System;")
+    rt.append("using System.Collections;")
+    rt.append("using UnityEngine;")
+    rt.append("using UnityEngine.Events;")
+    rt.append("")
+    rt.append("namespace " + ns)
+    rt.append("{")
+    # WeatherState enum
+    rt.append("    public enum WeatherState")
+    rt.append("    {")
+    for i, state in enumerate(weather_states):
+        safe_state = _sanitize_cs_identifier(state)
+        comma = "," if i < len(weather_states) - 1 else ""
+        rt.append("        " + safe_state + comma)
+    rt.append("    }")
+    rt.append("")
+    # WeatherManager
+    rt.append("    /// <summary>")
+    rt.append("    /// Weather manager with smooth coroutine-based transitions.")
+    rt.append("    /// Uses ParticleSystem emission rate lerp for smooth weather changes.")
+    rt.append("    /// Generated by VeilBreakers MCP toolkit.")
+    rt.append("    /// </summary>")
+    rt.append("    public class VB_WeatherManager : MonoBehaviour")
+    rt.append("    {")
+    rt.append("        public static VB_WeatherManager Instance { get; private set; }")
+    rt.append("        [Header(\"Weather Configuration\")]")
+    rt.append("        [SerializeField] private float _transitionDuration = " + str(transition_duration) + "f;")
+    rt.append("        [SerializeField] private WeatherState _defaultState = WeatherState." + _sanitize_cs_identifier(default_state) + ";")
+    rt.append("        [Header(\"Particle Systems\")]")
+    for state in weather_states:
+        safe = _sanitize_cs_identifier(state)
+        if safe != "Clear":
+            rt.append("        [SerializeField] private ParticleSystem _" + safe.lower() + "Particles;")
+    rt.append("        [Header(\"Fog Settings\")]")
+    rt.append("        [SerializeField] private float _clearFogDensity = 0.001f;")
+    rt.append("        [SerializeField] private float _foggyFogDensity = 0.05f;")
+    rt.append("        [SerializeField] private Color _clearFogColor = new Color(0.7f, 0.8f, 0.9f);")
+    rt.append("        [SerializeField] private Color _stormFogColor = new Color(0.3f, 0.3f, 0.35f);")
+    rt.append("        [Header(\"Events\")]")
+    rt.append("        public UnityEvent<WeatherState> OnWeatherChanged;")
+    rt.append("        private WeatherState _currentWeather;")
+    rt.append("        private Coroutine _transitionCoroutine;")
+    rt.append("        public WeatherState CurrentWeather => _currentWeather;")
+    rt.append("")
+    rt.append("        private void Awake()")
+    rt.append("        {")
+    rt.append("            if (Instance != null) { Destroy(gameObject); return; }")
+    rt.append("            Instance = this;")
+    rt.append("            _currentWeather = _defaultState;")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        public void TransitionTo(WeatherState target)")
+    rt.append("        {")
+    rt.append("            if (target == _currentWeather) return;")
+    rt.append("            if (_transitionCoroutine != null) StopCoroutine(_transitionCoroutine);")
+    rt.append("            _transitionCoroutine = StartCoroutine(WeatherTransitionRoutine(target));")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        private IEnumerator WeatherTransitionRoutine(WeatherState target)")
+    rt.append("        {")
+    rt.append("            float elapsed = 0f;")
+    rt.append("            ParticleSystem currentPS = GetParticleSystem(_currentWeather);")
+    rt.append("            ParticleSystem targetPS = GetParticleSystem(target);")
+    rt.append("            float currentRate = currentPS != null ? GetEmissionRate(currentPS) : 0f;")
+    rt.append("            float targetRate = targetPS != null ? GetMaxEmissionRate(target) : 0f;")
+    rt.append("            float startFog = RenderSettings.fogDensity;")
+    rt.append("            float endFog = GetFogDensity(target);")
+    rt.append("            Color startFogColor = RenderSettings.fogColor;")
+    rt.append("            Color endFogColor = GetFogColor(target);")
+    rt.append("")
+    rt.append("            if (targetPS != null && !targetPS.isPlaying)")
+    rt.append("            {")
+    rt.append("                var emission = targetPS.emission;")
+    rt.append("                emission.rateOverTime = 0f;")
+    rt.append("                targetPS.Play();")
+    rt.append("            }")
+    rt.append("")
+    rt.append("            while (elapsed < _transitionDuration)")
+    rt.append("            {")
+    rt.append("                float t = elapsed / _transitionDuration;")
+    rt.append("                if (currentPS != null) { var emission = currentPS.emission; emission.rateOverTime = Mathf.Lerp(currentRate, 0f, t); }")
+    rt.append("                if (targetPS != null) { var emission = targetPS.emission; emission.rateOverTime = Mathf.Lerp(0f, targetRate, t); }")
+    rt.append("                RenderSettings.fogDensity = Mathf.Lerp(startFog, endFog, t);")
+    rt.append("                RenderSettings.fogColor = Color.Lerp(startFogColor, endFogColor, t);")
+    rt.append("                elapsed += Time.deltaTime;")
+    rt.append("                yield return null;")
+    rt.append("            }")
+    rt.append("")
+    rt.append("            if (currentPS != null) currentPS.Stop();")
+    rt.append("            if (targetPS != null) { var emission = targetPS.emission; emission.rateOverTime = targetRate; }")
+    rt.append("            RenderSettings.fogDensity = endFog;")
+    rt.append("            RenderSettings.fogColor = endFogColor;")
+    rt.append("            _currentWeather = target;")
+    rt.append("            OnWeatherChanged?.Invoke(target);")
+    rt.append("            _transitionCoroutine = null;")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        private ParticleSystem GetParticleSystem(WeatherState state)")
+    rt.append("        {")
+    rt.append("            switch (state)")
+    rt.append("            {")
+    for state_name in weather_states:
+        safe = _sanitize_cs_identifier(state_name)
+        if safe == "Clear":
+            rt.append("                case WeatherState.Clear: return null;")
+        else:
+            rt.append("                case WeatherState." + safe + ": return _" + safe.lower() + "Particles;")
+    rt.append("                default: return null;")
+    rt.append("            }")
+    rt.append("        }")
+    rt.append("        private float GetEmissionRate(ParticleSystem ps) { var emission = ps.emission; return emission.rateOverTime.constant; }")
+    rt.append("        private float GetMaxEmissionRate(WeatherState state)")
+    rt.append("        {")
+    rt.append("            switch (state) { case WeatherState.Rain: return 500f; case WeatherState.Snow: return 200f; case WeatherState.Fog: return 50f; case WeatherState.Storm: return 800f; default: return 0f; }")
+    rt.append("        }")
+    rt.append("        private float GetFogDensity(WeatherState state)")
+    rt.append("        {")
+    rt.append("            switch (state) { case WeatherState.Clear: return _clearFogDensity; case WeatherState.Fog: return _foggyFogDensity; case WeatherState.Storm: return _foggyFogDensity * 0.7f; default: return _clearFogDensity * 2f; }")
+    rt.append("        }")
+    rt.append("        private Color GetFogColor(WeatherState state)")
+    rt.append("        {")
+    rt.append("            switch (state) { case WeatherState.Storm: return _stormFogColor; default: return _clearFogColor; }")
+    rt.append("        }")
+    rt.append("    }")
+    rt.append("}")
+    runtime_cs = "\n".join(rt)
+
+    ed: list[str] = []
+    ed.append("using UnityEngine;")
+    ed.append("using UnityEditor;")
+    ed.append("")
+    ed.append("public static class VeilBreakers_WeatherSetup")
+    ed.append("{")
+    ed.append("    [MenuItem(\"VeilBreakers/World/Create Weather System\")]")
+    ed.append("    public static void Execute()")
+    ed.append("    {")
+    ed.append("        GameObject go = new GameObject(\"VB_WeatherManager\");")
+    ed.append("        go.AddComponent<" + ns + ".VB_WeatherManager>();")
+    ed.append("        string[] weatherTypes = { \"Rain\", \"Snow\", \"Fog\", \"Storm\" };")
+    ed.append("        foreach (string wt in weatherTypes)")
+    ed.append("        {")
+    ed.append("            GameObject psGo = new GameObject($\"{wt}Particles\");")
+    ed.append("            psGo.transform.SetParent(go.transform);")
+    ed.append("            psGo.AddComponent<ParticleSystem>().Stop();")
+    ed.append("        }")
+    ed.append("        Selection.activeGameObject = go;")
+    ed.append("        Debug.Log(\"[VeilBreakers] Weather system created.\");")
+    ed.append("    }")
+    ed.append("}")
+    editor_cs = "\n".join(ed)
+
+    return (editor_cs, runtime_cs)
+
+
+# ---------------------------------------------------------------------------
+# RPG-10: Day/night cycle
+# ---------------------------------------------------------------------------
+
+
+def generate_day_night_cycle_script(
+    day_duration_minutes: float = 10.0,
+    start_hour: float = 8.0,
+    time_presets: Optional[list[str]] = None,
+    namespace: str = "VeilBreakers.WorldSystems",
+) -> tuple[str, str]:
+    """Generate C# for a continuous day/night cycle with lighting presets.
+
+    Returns:
+        (editor_cs, runtime_cs) tuple.
+    """
+    if time_presets is None:
+        time_presets = ["Dawn", "Morning", "Noon", "Afternoon", "Dusk", "Evening", "Night", "Midnight"]
+    ns = _safe_namespace(namespace)
+
+    rt: list[str] = []
+    rt.append("using System;")
+    rt.append("using System.Collections;")
+    rt.append("using UnityEngine;")
+    rt.append("using UnityEngine.Events;")
+    rt.append("")
+    rt.append("namespace " + ns)
+    rt.append("{")
+    rt.append("    [Serializable]")
+    rt.append("    public class TimeOfDayPreset")
+    rt.append("    {")
+    rt.append("        public string name;")
+    rt.append("        public float hour;")
+    rt.append("        public float sunIntensity = 1f;")
+    rt.append("        public Color sunColor = Color.white;")
+    rt.append("        public float sunAngle = 45f;")
+    rt.append("        public Color ambientLight = new Color(0.2f, 0.2f, 0.25f);")
+    rt.append("        public float fogDensity = 0.002f;")
+    rt.append("        public Color fogColor = new Color(0.7f, 0.8f, 0.9f);")
+    rt.append("    }")
+    rt.append("")
+    rt.append("    /// <summary>")
+    rt.append("    /// Continuous day/night cycle with lighting preset transitions,")
+    rt.append("    /// NPC schedule callbacks, and enemy behavior shift events.")
+    rt.append("    /// Generated by VeilBreakers MCP toolkit.")
+    rt.append("    /// </summary>")
+    rt.append("    public class VB_DayNightCycleManager : MonoBehaviour")
+    rt.append("    {")
+    rt.append("        public static VB_DayNightCycleManager Instance { get; private set; }")
+    rt.append("        [Header(\"Time Settings\")]")
+    rt.append("        [SerializeField] private float _dayDurationMinutes = " + str(day_duration_minutes) + "f;")
+    rt.append("        [SerializeField] private float _startHour = " + str(start_hour) + "f;")
+    rt.append("        [SerializeField] private bool _isPaused;")
+    rt.append("        [Header(\"Lighting\")]")
+    rt.append("        [SerializeField] private Light _directionalLight;")
+    rt.append("        [SerializeField] private TimeOfDayPreset[] _presets;")
+    rt.append("        [Header(\"Events\")]")
+    rt.append("        public UnityEvent<float> OnTimeChanged;")
+    rt.append("        public UnityEvent<bool> OnNightfall;")
+    rt.append("        public UnityEvent<bool> OnDaybreak;")
+    rt.append("        private float _timeOfDay;")
+    rt.append("        private bool _wasNight;")
+    rt.append("        public float CurrentHour => _timeOfDay;")
+    rt.append("        public float NormalizedTime => _timeOfDay / 24f;")
+    rt.append("        public bool IsNight => _timeOfDay >= 20f || _timeOfDay < 6f;")
+    rt.append("")
+    rt.append("        private void Awake()")
+    rt.append("        {")
+    rt.append("            if (Instance != null) { Destroy(gameObject); return; }")
+    rt.append("            Instance = this;")
+    rt.append("            _timeOfDay = _startHour;")
+    rt.append("            _wasNight = IsNight;")
+    rt.append("            InitializeDefaultPresets();")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        private void Update()")
+    rt.append("        {")
+    rt.append("            if (_isPaused) return;")
+    rt.append("            float hoursPerSecond = 24f / (_dayDurationMinutes * 60f);")
+    rt.append("            _timeOfDay += hoursPerSecond * Time.deltaTime;")
+    rt.append("            if (_timeOfDay >= 24f) _timeOfDay -= 24f;")
+    rt.append("            UpdateLighting();")
+    rt.append("            OnTimeChanged?.Invoke(_timeOfDay);")
+    rt.append("            bool isNightNow = IsNight;")
+    rt.append("            if (isNightNow && !_wasNight) OnNightfall?.Invoke(true);")
+    rt.append("            else if (!isNightNow && _wasNight) OnDaybreak?.Invoke(true);")
+    rt.append("            _wasNight = isNightNow;")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        public void SetTime(float hour) { _timeOfDay = Mathf.Repeat(hour, 24f); UpdateLighting(); OnTimeChanged?.Invoke(_timeOfDay); }")
+    rt.append("        public void PauseTime(bool pause) { _isPaused = pause; }")
+    rt.append("")
+    rt.append("        private void UpdateLighting()")
+    rt.append("        {")
+    rt.append("            if (_presets == null || _presets.Length < 2 || _directionalLight == null) return;")
+    rt.append("            TimeOfDayPreset prev = _presets[_presets.Length - 1];")
+    rt.append("            TimeOfDayPreset next = _presets[0];")
+    rt.append("            for (int i = 0; i < _presets.Length; i++)")
+    rt.append("            {")
+    rt.append("                if (_presets[i].hour <= _timeOfDay) prev = _presets[i];")
+    rt.append("                if (_presets[i].hour > _timeOfDay) { next = _presets[i]; break; }")
+    rt.append("            }")
+    rt.append("            float range = next.hour - prev.hour;")
+    rt.append("            if (range <= 0f) range += 24f;")
+    rt.append("            float offset = _timeOfDay - prev.hour;")
+    rt.append("            if (offset < 0f) offset += 24f;")
+    rt.append("            float t = range > 0f ? offset / range : 0f;")
+    rt.append("            _directionalLight.intensity = Mathf.Lerp(prev.sunIntensity, next.sunIntensity, t);")
+    rt.append("            _directionalLight.color = Color.Lerp(prev.sunColor, next.sunColor, t);")
+    rt.append("            float angle = Mathf.Lerp(prev.sunAngle, next.sunAngle, t);")
+    rt.append("            _directionalLight.transform.rotation = Quaternion.Euler(angle, -30f, 0f);")
+    rt.append("            RenderSettings.ambientLight = Color.Lerp(prev.ambientLight, next.ambientLight, t);")
+    rt.append("            RenderSettings.fogDensity = Mathf.Lerp(prev.fogDensity, next.fogDensity, t);")
+    rt.append("            RenderSettings.fogColor = Color.Lerp(prev.fogColor, next.fogColor, t);")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        private void InitializeDefaultPresets()")
+    rt.append("        {")
+    rt.append("            if (_presets != null && _presets.Length > 0) return;")
+    rt.append("            _presets = new TimeOfDayPreset[]")
+    rt.append("            {")
+    preset_data = [
+        ("Dawn", 5.0, 0.3, "1.0f, 0.6f, 0.3f", 10, "0.15f, 0.12f, 0.18f", 0.008, "0.8f, 0.6f, 0.5f"),
+        ("Morning", 7.0, 0.7, "1.0f, 0.9f, 0.8f", 30, "0.2f, 0.2f, 0.22f", 0.003, "0.7f, 0.8f, 0.9f"),
+        ("Noon", 12.0, 1.2, "1.0f, 1.0f, 0.95f", 75, "0.3f, 0.3f, 0.32f", 0.001, "0.8f, 0.85f, 0.95f"),
+        ("Afternoon", 15.0, 1.0, "1.0f, 0.95f, 0.85f", 55, "0.25f, 0.25f, 0.28f", 0.002, "0.75f, 0.8f, 0.9f"),
+        ("Dusk", 18.0, 0.4, "1.0f, 0.5f, 0.2f", 15, "0.18f, 0.1f, 0.15f", 0.006, "0.9f, 0.5f, 0.3f"),
+        ("Evening", 20.0, 0.15, "0.3f, 0.3f, 0.5f", 5, "0.08f, 0.08f, 0.12f", 0.004, "0.2f, 0.2f, 0.3f"),
+        ("Night", 22.0, 0.05, "0.2f, 0.2f, 0.4f", -10, "0.03f, 0.03f, 0.06f", 0.003, "0.1f, 0.1f, 0.15f"),
+        ("Midnight", 0.0, 0.02, "0.15f, 0.15f, 0.3f", -20, "0.02f, 0.02f, 0.04f", 0.005, "0.05f, 0.05f, 0.1f"),
+    ]
+    for name, hour, intensity, sun_col, angle, amb, fog_d, fog_c in preset_data:
+        rt.append("                new TimeOfDayPreset { name = \"" + name + "\", hour = " + str(hour) + "f, sunIntensity = " + str(intensity) + "f, sunColor = new Color(" + sun_col + "), sunAngle = " + str(angle) + "f, ambientLight = new Color(" + amb + "), fogDensity = " + str(fog_d) + "f, fogColor = new Color(" + fog_c + ") },")
+    rt.append("            };")
+    rt.append("        }")
+    rt.append("    }")
+    rt.append("}")
+    runtime_cs = "\n".join(rt)
+
+    ed: list[str] = []
+    ed.append("using UnityEngine;")
+    ed.append("using UnityEditor;")
+    ed.append("")
+    ed.append("public static class VeilBreakers_DayNightSetup")
+    ed.append("{")
+    ed.append("    [MenuItem(\"VeilBreakers/World/Create Day Night Cycle\")]")
+    ed.append("    public static void Execute()")
+    ed.append("    {")
+    ed.append("        GameObject go = new GameObject(\"VB_DayNightCycleManager\");")
+    ed.append("        go.AddComponent<" + ns + ".VB_DayNightCycleManager>();")
+    ed.append("        if (Object.FindObjectOfType<Light>() == null)")
+    ed.append("        {")
+    ed.append("            GameObject lightGo = new GameObject(\"VB_DirectionalLight\");")
+    ed.append("            Light light = lightGo.AddComponent<Light>();")
+    ed.append("            light.type = LightType.Directional;")
+    ed.append("            light.shadows = LightShadows.Soft;")
+    ed.append("        }")
+    ed.append("        Selection.activeGameObject = go;")
+    ed.append("        Debug.Log(\"[VeilBreakers] Day/night cycle manager created.\");")
+    ed.append("    }")
+    ed.append("}")
+    editor_cs = "\n".join(ed)
+
+    return (editor_cs, runtime_cs)
+
+
+# ---------------------------------------------------------------------------
+# RPG-11: NPC placement
+# ---------------------------------------------------------------------------
+
+
+def generate_npc_placement_script(
+    npc_roles: Optional[list[str]] = None,
+    namespace: str = "VeilBreakers.WorldSystems",
+) -> tuple[str, str, str]:
+    """Generate C# for NPC placement data and manager.
+
+    Returns:
+        (so_cs, runtime_cs, editor_cs) triple.
+    """
+    if npc_roles is None:
+        npc_roles = ["shopkeeper", "quest_giver", "bartender", "guard"]
+    ns = _safe_namespace(namespace)
+
+    # ----- ScriptableObject: NPCPlacementData -----
+    so: list[str] = []
+    so.append("using System;")
+    so.append("using UnityEngine;")
+    so.append("")
+    so.append("namespace " + ns)
+    so.append("{")
+    so.append("    public enum NPCRole")
+    so.append("    {")
+    for i, role in enumerate(npc_roles):
+        safe_role = _sanitize_cs_identifier(role)
+        pascal = "".join(w.capitalize() for w in safe_role.split("_"))
+        comma = "," if i < len(npc_roles) - 1 else ""
+        so.append("        " + pascal + comma)
+    so.append("    }")
+    so.append("")
+    so.append("    [Serializable]")
+    so.append("    public class NPCSlot")
+    so.append("    {")
+    so.append("        public string npcName;")
+    so.append("        public NPCRole role;")
+    so.append("        public Vector3 position;")
+    so.append("        public Quaternion rotation = Quaternion.identity;")
+    so.append("        public string prefabPath;")
+    so.append("    }")
+    so.append("")
+    so.append("    [CreateAssetMenu(fileName = \"NewNPCPlacement\", menuName = \"VeilBreakers/NPC Placement\")]")
+    so.append("    public class VB_NPCPlacementData : ScriptableObject")
+    so.append("    {")
+    so.append("        public string locationName;")
+    so.append("        public NPCSlot[] slots;")
+    so.append("    }")
+    so.append("}")
+    so_cs = "\n".join(so)
+
+    # ----- Runtime -----
+    rt: list[str] = []
+    rt.append("using System.Collections.Generic;")
+    rt.append("using UnityEngine;")
+    rt.append("")
+    rt.append("namespace " + ns)
+    rt.append("{")
+    rt.append("    /// <summary>")
+    rt.append("    /// Reads NPC placement SO data and instantiates NPCs at designated positions.")
+    rt.append("    /// Generated by VeilBreakers MCP toolkit.")
+    rt.append("    /// </summary>")
+    rt.append("    public class VB_NPCPlacementManager : MonoBehaviour")
+    rt.append("    {")
+    rt.append("        [SerializeField] private VB_NPCPlacementData _placementData;")
+    rt.append("        [SerializeField] private GameObject _fallbackPrefab;")
+    rt.append("        private List<GameObject> _spawnedNPCs = new List<GameObject>();")
+    rt.append("")
+    rt.append("        private void Start() { SpawnNPCs(); }")
+    rt.append("")
+    rt.append("        public void SpawnNPCs()")
+    rt.append("        {")
+    rt.append("            if (_placementData == null || _placementData.slots == null) return;")
+    rt.append("            foreach (NPCSlot slot in _placementData.slots)")
+    rt.append("            {")
+    rt.append("                GameObject prefab = null;")
+    rt.append("                if (!string.IsNullOrEmpty(slot.prefabPath))")
+    rt.append("                    prefab = Resources.Load<GameObject>(slot.prefabPath);")
+    rt.append("                if (prefab == null) prefab = _fallbackPrefab;")
+    rt.append("                if (prefab == null) continue;")
+    rt.append("                GameObject npc = Instantiate(prefab, slot.position, slot.rotation);")
+    rt.append("                npc.name = !string.IsNullOrEmpty(slot.npcName) ? slot.npcName : slot.role.ToString();")
+    rt.append("                _spawnedNPCs.Add(npc);")
+    rt.append("            }")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        public void DespawnAll()")
+    rt.append("        {")
+    rt.append("            foreach (GameObject npc in _spawnedNPCs)")
+    rt.append("                if (npc != null) Destroy(npc);")
+    rt.append("            _spawnedNPCs.Clear();")
+    rt.append("        }")
+    rt.append("    }")
+    rt.append("}")
+    runtime_cs = "\n".join(rt)
+
+    # ----- Editor -----
+    ed: list[str] = []
+    ed.append("using UnityEngine;")
+    ed.append("using UnityEditor;")
+    ed.append("")
+    ed.append("public static class VeilBreakers_NPCPlacementSetup")
+    ed.append("{")
+    ed.append("    [MenuItem(\"VeilBreakers/World/Setup NPC Placement\")]")
+    ed.append("    public static void Execute()")
+    ed.append("    {")
+    ed.append("        var data = ScriptableObject.CreateInstance<" + ns + ".VB_NPCPlacementData>();")
+    ed.append("        data.locationName = \"NewLocation\";")
+    ed.append("        AssetDatabase.CreateAsset(data, \"Assets/Data/NPCPlacement_NewLocation.asset\");")
+    ed.append("        GameObject go = new GameObject(\"VB_NPCPlacementManager\");")
+    ed.append("        go.AddComponent<" + ns + ".VB_NPCPlacementManager>();")
+    ed.append("        Selection.activeGameObject = go;")
+    ed.append("        Debug.Log(\"[VeilBreakers] NPC placement manager created.\");")
+    ed.append("    }")
+    ed.append("}")
+    editor_cs = "\n".join(ed)
+
+    return (so_cs, runtime_cs, editor_cs)
+
+
+# ---------------------------------------------------------------------------
+# RPG-12: Dungeon lighting
+# ---------------------------------------------------------------------------
+
+
+def generate_dungeon_lighting_script(
+    torch_spacing: float = 5.0,
+    torch_light_range: float = 8.0,
+    torch_color: Optional[list[float]] = None,
+    fog_density: float = 0.03,
+    fog_color: Optional[list[float]] = None,
+    namespace: str = "VeilBreakers.WorldSystems",
+) -> tuple[str, str]:
+    """Generate C# for dungeon lighting with torch sconces and atmospheric fog.
+
+    Returns:
+        (editor_cs, runtime_cs) tuple.
+    """
+    if torch_color is None:
+        torch_color = [1.0, 0.7, 0.3, 1.0]
+    if fog_color is None:
+        fog_color = [0.1, 0.08, 0.06]
+    ns = _safe_namespace(namespace)
+    tc = ", ".join(str(c) + "f" for c in torch_color[:3])
+    fc = ", ".join(str(c) + "f" for c in fog_color[:3])
+
+    rt: list[str] = []
+    rt.append("using System.Collections.Generic;")
+    rt.append("using UnityEngine;")
+    rt.append("")
+    rt.append("namespace " + ns)
+    rt.append("{")
+    rt.append("    /// <summary>")
+    rt.append("    /// Sets up dungeon lighting with torch sconces at regular intervals,")
+    rt.append("    /// point lights for warm illumination pools, and atmospheric fog.")
+    rt.append("    /// Generated by VeilBreakers MCP toolkit.")
+    rt.append("    /// </summary>")
+    rt.append("    public class VB_DungeonLightingSetup : MonoBehaviour")
+    rt.append("    {")
+    rt.append("        [Header(\"Torch Settings\")]")
+    rt.append("        [SerializeField] private float _torchSpacing = " + str(torch_spacing) + "f;")
+    rt.append("        [SerializeField] private float _torchLightRange = " + str(torch_light_range) + "f;")
+    rt.append("        [SerializeField] private Color _torchColor = new Color(" + tc + ");")
+    rt.append("        [SerializeField] private float _torchIntensity = 1.5f;")
+    rt.append("        [SerializeField] private LightShadows _shadowType = LightShadows.Soft;")
+    rt.append("        [Header(\"Torch Prefab\")]")
+    rt.append("        [SerializeField] private GameObject _torchSconcePrefab;")
+    rt.append("        [Header(\"Fog Settings\")]")
+    rt.append("        [SerializeField] private float _fogDensity = " + str(fog_density) + "f;")
+    rt.append("        [SerializeField] private Color _fogColor = new Color(" + fc + ");")
+    rt.append("        [SerializeField] private bool _enableFog = true;")
+    rt.append("        [Header(\"Corridor Path\")]")
+    rt.append("        [SerializeField] private Transform[] _pathPoints;")
+    rt.append("        private List<GameObject> _placedTorches = new List<GameObject>();")
+    rt.append("")
+    rt.append("        /// <summary>Places torch sconces every 4-6m along corridor path.</summary>")
+    rt.append("        public void SetupLighting()")
+    rt.append("        {")
+    rt.append("            ClearTorches();")
+    rt.append("            SetupFog();")
+    rt.append("            if (_pathPoints == null || _pathPoints.Length < 2) return;")
+    rt.append("            float accumulated = 0f;")
+    rt.append("            for (int i = 0; i < _pathPoints.Length - 1; i++)")
+    rt.append("            {")
+    rt.append("                Vector3 start = _pathPoints[i].position;")
+    rt.append("                Vector3 end = _pathPoints[i + 1].position;")
+    rt.append("                float segLength = Vector3.Distance(start, end);")
+    rt.append("                Vector3 dir = (end - start).normalized;")
+    rt.append("                while (accumulated < segLength)")
+    rt.append("                {")
+    rt.append("                    Vector3 pos = start + dir * accumulated;")
+    rt.append("                    PlaceTorch(pos, dir);")
+    rt.append("                    accumulated += _torchSpacing;")
+    rt.append("                }")
+    rt.append("                accumulated -= segLength;")
+    rt.append("            }")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        private void PlaceTorch(Vector3 position, Vector3 corridorDir)")
+    rt.append("        {")
+    rt.append("            Vector3 wallOffset = Vector3.Cross(corridorDir, Vector3.up).normalized * 1.5f;")
+    rt.append("            Vector3 torchPos = position + wallOffset + Vector3.up * 2f;")
+    rt.append("            GameObject torchGo;")
+    rt.append("            if (_torchSconcePrefab != null)")
+    rt.append("                torchGo = Instantiate(_torchSconcePrefab, torchPos, Quaternion.identity, transform);")
+    rt.append("            else")
+    rt.append("            {")
+    rt.append("                torchGo = new GameObject(\"Torch_Sconce\");")
+    rt.append("                torchGo.transform.position = torchPos;")
+    rt.append("                torchGo.transform.SetParent(transform);")
+    rt.append("            }")
+    rt.append("            Light pointLight = torchGo.AddComponent<Light>();")
+    rt.append("            pointLight.type = LightType.Point;")
+    rt.append("            pointLight.range = _torchLightRange;")
+    rt.append("            pointLight.color = _torchColor;")
+    rt.append("            pointLight.intensity = _torchIntensity;")
+    rt.append("            pointLight.shadows = _shadowType;")
+    rt.append("            _placedTorches.Add(torchGo);")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        private void SetupFog()")
+    rt.append("        {")
+    rt.append("            RenderSettings.fog = _enableFog;")
+    rt.append("            RenderSettings.fogMode = FogMode.Exponential;")
+    rt.append("            RenderSettings.fogDensity = _fogDensity;")
+    rt.append("            RenderSettings.fogColor = _fogColor;")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        public void ClearTorches()")
+    rt.append("        {")
+    rt.append("            foreach (GameObject torch in _placedTorches)")
+    rt.append("                if (torch != null) DestroyImmediate(torch);")
+    rt.append("            _placedTorches.Clear();")
+    rt.append("        }")
+    rt.append("    }")
+    rt.append("}")
+    runtime_cs = "\n".join(rt)
+
+    ed: list[str] = []
+    ed.append("using UnityEngine;")
+    ed.append("using UnityEditor;")
+    ed.append("")
+    ed.append("public static class VeilBreakers_DungeonLightingSetupEditor")
+    ed.append("{")
+    ed.append("    [MenuItem(\"VeilBreakers/World/Setup Dungeon Lighting\")]")
+    ed.append("    public static void Execute()")
+    ed.append("    {")
+    ed.append("        GameObject go = new GameObject(\"VB_DungeonLightingSetup\");")
+    ed.append("        go.AddComponent<" + ns + ".VB_DungeonLightingSetup>();")
+    ed.append("        for (int i = 0; i < 4; i++)")
+    ed.append("        {")
+    ed.append("            GameObject point = new GameObject($\"PathPoint_{i}\");")
+    ed.append("            point.transform.SetParent(go.transform);")
+    ed.append("            point.transform.localPosition = new Vector3(i * 10f, 0f, 0f);")
+    ed.append("        }")
+    ed.append("        Selection.activeGameObject = go;")
+    ed.append("        Debug.Log(\"[VeilBreakers] Dungeon lighting setup created.\");")
+    ed.append("    }")
+    ed.append("}")
+    editor_cs = "\n".join(ed)
+
+    return (editor_cs, runtime_cs)
+
+
+# ---------------------------------------------------------------------------
+# RPG-13: Terrain-building blending
+# ---------------------------------------------------------------------------
+
+
+def generate_terrain_building_blend_script(
+    blend_radius: float = 2.0,
+    decal_material_path: str = "Materials/TerrainBlendDecal",
+    depression_depth: float = 0.1,
+    vertex_color_falloff: float = 1.5,
+    namespace: str = "VeilBreakers.WorldSystems",
+) -> tuple[str, str]:
+    """Generate C# for terrain-building blend (vertex color + decal + depression).
+
+    Returns:
+        (editor_cs, runtime_cs) tuple.
+    """
+    ns = _safe_namespace(namespace)
+
+    rt: list[str] = []
+    rt.append("using UnityEngine;")
+    rt.append("using UnityEngine.Rendering.Universal;")
+    rt.append("")
+    rt.append("namespace " + ns)
+    rt.append("{")
+    rt.append("    /// <summary>")
+    rt.append("    /// Blends terrain with buildings: vertex color painting at base,")
+    rt.append("    /// decal projector for ground transition, terrain height depression.")
+    rt.append("    /// Generated by VeilBreakers MCP toolkit.")
+    rt.append("    /// </summary>")
+    rt.append("    public class VB_TerrainBuildingBlend : MonoBehaviour")
+    rt.append("    {")
+    rt.append("        [Header(\"Blend Settings\")]")
+    rt.append("        [SerializeField] private float _blendRadius = " + str(blend_radius) + "f;")
+    rt.append("        [SerializeField] private float _vertexColorFalloff = " + str(vertex_color_falloff) + "f;")
+    rt.append("        [SerializeField] private Color _baseBlendColor = new Color(0.3f, 0.25f, 0.15f, 1f);")
+    rt.append("        [Header(\"Decal\")]")
+    rt.append("        [SerializeField] private Material _decalMaterial;")
+    rt.append("        [SerializeField] private float _decalSize = 4f;")
+    rt.append("        [Header(\"Terrain Depression\")]")
+    rt.append("        [SerializeField] private float _depressionDepth = " + str(depression_depth) + "f;")
+    rt.append("        [SerializeField] private Terrain _terrain;")
+    rt.append("")
+    rt.append("        public void ApplyBlend() { PaintVertexColors(); PlaceDecalProjector(); DepressTerrain(); }")
+    rt.append("")
+    rt.append("        public void PaintVertexColors()")
+    rt.append("        {")
+    rt.append("            MeshFilter mf = GetComponentInChildren<MeshFilter>();")
+    rt.append("            if (mf == null || mf.sharedMesh == null) return;")
+    rt.append("            Mesh mesh = Instantiate(mf.sharedMesh);")
+    rt.append("            Vector3[] vertices = mesh.vertices;")
+    rt.append("            Color[] colors = new Color[vertices.Length];")
+    rt.append("            float minY = float.MaxValue;")
+    rt.append("            foreach (Vector3 v in vertices) if (v.y < minY) minY = v.y;")
+    rt.append("            for (int i = 0; i < vertices.Length; i++)")
+    rt.append("            {")
+    rt.append("                float height = vertices[i].y - minY;")
+    rt.append("                float t = Mathf.Clamp01(1f - (height / (_blendRadius * _vertexColorFalloff)));")
+    rt.append("                colors[i] = Color.Lerp(Color.white, _baseBlendColor, t);")
+    rt.append("            }")
+    rt.append("            mesh.colors = colors;")
+    rt.append("            mf.mesh = mesh;")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        public void PlaceDecalProjector()")
+    rt.append("        {")
+    rt.append("            GameObject decalGo = new GameObject(\"VB_BlendDecal\");")
+    rt.append("            decalGo.transform.SetParent(transform);")
+    rt.append("            decalGo.transform.localPosition = Vector3.down * 0.1f;")
+    rt.append("            decalGo.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);")
+    rt.append("            DecalProjector decal = decalGo.AddComponent<DecalProjector>();")
+    rt.append("            decal.material = _decalMaterial;")
+    rt.append("            decal.size = new Vector3(_decalSize, _decalSize, 1f);")
+    rt.append("            decal.fadeFactor = 1f;")
+    rt.append("        }")
+    rt.append("")
+    rt.append("        public void DepressTerrain()")
+    rt.append("        {")
+    rt.append("            if (_terrain == null) return;")
+    rt.append("            TerrainData terrainData = _terrain.terrainData;")
+    rt.append("            Vector3 terrainPos = _terrain.transform.position;")
+    rt.append("            Vector3 buildingPos = transform.position;")
+    rt.append("            int mapW = terrainData.heightmapResolution;")
+    rt.append("            int mapH = terrainData.heightmapResolution;")
+    rt.append("            float relX = (buildingPos.x - terrainPos.x) / terrainData.size.x;")
+    rt.append("            float relZ = (buildingPos.z - terrainPos.z) / terrainData.size.z;")
+    rt.append("            int centerX = Mathf.RoundToInt(relX * mapW);")
+    rt.append("            int centerZ = Mathf.RoundToInt(relZ * mapH);")
+    rt.append("            int radiusSamples = Mathf.RoundToInt((_blendRadius / terrainData.size.x) * mapW);")
+    rt.append("            int startX = Mathf.Max(0, centerX - radiusSamples);")
+    rt.append("            int startZ = Mathf.Max(0, centerZ - radiusSamples);")
+    rt.append("            int width = Mathf.Min(radiusSamples * 2, mapW - startX);")
+    rt.append("            int height = Mathf.Min(radiusSamples * 2, mapH - startZ);")
+    rt.append("            float[,] heights = terrainData.GetHeights(startX, startZ, width, height);")
+    rt.append("            float depthNorm = _depressionDepth / terrainData.size.y;")
+    rt.append("            for (int z = 0; z < height; z++)")
+    rt.append("                for (int x = 0; x < width; x++)")
+    rt.append("                {")
+    rt.append("                    float dx = (startX + x - centerX) / (float)radiusSamples;")
+    rt.append("                    float dz = (startZ + z - centerZ) / (float)radiusSamples;")
+    rt.append("                    float dist = Mathf.Sqrt(dx * dx + dz * dz);")
+    rt.append("                    if (dist <= 1f) heights[z, x] -= depthNorm * (1f - dist);")
+    rt.append("                }")
+    rt.append("            terrainData.SetHeights(startX, startZ, heights);")
+    rt.append("        }")
+    rt.append("    }")
+    rt.append("}")
+    runtime_cs = "\n".join(rt)
+
+    ed: list[str] = []
+    ed.append("using UnityEngine;")
+    ed.append("using UnityEditor;")
+    ed.append("")
+    ed.append("public static class VeilBreakers_TerrainBlendSetup")
+    ed.append("{")
+    ed.append("    [MenuItem(\"VeilBreakers/World/Blend Terrain Building\")]")
+    ed.append("    public static void Execute()")
+    ed.append("    {")
+    ed.append("        if (Selection.activeGameObject == null)")
+    ed.append("        {")
+    ed.append("            Debug.LogWarning(\"[VeilBreakers] Select a building GameObject first.\");")
+    ed.append("            return;")
+    ed.append("        }")
+    ed.append("        Selection.activeGameObject.AddComponent<" + ns + ".VB_TerrainBuildingBlend>();")
+    ed.append("        Debug.Log(\"[VeilBreakers] Terrain-building blend component added.\");")
+    ed.append("    }")
+    ed.append("}")
+    editor_cs = "\n".join(ed)
+
+    return (editor_cs, runtime_cs)
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
@@ -1182,4 +2643,13 @@ __all__ = [
     "generate_tilemap_setup_script",
     "generate_2d_physics_script",
     "generate_time_of_day_preset_script",
+    "generate_fast_travel_script",
+    "generate_puzzle_mechanics_script",
+    "generate_trap_system_script",
+    "generate_spatial_loot_script",
+    "generate_weather_system_script",
+    "generate_day_night_cycle_script",
+    "generate_npc_placement_script",
+    "generate_dungeon_lighting_script",
+    "generate_terrain_building_blend_script",
 ]
