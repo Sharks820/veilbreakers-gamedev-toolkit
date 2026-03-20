@@ -3,8 +3,23 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
+stopped_at: Completed 16-02-PLAN.md (5 QA generators + 120 tests)
+last_updated: "2026-03-20T22:36:25.303Z"
+last_activity: 2026-03-20 -- Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators, 78 tests)
+progress:
+  total_phases: 9
+  completed_phases: 7
+  total_plans: 30
+  completed_plans: 29
+---
+
+---
+gsd_state_version: 1.0
+milestone: v2.0
+milestone_name: Complete Unity Game Development Coverage
+status: executing
 stopped_at: Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators)
-last_updated: "2026-03-20T22:34:55.377Z"
+last_updated: "2026-03-20T22:35:08.264Z"
 last_activity: 2026-03-20 -- Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators, 78 tests)
 progress:
   total_phases: 9
@@ -170,6 +185,7 @@ v2.0 Progress:  [█████████████████████
 | 16-01 duration | 12 min | 2 tasks | 6 files |
 | 16-02 duration | -- | 1 task | 2 files |
 | 16-03 duration | 19 min | 1 task | 2 files |
+| Phase 16 P02 | 23 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -272,6 +288,9 @@ v2.0 Progress:  [█████████████████████
 | Empty DSN fallback to Debug.Log in crash reporting | Prevents runtime crashes when Sentry not configured | 16 |
 | PascalCase typed event methods from snake_case names | TrackEnemyKilled from "enemy_killed", consistent C# naming convention | 16 |
 | FSM state detection via field name convention | Checks "currentState" or "_state" field names, avoids interface/attribute dependency | 16 |
+| ProfilerRecorder.StartNew() for programmatic frame/draw/memory sampling | Provides min/avg/max over N frames vs single-frame UnityStats | 16 |
+| Python-side regex static analyzer with ANTI_PATTERNS dict | Simpler than Roslyn DLLs, works at code-gen time, no build dependency | 16 |
+| Brace-counting method body tracker for hot method detection | Pragmatic approach for single-file analysis without full C# AST parsing | 16 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -286,8 +305,8 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T22:29:23Z
-Stopped at: Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators)
+Last session: 2026-03-20T22:36:25.295Z
+Stopped at: Completed 16-02-PLAN.md (5 QA generators + 120 tests)
 Next action: Continue Phase 16, plan 04 (tool wiring)
 
 ---
