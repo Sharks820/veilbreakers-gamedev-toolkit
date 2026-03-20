@@ -1,0 +1,12 @@
+{
+  "prefab_type": "monster",
+  "description": "Standard VeilBreakers monster prefab",
+  "components": [
+    {"type": "CapsuleCollider", "properties": {"height": 2.0, "radius": 0.5, "center": [0, 1, 0]}},
+    {"type": "UnityEngine.AI.NavMeshAgent", "properties": {"speed": 3.5, "stoppingDistance": 1.5, "angularSpeed": 120}},
+    {"type": "Animator", "properties": {}},
+    {"type": "VeilBreakers.Combat.Combatant", "properties": {}}
+  ],
+  "default_layer": "Enemy",
+  "default_tag": "Monster"
+}

@@ -1,0 +1,10 @@
+{
+  "prefab_type": "ui",
+  "description": "UI element prefab",
+  "components": [
+    {"type": "RectTransform", "properties": {}},
+    {"type": "CanvasRenderer", "properties": {}}
+  ],
+  "default_layer": "UI",
+  "default_tag": "Untagged"
+}
