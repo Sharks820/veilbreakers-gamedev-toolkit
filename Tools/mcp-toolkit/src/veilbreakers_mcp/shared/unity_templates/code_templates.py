@@ -105,7 +105,8 @@ def _safe_namespace(ns: str) -> str:
     """Sanitize a C# namespace to prevent code injection.
 
     Valid C# namespaces allow only letters, digits, underscores, and dots.
-    Strips everything else.
+    Strips everything else. Segments starting with a digit get a ``_``
+    prefix, and segments that are C# reserved words get an ``@`` prefix.
 
     Args:
         ns: Raw namespace string.
@@ -116,7 +117,20 @@ def _safe_namespace(ns: str) -> str:
     sanitized = re.sub(r"[^a-zA-Z0-9_.]", "", ns)
     # Strip leading/trailing dots and collapse consecutive dots
     sanitized = re.sub(r"\.{2,}", ".", sanitized).strip(".")
-    return sanitized or "Generated"
+    if not sanitized:
+        return "Generated"
+    # Validate each segment: fix leading-digit and reserved-word segments
+    segments = sanitized.split(".")
+    fixed: list[str] = []
+    for seg in segments:
+        if not seg:
+            continue
+        if seg[0].isdigit():
+            seg = f"_{seg}"
+        if seg in _CS_RESERVED:
+            seg = f"@{seg}"
+        fixed.append(seg)
+    return ".".join(fixed) or "Generated"
 
 
 def _safe_type(type_str: str) -> str:

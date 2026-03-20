@@ -58,14 +58,42 @@ def _safe_type(type_str: str) -> str:
     return sanitized or "object"
 
 
+_CS_RESERVED = frozenset({
+    "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char",
+    "checked", "class", "const", "continue", "decimal", "default", "delegate",
+    "do", "double", "else", "enum", "event", "explicit", "extern", "false",
+    "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit",
+    "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
+    "new", "null", "object", "operator", "out", "override", "params", "private",
+    "protected", "public", "readonly", "ref", "return", "sbyte", "sealed",
+    "short", "sizeof", "stackalloc", "static", "string", "struct", "switch",
+    "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
+    "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+})
+
+
 def _safe_namespace(ns: str) -> str:
     """Sanitize a C# namespace to prevent code injection.
 
     Valid C# namespaces allow only letters, digits, underscores, and dots.
+    Segments starting with a digit get a ``_`` prefix, and segments that
+    are C# reserved words get an ``@`` prefix.
     """
     sanitized = re.sub(r"[^a-zA-Z0-9_.]", "", ns)
     sanitized = re.sub(r"\.{2,}", ".", sanitized).strip(".")
-    return sanitized or "Generated"
+    if not sanitized:
+        return "Generated"
+    segments = sanitized.split(".")
+    fixed: list[str] = []
+    for seg in segments:
+        if not seg:
+            continue
+        if seg[0].isdigit():
+            seg = f"_{seg}"
+        if seg in _CS_RESERVED:
+            seg = f"@{seg}"
+        fixed.append(seg)
+    return ".".join(fixed) or "Generated"
 
 
 # ---------------------------------------------------------------------------

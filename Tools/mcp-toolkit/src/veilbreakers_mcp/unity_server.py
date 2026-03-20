@@ -799,7 +799,8 @@ async def _handle_vfx_aura(
 async def _handle_vfx_corruption_shader(name: str) -> str:
     """Generate corruption scaling HLSL shader (VFX-06)."""
     shader = generate_corruption_shader()
-    shader_path = f"Assets/Shaders/Generated/{name}_Corruption.shader"
+    safe_name = _sanitize_cs_identifier(name) or "Shader"
+    shader_path = f"Assets/Shaders/Generated/{safe_name}_Corruption.shader"
 
     try:
         abs_path = _write_to_unity(shader, shader_path)
@@ -5088,7 +5089,8 @@ async def unity_shader(
                 material_properties=material_properties,
                 pass_code=pass_code,
             )
-            rel_path = f"Assets/Scripts/Rendering/{feature_name}Feature.cs"
+            safe_feature = _sanitize_cs_identifier(feature_name) or "Feature"
+            rel_path = f"Assets/Scripts/Rendering/{safe_feature}Feature.cs"
             abs_path = _write_to_unity(script, rel_path)
             return json.dumps({
                 "status": "success",
