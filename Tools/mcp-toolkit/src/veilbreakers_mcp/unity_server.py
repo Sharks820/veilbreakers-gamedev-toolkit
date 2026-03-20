@@ -158,6 +158,30 @@ from veilbreakers_mcp.shared.unity_templates.asset_templates import (
     generate_reference_scan_script,
     generate_atomic_import_script,
 )
+from veilbreakers_mcp.shared.unity_templates.data_templates import (
+    generate_so_definition,
+    generate_asset_creation_script,
+    generate_json_validator_script,
+    generate_json_loader_script,
+    generate_localization_setup_script,
+    generate_localization_entries_script,
+    generate_data_authoring_window,
+)
+from veilbreakers_mcp.shared.unity_templates.pipeline_templates import (
+    generate_gitlfs_config,
+    generate_gitignore,
+    generate_normal_map_bake_script,
+    generate_sprite_atlas_script,
+    generate_sprite_animation_script,
+    generate_sprite_editor_config_script,
+    generate_asset_postprocessor_script,
+)
+from veilbreakers_mcp.shared.unity_templates.quality_templates import (
+    generate_poly_budget_check_script,
+    generate_master_material_script,
+    generate_texture_quality_check_script,
+    generate_aaa_validation_script,
+)
 
 logger = logging.getLogger("veilbreakers_mcp.unity")
 
@@ -5110,6 +5134,679 @@ async def unity_shader(
 
     except Exception as exc:
         logger.exception("unity_shader action '%s' failed", action)
+        return json.dumps(
+            {"status": "error", "action": action, "message": str(exc)}
+        )
+
+
+# ---------------------------------------------------------------------------
+# Compound tool: unity_data (DATA-01, DATA-02, DATA-03, DATA-04)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def unity_data(
+    action: Literal[
+        "create_so_definition",       # DATA-02: ScriptableObject class definition
+        "create_so_assets",           # DATA-02: .asset file instantiation
+        "validate_json",             # DATA-01: JSON config schema validator
+        "create_json_loader",        # DATA-01: Typed C# data class + JSON loader
+        "setup_localization",        # DATA-03: Unity Localization infrastructure
+        "add_localization_entries",   # DATA-03: String table entry population
+        "create_data_editor",        # DATA-04: IMGUI EditorWindow for SO authoring
+    ],
+    # SO definition params
+    class_name: str = "",
+    namespace: str = "VeilBreakers.Data",
+    fields: list[dict] | None = None,
+    summary: str = "",
+    menu_name: str = "",
+    file_name: str = "",
+    # Asset creation params
+    so_class_name: str = "",
+    assets: list[dict] | None = None,
+    output_folder: str = "Assets/Data",
+    category: str = "",
+    # JSON params
+    config_name: str = "",
+    json_path: str = "",
+    schema: dict | None = None,
+    wrapper_class: str = "",
+    is_array: bool = True,
+    # Localization params
+    default_locale: str = "en",
+    locales: list[str] | None = None,
+    table_name: str = "VeilBreakers_UI",
+    entries: dict[str, str] | None = None,
+    locale: str = "en",
+    # Data editor params
+    window_name: str = "",
+    menu_path: str = "",
+    data_folder: str = "Assets/Data",
+) -> str:
+    """Data-driven game architecture -- ScriptableObject definitions, JSON config
+    loading, localization setup, and data authoring editor windows.
+
+    This compound tool generates C# editor scripts for data architecture,
+    writes them to the Unity project, and returns instructions for executing
+    them via mcp-unity.
+
+    Actions:
+    - create_so_definition: Generate ScriptableObject class with CreateAssetMenu (DATA-02)
+    - create_so_assets: Create .asset instances from a ScriptableObject class (DATA-02)
+    - validate_json: Generate JSON config schema validator (DATA-01)
+    - create_json_loader: Generate typed C# data class + JSON loader (DATA-01)
+    - setup_localization: Set up Unity Localization infrastructure (DATA-03)
+    - add_localization_entries: Populate string table entries (DATA-03)
+    - create_data_editor: Generate IMGUI EditorWindow for batch SO authoring (DATA-04)
+
+    Args:
+        action: The data action to perform.
+        class_name: C# class name for SO definition or JSON loader.
+        namespace: C# namespace (default VeilBreakers.Data).
+        fields: Field definitions (list of dicts with name, type, optional default/label).
+        summary: XML summary comment for the class.
+        menu_name: CreateAssetMenu menu name for SO.
+        file_name: Default file name for SO asset creation.
+        so_class_name: ScriptableObject class name for asset creation or data editor.
+        assets: List of asset data dicts for create_so_assets.
+        output_folder: Output folder for assets (default Assets/Data).
+        category: Category name for asset organization.
+        config_name: Config name for JSON validator.
+        json_path: JSON file path for validation or loading.
+        schema: JSON schema dict for validator.
+        wrapper_class: Wrapper class name for JSON validator.
+        is_array: Whether JSON data is an array (for JSON loader).
+        default_locale: Default locale for localization (default en).
+        locales: List of additional locale codes.
+        table_name: String table name for localization.
+        entries: Dict of key->value entries for localization.
+        locale: Locale code for localization entries.
+        window_name: EditorWindow class name for data editor.
+        menu_path: MenuItem path for data editor.
+        data_folder: Folder for data editor to browse (default Assets/Data).
+    """
+    try:
+        if action == "create_so_definition":
+            if not class_name:
+                return json.dumps(
+                    {"status": "error", "action": action, "message": "class_name is required"}
+                )
+            safe_class = _sanitize_cs_identifier(class_name) or "SODefinition"
+            script = generate_so_definition(
+                class_name=safe_class,
+                namespace=namespace,
+                fields=fields or [],
+                summary=summary,
+                menu_name=menu_name,
+                file_name=file_name,
+            )
+            rel_path = f"Assets/Scripts/Generated/Data/{safe_class}.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "class_name": safe_class,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the SO definition",
+                ],
+            })
+
+        elif action == "create_so_assets":
+            if not so_class_name:
+                return json.dumps(
+                    {"status": "error", "action": action, "message": "so_class_name is required"}
+                )
+            safe_class = _sanitize_cs_identifier(so_class_name) or "SOClass"
+            script = generate_asset_creation_script(
+                so_class_name=safe_class,
+                namespace=namespace,
+                assets=assets or [],
+                output_folder=output_folder,
+                category=category,
+                menu_path=menu_path or f"VeilBreakers/Data/Create {safe_class} Assets",
+            )
+            rel_path = f"Assets/Editor/Generated/Data/Create_{safe_class}_Assets.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "so_class_name": safe_class,
+                "asset_count": len(assets or []),
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the script",
+                    f"Execute menu item: VeilBreakers/Data/Create {safe_class} Assets",
+                ],
+            })
+
+        elif action == "validate_json":
+            if not config_name:
+                return json.dumps(
+                    {"status": "error", "action": action, "message": "config_name is required"}
+                )
+            safe_config = _sanitize_cs_identifier(config_name) or "Config"
+            script = generate_json_validator_script(
+                config_name=safe_config,
+                json_path=json_path,
+                schema=schema or {},
+                wrapper_class=wrapper_class,
+            )
+            rel_path = f"Assets/Editor/Generated/Data/Validate_{safe_config}.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "config_name": safe_config,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the validator",
+                    f"Execute menu item: VeilBreakers/Data/Validate {safe_config}",
+                ],
+            })
+
+        elif action == "create_json_loader":
+            if not class_name:
+                return json.dumps(
+                    {"status": "error", "action": action, "message": "class_name is required"}
+                )
+            safe_class = _sanitize_cs_identifier(class_name) or "DataLoader"
+            script = generate_json_loader_script(
+                class_name=safe_class,
+                namespace=namespace,
+                fields=fields or [],
+                json_path=json_path,
+                is_array=is_array,
+            )
+            rel_path = f"Assets/Scripts/Generated/Data/{safe_class}.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "class_name": safe_class,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the loader class",
+                ],
+            })
+
+        elif action == "setup_localization":
+            script = generate_localization_setup_script(
+                default_locale=default_locale,
+                locales=locales or [],
+                table_name=table_name,
+                output_dir=output_folder,
+            )
+            safe_table = _sanitize_cs_identifier(table_name) or "Localization"
+            rel_path = f"Assets/Editor/Generated/Data/Setup_{safe_table}_Localization.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "table_name": table_name,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the setup script",
+                    f"Execute menu item: VeilBreakers/Data/Setup {table_name} Localization",
+                ],
+            })
+
+        elif action == "add_localization_entries":
+            if not entries:
+                return json.dumps(
+                    {"status": "error", "action": action, "message": "entries dict is required"}
+                )
+            script = generate_localization_entries_script(
+                table_name=table_name,
+                entries=entries,
+                locale=locale,
+            )
+            safe_table = _sanitize_cs_identifier(table_name) or "Localization"
+            rel_path = f"Assets/Editor/Generated/Data/Add_{safe_table}_{locale}_Entries.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "table_name": table_name,
+                "locale": locale,
+                "entry_count": len(entries),
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the entries script",
+                    f"Execute menu item: VeilBreakers/Data/Add {table_name} {locale} Entries",
+                ],
+            })
+
+        elif action == "create_data_editor":
+            if not window_name:
+                return json.dumps(
+                    {"status": "error", "action": action, "message": "window_name is required"}
+                )
+            if not so_class_name:
+                return json.dumps(
+                    {"status": "error", "action": action, "message": "so_class_name is required"}
+                )
+            safe_window = _sanitize_cs_identifier(window_name) or "DataEditor"
+            safe_so = _sanitize_cs_identifier(so_class_name) or "SOClass"
+            script = generate_data_authoring_window(
+                window_name=safe_window,
+                so_class_name=safe_so,
+                namespace=namespace,
+                fields=fields or [],
+                menu_path=menu_path or f"VeilBreakers/Data/{safe_window}",
+                data_folder=data_folder,
+                category=category,
+            )
+            rel_path = f"Assets/Editor/Generated/Data/{safe_window}.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "window_name": safe_window,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the editor window",
+                    f"Open via menu: {menu_path or f'VeilBreakers/Data/{safe_window}'}",
+                ],
+            })
+
+        else:
+            return json.dumps(
+                {"status": "error", "message": f"Unknown action: {action}"}
+            )
+
+    except Exception as exc:
+        logger.exception("unity_data action '%s' failed", action)
+        return json.dumps(
+            {"status": "error", "action": action, "message": str(exc)}
+        )
+
+
+# ---------------------------------------------------------------------------
+# Compound tool: unity_quality (AAA-01, AAA-02, AAA-03, AAA-04, AAA-06)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def unity_quality(
+    action: Literal[
+        "check_poly_budget",         # AAA-02: Per-asset-type polygon budget check
+        "create_master_materials",   # AAA-04: Master material library generation
+        "check_texture_quality",     # AAA-06: Texture quality validation
+        "aaa_audit",                 # Combined AAA quality audit
+    ],
+    asset_type: str = "prop",
+    target_path: str = "",
+    target_folder: str = "Assets",
+    auto_flag: bool = True,
+    output_folder: str = "Assets/Data/Materials/MasterLibrary",
+    materials: list[dict] | None = None,
+    target_texel_density: float = 10.24,
+    check_normal_maps: bool = True,
+    check_channel_packing: bool = True,
+    check_poly: bool = True,
+    check_textures: bool = True,
+    check_materials: bool = True,
+) -> str:
+    """AAA quality enforcement -- polygon budgets, master materials, texture
+    quality, and combined quality auditing.
+
+    This compound tool generates C# editor scripts that validate and enforce
+    AAA quality standards for VeilBreakers game assets.
+
+    Actions:
+    - check_poly_budget: Check polygon counts against per-asset-type budgets (AAA-02)
+    - create_master_materials: Generate master material library with PBR presets (AAA-04)
+    - check_texture_quality: Validate texel density, normal maps, channel packing (AAA-06)
+    - aaa_audit: Combined AAA quality audit (poly + texture + material checks)
+
+    Args:
+        action: The quality action to perform.
+        asset_type: Asset type for poly budget (hero/mob/weapon/prop/building).
+        target_path: Target path for poly budget check.
+        target_folder: Target folder for texture quality or AAA audit.
+        auto_flag: Auto-flag assets exceeding budgets.
+        output_folder: Output folder for master materials.
+        materials: Custom material definitions for master library.
+        target_texel_density: Target texel density in px/m (default 10.24).
+        check_normal_maps: Whether to validate normal maps.
+        check_channel_packing: Whether to check channel packing.
+        check_poly: Include poly check in AAA audit.
+        check_textures: Include texture check in AAA audit.
+        check_materials: Include material check in AAA audit.
+    """
+    try:
+        if action == "check_poly_budget":
+            safe_type = _sanitize_cs_identifier(asset_type) or "prop"
+            script = generate_poly_budget_check_script(
+                asset_type=safe_type,
+                target_path=target_path,
+                auto_flag=auto_flag,
+            )
+            rel_path = f"Assets/Editor/Generated/Quality/PolyBudgetCheck_{safe_type}.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "asset_type": safe_type,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the budget check",
+                    f"Execute menu item: VeilBreakers/Quality/Check Poly Budget ({safe_type})",
+                ],
+            })
+
+        elif action == "create_master_materials":
+            script = generate_master_material_script(
+                output_folder=output_folder,
+                materials=materials,
+            )
+            rel_path = "Assets/Editor/Generated/Quality/CreateMasterMaterials.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "material_count": len(materials) if materials else "default",
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the script",
+                    "Execute menu item: VeilBreakers/Quality/Create Master Materials",
+                ],
+            })
+
+        elif action == "check_texture_quality":
+            script = generate_texture_quality_check_script(
+                target_folder=target_folder,
+                target_texel_density=target_texel_density,
+                check_normal_maps=check_normal_maps,
+                check_channel_packing=check_channel_packing,
+            )
+            rel_path = "Assets/Editor/Generated/Quality/TextureQualityCheck.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the checker",
+                    "Execute menu item: VeilBreakers/Quality/Check Texture Quality",
+                ],
+            })
+
+        elif action == "aaa_audit":
+            safe_type = _sanitize_cs_identifier(asset_type) or "prop"
+            script = generate_aaa_validation_script(
+                target_folder=target_folder,
+                asset_type=safe_type,
+                check_poly=check_poly,
+                check_textures=check_textures,
+                check_materials=check_materials,
+            )
+            rel_path = "Assets/Editor/Generated/Quality/AAAQualityAudit.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "asset_type": safe_type,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the audit script",
+                    "Execute menu item: VeilBreakers/Quality/AAA Quality Audit",
+                ],
+            })
+
+        else:
+            return json.dumps(
+                {"status": "error", "message": f"Unknown action: {action}"}
+            )
+
+    except Exception as exc:
+        logger.exception("unity_quality action '%s' failed", action)
+        return json.dumps(
+            {"status": "error", "action": action, "message": str(exc)}
+        )
+
+
+# ---------------------------------------------------------------------------
+# Compound tool: unity_pipeline (BUILD-06, TWO-03, PIPE-08, IMP-03)
+# ---------------------------------------------------------------------------
+
+
+@mcp.tool()
+async def unity_pipeline(
+    action: Literal[
+        "create_sprite_atlas",       # BUILD-06: SpriteAtlas creation
+        "create_sprite_animation",   # BUILD-06: Sprite AnimationClip
+        "configure_sprite_editor",   # TWO-03: Sprite Editor configuration
+        "create_asset_postprocessor",  # PIPE-08: AssetPostprocessor with folder rules
+        "configure_git_lfs",         # IMP-03: Git LFS + .gitignore setup
+    ],
+    # Sprite atlas params
+    atlas_name: str = "",
+    source_folder: str = "",
+    padding: int = 4,
+    enable_tight_packing: bool = True,
+    enable_rotation: bool = False,
+    max_texture_size: int = 4096,
+    srgb: bool = True,
+    filter_mode: str = "Bilinear",
+    include_in_build: bool = True,
+    # Sprite animation params
+    clip_name: str = "",
+    sprite_folder: str = "",
+    frame_rate: int = 12,
+    loop: bool = True,
+    # Sprite editor params
+    sprite_path: str = "",
+    pivot: list[float] | None = None,
+    border: list[int] | None = None,
+    pixels_per_unit: int = 100,
+    sprite_mode: int = 1,
+    custom_physics_shape: bool = False,
+    # Postprocessor params
+    processor_name: str = "",
+    version: int = 1,
+    texture_rules: list[dict] | None = None,
+    model_rules: list[dict] | None = None,
+    audio_rules: list[dict] | None = None,
+    namespace: str = "VeilBreakers.Editor",
+    # Git LFS params
+    extra_extensions: list[str] | None = None,
+    include_unity_yaml_merge: bool = True,
+    extra_patterns: list[str] | None = None,
+    output_path: str = "",
+) -> str:
+    """Asset pipeline automation -- sprite atlasing, sprite animation, Sprite
+    Editor configuration, AssetPostprocessor, and Git LFS setup.
+
+    This compound tool generates C# editor scripts and configuration files
+    for Unity asset pipeline automation.
+
+    Actions:
+    - create_sprite_atlas: Create SpriteAtlas with folder sources (BUILD-06)
+    - create_sprite_animation: Create sprite-based AnimationClip (BUILD-06)
+    - configure_sprite_editor: Configure Sprite Editor import settings (TWO-03)
+    - create_asset_postprocessor: Create AssetPostprocessor with folder rules (PIPE-08)
+    - configure_git_lfs: Generate .gitattributes and .gitignore for Unity project (IMP-03)
+
+    Args:
+        action: The pipeline action to perform.
+        atlas_name: SpriteAtlas name.
+        source_folder: Source folder for sprites.
+        padding: Atlas padding in pixels (default 4).
+        enable_tight_packing: Enable tight packing (default True).
+        enable_rotation: Allow sprite rotation in atlas (default False).
+        max_texture_size: Maximum atlas texture size (default 4096).
+        srgb: sRGB color space (default True).
+        filter_mode: Texture filter mode (default Bilinear).
+        include_in_build: Include atlas in build (default True).
+        clip_name: Animation clip name.
+        sprite_folder: Folder containing sprite frames.
+        frame_rate: Animation frame rate (default 12).
+        loop: Loop animation (default True).
+        sprite_path: Path to sprite asset for editor config.
+        pivot: Sprite pivot point [x, y] (default center).
+        border: Sprite border [left, bottom, right, top].
+        pixels_per_unit: Pixels per unit (default 100).
+        sprite_mode: Sprite mode (1=Single, 2=Multiple, 3=Polygon).
+        custom_physics_shape: Enable custom physics shape.
+        processor_name: AssetPostprocessor class name.
+        version: Postprocessor version number.
+        texture_rules: Texture import rules list.
+        model_rules: Model import rules list.
+        audio_rules: Audio import rules list.
+        namespace: C# namespace for postprocessor.
+        extra_extensions: Additional file extensions for Git LFS tracking.
+        include_unity_yaml_merge: Include Unity YAML merge driver config.
+        extra_patterns: Additional .gitignore patterns.
+        output_path: Output path for generated files.
+    """
+    try:
+        if action == "create_sprite_atlas":
+            if not atlas_name:
+                return json.dumps(
+                    {"status": "error", "action": action, "message": "atlas_name is required"}
+                )
+            safe_name = _sanitize_cs_identifier(atlas_name) or "Atlas"
+            script = generate_sprite_atlas_script(
+                atlas_name=safe_name,
+                source_folder=source_folder,
+                output_path=output_path or f"Assets/SpriteAtlases/{safe_name}.spriteatlas",
+                padding=padding,
+                enable_tight_packing=enable_tight_packing,
+                enable_rotation=enable_rotation,
+                max_texture_size=max_texture_size,
+                srgb=srgb,
+                filter_mode=filter_mode,
+                include_in_build=include_in_build,
+            )
+            rel_path = f"Assets/Editor/Generated/Pipeline/Create_{safe_name}_Atlas.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "atlas_name": safe_name,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the atlas script",
+                    f"Execute menu item: VeilBreakers/Pipeline/Create {safe_name} Atlas",
+                ],
+            })
+
+        elif action == "create_sprite_animation":
+            if not clip_name:
+                return json.dumps(
+                    {"status": "error", "action": action, "message": "clip_name is required"}
+                )
+            safe_clip = _sanitize_cs_identifier(clip_name) or "SpriteAnim"
+            script = generate_sprite_animation_script(
+                clip_name=safe_clip,
+                sprite_folder=sprite_folder,
+                frame_rate=frame_rate,
+                loop=loop,
+                output_path=output_path or f"Assets/Animations/{safe_clip}.anim",
+            )
+            rel_path = f"Assets/Editor/Generated/Pipeline/Create_{safe_clip}_Animation.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "clip_name": safe_clip,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the animation script",
+                    f"Execute menu item: VeilBreakers/Pipeline/Create {safe_clip} Animation",
+                ],
+            })
+
+        elif action == "configure_sprite_editor":
+            if not sprite_path:
+                return json.dumps(
+                    {"status": "error", "action": action, "message": "sprite_path is required"}
+                )
+            # Convert list params to tuples for the generator
+            pivot_tuple = tuple(pivot) if pivot else None
+            border_tuple = tuple(border) if border else None
+            script = generate_sprite_editor_config_script(
+                sprite_path=sprite_path,
+                pivot=pivot_tuple,
+                border=border_tuple,
+                pixels_per_unit=pixels_per_unit,
+                sprite_mode=sprite_mode,
+                custom_physics_shape=custom_physics_shape,
+            )
+            rel_path = "Assets/Editor/Generated/Pipeline/ConfigureSpriteEditor.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "sprite_path": sprite_path,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the configuration script",
+                    "Execute menu item: VeilBreakers/Pipeline/Configure Sprite Editor",
+                ],
+            })
+
+        elif action == "create_asset_postprocessor":
+            if not processor_name:
+                return json.dumps(
+                    {"status": "error", "action": action, "message": "processor_name is required"}
+                )
+            safe_name = _sanitize_cs_identifier(processor_name) or "Postprocessor"
+            script = generate_asset_postprocessor_script(
+                processor_name=safe_name,
+                version=version,
+                texture_rules=texture_rules,
+                model_rules=model_rules,
+                audio_rules=audio_rules,
+                namespace=namespace,
+            )
+            rel_path = f"Assets/Editor/Generated/Pipeline/{safe_name}.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "processor_name": safe_name,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the postprocessor",
+                    "The postprocessor will run automatically on future asset imports",
+                ],
+            })
+
+        elif action == "configure_git_lfs":
+            # Generate .gitattributes
+            gitattributes = generate_gitlfs_config(
+                extra_extensions=extra_extensions,
+                include_unity_yaml_merge=include_unity_yaml_merge,
+            )
+            # Generate .gitignore
+            gitignore = generate_gitignore(
+                extra_patterns=extra_patterns,
+            )
+            # Write to Unity project root
+            gitattr_path = _write_to_unity(gitattributes, ".gitattributes")
+            gitignore_path = _write_to_unity(gitignore, ".gitignore")
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "gitattributes_path": gitattr_path,
+                "gitignore_path": gitignore_path,
+                "next_steps": [
+                    "Run 'git lfs install' in the Unity project directory if not already configured",
+                    "Commit the .gitattributes and .gitignore files",
+                ],
+            })
+
+        else:
+            return json.dumps(
+                {"status": "error", "message": f"Unknown action: {action}"}
+            )
+
+    except Exception as exc:
+        logger.exception("unity_pipeline action '%s' failed", action)
         return json.dumps(
             {"status": "error", "action": action, "message": str(exc)}
         )

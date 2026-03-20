@@ -28,6 +28,8 @@ from veilbreakers_mcp.shared.fal_client import (
     compose_style_board,
     test_silhouette_readability,
 )
+from veilbreakers_mcp.shared.delight import delight_albedo
+from veilbreakers_mcp.shared.palette_validator import validate_palette as _validate_palette, validate_roughness_map
 
 logger = logging.getLogger("veilbreakers_mcp")
 
@@ -632,7 +634,7 @@ async def blender_texture(
     action: Literal[
         "create_pbr", "mask_region", "inpaint", "hsv_adjust",
         "blend_seams", "generate_wear", "bake", "upscale",
-        "make_tileable", "validate",
+        "make_tileable", "validate", "delight", "validate_palette",
     ],
     object_name: str | None = None,
     # PBR creation params
@@ -663,6 +665,12 @@ async def blender_texture(
     output_path: str | None = None,
     # Tileable params
     overlap_pct: float = 0.15,
+    # Delight params
+    blur_radius_pct: float = 0.12,
+    strength: float = 0.75,
+    # Palette validation params
+    rules: dict | None = None,
+    sample_pixels: int = 10000,
     capture_viewport: bool = True,
 ):
     """Comprehensive texture operations -- Blender-side and MCP-side.
@@ -678,6 +686,8 @@ async def blender_texture(
     - upscale: AI upscale via Real-ESRGAN
     - make_tileable: Make texture tile seamlessly
     - validate: Validate textures on object or file
+    - delight: Remove baked-in lighting from albedo texture (AAA-01)
+    - validate_palette: Validate dark fantasy palette rules on albedo texture (AAA-03)
     """
     blender = get_blender_connection()
 
@@ -807,6 +817,29 @@ async def blender_texture(
             )
             return await _with_screenshot(blender, result, capture_viewport)
         return "ERROR: 'object_name' or 'image_path' is required for validate"
+
+    elif action == "delight":
+        if not image_path:
+            return "ERROR: 'image_path' is required for delight"
+        if not output_path:
+            return "ERROR: 'output_path' is required for delight"
+        result = delight_albedo(
+            image_path=image_path,
+            output_path=output_path,
+            blur_radius_pct=blur_radius_pct,
+            strength=strength,
+        )
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "validate_palette":
+        if not image_path:
+            return "ERROR: 'image_path' is required for validate_palette"
+        result = _validate_palette(
+            image_path=image_path,
+            rules=rules,
+            sample_pixels=sample_pixels,
+        )
+        return json.dumps(result, indent=2, default=str)
 
     return "Unknown action"
 
