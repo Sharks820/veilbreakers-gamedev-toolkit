@@ -1,7 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-20 (Phase 11 complete)
+**Updated:** 2026-03-20 (Phase 12 planned)
 
 ## Milestones
 
@@ -31,7 +31,7 @@
 - [ ] **Phase 9: Unity Editor Deep Control** - Prefabs, components, hierarchy, physics, project settings, packages, import configuration, asset operations
 - [ ] **Phase 10: C# Programming Framework** - General-purpose code generation, script modification, editor tooling, test framework, architecture patterns
 - [x] **Phase 11: Data Architecture & Asset Pipeline** - ScriptableObjects, JSON config, localization, game data tools, Git LFS, normal map baking, sprite atlasing
-- [ ] **Phase 12: Core Game Systems** - Save/load, health/damage, character controller, Input System, settings menu
+- [ ] **Phase 12: Core Game Systems** - Save/load, health/damage, character controller, Input System, settings menu, VeilBreakers combat systems
 - [ ] **Phase 13: Content & Progression Systems** - Inventory, dialogue, quests, loot tables, crafting, skill trees, combat balancing
 - [ ] **Phase 14: Camera, Cinematics & Scene Management** - Cinemachine, Timeline, cutscenes, scene loading, lighting, probes, terrain detail
 - [ ] **Phase 15: Game UX & Encounter Design** - Minimap, tutorials, damage numbers, interaction prompts, encounter scripting, AI director
@@ -227,13 +227,13 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 11-01-PLAN.md -- Data architecture: SO definitions, .asset instantiation, JSON validation, localization, data authoring tools (DATA-01, DATA-02, DATA-03, DATA-04)
-- [ ] 11-02-PLAN.md -- Asset pipeline: Git LFS config, normal map baking, sprite atlas, sprite editor, AssetPostprocessor (IMP-03, IMP-04, BUILD-06, TWO-03, PIPE-08)
+- [x] 11-01-PLAN.md -- Data architecture: SO definitions, .asset instantiation, JSON validation, localization, data authoring tools (DATA-01, DATA-02, DATA-03, DATA-04)
+- [x] 11-02-PLAN.md -- Asset pipeline: Git LFS config, normal map baking, sprite atlas, sprite editor, AssetPostprocessor (IMP-03, IMP-04, BUILD-06, TWO-03, PIPE-08)
 - [x] 11-03-PLAN.md -- AAA quality: albedo de-lighting, poly budgets, palette validation, master materials, texture quality (AAA-01, AAA-02, AAA-03, AAA-04, AAA-06)
 - [x] 11-04-PLAN.md -- Compound tool wiring: unity_data + unity_quality + unity_pipeline tools, blender_texture extensions, syntax tests
 
 ### Phase 12: Core Game Systems
-**Goal**: Claude can generate the foundational game systems every Unity project needs -- save/load persistence, health/damage, character movement, input configuration, and settings menus
+**Goal**: Claude can generate the foundational game systems every Unity project needs -- save/load persistence, health/damage, character movement, input configuration, settings menus, and VeilBreakers combat systems (player combat, abilities, synergy, corruption, XP, currency, damage types)
 **Depends on**: Phase 10 (C# generation), Phase 11 (ScriptableObjects for item/config data)
 **Requirements**: GAME-01, GAME-05, GAME-06, GAME-07, GAME-08, MEDIA-02, VB-01, VB-02, VB-03, VB-04, VB-05, VB-06, VB-07, RPG-03
 **Success Criteria** (what must be TRUE):
@@ -242,11 +242,12 @@ Plans:
   3. Claude can generate first-person and third-person character controllers with configurable movement parameters and camera follow behavior
   4. Claude can create Input Action assets with action maps, control schemes, and rebinding support -- player input routes correctly through the Input System
   5. Claude can generate a game settings menu (graphics quality, audio volume, keybindings, accessibility) that persists preferences across sessions
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 12-01: TBD
-- [ ] 12-02: TBD
+- [ ] 12-01-PLAN.md -- Core game system templates: save/load, health/damage, character controller, input system, settings menu, HTTP client, interactable objects (GAME-01, GAME-05, GAME-06, GAME-07, GAME-08, MEDIA-02, RPG-03)
+- [ ] 12-02-PLAN.md -- VeilBreakers combat templates: player combat, ability system, synergy engine, corruption gameplay, XP/leveling, currency, damage types (VB-01, VB-02, VB-03, VB-04, VB-05, VB-06, VB-07)
+- [ ] 12-03-PLAN.md -- Compound tool wiring: unity_game tool + extended C# syntax tests (all 14 requirements)
 
 ### Phase 13: Content & Progression Systems
 **Goal**: Claude can generate the higher-level game systems that drive player engagement -- inventory, dialogue, quests, loot, crafting, skill trees, and combat balancing tools
@@ -348,8 +349,8 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 8. Gameplay AI & Performance | v1.0 | 3/3 | Complete | 2026-03-19 |
 | 9. Unity Editor Deep Control | v2.0 | 3/3 | Complete | 2026-03-20 |
 | 10. C# Programming Framework | v2.0 | 4/4 | Complete | 2026-03-20 |
-| 11. Data Architecture & Asset Pipeline | 3/4 | Complete    | 2026-03-20 | - |
-| 12. Core Game Systems | v2.0 | 0/2 | Not started | - |
+| 11. Data Architecture & Asset Pipeline | v2.0 | 4/4 | Complete | 2026-03-20 |
+| 12. Core Game Systems | v2.0 | 0/3 | Not started | - |
 | 13. Content & Progression Systems | v2.0 | 0/3 | Not started | - |
 | 14. Camera, Cinematics & Scene Management | v2.0 | 0/3 | Not started | - |
 | 15. Game UX & Encounter Design | v2.0 | 0/2 | Not started | - |
@@ -362,3 +363,4 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 *Phase 10 planned: 2026-03-20*
 *Phase 11 planned: 2026-03-20*
 *Phase 11 complete: 2026-03-20*
+*Phase 12 planned: 2026-03-20*
