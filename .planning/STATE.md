@@ -3,11 +3,27 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
+stopped_at: Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators)
+last_updated: "2026-03-20T22:34:55.377Z"
+last_activity: 2026-03-20 -- Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators, 78 tests)
+progress:
+  total_phases: 9
+  completed_phases: 7
+  total_plans: 30
+  completed_plans: 29
+  percent: 97
+---
+
+---
+gsd_state_version: 1.0
+milestone: v2.0
+milestone_name: Complete Unity Game Development Coverage
+status: executing
 stopped_at: Completed 15-04-PLAN.md (tool wiring + 31 syntax tests, Phase 15 complete)
 last_updated: "2026-03-20T21:19:24.423Z"
 last_activity: 2026-03-20 -- Completed 15-04-PLAN.md (tool wiring + 31 syntax tests, Phase 15 complete)
 progress:
-  total_phases: 9
+  [██████████] 97%
   completed_phases: 7
   total_plans: 26
   completed_plans: 26
@@ -102,13 +118,13 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 ## Current Position
 
 Phase: 16 of 17 (Quality Assurance & Testing)
-Plan: 1 of 4 in current phase (1 complete)
+Plan: 3 of 4 in current phase (3 complete)
 Status: Executing Phase 16
-Last activity: 2026-03-20 -- Completed 16-01-PLAN.md (Unity TCP bridge foundation + 118 tests)
+Last activity: 2026-03-20 -- Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators, 78 tests)
 
 ```
-Phase Progress: [████████████████████████████░░] 30/33 plans complete
-v2.0 Progress:  [████████████████████████████░░] 30/33 plans complete
+Phase Progress: [█████████████████████████████░] 32/33 plans complete
+v2.0 Progress:  [█████████████████████████████░] 32/33 plans complete
 ```
 
 ## Performance Metrics
@@ -122,9 +138,9 @@ v2.0 Progress:  [█████████████████████
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 30 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-04, 16-01) |
-| v2.0 tests added | 3,220 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter + 84 ux-batch2 + 93 ux-batch1 + 283 tool-wiring-p15 + 118 qa-bridge) |
-| v2.0 total tests passing | 6,003 |
+| v2.0 plans completed | 32 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-04, 16-01 through 16-03) |
+| v2.0 tests added | 3,409 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter + 84 ux-batch2 + 93 ux-batch1 + 283 tool-wiring-p15 + 118 qa-bridge + 111 qa-testing + 78 qa-observability) |
+| v2.0 total tests passing | 6,192 |
 | v2.0 MCP tools | 35 (15 Blender + 20 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
@@ -152,6 +168,8 @@ v2.0 Progress:  [█████████████████████
 | Phase 15-02 P02 | 22 min | 2 tasks | 2 files |
 | Phase 15-04 P04 | 20 min | 2 tasks | 2 files |
 | 16-01 duration | 12 min | 2 tasks | 6 files |
+| 16-02 duration | -- | 1 task | 2 files |
+| 16-03 duration | 19 min | 1 task | 2 files |
 
 ## Accumulated Context
 
@@ -250,6 +268,10 @@ v2.0 Progress:  [█████████████████████
 | Raw triple-quoted string for MiniJSON C# template section | Avoids Python/C# single-quote char literal escaping conflicts in line-based templates | 16 |
 | Embedded MiniJSON parser in bridge commands template | JsonUtility cannot handle Dictionary<string,object>; MiniJSON is MIT single-file standard | 16 |
 | Connection-per-command pattern for UnityConnection | Mirrors BlenderConnection exactly; avoids stale sockets on Unity domain reload | 16 |
+| SENTRY_AVAILABLE preprocessor guard for crash reporting | Generated C# compiles without Sentry package installed | 16 |
+| Empty DSN fallback to Debug.Log in crash reporting | Prevents runtime crashes when Sentry not configured | 16 |
+| PascalCase typed event methods from snake_case names | TrackEnemyKilled from "enemy_killed", consistent C# naming convention | 16 |
+| FSM state detection via field name convention | Checks "currentState" or "_state" field names, avoids interface/attribute dependency | 16 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -264,9 +286,9 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T22:02:21Z
-Stopped at: Completed 16-01-PLAN.md (Unity TCP bridge foundation + 118 tests)
-Next action: Continue Phase 16, plan 02
+Last session: 2026-03-20T22:29:23Z
+Stopped at: Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators)
+Next action: Continue Phase 16, plan 04 (tool wiring)
 
 ---
 *State initialized: 2026-03-18*
