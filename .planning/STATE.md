@@ -3,60 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
-stopped_at: Completed 13-03-PLAN.md (tool wiring + equipment templates, 4,511 total)
-last_updated: "2026-03-20T17:31:10.509Z"
-last_activity: 2026-03-20 -- Completed 14-02-PLAN.md (9 world template generators + 110 tests)
+stopped_at: Completed 14-01-PLAN.md (10 camera template generators + 71 tests)
+last_updated: "2026-03-20T17:30:00Z"
+last_activity: 2026-03-20 -- Completed 14-01-PLAN.md (10 camera template generators + 71 tests)
 progress:
   total_phases: 9
   completed_phases: 5
   total_plans: 22
-  completed_plans: 19
-  percent: 86
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 13-03-PLAN.md (tool wiring + equipment templates, 4,511 total)
-last_updated: "2026-03-20T17:29:43.394Z"
-last_activity: 2026-03-20 -- Completed 14-02-PLAN.md (9 world template generators + 110 tests)
-progress:
-  [█████████░] 86%
-  completed_phases: 5
-  total_plans: 22
-  completed_plans: 18
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 13-03-PLAN.md (tool wiring + equipment templates, 4,511 total)
-last_updated: "2026-03-20T17:29:01.817Z"
-last_activity: 2026-03-20 -- Completed 13-03-PLAN.md (tool wiring + 42 equipment tests + 30 syntax entries, 4511 total)
-progress:
-  total_phases: 9
-  completed_phases: 5
-  total_plans: 22
-  completed_plans: 18
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 13-03-PLAN.md
-last_updated: "2026-03-20T16:15:27Z"
-last_activity: 2026-03-20 -- Completed 13-03-PLAN.md (tool wiring + equipment templates, 4511 total)
-progress:
-  total_phases: 9
-  completed_phases: 5
-  total_plans: 16
-  completed_plans: 19
+  completed_plans: 20
+  percent: 90
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -73,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 Phase: 14 of 17 (Camera, Cinematics & Scene Management)
 Plan: 2 of 5 in current phase (14-01, 14-02 complete)
 Status: Executing Phase 14
-Last activity: 2026-03-20 -- Completed 14-02-PLAN.md (9 world template generators + 110 tests)
+Last activity: 2026-03-20 -- Completed 14-01-PLAN.md (10 camera template generators + 71 tests)
 
 ```
 Phase Progress: [████████████████████████████████████████] 82% overall (14/17 phases, plan 2/5)
@@ -92,7 +47,7 @@ v2.0 Progress:  [████████████████████] 2
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
 | v2.0 plans completed | 20 (09-01 through 13-03, 14-01, 14-02) |
-| v2.0 tests added | 1,838 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 110 world-templates) |
+| v2.0 tests added | 1,838 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates) |
 | v2.0 total tests passing | 4,621 |
 | v2.0 MCP tools | 32 (15 Blender + 17 Unity) |
 | 09-01 duration | 16 min |
@@ -111,7 +66,8 @@ v2.0 Progress:  [████████████████████] 2
 | 13-01 duration | 17 min |
 | 13-02 duration | 11 min |
 | 13-03 duration | 18 min |
-| Phase 14 P02 | 7 min | 2 tasks | 2 files |
+| 14-01 duration | 10 min |
+| 14-02 duration | 7 min |
 
 ## Accumulated Context
 
@@ -174,6 +130,9 @@ v2.0 Progress:  [████████████████████] 2
 | Multi-Parent Constraint with coroutine weight animation | Smooth draw/sheathe weapon transitions with 0.25s duration | 13 |
 | Equipment slot enum with 9 standard slots | Matches Phase 9 bone socket system for consistent attachment | 13 |
 | EventBus.Raise(EquipmentChangeEvent) for equipment changes | Cross-system notification pattern consistent with VB architecture | 13 |
+| Cinemachine 3.x only in camera templates (no FreeLook/VirtualCamera) | Negative test assertions prevent legacy 2.x API regression | 14 |
+| AnimationUtility.SetEditorCurve for editor clips | SetCurve only works at runtime for legacy clips | 14 |
+| Timeline saved before CreateTrack calls | Tracks are sub-assets requiring persisted parent | 14 |
 | Separate _WORLD_TIME_PRESETS dict in world_templates.py | Avoids modifying scene_templates.py, allows independent 8-preset set | 14 |
 | Scene transition returns tuple (editor_cs, runtime_cs) | Editor sets up manager prefab, runtime is the MonoBehaviour | 14 |
 | Occlusion marks large objects as occluder+occludee, small as occludee | Bounds-based classification for efficient occlusion culling | 14 |
@@ -191,10 +150,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T17:27:00Z
-Stopped at: Completed 14-02-PLAN.md (9 world template generators + 110 tests)
+Last session: 2026-03-20T17:33:36.611Z
+Stopped at: Completed 14-01-PLAN.md
 Next action: Phase 14 Plan 03 (Blender world design extensions)
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 14-02-PLAN.md (9 world template generators + 110 tests, 4,621 total)*
+*Last updated: 2026-03-20 -- Completed 14-01-PLAN.md (10 camera template generators + 71 tests)*
