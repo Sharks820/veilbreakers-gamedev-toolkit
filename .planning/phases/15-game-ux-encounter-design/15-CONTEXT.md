@@ -17,9 +17,9 @@ Requirements: UIX-01, UIX-02, UIX-03, UIX-04, AID-01, AID-02, AID-03, SHDR-04, A
 ## Implementation Decisions
 
 ### Game UX (UIX-01 through UIX-04)
-- **Minimap/compass** (UIX-01): Render texture minimap with world-space markers, rotatable compass, configurable zoom
+- **Minimap/compass** (UIX-01): Render texture minimap that EXACTLY emulates the actual game maps — every movement, every area must be 1:1 accurate with the 3D world. Uses orthographic camera render texture from actual scene geometry (not a static image). World-space markers for POIs, rotatable compass, configurable zoom. Player position must match exactly between minimap and 3D world at all times. No approximations or AI-generated map art — the minimap IS the game world viewed from above
 - **Tutorial/onboarding** (UIX-02): Step-based tutorial system with tooltip overlays, highlight rects, action triggers
-- **Damage numbers** (UIX-03): Floating text with DOTween animation, color-coded by damage type/brand, crit scaling
+- **Damage numbers** (UIX-03): Floating text with PrimeTween animation, color-coded by damage type/brand, crit scaling
 - **Interaction prompts** (UIX-04): Context-sensitive "Press E" with dynamic key rebind display, proximity triggers
 
 ### Encounter Design (AID-01 through AID-03)
@@ -54,7 +54,7 @@ Requirements: UIX-01, UIX-02, UIX-03, UIX-04, AID-01, AID-02, AID-03, SHDR-04, A
 - **2D world map from 3D terrain**: Generate 2D map texture from heightmap data, fog-of-war, location markers, player position
 
 ### Claude's Discretion
-- Minimap render texture resolution and update frequency
+- Minimap render texture resolution and update frequency (must be high enough for 1:1 accuracy)
 - Tutorial step transition animations
 - Damage number float height and duration
 - AI director difficulty adjustment curves
