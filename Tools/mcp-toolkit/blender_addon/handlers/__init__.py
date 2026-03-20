@@ -119,6 +119,12 @@ from .environment_scatter import (
     handle_scatter_props,
     handle_create_breakable,
 )
+from .equipment import (
+    handle_equipment_generate_weapon,
+    handle_equipment_split_character,
+    handle_equipment_fit_armor,
+    handle_equipment_render_icon,
+)
 
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "ping": lambda params: {"status": "success", "result": "pong"},
@@ -227,4 +233,9 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "world_generate_dungeon": handle_generate_dungeon,
     "world_generate_cave": handle_generate_cave,
     "world_generate_town": handle_generate_town,
+    # Equipment operations
+    "equipment_generate_weapon": handle_equipment_generate_weapon,
+    "equipment_split_character": handle_equipment_split_character,
+    "equipment_fit_armor": handle_equipment_fit_armor,
+    "equipment_render_icon": handle_equipment_render_icon,
 }
