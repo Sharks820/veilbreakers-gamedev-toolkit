@@ -20,11 +20,13 @@ from __future__ import annotations
 import pytest
 
 from veilbreakers_mcp.shared.unity_templates.qa_templates import (
+    analyze_csharp_static,
     generate_analytics_script,
     generate_bridge_commands_script,
     generate_bridge_server_script,
     generate_crash_reporting_script,
     generate_live_inspector_script,
+    generate_memory_leak_script,
     generate_play_session_script,
     generate_profiler_handler,
     generate_test_runner_handler,
