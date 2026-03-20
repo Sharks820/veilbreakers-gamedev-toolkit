@@ -3211,9 +3211,13 @@ async def _handle_settings_build(
     scenes: list[str] | None, platform: str, defines: list[str] | None
 ) -> str:
     """Generate and write the build settings script."""
-    script = generate_build_settings_script(
-        scenes=scenes, platform=platform, defines=defines
-    )
+    try:
+        script = generate_build_settings_script(
+            scenes=scenes, platform=platform, defines=defines
+        )
+    except ValueError as exc:
+        return json.dumps({"status": "error", "action": "configure_build", "message": str(exc)})
+
     script_path = "Assets/Editor/Generated/Settings/VeilBreakers_BuildSettings.cs"
 
     try:
