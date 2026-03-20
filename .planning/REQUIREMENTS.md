@@ -118,9 +118,9 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### AI & Encounter Design
 
-- [ ] **AID-01**: Claude can generate encounter scripting system (triggers, waves, conditions, AI director)
-- [ ] **AID-02**: Claude can generate threat escalation / AI director (dynamic difficulty adjustment)
-- [ ] **AID-03**: Claude can simulate encounters for balance testing (run N encounters, report statistics)
+- [x] **AID-01**: Claude can generate encounter scripting system (triggers, waves, conditions, AI director)
+- [x] **AID-02**: Claude can generate threat escalation / AI director (dynamic difficulty adjustment)
+- [x] **AID-03**: Claude can simulate encounters for balance testing (run N encounters, report statistics)
 
 ### Shader & Rendering
 
@@ -206,7 +206,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [x] **VB-07**: Claude can generate damage type system with 10 brand-specific damage types and elemental resistance calculations
 - [x] **VB-08**: Claude can generate brand-specific loot affinity (IRON brand mobs drop IRON-themed gear, rarity-weighted per brand)
 - [ ] **VB-09**: Claude can generate a character creation/selection screen (choose hero path, customize appearance, name entry)
-- [ ] **VB-10**: Claude can generate boss AI behavior (multi-phase state machine, phase transitions at HP thresholds, unique attack patterns, enrage mechanics)
+- [x] **VB-10**: Claude can generate boss AI behavior (multi-phase state machine, phase transitions at HP thresholds, unique attack patterns, enrage mechanics)
 
 ### RPG World Systems
 
@@ -297,9 +297,9 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | UIX-02 | Phase 15 | Pending |
 | UIX-03 | Phase 15 | Pending |
 | UIX-04 | Phase 15 | Pending |
-| AID-01 | Phase 15 | Pending |
-| AID-02 | Phase 15 | Pending |
-| AID-03 | Phase 15 | Pending |
+| AID-01 | Phase 15 | Complete |
+| AID-02 | Phase 15 | Complete |
+| AID-03 | Phase 15 | Complete |
 | QA-01 | Phase 16 | Pending |
 | QA-02 | Phase 16 | Pending |
 | QA-03 | Phase 16 | Pending |
@@ -367,7 +367,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | VB-07 | Phase 12 | Complete |
 | VB-08 | Phase 13 | Complete |
 | VB-09 | Phase 15 | Pending |
-| VB-10 | Phase 15 | Pending |
+| VB-10 | Phase 15 | Complete |
 | RPG-01 | Phase 13 | Complete |
 | RPG-02 | Phase 14 | Complete |
 | RPG-03 | Phase 12 | Complete |
