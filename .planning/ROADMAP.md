@@ -1,7 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-20 (Phase 10 planned)
+**Updated:** 2026-03-20 (Phase 11 planned)
 
 ## Milestones
 
@@ -210,12 +210,12 @@ Plans:
 
 Plans:
 - [x] 10-01-PLAN.md -- Core C# generation engine: class builder, script modifier, editor tools (CODE-01, CODE-02, CODE-03)
-- [ ] 10-02-PLAN.md -- Shader extensions: arbitrary HLSL/ShaderLab shaders, URP ScriptableRendererFeatures (SHDR-01, SHDR-02)
-- [ ] 10-03-PLAN.md -- Test framework + architecture patterns: test classes, test runner, service locator, object pool, singleton, state machine, SO events (CODE-04 through CODE-10)
-- [ ] 10-04-PLAN.md -- Compound tool wiring: unity_code + unity_shader tools, run_tests action in unity_server.py
+- [x] 10-02-PLAN.md -- Shader extensions: arbitrary HLSL/ShaderLab shaders, URP ScriptableRendererFeatures (SHDR-01, SHDR-02)
+- [x] 10-03-PLAN.md -- Test framework + architecture patterns: test classes, test runner, service locator, object pool, singleton, state machine, SO events (CODE-04 through CODE-10)
+- [x] 10-04-PLAN.md -- Compound tool wiring: unity_code + unity_shader tools, run_tests action in unity_server.py
 
 ### Phase 11: Data Architecture & Asset Pipeline
-**Goal**: Claude can create data-driven game architecture using ScriptableObjects, JSON configs, and localization -- plus manage the asset pipeline with Git LFS, normal map baking, and sprite atlasing
+**Goal**: Claude can create data-driven game architecture using ScriptableObjects, JSON configs, and localization -- plus manage the asset pipeline with Git LFS, normal map baking, and sprite atlasing, with AAA quality enforcement for all assets
 **Depends on**: Phase 10 (needs C# generation for SO definitions and data tools)
 **Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, IMP-03, IMP-04, BUILD-06, TWO-03, PIPE-08, AAA-01, AAA-02, AAA-03, AAA-04, AAA-06
 **Success Criteria** (what must be TRUE):
@@ -224,11 +224,13 @@ Plans:
   3. Claude can set up Unity Localization with string tables and locale assets, and localized text appears correctly when switching locales
   4. Claude can configure Git LFS rules and .gitignore for a Unity project, and normal map baking produces correct tangent-space maps from high/low poly pairs
   5. Claude can generate sprite sheets with atlas packing and sprite animation clips from individual frames
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 11-01: TBD
-- [ ] 11-02: TBD
+- [ ] 11-01-PLAN.md -- Data architecture: SO definitions, .asset instantiation, JSON validation, localization, data authoring tools (DATA-01, DATA-02, DATA-03, DATA-04)
+- [ ] 11-02-PLAN.md -- Asset pipeline: Git LFS config, normal map baking, sprite atlas, sprite editor, AssetPostprocessor (IMP-03, IMP-04, BUILD-06, TWO-03, PIPE-08)
+- [ ] 11-03-PLAN.md -- AAA quality: albedo de-lighting, poly budgets, palette validation, master materials, texture quality (AAA-01, AAA-02, AAA-03, AAA-04, AAA-06)
+- [ ] 11-04-PLAN.md -- Compound tool wiring: unity_data + unity_quality + unity_pipeline tools, blender_texture extensions, syntax tests
 
 ### Phase 12: Core Game Systems
 **Goal**: Claude can generate the foundational game systems every Unity project needs -- save/load persistence, health/damage, character movement, input configuration, and settings menus
@@ -345,8 +347,8 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 7. VFX, Audio, UI & Unity Scene | v1.0 | 5/5 | Complete | 2026-03-19 |
 | 8. Gameplay AI & Performance | v1.0 | 3/3 | Complete | 2026-03-19 |
 | 9. Unity Editor Deep Control | v2.0 | 3/3 | Complete | 2026-03-20 |
-| 10. C# Programming Framework | 4/4 | Complete    | 2026-03-20 | - |
-| 11. Data Architecture & Asset Pipeline | v2.0 | 0/2 | Not started | - |
+| 10. C# Programming Framework | v2.0 | 4/4 | Complete | 2026-03-20 |
+| 11. Data Architecture & Asset Pipeline | v2.0 | 0/4 | Planned | - |
 | 12. Core Game Systems | v2.0 | 0/2 | Not started | - |
 | 13. Content & Progression Systems | v2.0 | 0/3 | Not started | - |
 | 14. Camera, Cinematics & Scene Management | v2.0 | 0/3 | Not started | - |
@@ -358,3 +360,4 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 *Roadmap created: 2026-03-18*
 *v2.0 phases added: 2026-03-19*
 *Phase 10 planned: 2026-03-20*
+*Phase 11 planned: 2026-03-20*
