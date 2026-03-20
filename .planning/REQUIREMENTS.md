@@ -164,12 +164,12 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### AAA Quality & Art Style
 
-- [ ] **AAA-01**: Claude can apply albedo de-lighting to AI-generated model textures (remove baked-in lighting artifacts from Tripo3D output)
-- [ ] **AAA-02**: Claude can enforce per-asset-type polygon budgets (hero: 30-50k, mob: 8-15k, weapon: 3-8k, prop: 500-6k, building: 5-15k) with auto-retopo if over budget
-- [ ] **AAA-03**: Claude can apply dark fantasy material palette validation (saturation caps, color temperature rules, PBR roughness variation enforcement)
-- [ ] **AAA-04**: Claude can generate master material library with base materials (stone, wood, iron, moss, bone, cloth, leather) that all assets reference for art consistency
+- [x] **AAA-01**: Claude can apply albedo de-lighting to AI-generated model textures (remove baked-in lighting artifacts from Tripo3D output)
+- [x] **AAA-02**: Claude can enforce per-asset-type polygon budgets (hero: 30-50k, mob: 8-15k, weapon: 3-8k, prop: 500-6k, building: 5-15k) with auto-retopo if over budget
+- [x] **AAA-03**: Claude can apply dark fantasy material palette validation (saturation caps, color temperature rules, PBR roughness variation enforcement)
+- [x] **AAA-04**: Claude can generate master material library with base materials (stone, wood, iron, moss, bone, cloth, leather) that all assets reference for art consistency
 - [ ] **AAA-05**: Claude can add storytelling props (layer 3: clutter, wall decor, narrative detail — cobwebs, bloodstains, scattered papers, broken pottery) to any interior
-- [ ] **AAA-06**: Claude can validate texture quality against standards (texel density 10.24 px/cm, no flat roughness, micro-detail normals present, proper channel packing M/R/AO)
+- [x] **AAA-06**: Claude can validate texture quality against standards (texel density 10.24 px/cm, no flat roughness, micro-detail normals present, proper channel packing M/R/AO)
 
 ### Equipment & Weapons
 
@@ -333,12 +333,12 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | ANIMA-02 | Phase 14 | Pending |
 | ANIMA-03 | Phase 14 | Pending |
 
-| AAA-01 | Phase 11 | Pending |
-| AAA-02 | Phase 11 | Pending |
-| AAA-03 | Phase 11 | Pending |
-| AAA-04 | Phase 11 | Pending |
+| AAA-01 | Phase 11 | Complete |
+| AAA-02 | Phase 11 | Complete |
+| AAA-03 | Phase 11 | Complete |
+| AAA-04 | Phase 11 | Complete |
 | AAA-05 | Phase 14 | Pending |
-| AAA-06 | Phase 11 | Pending |
+| AAA-06 | Phase 11 | Complete |
 | EQUIP-01 | Phase 13 | Pending |
 | EQUIP-02 | Phase 9 | Complete |
 | EQUIP-03 | Phase 13 | Pending |
