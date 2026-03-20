@@ -209,7 +209,7 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 10-01-PLAN.md -- Core C# generation engine: class builder, script modifier, editor tools (CODE-01, CODE-02, CODE-03)
+- [x] 10-01-PLAN.md -- Core C# generation engine: class builder, script modifier, editor tools (CODE-01, CODE-02, CODE-03)
 - [ ] 10-02-PLAN.md -- Shader extensions: arbitrary HLSL/ShaderLab shaders, URP ScriptableRendererFeatures (SHDR-01, SHDR-02)
 - [ ] 10-03-PLAN.md -- Test framework + architecture patterns: test classes, test runner, service locator, object pool, singleton, state machine, SO events (CODE-04 through CODE-10)
 - [ ] 10-04-PLAN.md -- Compound tool wiring: unity_code + unity_shader tools, run_tests action in unity_server.py

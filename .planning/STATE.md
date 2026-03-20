@@ -3,30 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
-stopped_at: Phase 10 context gathered (auto)
-last_updated: "2026-03-20T08:39:36.386Z"
-last_activity: 2026-03-20 -- Completed 09-03-PLAN.md (unity_assets compound tool)
+stopped_at: Completed 10-01-PLAN.md
+last_updated: "2026-03-20T09:17:13Z"
+last_activity: 2026-03-20 -- Completed 10-01-PLAN.md (C# code generation engine)
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 09-03-PLAN.md
-last_updated: "2026-03-20T06:47:00Z"
-last_activity: 2026-03-20 -- Completed 09-03-PLAN.md (unity_assets compound tool)
-progress:
-  total_phases: 9
-  completed_phases: 1
-  total_plans: 3
-  completed_plans: 3
-  percent: 100
+  total_plans: 4
+  completed_plans: 1
+  percent: 25
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -36,18 +21,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** v2.0 Phase 9 COMPLETE -- Unity Editor Deep Control
+**Current focus:** v2.0 Phase 10 -- C# Programming Framework
 
 ## Current Position
 
-Phase: 9 of 17 (Unity Editor Deep Control) -- COMPLETE
-Plan: 3 of 3 in current phase (all done)
-Status: Phase 9 complete, ready for Phase 10
-Last activity: 2026-03-20 -- Completed 09-03-PLAN.md (unity_assets compound tool)
+Phase: 10 of 17 (C# Programming Framework)
+Plan: 2 of 4 in current phase (10-01, 10-02 complete)
+Status: Executing Phase 10
+Last activity: 2026-03-20 -- Completed 10-02-PLAN.md (shader templates v2 - arbitrary shader + renderer feature)
 
 ```
-Phase Progress: [████████████████████████░░░░░░░░░░░░░░░░] 53% overall (9/17 phases)
-v2.0 Progress:  [██████████] 100% (3/3 plans in phase 9)
+Phase Progress: [████████████████████████████░░░░░░░░░░░░] 59% overall (10/17 phases)
+v2.0 Progress:  [█████░░░░░] 50% (2/4 plans in phase 10)
 ```
 
 ## Performance Metrics
@@ -61,13 +46,15 @@ v2.0 Progress:  [██████████] 100% (3/3 plans in phase 9)
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 3 (09-01, 09-02, 09-03) |
-| v2.0 tests added | 292 (118 prefab + 78 settings + 96 assets) |
-| v2.0 total tests passing | 3,032 |
+| v2.0 plans completed | 5 (09-01, 09-02, 09-03, 10-01, 10-02) |
+| v2.0 tests added | 384 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2) |
+| v2.0 total tests passing | 3,124 |
 | v2.0 MCP tools | 25 (15 Blender + 10 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
 | 09-03 duration | 11 min |
+| 10-01 duration | 7 min |
+| 10-02 duration | 9 min |
 
 ## Accumulated Context
 
@@ -87,6 +74,10 @@ v2.0 Progress:  [██████████] 100% (3/3 plans in phase 9)
 | Asmdef generation returns JSON not C# | .asmdef files are plain JSON, no editor script needed | 9 |
 | Safe delete scans dependencies before deletion | Prevents broken references from careless asset removal | 9 |
 | Atomic import enforces textures->materials->FBX->remap order | Prevents pink materials from out-of-order imports | 9 |
+| IMGUI (OnGUI) default for EditorWindow generation | Matches existing VeilBreakers editor tools, simpler template gen | 10 |
+| Private fields auto-prefixed with underscore | VeilBreakers _camelCase convention enforced in code gen | 10 |
+| Reserved word identifiers get @ prefix | More permissive than rejection, valid C# syntax | 10 |
+| ScriptableObject auto-adds CreateAssetMenu | Consistent with Unity best practices for SO assets | 10 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -101,10 +92,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T08:39:36.383Z
-Stopped at: Phase 10 context gathered (auto)
-Next action: Begin Phase 10 planning
+Last session: 2026-03-20T09:17:13Z
+Stopped at: Completed 10-01-PLAN.md
+Next action: Execute 10-02-PLAN.md
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 09-03-PLAN.md (Phase 9 complete)*
+*Last updated: 2026-03-20 -- Completed 10-01-PLAN.md (C# code generation engine)*
