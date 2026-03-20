@@ -182,7 +182,7 @@ Plans:
 ### Phase 9: Unity Editor Deep Control
 **Goal**: Claude has complete programmatic control over the Unity Editor -- prefabs, components, hierarchy, physics, project settings, packages, and asset import configuration
 **Depends on**: Phase 8 (v1.0 Unity server foundation)
-**Requirements**: EDIT-01, EDIT-02, EDIT-03, EDIT-04, EDIT-05, EDIT-06, EDIT-07, EDIT-08, EDIT-09, EDIT-10, EDIT-11, EDIT-12, EDIT-13, EDIT-14, EDIT-15, IMP-01, IMP-02
+**Requirements**: EDIT-01, EDIT-02, EDIT-03, EDIT-04, EDIT-05, EDIT-06, EDIT-07, EDIT-08, EDIT-09, EDIT-10, EDIT-11, EDIT-12, EDIT-13, EDIT-14, EDIT-15, IMP-01, IMP-02, PHYS-01, PHYS-02, PIPE-09
 **Success Criteria** (what must be TRUE):
   1. Claude can create a nested prefab variant, add components with configured properties, and the resulting .prefab asset opens correctly in Unity's Prefab Mode
   2. Claude can reparent GameObjects, set layers/tags, enable/disable objects, and the hierarchy changes persist after scene save
@@ -199,7 +199,7 @@ Plans:
 ### Phase 10: C# Programming Framework
 **Goal**: Claude can generate and modify arbitrary C# code for Unity -- MonoBehaviours, editor tools, tests, and reusable architecture patterns -- not limited to domain-specific templates
 **Depends on**: Phase 9 (needs editor control for Assembly Definitions, test runner integration)
-**Requirements**: CODE-01, CODE-02, CODE-03, CODE-04, CODE-05, CODE-06, CODE-07, CODE-08, CODE-09, CODE-10
+**Requirements**: CODE-01, CODE-02, CODE-03, CODE-04, CODE-05, CODE-06, CODE-07, CODE-08, CODE-09, CODE-10, SHDR-01, SHDR-02
 **Success Criteria** (what must be TRUE):
   1. Claude can generate any C# class type (MonoBehaviour, plain class, interface, enum, struct, static utility) and the script compiles without errors after AssetDatabase.Refresh
   2. Claude can open an existing C# script, add methods/fields/properties/attributes, and the modified script compiles cleanly with no regressions
@@ -216,7 +216,7 @@ Plans:
 ### Phase 11: Data Architecture & Asset Pipeline
 **Goal**: Claude can create data-driven game architecture using ScriptableObjects, JSON configs, and localization -- plus manage the asset pipeline with Git LFS, normal map baking, and sprite atlasing
 **Depends on**: Phase 10 (needs C# generation for SO definitions and data tools)
-**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, IMP-03, IMP-04, BUILD-06
+**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, IMP-03, IMP-04, BUILD-06, TWO-03, PIPE-08
 **Success Criteria** (what must be TRUE):
   1. Claude can create ScriptableObject C# definitions and instantiate .asset files with populated data fields, usable as item databases or stat tables
   2. Claude can generate, validate, and parse JSON/XML configuration files for game balance, difficulty curves, and progression data
@@ -232,7 +232,7 @@ Plans:
 ### Phase 12: Core Game Systems
 **Goal**: Claude can generate the foundational game systems every Unity project needs -- save/load persistence, health/damage, character movement, input configuration, and settings menus
 **Depends on**: Phase 10 (C# generation), Phase 11 (ScriptableObjects for item/config data)
-**Requirements**: GAME-01, GAME-05, GAME-06, GAME-07, GAME-08
+**Requirements**: GAME-01, GAME-05, GAME-06, GAME-07, GAME-08, MEDIA-02
 **Success Criteria** (what must be TRUE):
   1. Claude can generate a save/load system with JSON serialization, multiple save slots, and data migration support -- saved data round-trips correctly through serialize/deserialize
   2. Claude can generate a health/damage system with HP components, damage number display, death handling, and respawn logic that integrates with existing GameObjects
@@ -265,7 +265,7 @@ Plans:
 ### Phase 14: Camera, Cinematics & Scene Management
 **Goal**: Claude can set up Cinemachine cameras, Timeline cutscenes, multi-scene workflows, and complete scene lighting/environment configuration
 **Depends on**: Phase 9 (editor control for scene/settings manipulation), Phase 10 (C# for custom Timeline tracks)
-**Requirements**: CAM-01, CAM-02, CAM-03, CAM-04, SCNE-01, SCNE-02, SCNE-03, SCNE-04, SCNE-05, SCNE-06
+**Requirements**: CAM-01, CAM-02, CAM-03, CAM-04, SCNE-01, SCNE-02, SCNE-03, SCNE-04, SCNE-05, SCNE-06, TWO-01, TWO-02, MEDIA-01, ANIMA-01, ANIMA-02, ANIMA-03
 **Success Criteria** (what must be TRUE):
   1. Claude can create Cinemachine virtual cameras (FreeLook, follow, state-driven) with configurable blending, and camera shake/zoom/transition effects trigger correctly
   2. Claude can create Timeline assets with animation, audio, activation, and Cinemachine tracks, and Playable Director plays back complete cutscene sequences
@@ -282,7 +282,7 @@ Plans:
 ### Phase 15: Game UX & Encounter Design
 **Goal**: Claude can generate polished gameplay UX elements and scripted encounter systems with dynamic difficulty adjustment
 **Depends on**: Phase 12 (game systems for health/damage integration), Phase 10 (C# framework for AI scripting)
-**Requirements**: UIX-01, UIX-02, UIX-03, UIX-04, AID-01, AID-02, AID-03
+**Requirements**: UIX-01, UIX-02, UIX-03, UIX-04, AID-01, AID-02, AID-03, SHDR-04, ACC-01, PIPE-10
 **Success Criteria** (what must be TRUE):
   1. Claude can generate a minimap/compass system with world-space markers that track objectives, NPCs, and points of interest
   2. Claude can generate tutorial/onboarding sequences with tooltip overlays and context-sensitive interaction prompts ("Press E to interact") that respond to player proximity
@@ -314,7 +314,7 @@ Plans:
 ### Phase 17: Build & Deploy Pipeline
 **Goal**: Claude can orchestrate complete build pipelines -- multi-platform builds, Addressable assets, CI/CD automation, versioning, and platform-specific configuration
 **Depends on**: Phase 9 (Build Settings, Player Settings), Phase 16 (tests run as part of CI)
-**Requirements**: BUILD-01, BUILD-02, BUILD-03, BUILD-04, BUILD-05
+**Requirements**: BUILD-01, BUILD-02, BUILD-03, BUILD-04, BUILD-05, SHDR-03, ACC-02
 **Success Criteria** (what must be TRUE):
   1. Claude can trigger builds for multiple platforms (Windows, Mac, Linux, Android, iOS, WebGL) with correct per-platform settings and receive build size reports
   2. Claude can configure Addressable Asset Groups with remote/local paths, content catalogs, and memory management profiles
