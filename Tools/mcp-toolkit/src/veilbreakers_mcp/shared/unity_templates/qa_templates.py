@@ -1678,7 +1678,7 @@ ANTI_PATTERNS: dict[str, dict] = {
         "fix": "Pre-compute LINQ results or use manual loops",
     },
     "new_allocation_in_update": {
-        "pattern": r"\bnew\s+\w+[\[\(]",
+        "pattern": r"\bnew\s+\w+[<\[\(]",
         "context": r"void\s+(Update|FixedUpdate|LateUpdate)\s*\(",
         "severity": "warning",
         "message": "Allocation in Update loop -- consider object pooling",

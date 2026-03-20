@@ -661,6 +661,367 @@ class TestProfilerCustomBudgets:
 
 
 # =====================================================================
+# Memory Leak Detector Tests (QA-04)
+# =====================================================================
+
+
+class TestMemoryLeak:
+    """Tests for generate_memory_leak_script output."""
+
+    @pytest.fixture
+    def leak_cs(self) -> str:
+        return generate_memory_leak_script()
+
+    def test_has_profiler_recorder(self, leak_cs: str):
+        assert "ProfilerRecorder" in leak_cs
+
+    def test_has_gc_reserved_memory(self, leak_cs: str):
+        assert "GC Reserved Memory" in leak_cs
+
+    def test_has_system_used_memory(self, leak_cs: str):
+        assert "System Used Memory" in leak_cs
+
+    def test_has_growth_threshold(self, leak_cs: str):
+        assert "growthThresholdMb" in leak_cs
+
+    def test_has_vb_memory_results_json(self, leak_cs: str):
+        assert "vb_memory_results.json" in leak_cs
+
+    def test_has_menu_item(self, leak_cs: str):
+        assert "MenuItem" in leak_cs
+        assert "VeilBreakers/QA/Detect Memory Leaks" in leak_cs
+
+    def test_has_is_playing_check(self, leak_cs: str):
+        assert "isPlaying" in leak_cs
+
+    def test_has_play_mode_warning(self, leak_cs: str):
+        assert "Must be in Play Mode" in leak_cs
+
+    def test_has_leak_detected(self, leak_cs: str):
+        assert "leak_detected" in leak_cs
+
+    def test_has_baseline_snapshot(self, leak_cs: str):
+        assert "managedBaselineMb" in leak_cs
+        assert "nativeBaselineMb" in leak_cs
+
+    def test_has_growth_computation(self, leak_cs: str):
+        assert "growthManaged" in leak_cs
+        assert "growthNative" in leak_cs
+        assert "totalGrowth" in leak_cs
+
+    def test_has_growth_rate(self, leak_cs: str):
+        assert "growth_rate_per_second_mb" in leak_cs
+
+    def test_has_samples_list(self, leak_cs: str):
+        assert "samples" in leak_cs
+
+    def test_has_delta_fields(self, leak_cs: str):
+        assert "delta_managed" in leak_cs
+        assert "delta_native" in leak_cs
+
+    def test_has_peak_memory(self, leak_cs: str):
+        assert "peakManagedMb" in leak_cs
+        assert "peakNativeMb" in leak_cs
+
+    def test_has_dispose(self, leak_cs: str):
+        assert "Dispose()" in leak_cs
+
+    def test_has_using_unity_profiling(self, leak_cs: str):
+        assert "using Unity.Profiling;" in leak_cs
+
+    def test_default_threshold(self, leak_cs: str):
+        assert "10.0f" in leak_cs
+
+    def test_default_sample_count(self, leak_cs: str):
+        assert "_targetSamples = 10" in leak_cs
+
+    def test_default_interval(self, leak_cs: str):
+        assert "5.0f" in leak_cs
+
+    def test_output_is_string(self, leak_cs: str):
+        assert isinstance(leak_cs, str)
+
+    def test_ends_with_newline(self, leak_cs: str):
+        assert leak_cs.endswith("\n")
+
+
+class TestMemoryLeakCustom:
+    """Test generate_memory_leak_script with custom parameters."""
+
+    def test_custom_threshold(self):
+        cs = generate_memory_leak_script(growth_threshold_mb=50)
+        assert "50.0f" in cs
+
+    def test_custom_interval(self):
+        cs = generate_memory_leak_script(sample_interval_seconds=10)
+        assert "10.0f" in cs
+
+    def test_custom_sample_count(self):
+        cs = generate_memory_leak_script(sample_count=20)
+        assert "_targetSamples = 20" in cs
+
+    def test_namespace_wrapping(self):
+        cs = generate_memory_leak_script(namespace="VB.QA")
+        assert "namespace VB.QA" in cs
+
+    def test_no_namespace_by_default(self):
+        cs = generate_memory_leak_script()
+        assert "namespace " not in cs
+
+
+# =====================================================================
+# Static Analysis Tests (QA-05)
+# =====================================================================
+
+
+class TestStaticAnalysis:
+    """Tests for analyze_csharp_static function."""
+
+    def test_clean_code(self):
+        source = """
+public class PlayerController : MonoBehaviour
+{
+    void Start()
+    {
+        _cam = Camera.main;
+    }
+
+    void Update()
+    {
+        transform.position += Vector3.forward * Time.deltaTime;
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        assert result["findings_count"] == 0
+        assert result["summary"]["errors"] == 0
+        assert result["summary"]["warnings"] == 0
+        assert result["summary"]["infos"] == 0
+
+    def test_camera_main_in_update(self):
+        source = """
+public class Bad : MonoBehaviour
+{
+    void Update()
+    {
+        var c = Camera.main;
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        assert result["findings_count"] >= 1
+        found = [f for f in result["findings"] if f["rule_name"] == "camera_main_in_update"]
+        assert len(found) >= 1
+        assert found[0]["severity"] == "warning"
+
+    def test_camera_main_in_start_ok(self):
+        source = """
+public class Good : MonoBehaviour
+{
+    private Camera _cam;
+    void Start()
+    {
+        _cam = Camera.main;
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        camera_findings = [f for f in result["findings"] if f["rule_name"] == "camera_main_in_update"]
+        assert len(camera_findings) == 0
+
+    def test_getcomponent_in_update(self):
+        source = """
+public class Bad : MonoBehaviour
+{
+    void Update()
+    {
+        var rb = GetComponent<Rigidbody>();
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        found = [f for f in result["findings"] if f["rule_name"] == "getcomponent_in_update"]
+        assert len(found) >= 1
+        assert found[0]["severity"] == "warning"
+
+    def test_find_object_in_update(self):
+        source = """
+public class Bad : MonoBehaviour
+{
+    void Update()
+    {
+        var player = FindObjectOfType<Player>();
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        found = [f for f in result["findings"] if f["rule_name"] == "find_object_at_runtime"]
+        assert len(found) >= 1
+        assert found[0]["severity"] == "error"
+
+    def test_linq_in_update(self):
+        source = """
+public class Bad : MonoBehaviour
+{
+    void FixedUpdate()
+    {
+        var enemies = allEnemies.Where(e => e.IsAlive).ToList();
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        found = [f for f in result["findings"] if f["rule_name"] == "linq_in_update"]
+        assert len(found) >= 1
+        assert found[0]["severity"] == "warning"
+
+    def test_new_in_update(self):
+        source = """
+public class Bad : MonoBehaviour
+{
+    void LateUpdate()
+    {
+        var list = new List<int>(100);
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        found = [f for f in result["findings"] if f["rule_name"] == "new_allocation_in_update"]
+        assert len(found) >= 1
+        assert found[0]["severity"] == "warning"
+
+    def test_string_concat_in_update(self):
+        source = """
+public class Bad : MonoBehaviour
+{
+    void Update()
+    {
+        Debug.Log("Score: " + score);
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        found = [f for f in result["findings"] if f["rule_name"] == "string_concat_in_update"]
+        assert len(found) >= 1
+        assert found[0]["severity"] == "info"
+
+    def test_multiple_findings(self):
+        source = """
+public class MultiBad : MonoBehaviour
+{
+    void Update()
+    {
+        var c = Camera.main;
+        var rb = GetComponent<Rigidbody>();
+        var list = new List<int>();
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        assert result["findings_count"] >= 3
+        assert result["summary"]["warnings"] >= 3
+
+    def test_empty_source(self):
+        result = analyze_csharp_static("")
+        assert result["findings_count"] == 0
+        assert result["findings"] == []
+
+    def test_none_like_empty(self):
+        result = analyze_csharp_static("   \n\n   ")
+        assert result["findings_count"] == 0
+
+    def test_file_path_in_result(self):
+        result = analyze_csharp_static("void Update() {}", file_path="Assets/Scripts/Player.cs")
+        assert result["file_path"] == "Assets/Scripts/Player.cs"
+
+    def test_default_file_path(self):
+        result = analyze_csharp_static("")
+        assert result["file_path"] == "<unknown>"
+
+    def test_finding_has_line_number(self):
+        source = """
+public class Bad : MonoBehaviour
+{
+    void Update()
+    {
+        var c = Camera.main;
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        assert len(result["findings"]) >= 1
+        assert "line_number" in result["findings"][0]
+        assert result["findings"][0]["line_number"] > 0
+
+    def test_finding_has_line_content(self):
+        source = """
+public class Bad : MonoBehaviour
+{
+    void Update()
+    {
+        var c = Camera.main;
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        assert "Camera.main" in result["findings"][0]["line_content"]
+
+    def test_finding_has_fix_suggestion(self):
+        source = """
+public class Bad : MonoBehaviour
+{
+    void Update()
+    {
+        var c = Camera.main;
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        assert result["findings"][0]["fix"] != ""
+
+    def test_no_false_positive_in_awake(self):
+        source = """
+public class Good : MonoBehaviour
+{
+    private Rigidbody _rb;
+    void Awake()
+    {
+        _rb = GetComponent<Rigidbody>();
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        assert result["findings_count"] == 0
+
+    def test_fixed_update_detection(self):
+        source = """
+public class Bad : MonoBehaviour
+{
+    void FixedUpdate()
+    {
+        var c = Camera.main;
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        camera_findings = [f for f in result["findings"] if f["rule_name"] == "camera_main_in_update"]
+        assert len(camera_findings) >= 1
+
+    def test_late_update_detection(self):
+        source = """
+public class Bad : MonoBehaviour
+{
+    void LateUpdate()
+    {
+        var c = Camera.main;
+    }
+}
+"""
+        result = analyze_csharp_static(source)
+        camera_findings = [f for f in result["findings"] if f["rule_name"] == "camera_main_in_update"]
+        assert len(camera_findings) >= 1
+
+
+# =====================================================================
 # Crash Reporting Tests (QA-06)
 # =====================================================================
 
