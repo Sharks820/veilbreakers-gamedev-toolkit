@@ -1,7 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-20 (Phase 12 planned)
+**Updated:** 2026-03-20 (Phase 13 planned)
 
 ## Milestones
 
@@ -32,7 +32,7 @@
 - [ ] **Phase 10: C# Programming Framework** - General-purpose code generation, script modification, editor tooling, test framework, architecture patterns
 - [x] **Phase 11: Data Architecture & Asset Pipeline** - ScriptableObjects, JSON config, localization, game data tools, Git LFS, normal map baking, sprite atlasing
 - [ ] **Phase 12: Core Game Systems** - Save/load, health/damage, character controller, Input System, settings menu, VeilBreakers combat systems
-- [ ] **Phase 13: Content & Progression Systems** - Inventory, dialogue, quests, loot tables, crafting, skill trees, combat balancing
+- [ ] **Phase 13: Content & Progression Systems** - Inventory, dialogue, quests, loot tables, crafting, skill trees, combat balancing, equipment systems
 - [ ] **Phase 14: Camera, Cinematics & Scene Management** - Cinemachine, Timeline, cutscenes, scene loading, lighting, probes, terrain detail
 - [ ] **Phase 15: Game UX & Encounter Design** - Minimap, tutorials, damage numbers, interaction prompts, encounter scripting, AI director
 - [ ] **Phase 16: Quality Assurance & Testing** - Test runner, automated play, profiling, memory leaks, static analysis, crash reporting, live inspection
@@ -247,10 +247,10 @@ Plans:
 Plans:
 - [x] 12-01-PLAN.md -- Core game system templates: save/load, health/damage, character controller, input system, settings menu, HTTP client, interactable objects (GAME-01, GAME-05, GAME-06, GAME-07, GAME-08, MEDIA-02, RPG-03)
 - [x] 12-02-PLAN.md -- VeilBreakers combat templates: player combat, ability system, synergy engine, corruption gameplay, XP/leveling, currency, damage types (VB-01, VB-02, VB-03, VB-04, VB-05, VB-06, VB-07)
-- [ ] 12-03-PLAN.md -- Compound tool wiring: unity_game tool + extended C# syntax tests (all 14 requirements)
+- [x] 12-03-PLAN.md -- Compound tool wiring: unity_game tool + extended C# syntax tests (all 14 requirements)
 
 ### Phase 13: Content & Progression Systems
-**Goal**: Claude can generate the higher-level game systems that drive player engagement -- inventory, dialogue, quests, loot, crafting, skill trees, and combat balancing tools
+**Goal**: Claude can generate the higher-level game systems that drive player engagement -- inventory, dialogue, quests, loot, crafting, skill trees, combat balancing tools, equipment mesh generation, and equipment attachment
 **Depends on**: Phase 12 (core game systems: save/load for persistence, health/damage for combat integration)
 **Requirements**: GAME-02, GAME-03, GAME-04, GAME-09, GAME-10, GAME-11, GAME-12, EQUIP-01, EQUIP-03, EQUIP-04, EQUIP-05, EQUIP-06, VB-08, RPG-01, RPG-05
 **Success Criteria** (what must be TRUE):
@@ -259,12 +259,12 @@ Plans:
   3. Claude can generate a quest system with objective tracking, quest giver NPCs, quest log UI, and completion rewards that modify inventory/progression state
   4. Claude can generate loot tables (weighted random with rarity tiers), a crafting/recipe system (ingredients, stations, unlocks), and a skill tree with node dependencies and point allocation
   5. Claude can generate combat balancing tools (DPS calculator, encounter simulator, stat curve editor) that output statistical reports for tuning game difficulty
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 13-01: TBD
-- [ ] 13-02: TBD
-- [ ] 13-03: TBD
+- [ ] 13-01-PLAN.md -- Content system templates: inventory, dialogue, quest, loot, crafting, skill tree, balancing tools, shop, journal (GAME-02, GAME-03, GAME-04, GAME-09, GAME-10, GAME-11, GAME-12, VB-08, RPG-01, RPG-05)
+- [ ] 13-02-PLAN.md -- Blender equipment handlers: weapon generation, character splitting, armor fitting, preview icons (EQUIP-01, EQUIP-03, EQUIP-04, EQUIP-05)
+- [ ] 13-03-PLAN.md -- Equipment attachment templates + compound tool wiring: unity_content + blender equipment extensions + syntax tests (EQUIP-06, all 15 requirements)
 
 ### Phase 14: Camera, Cinematics & Scene Management
 **Goal**: Claude can set up Cinemachine cameras, Timeline cutscenes, multi-scene workflows, and complete scene lighting/environment configuration
@@ -350,8 +350,8 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 9. Unity Editor Deep Control | v2.0 | 3/3 | Complete | 2026-03-20 |
 | 10. C# Programming Framework | v2.0 | 4/4 | Complete | 2026-03-20 |
 | 11. Data Architecture & Asset Pipeline | v2.0 | 4/4 | Complete | 2026-03-20 |
-| 12. Core Game Systems | 3/3 | Complete    | 2026-03-20 | - |
-| 13. Content & Progression Systems | v2.0 | 0/3 | Not started | - |
+| 12. Core Game Systems | v2.0 | 3/3 | Complete | 2026-03-20 |
+| 13. Content & Progression Systems | v2.0 | 0/3 | Planned | - |
 | 14. Camera, Cinematics & Scene Management | v2.0 | 0/3 | Not started | - |
 | 15. Game UX & Encounter Design | v2.0 | 0/2 | Not started | - |
 | 16. Quality Assurance & Testing | v2.0 | 0/2 | Not started | - |
@@ -364,3 +364,4 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 *Phase 11 planned: 2026-03-20*
 *Phase 11 complete: 2026-03-20*
 *Phase 12 planned: 2026-03-20*
+*Phase 13 planned: 2026-03-20*
