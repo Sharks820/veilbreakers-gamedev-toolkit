@@ -1,7 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-20 (Phase 13 planned)
+**Updated:** 2026-03-20 (Phase 14 planned)
 
 ## Milestones
 
@@ -33,7 +33,7 @@
 - [x] **Phase 11: Data Architecture & Asset Pipeline** - ScriptableObjects, JSON config, localization, game data tools, Git LFS, normal map baking, sprite atlasing
 - [ ] **Phase 12: Core Game Systems** - Save/load, health/damage, character controller, Input System, settings menu, VeilBreakers combat systems
 - [ ] **Phase 13: Content & Progression Systems** - Inventory, dialogue, quests, loot tables, crafting, skill trees, combat balancing, equipment systems
-- [ ] **Phase 14: Camera, Cinematics & Scene Management** - Cinemachine, Timeline, cutscenes, scene loading, lighting, probes, terrain detail
+- [ ] **Phase 14: Camera, Cinematics & Scene Management** - Cinemachine, Timeline, cutscenes, scene loading, lighting, probes, terrain detail, world design, RPG world systems
 - [ ] **Phase 15: Game UX & Encounter Design** - Minimap, tutorials, damage numbers, interaction prompts, encounter scripting, AI director
 - [ ] **Phase 16: Quality Assurance & Testing** - Test runner, automated play, profiling, memory leaks, static analysis, crash reporting, live inspection
 - [ ] **Phase 17: Build & Deploy Pipeline** - Multi-platform builds, Addressables, CI/CD, versioning, platform configs
@@ -262,12 +262,12 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 13-01-PLAN.md -- Content system templates: inventory, dialogue, quest, loot, crafting, skill tree, balancing tools, shop, journal (GAME-02, GAME-03, GAME-04, GAME-09, GAME-10, GAME-11, GAME-12, VB-08, RPG-01, RPG-05)
-- [ ] 13-02-PLAN.md -- Blender equipment handlers: weapon generation, character splitting, armor fitting, preview icons (EQUIP-01, EQUIP-03, EQUIP-04, EQUIP-05)
-- [ ] 13-03-PLAN.md -- Equipment attachment templates + compound tool wiring: unity_content + blender equipment extensions + syntax tests (EQUIP-06, all 15 requirements)
+- [x] 13-01-PLAN.md -- Content system templates: inventory, dialogue, quest, loot, crafting, skill tree, balancing tools, shop, journal (GAME-02, GAME-03, GAME-04, GAME-09, GAME-10, GAME-11, GAME-12, VB-08, RPG-01, RPG-05)
+- [x] 13-02-PLAN.md -- Blender equipment handlers: weapon generation, character splitting, armor fitting, preview icons (EQUIP-01, EQUIP-03, EQUIP-04, EQUIP-05)
+- [x] 13-03-PLAN.md -- Equipment attachment templates + compound tool wiring: unity_content + blender equipment extensions + syntax tests (EQUIP-06, all 15 requirements)
 
 ### Phase 14: Camera, Cinematics & Scene Management
-**Goal**: Claude can set up Cinemachine cameras, Timeline cutscenes, multi-scene workflows, and complete scene lighting/environment configuration
+**Goal**: Claude can set up Cinemachine cameras, Timeline cutscenes, multi-scene workflows, complete scene lighting/environment configuration, generate explorable world locations, and create RPG world systems (weather, day/night, puzzles, traps, fast travel, NPC placement)
 **Depends on**: Phase 9 (editor control for scene/settings manipulation), Phase 10 (C# for custom Timeline tracks)
 **Requirements**: CAM-01, CAM-02, CAM-03, CAM-04, SCNE-01, SCNE-02, SCNE-03, SCNE-04, SCNE-05, SCNE-06, TWO-01, TWO-02, MEDIA-01, ANIMA-01, ANIMA-02, ANIMA-03, AAA-05, WORLD-01, WORLD-02, WORLD-03, WORLD-04, WORLD-05, WORLD-06, WORLD-07, WORLD-08, WORLD-09, WORLD-10, RPG-02, RPG-04, RPG-06, RPG-07, RPG-09, RPG-10, RPG-11, RPG-12, RPG-13
 **Success Criteria** (what must be TRUE):
@@ -276,12 +276,14 @@ Plans:
   3. Claude can create new scenes, configure single/additive/async loading, and generate a scene transition system with loading screens and fade effects
   4. Claude can set up reflection probes, light probes, HDR skybox, environment reflections, and Global Illumination -- lighting looks correct in baked and mixed modes
   5. Claude can configure occlusion culling (static occluders/occludees, bake data) and paint terrain detail (grass, detail meshes) on Unity Terrain
-**Plans**: TBD
+**Plans**: 5 plans
 
 Plans:
-- [ ] 14-01: TBD
-- [ ] 14-02: TBD
-- [ ] 14-03: TBD
+- [ ] 14-01-PLAN.md -- Camera + Timeline + animation editing templates: Cinemachine 3.x, Timeline, cutscenes, AnimationClip, Animator, AvatarMask, VideoPlayer (CAM-01, CAM-02, CAM-03, CAM-04, ANIMA-01, ANIMA-02, ANIMA-03, MEDIA-01)
+- [ ] 14-02-PLAN.md -- Scene management + environment templates: scene creation/loading, transitions, probes, occlusion, skybox/GI, terrain detail, tilemap, 2D physics, time-of-day (SCNE-01, SCNE-02, SCNE-03, SCNE-04, SCNE-05, SCNE-06, TWO-01, TWO-02, WORLD-08)
+- [ ] 14-03-PLAN.md -- Blender world design extensions: locations, 16 room types, boss arenas, world graph, linked interiors, multi-floor dungeons, furniture scale, overrun variants, easter eggs, storytelling props (WORLD-01, WORLD-02, WORLD-03, WORLD-04, WORLD-05, WORLD-06, WORLD-07, WORLD-09, WORLD-10, AAA-05)
+- [ ] 14-04-PLAN.md -- RPG world system templates: fast travel, puzzles, traps, spatial loot, weather, day/night cycle, NPC placement, dungeon lighting, terrain-building blending (RPG-02, RPG-04, RPG-06, RPG-07, RPG-09, RPG-10, RPG-11, RPG-12, RPG-13)
+- [ ] 14-05-PLAN.md -- Compound tool wiring: unity_camera + unity_world tools, blender_worldbuilding extensions, handler registration, deep C# syntax tests (all 36 requirements)
 
 ### Phase 15: Game UX & Encounter Design
 **Goal**: Claude can generate polished gameplay UX elements and scripted encounter systems with dynamic difficulty adjustment
@@ -351,8 +353,8 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 10. C# Programming Framework | v2.0 | 4/4 | Complete | 2026-03-20 |
 | 11. Data Architecture & Asset Pipeline | v2.0 | 4/4 | Complete | 2026-03-20 |
 | 12. Core Game Systems | v2.0 | 3/3 | Complete | 2026-03-20 |
-| 13. Content & Progression Systems | 3/3 | Complete    | 2026-03-20 | - |
-| 14. Camera, Cinematics & Scene Management | v2.0 | 0/3 | Not started | - |
+| 13. Content & Progression Systems | v2.0 | 3/3 | Complete | 2026-03-20 |
+| 14. Camera, Cinematics & Scene Management | v2.0 | 0/5 | Planned | - |
 | 15. Game UX & Encounter Design | v2.0 | 0/2 | Not started | - |
 | 16. Quality Assurance & Testing | v2.0 | 0/2 | Not started | - |
 | 17. Build & Deploy Pipeline | v2.0 | 0/2 | Not started | - |
@@ -365,3 +367,4 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 *Phase 11 complete: 2026-03-20*
 *Phase 12 planned: 2026-03-20*
 *Phase 13 planned: 2026-03-20*
+*Phase 14 planned: 2026-03-20*
