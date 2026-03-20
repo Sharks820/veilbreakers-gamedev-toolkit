@@ -12,7 +12,28 @@ Every tool returns structured validation data and visual proof so Claude never w
 
 ### Validated
 
-(None yet — ship to validate)
+v1.0 delivered (2026-03-19): 22 MCP tools, 86 Blender handlers, 153 capabilities, 2740 tests.
+- ✓ Token-efficient compound tool architecture (22/26 tools used)
+- ✓ Blender socket bridge addon with command dispatch (86 handlers)
+- ✓ Visual feedback system (screenshots, contact sheets)
+- ✓ Full mesh/UV/texture/rig/animation/environment/worldbuilding pipeline
+- ✓ Unity VFX/Audio/UI/Scene/Gameplay/Performance tools
+- ✓ Unity auto-recompile (AssetDatabase.Refresh without human clicking)
+
+## Current Milestone: v2.0 — Complete Unity Game Development Coverage
+
+**Goal:** Close every gap in Unity Editor control, game systems, and programming tools so Claude can handle ANY Unity development task without limitations.
+
+**Target features:**
+- Unity Editor deep control (prefabs, components, hierarchy, physics, settings)
+- General-purpose C# programming (not just templates)
+- Complete game systems (save/load, inventory, dialogue, quests)
+- Camera/cutscene systems (Cinemachine, Timeline)
+- Input System configuration
+- Data architecture (ScriptableObjects, JSON config)
+- Multi-scene management
+- Build/deploy pipeline improvements
+- Testing framework integration
 
 ### Active
 
@@ -86,7 +107,7 @@ Every tool returns structured validation data and visual proof so Claude never w
 
 - Live operations / analytics — not needed during development
 - Mobile platform optimization — PC-first, mobile later
-- Multiplayer/networking tools — VeilBreakers is single-player
+- Multiplayer/networking tools — VeilBreakers is single-player (revisit if needed)
 - Custom game engine — Unity is the target, not building an engine
 - Houdini integration — too expensive, Blender Geometry Nodes covers procedural needs
 
@@ -132,5 +153,8 @@ Every tool returns structured validation data and visual proof so Claude never w
 | Separate repo from VeilBreakers | Clean separation of concerns, reusable for other projects | — Pending |
 | URP focus (not HDRP) | Unity 2026 strategy: URP is the future, HDRP entering maintenance | — Pending |
 
+| v1.0 code generation pattern for Unity tools | Generates C# scripts written to disk, not live RPC | ✓ Good |
+| All v1.0 Active requirements delivered | 8 phases, 22 tools, 2740 tests | ✓ Good |
+
 ---
-*Last updated: 2026-03-18 after initialization*
+*Last updated: 2026-03-19 after v1.0 completion, v2.0 milestone start*
