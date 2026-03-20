@@ -178,7 +178,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [x] **EQUIP-03**: Claude can split character mesh into modular parts (head, torso, upper arms, lower arms, upper legs, lower legs, feet) for armor swapping
 - [x] **EQUIP-04**: Claude can generate armor/clothing meshes that fit character models using shape keys and vertex weight transfer
 - [x] **EQUIP-05**: Claude can generate equipment preview icons (3D rendered turntable or flat icon) for inventory UI
-- [ ] **EQUIP-06**: Claude can set up Unity equipment attachment system (SkinnedMeshRenderer rebinding, bone socket parenting, sheathed weapon positioning with Multi-Parent Constraint)
+- [x] **EQUIP-06**: Claude can set up Unity equipment attachment system (SkinnedMeshRenderer rebinding, bone socket parenting, sheathed weapon positioning with Multi-Parent Constraint)
 - [ ] **EQUIP-07**: Claude can apply rarity tier visual effects to equipment (Common gray, Rare blue, Epic purple, Legendary gold glow + particle effects)
 - [ ] **EQUIP-08**: Claude can apply corruption visual progression to equipment (0-100% corruption with increasing vein patterns, color shift, particle emission)
 
@@ -344,7 +344,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | EQUIP-03 | Phase 13 | Complete |
 | EQUIP-04 | Phase 13 | Complete |
 | EQUIP-05 | Phase 13 | Complete |
-| EQUIP-06 | Phase 13 | Pending |
+| EQUIP-06 | Phase 13 | Complete |
 | EQUIP-07 | Phase 15 | Pending |
 | EQUIP-08 | Phase 15 | Pending |
 | WORLD-01 | Phase 14 | Pending |
