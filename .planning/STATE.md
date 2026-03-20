@@ -135,6 +135,10 @@ v2.0 Progress:  [██████░░░░] 67% (2/3 plans in phase 12)
 | VB delegation pattern: generated MonoBehaviours call existing static utility classes | Generated C# references BrandSystem/SynergySystem/CorruptionSystem by name, never reimplements | 12 |
 | Actual VeilBreakers API signatures over plan interfaces | Plan had simplified signatures; actual source uses Path enum, 10 brands, nested SynergyTier | 12 |
 | Extended damage types cover all 10 brands | BrandSystem has 10 brands (not 5 combat), damage type system matches full set | 12 |
+| Cinemachine 3.x API exclusively (CinemachineCamera + OrbitalFollow + RotationComposer) | Legacy FreeLook is Cinemachine 2.x, new API is cleaner and Unity 6 native | 12 |
+| Multi-file generators return tuples | Input config returns (JSON, C#), settings returns (C#, UXML, USS) for related artifacts | 12 |
+| HTTP client uses UNITY_6000_0_OR_NEWER guard | Awaitable async for Unity 6, coroutine fallback for earlier versions | 12 |
+| Save system key derivation from Application.identifier | AES-CBC key derived via SHA256(identifier + salt), matching SaveFileHandler pattern | 12 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -149,10 +153,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T13:39:17.545Z
-Stopped at: Completed 12-02-PLAN.md
-Next action: Continue Phase 12 (12-01 or 12-03)
+Last session: 2026-03-20T13:35:15Z
+Stopped at: Completed 12-01-PLAN.md
+Next action: Continue Phase 12 (12-03 remaining)
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 12-02-PLAN.md (7 VB combat generators + 87 tests, 3,802 total)*
+*Last updated: 2026-03-20 -- Completed 12-01-PLAN.md (7 core game system generators + 93 tests, 3,895 total)*
