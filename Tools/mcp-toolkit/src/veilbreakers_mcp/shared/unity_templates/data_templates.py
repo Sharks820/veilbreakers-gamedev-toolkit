@@ -440,7 +440,13 @@ def generate_json_validator_script(
         safe_name = "ConfigData"
 
     safe_path = _sanitize_cs_string(json_path)
-    safe_wrapper = _sanitize_cs_identifier(wrapper_class) if wrapper_class else ""
+    # Auto-generate wrapper class name if schema is provided but no wrapper specified
+    if wrapper_class:
+        safe_wrapper = _sanitize_cs_identifier(wrapper_class)
+    elif schema:
+        safe_wrapper = f"{safe_name}Wrapper"
+    else:
+        safe_wrapper = ""
     script_class = f"VeilBreakers_Validate{safe_name}"
 
     lines: list[str] = []
