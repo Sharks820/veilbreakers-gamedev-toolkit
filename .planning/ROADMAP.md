@@ -1,7 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-20 (Phase 14 planned)
+**Updated:** 2026-03-20 (Phase 15 planned)
 
 ## Milestones
 
@@ -279,11 +279,11 @@ Plans:
 **Plans**: 5 plans
 
 Plans:
-- [ ] 14-01-PLAN.md -- Camera + Timeline + animation editing templates: Cinemachine 3.x, Timeline, cutscenes, AnimationClip, Animator, AvatarMask, VideoPlayer (CAM-01, CAM-02, CAM-03, CAM-04, ANIMA-01, ANIMA-02, ANIMA-03, MEDIA-01)
-- [ ] 14-02-PLAN.md -- Scene management + environment templates: scene creation/loading, transitions, probes, occlusion, skybox/GI, terrain detail, tilemap, 2D physics, time-of-day (SCNE-01, SCNE-02, SCNE-03, SCNE-04, SCNE-05, SCNE-06, TWO-01, TWO-02, WORLD-08)
-- [ ] 14-03-PLAN.md -- Blender world design extensions: locations, 16 room types, boss arenas, world graph, linked interiors, multi-floor dungeons, furniture scale, overrun variants, easter eggs, storytelling props (WORLD-01, WORLD-02, WORLD-03, WORLD-04, WORLD-05, WORLD-06, WORLD-07, WORLD-09, WORLD-10, AAA-05)
-- [ ] 14-04-PLAN.md -- RPG world system templates: fast travel, puzzles, traps, spatial loot, weather, day/night cycle, NPC placement, dungeon lighting, terrain-building blending (RPG-02, RPG-04, RPG-06, RPG-07, RPG-09, RPG-10, RPG-11, RPG-12, RPG-13)
-- [ ] 14-05-PLAN.md -- Compound tool wiring: unity_camera + unity_world tools, blender_worldbuilding extensions, handler registration, deep C# syntax tests (all 36 requirements)
+- [x] 14-01-PLAN.md -- Camera + Timeline + animation editing templates: Cinemachine 3.x, Timeline, cutscenes, AnimationClip, Animator, AvatarMask, VideoPlayer (CAM-01, CAM-02, CAM-03, CAM-04, ANIMA-01, ANIMA-02, ANIMA-03, MEDIA-01)
+- [x] 14-02-PLAN.md -- Scene management + environment templates: scene creation/loading, transitions, probes, occlusion, skybox/GI, terrain detail, tilemap, 2D physics, time-of-day (SCNE-01, SCNE-02, SCNE-03, SCNE-04, SCNE-05, SCNE-06, TWO-01, TWO-02, WORLD-08)
+- [x] 14-03-PLAN.md -- Blender world design extensions: locations, 16 room types, boss arenas, world graph, linked interiors, multi-floor dungeons, furniture scale, overrun variants, easter eggs, storytelling props (WORLD-01, WORLD-02, WORLD-03, WORLD-04, WORLD-05, WORLD-06, WORLD-07, WORLD-09, WORLD-10, AAA-05)
+- [x] 14-04-PLAN.md -- RPG world system templates: fast travel, puzzles, traps, spatial loot, weather, day/night cycle, NPC placement, dungeon lighting, terrain-building blending (RPG-02, RPG-04, RPG-06, RPG-07, RPG-09, RPG-10, RPG-11, RPG-12, RPG-13)
+- [x] 14-05-PLAN.md -- Compound tool wiring: unity_camera + unity_world tools, blender_worldbuilding extensions, handler registration, deep C# syntax tests (all 36 requirements)
 
 ### Phase 15: Game UX & Encounter Design
 **Goal**: Claude can generate polished gameplay UX elements and scripted encounter systems with dynamic difficulty adjustment
@@ -295,11 +295,13 @@ Plans:
   3. Claude can generate a floating damage number system with configurable fonts, colors per damage type, critical hit scaling, and pooled text objects
   4. Claude can generate an encounter scripting system with trigger zones, wave spawning, win/fail conditions, and AI director hooks
   5. Claude can generate a threat escalation / AI director system that adjusts difficulty dynamically, and encounter simulations produce statistical balance reports
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 15-01: TBD
-- [ ] 15-02: TBD
+- [ ] 15-01-PLAN.md -- Core UX templates: minimap (orthographic camera render texture), damage numbers (PrimeTween + pooling), interaction prompts (Input System rebind), PrimeTween sequences, TextMeshPro setup (UIX-01, UIX-03, UIX-04, SHDR-04, PIPE-10)
+- [ ] 15-02-PLAN.md -- Game screen & visual effect templates: tutorial system, accessibility (colorblind/subtitles/motor), character select, world map, rarity VFX, corruption VFX (UIX-02, ACC-01, VB-09, RPG-08, EQUIP-07, EQUIP-08)
+- [ ] 15-03-PLAN.md -- Encounter & boss AI templates: encounter scripting (waves/triggers), AI director (DDA), encounter simulator (Monte Carlo EditorWindow), boss AI (multi-phase FSM) (AID-01, AID-02, AID-03, VB-10)
+- [ ] 15-04-PLAN.md -- Compound tool wiring: unity_ux (12 actions) + unity_gameplay extensions (4 actions) + deep C# syntax tests (all 15 requirements)
 
 ### Phase 16: Quality Assurance & Testing
 **Goal**: Claude can run tests, profile performance, detect memory leaks, analyze code quality, and inspect live game state -- closing the feedback loop on code correctness and runtime health
@@ -354,8 +356,8 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 11. Data Architecture & Asset Pipeline | v2.0 | 4/4 | Complete | 2026-03-20 |
 | 12. Core Game Systems | v2.0 | 3/3 | Complete | 2026-03-20 |
 | 13. Content & Progression Systems | v2.0 | 3/3 | Complete | 2026-03-20 |
-| 14. Camera, Cinematics & Scene Management | 5/5 | Complete    | 2026-03-20 | - |
-| 15. Game UX & Encounter Design | v2.0 | 0/2 | Not started | - |
+| 14. Camera, Cinematics & Scene Management | v2.0 | 5/5 | Complete | 2026-03-20 |
+| 15. Game UX & Encounter Design | v2.0 | 0/4 | Planned | - |
 | 16. Quality Assurance & Testing | v2.0 | 0/2 | Not started | - |
 | 17. Build & Deploy Pipeline | v2.0 | 0/2 | Not started | - |
 
@@ -368,3 +370,4 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 *Phase 12 planned: 2026-03-20*
 *Phase 13 planned: 2026-03-20*
 *Phase 14 planned: 2026-03-20*
+*Phase 15 planned: 2026-03-20*
