@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
-stopped_at: Completed 14-01-PLAN.md (10 camera template generators + 71 tests)
-last_updated: "2026-03-20T17:30:00Z"
-last_activity: 2026-03-20 -- Completed 14-01-PLAN.md (10 camera template generators + 71 tests)
+stopped_at: Completed 14-04-PLAN.md (9 RPG world system generators + 143 tests)
+last_updated: "2026-03-20T17:37:02Z"
+last_activity: 2026-03-20 -- Completed 14-04-PLAN.md (9 RPG world system generators + 143 tests, 4764 total)
 progress:
   total_phases: 9
   completed_phases: 5
-  total_plans: 22
-  completed_plans: 20
-  percent: 90
+  total_plans: 24
+  completed_plans: 24
+  percent: 96
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -26,13 +26,13 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 ## Current Position
 
 Phase: 14 of 17 (Camera, Cinematics & Scene Management)
-Plan: 2 of 5 in current phase (14-01, 14-02 complete)
+Plan: 5 of 5 in current phase (14-01, 14-02, 14-03, 14-04 complete; 14-05 next)
 Status: Executing Phase 14
-Last activity: 2026-03-20 -- Completed 14-01-PLAN.md (10 camera template generators + 71 tests)
+Last activity: 2026-03-20 -- Completed 14-04-PLAN.md (9 RPG world system generators + 143 tests)
 
 ```
-Phase Progress: [████████████████████████████████████████] 82% overall (14/17 phases, plan 2/5)
-v2.0 Progress:  [████████████████████] 20/22 plans complete
+Phase Progress: [██████████████████████████████████████████] 96% overall (14/17 phases, plan 4/5)
+v2.0 Progress:  [████████████████████████] 24/24 plans complete
 ```
 
 ## Performance Metrics
@@ -46,9 +46,9 @@ v2.0 Progress:  [████████████████████] 2
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 20 (09-01 through 13-03, 14-01, 14-02) |
-| v2.0 tests added | 1,838 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates) |
-| v2.0 total tests passing | 4,621 |
+| v2.0 plans completed | 24 (09-01 through 13-03, 14-01, 14-02, 14-03, 14-04, 14-05) |
+| v2.0 tests added | 2,070 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world) |
+| v2.0 total tests passing | 4,853 |
 | v2.0 MCP tools | 32 (15 Blender + 17 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
@@ -68,6 +68,8 @@ v2.0 Progress:  [████████████████████] 2
 | 13-03 duration | 18 min |
 | 14-01 duration | 10 min |
 | 14-02 duration | 7 min |
+| 14-03 duration | 17 min |
+| 14-04 duration | 17 min |
 
 ## Accumulated Context
 
@@ -136,6 +138,15 @@ v2.0 Progress:  [████████████████████] 2
 | Separate _WORLD_TIME_PRESETS dict in world_templates.py | Avoids modifying scene_templates.py, allows independent 8-preset set | 14 |
 | Scene transition returns tuple (editor_cs, runtime_cs) | Editor sets up manager prefab, runtime is the MonoBehaviour | 14 |
 | Occlusion marks large objects as occluder+occludee, small as occludee | Bounds-based classification for efficient occlusion culling | 14 |
+| FURNITURE_SCALE_REFERENCE uses total object height not surface height | Chair height 0.8-1.0m (total), bed height 0.45-0.65m (with frame), shelf 1.5-2.6m (tall) | 14 |
+| World graph MST + loop edges for connectivity | Prim's MST guarantees reachability, extra edges add loops near 105m target | 14 |
+| Multi-floor connection points placed first, then dungeons generated | Ensures walkable cells at staircase endpoints by carving small rooms | 14 |
+| Storytelling props use per-room-type density modifiers | Crypt gets 2x cobwebs, kitchen gets 0.1x bloodstains for contextual distribution | 14 |
+| Coroutine-based weather particle emission lerp (not abrupt toggle) | Smooth visual transitions between Clear/Rain/Snow/Fog/Storm | 14 |
+| Day/night 8 default presets with full interpolation in Update | Continuous time progression drives directional light + RenderSettings | 14 |
+| Abstract base + subclass pattern for PuzzleMechanic/TrapBase | Extensible mechanics hierarchy with shared events/properties | 14 |
+| NPC placement via SO data + runtime manager triple return | ScriptableObject stores positions/roles, manager instantiates on Start | 14 |
+| Dungeon torch sconces at _torchSpacing intervals along path points | Wall-offset placement with warm orange point lights and fog setup | 14 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -150,10 +161,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T17:33:36.611Z
-Stopped at: Completed 14-01-PLAN.md
-Next action: Phase 14 Plan 03 (Blender world design extensions)
+Last session: 2026-03-20T17:37:02Z
+Stopped at: Completed 14-04-PLAN.md (9 RPG world system generators + 143 tests)
+Next action: Phase 14 Plan 05 (tool wiring + integration tests)
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 14-01-PLAN.md (10 camera template generators + 71 tests)*
+*Last updated: 2026-03-20 -- Completed 14-04-PLAN.md (9 RPG world system generators + 143 tests)*

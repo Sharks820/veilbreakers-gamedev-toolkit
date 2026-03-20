@@ -168,7 +168,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [x] **AAA-02**: Claude can enforce per-asset-type polygon budgets (hero: 30-50k, mob: 8-15k, weapon: 3-8k, prop: 500-6k, building: 5-15k) with auto-retopo if over budget
 - [x] **AAA-03**: Claude can apply dark fantasy material palette validation (saturation caps, color temperature rules, PBR roughness variation enforcement)
 - [x] **AAA-04**: Claude can generate master material library with base materials (stone, wood, iron, moss, bone, cloth, leather) that all assets reference for art consistency
-- [ ] **AAA-05**: Claude can add storytelling props (layer 3: clutter, wall decor, narrative detail — cobwebs, bloodstains, scattered papers, broken pottery) to any interior
+- [x] **AAA-05**: Claude can add storytelling props (layer 3: clutter, wall decor, narrative detail — cobwebs, bloodstains, scattered papers, broken pottery) to any interior
 - [x] **AAA-06**: Claude can validate texture quality against standards (texel density 10.24 px/cm, no flat roughness, micro-detail normals present, proper channel packing M/R/AO)
 
 ### Equipment & Weapons
@@ -184,16 +184,16 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### World Design & Composition
 
-- [ ] **WORLD-01**: Claude can generate complete explorable locations from text descriptions (cities, bandit camps, dungeons, castles, forest clearings, ruins) with proper scale, paths, and points of interest
-- [ ] **WORLD-02**: Claude can generate fully furnished building interiors for 16 room types (tavern, throne room, prison, bedroom, kitchen, library, armory, temple, blacksmith, guard barracks, treasury, war room, alchemy lab, torture chamber, crypt, dining hall)
-- [ ] **WORLD-03**: Claude can generate boss arena environments with fog gates, cover objects, hazard zones, phase triggers, and proper scale (20-40m)
-- [ ] **WORLD-04**: Claude can connect locations into a world graph with proper walking distances (30-second rule: point of interest every ~105m), path generation, and terrain integration
-- [ ] **WORLD-05**: Claude can generate interior-exterior linked buildings (door triggers, occlusion culling zones, lighting transitions, collision boundaries)
-- [ ] **WORLD-06**: Claude can generate multi-floor dungeon layouts with vertical progression (descending staircases, elevators, ladders, pit drops), proper ceiling heights, and navigable corridors
-- [ ] **WORLD-07**: Claude can place furniture and props at correct real-world scale (doors: 1.0-1.2m wide, ceilings: 2.8-3.5m, tables: 0.75m high, chairs to fit character model)
+- [x] **WORLD-01**: Claude can generate complete explorable locations from text descriptions (cities, bandit camps, dungeons, castles, forest clearings, ruins) with proper scale, paths, and points of interest
+- [x] **WORLD-02**: Claude can generate fully furnished building interiors for 16 room types (tavern, throne room, prison, bedroom, kitchen, library, armory, temple, blacksmith, guard barracks, treasury, war room, alchemy lab, torture chamber, crypt, dining hall)
+- [x] **WORLD-03**: Claude can generate boss arena environments with fog gates, cover objects, hazard zones, phase triggers, and proper scale (20-40m)
+- [x] **WORLD-04**: Claude can connect locations into a world graph with proper walking distances (30-second rule: point of interest every ~105m), path generation, and terrain integration
+- [x] **WORLD-05**: Claude can generate interior-exterior linked buildings (door triggers, occlusion culling zones, lighting transitions, collision boundaries)
+- [x] **WORLD-06**: Claude can generate multi-floor dungeon layouts with vertical progression (descending staircases, elevators, ladders, pit drops), proper ceiling heights, and navigable corridors
+- [x] **WORLD-07**: Claude can place furniture and props at correct real-world scale (doors: 1.0-1.2m wide, ceilings: 2.8-3.5m, tables: 0.75m high, chairs to fit character model)
 - [x] **WORLD-08**: Claude can apply time-of-day lighting presets across entire scenes (8 presets: dawn, morning, noon, afternoon, dusk, evening, night, midnight) with matching fog/atmosphere
-- [ ] **WORLD-09**: Claude can generate overrun/ruined variants of intact locations (add debris, broken walls, overgrown vegetation, scattered remains, damaged furniture)
-- [ ] **WORLD-10**: Claude can place easter eggs and hidden areas (secret rooms behind breakable walls, hidden paths off main routes, lore items in unexpected locations)
+- [x] **WORLD-09**: Claude can generate overrun/ruined variants of intact locations (add debris, broken walls, overgrown vegetation, scattered remains, damaged furniture)
+- [x] **WORLD-10**: Claude can place easter eggs and hidden areas (secret rooms behind breakable walls, hidden paths off main routes, lore items in unexpected locations)
 
 ### VeilBreakers Core Systems
 
@@ -211,18 +211,18 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 ### RPG World Systems
 
 - [x] **RPG-01**: Claude can generate a shop/merchant system (buy/sell UI, price display, equipment stat comparison, currency transactions, merchant inventory)
-- [ ] **RPG-02**: Claude can generate a fast travel/waypoint system (discover waypoints by visiting, teleport between unlocked points, loading transition)
+- [x] **RPG-02**: Claude can generate a fast travel/waypoint system (discover waypoints by visiting, teleport between unlocked points, loading transition)
 - [x] **RPG-03**: Claude can generate an interactable object framework (state machine for doors, chests, levers, switches with animations and sound)
-- [ ] **RPG-04**: Claude can generate environmental puzzle mechanics (lever sequences, pressure plates, key-and-lock, movable blocks, light beam puzzles)
+- [x] **RPG-04**: Claude can generate environmental puzzle mechanics (lever sequences, pressure plates, key-and-lock, movable blocks, light beam puzzles)
 - [x] **RPG-05**: Claude can generate a journal/codex/bestiary system (lore entries from world, monster compendium with stats/weaknesses, item encyclopedia)
-- [ ] **RPG-06**: Claude can generate dungeon trap mechanics (pressure plates, dart walls, spike pits, falling rocks, poison gas, swinging blades)
-- [ ] **RPG-07**: Claude can generate spatial loot placement in dungeons (treasure chest positions, item drops in specific rooms, treasure room layouts)
+- [x] **RPG-06**: Claude can generate dungeon trap mechanics (pressure plates, dart walls, spike pits, falling rocks, poison gas, swinging blades)
+- [x] **RPG-07**: Claude can generate spatial loot placement in dungeons (treasure chest positions, item drops in specific rooms, treasure room layouts)
 - [ ] **RPG-08**: Claude can generate a 2D world map screen from 3D terrain data (fog-of-war, location markers, player position, discovered areas)
-- [ ] **RPG-09**: Claude can generate a weather system with state management (rain, snow, fog, storms), smooth transitions, and optional gameplay effects
-- [ ] **RPG-10**: Claude can generate a day/night runtime cycle (continuous time progression, lighting preset transitions, NPC schedule changes, enemy behavior shifts)
-- [ ] **RPG-11**: Claude can generate friendly NPC placement markers inside buildings (shopkeeper positions, quest giver positions, bartender positions, guard positions)
-- [ ] **RPG-12**: Claude can generate dungeon-specific lighting (torch sconces every 4-6m, dark corridors, light pools around fire sources, atmospheric fog)
-- [ ] **RPG-13**: Claude can generate terrain-building blending (vertex color at base, decal projection, terrain depression beneath structures)
+- [x] **RPG-09**: Claude can generate a weather system with state management (rain, snow, fog, storms), smooth transitions, and optional gameplay effects
+- [x] **RPG-10**: Claude can generate a day/night runtime cycle (continuous time progression, lighting preset transitions, NPC schedule changes, enemy behavior shifts)
+- [x] **RPG-11**: Claude can generate friendly NPC placement markers inside buildings (shopkeeper positions, quest giver positions, bartender positions, guard positions)
+- [x] **RPG-12**: Claude can generate dungeon-specific lighting (torch sconces every 4-6m, dark corridors, light pools around fire sources, atmospheric fog)
+- [x] **RPG-13**: Claude can generate terrain-building blending (vertex color at base, decal projection, terrain depression beneath structures)
 
 ## Out of Scope
 
@@ -337,7 +337,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | AAA-02 | Phase 11 | Complete |
 | AAA-03 | Phase 11 | Complete |
 | AAA-04 | Phase 11 | Complete |
-| AAA-05 | Phase 14 | Pending |
+| AAA-05 | Phase 14 | Complete |
 | AAA-06 | Phase 11 | Complete |
 | EQUIP-01 | Phase 13 | Complete |
 | EQUIP-02 | Phase 9 | Complete |
@@ -347,16 +347,16 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | EQUIP-06 | Phase 13 | Complete |
 | EQUIP-07 | Phase 15 | Pending |
 | EQUIP-08 | Phase 15 | Pending |
-| WORLD-01 | Phase 14 | Pending |
-| WORLD-02 | Phase 14 | Pending |
-| WORLD-03 | Phase 14 | Pending |
-| WORLD-04 | Phase 14 | Pending |
-| WORLD-05 | Phase 14 | Pending |
-| WORLD-06 | Phase 14 | Pending |
-| WORLD-07 | Phase 14 | Pending |
+| WORLD-01 | Phase 14 | Complete |
+| WORLD-02 | Phase 14 | Complete |
+| WORLD-03 | Phase 14 | Complete |
+| WORLD-04 | Phase 14 | Complete |
+| WORLD-05 | Phase 14 | Complete |
+| WORLD-06 | Phase 14 | Complete |
+| WORLD-07 | Phase 14 | Complete |
 | WORLD-08 | Phase 14 | Complete |
-| WORLD-09 | Phase 14 | Pending |
-| WORLD-10 | Phase 14 | Pending |
+| WORLD-09 | Phase 14 | Complete |
+| WORLD-10 | Phase 14 | Complete |
 
 | VB-01 | Phase 12 | Complete |
 | VB-02 | Phase 12 | Complete |
@@ -369,18 +369,18 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | VB-09 | Phase 15 | Pending |
 | VB-10 | Phase 15 | Pending |
 | RPG-01 | Phase 13 | Complete |
-| RPG-02 | Phase 14 | Pending |
+| RPG-02 | Phase 14 | Complete |
 | RPG-03 | Phase 12 | Complete |
-| RPG-04 | Phase 14 | Pending |
+| RPG-04 | Phase 14 | Complete |
 | RPG-05 | Phase 13 | Complete |
-| RPG-06 | Phase 14 | Pending |
-| RPG-07 | Phase 14 | Pending |
+| RPG-06 | Phase 14 | Complete |
+| RPG-07 | Phase 14 | Complete |
 | RPG-08 | Phase 15 | Pending |
-| RPG-09 | Phase 14 | Pending |
-| RPG-10 | Phase 14 | Pending |
-| RPG-11 | Phase 14 | Pending |
-| RPG-12 | Phase 14 | Pending |
-| RPG-13 | Phase 14 | Pending |
+| RPG-09 | Phase 14 | Complete |
+| RPG-10 | Phase 14 | Complete |
+| RPG-11 | Phase 14 | Complete |
+| RPG-12 | Phase 14 | Complete |
+| RPG-13 | Phase 14 | Complete |
 
 **Coverage:**
 - v2 requirements: 143 total (across 23 categories)
