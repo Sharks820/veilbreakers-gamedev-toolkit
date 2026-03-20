@@ -17,6 +17,12 @@ class Settings(BaseSettings):
 
     # Unity project root path (for C# script generation)
     unity_project_path: str = ""
+
+    # Unity Editor TCP bridge (direct communication, port 9877)
+    unity_bridge_host: str = "localhost"
+    unity_bridge_port: int = 9877
+    unity_bridge_timeout: int = 300
+
     # Google Gemini API key for visual review
     gemini_api_key: str = ""
     # ElevenLabs API key for AI audio generation
