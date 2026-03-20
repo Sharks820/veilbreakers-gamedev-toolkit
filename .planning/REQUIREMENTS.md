@@ -124,8 +124,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Shader & Rendering
 
-- [ ] **SHDR-01**: Claude can write arbitrary HLSL/ShaderLab shaders (not just predefined templates)
-- [ ] **SHDR-02**: Claude can create custom URP ScriptableRendererFeatures and render passes
+- [x] **SHDR-01**: Claude can write arbitrary HLSL/ShaderLab shaders (not just predefined templates)
+- [x] **SHDR-02**: Claude can create custom URP ScriptableRendererFeatures and render passes
 - [ ] **SHDR-03**: Claude can manage shader variant stripping and keyword sets for build size optimization
 - [ ] **SHDR-04**: Claude can generate DOTween/LeanTween animation sequences for UI polish and game juice
 
@@ -313,8 +313,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | BUILD-03 | Phase 17 | Pending |
 | BUILD-04 | Phase 17 | Pending |
 | BUILD-05 | Phase 17 | Pending |
-| SHDR-01 | Phase 10 | Pending |
-| SHDR-02 | Phase 10 | Pending |
+| SHDR-01 | Phase 10 | Complete |
+| SHDR-02 | Phase 10 | Complete |
 | SHDR-03 | Phase 17 | Pending |
 | SHDR-04 | Phase 15 | Pending |
 | TWO-01 | Phase 14 | Pending |
