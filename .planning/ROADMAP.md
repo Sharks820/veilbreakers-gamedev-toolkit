@@ -1,7 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-19 (v2.0 milestone added)
+**Updated:** 2026-03-20 (Phase 10 planned)
 
 ## Milestones
 
@@ -192,9 +192,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 09-01-PLAN.md -- Prefab, component, hierarchy, physics joints, NavMesh, bone sockets (unity_prefab tool)
-- [ ] 09-02-PLAN.md -- Project settings, packages, tags/layers, physics config (unity_settings tool)
-- [ ] 09-03-PLAN.md -- Asset operations, FBX/texture import, material remap, presets, asmdef (unity_assets tool)
+- [x] 09-01-PLAN.md -- Prefab, component, hierarchy, physics joints, NavMesh, bone sockets (unity_prefab tool)
+- [x] 09-02-PLAN.md -- Project settings, packages, tags/layers, physics config (unity_settings tool)
+- [x] 09-03-PLAN.md -- Asset operations, FBX/texture import, material remap, presets, asmdef (unity_assets tool)
 
 ### Phase 10: C# Programming Framework
 **Goal**: Claude can generate and modify arbitrary C# code for Unity -- MonoBehaviours, editor tools, tests, and reusable architecture patterns -- not limited to domain-specific templates
@@ -206,12 +206,13 @@ Plans:
   3. Claude can generate custom Editor windows, PropertyDrawers, and Inspector drawers that render correctly in the Unity Editor
   4. Claude can create test assemblies and run EditMode/PlayMode tests through MCP, receiving structured pass/fail results with failure messages
   5. Claude can scaffold architecture patterns (service locator, event bus, object pool, state machine, observer/SO events) that compile and function as reusable frameworks
-**Plans**: TBD
+**Plans**: 4 plans
 
 Plans:
-- [ ] 10-01: TBD
-- [ ] 10-02: TBD
-- [ ] 10-03: TBD
+- [ ] 10-01-PLAN.md -- Core C# generation engine: class builder, script modifier, editor tools (CODE-01, CODE-02, CODE-03)
+- [ ] 10-02-PLAN.md -- Shader extensions: arbitrary HLSL/ShaderLab shaders, URP ScriptableRendererFeatures (SHDR-01, SHDR-02)
+- [ ] 10-03-PLAN.md -- Test framework + architecture patterns: test classes, test runner, service locator, object pool, singleton, state machine, SO events (CODE-04 through CODE-10)
+- [ ] 10-04-PLAN.md -- Compound tool wiring: unity_code + unity_shader tools, run_tests action in unity_server.py
 
 ### Phase 11: Data Architecture & Asset Pipeline
 **Goal**: Claude can create data-driven game architecture using ScriptableObjects, JSON configs, and localization -- plus manage the asset pipeline with Git LFS, normal map baking, and sprite atlasing
@@ -343,8 +344,8 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 6. Environment & World Building | v1.0 | 4/4 | Complete | 2026-03-19 |
 | 7. VFX, Audio, UI & Unity Scene | v1.0 | 5/5 | Complete | 2026-03-19 |
 | 8. Gameplay AI & Performance | v1.0 | 3/3 | Complete | 2026-03-19 |
-| 9. Unity Editor Deep Control | 3/3 | Complete   | 2026-03-20 | - |
-| 10. C# Programming Framework | v2.0 | 0/3 | Not started | - |
+| 9. Unity Editor Deep Control | v2.0 | 3/3 | Complete | 2026-03-20 |
+| 10. C# Programming Framework | v2.0 | 0/4 | Not started | - |
 | 11. Data Architecture & Asset Pipeline | v2.0 | 0/2 | Not started | - |
 | 12. Core Game Systems | v2.0 | 0/2 | Not started | - |
 | 13. Content & Progression Systems | v2.0 | 0/3 | Not started | - |
@@ -356,3 +357,4 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 ---
 *Roadmap created: 2026-03-18*
 *v2.0 phases added: 2026-03-19*
+*Phase 10 planned: 2026-03-20*
