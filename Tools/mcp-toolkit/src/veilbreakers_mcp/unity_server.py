@@ -8904,7 +8904,7 @@ async def unity_qa(
             ]
             for finding in result.get("findings", []):
                 severity = finding.get("severity", "info")
-                line = finding.get("line", "?")
+                line = finding.get("line_number", finding.get("line", "?"))
                 message = finding.get("message", "")
                 fix = finding.get("fix", "")
                 report_lines.append(
@@ -8944,6 +8944,19 @@ async def unity_qa(
             }, indent=2)
 
         elif action == "setup_analytics":
+            # Validate log_file_path to prevent directory traversal
+            import posixpath
+            if (log_file_path.startswith("/") or log_file_path.startswith("\\")
+                    or ".." in log_file_path
+                    or ":" in log_file_path):
+                return json.dumps({
+                    "status": "error",
+                    "action": "setup_analytics",
+                    "message": (
+                        "log_file_path must be a relative path without "
+                        "'..', leading '/' or '\\\\', or drive letters"
+                    ),
+                })
             script = generate_analytics_script(
                 event_names=event_names,
                 flush_interval_seconds=flush_interval_seconds,
