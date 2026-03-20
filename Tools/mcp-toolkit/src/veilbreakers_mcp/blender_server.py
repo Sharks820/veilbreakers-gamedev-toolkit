@@ -1560,6 +1560,7 @@ async def blender_environment(
         "scatter_vegetation",
         "scatter_props",
         "create_breakable",
+        "add_storytelling_props",
     ],
     # Common params
     name: str | None = None,
@@ -1599,10 +1600,15 @@ async def blender_environment(
     # create_breakable params
     prop_type: str | None = None,
     position: list[float] | None = None,
+    # add_storytelling_props params (AAA-05)
+    target_interior: str | None = None,
+    density_modifier: float | None = None,
+    prop_types: list[str] | None = None,
     # Visual feedback
     capture_viewport: bool = True,
 ):
-    """Environment generation -- terrain, biomes, rivers, roads, water, vegetation scatter, prop scatter, breakable props.
+    """Environment generation -- terrain, biomes, rivers, roads, water, vegetation scatter,
+    prop scatter, breakable props, storytelling props.
 
     Actions:
     - generate_terrain: Create heightmap terrain mesh with optional erosion
@@ -1614,6 +1620,7 @@ async def blender_environment(
     - scatter_vegetation: Biome-aware vegetation scatter using Poisson disk
     - scatter_props: Context-aware prop placement near buildings
     - create_breakable: Generate intact + damaged prop variants
+    - add_storytelling_props: Add narrative clutter to interior rooms (AAA-05)
     """
     blender = get_blender_connection()
 
@@ -1750,6 +1757,19 @@ async def blender_environment(
         result = await blender.send_command("env_create_breakable", params)
         return await _with_screenshot(blender, result, capture_viewport)
 
+    elif action == "add_storytelling_props":
+        params = {}
+        if target_interior is not None:
+            params["target_interior"] = target_interior
+        if name is not None:
+            params["room_type"] = name
+        if density_modifier is not None:
+            params["density_modifier"] = density_modifier
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("env_add_storytelling_props", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
     return "Unknown action"
 
 
@@ -1768,6 +1788,13 @@ async def blender_worldbuilding(
         "generate_ruins",
         "generate_interior",
         "generate_modular_kit",
+        "generate_location",
+        "generate_boss_arena",
+        "generate_world_graph",
+        "generate_linked_interior",
+        "generate_multi_floor_dungeon",
+        "generate_overrun_variant",
+        "generate_easter_egg",
     ],
     # Common params (float to accommodate both grid dimensions and building dimensions)
     name: str | None = None,
@@ -1799,10 +1826,38 @@ async def blender_worldbuilding(
     # Modular kit params
     name_prefix: str | None = None,
     pieces: list[str] | None = None,
+    # Location params (WORLD-01)
+    location_type: str | None = None,
+    building_count: int | None = None,
+    path_count: int | None = None,
+    poi_count: int | None = None,
+    # Boss arena params (WORLD-03)
+    arena_type: str | None = None,
+    diameter: float | None = None,
+    cover_count: int | None = None,
+    hazard_zones: int | None = None,
+    phase_trigger_count: int | None = None,
+    # World graph params (WORLD-04)
+    locations: list[dict] | None = None,
+    target_distance: float | None = None,
+    # Linked interior params (WORLD-05)
+    interior_rooms: list[str] | None = None,
+    door_positions: list | None = None,
+    # Multi-floor dungeon params (WORLD-06)
+    num_floors: int | None = None,
+    connection_types: list[str] | None = None,
+    # Overrun variant params (WORLD-09)
+    corruption_level: float | None = None,
+    # Easter egg params (WORLD-10)
+    secret_room_count: int | None = None,
+    hidden_path_count: int | None = None,
+    lore_item_count: int | None = None,
     # Visual feedback
     capture_viewport: bool = True,
 ):
-    """Worldbuilding generation -- dungeons, caves, towns, buildings, castles, ruins, interiors, modular kits.
+    """Worldbuilding generation -- dungeons, caves, towns, buildings, castles, ruins,
+    interiors, modular kits, locations, boss arenas, world graphs, linked interiors,
+    multi-floor dungeons, overrun variants, easter eggs.
 
     Actions:
     - generate_dungeon: BSP dungeon with rooms, corridors, doors
@@ -1813,6 +1868,13 @@ async def blender_worldbuilding(
     - generate_ruins: Damaged building with debris
     - generate_interior: Furnished room interior
     - generate_modular_kit: Modular architecture kit pieces
+    - generate_location: Composed location with buildings, paths, POIs (WORLD-01)
+    - generate_boss_arena: Arena with cover, hazards, phase triggers (WORLD-03)
+    - generate_world_graph: MST-connected world graph with locations (WORLD-04)
+    - generate_linked_interior: Interior with door/occlusion/lighting markers (WORLD-05)
+    - generate_multi_floor_dungeon: Multi-floor dungeon with vertical connections (WORLD-06)
+    - generate_overrun_variant: Corrupted variant with narrative debris (WORLD-09)
+    - generate_easter_egg: Secret rooms, hidden paths, lore items (WORLD-10)
     """
     blender = get_blender_connection()
 
@@ -1952,6 +2014,121 @@ async def blender_worldbuilding(
         if pieces is not None:
             params["pieces"] = pieces
         result = await blender.send_command("world_generate_modular_kit", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_location":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if location_type is not None:
+            params["location_type"] = location_type
+        if building_count is not None:
+            params["building_count"] = building_count
+        if path_count is not None:
+            params["path_count"] = path_count
+        if poi_count is not None:
+            params["poi_count"] = poi_count
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("world_generate_location", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_boss_arena":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if arena_type is not None:
+            params["arena_type"] = arena_type
+        if diameter is not None:
+            params["diameter"] = diameter
+        if cover_count is not None:
+            params["cover_count"] = cover_count
+        if hazard_zones is not None:
+            params["hazard_zones"] = hazard_zones
+        if phase_trigger_count is not None:
+            params["phase_trigger_count"] = phase_trigger_count
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("world_generate_boss_arena", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_world_graph":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if locations is not None:
+            params["locations"] = locations
+        if target_distance is not None:
+            params["target_distance"] = target_distance
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("world_generate_world_graph", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_linked_interior":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if interior_rooms is not None:
+            params["interior_rooms"] = interior_rooms
+        if door_positions is not None:
+            params["door_positions"] = door_positions
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("world_generate_linked_interior", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_multi_floor_dungeon":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if num_floors is not None:
+            params["num_floors"] = num_floors
+        if width is not None:
+            params["width"] = int(width)
+        if height is not None:
+            params["height"] = int(height)
+        if min_room_size is not None:
+            params["min_room_size"] = min_room_size
+        if max_depth is not None:
+            params["max_depth"] = max_depth
+        if connection_types is not None:
+            params["connection_types"] = connection_types
+        if cell_size is not None:
+            params["cell_size"] = cell_size
+        if wall_height is not None:
+            params["wall_height"] = wall_height
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("world_generate_multi_floor_dungeon", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_overrun_variant":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if corruption_level is not None:
+            params["corruption_level"] = corruption_level
+        if room_type is not None:
+            params["room_type"] = room_type
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("world_generate_overrun_variant", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_easter_egg":
+        params = {}
+        if name is not None:
+            params["name"] = name
+        if secret_room_count is not None:
+            params["secret_room_count"] = secret_room_count
+        if hidden_path_count is not None:
+            params["hidden_path_count"] = hidden_path_count
+        if lore_item_count is not None:
+            params["lore_item_count"] = lore_item_count
+        if seed is not None:
+            params["seed"] = seed
+        result = await blender.send_command("world_generate_easter_egg", params)
         return await _with_screenshot(blender, result, capture_viewport)
 
     return "Unknown action"

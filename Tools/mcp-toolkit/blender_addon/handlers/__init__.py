@@ -108,6 +108,14 @@ from .worldbuilding import (
     handle_generate_ruins,
     handle_generate_interior,
     handle_generate_modular_kit,
+    handle_generate_location,
+    handle_generate_boss_arena,
+    handle_generate_world_graph,
+    handle_generate_linked_interior,
+    handle_generate_multi_floor_dungeon,
+    handle_generate_overrun_variant,
+    handle_generate_easter_egg,
+    handle_add_storytelling_props,
 )
 from .worldbuilding_layout import (
     handle_generate_dungeon,
@@ -233,6 +241,16 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "world_generate_dungeon": handle_generate_dungeon,
     "world_generate_cave": handle_generate_cave,
     "world_generate_town": handle_generate_town,
+    # Worldbuilding v2 operations (Phase 14 -- world design)
+    "world_generate_location": handle_generate_location,
+    "world_generate_boss_arena": handle_generate_boss_arena,
+    "world_generate_world_graph": handle_generate_world_graph,
+    "world_generate_linked_interior": handle_generate_linked_interior,
+    "world_generate_multi_floor_dungeon": handle_generate_multi_floor_dungeon,
+    "world_generate_overrun_variant": handle_generate_overrun_variant,
+    "world_generate_easter_egg": handle_generate_easter_egg,
+    # Environment v2 operations (Phase 14 -- AAA-05 storytelling props)
+    "env_add_storytelling_props": handle_add_storytelling_props,
     # Equipment operations
     "equipment_generate_weapon": handle_equipment_generate_weapon,
     "equipment_split_character": handle_equipment_split_character,
