@@ -403,6 +403,23 @@ public static class VeilBreakers_DuplicateAsset
             string sourcePath = "{safe_source}";
             string destPath = "{safe_dest}";
 
+            // Ensure destination directory exists
+            string destDir = Path.GetDirectoryName(destPath).Replace("\\\\", "/");
+            if (!string.IsNullOrEmpty(destDir) && !AssetDatabase.IsValidFolder(destDir))
+            {{
+                string[] parts = destDir.Split('/');
+                string current = parts[0];
+                for (int i = 1; i < parts.Length; i++)
+                {{
+                    string next = current + "/" + parts[i];
+                    if (!AssetDatabase.IsValidFolder(next))
+                    {{
+                        AssetDatabase.CreateFolder(current, parts[i]);
+                    }}
+                    current = next;
+                }}
+            }}
+
             bool success = AssetDatabase.CopyAsset(sourcePath, destPath);
 
             if (success)
@@ -459,7 +476,7 @@ public static class VeilBreakers_CreateFolder
     {{
         try
         {{
-            string folderPath = "{safe_path}";
+            string folderPath = "{safe_path}".Replace("\\\\", "/");
             string[] parts = folderPath.Split('/');
 
             string current = parts[0]; // "Assets"
@@ -1356,7 +1373,7 @@ public static class VeilBreakers_AtomicImport
             {{
                 string errJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"atomic_import\\", "
                     + "\\"message\\": \\"Shader not found: " + shaderName + "\\", "
-                    + "\\"changed_assets\\": [" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "], "
+                    + "\\"changed_assets\\": [" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "], "
                     + "\\"validation_status\\": \\"error\\"}}";
                 File.WriteAllText("Temp/vb_result.json", errJson);
                 Debug.LogError("[VeilBreakers] Shader not found: " + shaderName);
@@ -1425,7 +1442,7 @@ public static class VeilBreakers_AtomicImport
             assets += "\\"" + changedAssets[i].Replace("\\\\", "/") + "\\"";
         }}
 
-        string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"atomic_import\\", \\"material_name\\": \\"{safe_mat_name}\\", \\"fbx_path\\": \\"" + "{safe_fbx}" + "\\", \\"changed_assets\\": [" + assets + "], \\"validation_status\\": \\"ok\\"}}";
+        string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"atomic_import\\", \\"material_name\\": \\"{safe_mat_name}\\", \\"fbx_path\\": \\"" + "{safe_fbx}".Replace("\\\\", "/") + "\\", \\"changed_assets\\": [" + assets + "], \\"validation_status\\": \\"ok\\"}}";
         File.WriteAllText("Temp/vb_result.json", resultJson);
         Debug.Log("[VeilBreakers] Atomic import complete for: {safe_fbx}");
     }}

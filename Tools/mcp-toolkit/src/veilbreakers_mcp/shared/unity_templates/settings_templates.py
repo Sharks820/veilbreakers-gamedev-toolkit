@@ -609,20 +609,34 @@ public static class VeilBreakers_InstallPackage
             // Add scoped registry if not present
             if (!manifestContent.Contains("{safe_url}"))
             {{
+                string newRegistry = "{{\\n      \\"name\\": \\"{safe_package_id}\\",\\n      \\"url\\": \\"{safe_url}\\",\\n      \\"scopes\\": [{scopes_cs}]\\n    }}";
                 // Find scopedRegistries array or create it
-                if (manifestContent.Contains("scopedRegistries"))
+                if (manifestContent.Contains("\\"scopedRegistries\\""))
                 {{
-                    // Insert new registry into existing array
-                    int idx = manifestContent.IndexOf("scopedRegistries") + "scopedRegistries".Length;
-                    idx = manifestContent.IndexOf("[", idx) + 1;
-                    string newRegistry = "\\n    {{\\n      \\"name\\": \\"{safe_package_id}\\",\\n      \\"url\\": \\"{safe_url}\\",\\n      \\"scopes\\": [{scopes_cs}]\\n    }},";
-                    manifestContent = manifestContent.Insert(idx, newRegistry);
+                    // Handle both empty [] and populated arrays
+                    // Check if scopedRegistries is an empty array []
+                    int srIdx = manifestContent.IndexOf("\\"scopedRegistries\\"");
+                    int srBracket = manifestContent.IndexOf("[", srIdx);
+                    string afterBracket = manifestContent.Substring(srBracket + 1).TrimStart();
+                    if (afterBracket.StartsWith("]"))
+                    {{
+                        // Empty array case: replace [] with [<registry>]
+                        int closeBracket = manifestContent.IndexOf("]", srBracket);
+                        manifestContent = manifestContent.Substring(0, srBracket + 1)
+                            + "\\n    " + newRegistry + "\\n  "
+                            + manifestContent.Substring(closeBracket);
+                    }}
+                    else
+                    {{
+                        // Non-empty array: insert after opening bracket
+                        manifestContent = manifestContent.Insert(srBracket + 1, "\\n    " + newRegistry + ",");
+                    }}
                 }}
                 else
                 {{
                     // Add scopedRegistries before dependencies
                     int depIdx = manifestContent.IndexOf("\\"dependencies\\"");
-                    string registryBlock = "\\"scopedRegistries\\": [\\n    {{\\n      \\"name\\": \\"{safe_package_id}\\",\\n      \\"url\\": \\"{safe_url}\\",\\n      \\"scopes\\": [{scopes_cs}]\\n    }}\\n  ],\\n  ";
+                    string registryBlock = "\\"scopedRegistries\\": [\\n    " + newRegistry + "\\n  ],\\n  ";
                     manifestContent = manifestContent.Insert(depIdx, registryBlock);
                 }}
             }}
@@ -630,10 +644,24 @@ public static class VeilBreakers_InstallPackage
             // Add package to dependencies
             if (!manifestContent.Contains("{safe_package_id}"))
             {{
-                int depIdx = manifestContent.IndexOf("\\"dependencies\\"");
-                int braceIdx = manifestContent.IndexOf("{{", depIdx) + 1;
-                string packageEntry = "\\n    \\"{safe_package_id}\\": \\"latest\\",";
-                manifestContent = manifestContent.Insert(braceIdx, packageEntry);
+                string packageEntry = "\\"" + "{safe_package_id}" + "\\": \\"latest\\"";
+                // Handle both empty {{}} and populated dependencies
+                int dIdx = manifestContent.IndexOf("\\"dependencies\\"");
+                int dBrace = manifestContent.IndexOf("{{", dIdx);
+                string afterBrace = manifestContent.Substring(dBrace + 1).TrimStart();
+                if (afterBrace.StartsWith("}}"))
+                {{
+                    // Empty object case: replace {{}} with {{<entry>}}
+                    int closeBrace = manifestContent.IndexOf("}}", dBrace);
+                    manifestContent = manifestContent.Substring(0, dBrace + 1)
+                        + "\\n    " + packageEntry + "\\n  "
+                        + manifestContent.Substring(closeBrace);
+                }}
+                else
+                {{
+                    // Non-empty object: insert after opening brace
+                    manifestContent = manifestContent.Insert(dBrace + 1, "\\n    " + packageEntry + ",");
+                }}
             }}
 
             File.WriteAllText(manifestPath, manifestContent);
@@ -673,28 +701,31 @@ public static class VeilBreakers_InstallPackage
         {{
             var request = Client.Add("{safe_package_id}");
 
-            // Wait for async operation
-            while (!request.IsCompleted)
-            {{
-                System.Threading.Thread.Sleep(100);
-            }}
+            // Use EditorApplication.update callback to avoid blocking the main thread
+            EditorApplication.update += OnUpdate;
 
-            if (request.Status == StatusCode.Success)
+            void OnUpdate()
             {{
-                string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"install_package\\", "
-                    + "\\"package_id\\": \\"{safe_package_id}\\", "
-                    + "\\"source\\": \\"git\\", "
-                    + "\\"changed_assets\\": [\\"Packages/manifest.json\\"], "
-                    + "\\"validation_status\\": \\"ok\\"}}";
-                File.WriteAllText("Temp/vb_result.json", json);
-                Debug.Log("[VeilBreakers] Package installed via git: {safe_package_id}");
-            }}
-            else
-            {{
-                string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"install_package\\", "
-                    + "\\"message\\": \\"" + request.Error.message.Replace("\\"", "\\\\\\"") + "\\"}}";
-                File.WriteAllText("Temp/vb_result.json", json);
-                Debug.LogError("[VeilBreakers] Package installation failed: " + request.Error.message);
+                if (!request.IsCompleted) return;
+                EditorApplication.update -= OnUpdate;
+
+                if (request.Status == StatusCode.Success)
+                {{
+                    string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"install_package\\", "
+                        + "\\"package_id\\": \\"{safe_package_id}\\", "
+                        + "\\"source\\": \\"git\\", "
+                        + "\\"changed_assets\\": [\\"Packages/manifest.json\\"], "
+                        + "\\"validation_status\\": \\"ok\\"}}";
+                    File.WriteAllText("Temp/vb_result.json", json);
+                    Debug.Log("[VeilBreakers] Package installed via git: {safe_package_id}");
+                }}
+                else
+                {{
+                    string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"install_package\\", "
+                        + "\\"message\\": \\"" + request.Error.message.Replace("\\"", "\\\\\\"") + "\\"}}";
+                    File.WriteAllText("Temp/vb_result.json", json);
+                    Debug.LogError("[VeilBreakers] Package installation failed: " + request.Error.message);
+                }}
             }}
         }}
         catch (System.Exception ex)
@@ -724,29 +755,32 @@ public static class VeilBreakers_InstallPackage
         {{
             var request = Client.Add("{safe_package_id}{version_suffix}");
 
-            // Wait for async operation
-            while (!request.IsCompleted)
-            {{
-                System.Threading.Thread.Sleep(100);
-            }}
+            // Use EditorApplication.update callback to avoid blocking the main thread
+            EditorApplication.update += OnUpdate;
 
-            if (request.Status == StatusCode.Success)
+            void OnUpdate()
             {{
-                string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"install_package\\", "
-                    + "\\"package_id\\": \\"{safe_package_id}\\", "
-                    + "\\"version\\": \\"{_sanitize_cs_string(version)}\\", "
-                    + "\\"source\\": \\"upm\\", "
-                    + "\\"changed_assets\\": [\\"Packages/manifest.json\\"], "
-                    + "\\"validation_status\\": \\"ok\\"}}";
-                File.WriteAllText("Temp/vb_result.json", json);
-                Debug.Log("[VeilBreakers] Package installed: {safe_package_id}{version_suffix}");
-            }}
-            else
-            {{
-                string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"install_package\\", "
-                    + "\\"message\\": \\"" + request.Error.message.Replace("\\"", "\\\\\\"") + "\\"}}";
-                File.WriteAllText("Temp/vb_result.json", json);
-                Debug.LogError("[VeilBreakers] Package installation failed: " + request.Error.message);
+                if (!request.IsCompleted) return;
+                EditorApplication.update -= OnUpdate;
+
+                if (request.Status == StatusCode.Success)
+                {{
+                    string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"install_package\\", "
+                        + "\\"package_id\\": \\"{safe_package_id}\\", "
+                        + "\\"version\\": \\"{_sanitize_cs_string(version)}\\", "
+                        + "\\"source\\": \\"upm\\", "
+                        + "\\"changed_assets\\": [\\"Packages/manifest.json\\"], "
+                        + "\\"validation_status\\": \\"ok\\"}}";
+                    File.WriteAllText("Temp/vb_result.json", json);
+                    Debug.Log("[VeilBreakers] Package installed: {safe_package_id}{version_suffix}");
+                }}
+                else
+                {{
+                    string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"install_package\\", "
+                        + "\\"message\\": \\"" + request.Error.message.Replace("\\"", "\\\\\\"") + "\\"}}";
+                    File.WriteAllText("Temp/vb_result.json", json);
+                    Debug.LogError("[VeilBreakers] Package installation failed: " + request.Error.message);
+                }}
             }}
         }}
         catch (System.Exception ex)
@@ -785,27 +819,30 @@ public static class VeilBreakers_RemovePackage
         {{
             var request = Client.Remove("{safe_package_id}");
 
-            // Wait for async operation
-            while (!request.IsCompleted)
-            {{
-                System.Threading.Thread.Sleep(100);
-            }}
+            // Use EditorApplication.update callback to avoid blocking the main thread
+            EditorApplication.update += OnUpdate;
 
-            if (request.Status == StatusCode.Success)
+            void OnUpdate()
             {{
-                string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"remove_package\\", "
-                    + "\\"package_id\\": \\"{safe_package_id}\\", "
-                    + "\\"changed_assets\\": [\\"Packages/manifest.json\\"], "
-                    + "\\"validation_status\\": \\"ok\\"}}";
-                File.WriteAllText("Temp/vb_result.json", json);
-                Debug.Log("[VeilBreakers] Package removed: {safe_package_id}");
-            }}
-            else
-            {{
-                string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"remove_package\\", "
-                    + "\\"message\\": \\"" + request.Error.message.Replace("\\"", "\\\\\\"") + "\\"}}";
-                File.WriteAllText("Temp/vb_result.json", json);
-                Debug.LogError("[VeilBreakers] Package removal failed: " + request.Error.message);
+                if (!request.IsCompleted) return;
+                EditorApplication.update -= OnUpdate;
+
+                if (request.Status == StatusCode.Success)
+                {{
+                    string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"remove_package\\", "
+                        + "\\"package_id\\": \\"{safe_package_id}\\", "
+                        + "\\"changed_assets\\": [\\"Packages/manifest.json\\"], "
+                        + "\\"validation_status\\": \\"ok\\"}}";
+                    File.WriteAllText("Temp/vb_result.json", json);
+                    Debug.Log("[VeilBreakers] Package removed: {safe_package_id}");
+                }}
+                else
+                {{
+                    string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"remove_package\\", "
+                        + "\\"message\\": \\"" + request.Error.message.Replace("\\"", "\\\\\\"") + "\\"}}";
+                    File.WriteAllText("Temp/vb_result.json", json);
+                    Debug.LogError("[VeilBreakers] Package removal failed: " + request.Error.message);
+                }}
             }}
         }}
         catch (System.Exception ex)
@@ -1018,10 +1055,10 @@ public static class VeilBreakers_SyncTagsLayers
         try
         {{
             string constantsPath = "{safe_path}";
-            string fullPath = Path.GetFullPath(constantsPath);
+            string fullPath = Path.GetFullPath(constantsPath).Replace("\\\\", "/");
 
             // Verify path stays within the Unity project Assets folder
-            if (!fullPath.StartsWith(Application.dataPath))
+            if (!fullPath.StartsWith(Application.dataPath.Replace("\\\\", "/")))
             {{
                 string errJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"sync_tags_layers\\", "
                     + "\\"message\\": \\"Path escapes project boundary: {safe_path}\\"}}";

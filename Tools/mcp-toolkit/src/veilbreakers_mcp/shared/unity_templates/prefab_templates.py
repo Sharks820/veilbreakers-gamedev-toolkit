@@ -335,13 +335,21 @@ public static class VeilBreakers_CreatePrefab_{safe_name}
 
             string prefabPath = dir + "/{safe_display_name}.prefab";
             var prefab = PrefabUtility.SaveAsPrefabAsset(go, prefabPath);
-            changedAssets.Add(prefabPath);
 
             // Cleanup scene object
             Object.DestroyImmediate(go);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
-            string warnJson = "[" + string.Join(",", warnings.ConvertAll(w => "\\"" + w + "\\"")) + "]";
+            if (prefab == null)
+            {{
+                string errJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"create_prefab\\", \\"message\\": \\"SaveAsPrefabAsset failed for: " + prefabPath + "\\", \\"validation_status\\": \\"failed\\"}}";
+                File.WriteAllText("Temp/vb_result.json", errJson);
+                Debug.LogError("[VeilBreakers] SaveAsPrefabAsset returned null: " + prefabPath);
+                return;
+            }}
+
+            changedAssets.Add(prefabPath);
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
+            string warnJson = "[" + string.Join(",", warnings.ConvertAll(w => "\\"" + w.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"create_prefab\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": " + warnJson + ", \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Prefab created: " + prefabPath);
@@ -412,7 +420,10 @@ public static class VeilBreakers_CreateScaffold_{safe_name}
             var renderer = go.GetComponent<MeshRenderer>();
             if (renderer != null)
             {{
-                var mat = new Material(Shader.Find("Standard"));
+                Shader shader = Shader.Find("Universal Render Pipeline/Lit")
+                    ?? Shader.Find("Standard")
+                    ?? Shader.Find("Hidden/InternalErrorShader");
+                var mat = new Material(shader);
                 mat.SetFloat("_Mode", 3); // Transparent
                 mat.SetColor("_Color", new Color(0.5f, 0.8f, 1.0f, 0.3f));
                 mat.SetInt("_SrcBlend", (int)UnityEngine.Rendering.BlendMode.SrcAlpha);
@@ -429,7 +440,7 @@ public static class VeilBreakers_CreateScaffold_{safe_name}
 {comp_code}
 
             changedAssets.Add(go.name);
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"create_scaffold\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Scaffold created: " + go.name);
@@ -512,12 +523,20 @@ public static class VeilBreakers_CreateVariant_{safe_name}
             // Save as prefab variant
             string dir = System.IO.Path.GetDirectoryName("{safe_base}").Replace("\\\\", "/");
             string variantPath = dir + "/{safe_display_name}.prefab";
-            PrefabUtility.SaveAsPrefabAsset(instance, variantPath);
-            changedAssets.Add(variantPath);
+            var savedVariant = PrefabUtility.SaveAsPrefabAsset(instance, variantPath);
 
             Object.DestroyImmediate(instance);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            if (savedVariant == null)
+            {{
+                string errJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"create_variant\\", \\"message\\": \\"SaveAsPrefabAsset failed for: " + variantPath + "\\", \\"validation_status\\": \\"failed\\"}}";
+                File.WriteAllText("Temp/vb_result.json", errJson);
+                Debug.LogError("[VeilBreakers] SaveAsPrefabAsset returned null: " + variantPath);
+                return;
+            }}
+
+            changedAssets.Add(variantPath);
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"create_variant\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Variant created: " + variantPath);
@@ -587,7 +606,7 @@ public static class VeilBreakers_ModifyPrefab
             AssetDatabase.SaveAssets();
             changedAssets.Add("{safe_path}");
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"modify_prefab\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Prefab modified: {safe_path}");
@@ -637,7 +656,7 @@ public static class VeilBreakers_DeletePrefab
             if (deleted)
             {{
                 changedAssets.Add("{safe_path}");
-                string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+                string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
                 string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"delete_prefab\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
                 File.WriteAllText("Temp/vb_result.json", json);
                 Debug.Log("[VeilBreakers] Prefab deleted: {safe_path}");
@@ -710,7 +729,7 @@ public static class VeilBreakers_AddComponent
             changedAssets.Add(target.name);
 {prop_lines}
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"add_component\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Component added: {safe_comp}");
@@ -767,7 +786,7 @@ public static class VeilBreakers_RemoveComponent
             {{
                 Undo.DestroyObjectImmediate(comp);
                 changedAssets.Add(target.name);
-                string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+                string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
                 string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"remove_component\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
                 File.WriteAllText("Temp/vb_result.json", json);
                 Debug.Log("[VeilBreakers] Component removed: {safe_comp}");
@@ -846,7 +865,7 @@ public static class VeilBreakers_ConfigureComponent
             so.ApplyModifiedProperties();
             changedAssets.Add(target.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"configure_component\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Component configured: {safe_comp}");
@@ -970,7 +989,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
             Undo.RegisterCreatedObjectUndo(go, "Create Empty {obj_name}");
             changedAssets.Add(go.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"hierarchy\\", \\"operation\\": \\"{operation}\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Empty GameObject created: {obj_name}");
@@ -1018,7 +1037,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
             target.transform.SetParent(parent.transform);
             changedAssets.Add(target.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"hierarchy\\", \\"operation\\": \\"reparent\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Reparented to: {parent}");
@@ -1054,7 +1073,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
             target.gameObject.layer = LayerMask.NameToLayer("{layer_name}");
             changedAssets.Add(target.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"hierarchy\\", \\"operation\\": \\"set_layer\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Layer set to: {layer_name}");
@@ -1090,7 +1109,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
             target.gameObject.tag = "{tag_name}";
             changedAssets.Add(target.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"hierarchy\\", \\"operation\\": \\"set_tag\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Tag set to: {tag_name}");
@@ -1126,7 +1145,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
             target.SetActive({active});
             changedAssets.Add(target.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"hierarchy\\", \\"operation\\": \\"{operation}\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] GameObject {operation}d");
@@ -1162,7 +1181,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
             target.name = "{new_name}";
             changedAssets.Add(target.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"hierarchy\\", \\"operation\\": \\"rename\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Renamed to: {new_name}");
@@ -1198,7 +1217,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
             Undo.RegisterCreatedObjectUndo(duplicate, "Duplicate");
             changedAssets.Add(duplicate.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"hierarchy\\", \\"operation\\": \\"duplicate\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Duplicated: " + duplicate.name);
@@ -1232,7 +1251,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
             changedAssets.Add(target.name);
             Undo.DestroyObjectImmediate(target);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"hierarchy\\", \\"operation\\": \\"delete\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Deleted GameObject");
@@ -1346,7 +1365,7 @@ public static class VeilBreakers_BatchConfigure
                 changedAssets.Add(target.name);
             }}
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"batch_configure\\", \\"count\\": " + objects.Length + ", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Batch configured " + objects.Length + " objects");
@@ -1446,8 +1465,15 @@ public static class VeilBreakers_VariantMatrix
                         Undo.RegisterCreatedObjectUndo(instance, "Create Variant " + variantName);
 
                         string variantPath = outputDir + "/" + variantName + ".prefab";
-                        PrefabUtility.SaveAsPrefabAsset(instance, variantPath);
-                        changedAssets.Add(variantPath);
+                        var savedVariant = PrefabUtility.SaveAsPrefabAsset(instance, variantPath);
+                        if (savedVariant != null)
+                        {{
+                            changedAssets.Add(variantPath);
+                        }}
+                        else
+                        {{
+                            Debug.LogWarning("[VeilBreakers] SaveAsPrefabAsset returned null for: " + variantPath);
+                        }}
                         Object.DestroyImmediate(instance);
                     }}
                 }}
@@ -1459,7 +1485,7 @@ public static class VeilBreakers_VariantMatrix
 
             AssetDatabase.Refresh();
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"variant_matrix\\", \\"count\\": " + changedAssets.Count + ", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Variant matrix generated: " + changedAssets.Count + " variants");
@@ -1532,7 +1558,7 @@ public static class VeilBreakers_SetupJoint
 {config_code}
             changedAssets.Add(target.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"setup_joint\\", \\"joint_type\\": \\"{safe_joint}\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Joint configured: {safe_joint}");
@@ -1594,7 +1620,7 @@ public static class VeilBreakers_NavMeshSetup_{safe_op}
             obstacle.carving = {carve};
             changedAssets.Add(target.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"navmesh_setup\\", \\"operation\\": \\"add_obstacle\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] NavMeshObstacle added");
@@ -1633,7 +1659,7 @@ public static class VeilBreakers_NavMeshSetup_{safe_op}
             link.width = {width}f;
             changedAssets.Add(target.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"navmesh_setup\\", \\"operation\\": \\"add_link\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] NavMeshLink added");
@@ -1671,7 +1697,7 @@ public static class VeilBreakers_NavMeshSetup_{safe_op}
             NavMesh.SetAreaCost({area_index}, {cost}f);
             changedAssets.Add(target.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"navmesh_setup\\", \\"operation\\": \\"configure_area\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] NavMesh area configured");
@@ -1708,7 +1734,7 @@ public static class VeilBreakers_NavMeshSetup_{safe_op}
             var modifier = Undo.AddComponent<NavMeshModifier>(target);
             changedAssets.Add(target.name);
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"navmesh_setup\\", \\"operation\\": \\"{operation}\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] NavMeshModifier added");
@@ -1784,6 +1810,17 @@ using System.Collections.Generic;
 
 public static class VeilBreakers_BoneSockets
 {{
+    static Transform FindDeepChild(Transform parent, string name)
+    {{
+        foreach (Transform child in parent)
+        {{
+            if (child.name == name) return child;
+            Transform result = FindDeepChild(child, name);
+            if (result != null) return result;
+        }}
+        return null;
+    }}
+
     [MenuItem("VeilBreakers/Prefab/Setup Bone Sockets")]
     public static void Execute()
     {{
@@ -1823,10 +1860,10 @@ public static class VeilBreakers_BoneSockets
                     boneTransform = animator.GetBoneTransform(humanBone);
                 }}
 
-                // Fallback: Transform.Find
+                // Fallback: recursive deep search of all descendants
                 if (boneTransform == null)
                 {{
-                    boneTransform = instance.transform.Find(boneMap[socketName]);
+                    boneTransform = FindDeepChild(instance.transform, boneMap[socketName]);
                 }}
 
                 if (boneTransform != null)
@@ -1839,11 +1876,20 @@ public static class VeilBreakers_BoneSockets
                 }}
             }}
 
-            PrefabUtility.SaveAsPrefabAsset(instance, "{safe_path}");
+            var savedPrefab = PrefabUtility.SaveAsPrefabAsset(instance, "{safe_path}");
             Object.DestroyImmediate(instance);
+
+            if (savedPrefab == null)
+            {{
+                string errJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"bone_sockets\\", \\"message\\": \\"SaveAsPrefabAsset failed for: {safe_path}\\", \\"validation_status\\": \\"failed\\"}}";
+                File.WriteAllText("Temp/vb_result.json", errJson);
+                Debug.LogError("[VeilBreakers] SaveAsPrefabAsset returned null: {safe_path}");
+                return;
+            }}
+
             changedAssets.Add("{safe_path}");
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"bone_sockets\\", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] Bone sockets created: " + changedAssets.Count);
@@ -1925,7 +1971,7 @@ public static class VeilBreakers_ValidateProject
             }
 
             string status = (missingScripts == 0 && missingMaterials == 0) ? "ok" : "warnings";
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string warnJson = "[" + string.Join(",", warnings.ConvertAll(w => "\\"" + w.Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string json = "{\\"status\\": \\"success\\", \\"action\\": \\"validate_project\\", \\"total_prefabs\\": " + totalPrefabs +
                 ", \\"missing_scripts\\": " + missingScripts +
@@ -1998,6 +2044,12 @@ public static class VeilBreakers_JobScript
         selector_code = selector_code.replace("if (target", f"if ({step_target}")
         selector_code = selector_code.replace("target.", f"{step_target}.")
         selector_code = selector_code.replace("target)", f"{step_target})")
+        # In job context, selector failure should throw instead of return
+        # to be caught by step-level try/catch and continue to next step
+        selector_code = selector_code.replace(
+            'System.IO.File.WriteAllText("Temp/vb_result.json", errJson);\n                return;',
+            'throw new System.Exception(errJson);'
+        )
 
         if action == "add_component":
             step_blocks.append(f'''
@@ -2126,7 +2178,7 @@ public static class VeilBreakers_JobScript
                 AssetDatabase.StopAssetEditing();
             }}
 
-            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "]";
+            string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
             string stepsJson = "[" + string.Join(",", steps) + "]";
             string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"job_script\\", \\"steps\\": " + stepsJson + ", \\"changed_assets\\": " + changedJson + ", \\"warnings\\": [], \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
