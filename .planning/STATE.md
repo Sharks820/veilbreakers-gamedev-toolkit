@@ -78,6 +78,8 @@ v2.0 Progress:  [█████░░░░░] 50% (2/4 plans in phase 10)
 | Private fields auto-prefixed with underscore | VeilBreakers _camelCase convention enforced in code gen | 10 |
 | Reserved word identifiers get @ prefix | More permissive than rejection, valid C# syntax | 10 |
 | ScriptableObject auto-adds CreateAssetMenu | Consistent with Unity best practices for SO assets | 10 |
+| Renderer feature uses RenderGraph API (RecordRenderGraph) not legacy Execute() | URP 17 / Unity 6 modern API, Execute() is obsolete | 10 |
+| Property-to-HLSL type mapping centralised in helper | Consistent CBUFFER generation across all shader configs | 10 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -92,10 +94,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T09:17:13Z
-Stopped at: Completed 10-01-PLAN.md
-Next action: Execute 10-02-PLAN.md
+Last session: 2026-03-20T09:19:29Z
+Stopped at: Completed 10-02-PLAN.md
+Next action: Execute 10-03-PLAN.md
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 10-01-PLAN.md (C# code generation engine)*
+*Last updated: 2026-03-20 -- Completed 10-02-PLAN.md (shader templates v2)*
