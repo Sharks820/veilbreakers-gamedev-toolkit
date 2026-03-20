@@ -195,6 +195,35 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [ ] **WORLD-09**: Claude can generate overrun/ruined variants of intact locations (add debris, broken walls, overgrown vegetation, scattered remains, damaged furniture)
 - [ ] **WORLD-10**: Claude can place easter eggs and hidden areas (secret rooms behind breakable walls, hidden paths off main routes, lore items in unexpected locations)
 
+### VeilBreakers Core Systems
+
+- [ ] **VB-01**: Claude can generate a player combat controller (light/heavy attack, dodge, block, combo chains, hit reactions, i-frames, stamina consumption)
+- [ ] **VB-02**: Claude can generate a player ability system with brand-specific ability slots, cooldown timers, mana/stamina resource management, and ability activation per combat brand
+- [ ] **VB-03**: Claude can generate the synergy detection engine (FULL/PARTIAL/NEUTRAL/ANTI tier evaluation, combo triggers, synergy UI feedback)
+- [ ] **VB-04**: Claude can generate corruption gameplay effects (stat modifiers, ability mutations, NPC reaction changes, threshold triggers at 25/50/75/100%)
+- [ ] **VB-05**: Claude can generate an experience/leveling system (XP gain from kills/quests, level-up triggers, stat scaling per level, per-hero-path progression curves)
+- [ ] **VB-06**: Claude can generate a currency system (gold/souls/marks earning, spending, display, multiple currency types)
+- [ ] **VB-07**: Claude can generate damage type system with 10 brand-specific damage types and elemental resistance calculations
+- [ ] **VB-08**: Claude can generate brand-specific loot affinity (IRON brand mobs drop IRON-themed gear, rarity-weighted per brand)
+- [ ] **VB-09**: Claude can generate a character creation/selection screen (choose hero path, customize appearance, name entry)
+- [ ] **VB-10**: Claude can generate boss AI behavior (multi-phase state machine, phase transitions at HP thresholds, unique attack patterns, enrage mechanics)
+
+### RPG World Systems
+
+- [ ] **RPG-01**: Claude can generate a shop/merchant system (buy/sell UI, price display, equipment stat comparison, currency transactions, merchant inventory)
+- [ ] **RPG-02**: Claude can generate a fast travel/waypoint system (discover waypoints by visiting, teleport between unlocked points, loading transition)
+- [ ] **RPG-03**: Claude can generate an interactable object framework (state machine for doors, chests, levers, switches with animations and sound)
+- [ ] **RPG-04**: Claude can generate environmental puzzle mechanics (lever sequences, pressure plates, key-and-lock, movable blocks, light beam puzzles)
+- [ ] **RPG-05**: Claude can generate a journal/codex/bestiary system (lore entries from world, monster compendium with stats/weaknesses, item encyclopedia)
+- [ ] **RPG-06**: Claude can generate dungeon trap mechanics (pressure plates, dart walls, spike pits, falling rocks, poison gas, swinging blades)
+- [ ] **RPG-07**: Claude can generate spatial loot placement in dungeons (treasure chest positions, item drops in specific rooms, treasure room layouts)
+- [ ] **RPG-08**: Claude can generate a 2D world map screen from 3D terrain data (fog-of-war, location markers, player position, discovered areas)
+- [ ] **RPG-09**: Claude can generate a weather system with state management (rain, snow, fog, storms), smooth transitions, and optional gameplay effects
+- [ ] **RPG-10**: Claude can generate a day/night runtime cycle (continuous time progression, lighting preset transitions, NPC schedule changes, enemy behavior shifts)
+- [ ] **RPG-11**: Claude can generate friendly NPC placement markers inside buildings (shopkeeper positions, quest giver positions, bartender positions, guard positions)
+- [ ] **RPG-12**: Claude can generate dungeon-specific lighting (torch sconces every 4-6m, dark corridors, light pools around fire sources, atmospheric fog)
+- [ ] **RPG-13**: Claude can generate terrain-building blending (vertex color at base, decal projection, terrain depression beneath structures)
+
 ## Out of Scope
 
 | Feature | Reason |
@@ -329,12 +358,36 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | WORLD-09 | Phase 14 | Pending |
 | WORLD-10 | Phase 14 | Pending |
 
+| VB-01 | Phase 12 | Pending |
+| VB-02 | Phase 12 | Pending |
+| VB-03 | Phase 12 | Pending |
+| VB-04 | Phase 12 | Pending |
+| VB-05 | Phase 12 | Pending |
+| VB-06 | Phase 12 | Pending |
+| VB-07 | Phase 12 | Pending |
+| VB-08 | Phase 13 | Pending |
+| VB-09 | Phase 15 | Pending |
+| VB-10 | Phase 15 | Pending |
+| RPG-01 | Phase 13 | Pending |
+| RPG-02 | Phase 14 | Pending |
+| RPG-03 | Phase 12 | Pending |
+| RPG-04 | Phase 14 | Pending |
+| RPG-05 | Phase 13 | Pending |
+| RPG-06 | Phase 14 | Pending |
+| RPG-07 | Phase 14 | Pending |
+| RPG-08 | Phase 15 | Pending |
+| RPG-09 | Phase 14 | Pending |
+| RPG-10 | Phase 14 | Pending |
+| RPG-11 | Phase 14 | Pending |
+| RPG-12 | Phase 14 | Pending |
+| RPG-13 | Phase 14 | Pending |
+
 **Coverage:**
-- v2 requirements: 120 total (across 21 categories)
-- Mapped to phases: 120/120
+- v2 requirements: 143 total (across 23 categories)
+- Mapped to phases: 143/143
 - Unmapped: 0
 
-**Categories:** EDIT (15), CODE (10), GAME (12), CAM (4), SCNE (6), DATA (4), BUILD (7), QA (8), IMP (4), UIX (4), AID (3), SHDR (4), TWO (3), PHYS (2), ACC (2), PIPE (3), MEDIA (2), ANIMA (3), AAA (6), EQUIP (8), WORLD (10)
+**Categories:** EDIT (15), CODE (10), GAME (12), CAM (4), SCNE (6), DATA (4), BUILD (7), QA (8), IMP (4), UIX (4), AID (3), SHDR (4), TWO (3), PHYS (2), ACC (2), PIPE (3), MEDIA (2), ANIMA (3), AAA (6), EQUIP (8), WORLD (10), VB (10), RPG (13)
 
 ---
 *Requirements defined: 2026-03-18 (v1), updated 2026-03-19 (v2 with traceability)*
