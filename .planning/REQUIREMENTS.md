@@ -77,10 +77,10 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Data & Configuration
 
-- [ ] **DATA-01**: Claude can create, edit, and validate JSON/XML game configuration files (difficulty, balance, progression)
-- [ ] **DATA-02**: Claude can create ScriptableObject definitions and instantiate .asset files for data-driven design
-- [ ] **DATA-03**: Claude can set up Unity Localization package (string tables, locale assets, localized variants)
-- [ ] **DATA-04**: Claude can generate game data authoring tools (item databases, stat tables, ability configs as SO assets)
+- [x] **DATA-01**: Claude can create, edit, and validate JSON/XML game configuration files (difficulty, balance, progression)
+- [x] **DATA-02**: Claude can create ScriptableObject definitions and instantiate .asset files for data-driven design
+- [x] **DATA-03**: Claude can set up Unity Localization package (string tables, locale assets, localized variants)
+- [x] **DATA-04**: Claude can generate game data authoring tools (item databases, stat tables, ability configs as SO assets)
 
 ### Build & Deploy
 
@@ -264,10 +264,10 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | CODE-08 | Phase 10 | Complete |
 | CODE-09 | Phase 10 | Complete |
 | CODE-10 | Phase 10 | Complete |
-| DATA-01 | Phase 11 | Pending |
-| DATA-02 | Phase 11 | Pending |
-| DATA-03 | Phase 11 | Pending |
-| DATA-04 | Phase 11 | Pending |
+| DATA-01 | Phase 11 | Complete |
+| DATA-02 | Phase 11 | Complete |
+| DATA-03 | Phase 11 | Complete |
+| DATA-04 | Phase 11 | Complete |
 | IMP-03 | Phase 11 | Pending |
 | IMP-04 | Phase 11 | Pending |
 | BUILD-06 | Phase 11 | Pending |
