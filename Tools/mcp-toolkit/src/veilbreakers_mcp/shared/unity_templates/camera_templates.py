@@ -41,6 +41,43 @@ def _sanitize_cs_identifier(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]", "", value)
 
 
+# ---------------------------------------------------------------------------
+# C# reserved words (needed for _safe_namespace)
+# ---------------------------------------------------------------------------
+
+_CS_RESERVED = frozenset({
+    "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char",
+    "checked", "class", "const", "continue", "decimal", "default", "delegate",
+    "do", "double", "else", "enum", "event", "explicit", "extern", "false",
+    "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit",
+    "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
+    "new", "null", "object", "operator", "out", "override", "params", "private",
+    "protected", "public", "readonly", "ref", "return", "sbyte", "sealed",
+    "short", "sizeof", "stackalloc", "static", "string", "struct", "switch",
+    "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
+    "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+})
+
+
+def _safe_namespace(ns: str) -> str:
+    """Sanitize a C# namespace to prevent code injection."""
+    sanitized = re.sub(r"[^a-zA-Z0-9_.]", "", ns)
+    sanitized = re.sub(r"\.{2,}", ".", sanitized).strip(".")
+    if not sanitized:
+        return "Generated"
+    segments = sanitized.split(".")
+    fixed: list[str] = []
+    for seg in segments:
+        if not seg:
+            continue
+        if seg[0].isdigit():
+            seg = f"_{seg}"
+        if seg in _CS_RESERVED:
+            seg = f"@{seg}"
+        fixed.append(seg)
+    return ".".join(fixed) or "Generated"
+
+
 __all__ = [
     "generate_cinemachine_setup_script",
     "generate_state_driven_camera_script",
@@ -93,7 +130,7 @@ def generate_cinemachine_setup_script(
     lines.append("")
 
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
 
     indent = "    " if namespace else ""
@@ -197,7 +234,7 @@ def generate_state_driven_camera_script(
     lines.append("")
 
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
 
     indent = "    " if namespace else ""
@@ -272,7 +309,7 @@ def generate_camera_shake_script(
     lines.append("")
 
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
 
     indent = "    " if namespace else ""
@@ -351,7 +388,7 @@ def generate_camera_blend_script(
     lines.append("")
 
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
 
     indent = "    " if namespace else ""
@@ -466,7 +503,7 @@ def generate_timeline_setup_script(
     lines.append("")
 
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
 
     indent = "    " if namespace else ""
@@ -559,7 +596,7 @@ def generate_cutscene_setup_script(
     lines.append("")
 
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
 
     indent = "    " if namespace else ""
@@ -650,7 +687,7 @@ def generate_animation_clip_editor_script(
     lines.append("")
 
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
 
     indent = "    " if namespace else ""
@@ -770,7 +807,7 @@ def generate_animator_modifier_script(
     lines.append("")
 
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
 
     indent = "    " if namespace else ""
@@ -898,7 +935,7 @@ def generate_avatar_mask_script(
     lines.append("")
 
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
 
     indent = "    " if namespace else ""
@@ -997,7 +1034,7 @@ def generate_video_player_script(
     lines.append("")
 
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
 
     indent = "    " if namespace else ""
