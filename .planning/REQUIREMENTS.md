@@ -94,11 +94,11 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 ### Quality & Testing
 
 - [x] **QA-00**: The VB Unity MCP server can directly communicate with the Unity Editor (TCP bridge addon) to trigger AssetDatabase.Refresh, execute menu items, enter/exit play mode, and read results — WITHOUT requiring mcp-unity or any external MCP server
-- [ ] **QA-01**: Claude can run EditMode and PlayMode tests via Unity Test Runner and report results through MCP
-- [ ] **QA-02**: Claude can script automated play sessions (walk to point, interact, verify state) for integration testing
-- [ ] **QA-03**: Claude can capture GPU profiling data and continuous performance analysis
-- [ ] **QA-04**: Claude can detect memory leaks (managed/native memory snapshots, growing allocations)
-- [ ] **QA-05**: Claude can run static code analysis (Roslyn analyzers for Update() allocations, string concat, Camera.main)
+- [x] **QA-01**: Claude can run EditMode and PlayMode tests via Unity Test Runner and report results through MCP
+- [x] **QA-02**: Claude can script automated play sessions (walk to point, interact, verify state) for integration testing
+- [x] **QA-03**: Claude can capture GPU profiling data and continuous performance analysis
+- [x] **QA-04**: Claude can detect memory leaks (managed/native memory snapshots, growing allocations)
+- [x] **QA-05**: Claude can run static code analysis (Roslyn analyzers for Update() allocations, string concat, Camera.main)
 - [x] **QA-06**: Claude can set up crash reporting (Sentry, Unity Cloud Diagnostics)
 - [x] **QA-07**: Claude can set up analytics/telemetry events for player behavior tracking
 - [x] **QA-08**: Claude can inspect live game state during Play Mode (variable values on GameObjects, BT state)
@@ -301,11 +301,11 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | AID-01 | Phase 15 | Complete |
 | AID-02 | Phase 15 | Complete |
 | AID-03 | Phase 15 | Complete |
-| QA-01 | Phase 16 | Pending |
-| QA-02 | Phase 16 | Pending |
-| QA-03 | Phase 16 | Pending |
-| QA-04 | Phase 16 | Pending |
-| QA-05 | Phase 16 | Pending |
+| QA-01 | Phase 16 | Complete |
+| QA-02 | Phase 16 | Complete |
+| QA-03 | Phase 16 | Complete |
+| QA-04 | Phase 16 | Complete |
+| QA-05 | Phase 16 | Complete |
 | QA-06 | Phase 16 | Complete |
 | QA-07 | Phase 16 | Complete |
 | QA-08 | Phase 16 | Complete |
