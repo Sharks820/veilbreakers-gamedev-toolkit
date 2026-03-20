@@ -3,29 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
-stopped_at: Completed 12-03-PLAN.md (Phase 12 complete)
-last_updated: "2026-03-20T15:01:49.976Z"
-last_activity: 2026-03-20 -- Completed 12-03-PLAN.md (unity_game MCP tool wiring + 14 syntax tests)
+stopped_at: Completed 13-02-PLAN.md
+last_updated: "2026-03-20T15:43:29Z"
+last_activity: 2026-03-20 -- Completed 13-02-PLAN.md (equipment handlers + 105 tests, 4098 total)
 progress:
   total_phases: 9
   completed_phases: 4
-  total_plans: 14
-  completed_plans: 14
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 12-03-PLAN.md (Phase 12 complete)
-last_updated: "2026-03-20T14:00:08Z"
-last_activity: 2026-03-20 -- Completed 12-03-PLAN.md (unity_game MCP tool wiring + 14 syntax tests, 3993 total)
-progress:
-  total_phases: 9
-  completed_phases: 4
-  total_plans: 14
-  completed_plans: 14
+  total_plans: 16
+  completed_plans: 16
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -35,18 +20,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** v2.0 Phase 12 complete, ready for Phase 13
+**Current focus:** v2.0 Phase 13 in progress
 
 ## Current Position
 
-Phase: 12 of 17 (Core Game Systems -- COMPLETE)
-Plan: 3 of 3 in current phase (12-01, 12-02, 12-03 complete)
-Status: Phase 12 complete
-Last activity: 2026-03-20 -- Completed 12-03-PLAN.md (unity_game MCP tool wiring + 14 syntax tests)
+Phase: 13 of 17 (Content & Progression Systems)
+Plan: 2 of N in current phase (13-01, 13-02 complete)
+Status: Executing Phase 13
+Last activity: 2026-03-20 -- Completed 13-02-PLAN.md (equipment handlers + 105 tests, 4098 total)
 
 ```
-Phase Progress: [████████████████████████████████████░░░░] 71% overall (12/17 phases)
-v2.0 Progress:  [██████████] 100% (3/3 plans in phase 12)
+Phase Progress: [████████████████████████████████████░░░░] 76% overall (13/17 phases in progress)
+v2.0 Progress:  [████████████████] 16/16 plans complete
 ```
 
 ## Performance Metrics
@@ -60,9 +45,9 @@ v2.0 Progress:  [██████████] 100% (3/3 plans in phase 12)
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 14 (09-01, 09-02, 09-03, 10-01, 10-02, 10-03, 10-04, 11-01, 11-02, 11-03, 11-04, 12-01, 12-02, 12-03) |
-| v2.0 tests added | 1,210 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12) |
-| v2.0 total tests passing | 3,993 |
+| v2.0 plans completed | 16 (09-01, 09-02, 09-03, 10-01, 10-02, 10-03, 10-04, 11-01, 11-02, 11-03, 11-04, 12-01, 12-02, 12-03, 13-01, 13-02) |
+| v2.0 tests added | 1,315 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment) |
+| v2.0 total tests passing | 4,098 |
 | v2.0 MCP tools | 31 (15 Blender + 16 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
@@ -77,6 +62,7 @@ v2.0 Progress:  [██████████] 100% (3/3 plans in phase 12)
 | 12-01 duration | 13 min |
 | 12-02 duration | 11 min |
 | 12-03 duration | 11 min |
+| 13-02 duration | 11 min |
 
 ## Accumulated Context
 
@@ -126,6 +112,10 @@ v2.0 Progress:  [██████████] 100% (3/3 plans in phase 12)
 | Save system key derivation from Application.identifier | AES-CBC key derived via SHA256(identifier + salt), matching SaveFileHandler pattern | 12 |
 | ns_kwargs dict pattern for optional namespace passthrough | Only passes namespace when non-empty, letting generators use defaults | 12 |
 | Extended f-string whitelist for HTTP client interpolation | 'method' and 'url' are legitimate C# $"" interpolation beyond 50-char lookback | 12 |
+| Synchronous handler signatures for equipment handlers | Existing codebase uses def (not async def); plan corrected to match | 13 |
+| Pure-logic validation/computation helpers for testability | Separated _validate_* and _compute_* from bpy-dependent code | 13 |
+| Weapon generator dispatch table (_WEAPON_GENERATORS) | Clean extensibility for adding new weapon types | 13 |
+| Convex hull for collision mesh approximation | bmesh.ops.convex_hull for simplified weapon collision shapes | 13 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -140,10 +130,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T14:00:08Z
-Stopped at: Completed 12-03-PLAN.md (Phase 12 complete)
-Next action: Begin Phase 13
+Last session: 2026-03-20T15:43:29Z
+Stopped at: Completed 13-02-PLAN.md
+Next action: Continue Phase 13
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 12-03-PLAN.md (unity_game MCP tool wiring + 14 syntax tests, 3,993 total)*
+*Last updated: 2026-03-20 -- Completed 13-02-PLAN.md (equipment handlers + 105 tests, 4,098 total)*

@@ -173,11 +173,11 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Equipment & Weapons
 
-- [ ] **EQUIP-01**: Claude can generate weapon meshes from text descriptions (swords, axes, maces, staffs, bows, daggers, shields) with proper grip points, trail VFX attachment points, and collision mesh
+- [x] **EQUIP-01**: Claude can generate weapon meshes from text descriptions (swords, axes, maces, staffs, bows, daggers, shields) with proper grip points, trail VFX attachment points, and collision mesh
 - [x] **EQUIP-02**: Claude can set up bone socket attachment system on character rigs (10 standard sockets: weapon_hand_R/L, shield_hand_L, back_weapon, hip_L/R, head, chest, spell_hand_R/L)
-- [ ] **EQUIP-03**: Claude can split character mesh into modular parts (head, torso, upper arms, lower arms, upper legs, lower legs, feet) for armor swapping
-- [ ] **EQUIP-04**: Claude can generate armor/clothing meshes that fit character models using shape keys and vertex weight transfer
-- [ ] **EQUIP-05**: Claude can generate equipment preview icons (3D rendered turntable or flat icon) for inventory UI
+- [x] **EQUIP-03**: Claude can split character mesh into modular parts (head, torso, upper arms, lower arms, upper legs, lower legs, feet) for armor swapping
+- [x] **EQUIP-04**: Claude can generate armor/clothing meshes that fit character models using shape keys and vertex weight transfer
+- [x] **EQUIP-05**: Claude can generate equipment preview icons (3D rendered turntable or flat icon) for inventory UI
 - [ ] **EQUIP-06**: Claude can set up Unity equipment attachment system (SkinnedMeshRenderer rebinding, bone socket parenting, sheathed weapon positioning with Multi-Parent Constraint)
 - [ ] **EQUIP-07**: Claude can apply rarity tier visual effects to equipment (Common gray, Rare blue, Epic purple, Legendary gold glow + particle effects)
 - [ ] **EQUIP-08**: Claude can apply corruption visual progression to equipment (0-100% corruption with increasing vein patterns, color shift, particle emission)
@@ -339,11 +339,11 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | AAA-04 | Phase 11 | Complete |
 | AAA-05 | Phase 14 | Pending |
 | AAA-06 | Phase 11 | Complete |
-| EQUIP-01 | Phase 13 | Pending |
+| EQUIP-01 | Phase 13 | Complete |
 | EQUIP-02 | Phase 9 | Complete |
-| EQUIP-03 | Phase 13 | Pending |
-| EQUIP-04 | Phase 13 | Pending |
-| EQUIP-05 | Phase 13 | Pending |
+| EQUIP-03 | Phase 13 | Complete |
+| EQUIP-04 | Phase 13 | Complete |
+| EQUIP-05 | Phase 13 | Complete |
 | EQUIP-06 | Phase 13 | Pending |
 | EQUIP-07 | Phase 15 | Pending |
 | EQUIP-08 | Phase 15 | Pending |
