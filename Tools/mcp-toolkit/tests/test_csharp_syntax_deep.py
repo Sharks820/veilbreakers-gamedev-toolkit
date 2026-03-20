@@ -213,6 +213,46 @@ from veilbreakers_mcp.shared.unity_templates.equipment_templates import (
     generate_equipment_attachment_script,
 )
 
+# ---------------------------------------------------------------------------
+# camera_templates.py generators (Phase 14 -- Camera, Cinematics & Animation)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.camera_templates import (
+    generate_cinemachine_setup_script,
+    generate_state_driven_camera_script,
+    generate_camera_shake_script,
+    generate_camera_blend_script,
+    generate_timeline_setup_script,
+    generate_cutscene_setup_script,
+    generate_animation_clip_editor_script,
+    generate_animator_modifier_script,
+    generate_avatar_mask_script,
+    generate_video_player_script,
+)
+
+# ---------------------------------------------------------------------------
+# world_templates.py generators (Phase 14 -- Scene & World Systems)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.world_templates import (
+    generate_scene_creation_script,
+    generate_scene_transition_script,
+    generate_probe_setup_script,
+    generate_occlusion_setup_script,
+    generate_environment_setup_script,
+    generate_terrain_detail_script,
+    generate_tilemap_setup_script,
+    generate_2d_physics_script,
+    generate_time_of_day_preset_script,
+    generate_fast_travel_script,
+    generate_puzzle_mechanics_script,
+    generate_trap_system_script,
+    generate_spatial_loot_script,
+    generate_weather_system_script,
+    generate_day_night_cycle_script,
+    generate_npc_placement_script,
+    generate_dungeon_lighting_script,
+    generate_terrain_building_blend_script,
+)
+
 
 # ===================================================================
 # Build a list of (name, callable, is_csharp) for every generator
@@ -514,6 +554,163 @@ ALL_GENERATORS: list[tuple[str, callable, str]] = [
     # --- equipment (Phase 13 -- EQUIP-06) ---
     ("equipment/attachment", lambda: generate_equipment_attachment_script()[0], "cs"),
     ("equipment/weapon_sheath", lambda: generate_equipment_attachment_script()[1], "cs"),
+
+    # ===================================================================
+    # Phase 14: Camera, Cinematics & Scene Management
+    # ===================================================================
+
+    # --- camera/ -- camera_templates.py (10 generators) ---
+    ("camera/cinemachine_orbital", lambda: generate_cinemachine_setup_script(camera_type="orbital"), "cs"),
+    ("camera/cinemachine_follow", lambda: generate_cinemachine_setup_script(camera_type="follow"), "cs"),
+    ("camera/cinemachine_dolly", lambda: generate_cinemachine_setup_script(camera_type="dolly"), "cs"),
+    ("camera/cinemachine_with_targets", lambda: generate_cinemachine_setup_script(
+        camera_type="orbital", follow_target="Player", look_at_target="Player/Head",
+        priority=15, radius=8.0, target_offset=[0, 1.5, 0], damping=[1, 1, 0.5],
+    ), "cs"),
+    ("camera/state_driven_default", lambda: generate_state_driven_camera_script(), "cs"),
+    ("camera/state_driven_custom", lambda: generate_state_driven_camera_script(
+        camera_name="VB_CombatCamera",
+        states=[{"state": "Idle", "blend_time": 1.0}, {"state": "Combat", "blend_time": 0.3}],
+    ), "cs"),
+    ("camera/shake_default", lambda: generate_camera_shake_script(), "cs"),
+    ("camera/shake_custom", lambda: generate_camera_shake_script(
+        impulse_force=1.5, impulse_duration=0.4, add_listener=False,
+    ), "cs"),
+    ("camera/blend_default", lambda: generate_camera_blend_script(), "cs"),
+    ("camera/blend_custom", lambda: generate_camera_blend_script(
+        default_blend_time=1.0, blend_style="Cut",
+        custom_blends=[{"from_camera": "CamA", "to_camera": "CamB", "blend_time": 0.5}],
+    ), "cs"),
+    ("camera/timeline_default", lambda: generate_timeline_setup_script(), "cs"),
+    ("camera/timeline_with_tracks", lambda: generate_timeline_setup_script(
+        timeline_name="BossCutscene",
+        tracks=[{"type": "AnimationTrack", "name": "BossEntry"}],
+    ), "cs"),
+    ("camera/cutscene_default", lambda: generate_cutscene_setup_script(), "cs"),
+    ("camera/cutscene_custom", lambda: generate_cutscene_setup_script(
+        cutscene_name="IntroCutscene",
+        timeline_path="Assets/Timelines/Intro.playable",
+        wrap_mode="Hold", play_on_awake=True,
+    ), "cs"),
+    ("camera/animation_clip_default", lambda: generate_animation_clip_editor_script(), "cs"),
+    ("camera/animation_clip_with_curves", lambda: generate_animation_clip_editor_script(
+        clip_name="DoorOpen",
+        curves=[{"property": "localRotation.y", "type": "Transform", "keys": [{"time": 0, "value": 0}, {"time": 1, "value": 90}]}],
+    ), "cs"),
+    ("camera/animator_modifier_default", lambda: generate_animator_modifier_script(), "cs"),
+    ("camera/animator_modifier_custom", lambda: generate_animator_modifier_script(
+        states_to_add=["Dodge", "Block"],
+        parameters=[{"name": "IsDodging", "type": "bool"}],
+        transitions=[{"from": "Idle", "to": "Dodge", "condition_param": "IsDodging"}],
+    ), "cs"),
+    ("camera/avatar_mask_default", lambda: generate_avatar_mask_script(), "cs"),
+    ("camera/avatar_mask_custom", lambda: generate_avatar_mask_script(
+        mask_name="LowerBodyMask",
+        body_parts={"Head": False, "LeftArm": False, "RightArm": False, "LeftLeg": True, "RightLeg": True},
+    ), "cs"),
+    ("camera/video_player_clip", lambda: generate_video_player_script(video_source="clip"), "cs"),
+    ("camera/video_player_url", lambda: generate_video_player_script(
+        video_source="url", video_path="https://example.com/video.mp4", loop=False,
+    ), "cs"),
+
+    # --- world/ -- world_templates.py (18 generators: 9 scene/env + 9 RPG) ---
+
+    # Scene/Environment generators
+    ("world/scene_creation_default", lambda: generate_scene_creation_script(), "cs"),
+    ("world/scene_creation_custom", lambda: generate_scene_creation_script(
+        scene_name="DungeonLevel1", scene_setup="EmptyScene",
+        loading_mode="additive", build_index=3,
+    ), "cs"),
+    ("world/scene_transition_editor", lambda: generate_scene_transition_script()[0], "cs"),
+    ("world/scene_transition_runtime", lambda: generate_scene_transition_script()[1], "cs"),
+    ("world/scene_transition_custom_editor", lambda: generate_scene_transition_script(
+        fade_duration=1.0, show_loading_screen=False,
+    )[0], "cs"),
+    ("world/scene_transition_custom_runtime", lambda: generate_scene_transition_script(
+        fade_duration=1.0, show_loading_screen=False,
+    )[1], "cs"),
+    ("world/probe_setup", lambda: generate_probe_setup_script(), "cs"),
+    ("world/probe_setup_custom", lambda: generate_probe_setup_script(
+        reflection_probe_count=8, reflection_resolution=512,
+        probe_box_size=[20.0, 10.0, 20.0],
+    ), "cs"),
+    ("world/occlusion_setup", lambda: generate_occlusion_setup_script(), "cs"),
+    ("world/environment_setup", lambda: generate_environment_setup_script(), "cs"),
+    ("world/terrain_detail", lambda: generate_terrain_detail_script(), "cs"),
+    ("world/tilemap_setup", lambda: generate_tilemap_setup_script(), "cs"),
+    ("world/2d_physics", lambda: generate_2d_physics_script(), "cs"),
+    ("world/2d_physics_hinge", lambda: generate_2d_physics_script(
+        collider_type="circle", body_type="Kinematic", joint_type="hinge",
+    ), "cs"),
+    ("world/time_of_day_noon", lambda: generate_time_of_day_preset_script(preset_name="noon"), "cs"),
+    ("world/time_of_day_dusk", lambda: generate_time_of_day_preset_script(preset_name="dusk"), "cs"),
+    ("world/time_of_day_midnight", lambda: generate_time_of_day_preset_script(preset_name="midnight"), "cs"),
+
+    # RPG World System generators
+    ("world/fast_travel_editor", lambda: generate_fast_travel_script()[0], "cs"),
+    ("world/fast_travel_runtime", lambda: generate_fast_travel_script()[1], "cs"),
+    ("world/puzzle_editor", lambda: generate_puzzle_mechanics_script()[0], "cs"),
+    ("world/puzzle_runtime", lambda: generate_puzzle_mechanics_script()[1], "cs"),
+    ("world/puzzle_custom_editor", lambda: generate_puzzle_mechanics_script(
+        puzzle_types=["lever_sequence", "pressure_plate"],
+    )[0], "cs"),
+    ("world/puzzle_custom_runtime", lambda: generate_puzzle_mechanics_script(
+        puzzle_types=["lever_sequence", "pressure_plate"],
+    )[1], "cs"),
+    ("world/trap_editor", lambda: generate_trap_system_script()[0], "cs"),
+    ("world/trap_runtime", lambda: generate_trap_system_script()[1], "cs"),
+    ("world/trap_custom_editor", lambda: generate_trap_system_script(
+        trap_types=["spike_pit", "dart_wall"], base_damage=50.0, cooldown=5.0,
+    )[0], "cs"),
+    ("world/trap_custom_runtime", lambda: generate_trap_system_script(
+        trap_types=["spike_pit", "dart_wall"], base_damage=50.0, cooldown=5.0,
+    )[1], "cs"),
+    ("world/spatial_loot_editor", lambda: generate_spatial_loot_script()[0], "cs"),
+    ("world/spatial_loot_runtime", lambda: generate_spatial_loot_script()[1], "cs"),
+    ("world/weather_editor", lambda: generate_weather_system_script()[0], "cs"),
+    ("world/weather_runtime", lambda: generate_weather_system_script()[1], "cs"),
+    ("world/weather_custom_editor", lambda: generate_weather_system_script(
+        weather_states=["Clear", "Rain", "Storm"],
+    )[0], "cs"),
+    ("world/weather_custom_runtime", lambda: generate_weather_system_script(
+        weather_states=["Clear", "Rain", "Storm"],
+    )[1], "cs"),
+    ("world/day_night_editor", lambda: generate_day_night_cycle_script()[0], "cs"),
+    ("world/day_night_runtime", lambda: generate_day_night_cycle_script()[1], "cs"),
+    ("world/day_night_custom_editor", lambda: generate_day_night_cycle_script(
+        day_duration_minutes=20.0, start_hour=6.0,
+    )[0], "cs"),
+    ("world/day_night_custom_runtime", lambda: generate_day_night_cycle_script(
+        day_duration_minutes=20.0, start_hour=6.0,
+    )[1], "cs"),
+    ("world/npc_placement_so", lambda: generate_npc_placement_script()[0], "cs"),
+    ("world/npc_placement_runtime", lambda: generate_npc_placement_script()[1], "cs"),
+    ("world/npc_placement_editor", lambda: generate_npc_placement_script()[2], "cs"),
+    ("world/npc_custom_so", lambda: generate_npc_placement_script(
+        npc_roles=["merchant", "guard", "quest_giver"],
+    )[0], "cs"),
+    ("world/npc_custom_runtime", lambda: generate_npc_placement_script(
+        npc_roles=["merchant", "guard", "quest_giver"],
+    )[1], "cs"),
+    ("world/npc_custom_editor", lambda: generate_npc_placement_script(
+        npc_roles=["merchant", "guard", "quest_giver"],
+    )[2], "cs"),
+    ("world/dungeon_lighting_editor", lambda: generate_dungeon_lighting_script()[0], "cs"),
+    ("world/dungeon_lighting_runtime", lambda: generate_dungeon_lighting_script()[1], "cs"),
+    ("world/dungeon_lighting_custom_editor", lambda: generate_dungeon_lighting_script(
+        torch_spacing=4.0, torch_light_range=10.0, fog_density=0.05,
+    )[0], "cs"),
+    ("world/dungeon_lighting_custom_runtime", lambda: generate_dungeon_lighting_script(
+        torch_spacing=4.0, torch_light_range=10.0, fog_density=0.05,
+    )[1], "cs"),
+    ("world/terrain_blend_editor", lambda: generate_terrain_building_blend_script()[0], "cs"),
+    ("world/terrain_blend_runtime", lambda: generate_terrain_building_blend_script()[1], "cs"),
+    ("world/terrain_blend_custom_editor", lambda: generate_terrain_building_blend_script(
+        blend_radius=3.0, depression_depth=0.2, vertex_color_falloff=2.0,
+    )[0], "cs"),
+    ("world/terrain_blend_custom_runtime", lambda: generate_terrain_building_blend_script(
+        blend_radius=3.0, depression_depth=0.2, vertex_color_falloff=2.0,
+    )[1], "cs"),
 ]
 
 # Also test the non-C# generators separately for their own validity
@@ -621,6 +818,9 @@ _CS_BRACE_WHITELIST = {
     "sprites.Length",
     # C# interpolated string variables (used in game_templates HTTP client)
     "method", "url",
+    # C# interpolated string variables (used in world_templates probe/occlusion setup)
+    "positions.Count",
+    "occludeeCount",
 }
 
 

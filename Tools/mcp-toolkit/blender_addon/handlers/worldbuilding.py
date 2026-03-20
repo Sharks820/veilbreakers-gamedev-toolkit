@@ -960,3 +960,63 @@ def handle_generate_easter_egg(params: dict) -> dict:
             "lore_items": sum(1 for e in eggs if e["type"] == "lore_item"),
         },
     }
+
+
+def handle_add_storytelling_props(params: dict) -> dict:
+    """Add storytelling props (narrative clutter) to an interior room (AAA-05).
+
+    Params:
+        target_interior: object name of the interior to decorate (default "Interior")
+        room_type: room type for contextual distribution (default "tavern")
+        room_width: room width (default 4.0)
+        room_depth: room depth (default 4.0)
+        density_modifier: prop density multiplier (default 1.0)
+        seed: random seed (default 0)
+    """
+    target_interior = params.get("target_interior", "Interior")
+    room_type = params.get("room_type", "tavern")
+    room_width = params.get("room_width", 4.0)
+    room_depth = params.get("room_depth", 4.0)
+    density_modifier = params.get("density_modifier", 1.0)
+    seed = params.get("seed", 0)
+
+    prop_specs = add_storytelling_props(
+        room_type=room_type,
+        room_width=room_width,
+        room_depth=room_depth,
+        density_modifier=density_modifier,
+        seed=seed,
+    )
+
+    # Find parent object (if exists)
+    parent_obj = bpy.data.objects.get(target_interior)
+
+    # Create marker empties for each prop
+    prop_group_name = f"{target_interior}_StoryProps"
+    group = bpy.data.objects.new(prop_group_name, None)
+    group.empty_display_type = "PLAIN_AXES"
+    bpy.context.collection.objects.link(group)
+    if parent_obj:
+        group.parent = parent_obj
+
+    for i, prop in enumerate(prop_specs):
+        p_name = f"{prop_group_name}_{prop['prop_type']}_{i}"
+        p_obj = bpy.data.objects.new(p_name, None)
+        p_obj.empty_display_type = "SINGLE_ARROW"
+        p_obj.empty_display_size = 0.3
+        pos = prop["position"]
+        p_obj.location = (pos[0], pos[1], pos[2])
+        p_obj.parent = group
+        bpy.context.collection.objects.link(p_obj)
+        p_obj["prop_type"] = prop["prop_type"]
+        p_obj["placement_rule"] = prop["placement_rule"]
+
+    return {
+        "status": "success",
+        "result": {
+            "target_interior": target_interior,
+            "room_type": room_type,
+            "props_placed": len(prop_specs),
+            "group_name": prop_group_name,
+        },
+    }
