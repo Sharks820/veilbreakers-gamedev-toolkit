@@ -182,7 +182,7 @@ Plans:
 ### Phase 9: Unity Editor Deep Control
 **Goal**: Claude has complete programmatic control over the Unity Editor -- prefabs, components, hierarchy, physics, project settings, packages, and asset import configuration
 **Depends on**: Phase 8 (v1.0 Unity server foundation)
-**Requirements**: EDIT-01, EDIT-02, EDIT-03, EDIT-04, EDIT-05, EDIT-06, EDIT-07, EDIT-08, EDIT-09, EDIT-10, EDIT-11, EDIT-12, EDIT-13, EDIT-14, EDIT-15, IMP-01, IMP-02, PHYS-01, PHYS-02, PIPE-09
+**Requirements**: EDIT-01, EDIT-02, EDIT-03, EDIT-04, EDIT-05, EDIT-06, EDIT-07, EDIT-08, EDIT-09, EDIT-10, EDIT-11, EDIT-12, EDIT-13, EDIT-14, EDIT-15, IMP-01, IMP-02, PHYS-01, PHYS-02, PIPE-09, EQUIP-02
 **Success Criteria** (what must be TRUE):
   1. Claude can create a nested prefab variant, add components with configured properties, and the resulting .prefab asset opens correctly in Unity's Prefab Mode
   2. Claude can reparent GameObjects, set layers/tags, enable/disable objects, and the hierarchy changes persist after scene save
@@ -216,7 +216,7 @@ Plans:
 ### Phase 11: Data Architecture & Asset Pipeline
 **Goal**: Claude can create data-driven game architecture using ScriptableObjects, JSON configs, and localization -- plus manage the asset pipeline with Git LFS, normal map baking, and sprite atlasing
 **Depends on**: Phase 10 (needs C# generation for SO definitions and data tools)
-**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, IMP-03, IMP-04, BUILD-06, TWO-03, PIPE-08
+**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, IMP-03, IMP-04, BUILD-06, TWO-03, PIPE-08, AAA-01, AAA-02, AAA-03, AAA-04, AAA-06
 **Success Criteria** (what must be TRUE):
   1. Claude can create ScriptableObject C# definitions and instantiate .asset files with populated data fields, usable as item databases or stat tables
   2. Claude can generate, validate, and parse JSON/XML configuration files for game balance, difficulty curves, and progression data
@@ -248,7 +248,7 @@ Plans:
 ### Phase 13: Content & Progression Systems
 **Goal**: Claude can generate the higher-level game systems that drive player engagement -- inventory, dialogue, quests, loot, crafting, skill trees, and combat balancing tools
 **Depends on**: Phase 12 (core game systems: save/load for persistence, health/damage for combat integration)
-**Requirements**: GAME-02, GAME-03, GAME-04, GAME-09, GAME-10, GAME-11, GAME-12
+**Requirements**: GAME-02, GAME-03, GAME-04, GAME-09, GAME-10, GAME-11, GAME-12, EQUIP-01, EQUIP-03, EQUIP-04, EQUIP-05, EQUIP-06
 **Success Criteria** (what must be TRUE):
   1. Claude can generate an inventory system with SO-based item database, drag-and-drop UI slots, equipment system, and storage containers that persist through save/load
   2. Claude can generate a branching dialogue system with dialogue tree data, NPC interaction triggers, and dialogue UI -- compatible with YarnSpinner data format
@@ -265,7 +265,7 @@ Plans:
 ### Phase 14: Camera, Cinematics & Scene Management
 **Goal**: Claude can set up Cinemachine cameras, Timeline cutscenes, multi-scene workflows, and complete scene lighting/environment configuration
 **Depends on**: Phase 9 (editor control for scene/settings manipulation), Phase 10 (C# for custom Timeline tracks)
-**Requirements**: CAM-01, CAM-02, CAM-03, CAM-04, SCNE-01, SCNE-02, SCNE-03, SCNE-04, SCNE-05, SCNE-06, TWO-01, TWO-02, MEDIA-01, ANIMA-01, ANIMA-02, ANIMA-03
+**Requirements**: CAM-01, CAM-02, CAM-03, CAM-04, SCNE-01, SCNE-02, SCNE-03, SCNE-04, SCNE-05, SCNE-06, TWO-01, TWO-02, MEDIA-01, ANIMA-01, ANIMA-02, ANIMA-03, AAA-05, WORLD-01, WORLD-02, WORLD-03, WORLD-04, WORLD-05, WORLD-06, WORLD-07, WORLD-08, WORLD-09, WORLD-10
 **Success Criteria** (what must be TRUE):
   1. Claude can create Cinemachine virtual cameras (FreeLook, follow, state-driven) with configurable blending, and camera shake/zoom/transition effects trigger correctly
   2. Claude can create Timeline assets with animation, audio, activation, and Cinemachine tracks, and Playable Director plays back complete cutscene sequences
@@ -282,7 +282,7 @@ Plans:
 ### Phase 15: Game UX & Encounter Design
 **Goal**: Claude can generate polished gameplay UX elements and scripted encounter systems with dynamic difficulty adjustment
 **Depends on**: Phase 12 (game systems for health/damage integration), Phase 10 (C# framework for AI scripting)
-**Requirements**: UIX-01, UIX-02, UIX-03, UIX-04, AID-01, AID-02, AID-03, SHDR-04, ACC-01, PIPE-10
+**Requirements**: UIX-01, UIX-02, UIX-03, UIX-04, AID-01, AID-02, AID-03, SHDR-04, ACC-01, PIPE-10, EQUIP-07, EQUIP-08
 **Success Criteria** (what must be TRUE):
   1. Claude can generate a minimap/compass system with world-space markers that track objectives, NPCs, and points of interest
   2. Claude can generate tutorial/onboarding sequences with tooltip overlays and context-sensitive interaction prompts ("Press E to interact") that respond to player proximity
