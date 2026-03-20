@@ -82,18 +82,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** v2.0 Phase 15 in progress
+**Current focus:** v2.0 Phase 15 complete, ready for Phase 16
 
 ## Current Position
 
-Phase: 15 of 17 (Game UX & Encounter Design)
-Plan: 3 of 4 in current phase (15-01, 15-02 complete)
-Status: Executing Phase 15 -- 15-02 UX batch-2 templates complete
-Last activity: 2026-03-20 -- Completed 15-02-PLAN.md (6 UX generators + 168 tests)
+Phase: 15 of 17 (Game UX & Encounter Design) -- PHASE COMPLETE
+Plan: 4 of 4 in current phase (all complete)
+Status: Phase 15 complete -- ready for Phase 16
+Last activity: 2026-03-20 -- Completed 15-04-PLAN.md (tool wiring + 31 syntax tests, Phase 15 complete)
 
 ```
-Phase Progress: [██████████] 96% overall (29 plans, 27 complete)
-v2.0 Progress:  [███████████████████████████░] 27/29 plans complete
+Phase Progress: [██████████] 100% overall (29 plans, 29 complete)
+v2.0 Progress:  [████████████████████████████] 29/29 plans complete
 ```
 
 ## Performance Metrics
@@ -107,10 +107,10 @@ v2.0 Progress:  [█████████████████████
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 27 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-03, 15-02) |
-| v2.0 tests added | 2,819 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter + 84 ux-batch2) |
-| v2.0 total tests passing | 5,602 |
-| v2.0 MCP tools | 34 (15 Blender + 19 Unity) |
+| v2.0 plans completed | 29 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-04) |
+| v2.0 tests added | 3,102 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter + 84 ux-batch2 + 93 ux-batch1 + 283 tool-wiring-p15) |
+| v2.0 total tests passing | 5,885 |
+| v2.0 MCP tools | 35 (15 Blender + 20 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
 | 09-03 duration | 11 min |
@@ -135,6 +135,7 @@ v2.0 Progress:  [█████████████████████
 | 15-03 duration | 8 min |
 | Phase 15 P01 | 9min | 2 tasks | 2 files |
 | Phase 15-02 P02 | 22 min | 2 tasks | 2 files |
+| Phase 15-04 P04 | 20 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -228,6 +229,8 @@ v2.0 Progress:  [█████████████████████
 | Line-based body + _wrap_namespace pattern for batch-2 generators | Consistent with Plan 01 generator convention | 15 |
 | RARITY_VFX dict as module-level constant | External reference by other modules for tier configuration | 15 |
 | Colorblind shader sRGB-to-linear before LMS matrix multiply | Industry standard for accurate color simulation | 15 |
+| Aliased encounter_templates import to avoid content_templates collision | Both modules export generate_encounter_simulator_script | 15 |
+| Encounter actions in existing unity_gameplay vs new compound tool | Natural extension of gameplay AI domain, avoids tool proliferation | 15 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -242,9 +245,9 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T20:01:35.320Z
-Stopped at: Completed 15-02-PLAN.md (6 UX generators + 168 tests)
-Next action: Continue Phase 15 (15-02)
+Last session: 2026-03-20T20:25:09Z
+Stopped at: Completed 15-04-PLAN.md (tool wiring + 31 syntax tests, Phase 15 complete)
+Next action: Begin Phase 16
 
 ---
 *State initialized: 2026-03-18*
