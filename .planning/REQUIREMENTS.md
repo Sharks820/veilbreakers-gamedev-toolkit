@@ -99,9 +99,9 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [ ] **QA-03**: Claude can capture GPU profiling data and continuous performance analysis
 - [ ] **QA-04**: Claude can detect memory leaks (managed/native memory snapshots, growing allocations)
 - [ ] **QA-05**: Claude can run static code analysis (Roslyn analyzers for Update() allocations, string concat, Camera.main)
-- [ ] **QA-06**: Claude can set up crash reporting (Sentry, Unity Cloud Diagnostics)
-- [ ] **QA-07**: Claude can set up analytics/telemetry events for player behavior tracking
-- [ ] **QA-08**: Claude can inspect live game state during Play Mode (variable values on GameObjects, BT state)
+- [x] **QA-06**: Claude can set up crash reporting (Sentry, Unity Cloud Diagnostics)
+- [x] **QA-07**: Claude can set up analytics/telemetry events for player behavior tracking
+- [x] **QA-08**: Claude can inspect live game state during Play Mode (variable values on GameObjects, BT state)
 
 ### Import Pipeline
 
@@ -306,9 +306,9 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | QA-03 | Phase 16 | Pending |
 | QA-04 | Phase 16 | Pending |
 | QA-05 | Phase 16 | Pending |
-| QA-06 | Phase 16 | Pending |
-| QA-07 | Phase 16 | Pending |
-| QA-08 | Phase 16 | Pending |
+| QA-06 | Phase 16 | Complete |
+| QA-07 | Phase 16 | Complete |
+| QA-08 | Phase 16 | Complete |
 | BUILD-01 | Phase 17 | Pending |
 | BUILD-02 | Phase 17 | Pending |
 | BUILD-03 | Phase 17 | Pending |

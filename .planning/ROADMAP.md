@@ -361,7 +361,7 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 13. Content & Progression Systems | v2.0 | 3/3 | Complete | 2026-03-20 |
 | 14. Camera, Cinematics & Scene Management | v2.0 | 5/5 | Complete | 2026-03-20 |
 | 15. Game UX & Encounter Design | v2.0 | 4/4 | Complete | 2026-03-20 |
-| 16. Quality Assurance & Testing | 1/4 | In Progress|  | - |
+| 16. Quality Assurance & Testing | 3/4 | In Progress|  | - |
 | 17. Build & Deploy Pipeline | v2.0 | 0/2 | Not started | - |
 
 ---
