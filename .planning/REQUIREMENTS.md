@@ -36,13 +36,13 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [x] **CODE-01**: Claude can generate arbitrary C# MonoBehaviours, plain classes, interfaces, enums, structs, and static utilities (not just domain templates)
 - [x] **CODE-02**: Claude can modify existing C# scripts (add methods, fields, properties, attributes, using statements)
 - [x] **CODE-03**: Claude can generate custom Inspector drawers, PropertyDrawers, EditorWindows, and SceneView overlays
-- [ ] **CODE-04**: Claude can create EditMode and PlayMode test assemblies, fixtures, and test methods (NUnit / Unity Test Framework)
-- [ ] **CODE-05**: Claude can run Unity tests and collect pass/fail results through MCP
-- [ ] **CODE-06**: Claude can scaffold dependency injection patterns (service locator, event bus, SO event channels)
-- [ ] **CODE-07**: Claude can generate generic object pooling systems (projectiles, enemies, VFX, UI elements)
-- [ ] **CODE-08**: Claude can generate singleton patterns (persistent MonoBehaviour, non-MB singletons)
-- [ ] **CODE-09**: Claude can generate generic reusable state machine framework usable by multiple systems
-- [ ] **CODE-10**: Claude can generate observer/event system with ScriptableObject event channels
+- [x] **CODE-04**: Claude can create EditMode and PlayMode test assemblies, fixtures, and test methods (NUnit / Unity Test Framework)
+- [x] **CODE-05**: Claude can run Unity tests and collect pass/fail results through MCP
+- [x] **CODE-06**: Claude can scaffold dependency injection patterns (service locator, event bus, SO event channels)
+- [x] **CODE-07**: Claude can generate generic object pooling systems (projectiles, enemies, VFX, UI elements)
+- [x] **CODE-08**: Claude can generate singleton patterns (persistent MonoBehaviour, non-MB singletons)
+- [x] **CODE-09**: Claude can generate generic reusable state machine framework usable by multiple systems
+- [x] **CODE-10**: Claude can generate observer/event system with ScriptableObject event channels
 
 ### Game Systems
 
@@ -257,13 +257,13 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | CODE-01 | Phase 10 | Complete |
 | CODE-02 | Phase 10 | Complete |
 | CODE-03 | Phase 10 | Complete |
-| CODE-04 | Phase 10 | Pending |
-| CODE-05 | Phase 10 | Pending |
-| CODE-06 | Phase 10 | Pending |
-| CODE-07 | Phase 10 | Pending |
-| CODE-08 | Phase 10 | Pending |
-| CODE-09 | Phase 10 | Pending |
-| CODE-10 | Phase 10 | Pending |
+| CODE-04 | Phase 10 | Complete |
+| CODE-05 | Phase 10 | Complete |
+| CODE-06 | Phase 10 | Complete |
+| CODE-07 | Phase 10 | Complete |
+| CODE-08 | Phase 10 | Complete |
+| CODE-09 | Phase 10 | Complete |
+| CODE-10 | Phase 10 | Complete |
 | DATA-01 | Phase 11 | Pending |
 | DATA-02 | Phase 11 | Pending |
 | DATA-03 | Phase 11 | Pending |

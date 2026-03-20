@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
-stopped_at: Completed 10-01-PLAN.md
-last_updated: "2026-03-20T09:17:13Z"
-last_activity: 2026-03-20 -- Completed 10-01-PLAN.md (C# code generation engine)
+stopped_at: Completed 10-03-PLAN.md
+last_updated: "2026-03-20T09:37:54Z"
+last_activity: 2026-03-20 -- Completed 10-03-PLAN.md (test framework + architecture patterns)
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 1
-  percent: 25
+  total_plans: 7
+  completed_plans: 6
+  percent: 86
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -26,13 +26,13 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 ## Current Position
 
 Phase: 10 of 17 (C# Programming Framework)
-Plan: 2 of 4 in current phase (10-01, 10-02 complete)
+Plan: 4 of 4 in current phase (10-01, 10-02, 10-03 complete)
 Status: Executing Phase 10
-Last activity: 2026-03-20 -- Completed 10-02-PLAN.md (shader templates v2 - arbitrary shader + renderer feature)
+Last activity: 2026-03-20 -- Completed 10-03-PLAN.md (test framework + architecture patterns)
 
 ```
 Phase Progress: [████████████████████████████░░░░░░░░░░░░] 59% overall (10/17 phases)
-v2.0 Progress:  [█████░░░░░] 50% (2/4 plans in phase 10)
+v2.0 Progress:  [████████░░] 75% (3/4 plans in phase 10)
 ```
 
 ## Performance Metrics
@@ -46,15 +46,16 @@ v2.0 Progress:  [█████░░░░░] 50% (2/4 plans in phase 10)
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 5 (09-01, 09-02, 09-03, 10-01, 10-02) |
-| v2.0 tests added | 384 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2) |
-| v2.0 total tests passing | 3,124 |
+| v2.0 plans completed | 6 (09-01, 09-02, 09-03, 10-01, 10-02, 10-03) |
+| v2.0 tests added | 431 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch) |
+| v2.0 total tests passing | 3,171 |
 | v2.0 MCP tools | 25 (15 Blender + 10 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
 | 09-03 duration | 11 min |
 | 10-01 duration | 7 min |
 | 10-02 duration | 9 min |
+| 10-03 duration | 9 min |
 
 ## Accumulated Context
 
@@ -80,6 +81,9 @@ v2.0 Progress:  [█████░░░░░] 50% (2/4 plans in phase 10)
 | ScriptableObject auto-adds CreateAssetMenu | Consistent with Unity best practices for SO assets | 10 |
 | Renderer feature uses RenderGraph API (RecordRenderGraph) not legacy Execute() | URP 17 / Unity 6 modern API, Execute() is obsolete | 10 |
 | Property-to-HLSL type mapping centralised in helper | Consistent CBUFFER generation across all shader configs | 10 |
+| SO event channels use VeilBreakers.Events.Channels namespace | Distinct from existing VeilBreakers.Core.EventBus to prevent collisions | 10 |
+| TestRunnerApi with runSynchronously, not CLI batch mode | Maintains two-step editor script pattern for MCP integration | 10 |
+| Architecture patterns in VeilBreakers.Patterns namespace | Consistent namespace for service locator, object pool, state machine | 10 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -94,10 +98,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T09:19:29Z
-Stopped at: Completed 10-02-PLAN.md
-Next action: Execute 10-03-PLAN.md
+Last session: 2026-03-20T09:37:54Z
+Stopped at: Completed 10-03-PLAN.md
+Next action: Execute 10-04-PLAN.md
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 10-02-PLAN.md (shader templates v2)*
+*Last updated: 2026-03-20 -- Completed 10-03-PLAN.md (test framework + architecture patterns)*
