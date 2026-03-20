@@ -7,6 +7,12 @@ Exports:
     generate_property_drawer -- Generate CustomPropertyDrawer with OnGUI and GetPropertyHeight
     generate_inspector_drawer -- Generate CustomEditor with OnInspectorGUI
     generate_scene_overlay -- Generate SceneView Overlay with CreatePanelContent
+    generate_test_class    -- Generate NUnit test class for EditMode or PlayMode (CODE-04)
+    generate_service_locator -- Generate static ServiceLocator with Register/Get/TryGet (CODE-06)
+    generate_object_pool   -- Generate generic ObjectPool<T> with optional GameObjectPool (CODE-07)
+    generate_singleton     -- Generate MonoBehaviour or plain thread-safe singleton (CODE-08)
+    generate_state_machine -- Generate IState/StateMachine/BaseState framework (CODE-09)
+    generate_so_event_channel -- Generate ScriptableObject event channel system (CODE-10)
     _build_cs_class        -- Low-level section-based class builder (also exported for advanced use)
 """
 
@@ -934,6 +940,731 @@ def generate_scene_overlay(
     lines.append(f"{body_indent}}}")
 
     lines.append(f"{indent}}}")
+    if namespace:
+        lines.append("}")
+
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# CODE-04: Test class generator
+# ---------------------------------------------------------------------------
+
+
+def generate_test_class(
+    class_name: str,
+    test_mode: str = "EditMode",
+    namespace: str = "",
+    target_class: str = "",
+    test_methods: list[dict] | None = None,
+    setup_body: str = "",
+    teardown_body: str = "",
+) -> str:
+    """Generate an NUnit test class for Unity EditMode or PlayMode tests.
+
+    Args:
+        class_name: Name of the test fixture class.
+        test_mode: ``"EditMode"`` or ``"PlayMode"``.
+        namespace: Optional namespace wrapper.
+        target_class: If provided, creates a ``_sut`` field and instantiates it in SetUp.
+        test_methods: List of dicts with keys: ``name``, ``body`` (optional),
+                      ``is_unity_test`` (optional bool for ``[UnityTest]``).
+        setup_body: Custom body for the ``[SetUp]`` method.
+        teardown_body: Custom body for the ``[TearDown]`` method.
+
+    Returns:
+        Complete C# NUnit test class source string.
+    """
+    safe_name = _safe_identifier(class_name)
+
+    lines: list[str] = []
+
+    # Using statements
+    usings_set: set[str] = set()
+    usings_ordered: list[str] = []
+
+    def _add_using(u: str) -> None:
+        if u not in usings_set:
+            usings_set.add(u)
+            usings_ordered.append(u)
+
+    _add_using("NUnit.Framework")
+    _add_using("UnityEngine")
+    if test_mode == "PlayMode":
+        _add_using("UnityEngine.TestTools")
+    # Check if any test method is a UnityTest (needs TestTools even in EditMode)
+    if test_methods and any(m.get("is_unity_test") for m in test_methods):
+        _add_using("UnityEngine.TestTools")
+        _add_using("System.Collections")
+
+    for u in usings_ordered:
+        lines.append(f"using {u};")
+    lines.append("")
+
+    indent = ""
+    if namespace:
+        lines.append(f"namespace {namespace}")
+        lines.append("{")
+        indent = "    "
+
+    body_indent = indent + "    "
+    body_indent2 = body_indent + "    "
+
+    lines.append(f"{indent}[TestFixture]")
+    lines.append(f"{indent}public class {safe_name}")
+    lines.append(f"{indent}{{")
+
+    # Target class field
+    if target_class:
+        safe_target = _safe_identifier(target_class)
+        lines.append(f"{body_indent}private {safe_target} _sut;")
+        lines.append("")
+
+    # SetUp
+    if setup_body or target_class:
+        lines.append(f"{body_indent}[SetUp]")
+        lines.append(f"{body_indent}public void SetUp()")
+        lines.append(f"{body_indent}{{")
+        if target_class:
+            safe_target = _safe_identifier(target_class)
+            lines.append(f"{body_indent2}_sut = new {safe_target}();")
+        if setup_body:
+            for bline in setup_body.split("\n"):
+                lines.append(f"{body_indent2}{bline}")
+        lines.append(f"{body_indent}}}")
+        lines.append("")
+
+    # TearDown
+    if teardown_body:
+        lines.append(f"{body_indent}[TearDown]")
+        lines.append(f"{body_indent}public void TearDown()")
+        lines.append(f"{body_indent}{{")
+        for bline in teardown_body.split("\n"):
+            lines.append(f"{body_indent2}{bline}")
+        lines.append(f"{body_indent}}}")
+        lines.append("")
+
+    # Test methods
+    if test_methods:
+        for i, method in enumerate(test_methods):
+            m_name = _safe_identifier(method.get("name", f"Test{i + 1}"))
+            m_body = method.get("body", "")
+            is_unity = method.get("is_unity_test", False)
+
+            if is_unity:
+                lines.append(f"{body_indent}[UnityTest]")
+                lines.append(f"{body_indent}public IEnumerator {m_name}()")
+            else:
+                lines.append(f"{body_indent}[Test]")
+                lines.append(f"{body_indent}public void {m_name}()")
+            lines.append(f"{body_indent}{{")
+            if m_body:
+                for bline in m_body.split("\n"):
+                    lines.append(f"{body_indent2}{bline}")
+            else:
+                if is_unity:
+                    lines.append(f"{body_indent2}yield return null;")
+                else:
+                    lines.append(f"{body_indent2}Assert.Pass();")
+            lines.append(f"{body_indent}}}")
+            if i < len(test_methods) - 1:
+                lines.append("")
+    else:
+        # Default test method
+        lines.append(f"{body_indent}[Test]")
+        lines.append(f"{body_indent}public void TestPlaceholder()")
+        lines.append(f"{body_indent}{{")
+        lines.append(f"{body_indent2}Assert.Pass();")
+        lines.append(f"{body_indent}}}")
+
+    lines.append(f"{indent}}}")
+    if namespace:
+        lines.append("}")
+
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# CODE-06: Service locator generator
+# ---------------------------------------------------------------------------
+
+
+def generate_service_locator(
+    namespace: str = "VeilBreakers.Patterns",
+    include_scene_persistent: bool = True,
+) -> str:
+    """Generate a static ServiceLocator class with type-based service registry.
+
+    Args:
+        namespace: Namespace wrapper (default ``VeilBreakers.Patterns``).
+        include_scene_persistent: If True, adds ``ServiceLocatorInitializer``
+            MonoBehaviour with ``[RuntimeInitializeOnLoadMethod]`` to auto-clear
+            on scene load.
+
+    Returns:
+        Complete C# source string.
+    """
+    lines: list[str] = []
+
+    lines.append("using System;")
+    lines.append("using System.Collections.Generic;")
+    lines.append("using UnityEngine;")
+    lines.append("")
+
+    indent = ""
+    if namespace:
+        lines.append(f"namespace {namespace}")
+        lines.append("{")
+        indent = "    "
+
+    body_indent = indent + "    "
+    body_indent2 = body_indent + "    "
+
+    # ServiceLocator class
+    lines.append(f"{indent}/// <summary>")
+    lines.append(f"{indent}/// Static service locator for dependency injection.")
+    lines.append(f"{indent}/// </summary>")
+    lines.append(f"{indent}public static class ServiceLocator")
+    lines.append(f"{indent}{{")
+    lines.append(f"{body_indent}private static readonly Dictionary<Type, object> _services = new();")
+    lines.append("")
+
+    # Register<T>
+    lines.append(f"{body_indent}public static void Register<T>(T service) where T : class")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}_services[typeof(T)] = service;")
+    lines.append(f"{body_indent}}}")
+    lines.append("")
+
+    # Get<T>
+    lines.append(f"{body_indent}public static T Get<T>() where T : class")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}if (_services.TryGetValue(typeof(T), out var service))")
+    lines.append(f"{body_indent2}    return (T)service;")
+    lines.append(f'{body_indent2}throw new InvalidOperationException($"Service {{typeof(T).Name}} not registered.");')
+    lines.append(f"{body_indent}}}")
+    lines.append("")
+
+    # TryGet<T>
+    lines.append(f"{body_indent}public static bool TryGet<T>(out T service) where T : class")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}if (_services.TryGetValue(typeof(T), out var obj))")
+    lines.append(f"{body_indent2}{{")
+    lines.append(f"{body_indent2}    service = (T)obj;")
+    lines.append(f"{body_indent2}    return true;")
+    lines.append(f"{body_indent2}}}")
+    lines.append(f"{body_indent2}service = null;")
+    lines.append(f"{body_indent2}return false;")
+    lines.append(f"{body_indent}}}")
+    lines.append("")
+
+    # Unregister<T>
+    lines.append(f"{body_indent}public static void Unregister<T>() where T : class")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}_services.Remove(typeof(T));")
+    lines.append(f"{body_indent}}}")
+    lines.append("")
+
+    # Clear
+    lines.append(f"{body_indent}public static void Clear()")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}_services.Clear();")
+    lines.append(f"{body_indent}}}")
+
+    lines.append(f"{indent}}}")
+
+    # ServiceLocatorInitializer
+    if include_scene_persistent:
+        lines.append("")
+        lines.append(f"{indent}/// <summary>")
+        lines.append(f"{indent}/// Auto-clears ServiceLocator on scene load to prevent stale references.")
+        lines.append(f"{indent}/// </summary>")
+        lines.append(f"{indent}public class ServiceLocatorInitializer : MonoBehaviour")
+        lines.append(f"{indent}{{")
+        lines.append(f"{body_indent}[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]")
+        lines.append(f"{body_indent}private static void Init()")
+        lines.append(f"{body_indent}{{")
+        lines.append(f"{body_indent2}ServiceLocator.Clear();")
+        lines.append(f"{body_indent}}}")
+        lines.append(f"{indent}}}")
+
+    if namespace:
+        lines.append("}")
+
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# CODE-07: Object pool generator
+# ---------------------------------------------------------------------------
+
+
+def generate_object_pool(
+    namespace: str = "VeilBreakers.Patterns",
+    include_gameobject_pool: bool = True,
+) -> str:
+    """Generate a generic ObjectPool<T> with optional GameObjectPool specialisation.
+
+    Args:
+        namespace: Namespace wrapper (default ``VeilBreakers.Patterns``).
+        include_gameobject_pool: If True, adds a ``GameObjectPool`` subclass
+            using ``Instantiate``/``SetActive`` for GameObjects.
+
+    Returns:
+        Complete C# source string.
+    """
+    lines: list[str] = []
+
+    lines.append("using System;")
+    lines.append("using System.Collections.Generic;")
+    lines.append("using UnityEngine;")
+    lines.append("")
+
+    indent = ""
+    if namespace:
+        lines.append(f"namespace {namespace}")
+        lines.append("{")
+        indent = "    "
+
+    body_indent = indent + "    "
+    body_indent2 = body_indent + "    "
+    body_indent3 = body_indent2 + "    "
+
+    # ObjectPool<T>
+    lines.append(f"{indent}/// <summary>")
+    lines.append(f"{indent}/// Generic object pool with configurable create, get, and release callbacks.")
+    lines.append(f"{indent}/// </summary>")
+    lines.append(f"{indent}public class ObjectPool<T> where T : class")
+    lines.append(f"{indent}{{")
+    lines.append(f"{body_indent}private readonly Stack<T> _available;")
+    lines.append(f"{body_indent}private readonly Func<T> _createFunc;")
+    lines.append(f"{body_indent}private readonly Action<T> _onGet;")
+    lines.append(f"{body_indent}private readonly Action<T> _onRelease;")
+    lines.append(f"{body_indent}private readonly int _maxSize;")
+    lines.append("")
+    lines.append(f"{body_indent}public int CountActive {{ get; private set; }}")
+    lines.append(f"{body_indent}public int CountInactive => _available.Count;")
+    lines.append("")
+
+    # Constructor
+    lines.append(f"{body_indent}public ObjectPool(")
+    lines.append(f"{body_indent2}Func<T> createFunc,")
+    lines.append(f"{body_indent2}Action<T> onGet = null,")
+    lines.append(f"{body_indent2}Action<T> onRelease = null,")
+    lines.append(f"{body_indent2}int initialSize = 10,")
+    lines.append(f"{body_indent2}int maxSize = 100)")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}_createFunc = createFunc ?? throw new ArgumentNullException(nameof(createFunc));")
+    lines.append(f"{body_indent2}_onGet = onGet;")
+    lines.append(f"{body_indent2}_onRelease = onRelease;")
+    lines.append(f"{body_indent2}_maxSize = maxSize;")
+    lines.append(f"{body_indent2}_available = new Stack<T>(initialSize);")
+    lines.append("")
+    lines.append(f"{body_indent2}// Warm up pool")
+    lines.append(f"{body_indent2}for (int i = 0; i < initialSize; i++)")
+    lines.append(f"{body_indent2}    _available.Push(_createFunc());")
+    lines.append(f"{body_indent}}}")
+    lines.append("")
+
+    # Get
+    lines.append(f"{body_indent}public T Get()")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}T item = _available.Count > 0 ? _available.Pop() : _createFunc();")
+    lines.append(f"{body_indent2}_onGet?.Invoke(item);")
+    lines.append(f"{body_indent2}CountActive++;")
+    lines.append(f"{body_indent2}return item;")
+    lines.append(f"{body_indent}}}")
+    lines.append("")
+
+    # Release
+    lines.append(f"{body_indent}public void Release(T item)")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}_onRelease?.Invoke(item);")
+    lines.append(f"{body_indent2}CountActive--;")
+    lines.append(f"{body_indent2}if (_available.Count < _maxSize)")
+    lines.append(f"{body_indent2}    _available.Push(item);")
+    lines.append(f"{body_indent}}}")
+
+    lines.append(f"{indent}}}")
+
+    # GameObjectPool
+    if include_gameobject_pool:
+        lines.append("")
+        lines.append(f"{indent}/// <summary>")
+        lines.append(f"{indent}/// Specialised pool for GameObjects using Instantiate/SetActive pattern.")
+        lines.append(f"{indent}/// </summary>")
+        lines.append(f"{indent}public class GameObjectPool")
+        lines.append(f"{indent}{{")
+        lines.append(f"{body_indent}private readonly ObjectPool<GameObject> _pool;")
+        lines.append(f"{body_indent}private readonly GameObject _prefab;")
+        lines.append("")
+
+        # Constructor
+        lines.append(f"{body_indent}public GameObjectPool(GameObject prefab, int initialSize = 10, int maxSize = 100)")
+        lines.append(f"{body_indent}{{")
+        lines.append(f"{body_indent2}_prefab = prefab;")
+        lines.append(f"{body_indent2}_pool = new ObjectPool<GameObject>(")
+        lines.append(f"{body_indent3}createFunc: () => UnityEngine.Object.Instantiate(_prefab),")
+        lines.append(f"{body_indent3}onGet: obj => obj.SetActive(true),")
+        lines.append(f"{body_indent3}onRelease: obj => obj.SetActive(false),")
+        lines.append(f"{body_indent3}initialSize: initialSize,")
+        lines.append(f"{body_indent3}maxSize: maxSize")
+        lines.append(f"{body_indent2});")
+        lines.append(f"{body_indent}}}")
+        lines.append("")
+
+        lines.append(f"{body_indent}public GameObject Get() => _pool.Get();")
+        lines.append(f"{body_indent}public void Release(GameObject obj) => _pool.Release(obj);")
+        lines.append(f"{body_indent}public int CountActive => _pool.CountActive;")
+        lines.append(f"{body_indent}public int CountInactive => _pool.CountInactive;")
+
+        lines.append(f"{indent}}}")
+
+    if namespace:
+        lines.append("}")
+
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# CODE-08: Singleton generator
+# ---------------------------------------------------------------------------
+
+
+def generate_singleton(
+    class_name: str,
+    singleton_type: str = "MonoBehaviour",
+    namespace: str = "VeilBreakers.Patterns",
+    persistent: bool = True,
+) -> str:
+    """Generate a singleton pattern class.
+
+    Args:
+        class_name: Name of the singleton class.
+        singleton_type: ``"MonoBehaviour"`` for Unity singleton or ``"Plain"``
+            for a thread-safe non-MonoBehaviour singleton.
+        namespace: Namespace wrapper.
+        persistent: If True (and MonoBehaviour type), adds ``DontDestroyOnLoad``.
+
+    Returns:
+        Complete C# source string.
+    """
+    safe_name = _safe_identifier(class_name)
+
+    lines: list[str] = []
+
+    if singleton_type == "MonoBehaviour":
+        lines.append("using UnityEngine;")
+    else:
+        lines.append("using System;")
+    lines.append("")
+
+    indent = ""
+    if namespace:
+        lines.append(f"namespace {namespace}")
+        lines.append("{")
+        indent = "    "
+
+    body_indent = indent + "    "
+    body_indent2 = body_indent + "    "
+
+    lines.append(f"{indent}/// <summary>")
+    lines.append(f"{indent}/// Singleton implementation for {safe_name}.")
+    lines.append(f"{indent}/// Compatible with VeilBreakers.Core.SingletonMonoBehaviour&lt;T&gt; pattern")
+    lines.append(f"{indent}/// </summary>")
+
+    if singleton_type == "MonoBehaviour":
+        lines.append(f"{indent}public class {safe_name} : MonoBehaviour")
+        lines.append(f"{indent}{{")
+        lines.append(f"{body_indent}private static {safe_name} _instance;")
+        lines.append("")
+
+        # Instance property with lazy find fallback
+        lines.append(f"{body_indent}public static {safe_name} Instance")
+        lines.append(f"{body_indent}{{")
+        lines.append(f"{body_indent2}get")
+        lines.append(f"{body_indent2}{{")
+        lines.append(f"{body_indent2}    if (_instance == null)")
+        lines.append(f"{body_indent2}        _instance = FindAnyObjectByType<{safe_name}>();")
+        lines.append(f"{body_indent2}    return _instance;")
+        lines.append(f"{body_indent2}}}")
+        lines.append(f"{body_indent}}}")
+        lines.append("")
+
+        # Awake
+        lines.append(f"{body_indent}private void Awake()")
+        lines.append(f"{body_indent}{{")
+        lines.append(f"{body_indent2}if (_instance != null && _instance != this)")
+        lines.append(f"{body_indent2}{{")
+        lines.append(f"{body_indent2}    Destroy(gameObject);")
+        lines.append(f"{body_indent2}    return;")
+        lines.append(f"{body_indent2}}}")
+        lines.append(f"{body_indent2}_instance = this;")
+        if persistent:
+            lines.append(f"{body_indent2}DontDestroyOnLoad(gameObject);")
+        lines.append(f"{body_indent}}}")
+
+        lines.append(f"{indent}}}")
+
+    else:
+        # Plain thread-safe singleton
+        lines.append(f"{indent}public class {safe_name}")
+        lines.append(f"{indent}{{")
+        lines.append(f"{body_indent}private static readonly Lazy<{safe_name}> _instance = new(() => new {safe_name}());")
+        lines.append("")
+        lines.append(f"{body_indent}public static {safe_name} Instance => _instance.Value;")
+        lines.append("")
+        lines.append(f"{body_indent}private {safe_name}() {{ }}")
+
+        lines.append(f"{indent}}}")
+
+    if namespace:
+        lines.append("}")
+
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# CODE-09: State machine generator
+# ---------------------------------------------------------------------------
+
+
+def generate_state_machine(
+    namespace: str = "VeilBreakers.Patterns",
+) -> str:
+    """Generate a generic state machine framework with IState, StateMachine, and BaseState.
+
+    Args:
+        namespace: Namespace wrapper (default ``VeilBreakers.Patterns``).
+
+    Returns:
+        Complete C# source string containing IState interface, StateMachine class,
+        and BaseState abstract class.
+    """
+    lines: list[str] = []
+
+    lines.append("using System;")
+    lines.append("using System.Collections.Generic;")
+    lines.append("")
+
+    indent = ""
+    if namespace:
+        lines.append(f"namespace {namespace}")
+        lines.append("{")
+        indent = "    "
+
+    body_indent = indent + "    "
+    body_indent2 = body_indent + "    "
+
+    # IState interface
+    lines.append(f"{indent}/// <summary>")
+    lines.append(f"{indent}/// Interface for state machine states.")
+    lines.append(f"{indent}/// </summary>")
+    lines.append(f"{indent}public interface IState")
+    lines.append(f"{indent}{{")
+    lines.append(f"{body_indent}void Enter();")
+    lines.append(f"{body_indent}void Exit();")
+    lines.append(f"{body_indent}void Update();")
+    lines.append(f"{body_indent}void FixedUpdate();")
+    lines.append(f"{indent}}}")
+    lines.append("")
+
+    # StateMachine class
+    lines.append(f"{indent}/// <summary>")
+    lines.append(f"{indent}/// Generic state machine that manages state transitions.")
+    lines.append(f"{indent}/// </summary>")
+    lines.append(f"{indent}public class StateMachine")
+    lines.append(f"{indent}{{")
+    lines.append(f"{body_indent}private IState _currentState;")
+    lines.append(f"{body_indent}private readonly Dictionary<Type, IState> _states = new();")
+    lines.append("")
+    lines.append(f"{body_indent}public IState CurrentState => _currentState;")
+    lines.append("")
+
+    # AddState
+    lines.append(f"{body_indent}public void AddState(IState state)")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}_states[state.GetType()] = state;")
+    lines.append(f"{body_indent}}}")
+    lines.append("")
+
+    # ChangeState<T>
+    lines.append(f"{body_indent}public void ChangeState<T>() where T : IState")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}if (!_states.TryGetValue(typeof(T), out var newState))")
+    lines.append(f'{body_indent2}    throw new InvalidOperationException($"State {{typeof(T).Name}} not registered.");')
+    lines.append(f"{body_indent2}_currentState?.Exit();")
+    lines.append(f"{body_indent2}_currentState = newState;")
+    lines.append(f"{body_indent2}_currentState.Enter();")
+    lines.append(f"{body_indent}}}")
+    lines.append("")
+
+    # Update
+    lines.append(f"{body_indent}public void Update()")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}_currentState?.Update();")
+    lines.append(f"{body_indent}}}")
+    lines.append("")
+
+    # FixedUpdate
+    lines.append(f"{body_indent}public void FixedUpdate()")
+    lines.append(f"{body_indent}{{")
+    lines.append(f"{body_indent2}_currentState?.FixedUpdate();")
+    lines.append(f"{body_indent}}}")
+
+    lines.append(f"{indent}}}")
+    lines.append("")
+
+    # BaseState abstract class
+    lines.append(f"{indent}/// <summary>")
+    lines.append(f"{indent}/// Abstract base state with virtual empty implementations.")
+    lines.append(f"{indent}/// </summary>")
+    lines.append(f"{indent}public abstract class BaseState : IState")
+    lines.append(f"{indent}{{")
+    lines.append(f"{body_indent}public virtual void Enter() {{ }}")
+    lines.append(f"{body_indent}public virtual void Exit() {{ }}")
+    lines.append(f"{body_indent}public virtual void Update() {{ }}")
+    lines.append(f"{body_indent}public virtual void FixedUpdate() {{ }}")
+    lines.append(f"{indent}}}")
+
+    if namespace:
+        lines.append("}")
+
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# CODE-10: ScriptableObject event channel generator
+# ---------------------------------------------------------------------------
+
+
+def generate_so_event_channel(
+    event_name: str = "",
+    has_parameter: bool = False,
+    parameter_type: str = "int",
+    namespace: str = "VeilBreakers.Events.Channels",
+) -> str:
+    """Generate ScriptableObject-based event channel system.
+
+    When ``event_name`` is empty, generates the base classes (``GameEvent``,
+    ``GameEvent<T>``, ``GameEventListener``). When ``event_name`` is provided,
+    generates a specific typed event subclass.
+
+    This system is complementary to the existing ``VeilBreakers.Core.EventBus``.
+
+    Args:
+        event_name: If empty, generates base classes. If provided, generates a
+            specific event subclass (e.g. ``PlayerDeathEvent``).
+        has_parameter: Whether the event carries a parameter value.
+        parameter_type: C# type of the parameter (e.g. ``"float"``, ``"int"``).
+        namespace: Namespace (default ``VeilBreakers.Events.Channels``).
+
+    Returns:
+        Complete C# source string.
+    """
+    lines: list[str] = []
+
+    lines.append("using System;")
+    lines.append("using UnityEngine;")
+    if not event_name:
+        lines.append("using UnityEngine.Events;")
+    lines.append("")
+
+    indent = ""
+    if namespace:
+        lines.append(f"namespace {namespace}")
+        lines.append("{")
+        indent = "    "
+
+    body_indent = indent + "    "
+    body_indent2 = body_indent + "    "
+
+    if not event_name:
+        # --- Base GameEvent (no parameter) ---
+        lines.append(f'{indent}[CreateAssetMenu(menuName = "VeilBreakers/Events/Game Event", fileName = "NewGameEvent")]')
+        lines.append(f"{indent}public class GameEvent : ScriptableObject")
+        lines.append(f"{indent}{{")
+        lines.append(f"{body_indent}private Action _onRaise;")
+        lines.append("")
+        lines.append(f"{body_indent}public void RegisterListener(Action listener) => _onRaise += listener;")
+        lines.append(f"{body_indent}public void UnregisterListener(Action listener) => _onRaise -= listener;")
+        lines.append("")
+        lines.append(f"{body_indent}public void Raise()")
+        lines.append(f"{body_indent}{{")
+        lines.append(f"{body_indent2}_onRaise?.Invoke();")
+        lines.append(f"{body_indent2}#if UNITY_EDITOR")
+        lines.append(f'{body_indent2}Debug.Log($"[GameEvent] {{name}} raised");')
+        lines.append(f"{body_indent2}#endif")
+        lines.append(f"{body_indent}}}")
+        lines.append(f"{indent}}}")
+        lines.append("")
+
+        # --- Base GameEvent<T> (typed parameter) ---
+        lines.append(f"{indent}public class GameEvent<T> : ScriptableObject")
+        lines.append(f"{indent}{{")
+        lines.append(f"{body_indent}private Action<T> _onRaise;")
+        lines.append("")
+        lines.append(f"{body_indent}public void RegisterListener(Action<T> listener) => _onRaise += listener;")
+        lines.append(f"{body_indent}public void UnregisterListener(Action<T> listener) => _onRaise -= listener;")
+        lines.append("")
+        lines.append(f"{body_indent}public void Raise(T value)")
+        lines.append(f"{body_indent}{{")
+        lines.append(f"{body_indent2}_onRaise?.Invoke(value);")
+        lines.append(f"{body_indent2}#if UNITY_EDITOR")
+        lines.append(f'{body_indent2}Debug.Log($"[GameEvent<{{typeof(T).Name}}>] {{name}} raised with {{value}}");')
+        lines.append(f"{body_indent2}#endif")
+        lines.append(f"{body_indent}}}")
+        lines.append(f"{indent}}}")
+        lines.append("")
+
+        # --- GameEventListener MonoBehaviour ---
+        lines.append(f"{indent}/// <summary>")
+        lines.append(f"{indent}/// MonoBehaviour listener that subscribes to a GameEvent and invokes a UnityEvent response.")
+        lines.append(f"{indent}/// </summary>")
+        lines.append(f"{indent}public class GameEventListener : MonoBehaviour")
+        lines.append(f"{indent}{{")
+        lines.append(f"{body_indent}[SerializeField] private GameEvent _event;")
+        lines.append(f"{body_indent}[SerializeField] private UnityEvent _response;")
+        lines.append("")
+        lines.append(f"{body_indent}private void OnEnable()")
+        lines.append(f"{body_indent}{{")
+        lines.append(f"{body_indent2}if (_event != null)")
+        lines.append(f"{body_indent2}    _event.RegisterListener(OnEventRaised);")
+        lines.append(f"{body_indent}}}")
+        lines.append("")
+        lines.append(f"{body_indent}private void OnDisable()")
+        lines.append(f"{body_indent}{{")
+        lines.append(f"{body_indent2}if (_event != null)")
+        lines.append(f"{body_indent2}    _event.UnregisterListener(OnEventRaised);")
+        lines.append(f"{body_indent}}}")
+        lines.append("")
+        lines.append(f"{body_indent}private void OnEventRaised()")
+        lines.append(f"{body_indent}{{")
+        lines.append(f"{body_indent2}_response?.Invoke();")
+        lines.append(f"{body_indent}}}")
+        lines.append(f"{indent}}}")
+
+    else:
+        # --- Specific typed event ---
+        safe_event = _safe_identifier(event_name)
+        if has_parameter:
+            safe_param = _sanitize_cs_string(parameter_type)
+            lines.append(f"{indent}/// <summary>")
+            lines.append(f"{indent}/// {safe_event} event channel carrying a {safe_param} parameter.")
+            lines.append(f"{indent}/// </summary>")
+            lines.append(f'{indent}[CreateAssetMenu(menuName = "VeilBreakers/Events/{safe_event} Event", fileName = "{safe_event}Event")]')
+            lines.append(f"{indent}public class {safe_event}Event : GameEvent<{parameter_type}>")
+            lines.append(f"{indent}{{")
+            lines.append(f"{indent}}}")
+        else:
+            lines.append(f"{indent}/// <summary>")
+            lines.append(f"{indent}/// {safe_event} event channel (no parameter).")
+            lines.append(f"{indent}/// </summary>")
+            lines.append(f'{indent}[CreateAssetMenu(menuName = "VeilBreakers/Events/{safe_event} Event", fileName = "{safe_event}Event")]')
+            lines.append(f"{indent}public class {safe_event}Event : GameEvent")
+            lines.append(f"{indent}{{")
+            lines.append(f"{indent}}}")
+
     if namespace:
         lines.append("}")
 

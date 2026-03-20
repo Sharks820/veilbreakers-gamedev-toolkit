@@ -6,6 +6,14 @@ scripts register as MenuItem commands under "VeilBreakers/Editor/...".
 
 All generated scripts write their result to Temp/vb_result.json so that
 the Python MCP server can read back the outcome after execution.
+
+Exports:
+    generate_recompile_script    -- Force Unity to recompile all scripts
+    generate_play_mode_script    -- Enter or exit Unity play mode
+    generate_screenshot_script   -- Capture game view screenshot
+    generate_console_log_script  -- Retrieve Unity console log entries
+    generate_gemini_review_script -- Export screenshot path for Gemini review
+    generate_test_runner_script  -- Run Unity tests programmatically via TestRunnerApi (CODE-05)
 """
 
 from __future__ import annotations
@@ -377,6 +385,149 @@ public static class VeilBreakers_GeminiReview
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.LogError("[VeilBreakers] Gemini review prep failed: " + ex.Message);
         }}
+    }}
+}}
+'''
+
+
+_VALID_TEST_MODES = {"EditMode", "PlayMode"}
+
+
+def generate_test_runner_script(
+    test_mode: str = "EditMode",
+    assembly_filter: str = "",
+    category_filter: str = "",
+) -> str:
+    """Generate C# editor script that runs Unity tests via TestRunnerApi.
+
+    Uses ``TestRunnerApi`` with ``ICallbacks`` to execute tests programmatically
+    and writes structured JSON results to ``Temp/vb_result.json``.
+
+    Args:
+        test_mode: ``"EditMode"`` or ``"PlayMode"``.
+        assembly_filter: Optional assembly name filter (e.g.
+            ``"VeilBreakers.Tests.EditMode"``).
+        category_filter: Optional NUnit category filter.
+
+    Returns:
+        Complete C# source string for the test runner editor script.
+
+    Raises:
+        ValueError: If test_mode is not ``"EditMode"`` or ``"PlayMode"``.
+    """
+    if test_mode not in _VALID_TEST_MODES:
+        raise ValueError(
+            f"test_mode must be one of {sorted(_VALID_TEST_MODES)}, got '{test_mode}'"
+        )
+
+    safe_mode = _sanitize_cs_string(test_mode)
+
+    # Build filter lines
+    filter_extra = ""
+    if assembly_filter:
+        safe_asm = _sanitize_cs_string(assembly_filter)
+        filter_extra += f'\n                assemblyNames = new[] {{ "{safe_asm}" }},'
+    if category_filter:
+        safe_cat = _sanitize_cs_string(category_filter)
+        filter_extra += f'\n                categories = new[] {{ "{safe_cat}" }},'
+
+    return f'''using UnityEngine;
+using UnityEditor;
+using UnityEditor.TestTools.TestRunner.Api;
+using System.IO;
+using System.Collections.Generic;
+using System.Text;
+
+public static class VeilBreakers_RunTests
+{{
+    [MenuItem("VeilBreakers/Code/Run Tests")]
+    public static void Execute()
+    {{
+        var api = ScriptableObject.CreateInstance<TestRunnerApi>();
+        var collector = new TestResultCollector();
+        api.RegisterCallbacks(collector);
+
+        api.Execute(new ExecutionSettings
+        {{
+            runSynchronously = true,
+            filters = new[] {{ new Filter
+            {{
+                testMode = TestMode.{safe_mode},{filter_extra}
+            }}}}
+        }});
+
+        string json = collector.BuildResultJson("{safe_mode}");
+        File.WriteAllText("Temp/vb_result.json", json);
+        Debug.Log("[VeilBreakers] Tests complete: " + collector.PassCount + " passed, " + collector.FailCount + " failed");
+    }}
+}}
+
+public class TestResultCollector : ICallbacks
+{{
+    public int PassCount;
+    public int FailCount;
+    public List<TestDetail> Details = new List<TestDetail>();
+
+    public void RunStarted(ITestAdaptor testsToRun) {{ }}
+    public void RunFinished(ITestResultAdaptor result)
+    {{
+        PassCount = result.PassCount;
+        FailCount = result.FailCount;
+    }}
+    public void TestStarted(ITestAdaptor test) {{ }}
+    public void TestFinished(ITestResultAdaptor result)
+    {{
+        if (!result.HasChildren)
+        {{
+            Details.Add(new TestDetail
+            {{
+                name = result.Test.FullName,
+                passed = result.TestStatus == TestStatus.Passed,
+                duration = (float)result.Duration,
+                message = result.Message ?? ""
+            }});
+        }}
+    }}
+
+    [System.Serializable]
+    public class TestDetail
+    {{
+        public string name;
+        public bool passed;
+        public float duration;
+        public string message;
+    }}
+
+    public string BuildResultJson(string testMode)
+    {{
+        var sb = new StringBuilder();
+        sb.Append("{{\\"status\\": \\"");
+        sb.Append(FailCount == 0 ? "success" : "failure");
+        sb.Append("\\", \\"action\\": \\"run_tests\\", \\"test_mode\\": \\"");
+        sb.Append(testMode);
+        sb.Append("\\", \\"pass_count\\": ");
+        sb.Append(PassCount);
+        sb.Append(", \\"fail_count\\": ");
+        sb.Append(FailCount);
+        sb.Append(", \\"tests\\": [");
+
+        for (int i = 0; i < Details.Count; i++)
+        {{
+            if (i > 0) sb.Append(", ");
+            var d = Details[i];
+            sb.Append("{{\\"name\\": \\"");
+            sb.Append(d.name.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\""));
+            sb.Append("\\", \\"passed\\": ");
+            sb.Append(d.passed ? "true" : "false");
+            sb.Append(", \\"duration\\": ");
+            sb.Append(d.duration.ToString("F4"));
+            sb.Append(", \\"message\\": \\"");
+            sb.Append((d.message ?? "").Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"").Replace("\\n", "\\\\n"));
+            sb.Append("\\"}}");
+        }}
+
+        sb.Append("]}}");
+        return sb.ToString();
     }}
 }}
 '''
