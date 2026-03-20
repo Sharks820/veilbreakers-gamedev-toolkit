@@ -68,12 +68,12 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Scene Management
 
-- [ ] **SCNE-01**: Claude can create new Unity scenes and configure scene loading (single, additive, async)
-- [ ] **SCNE-02**: Claude can generate scene transition system (loading screens, fade transitions, bootstrapper)
-- [ ] **SCNE-03**: Claude can set up reflection probes, light probes, and probe groups
-- [ ] **SCNE-04**: Claude can configure occlusion culling (mark static occluders/occludees, bake data)
-- [ ] **SCNE-05**: Claude can set up HDR skybox, environment reflections, and Global Illumination
-- [ ] **SCNE-06**: Claude can generate terrain detail painting (grass, detail meshes on Unity terrain)
+- [x] **SCNE-01**: Claude can create new Unity scenes and configure scene loading (single, additive, async)
+- [x] **SCNE-02**: Claude can generate scene transition system (loading screens, fade transitions, bootstrapper)
+- [x] **SCNE-03**: Claude can set up reflection probes, light probes, and probe groups
+- [x] **SCNE-04**: Claude can configure occlusion culling (mark static occluders/occludees, bake data)
+- [x] **SCNE-05**: Claude can set up HDR skybox, environment reflections, and Global Illumination
+- [x] **SCNE-06**: Claude can generate terrain detail painting (grass, detail meshes on Unity terrain)
 
 ### Data & Configuration
 
@@ -131,8 +131,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### 2D Systems
 
-- [ ] **TWO-01**: Claude can create and paint 2D Tilemaps with Tile Palettes and Rule Tiles
-- [ ] **TWO-02**: Claude can configure 2D Physics (Rigidbody2D, Collider2D, Physics2D settings, 2D joints)
+- [x] **TWO-01**: Claude can create and paint 2D Tilemaps with Tile Palettes and Rule Tiles
+- [x] **TWO-02**: Claude can configure 2D Physics (Rigidbody2D, Collider2D, Physics2D settings, 2D joints)
 - [x] **TWO-03**: Claude can configure Sprite Editor features (custom physics shapes, pivot, 9-slice borders)
 
 ### Physics Advanced
@@ -191,7 +191,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [ ] **WORLD-05**: Claude can generate interior-exterior linked buildings (door triggers, occlusion culling zones, lighting transitions, collision boundaries)
 - [ ] **WORLD-06**: Claude can generate multi-floor dungeon layouts with vertical progression (descending staircases, elevators, ladders, pit drops), proper ceiling heights, and navigable corridors
 - [ ] **WORLD-07**: Claude can place furniture and props at correct real-world scale (doors: 1.0-1.2m wide, ceilings: 2.8-3.5m, tables: 0.75m high, chairs to fit character model)
-- [ ] **WORLD-08**: Claude can apply time-of-day lighting presets across entire scenes (8 presets: dawn, morning, noon, afternoon, dusk, evening, night, midnight) with matching fog/atmosphere
+- [x] **WORLD-08**: Claude can apply time-of-day lighting presets across entire scenes (8 presets: dawn, morning, noon, afternoon, dusk, evening, night, midnight) with matching fog/atmosphere
 - [ ] **WORLD-09**: Claude can generate overrun/ruined variants of intact locations (add debris, broken walls, overgrown vegetation, scattered remains, damaged furniture)
 - [ ] **WORLD-10**: Claude can place easter eggs and hidden areas (secret rooms behind breakable walls, hidden paths off main routes, lore items in unexpected locations)
 
@@ -287,12 +287,12 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | CAM-02 | Phase 14 | Pending |
 | CAM-03 | Phase 14 | Pending |
 | CAM-04 | Phase 14 | Pending |
-| SCNE-01 | Phase 14 | Pending |
-| SCNE-02 | Phase 14 | Pending |
-| SCNE-03 | Phase 14 | Pending |
-| SCNE-04 | Phase 14 | Pending |
-| SCNE-05 | Phase 14 | Pending |
-| SCNE-06 | Phase 14 | Pending |
+| SCNE-01 | Phase 14 | Complete |
+| SCNE-02 | Phase 14 | Complete |
+| SCNE-03 | Phase 14 | Complete |
+| SCNE-04 | Phase 14 | Complete |
+| SCNE-05 | Phase 14 | Complete |
+| SCNE-06 | Phase 14 | Complete |
 | UIX-01 | Phase 15 | Pending |
 | UIX-02 | Phase 15 | Pending |
 | UIX-03 | Phase 15 | Pending |
@@ -317,8 +317,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | SHDR-02 | Phase 10 | Complete |
 | SHDR-03 | Phase 17 | Pending |
 | SHDR-04 | Phase 15 | Pending |
-| TWO-01 | Phase 14 | Pending |
-| TWO-02 | Phase 14 | Pending |
+| TWO-01 | Phase 14 | Complete |
+| TWO-02 | Phase 14 | Complete |
 | TWO-03 | Phase 11 | Complete |
 | PHYS-01 | Phase 9 | Complete |
 | PHYS-02 | Phase 9 | Complete |
@@ -354,7 +354,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | WORLD-05 | Phase 14 | Pending |
 | WORLD-06 | Phase 14 | Pending |
 | WORLD-07 | Phase 14 | Pending |
-| WORLD-08 | Phase 14 | Pending |
+| WORLD-08 | Phase 14 | Complete |
 | WORLD-09 | Phase 14 | Pending |
 | WORLD-10 | Phase 14 | Pending |
 
