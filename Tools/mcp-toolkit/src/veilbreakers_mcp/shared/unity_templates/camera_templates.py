@@ -160,20 +160,20 @@ def generate_cinemachine_setup_script(
         lines.append(f"{indent}        // OrbitalFollow for third-person orbit")
         lines.append(f"{indent}        CinemachineOrbitalFollow orbital = camGo.AddComponent<CinemachineOrbitalFollow>();")
         lines.append(f"{indent}        orbital.Radius = {radius}f;")
-        lines.append(f"{indent}        orbital.TargetOffset = new Vector3({target_offset[0]}f, {target_offset[1]}f, {target_offset[2]}f);")
+        lines.append(f"{indent}        orbital.OrbitOffset = new Vector3({target_offset[0]}f, {target_offset[1]}f, {target_offset[2]}f);")
         lines.append("")
         lines.append(f"{indent}        // RotationComposer for look-at tracking")
         lines.append(f"{indent}        CinemachineRotationComposer composer = camGo.AddComponent<CinemachineRotationComposer>();")
-        lines.append(f"{indent}        composer.Damping = new Vector3({damping[0]}f, {damping[1]}f, {damping[2]}f);")
+        lines.append(f"{indent}        composer.Damping = new Vector2({damping[0]}f, {damping[1]}f);")
     elif camera_type == "follow":
         lines.append(f"{indent}        // Follow for follow camera")
         lines.append(f"{indent}        CinemachineFollow follow = camGo.AddComponent<CinemachineFollow>();")
         lines.append(f"{indent}        follow.FollowOffset = new Vector3({target_offset[0]}f, {target_offset[1]}f, -{radius}f);")
-        lines.append(f"{indent}        follow.Damping = new Vector3({damping[0]}f, {damping[1]}f, {damping[2]}f);")
+        lines.append(f"{indent}        follow.TrackerSettings.PositionDamping = new Vector3({damping[0]}f, {damping[1]}f, {damping[2]}f);")
         lines.append("")
         lines.append(f"{indent}        // RotationComposer for look-at tracking")
         lines.append(f"{indent}        CinemachineRotationComposer composer = camGo.AddComponent<CinemachineRotationComposer>();")
-        lines.append(f"{indent}        composer.Damping = new Vector3({damping[0]}f, {damping[1]}f, {damping[2]}f);")
+        lines.append(f"{indent}        composer.Damping = new Vector2({damping[0]}f, {damping[1]}f);")
     elif camera_type == "dolly":
         lines.append(f"{indent}        // SplineDolly for dolly camera")
         lines.append(f"{indent}        CinemachineSplineDolly dolly = camGo.AddComponent<CinemachineSplineDolly>();")
@@ -264,7 +264,20 @@ def generate_state_driven_camera_script(
         c_name = _sanitize_cs_string(state_info.get("camera_name", "Camera"))
         lines.append(f'{indent}        GameObject child_{_sanitize_cs_identifier(s_name)} = new GameObject("{c_name}");')
         lines.append(f"{indent}        child_{_sanitize_cs_identifier(s_name)}.transform.SetParent(sdGo.transform);")
-        lines.append(f"{indent}        child_{_sanitize_cs_identifier(s_name)}.AddComponent<CinemachineCamera>();")
+        lines.append(f"{indent}        CinemachineCamera cm_{_sanitize_cs_identifier(s_name)} = child_{_sanitize_cs_identifier(s_name)}.AddComponent<CinemachineCamera>();")
+    lines.append("")
+
+    # Populate Instructions array to map animation states to child cameras
+    lines.append(f"{indent}        // Map animation states to child cameras via Instructions")
+    lines.append(f"{indent}        var instructions = new System.Collections.Generic.List<CinemachineStateDrivenCamera.Instruction>();")
+    for state_info in states:
+        s_name = _sanitize_cs_string(state_info.get("state_name", "Default"))
+        lines.append(f"{indent}        instructions.Add(new CinemachineStateDrivenCamera.Instruction")
+        lines.append(f"{indent}        {{")
+        lines.append(f'{indent}            FullHash = Animator.StringToHash("{s_name}"),')
+        lines.append(f"{indent}            Camera = cm_{_sanitize_cs_identifier(s_name)}")
+        lines.append(f"{indent}        }});")
+    lines.append(f"{indent}        sdc.Instructions = instructions.ToArray();")
     lines.append("")
 
     lines.append(f"{indent}        Undo.RegisterCreatedObjectUndo(sdGo, \"Create State-Driven Camera\");")
@@ -331,13 +344,13 @@ def generate_camera_shake_script(
     lines.append("")
 
     if add_listener:
-        lines.append(f"{indent}        // Add listener to main camera")
-        lines.append(f"{indent}        Camera mainCam = Camera.main;")
-        lines.append(f"{indent}        if (mainCam != null)")
+        lines.append(f"{indent}        // Add listener to CinemachineCamera (not the physical camera)")
+        lines.append(f"{indent}        CinemachineCamera cmCam = Object.FindFirstObjectByType<CinemachineCamera>();")
+        lines.append(f"{indent}        if (cmCam != null)")
         lines.append(f"{indent}        {{")
-        lines.append(f"{indent}            CinemachineImpulseListener listener = mainCam.GetComponent<CinemachineImpulseListener>();")
+        lines.append(f"{indent}            CinemachineImpulseListener listener = cmCam.GetComponent<CinemachineImpulseListener>();")
         lines.append(f"{indent}            if (listener == null)")
-        lines.append(f"{indent}                listener = mainCam.gameObject.AddComponent<CinemachineImpulseListener>();")
+        lines.append(f"{indent}                listener = cmCam.gameObject.AddComponent<CinemachineImpulseListener>();")
         lines.append(f"{indent}        }}")
         lines.append("")
 
@@ -1084,7 +1097,9 @@ def generate_video_player_script(
     lines.append(f"{indent}        vp.playOnAwake = {poa_str};")
     lines.append("")
 
-    # Save RenderTexture as asset
+    # Ensure output directory exists and save RenderTexture as asset
+    lines.append(f'{indent}        if (!AssetDatabase.IsValidFolder("Assets/RenderTextures"))')
+    lines.append(f'{indent}            AssetDatabase.CreateFolder("Assets", "RenderTextures");')
     lines.append(f'{indent}        AssetDatabase.CreateAsset(renderTexture, "Assets/RenderTextures/VB_VideoRT.renderTexture");')
     lines.append("")
 

@@ -992,10 +992,10 @@ def handle_equipment_render_icon(params: dict) -> dict:
     yaw_rad = math.radians(camera_angle[1])
     roll_rad = math.radians(camera_angle[2])
 
-    # Object center for camera target
+    # Object center for camera target (world space)
     obj_center = mathutils.Vector(obj.location)
     if hasattr(obj, "bound_box") and obj.bound_box:
-        bbox = [mathutils.Vector(corner) for corner in obj.bound_box]
+        bbox = [obj.matrix_world @ mathutils.Vector(corner) for corner in obj.bound_box]
         obj_center = sum(bbox, mathutils.Vector()) / 8
 
     cam_x = obj_center.x + camera_distance * math.cos(pitch_rad) * math.sin(yaw_rad)
