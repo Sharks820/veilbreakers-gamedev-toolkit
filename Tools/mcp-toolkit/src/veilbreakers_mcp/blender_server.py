@@ -853,6 +853,8 @@ async def asset_pipeline(
     action: Literal[
         "generate_3d", "cleanup", "generate_lods", "validate_export",
         "tag_metadata", "batch_process", "catalog_query", "catalog_add",
+        # Equipment operations (Phase 13 -- EQUIP-01/03/04/05)
+        "generate_weapon", "split_character", "fit_armor", "render_equipment_icon",
     ],
     # Common params
     object_name: str | None = None,
@@ -878,9 +880,18 @@ async def asset_pipeline(
     path: str | None = None,
     tags: list[str] | None = None,
     status: str | None = None,
+    # equipment params (Phase 13 -- EQUIP-01/03/04/05)
+    weapon_type: str | None = None,
+    parts: list[str] | None = None,
+    armor_object_name: str | None = None,
+    character_object_name: str | None = None,
+    resolution: int = 512,
+    camera_distance: float = 2.0,
+    camera_angle: str = "front",
+    body_types: list[str] | None = None,
     capture_viewport: bool = True,
 ):
-    """Asset pipeline management -- 3D generation, processing, LODs, catalog.
+    """Asset pipeline management -- 3D generation, processing, LODs, catalog, equipment.
 
     Actions:
     - generate_3d: Generate 3D model from text prompt or image via Tripo3D
@@ -891,6 +902,10 @@ async def asset_pipeline(
     - batch_process: Run pipeline for multiple objects
     - catalog_query: Search asset catalog by type, tags, status
     - catalog_add: Add asset to catalog database
+    - generate_weapon: Generate parametric weapon mesh (EQUIP-01)
+    - split_character: Split rigged character into modular parts (EQUIP-03)
+    - fit_armor: Fit armor mesh to character (EQUIP-04)
+    - render_equipment_icon: Render transparent equipment preview icon (EQUIP-05)
     """
     blender = get_blender_connection()
 
@@ -977,6 +992,52 @@ async def asset_pipeline(
             return json.dumps({"asset_id": new_id, "status": "added"}, indent=2)
         finally:
             catalog.close()
+
+    # --- Equipment operations (Phase 13) ---
+
+    elif action == "generate_weapon":
+        if not weapon_type:
+            return "ERROR: 'weapon_type' is required for generate_weapon"
+        params = {"weapon_type": weapon_type}
+        if object_name:
+            params["object_name"] = object_name
+        result = await blender.send_command("equipment_generate_weapon", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "split_character":
+        if not object_name:
+            return "ERROR: 'object_name' is required for split_character"
+        params = {"object_name": object_name}
+        if parts:
+            params["parts"] = parts
+        result = await blender.send_command("equipment_split_character", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "fit_armor":
+        if not armor_object_name or not character_object_name:
+            return "ERROR: 'armor_object_name' and 'character_object_name' are required for fit_armor"
+        params = {
+            "armor_object_name": armor_object_name,
+            "character_object_name": character_object_name,
+        }
+        if body_types:
+            params["body_types"] = body_types
+        result = await blender.send_command("equipment_fit_armor", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "render_equipment_icon":
+        if not object_name:
+            return "ERROR: 'object_name' is required for render_equipment_icon"
+        params = {
+            "object_name": object_name,
+            "resolution": resolution,
+            "camera_distance": camera_distance,
+            "camera_angle": camera_angle,
+        }
+        if output_path:
+            params["output_path"] = output_path
+        result = await blender.send_command("equipment_render_icon", params)
+        return json.dumps(result, indent=2, default=str)
 
     return "Unknown action"
 
