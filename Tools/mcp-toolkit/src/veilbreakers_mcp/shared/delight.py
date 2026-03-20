@@ -92,6 +92,10 @@ def delight_albedo(
 
     # Edge case: all-black or all-white images -- skip correction
     if mean_lum_before < 0.005 or mean_lum_before > 0.995:
+        try:
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        except (OSError, ValueError):
+            pass  # dirname may be empty for bare filenames
         img.save(output_path)
         return {
             "input": image_path,
@@ -147,6 +151,10 @@ def delight_albedo(
     result_uint8 = (result * 255.0).astype(np.uint8)
 
     # Save result
+    try:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    except (OSError, ValueError):
+        pass  # dirname may be empty for bare filenames
     result_img = Image.fromarray(result_uint8, "RGB")
     result_img.save(output_path)
 

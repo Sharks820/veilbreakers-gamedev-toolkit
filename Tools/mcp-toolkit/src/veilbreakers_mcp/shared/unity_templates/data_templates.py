@@ -503,8 +503,8 @@ def generate_json_validator_script(
     lines.append(f'        string filePath = Path.Combine(Application.dataPath, "{safe_path}");')
     lines.append("        if (!File.Exists(filePath))")
     lines.append("        {")
-    lines.append('            results.Add(new VB_ValidationResult {{ level = "ERROR", '
-                 'message = "File not found: " + filePath }});')
+    lines.append('            results.Add(new VB_ValidationResult { level = "ERROR", '
+                 'message = "File not found: " + filePath });')
     lines.append("            WriteResults(results);")
     lines.append("            return;")
     lines.append("        }")
@@ -577,14 +577,17 @@ def generate_json_validator_script(
                     )
 
                 if pattern and ftype == "string":
-                    safe_pattern = _sanitize_cs_string(pattern)
+                    # For @"..." verbatim strings, only escape double quotes (as "")
+                    verbatim_pattern = pattern.replace('"', '""')
+                    # For display in interpolated string, use raw pattern
+                    display_pattern = pattern.replace('"', '\\"')
                     lines.append(
                         f'            if (!string.IsNullOrEmpty(entry.{safe_field}) '
-                        f'&& !Regex.IsMatch(entry.{safe_field}, @"{safe_pattern}"))'
+                        f'&& !Regex.IsMatch(entry.{safe_field}, @"{verbatim_pattern}"))'
                     )
                     lines.append(
                         f'                results.Add(new VB_ValidationResult {{ level = "WARNING", '
-                        f'message = $"Item [{{index}}]: {safe_field} does not match pattern {safe_pattern}" }});'
+                        f'message = $"Item [{{index}}]: {safe_field} does not match pattern {display_pattern}" }});'
                     )
 
             lines.append("            index++;")
@@ -1224,6 +1227,26 @@ def generate_data_authoring_window(
             elif ftype == "bool":
                 lines.append(
                     f'            {pname} = EditorGUILayout.Toggle("{safe_label}", {pname});'
+                )
+            elif ftype == "Vector2":
+                lines.append(
+                    f'            {pname} = EditorGUILayout.Vector2Field("{safe_label}", {pname});'
+                )
+            elif ftype == "Vector3":
+                lines.append(
+                    f'            {pname} = EditorGUILayout.Vector3Field("{safe_label}", {pname});'
+                )
+            elif ftype == "Vector4":
+                lines.append(
+                    f'            {pname} = EditorGUILayout.Vector4Field("{safe_label}", {pname});'
+                )
+            elif ftype == "Color":
+                lines.append(
+                    f'            {pname} = EditorGUILayout.ColorField("{safe_label}", {pname});'
+                )
+            elif ftype == "Rect":
+                lines.append(
+                    f'            {pname} = EditorGUILayout.RectField("{safe_label}", {pname});'
                 )
             else:
                 lines.append(
