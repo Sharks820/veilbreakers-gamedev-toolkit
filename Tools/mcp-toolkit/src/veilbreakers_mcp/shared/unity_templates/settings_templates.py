@@ -98,6 +98,7 @@ def generate_physics_settings_script(
             safe_name = _sanitize_cs_identifier(name)
             safe_str = _sanitize_cs_string(name)
             layer_resolves += f'            int layer_{safe_name} = LayerMask.NameToLayer("{safe_str}");\n'
+            layer_resolves += f'            if (layer_{safe_name} == -1) {{ warnings.Add("Layer not found: {safe_str}"); }}\n'
 
         # Build collision enable/disable pairs
         collision_pairs = ""
@@ -110,9 +111,10 @@ def generate_physics_settings_script(
                 b_collides_a = name_a in collision_matrix.get(name_b, [])
                 should_collide = a_collides_b or b_collides_a
                 ignore = "false" if should_collide else "true"
-                collision_pairs += f'            Physics.IgnoreLayerCollision(layer_{safe_a}, layer_{safe_b}, {ignore});\n'
+                collision_pairs += f'            if (layer_{safe_a} != -1 && layer_{safe_b} != -1) Physics.IgnoreLayerCollision(layer_{safe_a}, layer_{safe_b}, {ignore});\n'
 
         collision_code = f"""
+            var warnings = new System.Collections.Generic.List<string>();
             // Resolve layer indices
 {layer_resolves}
             // Configure collision matrix
@@ -309,10 +311,46 @@ def generate_player_settings_script(
     if splash_path:
         safe = _sanitize_cs_string(splash_path)
         settings_lines.append(
-            f'            var splashLogo = AssetDatabase.LoadAssetAtPath<Texture2D>("{safe}");'
+            f'            // Load sprite from asset path (persistent) instead of creating non-persistent Sprite'
         )
         settings_lines.append(
-            '            if (splashLogo != null)'
+            f'            var splashSprite = AssetDatabase.LoadAssetAtPath<Sprite>("{safe}");'
+        )
+        settings_lines.append(
+            f'            if (splashSprite == null)'
+        )
+        settings_lines.append(
+            '            {'
+        )
+        settings_lines.append(
+            f'                // Ensure TextureImporter has sprite mode enabled so we can load as Sprite'
+        )
+        settings_lines.append(
+            f'                var texImporter = AssetImporter.GetAtPath("{safe}") as TextureImporter;'
+        )
+        settings_lines.append(
+            '                if (texImporter != null && texImporter.textureType != TextureImporterType.Sprite)'
+        )
+        settings_lines.append(
+            '                {'
+        )
+        settings_lines.append(
+            '                    texImporter.textureType = TextureImporterType.Sprite;'
+        )
+        settings_lines.append(
+            '                    texImporter.SaveAndReimport();'
+        )
+        settings_lines.append(
+            f'                    splashSprite = AssetDatabase.LoadAssetAtPath<Sprite>("{safe}");'
+        )
+        settings_lines.append(
+            '                }'
+        )
+        settings_lines.append(
+            '            }'
+        )
+        settings_lines.append(
+            '            if (splashSprite != null)'
         )
         settings_lines.append(
             '            {'
@@ -324,7 +362,7 @@ def generate_player_settings_script(
             '                var logoList = new System.Collections.Generic.List<UnityEditor.PlayerSettings.SplashScreenLogo>(logo);'
         )
         settings_lines.append(
-            '                logoList.Add(UnityEditor.PlayerSettings.SplashScreenLogo.Create(2.0f, Sprite.Create(splashLogo, new Rect(0, 0, splashLogo.width, splashLogo.height), Vector2.one * 0.5f)));'
+            '                logoList.Add(UnityEditor.PlayerSettings.SplashScreenLogo.Create(2.0f, splashSprite));'
         )
         settings_lines.append(
             '                UnityEditor.PlayerSettings.SplashScreen.logos = logoList.ToArray();'
@@ -967,7 +1005,7 @@ def generate_tag_layer_script(
                     sortingLayersProp.InsertArrayElementAtIndex(sortingLayersProp.arraySize);
                     var newEntry = sortingLayersProp.GetArrayElementAtIndex(sortingLayersProp.arraySize - 1);
                     newEntry.FindPropertyRelative("name").stringValue = "{safe}";
-                    newEntry.FindPropertyRelative("uniqueID").intValue = (int)(System.DateTime.Now.Ticks % int.MaxValue) + {int(hashlib.md5(sl.encode()).hexdigest()[:8], 16) % 10000};
+                    newEntry.FindPropertyRelative("uniqueID").intValue = {int(hashlib.md5(sl.encode()).hexdigest()[:8], 16) & 0x7FFFFFFF};
                     sortingLayersAdded++;
                 }}
 """

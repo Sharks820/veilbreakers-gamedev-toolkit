@@ -311,9 +311,12 @@ public static class VeilBreakers_CreatePrefab_{safe_name}
             var go = new GameObject("{safe_display_name}");
             Undo.RegisterCreatedObjectUndo(go, "Create Prefab {safe_display_name}");
 
-            // Set layer and tag
-            go.tag = "{default_tag}";
-            go.layer = LayerMask.NameToLayer("{default_layer}");
+            // Set layer and tag (with validation)
+            try {{ go.tag = "{default_tag}"; }}
+            catch (UnityException) {{ warnings.Add("Tag not found: {default_tag}"); }}
+            int layerIdx = LayerMask.NameToLayer("{default_layer}");
+            if (layerIdx != -1) go.layer = layerIdx;
+            else warnings.Add("Layer not found: {default_layer}");
 
             // Add auto-wired components
 {comp_code}
@@ -1070,7 +1073,14 @@ public static class VeilBreakers_Hierarchy_{safe_op}
 {selector_code}
 
             Undo.RecordObject(target, "Set Layer");
-            target.gameObject.layer = LayerMask.NameToLayer("{layer_name}");
+            int layerIdx = LayerMask.NameToLayer("{layer_name}");
+            if (layerIdx == -1)
+            {{
+                string errJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"hierarchy\\", \\"message\\": \\"Layer not found: {layer_name}\\"}}";
+                File.WriteAllText("Temp/vb_result.json", errJson);
+                return;
+            }}
+            target.gameObject.layer = layerIdx;
             changedAssets.Add(target.name);
 
             string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
@@ -1106,7 +1116,13 @@ public static class VeilBreakers_Hierarchy_{safe_op}
 {selector_code}
 
             Undo.RecordObject(target, "Set Tag");
-            target.gameObject.tag = "{tag_name}";
+            try {{ target.gameObject.tag = "{tag_name}"; }}
+            catch (UnityException)
+            {{
+                string errJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"hierarchy\\", \\"message\\": \\"Tag not found: {tag_name}\\"}}";
+                File.WriteAllText("Temp/vb_result.json", errJson);
+                return;
+            }}
             changedAssets.Add(target.name);
 
             string changedJson = "[" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"") + "\\"")) + "]";
@@ -1531,7 +1547,17 @@ def generate_joint_setup_script(
         safe_key = _sanitize_cs_identifier(key)
         safe_val = _sanitize_cs_string(str(val))
         if key == "physics_material":
-            config_lines.append(f'''            var physMat = new PhysicMaterial("{safe_val}");
+            config_lines.append(f'''            // Load or create persistent PhysicMaterial asset
+            string physMatDir = "Assets/Physics";
+            if (!AssetDatabase.IsValidFolder(physMatDir))
+                AssetDatabase.CreateFolder("Assets", "Physics");
+            string physMatPath = physMatDir + "/{safe_val}.asset";
+            var physMat = AssetDatabase.LoadAssetAtPath<PhysicMaterial>(physMatPath);
+            if (physMat == null)
+            {{
+                physMat = new PhysicMaterial("{safe_val}");
+                AssetDatabase.CreateAsset(physMat, physMatPath);
+            }}
             var col = target.GetComponent<Collider>();
             if (col != null) col.material = physMat;''')
         else:
@@ -1856,8 +1882,10 @@ public static class VeilBreakers_BoneSockets
                 if (animator != null && animator.isHuman)
                 {{
                     var boneName = boneMap[socketName];
-                    System.Enum.TryParse<HumanBodyBones>(boneName, out var humanBone);
-                    boneTransform = animator.GetBoneTransform(humanBone);
+                    if (System.Enum.TryParse<HumanBodyBones>(boneName, out var humanBone))
+                    {{
+                        boneTransform = animator.GetBoneTransform(humanBone);
+                    }}
                 }}
 
                 // Fallback: recursive deep search of all descendants
@@ -2037,13 +2065,10 @@ public static class VeilBreakers_JobScript
 
         selector_code = _resolve_selector_snippet(selector)
         # Rename 'target' to unique per step to avoid conflicts
+        # Use word-boundary-aware replacement via regex to avoid partial matches
         step_target = f"target_{step_num}"
-        selector_code = selector_code.replace("GameObject target", f"GameObject {step_target}")
-        selector_code = selector_code.replace("target =", f"{step_target} =")
-        selector_code = selector_code.replace("target !", f"{step_target} !")
-        selector_code = selector_code.replace("if (target", f"if ({step_target}")
-        selector_code = selector_code.replace("target.", f"{step_target}.")
-        selector_code = selector_code.replace("target)", f"{step_target})")
+        import re as _re
+        selector_code = _re.sub(r'\btarget\b', step_target, selector_code)
         # In job context, selector failure should throw instead of return
         # to be caught by step-level try/catch and continue to next step
         selector_code = selector_code.replace(
@@ -2115,12 +2140,20 @@ public static class VeilBreakers_JobScript
 
         elif action == "hierarchy":
             hier_op = op.get("operation", "create_empty")
-            step_blocks.append(f'''
-                // Step {step_num}: Hierarchy operation {hier_op}
+            hier_name = _sanitize_cs_string(op.get("name", "NewEmpty"))
+            hier_new_name = _sanitize_cs_string(op.get("new_name", "Renamed"))
+            hier_parent = _sanitize_cs_string(op.get("parent_name", ""))
+            hier_layer = _sanitize_cs_string(op.get("layer", "Default"))
+            hier_tag = _sanitize_cs_string(op.get("tag", "Untagged"))
+            hier_active = "true" if hier_op == "enable" else "false"
+
+            if hier_op == "create_empty":
+                step_blocks.append(f'''
+                // Step {step_num}: Hierarchy create_empty
                 try
                 {{
-{selector_code}
-                    Undo.RecordObject({step_target}, "Job: Hierarchy {hier_op}");
+                    var {step_target} = new GameObject("{hier_name}");
+                    Undo.RegisterCreatedObjectUndo({step_target}, "Job: Create Empty");
                     changedAssets.Add({step_target}.name);
                     steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"success\\"}}");
                 }}
@@ -2128,6 +2161,104 @@ public static class VeilBreakers_JobScript
                 {{
                     steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"error\\", \\"message\\": \\"" + ex_{step_num}.Message.Replace("\\"", "\\\\\\"") + "\\"}}");
                 }}''')
+            elif hier_op == "rename":
+                step_blocks.append(f'''
+                // Step {step_num}: Hierarchy rename
+                try
+                {{
+{selector_code}
+                    Undo.RecordObject({step_target}, "Job: Rename");
+                    {step_target}.name = "{hier_new_name}";
+                    changedAssets.Add({step_target}.name);
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"success\\"}}");
+                }}
+                catch (System.Exception ex_{step_num})
+                {{
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"error\\", \\"message\\": \\"" + ex_{step_num}.Message.Replace("\\"", "\\\\\\"") + "\\"}}");
+                }}''')
+            elif hier_op == "reparent":
+                step_blocks.append(f'''
+                // Step {step_num}: Hierarchy reparent
+                try
+                {{
+{selector_code}
+                    var parent_{step_num} = GameObject.Find("{hier_parent}");
+                    if (parent_{step_num} == null) throw new System.Exception("Parent not found: {hier_parent}");
+                    Undo.RecordObject({step_target}.transform, "Job: Reparent");
+                    {step_target}.transform.SetParent(parent_{step_num}.transform);
+                    changedAssets.Add({step_target}.name);
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"success\\"}}");
+                }}
+                catch (System.Exception ex_{step_num})
+                {{
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"error\\", \\"message\\": \\"" + ex_{step_num}.Message.Replace("\\"", "\\\\\\"") + "\\"}}");
+                }}''')
+            elif hier_op in ("enable", "disable"):
+                step_blocks.append(f'''
+                // Step {step_num}: Hierarchy {hier_op}
+                try
+                {{
+{selector_code}
+                    Undo.RecordObject({step_target}, "Job: {hier_op.title()}");
+                    {step_target}.SetActive({hier_active});
+                    changedAssets.Add({step_target}.name);
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"success\\"}}");
+                }}
+                catch (System.Exception ex_{step_num})
+                {{
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"error\\", \\"message\\": \\"" + ex_{step_num}.Message.Replace("\\"", "\\\\\\"") + "\\"}}");
+                }}''')
+            elif hier_op == "set_layer":
+                step_blocks.append(f'''
+                // Step {step_num}: Hierarchy set_layer
+                try
+                {{
+{selector_code}
+                    Undo.RecordObject({step_target}, "Job: Set Layer");
+                    int layerIdx_{step_num} = LayerMask.NameToLayer("{hier_layer}");
+                    if (layerIdx_{step_num} == -1) throw new System.Exception("Layer not found: {hier_layer}");
+                    {step_target}.layer = layerIdx_{step_num};
+                    changedAssets.Add({step_target}.name);
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"success\\"}}");
+                }}
+                catch (System.Exception ex_{step_num})
+                {{
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"error\\", \\"message\\": \\"" + ex_{step_num}.Message.Replace("\\"", "\\\\\\"") + "\\"}}");
+                }}''')
+            elif hier_op == "set_tag":
+                step_blocks.append(f'''
+                // Step {step_num}: Hierarchy set_tag
+                try
+                {{
+{selector_code}
+                    Undo.RecordObject({step_target}, "Job: Set Tag");
+                    try {{ {step_target}.tag = "{hier_tag}"; }}
+                    catch (UnityException) {{ throw new System.Exception("Tag not found: {hier_tag}"); }}
+                    changedAssets.Add({step_target}.name);
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"success\\"}}");
+                }}
+                catch (System.Exception ex_{step_num})
+                {{
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"error\\", \\"message\\": \\"" + ex_{step_num}.Message.Replace("\\"", "\\\\\\"") + "\\"}}");
+                }}''')
+            elif hier_op == "delete":
+                step_blocks.append(f'''
+                // Step {step_num}: Hierarchy delete
+                try
+                {{
+{selector_code}
+                    Undo.DestroyObjectImmediate({step_target});
+                    changedAssets.Add("{hier_name}");
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"success\\"}}");
+                }}
+                catch (System.Exception ex_{step_num})
+                {{
+                    steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"error\\", \\"message\\": \\"" + ex_{step_num}.Message.Replace("\\"", "\\\\\\"") + "\\"}}");
+                }}''')
+            else:
+                step_blocks.append(f'''
+                // Step {step_num}: Hierarchy unknown operation {hier_op}
+                steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"skipped\\", \\"message\\": \\"Unknown hierarchy operation: {hier_op}\\"}}");''')
 
         elif action == "setup_joints":
             jt = _sanitize_cs_identifier(op.get("joint_type", "HingeJoint"))
