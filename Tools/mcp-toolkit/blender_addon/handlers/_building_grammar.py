@@ -10,6 +10,12 @@ Provides:
 - apply_ruins_damage(): damage existing building specs
 - generate_interior_layout(): furniture placement for room types
 - MODULAR_CATALOG + generate_modular_pieces(): snap-together architecture kit
+- FURNITURE_SCALE_REFERENCE: real-world scale constraints for validation (WORLD-07)
+- 16 room types (8 original + 8 new: blacksmith, guard_barracks, treasury,
+  war_room, alchemy_lab, torture_chamber, crypt, dining_hall) (WORLD-02)
+- validate_furniture_scale(): dimension validation against reference (WORLD-07)
+- _STORYTELLING_PROPS + add_storytelling_props(): layer-3 narrative clutter (AAA-05)
+- generate_overrun_variant(): narrative debris beyond structural damage (WORLD-09)
 """
 
 from __future__ import annotations
@@ -70,6 +76,23 @@ STYLE_CONFIGS: dict[str, dict] = {
         "details": ["vine_growth", "moss_patches", "root_buttress"],
     },
 }
+
+# ---------------------------------------------------------------------------
+# Furniture Scale Reference (WORLD-07)
+# ---------------------------------------------------------------------------
+
+FURNITURE_SCALE_REFERENCE: dict[str, dict[str, tuple[float, float]]] = {
+    "door": {"width": (1.0, 1.2), "height": (2.0, 2.2)},
+    "ceiling": {"height": (2.8, 3.5)},
+    "table": {"height": (0.72, 0.78), "width": (0.8, 1.8)},
+    "chair": {"height": (0.45, 0.50), "seat_depth": (0.4, 0.5)},
+    "bed": {"width": (0.9, 1.8), "length": (1.9, 2.1), "height": (0.45, 0.55)},
+    "shelf": {"depth": (0.3, 0.4), "height": (1.5, 2.0)},
+    "barrel": {"diameter": (0.4, 0.6), "height": (0.8, 1.0)},
+    "crate": {"size": (0.4, 0.8)},
+    "torch_sconce": {"height": (1.5, 1.8), "protrusion": (0.15, 0.25)},
+}
+
 
 # ---------------------------------------------------------------------------
 # BuildingSpec dataclass
@@ -931,6 +954,83 @@ _ROOM_CONFIGS: dict[str, list[tuple[str, str, tuple[float, float], float]]] = {
         ("candelabra", "center", (0.3, 0.3), 1.5),
         ("banner", "wall", (0.8, 0.1), 2.5),
     ],
+    # ---- 8 new room types (WORLD-02) ----
+    "blacksmith": [
+        ("anvil", "center", (0.7, 0.5), 0.75),
+        ("forge", "wall", (1.5, 0.8), 1.2),
+        ("workbench", "wall", (1.5, 0.6), 0.78),
+        ("weapon_rack", "wall", (1.8, 0.4), 1.8),
+        ("tool_rack", "wall", (1.2, 0.35), 1.6),
+        ("bellows", "wall", (0.6, 0.5), 1.0),
+    ],
+    "guard_barracks": [
+        ("bunk_bed", "wall", (1.0, 1.9), 1.8),
+        ("bunk_bed", "wall", (1.0, 1.9), 1.8),
+        ("bunk_bed", "wall", (1.0, 1.9), 1.8),
+        ("weapon_rack", "wall", (1.8, 0.4), 1.8),
+        ("armor_stand", "corner", (0.6, 0.6), 1.8),
+        ("table", "center", (1.2, 1.2), 0.75),
+        ("footlocker", "wall", (0.8, 0.5), 0.45),
+    ],
+    "treasury": [
+        ("coin_pile", "center", (0.8, 0.8), 0.4),
+        ("display_case", "wall", (1.5, 0.5), 1.5),
+        ("locked_chest", "center", (0.7, 0.5), 0.5),
+        ("locked_chest", "center", (0.7, 0.5), 0.5),
+        ("locked_chest", "center", (0.7, 0.5), 0.5),
+        ("chandelier", "center", (0.6, 0.6), 0.3),
+        ("safe", "wall", (0.6, 0.5), 1.0),
+    ],
+    "war_room": [
+        ("large_table", "center", (1.8, 1.2), 0.78),
+        ("map_display", "center", (1.4, 0.8), 0.05),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("banner", "wall", (0.8, 0.1), 2.5),
+        ("banner", "wall", (0.8, 0.1), 2.5),
+        ("banner", "wall", (0.8, 0.1), 2.5),
+        ("candelabra", "center", (0.3, 0.3), 1.2),
+    ],
+    "alchemy_lab": [
+        ("workbench", "center", (1.5, 0.6), 0.78),
+        ("shelf_with_bottles", "wall", (1.8, 0.35), 1.8),
+        ("shelf_with_bottles", "wall", (1.8, 0.35), 1.8),
+        ("cauldron", "center", (0.8, 0.8), 0.7),
+        ("herb_rack", "wall", (1.2, 0.35), 1.6),
+        ("distillation_apparatus", "wall", (0.8, 0.5), 1.2),
+    ],
+    "torture_chamber": [
+        ("rack", "center", (2.0, 0.8), 1.0),
+        ("iron_maiden", "wall", (0.8, 0.6), 2.0),
+        ("chains", "wall", (0.3, 0.3), 1.8),
+        ("brazier", "center", (0.5, 0.5), 0.8),
+        ("cage", "corner", (1.2, 1.2), 2.0),
+    ],
+    "crypt": [
+        ("sarcophagus", "center", (1.0, 2.0), 0.9),
+        ("sarcophagus", "center", (1.0, 2.0), 0.9),
+        ("wall_tomb", "wall", (1.2, 0.6), 0.9),
+        ("wall_tomb", "wall", (1.2, 0.6), 0.9),
+        ("candelabra", "corner", (0.3, 0.3), 1.5),
+        ("altar", "wall", (1.5, 0.8), 1.2),
+    ],
+    "dining_hall": [
+        ("long_table", "center", (1.8, 4.0), 0.75),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chandelier", "center", (0.6, 0.6), 0.3),
+        ("fireplace", "wall", (1.5, 0.8), 1.8),
+        ("serving_table", "wall", (1.5, 0.6), 0.75),
+        ("banner", "wall", (0.8, 0.1), 2.5),
+    ],
 }
 
 
@@ -1161,6 +1261,356 @@ def generate_modular_pieces(
             "origin": catalog_entry["origin"],
             "connection_points": scaled_cps,
             "cell_size": cell_size,
+        })
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Furniture Scale Validation (WORLD-07)
+# ---------------------------------------------------------------------------
+
+# Mapping from furniture item types to FURNITURE_SCALE_REFERENCE keys and
+# which dimensions should be checked: (ref_key, [(item_dim_index, ref_dim)])
+_FURNITURE_SCALE_MAP: dict[str, list[tuple[str, str, int]]] = {
+    # (ref_category, ref_dimension, item_tuple_index)
+    # item_tuple_index: 0=width(sx), 1=depth(sy), 2=height(item_height)
+    "table": [("table", "height", 2), ("table", "width", 0)],
+    "large_table": [("table", "height", 2), ("table", "width", 0)],
+    "long_table": [("table", "height", 2), ("table", "width", 0)],
+    "serving_table": [("table", "height", 2)],
+    "desk": [("table", "height", 2)],
+    "workbench": [("table", "height", 2)],
+    "chair": [("chair", "height", 2)],
+    "bed": [("bed", "height", 2), ("bed", "width", 0), ("bed", "length", 1)],
+    "bunk_bed": [("bed", "width", 0)],
+    "cot": [("bed", "width", 0)],
+    "shelf": [("shelf", "height", 2), ("shelf", "depth", 1)],
+    "bookshelf": [("shelf", "height", 2)],
+    "shelf_with_bottles": [("shelf", "height", 2), ("shelf", "depth", 1)],
+    "herb_rack": [("shelf", "depth", 1)],
+    "tool_rack": [("shelf", "depth", 1)],
+    "barrel": [("barrel", "height", 2), ("barrel", "diameter", 0)],
+    "crate": [("crate", "size", 0)],
+    "footlocker": [("crate", "size", 0)],
+}
+
+
+def validate_furniture_scale(
+    room_type: str,
+    ceiling_height: float = 3.0,
+) -> list[str]:
+    """Validate furniture in *room_type* against FURNITURE_SCALE_REFERENCE.
+
+    Returns list of violation strings (empty if all valid).
+    Also validates ceiling height against reference.
+    """
+    violations: list[str] = []
+
+    # Ceiling height check
+    ceil_ref = FURNITURE_SCALE_REFERENCE["ceiling"]["height"]
+    if not (ceil_ref[0] <= ceiling_height <= ceil_ref[1]):
+        violations.append(
+            f"ceiling height {ceiling_height} outside range "
+            f"[{ceil_ref[0]}, {ceil_ref[1]}]"
+        )
+
+    config = _ROOM_CONFIGS.get(room_type)
+    if config is None:
+        return violations
+
+    for item_type, _rule, base_size, item_height in config:
+        checks = _FURNITURE_SCALE_MAP.get(item_type, [])
+        for ref_category, ref_dimension, dim_index in checks:
+            ref_range = FURNITURE_SCALE_REFERENCE.get(ref_category, {}).get(ref_dimension)
+            if ref_range is None:
+                continue
+            # Get actual value from the item tuple
+            if dim_index == 0:
+                actual = base_size[0]
+            elif dim_index == 1:
+                actual = base_size[1]
+            else:
+                actual = item_height
+
+            lo, hi = ref_range
+            if not (lo <= actual <= hi):
+                violations.append(
+                    f"{room_type}/{item_type}: {ref_dimension} = {actual} "
+                    f"outside [{lo}, {hi}]"
+                )
+
+    return violations
+
+
+# ---------------------------------------------------------------------------
+# Storytelling Props (AAA-05)
+# ---------------------------------------------------------------------------
+
+_STORYTELLING_PROPS: dict[str, dict] = {
+    "cobwebs": {"placement": "corner", "density": 0.3},
+    "bloodstains": {"placement": "floor_random", "density": 0.1},
+    "scattered_papers": {"placement": "near_table", "density": 0.2},
+    "broken_pottery": {"placement": "floor_random", "density": 0.15},
+    "dust_piles": {"placement": "corner", "density": 0.2},
+    "candle_stubs": {"placement": "near_table", "density": 0.25},
+    "wall_cracks": {"placement": "wall", "density": 0.15},
+    "rat_bones": {"placement": "corner", "density": 0.05},
+}
+
+# Room-type density modifiers: multiply base density by these factors.
+# Missing rooms get factor 1.0 (neutral).
+_ROOM_PROP_MODIFIERS: dict[str, dict[str, float]] = {
+    "crypt": {
+        "cobwebs": 2.0,
+        "rat_bones": 3.0,
+        "dust_piles": 2.0,
+        "bloodstains": 0.5,
+        "scattered_papers": 0.2,
+    },
+    "kitchen": {
+        "bloodstains": 0.1,
+        "broken_pottery": 2.0,
+        "scattered_papers": 0.3,
+    },
+    "library": {
+        "scattered_papers": 3.0,
+        "candle_stubs": 2.0,
+        "broken_pottery": 0.3,
+        "bloodstains": 0.1,
+    },
+    "torture_chamber": {
+        "bloodstains": 3.0,
+        "rat_bones": 2.0,
+        "cobwebs": 1.5,
+    },
+    "dining_hall": {
+        "broken_pottery": 1.5,
+        "candle_stubs": 2.0,
+        "bloodstains": 0.2,
+    },
+    "treasury": {
+        "dust_piles": 2.0,
+        "cobwebs": 1.5,
+        "bloodstains": 0.1,
+        "scattered_papers": 0.5,
+    },
+    "alchemy_lab": {
+        "broken_pottery": 2.5,
+        "scattered_papers": 2.0,
+        "candle_stubs": 1.5,
+    },
+    "guard_barracks": {
+        "scattered_papers": 0.5,
+        "dust_piles": 0.5,
+    },
+}
+
+
+def add_storytelling_props(
+    room_type: str,
+    room_width: float,
+    room_depth: float,
+    density_modifier: float = 1.0,
+    seed: int = 0,
+) -> list[dict]:
+    """Generate storytelling prop placements for a room.
+
+    Returns list of dicts with: prop_type, position (x, y, z), placement_rule.
+    Different room types produce different prop distributions via modifiers.
+    """
+    rng = random.Random(seed)
+    props: list[dict] = []
+
+    modifiers = _ROOM_PROP_MODIFIERS.get(room_type, {})
+
+    for prop_name, prop_info in _STORYTELLING_PROPS.items():
+        base_density = prop_info["density"]
+        room_mod = modifiers.get(prop_name, 1.0)
+        effective_density = base_density * room_mod * density_modifier
+
+        # Number of this prop type to place (Poisson-like: density * area factor)
+        expected_count = effective_density * 3  # 3 = nominal area factor
+        count = 0
+        for _ in range(max(1, int(expected_count + 1))):
+            if rng.random() < effective_density:
+                count += 1
+
+        placement = prop_info["placement"]
+        for _ in range(count):
+            if placement == "corner":
+                # Pick a corner with slight offset
+                cx = rng.choice([0.3, room_width - 0.3])
+                cy = rng.choice([0.3, room_depth - 0.3])
+            elif placement == "floor_random":
+                cx = rng.uniform(0.5, room_width - 0.5)
+                cy = rng.uniform(0.5, room_depth - 0.5)
+            elif placement == "near_table":
+                # Center area where tables typically are
+                cx = rng.uniform(room_width * 0.25, room_width * 0.75)
+                cy = rng.uniform(room_depth * 0.25, room_depth * 0.75)
+            elif placement == "wall":
+                wall = rng.randint(0, 3)
+                if wall == 0:
+                    cx = rng.uniform(0.5, room_width - 0.5)
+                    cy = 0.1
+                elif wall == 1:
+                    cx = rng.uniform(0.5, room_width - 0.5)
+                    cy = room_depth - 0.1
+                elif wall == 2:
+                    cx = 0.1
+                    cy = rng.uniform(0.5, room_depth - 0.5)
+                else:
+                    cx = room_width - 0.1
+                    cy = rng.uniform(0.5, room_depth - 0.5)
+            else:
+                cx = rng.uniform(0.5, room_width - 0.5)
+                cy = rng.uniform(0.5, room_depth - 0.5)
+
+            props.append({
+                "prop_type": prop_name,
+                "position": [round(cx, 4), round(cy, 4), 0.0],
+                "placement_rule": placement,
+            })
+
+    return props
+
+
+# ---------------------------------------------------------------------------
+# Overrun Variant (WORLD-09)
+# ---------------------------------------------------------------------------
+
+# Types of narrative debris added by overrun generation
+_OVERRUN_DEBRIS_TYPES = [
+    "rubble_pile", "fallen_beam", "collapsed_wall_section",
+    "broken_furniture", "shattered_crate",
+]
+
+_OVERRUN_VEGETATION_TYPES = [
+    "ivy_growth", "moss_patch", "vine_curtain",
+    "root_intrusion", "mushroom_cluster", "fern_growth",
+]
+
+_OVERRUN_REMAINS_TYPES = [
+    "scattered_bones", "torn_banner", "rusted_weapon",
+    "broken_shield", "skull", "tattered_cloth",
+]
+
+
+def generate_overrun_variant(
+    layout: list[dict],
+    room_width: float,
+    room_depth: float,
+    corruption_level: float = 0.5,
+    seed: int = 0,
+) -> list[dict]:
+    """Generate an overrun variant of an existing interior layout.
+
+    Extends *layout* with narrative debris, broken walls, vegetation, and
+    scattered remains.  Higher *corruption_level* (0.0--1.0) produces more
+    destruction.  The original furniture items are preserved but some may be
+    marked as ``damaged``.
+
+    Returns a new list combining original items + overrun additions.
+    """
+    rng = random.Random(seed)
+    result: list[dict] = []
+
+    # 1. Copy original items, optionally marking some as damaged
+    for item in layout:
+        item_copy = dict(item)
+        if rng.random() < corruption_level * 0.6:
+            item_copy["damaged"] = True
+        result.append(item_copy)
+
+    # 2. Add debris (scales with corruption)
+    n_debris = max(1, int(corruption_level * 8))
+    for _ in range(n_debris):
+        debris_type = rng.choice(_OVERRUN_DEBRIS_TYPES)
+        result.append({
+            "type": debris_type,
+            "position": [
+                round(rng.uniform(0.3, room_width - 0.3), 4),
+                round(rng.uniform(0.3, room_depth - 0.3), 4),
+                0.0,
+            ],
+            "rotation": round(rng.uniform(0, math.pi * 2), 4),
+            "scale": [
+                round(rng.uniform(0.3, 1.0), 4),
+                round(rng.uniform(0.3, 1.0), 4),
+                round(rng.uniform(0.1, 0.5), 4),
+            ],
+            "role": "debris",
+        })
+
+    # 3. Add broken wall segments (high corruption only)
+    if corruption_level >= 0.3:
+        n_walls = max(1, int(corruption_level * 4))
+        for _ in range(n_walls):
+            wall = rng.randint(0, 3)
+            if wall == 0:
+                wx = rng.uniform(0.5, room_width - 0.5)
+                wy = 0.0
+            elif wall == 1:
+                wx = rng.uniform(0.5, room_width - 0.5)
+                wy = room_depth
+            elif wall == 2:
+                wx = 0.0
+                wy = rng.uniform(0.5, room_depth - 0.5)
+            else:
+                wx = room_width
+                wy = rng.uniform(0.5, room_depth - 0.5)
+            result.append({
+                "type": "broken_wall",
+                "position": [round(wx, 4), round(wy, 4), 0.0],
+                "rotation": 0.0,
+                "scale": [
+                    round(rng.uniform(1.0, 2.5), 4),
+                    round(rng.uniform(0.2, 0.5), 4),
+                    round(rng.uniform(0.5, 2.0), 4),
+                ],
+                "role": "broken_wall",
+            })
+
+    # 4. Add vegetation overgrowth (moderate+ corruption)
+    if corruption_level >= 0.4:
+        n_veg = max(1, int(corruption_level * 6))
+        for _ in range(n_veg):
+            veg_type = rng.choice(_OVERRUN_VEGETATION_TYPES)
+            result.append({
+                "type": veg_type,
+                "position": [
+                    round(rng.uniform(0.2, room_width - 0.2), 4),
+                    round(rng.uniform(0.2, room_depth - 0.2), 4),
+                    0.0,
+                ],
+                "rotation": round(rng.uniform(0, math.pi * 2), 4),
+                "scale": [
+                    round(rng.uniform(0.3, 1.2), 4),
+                    round(rng.uniform(0.3, 1.2), 4),
+                    round(rng.uniform(0.2, 1.0), 4),
+                ],
+                "role": "vegetation",
+            })
+
+    # 5. Add scattered remains
+    n_remains = max(1, int(corruption_level * 5))
+    for _ in range(n_remains):
+        remains_type = rng.choice(_OVERRUN_REMAINS_TYPES)
+        result.append({
+            "type": remains_type,
+            "position": [
+                round(rng.uniform(0.5, room_width - 0.5), 4),
+                round(rng.uniform(0.5, room_depth - 0.5), 4),
+                0.0,
+            ],
+            "rotation": round(rng.uniform(0, math.pi * 2), 4),
+            "scale": [
+                round(rng.uniform(0.2, 0.6), 4),
+                round(rng.uniform(0.2, 0.6), 4),
+                round(rng.uniform(0.05, 0.2), 4),
+            ],
+            "role": "remains",
         })
 
     return result
