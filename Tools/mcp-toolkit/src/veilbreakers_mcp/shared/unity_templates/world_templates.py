@@ -299,6 +299,7 @@ def generate_scene_transition_script(
     rt: list[str] = []
     rt.append("using UnityEngine;")
     rt.append("using UnityEngine.SceneManagement;")
+    rt.append("using UnityEngine.UI;")
     rt.append("using UnityEngine.UIElements;")
     rt.append("using System;")
     rt.append("using System.Collections;")
