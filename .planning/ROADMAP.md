@@ -1,7 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-20 (Phase 11 planned)
+**Updated:** 2026-03-20 (Phase 11 complete)
 
 ## Milestones
 
@@ -30,7 +30,7 @@
 
 - [ ] **Phase 9: Unity Editor Deep Control** - Prefabs, components, hierarchy, physics, project settings, packages, import configuration, asset operations
 - [ ] **Phase 10: C# Programming Framework** - General-purpose code generation, script modification, editor tooling, test framework, architecture patterns
-- [ ] **Phase 11: Data Architecture & Asset Pipeline** - ScriptableObjects, JSON config, localization, game data tools, Git LFS, normal map baking, sprite atlasing
+- [x] **Phase 11: Data Architecture & Asset Pipeline** - ScriptableObjects, JSON config, localization, game data tools, Git LFS, normal map baking, sprite atlasing
 - [ ] **Phase 12: Core Game Systems** - Save/load, health/damage, character controller, Input System, settings menu
 - [ ] **Phase 13: Content & Progression Systems** - Inventory, dialogue, quests, loot tables, crafting, skill trees, combat balancing
 - [ ] **Phase 14: Camera, Cinematics & Scene Management** - Cinemachine, Timeline, cutscenes, scene loading, lighting, probes, terrain detail
@@ -229,8 +229,8 @@ Plans:
 Plans:
 - [ ] 11-01-PLAN.md -- Data architecture: SO definitions, .asset instantiation, JSON validation, localization, data authoring tools (DATA-01, DATA-02, DATA-03, DATA-04)
 - [ ] 11-02-PLAN.md -- Asset pipeline: Git LFS config, normal map baking, sprite atlas, sprite editor, AssetPostprocessor (IMP-03, IMP-04, BUILD-06, TWO-03, PIPE-08)
-- [ ] 11-03-PLAN.md -- AAA quality: albedo de-lighting, poly budgets, palette validation, master materials, texture quality (AAA-01, AAA-02, AAA-03, AAA-04, AAA-06)
-- [ ] 11-04-PLAN.md -- Compound tool wiring: unity_data + unity_quality + unity_pipeline tools, blender_texture extensions, syntax tests
+- [x] 11-03-PLAN.md -- AAA quality: albedo de-lighting, poly budgets, palette validation, master materials, texture quality (AAA-01, AAA-02, AAA-03, AAA-04, AAA-06)
+- [x] 11-04-PLAN.md -- Compound tool wiring: unity_data + unity_quality + unity_pipeline tools, blender_texture extensions, syntax tests
 
 ### Phase 12: Core Game Systems
 **Goal**: Claude can generate the foundational game systems every Unity project needs -- save/load persistence, health/damage, character movement, input configuration, and settings menus
@@ -361,3 +361,4 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 *v2.0 phases added: 2026-03-19*
 *Phase 10 planned: 2026-03-20*
 *Phase 11 planned: 2026-03-20*
+*Phase 11 complete: 2026-03-20*
