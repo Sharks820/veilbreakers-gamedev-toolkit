@@ -37,6 +37,56 @@ def _sanitize_cs_identifier(value: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# C# reserved words
+# ---------------------------------------------------------------------------
+
+_CS_RESERVED = frozenset({
+    "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char",
+    "checked", "class", "const", "continue", "decimal", "default", "delegate",
+    "do", "double", "else", "enum", "event", "explicit", "extern", "false",
+    "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit",
+    "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
+    "new", "null", "object", "operator", "out", "override", "params", "private",
+    "protected", "public", "readonly", "ref", "return", "sbyte", "sealed",
+    "short", "sizeof", "stackalloc", "static", "string", "struct", "switch",
+    "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
+    "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+})
+
+
+def _safe_namespace(ns: str) -> str:
+    """Sanitize a C# namespace to prevent code injection.
+
+    Valid C# namespaces allow only letters, digits, underscores, and dots.
+    Strips everything else. Segments starting with a digit get a ``_``
+    prefix, and segments that are C# reserved words get an ``@`` prefix.
+
+    Args:
+        ns: Raw namespace string.
+
+    Returns:
+        Sanitized namespace string safe for C# ``namespace`` declarations.
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9_.]", "", ns)
+    # Strip leading/trailing dots and collapse consecutive dots
+    sanitized = re.sub(r"\.{2,}", ".", sanitized).strip(".")
+    if not sanitized:
+        return "Generated"
+    # Validate each segment: fix leading-digit and reserved-word segments
+    segments = sanitized.split(".")
+    fixed: list[str] = []
+    for seg in segments:
+        if not seg:
+            continue
+        if seg[0].isdigit():
+            seg = f"_{seg}"
+        if seg in _CS_RESERVED:
+            seg = f"@{seg}"
+        fixed.append(seg)
+    return ".".join(fixed) or "Generated"
+
+
+# ---------------------------------------------------------------------------
 # GAME-01: Save system (JSON + AES-CBC + migration)
 # ---------------------------------------------------------------------------
 
@@ -64,7 +114,6 @@ def generate_save_system_script(
     Returns:
         Complete C# source string.
     """
-    safe_ns = _sanitize_cs_identifier(namespace.replace(".", "_"))
     lines = []
 
     # Using directives
@@ -78,7 +127,7 @@ def generate_save_system_script(
     lines.append("using System.Text;")
     lines.append("using UnityEngine;")
     lines.append("")
-    lines.append("namespace " + _sanitize_cs_string(namespace))
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
 
     # SaveSlot class
@@ -527,7 +576,7 @@ def generate_health_system_script(
     if use_damage_numbers:
         lines.append("using TMPro;")
     lines.append("")
-    lines.append("namespace " + _sanitize_cs_string(namespace))
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
 
     lines.append("    /// <summary>")
@@ -783,7 +832,7 @@ def generate_character_controller_script(
     lines.append("using UnityEngine;")
     lines.append("using Unity.Cinemachine;")
     lines.append("")
-    lines.append("namespace " + _sanitize_cs_string(namespace))
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
 
     # VB_CharacterController
@@ -1021,6 +1070,9 @@ def generate_input_config_script(
         Tuple of (input_actions_json: str, input_config_cs: str).
     """
     import json as json_mod
+
+    # action_maps is accepted for API compatibility; built-in maps are always generated
+    _ = action_maps
 
     # ---------------------------------------------------------------
     # Build .inputactions JSON
@@ -1361,7 +1413,7 @@ def generate_input_config_script(
     cs_lines.append("using UnityEngine;")
     cs_lines.append("using UnityEngine.InputSystem;")
     cs_lines.append("")
-    cs_lines.append("namespace " + _sanitize_cs_string(namespace))
+    cs_lines.append("namespace " + _safe_namespace(namespace))
     cs_lines.append("{")
     cs_lines.append("    /// <summary>")
     cs_lines.append("    /// Input configuration wrapper for Unity Input System.")
@@ -1564,6 +1616,9 @@ def generate_settings_menu_script(
     if categories is None:
         categories = ["Graphics", "Audio", "Controls", "Accessibility"]
 
+    # theme is accepted for API compatibility but USS is currently always dark_fantasy
+    _ = theme
+
     # ---------------------------------------------------------------
     # C# SettingsMenu
     # ---------------------------------------------------------------
@@ -1573,7 +1628,7 @@ def generate_settings_menu_script(
     cs.append("using UnityEngine.Audio;")
     cs.append("using UnityEngine.UIElements;")
     cs.append("")
-    cs.append("namespace " + _sanitize_cs_string(namespace))
+    cs.append("namespace " + _safe_namespace(namespace))
     cs.append("{")
 
     # SettingsData class
@@ -1641,30 +1696,44 @@ def generate_settings_menu_script(
     cs.append("        {")
     cs.append("            if (_root == null) return;")
     cs.append("")
+    cs.append("            // Unregister all existing callbacks to prevent stacking on rebind")
+    cs.append("            UnregisterAllCallbacks();")
+    cs.append("")
     if "Graphics" in categories:
         cs.append("            // Graphics")
         cs.append("            var qualityDropdown = _root.Q<DropdownField>(\"quality-dropdown\");")
         cs.append("            if (qualityDropdown != null)")
         cs.append("            {")
         cs.append("                qualityDropdown.index = _settings.qualityLevel;")
-        cs.append("                qualityDropdown.RegisterValueChangedCallback(evt =>")
-        cs.append("                    _pendingSettings.qualityLevel = qualityDropdown.index);")
+        cs.append("                qualityDropdown.RegisterValueChangedCallback(_onQualityChanged);")
+        cs.append("            }")
+        cs.append("")
+        cs.append("            var resolutionDropdown = _root.Q<DropdownField>(\"resolution-dropdown\");")
+        cs.append("            if (resolutionDropdown != null)")
+        cs.append("            {")
+        cs.append("                resolutionDropdown.index = Mathf.Max(0, _settings.resolutionIndex);")
+        cs.append("                resolutionDropdown.RegisterValueChangedCallback(_onResolutionChanged);")
         cs.append("            }")
         cs.append("")
         cs.append("            var fullscreenToggle = _root.Q<Toggle>(\"fullscreen-toggle\");")
         cs.append("            if (fullscreenToggle != null)")
         cs.append("            {")
         cs.append("                fullscreenToggle.value = _settings.fullscreen;")
-        cs.append("                fullscreenToggle.RegisterValueChangedCallback(evt =>")
-        cs.append("                    _pendingSettings.fullscreen = evt.newValue);")
+        cs.append("                fullscreenToggle.RegisterValueChangedCallback(_onFullscreenChanged);")
         cs.append("            }")
         cs.append("")
         cs.append("            var vsyncToggle = _root.Q<Toggle>(\"vsync-toggle\");")
         cs.append("            if (vsyncToggle != null)")
         cs.append("            {")
         cs.append("                vsyncToggle.value = _settings.vsync;")
-        cs.append("                vsyncToggle.RegisterValueChangedCallback(evt =>")
-        cs.append("                    _pendingSettings.vsync = evt.newValue);")
+        cs.append("                vsyncToggle.RegisterValueChangedCallback(_onVsyncChanged);")
+        cs.append("            }")
+        cs.append("")
+        cs.append("            var shadowDropdown = _root.Q<DropdownField>(\"shadow-quality-dropdown\");")
+        cs.append("            if (shadowDropdown != null)")
+        cs.append("            {")
+        cs.append("                shadowDropdown.index = _settings.shadowQuality;")
+        cs.append("                shadowDropdown.RegisterValueChangedCallback(_onShadowChanged);")
         cs.append("            }")
         cs.append("")
 
@@ -1684,16 +1753,14 @@ def generate_settings_menu_script(
         cs.append("            if (colorblindDropdown != null)")
         cs.append("            {")
         cs.append("                colorblindDropdown.index = _settings.colorblindMode;")
-        cs.append("                colorblindDropdown.RegisterValueChangedCallback(evt =>")
-        cs.append("                    _pendingSettings.colorblindMode = colorblindDropdown.index);")
+        cs.append("                colorblindDropdown.RegisterValueChangedCallback(_onColorblindChanged);")
         cs.append("            }")
         cs.append("")
         cs.append("            var highContrastToggle = _root.Q<Toggle>(\"high-contrast-toggle\");")
         cs.append("            if (highContrastToggle != null)")
         cs.append("            {")
         cs.append("                highContrastToggle.value = _settings.highContrast;")
-        cs.append("                highContrastToggle.RegisterValueChangedCallback(evt =>")
-        cs.append("                    _pendingSettings.highContrast = evt.newValue);")
+        cs.append("                highContrastToggle.RegisterValueChangedCallback(_onHighContrastChanged);")
         cs.append("            }")
         cs.append("")
 
@@ -1702,6 +1769,53 @@ def generate_settings_menu_script(
     cs.append("            _root.Q<Button>(\"apply-button\")?.RegisterCallback<ClickEvent>(evt => ApplyPending());")
     cs.append("            _root.Q<Button>(\"revert-button\")?.RegisterCallback<ClickEvent>(evt => RevertPending());")
     cs.append("            _root.Q<Button>(\"defaults-button\")?.RegisterCallback<ClickEvent>(evt => ResetToDefaults());")
+    cs.append("        }")
+    cs.append("")
+
+    # Named callback methods (so they can be unregistered)
+    cs.append("        // Named callback delegates for unregistration")
+    cs.append("        private void _onQualityChanged(ChangeEvent<string> evt)")
+    cs.append("        {")
+    cs.append("            var dd = _root.Q<DropdownField>(\"quality-dropdown\");")
+    cs.append("            if (dd != null) _pendingSettings.qualityLevel = dd.index;")
+    cs.append("        }")
+    cs.append("")
+    cs.append("        private void _onResolutionChanged(ChangeEvent<string> evt)")
+    cs.append("        {")
+    cs.append("            var dd = _root.Q<DropdownField>(\"resolution-dropdown\");")
+    cs.append("            if (dd != null) _pendingSettings.resolutionIndex = dd.index;")
+    cs.append("        }")
+    cs.append("")
+    cs.append("        private void _onFullscreenChanged(ChangeEvent<bool> evt)")
+    cs.append("        { _pendingSettings.fullscreen = evt.newValue; }")
+    cs.append("")
+    cs.append("        private void _onVsyncChanged(ChangeEvent<bool> evt)")
+    cs.append("        { _pendingSettings.vsync = evt.newValue; }")
+    cs.append("")
+    cs.append("        private void _onShadowChanged(ChangeEvent<string> evt)")
+    cs.append("        {")
+    cs.append("            var dd = _root.Q<DropdownField>(\"shadow-quality-dropdown\");")
+    cs.append("            if (dd != null) _pendingSettings.shadowQuality = dd.index;")
+    cs.append("        }")
+    cs.append("")
+    cs.append("        private void _onColorblindChanged(ChangeEvent<string> evt)")
+    cs.append("        {")
+    cs.append("            var dd = _root.Q<DropdownField>(\"colorblind-dropdown\");")
+    cs.append("            if (dd != null) _pendingSettings.colorblindMode = dd.index;")
+    cs.append("        }")
+    cs.append("")
+    cs.append("        private void _onHighContrastChanged(ChangeEvent<bool> evt)")
+    cs.append("        { _pendingSettings.highContrast = evt.newValue; }")
+    cs.append("")
+    cs.append("        private void UnregisterAllCallbacks()")
+    cs.append("        {")
+    cs.append("            _root.Q<DropdownField>(\"quality-dropdown\")?.UnregisterValueChangedCallback(_onQualityChanged);")
+    cs.append("            _root.Q<DropdownField>(\"resolution-dropdown\")?.UnregisterValueChangedCallback(_onResolutionChanged);")
+    cs.append("            _root.Q<Toggle>(\"fullscreen-toggle\")?.UnregisterValueChangedCallback(_onFullscreenChanged);")
+    cs.append("            _root.Q<Toggle>(\"vsync-toggle\")?.UnregisterValueChangedCallback(_onVsyncChanged);")
+    cs.append("            _root.Q<DropdownField>(\"shadow-quality-dropdown\")?.UnregisterValueChangedCallback(_onShadowChanged);")
+    cs.append("            _root.Q<DropdownField>(\"colorblind-dropdown\")?.UnregisterValueChangedCallback(_onColorblindChanged);")
+    cs.append("            _root.Q<Toggle>(\"high-contrast-toggle\")?.UnregisterValueChangedCallback(_onHighContrastChanged);")
     cs.append("        }")
     cs.append("")
 
@@ -1727,6 +1841,16 @@ def generate_settings_menu_script(
     cs.append("            QualitySettings.SetQualityLevel(data.qualityLevel);")
     cs.append("            Screen.fullScreen = data.fullscreen;")
     cs.append("            QualitySettings.vSyncCount = data.vsync ? 1 : 0;")
+    cs.append("")
+    cs.append("            // Resolution")
+    cs.append("            if (data.resolutionIndex >= 0 && data.resolutionIndex < Screen.resolutions.Length)")
+    cs.append("            {")
+    cs.append("                Resolution res = Screen.resolutions[data.resolutionIndex];")
+    cs.append("                Screen.SetResolution(res.width, res.height, Screen.fullScreen);")
+    cs.append("            }")
+    cs.append("")
+    cs.append("            // Shadow quality (0=Disable, 1=HardOnly, 2=All)")
+    cs.append("            QualitySettings.shadows = (ShadowQuality)Mathf.Clamp(data.shadowQuality, 0, 2);")
     cs.append("")
     cs.append("            // Audio (AudioMixer exposed parameters)")
     cs.append("            if (_audioMixer != null)")
@@ -1800,7 +1924,7 @@ def generate_settings_menu_script(
     # UXML
     # ---------------------------------------------------------------
     uxml = []
-    uxml.append('<ui:UXML xmlns:ui="UnityEngine.UIElements" xmlns:uie="UnityEditor.UIElements">')
+    uxml.append('<ui:UXML xmlns:ui="UnityEngine.UIElements">')
     uxml.append('    <ui:VisualElement name="settings-root" class="settings-panel">')
     uxml.append('        <ui:Label text="Settings" class="settings-title" />')
     uxml.append('        <ui:ScrollView>')
@@ -1961,7 +2085,7 @@ def generate_http_client_script(
     lines.append("using UnityEngine;")
     lines.append("using UnityEngine.Networking;")
     lines.append("")
-    lines.append("namespace " + _sanitize_cs_string(namespace))
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
 
     # HttpResponse<T>
@@ -2265,6 +2389,9 @@ def generate_interactable_script(
     Returns:
         Complete C# source string.
     """
+    # interactable_types is accepted for API compatibility; built-in types always generated
+    _ = interactable_types
+
     lines = []
 
     lines.append("using System;")
@@ -2272,7 +2399,7 @@ def generate_interactable_script(
     lines.append("using UnityEngine;")
     lines.append("using UnityEngine.Events;")
     lines.append("")
-    lines.append("namespace " + _sanitize_cs_string(namespace))
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
 
     # InteractableType enum
@@ -2350,12 +2477,20 @@ def generate_interactable_script(
     lines.append("        public bool IsLocked => _isLocked;")
     lines.append("")
 
+    # Reset (editor-only: auto-generate ID when component is first added)
+    lines.append("        /// <summary>Called in Editor when component is first added or reset.</summary>")
+    lines.append("        private void Reset()")
+    lines.append("        {")
+    lines.append("            if (string.IsNullOrEmpty(_interactableId))")
+    lines.append("                _interactableId = Guid.NewGuid().ToString();")
+    lines.append("        }")
+    lines.append("")
+
     # Awake
     lines.append("        private void Awake()")
     lines.append("        {")
-    lines.append("            // Generate GUID if not set")
     lines.append("            if (string.IsNullOrEmpty(_interactableId))")
-    lines.append("                _interactableId = Guid.NewGuid().ToString();")
+    lines.append("                Debug.LogWarning(\"[VB_Interactable] \" + gameObject.name + \" has no interactableId. Assign one in the Inspector for save/load.\");")
     lines.append("")
     lines.append("            // Setup trigger collider for proximity detection")
     lines.append("            SphereCollider trigger = GetComponent<SphereCollider>();")
@@ -2481,11 +2616,13 @@ def generate_interactable_script(
     lines.append("        /// <summary>Restore state from save string.</summary>")
     lines.append("        public void LoadSaveState(string state)")
     lines.append("        {")
+    lines.append("            if (string.IsNullOrEmpty(state)) return;")
+    lines.append("")
     lines.append("            string[] parts = state.Split('|');")
     lines.append("            if (parts.Length >= 3 && parts[0] == _interactableId)")
     lines.append("            {")
     lines.append("                if (int.TryParse(parts[1], out int stateInt))")
-    lines.append("                    _currentState = (InteractState)stateInt;")
+    lines.append("                    SetState((InteractState)stateInt);")
     lines.append("                if (int.TryParse(parts[2], out int lockedInt))")
     lines.append("                    _isLocked = lockedInt == 1;")
     lines.append("            }")
