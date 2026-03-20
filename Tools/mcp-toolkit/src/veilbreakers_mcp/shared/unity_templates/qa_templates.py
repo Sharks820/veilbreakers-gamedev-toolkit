@@ -1444,6 +1444,360 @@ def generate_profiler_handler(
 
 
 # ---------------------------------------------------------------------------
+# generate_memory_leak_script
+# ---------------------------------------------------------------------------
+
+def generate_memory_leak_script(
+    growth_threshold_mb: int = 10,
+    sample_interval_seconds: int = 5,
+    sample_count: int = 10,
+    namespace: str = "",
+) -> str:
+    """Generate VBMemoryLeakDetector.cs: managed/native memory leak detector.
+
+    Creates a C# editor script that uses ``ProfilerRecorder`` to capture
+    memory snapshots at intervals during Play Mode. Compares baseline vs
+    final usage, computes growth rate, and flags leaks if total growth
+    exceeds the threshold.
+
+    Args:
+        growth_threshold_mb: Memory growth threshold in MB to flag a leak.
+        sample_interval_seconds: Seconds between memory samples.
+        sample_count: Number of samples to take.
+        namespace: Optional C# namespace to wrap the class in.
+
+    Returns:
+        Complete C# source string for VBMemoryLeakDetector.cs.
+    """
+    lines: list[str] = [
+        "using UnityEngine;",
+        "using UnityEditor;",
+        "using Unity.Profiling;",
+        "using System;",
+        "using System.Collections;",
+        "using System.Collections.Generic;",
+        "using System.IO;",
+        "using System.Text;",
+        "",
+        "public class VBMemoryLeakDetector",
+        "{",
+        "    private static bool _sampling;",
+        "    private static int _samplesTaken;",
+        "    private static int _targetSamples = " + str(int(sample_count)) + ";",
+        "    private static float _sampleIntervalSeconds = " + str(float(sample_interval_seconds)) + "f;",
+        "    private static float _growthThresholdMb = " + str(float(growth_threshold_mb)) + "f;",
+        "    private static float _nextSampleTime;",
+        "",
+        "    private static ProfilerRecorder _gcMemoryRecorder;",
+        "    private static ProfilerRecorder _sysMemoryRecorder;",
+        "",
+        "    private static double _managedBaselineMb;",
+        "    private static double _nativeBaselineMb;",
+        "    private static double _peakManagedMb;",
+        "    private static double _peakNativeMb;",
+        "",
+        "    private static List<Dictionary<string, object>> _samples = new List<Dictionary<string, object>>();",
+        "",
+        '    [MenuItem("VeilBreakers/QA/Detect Memory Leaks")]',
+        "    public static void Execute()",
+        "    {",
+        "        if (!EditorApplication.isPlaying)",
+        "        {",
+        '            UnityEngine.Debug.LogWarning("[VBMemoryLeakDetector] Must be in Play Mode to detect memory leaks. Enter Play Mode first.");',
+        "            return;",
+        "        }",
+        "",
+        "        _samplesTaken = 0;",
+        "        _samples.Clear();",
+        "        _peakManagedMb = 0;",
+        "        _peakNativeMb = 0;",
+        "",
+        '        _gcMemoryRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "GC Reserved Memory");',
+        '        _sysMemoryRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "System Used Memory");',
+        "",
+        "        // Capture baseline",
+        "        _managedBaselineMb = _gcMemoryRecorder.LastValue / (1024.0 * 1024.0);",
+        "        _nativeBaselineMb = _sysMemoryRecorder.LastValue / (1024.0 * 1024.0);",
+        "",
+        "        _nextSampleTime = Time.realtimeSinceStartup + _sampleIntervalSeconds;",
+        "        _sampling = true;",
+        "        EditorApplication.update += SampleMemory;",
+        '        UnityEngine.Debug.Log("[VBMemoryLeakDetector] Started sampling. Baseline: managed="',
+        '            + _managedBaselineMb.ToString("F1") + "MB, native="',
+        '            + _nativeBaselineMb.ToString("F1") + "MB");',
+        "    }",
+        "",
+        "    static void SampleMemory()",
+        "    {",
+        "        if (!_sampling) return;",
+        "",
+        "        if (!EditorApplication.isPlaying)",
+        "        {",
+        "            FinishSampling();",
+        "            return;",
+        "        }",
+        "",
+        "        if (Time.realtimeSinceStartup < _nextSampleTime) return;",
+        "",
+        "        double managedMb = _gcMemoryRecorder.LastValue / (1024.0 * 1024.0);",
+        "        double nativeMb = _sysMemoryRecorder.LastValue / (1024.0 * 1024.0);",
+        "",
+        "        if (managedMb > _peakManagedMb) _peakManagedMb = managedMb;",
+        "        if (nativeMb > _peakNativeMb) _peakNativeMb = nativeMb;",
+        "",
+        "        var sample = new Dictionary<string, object>",
+        "        {",
+        '            ["timestamp"] = Time.realtimeSinceStartup,',
+        '            ["managed_mb"] = managedMb,',
+        '            ["native_mb"] = nativeMb,',
+        '            ["delta_managed"] = managedMb - _managedBaselineMb,',
+        '            ["delta_native"] = nativeMb - _nativeBaselineMb',
+        "        };",
+        "        _samples.Add(sample);",
+        "",
+        "        _samplesTaken++;",
+        "        _nextSampleTime = Time.realtimeSinceStartup + _sampleIntervalSeconds;",
+        "",
+        "        if (_samplesTaken >= _targetSamples)",
+        "        {",
+        "            FinishSampling();",
+        "        }",
+        "    }",
+        "",
+        "    static void FinishSampling()",
+        "    {",
+        "        _sampling = false;",
+        "        EditorApplication.update -= SampleMemory;",
+        "",
+        "        double finalManagedMb = _gcMemoryRecorder.LastValue / (1024.0 * 1024.0);",
+        "        double finalNativeMb = _sysMemoryRecorder.LastValue / (1024.0 * 1024.0);",
+        "",
+        "        _gcMemoryRecorder.Dispose();",
+        "        _sysMemoryRecorder.Dispose();",
+        "",
+        "        double growthManaged = finalManagedMb - _managedBaselineMb;",
+        "        double growthNative = finalNativeMb - _nativeBaselineMb;",
+        "        double totalGrowth = growthManaged + growthNative;",
+        "        double totalTime = _samplesTaken * _sampleIntervalSeconds;",
+        "        double growthRate = totalTime > 0 ? totalGrowth / totalTime : 0;",
+        "        bool leakDetected = totalGrowth > _growthThresholdMb;",
+        "",
+        "        // Build JSON",
+        "        var sb = new StringBuilder();",
+        '        sb.Append("{");',
+        '        sb.Append("\\"baseline\\": {");',
+        '        sb.Append("\\"managed_mb\\": " + _managedBaselineMb.ToString("F2") + ", ");',
+        '        sb.Append("\\"native_mb\\": " + _nativeBaselineMb.ToString("F2"));',
+        '        sb.Append("}, ");',
+        "",
+        '        sb.Append("\\"final\\": {");',
+        '        sb.Append("\\"managed_mb\\": " + finalManagedMb.ToString("F2") + ", ");',
+        '        sb.Append("\\"native_mb\\": " + finalNativeMb.ToString("F2"));',
+        '        sb.Append("}, ");',
+        "",
+        '        sb.Append("\\"growth\\": {");',
+        '        sb.Append("\\"managed_mb\\": " + growthManaged.ToString("F2") + ", ");',
+        '        sb.Append("\\"native_mb\\": " + growthNative.ToString("F2") + ", ");',
+        '        sb.Append("\\"total_mb\\": " + totalGrowth.ToString("F2"));',
+        '        sb.Append("}, ");',
+        "",
+        '        sb.Append("\\"growth_rate_per_second_mb\\": " + growthRate.ToString("F4") + ", ");',
+        '        sb.Append("\\"leak_detected\\": " + (leakDetected ? "true" : "false") + ", ");',
+        '        sb.Append("\\"threshold_mb\\": " + _growthThresholdMb + ", ");',
+        '        sb.Append("\\"peak_managed_mb\\": " + _peakManagedMb.ToString("F2") + ", ");',
+        '        sb.Append("\\"peak_native_mb\\": " + _peakNativeMb.ToString("F2") + ", ");',
+        "",
+        '        sb.Append("\\"samples\\": [");',
+        "        for (int i = 0; i < _samples.Count; i++)",
+        "        {",
+        "            var s = _samples[i];",
+        '            if (i > 0) sb.Append(", ");',
+        '            sb.Append("{");',
+        '            sb.Append("\\"timestamp\\": " + s["timestamp"] + ", ");',
+        '            sb.Append("\\"managed_mb\\": " + s["managed_mb"] + ", ");',
+        '            sb.Append("\\"native_mb\\": " + s["native_mb"] + ", ");',
+        '            sb.Append("\\"delta_managed\\": " + s["delta_managed"] + ", ");',
+        '            sb.Append("\\"delta_native\\": " + s["delta_native"]);',
+        '            sb.Append("}");',
+        "        }",
+        '        sb.Append("]");',
+        "",
+        '        sb.Append("}");',
+        '        File.WriteAllText("Temp/vb_memory_results.json", sb.ToString());',
+        "",
+        "        string status = leakDetected ? \"LEAK DETECTED\" : \"No leak detected\";",
+        '        UnityEngine.Debug.Log("[VBMemoryLeakDetector] " + status',
+        '            + ". Growth: " + totalGrowth.ToString("F2") + "MB"',
+        '            + " (threshold: " + _growthThresholdMb + "MB)");',
+        "    }",
+        "}",
+    ]
+
+    lines = _wrap_namespace(lines, namespace)
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# analyze_csharp_static (Python-side static analysis)
+# ---------------------------------------------------------------------------
+
+ANTI_PATTERNS: dict[str, dict] = {
+    "camera_main_in_update": {
+        "pattern": r"Camera\.main",
+        "context": r"void\s+(Update|FixedUpdate|LateUpdate)\s*\(",
+        "severity": "warning",
+        "message": "Camera.main in Update loop -- cache in Awake/Start",
+        "fix": "private Camera _mainCam; void Awake() { _mainCam = Camera.main; }",
+    },
+    "getcomponent_in_update": {
+        "pattern": r"GetComponent<\w+>\(\)",
+        "context": r"void\s+(Update|FixedUpdate|LateUpdate)\s*\(",
+        "severity": "warning",
+        "message": "GetComponent in Update loop -- cache in Awake/Start",
+        "fix": "Cache the component in a field during Awake() or Start()",
+    },
+    "find_object_at_runtime": {
+        "pattern": r"FindObjectOfType|FindObjectsOfType|FindFirstObjectByType",
+        "context": r"void\s+(Update|FixedUpdate|LateUpdate|OnTrigger|OnCollision)",
+        "severity": "error",
+        "message": "FindObjectOfType in hot path -- use cached references",
+        "fix": "Cache the reference in Awake/Start or use dependency injection",
+    },
+    "string_concat_in_update": {
+        "pattern": r'\+\s*"[^"]*"|\"\s*\+',
+        "context": r"void\s+(Update|FixedUpdate|LateUpdate)\s*\(",
+        "severity": "info",
+        "message": "String concatenation in Update -- use StringBuilder or interpolation cache",
+        "fix": "Use StringBuilder or cache the formatted string",
+    },
+    "linq_in_update": {
+        "pattern": r"\.(Where|Select|Any|All|First|Last|Count|OrderBy|GroupBy|ToList|ToArray)\s*\(",
+        "context": r"void\s+(Update|FixedUpdate|LateUpdate)\s*\(",
+        "severity": "warning",
+        "message": "LINQ in Update loop -- allocates enumerators each frame",
+        "fix": "Pre-compute LINQ results or use manual loops",
+    },
+    "new_allocation_in_update": {
+        "pattern": r"\bnew\s+\w+[\[\(]",
+        "context": r"void\s+(Update|FixedUpdate|LateUpdate)\s*\(",
+        "severity": "warning",
+        "message": "Allocation in Update loop -- consider object pooling",
+        "fix": "Use object pooling or pre-allocate collections",
+    },
+}
+
+# Hot method names that indicate performance-critical code paths
+_HOT_METHODS = frozenset({
+    "Update", "FixedUpdate", "LateUpdate",
+    "OnTriggerEnter", "OnTriggerStay", "OnTriggerExit",
+    "OnCollisionEnter", "OnCollisionStay", "OnCollisionExit",
+})
+
+
+def analyze_csharp_static(
+    source_code: str,
+    file_path: str = "<unknown>",
+) -> dict:
+    """Perform regex-based static analysis on C# source code.
+
+    Scans for common Unity performance anti-patterns within hot method
+    bodies (Update, FixedUpdate, LateUpdate, OnTrigger*, OnCollision*).
+
+    Args:
+        source_code: Complete C# source code string.
+        file_path: File path for reporting (not accessed, just metadata).
+
+    Returns:
+        Dict with keys: file_path, findings_count, findings (list of dicts),
+        summary (errors, warnings, infos counts).
+    """
+    if not source_code or not source_code.strip():
+        return {
+            "file_path": file_path,
+            "findings_count": 0,
+            "findings": [],
+            "summary": {"errors": 0, "warnings": 0, "infos": 0},
+        }
+
+    lines = source_code.split("\n")
+    findings: list[dict] = []
+
+    # Track which method body each line belongs to using brace counting
+    in_hot_method = False
+    hot_method_name = ""
+    brace_depth = 0
+    method_start_depth = 0
+
+    for line_num, line in enumerate(lines, start=1):
+        stripped = line.strip()
+
+        # Detect entry into a hot method
+        if not in_hot_method:
+            for method_name in _HOT_METHODS:
+                # Match method declarations like: void Update() {
+                # or: void Update()
+                pattern = r"void\s+" + re.escape(method_name) + r"\s*\("
+                if re.search(pattern, stripped):
+                    in_hot_method = True
+                    hot_method_name = method_name
+                    method_start_depth = brace_depth
+                    break
+
+        # Count braces on this line
+        for ch in stripped:
+            if ch == "{":
+                brace_depth += 1
+            elif ch == "}":
+                brace_depth -= 1
+                # Check if we've exited the hot method
+                if in_hot_method and brace_depth <= method_start_depth:
+                    in_hot_method = False
+                    hot_method_name = ""
+
+        # If we're inside a hot method, check for anti-patterns
+        if in_hot_method:
+            for rule_name, rule in ANTI_PATTERNS.items():
+                if re.search(rule["pattern"], stripped):
+                    # Verify the context matches (some rules are specific)
+                    context_pattern = rule.get("context", "")
+                    if context_pattern:
+                        # Check if hot_method_name matches context
+                        context_methods = re.findall(
+                            r"Update|FixedUpdate|LateUpdate|OnTrigger|OnCollision",
+                            context_pattern,
+                        )
+                        method_prefix = hot_method_name
+                        # For OnTrigger/OnCollision, match prefix
+                        matches_context = any(
+                            method_prefix.startswith(cm)
+                            for cm in context_methods
+                        )
+                        if not matches_context:
+                            continue
+
+                    findings.append({
+                        "rule_name": rule_name,
+                        "severity": rule["severity"],
+                        "line_number": line_num,
+                        "line_content": stripped,
+                        "message": rule["message"],
+                        "fix": rule.get("fix", ""),
+                    })
+
+    # Build summary
+    errors = sum(1 for f in findings if f["severity"] == "error")
+    warnings = sum(1 for f in findings if f["severity"] == "warning")
+    infos = sum(1 for f in findings if f["severity"] == "info")
+
+    return {
+        "file_path": file_path,
+        "findings_count": len(findings),
+        "findings": findings,
+        "summary": {"errors": errors, "warnings": warnings, "infos": infos},
+    }
+
+
+# ---------------------------------------------------------------------------
 # generate_crash_reporting_script
 # ---------------------------------------------------------------------------
 
