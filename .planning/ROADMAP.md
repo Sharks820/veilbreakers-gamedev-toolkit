@@ -245,8 +245,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 12-01-PLAN.md -- Core game system templates: save/load, health/damage, character controller, input system, settings menu, HTTP client, interactable objects (GAME-01, GAME-05, GAME-06, GAME-07, GAME-08, MEDIA-02, RPG-03)
-- [ ] 12-02-PLAN.md -- VeilBreakers combat templates: player combat, ability system, synergy engine, corruption gameplay, XP/leveling, currency, damage types (VB-01, VB-02, VB-03, VB-04, VB-05, VB-06, VB-07)
+- [x] 12-01-PLAN.md -- Core game system templates: save/load, health/damage, character controller, input system, settings menu, HTTP client, interactable objects (GAME-01, GAME-05, GAME-06, GAME-07, GAME-08, MEDIA-02, RPG-03)
+- [x] 12-02-PLAN.md -- VeilBreakers combat templates: player combat, ability system, synergy engine, corruption gameplay, XP/leveling, currency, damage types (VB-01, VB-02, VB-03, VB-04, VB-05, VB-06, VB-07)
 - [ ] 12-03-PLAN.md -- Compound tool wiring: unity_game tool + extended C# syntax tests (all 14 requirements)
 
 ### Phase 13: Content & Progression Systems
@@ -350,7 +350,7 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 9. Unity Editor Deep Control | v2.0 | 3/3 | Complete | 2026-03-20 |
 | 10. C# Programming Framework | v2.0 | 4/4 | Complete | 2026-03-20 |
 | 11. Data Architecture & Asset Pipeline | v2.0 | 4/4 | Complete | 2026-03-20 |
-| 12. Core Game Systems | 2/3 | In Progress|  | - |
+| 12. Core Game Systems | v2.0 | 2/3 | In Progress | - |
 | 13. Content & Progression Systems | v2.0 | 0/3 | Not started | - |
 | 14. Camera, Cinematics & Scene Management | v2.0 | 0/3 | Not started | - |
 | 15. Game UX & Encounter Design | v2.0 | 0/2 | Not started | - |

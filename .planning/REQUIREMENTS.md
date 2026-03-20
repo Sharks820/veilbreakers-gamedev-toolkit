@@ -46,14 +46,14 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Game Systems
 
-- [ ] **GAME-01**: Claude can generate a complete save/load system (JSON/binary serialization, save slots, data migration)
+- [x] **GAME-01**: Claude can generate a complete save/load system (JSON/binary serialization, save slots, data migration)
 - [ ] **GAME-02**: Claude can generate inventory system (item database SO, UI slots, drag-and-drop, equipment, storage)
 - [ ] **GAME-03**: Claude can generate dialogue system (branching trees, dialogue UI, NPC interaction, YarnSpinner-compatible)
 - [ ] **GAME-04**: Claude can generate quest system (objectives, tracking, quest givers, quest log UI, completion rewards)
-- [ ] **GAME-05**: Claude can generate health/damage system (HP component, damage numbers, death handling, respawn)
-- [ ] **GAME-06**: Claude can generate character controller (first-person and third-person movement, camera follow)
-- [ ] **GAME-07**: Claude can configure Input System (Input Action assets, action maps, control schemes, rebinding)
-- [ ] **GAME-08**: Claude can generate game settings menu (graphics quality, audio volume, keybindings, accessibility)
+- [x] **GAME-05**: Claude can generate health/damage system (HP component, damage numbers, death handling, respawn)
+- [x] **GAME-06**: Claude can generate character controller (first-person and third-person movement, camera follow)
+- [x] **GAME-07**: Claude can configure Input System (Input Action assets, action maps, control schemes, rebinding)
+- [x] **GAME-08**: Claude can generate game settings menu (graphics quality, audio volume, keybindings, accessibility)
 - [ ] **GAME-09**: Claude can generate loot table system (weighted random, rarity tiers, drop conditions)
 - [ ] **GAME-10**: Claude can generate crafting/recipe system (ingredient requirements, crafting stations, unlock progression)
 - [ ] **GAME-11**: Claude can generate skill tree / talent system (node graph, unlock dependencies, point allocation)
@@ -154,7 +154,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 ### Video & Media
 
 - [ ] **MEDIA-01**: Claude can configure VideoPlayer component for video playback and render texture output
-- [ ] **MEDIA-02**: Claude can generate UnityWebRequest utilities for HTTP/REST API calls
+- [x] **MEDIA-02**: Claude can generate UnityWebRequest utilities for HTTP/REST API calls
 
 ### Animation Advanced
 
@@ -212,7 +212,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 - [ ] **RPG-01**: Claude can generate a shop/merchant system (buy/sell UI, price display, equipment stat comparison, currency transactions, merchant inventory)
 - [ ] **RPG-02**: Claude can generate a fast travel/waypoint system (discover waypoints by visiting, teleport between unlocked points, loading transition)
-- [ ] **RPG-03**: Claude can generate an interactable object framework (state machine for doors, chests, levers, switches with animations and sound)
+- [x] **RPG-03**: Claude can generate an interactable object framework (state machine for doors, chests, levers, switches with animations and sound)
 - [ ] **RPG-04**: Claude can generate environmental puzzle mechanics (lever sequences, pressure plates, key-and-lock, movable blocks, light beam puzzles)
 - [ ] **RPG-05**: Claude can generate a journal/codex/bestiary system (lore entries from world, monster compendium with stats/weaknesses, item encyclopedia)
 - [ ] **RPG-06**: Claude can generate dungeon trap mechanics (pressure plates, dart walls, spike pits, falling rocks, poison gas, swinging blades)
@@ -271,11 +271,11 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | IMP-03 | Phase 11 | Complete |
 | IMP-04 | Phase 11 | Complete |
 | BUILD-06 | Phase 11 | Complete |
-| GAME-01 | Phase 12 | Pending |
-| GAME-05 | Phase 12 | Pending |
-| GAME-06 | Phase 12 | Pending |
-| GAME-07 | Phase 12 | Pending |
-| GAME-08 | Phase 12 | Pending |
+| GAME-01 | Phase 12 | Complete |
+| GAME-05 | Phase 12 | Complete |
+| GAME-06 | Phase 12 | Complete |
+| GAME-07 | Phase 12 | Complete |
+| GAME-08 | Phase 12 | Complete |
 | GAME-02 | Phase 13 | Pending |
 | GAME-03 | Phase 13 | Pending |
 | GAME-04 | Phase 13 | Pending |
@@ -328,7 +328,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | PIPE-09 | Phase 9 | Complete |
 | PIPE-10 | Phase 15 | Pending |
 | MEDIA-01 | Phase 14 | Pending |
-| MEDIA-02 | Phase 12 | Pending |
+| MEDIA-02 | Phase 12 | Complete |
 | ANIMA-01 | Phase 14 | Pending |
 | ANIMA-02 | Phase 14 | Pending |
 | ANIMA-03 | Phase 14 | Pending |
@@ -370,7 +370,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | VB-10 | Phase 15 | Pending |
 | RPG-01 | Phase 13 | Pending |
 | RPG-02 | Phase 14 | Pending |
-| RPG-03 | Phase 12 | Pending |
+| RPG-03 | Phase 12 | Complete |
 | RPG-04 | Phase 14 | Pending |
 | RPG-05 | Phase 13 | Pending |
 | RPG-06 | Phase 14 | Pending |
