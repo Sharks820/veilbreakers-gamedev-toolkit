@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
-stopped_at: Completed 15-01-PLAN.md
-last_updated: "2026-03-20T19:51:37.704Z"
+stopped_at: Completed 15-02-PLAN.md (6 UX generators + 168 tests)
+last_updated: "2026-03-20T20:01:35.325Z"
 last_activity: 2026-03-20 -- Completed 15-01-PLAN.md (6 UX generators + 93 tests, 5611 total)
 progress:
   total_phases: 9
   completed_phases: 6
   total_plans: 26
-  completed_plans: 24
+  completed_plans: 25
 ---
 
 ---
@@ -87,13 +87,13 @@ See: .planning/PROJECT.md (updated 2026-03-19)
 ## Current Position
 
 Phase: 15 of 17 (Game UX & Encounter Design)
-Plan: 1 of 4 in current phase (15-01 complete)
-Status: Executing Phase 15 -- 15-01 UX templates complete
-Last activity: 2026-03-20 -- Completed 15-01-PLAN.md (6 UX generators + 93 tests, 5611 total)
+Plan: 3 of 4 in current phase (15-01, 15-02 complete)
+Status: Executing Phase 15 -- 15-02 UX batch-2 templates complete
+Last activity: 2026-03-20 -- Completed 15-02-PLAN.md (6 UX generators + 168 tests)
 
 ```
-Phase Progress: [█████████░] 88% overall (26 plans, 23 complete)
-v2.0 Progress:  [████████████████████████░] 26/29 plans complete
+Phase Progress: [██████████] 96% overall (29 plans, 27 complete)
+v2.0 Progress:  [███████████████████████████░] 27/29 plans complete
 ```
 
 ## Performance Metrics
@@ -107,9 +107,9 @@ v2.0 Progress:  [█████████████████████
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 26 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-03) |
-| v2.0 tests added | 2,735 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter) |
-| v2.0 total tests passing | 5,518 |
+| v2.0 plans completed | 27 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-03, 15-02) |
+| v2.0 tests added | 2,819 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter + 84 ux-batch2) |
+| v2.0 total tests passing | 5,602 |
 | v2.0 MCP tools | 34 (15 Blender + 19 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
@@ -134,6 +134,7 @@ v2.0 Progress:  [█████████████████████
 | 14-05 duration | 19 min |
 | 15-03 duration | 8 min |
 | Phase 15 P01 | 9min | 2 tasks | 2 files |
+| Phase 15-02 P02 | 22 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -224,6 +225,9 @@ v2.0 Progress:  [█████████████████████
 | 10 VeilBreakers brand colors as static damage type dictionary | IRON/VENOM/SURGE/DREAD/BLAZE/FROST/VOID/HOLY/NATURE/SHADOW color mapping | 15 |
 | Orthographic camera + RenderTexture for minimap 1:1 accuracy | Direct positional tracking (target.x, target.z) not interpolated | 15 |
 | InputAction.GetBindingDisplayString for interaction prompts | Dynamic key display supporting runtime rebinding | 15 |
+| Line-based body + _wrap_namespace pattern for batch-2 generators | Consistent with Plan 01 generator convention | 15 |
+| RARITY_VFX dict as module-level constant | External reference by other modules for tier configuration | 15 |
+| Colorblind shader sRGB-to-linear before LMS matrix multiply | Industry standard for accurate color simulation | 15 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -238,8 +242,8 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T19:51:37.699Z
-Stopped at: Completed 15-01-PLAN.md
+Last session: 2026-03-20T20:01:35.320Z
+Stopped at: Completed 15-02-PLAN.md (6 UX generators + 168 tests)
 Next action: Continue Phase 15 (15-02)
 
 ---
