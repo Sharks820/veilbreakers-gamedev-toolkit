@@ -34,6 +34,41 @@ _URP_CORE_INCLUDE = '#include "Packages/com.unity.render-pipelines.universal/Sha
 
 
 # ---------------------------------------------------------------------------
+# Sanitization helpers (local copies per established codebase pattern)
+# ---------------------------------------------------------------------------
+
+
+def _sanitize_cs_string(value: str) -> str:
+    """Escape a value for safe embedding inside a C# string literal."""
+    value = value.replace("\\", "\\\\")
+    value = value.replace('"', '\\"')
+    value = value.replace("\n", "\\n")
+    value = value.replace("\r", "\\r")
+    return value
+
+
+def _safe_type(type_str: str) -> str:
+    """Sanitize a C# type expression to prevent code injection.
+
+    Allows alphanumerics, underscores, angle brackets (generics), square
+    brackets (arrays), dots (namespaces), commas (generic params), and
+    ``?`` (nullable).
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9_<>\[\].,?]", "", type_str)
+    return sanitized or "object"
+
+
+def _safe_namespace(ns: str) -> str:
+    """Sanitize a C# namespace to prevent code injection.
+
+    Valid C# namespaces allow only letters, digits, underscores, and dots.
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9_.]", "", ns)
+    sanitized = re.sub(r"\.{2,}", ".", sanitized).strip(".")
+    return sanitized or "Generated"
+
+
+# ---------------------------------------------------------------------------
 # VFX-06: Corruption shader
 # ---------------------------------------------------------------------------
 
@@ -1099,7 +1134,7 @@ def generate_arbitrary_shader(
     }
     if tags:
         merged_tags.update(tags)
-    tags_str = ' '.join(f'"{k}"="{v}"' for k, v in merged_tags.items())
+    tags_str = ' '.join(f'"{_sanitize_cs_string(k)}"="{_sanitize_cs_string(v)}"' for k, v in merged_tags.items())
 
     # --- Render state lines ---
     render_state_lines = []
@@ -1317,7 +1352,7 @@ def generate_renderer_feature(
     settings_body_lines = []
     for f in fields:
         attr = f.get('attribute', '')
-        ftype = _sanitize_cs_identifier(f.get('type', 'float')) or 'float'
+        ftype = _safe_type(f.get('type', 'float'))
         fname = _sanitize_cs_identifier(f.get('name', 'value')) or 'value'
         fdefault = f.get('default', '')
         attr_line = f'        [{attr}] ' if attr else '        '
@@ -1329,9 +1364,9 @@ def generate_renderer_feature(
     # --- Material property set calls ---
     mat_prop_calls = []
     for mp in (material_properties or []):
-        mp_name = mp.get('name', '_Value')
+        mp_name = _sanitize_cs_string(mp.get('name', '_Value'))
         mp_type = mp.get('type', 'float')
-        mp_value = mp.get('value', '0f')
+        mp_value = _sanitize_cs_string(mp.get('value', '0f'))
         setter = 'SetFloat'
         if mp_type == 'int':
             setter = 'SetInt'
@@ -1371,7 +1406,7 @@ def generate_renderer_feature(
     ns_close = ''
     if namespace:
         indent = '    '
-        ns_open = f'namespace {namespace}\n{{\n'
+        ns_open = f'namespace {_safe_namespace(namespace)}\n{{\n'
         ns_close = '\n}'
 
     source = f'''using UnityEngine;
