@@ -459,7 +459,12 @@ def generate_build_settings_script(
         )
 
     if platform:
-        group, target = _PLATFORM_MAP.get(platform, ("Standalone", platform))
+        if platform not in _PLATFORM_MAP:
+            raise ValueError(
+                f"Unknown platform '{platform}'. "
+                f"Valid platforms: {sorted(_PLATFORM_MAP.keys())}"
+            )
+        group, target = _PLATFORM_MAP[platform]
         settings_lines.append(
             f'            EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.{group}, BuildTarget.{_sanitize_cs_identifier(target)});'
         )
@@ -469,7 +474,7 @@ def generate_build_settings_script(
 
     if defines:
         defines_str = ";".join(_sanitize_cs_string(d) for d in defines)
-        defines_group = _PLATFORM_MAP.get(platform, ("Standalone", platform))[0] if platform else "Standalone"
+        defines_group = _PLATFORM_MAP[platform][0] if platform and platform in _PLATFORM_MAP else "Standalone"
         settings_lines.append(
             f'            PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.{_sanitize_cs_identifier(defines_group)}, "{defines_str}");'
         )

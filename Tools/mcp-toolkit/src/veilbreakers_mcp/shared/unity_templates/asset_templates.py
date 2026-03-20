@@ -324,7 +324,7 @@ def generate_asset_delete_script(
                     if (i > 0) refs += ", ";
                     refs += "\\"" + referencingAssets[i].Replace("\\\\", "/") + "\\"";
                 }
-                string json = "{\\"status\\": \\"warning\\", \\"action\\": \\"delete_asset\\", \\"message\\": \\"Asset has " + referencingAssets.Count + " references. Delete blocked.\\", \\"referencing_assets\\": [" + refs + "], \\"validation_status\\": \\"blocked_by_references\\"}";
+                string json = "{\\"status\\": \\"warning\\", \\"action\\": \\"delete_asset\\", \\"message\\": \\"Asset has " + referencingAssets.Count + " references. Delete blocked.\\", \\"referencing_assets\\": [" + refs + "], \\"warnings\\": [\\"Reference scan only covers Assets/ paths. Packages/ and other paths are not scanned and may still reference this asset.\\"], \\"validation_status\\": \\"blocked_by_references\\"}";
                 File.WriteAllText("Temp/vb_result.json", json);
                 Debug.LogWarning("[VeilBreakers] Delete blocked: " + referencingAssets.Count + " references found for " + assetPath);
                 return;
@@ -332,6 +332,11 @@ def generate_asset_delete_script(
 '''
     else:
         ref_scan_block = ""
+
+    if safe_delete:
+        success_warnings = ', \\"warnings\\": [\\"Reference scan only covers Assets/ paths. Packages/ and other paths are not scanned and may still reference this asset.\\"]'
+    else:
+        success_warnings = ""
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -350,7 +355,7 @@ public static class VeilBreakers_DeleteAsset
 
             if (deleted)
             {{
-                string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"delete_asset\\", \\"deleted_path\\": \\"" + assetPath.Replace("\\\\", "/") + "\\", \\"changed_assets\\": [\\"" + assetPath.Replace("\\\\", "/") + "\\"], \\"validation_status\\": \\"ok\\"}}";
+                string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"delete_asset\\", \\"deleted_path\\": \\"" + assetPath.Replace("\\\\", "/") + "\\", \\"changed_assets\\": [\\"" + assetPath.Replace("\\\\", "/") + "\\"]{success_warnings}, \\"validation_status\\": \\"ok\\"}}";
                 File.WriteAllText("Temp/vb_result.json", json);
                 Debug.Log("[VeilBreakers] Asset deleted: " + assetPath);
             }}
@@ -942,6 +947,7 @@ public static class VeilBreakers_AutoMaterials
 
             // Remap FBX to use generated material
             ModelImporter importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
+            string fbxWarning = "";
             if (importer != null)
             {{
                 importer.materialImportMode = ModelImporterMaterialImportMode.ImportViaMaterialDescription;
@@ -971,8 +977,16 @@ public static class VeilBreakers_AutoMaterials
                 }}
                 importer.SaveAndReimport();
             }}
+            else
+            {{
+                fbxWarning = ", \\"warnings\\": [\\"ModelImporter is null for " + fbxPath.Replace("\\\\", "/").Replace("\\"", "\\\\\\"") + " -- asset may not be an FBX or importer not found. Material was created but FBX was not remapped.\\"]";
+                Debug.LogWarning("[VeilBreakers] ModelImporter is null for " + fbxPath + " -- FBX remap skipped.");
+            }}
 
-            string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"auto_materials\\", \\"material_path\\": \\"" + matPath.Replace("\\\\", "/") + "\\", \\"fbx_path\\": \\"" + fbxPath.Replace("\\\\", "/") + "\\", \\"changed_assets\\": [\\"" + matPath.Replace("\\\\", "/") + "\\", \\"" + fbxPath.Replace("\\\\", "/") + "\\"], \\"validation_status\\": \\"ok\\"}}";
+            string changedAssets = importer != null
+                ? "\\"" + matPath.Replace("\\\\", "/") + "\\", \\"" + fbxPath.Replace("\\\\", "/") + "\\""
+                : "\\"" + matPath.Replace("\\\\", "/") + "\\"";
+            string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"auto_materials\\", \\"material_path\\": \\"" + matPath.Replace("\\\\", "/") + "\\", \\"fbx_path\\": \\"" + fbxPath.Replace("\\\\", "/") + "\\", \\"changed_assets\\": [" + changedAssets + "]" + fbxWarning + ", \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", resultJson);
             Debug.Log("[VeilBreakers] Auto materials generated: " + matPath);
         }}
@@ -1451,6 +1465,14 @@ public static class VeilBreakers_AtomicImport
 {remap_block}
                 modelImporter.SaveAndReimport();
                 changedAssets.Add(fbxPath);
+            }}
+            else
+            {{
+                // FBX importer step is critical for atomic import -- fail the operation
+                string failJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"atomic_import\\", \\"message\\": \\"ModelImporter is null for " + fbxPath.Replace("\\\\", "/").Replace("\\"", "\\\\\\"") + " -- asset may not be an FBX or importer not found. Atomic import requires a valid FBX.\\", \\"validation_status\\": \\"failed\\"}}";
+                File.WriteAllText("Temp/vb_result.json", failJson);
+                Debug.LogError("[VeilBreakers] Atomic import failed: ModelImporter is null for " + fbxPath);
+                return;
             }}
         }}
         finally
