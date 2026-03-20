@@ -162,6 +162,39 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [ ] **ANIMA-02**: Claude can modify existing Animator Controllers (add/remove states, configure transitions, sub-state machines)
 - [ ] **ANIMA-03**: Claude can create Avatar Masks for animation layer filtering
 
+### AAA Quality & Art Style
+
+- [ ] **AAA-01**: Claude can apply albedo de-lighting to AI-generated model textures (remove baked-in lighting artifacts from Tripo3D output)
+- [ ] **AAA-02**: Claude can enforce per-asset-type polygon budgets (hero: 30-50k, mob: 8-15k, weapon: 3-8k, prop: 500-6k, building: 5-15k) with auto-retopo if over budget
+- [ ] **AAA-03**: Claude can apply dark fantasy material palette validation (saturation caps, color temperature rules, PBR roughness variation enforcement)
+- [ ] **AAA-04**: Claude can generate master material library with base materials (stone, wood, iron, moss, bone, cloth, leather) that all assets reference for art consistency
+- [ ] **AAA-05**: Claude can add storytelling props (layer 3: clutter, wall decor, narrative detail — cobwebs, bloodstains, scattered papers, broken pottery) to any interior
+- [ ] **AAA-06**: Claude can validate texture quality against standards (texel density 10.24 px/cm, no flat roughness, micro-detail normals present, proper channel packing M/R/AO)
+
+### Equipment & Weapons
+
+- [ ] **EQUIP-01**: Claude can generate weapon meshes from text descriptions (swords, axes, maces, staffs, bows, daggers, shields) with proper grip points, trail VFX attachment points, and collision mesh
+- [ ] **EQUIP-02**: Claude can set up bone socket attachment system on character rigs (10 standard sockets: weapon_hand_R/L, shield_hand_L, back_weapon, hip_L/R, head, chest, spell_hand_R/L)
+- [ ] **EQUIP-03**: Claude can split character mesh into modular parts (head, torso, upper arms, lower arms, upper legs, lower legs, feet) for armor swapping
+- [ ] **EQUIP-04**: Claude can generate armor/clothing meshes that fit character models using shape keys and vertex weight transfer
+- [ ] **EQUIP-05**: Claude can generate equipment preview icons (3D rendered turntable or flat icon) for inventory UI
+- [ ] **EQUIP-06**: Claude can set up Unity equipment attachment system (SkinnedMeshRenderer rebinding, bone socket parenting, sheathed weapon positioning with Multi-Parent Constraint)
+- [ ] **EQUIP-07**: Claude can apply rarity tier visual effects to equipment (Common gray, Rare blue, Epic purple, Legendary gold glow + particle effects)
+- [ ] **EQUIP-08**: Claude can apply corruption visual progression to equipment (0-100% corruption with increasing vein patterns, color shift, particle emission)
+
+### World Design & Composition
+
+- [ ] **WORLD-01**: Claude can generate complete explorable locations from text descriptions (cities, bandit camps, dungeons, castles, forest clearings, ruins) with proper scale, paths, and points of interest
+- [ ] **WORLD-02**: Claude can generate fully furnished building interiors for 16 room types (tavern, throne room, prison, bedroom, kitchen, library, armory, temple, blacksmith, guard barracks, treasury, war room, alchemy lab, torture chamber, crypt, dining hall)
+- [ ] **WORLD-03**: Claude can generate boss arena environments with fog gates, cover objects, hazard zones, phase triggers, and proper scale (20-40m)
+- [ ] **WORLD-04**: Claude can connect locations into a world graph with proper walking distances (30-second rule: point of interest every ~105m), path generation, and terrain integration
+- [ ] **WORLD-05**: Claude can generate interior-exterior linked buildings (door triggers, occlusion culling zones, lighting transitions, collision boundaries)
+- [ ] **WORLD-06**: Claude can generate multi-floor dungeon layouts with vertical progression (descending staircases, elevators, ladders, pit drops), proper ceiling heights, and navigable corridors
+- [ ] **WORLD-07**: Claude can place furniture and props at correct real-world scale (doors: 1.0-1.2m wide, ceilings: 2.8-3.5m, tables: 0.75m high, chairs to fit character model)
+- [ ] **WORLD-08**: Claude can apply time-of-day lighting presets across entire scenes (8 presets: dawn, morning, noon, afternoon, dusk, evening, night, midnight) with matching fog/atmosphere
+- [ ] **WORLD-09**: Claude can generate overrun/ruined variants of intact locations (add debris, broken walls, overgrown vegetation, scattered remains, damaged furniture)
+- [ ] **WORLD-10**: Claude can place easter eggs and hidden areas (secret rooms behind breakable walls, hidden paths off main routes, lore items in unexpected locations)
+
 ## Out of Scope
 
 | Feature | Reason |
@@ -271,12 +304,37 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | ANIMA-02 | Phase 14 | Pending |
 | ANIMA-03 | Phase 14 | Pending |
 
+| AAA-01 | Phase 11 | Pending |
+| AAA-02 | Phase 11 | Pending |
+| AAA-03 | Phase 11 | Pending |
+| AAA-04 | Phase 11 | Pending |
+| AAA-05 | Phase 14 | Pending |
+| AAA-06 | Phase 11 | Pending |
+| EQUIP-01 | Phase 13 | Pending |
+| EQUIP-02 | Phase 9 | Pending |
+| EQUIP-03 | Phase 13 | Pending |
+| EQUIP-04 | Phase 13 | Pending |
+| EQUIP-05 | Phase 13 | Pending |
+| EQUIP-06 | Phase 13 | Pending |
+| EQUIP-07 | Phase 15 | Pending |
+| EQUIP-08 | Phase 15 | Pending |
+| WORLD-01 | Phase 14 | Pending |
+| WORLD-02 | Phase 14 | Pending |
+| WORLD-03 | Phase 14 | Pending |
+| WORLD-04 | Phase 14 | Pending |
+| WORLD-05 | Phase 14 | Pending |
+| WORLD-06 | Phase 14 | Pending |
+| WORLD-07 | Phase 14 | Pending |
+| WORLD-08 | Phase 14 | Pending |
+| WORLD-09 | Phase 14 | Pending |
+| WORLD-10 | Phase 14 | Pending |
+
 **Coverage:**
-- v2 requirements: 96 total (across 18 categories)
-- Mapped to phases: 96/96
+- v2 requirements: 120 total (across 21 categories)
+- Mapped to phases: 120/120
 - Unmapped: 0
 
-**Categories:** EDIT (15), CODE (10), GAME (12), CAM (4), SCNE (6), DATA (4), BUILD (7), QA (8), IMP (4), UIX (4), AID (3), SHDR (4), TWO (3), PHYS (2), ACC (2), PIPE (3), MEDIA (2), ANIMA (3)
+**Categories:** EDIT (15), CODE (10), GAME (12), CAM (4), SCNE (6), DATA (4), BUILD (7), QA (8), IMP (4), UIX (4), AID (3), SHDR (4), TWO (3), PHYS (2), ACC (2), PIPE (3), MEDIA (2), ANIMA (3), AAA (6), EQUIP (8), WORLD (10)
 
 ---
 *Requirements defined: 2026-03-18 (v1), updated 2026-03-19 (v2 with traceability)*
