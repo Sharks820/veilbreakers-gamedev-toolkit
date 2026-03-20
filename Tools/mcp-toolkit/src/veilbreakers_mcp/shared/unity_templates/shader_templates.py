@@ -932,11 +932,48 @@ _RENDER_TYPE_DEFAULTS: dict[str, dict[str, str]] = {
     'TransparentCutout': {'queue': 'AlphaTest', 'zwrite': 'On', 'blend': ''},
 }
 
+_VALID_CULL_VALUES = frozenset({'Off', 'Front', 'Back'})
+_VALID_ZWRITE_VALUES = frozenset({'On', 'Off'})
+_VALID_BLEND_TOKENS = frozenset({
+    'One', 'Zero', 'SrcColor', 'SrcAlpha', 'DstColor', 'DstAlpha',
+    'OneMinusSrcColor', 'OneMinusSrcAlpha', 'OneMinusDstColor', 'OneMinusDstAlpha',
+})
+
+
+def _sanitize_display_name(name: str) -> str:
+    """Escape a display name for safe embedding inside ShaderLab quoted strings."""
+    return name.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ').replace('\r', '')
+
+
+def _validate_cull(value: str) -> str:
+    """Validate a cull value against known ShaderLab cull modes."""
+    if value in _VALID_CULL_VALUES:
+        return value
+    return 'Back'
+
+
+def _validate_zwrite(value: str) -> str:
+    """Validate a zwrite value against known ShaderLab modes."""
+    if value in _VALID_ZWRITE_VALUES:
+        return value
+    return 'On'
+
+
+def _validate_blend(value: str) -> str:
+    """Validate a blend string against known ShaderLab blend factor tokens."""
+    if not value:
+        return ''
+    tokens = value.split()
+    for token in tokens:
+        if token not in _VALID_BLEND_TOKENS:
+            return ''
+    return value
+
 
 def _build_property_line(prop: dict) -> str:
     """Build a single ShaderLab Properties line from a property dict."""
-    name = prop.get('name', '_Unnamed')
-    display = prop.get('display_name', name.lstrip('_'))
+    name = _sanitize_shader_identifier(prop.get('name', '_Unnamed'))
+    display = _sanitize_display_name(prop.get('display_name', name.lstrip('_')))
     ptype = prop.get('type', 'Float')
     default = prop.get('default', '')
 
@@ -964,6 +1001,13 @@ def _build_property_line(prop: dict) -> str:
         return f'        {name} ("{display}", Float) = {default}'
 
 
+_TEXTURE_TYPE_MAP: dict[str, str] = {
+    '2D': 'TEXTURE2D',
+    '3D': 'TEXTURE3D',
+    'Cube': 'TEXTURECUBE',
+}
+
+
 def _hlsl_type_for_property(prop: dict) -> str | None:
     """Return the HLSL variable type for a shader property."""
     ptype = prop.get('type', 'Float')
@@ -971,7 +1015,7 @@ def _hlsl_type_for_property(prop: dict) -> str | None:
         return 'float4'
     elif ptype == 'Vector':
         return 'float4'
-    elif ptype in ('2D', '3D', 'Cube'):
+    elif ptype in _TEXTURE_TYPE_MAP:
         return None  # textures handled separately
     else:
         return 'float'
@@ -1033,8 +1077,11 @@ def generate_arbitrary_shader(
     # Defaults from render type
     rt_defaults = _RENDER_TYPE_DEFAULTS.get(render_type, _RENDER_TYPE_DEFAULTS['Opaque'])
     effective_queue = queue or rt_defaults['queue']
-    effective_zwrite = zwrite or rt_defaults['zwrite']
-    effective_blend = blend or rt_defaults['blend']
+    effective_zwrite = _validate_zwrite(zwrite or rt_defaults['zwrite'])
+    effective_blend = _validate_blend(blend or rt_defaults['blend'])
+
+    # Validate cull
+    cull = _validate_cull(cull)
 
     props = properties or []
 
@@ -1068,10 +1115,11 @@ def generate_arbitrary_shader(
     texture_decls = []
     for p in props:
         hlsl_type = _hlsl_type_for_property(p)
-        pname = p.get('name', '_Unnamed')
+        pname = _sanitize_shader_identifier(p.get('name', '_Unnamed'))
         if hlsl_type is None:
             # Texture declaration
-            texture_decls.append(f'            TEXTURE2D({pname});')
+            tex_macro = _TEXTURE_TYPE_MAP.get(p.get('type', '2D'), 'TEXTURE2D')
+            texture_decls.append(f'            {tex_macro}({pname});')
             texture_decls.append(f'            SAMPLER(sampler{pname});')
             cbuffer_vars.append(f'                float4 {pname}_ST;')
         else:
@@ -1201,6 +1249,19 @@ def _sanitize_cs_identifier(name: str) -> str:
     return sanitized or 'Unnamed'
 
 
+_VALID_RENDER_PASS_EVENTS = frozenset({
+    'BeforeRendering', 'BeforeRenderingShadows', 'AfterRenderingShadows',
+    'BeforeRenderingPrePasses', 'AfterRenderingPrePasses',
+    'BeforeRenderingGbuffer', 'AfterRenderingGbuffer',
+    'BeforeRenderingDeferredLights', 'AfterRenderingDeferredLights',
+    'BeforeRenderingOpaques', 'AfterRenderingOpaques',
+    'BeforeRenderingSkybox', 'AfterRenderingSkybox',
+    'BeforeRenderingTransparents', 'AfterRenderingTransparents',
+    'BeforeRenderingPostProcessing', 'AfterRenderingPostProcessing',
+    'AfterRendering',
+})
+
+
 def generate_renderer_feature(
     feature_name: str,
     namespace: str = "",
@@ -1239,6 +1300,13 @@ def generate_renderer_feature(
         Complete C# source string with required ``using`` directives.
     """
     safe_name = _sanitize_cs_identifier(feature_name)
+
+    # Sanitize shader_property_name to prevent C# injection
+    shader_property_name = _sanitize_cs_identifier(shader_property_name) or '_shader'
+
+    # Validate render_pass_event against known enum values
+    if render_pass_event not in _VALID_RENDER_PASS_EVENTS:
+        render_pass_event = 'BeforeRenderingPostProcessing'
     feature_cls = f'{safe_name}Feature'
     pass_cls = f'{safe_name}Pass'
     settings_cls = f'{safe_name}Settings'
@@ -1249,8 +1317,8 @@ def generate_renderer_feature(
     settings_body_lines = []
     for f in fields:
         attr = f.get('attribute', '')
-        ftype = f.get('type', 'float')
-        fname = f.get('name', 'value')
+        ftype = _sanitize_cs_identifier(f.get('type', 'float')) or 'float'
+        fname = _sanitize_cs_identifier(f.get('name', 'value')) or 'value'
         fdefault = f.get('default', '')
         attr_line = f'        [{attr}] ' if attr else '        '
         default_part = f' = {fdefault};' if fdefault else ';'

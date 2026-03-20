@@ -94,9 +94,76 @@ def _safe_identifier(name: str) -> str:
     result = _sanitize_cs_identifier(name)
     if not result:
         raise ValueError(f"Identifier is empty after sanitization: {name!r}")
+    if result[0].isdigit():
+        result = f"_{result}"
     if result in _CS_RESERVED:
         result = f"@{result}"
     return result
+
+
+def _safe_type(type_str: str) -> str:
+    """Sanitize a C# type expression to prevent code injection.
+
+    Allows valid type characters: alphanumerics, underscores, angle brackets
+    (generics), square brackets (arrays), dots (namespaces), commas
+    (generic params), and ``?`` (nullable). Spaces are replaced with empty
+    string since valid C# type tokens do not require spaces. This prevents
+    multi-keyword injection like ``int; public void Exploit() {}``.
+
+    Args:
+        type_str: Raw type string (e.g. ``"List<int>"``, ``"float[]"``).
+
+    Returns:
+        Sanitized type string.
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9_<>\[\].,?]", "", type_str)
+    return sanitized or "object"
+
+
+def _safe_default(default: str, type_str: str) -> str:
+    """Sanitize a default value expression to prevent code injection.
+
+    For numeric types, validates that the value is a valid numeric literal.
+    For string types, wraps in quotes and escapes. For other types, strips
+    dangerous characters.
+
+    Args:
+        default: Raw default value string.
+        type_str: The C# type of the field (used to determine validation).
+
+    Returns:
+        Sanitized default value string.
+    """
+    if not default:
+        return default
+
+    clean_type = type_str.strip().rstrip("?")
+
+    # Numeric types: validate as numeric literal (with optional suffix)
+    numeric_types = {"int", "float", "double", "long", "short", "byte",
+                     "uint", "ulong", "ushort", "sbyte", "decimal"}
+    if clean_type in numeric_types:
+        # Allow numeric literals with optional suffix (f, d, m, L, etc.)
+        if re.match(r'^-?[0-9]*\.?[0-9]+[fFdDmMlLuU]?$', default.strip()):
+            return default
+        return "0"
+
+    # Bool type
+    if clean_type == "bool":
+        if default.strip() in ("true", "false"):
+            return default
+        return "false"
+
+    # String type: ensure properly escaped
+    if clean_type == "string":
+        inner = default.strip()
+        if inner.startswith('"') and inner.endswith('"'):
+            return inner
+        return f'"{_sanitize_cs_string(inner)}"'
+
+    # For other types: strip semicolons and braces that could inject code
+    sanitized = re.sub(r"[;{}]", "", default)
+    return sanitized
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +184,7 @@ def _format_field(field: dict, indent: str) -> list[str]:
     """
     lines: list[str] = []
     access = field.get("access", "private")
-    ftype = field.get("type", "int")
+    ftype = _safe_type(field.get("type", "int"))
     raw_name = field.get("name", "value")
     default = field.get("default", "")
     attrs = field.get("attributes", [])
@@ -134,9 +201,10 @@ def _format_field(field: dict, indent: str) -> list[str]:
     for attr in attrs:
         lines.append(f"{indent}[{attr}]")
 
+    safe_default = _safe_default(default, ftype) if default else ""
     decl = f"{indent}{access} {ftype} {safe_name}"
-    if default:
-        decl += f" = {default}"
+    if safe_default:
+        decl += f" = {safe_default}"
     decl += ";"
     lines.append(decl)
     return lines
@@ -155,7 +223,7 @@ def _format_property(prop: dict, indent: str) -> list[str]:
     """
     lines: list[str] = []
     access = prop.get("access", "public")
-    ptype = prop.get("type", "int")
+    ptype = _safe_type(prop.get("type", "int"))
     raw_name = prop.get("name", "Value")
     getter = prop.get("getter", "")
     setter = prop.get("setter", "")
@@ -200,7 +268,7 @@ def _format_method(method: dict, indent: str, is_interface: bool = False) -> lis
     """
     lines: list[str] = []
     access = method.get("access", "public")
-    ret_type = method.get("return_type", "void")
+    ret_type = _safe_type(method.get("return_type", "void"))
     raw_name = method.get("name", "DoSomething")
     params = method.get("params", "")
     body = method.get("body", "")
@@ -304,9 +372,9 @@ def _build_cs_class(
     decl = f"{indent}public {class_type} {class_name}"
     inheritance: list[str] = []
     if base_class:
-        inheritance.append(base_class)
+        inheritance.append(_safe_type(base_class))
     if interfaces:
-        inheritance.extend(interfaces)
+        inheritance.extend(_safe_type(iface) for iface in interfaces)
     if inheritance:
         decl += " : " + ", ".join(inheritance)
     lines.append(decl)
@@ -545,7 +613,7 @@ def modify_script(
                 continue
             # Find class declaration line
             class_pattern = re.compile(
-                rf"^(\s*)(public|internal|private|protected)?\s*(sealed\s+|abstract\s+|static\s+)*(class|struct|interface)\s+{re.escape(target_class)}\b",
+                rf"^(\s*)(public|internal|private|protected)?\s*(sealed\s+|abstract\s+|static\s+)*(partial\s+)?(class|struct|interface)\s+{re.escape(target_class)}\b",
                 re.MULTILINE,
             )
             match = class_pattern.search(result)
@@ -628,14 +696,14 @@ def _insert_after_class_open(source: str, code_to_insert: str) -> str:
     """Insert code after the opening brace of the first class/struct body."""
     # Find class/struct declaration followed by {
     match = re.search(
-        r"((?:public|internal|private|protected)\s+(?:sealed\s+|abstract\s+|static\s+)*(?:class|struct|interface)\s+\w+[^{]*\{)",
+        r"((?:public|internal|private|protected)\s+(?:sealed\s+|abstract\s+|static\s+)*(?:partial\s+)?(?:class|struct|interface)\s+\w+[^{]*\{)",
         source,
         re.MULTILINE,
     )
     if match:
         insert_pos = match.end()
         return source[:insert_pos] + "\n" + code_to_insert + source[insert_pos:]
-    return source
+    raise ValueError("No class/struct/interface declaration found in source for insertion.")
 
 
 def _insert_before_class_close(source: str, code_to_insert: str) -> str:

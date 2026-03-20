@@ -191,7 +191,9 @@ def _write_to_unity(content: str, relative_path: str) -> str:
     target = (project_root / relative_path).resolve()
 
     # Path traversal protection: ensure target stays within project root
-    if not str(target).startswith(str(project_root)):
+    try:
+        target.relative_to(project_root)
+    except ValueError:
         raise ValueError(
             f"Path traversal detected: '{relative_path}' resolves outside the "
             f"Unity project directory."
