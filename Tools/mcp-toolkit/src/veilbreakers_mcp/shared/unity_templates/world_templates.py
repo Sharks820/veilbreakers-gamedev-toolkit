@@ -2471,7 +2471,7 @@ def generate_dungeon_lighting_script(
     rt.append("        public void ClearTorches()")
     rt.append("        {")
     rt.append("            foreach (GameObject torch in _placedTorches)")
-    rt.append("                if (torch != null) DestroyImmediate(torch);")
+    rt.append("                if (torch != null) Destroy(torch);")
     rt.append("            _placedTorches.Clear();")
     rt.append("        }")
     rt.append("    }")
