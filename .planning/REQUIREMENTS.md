@@ -18,14 +18,14 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [ ] **EDIT-01**: Claude can create, modify, and delete Prefabs programmatically (including nested prefabs and prefab variants)
 - [ ] **EDIT-02**: Claude can add, remove, and configure any Component on any GameObject (Rigidbody, Collider, AudioSource, Light, custom MonoBehaviours)
 - [ ] **EDIT-03**: Claude can manipulate scene hierarchy (create empties, rename, reparent, enable/disable, set layer/tag)
-- [ ] **EDIT-04**: Claude can configure physics layers, layer collision matrix, and physics materials (friction, bounciness)
-- [ ] **EDIT-05**: Claude can manage Player Settings (company name, product name, icon, splash, scripting backend, API compat, color space)
-- [ ] **EDIT-06**: Claude can manage Build Settings (add/remove/reorder scenes, switch platform, set scripting defines)
-- [ ] **EDIT-07**: Claude can configure Quality Settings (shadow distance/resolution, texture quality, AA, VSync, LOD bias)
-- [ ] **EDIT-08**: Claude can install, remove, and update Unity packages via Package Manager (manifest.json + UPM)
-- [ ] **EDIT-09**: Claude can create and manage custom Tags, Sorting Layers, and Physics Layers
+- [x] **EDIT-04**: Claude can configure physics layers, layer collision matrix, and physics materials (friction, bounciness)
+- [x] **EDIT-05**: Claude can manage Player Settings (company name, product name, icon, splash, scripting backend, API compat, color space)
+- [x] **EDIT-06**: Claude can manage Build Settings (add/remove/reorder scenes, switch platform, set scripting defines)
+- [x] **EDIT-07**: Claude can configure Quality Settings (shadow distance/resolution, texture quality, AA, VSync, LOD bias)
+- [x] **EDIT-08**: Claude can install, remove, and update Unity packages via Package Manager (manifest.json + UPM)
+- [x] **EDIT-09**: Claude can create and manage custom Tags, Sorting Layers, and Physics Layers
 - [ ] **EDIT-10**: Claude can perform asset operations (move, rename, delete, duplicate, create folders) while preserving .meta/GUID integrity
-- [ ] **EDIT-11**: Claude can configure Time settings (fixed timestep), Graphics settings (render pipeline asset), and Editor preferences
+- [x] **EDIT-11**: Claude can configure Time settings (fixed timestep), Graphics settings (render pipeline asset), and Editor preferences
 - [ ] **EDIT-12**: Claude can configure FBX ModelImporter settings on import (scale, mesh compression, normals, animation compression, rig)
 - [ ] **EDIT-13**: Claude can configure TextureImporter settings (max size, compression per platform, sRGB/linear, sprite mode, mip maps)
 - [ ] **EDIT-14**: Claude can remap materials on FBX import to existing project materials or auto-generate from imported textures
@@ -240,14 +240,14 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | EDIT-01 | Phase 9 | Pending |
 | EDIT-02 | Phase 9 | Pending |
 | EDIT-03 | Phase 9 | Pending |
-| EDIT-04 | Phase 9 | Pending |
-| EDIT-05 | Phase 9 | Pending |
-| EDIT-06 | Phase 9 | Pending |
-| EDIT-07 | Phase 9 | Pending |
-| EDIT-08 | Phase 9 | Pending |
-| EDIT-09 | Phase 9 | Pending |
+| EDIT-04 | Phase 9 | Complete |
+| EDIT-05 | Phase 9 | Complete |
+| EDIT-06 | Phase 9 | Complete |
+| EDIT-07 | Phase 9 | Complete |
+| EDIT-08 | Phase 9 | Complete |
+| EDIT-09 | Phase 9 | Complete |
 | EDIT-10 | Phase 9 | Pending |
-| EDIT-11 | Phase 9 | Pending |
+| EDIT-11 | Phase 9 | Complete |
 | EDIT-12 | Phase 9 | Pending |
 | EDIT-13 | Phase 9 | Pending |
 | EDIT-14 | Phase 9 | Pending |
