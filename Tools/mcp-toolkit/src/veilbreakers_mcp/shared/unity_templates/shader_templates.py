@@ -22,9 +22,13 @@ Exports:
     generate_foliage_shader         -- VFX-07: wind sway vertex animation
     generate_outline_shader         -- VFX-07: two-pass outline rendering
     generate_damage_overlay_shader  -- VFX-07: fullscreen damage overlay
+    generate_arbitrary_shader       -- SHDR-01: configurable HLSL/ShaderLab shader
+    generate_renderer_feature       -- SHDR-02: URP ScriptableRendererFeature + RenderGraph pass
 """
 
 from __future__ import annotations
+
+import re
 
 _URP_CORE_INCLUDE = '#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"'
 
@@ -902,3 +906,460 @@ def generate_damage_overlay_shader(
     FallBack Off
 }}
 '''
+
+
+# ---------------------------------------------------------------------------
+# SHDR-01: Arbitrary shader builder
+# ---------------------------------------------------------------------------
+
+
+def _sanitize_shader_name(name: str) -> str:
+    """Remove characters that are invalid in a Shader path string."""
+    return re.sub(r'[^A-Za-z0-9_ /]', '', name).strip()
+
+
+def _sanitize_shader_identifier(name: str) -> str:
+    """Sanitize a string into a valid HLSL identifier."""
+    sanitized = re.sub(r'[^A-Za-z0-9_]', '', name)
+    if sanitized and sanitized[0].isdigit():
+        sanitized = '_' + sanitized
+    return sanitized or '_Unnamed'
+
+
+_RENDER_TYPE_DEFAULTS: dict[str, dict[str, str]] = {
+    'Opaque': {'queue': 'Geometry', 'zwrite': 'On', 'blend': ''},
+    'Transparent': {'queue': 'Transparent', 'zwrite': 'Off', 'blend': 'SrcAlpha OneMinusSrcAlpha'},
+    'TransparentCutout': {'queue': 'AlphaTest', 'zwrite': 'On', 'blend': ''},
+}
+
+
+def _build_property_line(prop: dict) -> str:
+    """Build a single ShaderLab Properties line from a property dict."""
+    name = prop.get('name', '_Unnamed')
+    display = prop.get('display_name', name.lstrip('_'))
+    ptype = prop.get('type', 'Float')
+    default = prop.get('default', '')
+
+    if ptype == 'Color':
+        default = default or '(1,1,1,1)'
+        return f'        {name} ("{display}", Color) = {default}'
+    elif ptype == 'Vector':
+        default = default or '(0,0,0,0)'
+        return f'        {name} ("{display}", Vector) = {default}'
+    elif ptype == '2D':
+        default = default or '"white" {{}}'
+        return f'        {name} ("{display}", 2D) = {default}'
+    elif ptype == '3D':
+        default = default or '"" {{}}'
+        return f'        {name} ("{display}", 3D) = {default}'
+    elif ptype == 'Cube':
+        default = default or '"" {{}}'
+        return f'        {name} ("{display}", Cube) = {default}'
+    elif ptype.startswith('Range'):
+        default = default or '0'
+        return f'        {name} ("{display}", {ptype}) = {default}'
+    else:
+        # Float or any other type
+        default = default or '0'
+        return f'        {name} ("{display}", Float) = {default}'
+
+
+def _hlsl_type_for_property(prop: dict) -> str | None:
+    """Return the HLSL variable type for a shader property."""
+    ptype = prop.get('type', 'Float')
+    if ptype == 'Color':
+        return 'float4'
+    elif ptype == 'Vector':
+        return 'float4'
+    elif ptype in ('2D', '3D', 'Cube'):
+        return None  # textures handled separately
+    else:
+        return 'float'
+
+
+def generate_arbitrary_shader(
+    shader_name: str,
+    shader_path: str = "VeilBreakers/Custom",
+    render_type: str = "Opaque",
+    queue: str = "",
+    properties: list[dict] | None = None,
+    vertex_code: str = "",
+    fragment_code: str = "",
+    tags: dict | None = None,
+    pragma_directives: list[str] | None = None,
+    include_paths: list[str] | None = None,
+    cull: str = "Back",
+    zwrite: str = "",
+    blend: str = "",
+    two_passes: bool = False,
+    second_pass_vertex: str = "",
+    second_pass_fragment: str = "",
+) -> str:
+    """Generate a complete, configurable HLSL/ShaderLab shader for URP.
+
+    Produces a full .shader file with ShaderLab wrapper, Properties block,
+    SubShader tags, and one or two HLSL passes with configurable vertex/fragment
+    programs.
+
+    Args:
+        shader_name: Display name for the shader (sanitized for path safety).
+        shader_path: Shader menu path prefix (e.g. ``"VeilBreakers/Custom"``).
+        render_type: ``"Opaque"`` | ``"Transparent"`` | ``"TransparentCutout"``.
+        queue: Render queue override; auto-derived from *render_type* if empty.
+        properties: List of property dicts, each with ``name``, ``display_name``,
+            ``type`` (``"Float"`` | ``"Range(min,max)"`` | ``"Color"`` | ``"Vector"``
+            | ``"2D"`` | ``"3D"`` | ``"Cube"``), and ``default``.
+        vertex_code: Custom vertex shader body. If empty, a standard transform is
+            generated.
+        fragment_code: Custom fragment shader body. If empty, returns white.
+        tags: Extra SubShader tags merged with the auto-generated ones.
+        pragma_directives: Extra ``#pragma`` lines (e.g. ``"#pragma multi_compile_fog"``).
+        include_paths: Extra ``#include`` paths beyond the default URP Core include.
+        cull: ``"Back"`` | ``"Front"`` | ``"Off"``.
+        zwrite: ``"On"`` | ``"Off"``; auto-derived from *render_type* if empty.
+        blend: Blend mode string (e.g. ``"SrcAlpha OneMinusSrcAlpha"``); auto-derived
+            from *render_type* if empty.
+        two_passes: If ``True``, a second Pass block is appended.
+        second_pass_vertex: Vertex code for the second pass.
+        second_pass_fragment: Fragment code for the second pass.
+
+    Returns:
+        Complete ShaderLab source string targeting URP.
+    """
+    # Sanitize
+    safe_name = _sanitize_shader_name(shader_name) or 'CustomShader'
+    safe_path = _sanitize_shader_name(shader_path) or 'VeilBreakers/Custom'
+
+    # Defaults from render type
+    rt_defaults = _RENDER_TYPE_DEFAULTS.get(render_type, _RENDER_TYPE_DEFAULTS['Opaque'])
+    effective_queue = queue or rt_defaults['queue']
+    effective_zwrite = zwrite or rt_defaults['zwrite']
+    effective_blend = blend or rt_defaults['blend']
+
+    props = properties or []
+
+    # --- Properties block ---
+    prop_lines = []
+    for p in props:
+        prop_lines.append(_build_property_line(p))
+    properties_block = '\n'.join(prop_lines)
+
+    # --- SubShader tags ---
+    merged_tags = {
+        'RenderType': render_type,
+        'RenderPipeline': 'UniversalPipeline',
+        'Queue': effective_queue,
+    }
+    if tags:
+        merged_tags.update(tags)
+    tags_str = ' '.join(f'"{k}"="{v}"' for k, v in merged_tags.items())
+
+    # --- Render state lines ---
+    render_state_lines = []
+    if effective_blend:
+        render_state_lines.append(f'        Blend {effective_blend}')
+    render_state_lines.append(f'        ZWrite {effective_zwrite}')
+    if cull != 'Back':
+        render_state_lines.append(f'        Cull {cull}')
+    render_state = '\n'.join(render_state_lines)
+
+    # --- CBUFFER variable declarations ---
+    cbuffer_vars = []
+    texture_decls = []
+    for p in props:
+        hlsl_type = _hlsl_type_for_property(p)
+        pname = p.get('name', '_Unnamed')
+        if hlsl_type is None:
+            # Texture declaration
+            texture_decls.append(f'            TEXTURE2D({pname});')
+            texture_decls.append(f'            SAMPLER(sampler{pname});')
+            cbuffer_vars.append(f'                float4 {pname}_ST;')
+        else:
+            cbuffer_vars.append(f'                {hlsl_type} {pname};')
+
+    texture_block = '\n'.join(texture_decls)
+    cbuffer_content = '\n'.join(cbuffer_vars)
+
+    cbuffer_block = ''
+    if cbuffer_vars:
+        cbuffer_block = f'''
+            CBUFFER_START(UnityPerMaterial)
+{cbuffer_content}
+            CBUFFER_END'''
+
+    # --- Pragma directives ---
+    extra_pragmas = ''
+    if pragma_directives:
+        extra_pragmas = '\n'.join(f'            {d}' for d in pragma_directives)
+        extra_pragmas = '\n' + extra_pragmas
+
+    # --- Include paths ---
+    extra_includes = ''
+    if include_paths:
+        extra_includes = '\n'.join(f'            #include "{p}"' for p in include_paths)
+        extra_includes = '\n' + extra_includes
+
+    # --- Vertex function ---
+    if vertex_code:
+        vert_body = vertex_code
+    else:
+        vert_body = '''Varyings output;
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.uv = input.uv;
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                return output;'''
+
+    # --- Fragment function ---
+    if fragment_code:
+        frag_body = fragment_code
+    else:
+        frag_body = 'return half4(1, 1, 1, 1);'
+
+    # --- Build pass ---
+    def _build_pass(v_body: str, f_body: str, pass_name: str = 'ForwardLit') -> str:
+        return f'''        Pass
+        {{
+            Name "{pass_name}"
+            Tags {{ "LightMode"="UniversalForward" }}
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag{extra_pragmas}
+
+            {_URP_CORE_INCLUDE}{extra_includes}
+
+            struct Attributes
+            {{
+                float4 positionOS : POSITION;
+                float2 uv : TEXCOORD0;
+                float3 normalOS : NORMAL;
+            }};
+
+            struct Varyings
+            {{
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float3 normalWS : TEXCOORD1;
+                float3 positionWS : TEXCOORD2;
+            }};
+
+{texture_block}
+{cbuffer_block}
+
+            Varyings vert(Attributes input)
+            {{
+                {v_body}
+            }}
+
+            half4 frag(Varyings input) : SV_Target
+            {{
+                {f_body}
+            }}
+            ENDHLSL
+        }}'''
+
+    pass1 = _build_pass(vert_body, frag_body, 'ForwardLit')
+
+    pass2 = ''
+    if two_passes:
+        second_v = second_pass_vertex or vert_body
+        second_f = second_pass_fragment or frag_body
+        pass2 = '\n\n' + _build_pass(second_v, second_f, 'SecondPass')
+
+    return f'''Shader "{safe_path}/{safe_name}"
+{{
+    Properties
+    {{
+{properties_block}
+    }}
+
+    SubShader
+    {{
+        Tags {{ {tags_str} }}
+        LOD 200
+{render_state}
+
+{pass1}{pass2}
+    }}
+
+    FallBack "Hidden/InternalErrorShader"
+}}
+'''
+
+
+# ---------------------------------------------------------------------------
+# SHDR-02: URP ScriptableRendererFeature + RenderGraph pass
+# ---------------------------------------------------------------------------
+
+
+def _sanitize_cs_identifier(name: str) -> str:
+    """Sanitize a string into a valid C# identifier."""
+    sanitized = re.sub(r'[^A-Za-z0-9_]', '', name)
+    if sanitized and sanitized[0].isdigit():
+        sanitized = '_' + sanitized
+    return sanitized or 'Unnamed'
+
+
+def generate_renderer_feature(
+    feature_name: str,
+    namespace: str = "",
+    settings_fields: list[dict] | None = None,
+    render_pass_event: str = "BeforeRenderingPostProcessing",
+    shader_property_name: str = "_shader",
+    material_properties: list[dict] | None = None,
+    pass_code: str = "",
+) -> str:
+    """Generate a URP ScriptableRendererFeature with RenderGraph render pass.
+
+    Produces TWO C# classes in a single file:
+
+    1. ``{feature_name}Feature`` -- extends ``ScriptableRendererFeature`` with
+       shader/material lifecycle, settings serialization, and pass enqueueing.
+    2. ``{feature_name}Pass`` -- extends ``ScriptableRenderPass`` using the
+       modern ``RecordRenderGraph`` API (URP 17 / Unity 6). Does **not**
+       implement the legacy ``Execute()`` method.
+
+    Args:
+        feature_name: Base name (e.g. ``"CustomBloom"``). ``Feature`` / ``Pass``
+            suffixes are appended automatically.
+        namespace: Optional C# namespace wrapper.
+        settings_fields: List of settings field dicts, each with ``type``,
+            ``name``, ``default``, and optional ``attribute``.
+        render_pass_event: URP ``RenderPassEvent`` enum value for pass
+            scheduling.
+        shader_property_name: Name of the ``Shader`` serialized field on the
+            feature class.
+        material_properties: List of material property dicts (``name``, ``type``,
+            ``value``) set on the material each frame in ``RecordRenderGraph``.
+        pass_code: Custom body for ``RecordRenderGraph``. If empty, a default
+            blit-and-copy-back pass is generated.
+
+    Returns:
+        Complete C# source string with required ``using`` directives.
+    """
+    safe_name = _sanitize_cs_identifier(feature_name)
+    feature_cls = f'{safe_name}Feature'
+    pass_cls = f'{safe_name}Pass'
+    settings_cls = f'{safe_name}Settings'
+
+    fields = settings_fields or []
+
+    # --- Settings class body ---
+    settings_body_lines = []
+    for f in fields:
+        attr = f.get('attribute', '')
+        ftype = f.get('type', 'float')
+        fname = f.get('name', 'value')
+        fdefault = f.get('default', '')
+        attr_line = f'        [{attr}] ' if attr else '        '
+        default_part = f' = {fdefault};' if fdefault else ';'
+        settings_body_lines.append(f'{attr_line}public {ftype} {fname}{default_part}')
+
+    settings_body = '\n'.join(settings_body_lines) if settings_body_lines else '        // No settings fields'
+
+    # --- Material property set calls ---
+    mat_prop_calls = []
+    for mp in (material_properties or []):
+        mp_name = mp.get('name', '_Value')
+        mp_type = mp.get('type', 'float')
+        mp_value = mp.get('value', '0f')
+        setter = 'SetFloat'
+        if mp_type == 'int':
+            setter = 'SetInt'
+        elif mp_type == 'Color':
+            setter = 'SetColor'
+        elif mp_type == 'Vector':
+            setter = 'SetVector'
+        elif mp_type == 'Texture':
+            setter = 'SetTexture'
+        mat_prop_calls.append(f'            _material.{setter}("{mp_name}", {mp_value});')
+
+    mat_prop_block = '\n'.join(mat_prop_calls)
+
+    # --- RecordRenderGraph body ---
+    if pass_code:
+        record_body = pass_code
+    else:
+        record_body = f'''var resourceData = frameData.Get<UniversalResourceData>();
+            if (resourceData.isActiveTargetBackBuffer) return;
+
+            var src = resourceData.activeColorTexture;
+            var desc = renderGraph.GetTextureDesc(src);
+            desc.depthBufferBits = 0;
+            var dst = renderGraph.CreateTexture(desc);
+
+{mat_prop_block}
+
+            var blitParams = new RenderGraphUtils.BlitMaterialParameters(src, dst, _material, 0);
+            renderGraph.AddBlitPass(blitParams, "{safe_name}");
+
+            var copyBack = new RenderGraphUtils.BlitMaterialParameters(dst, src, _material, 0);
+            renderGraph.AddBlitPass(copyBack, "{safe_name}CopyBack");'''
+
+    # --- Namespace handling ---
+    indent = ''
+    ns_open = ''
+    ns_close = ''
+    if namespace:
+        indent = '    '
+        ns_open = f'namespace {namespace}\n{{\n'
+        ns_close = '\n}'
+
+    source = f'''using UnityEngine;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
+using UnityEngine.Rendering.RenderGraphModule;
+
+{ns_open}{indent}public class {feature_cls} : ScriptableRendererFeature
+{indent}{{
+{indent}    [SerializeField] private Shader {shader_property_name};
+{indent}    [SerializeField] private {settings_cls} _settings;
+{indent}    private Material _material;
+{indent}    private {pass_cls} _pass;
+
+{indent}    public override void Create()
+{indent}    {{
+{indent}        if ({shader_property_name} != null)
+{indent}            _material = CoreUtils.CreateEngineMaterial({shader_property_name});
+{indent}        _pass = new {pass_cls}(_material, _settings);
+{indent}        _pass.renderPassEvent = RenderPassEvent.{render_pass_event};
+{indent}    }}
+
+{indent}    public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
+{indent}    {{
+{indent}        if (_material != null && renderingData.cameraData.cameraType == CameraType.Game)
+{indent}            renderer.EnqueuePass(_pass);
+{indent}    }}
+
+{indent}    protected override void Dispose(bool disposing)
+{indent}    {{
+{indent}        CoreUtils.Destroy(_material);
+{indent}    }}
+
+{indent}    [System.Serializable]
+{indent}    public class {settings_cls}
+{indent}    {{
+{indent}{settings_body}
+{indent}    }}
+{indent}}}
+
+{indent}public class {pass_cls} : ScriptableRenderPass
+{indent}{{
+{indent}    private Material _material;
+{indent}    private {feature_cls}.{settings_cls} _settings;
+
+{indent}    public {pass_cls}(Material material, {feature_cls}.{settings_cls} settings)
+{indent}    {{
+{indent}        _material = material;
+{indent}        _settings = settings;
+{indent}    }}
+
+{indent}    public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
+{indent}    {{
+{indent}        {record_body}
+{indent}    }}
+{indent}}}{ns_close}
+'''
+
+    return source
