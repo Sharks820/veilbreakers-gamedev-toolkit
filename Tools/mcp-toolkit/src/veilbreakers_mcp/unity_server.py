@@ -1245,7 +1245,8 @@ async def _handle_audio_generate_sfx(
 ) -> str:
     """Generate AI SFX from text description (AUD-01)."""
     client = _get_audio_client()
-    output_rel = f"Assets/Resources/Audio/SFX/{name}.mp3"
+    safe_name = _sanitize_cs_identifier(name) or "sfx"
+    output_rel = f"Assets/Resources/Audio/SFX/{safe_name}.mp3"
 
     if settings.unity_project_path:
         output_path = str(Path(settings.unity_project_path) / output_rel)
@@ -1281,7 +1282,9 @@ async def _handle_audio_generate_music_loop(
 ) -> str:
     """Generate loopable music track (AUD-02)."""
     client = _get_audio_client()
-    output_rel = f"Assets/Resources/Audio/Music/{name}_{theme}.mp3"
+    safe_name = _sanitize_cs_identifier(name) or "music"
+    safe_theme = _sanitize_cs_identifier(theme) or "theme"
+    output_rel = f"Assets/Resources/Audio/Music/{safe_name}_{safe_theme}.mp3"
 
     if settings.unity_project_path:
         output_path = str(Path(settings.unity_project_path) / output_rel)
@@ -1317,7 +1320,8 @@ async def _handle_audio_generate_voice_line(
 ) -> str:
     """Synthesise NPC/monster voice line (AUD-03)."""
     client = _get_audio_client()
-    output_rel = f"Assets/Resources/Audio/Voice/{name}.mp3"
+    safe_name = _sanitize_cs_identifier(name) or "voice"
+    output_rel = f"Assets/Resources/Audio/Voice/{safe_name}.mp3"
 
     if settings.unity_project_path:
         output_path = str(Path(settings.unity_project_path) / output_rel)
@@ -1353,7 +1357,8 @@ async def _handle_audio_generate_ambient(
 ) -> str:
     """Generate layered ambient soundscape (AUD-04)."""
     client = _get_audio_client()
-    output_rel = f"Assets/Resources/Audio/Ambient/{biome}"
+    safe_biome = _sanitize_cs_identifier(biome) or "ambient"
+    output_rel = f"Assets/Resources/Audio/Ambient/{safe_biome}"
 
     if settings.unity_project_path:
         output_dir = str(Path(settings.unity_project_path) / output_rel)

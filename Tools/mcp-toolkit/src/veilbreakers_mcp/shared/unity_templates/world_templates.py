@@ -226,7 +226,7 @@ def generate_scene_creation_script(
     lines.append(f'        [MenuItem("VeilBreakers/World/Create Scene ({safe_name})")]')
     lines.append("        public static void Execute()")
     lines.append("        {")
-    lines.append(f'            string sceneName = "{safe_name}";')
+    lines.append(f'            string sceneName = "{safe_id}";')
     lines.append(f"            var scene = EditorSceneManager.NewScene({setup_enum}, NewSceneMode.Single);")
     lines.append("")
     lines.append('            string scenePath = "Assets/Scenes/" + sceneName + ".unity";')
@@ -238,7 +238,11 @@ def generate_scene_creation_script(
     if build_index >= 0:
         lines.append("            // Add to Build Settings")
         lines.append("            var scenes = new System.Collections.Generic.List<EditorBuildSettingsScene>(EditorBuildSettings.scenes);")
-        lines.append("            scenes.Add(new EditorBuildSettingsScene(scenePath, true));")
+        lines.append(f"            int insertIndex = {build_index};")
+        lines.append("            if (insertIndex >= 0 && insertIndex < scenes.Count)")
+        lines.append("                scenes.Insert(insertIndex, new EditorBuildSettingsScene(scenePath, true));")
+        lines.append("            else")
+        lines.append("                scenes.Add(new EditorBuildSettingsScene(scenePath, true));")
         lines.append("            EditorBuildSettings.scenes = scenes.ToArray();")
         lines.append("")
 

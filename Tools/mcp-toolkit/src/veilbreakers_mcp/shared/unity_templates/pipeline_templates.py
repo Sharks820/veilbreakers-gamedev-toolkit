@@ -46,6 +46,40 @@ def _sanitize_cs_identifier(value: str) -> str:
     return re.sub(r"[^a-zA-Z0-9_]", "", value)
 
 
+# C# reserved words (needed by _safe_namespace)
+_CS_RESERVED = frozenset({
+    "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char",
+    "checked", "class", "const", "continue", "decimal", "default", "delegate",
+    "do", "double", "else", "enum", "event", "explicit", "extern", "false",
+    "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit",
+    "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
+    "new", "null", "object", "operator", "out", "override", "params", "private",
+    "protected", "public", "readonly", "ref", "return", "sbyte", "sealed",
+    "short", "sizeof", "stackalloc", "static", "string", "struct", "switch",
+    "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
+    "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+})
+
+
+def _safe_namespace(ns: str) -> str:
+    """Sanitize a C# namespace to prevent code injection."""
+    sanitized = re.sub(r"[^a-zA-Z0-9_.]", "", ns)
+    sanitized = re.sub(r"\.{2,}", ".", sanitized).strip(".")
+    if not sanitized:
+        return "Generated"
+    segments = sanitized.split(".")
+    fixed: list[str] = []
+    for seg in segments:
+        if not seg:
+            continue
+        if seg[0].isdigit():
+            seg = f"_{seg}"
+        if seg in _CS_RESERVED:
+            seg = f"@{seg}"
+        fixed.append(seg)
+    return ".".join(fixed) if fixed else "Generated"
+
+
 # ---------------------------------------------------------------------------
 # LFS extension categories
 # ---------------------------------------------------------------------------
@@ -816,9 +850,7 @@ def generate_asset_postprocessor_script(
     """
     safe_name = _sanitize_cs_identifier(processor_name)
     safe_ns = _sanitize_cs_identifier(namespace.replace(".", "_"))
-    # Restore dots for actual namespace
-    ns_parts = namespace.split(".")
-    clean_ns = ".".join(_sanitize_cs_identifier(p) for p in ns_parts)
+    clean_ns = _safe_namespace(namespace)
 
     # Build texture rules code
     texture_method = _build_preprocess_method(
