@@ -163,6 +163,32 @@ from veilbreakers_mcp.shared.unity_templates.quality_templates import (
     generate_aaa_validation_script,
 )
 
+# ---------------------------------------------------------------------------
+# game_templates.py generators (Phase 12 -- Core Game Systems)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.game_templates import (
+    generate_save_system_script,
+    generate_health_system_script,
+    generate_character_controller_script,
+    generate_input_config_script,
+    generate_settings_menu_script,
+    generate_http_client_script,
+    generate_interactable_script,
+)
+
+# ---------------------------------------------------------------------------
+# vb_combat_templates.py generators (Phase 12 -- VeilBreakers Combat)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.vb_combat_templates import (
+    generate_player_combat_script,
+    generate_ability_system_script,
+    generate_synergy_engine_script,
+    generate_corruption_gameplay_script,
+    generate_xp_leveling_script,
+    generate_currency_system_script,
+    generate_damage_type_script,
+)
+
 
 # ===================================================================
 # Build a list of (name, callable, is_csharp) for every generator
@@ -422,6 +448,24 @@ ALL_GENERATORS: list[tuple[str, callable, str]] = [
     ("quality/master_materials", lambda: generate_master_material_script(), "cs"),
     ("quality/texture_check", lambda: generate_texture_quality_check_script("Assets", 10.24, True, True), "cs"),
     ("quality/aaa_audit", lambda: generate_aaa_validation_script("Assets", "prop", True, True, True), "cs"),
+
+    # --- game systems (Phase 12 -- Core Game Systems) ---
+    ("game/save_system", lambda: generate_save_system_script(), "cs"),
+    ("game/health_system", lambda: generate_health_system_script(), "cs"),
+    ("game/character_controller", lambda: generate_character_controller_script(), "cs"),
+    ("game/input_config", lambda: generate_input_config_script()[1], "cs"),
+    ("game/settings_menu", lambda: generate_settings_menu_script()[0], "cs"),
+    ("game/http_client", lambda: generate_http_client_script(), "cs"),
+    ("game/interactable", lambda: generate_interactable_script(), "cs"),
+
+    # --- vb combat (Phase 12 -- VeilBreakers Combat) ---
+    ("vb/player_combat", lambda: generate_player_combat_script(), "cs"),
+    ("vb/ability_system", lambda: generate_ability_system_script(), "cs"),
+    ("vb/synergy_engine", lambda: generate_synergy_engine_script(), "cs"),
+    ("vb/corruption_gameplay", lambda: generate_corruption_gameplay_script(), "cs"),
+    ("vb/xp_leveling", lambda: generate_xp_leveling_script(), "cs"),
+    ("vb/currency_system", lambda: generate_currency_system_script(), "cs"),
+    ("vb/damage_types", lambda: generate_damage_type_script(), "cs"),
 ]
 
 # Also test the non-C# generators separately for their own validity
@@ -515,6 +559,8 @@ _CS_BRACE_WHITELIST = {
     "added", "skipped", "failed",
     # C# interpolated string variables (used in pipeline_templates sprite animation)
     "sprites.Length",
+    # C# interpolated string variables (used in game_templates HTTP client)
+    "method", "url",
 }
 
 
