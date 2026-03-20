@@ -18,6 +18,16 @@ from veilbreakers_mcp.shared.unity_templates.code_templates import (
     generate_property_drawer,
     generate_inspector_drawer,
     generate_scene_overlay,
+    generate_test_class,
+    generate_service_locator,
+    generate_object_pool,
+    generate_singleton,
+    generate_state_machine,
+    generate_so_event_channel,
+)
+
+from veilbreakers_mcp.shared.unity_templates.editor_templates import (
+    generate_test_runner_script,
 )
 
 
@@ -509,3 +519,327 @@ class TestSafeIdentifier:
         assert isinstance(_CS_RESERVED, frozenset)
         assert "class" in _CS_RESERVED
         assert "void" in _CS_RESERVED
+
+
+# ===================================================================
+# TestGenerateTests (CODE-04)
+# ===================================================================
+
+
+class TestGenerateTests:
+    """Test generate_test_class for NUnit test class generation."""
+
+    def test_editmode_test_class(self):
+        result = generate_test_class("PlayerHealthTest", "EditMode")
+        assert "[TestFixture]" in result
+        assert "[Test]" in result
+        assert "using NUnit.Framework;" in result
+
+    def test_playmode_test_class(self):
+        result = generate_test_class("CombatIntegrationTest", "PlayMode")
+        assert "using UnityEngine.TestTools;" in result
+
+    def test_unity_test_method(self):
+        result = generate_test_class(
+            "AsyncTest",
+            test_methods=[
+                {"name": "TestDamageOverTime", "body": "yield return null;", "is_unity_test": True}
+            ],
+        )
+        assert "[UnityTest]" in result
+        assert "IEnumerator" in result
+
+    def test_setup_teardown(self):
+        result = generate_test_class(
+            "LifecycleTest",
+            setup_body="_sut = new object();",
+            teardown_body="_sut = null;",
+        )
+        assert "[SetUp]" in result
+        assert "[TearDown]" in result
+
+    def test_target_class(self):
+        result = generate_test_class("HealthTest", target_class="PlayerHealth")
+        assert "private PlayerHealth _sut;" in result
+
+    def test_namespace(self):
+        result = generate_test_class(
+            "NamespacedTest", namespace="VeilBreakers.Tests"
+        )
+        assert "namespace VeilBreakers.Tests" in result
+
+    def test_balanced_braces(self):
+        result = generate_test_class(
+            "BraceTest",
+            test_methods=[
+                {"name": "Test1", "body": "Assert.AreEqual(1, 1);"},
+                {"name": "Test2", "is_unity_test": True},
+            ],
+            setup_body="Debug.Log(\"setup\");",
+            teardown_body="Debug.Log(\"teardown\");",
+            namespace="VeilBreakers.Tests",
+        )
+        assert check_brace_balance(result)
+
+
+# ===================================================================
+# TestRunnerScript (CODE-05)
+# ===================================================================
+
+
+class TestRunnerScript:
+    """Test generate_test_runner_script for TestRunnerApi integration."""
+
+    def test_basic_runner(self):
+        result = generate_test_runner_script()
+        assert "TestRunnerApi" in result
+        assert "ICallbacks" in result
+        assert "vb_result.json" in result
+        assert "MenuItem" in result
+        assert "runSynchronously" in result
+
+    def test_editmode_filter(self):
+        result = generate_test_runner_script(test_mode="EditMode")
+        assert "TestMode.EditMode" in result
+
+    def test_playmode_filter(self):
+        result = generate_test_runner_script(test_mode="PlayMode")
+        assert "TestMode.PlayMode" in result
+
+    def test_assembly_filter(self):
+        result = generate_test_runner_script(
+            assembly_filter="VeilBreakers.Tests.EditMode"
+        )
+        assert "assemblyNames" in result
+        assert "VeilBreakers.Tests.EditMode" in result
+
+    def test_result_json_structure(self):
+        result = generate_test_runner_script()
+        assert "pass_count" in result
+        assert "fail_count" in result
+        assert "tests" in result
+
+    def test_balanced_braces(self):
+        result = generate_test_runner_script()
+        assert check_brace_balance(result)
+
+    def test_invalid_mode_raises(self):
+        with pytest.raises(ValueError, match="test_mode"):
+            generate_test_runner_script(test_mode="Invalid")
+
+
+# ===================================================================
+# TestServiceLocator (CODE-06)
+# ===================================================================
+
+
+class TestServiceLocator:
+    """Test generate_service_locator for service registry pattern."""
+
+    def test_basic_locator(self):
+        result = generate_service_locator()
+        assert "ServiceLocator" in result
+        assert "Register<T>" in result
+        assert "Get<T>" in result
+        assert "TryGet" in result
+        assert "Unregister" in result
+        assert "Clear" in result
+
+    def test_namespace(self):
+        result = generate_service_locator()
+        assert "VeilBreakers.Patterns" in result
+
+    def test_scene_persistent(self):
+        result = generate_service_locator(include_scene_persistent=True)
+        assert "ServiceLocatorInitializer" in result
+        assert "RuntimeInitializeOnLoadMethod" in result
+
+    def test_without_scene_persistent(self):
+        result = generate_service_locator(include_scene_persistent=False)
+        assert "ServiceLocatorInitializer" not in result
+
+    def test_balanced_braces(self):
+        result = generate_service_locator()
+        assert check_brace_balance(result)
+
+    def test_balanced_braces_without_persistent(self):
+        result = generate_service_locator(include_scene_persistent=False)
+        assert check_brace_balance(result)
+
+
+# ===================================================================
+# TestObjectPool (CODE-07)
+# ===================================================================
+
+
+class TestObjectPool:
+    """Test generate_object_pool for generic pooling system."""
+
+    def test_basic_pool(self):
+        result = generate_object_pool()
+        assert "ObjectPool<T>" in result
+        assert "Stack<T>" in result
+        assert "Get()" in result
+        assert "Release" in result
+        assert "CountActive" in result
+        assert "CountInactive" in result
+
+    def test_gameobject_pool(self):
+        result = generate_object_pool(include_gameobject_pool=True)
+        assert "GameObjectPool" in result
+        assert "SetActive" in result
+        assert "Instantiate" in result
+
+    def test_without_gameobject_pool(self):
+        result = generate_object_pool(include_gameobject_pool=False)
+        assert "GameObjectPool" not in result
+
+    def test_namespace(self):
+        result = generate_object_pool()
+        assert "VeilBreakers.Patterns" in result
+
+    def test_balanced_braces(self):
+        result = generate_object_pool()
+        assert check_brace_balance(result)
+
+    def test_balanced_braces_without_go_pool(self):
+        result = generate_object_pool(include_gameobject_pool=False)
+        assert check_brace_balance(result)
+
+
+# ===================================================================
+# TestSingleton (CODE-08)
+# ===================================================================
+
+
+class TestSingleton:
+    """Test generate_singleton for MonoBehaviour and Plain singletons."""
+
+    def test_monobehaviour_singleton(self):
+        result = generate_singleton("GameManager", "MonoBehaviour")
+        assert "MonoBehaviour" in result
+        assert "Instance" in result
+        assert "Awake" in result
+        assert "_instance" in result
+
+    def test_persistent(self):
+        result = generate_singleton("GameManager", persistent=True)
+        assert "DontDestroyOnLoad" in result
+
+    def test_non_persistent(self):
+        result = generate_singleton("GameManager", persistent=False)
+        assert "DontDestroyOnLoad" not in result
+
+    def test_plain_singleton(self):
+        result = generate_singleton("ConfigManager", "Plain")
+        assert "Lazy<" in result
+        # Check for private constructor
+        assert "private ConfigManager()" in result
+
+    def test_compatible_comment(self):
+        result = generate_singleton("GameManager")
+        assert "SingletonMonoBehaviour" in result
+
+    def test_balanced_braces_mono(self):
+        result = generate_singleton("Test1", "MonoBehaviour")
+        assert check_brace_balance(result)
+
+    def test_balanced_braces_plain(self):
+        result = generate_singleton("Test2", "Plain")
+        assert check_brace_balance(result)
+
+
+# ===================================================================
+# TestStateMachine (CODE-09)
+# ===================================================================
+
+
+class TestStateMachine:
+    """Test generate_state_machine for IState/StateMachine/BaseState."""
+
+    def test_state_machine(self):
+        result = generate_state_machine()
+        assert "IState" in result
+        assert "StateMachine" in result
+        assert "BaseState" in result
+        assert "ChangeState" in result
+        assert "Enter" in result
+        assert "Exit" in result
+        assert "Update" in result
+
+    def test_interface_methods(self):
+        result = generate_state_machine()
+        assert "void Enter();" in result
+        assert "void Exit();" in result
+        assert "void Update();" in result
+        assert "void FixedUpdate();" in result
+
+    def test_state_dictionary(self):
+        result = generate_state_machine()
+        assert "Dictionary<Type, IState>" in result
+        assert "AddState" in result
+
+    def test_namespace(self):
+        result = generate_state_machine()
+        assert "VeilBreakers.Patterns" in result
+
+    def test_balanced_braces(self):
+        result = generate_state_machine()
+        assert check_brace_balance(result)
+
+
+# ===================================================================
+# TestSOEvents (CODE-10)
+# ===================================================================
+
+
+class TestSOEvents:
+    """Test generate_so_event_channel for ScriptableObject event channels."""
+
+    def test_base_event_channel(self):
+        result = generate_so_event_channel()
+        assert "GameEvent" in result
+        assert "GameEvent<T>" in result
+        assert "GameEventListener" in result
+        assert "CreateAssetMenu" in result
+        assert "Action" in result
+
+    def test_namespace_distinct(self):
+        result = generate_so_event_channel()
+        assert "VeilBreakers.Events.Channels" in result
+        assert "VeilBreakers.Core" not in result
+
+    def test_specific_event(self):
+        result = generate_so_event_channel(event_name="PlayerDeath")
+        assert "PlayerDeathEvent" in result
+
+    def test_typed_event(self):
+        result = generate_so_event_channel(
+            event_name="DamageDealt", has_parameter=True, parameter_type="float"
+        )
+        assert "GameEvent<float>" in result
+
+    def test_listener_component(self):
+        result = generate_so_event_channel()
+        assert "GameEventListener" in result
+        assert "UnityEvent _response" in result
+        assert "OnEnable" in result
+        assert "OnDisable" in result
+
+    def test_editor_debug_log(self):
+        result = generate_so_event_channel()
+        assert "#if UNITY_EDITOR" in result
+
+    def test_balanced_braces(self):
+        result = generate_so_event_channel()
+        assert check_brace_balance(result)
+
+    def test_balanced_braces_specific(self):
+        result = generate_so_event_channel(event_name="Test")
+        assert check_brace_balance(result)
+
+    def test_balanced_braces_typed(self):
+        result = generate_so_event_channel(
+            event_name="Test", has_parameter=True, parameter_type="int"
+        )
+        assert check_brace_balance(result)
