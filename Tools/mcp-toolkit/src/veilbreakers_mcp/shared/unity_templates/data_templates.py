@@ -579,8 +579,8 @@ def generate_json_validator_script(
                 if pattern and ftype == "string":
                     # For @"..." verbatim strings, only escape double quotes (as "")
                     verbatim_pattern = pattern.replace('"', '""')
-                    # For display in interpolated string, use raw pattern
-                    display_pattern = pattern.replace('"', '\\"')
+                    # For display in interpolated string, escape backslashes then quotes
+                    display_pattern = pattern.replace("\\", "\\\\").replace('"', '\\"')
                     lines.append(
                         f'            if (!string.IsNullOrEmpty(entry.{safe_field}) '
                         f'&& !Regex.IsMatch(entry.{safe_field}, @"{verbatim_pattern}"))'
