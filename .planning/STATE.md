@@ -3,21 +3,6 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
-stopped_at: Completed 11-01-PLAN.md (data architecture templates + 43 tests)
-last_updated: "2026-03-20T11:49:51.456Z"
-last_activity: 2026-03-20 -- Completed 11-02-PLAN.md (pipeline templates + 72 tests)
-progress:
-  total_phases: 9
-  completed_phases: 2
-  total_plans: 11
-  completed_plans: 9
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
 stopped_at: Completed 11-02-PLAN.md
 last_updated: "2026-03-20T11:46:46Z"
 last_activity: 2026-03-20 -- Completed 11-02-PLAN.md (pipeline templates + 72 tests)
@@ -72,7 +57,7 @@ v2.0 Progress:  [█████░░░░░] 50% (2/4 plans in phase 11)
 | 10-02 duration | 9 min |
 | 10-03 duration | 9 min |
 | 10-04 duration | 18 min |
-| Phase 11 P01 | 8 | 2 tasks | 2 files |
+| 11-02 duration | 8 min |
 
 ## Accumulated Context
 
@@ -103,6 +88,11 @@ v2.0 Progress:  [█████░░░░░] 50% (2/4 plans in phase 11)
 | Architecture patterns in VeilBreakers.Patterns namespace | Consistent namespace for service locator, object pool, state machine | 10 |
 | unity_code consolidates 12 code-gen actions in single compound tool | Matches established compound pattern (unity_vfx, unity_audio, etc.) | 10 |
 | modify_script creates .cs.bak backup before modification | Safety rollback for non-destructive script editing | 10 |
+| SpriteAtlas V1 API (.spriteatlas) for programmatic creation | V2 has native crash issues; V1 API is stable and well-documented | 11 |
+| Normal map bake generates Blender Python not C# | Executed via blender_execute, must use only allowed imports (bpy, mathutils) | 11 |
+| AssetPostprocessor uses OnPreprocess exclusively | OnPostprocess triggers infinite reimport loops; OnPreprocess is safe | 11 |
+| .asset files excluded from Git LFS | Unity Force Text serialization stores .asset as YAML text | 11 |
+| Setting maps use (property, formatter) tuples | Clean code generation from Python dicts to C# property assignments | 11 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -117,10 +107,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T11:49:51.453Z
-Stopped at: Completed 11-01-PLAN.md (data architecture templates + 43 tests)
-Next action: Execute Phase 11
+Last session: 2026-03-20T11:46:46Z
+Stopped at: Completed 11-02-PLAN.md
+Next action: Execute 11-03-PLAN.md
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 10-04-PLAN.md (Phase 10 complete)*
+*Last updated: 2026-03-20 -- Completed 11-02-PLAN.md (pipeline templates + 72 tests)*

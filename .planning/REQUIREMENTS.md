@@ -89,7 +89,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [ ] **BUILD-03**: Claude can generate CI/CD pipeline configs (GitHub Actions, GitLab CI) for automated Unity builds and tests
 - [ ] **BUILD-04**: Claude can manage version numbers, release branches, and changelogs
 - [ ] **BUILD-05**: Claude can configure platform-specific settings (Android manifest, iOS plist, WebGL template)
-- [ ] **BUILD-06**: Claude can set up sprite sheet packing, texture atlasing, and sprite animation
+- [x] **BUILD-06**: Claude can set up sprite sheet packing, texture atlasing, and sprite animation
 
 ### Quality & Testing
 
@@ -106,8 +106,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 - [x] **IMP-01**: Claude can manage .meta files and GUIDs when moving/renaming assets (AssetDatabase.MoveAsset)
 - [x] **IMP-02**: Claude can configure material remapping on FBX import (auto-generate from textures or remap to existing)
-- [ ] **IMP-03**: Claude can set up Git LFS rules, .gitignore, .gitattributes for Unity projects
-- [ ] **IMP-04**: Claude can configure normal map baking workflow (high-to-low with cage generation in one step)
+- [x] **IMP-03**: Claude can set up Git LFS rules, .gitignore, .gitattributes for Unity projects
+- [x] **IMP-04**: Claude can configure normal map baking workflow (high-to-low with cage generation in one step)
 
 ### UI & UX Enhancements
 
@@ -133,7 +133,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 - [ ] **TWO-01**: Claude can create and paint 2D Tilemaps with Tile Palettes and Rule Tiles
 - [ ] **TWO-02**: Claude can configure 2D Physics (Rigidbody2D, Collider2D, Physics2D settings, 2D joints)
-- [ ] **TWO-03**: Claude can configure Sprite Editor features (custom physics shapes, pivot, 9-slice borders)
+- [x] **TWO-03**: Claude can configure Sprite Editor features (custom physics shapes, pivot, 9-slice borders)
 
 ### Physics Advanced
 
@@ -147,7 +147,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Asset Pipeline Advanced
 
-- [ ] **PIPE-08**: Claude can generate AssetPostprocessor scripts for custom import pipelines
+- [x] **PIPE-08**: Claude can generate AssetPostprocessor scripts for custom import pipelines
 - [x] **PIPE-09**: Claude can generate Unity Presets for reusable import/component configuration templates
 - [ ] **PIPE-10**: Claude can configure TextMeshPro (font asset creation, TMP component setup, rich text, font fallbacks)
 
@@ -268,9 +268,9 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | DATA-02 | Phase 11 | Complete |
 | DATA-03 | Phase 11 | Complete |
 | DATA-04 | Phase 11 | Complete |
-| IMP-03 | Phase 11 | Pending |
-| IMP-04 | Phase 11 | Pending |
-| BUILD-06 | Phase 11 | Pending |
+| IMP-03 | Phase 11 | Complete |
+| IMP-04 | Phase 11 | Complete |
+| BUILD-06 | Phase 11 | Complete |
 | GAME-01 | Phase 12 | Pending |
 | GAME-05 | Phase 12 | Pending |
 | GAME-06 | Phase 12 | Pending |
@@ -319,12 +319,12 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | SHDR-04 | Phase 15 | Pending |
 | TWO-01 | Phase 14 | Pending |
 | TWO-02 | Phase 14 | Pending |
-| TWO-03 | Phase 11 | Pending |
+| TWO-03 | Phase 11 | Complete |
 | PHYS-01 | Phase 9 | Complete |
 | PHYS-02 | Phase 9 | Complete |
 | ACC-01 | Phase 15 | Pending |
 | ACC-02 | Phase 17 | Pending |
-| PIPE-08 | Phase 11 | Pending |
+| PIPE-08 | Phase 11 | Complete |
 | PIPE-09 | Phase 9 | Complete |
 | PIPE-10 | Phase 15 | Pending |
 | MEDIA-01 | Phase 14 | Pending |
