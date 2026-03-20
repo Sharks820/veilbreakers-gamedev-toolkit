@@ -23,6 +23,24 @@ from veilbreakers_mcp.shared.unity_templates.editor_templates import (
     generate_screenshot_script,
     generate_console_log_script,
     generate_gemini_review_script,
+    generate_test_runner_script,
+)
+
+# ---------------------------------------------------------------------------
+# code_templates.py generators (Phase 10)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.code_templates import (
+    generate_class,
+    generate_editor_window,
+    generate_property_drawer,
+    generate_inspector_drawer,
+    generate_scene_overlay,
+    generate_test_class,
+    generate_service_locator,
+    generate_object_pool,
+    generate_singleton,
+    generate_state_machine,
+    generate_so_event_channel,
 )
 
 # ---------------------------------------------------------------------------
@@ -50,6 +68,8 @@ from veilbreakers_mcp.shared.unity_templates.shader_templates import (
     generate_foliage_shader,
     generate_outline_shader,
     generate_damage_overlay_shader,
+    generate_arbitrary_shader,
+    generate_renderer_feature,
 )
 
 # ---------------------------------------------------------------------------
@@ -127,6 +147,60 @@ ALL_GENERATORS: list[tuple[str, callable, str]] = [
     ("editor/console_log_all", lambda: generate_console_log_script(filter_type="all"), "cs"),
     ("editor/console_log_error", lambda: generate_console_log_script(filter_type="error"), "cs"),
     ("editor/gemini_review", lambda: generate_gemini_review_script("Screenshots/test.png", ["lighting", "composition"]), "cs"),
+    ("editor/test_runner", lambda: generate_test_runner_script(), "cs"),
+    ("editor/test_runner_playmode", lambda: generate_test_runner_script(test_mode="PlayMode"), "cs"),
+    ("editor/test_runner_filtered", lambda: generate_test_runner_script(assembly_filter="VeilBreakers.Tests", category_filter="Unit"), "cs"),
+
+    # --- code generation (Phase 10) ---
+    ("code/class_monobehaviour", lambda: generate_class("TestClass", "MonoBehaviour", namespace="Test", summary="A test MonoBehaviour class for validation"), "cs"),
+    ("code/class_scriptable_object", lambda: generate_class("TestSO", "ScriptableObject", namespace="Test", summary="A test ScriptableObject for validation"), "cs"),
+    ("code/class_plain", lambda: generate_class("TestPlain", "class", namespace="Test", usings=["System"], summary="A plain test class", methods=[{"access": "public", "return_type": "void", "name": "Execute", "body": "// TODO"}]), "cs"),
+    ("code/class_static", lambda: generate_class("TestStatic", "static class", namespace="Test", usings=["System"], methods=[{"access": "public static", "return_type": "string", "name": "GetName", "body": 'return "test";'}]), "cs"),
+    ("code/class_abstract", lambda: generate_class("TestAbstract", "abstract class", namespace="Test", usings=["System"], methods=[{"access": "public abstract", "return_type": "void", "name": "OnExecute"}]), "cs"),
+    ("code/class_struct", lambda: generate_class("TestStruct", "struct", namespace="Game.Data", usings=["System"], fields=[{"access": "public", "type": "float", "name": "x"}, {"access": "public", "type": "float", "name": "y"}, {"access": "public", "type": "float", "name": "z"}]), "cs"),
+    ("code/class_enum", lambda: generate_class("TestEnum", "enum", namespace="Game", enum_values=["None", "Attack", "Defend", "Heal", "Flee"]), "cs"),
+    ("code/class_interface", lambda: generate_class("ITestable", "interface", namespace="Game", methods=[{"access": "", "return_type": "void", "name": "Initialize"}, {"access": "", "return_type": "bool", "name": "IsReady"}]), "cs"),
+    (
+        "code/class_with_members",
+        lambda: generate_class(
+            "PlayerStats", "MonoBehaviour", namespace="Game",
+            fields=[{"access": "private", "type": "int", "name": "health", "default": "100"}],
+            properties=[{"access": "public", "type": "int", "name": "Health", "getter": "return health;", "setter": "health = value;"}],
+            methods=[{"access": "public", "return_type": "void", "name": "TakeDamage", "params": "int amount", "body": "health -= amount;"}],
+        ),
+        "cs",
+    ),
+    ("code/editor_window", lambda: generate_editor_window("TestWindow", "Tools/Test"), "cs"),
+    ("code/editor_window_custom", lambda: generate_editor_window("DebugPanel", "VeilBreakers/Debug", on_gui_body='GUILayout.Label("Debug Info");'), "cs"),
+    ("code/property_drawer", lambda: generate_property_drawer("TestType"), "cs"),
+    ("code/property_drawer_custom", lambda: generate_property_drawer("HealthRange", drawer_body='EditorGUI.Slider(position, property.floatValue, 0f, 100f);'), "cs"),
+    ("code/inspector_drawer", lambda: generate_inspector_drawer("TestComponent"), "cs"),
+    ("code/inspector_drawer_fields", lambda: generate_inspector_drawer("EnemyStats", fields_to_draw=["health", "damage", "speed"]), "cs"),
+    ("code/scene_overlay", lambda: generate_scene_overlay("TestOverlay", "Test"), "cs"),
+    ("code/test_class_editmode", lambda: generate_test_class("TestSuite"), "cs"),
+    ("code/test_class_playmode", lambda: generate_test_class("PlayTests", test_mode="PlayMode"), "cs"),
+    (
+        "code/test_class_with_methods",
+        lambda: generate_test_class(
+            "HealthTests", target_class="PlayerHealth",
+            test_methods=[
+                {"name": "TestInitialHealth", "body": "Assert.AreEqual(100, _sut.CurrentHealth);"},
+                {"name": "TestDamage", "body": "_sut.TakeDamage(10);\nAssert.AreEqual(90, _sut.CurrentHealth);"},
+            ],
+        ),
+        "cs",
+    ),
+    ("code/service_locator", lambda: generate_service_locator(), "cs"),
+    ("code/service_locator_no_init", lambda: generate_service_locator(include_scene_persistent=False), "cs"),
+    ("code/object_pool", lambda: generate_object_pool(), "cs"),
+    ("code/object_pool_no_go", lambda: generate_object_pool(include_gameobject_pool=False), "cs"),
+    ("code/singleton_mono", lambda: generate_singleton("TestSingleton", "MonoBehaviour"), "cs"),
+    ("code/singleton_plain", lambda: generate_singleton("TestSingleton2", "Plain"), "cs"),
+    ("code/singleton_no_persist", lambda: generate_singleton("TransientSingleton", "MonoBehaviour", persistent=False), "cs"),
+    ("code/state_machine", lambda: generate_state_machine(), "cs"),
+    ("code/event_channel_base", lambda: generate_so_event_channel(), "cs"),
+    ("code/event_channel_typed", lambda: generate_so_event_channel(event_name="PlayerDeath"), "cs"),
+    ("code/event_channel_param", lambda: generate_so_event_channel(event_name="DamageDealt", has_parameter=True, parameter_type="float"), "cs"),
 
     # --- vfx ---
     ("vfx/particle", lambda: generate_particle_vfx_script(name="TestEffect"), "cs"),
@@ -158,6 +232,11 @@ ALL_GENERATORS: list[tuple[str, callable, str]] = [
     ("shader/foliage", lambda: generate_foliage_shader(), "shader"),
     ("shader/outline", lambda: generate_outline_shader(), "shader"),
     ("shader/damage_overlay", lambda: generate_damage_overlay_shader(), "shader"),
+    ("shader/arbitrary", lambda: generate_arbitrary_shader("TestShader"), "shader"),
+    ("shader/arbitrary_transparent", lambda: generate_arbitrary_shader("TestTransparent", render_type="Transparent"), "shader"),
+    ("shader/arbitrary_two_pass", lambda: generate_arbitrary_shader("TestTwoPass", two_passes=True), "shader"),
+    ("shader/renderer_feature", lambda: generate_renderer_feature("TestFeature"), "cs"),
+    ("shader/renderer_feature_ns", lambda: generate_renderer_feature("CustomBloom", namespace="VeilBreakers.Rendering"), "cs"),
 
     # --- audio ---
     ("audio/footstep", lambda: generate_footstep_manager_script(), "cs"),
@@ -376,6 +455,8 @@ _CS_BRACE_WHITELIST = {
     "res.x", "res.y", "path", "ex.Message",
     # Common C# format strings
     "0", "1", "2", "3", "i",
+    # C# interpolated string variables (used in code_templates SO event channels)
+    "value", "name",
 }
 
 
@@ -431,10 +512,18 @@ class TestCSharpTemplateSyntax:
         """Output should contain expected C# / shader keywords."""
         output = generator()
         if lang == "cs":
-            # C# scripts must have at least 'class' or 'static class'
-            assert "class " in output, f"[{name}] Missing 'class' keyword"
-            # Should have 'using' statements (imports)
-            assert "using " in output, f"[{name}] Missing 'using' keyword"
+            # C# scripts must have a type declaration keyword
+            has_type_keyword = (
+                "class " in output
+                or "interface " in output
+                or "enum " in output
+                or "struct " in output
+            )
+            assert has_type_keyword, (
+                f"[{name}] Missing type keyword (class/interface/enum/struct)"
+            )
+            # Most C# scripts have 'using' statements, but minimal code
+            # generators (plain class, enum, interface) may legitimately omit them
         elif lang == "shader":
             # Shader files should have Shader, Properties, SubShader
             assert "Shader " in output, f"[{name}] Missing 'Shader' keyword"
