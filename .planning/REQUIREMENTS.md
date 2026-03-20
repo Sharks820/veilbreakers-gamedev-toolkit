@@ -33,9 +33,9 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### C# Programming
 
-- [ ] **CODE-01**: Claude can generate arbitrary C# MonoBehaviours, plain classes, interfaces, enums, structs, and static utilities (not just domain templates)
-- [ ] **CODE-02**: Claude can modify existing C# scripts (add methods, fields, properties, attributes, using statements)
-- [ ] **CODE-03**: Claude can generate custom Inspector drawers, PropertyDrawers, EditorWindows, and SceneView overlays
+- [x] **CODE-01**: Claude can generate arbitrary C# MonoBehaviours, plain classes, interfaces, enums, structs, and static utilities (not just domain templates)
+- [x] **CODE-02**: Claude can modify existing C# scripts (add methods, fields, properties, attributes, using statements)
+- [x] **CODE-03**: Claude can generate custom Inspector drawers, PropertyDrawers, EditorWindows, and SceneView overlays
 - [ ] **CODE-04**: Claude can create EditMode and PlayMode test assemblies, fixtures, and test methods (NUnit / Unity Test Framework)
 - [ ] **CODE-05**: Claude can run Unity tests and collect pass/fail results through MCP
 - [ ] **CODE-06**: Claude can scaffold dependency injection patterns (service locator, event bus, SO event channels)
@@ -254,9 +254,9 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | EDIT-15 | Phase 9 | Complete |
 | IMP-01 | Phase 9 | Complete |
 | IMP-02 | Phase 9 | Complete |
-| CODE-01 | Phase 10 | Pending |
-| CODE-02 | Phase 10 | Pending |
-| CODE-03 | Phase 10 | Pending |
+| CODE-01 | Phase 10 | Complete |
+| CODE-02 | Phase 10 | Complete |
+| CODE-03 | Phase 10 | Complete |
 | CODE-04 | Phase 10 | Pending |
 | CODE-05 | Phase 10 | Pending |
 | CODE-06 | Phase 10 | Pending |
