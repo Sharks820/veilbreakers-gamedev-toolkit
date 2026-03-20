@@ -101,6 +101,24 @@ def _safe_identifier(name: str) -> str:
     return result
 
 
+def _safe_namespace(ns: str) -> str:
+    """Sanitize a C# namespace to prevent code injection.
+
+    Valid C# namespaces allow only letters, digits, underscores, and dots.
+    Strips everything else.
+
+    Args:
+        ns: Raw namespace string.
+
+    Returns:
+        Sanitized namespace string safe for C# ``namespace`` declarations.
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9_.]", "", ns)
+    # Strip leading/trailing dots and collapse consecutive dots
+    sanitized = re.sub(r"\.{2,}", ".", sanitized).strip(".")
+    return sanitized or "Generated"
+
+
 def _safe_type(type_str: str) -> str:
     """Sanitize a C# type expression to prevent code injection.
 
@@ -354,7 +372,7 @@ def _build_cs_class(
     # 2. Namespace open
     indent = ""
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
         indent = "    "
 
@@ -770,7 +788,7 @@ def generate_editor_window(
 
     indent = ""
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
         indent = "    "
 
@@ -851,7 +869,7 @@ def generate_property_drawer(
 
     indent = ""
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
         indent = "    "
 
@@ -914,7 +932,7 @@ def generate_inspector_drawer(
 
     indent = ""
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
         indent = "    "
 
@@ -980,7 +998,7 @@ def generate_scene_overlay(
 
     indent = ""
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
         indent = "    "
 
@@ -1071,7 +1089,7 @@ def generate_test_class(
 
     indent = ""
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
         indent = "    "
 
@@ -1181,7 +1199,7 @@ def generate_service_locator(
 
     indent = ""
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
         indent = "    "
 
@@ -1290,7 +1308,7 @@ def generate_object_pool(
 
     indent = ""
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
         indent = "    "
 
@@ -1429,7 +1447,7 @@ def generate_singleton(
 
     indent = ""
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
         indent = "    "
 
@@ -1517,7 +1535,7 @@ def generate_state_machine(
 
     indent = ""
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
         indent = "    "
 
@@ -1640,7 +1658,7 @@ def generate_so_event_channel(
 
     indent = ""
     if namespace:
-        lines.append(f"namespace {namespace}")
+        lines.append(f"namespace {_safe_namespace(namespace)}")
         lines.append("{")
         indent = "    "
 
@@ -1721,7 +1739,8 @@ def generate_so_event_channel(
             lines.append(f"{indent}/// {safe_event} event channel carrying a {safe_param} parameter.")
             lines.append(f"{indent}/// </summary>")
             lines.append(f'{indent}[CreateAssetMenu(menuName = "VeilBreakers/Events/{safe_event} Event", fileName = "{safe_event}Event")]')
-            lines.append(f"{indent}public class {safe_event}Event : GameEvent<{parameter_type}>")
+            lines.append(f"{indent}public class {safe_event}Event : GameEvent<{_safe_type(parameter_type)}>")
+
             lines.append(f"{indent}{{")
             lines.append(f"{indent}}}")
         else:

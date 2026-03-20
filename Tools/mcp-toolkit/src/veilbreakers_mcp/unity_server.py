@@ -59,6 +59,7 @@ from veilbreakers_mcp.shared.unity_templates.code_templates import (
     generate_singleton,
     generate_state_machine,
     generate_so_event_channel,
+    _sanitize_cs_identifier,
 )
 from veilbreakers_mcp.shared.unity_templates.audio_templates import (
     generate_footstep_manager_script,
@@ -851,7 +852,8 @@ async def _handle_vfx_shader(name: str, shader_type: str) -> str:
 
     shader = shader_generators[shader_type]()
     type_label = shader_type.title().replace("_", "")
-    shader_path = f"Assets/Shaders/Generated/{name}_{type_label}.shader"
+    safe_name = _sanitize_cs_identifier(name) or "Shader"
+    shader_path = f"Assets/Shaders/Generated/{safe_name}_{type_label}.shader"
 
     try:
         abs_path = _write_to_unity(shader, shader_path)
@@ -5059,7 +5061,8 @@ async def unity_shader(
                 second_pass_vertex=second_pass_vertex,
                 second_pass_fragment=second_pass_fragment,
             )
-            rel_path = f"{output_dir}/{shader_name}.shader"
+            safe_shader_name = _sanitize_cs_identifier(shader_name) or "Shader"
+            rel_path = f"{output_dir}/{safe_shader_name}.shader"
             abs_path = _write_to_unity(shader_source, rel_path)
             return json.dumps({
                 "status": "success",
