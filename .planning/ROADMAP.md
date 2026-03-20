@@ -1,21 +1,47 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Depth:** Standard (5-8 phases)
-**Coverage:** 128/128 v1 requirements mapped
+**Updated:** 2026-03-19 (v2.0 milestone added)
+
+## Milestones
+
+- [x] **v1.0 Foundation & Full Pipeline** - Phases 1-8 (shipped 2026-03-19)
+- [ ] **v2.0 Complete Unity Game Development Coverage** - Phases 9-17 (in progress)
 
 ## Phases
 
-- [ ] **Phase 1: Foundation & Server Architecture** - MCP server skeleton, compound tool pattern, Blender socket bridge, async job queue, visual feedback
-- [ ] **Phase 2: Mesh, UV & Topology Pipeline** - Mesh analysis/editing/repair, UV unwrapping/packing, game-readiness validation
-- [ ] **Phase 3: Texturing & Asset Generation** - PBR textures, AI 3D generation, concept art, asset pipeline processing, export validation
-- [ ] **Phase 4: Rigging** - Creature rig templates, facial rigging, IK chains, spring bones, weight painting, ragdoll, shape keys
-- [ ] **Phase 5: Animation** - Procedural gaits, combat animations, contact sheet preview, root motion, AI motion, batch export
-- [ ] **Phase 6: Environment & World Building** - Terrain, caves, buildings, dungeons, vegetation, interiors, modular kits, props
-- [ ] **Phase 7: VFX, Audio, UI & Unity Scene** - Particle VFX, shaders, audio generation, UI screens, scene setup, Gemini visual review
-- [ ] **Phase 8: Gameplay AI & Performance** - Mob AI controllers, spawn systems, profiling, LOD, lightmaps, build pipeline
+<details>
+<summary>v1.0 Foundation & Full Pipeline (Phases 1-8) - SHIPPED 2026-03-19</summary>
+
+- [x] **Phase 1: Foundation & Server Architecture** - MCP server skeleton, compound tool pattern, Blender socket bridge, async job queue, visual feedback
+- [x] **Phase 2: Mesh, UV & Topology Pipeline** - Mesh analysis/editing/repair, UV unwrapping/packing, game-readiness validation
+- [x] **Phase 3: Texturing & Asset Generation** - PBR textures, AI 3D generation, concept art, asset pipeline processing, export validation
+- [x] **Phase 4: Rigging** - Creature rig templates, facial rigging, IK chains, spring bones, weight painting, ragdoll, shape keys
+- [x] **Phase 5: Animation** - Procedural gaits, combat animations, contact sheet preview, root motion, AI motion, batch export
+- [x] **Phase 6: Environment & World Building** - Terrain, caves, buildings, dungeons, vegetation, interiors, modular kits, props
+- [x] **Phase 7: VFX, Audio, UI & Unity Scene** - Particle VFX, shaders, audio generation, UI screens, scene setup, Gemini visual review
+- [x] **Phase 8: Gameplay AI & Performance** - Mob AI controllers, spawn systems, profiling, LOD, lightmaps, build pipeline
+
+**Delivered:** 22 MCP tools, 86 Blender handlers, 153 capabilities, 2,740 tests, 55 bugs fixed.
+
+</details>
+
+### v2.0 Complete Unity Game Development Coverage
+
+- [ ] **Phase 9: Unity Editor Deep Control** - Prefabs, components, hierarchy, physics, project settings, packages, import configuration, asset operations
+- [ ] **Phase 10: C# Programming Framework** - General-purpose code generation, script modification, editor tooling, test framework, architecture patterns
+- [ ] **Phase 11: Data Architecture & Asset Pipeline** - ScriptableObjects, JSON config, localization, game data tools, Git LFS, normal map baking, sprite atlasing
+- [ ] **Phase 12: Core Game Systems** - Save/load, health/damage, character controller, Input System, settings menu
+- [ ] **Phase 13: Content & Progression Systems** - Inventory, dialogue, quests, loot tables, crafting, skill trees, combat balancing
+- [ ] **Phase 14: Camera, Cinematics & Scene Management** - Cinemachine, Timeline, cutscenes, scene loading, lighting, probes, terrain detail
+- [ ] **Phase 15: Game UX & Encounter Design** - Minimap, tutorials, damage numbers, interaction prompts, encounter scripting, AI director
+- [ ] **Phase 16: Quality Assurance & Testing** - Test runner, automated play, profiling, memory leaks, static analysis, crash reporting, live inspection
+- [ ] **Phase 17: Build & Deploy Pipeline** - Multi-platform builds, Addressables, CI/CD, versioning, platform configs
 
 ## Phase Details
+
+<details>
+<summary>v1.0 Phase Details (Phases 1-8) - SHIPPED</summary>
 
 ### Phase 1: Foundation & Server Architecture
 **Goal**: Claude can connect to Blender, dispatch validated commands, and receive visual proof of every mutation -- the entire MCP communication layer works end-to-end
@@ -46,8 +72,8 @@ Plans:
 **Plans**: 3 plans
 Plans:
 - [x] 02-01-PLAN.md -- Mesh analysis, auto-repair, and game-readiness check (blender_mesh tool)
-- [ ] 02-02-PLAN.md -- UV analysis, xatlas unwrapping, packing, lightmap, density equalization (blender_uv tool)
-- [ ] 02-03-PLAN.md -- Mesh editing, selection engine, booleans, retopology, sculpt operations
+- [x] 02-02-PLAN.md -- UV analysis, xatlas unwrapping, packing, lightmap, density equalization (blender_uv tool)
+- [x] 02-03-PLAN.md -- Mesh editing, selection engine, booleans, retopology, sculpt operations
 
 ### Phase 3: Texturing & Asset Generation
 **Goal**: Claude can generate 3D models from text, create PBR texture sets, perform surgical texture edits with seamless blending, and run the full pipeline from AI generation through Unity-ready export
@@ -62,9 +88,9 @@ Plans:
 **Plans**: 4 plans
 Plans:
 - [x] 03-01-PLAN.md -- PBR texturing, texture baking, and validation handlers (Blender-side)
-- [ ] 03-02-PLAN.md -- Surgical texture editing with seamless blending (MCP-side Pillow)
-- [ ] 03-03-PLAN.md -- Asset pipeline, AI 3D generation, LOD, catalog, export validation
-- [ ] 03-04-PLAN.md -- Concept art, compound MCP tool wiring, integration
+- [x] 03-02-PLAN.md -- Surgical texture editing with seamless blending (MCP-side Pillow)
+- [x] 03-03-PLAN.md -- Asset pipeline, AI 3D generation, LOD, catalog, export validation
+- [x] 03-04-PLAN.md -- Concept art, compound MCP tool wiring, integration
 
 ### Phase 4: Rigging
 **Goal**: Claude can rig any creature type for game animation -- from humanoid to amorphous -- with deformation-tested weights, facial controls, and secondary motion physics
@@ -78,10 +104,10 @@ Plans:
   5. Rig validation reports zero critical issues (unweighted verts, broken symmetry, invalid bone rolls) and ragdoll auto-setup generates correct colliders and joint limits
 **Plans**: 4 plans
 Plans:
-- [ ] 04-01-PLAN.md -- Core rig templates (10 creatures), mesh analysis, custom rig builder
-- [ ] 04-02-PLAN.md -- Weight painting, deformation testing, rig validation, weight fix
-- [ ] 04-03-PLAN.md -- Advanced features: facial rig, IK, spring bones, ragdoll, retarget, shape keys
-- [ ] 04-04-PLAN.md -- Handler registration and blender_rig compound MCP tool wiring
+- [x] 04-01-PLAN.md -- Core rig templates (10 creatures), mesh analysis, custom rig builder
+- [x] 04-02-PLAN.md -- Weight painting, deformation testing, rig validation, weight fix
+- [x] 04-03-PLAN.md -- Advanced features: facial rig, IK, spring bones, ragdoll, retarget, shape keys
+- [x] 04-04-PLAN.md -- Handler registration and blender_rig compound MCP tool wiring
 
 ### Phase 5: Animation
 **Goal**: Claude can generate, preview, and export game-ready animations for any rigged creature -- procedural gaits, combat moves, and AI-generated motion clips
@@ -95,10 +121,10 @@ Plans:
   5. Batch export produces separate Unity animation clips (.anim) with correct naming, and the contact sheet preview shows all clips in a review-friendly layout
 **Plans**: 4 plans
 Plans:
-- [ ] 05-01-PLAN.md -- Pure-logic keyframe engine, gait configs, attack/reaction generators
-- [ ] 05-02-PLAN.md -- Blender animation handlers: walk/fly/idle/attack/reaction/custom (ANIM-01 to ANIM-06)
-- [ ] 05-03-PLAN.md -- Export handlers: preview, secondary motion, root motion, retarget, AI stub, batch export (ANIM-07 to ANIM-12)
-- [ ] 05-04-PLAN.md -- Handler registration and blender_animation compound MCP tool wiring
+- [x] 05-01-PLAN.md -- Pure-logic keyframe engine, gait configs, attack/reaction generators
+- [x] 05-02-PLAN.md -- Blender animation handlers: walk/fly/idle/attack/reaction/custom (ANIM-01 to ANIM-06)
+- [x] 05-03-PLAN.md -- Export handlers: preview, secondary motion, root motion, retarget, AI stub, batch export (ANIM-07 to ANIM-12)
+- [x] 05-04-PLAN.md -- Handler registration and blender_animation compound MCP tool wiring
 
 ### Phase 6: Environment & World Building
 **Goal**: Claude can generate complete game environments -- terrain, buildings, dungeons, vegetation, interiors -- from text descriptions, all textured and export-ready
@@ -112,10 +138,10 @@ Plans:
   5. Modular architecture pieces snap together correctly (walls, floors, corners, doors, windows) and ruins generation convincingly damages existing structures
 **Plans**: 4 plans
 Plans:
-- [ ] 06-01-PLAN.md -- Terrain generation, erosion, biome painting, rivers/roads, water, heightmap export
-- [ ] 06-02-PLAN.md -- BSP dungeon, cellular automata caves, town layout generation
-- [ ] 06-03-PLAN.md -- Building grammar, castle/tower/bridge, ruins, interiors, modular kit
-- [ ] 06-04-PLAN.md -- Vegetation/prop scatter, handler registration, compound MCP tool wiring
+- [x] 06-01-PLAN.md -- Terrain generation, erosion, biome painting, rivers/roads, water, heightmap export
+- [x] 06-02-PLAN.md -- BSP dungeon, cellular automata caves, town layout generation
+- [x] 06-03-PLAN.md -- Building grammar, castle/tower/bridge, ruins, interiors, modular kit
+- [x] 06-04-PLAN.md -- Vegetation/prop scatter, handler registration, compound MCP tool wiring
 
 ### Phase 7: VFX, Audio, UI & Unity Scene
 **Goal**: Claude can set up complete Unity scenes with VFX, audio, UI screens, lighting, NavMesh, and animation controllers -- with Gemini-powered visual quality review at every step
@@ -129,11 +155,11 @@ Plans:
   5. Screenshot comparison detects visual regressions between scene versions, and Gemini visual review provides actionable quality assessments at every visual checkpoint
 **Plans**: 5 plans
 Plans:
-- [ ] 07-01-PLAN.md -- Unity MCP server foundation, auto-recompile/editor tools, Gemini review, Settings
-- [ ] 07-02-PLAN.md -- VFX system: particle templates, brand VFX, shaders, post-processing, screen effects
-- [ ] 07-03-PLAN.md -- Audio system: ElevenLabs AI generation, footstep/adaptive/mixer/pool C# templates
-- [ ] 07-04-PLAN.md -- UI system: UXML/USS generation, WCAG contrast, layout validation, screenshot diff
-- [ ] 07-05-PLAN.md -- Scene setup: terrain, scatter, lighting, NavMesh, animator, avatar, animation rigging
+- [x] 07-01-PLAN.md -- Unity MCP server foundation, auto-recompile/editor tools, Gemini review, Settings
+- [x] 07-02-PLAN.md -- VFX system: particle templates, brand VFX, shaders, post-processing, screen effects
+- [x] 07-03-PLAN.md -- Audio system: ElevenLabs AI generation, footstep/adaptive/mixer/pool C# templates
+- [x] 07-04-PLAN.md -- UI system: UXML/USS generation, WCAG contrast, layout validation, screenshot diff
+- [x] 07-05-PLAN.md -- Scene setup: terrain, scatter, lighting, NavMesh, animator, avatar, animation rigging
 
 ### Phase 8: Gameplay AI & Performance
 **Goal**: Claude can generate complete mob AI systems and optimize game performance -- the final integration layer that makes environments feel alive and the game run smoothly
@@ -147,23 +173,186 @@ Plans:
   5. Auto-generated LOD chains, lightmap baking, and asset audit (unused assets, oversized textures) produce measurable performance improvements verified by before/after profiling data
 **Plans**: 3 plans
 Plans:
-- [ ] 08-01-PLAN.md -- Gameplay templates: mob controller, aggro, patrol, spawn, behavior tree, combat ability, projectile (MOB-01 to MOB-07)
-- [ ] 08-02-PLAN.md -- Performance templates: scene profiler, LOD setup, lightmap baking, asset audit, build automation (PERF-01 to PERF-05)
-- [ ] 08-03-PLAN.md -- Compound tool wiring: unity_gameplay + unity_performance in unity_server.py
+- [x] 08-01-PLAN.md -- Gameplay templates: mob controller, aggro, patrol, spawn, behavior tree, combat ability, projectile (MOB-01 to MOB-07)
+- [x] 08-02-PLAN.md -- Performance templates: scene profiler, LOD setup, lightmap baking, asset audit, build automation (PERF-01 to PERF-05)
+- [x] 08-03-PLAN.md -- Compound tool wiring: unity_gameplay + unity_performance in unity_server.py
+
+</details>
+
+### Phase 9: Unity Editor Deep Control
+**Goal**: Claude has complete programmatic control over the Unity Editor -- prefabs, components, hierarchy, physics, project settings, packages, and asset import configuration
+**Depends on**: Phase 8 (v1.0 Unity server foundation)
+**Requirements**: EDIT-01, EDIT-02, EDIT-03, EDIT-04, EDIT-05, EDIT-06, EDIT-07, EDIT-08, EDIT-09, EDIT-10, EDIT-11, EDIT-12, EDIT-13, EDIT-14, EDIT-15, IMP-01, IMP-02
+**Success Criteria** (what must be TRUE):
+  1. Claude can create a nested prefab variant, add components with configured properties, and the resulting .prefab asset opens correctly in Unity's Prefab Mode
+  2. Claude can reparent GameObjects, set layers/tags, enable/disable objects, and the hierarchy changes persist after scene save
+  3. Claude can modify Player Settings, Quality Settings, Physics settings, and Time/Graphics settings, and Unity reflects the changes without manual Editor interaction
+  4. Claude can install a UPM package, configure import settings on an FBX (scale, compression, rig type) and a texture (max size, platform compression, sRGB), and the assets reimport correctly
+  5. Claude can move/rename/delete assets while preserving .meta file GUID integrity, and material remapping on FBX import resolves to existing project materials
+**Plans**: TBD
+
+Plans:
+- [ ] 09-01: TBD
+- [ ] 09-02: TBD
+- [ ] 09-03: TBD
+
+### Phase 10: C# Programming Framework
+**Goal**: Claude can generate and modify arbitrary C# code for Unity -- MonoBehaviours, editor tools, tests, and reusable architecture patterns -- not limited to domain-specific templates
+**Depends on**: Phase 9 (needs editor control for Assembly Definitions, test runner integration)
+**Requirements**: CODE-01, CODE-02, CODE-03, CODE-04, CODE-05, CODE-06, CODE-07, CODE-08, CODE-09, CODE-10
+**Success Criteria** (what must be TRUE):
+  1. Claude can generate any C# class type (MonoBehaviour, plain class, interface, enum, struct, static utility) and the script compiles without errors after AssetDatabase.Refresh
+  2. Claude can open an existing C# script, add methods/fields/properties/attributes, and the modified script compiles cleanly with no regressions
+  3. Claude can generate custom Editor windows, PropertyDrawers, and Inspector drawers that render correctly in the Unity Editor
+  4. Claude can create test assemblies and run EditMode/PlayMode tests through MCP, receiving structured pass/fail results with failure messages
+  5. Claude can scaffold architecture patterns (service locator, event bus, object pool, state machine, observer/SO events) that compile and function as reusable frameworks
+**Plans**: TBD
+
+Plans:
+- [ ] 10-01: TBD
+- [ ] 10-02: TBD
+- [ ] 10-03: TBD
+
+### Phase 11: Data Architecture & Asset Pipeline
+**Goal**: Claude can create data-driven game architecture using ScriptableObjects, JSON configs, and localization -- plus manage the asset pipeline with Git LFS, normal map baking, and sprite atlasing
+**Depends on**: Phase 10 (needs C# generation for SO definitions and data tools)
+**Requirements**: DATA-01, DATA-02, DATA-03, DATA-04, IMP-03, IMP-04, BUILD-06
+**Success Criteria** (what must be TRUE):
+  1. Claude can create ScriptableObject C# definitions and instantiate .asset files with populated data fields, usable as item databases or stat tables
+  2. Claude can generate, validate, and parse JSON/XML configuration files for game balance, difficulty curves, and progression data
+  3. Claude can set up Unity Localization with string tables and locale assets, and localized text appears correctly when switching locales
+  4. Claude can configure Git LFS rules and .gitignore for a Unity project, and normal map baking produces correct tangent-space maps from high/low poly pairs
+  5. Claude can generate sprite sheets with atlas packing and sprite animation clips from individual frames
+**Plans**: TBD
+
+Plans:
+- [ ] 11-01: TBD
+- [ ] 11-02: TBD
+
+### Phase 12: Core Game Systems
+**Goal**: Claude can generate the foundational game systems every Unity project needs -- save/load persistence, health/damage, character movement, input configuration, and settings menus
+**Depends on**: Phase 10 (C# generation), Phase 11 (ScriptableObjects for item/config data)
+**Requirements**: GAME-01, GAME-05, GAME-06, GAME-07, GAME-08
+**Success Criteria** (what must be TRUE):
+  1. Claude can generate a save/load system with JSON serialization, multiple save slots, and data migration support -- saved data round-trips correctly through serialize/deserialize
+  2. Claude can generate a health/damage system with HP components, damage number display, death handling, and respawn logic that integrates with existing GameObjects
+  3. Claude can generate first-person and third-person character controllers with configurable movement parameters and camera follow behavior
+  4. Claude can create Input Action assets with action maps, control schemes, and rebinding support -- player input routes correctly through the Input System
+  5. Claude can generate a game settings menu (graphics quality, audio volume, keybindings, accessibility) that persists preferences across sessions
+**Plans**: TBD
+
+Plans:
+- [ ] 12-01: TBD
+- [ ] 12-02: TBD
+
+### Phase 13: Content & Progression Systems
+**Goal**: Claude can generate the higher-level game systems that drive player engagement -- inventory, dialogue, quests, loot, crafting, skill trees, and combat balancing tools
+**Depends on**: Phase 12 (core game systems: save/load for persistence, health/damage for combat integration)
+**Requirements**: GAME-02, GAME-03, GAME-04, GAME-09, GAME-10, GAME-11, GAME-12
+**Success Criteria** (what must be TRUE):
+  1. Claude can generate an inventory system with SO-based item database, drag-and-drop UI slots, equipment system, and storage containers that persist through save/load
+  2. Claude can generate a branching dialogue system with dialogue tree data, NPC interaction triggers, and dialogue UI -- compatible with YarnSpinner data format
+  3. Claude can generate a quest system with objective tracking, quest giver NPCs, quest log UI, and completion rewards that modify inventory/progression state
+  4. Claude can generate loot tables (weighted random with rarity tiers), a crafting/recipe system (ingredients, stations, unlocks), and a skill tree with node dependencies and point allocation
+  5. Claude can generate combat balancing tools (DPS calculator, encounter simulator, stat curve editor) that output statistical reports for tuning game difficulty
+**Plans**: TBD
+
+Plans:
+- [ ] 13-01: TBD
+- [ ] 13-02: TBD
+- [ ] 13-03: TBD
+
+### Phase 14: Camera, Cinematics & Scene Management
+**Goal**: Claude can set up Cinemachine cameras, Timeline cutscenes, multi-scene workflows, and complete scene lighting/environment configuration
+**Depends on**: Phase 9 (editor control for scene/settings manipulation), Phase 10 (C# for custom Timeline tracks)
+**Requirements**: CAM-01, CAM-02, CAM-03, CAM-04, SCNE-01, SCNE-02, SCNE-03, SCNE-04, SCNE-05, SCNE-06
+**Success Criteria** (what must be TRUE):
+  1. Claude can create Cinemachine virtual cameras (FreeLook, follow, state-driven) with configurable blending, and camera shake/zoom/transition effects trigger correctly
+  2. Claude can create Timeline assets with animation, audio, activation, and Cinemachine tracks, and Playable Director plays back complete cutscene sequences
+  3. Claude can create new scenes, configure single/additive/async loading, and generate a scene transition system with loading screens and fade effects
+  4. Claude can set up reflection probes, light probes, HDR skybox, environment reflections, and Global Illumination -- lighting looks correct in baked and mixed modes
+  5. Claude can configure occlusion culling (static occluders/occludees, bake data) and paint terrain detail (grass, detail meshes) on Unity Terrain
+**Plans**: TBD
+
+Plans:
+- [ ] 14-01: TBD
+- [ ] 14-02: TBD
+- [ ] 14-03: TBD
+
+### Phase 15: Game UX & Encounter Design
+**Goal**: Claude can generate polished gameplay UX elements and scripted encounter systems with dynamic difficulty adjustment
+**Depends on**: Phase 12 (game systems for health/damage integration), Phase 10 (C# framework for AI scripting)
+**Requirements**: UIX-01, UIX-02, UIX-03, UIX-04, AID-01, AID-02, AID-03
+**Success Criteria** (what must be TRUE):
+  1. Claude can generate a minimap/compass system with world-space markers that track objectives, NPCs, and points of interest
+  2. Claude can generate tutorial/onboarding sequences with tooltip overlays and context-sensitive interaction prompts ("Press E to interact") that respond to player proximity
+  3. Claude can generate a floating damage number system with configurable fonts, colors per damage type, critical hit scaling, and pooled text objects
+  4. Claude can generate an encounter scripting system with trigger zones, wave spawning, win/fail conditions, and AI director hooks
+  5. Claude can generate a threat escalation / AI director system that adjusts difficulty dynamically, and encounter simulations produce statistical balance reports
+**Plans**: TBD
+
+Plans:
+- [ ] 15-01: TBD
+- [ ] 15-02: TBD
+
+### Phase 16: Quality Assurance & Testing
+**Goal**: Claude can run tests, profile performance, detect memory leaks, analyze code quality, and inspect live game state -- closing the feedback loop on code correctness and runtime health
+**Depends on**: Phase 10 (test framework setup), Phase 12 (game systems to test against)
+**Requirements**: QA-01, QA-02, QA-03, QA-04, QA-05, QA-06, QA-07, QA-08
+**Success Criteria** (what must be TRUE):
+  1. Claude can trigger EditMode and PlayMode test runs through MCP and receive structured results with pass/fail counts, failure messages, and stack traces
+  2. Claude can script automated play sessions (navigate to point, interact with object, verify game state) and report whether integration scenarios pass
+  3. Claude can capture GPU profiling data and memory snapshots, detecting growing allocations that indicate memory leaks
+  4. Claude can run static code analysis using Roslyn analyzers to flag common Unity anti-patterns (Update allocations, string concat in hot paths, Camera.main usage)
+  5. Claude can set up crash reporting (Sentry/Unity Cloud Diagnostics), analytics telemetry events, and inspect live Play Mode state (variable values on GameObjects, behavior tree status)
+**Plans**: TBD
+
+Plans:
+- [ ] 16-01: TBD
+- [ ] 16-02: TBD
+
+### Phase 17: Build & Deploy Pipeline
+**Goal**: Claude can orchestrate complete build pipelines -- multi-platform builds, Addressable assets, CI/CD automation, versioning, and platform-specific configuration
+**Depends on**: Phase 9 (Build Settings, Player Settings), Phase 16 (tests run as part of CI)
+**Requirements**: BUILD-01, BUILD-02, BUILD-03, BUILD-04, BUILD-05
+**Success Criteria** (what must be TRUE):
+  1. Claude can trigger builds for multiple platforms (Windows, Mac, Linux, Android, iOS, WebGL) with correct per-platform settings and receive build size reports
+  2. Claude can configure Addressable Asset Groups with remote/local paths, content catalogs, and memory management profiles
+  3. Claude can generate CI/CD pipeline configs (GitHub Actions, GitLab CI) that automate build, test, and deploy steps for Unity projects
+  4. Claude can manage version numbers (semantic versioning), create release branches, and generate changelogs from commit history
+  5. Claude can configure platform-specific settings (Android manifest, iOS plist, WebGL template) without manual Editor interaction
+
+**Plans**: TBD
+
+Plans:
+- [ ] 17-01: TBD
+- [ ] 17-02: TBD
 
 ## Progress
 
-| Phase | Plans | Status | Completed |
-|-------|-------|--------|-----------|
-| 1. Foundation & Server Architecture | 3/3 | Complete | 2026-03-19 |
-| 2. Mesh, UV & Topology Pipeline | 3/3 | Complete | 2026-03-19 |
-| 3. Texturing & Asset Generation | 1/4 | In Progress | - |
-| 4. Rigging | 0/4 | Planned | - |
-| 5. Animation | 0/4 | Planned | - |
-| 6. Environment & World Building | 0/4 | Planned | - |
-| 7. VFX, Audio, UI & Unity Scene | 0/5 | Planned | - |
-| 8. Gameplay AI & Performance | 0/3 | Planned | - |
+**Execution Order:**
+Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their surrounding integers.
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 1. Foundation & Server Architecture | v1.0 | 3/3 | Complete | 2026-03-19 |
+| 2. Mesh, UV & Topology Pipeline | v1.0 | 3/3 | Complete | 2026-03-19 |
+| 3. Texturing & Asset Generation | v1.0 | 4/4 | Complete | 2026-03-19 |
+| 4. Rigging | v1.0 | 4/4 | Complete | 2026-03-19 |
+| 5. Animation | v1.0 | 4/4 | Complete | 2026-03-19 |
+| 6. Environment & World Building | v1.0 | 4/4 | Complete | 2026-03-19 |
+| 7. VFX, Audio, UI & Unity Scene | v1.0 | 5/5 | Complete | 2026-03-19 |
+| 8. Gameplay AI & Performance | v1.0 | 3/3 | Complete | 2026-03-19 |
+| 9. Unity Editor Deep Control | v2.0 | 0/3 | Not started | - |
+| 10. C# Programming Framework | v2.0 | 0/3 | Not started | - |
+| 11. Data Architecture & Asset Pipeline | v2.0 | 0/2 | Not started | - |
+| 12. Core Game Systems | v2.0 | 0/2 | Not started | - |
+| 13. Content & Progression Systems | v2.0 | 0/3 | Not started | - |
+| 14. Camera, Cinematics & Scene Management | v2.0 | 0/3 | Not started | - |
+| 15. Game UX & Encounter Design | v2.0 | 0/2 | Not started | - |
+| 16. Quality Assurance & Testing | v2.0 | 0/2 | Not started | - |
+| 17. Build & Deploy Pipeline | v2.0 | 0/2 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-18*
-*Last updated: 2026-03-19*
+*v2.0 phases added: 2026-03-19*
