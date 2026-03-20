@@ -246,7 +246,8 @@ public static class VeilBreakers_RenameAsset
 
             if (string.IsNullOrEmpty(result))
             {{
-                string dir = Path.GetDirectoryName(assetPath).Replace("\\\\", "/");
+                string dir = Path.GetDirectoryName(assetPath)?.Replace("\\\\", "/");
+                if (string.IsNullOrEmpty(dir)) dir = "Assets";
                 string ext = Path.GetExtension(assetPath);
                 string newPath = dir + "/" + newName + ext;
                 string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"rename_asset\\", \\"old_path\\": \\"" + assetPath.Replace("\\\\", "/") + "\\", \\"new_name\\": \\"" + newName + "\\", \\"new_path\\": \\"" + newPath + "\\", \\"guid\\": \\"" + guid + "\\", \\"changed_assets\\": [\\"" + newPath + "\\"], \\"validation_status\\": \\"ok\\"}}";
@@ -944,7 +945,30 @@ public static class VeilBreakers_AutoMaterials
             if (importer != null)
             {{
                 importer.materialImportMode = ModelImporterMaterialImportMode.ImportViaMaterialDescription;
-                importer.AddRemap(new AssetImporter.SourceAssetIdentifier(typeof(Material), "defaultMat"), mat);
+                // Iterate actual source material names from the FBX instead of hardcoding
+                var externalMap = importer.GetExternalObjectMap();
+                bool remapped = false;
+                foreach (var entry in externalMap)
+                {{
+                    if (entry.Key.type == typeof(Material))
+                    {{
+                        importer.AddRemap(entry.Key, mat);
+                        remapped = true;
+                    }}
+                }}
+                // Fallback: if no existing entries, use searchAndRemapMaterials
+                if (!remapped)
+                {{
+                    importer.SearchAndRemapMaterials(ModelImporterMaterialName.BasedOnMaterialName, ModelImporterMaterialSearch.Everywhere);
+                    // Re-read and remap all discovered material slots
+                    foreach (var entry in importer.GetExternalObjectMap())
+                    {{
+                        if (entry.Key.type == typeof(Material))
+                        {{
+                            importer.AddRemap(entry.Key, mat);
+                        }}
+                    }}
+                }}
                 importer.SaveAndReimport();
             }}
 
