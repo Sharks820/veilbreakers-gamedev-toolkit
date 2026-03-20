@@ -61,10 +61,10 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Camera & Cinematics
 
-- [ ] **CAM-01**: Claude can create and configure Cinemachine virtual cameras (FreeLook, follow, state-driven, blending)
-- [ ] **CAM-02**: Claude can create Timeline assets with animation, audio, activation, and Cinemachine tracks
-- [ ] **CAM-03**: Claude can set up cutscene sequences using Playable Director with Timeline
-- [ ] **CAM-04**: Claude can configure camera shake, zoom, and transition effects
+- [x] **CAM-01**: Claude can create and configure Cinemachine virtual cameras (FreeLook, follow, state-driven, blending)
+- [x] **CAM-02**: Claude can create Timeline assets with animation, audio, activation, and Cinemachine tracks
+- [x] **CAM-03**: Claude can set up cutscene sequences using Playable Director with Timeline
+- [x] **CAM-04**: Claude can configure camera shake, zoom, and transition effects
 
 ### Scene Management
 
@@ -153,14 +153,14 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Video & Media
 
-- [ ] **MEDIA-01**: Claude can configure VideoPlayer component for video playback and render texture output
+- [x] **MEDIA-01**: Claude can configure VideoPlayer component for video playback and render texture output
 - [x] **MEDIA-02**: Claude can generate UnityWebRequest utilities for HTTP/REST API calls
 
 ### Animation Advanced
 
-- [ ] **ANIMA-01**: Claude can edit Unity AnimationClips (add/remove keyframes, modify curves) programmatically
-- [ ] **ANIMA-02**: Claude can modify existing Animator Controllers (add/remove states, configure transitions, sub-state machines)
-- [ ] **ANIMA-03**: Claude can create Avatar Masks for animation layer filtering
+- [x] **ANIMA-01**: Claude can edit Unity AnimationClips (add/remove keyframes, modify curves) programmatically
+- [x] **ANIMA-02**: Claude can modify existing Animator Controllers (add/remove states, configure transitions, sub-state machines)
+- [x] **ANIMA-03**: Claude can create Avatar Masks for animation layer filtering
 
 ### AAA Quality & Art Style
 
@@ -283,10 +283,10 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | GAME-10 | Phase 13 | Complete |
 | GAME-11 | Phase 13 | Complete |
 | GAME-12 | Phase 13 | Complete |
-| CAM-01 | Phase 14 | Pending |
-| CAM-02 | Phase 14 | Pending |
-| CAM-03 | Phase 14 | Pending |
-| CAM-04 | Phase 14 | Pending |
+| CAM-01 | Phase 14 | Complete |
+| CAM-02 | Phase 14 | Complete |
+| CAM-03 | Phase 14 | Complete |
+| CAM-04 | Phase 14 | Complete |
 | SCNE-01 | Phase 14 | Complete |
 | SCNE-02 | Phase 14 | Complete |
 | SCNE-03 | Phase 14 | Complete |
@@ -327,11 +327,11 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | PIPE-08 | Phase 11 | Complete |
 | PIPE-09 | Phase 9 | Complete |
 | PIPE-10 | Phase 15 | Pending |
-| MEDIA-01 | Phase 14 | Pending |
+| MEDIA-01 | Phase 14 | Complete |
 | MEDIA-02 | Phase 12 | Complete |
-| ANIMA-01 | Phase 14 | Pending |
-| ANIMA-02 | Phase 14 | Pending |
-| ANIMA-03 | Phase 14 | Pending |
+| ANIMA-01 | Phase 14 | Complete |
+| ANIMA-02 | Phase 14 | Complete |
+| ANIMA-03 | Phase 14 | Complete |
 
 | AAA-01 | Phase 11 | Complete |
 | AAA-02 | Phase 11 | Complete |
