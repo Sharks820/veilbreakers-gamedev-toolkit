@@ -1352,6 +1352,16 @@ public static class VeilBreakers_AtomicImport
             // Step 2: Create Material(shader) with textures
             // ================================================================
             Shader shader = Shader.Find(shaderName);
+            if (shader == null)
+            {{
+                string errJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"atomic_import\\", "
+                    + "\\"message\\": \\"Shader not found: " + shaderName + "\\", "
+                    + "\\"changed_assets\\": [" + string.Join(",", changedAssets.ConvertAll(a => "\\"" + a + "\\"")) + "], "
+                    + "\\"validation_status\\": \\"error\\"}}";
+                File.WriteAllText("Temp/vb_result.json", errJson);
+                Debug.LogError("[VeilBreakers] Shader not found: " + shaderName);
+                return;
+            }}
             Material createdMat = new Material(shader);
             Undo.RegisterCreatedObjectUndo(createdMat, "VeilBreakers Atomic Material");
 
