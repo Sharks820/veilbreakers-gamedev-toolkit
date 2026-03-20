@@ -281,6 +281,21 @@ from veilbreakers_mcp.shared.unity_templates.encounter_templates import (
     generate_boss_ai_script,
 )
 
+# ---------------------------------------------------------------------------
+# qa_templates.py generators (Phase 16 -- Quality Assurance & Testing)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.qa_templates import (
+    generate_bridge_server_script,
+    generate_bridge_commands_script,
+    generate_test_runner_handler,
+    generate_play_session_script,
+    generate_profiler_handler,
+    generate_memory_leak_script,
+    generate_crash_reporting_script,
+    generate_analytics_script,
+    generate_live_inspector_script,
+)
+
 
 # ===================================================================
 # Build a list of (name, callable, is_csharp) for every generator
@@ -774,6 +789,26 @@ ALL_GENERATORS: list[tuple[str, callable, str]] = [
     ("encounter/simulator", lambda: generate_enc_sim_script("TestSim"), "cs"),
     ("encounter/boss_ai_3phase", lambda: generate_boss_ai_script("TestBoss", phase_count=3), "cs"),
     ("encounter/boss_ai_4phase", lambda: generate_boss_ai_script("TestBoss4", phase_count=4), "cs"),
+
+    # --- qa/ -- qa_templates.py (Phase 16 -- 8 C# generators) ---
+    ("qa/bridge_server_default", lambda: generate_bridge_server_script(), "cs"),
+    ("qa/bridge_server_custom", lambda: generate_bridge_server_script(port=9999, namespace="VB.QA"), "cs"),
+    ("qa/bridge_commands_default", lambda: generate_bridge_commands_script(), "cs"),
+    ("qa/bridge_commands_ns", lambda: generate_bridge_commands_script(namespace="VB.QA"), "cs"),
+    ("qa/test_runner_default", lambda: generate_test_runner_handler(), "cs"),
+    ("qa/test_runner_playmode", lambda: generate_test_runner_handler(test_mode="PlayMode", test_filter="MyTests"), "cs"),
+    ("qa/play_session_default", lambda: generate_play_session_script(), "cs"),
+    ("qa/play_session_steps", lambda: generate_play_session_script(steps=[{"action": "wait", "seconds": 2, "expected": "loaded"}]), "cs"),
+    ("qa/profiler_default", lambda: generate_profiler_handler(), "cs"),
+    ("qa/profiler_custom", lambda: generate_profiler_handler(target_frame_time_ms=33.33, max_draw_calls=500), "cs"),
+    ("qa/memory_leak_default", lambda: generate_memory_leak_script(), "cs"),
+    ("qa/memory_leak_custom", lambda: generate_memory_leak_script(growth_threshold_mb=50, sample_count=20), "cs"),
+    ("qa/crash_reporting_default", lambda: generate_crash_reporting_script(), "cs"),
+    ("qa/crash_reporting_prod", lambda: generate_crash_reporting_script(dsn="https://examplePublicKey@o0.ingest.sentry.io/0", environment="production"), "cs"),
+    ("qa/analytics_default", lambda: generate_analytics_script(), "cs"),
+    ("qa/analytics_events", lambda: generate_analytics_script(event_names=["custom_event", "boss_killed"]), "cs"),
+    ("qa/live_inspector_default", lambda: generate_live_inspector_script(), "cs"),
+    ("qa/live_inspector_custom", lambda: generate_live_inspector_script(update_interval_frames=30, max_tracked_objects=50), "cs"),
 ]
 
 # Also test the non-C# generators separately for their own validity

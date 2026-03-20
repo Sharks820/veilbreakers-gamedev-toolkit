@@ -183,8 +183,11 @@ def generate_bridge_server_script(port: int = 9877, namespace: str = "") -> str:
         "                TcpClient client = _listener.AcceptTcpClient();",
         "                ThreadPool.QueueUserWorkItem(_ => HandleClient(client));",
         "            }",
-        "            catch (SocketException) { if (_running) throw; }",
-        "            catch (ObjectDisposedException) { break; }",
+        "            catch (Exception ex) when (ex is SocketException || ex is ObjectDisposedException)",
+        "            {",
+        "                if (ex is ObjectDisposedException) break;",
+        "                if (_running) throw;",
+        "            }",
         "        }",
         "    }",
         "",
@@ -221,7 +224,10 @@ def generate_bridge_server_script(port: int = 9877, namespace: str = "") -> str:
         "            }",
         "        }",
         '        catch (Exception e) { Debug.LogError("[VBBridge] Client error: " + e.Message); }',
-        "        finally { try { client.Close(); } catch (Exception) { } }",
+        "        finally",
+        "        {",
+        "            try { client.Close(); } catch (Exception) { }",
+        "        }",
         "    }",
         "",
         "    // ----- Main-Thread Dispatch -----",
@@ -565,7 +571,7 @@ def generate_bridge_commands_script(namespace: str = "") -> str:
 
             Dictionary<string, object> ParseObject()
             {
-                _reader.Read(); // {
+                _reader.Read(); // consume opening brace
                 var dict = new Dictionary<string, object>();
                 while (true)
                 {
