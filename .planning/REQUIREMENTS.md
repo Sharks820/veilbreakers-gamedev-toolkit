@@ -93,6 +93,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Quality & Testing
 
+- [ ] **QA-00**: The VB Unity MCP server can directly communicate with the Unity Editor (TCP bridge addon) to trigger AssetDatabase.Refresh, execute menu items, enter/exit play mode, and read results — WITHOUT requiring mcp-unity or any external MCP server
 - [ ] **QA-01**: Claude can run EditMode and PlayMode tests via Unity Test Runner and report results through MCP
 - [ ] **QA-02**: Claude can script automated play sessions (walk to point, interact, verify state) for integration testing
 - [ ] **QA-03**: Claude can capture GPU profiling data and continuous performance analysis
