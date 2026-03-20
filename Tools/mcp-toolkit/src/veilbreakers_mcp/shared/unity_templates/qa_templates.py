@@ -1,6 +1,6 @@
-"""Unity TCP bridge addon C# template generators.
+"""Unity QA C# template generators.
 
-Generates two C# scripts that form the Unity-side TCP bridge addon:
+Generates C# scripts for quality assurance, debugging, and observability:
 
 1. **VBBridgeServer.cs** -- ``[InitializeOnLoad]`` static class with a
    background ``TcpListener`` thread, ``ConcurrentQueue`` for thread-safe
@@ -14,9 +14,21 @@ Generates two C# scripts that form the Unity-side TCP bridge addon:
    an embedded MiniJSON parser (MIT licensed) since ``JsonUtility``
    cannot deserialize ``Dictionary<string, object>``.
 
+3. **VBCrashReporting.cs** -- Sentry SDK initialization with configurable
+   DSN, breadcrumbs, environment tagging, and fallback console logging.
+
+4. **VBAnalytics.cs** -- Singleton analytics manager with event buffering,
+   JSON file logging, session management, and typed convenience methods.
+
+5. **VBLiveInspector.cs** -- IMGUI EditorWindow for inspecting live
+   GameObject component field values during Play Mode via Reflection.
+
 Exports:
-    generate_bridge_server_script   -- VBBridgeServer.cs generator
-    generate_bridge_commands_script -- VBBridgeCommands.cs generator
+    generate_bridge_server_script      -- VBBridgeServer.cs generator
+    generate_bridge_commands_script    -- VBBridgeCommands.cs generator
+    generate_crash_reporting_script    -- VBCrashReporting.cs generator
+    generate_analytics_script          -- VBAnalytics.cs generator
+    generate_live_inspector_script     -- VBLiveInspector.cs generator
 """
 
 from __future__ import annotations
@@ -762,6 +774,1447 @@ def generate_bridge_commands_script(namespace: str = "") -> str:
     # Append MiniJSON lines to main body
     lines.extend(_minijson.split("\n"))
     lines.append("")
+
+    lines = _wrap_namespace(lines, namespace)
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# generate_test_runner_handler
+# ---------------------------------------------------------------------------
+
+_VALID_QA_TEST_MODES = frozenset({"EditMode", "PlayMode", "Both"})
+
+
+def generate_test_runner_handler(
+    test_mode: str = "EditMode",
+    test_filter: str = "",
+    timeout_seconds: int = 60,
+    namespace: str = "",
+) -> str:
+    """Generate VBTestRunner.cs: bridge-compatible test runner handler.
+
+    Creates a C# editor script that uses ``TestRunnerApi`` with ``ICallbacks``
+    to execute EditMode/PlayMode tests and writes structured JSON results to
+    ``Temp/vb_test_results.json``.
+
+    Args:
+        test_mode: ``"EditMode"``, ``"PlayMode"``, or ``"Both"``.
+        test_filter: Optional test name filter substring.
+        timeout_seconds: Maximum time to wait for test completion.
+        namespace: Optional C# namespace to wrap the class in.
+
+    Returns:
+        Complete C# source string for VBTestRunner.cs.
+
+    Raises:
+        ValueError: If test_mode is not a valid value.
+    """
+    if test_mode not in _VALID_QA_TEST_MODES:
+        raise ValueError(
+            f"test_mode must be one of {sorted(_VALID_QA_TEST_MODES)}, "
+            f"got '{test_mode}'"
+        )
+
+    safe_filter = _sanitize_cs_string(test_filter)
+    safe_mode = _sanitize_cs_string(test_mode)
+
+    # Build filter name line if provided
+    filter_name_line = ""
+    if test_filter:
+        filter_name_line = (
+            '                testNames = new[] { "'
+            + safe_filter
+            + '" },'
+        )
+
+    # Build test mode expression
+    if test_mode == "Both":
+        mode_expr = "TestMode.EditMode | TestMode.PlayMode"
+    else:
+        mode_expr = "TestMode." + safe_mode
+
+    lines: list[str] = [
+        "using UnityEngine;",
+        "using UnityEditor;",
+        "using UnityEditor.TestTools.TestRunner.Api;",
+        "using System;",
+        "using System.Collections.Generic;",
+        "using System.Diagnostics;",
+        "using System.IO;",
+        "using System.Linq;",
+        "using System.Text;",
+        "",
+        "public class VBTestRunner",
+        "{",
+        '    [MenuItem("VeilBreakers/QA/Run Tests")]',
+        "    public static void Execute()",
+        "    {",
+        "        var api = ScriptableObject.CreateInstance<TestRunnerApi>();",
+        "        var collector = new VBTestResultCollector();",
+        "        api.RegisterCallbacks(collector);",
+        "",
+        "        var stopwatch = new Stopwatch();",
+        "        stopwatch.Start();",
+        "",
+        "        api.Execute(new ExecutionSettings",
+        "        {",
+        "            runSynchronously = true,",
+        "            filters = new[] { new Filter",
+        "            {",
+        "                testMode = " + mode_expr + ",",
+    ]
+
+    if filter_name_line:
+        lines.append(filter_name_line)
+
+    lines.extend([
+        "            }}",
+        "        });",
+        "",
+        "        stopwatch.Stop();",
+        "        double totalDuration = stopwatch.Elapsed.TotalSeconds;",
+        "",
+        "        // Build JSON result",
+        "        var sb = new StringBuilder();",
+        '        sb.Append("{");',
+        '        sb.Append("\\"total\\": " + collector.Details.Count + ", ");',
+        '        sb.Append("\\"passed\\": " + collector.PassCount + ", ");',
+        '        sb.Append("\\"failed\\": " + collector.FailCount + ", ");',
+        '        sb.Append("\\"skipped\\": " + collector.SkipCount + ", ");',
+        '        sb.Append("\\"duration\\": " + totalDuration.ToString("F3") + ", ");',
+        '        sb.Append("\\"test_mode\\": \\"' + safe_mode + '\\", ");',
+        '        sb.Append("\\"tests\\": [");',
+        "",
+        "        for (int i = 0; i < collector.Details.Count; i++)",
+        "        {",
+        "            var d = collector.Details[i];",
+        '            if (i > 0) sb.Append(", ");',
+        '            sb.Append("{");',
+        '            sb.Append("\\"testName\\": \\"" + EscapeJson(d.testName) + "\\", ");',
+        '            sb.Append("\\"result\\": \\"" + d.result + "\\", ");',
+        '            sb.Append("\\"message\\": \\"" + EscapeJson(d.message) + "\\", ");',
+        '            sb.Append("\\"stackTrace\\": \\"" + EscapeJson(d.stackTrace) + "\\", ");',
+        '            sb.Append("\\"duration\\": " + d.duration.ToString("F4"));',
+        '            sb.Append("}");',
+        "        }",
+        "",
+        '        sb.Append("]}");',
+        '        File.WriteAllText("Temp/vb_test_results.json", sb.ToString());',
+        '        UnityEngine.Debug.Log("[VBTestRunner] Tests complete: "',
+        '            + collector.PassCount + " passed, "',
+        '            + collector.FailCount + " failed, "',
+        '            + collector.SkipCount + " skipped");',
+        "    }",
+        "",
+        "    static string EscapeJson(string s)",
+        "    {",
+        '        if (s == null) return "";',
+        '        return s.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"").Replace("\\n", "\\\\n").Replace("\\r", "\\\\r");',
+        "    }",
+        "}",
+        "",
+        "public class VBTestResultCollector : ICallbacks",
+        "{",
+        "    public int PassCount;",
+        "    public int FailCount;",
+        "    public int SkipCount;",
+        "    public List<TestDetail> Details = new List<TestDetail>();",
+        "",
+        "    public void RunStarted(ITestAdaptor testsToRun) { }",
+        "",
+        "    public void RunFinished(ITestResultAdaptor result)",
+        "    {",
+        "        PassCount = result.PassCount;",
+        "        FailCount = result.FailCount;",
+        "        SkipCount = result.SkipCount;",
+        "    }",
+        "",
+        "    public void TestStarted(ITestAdaptor test) { }",
+        "",
+        "    public void TestFinished(ITestResultAdaptor result)",
+        "    {",
+        "        if (!result.HasChildren)",
+        "        {",
+        "            Details.Add(new TestDetail",
+        "            {",
+        "                testName = result.Test.FullName,",
+        '                result = result.TestStatus == TestStatus.Passed ? "Passed"',
+        '                    : result.TestStatus == TestStatus.Failed ? "Failed" : "Skipped",',
+        "                message = result.Message ?? \"\",",
+        "                stackTrace = result.StackTrace ?? \"\",",
+        "                duration = (float)result.Duration",
+        "            });",
+        "        }",
+        "    }",
+        "",
+        "    public class TestDetail",
+        "    {",
+        "        public string testName;",
+        "        public string result;",
+        "        public string message;",
+        "        public string stackTrace;",
+        "        public float duration;",
+        "    }",
+        "}",
+    ])
+
+    lines = _wrap_namespace(lines, namespace)
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# generate_play_session_script
+# ---------------------------------------------------------------------------
+
+def generate_play_session_script(
+    steps: list[dict] | None = None,
+    timeout_per_step: float = 10.0,
+    namespace: str = "",
+) -> str:
+    """Generate VBPlaySession.cs: automated play session runner.
+
+    Creates a C# editor script that enters Play Mode, runs a coroutine
+    processing sequential steps (move_to, interact, wait, verify_state),
+    and writes structured JSON results to ``Temp/vb_play_session_results.json``.
+
+    Args:
+        steps: List of step dicts. Each dict has ``action``, and action-specific
+            params (``position``, ``target``, ``seconds``, ``expected``).
+            Defaults to a single wait step.
+        timeout_per_step: Maximum seconds per step before timeout.
+        namespace: Optional C# namespace to wrap the class in.
+
+    Returns:
+        Complete C# source string for VBPlaySession.cs.
+    """
+    if steps is None:
+        steps = [{"action": "wait", "seconds": 2, "expected": "game_loaded"}]
+
+    # Serialize steps into C# array initializer
+    step_entries: list[str] = []
+    for i, step in enumerate(steps):
+        action = _sanitize_cs_string(step.get("action", "wait"))
+        expected = _sanitize_cs_string(step.get("expected", ""))
+        target = _sanitize_cs_string(step.get("target", ""))
+        seconds = step.get("seconds", 0)
+        pos = step.get("position", [0, 0, 0])
+        if not isinstance(pos, (list, tuple)) or len(pos) < 3:
+            pos = [0, 0, 0]
+
+        entry_lines = [
+            "            new StepDef {",
+            '                action = "' + action + '",',
+            '                expected = "' + expected + '",',
+            '                target = "' + target + '",',
+            "                seconds = " + str(float(seconds)) + "f,",
+            "                position = new Vector3("
+            + str(float(pos[0])) + "f, "
+            + str(float(pos[1])) + "f, "
+            + str(float(pos[2])) + "f)",
+            "            }",
+        ]
+        step_entries.append("\n".join(entry_lines))
+
+    steps_init = ",\n".join(step_entries)
+
+    lines: list[str] = [
+        "using UnityEngine;",
+        "using UnityEditor;",
+        "using System;",
+        "using System.Collections;",
+        "using System.Collections.Generic;",
+        "using System.Diagnostics;",
+        "using System.IO;",
+        "using System.Text;",
+        "",
+        "public class VBPlaySession",
+        "{",
+        "    private static List<StepResult> _results = new List<StepResult>();",
+        "    private static int _currentStep;",
+        "    private static bool _running;",
+        "    private static StepDef[] _steps;",
+        "    private static float _timeoutPerStep = " + str(float(timeout_per_step)) + "f;",
+        "",
+        '    [MenuItem("VeilBreakers/QA/Run Play Session")]',
+        "    public static void Execute()",
+        "    {",
+        "        _results.Clear();",
+        "        _currentStep = 0;",
+        "        _running = true;",
+        "",
+        "        _steps = new StepDef[]",
+        "        {",
+        steps_init,
+        "        };",
+        "",
+        "        EditorApplication.EnterPlaymode();",
+        "        EditorApplication.playModeStateChanged += OnPlayModeChanged;",
+        "    }",
+        "",
+        "    static void OnPlayModeChanged(PlayModeStateChange state)",
+        "    {",
+        "        if (state == PlayModeStateChange.EnteredPlayMode && _running)",
+        "        {",
+        "            var runner = new GameObject(\"VBPlaySessionRunner\").AddComponent<PlaySessionCoroutine>();",
+        "            runner.Steps = _steps;",
+        "            runner.TimeoutPerStep = _timeoutPerStep;",
+        "            runner.OnComplete = OnSessionComplete;",
+        "        }",
+        "    }",
+        "",
+        "    static void OnSessionComplete(List<StepResult> results)",
+        "    {",
+        "        _results = results;",
+        "        _running = false;",
+        "        EditorApplication.playModeStateChanged -= OnPlayModeChanged;",
+        "",
+        "        // Write results before exiting play mode",
+        "        int passed = 0;",
+        "        int failed = 0;",
+        "        foreach (var r in _results)",
+        "        {",
+        "            if (r.passed) passed++;",
+        "            else failed++;",
+        "        }",
+        "",
+        "        var sb = new StringBuilder();",
+        '        sb.Append("{");',
+        '        sb.Append("\\"total_steps\\": " + _results.Count + ", ");',
+        '        sb.Append("\\"passed\\": " + passed + ", ");',
+        '        sb.Append("\\"failed\\": " + failed + ", ");',
+        '        sb.Append("\\"steps\\": [");',
+        "",
+        "        for (int i = 0; i < _results.Count; i++)",
+        "        {",
+        "            var r = _results[i];",
+        '            if (i > 0) sb.Append(", ");',
+        '            sb.Append("{");',
+        '            sb.Append("\\"action\\": \\"" + r.action + "\\", ");',
+        '            sb.Append("\\"expected\\": \\"" + r.expected + "\\", ");',
+        '            sb.Append("\\"actual\\": \\"" + r.actual + "\\", ");',
+        '            sb.Append("\\"passed\\": " + (r.passed ? "true" : "false") + ", ");',
+        '            sb.Append("\\"duration\\": " + r.duration.ToString("F4"));',
+        '            sb.Append("}");',
+        "        }",
+        "",
+        '        sb.Append("]}");',
+        '        File.WriteAllText("Temp/vb_play_session_results.json", sb.ToString());',
+        "",
+        "        EditorApplication.ExitPlaymode();",
+        '        UnityEngine.Debug.Log("[VBPlaySession] Complete: " + passed + " passed, " + failed + " failed");',
+        "    }",
+        "",
+        "    public class StepDef",
+        "    {",
+        "        public string action;",
+        "        public string expected;",
+        "        public string target;",
+        "        public float seconds;",
+        "        public Vector3 position;",
+        "    }",
+        "",
+        "    public class StepResult",
+        "    {",
+        "        public string action;",
+        "        public string expected;",
+        "        public string actual;",
+        "        public bool passed;",
+        "        public float duration;",
+        "    }",
+        "}",
+        "",
+        "public class PlaySessionCoroutine : MonoBehaviour",
+        "{",
+        "    public VBPlaySession.StepDef[] Steps;",
+        "    public float TimeoutPerStep;",
+        "    public Action<List<VBPlaySession.StepResult>> OnComplete;",
+        "",
+        "    private List<VBPlaySession.StepResult> _results = new List<VBPlaySession.StepResult>();",
+        "",
+        "    IEnumerator Start()",
+        "    {",
+        "        yield return null; // Wait one frame for scene initialization",
+        "",
+        "        foreach (var step in Steps)",
+        "        {",
+        "            var result = new VBPlaySession.StepResult",
+        "            {",
+        "                action = step.action,",
+        "                expected = step.expected,",
+        '                actual = "",',
+        "                passed = false,",
+        "                duration = 0f",
+        "            };",
+        "",
+        "            float startTime = Time.realtimeSinceStartup;",
+        "",
+        '            if (step.action == "move_to")',
+        "            {",
+        '                GameObject player = GameObject.FindWithTag("Player");',
+        "                if (player != null)",
+        "                {",
+        "                    var agent = player.GetComponent<UnityEngine.AI.NavMeshAgent>();",
+        "                    if (agent != null)",
+        "                        agent.SetDestination(step.position);",
+        "                    else",
+        "                        player.transform.position = step.position;",
+        '                    result.actual = "moved_to_" + step.position;',
+        "                    result.passed = true;",
+        "                }",
+        "                else",
+        "                {",
+        '                    result.actual = "player_not_found";',
+        "                }",
+        "            }",
+        '            else if (step.action == "interact")',
+        "            {",
+        "                GameObject target = GameObject.Find(step.target);",
+        "                if (target != null)",
+        "                {",
+        '                    target.SendMessage("Interact", SendMessageOptions.DontRequireReceiver);',
+        '                    result.actual = step.target + "_interacted";',
+        "                    result.passed = true;",
+        "                }",
+        "                else",
+        "                {",
+        '                    result.actual = "target_not_found";',
+        "                }",
+        "            }",
+        '            else if (step.action == "wait")',
+        "            {",
+        "                yield return new WaitForSeconds(step.seconds);",
+        '                result.actual = "waited_" + step.seconds + "s";',
+        "                result.passed = true;",
+        "            }",
+        '            else if (step.action == "verify_state")',
+        "            {",
+        "                GameObject target = GameObject.Find(step.target);",
+        "                if (target != null)",
+        "                {",
+        '                    result.actual = "found_" + step.target;',
+        "                    result.passed = result.actual.Contains(step.expected)",
+        "                        || step.expected == result.actual;",
+        "                }",
+        "                else",
+        "                {",
+        '                    result.actual = "target_not_found";',
+        "                }",
+        "            }",
+        "",
+        "            result.duration = Time.realtimeSinceStartup - startTime;",
+        "",
+        "            // Timeout check",
+        "            if (result.duration > TimeoutPerStep && !result.passed)",
+        "            {",
+        '                result.actual = "timeout";',
+        "            }",
+        "",
+        "            _results.Add(result);",
+        "            yield return null;",
+        "        }",
+        "",
+        "        OnComplete?.Invoke(_results);",
+        "        Destroy(gameObject);",
+        "    }",
+        "}",
+    ]
+
+    lines = _wrap_namespace(lines, namespace)
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# generate_profiler_handler
+# ---------------------------------------------------------------------------
+
+def generate_profiler_handler(
+    target_frame_time_ms: float = 16.67,
+    max_draw_calls: int = 2000,
+    max_memory_mb: int = 1024,
+    sample_frames: int = 60,
+    namespace: str = "",
+) -> str:
+    """Generate VBProfiler.cs: GPU/CPU profiler with budget comparison.
+
+    Creates a C# editor script that uses ``ProfilerRecorder.StartNew()``
+    to sample frame time, draw calls, batches, memory, and triangles over
+    N frames. Compares against budget targets and writes structured JSON
+    results to ``Temp/vb_profiler_results.json``.
+
+    Args:
+        target_frame_time_ms: Frame time budget in milliseconds.
+        max_draw_calls: Maximum draw calls budget.
+        max_memory_mb: Maximum memory usage in MB.
+        sample_frames: Number of frames to sample.
+        namespace: Optional C# namespace to wrap the class in.
+
+    Returns:
+        Complete C# source string for VBProfiler.cs.
+    """
+    lines: list[str] = [
+        "using UnityEngine;",
+        "using UnityEditor;",
+        "using Unity.Profiling;",
+        "using System;",
+        "using System.Collections;",
+        "using System.Collections.Generic;",
+        "using System.IO;",
+        "using System.Text;",
+        "",
+        "public class VBProfiler",
+        "{",
+        "    private static bool _sampling;",
+        "    private static int _frameCount;",
+        "    private static int _targetFrames = " + str(int(sample_frames)) + ";",
+        "    private static float _targetFrameTimeMs = " + str(float(target_frame_time_ms)) + "f;",
+        "    private static int _maxDrawCalls = " + str(int(max_draw_calls)) + ";",
+        "    private static int _maxMemoryMb = " + str(int(max_memory_mb)) + ";",
+        "",
+        "    private static ProfilerRecorder _frameTimeRecorder;",
+        "    private static ProfilerRecorder _drawCallsRecorder;",
+        "    private static ProfilerRecorder _batchesRecorder;",
+        "    private static ProfilerRecorder _memoryRecorder;",
+        "    private static ProfilerRecorder _trianglesRecorder;",
+        "",
+        "    private static List<double> _frameTimeSamples = new List<double>();",
+        "    private static List<long> _drawCallSamples = new List<long>();",
+        "    private static List<long> _batchSamples = new List<long>();",
+        "    private static List<long> _memorySamples = new List<long>();",
+        "    private static List<long> _triangleSamples = new List<long>();",
+        "",
+        '    [MenuItem("VeilBreakers/QA/Profile Scene")]',
+        "    public static void Execute()",
+        "    {",
+        "        _frameCount = 0;",
+        "        _frameTimeSamples.Clear();",
+        "        _drawCallSamples.Clear();",
+        "        _batchSamples.Clear();",
+        "        _memorySamples.Clear();",
+        "        _triangleSamples.Clear();",
+        "",
+        '        _frameTimeRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Internal, "Main Thread");',
+        '        _drawCallsRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Render, "Draw Calls Count");',
+        '        _batchesRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Render, "SetPass Calls Count");',
+        '        _memoryRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Memory, "System Used Memory");',
+        '        _trianglesRecorder = ProfilerRecorder.StartNew(ProfilerCategory.Render, "Triangles Count");',
+        "",
+        "        _sampling = true;",
+        "        EditorApplication.update += SampleFrame;",
+        '        UnityEngine.Debug.Log("[VBProfiler] Started profiling for " + _targetFrames + " frames...");',
+        "    }",
+        "",
+        "    static void SampleFrame()",
+        "    {",
+        "        if (!_sampling) return;",
+        "",
+        "        // Convert nanoseconds to milliseconds for frame time",
+        "        double frameTimeMs = _frameTimeRecorder.LastValue / 1000000.0;",
+        "        _frameTimeSamples.Add(frameTimeMs);",
+        "        _drawCallSamples.Add(_drawCallsRecorder.LastValue);",
+        "        _batchSamples.Add(_batchesRecorder.LastValue);",
+        "        _memorySamples.Add(_memoryRecorder.LastValue);",
+        "        _triangleSamples.Add(_trianglesRecorder.LastValue);",
+        "",
+        "        _frameCount++;",
+        "        if (_frameCount >= _targetFrames)",
+        "        {",
+        "            FinishSampling();",
+        "        }",
+        "    }",
+        "",
+        "    static void FinishSampling()",
+        "    {",
+        "        _sampling = false;",
+        "        EditorApplication.update -= SampleFrame;",
+        "",
+        "        _frameTimeRecorder.Dispose();",
+        "        _drawCallsRecorder.Dispose();",
+        "        _batchesRecorder.Dispose();",
+        "        _memoryRecorder.Dispose();",
+        "        _trianglesRecorder.Dispose();",
+        "",
+        "        // Compute min/avg/max for frame time",
+        "        double ftMin = double.MaxValue, ftMax = 0, ftSum = 0;",
+        "        foreach (var v in _frameTimeSamples) { if (v < ftMin) ftMin = v; if (v > ftMax) ftMax = v; ftSum += v; }",
+        "        double ftAvg = ftSum / _frameTimeSamples.Count;",
+        "",
+        "        // Compute min/avg/max for draw calls",
+        "        long dcMin = long.MaxValue, dcMax = 0, dcSum = 0;",
+        "        foreach (var v in _drawCallSamples) { if (v < dcMin) dcMin = v; if (v > dcMax) dcMax = v; dcSum += v; }",
+        "        double dcAvg = (double)dcSum / _drawCallSamples.Count;",
+        "",
+        "        // Compute min/avg/max for batches",
+        "        long btMin = long.MaxValue, btMax = 0, btSum = 0;",
+        "        foreach (var v in _batchSamples) { if (v < btMin) btMin = v; if (v > btMax) btMax = v; btSum += v; }",
+        "        double btAvg = (double)btSum / _batchSamples.Count;",
+        "",
+        "        // Compute min/avg/max for memory (bytes -> MB)",
+        "        long memMin = long.MaxValue, memMax = 0, memSum = 0;",
+        "        foreach (var v in _memorySamples) { if (v < memMin) memMin = v; if (v > memMax) memMax = v; memSum += v; }",
+        "        double memAvgMb = ((double)memSum / _memorySamples.Count) / (1024.0 * 1024.0);",
+        "        double memMinMb = memMin / (1024.0 * 1024.0);",
+        "        double memMaxMb = memMax / (1024.0 * 1024.0);",
+        "",
+        "        // Compute min/avg/max for triangles",
+        "        long triMin = long.MaxValue, triMax = 0, triSum = 0;",
+        "        foreach (var v in _triangleSamples) { if (v < triMin) triMin = v; if (v > triMax) triMax = v; triSum += v; }",
+        "        double triAvg = (double)triSum / _triangleSamples.Count;",
+        "",
+        "        // Budget comparison",
+        "        bool ftPassed = ftAvg <= _targetFrameTimeMs;",
+        "        bool dcPassed = dcAvg <= _maxDrawCalls;",
+        "        bool memPassed = memAvgMb <= _maxMemoryMb;",
+        "",
+        "        var recommendations = new List<string>();",
+        "        if (!ftPassed)",
+        '            recommendations.Add("Frame time avg (" + ftAvg.ToString("F2") + "ms) exceeds budget (" + _targetFrameTimeMs + "ms). Reduce per-frame workload.");',
+        "        if (!dcPassed)",
+        '            recommendations.Add("Draw calls avg (" + dcAvg.ToString("F0") + ") exceeds budget (" + _maxDrawCalls + "). Enable GPU instancing or batching.");',
+        "        if (!memPassed)",
+        '            recommendations.Add("Memory avg (" + memAvgMb.ToString("F1") + "MB) exceeds budget (" + _maxMemoryMb + "MB). Compress textures or unload unused assets.");',
+        "",
+        "        // Build JSON",
+        "        var sb = new StringBuilder();",
+        '        sb.Append("{");',
+        '        sb.Append("\\"frames_sampled\\": " + _frameCount + ", ");',
+        '        sb.Append("\\"metrics\\": {");',
+        "",
+        "        // frame_time_ms",
+        '        sb.Append("\\"frame_time_ms\\": {");',
+        '        sb.Append("\\"min\\": " + ftMin.ToString("F3") + ", ");',
+        '        sb.Append("\\"avg\\": " + ftAvg.ToString("F3") + ", ");',
+        '        sb.Append("\\"max\\": " + ftMax.ToString("F3") + ", ");',
+        '        sb.Append("\\"budget\\": " + _targetFrameTimeMs + ", ");',
+        '        sb.Append("\\"passed\\": " + (ftPassed ? "true" : "false"));',
+        '        sb.Append("}, ");',
+        "",
+        "        // draw_calls",
+        '        sb.Append("\\"draw_calls\\": {");',
+        '        sb.Append("\\"min\\": " + dcMin + ", ");',
+        '        sb.Append("\\"avg\\": " + dcAvg.ToString("F0") + ", ");',
+        '        sb.Append("\\"max\\": " + dcMax + ", ");',
+        '        sb.Append("\\"budget\\": " + _maxDrawCalls + ", ");',
+        '        sb.Append("\\"passed\\": " + (dcPassed ? "true" : "false"));',
+        '        sb.Append("}, ");',
+        "",
+        "        // batches",
+        '        sb.Append("\\"batches\\": {");',
+        '        sb.Append("\\"min\\": " + btMin + ", ");',
+        '        sb.Append("\\"avg\\": " + btAvg.ToString("F0") + ", ");',
+        '        sb.Append("\\"max\\": " + btMax);',
+        '        sb.Append("}, ");',
+        "",
+        "        // memory_mb",
+        '        sb.Append("\\"memory_mb\\": {");',
+        '        sb.Append("\\"min\\": " + memMinMb.ToString("F1") + ", ");',
+        '        sb.Append("\\"avg\\": " + memAvgMb.ToString("F1") + ", ");',
+        '        sb.Append("\\"max\\": " + memMaxMb.ToString("F1") + ", ");',
+        '        sb.Append("\\"budget\\": " + _maxMemoryMb + ", ");',
+        '        sb.Append("\\"passed\\": " + (memPassed ? "true" : "false"));',
+        '        sb.Append("}, ");',
+        "",
+        "        // triangles",
+        '        sb.Append("\\"triangles\\": {");',
+        '        sb.Append("\\"min\\": " + triMin + ", ");',
+        '        sb.Append("\\"avg\\": " + triAvg.ToString("F0") + ", ");',
+        '        sb.Append("\\"max\\": " + triMax);',
+        '        sb.Append("}");',
+        "",
+        '        sb.Append("}, ");',
+        "",
+        "        // recommendations",
+        '        sb.Append("\\"recommendations\\": [");',
+        "        for (int i = 0; i < recommendations.Count; i++)",
+        "        {",
+        '            if (i > 0) sb.Append(", ");',
+        '            sb.Append("\\"" + recommendations[i].Replace("\\"", "\\\\\\"") + "\\"");',
+        "        }",
+        '        sb.Append("]");',
+        "",
+        '        sb.Append("}");',
+        '        File.WriteAllText("Temp/vb_profiler_results.json", sb.ToString());',
+        '        UnityEngine.Debug.Log("[VBProfiler] Profiling complete. " + recommendations.Count + " recommendation(s).");',
+        "    }",
+        "}",
+    ]
+
+    lines = _wrap_namespace(lines, namespace)
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# generate_crash_reporting_script
+# ---------------------------------------------------------------------------
+
+def generate_crash_reporting_script(
+    dsn: str = "",
+    environment: str = "development",
+    enable_breadcrumbs: bool = True,
+    sample_rate: float = 1.0,
+    namespace: str = "",
+) -> str:
+    """Generate VBCrashReporting.cs: Sentry SDK crash reporting setup.
+
+    Produces a runtime script that initializes the Sentry Unity SDK via
+    ``[RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]``.
+    When DSN is empty, all capture calls fall back to Unity ``Debug.Log``
+    instead of sending to Sentry.
+
+    Args:
+        dsn: Sentry DSN endpoint. Empty string enables fallback logging.
+        environment: Environment tag (development, staging, production).
+        enable_breadcrumbs: Hook Application.logMessageReceived for breadcrumbs.
+        sample_rate: Event sample rate (0.0 to 1.0).
+        namespace: Optional C# namespace to wrap the class in.
+
+    Returns:
+        Complete C# source string for VBCrashReporting.cs.
+    """
+    safe_dsn = _sanitize_cs_string(dsn)
+    safe_env = _sanitize_cs_string(environment)
+
+    lines: list[str] = [
+        "// VBCrashReporting.cs -- Generated by VeilBreakers MCP Toolkit",
+        "// Requires Sentry Unity SDK: install via UPM or add to manifest.json",
+        "// If DSN is empty, all capture calls fall back to Debug.Log",
+        "#if SENTRY_AVAILABLE",
+        "using Sentry;",
+        "using Sentry.Unity;",
+        "#endif",
+        "using UnityEngine;",
+        "",
+        "public static class VBCrashReporting",
+        "{",
+        '    private static string _dsn = "' + safe_dsn + '";',
+        "    private static bool _initialized = false;",
+        "",
+        "    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]",
+        "    static void Initialize()",
+        "    {",
+        "        if (_initialized) return;",
+        "        _initialized = true;",
+        "",
+        '        if (string.IsNullOrEmpty(_dsn))',
+        "        {",
+        '            Debug.Log("[VBCrashReporting] No DSN configured -- using fallback console logging.");',
+        "            return;",
+        "        }",
+        "",
+        "#if SENTRY_AVAILABLE",
+        "        SentrySdk.Init(options =>",
+        "        {",
+        '            options.Dsn = "' + safe_dsn + '";',
+        '            options.Environment = "' + safe_env + '";',
+        "            options.SampleRate = " + str(sample_rate) + "f;",
+        "            options.AutoSessionTracking = true;",
+        "        });",
+        '        Debug.Log("[VBCrashReporting] Sentry initialized for environment: ' + safe_env + '");',
+    ]
+
+    if enable_breadcrumbs:
+        lines.extend([
+            "",
+            "        Application.logMessageReceived += OnLogMessageReceived;",
+        ])
+
+    lines.extend([
+        "#endif",
+        "    }",
+    ])
+
+    if enable_breadcrumbs:
+        lines.extend([
+            "",
+            "    static void OnLogMessageReceived(string condition, string stackTrace, LogType type)",
+            "    {",
+            "        if (type == LogType.Warning || type == LogType.Error || type == LogType.Exception)",
+            "        {",
+            "#if SENTRY_AVAILABLE",
+            "            SentrySdk.AddBreadcrumb(",
+            "                message: condition,",
+            '                category: "unity.log",',
+            "                level: type == LogType.Warning ? BreadcrumbLevel.Warning : BreadcrumbLevel.Error",
+            "            );",
+            "#endif",
+            "        }",
+            "    }",
+        ])
+
+    lines.extend([
+        "",
+        "    // ----- Public Helpers -----",
+        "",
+        "    public static void CaptureException(System.Exception e)",
+        "    {",
+        '        if (string.IsNullOrEmpty(_dsn))',
+        "        {",
+        '            Debug.LogError("[VBCrashReporting] Exception: " + e.Message + "\\n" + e.StackTrace);',
+        "            return;",
+        "        }",
+        "#if SENTRY_AVAILABLE",
+        "        SentrySdk.CaptureException(e);",
+        "#endif",
+        "    }",
+        "",
+        "    public static void CaptureMessage(string msg, string level = \"Info\")",
+        "    {",
+        '        if (string.IsNullOrEmpty(_dsn))',
+        "        {",
+        '            Debug.Log("[VBCrashReporting] Message (" + level + "): " + msg);',
+        "            return;",
+        "        }",
+        "#if SENTRY_AVAILABLE",
+        "        SentrySdk.CaptureMessage(msg);",
+        "#endif",
+        "    }",
+        "",
+        "    public static void SetTag(string key, string value)",
+        "    {",
+        '        if (string.IsNullOrEmpty(_dsn))',
+        "        {",
+        '            Debug.Log("[VBCrashReporting] SetTag: " + key + " = " + value);',
+        "            return;",
+        "        }",
+        "#if SENTRY_AVAILABLE",
+        "        SentrySdk.ConfigureScope(scope => scope.SetTag(key, value));",
+        "#endif",
+        "    }",
+        "",
+        "    public static void SetUser(string id, string username)",
+        "    {",
+        '        if (string.IsNullOrEmpty(_dsn))',
+        "        {",
+        '            Debug.Log("[VBCrashReporting] SetUser: " + id + " (" + username + ")");',
+        "            return;",
+        "        }",
+        "#if SENTRY_AVAILABLE",
+        "        SentrySdk.ConfigureScope(scope =>",
+        "        {",
+        "            scope.User = new SentryUser",
+        "            {",
+        "                Id = id,",
+        "                Username = username",
+        "            };",
+        "        });",
+        "#endif",
+        "    }",
+        "}",
+    ])
+
+    lines = _wrap_namespace(lines, namespace)
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# generate_analytics_script
+# ---------------------------------------------------------------------------
+
+_DEFAULT_EVENT_NAMES = [
+    "level_start",
+    "level_complete",
+    "item_acquired",
+    "enemy_killed",
+    "player_death",
+    "session_start",
+    "session_end",
+]
+
+
+def _event_method_name(event_name: str) -> str:
+    """Convert snake_case event name to PascalCase method name."""
+    return "Track" + "".join(word.capitalize() for word in event_name.split("_"))
+
+
+def _event_method_params(event_name: str) -> str:
+    """Return typed parameters for a convenience event method."""
+    param_map = {
+        "level_start": "int level",
+        "level_complete": "int level, float duration",
+        "item_acquired": "string itemName, string rarity",
+        "enemy_killed": "string enemyType, int damage",
+        "player_death": "string cause, int level",
+        "session_start": "",
+        "session_end": "",
+    }
+    return param_map.get(event_name, "")
+
+
+def _event_method_body(event_name: str) -> list[str]:
+    """Return the body lines for a convenience event method."""
+    body_map = {
+        "level_start": [
+            "        var props = new Dictionary<string, object>",
+            "        {",
+            '            ["level"] = level',
+            "        };",
+            '        TrackEvent("level_start", props);',
+        ],
+        "level_complete": [
+            "        var props = new Dictionary<string, object>",
+            "        {",
+            '            ["level"] = level,',
+            '            ["duration"] = duration',
+            "        };",
+            '        TrackEvent("level_complete", props);',
+        ],
+        "item_acquired": [
+            "        var props = new Dictionary<string, object>",
+            "        {",
+            '            ["itemName"] = itemName,',
+            '            ["rarity"] = rarity',
+            "        };",
+            '        TrackEvent("item_acquired", props);',
+        ],
+        "enemy_killed": [
+            "        var props = new Dictionary<string, object>",
+            "        {",
+            '            ["enemyType"] = enemyType,',
+            '            ["damage"] = damage',
+            "        };",
+            '        TrackEvent("enemy_killed", props);',
+        ],
+        "player_death": [
+            "        var props = new Dictionary<string, object>",
+            "        {",
+            '            ["cause"] = cause,',
+            '            ["level"] = level',
+            "        };",
+            '        TrackEvent("player_death", props);',
+        ],
+        "session_start": [
+            '        TrackEvent("session_start", null);',
+        ],
+        "session_end": [
+            '        TrackEvent("session_end", null);',
+        ],
+    }
+    default_body = [
+        '        TrackEvent("' + event_name + '", null);',
+    ]
+    return body_map.get(event_name, default_body)
+
+
+def generate_analytics_script(
+    event_names: list[str] | None = None,
+    flush_interval_seconds: int = 30,
+    max_buffer_size: int = 100,
+    log_file_path: str = "Analytics/events.json",
+    namespace: str = "",
+) -> str:
+    """Generate VBAnalytics.cs: singleton analytics manager.
+
+    Produces a runtime MonoBehaviour singleton that buffers events in
+    memory and flushes them to a JSON file on disk. Generates typed
+    convenience methods for each event name.
+
+    Args:
+        event_names: List of event names to generate typed methods for.
+            Defaults to standard game events if None.
+        flush_interval_seconds: Seconds between automatic flushes.
+        max_buffer_size: Max events before forced flush.
+        log_file_path: Path relative to Application.persistentDataPath.
+        namespace: Optional C# namespace to wrap the class in.
+
+    Returns:
+        Complete C# source string for VBAnalytics.cs.
+    """
+    if event_names is None:
+        event_names = list(_DEFAULT_EVENT_NAMES)
+
+    safe_log_path = _sanitize_cs_string(log_file_path)
+
+    lines: list[str] = [
+        "// VBAnalytics.cs -- Generated by VeilBreakers MCP Toolkit",
+        "using UnityEngine;",
+        "using System;",
+        "using System.Collections.Generic;",
+        "using System.IO;",
+        "",
+        "public class VBAnalytics : MonoBehaviour",
+        "{",
+        "    // ----- Singleton -----",
+        "",
+        "    private static VBAnalytics _instance;",
+        "    public static VBAnalytics Instance",
+        "    {",
+        "        get",
+        "        {",
+        "            if (_instance == null)",
+        "            {",
+        '                GameObject go = new GameObject("[VBAnalytics]");',
+        "                _instance = go.AddComponent<VBAnalytics>();",
+        "                DontDestroyOnLoad(go);",
+        "            }",
+        "            return _instance;",
+        "        }",
+        "    }",
+        "",
+        "    // ----- Configuration -----",
+        "",
+        "    private string _sessionId;",
+        "    private List<Dictionary<string, object>> _eventBuffer = new List<Dictionary<string, object>>();",
+        "    private float _lastFlushTime;",
+        "    private int _flushIntervalSeconds = " + str(flush_interval_seconds) + ";",
+        "    private int _maxBufferSize = " + str(max_buffer_size) + ";",
+        '    private string _logFilePath = "' + safe_log_path + '";',
+        "",
+        "    // ----- Lifecycle -----",
+        "",
+        "    void Awake()",
+        "    {",
+        "        if (_instance != null && _instance != this)",
+        "        {",
+        "            Destroy(gameObject);",
+        "            return;",
+        "        }",
+        "        _instance = this;",
+        "        DontDestroyOnLoad(gameObject);",
+        "",
+        "        _sessionId = Guid.NewGuid().ToString();",
+        "        _lastFlushTime = Time.realtimeSinceStartup;",
+        '        TrackSessionStart();',
+        "    }",
+        "",
+        "    void Update()",
+        "    {",
+        "        if (Time.realtimeSinceStartup - _lastFlushTime >= _flushIntervalSeconds)",
+        "        {",
+        "            FlushEvents();",
+        "            _lastFlushTime = Time.realtimeSinceStartup;",
+        "        }",
+        "    }",
+        "",
+        "    void OnApplicationQuit()",
+        "    {",
+        '        TrackSessionEnd();',
+        "        FlushEvents();",
+        "    }",
+        "",
+        "    // ----- Core API -----",
+        "",
+        "    public void TrackEvent(string eventName, Dictionary<string, object> properties = null)",
+        "    {",
+        "        var eventRecord = new Dictionary<string, object>",
+        "        {",
+        '            ["eventName"] = eventName,',
+        '            ["timestamp"] = DateTime.UtcNow.ToString("o"),',
+        '            ["sessionId"] = _sessionId',
+        "        };",
+        "",
+        "        if (properties != null)",
+        "        {",
+        "            foreach (var kv in properties)",
+        "            {",
+        '                eventRecord["prop_" + kv.Key] = kv.Value;',
+        "            }",
+        "        }",
+        "",
+        "        _eventBuffer.Add(eventRecord);",
+        "",
+        "        if (_eventBuffer.Count >= _maxBufferSize)",
+        "        {",
+        "            FlushEvents();",
+        "            _lastFlushTime = Time.realtimeSinceStartup;",
+        "        }",
+        "    }",
+        "",
+        "    public void FlushEvents()",
+        "    {",
+        "        if (_eventBuffer.Count == 0) return;",
+        "",
+        "        string fullPath = Path.Combine(Application.persistentDataPath, _logFilePath);",
+        "        string dir = Path.GetDirectoryName(fullPath);",
+        "        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))",
+        "            Directory.CreateDirectory(dir);",
+        "",
+        "        // Serialize events as JSON array",
+        "        string json = SerializeEventsToJson(_eventBuffer);",
+        "",
+        "        // Append to file",
+        "        File.AppendAllText(fullPath, json + \"\\n\");",
+        "",
+        "        _eventBuffer.Clear();",
+        '        Debug.Log("[VBAnalytics] Flushed events to: " + fullPath);',
+        "    }",
+        "",
+        "    // ----- JSON Serialization -----",
+        "",
+        "    private string SerializeEventsToJson(List<Dictionary<string, object>> events)",
+        "    {",
+        '        var sb = new System.Text.StringBuilder();',
+        '        sb.Append("[");',
+        "        for (int i = 0; i < events.Count; i++)",
+        "        {",
+        '            if (i > 0) sb.Append(",");',
+        '            sb.Append("{");',
+        "            bool first = true;",
+        "            foreach (var kv in events[i])",
+        "            {",
+        '                if (!first) sb.Append(",");',
+        '                sb.Append("\\"");',
+        "                sb.Append(EscapeJsonString(kv.Key));",
+        '                sb.Append("\\":");',
+        "                if (kv.Value is string s)",
+        "                {",
+        '                    sb.Append("\\"");',
+        "                    sb.Append(EscapeJsonString(s));",
+        '                    sb.Append("\\"");',
+        "                }",
+        "                else if (kv.Value is bool b)",
+        "                {",
+        '                    sb.Append(b ? "true" : "false");',
+        "                }",
+        "                else if (kv.Value == null)",
+        "                {",
+        '                    sb.Append("null");',
+        "                }",
+        "                else",
+        "                {",
+        "                    sb.Append(kv.Value.ToString());",
+        "                }",
+        "                first = false;",
+        "            }",
+        '            sb.Append("}");',
+        "        }",
+        '        sb.Append("]");',
+        "        return sb.ToString();",
+        "    }",
+        "",
+        "    private string EscapeJsonString(string s)",
+        "    {",
+        '        if (s == null) return "";',
+        '        return s.Replace("\\\\", "\\\\\\\\").Replace("\\"", "\\\\\\"").Replace("\\n", "\\\\n").Replace("\\r", "\\\\r");',
+        "    }",
+        "",
+        "    // ----- Typed Convenience Methods -----",
+        "",
+    ]
+
+    # Generate typed convenience methods for each event name
+    for event_name in event_names:
+        method_name = _event_method_name(event_name)
+        params = _event_method_params(event_name)
+        body_lines = _event_method_body(event_name)
+
+        lines.append("    public void " + method_name + "(" + params + ")")
+        lines.append("    {")
+        lines.extend(body_lines)
+        lines.append("    }")
+        lines.append("")
+
+    lines.append("}")
+
+    lines = _wrap_namespace(lines, namespace)
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# generate_live_inspector_script
+# ---------------------------------------------------------------------------
+
+def generate_live_inspector_script(
+    update_interval_frames: int = 10,
+    max_tracked_objects: int = 20,
+    namespace: str = "",
+) -> str:
+    """Generate VBLiveInspector.cs: IMGUI EditorWindow for live state inspection.
+
+    Produces an EditorWindow that polls selected GameObjects during Play
+    Mode, enumerating component fields and properties via Reflection.
+    Supports pinning objects for comparison, search/filter, and special
+    formatting for common types (Vector3, Color, bool).
+
+    Args:
+        update_interval_frames: Frames between refresh polls.
+        max_tracked_objects: Maximum objects in the pinned list.
+        namespace: Optional C# namespace to wrap the class in.
+
+    Returns:
+        Complete C# source string for VBLiveInspector.cs.
+    """
+    lines: list[str] = [
+        "// VBLiveInspector.cs -- Generated by VeilBreakers MCP Toolkit",
+        "using UnityEngine;",
+        "using UnityEditor;",
+        "using System;",
+        "using System.Collections.Generic;",
+        "using System.Reflection;",
+        "using System.Linq;",
+        "",
+        "public class VBLiveInspector : EditorWindow",
+        "{",
+        '    [MenuItem("VeilBreakers/QA/Live Inspector")]',
+        "    public static void ShowWindow()",
+        "    {",
+        '        GetWindow<VBLiveInspector>("VB Live Inspector");',
+        "    }",
+        "",
+        "    // ----- Configuration -----",
+        "",
+        "    private int _updateIntervalFrames = " + str(update_interval_frames) + ";",
+        "    private int _maxTrackedObjects = " + str(max_tracked_objects) + ";",
+        "    private int _frameCounter;",
+        "",
+        "    // ----- State -----",
+        "",
+        "    private Vector2 _scrollPosition;",
+        "    private string _searchFilter = \"\";",
+        "    private List<GameObject> _pinnedObjects = new List<GameObject>();",
+        "    private Dictionary<string, bool> _componentFoldouts = new Dictionary<string, bool>();",
+        "    private Dictionary<int, ComponentData[]> _cachedData = new Dictionary<int, ComponentData[]>();",
+        "",
+        "    // ----- Data Structures -----",
+        "",
+        "    private struct FieldData",
+        "    {",
+        "        public string Name;",
+        "        public string TypeName;",
+        "        public object Value;",
+        "    }",
+        "",
+        "    private struct ComponentData",
+        "    {",
+        "        public string Name;",
+        "        public FieldData[] Fields;",
+        "    }",
+        "",
+        "    // ----- Lifecycle -----",
+        "",
+        "    void OnEnable()",
+        "    {",
+        "        EditorApplication.update += OnEditorUpdate;",
+        "    }",
+        "",
+        "    void OnDisable()",
+        "    {",
+        "        EditorApplication.update -= OnEditorUpdate;",
+        "    }",
+        "",
+        "    void OnEditorUpdate()",
+        "    {",
+        "        if (!EditorApplication.isPlaying) return;",
+        "",
+        "        _frameCounter++;",
+        "        if (_frameCounter < _updateIntervalFrames) return;",
+        "        _frameCounter = 0;",
+        "",
+        "        RefreshCachedData();",
+        "        Repaint();",
+        "    }",
+        "",
+        "    // ----- Data Collection -----",
+        "",
+        "    void RefreshCachedData()",
+        "    {",
+        "        _cachedData.Clear();",
+        "",
+        "        // Current selection",
+        "        if (Selection.activeGameObject != null)",
+        "        {",
+        "            CacheGameObjectData(Selection.activeGameObject);",
+        "        }",
+        "",
+        "        // Pinned objects",
+        "        for (int i = _pinnedObjects.Count - 1; i >= 0; i--)",
+        "        {",
+        "            if (_pinnedObjects[i] == null)",
+        "            {",
+        "                _pinnedObjects.RemoveAt(i);",
+        "                continue;",
+        "            }",
+        "            CacheGameObjectData(_pinnedObjects[i]);",
+        "        }",
+        "    }",
+        "",
+        "    void CacheGameObjectData(GameObject go)",
+        "    {",
+        "        int id = go.GetInstanceID();",
+        "        if (_cachedData.ContainsKey(id)) return;",
+        "",
+        "        Component[] components = go.GetComponents<Component>();",
+        "        var compDataList = new List<ComponentData>();",
+        "",
+        "        foreach (Component comp in components)",
+        "        {",
+        "            if (comp == null) continue;",
+        "            Type compType = comp.GetType();",
+        "",
+        "            // Get public fields",
+        "            FieldInfo[] fields = compType.GetFields(BindingFlags.Public | BindingFlags.Instance);",
+        "            PropertyInfo[] properties = compType.GetProperties(BindingFlags.Public | BindingFlags.Instance);",
+        "",
+        "            var fieldDataList = new List<FieldData>();",
+        "",
+        "            foreach (FieldInfo fi in fields)",
+        "            {",
+        "                try",
+        "                {",
+        "                    fieldDataList.Add(new FieldData",
+        "                    {",
+        "                        Name = fi.Name,",
+        "                        TypeName = fi.FieldType.Name,",
+        "                        Value = fi.GetValue(comp)",
+        "                    });",
+        "                }",
+        "                catch (Exception) { }",
+        "            }",
+        "",
+        "            foreach (PropertyInfo pi in properties)",
+        "            {",
+        "                if (!pi.CanRead || pi.GetIndexParameters().Length > 0) continue;",
+        "                try",
+        "                {",
+        "                    fieldDataList.Add(new FieldData",
+        "                    {",
+        "                        Name = pi.Name,",
+        "                        TypeName = pi.PropertyType.Name,",
+        "                        Value = pi.GetValue(comp)",
+        "                    });",
+        "                }",
+        "                catch (Exception) { }",
+        "            }",
+        "",
+        "            compDataList.Add(new ComponentData",
+        "            {",
+        "                Name = compType.Name,",
+        "                Fields = fieldDataList.ToArray()",
+        "            });",
+        "        }",
+        "",
+        "        _cachedData[id] = compDataList.ToArray();",
+        "    }",
+        "",
+        "    // ----- IMGUI -----",
+        "",
+        "    void OnGUI()",
+        "    {",
+        "        // Play Mode check",
+        "        if (!EditorApplication.isPlaying)",
+        "        {",
+        '            EditorGUILayout.HelpBox("Enter Play Mode to inspect live state", MessageType.Warning);',
+        "            return;",
+        "        }",
+        "",
+        "        // Search filter",
+        '        _searchFilter = EditorGUILayout.TextField("Search", _searchFilter);',
+        "        EditorGUILayout.Space();",
+        "",
+        "        // Pin current selection button",
+        "        EditorGUILayout.BeginHorizontal();",
+        '        if (GUILayout.Button("Pin Selected") && Selection.activeGameObject != null)',
+        "        {",
+        "            if (!_pinnedObjects.Contains(Selection.activeGameObject) && _pinnedObjects.Count < _maxTrackedObjects)",
+        "            {",
+        "                _pinnedObjects.Add(Selection.activeGameObject);",
+        "            }",
+        "        }",
+        '        if (GUILayout.Button("Clear Pins"))',
+        "        {",
+        "            _pinnedObjects.Clear();",
+        "        }",
+        '        EditorGUILayout.LabelField("Pinned: " + _pinnedObjects.Count + "/" + _maxTrackedObjects);',
+        "        EditorGUILayout.EndHorizontal();",
+        "        EditorGUILayout.Space();",
+        "",
+        "        // Scroll view",
+        "        _scrollPosition = EditorGUILayout.BeginScrollView(_scrollPosition);",
+        "",
+        "        // Current selection",
+        "        if (Selection.activeGameObject != null)",
+        "        {",
+        "            DrawGameObjectInspector(Selection.activeGameObject, true);",
+        "        }",
+        "",
+        "        // Pinned objects",
+        "        foreach (GameObject pinned in _pinnedObjects)",
+        "        {",
+        "            if (pinned != null && pinned != Selection.activeGameObject)",
+        "            {",
+        "                DrawGameObjectInspector(pinned, false);",
+        "            }",
+        "        }",
+        "",
+        "        EditorGUILayout.EndScrollView();",
+        "    }",
+        "",
+        "    void DrawGameObjectInspector(GameObject go, bool isSelection)",
+        "    {",
+        '        string prefix = isSelection ? "[Selected] " : "[Pinned] ";',
+        "        EditorGUILayout.LabelField(prefix + go.name, EditorStyles.boldLabel);",
+        '        EditorGUILayout.LabelField("Active: " + go.activeSelf + "  Layer: " + LayerMask.LayerToName(go.layer));',
+        "",
+        "        int id = go.GetInstanceID();",
+        "        ComponentData[] compData;",
+        "        if (!_cachedData.TryGetValue(id, out compData)) return;",
+        "",
+        "        foreach (ComponentData cd in compData)",
+        "        {",
+        "            string foldoutKey = id + \"_\" + cd.Name;",
+        "            if (!_componentFoldouts.ContainsKey(foldoutKey))",
+        "                _componentFoldouts[foldoutKey] = false;",
+        "",
+        "            _componentFoldouts[foldoutKey] = EditorGUILayout.Foldout(_componentFoldouts[foldoutKey], cd.Name, true);",
+        "",
+        "            if (_componentFoldouts[foldoutKey])",
+        "            {",
+        "                EditorGUI.indentLevel++;",
+        "                foreach (FieldData fd in cd.Fields)",
+        "                {",
+        "                    // Apply search filter",
+        "                    if (!string.IsNullOrEmpty(_searchFilter) &&",
+        "                        !fd.Name.ToLower().Contains(_searchFilter.ToLower()))",
+        "                        continue;",
+        "",
+        "                    // Check for FSM/state machine state",
+        '                    if (fd.Name == "currentState" || fd.Name == "_state")',
+        "                    {",
+        '                        EditorGUILayout.LabelField("STATE: " + fd.Name, fd.Value != null ? fd.Value.ToString() : "null", EditorStyles.helpBox);',
+        "                        continue;",
+        "                    }",
+        "",
+        "                    DrawFieldValue(fd);",
+        "                }",
+        "                EditorGUI.indentLevel--;",
+        "            }",
+        "        }",
+        "",
+        "        EditorGUILayout.Space();",
+        "    }",
+        "",
+        "    void DrawFieldValue(FieldData fd)",
+        "    {",
+        "        string label = fd.Name + \" (\" + fd.TypeName + \")\";",
+        "",
+        "        if (fd.Value == null)",
+        "        {",
+        '            EditorGUILayout.LabelField(label, "null");',
+        "            return;",
+        "        }",
+        "",
+        "        // Special formatting for common types",
+        '        if (fd.TypeName == "Vector3" && fd.Value is Vector3 v3)',
+        "        {",
+        '            EditorGUILayout.LabelField(label, "x:" + v3.x.ToString("F2") + " y:" + v3.y.ToString("F2") + " z:" + v3.z.ToString("F2"));',
+        "        }",
+        '        else if (fd.TypeName == "Color" && fd.Value is Color col)',
+        "        {",
+        "            EditorGUILayout.BeginHorizontal();",
+        "            EditorGUILayout.LabelField(label);",
+        "            EditorGUILayout.ColorField(col);",
+        "            EditorGUILayout.EndHorizontal();",
+        "        }",
+        '        else if (fd.TypeName == "Boolean" && fd.Value is bool bVal)',
+        "        {",
+        "            EditorGUILayout.Toggle(label, bVal);",
+        "        }",
+        "        else",
+        "        {",
+        "            EditorGUILayout.LabelField(label, fd.Value.ToString());",
+        "        }",
+        "    }",
+        "}",
+    ]
 
     lines = _wrap_namespace(lines, namespace)
     return "\n".join(lines) + "\n"
