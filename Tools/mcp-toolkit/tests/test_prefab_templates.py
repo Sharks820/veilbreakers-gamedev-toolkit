@@ -877,7 +877,11 @@ class TestAllGeneratorsCommon:
         return results
 
     def test_all_contain_undo(self):
+        # validate is a read-only scan and does not need Undo
+        skip_undo = {"validate"}
         for name, result in self._get_all_results():
+            if name in skip_undo:
+                continue
             assert "Undo." in result or "Undo.RegisterCreatedObjectUndo" in result, f"{name} missing Undo"
 
     def test_all_contain_result_json(self):

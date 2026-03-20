@@ -24,6 +24,7 @@ Exports:
 
 from __future__ import annotations
 
+import hashlib
 import re
 
 
@@ -121,9 +122,8 @@ def generate_physics_settings_script(
     gravity_code = ""
     if gravity and len(gravity) >= 3:
         gravity_code = f"""
-            // Set custom gravity
-            Physics.gravity = new Vector3({gravity[0]}f, {gravity[1]}f, {gravity[2]}f);
-            Undo.RecordObject(FindObjectOfType<MonoBehaviour>(), "Set Gravity");"""
+            // Set custom gravity (static setting, no undo target needed)
+            Physics.gravity = new Vector3({gravity[0]}f, {gravity[1]}f, {gravity[2]}f);"""
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -431,8 +431,9 @@ def generate_build_settings_script(
 
     if defines:
         defines_str = ";".join(_sanitize_cs_string(d) for d in defines)
+        defines_group = _PLATFORM_MAP.get(platform, ("Standalone", platform))[0] if platform else "Standalone"
         settings_lines.append(
-            f'            PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.Standalone, "{defines_str}");'
+            f'            PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.{_sanitize_cs_identifier(defines_group)}, "{defines_str}");'
         )
         settings_lines.append(
             f'            Debug.Log("[VeilBreakers] Set scripting defines: {defines_str}");'
@@ -513,6 +514,7 @@ def generate_quality_settings_script(
             QualitySettings.antiAliasing = {aa};
             QualitySettings.vSyncCount = {vsync_val};
             QualitySettings.lodBias = {lod_bias}f;
+            QualitySettings.shadowResolution = ShadowResolution.{shadow_res};
             Debug.Log("[VeilBreakers] Configured quality level {i}: {name}");
 """
 
@@ -928,7 +930,7 @@ def generate_tag_layer_script(
                     sortingLayersProp.InsertArrayElementAtIndex(sortingLayersProp.arraySize);
                     var newEntry = sortingLayersProp.GetArrayElementAtIndex(sortingLayersProp.arraySize - 1);
                     newEntry.FindPropertyRelative("name").stringValue = "{safe}";
-                    newEntry.FindPropertyRelative("uniqueID").intValue = (int)(System.DateTime.Now.Ticks % int.MaxValue) + {hash(sl) % 10000};
+                    newEntry.FindPropertyRelative("uniqueID").intValue = (int)(System.DateTime.Now.Ticks % int.MaxValue) + {int(hashlib.md5(sl.encode()).hexdigest()[:8], 16) % 10000};
                     sortingLayersAdded++;
                 }}
 """
@@ -1017,6 +1019,16 @@ public static class VeilBreakers_SyncTagsLayers
         {{
             string constantsPath = "{safe_path}";
             string fullPath = Path.GetFullPath(constantsPath);
+
+            // Verify path stays within the Unity project Assets folder
+            if (!fullPath.StartsWith(Application.dataPath))
+            {{
+                string errJson = "{{\\"status\\": \\"error\\", \\"action\\": \\"sync_tags_layers\\", "
+                    + "\\"message\\": \\"Path escapes project boundary: {safe_path}\\"}}";
+                File.WriteAllText("Temp/vb_result.json", errJson);
+                Debug.LogError("[VeilBreakers] Path escapes project: " + fullPath);
+                return;
+            }}
 
             if (!File.Exists(fullPath))
             {{

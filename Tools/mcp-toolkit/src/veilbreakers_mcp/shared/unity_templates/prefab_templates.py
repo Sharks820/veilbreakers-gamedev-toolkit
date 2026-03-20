@@ -80,9 +80,21 @@ def _load_auto_wire_profile(prefab_type: str) -> dict:
 
     Raises:
         FileNotFoundError: If profile JSON does not exist.
+        ValueError: If prefab_type contains path separators or escapes the
+            profiles directory.
     """
+    # Reject any prefab_type containing path separators to prevent traversal
+    if "/" in prefab_type or "\\" in prefab_type or ".." in prefab_type:
+        raise ValueError(
+            f"Invalid prefab_type '{prefab_type}': must not contain path separators or '..'"
+        )
     profiles_dir = Path(__file__).resolve().parent.parent / "auto_wire_profiles"
-    profile_path = profiles_dir / f"{prefab_type}.json"
+    profile_path = (profiles_dir / f"{prefab_type}.json").resolve()
+    # Verify the resolved path stays within the profiles directory
+    if not profile_path.is_relative_to(profiles_dir.resolve()):
+        raise ValueError(
+            f"Invalid prefab_type '{prefab_type}': resolved path escapes profiles directory"
+        )
     return json.loads(profile_path.read_text(encoding="utf-8"))
 
 
@@ -1246,7 +1258,6 @@ public static class VeilBreakers_Hierarchy_Unknown
     [MenuItem("VeilBreakers/Prefab/Hierarchy")]
     public static void Execute()
     {{
-        Undo.RecordObject(null, "Unknown");
         string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"hierarchy\\", \\"message\\": \\"Unknown operation: {operation}\\", \\"changed_assets\\": [], \\"validation_status\\": \\"error\\"}}";
         System.IO.File.WriteAllText("Temp/vb_result.json", json);
     }}
@@ -1873,7 +1884,6 @@ public static class VeilBreakers_ValidateProject
         var warnings = new List<string>();
         try
         {
-            Undo.RecordObject(null, "Validate Project");
             string[] guids = AssetDatabase.FindAssets("t:Prefab");
             int totalPrefabs = guids.Length;
             int missingScripts = 0;
@@ -1963,7 +1973,6 @@ public static class VeilBreakers_JobScript
     [MenuItem("VeilBreakers/Prefab/Execute Job Script")]
     public static void Execute()
     {
-        Undo.RecordObject(null, "Empty Job");
         string json = "{\\"status\\": \\"warning\\", \\"action\\": \\"job_script\\", \\"message\\": \\"No operations provided - empty job\\", \\"changed_assets\\": [], \\"validation_status\\": \\"ok\\"}";
         File.WriteAllText("Temp/vb_result.json", json);
         Debug.LogWarning("[VeilBreakers] Job script executed with no operations");
