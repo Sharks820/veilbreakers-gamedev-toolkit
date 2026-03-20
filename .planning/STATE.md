@@ -4,13 +4,29 @@ milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
 stopped_at: Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, Phase 14 complete)
-last_updated: "2026-03-20T18:33:41.967Z"
-last_activity: 2026-03-20 -- Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, 5420 total)
+last_updated: "2026-03-20T19:48:26.311Z"
+last_activity: 2026-03-20 -- Completed 15-03-PLAN.md (4 encounter/AI generators + 98 tests)
 progress:
   total_phases: 9
   completed_phases: 6
-  total_plans: 22
-  completed_plans: 22
+  total_plans: 26
+  completed_plans: 24
+  percent: 92
+---
+
+---
+gsd_state_version: 1.0
+milestone: v2.0
+milestone_name: Complete Unity Game Development Coverage
+status: executing
+stopped_at: Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, Phase 14 complete)
+last_updated: "2026-03-20T19:46:32.944Z"
+last_activity: 2026-03-20 -- Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, 5420 total)
+progress:
+  [█████████░] 92%
+  completed_phases: 6
+  total_plans: 26
+  completed_plans: 23
 ---
 
 ---
@@ -36,18 +52,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** v2.0 Phase 14 in progress
+**Current focus:** v2.0 Phase 15 in progress
 
 ## Current Position
 
-Phase: 14 of 17 (Camera, Cinematics & Scene Management) -- COMPLETE
-Plan: 5 of 5 in current phase (all 5 plans complete)
-Status: Phase 14 Complete -- ready for Phase 15
-Last activity: 2026-03-20 -- Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, 5420 total)
+Phase: 15 of 17 (Game UX & Encounter Design)
+Plan: 1 of 4 in current phase (15-01 complete)
+Status: Executing Phase 15 -- 15-01 UX templates complete
+Last activity: 2026-03-20 -- Completed 15-01-PLAN.md (6 UX generators + 93 tests, 5611 total)
 
 ```
-Phase Progress: [██████████████████████████████████████████] 100% overall (14/17 phases complete, all plans done)
-v2.0 Progress:  [█████████████████████████] 25/25 plans complete
+Phase Progress: [█████████░] 88% overall (26 plans, 23 complete)
+v2.0 Progress:  [████████████████████████░] 26/29 plans complete
 ```
 
 ## Performance Metrics
@@ -61,9 +77,9 @@ v2.0 Progress:  [█████████████████████
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 25 (09-01 through 13-03, 14-01 through 14-05) |
-| v2.0 tests added | 2,637 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14) |
-| v2.0 total tests passing | 5,420 |
+| v2.0 plans completed | 26 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-03) |
+| v2.0 tests added | 2,735 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter) |
+| v2.0 total tests passing | 5,518 |
 | v2.0 MCP tools | 34 (15 Blender + 19 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
@@ -86,6 +102,7 @@ v2.0 Progress:  [█████████████████████
 | 14-03 duration | 17 min |
 | 14-04 duration | 17 min |
 | 14-05 duration | 19 min |
+| 15-03 duration | 8 min |
 
 ## Accumulated Context
 
@@ -166,6 +183,12 @@ v2.0 Progress:  [█████████████████████
 | unity_camera + unity_world compound tools with ns_kwargs dispatch | Matches established compound tool pattern from unity_content | 14 |
 | NPC placement triple-return to SO/ + Runtime/ + Editor/ paths | Triple-file generators need three output directories | 14 |
 | Storytelling props via blender_environment (not worldbuilding) | AAA-05 is environment decoration concern, not structural worldbuilding | 14 |
+| Encounter system returns 2-tuple (wave SO, manager) | Separate file output following existing multi-file generator pattern | 15 |
+| AI director sliding window of last 5 encounters | Smooths difficulty adjustments to prevent oscillation | 15 |
+| Encounter simulator uses EditorApplication.update batching | Non-blocking Monte Carlo via per-frame batch execution | 15 |
+| Boss AI queues phase transitions via _pendingTransition flag | Avoids interrupting current attack animation during HP threshold cross | 15 |
+| Phase count clamped to 2-5 range for boss AI | Keeps generated code manageable while allowing customization | 15 |
+| DamageCalculator stub follows VB delegation pattern | Boss AI delegates damage calculation to static utility class | 15 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -180,10 +203,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T18:08:21Z
-Stopped at: Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, Phase 14 complete)
-Next action: Phase 15 (next v2.0 phase)
+Last session: 2026-03-20T19:45:38Z
+Stopped at: Completed 15-01-PLAN.md (6 UX generators + 93 tests, 5611 total)
+Next action: Continue Phase 15 (15-02)
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 14-05-PLAN.md (tool wiring + Phase 14 complete)*
+*Last updated: 2026-03-20 -- Completed 15-01-PLAN.md (6 UX generators + 93 tests)*
