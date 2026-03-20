@@ -3,45 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
-stopped_at: Completed 12-02-PLAN.md
-last_updated: "2026-03-20T13:39:17.549Z"
-last_activity: 2026-03-20 -- Completed 12-01-PLAN.md (7 core game system generators + 93 tests)
+stopped_at: Completed 12-03-PLAN.md (Phase 12 complete)
+last_updated: "2026-03-20T14:00:08Z"
+last_activity: 2026-03-20 -- Completed 12-03-PLAN.md (unity_game MCP tool wiring + 14 syntax tests, 3993 total)
 progress:
   total_phases: 9
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 14
-  completed_plans: 13
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 11-04-PLAN.md (Phase 11 complete)
-last_updated: "2026-03-20T12:48:42.858Z"
-last_activity: 2026-03-20 -- Completed 11-04-PLAN.md (MCP tool wiring + 15 syntax tests)
-progress:
-  total_phases: 9
-  completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 11-04-PLAN.md
-last_updated: "2026-03-20T12:14:02Z"
-last_activity: 2026-03-20 -- Completed 11-04-PLAN.md (MCP tool wiring + 15 syntax tests)
-progress:
-  total_phases: 9
-  completed_phases: 3
-  total_plans: 11
-  completed_plans: 11
-  percent: 100
+  completed_plans: 14
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -51,18 +20,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** v2.0 Phase 12 -- Core Game Systems
+**Current focus:** v2.0 Phase 12 complete, ready for Phase 13
 
 ## Current Position
 
-Phase: 12 of 17 (Core Game Systems)
-Plan: 2 of 3 in current phase (12-01, 12-02 complete)
-Status: Executing phase 12
-Last activity: 2026-03-20 -- Completed 12-01-PLAN.md (7 core game system generators + 93 tests)
+Phase: 12 of 17 (Core Game Systems -- COMPLETE)
+Plan: 3 of 3 in current phase (12-01, 12-02, 12-03 complete)
+Status: Phase 12 complete
+Last activity: 2026-03-20 -- Completed 12-03-PLAN.md (unity_game MCP tool wiring + 14 syntax tests)
 
 ```
-Phase Progress: [███████████████████████████████░░░░░░░░░] 65% overall (11/17 phases)
-v2.0 Progress:  [██████░░░░] 67% (2/3 plans in phase 12)
+Phase Progress: [████████████████████████████████████░░░░] 71% overall (12/17 phases)
+v2.0 Progress:  [██████████] 100% (3/3 plans in phase 12)
 ```
 
 ## Performance Metrics
@@ -76,10 +45,10 @@ v2.0 Progress:  [██████░░░░] 67% (2/3 plans in phase 12)
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 13 (09-01, 09-02, 09-03, 10-01, 10-02, 10-03, 10-04, 11-01, 11-02, 11-03, 11-04, 12-01, 12-02) |
-| v2.0 tests added | 1,112 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat) |
-| v2.0 total tests passing | 3,895 |
-| v2.0 MCP tools | 30 (15 Blender + 15 Unity) |
+| v2.0 plans completed | 14 (09-01, 09-02, 09-03, 10-01, 10-02, 10-03, 10-04, 11-01, 11-02, 11-03, 11-04, 12-01, 12-02, 12-03) |
+| v2.0 tests added | 1,210 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12) |
+| v2.0 total tests passing | 3,993 |
+| v2.0 MCP tools | 31 (15 Blender + 16 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
 | 09-03 duration | 11 min |
@@ -92,6 +61,7 @@ v2.0 Progress:  [██████░░░░] 67% (2/3 plans in phase 12)
 | 11-04 duration | 12 min |
 | 12-01 duration | 13 min |
 | 12-02 duration | 11 min |
+| 12-03 duration | 11 min |
 
 ## Accumulated Context
 
@@ -139,6 +109,8 @@ v2.0 Progress:  [██████░░░░] 67% (2/3 plans in phase 12)
 | Multi-file generators return tuples | Input config returns (JSON, C#), settings returns (C#, UXML, USS) for related artifacts | 12 |
 | HTTP client uses UNITY_6000_0_OR_NEWER guard | Awaitable async for Unity 6, coroutine fallback for earlier versions | 12 |
 | Save system key derivation from Application.identifier | AES-CBC key derived via SHA256(identifier + salt), matching SaveFileHandler pattern | 12 |
+| ns_kwargs dict pattern for optional namespace passthrough | Only passes namespace when non-empty, letting generators use defaults | 12 |
+| Extended f-string whitelist for HTTP client interpolation | 'method' and 'url' are legitimate C# $"" interpolation beyond 50-char lookback | 12 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -153,10 +125,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T13:35:15Z
-Stopped at: Completed 12-01-PLAN.md
-Next action: Continue Phase 12 (12-03 remaining)
+Last session: 2026-03-20T14:00:08Z
+Stopped at: Completed 12-03-PLAN.md (Phase 12 complete)
+Next action: Begin Phase 13
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 12-01-PLAN.md (7 core game system generators + 93 tests, 3,895 total)*
+*Last updated: 2026-03-20 -- Completed 12-03-PLAN.md (unity_game MCP tool wiring + 14 syntax tests, 3,993 total)*
