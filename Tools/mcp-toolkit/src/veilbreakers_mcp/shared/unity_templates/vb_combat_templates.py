@@ -47,6 +47,56 @@ def _sanitize_cs_identifier(value: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# C# reserved words
+# ---------------------------------------------------------------------------
+
+_CS_RESERVED = frozenset({
+    "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char",
+    "checked", "class", "const", "continue", "decimal", "default", "delegate",
+    "do", "double", "else", "enum", "event", "explicit", "extern", "false",
+    "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit",
+    "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
+    "new", "null", "object", "operator", "out", "override", "params", "private",
+    "protected", "public", "readonly", "ref", "return", "sbyte", "sealed",
+    "short", "sizeof", "stackalloc", "static", "string", "struct", "switch",
+    "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
+    "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+})
+
+
+def _safe_namespace(ns: str) -> str:
+    """Sanitize a C# namespace to prevent code injection.
+
+    Valid C# namespaces allow only letters, digits, underscores, and dots.
+    Strips everything else. Segments starting with a digit get a ``_``
+    prefix, and segments that are C# reserved words get an ``@`` prefix.
+
+    Args:
+        ns: Raw namespace string.
+
+    Returns:
+        Sanitized namespace string safe for C# ``namespace`` declarations.
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9_.]", "", ns)
+    # Strip leading/trailing dots and collapse consecutive dots
+    sanitized = re.sub(r"\.{2,}", ".", sanitized).strip(".")
+    if not sanitized:
+        return "Generated"
+    # Validate each segment: fix leading-digit and reserved-word segments
+    segments = sanitized.split(".")
+    fixed: list[str] = []
+    for seg in segments:
+        if not seg:
+            continue
+        if seg[0].isdigit():
+            seg = f"_{seg}"
+        if seg in _CS_RESERVED:
+            seg = f"@{seg}"
+        fixed.append(seg)
+    return ".".join(fixed) or "Generated"
+
+
+# ---------------------------------------------------------------------------
 # VB-01: Player combat controller (FSM with combos, dodge, block)
 # ---------------------------------------------------------------------------
 
@@ -81,7 +131,6 @@ def generate_player_combat_script(
     Returns:
         Complete C# source string.
     """
-    safe_ns = _sanitize_cs_identifier(namespace.replace(".", "_"))
     lines = []
     lines.append("using UnityEngine;")
     lines.append("using VeilBreakers.Combat;")
@@ -89,7 +138,7 @@ def generate_player_combat_script(
     lines.append("using VeilBreakers.Systems;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
-    lines.append("namespace " + namespace)
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
     lines.append("    /// <summary>")
     lines.append("    /// Player combat controller with FSM state machine.")
@@ -145,6 +194,9 @@ def generate_player_combat_script(
     lines.append("        private bool _isInvincible = false;")
     lines.append("        private float _iFrameTimer = 0f;")
     lines.append("")
+    lines.append("        private Vector3 _dodgeDirection;")
+    lines.append("        private float _dodgeSpeed;")
+    lines.append("")
     lines.append("        // Cached components")
     lines.append("        private Combatant _combatant;")
     lines.append("        private Animator _animator;")
@@ -159,6 +211,8 @@ def generate_player_combat_script(
     lines.append("        private void Start()")
     lines.append("        {")
     lines.append("            _combatant = GetComponent<Combatant>();")
+    lines.append("            if (_combatant == null)")
+    lines.append("                Debug.LogWarning(\"[VB_PlayerCombat] No Combatant component found on \" + gameObject.name + \". Combat damage will not function.\");")
     lines.append("            _animator = GetComponent<Animator>();")
     lines.append("            _characterController = GetComponent<CharacterController>();")
     lines.append("            staminaCurrent = staminaMax;")
@@ -258,6 +312,11 @@ def generate_player_combat_script(
     lines.append("        private void HandleDodgeState()")
     lines.append("        {")
     lines.append("            _stateTimer -= Time.deltaTime;")
+    lines.append("")
+    lines.append("            // Spread dodge movement across frames")
+    lines.append("            if (_characterController != null)")
+    lines.append("                _characterController.Move(_dodgeDirection * _dodgeSpeed * Time.deltaTime);")
+    lines.append("")
     lines.append("            if (_stateTimer <= 0f)")
     lines.append("                TransitionTo(CombatState.Idle);")
     lines.append("        }")
@@ -302,12 +361,12 @@ def generate_player_combat_script(
     lines.append("            _stateTimer = dodgeDuration;")
     lines.append("            TransitionTo(CombatState.Dodge);")
     lines.append("")
-    lines.append("            // Move character in input direction")
-    lines.append("            Vector3 dodgeDir = GetMoveDirection();")
-    lines.append("            if (dodgeDir.sqrMagnitude < 0.01f)")
-    lines.append("                dodgeDir = transform.forward;")
-    lines.append("            if (_characterController != null)")
-    lines.append("                _characterController.Move(dodgeDir.normalized * dodgeDistance);")
+    lines.append("            // Compute dodge direction and speed for gradual movement")
+    lines.append("            _dodgeDirection = GetMoveDirection();")
+    lines.append("            if (_dodgeDirection.sqrMagnitude < 0.01f)")
+    lines.append("                _dodgeDirection = transform.forward;")
+    lines.append("            _dodgeDirection = _dodgeDirection.normalized;")
+    lines.append("            _dodgeSpeed = dodgeDuration > 0f ? dodgeDistance / dodgeDuration : dodgeDistance;")
     lines.append("")
     lines.append("            if (_animator != null)")
     lines.append("                _animator.SetTrigger(\"Dodge\");")
@@ -405,14 +464,19 @@ def generate_player_combat_script(
     lines.append("")
     lines.append("                if (staminaCurrent <= 0f)")
     lines.append("                {")
-    lines.append("                    // Block broken -- take full remaining damage")
+    lines.append("                    // Block broken -- take full unmitigated damage")
     lines.append("                    staminaCurrent = 0f;")
     lines.append("                    TransitionTo(CombatState.HitReaction);")
     lines.append("                    _stateTimer = hitReactionDuration;")
+    lines.append("                    if (_combatant != null)")
+    lines.append("                        _combatant.TakeDamage(damage, isCritical);")
     lines.append("                }")
-    lines.append("")
-    lines.append("                if (_combatant != null)")
-    lines.append("                    _combatant.TakeDamage(reduced, isCritical);")
+    lines.append("                else")
+    lines.append("                {")
+    lines.append("                    // Block held -- apply reduced damage")
+    lines.append("                    if (_combatant != null)")
+    lines.append("                        _combatant.TakeDamage(reduced, isCritical);")
+    lines.append("                }")
     lines.append("                return;")
     lines.append("            }")
     lines.append("")
@@ -479,7 +543,24 @@ def generate_player_combat_script(
     lines.append("        /// <summary>Override to provide movement direction.</summary>")
     lines.append("        protected virtual Vector3 GetMoveDirection()")
     lines.append("        {")
-    lines.append("            return new Vector3(Input.GetAxisRaw(\"Horizontal\"), 0f, Input.GetAxisRaw(\"Vertical\"));")
+    lines.append("            float h = Input.GetAxisRaw(\"Horizontal\");")
+    lines.append("            float v = Input.GetAxisRaw(\"Vertical\");")
+    lines.append("            if (Mathf.Approximately(h, 0f) && Mathf.Approximately(v, 0f))")
+    lines.append("                return Vector3.zero;")
+    lines.append("")
+    lines.append("            // Camera-relative direction for third-person control")
+    lines.append("            Camera cam = Camera.main;")
+    lines.append("            if (cam == null)")
+    lines.append("                return new Vector3(h, 0f, v);")
+    lines.append("")
+    lines.append("            Vector3 camForward = cam.transform.forward;")
+    lines.append("            Vector3 camRight = cam.transform.right;")
+    lines.append("            camForward.y = 0f;")
+    lines.append("            camRight.y = 0f;")
+    lines.append("            camForward.Normalize();")
+    lines.append("            camRight.Normalize();")
+    lines.append("")
+    lines.append("            return camForward * v + camRight * h;")
     lines.append("        }")
     lines.append("    }")
     lines.append("}")
@@ -519,7 +600,7 @@ def generate_ability_system_script(
     lines.append("using VeilBreakers.Core;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
-    lines.append("namespace " + namespace)
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
     lines.append("    /// <summary>")
     lines.append("    /// Serializable ability slot for the ability system.")
@@ -686,7 +767,7 @@ def generate_synergy_engine_script(
     lines.append("using VeilBreakers.Systems;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
-    lines.append("namespace " + namespace)
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
     lines.append("    /// <summary>")
     lines.append("    /// Synergy engine wiring layer.")
@@ -824,7 +905,7 @@ def generate_corruption_gameplay_script(
     lines.append("using VeilBreakers.Systems;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
-    lines.append("namespace " + namespace)
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
     lines.append("    /// <summary>")
     lines.append("    /// Corruption gameplay wiring layer.")
@@ -854,11 +935,13 @@ def generate_corruption_gameplay_script(
     lines.append("        // Cached components")
     lines.append("        private Combatant _combatant;")
     lines.append("        private CorruptionState _previousState;")
+    lines.append("        private MaterialPropertyBlock _materialBlock;")
     lines.append("")
     lines.append("        private void Start()")
     lines.append("        {")
     lines.append("            _combatant = GetComponent<Combatant>();")
     lines.append("            _previousState = CorruptionState.ASCENDED;")
+    lines.append("            _materialBlock = new MaterialPropertyBlock();")
     lines.append("            UpdateCorruptionState();")
     lines.append("        }")
     lines.append("")
@@ -941,10 +1024,12 @@ def generate_corruption_gameplay_script(
     lines.append("        /// </summary>")
     lines.append("        private void UpdateVisualFeedback()")
     lines.append("        {")
-    lines.append("            if (characterRenderer != null && characterRenderer.material != null)")
+    lines.append("            if (characterRenderer != null && _materialBlock != null)")
     lines.append("            {")
-    lines.append("                // Drive VFX intensity from corruption percentage")
-    lines.append("                characterRenderer.material.SetFloat(CorruptionLevelProp, corruptionPercent / 100f);")
+    lines.append("                // Use MaterialPropertyBlock to avoid creating material instances")
+    lines.append("                characterRenderer.GetPropertyBlock(_materialBlock);")
+    lines.append("                _materialBlock.SetFloat(CorruptionLevelProp, corruptionPercent / 100f);")
+    lines.append("                characterRenderer.SetPropertyBlock(_materialBlock);")
     lines.append("            }")
     lines.append("        }")
     lines.append("")
@@ -993,7 +1078,7 @@ def generate_xp_leveling_script(
     lines.append("using VeilBreakers.Core;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
-    lines.append("namespace " + namespace)
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
     lines.append("    /// <summary>")
     lines.append("    /// XP and leveling system with exponential scaling.")
@@ -1201,7 +1286,7 @@ def generate_currency_system_script(
     lines.append("using System.Collections.Generic;")
     lines.append("using VeilBreakers.Core;")
     lines.append("")
-    lines.append("namespace " + namespace)
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
     lines.append("    /// <summary>")
     lines.append("    /// Serializable currency data for save system integration.")
@@ -1264,7 +1349,7 @@ def generate_currency_system_script(
     lines.append("            _currencies[currencyType] += amount;")
     lines.append("")
     lines.append("            _transactionHistory.Add($\"+{amount} {currencyType}\");")
-    lines.append("            EventBus.CurrencyChanged(_currencies[currencyType]);")
+    lines.append("            EventBus.CurrencyChanged(currencyType, _currencies[currencyType]);")
     lines.append("        }")
     lines.append("")
     lines.append("        /// <summary>")
@@ -1278,7 +1363,7 @@ def generate_currency_system_script(
     lines.append("            _currencies[currencyType] -= amount;")
     lines.append("")
     lines.append("            _transactionHistory.Add($\"-{amount} {currencyType}\");")
-    lines.append("            EventBus.CurrencyChanged(_currencies[currencyType]);")
+    lines.append("            EventBus.CurrencyChanged(currencyType, _currencies[currencyType]);")
     lines.append("            return true;")
     lines.append("        }")
     lines.append("")
@@ -1376,7 +1461,7 @@ def generate_damage_type_script(
     lines.append("using VeilBreakers.Systems;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
-    lines.append("namespace " + namespace)
+    lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")
     lines.append("    /// <summary>")
     lines.append("    /// Extended damage type system with brand-specific resistance.")
