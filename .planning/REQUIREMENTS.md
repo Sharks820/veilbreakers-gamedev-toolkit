@@ -111,10 +111,10 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### UI & UX Enhancements
 
-- [ ] **UIX-01**: Claude can generate minimap/compass with world-space markers
+- [x] **UIX-01**: Claude can generate minimap/compass with world-space markers
 - [ ] **UIX-02**: Claude can generate tutorial/onboarding sequences with tooltip overlays
-- [ ] **UIX-03**: Claude can generate damage number floating text system
-- [ ] **UIX-04**: Claude can generate context-sensitive interaction prompts (press E to interact)
+- [x] **UIX-03**: Claude can generate damage number floating text system
+- [x] **UIX-04**: Claude can generate context-sensitive interaction prompts (press E to interact)
 
 ### AI & Encounter Design
 
@@ -127,7 +127,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 - [x] **SHDR-01**: Claude can write arbitrary HLSL/ShaderLab shaders (not just predefined templates)
 - [x] **SHDR-02**: Claude can create custom URP ScriptableRendererFeatures and render passes
 - [ ] **SHDR-03**: Claude can manage shader variant stripping and keyword sets for build size optimization
-- [ ] **SHDR-04**: Claude can generate DOTween/LeanTween animation sequences for UI polish and game juice
+- [x] **SHDR-04**: Claude can generate DOTween/LeanTween animation sequences for UI polish and game juice
 
 ### 2D Systems
 
@@ -149,7 +149,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 - [x] **PIPE-08**: Claude can generate AssetPostprocessor scripts for custom import pipelines
 - [x] **PIPE-09**: Claude can generate Unity Presets for reusable import/component configuration templates
-- [ ] **PIPE-10**: Claude can configure TextMeshPro (font asset creation, TMP component setup, rich text, font fallbacks)
+- [x] **PIPE-10**: Claude can configure TextMeshPro (font asset creation, TMP component setup, rich text, font fallbacks)
 
 ### Video & Media
 
@@ -293,10 +293,10 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | SCNE-04 | Phase 14 | Complete |
 | SCNE-05 | Phase 14 | Complete |
 | SCNE-06 | Phase 14 | Complete |
-| UIX-01 | Phase 15 | Pending |
+| UIX-01 | Phase 15 | Complete |
 | UIX-02 | Phase 15 | Pending |
-| UIX-03 | Phase 15 | Pending |
-| UIX-04 | Phase 15 | Pending |
+| UIX-03 | Phase 15 | Complete |
+| UIX-04 | Phase 15 | Complete |
 | AID-01 | Phase 15 | Complete |
 | AID-02 | Phase 15 | Complete |
 | AID-03 | Phase 15 | Complete |
@@ -316,7 +316,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | SHDR-01 | Phase 10 | Complete |
 | SHDR-02 | Phase 10 | Complete |
 | SHDR-03 | Phase 17 | Pending |
-| SHDR-04 | Phase 15 | Pending |
+| SHDR-04 | Phase 15 | Complete |
 | TWO-01 | Phase 14 | Complete |
 | TWO-02 | Phase 14 | Complete |
 | TWO-03 | Phase 11 | Complete |
@@ -326,7 +326,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | ACC-02 | Phase 17 | Pending |
 | PIPE-08 | Phase 11 | Complete |
 | PIPE-09 | Phase 9 | Complete |
-| PIPE-10 | Phase 15 | Pending |
+| PIPE-10 | Phase 15 | Complete |
 | MEDIA-01 | Phase 14 | Complete |
 | MEDIA-02 | Phase 12 | Complete |
 | ANIMA-01 | Phase 14 | Complete |
