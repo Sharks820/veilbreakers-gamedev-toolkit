@@ -29,12 +29,40 @@ def _sanitize_cs_string(value: str) -> str:
 
 
 def _safe_namespace(ns: str) -> str:
-    """Sanitize a C# namespace to prevent code injection."""
+    """Sanitize a C# namespace to prevent code injection.
+
+    Valid C# namespaces allow only letters, digits, underscores, and dots.
+    Strips everything else.  Segments starting with a digit get a ``_``
+    prefix, and segments that are C# reserved words get an ``@`` prefix.
+    """
     sanitized = re.sub(r"[^a-zA-Z0-9_.]", "", ns)
     sanitized = re.sub(r"\.{2,}", ".", sanitized).strip(".")
     if not sanitized:
         return "Generated"
-    return sanitized
+    # Validate each segment: fix leading-digit and reserved-word segments
+    _cs_reserved = frozenset({
+        "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char",
+        "checked", "class", "const", "continue", "decimal", "default", "delegate",
+        "do", "double", "else", "enum", "event", "explicit", "extern", "false",
+        "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit",
+        "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
+        "new", "null", "object", "operator", "out", "override", "params", "private",
+        "protected", "public", "readonly", "ref", "return", "sbyte", "sealed",
+        "short", "sizeof", "stackalloc", "static", "string", "struct", "switch",
+        "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
+        "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+    })
+    segments = sanitized.split(".")
+    fixed: list[str] = []
+    for seg in segments:
+        if not seg:
+            continue
+        if seg[0].isdigit():
+            seg = f"_{seg}"
+        if seg in _cs_reserved:
+            seg = f"@{seg}"
+        fixed.append(seg)
+    return ".".join(fixed) or "Generated"
 
 
 # Standard bone sockets from Phase 9 bone socket system
@@ -53,7 +81,7 @@ STANDARD_BONE_SOCKETS = [
 
 
 def generate_equipment_attachment_script(
-    namespace: str = "VeilBreakers.Content",
+    namespace: str = "VeilBreakers.Equipment",
 ) -> tuple[str, str]:
     """Generate C# for equipment attachment with bone rebinding and weapon sheathing.
 
@@ -247,6 +275,12 @@ def generate_equipment_attachment_script(
     att_lines.append("            if (armorSMR == null)")
     att_lines.append("            {")
     att_lines.append('                Debug.LogError("[VB_EquipmentAttachment] armorSMR is null.");')
+    att_lines.append("                return;")
+    att_lines.append("            }")
+    att_lines.append("")
+    att_lines.append("            if (_armatureRoot == null)")
+    att_lines.append("            {")
+    att_lines.append('                Debug.LogError("[VB_EquipmentAttachment] _armatureRoot is null. Cannot equip armor without armature.");')
     att_lines.append("                return;")
     att_lines.append("            }")
     att_lines.append("")

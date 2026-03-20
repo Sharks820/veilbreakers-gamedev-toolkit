@@ -104,7 +104,7 @@ class TestEquipmentAttachment:
 
     def test_default_namespace(self):
         att, _ = generate_equipment_attachment_script()
-        assert "namespace VeilBreakers.Content" in att
+        assert "namespace VeilBreakers.Equipment" in att
 
     def test_is_slot_occupied(self):
         att, _ = generate_equipment_attachment_script()
@@ -207,11 +207,11 @@ class TestNamespaceOverride:
 
     def test_default_namespace_in_attachment(self):
         att, _ = generate_equipment_attachment_script()
-        assert "namespace VeilBreakers.Content" in att
+        assert "namespace VeilBreakers.Equipment" in att
 
     def test_default_namespace_in_sheath(self):
         _, ws = generate_equipment_attachment_script()
-        assert "namespace VeilBreakers.Content" in ws
+        assert "namespace VeilBreakers.Equipment" in ws
 
     def test_sanitized_namespace(self):
         att, _ = generate_equipment_attachment_script(namespace="Bad;Name<>")
