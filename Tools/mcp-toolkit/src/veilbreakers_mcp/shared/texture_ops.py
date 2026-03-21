@@ -10,17 +10,25 @@ Functions:
     blend_seams            - Smooth color transitions at UV island boundaries
     make_tileable          - Cross-fade edges so texture tiles seamlessly
     render_wear_map        - Produce grayscale wear/damage map from curvature data
-    inpaint_texture        - AI inpainting stub (fal.ai integration placeholder)
+    inpaint_texture        - AI texture inpainting via fal.ai FLUX Fill endpoint
 """
 
 from __future__ import annotations
 
+import base64
 import colorsys
 import io
 import math
 from typing import Sequence
 
 from PIL import Image, ImageDraw, ImageFilter
+
+try:
+    import fal_client as _fal  # type: ignore[import-untyped]
+
+    _FAL_AVAILABLE = True
+except ImportError:
+    _FAL_AVAILABLE = False
 
 
 # ---------------------------------------------------------------------------
@@ -640,28 +648,72 @@ def _render_wear_numpy(
 
 
 # ---------------------------------------------------------------------------
-# 6. AI Inpainting Stub
+# 6. AI Inpainting via fal.ai FLUX Fill
 # ---------------------------------------------------------------------------
+
+def _image_bytes_to_data_uri(image_bytes: bytes, media_type: str = "image/png") -> str:
+    """Encode image bytes as a base64 data URI for the fal.ai API."""
+    b64 = base64.b64encode(image_bytes).decode("ascii")
+    return f"data:{media_type};base64,{b64}"
+
+
+def _ensure_png_bytes(image_bytes: bytes) -> bytes:
+    """Ensure image bytes are PNG-encoded (re-encode if necessary)."""
+    img = Image.open(io.BytesIO(image_bytes))
+    if img.format == "PNG":
+        return image_bytes
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def _ensure_mask_rgb_png(mask_bytes: bytes) -> bytes:
+    """Ensure mask is an RGB PNG (fal.ai expects RGB, not L-mode).
+
+    The mask convention: white (255,255,255) = regions to inpaint,
+    black (0,0,0) = regions to keep.
+    """
+    mask = Image.open(io.BytesIO(mask_bytes))
+    if mask.mode != "RGB":
+        mask = mask.convert("RGB")
+    buf = io.BytesIO()
+    mask.save(buf, format="PNG")
+    return buf.getvalue()
+
 
 def inpaint_texture(
     image_bytes: bytes,
     mask_bytes: bytes,
     prompt: str,
     fal_key: str | None = None,
+    strength: float = 0.95,
 ) -> dict:
-    """AI-powered texture inpainting via fal.ai FLUX endpoint.
+    """AI-powered texture inpainting via fal.ai FLUX Fill endpoint.
 
-    Currently a placeholder stub. Full implementation arrives in Plan 03-04
-    when the MCP server is wired up with API key configuration.
+    Sends the source image and mask to fal.ai's FLUX Fill (inpainting)
+    model, which generates content matching the prompt in the masked
+    regions while preserving unmasked areas.
 
     Args:
-        image_bytes: Source image as PNG bytes.
-        mask_bytes: Inpainting mask (L-mode) as PNG bytes. White = regions to fill.
-        prompt: Text description of desired texture content.
-        fal_key: fal.ai API key. If None or empty, returns stub status.
+        image_bytes: Source image as PNG/JPEG bytes.
+        mask_bytes: Inpainting mask as PNG bytes (L-mode or RGB).
+            White = regions to fill, black = regions to keep.
+        prompt: Text description of desired texture content for
+            the masked region (e.g., "rusty metal texture",
+            "worn leather with scratches").
+        fal_key: fal.ai API key. If None or empty, returns
+            unavailable status with instructions.
+        strength: Inpainting strength (0.0-1.0). Higher values give
+            the model more creative freedom. Default 0.95.
 
     Returns:
-        Dict with status and either the result image bytes or a stub message.
+        Dict with:
+            status: "success", "unavailable", or "error"
+            message: Human-readable status description
+            image_bytes: (on success) PNG bytes of the inpainted result
+            prompt: (on success) The prompt that was used
+            width: (on success) Result image width
+            height: (on success) Result image height
     """
     # Validate inputs exist
     if not image_bytes:
@@ -673,13 +725,96 @@ def inpaint_texture(
 
     if not fal_key:
         return {
-            "status": "stub",
-            "message": "fal.ai API key not configured. Set fal_key to enable AI inpainting.",
+            "status": "unavailable",
+            "message": "fal.ai API key not configured. Set FAL_KEY environment variable to enable AI inpainting.",
         }
 
-    # TODO (Plan 03-04): Full fal.ai FLUX inpainting integration
-    # fal_client.subscribe("fal-ai/flux/inpaint", ...)
-    return {
-        "status": "stub",
-        "message": "AI inpainting not yet implemented. Full fal.ai FLUX integration planned for 03-04.",
-    }
+    if not _FAL_AVAILABLE:
+        return {
+            "status": "unavailable",
+            "message": "fal-client package not installed. Run: pip install fal-client",
+        }
+
+    import os
+
+    try:
+        # Ensure images are proper PNG format
+        image_png = _ensure_png_bytes(image_bytes)
+        mask_png = _ensure_mask_rgb_png(mask_bytes)
+
+        # Get source image dimensions for the response
+        src_img = Image.open(io.BytesIO(image_png))
+        src_width, src_height = src_img.size
+
+        # Build data URIs for the fal.ai API
+        image_uri = _image_bytes_to_data_uri(image_png)
+        mask_uri = _image_bytes_to_data_uri(mask_png)
+
+        # Set the API key in the environment for fal-client
+        # (fal-client reads FAL_KEY from env)
+        prev_key = os.environ.get("FAL_KEY")
+        os.environ["FAL_KEY"] = fal_key
+
+        try:
+            result = _fal.subscribe(
+                "fal-ai/flux/dev/inpainting",
+                arguments={
+                    "prompt": prompt,
+                    "image_url": image_uri,
+                    "mask_url": mask_uri,
+                    "strength": max(0.0, min(1.0, strength)),
+                    "image_size": {
+                        "width": src_width,
+                        "height": src_height,
+                    },
+                    "num_images": 1,
+                    "num_inference_steps": 28,
+                },
+            )
+        finally:
+            # Restore previous FAL_KEY state
+            if prev_key is not None:
+                os.environ["FAL_KEY"] = prev_key
+            else:
+                os.environ.pop("FAL_KEY", None)
+
+        # Extract result image URL
+        images = result.get("images", [])
+        if not images:
+            return {
+                "status": "error",
+                "message": "No images returned from fal.ai inpainting endpoint",
+            }
+
+        image_url = images[0].get("url", "")
+
+        # Validate URL scheme -- only allow HTTPS from fal.ai CDN
+        if not image_url.startswith("https://"):
+            return {
+                "status": "error",
+                "message": f"Unexpected image URL scheme: {image_url[:40]}",
+            }
+
+        # Download the result image
+        result_bytes = _fal.download(image_url)
+
+        # Re-encode as PNG to ensure consistent format
+        result_img = Image.open(io.BytesIO(result_bytes)).convert("RGB")
+        buf = io.BytesIO()
+        result_img.save(buf, format="PNG")
+        result_png = buf.getvalue()
+
+        return {
+            "status": "success",
+            "message": "Inpainting completed successfully",
+            "image_bytes": result_png,
+            "prompt": prompt,
+            "width": result_img.width,
+            "height": result_img.height,
+        }
+
+    except Exception as exc:
+        return {
+            "status": "error",
+            "message": f"fal.ai inpainting failed: {exc}",
+        }

@@ -6,16 +6,21 @@ Tests cover:
 - Seam blending across UV island boundaries
 - Tileable texture generation
 - Wear map rendering from curvature data
-- Inpainting stub behavior
+- AI inpainting via fal.ai (unavailable fallback + mocked success path)
 """
 
+import base64
 import io
 import math
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 from PIL import Image as PILImage
 
 from veilbreakers_mcp.shared.texture_ops import (
+    _ensure_mask_rgb_png,
+    _ensure_png_bytes,
+    _image_bytes_to_data_uri,
     apply_hsv_adjustment,
     blend_seams,
     generate_uv_mask,
@@ -376,10 +381,10 @@ class TestRenderWearMap:
 # ---------------------------------------------------------------------------
 
 class TestInpaintTexture:
-    """Tests for AI inpainting stub."""
+    """Tests for AI inpainting via fal.ai FLUX Fill endpoint."""
 
-    def test_stub_without_api_key(self):
-        """Returns stub status when no AI backend configured."""
+    def test_unavailable_without_api_key(self):
+        """Returns unavailable status when no API key configured."""
         img = PILImage.new("RGB", (64, 64), (128, 128, 128))
         mask = PILImage.new("L", (64, 64), 255)
 
@@ -391,11 +396,11 @@ class TestInpaintTexture:
         )
 
         assert isinstance(result, dict)
-        assert result["status"] == "stub"
+        assert result["status"] == "unavailable"
         assert "not configured" in result["message"].lower() or "fal" in result["message"].lower()
 
-    def test_stub_with_empty_key(self):
-        """Returns stub status when key is empty string."""
+    def test_unavailable_with_empty_key(self):
+        """Returns unavailable status when key is empty string."""
         img = PILImage.new("RGB", (64, 64), (128, 128, 128))
         mask = PILImage.new("L", (64, 64), 255)
 
@@ -406,4 +411,299 @@ class TestInpaintTexture:
             fal_key="",
         )
 
-        assert result["status"] == "stub"
+        assert result["status"] == "unavailable"
+
+    def test_error_no_image_data(self):
+        """Returns error when image_bytes is empty."""
+        mask = PILImage.new("L", (64, 64), 255)
+        result = inpaint_texture(
+            b"",
+            _to_png_bytes(mask),
+            prompt="test",
+            fal_key="test-key",
+        )
+        assert result["status"] == "error"
+        assert "image" in result["message"].lower()
+
+    def test_error_no_mask_data(self):
+        """Returns error when mask_bytes is empty."""
+        img = PILImage.new("RGB", (64, 64), (128, 128, 128))
+        result = inpaint_texture(
+            _to_png_bytes(img),
+            b"",
+            prompt="test",
+            fal_key="test-key",
+        )
+        assert result["status"] == "error"
+        assert "mask" in result["message"].lower()
+
+    def test_error_no_prompt(self):
+        """Returns error when prompt is empty."""
+        img = PILImage.new("RGB", (64, 64), (128, 128, 128))
+        mask = PILImage.new("L", (64, 64), 255)
+        result = inpaint_texture(
+            _to_png_bytes(img),
+            _to_png_bytes(mask),
+            prompt="",
+            fal_key="test-key",
+        )
+        assert result["status"] == "error"
+        assert "prompt" in result["message"].lower()
+
+    def test_error_whitespace_only_prompt(self):
+        """Returns error when prompt is only whitespace."""
+        img = PILImage.new("RGB", (64, 64), (128, 128, 128))
+        mask = PILImage.new("L", (64, 64), 255)
+        result = inpaint_texture(
+            _to_png_bytes(img),
+            _to_png_bytes(mask),
+            prompt="   ",
+            fal_key="test-key",
+        )
+        assert result["status"] == "error"
+        assert "prompt" in result["message"].lower()
+
+    @patch("veilbreakers_mcp.shared.texture_ops._FAL_AVAILABLE", False)
+    def test_unavailable_without_fal_package(self):
+        """Returns unavailable when fal-client package is not installed."""
+        img = PILImage.new("RGB", (64, 64), (128, 128, 128))
+        mask = PILImage.new("L", (64, 64), 255)
+
+        result = inpaint_texture(
+            _to_png_bytes(img),
+            _to_png_bytes(mask),
+            prompt="rusty metal",
+            fal_key="test-key-123",
+        )
+
+        assert result["status"] == "unavailable"
+        assert "fal-client" in result["message"].lower()
+
+    @patch("veilbreakers_mcp.shared.texture_ops._FAL_AVAILABLE", True)
+    @patch("veilbreakers_mcp.shared.texture_ops._fal")
+    def test_success_with_mocked_fal(self, mock_fal):
+        """Successful inpainting returns image bytes and metadata."""
+        # Create test image and mask
+        img = PILImage.new("RGB", (64, 64), (128, 128, 128))
+        mask = PILImage.new("L", (64, 64), 255)
+
+        # Create a fake result image that fal.ai would return
+        result_img = PILImage.new("RGB", (64, 64), (200, 100, 50))
+        result_buf = io.BytesIO()
+        result_img.save(result_buf, format="PNG")
+        result_png_bytes = result_buf.getvalue()
+
+        # Mock fal_client.subscribe and fal_client.download
+        mock_fal.subscribe.return_value = {
+            "images": [{"url": "https://fal.media/files/result_12345.png"}],
+        }
+        mock_fal.download.return_value = result_png_bytes
+
+        result = inpaint_texture(
+            _to_png_bytes(img),
+            _to_png_bytes(mask),
+            prompt="rusty metal texture",
+            fal_key="test-key-abc",
+        )
+
+        assert result["status"] == "success"
+        assert result["prompt"] == "rusty metal texture"
+        assert result["width"] == 64
+        assert result["height"] == 64
+        assert "image_bytes" in result
+        assert len(result["image_bytes"]) > 0
+
+        # Verify the returned image_bytes is a valid PNG
+        loaded = PILImage.open(io.BytesIO(result["image_bytes"]))
+        assert loaded.mode == "RGB"
+        assert loaded.size == (64, 64)
+
+        # Verify fal_client.subscribe was called with correct endpoint
+        mock_fal.subscribe.assert_called_once()
+        call_args = mock_fal.subscribe.call_args
+        assert call_args[0][0] == "fal-ai/flux/dev/inpainting"
+        assert call_args[1]["arguments"]["prompt"] == "rusty metal texture"
+
+    @patch("veilbreakers_mcp.shared.texture_ops._FAL_AVAILABLE", True)
+    @patch("veilbreakers_mcp.shared.texture_ops._fal")
+    def test_error_no_images_returned(self, mock_fal):
+        """Returns error when fal.ai returns empty images list."""
+        img = PILImage.new("RGB", (64, 64), (128, 128, 128))
+        mask = PILImage.new("L", (64, 64), 255)
+
+        mock_fal.subscribe.return_value = {"images": []}
+
+        result = inpaint_texture(
+            _to_png_bytes(img),
+            _to_png_bytes(mask),
+            prompt="worn stone",
+            fal_key="test-key",
+        )
+
+        assert result["status"] == "error"
+        assert "no images" in result["message"].lower()
+
+    @patch("veilbreakers_mcp.shared.texture_ops._FAL_AVAILABLE", True)
+    @patch("veilbreakers_mcp.shared.texture_ops._fal")
+    def test_error_invalid_url_scheme(self, mock_fal):
+        """Returns error when fal.ai returns non-HTTPS URL."""
+        img = PILImage.new("RGB", (64, 64), (128, 128, 128))
+        mask = PILImage.new("L", (64, 64), 255)
+
+        mock_fal.subscribe.return_value = {
+            "images": [{"url": "http://insecure.example.com/img.png"}],
+        }
+
+        result = inpaint_texture(
+            _to_png_bytes(img),
+            _to_png_bytes(mask),
+            prompt="metal",
+            fal_key="test-key",
+        )
+
+        assert result["status"] == "error"
+        assert "url" in result["message"].lower() or "scheme" in result["message"].lower()
+
+    @patch("veilbreakers_mcp.shared.texture_ops._FAL_AVAILABLE", True)
+    @patch("veilbreakers_mcp.shared.texture_ops._fal")
+    def test_error_on_fal_exception(self, mock_fal):
+        """Returns error when fal.ai raises an exception."""
+        img = PILImage.new("RGB", (64, 64), (128, 128, 128))
+        mask = PILImage.new("L", (64, 64), 255)
+
+        mock_fal.subscribe.side_effect = RuntimeError("API rate limit exceeded")
+
+        result = inpaint_texture(
+            _to_png_bytes(img),
+            _to_png_bytes(mask),
+            prompt="metal",
+            fal_key="test-key",
+        )
+
+        assert result["status"] == "error"
+        assert "rate limit" in result["message"].lower()
+
+    @patch("veilbreakers_mcp.shared.texture_ops._FAL_AVAILABLE", True)
+    @patch("veilbreakers_mcp.shared.texture_ops._fal")
+    def test_strength_is_clamped(self, mock_fal):
+        """Strength parameter is clamped to 0.0-1.0 range."""
+        img = PILImage.new("RGB", (64, 64), (128, 128, 128))
+        mask = PILImage.new("L", (64, 64), 255)
+
+        result_img = PILImage.new("RGB", (64, 64), (200, 100, 50))
+        result_buf = io.BytesIO()
+        result_img.save(result_buf, format="PNG")
+
+        mock_fal.subscribe.return_value = {
+            "images": [{"url": "https://fal.media/files/result.png"}],
+        }
+        mock_fal.download.return_value = result_buf.getvalue()
+
+        # Test with out-of-range strength
+        inpaint_texture(
+            _to_png_bytes(img),
+            _to_png_bytes(mask),
+            prompt="test",
+            fal_key="key",
+            strength=2.5,
+        )
+
+        call_args = mock_fal.subscribe.call_args
+        assert call_args[1]["arguments"]["strength"] == 1.0
+
+    @patch("veilbreakers_mcp.shared.texture_ops._FAL_AVAILABLE", True)
+    @patch("veilbreakers_mcp.shared.texture_ops._fal")
+    def test_mask_converted_to_rgb(self, mock_fal):
+        """L-mode mask is converted to RGB for the fal.ai API."""
+        img = PILImage.new("RGB", (64, 64), (128, 128, 128))
+        # Pass an L-mode mask (grayscale)
+        mask = PILImage.new("L", (64, 64), 255)
+
+        result_img = PILImage.new("RGB", (64, 64), (200, 100, 50))
+        result_buf = io.BytesIO()
+        result_img.save(result_buf, format="PNG")
+
+        mock_fal.subscribe.return_value = {
+            "images": [{"url": "https://fal.media/files/result.png"}],
+        }
+        mock_fal.download.return_value = result_buf.getvalue()
+
+        result = inpaint_texture(
+            _to_png_bytes(img),
+            _to_png_bytes(mask),
+            prompt="test",
+            fal_key="key",
+        )
+
+        # Should succeed -- the L-mode mask is converted to RGB internally
+        assert result["status"] == "success"
+
+        # Verify the mask_url in the subscribe call is a data URI
+        call_args = mock_fal.subscribe.call_args
+        mask_uri = call_args[1]["arguments"]["mask_url"]
+        assert mask_uri.startswith("data:image/png;base64,")
+
+
+# ---------------------------------------------------------------------------
+# Inpainting helper function tests
+# ---------------------------------------------------------------------------
+
+class TestInpaintHelpers:
+    """Tests for inpainting utility functions."""
+
+    def test_image_bytes_to_data_uri(self):
+        """Converts bytes to a proper base64 data URI."""
+        img = PILImage.new("RGB", (8, 8), (255, 0, 0))
+        img_bytes = _to_png_bytes(img)
+
+        uri = _image_bytes_to_data_uri(img_bytes)
+
+        assert uri.startswith("data:image/png;base64,")
+        # Decode the base64 portion and verify it matches
+        b64_part = uri.split(",", 1)[1]
+        decoded = base64.b64decode(b64_part)
+        assert decoded == img_bytes
+
+    def test_ensure_png_bytes_passthrough(self):
+        """PNG bytes pass through unchanged."""
+        img = PILImage.new("RGB", (8, 8), (0, 255, 0))
+        png_bytes = _to_png_bytes(img)
+
+        result = _ensure_png_bytes(png_bytes)
+        assert result == png_bytes
+
+    def test_ensure_png_bytes_converts_jpeg(self):
+        """JPEG bytes are re-encoded as PNG."""
+        img = PILImage.new("RGB", (8, 8), (0, 0, 255))
+        jpeg_buf = io.BytesIO()
+        img.save(jpeg_buf, format="JPEG")
+        jpeg_bytes = jpeg_buf.getvalue()
+
+        result = _ensure_png_bytes(jpeg_bytes)
+
+        # Should now be valid PNG
+        loaded = PILImage.open(io.BytesIO(result))
+        assert loaded.format == "PNG"
+
+    def test_ensure_mask_rgb_png_converts_l_mode(self):
+        """L-mode mask is converted to RGB PNG."""
+        mask = PILImage.new("L", (16, 16), 255)
+        mask_bytes = _to_png_bytes(mask)
+
+        result = _ensure_mask_rgb_png(mask_bytes)
+
+        loaded = PILImage.open(io.BytesIO(result))
+        assert loaded.mode == "RGB"
+        assert loaded.size == (16, 16)
+        # White L-mode pixel (255) should become white RGB (255, 255, 255)
+        assert loaded.getpixel((0, 0)) == (255, 255, 255)
+
+    def test_ensure_mask_rgb_png_passthrough_rgb(self):
+        """RGB mask passes through (re-saved as PNG)."""
+        mask = PILImage.new("RGB", (16, 16), (255, 255, 255))
+        mask_bytes = _to_png_bytes(mask)
+
+        result = _ensure_mask_rgb_png(mask_bytes)
+
+        loaded = PILImage.open(io.BytesIO(result))
+        assert loaded.mode == "RGB"
