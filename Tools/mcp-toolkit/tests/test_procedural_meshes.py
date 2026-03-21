@@ -655,7 +655,13 @@ class TestRegistry:
     """Test the GENERATORS registry."""
 
     def test_registry_has_all_categories(self):
-        expected = {"furniture", "vegetation", "dungeon_prop", "weapon", "architecture"}
+        expected = {
+            "furniture", "vegetation", "dungeon_prop", "weapon", "architecture",
+            "fence_barrier", "trap", "vehicle", "structural", "dark_fantasy",
+            "container", "light_source", "door_window", "wall_decor",
+            "crafting", "sign", "natural",
+            "monster_part", "monster_body", "projectile", "armor",
+        }
         assert set(GENERATORS.keys()) == expected
 
     def test_registry_furniture_count(self):
@@ -682,7 +688,7 @@ class TestRegistry:
 
     def test_total_generator_count(self):
         total = sum(len(g) for g in GENERATORS.values())
-        assert total == 34
+        assert total == 127
 
 
 # ---------------------------------------------------------------------------
