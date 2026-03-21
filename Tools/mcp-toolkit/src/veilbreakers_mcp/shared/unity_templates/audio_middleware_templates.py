@@ -26,7 +26,12 @@ from typing import Any
 
 def _sanitize_cs_identifier(value: str) -> str:
     """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+    result = re.sub(r"[^a-zA-Z0-9_]", "", value)
+    if not result:
+        return "Default"
+    if result[0].isdigit():
+        result = "_" + result
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -215,14 +220,14 @@ public class {class_name} : MonoBehaviour
 
     private void Start()
     {{
-        _listener = FindObjectOfType<AudioListener>();
+        _listener = FindAnyObjectByType<AudioListener>();
     }}
 
     private void Update()
     {{
         if (_listener == null)
         {{
-            _listener = FindObjectOfType<AudioListener>();
+            _listener = FindAnyObjectByType<AudioListener>();
             if (_listener == null) return;
         }}
 {occlusion_update}
@@ -320,7 +325,7 @@ def generate_audio_lod_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    if lod_distances is None:
+    if not lod_distances:
         lod_distances = [15.0, 30.0, 50.0]
 
     # Ensure we have exactly 3 thresholds
@@ -436,7 +441,7 @@ public class VeilBreakers_AudioLOD : MonoBehaviour
 
     private void Start()
     {{
-        _listener = FindObjectOfType<AudioListener>();
+        _listener = FindAnyObjectByType<AudioListener>();
     }}
 
     private void Update()
@@ -446,7 +451,7 @@ public class VeilBreakers_AudioLOD : MonoBehaviour
 
         if (_listener == null)
         {{
-            _listener = FindObjectOfType<AudioListener>();
+            _listener = FindAnyObjectByType<AudioListener>();
             if (_listener == null) return;
         }}
 
@@ -901,9 +906,11 @@ public class VeilBreakers_AudioEventChainPlayer : MonoBehaviour
         if (_cooldowns.ContainsKey(key) && Time.time < _cooldowns[key])
             return;
 
-        // Interrupt existing chain if needed
-        if (chainData.interruptible && _activeChains.ContainsKey(key))
+        // Handle existing chain
+        if (_activeChains.ContainsKey(key))
         {{
+            if (!chainData.interruptible)
+                return;  // Non-interruptible: skip if already playing
             if (_activeChains[key] != null)
                 StopCoroutine(_activeChains[key]);
             _activeChains.Remove(key);
@@ -1031,7 +1038,7 @@ def generate_procedural_foley_script(
     """
     safe_name = _sanitize_cs_identifier(character_name)
 
-    if surface_materials is None:
+    if not surface_materials:
         surface_materials = ["stone", "wood", "metal", "dirt", "grass", "water", "snow"]
 
     # Build surface enum entries
@@ -1370,12 +1377,12 @@ def generate_dynamic_music_script(
     """
     safe_name = _sanitize_cs_identifier(music_name)
 
-    if sections is None:
+    if not sections:
         sections = ["Intro", "Exploration", "Tension", "Combat", "BossPhase1",
                      "BossPhase2", "Victory", "Defeat"]
-    if stems is None:
+    if not stems:
         stems = ["Drums", "Bass", "Melody", "Pads", "Percussion"]
-    if stingers is None:
+    if not stingers:
         stingers = ["EnemySpotted", "BossPhaseChange", "PlayerDeath",
                      "LootDrop", "QuestComplete"]
 
@@ -1546,7 +1553,9 @@ public class VeilBreakers_DynamicMusic : MonoBehaviour
     /// </summary>
     public void TransitionToSection(MusicSection section)
     {{
-        if (section == _currentSection && _sectionSource.isPlaying) return;
+        // Check whichever source is currently active (crossfade alternates A/B)
+        AudioSource activeSource = _useSourceA ? _sectionSource : _sectionSourceB;
+        if (section == _currentSection && activeSource.isPlaying) return;
 
         MusicSection oldSection = _currentSection;
         _currentSection = section;
@@ -1866,17 +1875,18 @@ public class VeilBreakers_AudioPortal : MonoBehaviour
 
     private AudioListener _listener;
     private VeilBreakers_AudioRoom _listenerRoom;
+    private Dictionary<AudioSource, float> _originalVolumes = new Dictionary<AudioSource, float>();
 
     private void Start()
     {{
-        _listener = FindObjectOfType<AudioListener>();
+        _listener = FindAnyObjectByType<AudioListener>();
     }}
 
     private void Update()
     {{
         if (_listener == null)
         {{
-            _listener = FindObjectOfType<AudioListener>();
+            _listener = FindAnyObjectByType<AudioListener>();
             if (_listener == null) return;
         }}
 
@@ -1913,9 +1923,12 @@ public class VeilBreakers_AudioPortal : MonoBehaviour
         {{
             if (source == null) continue;
 
-            // Attenuate volume
-            // Note: original volume is tracked by the source's own systems
-            source.volume *= (1f - attenuation);
+            // Track original volume (first time we see this source)
+            if (!_originalVolumes.ContainsKey(source))
+                _originalVolumes[source] = source.volume;
+
+            // Apply attenuation relative to original volume (not current)
+            source.volume = _originalVolumes[source] * (1f - attenuation);
 
             // Apply low-pass filter
             AudioLowPassFilter lpf = source.GetComponent<AudioLowPassFilter>();
