@@ -953,11 +953,24 @@ def generate_gitlab_ci_config(
     # Map Unity target platform names to lowercase image suffixes
     _PLATFORM_IMAGE_MAP: dict[str, str] = {
         "StandaloneWindows64": "windows-mono",
+        "StandaloneWindows": "windows-mono",
         "StandaloneOSX": "mac-mono",
         "StandaloneLinux64": "linux-il2cpp",
         "Android": "android",
         "iOS": "ios",
         "WebGL": "webgl",
+        "tvOS": "appletv",
+        "PS4": "ps4",
+        "PS5": "ps5",
+        "XboxOne": "xboxone",
+        "GameCoreXboxOne": "xboxone",
+        "GameCoreXboxSeries": "xboxseries",
+        "Switch": "switch",
+        "Stadia": "stadia",
+        "LinuxHeadlessSimulation": "linux-il2cpp",
+        "EmbeddedLinux": "linux-il2cpp",
+        "QNX": "qnx",
+        "VisionOS": "visionos",
     }
 
     lines: list[str] = []
@@ -1236,7 +1249,7 @@ def generate_changelog(
         "",
         '            string json = "{\\"status\\": \\"success\\", \\"action\\": \\"generate_changelog\\", "',
         '                + "\\"commit_count\\": " + commitCount + ", "',
-        f'                + "\\"version\\": \\"{safe_version}\\"' + ' + "}";',
+        f'                + "\\"version\\": \\"{safe_version}\\"" + "}}";',
         '            File.WriteAllText("Temp/vb_result.json", json);',
         "        }",
         "        catch (Exception ex)",
