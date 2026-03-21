@@ -15,23 +15,31 @@ All rigging, weight painting, facial rig, and skeletal system improvements in th
 
 ## YOUR Files (ONLY touch these)
 ```
-blender_addon/handlers/rig_setup.py
-blender_addon/handlers/rig_templates.py
-blender_addon/handlers/rig_validation.py
-blender_addon/handlers/rig_weights.py
-blender_addon/handlers/rig_facial.py
-blender_addon/handlers/rig_spring.py
-blender_addon/handlers/rig_ik.py
-blender_addon/handlers/rig_retarget.py
+blender_addon/handlers/rigging.py            # Main rig handler (setup, basic ops)
+blender_addon/handlers/rigging_advanced.py   # Spring bones, IK, facial, retarget
+blender_addon/handlers/rigging_templates.py  # Rig template definitions (humanoid, quadruped, etc.)
+blender_addon/handlers/rigging_weights.py    # Weight painting and influence limits
+tests/test_rigging_handlers.py
+tests/test_rigging_advanced.py
+tests/test_rigging_templates.py
 ```
-New files must go in `blender_addon/handlers/` with `rig_` prefix, or in `tests/` with `test_rig_` prefix.
+New files must go in `blender_addon/handlers/` with `rigging_` prefix, or in `tests/` with `test_rigging_` prefix.
 
 ## DO NOT TOUCH (owned by other terminals)
 ```
 blender_addon/handlers/__init__.py          # SHARED — see Registration Protocol below
-blender_addon/handlers/animation_*.py       # Terminal 2
+blender_addon/handlers/animation.py         # Terminal 2
+blender_addon/handlers/animation_gaits.py   # Terminal 2
+blender_addon/handlers/animation_export.py  # Terminal 2
+blender_addon/handlers/_combat_timing.py    # Terminal 2
 blender_addon/handlers/environment.py       # Terminal 4
+blender_addon/handlers/environment_scatter.py # Terminal 4
 blender_addon/handlers/worldbuilding.py     # Terminal 4
+blender_addon/handlers/worldbuilding_layout.py # Terminal 4
+blender_addon/handlers/_terrain_*.py        # Terminal 4
+blender_addon/handlers/_scatter_engine.py   # Terminal 4
+blender_addon/handlers/_building_grammar.py # Terminal 4
+blender_addon/handlers/_dungeon_gen.py      # Terminal 4
 blender_addon/handlers/export.py            # Phase 1 (done)
 src/veilbreakers_mcp/blender_server.py      # Terminal 4
 src/veilbreakers_mcp/unity_tools/*          # Terminal 3 & 4

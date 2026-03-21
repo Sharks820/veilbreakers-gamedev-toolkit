@@ -28,9 +28,18 @@ src/veilbreakers_mcp/blender_server.py
 src/veilbreakers_mcp/unity_server.py
 src/veilbreakers_mcp/unity_tools/__init__.py
 
-# Environment & worldbuilding (Blender side)
+# Environment & worldbuilding (Blender side + internal modules)
 blender_addon/handlers/environment.py
+blender_addon/handlers/environment_scatter.py
+blender_addon/handlers/_scatter_engine.py
+blender_addon/handlers/_terrain_noise.py
+blender_addon/handlers/_terrain_erosion.py
+blender_addon/handlers/_terrain_depth.py
 blender_addon/handlers/worldbuilding.py
+blender_addon/handlers/worldbuilding_layout.py
+blender_addon/handlers/_building_grammar.py
+blender_addon/handlers/_dungeon_gen.py
+blender_addon/handlers/pipeline_lod.py
 
 # Shader pragmas
 src/veilbreakers_mcp/shared/unity_templates/shader_templates.py
@@ -56,9 +65,14 @@ tests/test_texture*.py
 
 ## DO NOT TOUCH (owned by other terminals)
 ```
-blender_addon/handlers/rig_*.py             # Terminal 1
-blender_addon/handlers/animation_*.py       # Terminal 2
-src/veilbreakers_mcp/shared/_combat_timing.py  # Terminal 2
+blender_addon/handlers/rigging.py           # Terminal 1
+blender_addon/handlers/rigging_advanced.py  # Terminal 1
+blender_addon/handlers/rigging_templates.py # Terminal 1
+blender_addon/handlers/rigging_weights.py   # Terminal 1
+blender_addon/handlers/animation.py         # Terminal 2
+blender_addon/handlers/animation_gaits.py   # Terminal 2
+blender_addon/handlers/animation_export.py  # Terminal 2
+blender_addon/handlers/_combat_timing.py    # Terminal 2
 src/veilbreakers_mcp/shared/unity_templates/vfx_templates.py       # Terminal 3
 src/veilbreakers_mcp/shared/unity_templates/vfx_mastery_templates.py # Terminal 3
 src/veilbreakers_mcp/shared/unity_templates/animation_templates.py   # Terminal 3
@@ -408,7 +422,7 @@ def delight_albedo(...):
 - Height variation: rooms can be at different Y levels, connected by stairs/ramps in corridors
 
 ### UPGRADE: Mesh LOD Silhouette Preservation (~2h)
-**File:** `blender_addon/handlers/environment.py` or mesh handler
+**File:** `blender_addon/handlers/pipeline_lod.py`
 **What:** LOD generation uses uniform decimation — no silhouette preservation. Characters become blobby at distance.
 **Fix:** When generating LODs, use Blender's `DECIMATE` modifier with `use_symmetry=True` and protect boundary edges. Add `protect_boundary` option that marks silhouette-important edges (character outline) and prevents their collapse.
 

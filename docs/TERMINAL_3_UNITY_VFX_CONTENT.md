@@ -27,14 +27,19 @@ New files must go in `src/veilbreakers_mcp/shared/unity_templates/` or `tests/` 
 
 ## DO NOT TOUCH (owned by other terminals)
 ```
-blender_addon/                              # Terminal 1 & 2
+blender_addon/                              # Terminal 1 & 2 (all Blender handlers)
 src/veilbreakers_mcp/blender_server.py      # Terminal 4
 src/veilbreakers_mcp/shared/security.py     # Shared (frozen)
 src/veilbreakers_mcp/shared/unity_templates/shader_templates.py  # Terminal 4
 src/veilbreakers_mcp/shared/unity_templates/world_templates.py   # Terminal 4
-src/veilbreakers_mcp/shared/unity_templates/content_templates.py # Phase 1 (done)
+src/veilbreakers_mcp/shared/unity_templates/game_templates.py    # Terminal 4
+src/veilbreakers_mcp/shared/unity_templates/gameplay_templates.py # Terminal 4
+src/veilbreakers_mcp/shared/unity_templates/content_templates.py # Terminal 4
+src/veilbreakers_mcp/shared/unity_templates/scene_templates.py   # Terminal 4
+src/veilbreakers_mcp/shared/unity_templates/prefab_templates.py  # Terminal 4
+src/veilbreakers_mcp/shared/unity_templates/ui_templates.py      # Terminal 4
 src/veilbreakers_mcp/unity_tools/scene.py   # Phase 1 (done)
-src/veilbreakers_mcp/shared/_combat_timing.py  # Terminal 2
+blender_addon/handlers/_combat_timing.py    # Terminal 2
 ```
 
 ## CRITICAL: Dissolve Shader Ownership
