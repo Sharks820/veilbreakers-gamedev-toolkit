@@ -1,7 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-20 (Phase 16 planned)
+**Updated:** 2026-03-20 (Phase 17 planned)
 
 ## Milestones
 
@@ -36,7 +36,7 @@
 - [ ] **Phase 14: Camera, Cinematics & Scene Management** - Cinemachine, Timeline, cutscenes, scene loading, lighting, probes, terrain detail, world design, RPG world systems
 - [ ] **Phase 15: Game UX & Encounter Design** - Minimap, tutorials, damage numbers, interaction prompts, encounter scripting, AI director
 - [ ] **Phase 16: Quality Assurance & Testing** - Unity TCP bridge, test runner, automated play, profiling, memory leaks, static analysis, crash reporting, live inspection
-- [ ] **Phase 17: Build & Deploy Pipeline** - Multi-platform builds, Addressables, CI/CD, versioning, platform configs
+- [ ] **Phase 17: Build & Deploy Pipeline** - Multi-platform builds, Addressables, CI/CD, versioning, platform configs, shader stripping, store metadata
 
 ## Phase Details
 
@@ -317,13 +317,13 @@ Plans:
 **Plans**: 4 plans
 
 Plans:
-- [ ] 16-01-PLAN.md -- Unity TCP bridge foundation: Python UnityConnection client, UnityCommand/UnityResponse models, C# bridge addon template generators (QA-00)
-- [ ] 16-02-PLAN.md -- QA template generators batch 1: test runner, automated play sessions, profiler, memory leak detector, static code analyzer (QA-01, QA-02, QA-03, QA-04, QA-05)
-- [ ] 16-03-PLAN.md -- QA template generators batch 2: crash reporting (Sentry), analytics/telemetry, live game state inspector (QA-06, QA-07, QA-08)
-- [ ] 16-04-PLAN.md -- Compound tool wiring: unity_qa (9 actions) + deep C# syntax tests (all 9 requirements)
+- [x] 16-01-PLAN.md -- Unity TCP bridge foundation: Python UnityConnection client, UnityCommand/UnityResponse models, C# bridge addon template generators (QA-00)
+- [x] 16-02-PLAN.md -- QA template generators batch 1: test runner, automated play sessions, profiler, memory leak detector, static code analyzer (QA-01, QA-02, QA-03, QA-04, QA-05)
+- [x] 16-03-PLAN.md -- QA template generators batch 2: crash reporting (Sentry), analytics/telemetry, live game state inspector (QA-06, QA-07, QA-08)
+- [x] 16-04-PLAN.md -- Compound tool wiring: unity_qa (9 actions) + deep C# syntax tests (all 9 requirements)
 
 ### Phase 17: Build & Deploy Pipeline
-**Goal**: Claude can orchestrate complete build pipelines -- multi-platform builds, Addressable assets, CI/CD automation, versioning, and platform-specific configuration
+**Goal**: Claude can orchestrate complete build pipelines -- multi-platform builds, Addressable assets, CI/CD automation, versioning, platform-specific configuration, shader variant stripping, and store publishing metadata
 **Depends on**: Phase 9 (Build Settings, Player Settings), Phase 16 (tests run as part of CI)
 **Requirements**: BUILD-01, BUILD-02, BUILD-03, BUILD-04, BUILD-05, SHDR-03, ACC-02
 **Success Criteria** (what must be TRUE):
@@ -332,12 +332,12 @@ Plans:
   3. Claude can generate CI/CD pipeline configs (GitHub Actions, GitLab CI) that automate build, test, and deploy steps for Unity projects
   4. Claude can manage version numbers (semantic versioning), create release branches, and generate changelogs from commit history
   5. Claude can configure platform-specific settings (Android manifest, iOS plist, WebGL template) without manual Editor interaction
-
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 17-01: TBD
-- [ ] 17-02: TBD
+- [ ] 17-01-PLAN.md -- Build template generators batch 1: multi-platform build orchestrator, Addressable Asset Groups, platform configs (Android/iOS/WebGL), shader variant stripping (BUILD-01, BUILD-02, BUILD-05, SHDR-03)
+- [ ] 17-02-PLAN.md -- Build template generators batch 2: CI/CD pipelines (GitHub Actions, GitLab CI), version management, changelog, store publishing metadata (BUILD-03, BUILD-04, ACC-02)
+- [ ] 17-03-PLAN.md -- Compound tool wiring: unity_build (7 actions) + deep C# syntax tests (all 7 requirements)
 
 ## Progress
 
@@ -361,8 +361,8 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 13. Content & Progression Systems | v2.0 | 3/3 | Complete | 2026-03-20 |
 | 14. Camera, Cinematics & Scene Management | v2.0 | 5/5 | Complete | 2026-03-20 |
 | 15. Game UX & Encounter Design | v2.0 | 4/4 | Complete | 2026-03-20 |
-| 16. Quality Assurance & Testing | 4/4 | Complete    | 2026-03-20 | - |
-| 17. Build & Deploy Pipeline | v2.0 | 0/2 | Not started | - |
+| 16. Quality Assurance & Testing | v2.0 | 4/4 | Complete | 2026-03-20 |
+| 17. Build & Deploy Pipeline | v2.0 | 0/3 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-18*
@@ -375,3 +375,4 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 *Phase 14 planned: 2026-03-20*
 *Phase 15 planned: 2026-03-20*
 *Phase 16 planned: 2026-03-20*
+*Phase 17 planned: 2026-03-20*
