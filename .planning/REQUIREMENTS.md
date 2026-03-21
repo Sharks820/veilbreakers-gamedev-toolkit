@@ -418,6 +418,7 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 - [ ] **CHAR-04**: Claude can perform character-aware LOD retopology (preserve face detail while reducing body/extremities)
 - [ ] **CHAR-05**: Claude can generate armor seam-hiding overlap rings at split points (neck, wrist, ankle)
 - [ ] **CHAR-06**: Claude can validate hand/foot topology (finger separation, proper edge flow for deformation)
+- [ ] **CHAR-07**: Claude can configure Unity Cloth component on character meshes (vertex weight painting, collision spheres/capsules, wind interaction, stiffness/damping for capes, robes, hair, banners, and cloth armor pieces)
 
 ### Advanced Animation
 
@@ -475,7 +476,7 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 | Multiplayer/networking | VeilBreakers is single-player |
 | Live ops infrastructure | Development tool, not production ops |
 | Motion capture pipeline | Requires hardware; AI motion generation covers the use case |
-| Cloth/soft body simulation | Unity Cloth component is limited; defer to physics middleware |
+| Soft body simulation | Beyond cloth — fluid, jelly, deformable terrain requires physics middleware |
 
 ## v3 Traceability
 
@@ -497,6 +498,7 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 | CHAR-04 | Phase 19 | Pending |
 | CHAR-05 | Phase 19 | Pending |
 | CHAR-06 | Phase 19 | Pending |
+| CHAR-07 | Phase 19 | Pending |
 | ANIM3-01 | Phase 20 | Pending |
 | ANIM3-02 | Phase 20 | Pending |
 | ANIM3-03 | Phase 20 | Pending |
@@ -532,7 +534,7 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 | PROD-05 | Phase 24 | Pending |
 
 **Coverage:**
-- v3 requirements: 51 total (across 8 categories)
+- v3 requirements: 52 total (across 8 categories)
 - Mapped to phases: 51/51
 - Unmapped: 0
 
