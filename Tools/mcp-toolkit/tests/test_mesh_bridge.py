@@ -281,12 +281,21 @@ class TestGenerateLodSpecs:
         assert len(lods[1]["faces"]) <= 30
         assert len(lods[2]["faces"]) <= 10
 
-    def test_preserves_vertices(self) -> None:
+    def test_compacts_vertices(self) -> None:
         spec = _make_test_spec(20, "Test")
         lods = generate_lod_specs(spec)
-        # All LODs should share the same vertex list (faces just reference fewer)
+        # LOD0 keeps all faces, so vertices are only those referenced by faces
+        orig_referenced = set(idx for face in spec["faces"] for idx in face)
+        assert len(lods[0]["vertices"]) == len(orig_referenced)
+        # Lower LODs have fewer faces, so should have fewer (or equal) vertices
+        assert len(lods[1]["vertices"]) <= len(lods[0]["vertices"])
+        assert len(lods[2]["vertices"]) <= len(lods[1]["vertices"])
+        # All LOD face indices must be valid (within vertex range)
         for lod in lods:
-            assert lod["vertices"] == spec["vertices"]
+            vert_count = len(lod["vertices"])
+            for face in lod["faces"]:
+                for idx in face:
+                    assert 0 <= idx < vert_count
 
     def test_handles_empty_uvs(self) -> None:
         spec = _make_test_spec(20, "NoUV")

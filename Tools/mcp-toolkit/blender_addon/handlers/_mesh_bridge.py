@@ -247,14 +247,28 @@ def generate_lod_specs(
         keep_count = min(keep_count, total_faces)
         lod_faces = faces[:keep_count]
 
+        # Compact vertices: remove orphaned vertices not referenced by any face
+        used_indices = sorted(set(idx for face in lod_faces for idx in face))
+        index_remap = {old: new for new, old in enumerate(used_indices)}
+        lod_verts = [spec["vertices"][i] for i in used_indices]
+        lod_faces_remapped = [
+            tuple(index_remap[i] for i in face) for face in lod_faces
+        ]
+
+        # Remap UVs if per-vertex
+        lod_uvs = spec["uvs"]
+        if lod_uvs and len(lod_uvs) == len(spec["vertices"]):
+            lod_uvs = [spec["uvs"][i] for i in used_indices]
+
         lod_spec: MeshSpec = {
-            "vertices": spec["vertices"],
-            "faces": lod_faces,
-            "uvs": spec["uvs"],
+            "vertices": lod_verts,
+            "faces": lod_faces_remapped,
+            "uvs": lod_uvs,
             "metadata": {
                 **spec["metadata"],
                 "name": f"{base_name}_LOD{level}",
-                "poly_count": len(lod_faces),
+                "poly_count": len(lod_faces_remapped),
+                "vertex_count": len(lod_verts),
             },
         }
         lod_specs.append(lod_spec)
@@ -307,7 +321,15 @@ def mesh_from_spec(
         bpy.types.Object when Blender is available, otherwise a dict
         summary ``{"obj_name": str, "vertex_count": int, "face_count": int}``.
     """
-    obj_name = name or spec["metadata"].get("name", "MeshSpec_Object")
+    # Validate input
+    if not spec or not isinstance(spec, dict):
+        raise ValueError("mesh_from_spec: spec must be a non-empty dict")
+    if "vertices" not in spec or "faces" not in spec:
+        raise ValueError("mesh_from_spec: spec must contain 'vertices' and 'faces'")
+    if not spec["vertices"]:
+        raise ValueError("mesh_from_spec: spec has empty vertices list")
+
+    obj_name = name or spec.get("metadata", {}).get("name", "MeshSpec_Object")
     verts = spec["vertices"]
     faces = spec["faces"]
     uvs = spec.get("uvs", [])

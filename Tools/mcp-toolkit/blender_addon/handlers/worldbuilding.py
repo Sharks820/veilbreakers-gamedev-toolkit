@@ -929,6 +929,8 @@ def handle_generate_multi_floor_dungeon(params: dict) -> dict:
         for pi, prop in enumerate(prop_placements):
             prop_entry = DUNGEON_PROP_MAP.get(prop["type"])
             if prop_entry is None:
+                prop_entry = FURNITURE_GENERATOR_MAP.get(prop["type"])
+            if prop_entry is None:
                 continue
             gen_func, gen_kwargs = prop_entry
             prop_spec = gen_func(**gen_kwargs)
