@@ -267,6 +267,34 @@ Write to `docs/GAPS_FROM_T2.md` — do NOT edit their files.
 
 ---
 
+## APPENDIX E — Additional Audit Findings (Originally Missing)
+
+### G13: Mixamo Retarget Drops Finger Bones and Hip Translation
+**File:** `animation_export.py` (lines 34-62 mapping, lines 772-776 constraints)
+**What:** Mixamo retarget only creates COPY_ROTATION constraints — drops ALL 30 finger bone rotations and hip TRANSLATION (only copies hip rotation). Characters will have frozen fingers and floating root.
+**How:**
+- Add finger bone mappings to the Mixamo → VB bone name mapping dict
+- Add COPY_LOCATION constraint on the hip/root bone (not just COPY_ROTATION)
+- Verify: retargeted animation should move the character through space AND animate fingers
+
+### G15: AnimationEvent Bridge — Blender Timing to Unity Clips
+**File:** `animation_export.py` + `_combat_timing.py`
+**What:** `_combat_timing.py` produces frame-accurate timing data, but `animation_export.py` doesn't serialize AnimationEvents into the exported FBX or generate a companion .anim.meta file. Unity has no way to receive the timing data.
+**How:**
+- During batch_export, for each animation clip, generate a JSON sidecar file `{clip_name}.timing.json` containing the combat timing data
+- OR: create a Unity editor script (write to T3's scope via GAPS file) that reads timing JSON and inserts AnimationEvents post-import
+- Recommend: generate the JSON sidecar (simpler, no cross-terminal dependency)
+
+### UPGRADE: Root Motion Quality
+**What:** Audit Section 5 notes root motion extraction exists but isn't integrated with FBX batch export.
+**How:** When `batch_export` runs, automatically extract root motion from the root bone and bake it as proper FBX root motion data. The root bone's world-space translation should be zeroed out and transferred to the FBX's root motion curves. This ensures Unity's `Apply Root Motion` checkbox works correctly.
+
+### UPGRADE: Arachnid Rotation Axis Fix
+**What:** Audit Section 5 notes arachnid legs rotate on wrong axis (bone Y instead of local Z for lateral spread).
+**How:** In the arachnid gait generator, change the rotation axis for leg spread from the bone's Y axis to local Z. This makes legs spread laterally (like a real spider) instead of rotating forward/backward.
+
+---
+
 ## Quality Bar
 - Biped walk: natural to a non-technical observer, proper heel-toe cycle
 - Quadruped gaits: walk/trot/canter/gallop visually distinct
@@ -274,6 +302,9 @@ Write to `docs/GAPS_FROM_T2.md` — do NOT edit their files.
 - Combat flow: all P0 commands implemented and smooth
 - Hover system: creatures visually float, bank into turns
 - Amorphous: blob creatures can move, attack, and idle with visible deformation
+- Mixamo retarget: fingers animate, hip translates
+- Root motion: exported clips work with Unity's Apply Root Motion
+- Arachnid: legs spread laterally like a real spider
 - No linear tangents on organic motion (except when explicitly requested)
 - `_combat_timing.py` backward compatible — no removed/renamed fields
 - All new code has tests

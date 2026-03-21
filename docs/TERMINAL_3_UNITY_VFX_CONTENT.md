@@ -252,10 +252,60 @@ Write to `docs/GAPS_FROM_T3.md` — do NOT edit their files.
 
 ---
 
+## APPENDIX E — Additional Audit Findings (Originally Missing)
+
+### G14: Animator Controllers Generate States but ZERO Transitions
+**File:** `animation_templates.py`
+**What:** Generated AnimatorControllers create states but never call `AddTransition()` between them. States are disconnected islands — no state machine flow.
+**How:** After creating states, generate transitions:
+- Idle → Walk (when `speed > 0.1`)
+- Walk → Run (when `speed > 0.5`)
+- Any → Attack (when `attackTrigger`)
+- Attack → Idle (on exit time)
+- Use `AnimatorStateTransition` with proper `hasExitTime`, `duration`, `offset` settings
+- Add `AnimatorControllerParameter` entries for each transition condition
+
+### FIX: VisualEffect Without VisualEffectAsset
+**File:** `vfx_templates.py`
+**What:** `VisualEffect` component is added to GameObjects without assigning a `VisualEffectAsset` reference — the VFX will be invisible in Unity.
+**How:** When generating VFX scripts, either:
+- Generate a companion VFX Graph asset creation script that produces the `.vfx` asset
+- OR: use ParticleSystem instead of VisualEffect for procedurally-configured effects (ParticleSystem can be fully configured via C# without an asset file)
+- For brand VFX that need VFX Graph, generate the asset creation in an editor script
+
+### FIX: Camera Dead Zone Configuration
+**File:** `camera_templates.py`
+**What:** Follow cameras generated without dead zone configuration — camera tracks target with zero tolerance, causing jittery following.
+**How:** Add dead zone params to camera generation:
+```csharp
+var composer = vcam.GetComponent<CinemachineRotationComposer>();
+composer.Composition.DeadZone.Width = 0.1f;
+composer.Composition.DeadZone.Height = 0.08f;
+composer.Composition.SoftZone.Width = 0.8f;
+composer.Composition.SoftZone.Height = 0.8f;
+```
+
+### FIX: Cinemachine Impulse Guard Incomplete
+**File:** `vfx_templates.py`
+**What:** Cinemachine impulse (camera shake) guard is incomplete — impulse source created but no impulse listener on the camera.
+**How:** Ensure generated camera setups include `CinemachineImpulseListener` component when combat VFX are configured.
+
+### UPGRADE: VFX-Animation Multi-Hit Bridge
+**What:** Audit Section 6 notes single `vfx_frame` per attack. Your combo system (P5-Q3) handles the Unity side, but also ensure:
+- AnimationEvent generation in `animation_templates.py` supports MULTIPLE events per clip (one per hit in a multi-hit combo)
+- Each event carries: hit index, damage type, brand, VFX intensity level
+
+---
+
 ## Quality Bar
 - All generated C# compiles against Unity 2022.3+ with URP
 - Evolution system covers all 10 brands with visually distinct effects
 - Brand colors match the Interface Contract palette exactly
+- Animator Controllers have TRANSITIONS between states (not disconnected)
+- VisualEffect components have valid asset references (or use ParticleSystem)
+- Follow cameras have dead zones for smooth tracking
+- Cinemachine impulse has both source and listener
+- Multi-hit animations generate multiple AnimationEvents
 - No `EventBus.Publish("string")` — use typed `EventBus<T>.Raise()`
 - No `HeroPath` — use `Path`
 - No local `_sanitize` — import from `_cs_sanitize`
