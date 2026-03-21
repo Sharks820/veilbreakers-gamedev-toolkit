@@ -180,8 +180,12 @@ def configure_combat_timing(
     recovery = max(1, round(preset["recovery"] * scale))
     total = anticipation + active + recovery
 
-    # Scale event frames
+    # Scale event frames, clamp hit_frame to active window
     hit_frame = round(preset["hit_frame"] * scale) if preset["hit_frame"] >= 0 else -1
+    if hit_frame >= 0 and active > 0:
+        hit_frame = max(anticipation, min(hit_frame, anticipation + active - 1))
+    elif hit_frame >= 0 and active == 0:
+        hit_frame = -1  # no active window means no hit
     vfx_frame = max(0, round(preset["vfx_frame"] * scale))
     sound_frame = max(0, round(preset["sound_frame"] * scale))
     camera_shake_frame = round(preset["camera_shake_frame"] * scale) if preset["camera_shake_frame"] >= 0 else -1

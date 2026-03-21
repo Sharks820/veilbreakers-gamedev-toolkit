@@ -29,7 +29,12 @@ def _sanitize_cs_string(value: str) -> str:
 
 def _sanitize_cs_identifier(value: str) -> str:
     """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+    result = re.sub(r"[^a-zA-Z0-9_]", "", value)
+    if not result:
+        return "_unnamed"
+    if result[0].isdigit():
+        result = "_" + result
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -272,7 +277,7 @@ def generate_cinematic_script(
         lines.append(f"{indent}            cam_{safe_sname}.transform.SetParent(cinemaRoot.transform);")
         lines.append(f"{indent}            cam_{safe_sname}.transform.position = new Vector3({cam_pos[0]}f, {cam_pos[1]}f, {cam_pos[2]}f);")
         lines.append(f"{indent}            CinemachineCamera vcam_{safe_sname} = cam_{safe_sname}.AddComponent<CinemachineCamera>();")
-        lines.append(f"{indent}            vcam_{safe_sname}.Priority.Value = {10 + i};")
+        lines.append(f"{indent}            vcam_{safe_sname}.Priority = {10 + i};")
 
         # Look-at target using RotationComposer
         lines.append(f"{indent}            CinemachineRotationComposer composer_{safe_sname} = cam_{safe_sname}.AddComponent<CinemachineRotationComposer>();")
