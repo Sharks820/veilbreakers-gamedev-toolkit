@@ -1,7 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-21 (v3.0 roadmap added)
+**Updated:** 2026-03-21 (v3.0 complete)
 
 ## Milestones
 
@@ -53,6 +53,8 @@
 - [x] **Phase 22: AAA Dark Fantasy UI/UX Polish** - Procedural ornate UI frames, 3D icon render pipeline, dark fantasy cursors, rich tooltips, radial menus, notification toasts, loading screens, UI material shaders (1/1 plan complete, 8 UIPOL requirements, 204 tests)
 - [x] **Phase 23: VFX Mastery** - Flipbook textures, VFX Graph node composition, projectile VFX chains, AoE VFX, per-brand status effects, environmental VFX depth, directional hit VFX, boss phase transitions (1/1 plan complete, 8 VFX3 requirements, 177 tests)
 - [x] **Phase 24: Production Pipeline** - Compile error auto-recovery, asset conflict detection, multi-tool pipeline orchestration, art style consistency validation, build verification smoke tests
+
+**Delivered:** 37 MCP tools (15 Blender + 22 Unity), 350 actions (41 new), 8,473+ tests (1,154 new), 56 requirements across 8 categories. FromSoft combat timing, Wwise-level spatial audio, Diablo 4 VFX, AAA dark fantasy UI, production pipeline automation.
 
 ## Phase Details
 
@@ -372,7 +374,12 @@ Plans:
   3. Claude can generate vertical cliff face geometry that extends beyond heightmap limitations, and cave entrance meshes transition seamlessly from terrain surface into underground space
   4. Claude can generate multi-biome terrain with smooth blend zones (forest-to-swamp, swamp-to-mountain), waterfall/cascade geometry with stepped water mesh, and bridges that span detected rivers or chasms
   5. Every procedural mesh generator produces LOD variants (high/medium/low poly) that respect platform performance budgets, verified by game-readiness checks on each LOD level
-**Plans**: TBD
+**Plans**: 3 plans (all complete)
+**Status**: COMPLETE (2026-03-21) -- 71 tests, 10 requirements fulfilled
+Plans:
+- [x] 18-01-PLAN.md -- Mesh bridge: wire 127 procedural meshes into worldbuilding/environment handlers
+- [x] 18-02-PLAN.md -- Terrain depth: cliff faces, cave entrances, multi-biome, waterfalls, bridges
+- [x] 18-03-PLAN.md -- Integration: dungeon prop meshes, castle meshes, environment scatter, LOD variants
 
 ### Phase 19: Character Excellence
 **Goal**: Claude can validate and generate character meshes at ZBrush-level quality -- correct body proportions, proper face topology for deformation, hair card systems, and seamless armor attachment
@@ -385,7 +392,12 @@ Plans:
   3. Claude can validate face topology and receive a report identifying whether edge loops exist around eyes, mouth, and nose -- flagging missing loops that would cause deformation artifacts during facial animation
   4. Claude can perform character-aware LOD retopology that preserves face and hand detail while aggressively reducing body/extremity polygon count, and the LOD chain passes deformation testing at each level
   5. Claude can generate armor seam-hiding overlap rings at mesh split points (neck, wrist, ankle) that prevent visible skin gaps when armor pieces are swapped, and validate hand/foot topology for proper finger separation and edge flow
-**Plans**: TBD
+**Plans**: 3 plans (all complete)
+**Status**: COMPLETE (2026-03-21) -- 142 tests, 8 requirements fulfilled
+Plans:
+- [x] 19-01-PLAN.md -- Character validation: body proportions, face topology, hand/foot topology, hair cards
+- [x] 19-02-PLAN.md -- Character LOD + armor: character-aware retopology, armor seam overlap rings
+- [x] 19-03-PLAN.md -- Unity character: cloth physics setup, SSS skin shader, parallax eye shader, micro-detail normals
 
 ### Phase 20: Advanced Animation + FromSoft Combat Feel -- COMPLETE
 **Goal**: Claude can configure frame-precise combat animation timing, inject animation events, generate blend trees and additive layers, refine root motion, generate AI-driven motion clips, and create cinematic animation sequences
@@ -406,7 +418,7 @@ Plans:
 ### Phase 22: AAA Dark Fantasy UI/UX Polish
 **Goal**: Claude can generate hand-crafted dark fantasy UI elements that rival Baldur's Gate 3 and Elden Ring -- ornate procedural frames, 3D-rendered item icons, themed cursors, rich tooltips, radial menus, and polished notification systems
 **Depends on**: Phase 7 (UI generation foundation), Phase 15 (existing UX templates to extend)
-**Requirements**: UIPOL-01, UIPOL-02, UIPOL-03, UIPOL-04, UIPOL-05, UIPOL-06, UIPOL-07
+**Requirements**: UIPOL-01, UIPOL-02, UIPOL-03, UIPOL-04, UIPOL-05, UIPOL-06, UIPOL-07, UIPOL-08
 **Success Criteria** (what must be TRUE):
   1. Claude can generate procedural UI frames with ornate dark fantasy borders (rune decorations, weathered edges, metal rivets) that tile correctly at any panel size and look hand-crafted
   2. Claude can generate equipment/item icons through a 3D render pipeline (render item mesh -> stylize -> add border/background) that produces consistent, inventory-ready icon images
@@ -427,7 +439,10 @@ Plans:
   3. Claude can generate area-of-effect VFX (ground circles, expanding domes, cone blasts with brand-appropriate colors) and per-brand status effect VFX for all 10 combat brands (burning, poisoned, frozen, stunned, blessed, cursed, etc.)
   4. Claude can generate environmental VFX with atmospheric depth (volumetric fog, god rays, heat distortion, water caustics) that integrate with the existing scene lighting setup
   5. Claude can generate directional combat hit VFX (blood splatter, sparks, energy bursts matched to damage brand and hit direction) and boss phase transition VFX (corruption wave, power surge, arena transformation) with full particle/shader coordination
-**Plans**: TBD
+**Plans**: 1 plan (complete)
+**Status**: COMPLETE (2026-03-21) -- 177 tests, 8 requirements fulfilled
+Plans:
+- [x] 23-01-PLAN.md -- VFX mastery: flipbook textures, VFX Graph composition, projectile chains, AoE, status effects, environmental VFX, hit VFX, boss transitions
 
 ### Phase 24: Production Pipeline
 **Goal**: Claude can detect and recover from compilation errors autonomously, prevent asset conflicts before they happen, orchestrate multi-tool pipelines as single commands, validate art style consistency across asset batches, and run build verification smoke tests
@@ -439,6 +454,10 @@ Plans:
   3. Claude can execute multi-tool pipelines as single orchestrated commands (e.g., "create character" triggers mesh generation -> cleanup -> UV -> texture -> rig -> animate -> export in sequence)
   4. Claude can validate art style consistency across a batch of assets by checking color palette adherence, roughness value distributions, and detail density against project standards -- flagging outliers
   5. Claude can run build verification smoke tests after every build, confirming the build launches, loads a scene, and passes basic sanity checks before the build is considered good
+**Plans**: 1 plan (complete)
+**Status**: COMPLETE (2026-03-21) -- 205 tests, 5 requirements fulfilled
+Plans:
+- [x] 24-01-PLAN.md -- Production pipeline: compile recovery, conflict detection, pipeline orchestration, art style validation, build smoke tests
 
 ## Progress
 
