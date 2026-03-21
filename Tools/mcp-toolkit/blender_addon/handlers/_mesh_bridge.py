@@ -354,7 +354,7 @@ def mesh_from_spec(
         try:
             bm.faces.new([bm_verts[i] for i in face_indices])
         except (ValueError, IndexError):
-            pass  # skip degenerate faces
+            print(f"Warning: skipped degenerate face {face_indices}")
 
     # Assign UVs if present
     if uvs:

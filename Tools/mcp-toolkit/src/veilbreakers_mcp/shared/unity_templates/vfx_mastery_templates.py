@@ -19,19 +19,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    result = re.sub(r"[^a-zA-Z0-9_]", "", value)
-    if not result:
-        return "Default"
-    if result[0].isdigit():
-        result = "_" + result
-    return result
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -184,7 +172,7 @@ def generate_flipbook_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_type = _sanitize_cs_identifier(effect_type)
+    safe_type = sanitize_cs_identifier(effect_type)
     if effect_type not in FLIPBOOK_EFFECT_TYPES:
         effect_type = "fire"
     cfg = FLIPBOOK_EFFECT_TYPES[effect_type]
@@ -475,7 +463,7 @@ def generate_vfx_graph_composition_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = _sanitize_cs_identifier(graph_name)
+    safe_name = sanitize_cs_identifier(graph_name)
 
     # Defaults
     spawn = spawn_config or {}
@@ -766,7 +754,7 @@ def generate_projectile_vfx_chain_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = _sanitize_cs_identifier(projectile_name)
+    safe_name = sanitize_cs_identifier(projectile_name)
     brand = brand.upper()
     if brand not in BRAND_COLORS:
         brand = "SURGE"
@@ -1010,7 +998,7 @@ def generate_aoe_vfx_script(
     """
     if aoe_type not in AOE_TYPES:
         aoe_type = "ground_circle"
-    safe_aoe = _sanitize_cs_identifier(aoe_type)
+    safe_aoe = sanitize_cs_identifier(aoe_type)
     brand = brand.upper()
     if brand not in BRAND_COLORS:
         brand = "RUIN"
@@ -1642,6 +1630,7 @@ public class VB_StatusVFX_{brand} : MonoBehaviour
     private ParticleSystem secondaryPS;{line_renderer_field}
     private float pulsePhase = 0f;
     private Renderer[] targetRenderers;
+    private MaterialPropertyBlock _mpb;
 
     public string Brand => brand;
     public string EffectName => effectName;
@@ -1656,6 +1645,7 @@ public class VB_StatusVFX_{brand} : MonoBehaviour
     private void Start()
     {{{target_block}
         targetRenderers = GetComponentsInChildren<Renderer>();
+        _mpb = new MaterialPropertyBlock();
         CreateMainParticleSystem();
         CreateSecondaryParticleSystem();{line_renderer_init}
     }}
@@ -1669,13 +1659,12 @@ public class VB_StatusVFX_{brand} : MonoBehaviour
         // Apply glow to renderers via MaterialPropertyBlock
         if (targetRenderers != null)
         {{
-            MaterialPropertyBlock mpb = new MaterialPropertyBlock();
             foreach (var rend in targetRenderers)
             {{
                 if (rend == null) continue;
-                rend.GetPropertyBlock(mpb);
-                mpb.SetColor("_EmissionColor", glowColor * pulse * 2f);
-                rend.SetPropertyBlock(mpb);
+                rend.GetPropertyBlock(_mpb);
+                _mpb.SetColor("_EmissionColor", glowColor * pulse * 2f);
+                rend.SetPropertyBlock(_mpb);
             }}
         }}
 
@@ -1836,7 +1825,7 @@ def generate_environmental_vfx_script(
     """
     if vfx_type not in ENV_VFX_TYPES:
         vfx_type = "volumetric_fog"
-    safe_type = _sanitize_cs_identifier(vfx_type)
+    safe_type = sanitize_cs_identifier(vfx_type)
     intensity = max(0.0, min(1.0, intensity))
 
     # Default colors per type
@@ -2403,7 +2392,7 @@ def generate_boss_transition_vfx_script(
     """
     if transition_type not in BOSS_TRANSITION_TYPES:
         transition_type = "corruption_wave"
-    safe_type = _sanitize_cs_identifier(transition_type)
+    safe_type = sanitize_cs_identifier(transition_type)
     boss_brand = boss_brand.upper()
     if boss_brand not in BRAND_COLORS:
         boss_brand = "DREAD"
@@ -2668,6 +2657,7 @@ public class VB_BossTransitionVFX_{safe_type}_{boss_brand} : MonoBehaviour
     private ParticleSystem wavePS;
     private ParticleSystem aftermathPS;{column_field}
     private Renderer[] arenaRenderers;
+    private MaterialPropertyBlock _mpb;
     private bool isTransitioning = false;
     private int currentPhase = 1;
 
@@ -2706,6 +2696,7 @@ public class VB_BossTransitionVFX_{safe_type}_{boss_brand} : MonoBehaviour
     private void Start()
     {{
         arenaRenderers = GetComponentsInChildren<Renderer>();
+        _mpb = new MaterialPropertyBlock();
         CreateParticleSystems();
     }}
 
@@ -2798,13 +2789,12 @@ public class VB_BossTransitionVFX_{safe_type}_{boss_brand} : MonoBehaviour
     private void ApplyGlow(float glowIntensity)
     {{
         if (arenaRenderers == null) return;
-        MaterialPropertyBlock mpb = new MaterialPropertyBlock();
         foreach (var rend in arenaRenderers)
         {{
             if (rend == null) continue;
-            rend.GetPropertyBlock(mpb);
-            mpb.SetColor("_EmissionColor", glowColor * glowIntensity);
-            rend.SetPropertyBlock(mpb);
+            rend.GetPropertyBlock(_mpb);
+            _mpb.SetColor("_EmissionColor", glowColor * glowIntensity);
+            rend.SetPropertyBlock(_mpb);
         }}
     }}
 
