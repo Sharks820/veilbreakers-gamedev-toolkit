@@ -21,19 +21,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    result = re.sub(r"[^a-zA-Z0-9_]", "", value)
-    if not result:
-        return "Default"
-    if result[0].isdigit():
-        result = "_" + result
-    return result
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # VeilBreakers dark fantasy color palette (hex)
@@ -90,7 +78,7 @@ def generate_procedural_frame_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = _sanitize_cs_identifier(frame_name)
+    safe_name = sanitize_cs_identifier(frame_name)
     class_name = f"VB_{safe_name}"
 
     valid_styles = {"gothic", "runic", "corrupted", "noble"}
@@ -2658,7 +2646,7 @@ def generate_ui_material_shaders(
     if not effects:
         effects = ["gold_leaf"]
 
-    safe_name = _sanitize_cs_identifier(shader_name)
+    safe_name = sanitize_cs_identifier(shader_name)
 
     # Build properties block
     properties_lines = [

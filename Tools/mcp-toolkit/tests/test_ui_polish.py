@@ -1108,28 +1108,28 @@ class TestModuleConstants:
 
 
 class TestSanitizeIdentifier:
-    """Tests for _sanitize_cs_identifier helper."""
+    """Tests for sanitize_cs_identifier helper (shared module)."""
 
     def test_normal_name(self):
-        from veilbreakers_mcp.shared.unity_templates.ui_polish_templates import _sanitize_cs_identifier
-        assert _sanitize_cs_identifier("MyFrame") == "MyFrame"
+        from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
+        assert sanitize_cs_identifier("MyFrame") == "MyFrame"
 
     def test_with_spaces(self):
-        from veilbreakers_mcp.shared.unity_templates.ui_polish_templates import _sanitize_cs_identifier
-        assert _sanitize_cs_identifier("My Frame") == "MyFrame"
+        from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
+        assert sanitize_cs_identifier("My Frame") == "MyFrame"
 
     def test_with_special_chars(self):
-        from veilbreakers_mcp.shared.unity_templates.ui_polish_templates import _sanitize_cs_identifier
-        assert _sanitize_cs_identifier("My-Frame!@#") == "MyFrame"
+        from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
+        assert sanitize_cs_identifier("My-Frame!@#") == "MyFrame"
 
     def test_starts_with_digit(self):
-        from veilbreakers_mcp.shared.unity_templates.ui_polish_templates import _sanitize_cs_identifier
-        assert _sanitize_cs_identifier("123Frame") == "_123Frame"
+        from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
+        assert sanitize_cs_identifier("123Frame") == "_123Frame"
 
     def test_empty_string(self):
-        from veilbreakers_mcp.shared.unity_templates.ui_polish_templates import _sanitize_cs_identifier
-        assert _sanitize_cs_identifier("") == "Default"
+        from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
+        assert sanitize_cs_identifier("") == "_unnamed"
 
     def test_only_special_chars(self):
-        from veilbreakers_mcp.shared.unity_templates.ui_polish_templates import _sanitize_cs_identifier
-        assert _sanitize_cs_identifier("@#$") == "Default"
+        from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
+        assert sanitize_cs_identifier("@#$") == "_unnamed"
