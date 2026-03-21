@@ -20,7 +20,21 @@ import math
 from typing import Any
 
 import numpy as np
-from opensimplex import OpenSimplex
+
+try:
+    from opensimplex import OpenSimplex
+except ImportError:
+    # Fallback: use a simple hash-based noise when opensimplex isn't installed
+    # (e.g. Blender's bundled Python may not have it)
+    class OpenSimplex:  # type: ignore[no-redef]
+        """Minimal noise fallback using hash-based value noise."""
+        def __init__(self, seed: int = 0) -> None:
+            self._seed = seed
+        def noise2(self, x: float, y: float) -> float:
+            # Deterministic pseudo-noise via hash mixing
+            import hashlib
+            h = hashlib.md5(f"{self._seed}:{x:.6f}:{y:.6f}".encode()).digest()
+            return (int.from_bytes(h[:4], "little") / 2147483647.0) - 1.0
 
 # ---------------------------------------------------------------------------
 # Terrain type presets
