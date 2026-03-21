@@ -4976,7 +4976,9 @@ async def unity_code(
                 )
             project_root = Path(settings.unity_project_path).resolve()
             full_path = (project_root / script_path).resolve()
-            if not str(full_path).startswith(str(project_root)):
+            try:
+                full_path.relative_to(project_root)
+            except ValueError:
                 return json.dumps(
                     {"status": "error", "action": action, "message": "Path traversal detected"}
                 )
@@ -8956,7 +8958,7 @@ async def unity_qa(
 
         elif action == "setup_analytics":
             # Validate log_file_path to prevent directory traversal
-            import posixpath
+
             if (log_file_path.startswith("/") or log_file_path.startswith("\\")
                     or ".." in log_file_path
                     or ":" in log_file_path):

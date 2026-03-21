@@ -51,6 +51,47 @@ def _sanitize_cs_identifier(value: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# C# reserved keywords (for namespace sanitization)
+# ---------------------------------------------------------------------------
+
+_CS_RESERVED = frozenset({
+    "abstract", "as", "base", "bool", "break", "byte", "case", "catch", "char",
+    "checked", "class", "const", "continue", "decimal", "default", "delegate",
+    "do", "double", "else", "enum", "event", "explicit", "extern", "false",
+    "finally", "fixed", "float", "for", "foreach", "goto", "if", "implicit",
+    "in", "int", "interface", "internal", "is", "lock", "long", "namespace",
+    "new", "null", "object", "operator", "out", "override", "params", "private",
+    "protected", "public", "readonly", "ref", "return", "sbyte", "sealed",
+    "short", "sizeof", "stackalloc", "static", "string", "struct", "switch",
+    "this", "throw", "true", "try", "typeof", "uint", "ulong", "unchecked",
+    "unsafe", "ushort", "using", "virtual", "void", "volatile", "while",
+})
+
+
+def _safe_namespace(ns: str) -> str:
+    """Sanitize a C# namespace string.
+
+    Beyond stripping invalid characters, this also handles leading digits
+    and C# reserved keywords in namespace segments.
+    """
+    sanitized = re.sub(r"[^a-zA-Z0-9_.]", "", ns)
+    sanitized = re.sub(r"\.{2,}", ".", sanitized).strip(".")
+    if not sanitized:
+        return "Generated"
+    segments = sanitized.split(".")
+    fixed: list[str] = []
+    for seg in segments:
+        if not seg:
+            continue
+        if seg[0].isdigit():
+            seg = f"_{seg}"
+        if seg in _CS_RESERVED:
+            seg = f"@{seg}"
+        fixed.append(seg)
+    return ".".join(fixed) or "Generated"
+
+
+# ---------------------------------------------------------------------------
 # C# type mapping helpers
 # ---------------------------------------------------------------------------
 
@@ -141,7 +182,7 @@ def generate_so_definition(
     lines.append("")
 
     # Namespace
-    safe_ns = re.sub(r"[^a-zA-Z0-9_.]", "", namespace)
+    safe_ns = _safe_namespace(namespace)
     if safe_ns:
         lines.append(f"namespace {safe_ns}")
         lines.append("{")
@@ -270,7 +311,7 @@ def generate_asset_creation_script(
     if not safe_class:
         safe_class = "GeneratedConfig"
 
-    safe_ns = re.sub(r"[^a-zA-Z0-9_.]", "", namespace)
+    safe_ns = _safe_namespace(namespace)
     safe_category = _sanitize_cs_identifier(category) if category else ""
     safe_folder = _sanitize_cs_string(output_folder)
 
@@ -687,7 +728,7 @@ def generate_json_loader_script(
     if not safe_class:
         safe_class = "GameData"
 
-    safe_ns = re.sub(r"[^a-zA-Z0-9_.]", "", namespace)
+    safe_ns = _safe_namespace(namespace)
     safe_path = _sanitize_cs_string(json_path)
 
     lines: list[str] = []
@@ -1113,7 +1154,7 @@ def generate_data_authoring_window(
     if not safe_so:
         safe_so = "GameConfig"
 
-    safe_ns = re.sub(r"[^a-zA-Z0-9_.]", "", namespace)
+    safe_ns = _safe_namespace(namespace)
     safe_category = _sanitize_cs_identifier(category) if category else ""
     safe_folder = _sanitize_cs_string(data_folder)
     safe_menu = _sanitize_cs_string(menu_path or safe_window)
