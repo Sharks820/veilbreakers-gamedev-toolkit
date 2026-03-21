@@ -1,19 +1,19 @@
-"""Build & deploy C# template generators for Unity automation.
+"""Build & deploy template generators for Unity automation.
 
-Each function returns a complete C# source string that can be written to
-a Unity project's Assets/Editor/Generated/Build/ directory.  When compiled
-by Unity, the scripts register as MenuItem commands under
-"VeilBreakers/Build/...".
-
-All generated scripts write their result to Temp/vb_result.json or
-Temp/vb_build_results.json so that the Python MCP server can read back the
-outcome after execution.
+C# generators return complete source strings for Unity editor scripts.
+Non-C# generators (CI/CD YAML, store metadata markdown) return plain text
+for direct file write.
 
 Exports:
     generate_multi_platform_build_script   -- BUILD-01: multi-platform build orchestrator
     generate_addressables_config_script    -- BUILD-02: Addressable group configurator
+    generate_github_actions_workflow       -- BUILD-03: GitHub Actions YAML with GameCI v4
+    generate_gitlab_ci_config              -- BUILD-03: GitLab CI YAML with GameCI Docker
+    generate_version_management_script     -- BUILD-04: SemVer version bump C# editor script
+    generate_changelog                     -- BUILD-04: git log -> CHANGELOG.md C# script
     generate_platform_config_script        -- BUILD-05: Android/iOS/WebGL config
     generate_shader_stripping_script       -- SHDR-03: IPreprocessShaders implementation
+    generate_store_metadata                -- ACC-02: store description/ratings/privacy markdown
 
 Pure-logic helpers:
     _validate_platforms                    -- validate platform dicts
@@ -752,3 +752,743 @@ def generate_shader_stripping_script(
 
     lines = _wrap_namespace(lines, namespace)
     return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# BUILD-03: CI/CD pipeline configuration -- GitHub Actions
+# ---------------------------------------------------------------------------
+
+_DEFAULT_CI_PLATFORMS: list[str] = [
+    "StandaloneWindows64",
+    "StandaloneOSX",
+    "StandaloneLinux64",
+    "Android",
+    "iOS",
+    "WebGL",
+]
+
+
+def generate_github_actions_workflow(
+    unity_version: str = "6000.0.0f1",
+    platforms: list[str] | None = None,
+    run_tests: bool = True,
+    namespace: str = "",
+) -> str:
+    """Generate GitHub Actions workflow YAML for Unity CI/CD pipeline.
+
+    Returns a complete YAML string (NOT C#) suitable for writing to
+    ``.github/workflows/unity-build.yml``.  Uses GameCI v4 actions for
+    test running and building, with matrix strategy across platforms.
+
+    Args:
+        unity_version: Unity editor version string (e.g. "6000.0.0f1").
+        platforms: List of Unity BuildTarget platform names for the build
+            matrix.  Defaults to all 6 standard platforms.
+        run_tests: If True, includes a test job using
+            ``game-ci/unity-test-runner@v4`` that the build job depends on.
+        namespace: Unused -- kept for API consistency with other generators.
+
+    Returns:
+        Complete YAML string for the GitHub Actions workflow.
+    """
+    plats = platforms or list(_DEFAULT_CI_PLATFORMS)
+
+    lines: list[str] = []
+    lines.append("name: Unity Build Pipeline")
+    lines.append("")
+    lines.append("on:")
+    lines.append("  push:")
+    lines.append("    branches: [main, develop]")
+    lines.append("  pull_request:")
+    lines.append("    branches: [main]")
+    lines.append("  workflow_dispatch: {}")
+    lines.append("")
+    lines.append("env:")
+    lines.append("  UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}")
+    lines.append("  UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}")
+    lines.append("  UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}")
+    lines.append("")
+    lines.append("jobs:")
+
+    # -- Test job --
+    if run_tests:
+        lines.append("  test:")
+        lines.append("    name: Run Tests")
+        lines.append("    runs-on: ubuntu-latest")
+        lines.append("    steps:")
+        lines.append("      - uses: actions/checkout@v4")
+        lines.append("        with:")
+        lines.append("          lfs: true")
+        lines.append("      - uses: actions/cache@v3")
+        lines.append("        with:")
+        lines.append("          path: Library")
+        lines.append("          key: Library-Test-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}")
+        lines.append("          restore-keys: |")
+        lines.append("            Library-Test-")
+        lines.append("      - uses: game-ci/unity-test-runner@v4")
+        lines.append("        env:")
+        lines.append("          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}")
+        lines.append("          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}")
+        lines.append("          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}")
+        lines.append("        with:")
+        lines.append(f"          unityVersion: {unity_version}")
+        lines.append("          testMode: all")
+        lines.append("          githubToken: ${{ secrets.GITHUB_TOKEN }}")
+        lines.append("      - uses: actions/upload-artifact@v4")
+        lines.append("        if: always()")
+        lines.append("        with:")
+        lines.append("          name: Test-Results")
+        lines.append("          path: artifacts")
+        lines.append("")
+
+    # -- Build job --
+    lines.append("  build:")
+    lines.append("    name: Build (${{ matrix.targetPlatform }})")
+    if run_tests:
+        lines.append("    needs: test")
+    lines.append("    runs-on: ubuntu-latest")
+    lines.append("    strategy:")
+    lines.append("      fail-fast: false")
+    lines.append("      matrix:")
+    lines.append("        targetPlatform:")
+    for plat in plats:
+        lines.append(f"          - {plat}")
+    lines.append("    steps:")
+    lines.append("      - uses: actions/checkout@v4")
+    lines.append("        with:")
+    lines.append("          lfs: true")
+    lines.append("      - uses: actions/cache@v3")
+    lines.append("        with:")
+    lines.append("          path: Library")
+    lines.append("          key: Library-${{ matrix.targetPlatform }}-${{ hashFiles('Assets/**', 'Packages/**', 'ProjectSettings/**') }}")
+    lines.append("          restore-keys: |")
+    lines.append("            Library-${{ matrix.targetPlatform }}-")
+    lines.append("      - uses: game-ci/unity-builder@v4")
+    lines.append("        env:")
+    lines.append("          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}")
+    lines.append("          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}")
+    lines.append("          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}")
+    lines.append("        with:")
+    lines.append(f"          unityVersion: {unity_version}")
+    lines.append("          targetPlatform: ${{ matrix.targetPlatform }}")
+    lines.append("          buildName: VeilBreakers")
+    lines.append("      - uses: actions/upload-artifact@v4")
+    lines.append("        with:")
+    lines.append("          name: Build-${{ matrix.targetPlatform }}")
+    lines.append("          path: build/${{ matrix.targetPlatform }}")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# BUILD-03: CI/CD pipeline configuration -- GitLab CI
+# ---------------------------------------------------------------------------
+
+def generate_gitlab_ci_config(
+    unity_version: str = "6000.0.0f1",
+    platforms: list[str] | None = None,
+    namespace: str = "",
+) -> str:
+    """Generate GitLab CI configuration YAML for Unity CI/CD pipeline.
+
+    Returns a complete YAML string (NOT C#) suitable for writing to
+    ``.gitlab-ci.yml``.  Uses GameCI Docker images for Unity builds.
+
+    Args:
+        unity_version: Unity editor version string (e.g. "6000.0.0f1").
+        platforms: List of Unity BuildTarget platform names.  Defaults to
+            all 6 standard platforms.
+        namespace: Unused -- kept for API consistency with other generators.
+
+    Returns:
+        Complete YAML string for the GitLab CI configuration.
+    """
+    plats = platforms or list(_DEFAULT_CI_PLATFORMS)
+
+    # Map Unity target platform names to lowercase image suffixes
+    _PLATFORM_IMAGE_MAP: dict[str, str] = {
+        "StandaloneWindows64": "windows-mono",
+        "StandaloneOSX": "mac-mono",
+        "StandaloneLinux64": "linux-il2cpp",
+        "Android": "android",
+        "iOS": "ios",
+        "WebGL": "webgl",
+    }
+
+    lines: list[str] = []
+    lines.append("stages:")
+    lines.append("  - test")
+    lines.append("  - build")
+    lines.append("")
+    lines.append("variables:")
+    lines.append(f"  UNITY_VERSION: \"{unity_version}\"")
+    lines.append("  IMAGE_VERSION: \"3\"")
+    lines.append("")
+    lines.append("# Cache the Library folder to speed up builds")
+    lines.append("cache:")
+    lines.append("  key: \"$CI_COMMIT_REF_SLUG\"")
+    lines.append("  paths:")
+    lines.append("    - Library/")
+    lines.append("")
+    lines.append(".unity_before_script: &unity_before_script")
+    lines.append("  before_script:")
+    lines.append("    - echo \"Activating Unity license...\"")
+    lines.append("    - unity-editor -quit -batchmode -nographics -logFile /dev/stdout")
+    lines.append("      -manualLicenseFile \"$UNITY_LICENSE_CONTENT\" || true")
+    lines.append("")
+
+    # -- Test job --
+    lines.append("test:")
+    lines.append("  stage: test")
+    lines.append(f"  image: unityci/editor:ubuntu-{unity_version}-linux-il2cpp-${{IMAGE_VERSION}}")
+    lines.append("  <<: *unity_before_script")
+    lines.append("  script:")
+    lines.append("    - unity-editor -runTests -batchmode -nographics -logFile /dev/stdout")
+    lines.append("      -projectPath . -testResults results.xml -testPlatform EditMode")
+    lines.append("    - unity-editor -runTests -batchmode -nographics -logFile /dev/stdout")
+    lines.append("      -projectPath . -testResults results-play.xml -testPlatform PlayMode")
+    lines.append("  artifacts:")
+    lines.append("    paths:")
+    lines.append("      - results.xml")
+    lines.append("      - results-play.xml")
+    lines.append("    reports:")
+    lines.append("      junit: results.xml")
+    lines.append("")
+
+    # -- Build jobs (one per platform) --
+    for plat in plats:
+        image_suffix = _PLATFORM_IMAGE_MAP.get(plat, plat.lower())
+        safe_job_name = plat.lower().replace("standalone", "build_")
+        if safe_job_name.startswith("build_"):
+            job_name = safe_job_name
+        else:
+            job_name = f"build_{safe_job_name}"
+
+        lines.append(f"{job_name}:")
+        lines.append("  stage: build")
+        lines.append(f"  image: unityci/editor:ubuntu-{unity_version}-{image_suffix}-${{IMAGE_VERSION}}")
+        lines.append("  <<: *unity_before_script")
+        lines.append("  script:")
+        lines.append("    - unity-editor -quit -batchmode -nographics -logFile /dev/stdout")
+        lines.append(f"      -projectPath . -buildTarget {plat}")
+        lines.append(f"      -customBuildPath \"./build/{plat}\"")
+        lines.append("  artifacts:")
+        lines.append("    paths:")
+        lines.append(f"      - ./build/{plat}")
+        lines.append("  needs:")
+        lines.append("    - test")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# BUILD-04: Version management
+# ---------------------------------------------------------------------------
+
+def generate_version_management_script(
+    version: str = "1.0.0",
+    auto_increment: str = "patch",
+    update_android: bool = True,
+    update_ios: bool = True,
+    namespace: str = "",
+) -> str:
+    """Generate C# editor script for version management.
+
+    Reads the current ``PlayerSettings.bundleVersion``, parses SemVer
+    components, increments the specified component, and writes the new
+    version back.  Optionally updates Android ``bundleVersionCode`` and
+    iOS ``buildNumber``.
+
+    Args:
+        version: Initial/fallback version string if bundleVersion is empty.
+        auto_increment: Which SemVer component to bump ("major", "minor",
+            or "patch").
+        update_android: If True, increments
+            ``PlayerSettings.Android.bundleVersionCode``.
+        update_ios: If True, sets
+            ``PlayerSettings.iOS.buildNumber`` to the new version string.
+        namespace: Optional C# namespace to wrap the class in.
+
+    Returns:
+        Complete C# source string.
+    """
+    safe_version = _sanitize_cs_string(version)
+
+    # Map auto_increment to the array index to bump
+    increment_map = {"major": 0, "minor": 1, "patch": 2}
+    inc_index = increment_map.get(auto_increment.lower(), 2)
+
+    lines: list[str] = [
+        "using UnityEditor;",
+        "using UnityEngine;",
+        "using System.IO;",
+        "",
+        "public static class VeilBreakers_VersionManager",
+        "{",
+        '    [MenuItem("VeilBreakers/Build/Bump Version")]',
+        "    public static void Execute()",
+        "    {",
+        "        try",
+        "        {",
+        "            string currentVersion = PlayerSettings.bundleVersion;",
+        "            if (string.IsNullOrEmpty(currentVersion))",
+        f'                currentVersion = "{safe_version}";',
+        "",
+        "            string[] parts = currentVersion.Split('.');",
+        "            int major = 0;",
+        "            int minor = 0;",
+        "            int patch = 0;",
+        "",
+        "            if (parts.Length >= 1) int.TryParse(parts[0], out major);",
+        "            if (parts.Length >= 2) int.TryParse(parts[1], out minor);",
+        "            if (parts.Length >= 3) int.TryParse(parts[2], out patch);",
+        "",
+        "            string oldVersion = major + \".\" + minor + \".\" + patch;",
+        "",
+    ]
+
+    # Increment logic
+    if inc_index == 0:
+        lines.append("            major++;")
+        lines.append("            minor = 0;")
+        lines.append("            patch = 0;")
+    elif inc_index == 1:
+        lines.append("            minor++;")
+        lines.append("            patch = 0;")
+    else:
+        lines.append("            patch++;")
+
+    lines.append("")
+    lines.append('            string newVersion = major + "." + minor + "." + patch;')
+    lines.append("            PlayerSettings.bundleVersion = newVersion;")
+    lines.append("")
+
+    if update_android:
+        lines.append("            // Increment Android version code")
+        lines.append("            PlayerSettings.Android.bundleVersionCode++;")
+        lines.append('            Debug.Log("[VeilBreakers] Android bundleVersionCode: " + PlayerSettings.Android.bundleVersionCode);')
+        lines.append("")
+
+    if update_ios:
+        lines.append("            // Update iOS build number")
+        lines.append("            PlayerSettings.iOS.buildNumber = newVersion;")
+        lines.append('            Debug.Log("[VeilBreakers] iOS buildNumber: " + newVersion);')
+        lines.append("")
+
+    lines.append('            Debug.Log("[VeilBreakers] Version bumped: " + oldVersion + " -> " + newVersion);')
+    lines.append("")
+    lines.append('            string json = "{\\"status\\": \\"success\\", \\"action\\": \\"bump_version\\", "')
+    lines.append('                + "\\"old_version\\": \\"" + oldVersion + "\\", "')
+    lines.append('                + "\\"new_version\\": \\"" + newVersion + "\\"}";')
+    lines.append('            File.WriteAllText("Temp/vb_result.json", json);')
+    lines.append("        }")
+    lines.append("        catch (System.Exception ex)")
+    lines.append("        {")
+    lines.append('            string json = "{\\"status\\": \\"error\\", \\"action\\": \\"bump_version\\", \\"message\\": \\"" + ex.Message.Replace("\\"", "\\\\\\"") + "\\"}";')
+    lines.append('            File.WriteAllText("Temp/vb_result.json", json);')
+    lines.append('            Debug.LogError("[VeilBreakers] Version bump failed: " + ex.Message);')
+    lines.append("        }")
+    lines.append("    }")
+    lines.append("}")
+
+    lines = _wrap_namespace(lines, namespace)
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# BUILD-04: Changelog generation
+# ---------------------------------------------------------------------------
+
+def generate_changelog(
+    project_name: str = "VeilBreakers",
+    version: str = "1.0.0",
+    namespace: str = "",
+) -> str:
+    """Generate C# editor script that creates a CHANGELOG.md from git log.
+
+    Uses ``System.Diagnostics.Process`` to run ``git log`` and
+    ``git describe`` commands, parses conventional commit prefixes,
+    and writes a grouped markdown changelog to the project root.
+
+    Args:
+        project_name: Name used in the changelog header.
+        version: Current release version string for the heading.
+        namespace: Optional C# namespace to wrap the class in.
+
+    Returns:
+        Complete C# source string.
+    """
+    safe_project = _sanitize_cs_string(project_name)
+    safe_version = _sanitize_cs_string(version)
+
+    lines: list[str] = [
+        "using UnityEditor;",
+        "using UnityEngine;",
+        "using System;",
+        "using System.Diagnostics;",
+        "using System.IO;",
+        "using System.Text;",
+        "using System.Collections.Generic;",
+        "",
+        "public static class VeilBreakers_ChangelogGenerator",
+        "{",
+        '    [MenuItem("VeilBreakers/Build/Generate Changelog")]',
+        "    public static void Execute()",
+        "    {",
+        "        try",
+        "        {",
+        "            // Discover the previous tag",
+        '            string previousTag = RunGit("describe --tags --abbrev=0 HEAD~1").Trim();',
+        "            if (string.IsNullOrEmpty(previousTag))",
+        '                previousTag = "";',
+        "",
+        "            // Get commits since previous tag (or all commits)",
+        '            string range = string.IsNullOrEmpty(previousTag) ? "HEAD" : previousTag + "..HEAD";',
+        '            string logOutput = RunGit("log --pretty=format:\\"%h %s\\" --no-merges " + range);',
+        "",
+        "            // Group commits by conventional prefix",
+        "            var features = new List<string>();",
+        "            var fixes = new List<string>();",
+        "            var docs = new List<string>();",
+        "            var other = new List<string>();",
+        "",
+        "            string[] commitLines = logOutput.Split(new[] { '\\n' }, StringSplitOptions.RemoveEmptyEntries);",
+        "            foreach (string line in commitLines)",
+        "            {",
+        "                string trimmed = line.Trim().TrimStart('\"').TrimEnd('\"');",
+        "                if (string.IsNullOrEmpty(trimmed)) continue;",
+        "",
+        "                string lower = trimmed.ToLower();",
+        '                if (lower.Contains("feat:") || lower.Contains("feat("))',
+        "                    features.Add(trimmed);",
+        '                else if (lower.Contains("fix:") || lower.Contains("fix("))',
+        "                    fixes.Add(trimmed);",
+        '                else if (lower.Contains("docs:") || lower.Contains("doc("))',
+        "                    docs.Add(trimmed);",
+        "                else",
+        "                    other.Add(trimmed);",
+        "            }",
+        "",
+        "            // Build the markdown",
+        "            var sb = new StringBuilder();",
+        f'            sb.AppendLine("# {safe_project} Changelog");',
+        "            sb.AppendLine();",
+        f'            sb.AppendLine("## [{safe_version}] - " + DateTime.Now.ToString("yyyy-MM-dd"));',
+        "            sb.AppendLine();",
+        "",
+        '            AppendSection(sb, "Features", features);',
+        '            AppendSection(sb, "Bug Fixes", fixes);',
+        '            AppendSection(sb, "Documentation", docs);',
+        '            AppendSection(sb, "Other Changes", other);',
+        "",
+        "            int commitCount = features.Count + fixes.Count + docs.Count + other.Count;",
+        "",
+        '            string changelogPath = Path.Combine(Application.dataPath, "..", "CHANGELOG.md");',
+        "            File.WriteAllText(changelogPath, sb.ToString());",
+        "",
+        '            UnityEngine.Debug.Log("[VeilBreakers] Changelog written to " + changelogPath + " with " + commitCount + " commits.");',
+        "",
+        '            string json = "{\\"status\\": \\"success\\", \\"action\\": \\"generate_changelog\\", "',
+        '                + "\\"commit_count\\": " + commitCount + ", "',
+        f'                + "\\"version\\": \\"{safe_version}\\"' + '+ "}";',
+        '            File.WriteAllText("Temp/vb_result.json", json);',
+        "        }",
+        "        catch (Exception ex)",
+        "        {",
+        '            string json = "{\\"status\\": \\"error\\", \\"action\\": \\"generate_changelog\\", \\"message\\": \\"" + ex.Message.Replace("\\"", "\\\\\\"") + "\\"}";',
+        '            File.WriteAllText("Temp/vb_result.json", json);',
+        '            UnityEngine.Debug.LogError("[VeilBreakers] Changelog generation failed: " + ex.Message);',
+        "        }",
+        "    }",
+        "",
+        "    private static void AppendSection(StringBuilder sb, string heading, List<string> items)",
+        "    {",
+        "        if (items.Count == 0) return;",
+        '        sb.AppendLine("### " + heading);',
+        "        sb.AppendLine();",
+        "        foreach (string item in items)",
+        '            sb.AppendLine("- " + item);',
+        "        sb.AppendLine();",
+        "    }",
+        "",
+        "    private static string RunGit(string arguments)",
+        "    {",
+        "        var psi = new ProcessStartInfo",
+        "        {",
+        '            FileName = "git",',
+        "            Arguments = arguments,",
+        "            RedirectStandardOutput = true,",
+        "            RedirectStandardError = true,",
+        "            UseShellExecute = false,",
+        "            CreateNoWindow = true,",
+        '            WorkingDirectory = Path.Combine(Application.dataPath, "..")',
+        "        };",
+        "        using (var process = Process.Start(psi))",
+        "        {",
+        "            string output = process.StandardOutput.ReadToEnd();",
+        "            process.WaitForExit();",
+        "            return output;",
+        "        }",
+        "    }",
+        "}",
+    ]
+
+    lines = _wrap_namespace(lines, namespace)
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# ACC-02: Store publishing metadata
+# ---------------------------------------------------------------------------
+
+def generate_store_metadata(
+    game_title: str = "VeilBreakers",
+    genre: str = "Action RPG",
+    has_iap: bool = False,
+    has_ads: bool = False,
+    collects_data: bool = False,
+    namespace: str = "",
+) -> str:
+    """Generate store publishing metadata as a markdown document.
+
+    Returns a multi-section markdown string with store description,
+    content rating questionnaire answers, privacy policy template, and
+    screenshot specifications.  This is plain text -- not C#.
+
+    Args:
+        game_title: Name of the game for the store listing.
+        genre: Game genre for the description section.
+        has_iap: Whether the game has in-app purchases.
+        has_ads: Whether the game shows advertisements.
+        collects_data: Whether the game collects user data.
+        namespace: Unused -- kept for API consistency with other generators.
+
+    Returns:
+        Markdown string with all store metadata sections.
+    """
+    safe_title = game_title.replace("\\", "").replace('"', "")
+    safe_genre = genre.replace("\\", "").replace('"', "")
+
+    sections: list[str] = []
+
+    # ---- Section 1: Store Description ----
+    sections.append(f"# {safe_title} -- Store Publishing Metadata")
+    sections.append("")
+    sections.append("---")
+    sections.append("")
+    sections.append("## 1. Store Description")
+    sections.append("")
+    sections.append(f"**Title:** {safe_title}")
+    sections.append(f"**Genre:** {safe_genre}")
+    sections.append("")
+    sections.append("### Short Description")
+    sections.append("")
+    sections.append(f"Dive into the dark fantasy world of {safe_title} -- a visceral {safe_genre}")
+    sections.append("where every choice shapes your destiny and corruption lurks in every shadow.")
+    sections.append("")
+    sections.append("### Feature Highlights")
+    sections.append("")
+    sections.append("- **Intense Combat System** -- Master a deep combo-based combat system with")
+    sections.append("  10 unique Brand powers and devastating synergy attacks.")
+    sections.append("- **Dark Fantasy World** -- Explore a richly detailed world filled with")
+    sections.append("  corrupted landscapes, ancient ruins, and hidden secrets.")
+    sections.append("- **Deep Character Progression** -- Customize your playstyle with extensive")
+    sections.append("  skill trees, equipment crafting, and Brand mastery.")
+    sections.append("- **Challenging Boss Encounters** -- Face off against fearsome bosses with")
+    sections.append("  multi-phase AI and unique mechanics.")
+    sections.append("- **Dynamic World Events** -- Participate in world events that reshape the")
+    sections.append("  environment and unlock new content.")
+    sections.append("")
+    sections.append("### System Requirements")
+    sections.append("")
+    sections.append("| | Minimum | Recommended |")
+    sections.append("|---|---------|-------------|")
+    sections.append("| OS | Windows 10 64-bit | Windows 11 64-bit |")
+    sections.append("| CPU | Intel i5-6600 / AMD Ryzen 3 1200 | Intel i7-9700 / AMD Ryzen 5 3600 |")
+    sections.append("| RAM | 8 GB | 16 GB |")
+    sections.append("| GPU | GTX 1050 Ti / RX 570 | RTX 2060 / RX 5700 XT |")
+    sections.append("| Storage | 20 GB | 30 GB SSD |")
+    sections.append("| DirectX | Version 11 | Version 12 |")
+    sections.append("")
+    sections.append("**Age Rating:** See Content Rating Questionnaire below.")
+    sections.append("")
+
+    # ---- Section 2: Content Rating Questionnaire ----
+    sections.append("---")
+    sections.append("")
+    sections.append("## 2. Content Rating Questionnaire")
+    sections.append("")
+    sections.append("> **REVIEW BEFORE SUBMISSION** -- These are pre-filled defaults for a dark")
+    sections.append("> fantasy action RPG. Review and adjust all answers based on your game's")
+    sections.append("> actual content before submitting to any rating authority.")
+    sections.append("")
+    sections.append("### ESRB (Entertainment Software Rating Board)")
+    sections.append("")
+    sections.append("| Category | Answer | Notes |")
+    sections.append("|----------|--------|-------|")
+    sections.append("| Violence | Frequent (Fantasy) | Combat is core gameplay; fantasy/stylized |")
+    sections.append("| Blood | Stylized/Fantasy | Non-realistic blood effects |")
+    sections.append("| Gore | Mild | Defeated enemies dissolve/fade |")
+    sections.append("| Language | Mild | Occasional mild language in dialogue |")
+    sections.append("| Suggestive Themes | None | No suggestive content |")
+    sections.append("| Sexual Content | None | No sexual content |")
+    sections.append("| Nudity | None | No nudity |")
+    sections.append("| Substances | None | No alcohol, tobacco, or drug use |")
+    sections.append("| Gambling | None | No real-money gambling mechanics |")
+    sections.append(f"| In-App Purchases | {'Yes' if has_iap else 'No'} | {'Digital items/currency' if has_iap else 'No microtransactions'} |")
+    sections.append("| User Interaction | Online features | Online multiplayer/leaderboards |")
+    sections.append("")
+    sections.append("**Expected Rating:** T (Teen) or M (Mature 17+)")
+    sections.append("")
+    sections.append("### PEGI (Pan European Game Information)")
+    sections.append("")
+    sections.append("| Category | Answer | Notes |")
+    sections.append("|----------|--------|-------|")
+    sections.append("| Violence | Yes | Fantasy combat with weapons and magic |")
+    sections.append("| Fear | Yes | Dark fantasy atmosphere, horror elements |")
+    sections.append("| Bad Language | Mild | Occasional mild language |")
+    sections.append("| Sex | No | No sexual content |")
+    sections.append("| Drugs | No | No drug references |")
+    sections.append("| Discrimination | No | No discriminatory content |")
+    sections.append("| Gambling | No | No gambling mechanics |")
+    sections.append(f"| In-App Purchases | {'Yes' if has_iap else 'No'} | {'Contains optional purchases' if has_iap else 'No in-app purchases'} |")
+    sections.append("")
+    sections.append("**Expected Rating:** PEGI 16")
+    sections.append("")
+    sections.append("### IARC (International Age Rating Coalition)")
+    sections.append("")
+    sections.append("Complete the IARC questionnaire at https://www.globalratings.com/ using")
+    sections.append("the answers above as guidance. IARC provides a unified rating across")
+    sections.append("multiple territories.")
+    sections.append("")
+
+    # ---- Section 3: Privacy Policy Template ----
+    sections.append("---")
+    sections.append("")
+    sections.append("## 3. Privacy Policy Template")
+    sections.append("")
+    sections.append("> **THIS IS A TEMPLATE -- CONSULT A LAWYER BEFORE USE.**")
+    sections.append("> This template is provided as a starting point only. Laws vary by")
+    sections.append("> jurisdiction. You must have this reviewed by qualified legal counsel.")
+    sections.append("")
+    sections.append(f"### Privacy Policy for {safe_title}")
+    sections.append("")
+    sections.append("**Last Updated:** [DATE]")
+    sections.append("")
+    sections.append(f"This Privacy Policy describes how {safe_title} (\"we\", \"us\", or \"our\")")
+    sections.append("collects, uses, and shares information when you use our game.")
+    sections.append("")
+
+    # Information Collected
+    sections.append("#### Information We Collect")
+    sections.append("")
+    if collects_data:
+        sections.append("We collect the following types of information:")
+        sections.append("")
+        sections.append("- **Account Information:** Email address and username when you create an account.")
+        sections.append("- **Gameplay Data:** Game progress, achievements, and play statistics.")
+        sections.append("- **Device Information:** Device type, operating system, and hardware identifiers.")
+        sections.append("- **Analytics Data:** App usage patterns and crash reports to improve the game.")
+    else:
+        sections.append("We collect minimal information necessary for the game to function:")
+        sections.append("")
+        sections.append("- **Gameplay Data:** Game progress and settings stored locally on your device.")
+        sections.append("- **Crash Reports:** Anonymous crash data to improve game stability.")
+    sections.append("")
+
+    # How Information Is Used
+    sections.append("#### How We Use Information")
+    sections.append("")
+    sections.append("We use collected information to:")
+    sections.append("")
+    sections.append("- Provide and maintain the game experience.")
+    sections.append("- Fix bugs and improve game performance.")
+    if collects_data:
+        sections.append("- Personalize your gaming experience.")
+        sections.append("- Communicate with you about updates and features.")
+    sections.append("")
+
+    # Third-Party Services
+    sections.append("#### Third-Party Services")
+    sections.append("")
+    if has_ads:
+        sections.append("We use the following third-party services that may collect information:")
+        sections.append("")
+        sections.append("- **Advertising Partners:** We display ads through third-party ad networks")
+        sections.append("  that may use cookies and similar technologies to serve personalized ads.")
+        sections.append("- **Analytics Providers:** We use analytics services to understand game usage.")
+    else:
+        sections.append("We do not display third-party advertisements. We may use analytics services")
+        sections.append("to understand game usage and improve performance. These services collect")
+        sections.append("anonymous, aggregated data only.")
+    sections.append("")
+
+    # In-App Purchases
+    if has_iap:
+        sections.append("#### In-App Purchases")
+        sections.append("")
+        sections.append("Our game offers optional in-app purchases. All transactions are processed")
+        sections.append("through the platform's official payment system (Apple App Store, Google Play,")
+        sections.append("or Steam). We do not directly collect or store payment information.")
+        sections.append("")
+
+    # Children's Privacy
+    sections.append("#### Children's Privacy")
+    sections.append("")
+    sections.append("This game is not directed at children under 13 years of age. We do not")
+    sections.append("knowingly collect personal information from children under 13. If you")
+    sections.append("believe we have collected information from a child under 13, please contact")
+    sections.append("us immediately so we can delete it. (COPPA compliance note)")
+    sections.append("")
+
+    # Contact
+    sections.append("#### Contact Information")
+    sections.append("")
+    sections.append("For questions about this Privacy Policy, please contact:")
+    sections.append("")
+    sections.append("- **Email:** [YOUR_PRIVACY_EMAIL]")
+    sections.append("- **Website:** [YOUR_WEBSITE_URL]")
+    sections.append("- **Address:** [YOUR_BUSINESS_ADDRESS]")
+    sections.append("")
+
+    # ---- Section 4: Screenshot Specifications ----
+    sections.append("---")
+    sections.append("")
+    sections.append("## 4. Screenshot Specifications")
+    sections.append("")
+    sections.append("### iOS (App Store)")
+    sections.append("")
+    sections.append("| Device | Size | Required |")
+    sections.append("|--------|------|----------|")
+    sections.append('| iPhone 6.7" (14 Pro Max) | 1290 x 2796 | Yes |')
+    sections.append('| iPhone 6.5" (11 Pro Max) | 1242 x 2688 | Yes |')
+    sections.append('| iPhone 5.5" (8 Plus) | 1242 x 2208 | Yes |')
+    sections.append('| iPad Pro 12.9" | 2048 x 2732 | If supporting iPad |')
+    sections.append("")
+    sections.append("### Android (Google Play)")
+    sections.append("")
+    sections.append("| Type | Size | Required |")
+    sections.append("|------|------|----------|")
+    sections.append("| Phone screenshot | 1080 x 1920 (min) | Yes (2-8 screenshots) |")
+    sections.append('| 7" Tablet screenshot | 1200 x 1920 | If supporting tablets |')
+    sections.append('| 10" Tablet screenshot | 1600 x 2560 | If supporting tablets |')
+    sections.append("| Feature graphic | 1024 x 500 | Yes |")
+    sections.append("")
+    sections.append("### Steam")
+    sections.append("")
+    sections.append("| Type | Size | Required |")
+    sections.append("|------|------|----------|")
+    sections.append("| Screenshot | 1920 x 1080 (minimum) | Yes (5+ recommended) |")
+    sections.append("| Header capsule | 460 x 215 | Yes |")
+    sections.append("| Small capsule | 231 x 87 | Yes |")
+    sections.append("| Large capsule | 467 x 181 | Yes |")
+    sections.append("| Hero graphic | 3840 x 1240 | Recommended |")
+    sections.append("| Library capsule | 600 x 900 | Yes |")
+    sections.append("")
+    sections.append("**Format:** PNG or JPG, no alpha channel, no letterboxing.")
+    sections.append("Capture at the highest resolution possible and downscale as needed.")
+    sections.append("")
+
+    return "\n".join(sections)
