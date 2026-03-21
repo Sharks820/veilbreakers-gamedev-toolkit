@@ -235,7 +235,7 @@ def generate_multi_platform_build_script(
         lines.append("        {")
         lines.append(f'            Debug.Log("[VeilBreakers] Building {safe_name}...");')
         lines.append(f"            EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.{safe_group}, BuildTarget.{safe_target});")
-        lines.append(f"            PlayerSettings.SetScriptingBackend(NamedBuildTarget.FromBuildTargetGroup(BuildTargetGroup.{safe_group}), ScriptingBackend.{safe_backend});")
+        lines.append(f"            PlayerSettings.SetScriptingBackend(NamedBuildTarget.FromBuildTargetGroup(BuildTargetGroup.{safe_group}), ScriptingImplementation.{safe_backend});")
         lines.append("")
         lines.append("            var options = new BuildPlayerOptions")
         lines.append("            {")
@@ -682,6 +682,7 @@ def generate_shader_stripping_script(
 
     lines: list[str] = [
         "using UnityEditor.Build;",
+        "using UnityEditor.Build.Reporting;",
         "using UnityEditor.Rendering;",
         "using UnityEngine;",
         "using UnityEngine.Rendering;",
@@ -767,6 +768,49 @@ _DEFAULT_CI_PLATFORMS: list[str] = [
     "WebGL",
 ]
 
+_ALLOWED_CI_PLATFORMS: set[str] = {
+    "StandaloneWindows64",
+    "StandaloneWindows",
+    "StandaloneOSX",
+    "StandaloneLinux64",
+    "Android",
+    "iOS",
+    "WebGL",
+    "tvOS",
+    "PS4",
+    "PS5",
+    "XboxOne",
+    "GameCoreXboxOne",
+    "GameCoreXboxSeries",
+    "Switch",
+    "Stadia",
+    "LinuxHeadlessSimulation",
+    "EmbeddedLinux",
+    "QNX",
+    "VisionOS",
+}
+
+
+def _validate_ci_platforms(platforms: list[str]) -> list[str]:
+    """Validate and return sanitised CI platform strings.
+
+    Raises ``ValueError`` for any platform not in the known allowlist.
+    All returned values are plain alphanumeric identifiers safe for YAML
+    embedding.
+    """
+    validated: list[str] = []
+    for plat in platforms:
+        if not isinstance(plat, str):
+            raise ValueError(f"CI platform must be a string, got {type(plat).__name__}")
+        stripped = plat.strip()
+        if stripped not in _ALLOWED_CI_PLATFORMS:
+            raise ValueError(
+                f"Unknown CI platform: '{stripped}'. "
+                f"Allowed: {sorted(_ALLOWED_CI_PLATFORMS)}"
+            )
+        validated.append(stripped)
+    return validated
+
 
 def generate_github_actions_workflow(
     unity_version: str = "6000.0.0f1",
@@ -791,7 +835,7 @@ def generate_github_actions_workflow(
     Returns:
         Complete YAML string for the GitHub Actions workflow.
     """
-    plats = platforms or list(_DEFAULT_CI_PLATFORMS)
+    plats = _validate_ci_platforms(platforms or list(_DEFAULT_CI_PLATFORMS))
 
     lines: list[str] = []
     lines.append("name: Unity Build Pipeline")
@@ -852,7 +896,7 @@ def generate_github_actions_workflow(
     lines.append("      matrix:")
     lines.append("        targetPlatform:")
     for plat in plats:
-        lines.append(f"          - {plat}")
+        lines.append(f'          - "{plat}"')
     lines.append("    steps:")
     lines.append("      - uses: actions/checkout@v4")
     lines.append("        with:")
@@ -904,7 +948,7 @@ def generate_gitlab_ci_config(
     Returns:
         Complete YAML string for the GitLab CI configuration.
     """
-    plats = platforms or list(_DEFAULT_CI_PLATFORMS)
+    plats = _validate_ci_platforms(platforms or list(_DEFAULT_CI_PLATFORMS))
 
     # Map Unity target platform names to lowercase image suffixes
     _PLATFORM_IMAGE_MAP: dict[str, str] = {
@@ -971,11 +1015,11 @@ def generate_gitlab_ci_config(
         lines.append("  <<: *unity_before_script")
         lines.append("  script:")
         lines.append("    - unity-editor -quit -batchmode -nographics -logFile /dev/stdout")
-        lines.append(f"      -projectPath . -buildTarget {plat}")
-        lines.append(f"      -customBuildPath \"./build/{plat}\"")
+        lines.append(f'      -projectPath . -buildTarget "{plat}"')
+        lines.append(f'      -customBuildPath "./build/{plat}"')
         lines.append("  artifacts:")
         lines.append("    paths:")
-        lines.append(f"      - ./build/{plat}")
+        lines.append(f'      - "./build/{plat}"')
         lines.append("  needs:")
         lines.append("    - test")
         lines.append("")
@@ -1192,7 +1236,7 @@ def generate_changelog(
         "",
         '            string json = "{\\"status\\": \\"success\\", \\"action\\": \\"generate_changelog\\", "',
         '                + "\\"commit_count\\": " + commitCount + ", "',
-        f'                + "\\"version\\": \\"{safe_version}\\"' + '+ "}";',
+        f'                + "\\"version\\": \\"{safe_version}\\"' + ' + "}";',
         '            File.WriteAllText("Temp/vb_result.json", json);',
         "        }",
         "        catch (Exception ex)",

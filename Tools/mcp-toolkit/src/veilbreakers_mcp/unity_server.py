@@ -9164,6 +9164,21 @@ async def unity_build(
             }, indent=2)
 
         elif action == "generate_ci_pipeline":
+            # Validate ci_platforms against the allowlist before passing
+            # to generators -- prevents YAML injection via crafted names.
+            if ci_platforms is not None:
+                from veilbreakers_mcp.shared.unity_templates.build_templates import (
+                    _validate_ci_platforms,
+                )
+                try:
+                    ci_platforms = _validate_ci_platforms(ci_platforms)
+                except ValueError as exc:
+                    return json.dumps({
+                        "status": "error",
+                        "action": "generate_ci_pipeline",
+                        "message": str(exc),
+                    })
+
             if ci_provider == "github":
                 content = generate_github_actions_workflow(
                     unity_version=unity_version,

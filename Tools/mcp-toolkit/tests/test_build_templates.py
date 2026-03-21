@@ -85,10 +85,10 @@ class TestMultiPlatformBuild:
         assert "BuildTarget.WebGL" in build_cs
 
     def test_il2cpp_backend_set(self, build_cs: str):
-        assert "ScriptingBackend.IL2CPP" in build_cs
+        assert "ScriptingImplementation.IL2CPP" in build_cs
 
     def test_webgl_mono_backend(self, build_cs: str):
-        assert "ScriptingBackend.Mono2x" in build_cs
+        assert "ScriptingImplementation.Mono2x" in build_cs
 
     def test_build_report_check(self, build_cs: str):
         assert "BuildResult.Succeeded" in build_cs
@@ -477,6 +477,7 @@ class TestShaderStripping:
 
     def test_has_using_statements(self, shader_cs: str):
         assert "using UnityEditor.Build;" in shader_cs
+        assert "using UnityEditor.Build.Reporting;" in shader_cs
         assert "using UnityEditor.Rendering;" in shader_cs
         assert "using UnityEngine.Rendering;" in shader_cs
 
