@@ -1393,7 +1393,7 @@ public class VB_TooltipSystem : MonoBehaviour
             _tooltipContainer.style.display = DisplayStyle.None;
             _tooltipContainer.style.opacity = 0f;
         }}
-        HideComparison();
+{"        HideComparison();" if show_comparison else ""}
 {lore_hide_call}
     }}
 
@@ -1925,14 +1925,31 @@ def generate_notification_system_script(
 
     enum_values = ", ".join([t.title().replace("_", "") for t in toast_types])
 
-    # Position-based anchor styling
+    # Position-based anchor styling (C# UI Toolkit property assignments)
     position_styles = {
-        "top_right": ("right: 20", "top: 20", "flex-direction: column"),
-        "top_left": ("left: 20", "top: 20", "flex-direction: column"),
-        "bottom_right": ("right: 20", "bottom: 20", "flex-direction: column-reverse"),
-        "bottom_center": ("left: 50%", "bottom: 20", "flex-direction: column-reverse"),
+        "top_right": [
+            "_toastContainer.style.right = 20;",
+            "_toastContainer.style.top = 20;",
+            "_toastContainer.style.flexDirection = FlexDirection.Column;",
+        ],
+        "top_left": [
+            "_toastContainer.style.left = 20;",
+            "_toastContainer.style.top = 20;",
+            "_toastContainer.style.flexDirection = FlexDirection.Column;",
+        ],
+        "bottom_right": [
+            "_toastContainer.style.right = 20;",
+            "_toastContainer.style.bottom = 20;",
+            "_toastContainer.style.flexDirection = FlexDirection.ColumnReverse;",
+        ],
+        "bottom_center": [
+            "_toastContainer.style.left = new Length(50, LengthUnit.Percent);",
+            "_toastContainer.style.translate = new Translate(new Length(-50, LengthUnit.Percent), 0);",
+            "_toastContainer.style.bottom = 20;",
+            "_toastContainer.style.flexDirection = FlexDirection.ColumnReverse;",
+        ],
     }
-    pos_x, pos_y, flex_dir = position_styles[position]
+    pos_code = "\n        ".join(position_styles[position])
 
     # Type-specific colors
     type_color_cases = []
@@ -2013,9 +2030,7 @@ public class VB_NotificationSystem : MonoBehaviour
         _toastContainer = new VisualElement();
         _toastContainer.AddToClassList("vb-notification-container");
         _toastContainer.style.position = Position.Absolute;
-        _toastContainer.style.{pos_x};
-        _toastContainer.style.{pos_y};
-        _toastContainer.style.{flex_dir};
+        {pos_code}
         _toastContainer.style.width = 320;
 
         _root.Add(_toastContainer);
@@ -2456,7 +2471,7 @@ public class VB_LoadingScreen : MonoBehaviour
         _artElement.style.right = 0;
         _artElement.style.bottom = 0;
         _artElement.style.opacity = 0.3f;
-        _artElement.style.unityBackgroundScaleMode = ScaleMode.ScaleAndCrop;
+        _artElement.style.backgroundSize = new BackgroundSize(BackgroundSizeType.Cover);
         _loadingContainer.Add(_artElement);
 
         // Dark gradient overlay
@@ -2653,7 +2668,7 @@ def generate_ui_material_shaders(
 
     if "gold_leaf" in effects:
         properties_lines.extend([
-            '        [Header(Gold Leaf Shine)]',
+            '        [Header("Gold Leaf Shine")]',
             '        _GoldLeafEnabled ("Gold Leaf Enabled", Float) = 1',
             '        _GoldLeafSpeed ("Sweep Speed", Range(0.1, 5)) = 1.5',
             '        _GoldLeafWidth ("Sweep Width", Range(0.01, 0.3)) = 0.1',
@@ -2663,7 +2678,7 @@ def generate_ui_material_shaders(
 
     if "blood_stain" in effects:
         properties_lines.extend([
-            '        [Header(Blood Stain)]',
+            '        [Header("Blood Stain")]',
             '        _BloodEnabled ("Blood Enabled", Float) = 0',
             '        _BloodAmount ("Blood Amount", Range(0, 1)) = 0',
             '        _BloodColor ("Blood Color", Color) = (0.5, 0, 0, 1)',
@@ -2673,7 +2688,7 @@ def generate_ui_material_shaders(
 
     if "rune_glow" in effects:
         properties_lines.extend([
-            '        [Header(Rune Glow)]',
+            '        [Header("Rune Glow")]',
             '        _RuneGlowEnabled ("Rune Glow Enabled", Float) = 0',
             '        _RuneGlowColor ("Glow Color", Color) = (0.79, 0.66, 0.3, 1)',
             '        _RuneGlowSpeed ("Pulse Speed", Range(0.1, 5)) = 2.0',
@@ -2683,7 +2698,7 @@ def generate_ui_material_shaders(
 
     if "corruption_ripple" in effects:
         properties_lines.extend([
-            '        [Header(Corruption Ripple)]',
+            '        [Header("Corruption Ripple")]',
             '        _CorruptionEnabled ("Corruption Enabled", Float) = 0',
             '        _CorruptionAmount ("Corruption Amount", Range(0, 1)) = 0',
             '        _CorruptionSpeed ("Ripple Speed", Range(0.1, 5)) = 1.0',
@@ -2735,7 +2750,15 @@ def generate_ui_material_shaders(
             "            float4 _CorruptionColor;",
         ])
 
-    hlsl_vars_str = "\n".join(hlsl_vars)
+    # Wrap in CBUFFER for SRP Batcher compatibility
+    cbuffer_vars = [v for v in hlsl_vars if "sampler2D" not in v]
+    texture_vars = [v for v in hlsl_vars if "sampler2D" in v]
+    hlsl_parts = []
+    hlsl_parts.extend(texture_vars)
+    hlsl_parts.append("            CBUFFER_START(UnityPerMaterial)")
+    hlsl_parts.extend(cbuffer_vars)
+    hlsl_parts.append("            CBUFFER_END")
+    hlsl_vars_str = "\n".join(hlsl_parts)
 
     # Build fragment shader effect blocks
     frag_effects = []
