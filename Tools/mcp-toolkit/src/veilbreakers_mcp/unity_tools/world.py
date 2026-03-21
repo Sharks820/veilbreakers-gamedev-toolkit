@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.world_templates import (
@@ -140,102 +140,9 @@ async def unity_world(
     depression_depth: float = 0.1,
     vertex_color_falloff: float = 1.5,
     # common
-    namespace: str = "",
+    namespace: str = ""
 ) -> str:
-    """Scene and world systems -- scene creation, transitions, probes, occlusion,
-    environment, terrain detail, tilemaps, 2D physics, time-of-day, fast travel,
-    puzzles, traps, spatial loot, weather, day/night cycle, NPC placement,
-    dungeon lighting, terrain-building blending.
-
-    Scene Management actions (world_templates.py):
-    - create_scene: Create new scene with default objects (SCNE-01)
-    - create_transition_system: Scene transition manager with fade/loading (SCNE-02)
-    - setup_probes: Reflection + light probe grid setup (SCNE-03)
-    - setup_occlusion: Occlusion culling configuration (SCNE-04)
-    - setup_environment: Skybox, ambient, GI configuration (SCNE-05)
-    - paint_terrain_detail: Terrain detail prototype painting (SCNE-06)
-
-    2D actions:
-    - create_tilemap: Tilemap grid with rule tiles (TWO-01)
-    - setup_2d_physics: 2D physics, colliders, joints (TWO-02)
-
-    World actions:
-    - apply_time_of_day: Apply time-of-day lighting preset (WORLD-08)
-
-    RPG World System actions:
-    - create_fast_travel: Waypoint-based fast travel system (RPG-02)
-    - create_puzzle: Environmental puzzle mechanics (RPG-04)
-    - create_trap: Dungeon trap system (RPG-06)
-    - create_spatial_loot: Room-based loot placement (RPG-07)
-    - create_weather: Weather state machine with particle transitions (RPG-09)
-    - create_day_night: Day/night cycle with lighting presets (RPG-10)
-    - create_npc_placement: NPC role placement via ScriptableObject (RPG-11)
-    - create_dungeon_lighting: Torch sconce + fog dungeon lighting (RPG-12)
-    - create_terrain_blend: Terrain-building blending system (RPG-13)
-
-    Args:
-        action: The world system action to perform.
-        name: Name for the generated system (used in file paths).
-        scene_name: Name of the scene to create.
-        scene_setup: Scene setup type (DefaultGameObjects/EmptyScene).
-        loading_mode: Scene loading mode (single/additive).
-        build_index: Build index for scene (-1 = auto).
-        fade_duration: Transition fade duration in seconds.
-        show_loading_screen: Show loading screen during transition.
-        reflection_probe_count: Number of reflection probes.
-        reflection_resolution: Reflection probe resolution.
-        probe_box_size: Reflection probe box size [x, y, z].
-        light_probe_grid_spacing: Light probe grid spacing.
-        light_probe_grid_size: Light probe grid dimensions [x, y, z].
-        smallest_occluder: Occlusion smallest occluder size.
-        smallest_hole: Occlusion smallest hole size.
-        backface_threshold: Occlusion backface threshold.
-        skybox_shader: Skybox shader path.
-        ambient_mode: Ambient lighting mode.
-        default_reflection_mode: Default reflection mode.
-        enable_gi: Enable global illumination.
-        detail_prototypes: Terrain detail prototype definitions.
-        paint_density: Terrain detail paint density.
-        grid_cell_size: Tilemap grid cell size [x, y].
-        tile_entries: Tile definitions for tilemap.
-        rule_tile_name: Name for rule tile asset.
-        rule_tile_rules: Rule tile rule definitions.
-        gravity: 2D gravity vector [x, y].
-        collider_type: 2D collider type (box/circle/polygon/edge).
-        body_type: 2D rigidbody type (Dynamic/Kinematic/Static).
-        joint_type: 2D joint type (hinge/spring/distance/fixed).
-        joint_params: 2D joint parameters.
-        preset_name: Time-of-day preset name.
-        custom_overrides: Custom time-of-day overrides.
-        apply_fog: Whether to apply fog settings.
-        waypoint_prefab_path: Path to waypoint prefab.
-        teleport_fade_duration: Teleport fade duration.
-        save_key: PlayerPrefs key for discovered waypoints.
-        puzzle_types: Puzzle type names to generate.
-        trap_types: Trap type names to generate.
-        base_damage: Base trap damage.
-        cooldown: Trap cooldown in seconds.
-        chest_prefab_path: Path to chest prefab.
-        loot_table_so_path: Path to loot table ScriptableObjects.
-        room_loot_density: Room loot placement density.
-        weather_states: Weather state names.
-        transition_duration: Weather transition duration.
-        default_state: Default weather state name.
-        day_duration_minutes: Full day cycle duration in minutes.
-        start_hour: Starting hour of day (0-24).
-        time_presets: Time preset names for day/night cycle.
-        npc_roles: NPC role names for placement.
-        torch_spacing: Spacing between dungeon torches.
-        torch_light_range: Torch light range.
-        torch_color: Torch light color [r, g, b].
-        fog_density: Dungeon fog density.
-        fog_color: Dungeon fog color [r, g, b].
-        blend_radius: Terrain-building blend radius.
-        decal_material_path: Path to blend decal material.
-        depression_depth: Terrain depression depth at building edge.
-        vertex_color_falloff: Vertex color blend falloff.
-        namespace: C# namespace override (empty = generator default).
-    """
+    """Scene and world systems -- scene creation, transitions, probes, occlusion, environment, terrain detail, tilemaps, 2D physics, time-of-day, fast travel, puzzles, traps, spatial loot, weather, day/night cycle, NPC placement, dungeon lighting, terrain-building blending."""
     try:
         ns_kwargs: dict = {}
         if namespace:
@@ -351,10 +258,7 @@ async def _handle_world_create_scene(
         "status": "success",
         "action": "create_scene",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the scene creator",
-            f"Execute menu item: VeilBreakers > World > Create {scene_name}",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -377,10 +281,7 @@ async def _handle_world_transition(
         "status": "success",
         "action": "create_transition_system",
         "paths": [editor_path, runtime_path],
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the transition system",
-            "Execute menu item: VeilBreakers > World > Setup Transitions",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -404,10 +305,7 @@ async def _handle_world_probes(
         "status": "success",
         "action": "setup_probes",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the probe setup",
-            "Execute menu item: VeilBreakers > World > Setup Probes",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -428,10 +326,7 @@ async def _handle_world_occlusion(
         "status": "success",
         "action": "setup_occlusion",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile occlusion setup",
-            "Execute menu item: VeilBreakers > World > Setup Occlusion",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -453,10 +348,7 @@ async def _handle_world_environment(
         "status": "success",
         "action": "setup_environment",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the environment setup",
-            "Execute menu item: VeilBreakers > World > Setup Environment",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -476,10 +368,7 @@ async def _handle_world_terrain_detail(
         "status": "success",
         "action": "paint_terrain_detail",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the terrain detail painter",
-            "Execute menu item: VeilBreakers > World > Paint Terrain Detail",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -501,10 +390,7 @@ async def _handle_world_tilemap(
         "status": "success",
         "action": "create_tilemap",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the tilemap setup",
-            "Execute menu item: VeilBreakers > World > Create Tilemap",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -528,10 +414,7 @@ async def _handle_world_2d_physics(
         "status": "success",
         "action": "setup_2d_physics",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile 2D physics setup",
-            "Execute menu item: VeilBreakers > World > Setup 2D Physics",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -552,10 +435,7 @@ async def _handle_world_time_of_day(
         "status": "success",
         "action": "apply_time_of_day",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile time-of-day setup",
-            f"Execute menu item: VeilBreakers > World > Apply {preset_name}",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -580,10 +460,7 @@ async def _handle_world_fast_travel(
         "status": "success",
         "action": "create_fast_travel",
         "paths": [editor_path, runtime_path],
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the fast travel system",
-            "Place waypoint triggers in the scene and assign discovery events",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -605,10 +482,7 @@ async def _handle_world_puzzle(
         "status": "success",
         "action": "create_puzzle",
         "paths": [editor_path, runtime_path],
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the puzzle system",
-            "Place puzzle objects in dungeon rooms and configure trigger sequences",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -633,10 +507,7 @@ async def _handle_world_trap(
         "status": "success",
         "action": "create_trap",
         "paths": [editor_path, runtime_path],
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the trap system",
-            "Place trap prefabs in dungeon corridors",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -661,10 +532,7 @@ async def _handle_world_spatial_loot(
         "status": "success",
         "action": "create_spatial_loot",
         "paths": [editor_path, runtime_path],
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the loot system",
-            "Create LootTable ScriptableObjects for room-specific drops",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -689,10 +557,7 @@ async def _handle_world_weather(
         "status": "success",
         "action": "create_weather",
         "paths": [editor_path, runtime_path],
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the weather system",
-            "Assign ParticleSystem prefabs for rain/snow/fog states",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -717,10 +582,7 @@ async def _handle_world_day_night(
         "status": "success",
         "action": "create_day_night",
         "paths": [editor_path, runtime_path],
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the day/night cycle",
-            "Assign directional light for sun rotation",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -746,10 +608,7 @@ async def _handle_world_npc_placement(
         "status": "success",
         "action": "create_npc_placement",
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the NPC placement system",
-            "Create NPCPlacementData ScriptableObject assets for NPC positions and roles",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -777,10 +636,7 @@ async def _handle_world_dungeon_lighting(
         "status": "success",
         "action": "create_dungeon_lighting",
         "paths": [editor_path, runtime_path],
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile dungeon lighting",
-            "Place torch sconce prefabs or run auto-placement from editor menu",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -806,8 +662,5 @@ async def _handle_world_terrain_blend(
         "status": "success",
         "action": "create_terrain_blend",
         "paths": [editor_path, runtime_path],
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile terrain blending",
-            "Select buildings and run blend from VeilBreakers > World > Blend Terrain",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)

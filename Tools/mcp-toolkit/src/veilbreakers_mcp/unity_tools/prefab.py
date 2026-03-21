@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.prefab_templates import (
@@ -113,34 +113,9 @@ async def unity_prefab(
     cloth_damping: float | None = None,
     wind_main: float = 1.0,
     wind_turbulence: float = 0.5,
-    collision_spheres: list[dict] | None = None,
+    collision_spheres: list[dict] | None = None
 ) -> str:
-    """Unity Prefab, Component, and Hierarchy automation.
-
-    This compound tool generates C# editor scripts for prefab creation,
-    component configuration, hierarchy manipulation, physics joints,
-    NavMesh setup, bone sockets, cloth simulation, and batch operations.
-
-    Actions:
-    - create: Create prefab from auto-wire profile (EDIT-01)
-    - create_variant: Create prefab variant from base (EDIT-01)
-    - modify: Modify existing prefab properties (EDIT-01)
-    - delete: Delete prefab asset (EDIT-01)
-    - create_scaffold: Create ghost scaffold placeholder
-    - add_component: Add component to GameObject (EDIT-02)
-    - remove_component: Remove component from GameObject (EDIT-02)
-    - configure: Configure component properties via SerializedObject (EDIT-02)
-    - reflect_component: Introspect component fields (EDIT-02)
-    - hierarchy: Hierarchy operations (create_empty/rename/reparent/etc.) (EDIT-03)
-    - batch_configure: Configure same component on multiple objects
-    - batch_job: Multiple different operations in one compile cycle
-    - generate_variants: Generate corruption x brand variant matrix
-    - setup_joints: Configure physics joints (PHYS-01)
-    - setup_navmesh: NavMesh configuration (PHYS-02)
-    - setup_bone_sockets: Bone socket attachment points (EQUIP-02)
-    - validate_project: Check project integrity
-    - cloth_setup: Configure Unity Cloth component with presets (CHAR-07)
-    """
+    """Unity Prefab, Component, and Hierarchy automation."""
     # Resolve selector: prefer explicit selector dict/str, fall back to object_name
     resolved_selector = selector if selector is not None else (object_name if object_name else None)
 
@@ -213,10 +188,7 @@ async def _handle_prefab_create(
         return json.dumps({"status": "error", "action": "create", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "create", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Create Prefab from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -234,10 +206,7 @@ async def _handle_prefab_create_variant(
         return json.dumps({"status": "error", "action": "create_variant", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "create_variant", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Create Variant from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -255,10 +224,7 @@ async def _handle_prefab_modify(
         return json.dumps({"status": "error", "action": "modify", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "modify", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Modify Prefab from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -274,10 +240,7 @@ async def _handle_prefab_delete(prefab_path: str) -> str:
         return json.dumps({"status": "error", "action": "delete", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "delete", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Delete Prefab from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -293,10 +256,7 @@ async def _handle_prefab_scaffold(name: str, prefab_type: str) -> str:
         return json.dumps({"status": "error", "action": "create_scaffold", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "create_scaffold", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Create Scaffold from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -314,10 +274,7 @@ async def _handle_prefab_add_component(
         return json.dumps({"status": "error", "action": "add_component", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "add_component", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Add Component from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -335,10 +292,7 @@ async def _handle_prefab_remove_component(
         return json.dumps({"status": "error", "action": "remove_component", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "remove_component", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Remove Component from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -358,10 +312,7 @@ async def _handle_prefab_configure(
         return json.dumps({"status": "error", "action": "configure", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "configure", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Configure Component from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -379,10 +330,7 @@ async def _handle_prefab_reflect(
         return json.dumps({"status": "error", "action": "reflect_component", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "reflect_component", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Reflect Component from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -421,10 +369,7 @@ async def _handle_prefab_hierarchy(
         return json.dumps({"status": "error", "action": "hierarchy", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "hierarchy", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Hierarchy from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -444,10 +389,7 @@ async def _handle_prefab_batch_configure(
         return json.dumps({"status": "error", "action": "batch_configure", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "batch_configure", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Batch Configure from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -463,10 +405,7 @@ async def _handle_prefab_batch_job(operations: list[dict] | None) -> str:
         return json.dumps({"status": "error", "action": "batch_job", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "batch_job", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Execute Job Script from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -490,10 +429,7 @@ async def _handle_prefab_generate_variants(
         return json.dumps({"status": "error", "action": "generate_variants", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "generate_variants", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Generate Variant Matrix from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -511,10 +447,7 @@ async def _handle_prefab_setup_joints(
         return json.dumps({"status": "error", "action": "setup_joints", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "setup_joints", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Setup Joint from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -532,10 +465,7 @@ async def _handle_prefab_setup_navmesh(
         return json.dumps({"status": "error", "action": "setup_navmesh", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "setup_navmesh", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > NavMesh Setup from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -553,10 +483,7 @@ async def _handle_prefab_setup_bone_sockets(
         return json.dumps({"status": "error", "action": "setup_bone_sockets", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "setup_bone_sockets", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Setup Bone Sockets from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -570,10 +497,7 @@ async def _handle_prefab_validate_project() -> str:
         return json.dumps({"status": "error", "action": "validate_project", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "validate_project", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Prefab > Validate Project Integrity from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -605,9 +529,6 @@ async def _handle_prefab_cloth_setup(
         "script_path": abs_path,
         "cloth_type": cloth_type,
         "mesh_name": mesh_name,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the cloth setup script",
-            f"Execute menu item: VeilBreakers > Character > Setup Cloth on {mesh_name}",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)

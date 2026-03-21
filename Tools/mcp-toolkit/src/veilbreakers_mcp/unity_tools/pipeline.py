@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.pipeline_templates import (
@@ -72,53 +72,9 @@ async def unity_pipeline(
     extra_extensions: list[str] | None = None,
     include_unity_yaml_merge: bool = True,
     extra_patterns: list[str] | None = None,
-    output_path: str = "",
+    output_path: str = ""
 ) -> str:
-    """Asset pipeline automation -- sprite atlasing, sprite animation, Sprite
-    Editor configuration, AssetPostprocessor, and Git LFS setup.
-
-    This compound tool generates C# editor scripts and configuration files
-    for Unity asset pipeline automation.
-
-    Actions:
-    - create_sprite_atlas: Create SpriteAtlas with folder sources (BUILD-06)
-    - create_sprite_animation: Create sprite-based AnimationClip (BUILD-06)
-    - configure_sprite_editor: Configure Sprite Editor import settings (TWO-03)
-    - create_asset_postprocessor: Create AssetPostprocessor with folder rules (PIPE-08)
-    - configure_git_lfs: Generate .gitattributes and .gitignore for Unity project (IMP-03)
-
-    Args:
-        action: The pipeline action to perform.
-        atlas_name: SpriteAtlas name.
-        source_folder: Source folder for sprites.
-        padding: Atlas padding in pixels (default 4).
-        enable_tight_packing: Enable tight packing (default True).
-        enable_rotation: Allow sprite rotation in atlas (default False).
-        max_texture_size: Maximum atlas texture size (default 4096).
-        srgb: sRGB color space (default True).
-        filter_mode: Texture filter mode (default Bilinear).
-        include_in_build: Include atlas in build (default True).
-        clip_name: Animation clip name.
-        sprite_folder: Folder containing sprite frames.
-        frame_rate: Animation frame rate (default 12).
-        loop: Loop animation (default True).
-        sprite_path: Path to sprite asset for editor config.
-        pivot: Sprite pivot point [x, y] (default center).
-        border: Sprite border [left, bottom, right, top].
-        pixels_per_unit: Pixels per unit (default 100).
-        sprite_mode: Sprite mode (1=Single, 2=Multiple, 3=Polygon).
-        custom_physics_shape: Enable custom physics shape.
-        processor_name: AssetPostprocessor class name.
-        version: Postprocessor version number.
-        texture_rules: Texture import rules list.
-        model_rules: Model import rules list.
-        audio_rules: Audio import rules list.
-        namespace: C# namespace for postprocessor.
-        extra_extensions: Additional file extensions for Git LFS tracking.
-        include_unity_yaml_merge: Include Unity YAML merge driver config.
-        extra_patterns: Additional .gitignore patterns.
-        output_path: Output path for generated files.
-    """
+    """Asset pipeline automation -- sprite atlasing, sprite animation, Sprite Editor configuration, AssetPostprocessor, and Git LFS setup."""
     try:
         if action == "create_sprite_atlas":
             if not atlas_name:
@@ -145,10 +101,7 @@ async def unity_pipeline(
                 "action": action,
                 "script_path": abs_path,
                 "atlas_name": safe_name,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the atlas script",
-                    f"Execute menu item: VeilBreakers/Pipeline/Create {safe_name} Atlas",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "create_sprite_animation":
@@ -171,10 +124,7 @@ async def unity_pipeline(
                 "action": action,
                 "script_path": abs_path,
                 "clip_name": safe_clip,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the animation script",
-                    f"Execute menu item: VeilBreakers/Pipeline/Create {safe_clip} Animation",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "configure_sprite_editor":
@@ -200,10 +150,7 @@ async def unity_pipeline(
                 "action": action,
                 "script_path": abs_path,
                 "sprite_path": sprite_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the configuration script",
-                    "Execute menu item: VeilBreakers/Pipeline/Configure Sprite Editor",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "create_asset_postprocessor":
@@ -227,10 +174,7 @@ async def unity_pipeline(
                 "action": action,
                 "script_path": abs_path,
                 "processor_name": safe_name,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the postprocessor",
-                    "The postprocessor will run automatically on future asset imports",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "configure_git_lfs":

@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.settings_templates import (
@@ -91,28 +91,9 @@ async def unity_settings(
     render_pipeline_path: str = "",
     fog_mode: str = "",
     fog_color: list[float] | None = None,
-    fog_density: float = 0.0,
+    fog_density: float = 0.0
 ) -> str:
-    """Unity project settings automation -- configure Player, Build, Quality,
-    Physics, Time, Graphics settings, manage packages, and tags/layers.
-
-    This compound tool generates C# editor scripts for project-level settings,
-    writes them to the Unity project, and returns instructions for executing
-    them via the VB toolkit.
-
-    Actions:
-    - configure_physics: Set collision matrix and gravity (EDIT-04)
-    - create_physics_material: Create PhysicMaterial asset (EDIT-04)
-    - configure_player: Configure Player Settings (EDIT-05)
-    - configure_build: Configure Build Settings (EDIT-06)
-    - configure_quality: Configure Quality Settings tiers (EDIT-07)
-    - install_package: Install package from UPM/OpenUPM/git (EDIT-08)
-    - remove_package: Remove a package (EDIT-08)
-    - manage_tags_layers: Create tags, layers, sorting layers (EDIT-09)
-    - sync_tags_layers: Sync tags/layers from Constants.cs (EDIT-09)
-    - configure_time: Configure time settings (EDIT-11)
-    - configure_graphics: Configure graphics/render pipeline (EDIT-11)
-    """
+    """Unity project settings automation -- configure Player, Build, Quality, Physics, Time, Graphics settings, manage packages, and tags/layers."""
     try:
         if action == "configure_physics":
             return await _handle_settings_physics(collision_matrix, gravity)
@@ -191,10 +172,7 @@ async def _handle_settings_physics(
             "status": "success",
             "action": "configure_physics",
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Settings > Configure Physics from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -229,10 +207,7 @@ async def _handle_settings_physics_material(
             "action": "create_physics_material",
             "script_path": abs_path,
             "material_name": material_name,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Settings > Create Physics Material from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -274,10 +249,7 @@ async def _handle_settings_player(
             "status": "success",
             "action": "configure_player",
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Settings > Configure Player Settings from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -307,10 +279,7 @@ async def _handle_settings_build(
             "status": "success",
             "action": "configure_build",
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Settings > Configure Build Settings from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -333,10 +302,7 @@ async def _handle_settings_quality(quality_levels: list[dict]) -> str:
             "action": "configure_quality",
             "script_path": abs_path,
             "levels_count": len(quality_levels),
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Settings > Configure Quality Settings from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -372,10 +338,7 @@ async def _handle_settings_install_package(
             "script_path": abs_path,
             "package_id": package_id,
             "source": source,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Settings > Install Package from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -398,10 +361,7 @@ async def _handle_settings_remove_package(package_id: str) -> str:
             "action": "remove_package",
             "script_path": abs_path,
             "package_id": package_id,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Settings > Remove Package from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -429,10 +389,7 @@ async def _handle_settings_tags_layers(
             "status": "success",
             "action": "manage_tags_layers",
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Settings > Manage Tags & Layers from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -455,10 +412,7 @@ async def _handle_settings_sync_tags_layers(constants_cs_path: str) -> str:
             "action": "sync_tags_layers",
             "script_path": abs_path,
             "constants_path": constants_cs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Settings > Sync Tags & Layers from Code from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -486,10 +440,7 @@ async def _handle_settings_time(
             "status": "success",
             "action": "configure_time",
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Settings > Configure Time Settings from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -521,10 +472,7 @@ async def _handle_settings_graphics(
             "status": "success",
             "action": "configure_graphics",
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Settings > Configure Graphics Settings from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,

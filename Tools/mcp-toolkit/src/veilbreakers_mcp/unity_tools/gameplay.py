@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.gameplay_templates import (
@@ -93,62 +93,9 @@ async def unity_gameplay(
     # Boss AI params (VB-10)
     phase_count: int = 3,
     # Common namespace
-    namespace: str = "",
+    namespace: str = ""
 ) -> str:
-    """Unity Gameplay AI -- mob controllers, aggro, patrol, spawning, behavior trees, combat abilities, projectiles, encounters, AI director, boss AI.
-
-    This compound tool generates C# runtime scripts for Unity gameplay AI
-    systems: FSM mob controllers, aggro/threat detection, waypoint patrol,
-    wave-based spawning, behavior trees, combat abilities, projectiles,
-    encounter systems, AI director, encounter simulator, and boss AI.
-
-    Actions:
-    - create_mob_controller: FSM state machine with Patrol/Chase/Attack/Flee states (MOB-01)
-    - create_aggro_system: OverlapSphereNonAlloc threat detection with decay (MOB-02)
-    - create_patrol_route: NavMeshAgent waypoint patrol with dwell times (MOB-03)
-    - create_spawn_system: Wave-based spawning with max alive tracking (MOB-04)
-    - create_behavior_tree: ScriptableObject BT with Sequence/Selector/Leaf nodes (MOB-05)
-    - create_combat_ability: Ability ScriptableObject + executor with cooldown queue (MOB-06)
-    - create_projectile_system: Straight/arc/homing projectile with trail + impact VFX (MOB-07)
-    - create_encounter_system: SO wave definitions + encounter manager MonoBehaviour (AID-01)
-    - create_ai_director: AnimationCurve-driven dynamic difficulty adjustment (AID-02)
-    - simulate_encounters: Monte Carlo encounter simulator EditorWindow (AID-03)
-    - create_boss_ai: Multi-phase hierarchical FSM boss controller (VB-10)
-
-    Args:
-        action: The gameplay action to perform.
-        name: Name for the generated script/system.
-        detection_range: Detection sphere radius (MOB-01, MOB-02).
-        attack_range: Attack engagement range (MOB-01).
-        leash_distance: Max distance from spawn before returning (MOB-01, MOB-02).
-        patrol_speed: NavMeshAgent patrol speed (MOB-01).
-        chase_speed: NavMeshAgent chase speed (MOB-01).
-        flee_health_pct: Health % threshold to trigger flee (MOB-01).
-        decay_rate: Threat decay per tick (MOB-02).
-        max_threats: Pre-allocated collider buffer size (MOB-02).
-        waypoint_count: Default waypoint slot count (MOB-03).
-        dwell_time: Dwell time at each waypoint in seconds (MOB-03).
-        random_deviation: Random offset radius per waypoint (MOB-03).
-        max_count: Maximum alive spawned instances (MOB-04).
-        respawn_timer: Delay before respawn after death (MOB-04).
-        spawn_radius: Random spawn position radius (MOB-04).
-        wave_cooldown: Delay between spawn waves (MOB-04).
-        wave_count: Number of wave slots (MOB-04).
-        node_types: Custom leaf node class names to scaffold (MOB-05).
-        damage: Base damage value (MOB-06).
-        cooldown: Cooldown duration in seconds (MOB-06).
-        ability_range: Ability effective range (MOB-06).
-        vfx_prefab: VFX prefab name/path (MOB-06).
-        sound_name: Audio clip name (MOB-06).
-        hitbox_size: Hitbox collider size (MOB-06).
-        velocity: Projectile speed (MOB-07).
-        trajectory: Trajectory type: straight/arc/homing (MOB-07).
-        trail_width: Trail renderer width (MOB-07).
-        impact_vfx: Impact VFX prefab name/path (MOB-07).
-        lifetime: Projectile auto-destroy time in seconds (MOB-07).
-        phase_count: Number of boss phases 2-5 (VB-10).
-        namespace: C# namespace override (empty = generator default).
-    """
+    """Unity Gameplay AI -- mob controllers, aggro, patrol, spawning, behavior trees, combat abilities, projectiles, encounters, AI director, boss AI."""
     try:
         if action == "create_mob_controller":
             return await _handle_gameplay_mob_controller(
@@ -251,10 +198,7 @@ async def _handle_gameplay_mob_controller(
             "action": "create_mob_controller",
             "name": name,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                "Attach the generated MonoBehaviour to a GameObject in the scene",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -292,10 +236,7 @@ async def _handle_gameplay_aggro_system(
             "action": "create_aggro_system",
             "name": name,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                "Attach the generated MonoBehaviour to a GameObject in the scene",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -331,10 +272,7 @@ async def _handle_gameplay_patrol_route(
             "action": "create_patrol_route",
             "name": name,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                "Attach the generated MonoBehaviour to a GameObject in the scene",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -378,10 +316,7 @@ async def _handle_gameplay_spawn_system(
             "action": "create_spawn_system",
             "name": name,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                "Attach the generated MonoBehaviour to a GameObject in the scene",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -413,10 +348,7 @@ async def _handle_gameplay_behavior_tree(
             "action": "create_behavior_tree",
             "name": name,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                "Attach the generated BehaviorTreeRunner MonoBehaviour to a GameObject in the scene",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -462,10 +394,7 @@ async def _handle_gameplay_combat_ability(
             "action": "create_combat_ability",
             "name": name,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                "Attach the generated AbilityExecutor MonoBehaviour to a GameObject in the scene",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -509,10 +438,7 @@ async def _handle_gameplay_projectile_system(
             "action": "create_projectile_system",
             "name": name,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                "Attach the generated Projectile MonoBehaviour to a prefab",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -540,10 +466,7 @@ async def _handle_gameplay_encounter_system(name: str, ns_kwargs: dict) -> str:
         "action": "create_encounter_system",
         "name": name,
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the encounter system",
-            "Create WaveData ScriptableObject assets and assign to encounter manager",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -558,10 +481,7 @@ async def _handle_gameplay_ai_director(name: str, ns_kwargs: dict) -> str:
         "action": "create_ai_director",
         "name": name,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the AI director",
-            "Attach VB_AIDirector to a persistent game manager object",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -576,10 +496,7 @@ async def _handle_gameplay_encounter_simulator(name: str, ns_kwargs: dict) -> st
         "action": "simulate_encounters",
         "name": name,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the simulator",
-            "Open from VeilBreakers > Tools > Encounter Simulator",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -595,8 +512,5 @@ async def _handle_gameplay_boss_ai(name: str, phase_count: int, ns_kwargs: dict)
         "name": name,
         "phase_count": phase_count,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the boss AI",
-            "Attach VB_BossAI to the boss prefab root",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)

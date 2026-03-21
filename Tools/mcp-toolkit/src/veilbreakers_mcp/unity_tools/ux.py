@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.ux_templates import (
@@ -93,65 +93,9 @@ async def unity_ux(
     map_resolution: int = 512,
     fog_resolution: int = 256,
     # common
-    namespace: str = "",
+    namespace: str = ""
 ) -> str:
-    """Unity UX & HUD tools -- minimap, damage numbers, interaction prompts,
-    PrimeTween sequences, TextMeshPro setup, tutorial system, accessibility,
-    character select, world map, rarity VFX, corruption VFX.
-
-    UX HUD actions (ux_templates.py batch 1):
-    - create_minimap: Orthographic camera + RenderTexture minimap with markers (UIX-01)
-    - create_damage_numbers: Floating damage numbers with PrimeTween + ObjectPool (UIX-03)
-    - create_interaction_prompts: Context-sensitive prompts with Input System rebind (UIX-04)
-    - create_primetween_sequence: PrimeTween UI animation utility class (SHDR-04)
-    - create_tmp_font_asset: TMP font asset creation editor script (PIPE-10)
-    - setup_tmp_components: TMP component configuration editor script (PIPE-10)
-
-    UX System actions (ux_templates.py batch 2):
-    - create_tutorial_system: Step-based tutorial with tooltips + highlight rects (UIX-02)
-    - create_accessibility: Colorblind simulation, subtitles, screen reader, motor (ACC-01)
-    - create_character_select: Hero path carousel with PrimeTween animations (VB-09)
-    - create_world_map: Heightmap-to-texture world map with fog-of-war (RPG-08)
-    - create_rarity_vfx: 5-tier rarity particle + glow VFX controller (EQUIP-07)
-    - create_corruption_vfx: 0-100% progressive corruption visual controller (EQUIP-08)
-
-    Args:
-        action: The UX action to perform.
-        name: Name for the generated system (used in file paths).
-        render_texture_size: Minimap render texture size in pixels.
-        zoom: Minimap camera orthographic size.
-        follow_target: Minimap follow target GameObject name.
-        culling_layers: Minimap camera culling layer names.
-        compass_enabled: Whether minimap includes compass direction.
-        marker_types: Minimap marker type names.
-        update_interval: Minimap camera update frame interval.
-        pool_size: Damage number object pool size.
-        float_height: Damage number float height in screen pixels.
-        duration: Damage number animation duration in seconds.
-        crit_scale: Damage number critical hit scale multiplier.
-        prompt_text: Interaction prompt default text.
-        trigger_radius: Interaction prompt trigger radius.
-        fade_duration: Interaction prompt fade animation duration.
-        sequence_type: PrimeTween sequence type (panel_entrance/button_hover/notification_popup/screen_shake).
-        font_path: Font file path for TMP font asset creation.
-        font_output_path: Output directory for generated TMP font assets.
-        sampling_size: TMP font sampling point size.
-        atlas_width: TMP font atlas texture width.
-        atlas_height: TMP font atlas texture height.
-        character_set: Custom character set for TMP font (None = ASCII).
-        font_asset_path: Path to existing TMP font asset for component setup.
-        font_size: TMP component font size.
-        text_color: TMP component text color [r,g,b,a].
-        rich_text: TMP component rich text support.
-        auto_sizing: TMP component auto-sizing enabled.
-        min_font_size: TMP component minimum font size (auto-sizing).
-        max_font_size: TMP component maximum font size (auto-sizing).
-        steps: Tutorial step definitions (list of dicts with title/description).
-        hero_paths: Character select hero path names.
-        map_resolution: World map texture resolution.
-        fog_resolution: World map fog-of-war texture resolution.
-        namespace: C# namespace override (empty = generator default).
-    """
+    """Unity UX & HUD tools -- minimap, damage numbers, interaction prompts, PrimeTween sequences, TextMeshPro setup, tutorial system, accessibility, character select, world map, rarity VFX, corruption VFX."""
     try:
         ns_kwargs: dict = {}
         if namespace:
@@ -240,10 +184,7 @@ async def _handle_ux_minimap(
         "action": "create_minimap",
         "name": name,
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the minimap system",
-            "Run editor setup from VeilBreakers > UX > Create Minimap",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -268,10 +209,7 @@ async def _handle_ux_damage_numbers(
         "action": "create_damage_numbers",
         "name": name,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile damage numbers",
-            "Attach VB_DamageNumbers to a Canvas or HUD manager",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -295,10 +233,7 @@ async def _handle_ux_interaction_prompts(
         "action": "create_interaction_prompts",
         "name": name,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile interaction prompts",
-            "Attach to interactable objects with a trigger collider",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -319,10 +254,7 @@ async def _handle_ux_primetween_sequence(
         "action": "create_primetween_sequence",
         "sequence_type": sequence_type,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the animation utility",
-            "Call static methods from UI scripts for PrimeTween animations",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -347,10 +279,7 @@ async def _handle_ux_tmp_font_asset(
         "status": "success",
         "action": "create_tmp_font_asset",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the font creator",
-            "Execute menu item: VeilBreakers > UX > Create TMP Font Asset",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -380,10 +309,7 @@ async def _handle_ux_tmp_components(
         "action": "setup_tmp_components",
         "name": name,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile TMP setup",
-            "Execute menu item: VeilBreakers > UX > Setup TMP Components",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -413,10 +339,7 @@ async def _handle_ux_tutorial(
         "action": "create_tutorial_system",
         "name": name,
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the tutorial system",
-            "Create TutorialData ScriptableObject assets with step definitions",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -441,10 +364,7 @@ async def _handle_ux_accessibility(name: str, ns_kwargs: dict) -> str:
         "action": "create_accessibility",
         "name": name,
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile accessibility system",
-            "Add the ColorblindFeature to the URP Renderer in Project Settings",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -472,10 +392,7 @@ async def _handle_ux_character_select(
         "status": "success",
         "action": "create_character_select",
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile character select",
-            "Create HeroPathData ScriptableObject assets for each hero path",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -502,10 +419,7 @@ async def _handle_ux_world_map(
         "action": "create_world_map",
         "name": name,
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the world map system",
-            "Run editor tool: VeilBreakers > UX > Generate World Map Texture",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -520,10 +434,7 @@ async def _handle_ux_rarity_vfx(name: str, ns_kwargs: dict) -> str:
         "action": "create_rarity_vfx",
         "name": name,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile rarity VFX",
-            "Attach to item pickup or equipment display objects",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -538,10 +449,7 @@ async def _handle_ux_corruption_vfx(name: str, ns_kwargs: dict) -> str:
         "action": "create_corruption_vfx",
         "name": name,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile corruption VFX",
-            "Attach to player character or affected objects",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 

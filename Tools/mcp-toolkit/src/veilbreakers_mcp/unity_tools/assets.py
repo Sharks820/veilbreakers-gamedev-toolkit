@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.asset_templates import (
@@ -103,31 +103,9 @@ async def unity_assets(
     preset_path: str = "",
     target_path: str = "",
     # Atomic import params
-    texture_paths: list[str] | None = None,
+    texture_paths: list[str] | None = None
 ) -> str:
-    """Unity asset pipeline automation -- asset operations, import config,
-    material management, Assembly Definitions, presets, and atomic imports.
-
-    This compound tool generates C# editor scripts (or JSON for asmdef) for
-    asset pipeline operations, writes them to the Unity project, and returns
-    instructions for executing them via the VB toolkit.
-
-    Actions:
-    - move: Move asset preserving GUID (EDIT-10 + IMP-01)
-    - rename: Rename asset preserving GUID (EDIT-10 + IMP-01)
-    - delete: Delete asset with optional reference scan (EDIT-10)
-    - duplicate: Duplicate asset (EDIT-10)
-    - create_folder: Create folder structure (EDIT-10)
-    - configure_fbx: Configure FBX ModelImporter settings (EDIT-12)
-    - configure_texture: Configure TextureImporter settings (EDIT-13)
-    - remap_materials: Remap materials on FBX import (EDIT-14 + IMP-02)
-    - auto_materials: Auto-generate PBR materials from textures (EDIT-14 + IMP-02)
-    - create_asmdef: Create Assembly Definition file (EDIT-15)
-    - create_preset: Create Unity Preset from asset (PIPE-09)
-    - apply_preset: Apply Unity Preset to asset (PIPE-09)
-    - scan_references: Scan for assets referencing target (IMP-01)
-    - atomic_import: Combined atomic import sequence
-    """
+    """Unity asset pipeline automation -- asset operations, import config, material management, Assembly Definitions, presets, and atomic imports."""
     try:
         if action == "move":
             if not asset_path or not new_path:
@@ -247,10 +225,7 @@ async def _handle_assets_move(asset_path: str, new_path: str) -> str:
         return json.dumps({"status": "error", "action": "move", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "move", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Move Asset from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -265,10 +240,7 @@ async def _handle_assets_rename(asset_path: str, new_name: str) -> str:
         return json.dumps({"status": "error", "action": "rename", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "rename", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Rename Asset from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -284,10 +256,7 @@ async def _handle_assets_delete(asset_path: str, safe_delete: bool) -> str:
     return json.dumps({
         "status": "success", "action": "delete", "script_path": abs_path,
         "safe_delete": safe_delete,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Delete Asset from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -302,10 +271,7 @@ async def _handle_assets_duplicate(source_path: str, dest_path: str) -> str:
         return json.dumps({"status": "error", "action": "duplicate", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "duplicate", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Duplicate Asset from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -320,10 +286,7 @@ async def _handle_assets_create_folder(folder_path: str) -> str:
         return json.dumps({"status": "error", "action": "create_folder", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "create_folder", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Create Folder from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -349,10 +312,7 @@ async def _handle_assets_configure_fbx(
     return json.dumps({
         "status": "success", "action": "configure_fbx", "script_path": abs_path,
         "preset_type": preset_type if preset_type else "custom",
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Configure FBX Import from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -378,10 +338,7 @@ async def _handle_assets_configure_texture(
     return json.dumps({
         "status": "success", "action": "configure_texture", "script_path": abs_path,
         "preset_type": preset_type if preset_type else "custom",
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Configure Texture Import from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -396,10 +353,7 @@ async def _handle_assets_remap_materials(fbx_path: str, remappings: dict) -> str
         return json.dumps({"status": "error", "action": "remap_materials", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "remap_materials", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Remap Materials from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -418,10 +372,7 @@ async def _handle_assets_auto_materials(
         return json.dumps({"status": "error", "action": "auto_materials", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "auto_materials", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Auto Generate Materials from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -447,9 +398,7 @@ async def _handle_assets_create_asmdef(
     return json.dumps({
         "status": "success", "action": "create_asmdef",
         "asmdef_path": abs_path, "asmdef_name": asmdef_name,
-        "next_steps": [
-            "Run unity_editor action=recompile to trigger Unity to recognize the new assembly definition",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": None,
     }, indent=2)
 
@@ -468,10 +417,7 @@ async def _handle_assets_create_preset(
         return json.dumps({"status": "error", "action": "create_preset", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "create_preset", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Create Preset from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -486,10 +432,7 @@ async def _handle_assets_apply_preset(preset_path: str, target_path: str) -> str
         return json.dumps({"status": "error", "action": "apply_preset", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "apply_preset", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Apply Preset from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -504,10 +447,7 @@ async def _handle_assets_scan_references(asset_path: str) -> str:
         return json.dumps({"status": "error", "action": "scan_references", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "scan_references", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Scan References from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -528,9 +468,6 @@ async def _handle_assets_atomic_import(
         return json.dumps({"status": "error", "action": "atomic_import", "message": str(exc)})
     return json.dumps({
         "status": "success", "action": "atomic_import", "script_path": abs_path,
-        "next_steps": [
-            "Run unity_editor action=recompile to compile the new script",
-            'Open Unity Editor and run VeilBreakers > Assets > Atomic Import from the menu bar',
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)

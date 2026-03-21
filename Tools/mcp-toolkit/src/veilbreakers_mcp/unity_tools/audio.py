@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.audio_templates import (
@@ -112,57 +112,9 @@ async def unity_audio(
     vo_entries: list[dict] | None = None,
     # Procedural foley params (AUDM-08)
     armor_type: str = "plate",
-    surface_materials: list[str] | None = None,
+    surface_materials: list[str] | None = None
 ) -> str:
-    """Unity Audio system -- AI audio generation, C# audio infrastructure, and
-    middleware-level audio architecture.
-
-    This compound tool covers all audio functionality: AI-generated sound
-    effects, music loops, voice lines, and ambient soundscapes via ElevenLabs,
-    Unity audio infrastructure setup (mixer, pool manager, footstep system,
-    adaptive music, audio zones, animation event SFX), and advanced audio
-    middleware features (spatial audio, layered sound, event chains, dynamic
-    music, portal propagation, audio LOD, VO pipeline, procedural foley).
-
-    Actions:
-    - generate_sfx: Generate AI sound effect from text description (AUD-01)
-    - generate_music_loop: Generate loopable music track (AUD-02)
-    - generate_voice_line: Synthesise NPC/monster voice line (AUD-03)
-    - generate_ambient: Generate layered ambient soundscape (AUD-04)
-    - setup_footstep_system: Generate footstep manager C# scripts (AUD-05)
-    - setup_adaptive_music: Generate adaptive music manager C# script (AUD-06)
-    - setup_audio_zones: Generate audio reverb zone C# script (AUD-07)
-    - setup_audio_mixer: Generate audio mixer setup C# script (AUD-08)
-    - setup_audio_pool_manager: Generate audio pool manager C# script (AUD-09)
-    - assign_animation_sfx: Generate animation event SFX binding C# script (AUD-10)
-    - setup_spatial_audio: 3D spatial audio with occlusion/rolloff (AUDM-01)
-    - setup_layered_sound: Composite layered sound design (AUDM-02)
-    - setup_audio_event_chain: Sequenced audio event chains (AUDM-03)
-    - setup_dynamic_music: Horizontal re-sequencing + vertical layering + stingers (AUDM-04)
-    - setup_portal_audio: Room-based sound propagation via portals (AUDM-05)
-    - setup_audio_lod: Distance-based audio quality tiers (AUDM-06)
-    - setup_vo_pipeline: Dialogue/VO playback with subtitles and lip sync (AUDM-07)
-    - setup_procedural_foley: Movement-based procedural foley (AUDM-08)
-
-    Args:
-        action: The audio action to perform.
-        name: Name for the generated asset or script.
-        description: Text description for SFX generation.
-        duration_seconds: Duration for generated audio (seconds).
-        theme: Music theme for loop generation.
-        text: Dialogue text for voice line synthesis.
-        voice_id: ElevenLabs voice ID for voice synthesis.
-        biome: Biome type for ambient soundscape generation.
-        layers: Layer descriptions for ambient generation.
-        surfaces: Surface types for footstep system.
-        music_layers: Layer/state names for adaptive music.
-        zone_type: Environment type for audio zones.
-        pool_size: Initial pool size for audio pool manager.
-        max_sources: Maximum audio sources for pool manager.
-        groups: Mixer group names for audio mixer setup.
-        events: Animation event definitions for SFX binding.
-        anim_clip_path: Path to animation clip for event binding.
-    """
+    """Unity Audio system -- AI audio generation, C# audio infrastructure, and middleware-level audio architecture."""
     try:
         if action == "generate_sfx":
             return await _handle_audio_generate_sfx(name, description, duration_seconds)
@@ -294,10 +246,7 @@ async def _handle_audio_generate_sfx(
             "duration": result["duration"],
             "stub": result["stub"],
             "description": description,
-            "next_steps": [
-                "Audio file written. Import into Unity via AssetDatabase.Refresh.",
-                "Call unity_editor action='recompile' to pick up new assets.",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )
@@ -332,10 +281,7 @@ async def _handle_audio_generate_music_loop(
             "duration": result["duration"],
             "stub": result["stub"],
             "theme": theme,
-            "next_steps": [
-                "Music loop written. Import into Unity via AssetDatabase.Refresh.",
-                "Assign to AdaptiveMusicManager via inspector or script.",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )
@@ -369,10 +315,7 @@ async def _handle_audio_generate_voice_line(
             "stub": result["stub"],
             "text": text,
             "voice_id": voice_id,
-            "next_steps": [
-                "Voice line written. Import into Unity via AssetDatabase.Refresh.",
-                "Assign to dialogue system or NPC AudioSource.",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )
@@ -437,12 +380,7 @@ async def _handle_audio_setup_footstep(
             "action": "setup_footstep_system",
             "script_path": abs_path,
             "surfaces": effective_surfaces,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new scripts",
-                "Attach VeilBreakers_FootstepManager to the player character",
-                "Create a FootstepSoundBank via Assets > Create > VeilBreakers > Audio > Footstep Sound Bank",
-                f"Assign AudioClips for surfaces: {', '.join(effective_surfaces)}",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )
@@ -470,12 +408,7 @@ async def _handle_audio_setup_adaptive_music(
             "action": "setup_adaptive_music",
             "script_path": abs_path,
             "layers": effective_layers,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                "Add VeilBreakers_AdaptiveMusicManager to a persistent GameObject",
-                f"Assign AudioClips for states: {', '.join(effective_layers)}",
-                "Call SetGameState(GameState.Combat) etc. from game logic",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )
@@ -500,11 +433,7 @@ async def _handle_audio_setup_zones(name: str, zone_type: str) -> str:
             "action": "setup_audio_zones",
             "script_path": abs_path,
             "zone_type": zone_type,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                f'Open Unity Editor and run VeilBreakers > Audio > Create {zone_label} Reverb Zone from the menu bar',
-                "Position the reverb zone in the scene as needed",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )
@@ -530,12 +459,7 @@ async def _handle_audio_setup_mixer(groups: list[str] | None) -> str:
             "action": "setup_audio_mixer",
             "script_path": abs_path,
             "groups": effective_groups,
-            "next_steps": [
-                "First, create an AudioMixer at Assets/Audio/VeilBreakersMixer.mixer in Unity",
-                f"Add these groups to the mixer: {', '.join(effective_groups)}",
-                "Run unity_editor action=recompile to compile the setup script",
-                'Open Unity Editor and run VeilBreakers > Audio > Setup Audio Mixer from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )
@@ -564,12 +488,7 @@ async def _handle_audio_setup_pool_manager(
             "script_path": abs_path,
             "pool_size": pool_size,
             "max_sources": max_sources,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                "Add VeilBreakers_AudioPoolManager to a persistent GameObject",
-                f"Pool starts with {pool_size} AudioSources, grows up to {max_sources}",
-                "Call VeilBreakers_AudioPoolManager.Instance.Play(clip, position, priority)",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )
@@ -594,12 +513,7 @@ async def _handle_audio_assign_animation_sfx(
             "status": "success",
             "action": "assign_animation_sfx",
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                "Select an AnimationClip in the Unity Project window",
-                'Open Unity Editor and run VeilBreakers > Audio > Assign Animation SFX Events from the menu bar',
-                "The script will bind SFX function calls to the specified animation keyframes",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )

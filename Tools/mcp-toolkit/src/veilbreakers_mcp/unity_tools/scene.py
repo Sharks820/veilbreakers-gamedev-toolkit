@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.scene_templates import (
@@ -96,63 +96,9 @@ async def unity_scene(
     base_layer_index: int = 0,
     additive_clips: list[dict] | None = None,
     default_weight: float = 1.0,
-    avatar_mask_path: str = "",
+    avatar_mask_path: str = ""
 ) -> str:
-    """Unity Scene setup -- terrain, object scattering, lighting, NavMesh, animation.
-
-    This compound tool generates C# editor scripts for complete Unity scene
-    setup: terrain from heightmaps, density-based object scattering, atmospheric
-    lighting with post-processing, NavMesh baking for AI navigation, Animator
-    Controllers with blend trees, avatar configuration, Animation Rigging
-    constraints, advanced blend trees, and additive animation layers.
-
-    Actions:
-    - setup_terrain: Create terrain from RAW heightmap with splatmaps (SCENE-01)
-    - scatter_objects: Density-based object placement filtered by slope/altitude (SCENE-02)
-    - setup_lighting: Directional light, fog, post-processing Volume (SCENE-03)
-    - bake_navmesh: NavMesh with agent radius/height/slope settings (SCENE-04)
-    - create_animator: Animator Controller with states, transitions, blend trees (SCENE-05)
-    - configure_avatar: Set Humanoid/Generic animation type with bone mapping (SCENE-06)
-    - setup_animation_rigging: TwoBoneIK and MultiAim constraints (SCENE-07)
-    - create_blend_tree: Directional 8-way, speed, or combined blend trees (ANIM3-03)
-    - create_additive_layer: Additive animation layers for hit reactions, breathing (ANIM3-04)
-
-    Args:
-        action: The scene action to perform.
-        name: Name for the generated asset or script.
-        heightmap_path: Path to RAW heightmap file (SCENE-01).
-        terrain_size: Terrain [width, height, length] (SCENE-01).
-        terrain_resolution: Heightmap resolution e.g. 513, 1025 (SCENE-01).
-        splatmap_layers: List of {texture_path, tiling} dicts (SCENE-01).
-        prefab_paths: Prefab paths for scattering (SCENE-02).
-        density: Scatter density 0-1 (SCENE-02).
-        min_slope: Min terrain slope filter in degrees (SCENE-02).
-        max_slope: Max terrain slope filter in degrees (SCENE-02).
-        min_altitude: Min terrain height filter (SCENE-02).
-        max_altitude: Max terrain height filter (SCENE-02).
-        scatter_seed: Random seed for scatter (SCENE-02).
-        sun_color: RGB sun color [r, g, b] (SCENE-03).
-        sun_intensity: Sun light intensity (SCENE-03).
-        ambient_color: RGB ambient color [r, g, b] (SCENE-03).
-        fog_enabled: Enable fog (SCENE-03).
-        fog_color: RGB fog color [r, g, b] (SCENE-03).
-        fog_density: Fog density (SCENE-03).
-        skybox_material: Path to skybox material (SCENE-03).
-        time_of_day: Preset: dawn/noon/dusk/night/overcast (SCENE-03).
-        agent_radius: NavMesh agent radius (SCENE-04).
-        agent_height: NavMesh agent height (SCENE-04).
-        nav_max_slope: NavMesh max walkable slope (SCENE-04).
-        step_height: NavMesh max step height (SCENE-04).
-        nav_links: NavMesh links [{start, end, width}] (SCENE-04).
-        states: Animator states [{name, motion_path}] (SCENE-05).
-        transitions: Animator transitions [{from_state, to_state, conditions, has_exit_time}] (SCENE-05).
-        parameters: Animator parameters [{name, type}] (SCENE-05).
-        blend_trees: Blend trees [{name, blend_param, children}] (SCENE-05).
-        fbx_path: Path to FBX model (SCENE-06).
-        animation_type: "Humanoid" or "Generic" (SCENE-06).
-        bone_mapping: Unity-to-model bone name mapping (SCENE-06).
-        constraints: Rigging constraints [{type, target_path, ...}] (SCENE-07).
-    """
+    """Unity Scene setup -- terrain, object scattering, lighting, NavMesh, animation."""
     try:
         if action == "setup_terrain":
             return await _handle_scene_setup_terrain(
@@ -242,10 +188,7 @@ async def _handle_scene_setup_terrain(
             "heightmap_path": heightmap_path,
             "terrain_size": list(size_tuple),
             "resolution": terrain_resolution,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Scene > Setup Terrain from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -295,10 +238,7 @@ async def _handle_scene_scatter_objects(
             "prefab_paths": prefab_paths,
             "density": density,
             "seed": seed,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Scene > Scatter Objects from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -343,10 +283,7 @@ async def _handle_scene_setup_lighting(
             "time_of_day": time_of_day,
             "fog_enabled": fog_enabled,
             "sun_intensity": sun_intensity,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Scene > Setup Lighting from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -386,10 +323,7 @@ async def _handle_scene_bake_navmesh(
             "agent_height": agent_height,
             "max_slope": max_slope,
             "step_height": step_height,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Scene > Bake NavMesh from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -435,10 +369,7 @@ async def _handle_scene_create_animator(
             "name": name,
             "script_path": abs_path,
             "state_count": len(states),
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                f'Open Unity Editor and run VeilBreakers > Scene > Create Animator > {name} from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -479,10 +410,7 @@ async def _handle_scene_configure_avatar(
             "script_path": abs_path,
             "fbx_path": fbx_path,
             "animation_type": animation_type,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Scene > Configure Avatar from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -522,10 +450,7 @@ async def _handle_scene_setup_animation_rigging(
             "name": name,
             "script_path": abs_path,
             "constraint_count": len(constraints),
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                f'Open Unity Editor and run VeilBreakers > Scene > Setup Animation Rigging > {name} from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -556,10 +481,7 @@ async def _handle_scene_create_blend_tree(
         "blend_type": blend_type,
         "controller_name": controller_name,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the blend tree script",
-            f"Execute menu item: VeilBreakers > Animation > Create Blend Tree > {controller_name}",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
 
@@ -590,9 +512,6 @@ async def _handle_scene_create_additive_layer(
         "controller_name": name,
         "layer_name": layer_name,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the additive layer script",
-            f"Execute menu item: VeilBreakers > Animation > Add Additive Layer > {layer_name}",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)

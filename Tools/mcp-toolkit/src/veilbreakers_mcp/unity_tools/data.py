@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.data_templates import (
@@ -68,50 +68,9 @@ async def unity_data(
     # Data editor params
     window_name: str = "",
     menu_path: str = "",
-    data_folder: str = "Assets/Data",
+    data_folder: str = "Assets/Data"
 ) -> str:
-    """Data-driven game architecture -- ScriptableObject definitions, JSON config
-    loading, localization setup, and data authoring editor windows.
-
-    This compound tool generates C# editor scripts for data architecture,
-    writes them to the Unity project, and returns instructions for executing
-    them via the VB toolkit.
-
-    Actions:
-    - create_so_definition: Generate ScriptableObject class with CreateAssetMenu (DATA-02)
-    - create_so_assets: Create .asset instances from a ScriptableObject class (DATA-02)
-    - validate_json: Generate JSON config schema validator (DATA-01)
-    - create_json_loader: Generate typed C# data class + JSON loader (DATA-01)
-    - setup_localization: Set up Unity Localization infrastructure (DATA-03)
-    - add_localization_entries: Populate string table entries (DATA-03)
-    - create_data_editor: Generate IMGUI EditorWindow for batch SO authoring (DATA-04)
-
-    Args:
-        action: The data action to perform.
-        class_name: C# class name for SO definition or JSON loader.
-        namespace: C# namespace (default VeilBreakers.Data).
-        fields: Field definitions (list of dicts with name, type, optional default/label).
-        summary: XML summary comment for the class.
-        menu_name: CreateAssetMenu menu name for SO.
-        file_name: Default file name for SO asset creation.
-        so_class_name: ScriptableObject class name for asset creation or data editor.
-        assets: List of asset data dicts for create_so_assets.
-        output_folder: Output folder for assets (default Assets/Data).
-        category: Category name for asset organization.
-        config_name: Config name for JSON validator.
-        json_path: JSON file path for validation or loading.
-        schema: JSON schema dict for validator.
-        wrapper_class: Wrapper class name for JSON validator.
-        is_array: Whether JSON data is an array (for JSON loader).
-        default_locale: Default locale for localization (default en).
-        locales: List of additional locale codes.
-        table_name: String table name for localization.
-        entries: Dict of key->value entries for localization.
-        locale: Locale code for localization entries.
-        window_name: EditorWindow class name for data editor.
-        menu_path: MenuItem path for data editor.
-        data_folder: Folder for data editor to browse (default Assets/Data).
-    """
+    """Data-driven game architecture -- ScriptableObject definitions, JSON config loading, localization setup, and data authoring editor windows."""
     try:
         if action == "create_so_definition":
             if not class_name:
@@ -134,9 +93,7 @@ async def unity_data(
                 "action": action,
                 "script_path": abs_path,
                 "class_name": safe_class,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the SO definition",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "create_so_assets":
@@ -161,10 +118,7 @@ async def unity_data(
                 "script_path": abs_path,
                 "so_class_name": safe_class,
                 "asset_count": len(assets or []),
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the script",
-                    f"Execute menu item: VeilBreakers/Data/Create {safe_class} Assets",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "validate_json":
@@ -186,10 +140,7 @@ async def unity_data(
                 "action": action,
                 "script_path": abs_path,
                 "config_name": safe_config,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the validator",
-                    f"Execute menu item: VeilBreakers/Data/Validate {safe_config}",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "create_json_loader":
@@ -212,9 +163,7 @@ async def unity_data(
                 "action": action,
                 "script_path": abs_path,
                 "class_name": safe_class,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the loader class",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "setup_localization":
@@ -232,10 +181,7 @@ async def unity_data(
                 "action": action,
                 "script_path": abs_path,
                 "table_name": table_name,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the setup script",
-                    f"Execute menu item: VeilBreakers/Data/Setup {table_name} Localization",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "add_localization_entries":
@@ -258,10 +204,7 @@ async def unity_data(
                 "table_name": table_name,
                 "locale": locale,
                 "entry_count": len(entries),
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the entries script",
-                    f"Execute menu item: VeilBreakers/Data/Add {table_name} {locale} Entries",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "create_data_editor":
@@ -291,10 +234,7 @@ async def unity_data(
                 "action": action,
                 "script_path": abs_path,
                 "window_name": safe_window,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the editor window",
-                    f"Open via menu: {menu_path or f'VeilBreakers/Data/{safe_window}'}",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         else:

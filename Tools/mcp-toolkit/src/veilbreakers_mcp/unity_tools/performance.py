@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.performance_templates import (
@@ -56,40 +56,9 @@ async def unity_performance(
     # Build params (PERF-05)
     build_target: str = "StandaloneWindows64",
     scenes: list[str] | None = None,
-    build_options: str = "None",
+    build_options: str = "None"
 ) -> str:
-    """Unity Performance -- scene profiling, LOD setup, lightmap baking, asset audit, build automation.
-
-    This compound tool generates C# editor scripts for Unity performance
-    optimization: scene profiling with budget thresholds, automatic LODGroup
-    setup, async lightmap baking, asset auditing for oversized/unused/uncompressed
-    assets, and build pipeline automation with size reports.
-
-    Actions:
-    - profile_scene: Collect frame time/draw calls/memory and compare against budgets (PERF-01)
-    - setup_lod_groups: Auto-generate LODGroups for scene MeshRenderers (PERF-02)
-    - bake_lightmaps: Async lightmap baking with quality/bounces/resolution (PERF-03)
-    - audit_assets: Find oversized textures, uncompressed audio, unused assets (PERF-04)
-    - automate_build: Build pipeline with packed asset size report (PERF-05)
-
-    Args:
-        action: The performance action to perform.
-        target_frame_time_ms: Frame time budget in milliseconds (PERF-01).
-        max_draw_calls: Draw call budget (PERF-01).
-        max_batches: Batch count budget (PERF-01).
-        max_triangles: Triangle count budget (PERF-01).
-        max_memory_mb: Memory budget in MB (PERF-01).
-        lod_count: Number of LOD levels (PERF-02).
-        screen_percentages: Screen percentage thresholds per LOD level, must be strictly descending (PERF-02).
-        lightmap_quality: Quality preset name (PERF-03).
-        bounces: Number of light bounces (PERF-03).
-        lightmap_resolution: Lightmap texels per unit (PERF-03).
-        max_texture_size: Max texture dimension before flagging as oversized (PERF-04).
-        allowed_audio_formats: Allowed audio compression formats (PERF-04).
-        build_target: BuildTarget enum name e.g. StandaloneWindows64 (PERF-05).
-        scenes: Scene paths to include in build, defaults to build settings (PERF-05).
-        build_options: BuildOptions flags e.g. Development, None (PERF-05).
-    """
+    """Unity Performance -- scene profiling, LOD setup, lightmap baking, asset audit, build automation."""
     try:
         if action == "profile_scene":
             return await _handle_performance_profile_scene(
@@ -153,10 +122,7 @@ async def _handle_performance_profile_scene(
             "status": "success",
             "action": "profile_scene",
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Performance > Profile Scene from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -194,10 +160,7 @@ async def _handle_performance_setup_lod_groups(
             "script_path": abs_path,
             "lod_count": len(pcts),
             "screen_percentages": pcts,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Performance > Setup LODGroups from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -232,10 +195,7 @@ async def _handle_performance_bake_lightmaps(
             "quality": lightmap_quality,
             "bounces": bounces,
             "resolution": lightmap_resolution,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Performance > Bake Lightmaps from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -268,10 +228,7 @@ async def _handle_performance_audit_assets(
             "script_path": abs_path,
             "max_texture_size": max_texture_size,
             "allowed_audio_formats": formats,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Performance > Audit Assets from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -306,10 +263,7 @@ async def _handle_performance_automate_build(
             "script_path": abs_path,
             "build_target": build_target,
             "build_options": build_options,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Performance > Build With Report from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,

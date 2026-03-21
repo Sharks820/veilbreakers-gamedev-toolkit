@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.quality_templates import (
@@ -46,35 +46,9 @@ async def unity_quality(
     check_channel_packing: bool = True,
     check_poly: bool = True,
     check_textures: bool = True,
-    check_materials: bool = True,
+    check_materials: bool = True
 ) -> str:
-    """AAA quality enforcement -- polygon budgets, master materials, texture
-    quality, and combined quality auditing.
-
-    This compound tool generates C# editor scripts that validate and enforce
-    AAA quality standards for VeilBreakers game assets.
-
-    Actions:
-    - check_poly_budget: Check polygon counts against per-asset-type budgets (AAA-02)
-    - create_master_materials: Generate master material library with PBR presets (AAA-04)
-    - check_texture_quality: Validate texel density, normal maps, channel packing (AAA-06)
-    - aaa_audit: Combined AAA quality audit (poly + texture + material checks)
-
-    Args:
-        action: The quality action to perform.
-        asset_type: Asset type for poly budget (hero/mob/weapon/prop/building).
-        target_path: Target path for poly budget check.
-        target_folder: Target folder for texture quality or AAA audit.
-        auto_flag: Auto-flag assets exceeding budgets.
-        output_folder: Output folder for master materials.
-        materials: Custom material definitions for master library.
-        target_texel_density: Target texel density in px/m (default 10.24).
-        check_normal_maps: Whether to validate normal maps.
-        check_channel_packing: Whether to check channel packing.
-        check_poly: Include poly check in AAA audit.
-        check_textures: Include texture check in AAA audit.
-        check_materials: Include material check in AAA audit.
-    """
+    """AAA quality enforcement -- polygon budgets, master materials, texture quality, and combined quality auditing."""
     try:
         if action == "check_poly_budget":
             safe_type = _sanitize_cs_identifier(asset_type) or "prop"
@@ -90,10 +64,7 @@ async def unity_quality(
                 "action": action,
                 "script_path": abs_path,
                 "asset_type": safe_type,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the budget check",
-                    f"Execute menu item: VeilBreakers/Quality/Check Poly Budget ({safe_type})",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "create_master_materials":
@@ -108,10 +79,7 @@ async def unity_quality(
                 "action": action,
                 "script_path": abs_path,
                 "material_count": len(materials) if materials else "default",
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the script",
-                    "Execute menu item: VeilBreakers/Quality/Create Master Materials",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "check_texture_quality":
@@ -127,10 +95,7 @@ async def unity_quality(
                 "status": "success",
                 "action": action,
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the checker",
-                    "Execute menu item: VeilBreakers/Quality/Check Texture Quality",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "aaa_audit":
@@ -149,10 +114,7 @@ async def unity_quality(
                 "action": action,
                 "script_path": abs_path,
                 "asset_type": safe_type,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the audit script",
-                    "Execute menu item: VeilBreakers/Quality/AAA Quality Audit",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         else:
