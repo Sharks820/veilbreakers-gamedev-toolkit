@@ -1,8 +1,8 @@
 """VeilBreakers Unity MCP Server.
 
 FastMCP server providing Unity Editor automation tools. Generates C# editor
-scripts that are written to the Unity project and executed via mcp-unity's
-recompile_scripts + execute_menu_item workflow.
+scripts that are written to the Unity project and compiled/executed via the
+VB toolkit's own TCP bridge (UnityConnection on port 9877).
 
 Entry point: vb-unity-mcp (see pyproject.toml [project.scripts])
 """
@@ -15,6 +15,7 @@ from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
 from veilbreakers_mcp.shared.config import Settings
+from veilbreakers_mcp.shared.unity_client import UnityConnection, UnityCommandError
 from veilbreakers_mcp.shared.unity_templates.editor_templates import (
     generate_recompile_script,
     generate_play_mode_script,
@@ -356,8 +357,8 @@ def _read_unity_result() -> dict:
             "status": "pending",
             "message": (
                 "Result file not found. The Unity editor script may not have "
-                "executed yet. Use mcp-unity's recompile_scripts tool to compile, "
-                "then execute_menu_item to run the generated command."
+                "executed yet. Run unity_editor action=recompile to compile, "
+                "then open Unity Editor and run the generated menu command."
             ),
         }
 
@@ -391,7 +392,7 @@ async def unity_editor(
     """Unity Editor automation -- generate C# scripts and trigger actions.
 
     This compound tool generates C# editor scripts, writes them to the Unity
-    project, and returns instructions for executing them via mcp-unity.
+    project, and returns instructions for executing them via the VB toolkit.
 
     Actions:
     - recompile: Force Unity to recompile all scripts (AssetDatabase.Refresh)
@@ -468,7 +469,7 @@ async def _handle_run_tests(
         "test_mode": test_mode,
         "next_steps": [
             "Call unity_editor action='recompile' to compile the test runner script",
-            "Execute menu item 'VeilBreakers/Code/Run Tests' via mcp-unity",
+            "Open Unity Editor and run VeilBreakers > Code > Run Tests from the menu bar",
             "Call unity_editor action='console_logs' or read Temp/vb_result.json for test results",
         ],
     })
@@ -490,8 +491,8 @@ async def _handle_recompile() -> str:
             "action": "recompile",
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Editor/Force Recompile"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Editor > Force Recompile from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -518,8 +519,8 @@ async def _handle_play_mode(enter: bool) -> str:
             "action": action_name,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/Editor/{menu_label}"',
+                "Run unity_editor action=recompile to compile the new script",
+                f'Open Unity Editor and run VeilBreakers > Editor > {menu_label} from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -545,8 +546,8 @@ async def _handle_screenshot(screenshot_path: str, supersize: int) -> str:
             "screenshot_path": screenshot_path,
             "supersize": supersize,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Editor/Capture Screenshot"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Editor > Capture Screenshot from the menu bar',
                 f"Screenshot will be saved to: {screenshot_path}",
             ],
             "result_file": "Temp/vb_result.json",
@@ -573,8 +574,8 @@ async def _handle_console_logs(log_filter: str, log_count: int) -> str:
             "filter": log_filter,
             "max_count": log_count,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Editor/Collect Console Logs"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Editor > Collect Console Logs from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -625,8 +626,8 @@ async def _handle_gemini_review(
             "review": review_result if review_result else None,
             "next_steps": [
                 "If screenshot doesn't exist yet, capture it first with action='screenshot'",
-                "Call mcp-unity recompile_scripts to compile the export script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Editor/Prepare Gemini Review"',
+                "Run unity_editor action=recompile to compile the export script",
+                'Open Unity Editor and run VeilBreakers > Editor > Prepare Gemini Review from the menu bar',
                 "The Gemini review result will also be available in Temp/vb_result.json",
             ],
         },
@@ -696,7 +697,7 @@ async def unity_vfx(
 
     Actions:
     - create_particle_vfx: Create VFX Graph particle prefab from params (VFX-01)
-    - create_brand_vfx: Generate per-brand damage VFX (IRON/VENOM/SURGE/DREAD/BLAZE) (VFX-02)
+    - create_brand_vfx: Generate per-brand damage VFX (IRON/SAVAGE/SURGE/VENOM/DREAD/LEECH/GRACE/MEND/RUIN/VOID) (VFX-02)
     - create_environmental_vfx: Create dust/fireflies/snow/rain/ash VFX (VFX-03)
     - create_trail_vfx: Create weapon/projectile trail prefab (VFX-04)
     - create_aura_vfx: Create character aura/buff particle system (VFX-05)
@@ -796,8 +797,8 @@ async def _handle_vfx_particle(
             "name": name,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/VFX/Create Particle VFX/{name}"',
+                "Run unity_editor action=recompile to compile the new script",
+                f'Open Unity Editor and run VeilBreakers > VFX > Create Particle VFX > {name} from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -825,8 +826,8 @@ async def _handle_vfx_brand(brand: str) -> str:
             "brand": brand_upper,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/VFX/Brand Damage/{brand_upper}"',
+                "Run unity_editor action=recompile to compile the new script",
+                f'Open Unity Editor and run VeilBreakers > VFX > Brand Damage > {brand_upper} from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -854,8 +855,8 @@ async def _handle_vfx_environmental(effect_type: str) -> str:
             "effect_type": effect_type,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/VFX/Environment/{safe}"',
+                "Run unity_editor action=recompile to compile the new script",
+                f'Open Unity Editor and run VeilBreakers > VFX > Environment > {safe} from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -887,8 +888,8 @@ async def _handle_vfx_trail(
             "name": name,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/VFX/Create Trail/{name}"',
+                "Run unity_editor action=recompile to compile the new script",
+                f'Open Unity Editor and run VeilBreakers > VFX > Create Trail > {name} from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -920,8 +921,8 @@ async def _handle_vfx_aura(
             "name": name,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/VFX/Create Aura/{name}"',
+                "Run unity_editor action=recompile to compile the new script",
+                f'Open Unity Editor and run VeilBreakers > VFX > Create Aura > {name} from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -954,7 +955,7 @@ async def _handle_vfx_corruption_shader(name: str) -> str:
                 "_VeinScale",
             ],
             "next_steps": [
-                "Call mcp-unity recompile_scripts to import the new shader",
+                "Run unity_editor action=recompile to import the new shader",
                 "Create a material using shader 'VeilBreakers/Corruption'",
                 "Adjust _CorruptionAmount from 0 (clean) to 1 (fully corrupted)",
             ],
@@ -1004,7 +1005,7 @@ async def _handle_vfx_shader(name: str, shader_type: str) -> str:
             "shader_path": abs_path,
             "shader_name": f"VeilBreakers/{type_label}",
             "next_steps": [
-                "Call mcp-unity recompile_scripts to import the new shader",
+                "Run unity_editor action=recompile to import the new shader",
                 f"Create a material using shader 'VeilBreakers/{type_label}'",
             ],
         },
@@ -1048,8 +1049,8 @@ async def _handle_vfx_post_processing(
                 "dof_focus": dof_focus_distance,
             },
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/VFX/Setup Post Processing"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > VFX > Setup Post Processing from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -1081,8 +1082,8 @@ async def _handle_vfx_screen_effect(effect_type: str, intensity: float) -> str:
             "effect_type": effect_type,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/VFX/Screen Effects/{label}"',
+                "Run unity_editor action=recompile to compile the new script",
+                f'Open Unity Editor and run VeilBreakers > VFX > Screen Effects > {label} from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -1123,8 +1124,8 @@ async def _handle_vfx_ability(
             "keyframe_time": keyframe_time,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/VFX/Ability VFX/{name}"',
+                "Run unity_editor action=recompile to compile the new script",
+                f'Open Unity Editor and run VeilBreakers > VFX > Ability VFX > {name} from the menu bar',
                 f"Ensure VFX prefab exists at: {vfx_prefab}",
                 f"Ensure animation clip exists at: {anim_clip}",
             ],
@@ -1435,7 +1436,7 @@ async def _handle_audio_setup_footstep(
             "script_path": abs_path,
             "surfaces": effective_surfaces,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new scripts",
+                "Run unity_editor action=recompile to compile the new scripts",
                 "Attach VeilBreakers_FootstepManager to the player character",
                 "Create a FootstepSoundBank via Assets > Create > VeilBreakers > Audio > Footstep Sound Bank",
                 f"Assign AudioClips for surfaces: {', '.join(effective_surfaces)}",
@@ -1468,7 +1469,7 @@ async def _handle_audio_setup_adaptive_music(
             "script_path": abs_path,
             "layers": effective_layers,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
+                "Run unity_editor action=recompile to compile the new script",
                 "Add VeilBreakers_AdaptiveMusicManager to a persistent GameObject",
                 f"Assign AudioClips for states: {', '.join(effective_layers)}",
                 "Call SetGameState(GameState.Combat) etc. from game logic",
@@ -1498,8 +1499,8 @@ async def _handle_audio_setup_zones(name: str, zone_type: str) -> str:
             "script_path": abs_path,
             "zone_type": zone_type,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/Audio/Create {zone_label} Reverb Zone"',
+                "Run unity_editor action=recompile to compile the new script",
+                f'Open Unity Editor and run VeilBreakers > Audio > Create {zone_label} Reverb Zone from the menu bar',
                 "Position the reverb zone in the scene as needed",
             ],
         },
@@ -1530,8 +1531,8 @@ async def _handle_audio_setup_mixer(groups: list[str] | None) -> str:
             "next_steps": [
                 "First, create an AudioMixer at Assets/Audio/VeilBreakersMixer.mixer in Unity",
                 f"Add these groups to the mixer: {', '.join(effective_groups)}",
-                "Call mcp-unity recompile_scripts to compile the setup script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Audio/Setup Audio Mixer"',
+                "Run unity_editor action=recompile to compile the setup script",
+                'Open Unity Editor and run VeilBreakers > Audio > Setup Audio Mixer from the menu bar',
             ],
         },
         indent=2,
@@ -1562,7 +1563,7 @@ async def _handle_audio_setup_pool_manager(
             "pool_size": pool_size,
             "max_sources": max_sources,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
+                "Run unity_editor action=recompile to compile the new script",
                 "Add VeilBreakers_AudioPoolManager to a persistent GameObject",
                 f"Pool starts with {pool_size} AudioSources, grows up to {max_sources}",
                 "Call VeilBreakers_AudioPoolManager.Instance.Play(clip, position, priority)",
@@ -1592,9 +1593,9 @@ async def _handle_audio_assign_animation_sfx(
             "action": "assign_animation_sfx",
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
+                "Run unity_editor action=recompile to compile the new script",
                 "Select an AnimationClip in the Unity Project window",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Audio/Assign Animation SFX Events"',
+                'Open Unity Editor and run VeilBreakers > Audio > Assign Animation SFX Events from the menu bar',
                 "The script will bind SFX function calls to the specified animation keyframes",
             ],
         },
@@ -1741,7 +1742,7 @@ async def _handle_ui_generate_screen(
             "layout_issues": layout_result["issues"],
             "contrast_violations": contrast_violations,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to pick up new UI files",
+                "Run unity_editor action=recompile to pick up new UI files",
                 f"UXML: {uxml_rel}",
                 f"USS: {uss_rel}",
                 "Open the UXML in Unity's UI Builder for visual editing",
@@ -1826,8 +1827,8 @@ async def _handle_ui_test_responsive(
                 (1280, 720), (1920, 1080), (2560, 1440), (3840, 2160), (800, 600)
             ]],
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the test script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/UI/Responsive Test {uxml_path.split("/")[-1].replace(".uxml", "")}"',
+                "Run unity_editor action=recompile to compile the test script",
+                f'Open Unity Editor and run VeilBreakers > UI > Responsive Test {uxml_path.split("/")[-1].replace(".uxml", "")} from the menu bar',
                 "Screenshots will be saved to Assets/Screenshots/Responsive/",
             ],
             "result_file": "Temp/vb_result.json",
@@ -2122,8 +2123,8 @@ async def _handle_scene_setup_terrain(
             "terrain_size": list(size_tuple),
             "resolution": terrain_resolution,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Scene/Setup Terrain"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Scene > Setup Terrain from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -2175,8 +2176,8 @@ async def _handle_scene_scatter_objects(
             "density": density,
             "seed": seed,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Scene/Scatter Objects"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Scene > Scatter Objects from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -2223,8 +2224,8 @@ async def _handle_scene_setup_lighting(
             "fog_enabled": fog_enabled,
             "sun_intensity": sun_intensity,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Scene/Setup Lighting"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Scene > Setup Lighting from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -2266,8 +2267,8 @@ async def _handle_scene_bake_navmesh(
             "max_slope": max_slope,
             "step_height": step_height,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Scene/Bake NavMesh"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Scene > Bake NavMesh from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -2315,8 +2316,8 @@ async def _handle_scene_create_animator(
             "script_path": abs_path,
             "state_count": len(states),
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/Scene/Create Animator/{name}"',
+                "Run unity_editor action=recompile to compile the new script",
+                f'Open Unity Editor and run VeilBreakers > Scene > Create Animator > {name} from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -2359,8 +2360,8 @@ async def _handle_scene_configure_avatar(
             "fbx_path": fbx_path,
             "animation_type": animation_type,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Scene/Configure Avatar"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Scene > Configure Avatar from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -2402,8 +2403,8 @@ async def _handle_scene_setup_animation_rigging(
             "script_path": abs_path,
             "constraint_count": len(constraints),
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                f'Call mcp-unity execute_menu_item with path "VeilBreakers/Scene/Setup Animation Rigging/{name}"',
+                "Run unity_editor action=recompile to compile the new script",
+                f'Open Unity Editor and run VeilBreakers > Scene > Setup Animation Rigging > {name} from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -2629,7 +2630,7 @@ async def _handle_gameplay_mob_controller(
             "name": name,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
+                "Run unity_editor action=recompile to compile the new script",
                 "Attach the generated MonoBehaviour to a GameObject in the scene",
             ],
             "result_file": "Temp/vb_result.json",
@@ -2670,7 +2671,7 @@ async def _handle_gameplay_aggro_system(
             "name": name,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
+                "Run unity_editor action=recompile to compile the new script",
                 "Attach the generated MonoBehaviour to a GameObject in the scene",
             ],
             "result_file": "Temp/vb_result.json",
@@ -2709,7 +2710,7 @@ async def _handle_gameplay_patrol_route(
             "name": name,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
+                "Run unity_editor action=recompile to compile the new script",
                 "Attach the generated MonoBehaviour to a GameObject in the scene",
             ],
             "result_file": "Temp/vb_result.json",
@@ -2756,7 +2757,7 @@ async def _handle_gameplay_spawn_system(
             "name": name,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
+                "Run unity_editor action=recompile to compile the new script",
                 "Attach the generated MonoBehaviour to a GameObject in the scene",
             ],
             "result_file": "Temp/vb_result.json",
@@ -2791,7 +2792,7 @@ async def _handle_gameplay_behavior_tree(
             "name": name,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
+                "Run unity_editor action=recompile to compile the new script",
                 "Attach the generated BehaviorTreeRunner MonoBehaviour to a GameObject in the scene",
             ],
             "result_file": "Temp/vb_result.json",
@@ -2840,7 +2841,7 @@ async def _handle_gameplay_combat_ability(
             "name": name,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
+                "Run unity_editor action=recompile to compile the new script",
                 "Attach the generated AbilityExecutor MonoBehaviour to a GameObject in the scene",
             ],
             "result_file": "Temp/vb_result.json",
@@ -2887,7 +2888,7 @@ async def _handle_gameplay_projectile_system(
             "name": name,
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
+                "Run unity_editor action=recompile to compile the new script",
                 "Attach the generated Projectile MonoBehaviour to a prefab",
             ],
             "result_file": "Temp/vb_result.json",
@@ -3110,8 +3111,8 @@ async def _handle_performance_profile_scene(
             "action": "profile_scene",
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Performance/Profile Scene"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Performance > Profile Scene from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3151,8 +3152,8 @@ async def _handle_performance_setup_lod_groups(
             "lod_count": len(pcts),
             "screen_percentages": pcts,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Performance/Setup LODGroups"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Performance > Setup LODGroups from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3189,8 +3190,8 @@ async def _handle_performance_bake_lightmaps(
             "bounces": bounces,
             "resolution": lightmap_resolution,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Performance/Bake Lightmaps"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Performance > Bake Lightmaps from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3225,8 +3226,8 @@ async def _handle_performance_audit_assets(
             "max_texture_size": max_texture_size,
             "allowed_audio_formats": formats,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Performance/Audit Assets"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Performance > Audit Assets from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3263,8 +3264,8 @@ async def _handle_performance_automate_build(
             "build_target": build_target,
             "build_options": build_options,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Performance/Build With Report"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Performance > Build With Report from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3342,7 +3343,7 @@ async def unity_settings(
 
     This compound tool generates C# editor scripts for project-level settings,
     writes them to the Unity project, and returns instructions for executing
-    them via mcp-unity.
+    them via the VB toolkit.
 
     Actions:
     - configure_physics: Set collision matrix and gravity (EDIT-04)
@@ -3436,8 +3437,8 @@ async def _handle_settings_physics(
             "action": "configure_physics",
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Settings/Configure Physics"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Settings > Configure Physics from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3474,8 +3475,8 @@ async def _handle_settings_physics_material(
             "script_path": abs_path,
             "material_name": material_name,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Settings/Create Physics Material"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Settings > Create Physics Material from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3519,8 +3520,8 @@ async def _handle_settings_player(
             "action": "configure_player",
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Settings/Configure Player Settings"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Settings > Configure Player Settings from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3552,8 +3553,8 @@ async def _handle_settings_build(
             "action": "configure_build",
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Settings/Configure Build Settings"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Settings > Configure Build Settings from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3578,8 +3579,8 @@ async def _handle_settings_quality(quality_levels: list[dict]) -> str:
             "script_path": abs_path,
             "levels_count": len(quality_levels),
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Settings/Configure Quality Settings"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Settings > Configure Quality Settings from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3617,8 +3618,8 @@ async def _handle_settings_install_package(
             "package_id": package_id,
             "source": source,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Settings/Install Package"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Settings > Install Package from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3643,8 +3644,8 @@ async def _handle_settings_remove_package(package_id: str) -> str:
             "script_path": abs_path,
             "package_id": package_id,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Settings/Remove Package"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Settings > Remove Package from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3674,8 +3675,8 @@ async def _handle_settings_tags_layers(
             "action": "manage_tags_layers",
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Settings/Manage Tags & Layers"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Settings > Manage Tags & Layers from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3700,8 +3701,8 @@ async def _handle_settings_sync_tags_layers(constants_cs_path: str) -> str:
             "script_path": abs_path,
             "constants_path": constants_cs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Settings/Sync Tags & Layers from Code"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Settings > Sync Tags & Layers from Code from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3731,8 +3732,8 @@ async def _handle_settings_time(
             "action": "configure_time",
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Settings/Configure Time Settings"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Settings > Configure Time Settings from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3766,8 +3767,8 @@ async def _handle_settings_graphics(
             "action": "configure_graphics",
             "script_path": abs_path,
             "next_steps": [
-                "Call mcp-unity recompile_scripts to compile the new script",
-                'Call mcp-unity execute_menu_item with path "VeilBreakers/Settings/Configure Graphics Settings"',
+                "Run unity_editor action=recompile to compile the new script",
+                'Open Unity Editor and run VeilBreakers > Settings > Configure Graphics Settings from the menu bar',
             ],
             "result_file": "Temp/vb_result.json",
         },
@@ -3935,8 +3936,8 @@ async def _handle_prefab_create(
     return json.dumps({
         "status": "success", "action": "create", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Create Prefab"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Create Prefab from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -3956,8 +3957,8 @@ async def _handle_prefab_create_variant(
     return json.dumps({
         "status": "success", "action": "create_variant", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Create Variant"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Create Variant from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -3977,8 +3978,8 @@ async def _handle_prefab_modify(
     return json.dumps({
         "status": "success", "action": "modify", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Modify Prefab"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Modify Prefab from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -3996,8 +3997,8 @@ async def _handle_prefab_delete(prefab_path: str) -> str:
     return json.dumps({
         "status": "success", "action": "delete", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Delete Prefab"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Delete Prefab from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4015,8 +4016,8 @@ async def _handle_prefab_scaffold(name: str, prefab_type: str) -> str:
     return json.dumps({
         "status": "success", "action": "create_scaffold", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Create Scaffold"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Create Scaffold from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4036,8 +4037,8 @@ async def _handle_prefab_add_component(
     return json.dumps({
         "status": "success", "action": "add_component", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Add Component"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Add Component from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4057,8 +4058,8 @@ async def _handle_prefab_remove_component(
     return json.dumps({
         "status": "success", "action": "remove_component", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Remove Component"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Remove Component from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4080,8 +4081,8 @@ async def _handle_prefab_configure(
     return json.dumps({
         "status": "success", "action": "configure", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Configure Component"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Configure Component from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4101,8 +4102,8 @@ async def _handle_prefab_reflect(
     return json.dumps({
         "status": "success", "action": "reflect_component", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Reflect Component"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Reflect Component from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4143,8 +4144,8 @@ async def _handle_prefab_hierarchy(
     return json.dumps({
         "status": "success", "action": "hierarchy", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Hierarchy"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Hierarchy from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4166,8 +4167,8 @@ async def _handle_prefab_batch_configure(
     return json.dumps({
         "status": "success", "action": "batch_configure", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Batch Configure"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Batch Configure from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4185,8 +4186,8 @@ async def _handle_prefab_batch_job(operations: list[dict] | None) -> str:
     return json.dumps({
         "status": "success", "action": "batch_job", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Execute Job Script"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Execute Job Script from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4212,8 +4213,8 @@ async def _handle_prefab_generate_variants(
     return json.dumps({
         "status": "success", "action": "generate_variants", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Generate Variant Matrix"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Generate Variant Matrix from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4233,8 +4234,8 @@ async def _handle_prefab_setup_joints(
     return json.dumps({
         "status": "success", "action": "setup_joints", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Setup Joint"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Setup Joint from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4254,8 +4255,8 @@ async def _handle_prefab_setup_navmesh(
     return json.dumps({
         "status": "success", "action": "setup_navmesh", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/NavMesh Setup"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > NavMesh Setup from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4275,8 +4276,8 @@ async def _handle_prefab_setup_bone_sockets(
     return json.dumps({
         "status": "success", "action": "setup_bone_sockets", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Setup Bone Sockets"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Setup Bone Sockets from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4292,8 +4293,8 @@ async def _handle_prefab_validate_project() -> str:
     return json.dumps({
         "status": "success", "action": "validate_project", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Prefab/Validate Project Integrity"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Prefab > Validate Project Integrity from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4378,7 +4379,7 @@ async def unity_assets(
 
     This compound tool generates C# editor scripts (or JSON for asmdef) for
     asset pipeline operations, writes them to the Unity project, and returns
-    instructions for executing them via mcp-unity.
+    instructions for executing them via the VB toolkit.
 
     Actions:
     - move: Move asset preserving GUID (EDIT-10 + IMP-01)
@@ -4516,8 +4517,8 @@ async def _handle_assets_move(asset_path: str, new_path: str) -> str:
     return json.dumps({
         "status": "success", "action": "move", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Move Asset"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Move Asset from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4534,8 +4535,8 @@ async def _handle_assets_rename(asset_path: str, new_name: str) -> str:
     return json.dumps({
         "status": "success", "action": "rename", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Rename Asset"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Rename Asset from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4553,8 +4554,8 @@ async def _handle_assets_delete(asset_path: str, safe_delete: bool) -> str:
         "status": "success", "action": "delete", "script_path": abs_path,
         "safe_delete": safe_delete,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Delete Asset"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Delete Asset from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4571,8 +4572,8 @@ async def _handle_assets_duplicate(source_path: str, dest_path: str) -> str:
     return json.dumps({
         "status": "success", "action": "duplicate", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Duplicate Asset"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Duplicate Asset from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4589,8 +4590,8 @@ async def _handle_assets_create_folder(folder_path: str) -> str:
     return json.dumps({
         "status": "success", "action": "create_folder", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Create Folder"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Create Folder from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4618,8 +4619,8 @@ async def _handle_assets_configure_fbx(
         "status": "success", "action": "configure_fbx", "script_path": abs_path,
         "preset_type": preset_type if preset_type else "custom",
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Configure FBX Import"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Configure FBX Import from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4647,8 +4648,8 @@ async def _handle_assets_configure_texture(
         "status": "success", "action": "configure_texture", "script_path": abs_path,
         "preset_type": preset_type if preset_type else "custom",
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Configure Texture Import"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Configure Texture Import from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4665,8 +4666,8 @@ async def _handle_assets_remap_materials(fbx_path: str, remappings: dict) -> str
     return json.dumps({
         "status": "success", "action": "remap_materials", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Remap Materials"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Remap Materials from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4687,8 +4688,8 @@ async def _handle_assets_auto_materials(
     return json.dumps({
         "status": "success", "action": "auto_materials", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Auto Generate Materials"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Auto Generate Materials from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4716,7 +4717,7 @@ async def _handle_assets_create_asmdef(
         "status": "success", "action": "create_asmdef",
         "asmdef_path": abs_path, "asmdef_name": asmdef_name,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to trigger Unity to recognize the new assembly definition",
+            "Run unity_editor action=recompile to trigger Unity to recognize the new assembly definition",
         ],
         "result_file": None,
     }, indent=2)
@@ -4737,8 +4738,8 @@ async def _handle_assets_create_preset(
     return json.dumps({
         "status": "success", "action": "create_preset", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Create Preset"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Create Preset from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4755,8 +4756,8 @@ async def _handle_assets_apply_preset(preset_path: str, target_path: str) -> str
     return json.dumps({
         "status": "success", "action": "apply_preset", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Apply Preset"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Apply Preset from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4773,8 +4774,8 @@ async def _handle_assets_scan_references(asset_path: str) -> str:
     return json.dumps({
         "status": "success", "action": "scan_references", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Scan References"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Scan References from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -4797,8 +4798,8 @@ async def _handle_assets_atomic_import(
     return json.dumps({
         "status": "success", "action": "atomic_import", "script_path": abs_path,
         "next_steps": [
-            "Call mcp-unity recompile_scripts to compile the new script",
-            'Call mcp-unity execute_menu_item with path "VeilBreakers/Assets/Atomic Import"',
+            "Run unity_editor action=recompile to compile the new script",
+            'Open Unity Editor and run VeilBreakers > Assets > Atomic Import from the menu bar',
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -5030,7 +5031,7 @@ async def unity_code(
                 "script_path": abs_path,
                 "next_steps": [
                     "Call unity_editor action='recompile' to compile the new script",
-                    f"Execute menu item '{menu_path or f'VeilBreakers/Tools/{window_name}'}' via mcp-unity",
+                    f"Execute menu item '{menu_path or f'VeilBreakers/Tools/{window_name}'}' from the menu bar",
                 ],
             })
 
@@ -5423,7 +5424,7 @@ async def unity_data(
 
     This compound tool generates C# editor scripts for data architecture,
     writes them to the Unity project, and returns instructions for executing
-    them via mcp-unity.
+    them via the VB toolkit.
 
     Actions:
     - create_so_definition: Generate ScriptableObject class with CreateAssetMenu (DATA-02)
@@ -8694,6 +8695,39 @@ async def _handle_ux_corruption_vfx(name: str, ns_kwargs: dict) -> str:
     }, indent=2)
 
 
+async def _handle_check_compile_status(bridge_port: int = 9877) -> str:
+    """Query the Unity bridge for compile error status.
+
+    Sends a ``check_compile_status`` command to the VBBridge TCP server
+    running inside Unity Editor.  Returns JSON with ``is_compiling``,
+    ``has_errors``, ``error_count``, and ``errors`` fields.
+
+    This should be called after writing C# scripts to verify that
+    compilation succeeded before attempting further Unity operations.
+    """
+    try:
+        conn = UnityConnection(port=bridge_port)
+        result = await conn.send_command("check_compile_status", {})
+        return json.dumps({
+            "status": "success",
+            "action": "check_compile_status",
+            "is_compiling": result.get("is_compiling", False) if isinstance(result, dict) else False,
+            "has_errors": result.get("has_errors", False) if isinstance(result, dict) else False,
+            "error_count": result.get("error_count", 0) if isinstance(result, dict) else 0,
+            "errors": result.get("errors", []) if isinstance(result, dict) else [],
+        }, indent=2)
+    except (ConnectionError, UnityCommandError) as exc:
+        return json.dumps({
+            "status": "error",
+            "action": "check_compile_status",
+            "message": (
+                f"Cannot reach Unity bridge on port {bridge_port}. "
+                f"Ensure Unity is running with VBBridge addon loaded. "
+                f"Detail: {exc}"
+            ),
+        }, indent=2)
+
+
 @mcp.tool()
 async def unity_qa(
     action: Literal[
@@ -8706,6 +8740,7 @@ async def unity_qa(
         "setup_crash_reporting",    # QA-06
         "setup_analytics",          # QA-07
         "inspect_live_state",       # QA-08
+        "check_compile_status",     # QA-09
     ],
     name: str = "default",
     # bridge params
@@ -8762,6 +8797,9 @@ async def unity_qa(
     - setup_crash_reporting: Sentry SDK initialization with breadcrumbs and environment tagging (QA-06)
     - setup_analytics: Singleton analytics manager with event buffering and JSON logging (QA-07)
     - inspect_live_state: IMGUI EditorWindow for live GameObject field inspection (QA-08)
+
+    Compile Status:
+    - check_compile_status: Query Unity bridge to detect compile errors after script writes (QA-09)
 
     Args:
         action: The QA action to perform.
@@ -9010,6 +9048,9 @@ async def unity_qa(
                     "Enter Play Mode to see live values",
                 ],
             }, indent=2)
+
+        elif action == "check_compile_status":
+            return await _handle_check_compile_status(bridge_port)
 
         else:
             return json.dumps({

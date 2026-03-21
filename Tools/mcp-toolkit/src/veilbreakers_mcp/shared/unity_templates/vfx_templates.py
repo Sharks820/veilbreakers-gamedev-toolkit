@@ -75,13 +75,53 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "shape": "sphere",
         "desc": "shadow wisps",
     },
-    "BLAZE": {
-        "rate": 300,
-        "lifetime": 1.0,
-        "size": 0.4,
-        "color": [1.0, 0.3, 0.05, 1.0],
+    "SAVAGE": {
+        "rate": 250,
+        "lifetime": 0.6,
+        "size": 0.35,
+        "color": [0.9, 0.3, 0.1, 1.0],
         "shape": "cone",
-        "desc": "fire and embers",
+        "desc": "beast claw slash marks",
+    },
+    "LEECH": {
+        "rate": 40,
+        "lifetime": 2.5,
+        "size": 0.25,
+        "color": [0.2, 0.5, 0.15, 0.7],
+        "shape": "sphere",
+        "desc": "dark drain tendrils",
+    },
+    "GRACE": {
+        "rate": 60,
+        "lifetime": 2.0,
+        "size": 0.2,
+        "color": [1.0, 0.95, 0.7, 0.9],
+        "shape": "sphere",
+        "desc": "holy light sparkles",
+    },
+    "MEND": {
+        "rate": 50,
+        "lifetime": 2.5,
+        "size": 0.2,
+        "color": [0.3, 0.9, 0.6, 0.8],
+        "shape": "sphere",
+        "desc": "restoration nature particles",
+    },
+    "RUIN": {
+        "rate": 80,
+        "lifetime": 1.5,
+        "size": 0.5,
+        "color": [0.4, 0.3, 0.2, 0.9],
+        "shape": "box",
+        "desc": "earth-cracking decay particles",
+    },
+    "VOID": {
+        "rate": 25,
+        "lifetime": 4.0,
+        "size": 0.6,
+        "color": [0.3, 0.1, 0.5, 0.7],
+        "shape": "sphere",
+        "desc": "void rift distortion",
     },
 }
 
@@ -245,8 +285,8 @@ def _shape_index(shape: str) -> int:
 def generate_brand_vfx_script(brand: str) -> str:
     """Generate C# editor script for brand-specific damage VFX.
 
-    Each brand (IRON, VENOM, SURGE, DREAD, BLAZE) has distinct VFX
-    parameters that define its visual identity.
+    Each brand (IRON, SAVAGE, SURGE, VENOM, DREAD, LEECH, GRACE, MEND,
+    RUIN, VOID) has distinct VFX parameters that define its visual identity.
 
     Args:
         brand: Brand name -- must be one of BRAND_VFX_CONFIGS keys.

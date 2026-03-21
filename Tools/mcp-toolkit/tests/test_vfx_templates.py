@@ -117,16 +117,41 @@ class TestGenerateBrandVfxScript:
         result = generate_brand_vfx_script("DREAD")
         assert "DREAD" in result or "shadow" in result.lower()
 
-    def test_blaze_brand_contains_fire(self):
-        result = generate_brand_vfx_script("BLAZE")
-        assert "BLAZE" in result or "fire" in result.lower() or "ember" in result.lower()
+    def test_savage_brand_contains_claw(self):
+        result = generate_brand_vfx_script("SAVAGE")
+        assert "SAVAGE" in result or "claw" in result.lower() or "slash" in result.lower()
+
+    def test_leech_brand_contains_drain(self):
+        result = generate_brand_vfx_script("LEECH")
+        assert "LEECH" in result or "drain" in result.lower() or "tendril" in result.lower()
+
+    def test_grace_brand_contains_holy(self):
+        result = generate_brand_vfx_script("GRACE")
+        assert "GRACE" in result or "holy" in result.lower() or "light" in result.lower()
+
+    def test_mend_brand_contains_restoration(self):
+        result = generate_brand_vfx_script("MEND")
+        assert "MEND" in result or "restoration" in result.lower() or "nature" in result.lower()
+
+    def test_ruin_brand_contains_decay(self):
+        result = generate_brand_vfx_script("RUIN")
+        assert "RUIN" in result or "decay" in result.lower() or "earth" in result.lower()
+
+    def test_void_brand_contains_void(self):
+        result = generate_brand_vfx_script("VOID")
+        assert "VOID" in result or "void" in result.lower() or "rift" in result.lower()
 
     def test_all_brands_have_configs(self):
         assert "IRON" in BRAND_VFX_CONFIGS
         assert "VENOM" in BRAND_VFX_CONFIGS
         assert "SURGE" in BRAND_VFX_CONFIGS
         assert "DREAD" in BRAND_VFX_CONFIGS
-        assert "BLAZE" in BRAND_VFX_CONFIGS
+        assert "SAVAGE" in BRAND_VFX_CONFIGS
+        assert "LEECH" in BRAND_VFX_CONFIGS
+        assert "GRACE" in BRAND_VFX_CONFIGS
+        assert "MEND" in BRAND_VFX_CONFIGS
+        assert "RUIN" in BRAND_VFX_CONFIGS
+        assert "VOID" in BRAND_VFX_CONFIGS
 
     def test_brand_configs_have_required_fields(self):
         for brand, cfg in BRAND_VFX_CONFIGS.items():
