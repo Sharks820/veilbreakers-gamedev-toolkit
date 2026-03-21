@@ -99,14 +99,14 @@ class TestGenerateSpatialAudioScript:
         result = generate_spatial_audio_script()
         content = result["script_content"]
         assert "occlusionEnabled" in content
-        assert "Physics.RaycastAll" in content
+        assert "Physics.RaycastNonAlloc" in content
         assert "AudioLowPassFilter" in content
 
     def test_occlusion_disabled(self):
         result = generate_spatial_audio_script(occlusion_enabled=False)
         content = result["script_content"]
         assert "occlusionEnabled" not in content
-        assert "RaycastAll" not in content
+        assert "RaycastNonAlloc" not in content
 
     def test_custom_distances(self):
         result = generate_spatial_audio_script(min_distance=5.0, max_distance=100.0)

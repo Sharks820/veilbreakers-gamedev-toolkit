@@ -19,19 +19,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    result = re.sub(r"[^a-zA-Z0-9_]", "", value)
-    if not result:
-        return "Default"
-    if result[0].isdigit():
-        result = "_" + result
-    return result
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -68,7 +56,7 @@ def generate_spatial_audio_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = _sanitize_cs_identifier(source_name)
+    safe_name = sanitize_cs_identifier(source_name)
     class_name = f"VeilBreakers_{safe_name}"
 
     # Map rolloff mode string to Unity enum
@@ -92,6 +80,7 @@ def generate_spatial_audio_script(
     private AudioLowPassFilter _lowPassFilter;
     private float _currentOcclusionFactor = 0f;
     private float _targetOcclusionFactor = 0f;
+    private static readonly RaycastHit[] _occlusionHits = new RaycastHit[16];
 
     private void UpdateOcclusion()
     {{
@@ -108,10 +97,8 @@ def generate_spatial_audio_script(
             return;
         }}
 
-        // Cast rays to detect occluding geometry
-        int hitCount = 0;
-        RaycastHit[] hits = Physics.RaycastAll(sourcePos, direction.normalized, distance, occlusionLayers);
-        hitCount = hits.Length;
+        // Cast rays to detect occluding geometry (non-alloc to avoid GC)
+        int hitCount = Physics.RaycastNonAlloc(sourcePos, direction.normalized, _occlusionHits, distance, occlusionLayers);
 
         // Additional rays for more accurate occlusion sampling
         if (maxOcclusionRays > 1)
@@ -123,9 +110,9 @@ def generate_spatial_audio_script(
             {{
                 Vector3 offset = (i == 1) ? right : up;
                 Vector3 offsetDir = (listenerPos - (sourcePos + offset)).normalized;
-                RaycastHit[] offsetHits = Physics.RaycastAll(
-                    sourcePos + offset, offsetDir, distance, occlusionLayers);
-                hitCount = Mathf.Max(hitCount, offsetHits.Length);
+                int offsetHitCount = Physics.RaycastNonAlloc(
+                    sourcePos + offset, offsetDir, _occlusionHits, distance, occlusionLayers);
+                hitCount = Mathf.Max(hitCount, offsetHitCount);
             }}
         }}
 
@@ -194,6 +181,7 @@ public class {class_name} : MonoBehaviour
     private AudioSource _audioSource;
     private AudioListener _listener;
     private float _baseVolume = 1.0f;
+    private int _listenerRetryFrame;
 
     private void Awake()
     {{
@@ -227,6 +215,8 @@ public class {class_name} : MonoBehaviour
     {{
         if (_listener == null)
         {{
+            _listenerRetryFrame++;
+            if (_listenerRetryFrame % 60 != 0) return;
             _listener = FindAnyObjectByType<AudioListener>();
             if (_listener == null) return;
         }}
@@ -430,6 +420,7 @@ public class VeilBreakers_AudioLOD : MonoBehaviour
     private float _originalSpatialBlend;
     private int _originalPriority;
     private float _nextUpdateTime;
+    private int _listenerRetryFrame;
 
     private void Awake()
     {{
@@ -451,6 +442,8 @@ public class VeilBreakers_AudioLOD : MonoBehaviour
 
         if (_listener == null)
         {{
+            _listenerRetryFrame++;
+            if (_listenerRetryFrame % 60 != 0) return;
             _listener = FindAnyObjectByType<AudioListener>();
             if (_listener == null) return;
         }}
@@ -568,7 +561,7 @@ def generate_layered_sound_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = _sanitize_cs_identifier(sound_name)
+    safe_name = sanitize_cs_identifier(sound_name)
 
     if layers is None:
         layers = [
@@ -773,7 +766,7 @@ def generate_audio_event_chain_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = _sanitize_cs_identifier(chain_name)
+    safe_name = sanitize_cs_identifier(chain_name)
 
     if events is None:
         events = [
@@ -1036,7 +1029,7 @@ def generate_procedural_foley_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = _sanitize_cs_identifier(character_name)
+    safe_name = sanitize_cs_identifier(character_name)
 
     if not surface_materials:
         surface_materials = ["stone", "wood", "metal", "dirt", "grass", "water", "snow"]
@@ -1375,7 +1368,7 @@ def generate_dynamic_music_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = _sanitize_cs_identifier(music_name)
+    safe_name = sanitize_cs_identifier(music_name)
 
     if not sections:
         sections = ["Intro", "Exploration", "Tension", "Combat", "BossPhase1",
@@ -1733,7 +1726,7 @@ def generate_portal_audio_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = _sanitize_cs_identifier(portal_name)
+    safe_name = sanitize_cs_identifier(portal_name)
 
     script = f'''// VeilBreakers Auto-Generated: Portal Audio Propagation System
 // Room-based sound with portal attenuation and reverb blending
@@ -1876,6 +1869,7 @@ public class VeilBreakers_AudioPortal : MonoBehaviour
     private AudioListener _listener;
     private VeilBreakers_AudioRoom _listenerRoom;
     private Dictionary<AudioSource, float> _originalVolumes = new Dictionary<AudioSource, float>();
+    private int _listenerRetryFrame;
 
     private void Start()
     {{
@@ -1886,6 +1880,8 @@ public class VeilBreakers_AudioPortal : MonoBehaviour
     {{
         if (_listener == null)
         {{
+            _listenerRetryFrame++;
+            if (_listenerRetryFrame % 60 != 0) return;
             _listener = FindAnyObjectByType<AudioListener>();
             if (_listener == null) return;
         }}
@@ -2031,7 +2027,7 @@ def generate_vo_pipeline_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = _sanitize_cs_identifier(database_name)
+    safe_name = sanitize_cs_identifier(database_name)
 
     if entries is None:
         entries = [
