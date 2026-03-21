@@ -86,8 +86,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 - [x] **BUILD-01**: Claude can orchestrate multi-platform builds (Windows, Mac, Linux, Android, iOS, WebGL) with per-platform settings
 - [x] **BUILD-02**: Claude can configure Addressable Asset Groups (remote/local paths, content catalogs, memory management)
-- [ ] **BUILD-03**: Claude can generate CI/CD pipeline configs (GitHub Actions, GitLab CI) for automated Unity builds and tests
-- [ ] **BUILD-04**: Claude can manage version numbers, release branches, and changelogs
+- [x] **BUILD-03**: Claude can generate CI/CD pipeline configs (GitHub Actions, GitLab CI) for automated Unity builds and tests
+- [x] **BUILD-04**: Claude can manage version numbers, release branches, and changelogs
 - [x] **BUILD-05**: Claude can configure platform-specific settings (Android manifest, iOS plist, WebGL template)
 - [x] **BUILD-06**: Claude can set up sprite sheet packing, texture atlasing, and sprite animation
 
@@ -144,7 +144,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 ### Accessibility & Publishing
 
 - [x] **ACC-01**: Claude can generate accessibility features (colorblind modes, subtitle sizing, screen reader tags, motor accessibility options)
-- [ ] **ACC-02**: Claude can generate store publishing metadata (screenshots, descriptions, content ratings, privacy policy templates)
+- [x] **ACC-02**: Claude can generate store publishing metadata (screenshots, descriptions, content ratings, privacy policy templates)
 
 ### Asset Pipeline Advanced
 
@@ -311,8 +311,8 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | QA-08 | Phase 16 | Complete |
 | BUILD-01 | Phase 17 | Complete |
 | BUILD-02 | Phase 17 | Complete |
-| BUILD-03 | Phase 17 | Pending |
-| BUILD-04 | Phase 17 | Pending |
+| BUILD-03 | Phase 17 | Complete |
+| BUILD-04 | Phase 17 | Complete |
 | BUILD-05 | Phase 17 | Complete |
 | SHDR-01 | Phase 10 | Complete |
 | SHDR-02 | Phase 10 | Complete |
@@ -324,7 +324,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | PHYS-01 | Phase 9 | Complete |
 | PHYS-02 | Phase 9 | Complete |
 | ACC-01 | Phase 15 | Complete |
-| ACC-02 | Phase 17 | Pending |
+| ACC-02 | Phase 17 | Complete |
 | PIPE-08 | Phase 11 | Complete |
 | PIPE-09 | Phase 9 | Complete |
 | PIPE-10 | Phase 15 | Complete |
