@@ -436,9 +436,6 @@ def generate_terrain_bridge_mesh(
     end_pos: tuple[float, float, float] = (10, 0, 0),
     width: float = 3.0,
     style: str = "stone_arch",
-    railing: bool = True,
-    arch_height: float = 2.0,
-    segments: int = 12,
     seed: int = 0,
 ) -> MeshSpec:
     """Generate a terrain-aware bridge between two world positions.
@@ -451,10 +448,7 @@ def generate_terrain_bridge_mesh(
         end_pos: World position of bridge end (x, y, z).
         width: Bridge width.
         style: Bridge style ("stone_arch", "rope", "drawbridge").
-        railing: Whether to include railings.
-        arch_height: Height of the arch curve.
-        segments: Subdivision segments.
-        seed: Random seed.
+        seed: Random seed (reserved for future noise variation).
 
     Returns:
         MeshSpec with bridge geometry transformed to world position.

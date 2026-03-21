@@ -101,9 +101,9 @@ def _create_vegetation_template(
         gen_func, gen_kwargs = gen_entry
         scatter_kwargs = dict(gen_kwargs)
         if veg_type == "tree":
-            scatter_kwargs.setdefault("segments", 6)
+            scatter_kwargs.setdefault("branch_count", 4)  # lower for scatter
         elif veg_type == "rock":
-            scatter_kwargs.setdefault("segments", 8)
+            scatter_kwargs.setdefault("detail", 2)  # lower for scatter
         spec = gen_func(**scatter_kwargs)
         obj = mesh_from_spec(
             spec,
