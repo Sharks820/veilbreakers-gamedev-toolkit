@@ -423,13 +423,13 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 
 ### Advanced Animation
 
-- [ ] **ANIM3-01**: Claude can configure combat animation timing (anticipation frames, active frames, recovery frames per attack type)
-- [ ] **ANIM3-02**: Claude can inject animation events at specific keyframes (hit, VFX spawn, sound trigger, footstep)
-- [ ] **ANIM3-03**: Claude can generate blend trees for directional movement and speed blending
-- [ ] **ANIM3-04**: Claude can create additive animation layers (damage reactions on top of locomotion)
-- [ ] **ANIM3-05**: Claude can refine root motion curves (smooth drift, prevent sliding)
-- [ ] **ANIM3-06**: Claude can generate AI-driven motion (implement generate_ai_motion stub with MotionGPT/HunyuanVideo integration)
-- [ ] **ANIM3-07**: Claude can generate cinematic animation sequences (camera cuts, character staging, Timeline integration)
+- [x] **ANIM3-01**: Claude can configure combat animation timing (anticipation frames, active frames, recovery frames per attack type)
+- [x] **ANIM3-02**: Claude can inject animation events at specific keyframes (hit, VFX spawn, sound trigger, footstep)
+- [x] **ANIM3-03**: Claude can generate blend trees for directional movement and speed blending
+- [x] **ANIM3-04**: Claude can create additive animation layers (damage reactions on top of locomotion)
+- [x] **ANIM3-05**: Claude can refine root motion curves (smooth drift, prevent sliding)
+- [x] **ANIM3-06**: Claude can generate AI-driven motion (implement generate_ai_motion stub with MotionGPT/HunyuanVideo integration)
+- [x] **ANIM3-07**: Claude can generate cinematic animation sequences (camera cuts, character staging, Timeline integration)
 
 ### Audio Middleware
 
@@ -504,13 +504,13 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 | CHAR-06 | Phase 19 | Complete |
 | CHAR-07 | Phase 19 | Complete |
 | CHAR-08 | Phase 19 | Complete |
-| ANIM3-01 | Phase 20 | Pending |
-| ANIM3-02 | Phase 20 | Pending |
-| ANIM3-03 | Phase 20 | Pending |
-| ANIM3-04 | Phase 20 | Pending |
-| ANIM3-05 | Phase 20 | Pending |
-| ANIM3-06 | Phase 20 | Pending |
-| ANIM3-07 | Phase 20 | Pending |
+| ANIM3-01 | Phase 20 | Complete |
+| ANIM3-02 | Phase 20 | Complete |
+| ANIM3-03 | Phase 20 | Complete |
+| ANIM3-04 | Phase 20 | Complete |
+| ANIM3-05 | Phase 20 | Complete |
+| ANIM3-06 | Phase 20 | Complete |
+| ANIM3-07 | Phase 20 | Complete |
 | AUDM-01 | Phase 21 | Pending |
 | AUDM-02 | Phase 21 | Pending |
 | AUDM-03 | Phase 21 | Pending |
