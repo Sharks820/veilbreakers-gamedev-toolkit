@@ -13,27 +13,38 @@ Every tool returns structured validation data and visual proof so Claude never w
 ### Validated
 
 v1.0 delivered (2026-03-19): 22 MCP tools, 86 Blender handlers, 153 capabilities, 2740 tests.
-- ✓ Token-efficient compound tool architecture (22/26 tools used)
+- ✓ Token-efficient compound tool architecture
 - ✓ Blender socket bridge addon with command dispatch (86 handlers)
 - ✓ Visual feedback system (screenshots, contact sheets)
 - ✓ Full mesh/UV/texture/rig/animation/environment/worldbuilding pipeline
 - ✓ Unity VFX/Audio/UI/Scene/Gameplay/Performance tools
-- ✓ Unity auto-recompile (AssetDatabase.Refresh without human clicking)
 
-## Current Milestone: v2.0 — Complete Unity Game Development Coverage
+v2.0 delivered (2026-03-21): 37 MCP tools (15 Blender + 22 Unity), 309 actions, 7182 tests, 135 bugs fixed.
+- ✓ Unity Editor deep control (prefabs, components, hierarchy, physics, settings, packages)
+- ✓ General-purpose C# code generation + script modification
+- ✓ Complete game systems (save/load, health, combat, inventory, dialogue, quests, loot, crafting, skill trees)
+- ✓ Camera/Cinemachine 3.x + Timeline + cutscenes + animation editing
+- ✓ Data architecture (ScriptableObjects, JSON, localization) + AAA quality enforcement
+- ✓ World design (16 room types, world graph, boss arenas, multi-floor dungeons, weather, day/night)
+- ✓ Game UX (minimap, damage numbers, tutorials, accessibility, encounter scripting, boss AI)
+- ✓ Unity TCP bridge (direct editor communication, no mcp-unity dependency)
+- ✓ QA/Testing (test runner, profiler, memory leaks, static analysis, compile error detection)
+- ✓ Build pipeline (multi-platform, Addressables, CI/CD, versioning, shader stripping)
+- ✓ 127 procedural mesh generators across 21 categories
 
-**Goal:** Close every gap in Unity Editor control, game systems, and programming tools so Claude can handle ANY Unity development task without limitations.
+## Current Milestone: v3.0 — AAA Mesh Quality + Professional Systems
+
+**Goal:** Close ALL remaining 3D modeling gaps, add ZBrush-level character workflows, FromSoft-level animation timing, Wwise-level audio architecture, and AAA UI/VFX polish. Move from 40% to 95% AAA coverage.
 
 **Target features:**
-- Unity Editor deep control (prefabs, components, hierarchy, physics, settings)
-- General-purpose C# programming (not just templates)
-- Complete game systems (save/load, inventory, dialogue, quests)
-- Camera/cutscene systems (Cinemachine, Timeline)
-- Input System configuration
-- Data architecture (ScriptableObjects, JSON config)
-- Multi-scene management
-- Build/deploy pipeline improvements
-- Testing framework integration
+- Wire 127 procedural meshes into worldbuilding/environment (real meshes, not primitives)
+- Terrain depth (cliffs, caves, multi-biome, waterfalls, bridges)
+- Character excellence (hair cards, face topology, proportions, armor seams)
+- FromSoft combat animation timing (anticipation/active/recovery frames)
+- Wwise-level spatial audio (propagation, occlusion, layered sound design)
+- AAA dark fantasy UI (ornate borders, icon pipeline, radial menus, tooltips)
+- Diablo 4-level VFX (flipbooks, VFX Graph composition, spell chains, status effects)
+- Production pipeline (compile auto-recovery, conflict detection, orchestration)
 
 ### Active
 
