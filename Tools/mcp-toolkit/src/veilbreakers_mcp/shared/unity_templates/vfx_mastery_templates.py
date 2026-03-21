@@ -955,7 +955,7 @@ public class VB_ProjectileVFX_{safe_name} : MonoBehaviour
 
         // Renderer
         var renderer = ps.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Particles/Standard Unlit"));
         renderer.material.SetColor("_Color", glowColor);
 
         ps.Stop();
@@ -1257,7 +1257,7 @@ public class VB_AoEVFX_{safe_aoe}_{brand} : MonoBehaviour
 
         // Renderer
         var renderer = ps.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Particles/Standard Unlit"));
         renderer.material.SetColor("_Color", glowColor);
 
         return ps;
@@ -1599,7 +1599,7 @@ def generate_status_effect_vfx_script(
         GameObject lrObj = new GameObject("LightningArc");
         lrObj.transform.SetParent(transform);
         lineRenderer = lrObj.AddComponent<LineRenderer>();
-        lineRenderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        lineRenderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Particles/Standard Unlit"));
         lineRenderer.material.SetColor("_Color", glowColor);'''
 
     target_block = ""
@@ -1748,7 +1748,7 @@ public class VB_StatusVFX_{brand} : MonoBehaviour
         col.color = new ParticleSystem.MinMaxGradient(grad);
 
         var renderer = mainPS.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Particles/Standard Unlit"));
         renderer.material.SetColor("_Color", glowColor);
     }}
 
@@ -1774,7 +1774,7 @@ public class VB_StatusVFX_{brand} : MonoBehaviour
         emission.rateOverTime = 0; // Emit manually in UpdateSecondaryEffect
 
         var renderer = secondaryPS.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Particles/Standard Unlit"));
         renderer.material.SetColor("_Color", brandColor);
     }}
 {secondary_code}
@@ -1967,7 +1967,7 @@ def generate_environmental_vfx_script(
             rayObj.transform.localPosition = new Vector3(xOffset, rayLength, zOffset);
 
             LineRenderer lr = rayObj.AddComponent<LineRenderer>();
-            lr.material = new Material(Shader.Find("Particles/Standard Unlit"));
+            lr.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Particles/Standard Unlit"));
             lr.positionCount = 2;
             lr.SetPosition(0, rayObj.transform.position);
             lr.SetPosition(1, rayObj.transform.position + Vector3.down * rayLength);
@@ -2185,7 +2185,7 @@ def generate_directional_hit_vfx_script(
     private System.Collections.IEnumerator ScreenFlash(float magnitude)
     {
         // Apply chromatic aberration via post-processing volume
-        var volumes = FindObjectsOfType<UnityEngine.Rendering.Volume>();
+        var volumes = FindObjectsByType<UnityEngine.Rendering.Volume>(FindObjectsSortMode.None);
         UnityEngine.Rendering.Universal.ChromaticAberration ca = null;
         foreach (var vol in volumes)
         {
@@ -2326,7 +2326,7 @@ public class VB_HitVFX_{brand} : MonoBehaviour
 
         // Renderer
         var renderer = ps.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Particles/Standard Unlit"));
         renderer.material.SetColor("_Color", glowColor);
     }}
 
@@ -2355,7 +2355,7 @@ public class VB_HitVFX_{brand} : MonoBehaviour
         shape.radius = splashRadius * 0.5f;
 
         var renderer = ps.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Particles/Standard Unlit"));
         renderer.material.SetColor("_Color", brandColor);
     }}
 }}
@@ -2773,7 +2773,7 @@ public class VB_BossTransitionVFX_{safe_type}_{boss_brand} : MonoBehaviour
         col.color = new ParticleSystem.MinMaxGradient(grad);
 
         var renderer = ps.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit") ?? Shader.Find("Particles/Standard Unlit"));
         renderer.material.SetColor("_Color", glowColor);
 
         ps.Stop();
