@@ -292,6 +292,60 @@ from veilbreakers_mcp.shared.unity_templates.build_templates import (
     generate_changelog,
     generate_store_metadata,
 )
+# ---------------------------------------------------------------------------
+# v3.0 template imports (Phases 19-24)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.character_templates import (
+    generate_cloth_setup_script,
+    generate_sss_skin_shader,
+    generate_parallax_eye_shader,
+    generate_micro_detail_normal_script,
+)
+from veilbreakers_mcp.shared.unity_templates.animation_templates import (
+    generate_blend_tree_script,
+    generate_additive_layer_script,
+)
+from veilbreakers_mcp.shared.unity_templates.cinematic_templates import (
+    generate_cinematic_script,
+)
+from veilbreakers_mcp.shared.unity_templates.audio_middleware_templates import (
+    generate_spatial_audio_script,
+    generate_audio_lod_script,
+    generate_layered_sound_script,
+    generate_audio_event_chain_script,
+    generate_procedural_foley_script,
+    generate_dynamic_music_script,
+    generate_portal_audio_script,
+    generate_vo_pipeline_script,
+)
+from veilbreakers_mcp.shared.unity_templates.ui_polish_templates import (
+    generate_procedural_frame_script,
+    generate_icon_render_pipeline_script,
+    generate_cursor_system_script,
+    generate_tooltip_system_script,
+    generate_radial_menu_script,
+    generate_notification_system_script,
+    generate_loading_screen_script,
+    generate_ui_material_shaders,
+)
+from veilbreakers_mcp.shared.unity_templates.vfx_mastery_templates import (
+    generate_flipbook_script,
+    generate_vfx_graph_composition_script,
+    generate_projectile_vfx_chain_script,
+    generate_aoe_vfx_script,
+    generate_status_effect_vfx_script,
+    generate_environmental_vfx_script as generate_deep_environmental_vfx_script,
+    generate_directional_hit_vfx_script,
+    generate_boss_transition_vfx_script,
+)
+from veilbreakers_mcp.shared.unity_templates.production_templates import (
+    generate_compile_recovery_script,
+    generate_conflict_detector_script,
+    generate_pipeline_orchestrator_script,
+    generate_pipeline_step_definitions,
+    generate_art_style_validator_script,
+    generate_build_smoke_test_script,
+)
 
 logger = logging.getLogger("veilbreakers_mcp.unity")
 
@@ -366,6 +420,31 @@ def _read_unity_result() -> dict:
         return json.loads(result_path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError) as exc:
         return {"status": "error", "message": f"Failed to read result: {exc}"}
+
+
+async def _handle_dict_template(action_name: str, result: dict) -> str:
+    """Generic handler for v3.0 template generators that return dicts.
+
+    v3.0 generators (audio_middleware, ui_polish, vfx_mastery, production)
+    return ``{script_path, script_content, next_steps}``.
+    This helper writes the script to Unity and returns a standard JSON response.
+    """
+    script_content = result.get("script_content", "")
+    rel_path = result.get("script_path", f"Assets/Scripts/Generated/{action_name}.cs")
+    next_steps = result.get("next_steps", [])
+
+    try:
+        abs_path = _write_to_unity(script_content, rel_path)
+    except ValueError as exc:
+        return json.dumps({"status": "error", "action": action_name, "message": str(exc)})
+
+    return json.dumps({
+        "status": "success",
+        "action": action_name,
+        "script_path": abs_path,
+        "next_steps": next_steps,
+        "result_file": "Temp/vb_result.json",
+    }, indent=2)
 
 
 @mcp.tool()
@@ -653,6 +732,14 @@ async def unity_vfx(
         "setup_post_processing",    # VFX-08: bloom/color grading/vignette/AO/DOF
         "create_screen_effect",     # VFX-09: camera shake/damage vignette/etc
         "create_ability_vfx",       # VFX-10: ability VFX + animation integration
+        "create_flipbook",           # VFX3-01: flipbook texture sheet generation
+        "compose_vfx_graph",         # VFX3-02: programmatic VFX Graph composition
+        "create_projectile_chain",   # VFX3-03: projectile VFX chain (spawn->travel->impact->aftermath)
+        "create_aoe_vfx",            # VFX3-04: area-of-effect VFX
+        "create_status_effect_vfx",  # VFX3-05: per-brand status effect VFX
+        "create_deep_environmental_vfx",  # VFX3-06: volumetric fog/god rays/heat distortion/caustics
+        "create_directional_hit_vfx",     # VFX3-07: directional combat hit VFX
+        "create_boss_transition_vfx",     # VFX3-08: boss phase transition VFX
     ],
     # Common params
     name: str = "default",
@@ -687,6 +774,41 @@ async def unity_vfx(
     vfx_prefab_path: str = "",
     anim_clip_path: str = "",
     keyframe_time: float = 0.0,
+    # Flipbook params (VFX3-01)
+    rows: int = 4,
+    columns: int = 4,
+    frame_count: int = 16,
+    resolution_per_frame: int = 128,
+    flipbook_output_path: str = "Assets/Art/VFX/Flipbooks",
+    # VFX Graph composition params (VFX3-02)
+    spawn_config: dict | None = None,
+    init_config: dict | None = None,
+    update_config: dict | None = None,
+    output_config: dict | None = None,
+    # Projectile chain params (VFX3-03)
+    stages: list[dict] | None = None,
+    projectile_speed: float = 20.0,
+    auto_generate: bool = True,
+    # AoE VFX params (VFX3-04)
+    aoe_type: str = "ground_circle",
+    aoe_radius: float = 5.0,
+    aoe_duration: float = 3.0,
+    particle_count: int = 200,
+    fade_out_time: float = 0.5,
+    # Status effect params (VFX3-05)
+    vfx_intensity: float = 1.0,
+    target_transform_path: str = "",
+    # Deep environmental VFX params (VFX3-06)
+    deep_vfx_type: str = "volumetric_fog",
+    area_size: float = 20.0,
+    # Directional hit params (VFX3-07)
+    hit_magnitude: float = 1.0,
+    screen_effect_enabled: bool = True,
+    # Boss transition params (VFX3-08)
+    transition_type: str = "corruption_wave",
+    boss_brand: str = "DREAD",
+    transition_duration: float = 3.0,
+    arena_radius: float = 20.0,
 ) -> str:
     """Unity VFX system -- VFX particles, shaders, post-processing, screen effects.
 
@@ -706,6 +828,14 @@ async def unity_vfx(
     - setup_post_processing: Create post-processing Volume with bloom/vignette/AO/DOF (VFX-08)
     - create_screen_effect: Create screen effects (camera shake/damage vignette/etc) (VFX-09)
     - create_ability_vfx: Bind VFX to AnimationEvent for ability effects (VFX-10)
+    - create_flipbook: Generate flipbook texture sheet from particle system captures (VFX3-01)
+    - compose_vfx_graph: Programmatic VFX Graph node composition (VFX3-02)
+    - create_projectile_chain: 4-stage projectile VFX chain (spawn/travel/impact/aftermath) (VFX3-03)
+    - create_aoe_vfx: Area-of-effect ground VFX (circle/cone/line/sphere) (VFX3-04)
+    - create_status_effect_vfx: Per-brand persistent status effect VFX (VFX3-05)
+    - create_deep_environmental_vfx: Volumetric fog, god rays, heat distortion, caustics (VFX3-06)
+    - create_directional_hit_vfx: Directional combat hit VFX with screen effects (VFX3-07)
+    - create_boss_transition_vfx: Boss phase transition VFX (VFX3-08)
 
     Args:
         action: The VFX action to perform.
@@ -758,6 +888,72 @@ async def unity_vfx(
         elif action == "create_ability_vfx":
             return await _handle_vfx_ability(
                 name, vfx_prefab_path, anim_clip_path, keyframe_time
+            )
+        elif action == "create_flipbook":
+            return await _handle_dict_template(
+                "create_flipbook",
+                generate_flipbook_script(
+                    effect_type=effect_type, rows=rows, columns=columns,
+                    frame_count=frame_count, resolution_per_frame=resolution_per_frame,
+                    output_path=flipbook_output_path,
+                ),
+            )
+        elif action == "compose_vfx_graph":
+            return await _handle_dict_template(
+                "compose_vfx_graph",
+                generate_vfx_graph_composition_script(
+                    graph_name=name, spawn_config=spawn_config, init_config=init_config,
+                    update_config=update_config, output_config=output_config,
+                ),
+            )
+        elif action == "create_projectile_chain":
+            return await _handle_dict_template(
+                "create_projectile_chain",
+                generate_projectile_vfx_chain_script(
+                    projectile_name=name, brand=brand, stages=stages,
+                    projectile_speed=projectile_speed, auto_generate=auto_generate,
+                ),
+            )
+        elif action == "create_aoe_vfx":
+            return await _handle_dict_template(
+                "create_aoe_vfx",
+                generate_aoe_vfx_script(
+                    aoe_type=aoe_type, brand=brand, radius=aoe_radius,
+                    duration=aoe_duration, particle_count=particle_count,
+                    fade_out_time=fade_out_time,
+                ),
+            )
+        elif action == "create_status_effect_vfx":
+            return await _handle_dict_template(
+                "create_status_effect_vfx",
+                generate_status_effect_vfx_script(
+                    brand=brand, intensity=vfx_intensity,
+                    target_transform_path=target_transform_path,
+                ),
+            )
+        elif action == "create_deep_environmental_vfx":
+            return await _handle_dict_template(
+                "create_deep_environmental_vfx",
+                generate_deep_environmental_vfx_script(
+                    vfx_type=deep_vfx_type, intensity=vfx_intensity,
+                    color=color, area_size=area_size,
+                ),
+            )
+        elif action == "create_directional_hit_vfx":
+            return await _handle_dict_template(
+                "create_directional_hit_vfx",
+                generate_directional_hit_vfx_script(
+                    brand=brand, hit_magnitude=hit_magnitude,
+                    screen_effect_enabled=screen_effect_enabled,
+                ),
+            )
+        elif action == "create_boss_transition_vfx":
+            return await _handle_dict_template(
+                "create_boss_transition_vfx",
+                generate_boss_transition_vfx_script(
+                    transition_type=transition_type, boss_brand=boss_brand,
+                    duration=transition_duration, arena_radius=arena_radius,
+                ),
             )
         else:
             return json.dumps(
@@ -1166,6 +1362,14 @@ async def unity_audio(
         "setup_audio_mixer",        # AUD-08: Unity Audio Mixer with groups
         "setup_audio_pool_manager", # AUD-09: audio pooling, priority, ducking
         "assign_animation_sfx",     # AUD-10: SFX at animation event keyframes
+        "setup_spatial_audio",      # AUDM-01: 3D spatial audio with occlusion
+        "setup_layered_sound",      # AUDM-02: composite layered sound design
+        "setup_audio_event_chain",  # AUDM-03: sequenced audio event chains
+        "setup_dynamic_music",      # AUDM-04: horizontal re-sequencing + vertical layering
+        "setup_portal_audio",       # AUDM-05: room-based sound propagation via portals
+        "setup_audio_lod",          # AUDM-06: distance-based audio quality tiers
+        "setup_vo_pipeline",        # AUDM-07: dialogue/VO playback pipeline
+        "setup_procedural_foley",   # AUDM-08: movement-based procedural foley
     ],
     # Common
     name: str = "default",
@@ -1192,13 +1396,47 @@ async def unity_audio(
     # Animation event params
     events: list[dict] | None = None,
     anim_clip_path: str = "",
+    # Spatial audio params (AUDM-01)
+    min_distance: float = 1.0,
+    max_distance: float = 50.0,
+    occlusion_enabled: bool = True,
+    occlusion_layers: str = "Default",
+    rolloff_mode: str = "Logarithmic",
+    doppler_level: float = 0.5,
+    spread_angle: float = 60.0,
+    # Layered sound params (AUDM-02)
+    sound_layers: list[dict] | None = None,
+    # Audio event chain params (AUDM-03)
+    chain_events: list[dict] | None = None,
+    # Dynamic music params (AUDM-04)
+    sections: list[str] | None = None,
+    stems: list[str] | None = None,
+    stingers: list[str] | None = None,
+    crossfade_duration: float = 2.0,
+    # Portal audio params (AUDM-05)
+    room_a: str = "RoomA",
+    room_b: str = "RoomB",
+    attenuation_closed: float = 0.9,
+    attenuation_open: float = 0.1,
+    # Audio LOD params (AUDM-06)
+    lod_distances: list[float] | None = None,
+    channel_reduction: bool = True,
+    priority_scaling: bool = True,
+    # VO pipeline params (AUDM-07)
+    vo_entries: list[dict] | None = None,
+    # Procedural foley params (AUDM-08)
+    armor_type: str = "plate",
+    surface_materials: list[str] | None = None,
 ) -> str:
-    """Unity Audio system -- AI audio generation and C# audio infrastructure.
+    """Unity Audio system -- AI audio generation, C# audio infrastructure, and
+    middleware-level audio architecture.
 
     This compound tool covers all audio functionality: AI-generated sound
     effects, music loops, voice lines, and ambient soundscapes via ElevenLabs,
-    plus Unity audio infrastructure setup (mixer, pool manager, footstep
-    system, adaptive music, audio zones, animation event SFX).
+    Unity audio infrastructure setup (mixer, pool manager, footstep system,
+    adaptive music, audio zones, animation event SFX), and advanced audio
+    middleware features (spatial audio, layered sound, event chains, dynamic
+    music, portal propagation, audio LOD, VO pipeline, procedural foley).
 
     Actions:
     - generate_sfx: Generate AI sound effect from text description (AUD-01)
@@ -1211,6 +1449,14 @@ async def unity_audio(
     - setup_audio_mixer: Generate audio mixer setup C# script (AUD-08)
     - setup_audio_pool_manager: Generate audio pool manager C# script (AUD-09)
     - assign_animation_sfx: Generate animation event SFX binding C# script (AUD-10)
+    - setup_spatial_audio: 3D spatial audio with occlusion/rolloff (AUDM-01)
+    - setup_layered_sound: Composite layered sound design (AUDM-02)
+    - setup_audio_event_chain: Sequenced audio event chains (AUDM-03)
+    - setup_dynamic_music: Horizontal re-sequencing + vertical layering + stingers (AUDM-04)
+    - setup_portal_audio: Room-based sound propagation via portals (AUDM-05)
+    - setup_audio_lod: Distance-based audio quality tiers (AUDM-06)
+    - setup_vo_pipeline: Dialogue/VO playback with subtitles and lip sync (AUDM-07)
+    - setup_procedural_foley: Movement-based procedural foley (AUDM-08)
 
     Args:
         action: The audio action to perform.
@@ -1252,6 +1498,62 @@ async def unity_audio(
             return await _handle_audio_setup_pool_manager(name, pool_size, max_sources)
         elif action == "assign_animation_sfx":
             return await _handle_audio_assign_animation_sfx(name, events)
+        elif action == "setup_spatial_audio":
+            return await _handle_dict_template(
+                "setup_spatial_audio",
+                generate_spatial_audio_script(
+                    source_name=name, min_distance=min_distance, max_distance=max_distance,
+                    occlusion_enabled=occlusion_enabled, occlusion_layers=occlusion_layers,
+                    rolloff_mode=rolloff_mode, doppler_level=doppler_level, spread_angle=spread_angle,
+                ),
+            )
+        elif action == "setup_layered_sound":
+            return await _handle_dict_template(
+                "setup_layered_sound",
+                generate_layered_sound_script(sound_name=name, layers=sound_layers),
+            )
+        elif action == "setup_audio_event_chain":
+            return await _handle_dict_template(
+                "setup_audio_event_chain",
+                generate_audio_event_chain_script(chain_name=name, events=chain_events),
+            )
+        elif action == "setup_dynamic_music":
+            return await _handle_dict_template(
+                "setup_dynamic_music",
+                generate_dynamic_music_script(
+                    music_name=name, sections=sections, stems=stems,
+                    stingers=stingers, crossfade_duration=crossfade_duration,
+                ),
+            )
+        elif action == "setup_portal_audio":
+            return await _handle_dict_template(
+                "setup_portal_audio",
+                generate_portal_audio_script(
+                    portal_name=name, room_a=room_a, room_b=room_b,
+                    attenuation_closed=attenuation_closed, attenuation_open=attenuation_open,
+                ),
+            )
+        elif action == "setup_audio_lod":
+            return await _handle_dict_template(
+                "setup_audio_lod",
+                generate_audio_lod_script(
+                    lod_distances=lod_distances, channel_reduction=channel_reduction,
+                    priority_scaling=priority_scaling,
+                ),
+            )
+        elif action == "setup_vo_pipeline":
+            return await _handle_dict_template(
+                "setup_vo_pipeline",
+                generate_vo_pipeline_script(database_name=name, entries=vo_entries),
+            )
+        elif action == "setup_procedural_foley":
+            return await _handle_dict_template(
+                "setup_procedural_foley",
+                generate_procedural_foley_script(
+                    character_name=name, armor_type=armor_type,
+                    surface_materials=surface_materials,
+                ),
+            )
         else:
             return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
     except Exception as exc:
@@ -1616,6 +1918,14 @@ async def unity_ui(
         "test_responsive",      # UI-03: capture at 5 resolutions
         "check_contrast",       # UI-06: WCAG AA contrast validation
         "compare_screenshots",  # UI-07: visual regression detection
+        "create_procedural_frame",   # UIPOL-01: ornate dark fantasy UI frames
+        "create_icon_pipeline",      # UIPOL-02: 3D icon render pipeline
+        "create_cursor_system",      # UIPOL-03: context-sensitive cursors
+        "create_tooltip_system",     # UIPOL-04: rich tooltips with comparison
+        "create_radial_menu",        # UIPOL-05: radial ability/item wheel
+        "create_notification_system", # UIPOL-06: toast notification system
+        "create_loading_screen",     # UIPOL-07: loading screen with tips/lore
+        "create_ui_shaders",         # UIPOL-08: material-based UI effect shaders
     ],
     # Screen generation params
     screen_spec: dict | None = None,
@@ -1632,14 +1942,57 @@ async def unity_ui(
     reference_path: str = "",
     current_path: str = "",
     diff_threshold: float = 0.01,
+    # Procedural frame params (UIPOL-01)
+    frame_name: str = "DarkFantasyFrame",
+    frame_style: str = "gothic",
+    border_width: int = 4,
+    corner_style: str = "ornate",
+    inner_glow: bool = True,
+    rune_brand: str = "IRON",
+    # Icon pipeline params (UIPOL-02)
+    icon_size: int = 256,
+    render_angle: str = "front_three_quarter",
+    light_setup: str = "three_point",
+    rarity_border: bool = True,
+    background_gradient: bool = True,
+    # Cursor system params (UIPOL-03)
+    cursor_types: list[str] | None = None,
+    detection_layers: str = "Default",
+    cursor_size: int = 32,
+    # Tooltip params (UIPOL-04)
+    tooltip_style: str = "dark_fantasy",
+    show_comparison: bool = True,
+    show_lore: bool = True,
+    fade_duration: float = 0.2,
+    max_width: int = 350,
+    # Radial menu params (UIPOL-05)
+    segment_count: int = 8,
+    menu_radius: float = 150.0,
+    menu_type: str = "ability",
+    trigger_key: str = "Tab",
+    # Notification params (UIPOL-06)
+    max_visible: int = 5,
+    auto_dismiss_seconds: float = 4.0,
+    toast_position: str = "top_right",
+    toast_types: list[str] | None = None,
+    # Loading screen params (UIPOL-07)
+    show_tips: bool = True,
+    show_loading_lore: bool = True,
+    show_art: bool = True,
+    progress_style: str = "bar",
+    tip_interval: float = 5.0,
+    # UI shader params (UIPOL-08)
+    ui_shader_name: str = "VB_UIEffects",
+    ui_effects: list[str] | None = None,
 ) -> str:
-    """Unity UI system -- UXML/USS generation, layout validation, WCAG contrast, responsive testing, visual regression.
+    """Unity UI system -- UXML/USS generation, layout validation, WCAG contrast,
+    responsive testing, visual regression, and dark fantasy UI polish.
 
     This compound tool covers all UI functionality: generating UI screens from
     text descriptions as UXML + USS with dark fantasy theming, validating layout
     for overlaps and sizing issues, checking WCAG color contrast compliance,
-    testing responsiveness at multiple resolutions, and detecting visual
-    regressions through screenshot comparison.
+    testing responsiveness at multiple resolutions, detecting visual regressions
+    through screenshot comparison, and AAA dark fantasy UI polish systems.
 
     Actions:
     - generate_ui_screen: Generate UXML + USS from screen spec with dark fantasy styling (UI-05)
@@ -1647,6 +2000,14 @@ async def unity_ui(
     - test_responsive: Generate C# script to capture screenshots at 5 resolutions (UI-03)
     - check_contrast: Validate WCAG AA contrast ratios for text elements (UI-06)
     - compare_screenshots: Detect visual regressions between screenshot pairs (UI-07)
+    - create_procedural_frame: Ornate dark fantasy UI frames with rune decorations (UIPOL-01)
+    - create_icon_pipeline: 3D icon render pipeline with rarity borders (UIPOL-02)
+    - create_cursor_system: Context-sensitive cursors with dark fantasy themes (UIPOL-03)
+    - create_tooltip_system: Rich tooltips with equipment comparison and lore (UIPOL-04)
+    - create_radial_menu: Radial ability/item wheel with PrimeTween animation (UIPOL-05)
+    - create_notification_system: Toast notification system with priority queue (UIPOL-06)
+    - create_loading_screen: Loading screen with tips, lore, and concept art (UIPOL-07)
+    - create_ui_shaders: Material-based UI effect shaders (gold-leaf, blood stain, etc.) (UIPOL-08)
 
     Args:
         action: The UI action to perform.
@@ -1680,6 +2041,69 @@ async def unity_ui(
         elif action == "compare_screenshots":
             return await _handle_ui_compare_screenshots(
                 reference_path, current_path, diff_threshold
+            )
+        elif action == "create_procedural_frame":
+            return await _handle_dict_template(
+                "create_procedural_frame",
+                generate_procedural_frame_script(
+                    frame_name=frame_name, style=frame_style, border_width=border_width,
+                    corner_style=corner_style, inner_glow=inner_glow, rune_brand=rune_brand,
+                ),
+            )
+        elif action == "create_icon_pipeline":
+            return await _handle_dict_template(
+                "create_icon_pipeline",
+                generate_icon_render_pipeline_script(
+                    icon_size=icon_size, render_angle=render_angle, light_setup=light_setup,
+                    rarity_border=rarity_border, background_gradient=background_gradient,
+                ),
+            )
+        elif action == "create_cursor_system":
+            return await _handle_dict_template(
+                "create_cursor_system",
+                generate_cursor_system_script(
+                    cursor_types=cursor_types, detection_layers=detection_layers,
+                    cursor_size=cursor_size,
+                ),
+            )
+        elif action == "create_tooltip_system":
+            return await _handle_dict_template(
+                "create_tooltip_system",
+                generate_tooltip_system_script(
+                    tooltip_style=tooltip_style, show_comparison=show_comparison,
+                    show_lore=show_lore, fade_duration=fade_duration, max_width=max_width,
+                ),
+            )
+        elif action == "create_radial_menu":
+            return await _handle_dict_template(
+                "create_radial_menu",
+                generate_radial_menu_script(
+                    segment_count=segment_count, radius=menu_radius,
+                    menu_type=menu_type, trigger_key=trigger_key,
+                ),
+            )
+        elif action == "create_notification_system":
+            return await _handle_dict_template(
+                "create_notification_system",
+                generate_notification_system_script(
+                    max_visible=max_visible, auto_dismiss_seconds=auto_dismiss_seconds,
+                    position=toast_position, toast_types=toast_types,
+                ),
+            )
+        elif action == "create_loading_screen":
+            return await _handle_dict_template(
+                "create_loading_screen",
+                generate_loading_screen_script(
+                    show_tips=show_tips, show_lore=show_loading_lore, show_art=show_art,
+                    progress_style=progress_style, tip_interval=tip_interval,
+                ),
+            )
+        elif action == "create_ui_shaders":
+            return await _handle_dict_template(
+                "create_ui_shaders",
+                generate_ui_material_shaders(
+                    shader_name=ui_shader_name, effects=ui_effects,
+                ),
             )
         else:
             return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
@@ -1946,6 +2370,8 @@ async def unity_scene(
         "create_animator",          # SCENE-05: Animator Controller with states/transitions
         "configure_avatar",         # SCENE-06: Humanoid/Generic bone mapping
         "setup_animation_rigging",  # SCENE-07: TwoBoneIK, MultiAim constraints
+        "create_blend_tree",        # ANIM3-03: directional/speed blend trees
+        "create_additive_layer",    # ANIM3-04: additive animation layers
     ],
     # Common
     name: str = "default",
@@ -1988,14 +2414,24 @@ async def unity_scene(
     bone_mapping: dict | None = None,
     # Animation Rigging params
     constraints: list[dict] | None = None,
+    # Blend tree params (ANIM3-03)
+    blend_type: str = "directional_8way",
+    controller_name: str = "VB_Locomotion",
+    motion_clips: dict[str, str] | None = None,
+    # Additive layer params (ANIM3-04)
+    layer_name: str = "Additive",
+    base_layer_index: int = 0,
+    additive_clips: list[dict] | None = None,
+    default_weight: float = 1.0,
+    avatar_mask_path: str = "",
 ) -> str:
     """Unity Scene setup -- terrain, object scattering, lighting, NavMesh, animation.
 
     This compound tool generates C# editor scripts for complete Unity scene
     setup: terrain from heightmaps, density-based object scattering, atmospheric
     lighting with post-processing, NavMesh baking for AI navigation, Animator
-    Controllers with blend trees, avatar configuration, and Animation Rigging
-    constraints.
+    Controllers with blend trees, avatar configuration, Animation Rigging
+    constraints, advanced blend trees, and additive animation layers.
 
     Actions:
     - setup_terrain: Create terrain from RAW heightmap with splatmaps (SCENE-01)
@@ -2005,6 +2441,8 @@ async def unity_scene(
     - create_animator: Animator Controller with states, transitions, blend trees (SCENE-05)
     - configure_avatar: Set Humanoid/Generic animation type with bone mapping (SCENE-06)
     - setup_animation_rigging: TwoBoneIK and MultiAim constraints (SCENE-07)
+    - create_blend_tree: Directional 8-way, speed, or combined blend trees (ANIM3-03)
+    - create_additive_layer: Additive animation layers for hit reactions, breathing (ANIM3-04)
 
     Args:
         action: The scene action to perform.
@@ -2071,6 +2509,15 @@ async def unity_scene(
             )
         elif action == "setup_animation_rigging":
             return await _handle_scene_setup_animation_rigging(name, constraints)
+        elif action == "create_blend_tree":
+            return await _handle_scene_create_blend_tree(
+                blend_type, controller_name, states, parameters, motion_clips,
+            )
+        elif action == "create_additive_layer":
+            return await _handle_scene_create_additive_layer(
+                name, layer_name, base_layer_index, additive_clips,
+                default_weight, avatar_mask_path,
+            )
         else:
             return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
     except Exception as exc:
@@ -2410,6 +2857,72 @@ async def _handle_scene_setup_animation_rigging(
         },
         indent=2,
     )
+
+
+async def _handle_scene_create_blend_tree(
+    blend_type: str, controller_name: str, states: list[dict] | None,
+    parameters: list[dict] | None, motion_clips: dict[str, str] | None,
+) -> str:
+    """Create advanced blend tree (ANIM3-03)."""
+    script = generate_blend_tree_script(
+        blend_type=blend_type,
+        controller_name=controller_name,
+        states=states,
+        parameters=parameters,
+        motion_clips=motion_clips,
+    )
+    safe_name = controller_name.replace(" ", "_").replace("-", "_")
+    rel_path = f"Assets/Editor/Generated/Animation/VeilBreakers_BlendTree_{safe_name}.cs"
+    try:
+        abs_path = _write_to_unity(script, rel_path)
+    except ValueError as exc:
+        return json.dumps({"status": "error", "action": "create_blend_tree", "message": str(exc)})
+    return json.dumps({
+        "status": "success",
+        "action": "create_blend_tree",
+        "blend_type": blend_type,
+        "controller_name": controller_name,
+        "script_path": abs_path,
+        "next_steps": [
+            "Call unity_editor action='recompile' to compile the blend tree script",
+            f"Execute menu item: VeilBreakers > Animation > Create Blend Tree > {controller_name}",
+        ],
+        "result_file": "Temp/vb_result.json",
+    }, indent=2)
+
+
+async def _handle_scene_create_additive_layer(
+    name: str, layer_name: str, base_layer_index: int,
+    additive_clips: list[dict] | None, default_weight: float,
+    avatar_mask_path: str,
+) -> str:
+    """Create additive animation layer (ANIM3-04)."""
+    script = generate_additive_layer_script(
+        controller_name=name,
+        layer_name=layer_name,
+        base_layer_index=base_layer_index,
+        additive_clips=additive_clips,
+        default_weight=default_weight,
+        avatar_mask_path=avatar_mask_path,
+    )
+    safe_name = name.replace(" ", "_").replace("-", "_")
+    rel_path = f"Assets/Editor/Generated/Animation/VeilBreakers_AdditiveLayer_{safe_name}.cs"
+    try:
+        abs_path = _write_to_unity(script, rel_path)
+    except ValueError as exc:
+        return json.dumps({"status": "error", "action": "create_additive_layer", "message": str(exc)})
+    return json.dumps({
+        "status": "success",
+        "action": "create_additive_layer",
+        "controller_name": name,
+        "layer_name": layer_name,
+        "script_path": abs_path,
+        "next_steps": [
+            "Call unity_editor action='recompile' to compile the additive layer script",
+            f"Execute menu item: VeilBreakers > Animation > Add Additive Layer > {layer_name}",
+        ],
+        "result_file": "Temp/vb_result.json",
+    }, indent=2)
 
 
 # ---------------------------------------------------------------------------
@@ -3801,6 +4314,7 @@ async def unity_prefab(
         "setup_navmesh",
         "setup_bone_sockets",
         "validate_project",
+        "cloth_setup",              # CHAR-07: Unity Cloth component configuration
     ],
     # Params for create/scaffold
     name: str = "",
@@ -3842,12 +4356,19 @@ async def unity_prefab(
     sockets: list[str] | None = None,
     # Params for components list (auto-wire override)
     components: list[dict] | None = None,
+    # Params for cloth_setup (CHAR-07)
+    cloth_type: str = "cape",
+    cloth_stiffness: float | None = None,
+    cloth_damping: float | None = None,
+    wind_main: float = 1.0,
+    wind_turbulence: float = 0.5,
+    collision_spheres: list[dict] | None = None,
 ) -> str:
     """Unity Prefab, Component, and Hierarchy automation.
 
     This compound tool generates C# editor scripts for prefab creation,
     component configuration, hierarchy manipulation, physics joints,
-    NavMesh setup, bone sockets, and batch operations.
+    NavMesh setup, bone sockets, cloth simulation, and batch operations.
 
     Actions:
     - create: Create prefab from auto-wire profile (EDIT-01)
@@ -3867,6 +4388,7 @@ async def unity_prefab(
     - setup_navmesh: NavMesh configuration (PHYS-02)
     - setup_bone_sockets: Bone socket attachment points (EQUIP-02)
     - validate_project: Check project integrity
+    - cloth_setup: Configure Unity Cloth component with presets (CHAR-07)
     """
     # Resolve selector: prefer explicit selector dict/str, fall back to object_name
     resolved_selector = selector if selector is not None else (object_name if object_name else None)
@@ -3910,6 +4432,11 @@ async def unity_prefab(
             return await _handle_prefab_setup_bone_sockets(prefab_path, sockets)
         elif action == "validate_project":
             return await _handle_prefab_validate_project()
+        elif action == "cloth_setup":
+            return await _handle_prefab_cloth_setup(
+                name or "CharacterCloth", cloth_type, cloth_stiffness,
+                cloth_damping, wind_main, wind_turbulence, collision_spheres,
+            )
         else:
             return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
     except Exception as exc:
@@ -4295,6 +4822,41 @@ async def _handle_prefab_validate_project() -> str:
         "next_steps": [
             "Run unity_editor action=recompile to compile the new script",
             'Open Unity Editor and run VeilBreakers > Prefab > Validate Project Integrity from the menu bar',
+        ],
+        "result_file": "Temp/vb_result.json",
+    }, indent=2)
+
+
+async def _handle_prefab_cloth_setup(
+    mesh_name: str, cloth_type: str, stiffness: float | None,
+    damping: float | None, wind_main: float, wind_turbulence: float,
+    collision_spheres: list[dict] | None,
+) -> str:
+    """Configure Unity Cloth component on mesh (CHAR-07)."""
+    script = generate_cloth_setup_script(
+        mesh_name=mesh_name,
+        cloth_type=cloth_type,
+        stiffness=stiffness,
+        damping=damping,
+        wind_main=wind_main,
+        wind_turbulence=wind_turbulence,
+        collision_spheres=collision_spheres,
+    )
+    safe_name = mesh_name.replace(" ", "_").replace("-", "_")
+    rel_path = f"Assets/Editor/Generated/Character/VeilBreakers_Cloth_{safe_name}.cs"
+    try:
+        abs_path = _write_to_unity(script, rel_path)
+    except ValueError as exc:
+        return json.dumps({"status": "error", "action": "cloth_setup", "message": str(exc)})
+    return json.dumps({
+        "status": "success",
+        "action": "cloth_setup",
+        "script_path": abs_path,
+        "cloth_type": cloth_type,
+        "mesh_name": mesh_name,
+        "next_steps": [
+            "Call unity_editor action='recompile' to compile the cloth setup script",
+            f"Execute menu item: VeilBreakers > Character > Setup Cloth on {mesh_name}",
         ],
         "result_file": "Temp/vb_result.json",
     }, indent=2)
@@ -5238,6 +5800,9 @@ async def unity_shader(
     action: Literal[
         "create_shader",            # SHDR-01: Generate arbitrary HLSL/ShaderLab shader
         "create_renderer_feature",  # SHDR-02: Generate URP ScriptableRendererFeature
+        "sss_skin_shader",          # CHAR-08: Subsurface scattering skin shader
+        "parallax_eye_shader",      # CHAR-08: Parallax/refraction eye shader
+        "micro_detail_normal",      # CHAR-08: Micro-detail normal compositing script
     ],
     # Shader params (SHDR-01)
     shader_name: str = "",
@@ -5264,13 +5829,30 @@ async def unity_shader(
     shader_property_name: str = "_shader",
     material_properties: list[dict] | None = None,
     pass_code: str = "",
+    # SSS skin shader params (CHAR-08)
+    sss_color: list[float] | None = None,
+    sss_power: float = 3.0,
+    sss_distortion: float = 0.5,
+    sss_scale: float = 1.0,
+    # Parallax eye shader params (CHAR-08)
+    iris_depth: float = 0.3,
+    pupil_scale: float = 0.3,
+    ior: float = 1.33,
+    # Micro-detail normal params (CHAR-08)
+    base_normal_property: str = "_BumpMap",
+    detail_normal_property: str = "_DetailNormalMap",
+    detail_tiling: float = 10.0,
+    detail_strength: float = 0.5,
 ) -> str:
-    """Shader and renderer feature generation -- create HLSL/ShaderLab shaders
-    and URP ScriptableRendererFeatures.
+    """Shader and renderer feature generation -- create HLSL/ShaderLab shaders,
+    URP ScriptableRendererFeatures, and AAA character shaders.
 
     Actions:
     - create_shader: Generate configurable HLSL/ShaderLab shader for URP (SHDR-01)
     - create_renderer_feature: Generate URP ScriptableRendererFeature with RenderGraph pass (SHDR-02)
+    - sss_skin_shader: Generate subsurface scattering skin shader for characters (CHAR-08)
+    - parallax_eye_shader: Generate parallax/refraction eye shader with iris depth (CHAR-08)
+    - micro_detail_normal: Generate micro-detail normal compositing script (CHAR-08)
 
     Args:
         action: The shader action to perform.
@@ -5297,6 +5879,17 @@ async def unity_shader(
         shader_property_name: Shader serialized field name.
         material_properties: Material properties set per frame.
         pass_code: Custom RecordRenderGraph body.
+        sss_color: RGBA color for SSS tint [r, g, b, a] (sss_skin_shader).
+        sss_power: SSS falloff power (sss_skin_shader).
+        sss_distortion: Normal distortion for back-scatter (sss_skin_shader).
+        sss_scale: SSS intensity scale (sss_skin_shader).
+        iris_depth: Eye iris parallax depth 0-1 (parallax_eye_shader).
+        pupil_scale: Pupil size scale (parallax_eye_shader).
+        ior: Index of refraction for cornea (parallax_eye_shader).
+        base_normal_property: Shader property for base normal map (micro_detail_normal).
+        detail_normal_property: Shader property for detail normal map (micro_detail_normal).
+        detail_tiling: UV tiling for micro-detail normal (micro_detail_normal).
+        detail_strength: Blend strength for detail normal (micro_detail_normal).
     """
     try:
         if action == "create_shader":
@@ -5361,6 +5954,68 @@ async def unity_shader(
                     f"Add {feature_name}Feature to the URP Renderer asset in Unity",
                 ],
             })
+
+        elif action == "sss_skin_shader":
+            sss_tuple = tuple(sss_color) if sss_color and len(sss_color) == 4 else (0.8, 0.3, 0.2, 1.0)
+            shader_source = generate_sss_skin_shader(
+                sss_color=sss_tuple,
+                sss_power=sss_power,
+                sss_distortion=sss_distortion,
+                sss_scale=sss_scale,
+            )
+            rel_path = f"{output_dir}/VB_SSS_Skin.shader"
+            abs_path = _write_to_unity(shader_source, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "shader_path": abs_path,
+                "shader_name": "VeilBreakers/Character/SSS_Skin",
+                "next_steps": [
+                    "Call unity_editor action='recompile' to import the SSS skin shader",
+                    "Create a material using shader 'VeilBreakers/Character/SSS_Skin'",
+                    "Assign a thickness map to _ThicknessMap for SSS control",
+                ],
+            }, indent=2)
+
+        elif action == "parallax_eye_shader":
+            shader_source = generate_parallax_eye_shader(
+                iris_depth=iris_depth,
+                pupil_scale=pupil_scale,
+                ior=ior,
+            )
+            rel_path = f"{output_dir}/VB_ParallaxEye.shader"
+            abs_path = _write_to_unity(shader_source, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "shader_path": abs_path,
+                "shader_name": "VeilBreakers/Character/ParallaxEye",
+                "next_steps": [
+                    "Call unity_editor action='recompile' to import the eye shader",
+                    "Create a material using shader 'VeilBreakers/Character/ParallaxEye'",
+                    "Assign iris texture and configure pupil dilation via _PupilScale",
+                ],
+            }, indent=2)
+
+        elif action == "micro_detail_normal":
+            script = generate_micro_detail_normal_script(
+                base_normal_property=base_normal_property,
+                detail_normal_property=detail_normal_property,
+                detail_tiling=detail_tiling,
+                detail_strength=detail_strength,
+            )
+            rel_path = "Assets/Editor/Generated/Character/VeilBreakers_MicroDetailNormal.cs"
+            abs_path = _write_to_unity(script, rel_path)
+            return json.dumps({
+                "status": "success",
+                "action": action,
+                "script_path": abs_path,
+                "next_steps": [
+                    "Call unity_editor action='recompile' to compile the micro-detail script",
+                    "Attach VeilBreakers_MicroDetailNormal component to character head mesh",
+                    "Assign base + detail normal maps for pore-level detail compositing",
+                ],
+            }, indent=2)
 
         else:
             return json.dumps(
@@ -6985,6 +7640,7 @@ async def unity_camera(
         "modify_animator",            # ANIMA-02
         "create_avatar_mask",         # ANIMA-03
         "setup_video_player",         # MEDIA-01
+        "cinematic_sequence",         # ANIM3-07: Timeline-based cinematic sequences
     ],
     name: str = "default",
     # camera params
@@ -7033,10 +7689,13 @@ async def unity_camera(
     loop: bool = True,
     # common
     namespace: str = "",
+    # cinematic sequence params (ANIM3-07)
+    shots: list[dict] | None = None,
 ) -> str:
     """Camera, cinematics, and animation tools -- Cinemachine 3.x virtual cameras,
     state-driven cameras, camera shake, blend profiles, Timeline, cutscenes,
-    animation clip editing, animator modification, avatar masks, video player.
+    animation clip editing, animator modification, avatar masks, video player,
+    and cinematic sequences.
 
     Camera actions (camera_templates.py):
     - create_virtual_camera: Cinemachine 3.x camera with orbital/follow/dolly body (CAM-01)
@@ -7055,6 +7714,7 @@ async def unity_camera(
 
     Media actions:
     - setup_video_player: Video player with render texture or camera overlay (MEDIA-01)
+    - cinematic_sequence: Create Timeline-based cinematic with shots and character staging (ANIM3-07)
 
     Args:
         action: The camera/animation action to perform.
@@ -7138,6 +7798,10 @@ async def unity_camera(
             return await _handle_camera_video_player(
                 video_source, video_path, render_texture_width,
                 render_texture_height, loop, play_on_awake, ns_kwargs,
+            )
+        elif action == "cinematic_sequence":
+            return await _handle_camera_cinematic_sequence(
+                name, shots, output_path, namespace,
             )
         else:
             return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
@@ -7402,6 +8066,37 @@ async def _handle_camera_video_player(
             "Call unity_editor action='recompile' to compile the video player setup",
             "Execute menu item: VeilBreakers > Media > Setup Video Player",
         ],
+    }, indent=2)
+
+
+async def _handle_camera_cinematic_sequence(
+    name: str, shots: list[dict] | None, output_path: str, namespace: str,
+) -> str:
+    """Create Timeline-based cinematic sequence (ANIM3-07)."""
+    ns = namespace or "VeilBreakers.Cinematics"
+    script = generate_cinematic_script(
+        sequence_name=name,
+        shots=shots,
+        output_path=output_path,
+        namespace=ns,
+    )
+    safe_name = name.replace(" ", "_").replace("-", "_")
+    rel_path = f"Assets/Editor/Generated/Cinematic/VeilBreakers_Cinematic_{safe_name}.cs"
+    try:
+        abs_path = _write_to_unity(script, rel_path)
+    except ValueError as exc:
+        return json.dumps({"status": "error", "action": "cinematic_sequence", "message": str(exc)})
+    return json.dumps({
+        "status": "success",
+        "action": "cinematic_sequence",
+        "sequence_name": name,
+        "script_path": abs_path,
+        "next_steps": [
+            "Call unity_editor action='recompile' to compile the cinematic script",
+            f"Execute menu item: VeilBreakers > Cinematic > Create {name}",
+            f"Timeline asset will be saved to: {output_path}/{name}.playable",
+        ],
+        "result_file": "Temp/vb_result.json",
     }, indent=2)
 
 
@@ -8745,6 +9440,12 @@ async def unity_qa(
         "setup_analytics",          # QA-07
         "inspect_live_state",       # QA-08
         "check_compile_status",     # QA-09
+        "compile_recovery",         # PROD-01: compile error auto-recovery
+        "detect_conflicts",         # PROD-02: asset/class name conflict detection
+        "orchestrate_pipeline",     # PROD-03: multi-tool pipeline orchestration
+        "list_pipeline_steps",      # PROD-03b: list available pipeline step definitions
+        "validate_art_style",       # PROD-04: art style consistency validation
+        "build_smoke_test",         # PROD-05: post-build smoke test verification
     ],
     name: str = "default",
     # bridge params
@@ -8783,9 +9484,34 @@ async def unity_qa(
     max_tracked_objects: int = 20,
     # common
     namespace: str = "",
+    # compile recovery params (PROD-01)
+    auto_fix_enabled: bool = True,
+    max_retries: int = 3,
+    watch_assemblies: list[str] | None = None,
+    recovery_log_path: str = "Temp/vb_compile_recovery.json",
+    # conflict detector params (PROD-02)
+    scan_paths: list[str] | None = None,
+    ignore_patterns: list[str] | None = None,
+    namespace_prefix: str = "VeilBreakers",
+    # pipeline orchestrator params (PROD-03)
+    pipeline_name: str = "custom",
+    pipeline_steps: list[dict] | None = None,
+    on_failure: str = "stop",
+    # art style validator params (PROD-04)
+    palette_colors: list[dict] | None = None,
+    roughness_range: list[float] | None = None,
+    max_texel_density: float | None = None,
+    naming_pattern: str | None = None,
+    # build smoke test params (PROD-05)
+    build_path: str = "Builds/VeilBreakers.exe",
+    smoke_timeout_seconds: int = 30,
+    scene_to_load: str = "",
+    expected_fps_min: int = 10,
 ) -> str:
     """Unity Quality Assurance & Testing tools -- bridge, test runner, profiler,
-    memory leak detection, static analysis, crash reporting, analytics, live inspector.
+    memory leak detection, static analysis, crash reporting, analytics, live
+    inspector, compile recovery, conflict detection, pipeline orchestration,
+    art style validation, and build smoke tests.
 
     Bridge & Infrastructure (qa_templates.py):
     - setup_bridge: TCP bridge server + command dispatch for Unity Editor automation (QA-00)
@@ -8804,6 +9530,14 @@ async def unity_qa(
 
     Compile Status:
     - check_compile_status: Query Unity bridge to detect compile errors after script writes (QA-09)
+
+    Production Pipeline (production_templates.py):
+    - compile_recovery: Compile error auto-detection and recovery (PROD-01)
+    - detect_conflicts: Pre-write asset/class name conflict scanning (PROD-02)
+    - orchestrate_pipeline: Multi-step pipeline orchestration with status tracking (PROD-03)
+    - list_pipeline_steps: List available built-in pipeline step definitions (PROD-03b)
+    - validate_art_style: Art style consistency validation (palette, roughness, naming) (PROD-04)
+    - build_smoke_test: Post-build smoke test verification (PROD-05)
 
     Args:
         action: The QA action to perform.
@@ -9055,6 +9789,55 @@ async def unity_qa(
 
         elif action == "check_compile_status":
             return await _handle_check_compile_status(bridge_port)
+
+        elif action == "compile_recovery":
+            return await _handle_dict_template(
+                "compile_recovery",
+                generate_compile_recovery_script(
+                    auto_fix_enabled=auto_fix_enabled, max_retries=max_retries,
+                    watch_assemblies=watch_assemblies, log_path=recovery_log_path,
+                ),
+            )
+        elif action == "detect_conflicts":
+            return await _handle_dict_template(
+                "detect_conflicts",
+                generate_conflict_detector_script(
+                    scan_paths=scan_paths, ignore_patterns=ignore_patterns,
+                    namespace_prefix=namespace_prefix,
+                ),
+            )
+        elif action == "orchestrate_pipeline":
+            return await _handle_dict_template(
+                "orchestrate_pipeline",
+                generate_pipeline_orchestrator_script(
+                    pipeline_name=pipeline_name, steps=pipeline_steps,
+                    on_failure=on_failure,
+                ),
+            )
+        elif action == "list_pipeline_steps":
+            result = generate_pipeline_step_definitions()
+            return json.dumps({
+                "status": "success",
+                "action": "list_pipeline_steps",
+                **result,
+            }, indent=2)
+        elif action == "validate_art_style":
+            roughness_tuple = tuple(roughness_range) if roughness_range and len(roughness_range) == 2 else None
+            return await _handle_dict_template(
+                "validate_art_style",
+                generate_art_style_validator_script(
+                    palette_colors=palette_colors, roughness_range=roughness_tuple,
+                    max_texel_density=max_texel_density, naming_pattern=naming_pattern,
+                ),
+            )
+        elif action == "build_smoke_test":
+            return await _handle_dict_template(
+                "build_smoke_test",
+                generate_build_smoke_test_script(
+                    build_path=build_path, timeout_seconds=smoke_timeout_seconds,
+                    scene_to_load=scene_to_load, expected_fps_min=expected_fps_min,
+                ),
+            )
 
         else:
             return json.dumps({
