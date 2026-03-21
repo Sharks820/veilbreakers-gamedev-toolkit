@@ -87,16 +87,9 @@ async def blender_scene(
     action: Literal["inspect", "clear", "configure", "list_objects"],
     render_engine: str | None = None,
     fps: int | None = None,
-    unit_scale: float | None = None,
+    unit_scale: float | None = None
 ):
-    """Manage Blender scene state.
-
-    Actions:
-    - inspect: Get full scene info (objects, materials, render settings)
-    - clear: Remove all objects from scene
-    - configure: Set render engine, FPS, unit scale
-    - list_objects: Get names and types of all objects
-    """
+    """Manage Blender scene state."""
     blender = get_blender_connection()
     if action == "inspect":
         result = await blender.send_command("get_scene_info")
@@ -128,17 +121,9 @@ async def blender_object(
     position: list[float] | None = None,
     rotation: list[float] | None = None,
     scale: list[float] | None = None,
-    capture_viewport: bool = True,
+    capture_viewport: bool = True
 ):
-    """Manage Blender objects with visual verification.
-
-    Actions:
-    - create: Add new mesh (mesh_type: cube/sphere/cylinder/plane/cone/torus/monkey)
-    - modify: Change position/rotation/scale of existing object by name
-    - delete: Remove object by name
-    - duplicate: Copy object, optionally rename
-    - list: List all objects (no screenshot)
-    """
+    """Manage Blender objects with visual verification."""
     blender = get_blender_connection()
 
     if action == "list":
@@ -180,16 +165,9 @@ async def blender_material(
     base_color: list[float] | None = None,
     metallic: float | None = None,
     roughness: float | None = None,
-    capture_viewport: bool = True,
+    capture_viewport: bool = True
 ):
-    """Manage Blender materials (basic PBR).
-
-    Actions:
-    - create: Create new material with optional PBR properties
-    - assign: Assign material to object by name
-    - modify: Change material properties
-    - list: List all materials (no screenshot)
-    """
+    """Manage Blender materials (basic PBR)."""
     blender = get_blender_connection()
 
     if action == "list":
@@ -231,16 +209,9 @@ async def blender_viewport(
     camera_target: list[float] | None = None,
     angles: list[list[float]] | None = None,
     resolution: list[int] | None = None,
-    max_size: int = 1024,
+    max_size: int = 1024
 ):
-    """Visual verification and viewport control.
-
-    Actions:
-    - screenshot: Capture current viewport
-    - contact_sheet: Render multi-angle composite of object (default 6 angles)
-    - set_shading: Change viewport shading (WIREFRAME, SOLID, MATERIAL, RENDERED)
-    - navigate: Move viewport camera to position looking at target
-    """
+    """Visual verification and viewport control."""
     blender = get_blender_connection()
 
     if action == "screenshot":
@@ -295,12 +266,7 @@ async def blender_execute(
     code: str,
     capture_viewport: bool = True,
 ):
-    """Execute validated Python code in Blender.
-
-    Code is AST-validated against a security whitelist before execution.
-    Allowed imports: bpy, mathutils, bmesh, math, random, json.
-    Blocked: os, sys, subprocess, socket, exec, eval, getattr, open.
-    """
+    """Execute validated Python code in Blender."""
     is_safe, violations = validate_code(code)
     if not is_safe:
         return "SECURITY ERROR: Code validation failed:\n" + "\n".join(
@@ -319,12 +285,7 @@ async def blender_export(
     selected_only: bool = False,
     apply_modifiers: bool = True,
 ) -> str:
-    """Export scene or selection to game-ready format.
-
-    Formats:
-    - fbx: FBX export with Unity-compatible settings
-    - gltf: glTF 2.0 export
-    """
+    """Export scene or selection to game-ready format."""
     blender = get_blender_connection()
     cmd = f"export_{export_format}"
     result = await blender.send_command(cmd, {
@@ -375,20 +336,9 @@ async def blender_mesh(
     # Sculpt params
     strength: float = 0.5,
     iterations: int = 3,
-    capture_viewport: bool = True,
+    capture_viewport: bool = True
 ):
-    """Mesh topology analysis, repair, editing, booleans, retopology, and sculpting.
-
-    Actions:
-    - analyze: Full topology analysis with A-F grading
-    - repair: Auto-repair pipeline (remove doubles, fix normals, fill holes)
-    - game_check: Composite game-readiness validation
-    - select: Select geometry by material, vertex group, face normal, or loose parts
-    - edit: Surgical mesh editing (extrude, inset, mirror, separate, join)
-    - boolean: Boolean operations (union, difference, intersect) with another object
-    - retopo: Retopology via Quadriflow with target face count
-    - sculpt: Sculpt operations (smooth, inflate, flatten, crease)
-    """
+    """Mesh topology analysis, repair, editing, booleans, retopology, and sculpting."""
     blender = get_blender_connection()
 
     if action == "analyze":
@@ -519,21 +469,9 @@ async def blender_uv(
     target_density: float | None = None,
     size: int = 1024,
     opacity: float = 0.25,
-    capture_viewport: bool = True,
+    capture_viewport: bool = True
 ):
-    """UV mapping analysis, unwrapping, packing, and optimization.
-
-    Actions:
-    - analyze: UV quality analysis (stretch, overlap, island count, texel density, seams)
-    - unwrap: Automatic UV unwrap via xatlas (high quality, configurable)
-    - unwrap_blender: Blender native UV unwrap (smart_project or angle_based)
-    - pack: UV island packing optimization
-    - lightmap: Generate lightmap UV2 for Unity (separate from UV1)
-    - equalize: Texel density equalization across all UV islands
-    - export_layout: Export UV layout as PNG image for visual review
-    - set_layer: Set active UV layer by name
-    - ensure_xatlas: Install xatlas into Blender Python if not present
-    """
+    """UV mapping analysis, unwrapping, packing, and optimization."""
     blender = get_blender_connection()
 
     if action == "analyze":
@@ -671,24 +609,9 @@ async def blender_texture(
     # Palette validation params
     rules: dict | None = None,
     sample_pixels: int = 10000,
-    capture_viewport: bool = True,
+    capture_viewport: bool = True
 ):
-    """Comprehensive texture operations -- Blender-side and MCP-side.
-
-    Actions:
-    - create_pbr: Create full PBR material with image texture nodes
-    - mask_region: Generate UV mask for a material slot
-    - inpaint: AI texture inpainting (requires fal_key)
-    - hsv_adjust: HSV color adjustment on masked region
-    - blend_seams: Smooth UV seam boundaries
-    - generate_wear: Compute per-vertex curvature wear map
-    - bake: Bake texture maps (normal, AO, combined, etc.)
-    - upscale: AI upscale via Real-ESRGAN
-    - make_tileable: Make texture tile seamlessly
-    - validate: Validate textures on object or file
-    - delight: Remove baked-in lighting from albedo texture (AAA-01)
-    - validate_palette: Validate dark fantasy palette rules on albedo texture (AAA-03)
-    """
+    """Comprehensive texture operations -- Blender-side and MCP-side."""
     blender = get_blender_connection()
 
     if action == "create_pbr":
@@ -889,24 +812,9 @@ async def asset_pipeline(
     camera_distance: float = 2.0,
     camera_angle: str = "front",
     body_types: list[str] | None = None,
-    capture_viewport: bool = True,
+    capture_viewport: bool = True
 ):
-    """Asset pipeline management -- 3D generation, processing, LODs, catalog, equipment.
-
-    Actions:
-    - generate_3d: Generate 3D model from text prompt or image via Tripo3D
-    - cleanup: Run repair -> UV -> PBR pipeline on AI-generated model
-    - generate_lods: Generate LOD chain (LOD0-LOD3) with decimation
-    - validate_export: Validate exported FBX/GLB file
-    - tag_metadata: Export asset metadata as JSON sidecar
-    - batch_process: Run pipeline for multiple objects
-    - catalog_query: Search asset catalog by type, tags, status
-    - catalog_add: Add asset to catalog database
-    - generate_weapon: Generate parametric weapon mesh (EQUIP-01)
-    - split_character: Split rigged character into modular parts (EQUIP-03)
-    - fit_armor: Fit armor mesh to character (EQUIP-04)
-    - render_equipment_icon: Render transparent equipment preview icon (EQUIP-05)
-    """
+    """Asset pipeline management -- 3D generation, processing, LODs, catalog, equipment."""
     blender = get_blender_connection()
 
     if action == "generate_3d":
@@ -1068,16 +976,9 @@ async def concept_art(
     # silhouette params
     threshold: int = 128,
     min_contrast_ratio: float = 0.3,
-    distances: list[float] | None = None,
+    distances: list[float] | None = None
 ):
-    """Concept art generation and visual analysis tools.
-
-    Actions:
-    - generate: Generate concept art via fal.ai FLUX
-    - extract_palette: Extract dominant color palette from image
-    - style_board: Compose reference style board from multiple images
-    - silhouette_test: Test shape readability at game distances
-    """
+    """Concept art generation and visual analysis tools."""
     if action == "generate":
         if not prompt:
             return "ERROR: 'prompt' is required for generate"
@@ -1190,25 +1091,9 @@ async def blender_rig(
     # Facial params
     expressions: list[str] | None = None,
     # Visual feedback
-    capture_viewport: bool = True,
+    capture_viewport: bool = True
 ):
-    """Rig creatures for game animation with visual verification.
-
-    Actions:
-    - analyze_mesh: Analyze mesh proportions and recommend rig template (RIG-01)
-    - apply_template: Apply Rigify creature template (humanoid/quadruped/bird/etc.) (RIG-02)
-    - build_custom: Build custom rig from limb library (mix-and-match) (RIG-03)
-    - setup_facial: Add facial rig bones + monster expression presets (RIG-04)
-    - setup_ik: Add IK constraints (2-bone or spline for tails) (RIG-05)
-    - setup_spring_bones: Add spring/jiggle bones for secondary motion (RIG-06)
-    - auto_weight: Auto weight paint mesh to armature (RIG-07)
-    - test_deformation: Test deformation at 8 standard poses with contact sheet (RIG-08)
-    - validate: Validate rig quality (unweighted verts, symmetry, rolls) A-F grade (RIG-09)
-    - fix_weights: Normalize/clean/smooth/mirror weights (RIG-10)
-    - setup_ragdoll: Auto-generate ragdoll colliders and joints (RIG-11)
-    - retarget: Map bones between source and target rigs (RIG-12)
-    - add_shape_keys: Create expression/damage shape keys (RIG-13)
-    """
+    """Rig creatures for game animation with visual verification."""
     blender = get_blender_connection()
 
     if action == "analyze_mesh":
@@ -1403,12 +1288,7 @@ async def blender_animation(
     # Visual feedback
     capture_viewport: bool = True,
 ):
-    """Generate, preview, and export game-ready animations for rigged creatures.
-
-    Supports procedural gaits (5 types), combat animations (8 attack types + death/hit/spawn),
-    custom text-to-animation, contact sheet preview, secondary motion baking, root motion
-    extraction, Mixamo retargeting, and batch Unity FBX export.
-    """
+    """Generate, preview, and export game-ready animations for rigged creatures."""
     blender = get_blender_connection()
 
     if action == "generate_walk":
@@ -1605,23 +1485,9 @@ async def blender_environment(
     density_modifier: float | None = None,
     prop_types: list[str] | None = None,
     # Visual feedback
-    capture_viewport: bool = True,
+    capture_viewport: bool = True
 ):
-    """Environment generation -- terrain, biomes, rivers, roads, water, vegetation scatter,
-    prop scatter, breakable props, storytelling props.
-
-    Actions:
-    - generate_terrain: Create heightmap terrain mesh with optional erosion
-    - paint_terrain: Auto-paint biome materials based on slope/altitude
-    - carve_river: Carve river channel along A* path
-    - generate_road: Generate road between waypoints with grading
-    - create_water: Create water plane at specified level
-    - export_heightmap: Export terrain as 16-bit RAW for Unity
-    - scatter_vegetation: Biome-aware vegetation scatter using Poisson disk
-    - scatter_props: Context-aware prop placement near buildings
-    - create_breakable: Generate intact + damaged prop variants
-    - add_storytelling_props: Add narrative clutter to interior rooms (AAA-05)
-    """
+    """Environment generation."""
     blender = get_blender_connection()
 
     if action == "generate_terrain":
@@ -1853,29 +1719,9 @@ async def blender_worldbuilding(
     hidden_path_count: int | None = None,
     lore_item_count: int | None = None,
     # Visual feedback
-    capture_viewport: bool = True,
+    capture_viewport: bool = True
 ):
-    """Worldbuilding generation -- dungeons, caves, towns, buildings, castles, ruins,
-    interiors, modular kits, locations, boss arenas, world graphs, linked interiors,
-    multi-floor dungeons, overrun variants, easter eggs.
-
-    Actions:
-    - generate_dungeon: BSP dungeon with rooms, corridors, doors
-    - generate_cave: Cellular automata cave system
-    - generate_town: Voronoi district town layout
-    - generate_building: Grammar-based building from style presets
-    - generate_castle: Castle with walls, towers, keep, gatehouse
-    - generate_ruins: Damaged building with debris
-    - generate_interior: Furnished room interior
-    - generate_modular_kit: Modular architecture kit pieces
-    - generate_location: Composed location with buildings, paths, POIs (WORLD-01)
-    - generate_boss_arena: Arena with cover, hazards, phase triggers (WORLD-03)
-    - generate_world_graph: MST-connected world graph with locations (WORLD-04)
-    - generate_linked_interior: Interior with door/occlusion/lighting markers (WORLD-05)
-    - generate_multi_floor_dungeon: Multi-floor dungeon with vertical connections (WORLD-06)
-    - generate_overrun_variant: Corrupted variant with narrative debris (WORLD-09)
-    - generate_easter_egg: Secret rooms, hidden paths, lore items (WORLD-10)
-    """
+    """Worldbuilding generation."""
     blender = get_blender_connection()
 
     if action == "generate_dungeon":

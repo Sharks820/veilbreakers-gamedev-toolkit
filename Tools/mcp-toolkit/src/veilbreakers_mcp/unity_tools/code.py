@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.code_templates import (
@@ -95,73 +95,9 @@ async def unity_code(
     include_gameobject_pool: bool = True,
     event_name: str = "",
     has_parameter: bool = False,
-    parameter_type: str = "int",
+    parameter_type: str = "int"
 ) -> str:
-    """C# code generation -- generate classes, modify scripts, create editor tools
-    and architecture patterns.
-
-    This compound tool generates C# source files covering arbitrary class types,
-    script modification, editor windows/drawers/overlays, test classes, and
-    common architecture patterns (service locator, object pool, singleton, state
-    machine, event channels).
-
-    Actions:
-    - generate_class: Generate any C# class type (MonoBehaviour, SO, class, interface, enum, struct) (CODE-01)
-    - modify_script: Modify existing C# script by adding usings, fields, properties, methods (CODE-02)
-    - editor_window: Generate EditorWindow with MenuItem and OnGUI (CODE-03)
-    - property_drawer: Generate CustomPropertyDrawer (CODE-03)
-    - inspector_drawer: Generate CustomEditor (CODE-03)
-    - scene_overlay: Generate SceneView Overlay (CODE-03)
-    - generate_test: Generate NUnit test class for EditMode or PlayMode (CODE-04)
-    - service_locator: Scaffold static service locator pattern (CODE-06)
-    - object_pool: Scaffold generic ObjectPool<T> with optional GameObjectPool (CODE-07)
-    - singleton: Scaffold MonoBehaviour or plain thread-safe singleton (CODE-08)
-    - state_machine: Scaffold IState/StateMachine/BaseState framework (CODE-09)
-    - event_channel: Scaffold ScriptableObject event channel system (CODE-10)
-
-    Args:
-        action: The code generation action to perform.
-        class_name: Name of the class (required for generate_class, singleton, generate_test).
-        class_type: Class type -- MonoBehaviour, ScriptableObject, class, static class, abstract class, interface, enum, struct.
-        namespace: Optional C# namespace.
-        base_class: Explicit base class override.
-        interfaces: Interfaces to implement.
-        usings: Additional using statements.
-        attributes: Class-level attributes.
-        fields: Field definitions (list of dicts).
-        properties: Property definitions (list of dicts).
-        methods: Method definitions (list of dicts).
-        enum_values: Enum member names (only for enum class_type).
-        summary: XML summary comment.
-        output_dir: Output directory relative to Unity project (default Assets/Scripts/Generated).
-        script_path: Path to existing script for modify_script action.
-        add_usings: Usings to add (modify_script).
-        add_fields: Fields to add (modify_script).
-        add_properties: Properties to add (modify_script).
-        add_methods: Methods to add (modify_script).
-        add_attributes: Attributes to add (modify_script).
-        window_name: EditorWindow class name (editor_window).
-        menu_path: MenuItem path (editor_window).
-        target_type: Target type for property_drawer/inspector_drawer.
-        overlay_name: SceneView overlay class name.
-        display_name: Display name for overlay header.
-        drawer_body: Custom drawer OnGUI body.
-        panel_body: Custom overlay panel body.
-        on_gui_body: Custom OnGUI body for editor_window.
-        fields_to_draw: Specific fields for inspector_drawer.
-        test_mode: EditMode or PlayMode (generate_test).
-        target_class: Target class for test setup (generate_test).
-        test_methods: Test method definitions (generate_test).
-        setup_body: SetUp method body (generate_test).
-        teardown_body: TearDown method body (generate_test).
-        singleton_type: MonoBehaviour or Plain (singleton).
-        persistent: DontDestroyOnLoad for MonoBehaviour singletons.
-        include_scene_persistent: Include auto-clear on scene load (service_locator).
-        include_gameobject_pool: Include GameObjectPool subclass (object_pool).
-        event_name: Event name for specific event channel subclass.
-        has_parameter: Whether event carries a parameter (event_channel).
-        parameter_type: C# type of event parameter (event_channel).
-    """
+    """C# code generation -- generate classes, modify scripts, create editor tools and architecture patterns."""
     try:
         if action == "generate_class":
             if not class_name:
@@ -190,9 +126,7 @@ async def unity_code(
                 "script_path": abs_path,
                 "class_name": class_name,
                 "class_type": class_type,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the new script",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "modify_script":
@@ -231,9 +165,7 @@ async def unity_code(
                 "script_path": str(full_path),
                 "backup_path": backup_path,
                 "changes": changes,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the modified script",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "editor_window":
@@ -254,10 +186,7 @@ async def unity_code(
                 "status": "success",
                 "action": action,
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the new script",
-                    f"Execute menu item '{menu_path or f'VeilBreakers/Tools/{window_name}'}' from the menu bar",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "property_drawer":
@@ -276,9 +205,7 @@ async def unity_code(
                 "status": "success",
                 "action": action,
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the new script",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "inspector_drawer":
@@ -297,9 +224,7 @@ async def unity_code(
                 "status": "success",
                 "action": action,
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the new script",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "scene_overlay":
@@ -319,9 +244,7 @@ async def unity_code(
                 "status": "success",
                 "action": action,
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the new script",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "generate_test":
@@ -345,10 +268,7 @@ async def unity_code(
                 "action": action,
                 "script_path": abs_path,
                 "test_mode": test_mode,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the test class",
-                    "Call unity_editor action='run_tests' to execute tests",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "service_locator":
@@ -362,9 +282,7 @@ async def unity_code(
                 "status": "success",
                 "action": action,
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the new script",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "object_pool":
@@ -378,9 +296,7 @@ async def unity_code(
                 "status": "success",
                 "action": action,
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the new script",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "singleton":
@@ -401,9 +317,7 @@ async def unity_code(
                 "action": action,
                 "script_path": abs_path,
                 "singleton_type": singleton_type,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the new script",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "state_machine":
@@ -416,9 +330,7 @@ async def unity_code(
                 "status": "success",
                 "action": action,
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the new script",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "event_channel":
@@ -436,9 +348,7 @@ async def unity_code(
                 "action": action,
                 "script_path": abs_path,
                 "event_name": event_name or "GameEvent (base classes)",
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the new script",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         else:

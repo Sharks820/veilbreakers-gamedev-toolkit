@@ -14,6 +14,11 @@ from veilbreakers_mcp.shared.config import Settings
 from veilbreakers_mcp.shared.unity_client import UnityConnection, UnityCommandError
 from veilbreakers_mcp.shared.unity_templates.code_templates import _sanitize_cs_identifier
 
+STANDARD_NEXT_STEPS = [
+    "Recompile: unity_editor action=recompile",
+    "Then run the generated menu item in Unity Editor",
+]
+
 logger = logging.getLogger("veilbreakers_mcp.unity")
 
 settings = Settings()
@@ -43,6 +48,7 @@ def _write_to_unity(content: str, relative_path: str) -> str:
         raise ValueError(
             "unity_project_path not configured. Set UNITY_PROJECT_PATH environment "
             "variable or unity_project_path in Settings."
+        )
 
     project_root = Path(settings.unity_project_path).resolve()
     target = (project_root / relative_path).resolve()
@@ -54,6 +60,7 @@ def _write_to_unity(content: str, relative_path: str) -> str:
         raise ValueError(
             f"Path traversal detected: '{relative_path}' resolves outside the "
             f"Unity project directory."
+        )
 
     # Create parent directories as needed
     target.parent.mkdir(parents=True, exist_ok=True)

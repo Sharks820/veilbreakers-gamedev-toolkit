@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.build_templates import (
@@ -72,54 +72,9 @@ async def unity_build(
     has_ads: bool = False,
     collects_data: bool = False,
     # common
-    namespace: str = "",
+    namespace: str = ""
 ) -> str:
-    """Unity Build & Deploy Pipeline tools -- multi-platform builds, addressables,
-    CI/CD, versioning, platform config, shader stripping, store metadata.
-
-    Build Orchestration:
-    - build_multi_platform: 6-platform build orchestrator with IL2CPP/Mono backend selection (BUILD-01)
-    - configure_addressables: Addressable Asset Group configurator with BundledAssetGroupSchema (BUILD-02)
-    - configure_platform: Android manifest/iOS PostProcessBuild/WebGL PlayerSettings config (BUILD-05)
-    - setup_shader_stripping: IPreprocessShaders keyword blacklist for variant reduction (SHDR-03)
-
-    CI/CD & Versioning:
-    - generate_ci_pipeline: GitHub Actions or GitLab CI YAML with GameCI integration (BUILD-03)
-    - manage_version: SemVer version bump + changelog generation C# editor scripts (BUILD-04)
-
-    Store Publishing:
-    - generate_store_metadata: Store description, content ratings, privacy policy markdown (ACC-02)
-
-    Args:
-        action: The build action to perform.
-        name: Name for generated system (used in file paths).
-        platforms: Multi-platform build target definitions (list of dicts with name/target/group/backend/extension).
-        development: Enable development build mode with debugging.
-        groups: Addressable group definitions (list of dicts with name/packing/local).
-        build_remote: Build Addressable content for remote hosting.
-        ci_provider: CI/CD provider -- "github" or "gitlab".
-        unity_version: Unity editor version for CI Docker images.
-        ci_platforms: CI build platforms list (e.g. ["StandaloneWindows64", "Android"]).
-        run_tests: Run tests in CI pipeline before building.
-        version: SemVer version string (e.g. "1.0.0").
-        auto_increment: Version component to auto-increment (major/minor/patch).
-        update_android: Update Android bundleVersionCode on version bump.
-        update_ios: Update iOS buildNumber on version bump.
-        project_name: Project name for changelog generation.
-        platform: Target platform for platform-specific config (android/ios/webgl).
-        permissions: Android permissions list (e.g. ["android.permission.CAMERA"]).
-        features: Android features list.
-        plist_entries: iOS Info.plist entries (list of dicts with key/value/type).
-        webgl_memory_mb: WebGL initial memory size in MB.
-        keywords_to_strip: Shader keywords to strip during builds.
-        log_stripping: Log shader stripping results to JSON.
-        game_title: Game title for store metadata.
-        genre: Game genre for store metadata.
-        has_iap: Game includes in-app purchases.
-        has_ads: Game includes advertisements.
-        collects_data: Game collects user data.
-        namespace: C# namespace override (empty = generator default).
-    """
+    """Unity Build & Deploy Pipeline tools -- multi-platform builds, addressables, CI/CD, versioning, platform config, shader stripping, store metadata."""
     try:
         ns_kwargs: dict = {}
         if namespace:
@@ -138,11 +93,7 @@ async def unity_build(
                 "status": "success",
                 "action": "build_multi_platform",
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile build script",
-                    "Execute menu item: VeilBreakers > Build > Multi-Platform Build",
-                    "Read results from Temp/vb_build_results.json",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "configure_addressables":
@@ -158,11 +109,7 @@ async def unity_build(
                 "status": "success",
                 "action": "configure_addressables",
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile addressables config",
-                    "Execute menu item: VeilBreakers > Build > Configure Addressables",
-                    "Read results from Temp/vb_result.json",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "generate_ci_pipeline":
@@ -330,11 +277,7 @@ async def unity_build(
                 "status": "success",
                 "action": "setup_shader_stripping",
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile shader stripper",
-                    "Build project to see shader stripping in action",
-                    "Check Temp/vb_shader_strip_results.json for stripping report",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "generate_store_metadata":

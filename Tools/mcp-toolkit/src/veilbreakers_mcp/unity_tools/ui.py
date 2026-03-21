@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.ui_templates import (
@@ -114,46 +114,9 @@ async def unity_ui(
     tip_interval: float = 5.0,
     # UI shader params (UIPOL-08)
     ui_shader_name: str = "VB_UIEffects",
-    ui_effects: list[str] | None = None,
+    ui_effects: list[str] | None = None
 ) -> str:
-    """Unity UI system -- UXML/USS generation, layout validation, WCAG contrast,
-    responsive testing, visual regression, and dark fantasy UI polish.
-
-    This compound tool covers all UI functionality: generating UI screens from
-    text descriptions as UXML + USS with dark fantasy theming, validating layout
-    for overlaps and sizing issues, checking WCAG color contrast compliance,
-    testing responsiveness at multiple resolutions, detecting visual regressions
-    through screenshot comparison, and AAA dark fantasy UI polish systems.
-
-    Actions:
-    - generate_ui_screen: Generate UXML + USS from screen spec with dark fantasy styling (UI-05)
-    - validate_layout: Check UXML for overlaps, zero-size elements, overflow (UI-02)
-    - test_responsive: Generate C# script to capture screenshots at 5 resolutions (UI-03)
-    - check_contrast: Validate WCAG AA contrast ratios for text elements (UI-06)
-    - compare_screenshots: Detect visual regressions between screenshot pairs (UI-07)
-    - create_procedural_frame: Ornate dark fantasy UI frames with rune decorations (UIPOL-01)
-    - create_icon_pipeline: 3D icon render pipeline with rarity borders (UIPOL-02)
-    - create_cursor_system: Context-sensitive cursors with dark fantasy themes (UIPOL-03)
-    - create_tooltip_system: Rich tooltips with equipment comparison and lore (UIPOL-04)
-    - create_radial_menu: Radial ability/item wheel with PrimeTween animation (UIPOL-05)
-    - create_notification_system: Toast notification system with priority queue (UIPOL-06)
-    - create_loading_screen: Loading screen with tips, lore, and concept art (UIPOL-07)
-    - create_ui_shaders: Material-based UI effect shaders (gold-leaf, blood stain, etc.) (UIPOL-08)
-
-    Args:
-        action: The UI action to perform.
-        screen_spec: Screen specification dict for generate_ui_screen.
-        theme: USS theme name (default: "dark_fantasy").
-        screen_name: Name for the generated screen files.
-        uxml_path: Path to UXML file (relative to Unity project) for validation.
-        uss_path: Path to USS file (relative to Unity project) for contrast check.
-        uxml_content: Inline UXML content (alternative to uxml_path).
-        uss_content: Inline USS content (alternative to uss_path).
-        resolutions: List of [width, height] pairs for responsive testing.
-        reference_path: Path to reference screenshot for comparison.
-        current_path: Path to current screenshot for comparison.
-        diff_threshold: Maximum acceptable diff percentage (0.01 = 1%).
-    """
+    """Unity UI system -- UXML/USS generation, layout validation, WCAG contrast, responsive testing, visual regression, and dark fantasy UI polish."""
     try:
         if action == "generate_ui_screen":
             return await _handle_ui_generate_screen(screen_spec, theme, screen_name)
@@ -296,12 +259,7 @@ async def _handle_ui_generate_screen(
             "layout_valid": layout_result["valid"],
             "layout_issues": layout_result["issues"],
             "contrast_violations": contrast_violations,
-            "next_steps": [
-                "Run unity_editor action=recompile to pick up new UI files",
-                f"UXML: {uxml_rel}",
-                f"USS: {uss_rel}",
-                "Open the UXML in Unity's UI Builder for visual editing",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )
@@ -381,11 +339,7 @@ async def _handle_ui_test_responsive(
             "resolutions": resolutions or [[w, h] for w, h in [
                 (1280, 720), (1920, 1080), (2560, 1440), (3840, 2160), (800, 600)
             ]],
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the test script",
-                f'Open Unity Editor and run VeilBreakers > UI > Responsive Test {uxml_path.split("/")[-1].replace(".uxml", "")} from the menu bar',
-                "Screenshots will be saved to Assets/Screenshots/Responsive/",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,

@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.editor_templates import (
@@ -43,34 +43,9 @@ async def unity_editor(
     gemini_criteria: list[str] | None = None,
     test_mode: str = "EditMode",
     assembly_filter: str = "",
-    category_filter: str = "",
+    category_filter: str = ""
 ) -> str:
-    """Unity Editor automation -- generate C# scripts and trigger actions.
-
-    This compound tool generates C# editor scripts, writes them to the Unity
-    project, and returns instructions for executing them via the VB toolkit.
-
-    Actions:
-    - recompile: Force Unity to recompile all scripts (AssetDatabase.Refresh)
-    - enter_play_mode: Enter Unity play mode
-    - exit_play_mode: Exit Unity play mode
-    - screenshot: Capture game view screenshot
-    - console_logs: Collect Unity console log entries
-    - gemini_review: Send a screenshot to Gemini for visual quality review
-    - run_tests: Run Unity tests via TestRunnerApi (CODE-05)
-
-    Args:
-        action: The editor action to perform.
-        screenshot_path: Path for screenshot capture (relative to Unity project).
-        supersize: Screenshot resolution multiplier (1-4).
-        log_filter: Console log filter -- "all", "error", "warning", "log".
-        log_count: Maximum number of log entries to collect.
-        gemini_prompt: Prompt for Gemini visual review.
-        gemini_criteria: List of quality criteria for Gemini review.
-        test_mode: Test mode for run_tests -- "EditMode" or "PlayMode".
-        assembly_filter: Optional assembly name filter for run_tests.
-        category_filter: Optional NUnit category filter for run_tests.
-    """
+    """Unity Editor automation -- generate C# scripts and trigger actions."""
     if gemini_criteria is None:
         gemini_criteria = ["lighting", "composition", "visual_quality"]
 
@@ -123,11 +98,7 @@ async def _handle_run_tests(
         "action": "run_tests",
         "script_path": abs_path,
         "test_mode": test_mode,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the test runner script",
-            "Open Unity Editor and run VeilBreakers > Code > Run Tests from the menu bar",
-            "Call unity_editor action='console_logs' or read Temp/vb_result.json for test results",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     })
 
 
@@ -146,10 +117,7 @@ async def _handle_recompile() -> str:
             "status": "success",
             "action": "recompile",
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Editor > Force Recompile from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -174,10 +142,7 @@ async def _handle_play_mode(enter: bool) -> str:
             "status": "success",
             "action": action_name,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                f'Open Unity Editor and run VeilBreakers > Editor > {menu_label} from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -201,11 +166,7 @@ async def _handle_screenshot(screenshot_path: str, supersize: int) -> str:
             "script_path": abs_path,
             "screenshot_path": screenshot_path,
             "supersize": supersize,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Editor > Capture Screenshot from the menu bar',
-                f"Screenshot will be saved to: {screenshot_path}",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -229,10 +190,7 @@ async def _handle_console_logs(log_filter: str, log_count: int) -> str:
             "script_path": abs_path,
             "filter": log_filter,
             "max_count": log_count,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > Editor > Collect Console Logs from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -280,12 +238,7 @@ async def _handle_gemini_review(
             "screenshot_path": screenshot_path,
             "criteria": criteria,
             "review": review_result if review_result else None,
-            "next_steps": [
-                "If screenshot doesn't exist yet, capture it first with action='screenshot'",
-                "Run unity_editor action=recompile to compile the export script",
-                'Open Unity Editor and run VeilBreakers > Editor > Prepare Gemini Review from the menu bar',
-                "The Gemini review result will also be available in Temp/vb_result.json",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )

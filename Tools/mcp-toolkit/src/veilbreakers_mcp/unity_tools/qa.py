@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.qa_templates import (
@@ -115,69 +115,9 @@ async def unity_qa(
     build_path: str = "Builds/VeilBreakers.exe",
     smoke_timeout_seconds: int = 30,
     scene_to_load: str = "",
-    expected_fps_min: int = 10,
+    expected_fps_min: int = 10
 ) -> str:
-    """Unity Quality Assurance & Testing tools -- bridge, test runner, profiler,
-    memory leak detection, static analysis, crash reporting, analytics, live
-    inspector, compile recovery, conflict detection, pipeline orchestration,
-    art style validation, and build smoke tests.
-
-    Bridge & Infrastructure (qa_templates.py):
-    - setup_bridge: TCP bridge server + command dispatch for Unity Editor automation (QA-00)
-
-    Testing & Profiling (qa_templates.py):
-    - run_tests: TestRunnerApi-based EditMode/PlayMode test execution with JSON results (QA-01)
-    - run_play_session: Automated play session with sequential steps and verification (QA-02)
-    - profile_scene: GPU/CPU profiler with budget comparison via ProfilerRecorder (QA-03)
-    - detect_memory_leaks: Managed/native memory leak detection over sampled intervals (QA-04)
-    - analyze_code: Python-side regex static analysis for Unity performance anti-patterns (QA-05)
-
-    Observability (qa_templates.py):
-    - setup_crash_reporting: Sentry SDK initialization with breadcrumbs and environment tagging (QA-06)
-    - setup_analytics: Singleton analytics manager with event buffering and JSON logging (QA-07)
-    - inspect_live_state: IMGUI EditorWindow for live GameObject field inspection (QA-08)
-
-    Compile Status:
-    - check_compile_status: Query Unity bridge to detect compile errors after script writes (QA-09)
-
-    Production Pipeline (production_templates.py):
-    - compile_recovery: Compile error auto-detection and recovery (PROD-01)
-    - detect_conflicts: Pre-write asset/class name conflict scanning (PROD-02)
-    - orchestrate_pipeline: Multi-step pipeline orchestration with status tracking (PROD-03)
-    - list_pipeline_steps: List available built-in pipeline step definitions (PROD-03b)
-    - validate_art_style: Art style consistency validation (palette, roughness, naming) (PROD-04)
-    - build_smoke_test: Post-build smoke test verification (PROD-05)
-
-    Args:
-        action: The QA action to perform.
-        name: Name for the generated system (used in file paths).
-        bridge_port: TCP port for VBBridge server (default 9877).
-        test_mode: Test runner mode -- EditMode, PlayMode, or Both.
-        test_filter: Optional test name filter substring.
-        timeout_seconds: Test runner timeout in seconds.
-        steps: Play session step definitions (list of dicts with action/params).
-        timeout_per_step: Play session per-step timeout in seconds.
-        target_frame_time_ms: Profiler target frame time budget in milliseconds.
-        max_draw_calls: Profiler maximum draw call budget.
-        max_memory_mb: Profiler maximum memory budget in MB.
-        sample_frames: Profiler number of frames to sample.
-        growth_threshold_mb: Memory leak growth threshold in MB.
-        sample_interval_seconds: Memory leak sampling interval in seconds.
-        sample_count: Memory leak number of samples to collect.
-        source_code: C# source code string for static analysis.
-        source_file_path: File path metadata for static analysis reports.
-        dsn: Sentry DSN URL for crash reporting (empty = console fallback).
-        environment: Sentry environment tag (development/staging/production).
-        enable_breadcrumbs: Enable Sentry breadcrumb tracking.
-        sample_rate: Sentry event sample rate (0.0 to 1.0).
-        event_names: Analytics event names for typed convenience methods.
-        flush_interval_seconds: Analytics event buffer flush interval.
-        max_buffer_size: Analytics event buffer max size before auto-flush.
-        log_file_path: Analytics JSON log file path relative to persistentDataPath.
-        update_interval_frames: Live inspector refresh interval in frames.
-        max_tracked_objects: Live inspector max pinned objects.
-        namespace: C# namespace override (empty = generator default).
-    """
+    """Unity Quality Assurance & Testing tools -- bridge, test runner, profiler, memory leak detection, static analysis, crash reporting, analytics, live inspector, compile recovery, conflict detection, pipeline orchestration, art style validation, and build smoke tests."""
     try:
         ns_kwargs: dict = {}
         if namespace:
@@ -198,10 +138,7 @@ async def unity_qa(
                 "status": "success",
                 "action": "setup_bridge",
                 "paths": [server_path, commands_path],
-                "next_steps": [
-                    "Recompile scripts in Unity (AssetDatabase.Refresh)",
-                    f"Verify VBBridge is listening on port {bridge_port} in Unity Console",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "run_tests":
@@ -218,11 +155,7 @@ async def unity_qa(
                 "status": "success",
                 "action": "run_tests",
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile test runner",
-                    "Execute menu item: VeilBreakers > QA > Run Tests",
-                    "Read results from Temp/vb_test_results.json",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "run_play_session":
@@ -238,10 +171,7 @@ async def unity_qa(
                 "status": "success",
                 "action": "run_play_session",
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile play session",
-                    "Execute menu item: VeilBreakers > QA > Run Play Session",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "profile_scene":
@@ -259,11 +189,7 @@ async def unity_qa(
                 "status": "success",
                 "action": "profile_scene",
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile profiler",
-                    "Execute menu item: VeilBreakers > QA > Profile Scene",
-                    "Read results from Temp/vb_profiler_results.json",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "detect_memory_leaks":
@@ -280,11 +206,7 @@ async def unity_qa(
                 "status": "success",
                 "action": "detect_memory_leaks",
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile leak detector",
-                    "Enter Play Mode",
-                    "Execute menu item: VeilBreakers > QA > Detect Memory Leaks",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "analyze_code":
@@ -334,11 +256,7 @@ async def unity_qa(
                 "status": "success",
                 "action": "setup_crash_reporting",
                 "script_path": abs_path,
-                "next_steps": [
-                    "Install Sentry Unity SDK: add 'io.sentry.unity' via UPM",
-                    "Set DSN in script or via Sentry dashboard",
-                    "Call unity_editor action='recompile' to compile crash reporting",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "setup_analytics":
@@ -369,11 +287,7 @@ async def unity_qa(
                 "status": "success",
                 "action": "setup_analytics",
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile analytics",
-                    "Add VBAnalytics prefab to scene",
-                    f"Events logged to Application.persistentDataPath/{log_file_path}",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "inspect_live_state":
@@ -389,11 +303,7 @@ async def unity_qa(
                 "status": "success",
                 "action": "inspect_live_state",
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile live inspector",
-                    "Open via VeilBreakers > QA > Live Inspector",
-                    "Enter Play Mode to see live values",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "check_compile_status":

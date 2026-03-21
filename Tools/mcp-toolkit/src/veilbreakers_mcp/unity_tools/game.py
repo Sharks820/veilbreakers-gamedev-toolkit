@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.game_templates import (
@@ -109,81 +109,9 @@ async def unity_game(
     # Currency params (VB-06)
     currency_types: list[str] | None = None,
     # Namespace (shared)
-    namespace: str = "",
+    namespace: str = ""
 ) -> str:
-    """Core game systems and VeilBreakers combat -- save/load, health, character
-    controller, input, settings, HTTP client, interactables, player combat,
-    abilities, synergy, corruption, XP/leveling, currency, and damage types.
-
-    This compound tool generates C# runtime scripts for Unity game systems and
-    VeilBreakers-specific combat mechanics. Scripts are written to
-    Assets/Scripts/Runtime/ -- they are runtime MonoBehaviours and utility
-    classes, NOT editor scripts.
-
-    Core Game Systems actions (game_templates.py):
-    - create_save_system: JSON save/load with AES-CBC encryption, migration, auto-save (GAME-01)
-    - create_health_system: HP component with DamageCalculator, damage numbers, respawn (GAME-05)
-    - create_character_controller: Third-person CharacterController + Cinemachine 3.x (GAME-06)
-    - create_input_config: Input System .inputactions JSON + C# wrapper with rebinding (GAME-07)
-    - create_settings_menu: Settings C# controller + UXML layout + USS stylesheet (GAME-08)
-    - create_http_client: UnityWebRequest wrapper with retry, timeout, Awaitable (MEDIA-02)
-    - create_interactable: Interactable state machine + InteractionManager (RPG-03)
-
-    VeilBreakers Combat actions (vb_combat_templates.py):
-    - create_player_combat: FSM combat controller with combos, dodge, block (VB-01)
-    - create_ability_system: Brand-specific ability system with mana (VB-02)
-    - create_synergy_engine: Synergy wiring delegating to SynergySystem (VB-03)
-    - create_corruption_gameplay: Corruption effects delegating to CorruptionSystem (VB-04)
-    - create_xp_leveling: XP/leveling with EventBus integration (VB-05)
-    - create_currency_system: Multi-currency system (VB-06)
-    - create_damage_types: Brand-specific damage types delegating to BrandSystem (VB-07)
-
-    Args:
-        action: The game system action to perform.
-        name: Name for the generated script/system.
-        slot_count: Number of save slots (GAME-01, default 3).
-        use_encryption: Enable AES-CBC save encryption (GAME-01).
-        use_compression: Enable GZip save compression (GAME-01).
-        auto_save: Enable auto-save system (GAME-01).
-        max_hp: Maximum health points (GAME-05).
-        use_damage_numbers: Enable floating damage numbers (GAME-05).
-        use_respawn: Enable respawn system (GAME-05).
-        respawn_delay: Respawn delay in seconds (GAME-05).
-        mode: Controller mode: third_person or first_person (GAME-06).
-        move_speed: Base movement speed (GAME-06).
-        sprint_multiplier: Sprint speed multiplier (GAME-06).
-        jump_height: Jump height in units (GAME-06).
-        gravity: Gravity force (GAME-06, negative value).
-        rotation_speed: Character rotation speed (GAME-06).
-        action_maps: Custom action map definitions (GAME-07).
-        include_gamepad: Include gamepad bindings (GAME-07).
-        include_rebinding: Include runtime rebinding support (GAME-07).
-        categories: Settings categories list (GAME-08).
-        theme: UI theme for settings menu (GAME-08).
-        base_url: Base URL for HTTP client (MEDIA-02).
-        max_retries: HTTP retry count (MEDIA-02).
-        timeout_seconds: HTTP timeout in seconds (MEDIA-02).
-        interactable_types: Custom interactable type names (RPG-03).
-        interaction_radius: Interaction detection radius (RPG-03).
-        use_animation: Enable interaction animations (RPG-03).
-        use_sound: Enable interaction sounds (RPG-03).
-        light_combo_count: Light attack combo chain length (VB-01).
-        heavy_combo_count: Heavy attack combo chain length (VB-01).
-        dodge_iframe_duration: Dodge invincibility frame duration (VB-01).
-        dodge_distance: Dodge roll distance (VB-01).
-        block_stamina_drain: Stamina drain per blocked hit (VB-01).
-        stamina_max: Maximum stamina (VB-01).
-        stamina_regen_rate: Stamina regeneration per second (VB-01).
-        max_ability_slots: Ability hotbar slot count (VB-02).
-        mana_max: Maximum mana (VB-02).
-        mana_regen_rate: Mana regeneration per second (VB-02).
-        thresholds: Corruption threshold percentages (VB-04).
-        max_level: Maximum character level (VB-05).
-        base_xp_per_level: Base XP required per level (VB-05).
-        xp_scaling_factor: XP requirement scaling factor (VB-05).
-        currency_types: Custom currency type names (VB-06).
-        namespace: C# namespace override (empty = generator default).
-    """
+    """Core game systems and VeilBreakers combat -- save/load, health, character controller, input, settings, HTTP client, interactables, player combat, abilities, synergy, corruption, XP/leveling, currency, and damage types."""
     try:
         # Build namespace kwargs -- only pass if non-empty to use generator defaults
         ns_kwargs: dict = {}
@@ -271,10 +199,7 @@ async def _handle_game_save_system(
         "status": "success",
         "action": "create_save_system",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the save system",
-            "Attach SaveManager to a persistent GameObject in the scene",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -296,10 +221,7 @@ async def _handle_game_health_system(
         "status": "success",
         "action": "create_health_system",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the health system",
-            "Attach HealthComponent to entities that need HP tracking",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -325,11 +247,7 @@ async def _handle_game_character_controller(
         "status": "success",
         "action": "create_character_controller",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the character controller",
-            "Attach VBCharacterController to the player GameObject",
-            "Add a Cinemachine CinemachineCamera to the scene for camera follow",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -357,10 +275,7 @@ async def _handle_game_input_config(
             "inputactions": abs_json,
             "csharp": abs_cs,
         },
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the input wrapper",
-            "The .inputactions file will be recognized by Unity's Input System",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -391,10 +306,7 @@ async def _handle_game_settings_menu(
             "uxml": abs_uxml,
             "uss": abs_uss,
         },
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the settings controller",
-            "Reference the UXML and USS from the SettingsMenuController component",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -414,10 +326,7 @@ async def _handle_game_http_client(
         "status": "success",
         "action": "create_http_client",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the HTTP client",
-            "Use VBHttpClient.Instance for all HTTP requests",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -439,10 +348,7 @@ async def _handle_game_interactable(
         "status": "success",
         "action": "create_interactable",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the interactable system",
-            "Attach InteractableBase to objects and InteractionManager to the player",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -478,10 +384,7 @@ async def _handle_game_player_combat(
         "status": "success",
         "action": "create_player_combat",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the combat controller",
-            "Attach PlayerCombatController to the player GameObject",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -502,10 +405,7 @@ async def _handle_game_ability_system(
         "status": "success",
         "action": "create_ability_system",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the ability system",
-            "Attach AbilityManager to the player, create AbilityDefinition SO assets",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -518,10 +418,7 @@ async def _handle_game_synergy_engine(ns_kwargs: dict) -> str:
         "status": "success",
         "action": "create_synergy_engine",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the synergy engine",
-            "SynergyWiringManager auto-registers with EventBus on Awake",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -539,10 +436,7 @@ async def _handle_game_corruption_gameplay(
         "status": "success",
         "action": "create_corruption_gameplay",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the corruption system",
-            "Attach CorruptionEffectsManager to the player",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -563,10 +457,7 @@ async def _handle_game_xp_leveling(
         "status": "success",
         "action": "create_xp_leveling",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the XP system",
-            "Attach LevelingManager to the player, XPRewardSource to enemies",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -584,10 +475,7 @@ async def _handle_game_currency_system(
         "status": "success",
         "action": "create_currency_system",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the currency system",
-            "Use CurrencyManager.Instance for all currency transactions",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -600,8 +488,5 @@ async def _handle_game_damage_types(ns_kwargs: dict) -> str:
         "status": "success",
         "action": "create_damage_types",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the damage type system",
-            "DamageTypeRegistry initializes with all brand-specific damage types",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)

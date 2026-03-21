@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.shader_templates import (
@@ -85,55 +85,9 @@ async def unity_shader(
     base_normal_property: str = "_BumpMap",
     detail_normal_property: str = "_DetailNormalMap",
     detail_tiling: float = 10.0,
-    detail_strength: float = 0.5,
+    detail_strength: float = 0.5
 ) -> str:
-    """Shader and renderer feature generation -- create HLSL/ShaderLab shaders,
-    URP ScriptableRendererFeatures, and AAA character shaders.
-
-    Actions:
-    - create_shader: Generate configurable HLSL/ShaderLab shader for URP (SHDR-01)
-    - create_renderer_feature: Generate URP ScriptableRendererFeature with RenderGraph pass (SHDR-02)
-    - sss_skin_shader: Generate subsurface scattering skin shader for characters (CHAR-08)
-    - parallax_eye_shader: Generate parallax/refraction eye shader with iris depth (CHAR-08)
-    - micro_detail_normal: Generate micro-detail normal compositing script (CHAR-08)
-
-    Args:
-        action: The shader action to perform.
-        shader_name: Display name for the shader (create_shader, required).
-        shader_path: Shader menu path prefix (default VeilBreakers/Custom).
-        render_type: Opaque, Transparent, or TransparentCutout.
-        shader_properties: Shader property definitions (list of dicts).
-        vertex_code: Custom vertex shader code.
-        fragment_code: Custom fragment shader code.
-        shader_tags: Additional SubShader tags.
-        pragma_directives: Additional pragma directives.
-        include_paths: Additional include paths.
-        cull: Cull mode (Back, Front, Off).
-        zwrite: ZWrite mode override.
-        blend: Blend mode override.
-        two_passes: Enable two-pass rendering.
-        second_pass_vertex: Vertex code for second pass.
-        second_pass_fragment: Fragment code for second pass.
-        output_dir: Output directory for shader files.
-        feature_name: Feature name (create_renderer_feature, required).
-        namespace: Namespace for renderer feature.
-        settings_fields: Settings field definitions.
-        render_pass_event: RenderPassEvent for scheduling.
-        shader_property_name: Shader serialized field name.
-        material_properties: Material properties set per frame.
-        pass_code: Custom RecordRenderGraph body.
-        sss_color: RGBA color for SSS tint [r, g, b, a] (sss_skin_shader).
-        sss_power: SSS falloff power (sss_skin_shader).
-        sss_distortion: Normal distortion for back-scatter (sss_skin_shader).
-        sss_scale: SSS intensity scale (sss_skin_shader).
-        iris_depth: Eye iris parallax depth 0-1 (parallax_eye_shader).
-        pupil_scale: Pupil size scale (parallax_eye_shader).
-        ior: Index of refraction for cornea (parallax_eye_shader).
-        base_normal_property: Shader property for base normal map (micro_detail_normal).
-        detail_normal_property: Shader property for detail normal map (micro_detail_normal).
-        detail_tiling: UV tiling for micro-detail normal (micro_detail_normal).
-        detail_strength: Blend strength for detail normal (micro_detail_normal).
-    """
+    """Shader and renderer feature generation."""
     try:
         if action == "create_shader":
             if not shader_name:
@@ -165,9 +119,7 @@ async def unity_shader(
                 "action": action,
                 "shader_path": abs_path,
                 "shader_name": shader_name,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to refresh assets and compile the shader",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "create_renderer_feature":
@@ -192,10 +144,7 @@ async def unity_shader(
                 "action": action,
                 "script_path": abs_path,
                 "feature_name": feature_name,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the renderer feature",
-                    f"Add {feature_name}Feature to the URP Renderer asset in Unity",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             })
 
         elif action == "sss_skin_shader":
@@ -213,11 +162,7 @@ async def unity_shader(
                 "action": action,
                 "shader_path": abs_path,
                 "shader_name": "VeilBreakers/Character/SSS_Skin",
-                "next_steps": [
-                    "Call unity_editor action='recompile' to import the SSS skin shader",
-                    "Create a material using shader 'VeilBreakers/Character/SSS_Skin'",
-                    "Assign a thickness map to _ThicknessMap for SSS control",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "parallax_eye_shader":
@@ -233,11 +178,7 @@ async def unity_shader(
                 "action": action,
                 "shader_path": abs_path,
                 "shader_name": "VeilBreakers/Character/ParallaxEye",
-                "next_steps": [
-                    "Call unity_editor action='recompile' to import the eye shader",
-                    "Create a material using shader 'VeilBreakers/Character/ParallaxEye'",
-                    "Assign iris texture and configure pupil dilation via _PupilScale",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         elif action == "micro_detail_normal":
@@ -253,11 +194,7 @@ async def unity_shader(
                 "status": "success",
                 "action": action,
                 "script_path": abs_path,
-                "next_steps": [
-                    "Call unity_editor action='recompile' to compile the micro-detail script",
-                    "Attach VeilBreakers_MicroDetailNormal component to character head mesh",
-                    "Assign base + detail normal maps for pore-level detail compositing",
-                ],
+                "next_steps": STANDARD_NEXT_STEPS,
             }, indent=2)
 
         else:

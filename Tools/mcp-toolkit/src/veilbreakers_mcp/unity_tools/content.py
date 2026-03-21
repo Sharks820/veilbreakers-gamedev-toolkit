@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.content_templates import (
@@ -64,42 +64,9 @@ async def unity_content(
     # DPS calculator params (GAME-12)
     brands: list[str] | None = None,
     # Namespace (shared)
-    namespace: str = "",
+    namespace: str = ""
 ) -> str:
-    """Content and progression systems -- inventory, dialogue, quests, loot, crafting,
-    skill tree, balancing tools, shop, journal, and equipment attachment.
-
-    This compound tool generates C# runtime scripts and Editor tools for
-    content/progression systems. Runtime scripts go to
-    Assets/Scripts/Runtime/ContentSystems/; editor tools go to
-    Assets/Scripts/Editor/BalancingTools/.
-
-    Content Systems actions (content_templates.py):
-    - create_inventory_system: Grid inventory + equipment slots + UI (GAME-02)
-    - create_dialogue_system: Branching dialogue with YarnSpinner-compatible nodes (GAME-03)
-    - create_quest_system: Quest state machine + objective tracker + log UI (GAME-04)
-    - create_loot_table: Weighted loot tables with brand affinity (GAME-09)
-    - create_crafting_system: Recipe SO + crafting station system (GAME-10)
-    - create_skill_tree: Skill nodes + hero path tree (GAME-11)
-    - create_dps_calculator: EditorWindow DPS calculator (GAME-12, EDITOR)
-    - create_encounter_simulator: EditorWindow Monte Carlo encounter sim (GAME-12, EDITOR)
-    - create_stat_curve_editor: EditorWindow stat curve editor (GAME-12, EDITOR)
-    - create_shop_system: Merchant + shop UI with stat comparison (RPG-01)
-    - create_journal_system: Codex with Lore/Bestiary/Items (RPG-05)
-
-    Equipment actions (equipment_templates.py):
-    - create_equipment_attachment: Bone rebinding + weapon sheathing (EQUIP-06)
-
-    Args:
-        action: The content system action to perform.
-        name: Name for the generated system (used in file paths).
-        grid_width: Inventory grid width (GAME-02, default 8).
-        grid_height: Inventory grid height (GAME-02, default 5).
-        equipment_slots: Equipment slot names (GAME-02).
-        hero_paths: Hero path names for skill tree layout (GAME-11).
-        brands: Brand names for DPS calculator (GAME-12).
-        namespace: C# namespace override (empty = generator default).
-    """
+    """Content and progression systems -- inventory, dialogue, quests, loot, crafting, skill tree, balancing tools, shop, journal, and equipment attachment."""
     try:
         ns_kwargs: dict = {}
         if namespace:
@@ -165,10 +132,7 @@ async def _handle_content_inventory(
         "status": "success",
         "action": "create_inventory_system",
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the inventory system",
-            "Attach VB_InventorySystem to the player",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -185,10 +149,7 @@ async def _handle_content_dialogue(ns_kwargs: dict) -> str:
         "status": "success",
         "action": "create_dialogue_system",
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the dialogue system",
-            "Create DialogueData ScriptableObject assets for conversations",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -205,10 +166,7 @@ async def _handle_content_quest(ns_kwargs: dict) -> str:
         "status": "success",
         "action": "create_quest_system",
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the quest system",
-            "Create QuestDefinition ScriptableObject assets for quests",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -221,10 +179,7 @@ async def _handle_content_loot_table(ns_kwargs: dict) -> str:
         "status": "success",
         "action": "create_loot_table",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the loot table system",
-            "Create LootTable ScriptableObject assets for drop tables",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -239,10 +194,7 @@ async def _handle_content_crafting(ns_kwargs: dict) -> str:
         "status": "success",
         "action": "create_crafting_system",
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the crafting system",
-            "Create CraftingRecipe ScriptableObject assets for recipes",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -262,10 +214,7 @@ async def _handle_content_skill_tree(
         "status": "success",
         "action": "create_skill_tree",
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the skill tree system",
-            "Create SkillNode ScriptableObject assets for skill definitions",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -280,10 +229,7 @@ async def _handle_content_dps_calculator(
         "status": "success",
         "action": "create_dps_calculator",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the DPS calculator",
-            "Open via menu: VeilBreakers > Balancing > DPS Calculator",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -296,10 +242,7 @@ async def _handle_content_encounter_simulator(ns_kwargs: dict) -> str:
         "status": "success",
         "action": "create_encounter_simulator",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the encounter simulator",
-            "Open via menu: VeilBreakers > Balancing > Encounter Simulator",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -312,10 +255,7 @@ async def _handle_content_stat_curve_editor(ns_kwargs: dict) -> str:
         "status": "success",
         "action": "create_stat_curve_editor",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the stat curve editor",
-            "Open via menu: VeilBreakers > Balancing > Stat Curve Editor",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -332,10 +272,7 @@ async def _handle_content_shop(ns_kwargs: dict) -> str:
         "status": "success",
         "action": "create_shop_system",
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the shop system",
-            "Create MerchantData ScriptableObject assets for merchants",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -352,10 +289,7 @@ async def _handle_content_journal(ns_kwargs: dict) -> str:
         "status": "success",
         "action": "create_journal_system",
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the journal system",
-            "Create JournalEntry ScriptableObject assets for lore and bestiary entries",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -370,9 +304,5 @@ async def _handle_content_equipment_attachment(ns_kwargs: dict) -> str:
         "status": "success",
         "action": "create_equipment_attachment",
         "paths": paths,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the equipment system",
-            "Attach VB_EquipmentAttachment to the character root",
-            "Attach VB_WeaponSheath to weapon objects with Animation Rigging",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)

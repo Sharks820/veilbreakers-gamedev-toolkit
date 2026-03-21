@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.vfx_templates import (
@@ -141,61 +141,9 @@ async def unity_vfx(
     transition_type: str = "corruption_wave",
     boss_brand: str = "DREAD",
     transition_duration: float = 3.0,
-    arena_radius: float = 20.0,
+    arena_radius: float = 20.0
 ) -> str:
-    """Unity VFX system -- VFX particles, shaders, post-processing, screen effects.
-
-    This compound tool generates C# editor scripts and HLSL shader files
-    for all VFX functionality: particle systems, brand damage effects,
-    environmental VFX, trails, auras, shaders, post-processing, screen
-    effects, and ability VFX with animation integration.
-
-    Actions:
-    - create_particle_vfx: Create VFX Graph particle prefab from params (VFX-01)
-    - create_brand_vfx: Generate per-brand damage VFX (IRON/SAVAGE/SURGE/VENOM/DREAD/LEECH/GRACE/MEND/RUIN/VOID) (VFX-02)
-    - create_environmental_vfx: Create dust/fireflies/snow/rain/ash VFX (VFX-03)
-    - create_trail_vfx: Create weapon/projectile trail prefab (VFX-04)
-    - create_aura_vfx: Create character aura/buff particle system (VFX-05)
-    - create_corruption_shader: Generate corruption scaling HLSL shader (VFX-06)
-    - create_shader: Generate HLSL shader (dissolve/force field/water/foliage/outline/damage overlay) (VFX-07)
-    - setup_post_processing: Create post-processing Volume with bloom/vignette/AO/DOF (VFX-08)
-    - create_screen_effect: Create screen effects (camera shake/damage vignette/etc) (VFX-09)
-    - create_ability_vfx: Bind VFX to AnimationEvent for ability effects (VFX-10)
-    - create_flipbook: Generate flipbook texture sheet from particle system captures (VFX3-01)
-    - compose_vfx_graph: Programmatic VFX Graph node composition (VFX3-02)
-    - create_projectile_chain: 4-stage projectile VFX chain (spawn/travel/impact/aftermath) (VFX3-03)
-    - create_aoe_vfx: Area-of-effect ground VFX (circle/cone/line/sphere) (VFX3-04)
-    - create_status_effect_vfx: Per-brand persistent status effect VFX (VFX3-05)
-    - create_deep_environmental_vfx: Volumetric fog, god rays, heat distortion, caustics (VFX3-06)
-    - create_directional_hit_vfx: Directional combat hit VFX with screen effects (VFX3-07)
-    - create_boss_transition_vfx: Boss phase transition VFX (VFX3-08)
-
-    Args:
-        action: The VFX action to perform.
-        name: Name for the generated VFX asset or script.
-        rate: Particle emission rate per second (VFX-01).
-        lifetime: Particle lifetime in seconds (VFX-01).
-        size: Particle size (VFX-01).
-        color: RGBA color as [r, g, b, a] (VFX-01/04/05).
-        shape: Emission shape (VFX-01).
-        brand: Brand name for damage VFX (VFX-02).
-        effect_type: Environmental effect type (VFX-03).
-        width: Trail width (VFX-04).
-        trail_lifetime: Trail segment lifetime (VFX-04).
-        aura_intensity: Aura emission intensity multiplier (VFX-05).
-        aura_radius: Aura emission radius around character (VFX-05).
-        shader_type: Shader type for create_shader (VFX-07).
-        bloom_intensity: Post-processing bloom intensity (VFX-08).
-        bloom_threshold: Post-processing bloom threshold (VFX-08).
-        vignette_intensity: Post-processing vignette intensity (VFX-08).
-        ao_intensity: Post-processing ambient occlusion intensity (VFX-08).
-        dof_focus_distance: Post-processing depth of field focus distance (VFX-08).
-        screen_effect_type: Screen effect type (VFX-09).
-        shake_intensity: Camera shake intensity (VFX-09).
-        vfx_prefab_path: Path to VFX prefab for ability binding (VFX-10).
-        anim_clip_path: Path to animation clip for ability binding (VFX-10).
-        keyframe_time: Animation keyframe time for VFX trigger (VFX-10).
-    """
+    """Unity VFX system -- VFX particles, shaders, post-processing, screen effects."""
     try:
         if action == "create_particle_vfx":
             return await _handle_vfx_particle(name, rate, lifetime, size, color, shape)
@@ -325,10 +273,7 @@ async def _handle_vfx_particle(
             "action": "create_particle_vfx",
             "name": name,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                f'Open Unity Editor and run VeilBreakers > VFX > Create Particle VFX > {name} from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -354,10 +299,7 @@ async def _handle_vfx_brand(brand: str) -> str:
             "action": "create_brand_vfx",
             "brand": brand_upper,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                f'Open Unity Editor and run VeilBreakers > VFX > Brand Damage > {brand_upper} from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -383,10 +325,7 @@ async def _handle_vfx_environmental(effect_type: str) -> str:
             "action": "create_environmental_vfx",
             "effect_type": effect_type,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                f'Open Unity Editor and run VeilBreakers > VFX > Environment > {safe} from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -416,10 +355,7 @@ async def _handle_vfx_trail(
             "action": "create_trail_vfx",
             "name": name,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                f'Open Unity Editor and run VeilBreakers > VFX > Create Trail > {name} from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -449,10 +385,7 @@ async def _handle_vfx_aura(
             "action": "create_aura_vfx",
             "name": name,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                f'Open Unity Editor and run VeilBreakers > VFX > Create Aura > {name} from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -483,11 +416,7 @@ async def _handle_vfx_corruption_shader(name: str) -> str:
                 "_CorruptionColor",
                 "_VeinScale",
             ],
-            "next_steps": [
-                "Run unity_editor action=recompile to import the new shader",
-                "Create a material using shader 'VeilBreakers/Corruption'",
-                "Adjust _CorruptionAmount from 0 (clean) to 1 (fully corrupted)",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )
@@ -533,10 +462,7 @@ async def _handle_vfx_shader(name: str, shader_type: str) -> str:
             "shader_type": shader_type,
             "shader_path": abs_path,
             "shader_name": f"VeilBreakers/{type_label}",
-            "next_steps": [
-                "Run unity_editor action=recompile to import the new shader",
-                f"Create a material using shader 'VeilBreakers/{type_label}'",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,
     )
@@ -577,10 +503,7 @@ async def _handle_vfx_post_processing(
                 "ao": ao_intensity,
                 "dof_focus": dof_focus_distance,
             },
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                'Open Unity Editor and run VeilBreakers > VFX > Setup Post Processing from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -610,10 +533,7 @@ async def _handle_vfx_screen_effect(effect_type: str, intensity: float) -> str:
             "action": "create_screen_effect",
             "effect_type": effect_type,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                f'Open Unity Editor and run VeilBreakers > VFX > Screen Effects > {label} from the menu bar',
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,
@@ -652,12 +572,7 @@ async def _handle_vfx_ability(
             "anim_clip": anim_clip,
             "keyframe_time": keyframe_time,
             "script_path": abs_path,
-            "next_steps": [
-                "Run unity_editor action=recompile to compile the new script",
-                f'Open Unity Editor and run VeilBreakers > VFX > Ability VFX > {name} from the menu bar',
-                f"Ensure VFX prefab exists at: {vfx_prefab}",
-                f"Ensure animation clip exists at: {anim_clip}",
-            ],
+            "next_steps": STANDARD_NEXT_STEPS,
             "result_file": "Temp/vb_result.json",
         },
         indent=2,

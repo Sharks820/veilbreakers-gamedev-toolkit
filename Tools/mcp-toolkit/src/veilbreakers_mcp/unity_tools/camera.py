@@ -8,7 +8,7 @@ from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template,
+    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.camera_templates import (
@@ -98,71 +98,9 @@ async def unity_camera(
     # common
     namespace: str = "",
     # cinematic sequence params (ANIM3-07)
-    shots: list[dict] | None = None,
+    shots: list[dict] | None = None
 ) -> str:
-    """Camera, cinematics, and animation tools -- Cinemachine 3.x virtual cameras,
-    state-driven cameras, camera shake, blend profiles, Timeline, cutscenes,
-    animation clip editing, animator modification, avatar masks, video player,
-    and cinematic sequences.
-
-    Camera actions (camera_templates.py):
-    - create_virtual_camera: Cinemachine 3.x camera with orbital/follow/dolly body (CAM-01)
-    - create_state_driven_camera: State-driven camera switching by animator state (CAM-01)
-    - create_camera_shake: Cinemachine impulse shake system (CAM-04)
-    - configure_blend: Camera blend profile configuration (CAM-04)
-
-    Timeline/Cutscene actions:
-    - create_timeline: Timeline asset with configurable tracks (CAM-02)
-    - create_cutscene: Cutscene setup with PlayableDirector (CAM-03)
-
-    Animation actions:
-    - edit_animation_clip: Create/modify animation clips via AnimationUtility (ANIMA-01)
-    - modify_animator: Modify animator controller states/transitions/parameters (ANIMA-02)
-    - create_avatar_mask: Create avatar mask for animation layers (ANIMA-03)
-
-    Media actions:
-    - setup_video_player: Video player with render texture or camera overlay (MEDIA-01)
-    - cinematic_sequence: Create Timeline-based cinematic with shots and character staging (ANIM3-07)
-
-    Args:
-        action: The camera/animation action to perform.
-        name: Name for the generated system (used in file paths).
-        camera_type: Virtual camera body type (orbital/follow/dolly).
-        follow_target: Transform path for follow target.
-        look_at_target: Transform path for look-at target.
-        priority: Camera priority (higher = more important).
-        radius: Orbital camera radius.
-        target_offset: Target offset [x, y, z].
-        damping: Damping values [x, y, z].
-        states: State-driven camera state definitions.
-        impulse_force: Camera shake impulse force.
-        impulse_duration: Camera shake impulse duration.
-        add_listener: Whether to add impulse listener.
-        default_blend_time: Default camera blend time in seconds.
-        blend_style: Blend curve style (EaseInOut/Cut/Linear).
-        custom_blends: Custom per-camera-pair blend overrides.
-        tracks: Timeline track definitions.
-        output_path: Output directory for timeline/animation assets.
-        timeline_path: Path to existing timeline asset for cutscene.
-        wrap_mode: Cutscene wrap mode (None/Loop/Hold).
-        play_on_awake: Whether cutscene plays on awake.
-        clip_name: Animation clip name.
-        curves: Animation curve definitions.
-        controller_path: Path to existing animator controller.
-        states_to_add: States to add to animator controller.
-        transitions: Animator transitions to add.
-        parameters: Animator parameters to add.
-        sub_state_machines: Sub-state machines to add.
-        mask_name: Avatar mask name.
-        body_parts: Body part enable/disable map.
-        transform_paths: Transform paths for avatar mask.
-        video_source: Video source type (clip/url).
-        video_path: Path to video clip or URL.
-        render_texture_width: Render texture width.
-        render_texture_height: Render texture height.
-        loop: Whether video loops.
-        namespace: C# namespace override (empty = generator default).
-    """
+    """Camera, cinematics, and animation tools -- Cinemachine 3.x virtual cameras, state-driven cameras, camera shake, blend profiles, Timeline, cutscenes, animation clip editing, animator modification, avatar masks, video player, and cinematic sequences."""
     try:
         ns_kwargs: dict = {}
         if namespace:
@@ -246,10 +184,7 @@ async def _handle_camera_virtual(
         "status": "success",
         "action": "create_virtual_camera",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the camera setup",
-            f"Execute menu item: VeilBreakers > Camera > Setup {name}",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -268,10 +203,7 @@ async def _handle_camera_state_driven(
         "status": "success",
         "action": "create_state_driven_camera",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the state-driven camera",
-            f"Execute menu item: VeilBreakers > Camera > Setup {name} State Camera",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -292,10 +224,7 @@ async def _handle_camera_shake(
         "status": "success",
         "action": "create_camera_shake",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the camera shake system",
-            "Execute menu item: VeilBreakers > Camera > Setup Shake",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -316,10 +245,7 @@ async def _handle_camera_blend(
         "status": "success",
         "action": "configure_blend",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the blend configuration",
-            "Execute menu item: VeilBreakers > Camera > Configure Blends",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -339,10 +265,7 @@ async def _handle_camera_timeline(
         "status": "success",
         "action": "create_timeline",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the timeline setup",
-            f"Execute menu item: VeilBreakers > Camera > Create {name} Timeline",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -364,10 +287,7 @@ async def _handle_camera_cutscene(
         "status": "success",
         "action": "create_cutscene",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the cutscene setup",
-            f"Execute menu item: VeilBreakers > Camera > Setup {name} Cutscene",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -389,10 +309,7 @@ async def _handle_camera_animation_clip(
         "status": "success",
         "action": "edit_animation_clip",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the clip editor",
-            f"Execute menu item: VeilBreakers > Animation > Create {clip_name}",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -416,10 +333,7 @@ async def _handle_camera_animator_modifier(
         "status": "success",
         "action": "modify_animator",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the animator modifier",
-            "Execute menu item: VeilBreakers > Animation > Modify Controller",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -442,10 +356,7 @@ async def _handle_camera_avatar_mask(
         "status": "success",
         "action": "create_avatar_mask",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the mask setup",
-            f"Execute menu item: VeilBreakers > Animation > Create {mask_name}",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -470,10 +381,7 @@ async def _handle_camera_video_player(
         "status": "success",
         "action": "setup_video_player",
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the video player setup",
-            "Execute menu item: VeilBreakers > Media > Setup Video Player",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
 
 
@@ -499,10 +407,6 @@ async def _handle_camera_cinematic_sequence(
         "action": "cinematic_sequence",
         "sequence_name": name,
         "script_path": abs_path,
-        "next_steps": [
-            "Call unity_editor action='recompile' to compile the cinematic script",
-            f"Execute menu item: VeilBreakers > Cinematic > Create {name}",
-            f"Timeline asset will be saved to: {output_path}/{name}.playable",
-        ],
+        "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
     }, indent=2)
