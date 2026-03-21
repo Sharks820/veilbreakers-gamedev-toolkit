@@ -24,6 +24,7 @@ from ._scatter_engine import (
     generate_breakable_variants,
 )
 from ._terrain_noise import compute_slope_map
+from ._mesh_bridge import mesh_from_spec, VEGETATION_GENERATOR_MAP
 
 
 # ---------------------------------------------------------------------------
@@ -87,25 +88,42 @@ def _create_template_collection(name: str) -> bpy.types.Collection:
 def _create_vegetation_template(
     veg_type: str, collection: bpy.types.Collection
 ) -> bpy.types.Object:
-    """Create a simple template mesh for a vegetation type."""
+    """Create a template mesh for a vegetation type.
+
+    Uses procedural mesh generators from VEGETATION_GENERATOR_MAP when
+    available. Falls back to simple primitives for unmapped types (e.g.
+    grass stays as a flat plane -- billboard grass is standard for games).
+    """
+    gen_entry = VEGETATION_GENERATOR_MAP.get(veg_type)
+    if gen_entry is not None:
+        # Use procedural mesh generator with lower segment counts for
+        # scatter templates (these get instanced 1000s of times)
+        gen_func, gen_kwargs = gen_entry
+        scatter_kwargs = dict(gen_kwargs)
+        if veg_type == "tree":
+            scatter_kwargs.setdefault("segments", 6)
+        elif veg_type == "rock":
+            scatter_kwargs.setdefault("segments", 8)
+        spec = gen_func(**scatter_kwargs)
+        obj = mesh_from_spec(
+            spec,
+            name=f"_template_{veg_type}",
+            collection=collection,
+        )
+        # Assign a basic material
+        if hasattr(obj, "data") and obj.data is not None:
+            mat = bpy.data.materials.new(name=f"mat_{veg_type}")
+            mat.use_nodes = True
+            obj.data.materials.append(mat)
+        return obj
+
+    # Fallback: simple primitives for unmapped types
     mesh = bpy.data.meshes.new(f"_template_{veg_type}")
     bm = bmesh.new()
 
-    if veg_type == "tree":
-        # Cone shape for tree
-        bmesh.ops.create_cone(
-            bm, cap_ends=True, cap_tris=True,
-            segments=8, radius1=0.5, radius2=0.0, depth=2.0,
-        )
-    elif veg_type == "bush":
-        # Sphere for bush
-        bmesh.ops.create_icosphere(bm, subdivisions=2, radius=0.5)
-    elif veg_type == "grass":
-        # Flat plane for grass
+    if veg_type == "grass":
+        # Flat plane for grass (billboard grass is correct for games)
         bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=0.3)
-    elif veg_type == "rock":
-        # Box for rock
-        bmesh.ops.create_cube(bm, size=0.6)
     else:
         bmesh.ops.create_cube(bm, size=0.5)
 

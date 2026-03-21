@@ -27,7 +27,7 @@ from ._building_grammar import (
     STYLE_CONFIGS,
     MODULAR_CATALOG,
 )
-from ._dungeon_gen import generate_multi_floor_dungeon
+from ._dungeon_gen import generate_multi_floor_dungeon, generate_dungeon_prop_placements
 from ._mesh_bridge import (
     mesh_from_spec,
     FURNITURE_GENERATOR_MAP,
@@ -907,16 +907,41 @@ def handle_generate_multi_floor_dungeon(params: dict) -> dict:
     bpy.context.collection.objects.link(parent)
 
     # Create each floor as a separate mesh, offset by wall_height
+    total_prop_count = 0
     for floor_idx, layout in enumerate(dungeon.floors):
         floor_name = f"{name}_floor_{floor_idx}"
         ops = _dungeon_to_geometry_ops(layout, cell_size, wall_height)
-        # Offset Y position for stacking
+        # Offset Z position for stacking
         y_offset = floor_idx * wall_height
         for op in ops:
             px, py, pz = op["position"]
             op["position"] = (px, py, pz + y_offset)
         floor_obj = _ops_to_mesh(ops, floor_name)
         floor_obj.parent = parent
+
+        # Place procedural dungeon props for this floor
+        prop_placements = generate_dungeon_prop_placements(
+            layout, seed=seed + floor_idx * 100,
+        )
+        props_coll = bpy.data.collections.new(f"{name}_floor_{floor_idx}_props")
+        bpy.context.scene.collection.children.link(props_coll)
+
+        for pi, prop in enumerate(prop_placements):
+            prop_entry = DUNGEON_PROP_MAP.get(prop["type"])
+            if prop_entry is None:
+                continue
+            gen_func, gen_kwargs = prop_entry
+            prop_spec = gen_func(**gen_kwargs)
+            px, py, pz = prop["position"]
+            mesh_from_spec(
+                prop_spec,
+                name=f"{name}_f{floor_idx}_{prop['type']}_{pi}",
+                location=(px * cell_size, py * cell_size, pz + y_offset),
+                rotation=(0, 0, prop["rotation"]),
+                collection=props_coll,
+                parent=parent,
+            )
+            total_prop_count += 1
 
     # Connection markers
     for i, conn in enumerate(dungeon.connections):
@@ -939,6 +964,7 @@ def handle_generate_multi_floor_dungeon(params: dict) -> dict:
             "name": name,
             "num_floors": dungeon.num_floors,
             "total_rooms": dungeon.total_rooms,
+            "procedural_mesh_count": total_prop_count,
             "connections": [
                 {
                     "from_floor": c["from_floor"],

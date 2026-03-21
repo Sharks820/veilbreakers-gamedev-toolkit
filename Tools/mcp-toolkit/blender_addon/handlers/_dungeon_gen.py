@@ -961,3 +961,139 @@ def generate_multi_floor_dungeon(
         connections=connections,
         total_rooms=total_rooms,
     )
+
+
+# ---------------------------------------------------------------------------
+# Dungeon prop placement (pure-logic, no bpy)
+# ---------------------------------------------------------------------------
+
+# Prop types that can appear in generic rooms
+_GENERIC_ROOM_PROPS = ("crate", "barrel", "skull_pile")
+
+
+def generate_dungeon_prop_placements(
+    layout: DungeonLayout,
+    seed: int = 0,
+) -> list[dict]:
+    """Generate prop placement data for a dungeon layout.
+
+    Pure-logic function -- returns placement dicts, not Blender objects.
+    The caller (worldbuilding handler) consumes these and creates geometry
+    via DUNGEON_PROP_MAP + mesh_from_spec.
+
+    Placement rules by room type:
+    - Corridors: torch_sconce every 4-6 cells along walls (alternating sides)
+    - Boss rooms: altar at center, pillar at each corner
+    - Treasure rooms: chest at center, torch_sconce at corners
+    - Generic rooms: 1-2 random props (crate, barrel, skull_pile)
+    - All rooms: 30% chance of archway at each door position
+
+    Args:
+        layout: DungeonLayout with rooms, corridors, doors, grid.
+        seed: Random seed for deterministic output.
+
+    Returns:
+        List of dicts: ``{"type": str, "position": (x, y, z),
+        "rotation": float, "room_type": str}``
+    """
+    rng = random.Random(seed)
+    props: list[dict] = []
+
+    # --- Room-based props ---
+    for room in layout.rooms:
+        cx, cy = room.center
+        rt = room.room_type
+
+        if rt == "boss":
+            # Altar at center
+            props.append({
+                "type": "altar",
+                "position": (cx, cy, 0),
+                "rotation": 0.0,
+                "room_type": rt,
+            })
+            # Pillar at each corner
+            for dx, dy in [(0, 0), (room.width - 1, 0),
+                           (0, room.height - 1), (room.width - 1, room.height - 1)]:
+                px = room.x + dx
+                py = room.y + dy
+                props.append({
+                    "type": "pillar",
+                    "position": (px, py, 0),
+                    "rotation": 0.0,
+                    "room_type": rt,
+                })
+
+        elif rt == "treasure":
+            # Chest at center
+            props.append({
+                "type": "chest",
+                "position": (cx, cy, 0),
+                "rotation": 0.0,
+                "room_type": rt,
+            })
+            # Torch sconce at corners
+            for dx, dy in [(0, 0), (room.width - 1, 0),
+                           (0, room.height - 1), (room.width - 1, room.height - 1)]:
+                px = room.x + dx
+                py = room.y + dy
+                props.append({
+                    "type": "torch_sconce",
+                    "position": (px, py, 0),
+                    "rotation": 0.0,
+                    "room_type": rt,
+                })
+
+        elif rt in ("generic", "entrance", "exit"):
+            # 1-2 random props
+            n_props = rng.randint(1, 2)
+            for _ in range(n_props):
+                prop_type = rng.choice(_GENERIC_ROOM_PROPS)
+                px = rng.randint(room.x + 1, max(room.x + 1, room.x2 - 2))
+                py = rng.randint(room.y + 1, max(room.y + 1, room.y2 - 2))
+                rotation = rng.uniform(0, 2 * math.pi)
+                props.append({
+                    "type": prop_type,
+                    "position": (px, py, 0),
+                    "rotation": rotation,
+                    "room_type": rt,
+                })
+
+    # --- Corridor torch sconces ---
+    # Walk corridors and place torches every 4-6 cells
+    for (x1, y1), (x2, y2) in layout.corridors:
+        # Compute corridor cells (L-shaped: horizontal then vertical)
+        cells: list[tuple[int, int]] = []
+        # Horizontal segment
+        lo_x, hi_x = min(x1, x2), max(x1, x2)
+        for x in range(lo_x, hi_x + 1):
+            cells.append((x, y1))
+        # Vertical segment
+        lo_y, hi_y = min(y1, y2), max(y1, y2)
+        for y in range(lo_y, hi_y + 1):
+            cells.append((x2, y))
+
+        # Place torch every 4-6 cells, alternating sides
+        spacing = rng.randint(4, 6)
+        side = 1
+        for i in range(0, len(cells), spacing):
+            cx_t, cy_t = cells[i]
+            props.append({
+                "type": "torch_sconce",
+                "position": (cx_t, cy_t, 0),
+                "rotation": side * math.pi / 2,
+                "room_type": "corridor",
+            })
+            side *= -1
+
+    # --- Archways at doorways (30% chance) ---
+    for dx, dy in layout.doors:
+        if rng.random() < 0.3:
+            props.append({
+                "type": "archway",
+                "position": (dx, dy, 0),
+                "rotation": 0.0,
+                "room_type": "doorway",
+            })
+
+    return props
