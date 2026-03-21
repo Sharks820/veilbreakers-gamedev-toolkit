@@ -29,7 +29,7 @@ from veilbreakers_mcp.shared.unity_templates.audio_middleware_templates import (
     generate_portal_audio_script,
     generate_vo_pipeline_script,
 )
-from veilbreakers_mcp.shared.unity_templates.code_templates import _sanitize_cs_identifier
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 from veilbreakers_mcp.shared.elevenlabs_client import ElevenLabsAudioClient
 
 
@@ -223,7 +223,7 @@ async def _handle_audio_generate_sfx(
 ) -> str:
     """Generate AI SFX from text description (AUD-01)."""
     client = _get_audio_client()
-    safe_name = _sanitize_cs_identifier(name) or "sfx"
+    safe_name = sanitize_cs_identifier(name) or "sfx"
     output_rel = f"Assets/Resources/Audio/SFX/{safe_name}.mp3"
 
     if settings.unity_project_path:
@@ -257,8 +257,8 @@ async def _handle_audio_generate_music_loop(
 ) -> str:
     """Generate loopable music track (AUD-02)."""
     client = _get_audio_client()
-    safe_name = _sanitize_cs_identifier(name) or "music"
-    safe_theme = _sanitize_cs_identifier(theme) or "theme"
+    safe_name = sanitize_cs_identifier(name) or "music"
+    safe_theme = sanitize_cs_identifier(theme) or "theme"
     output_rel = f"Assets/Resources/Audio/Music/{safe_name}_{safe_theme}.mp3"
 
     if settings.unity_project_path:
@@ -292,7 +292,7 @@ async def _handle_audio_generate_voice_line(
 ) -> str:
     """Synthesise NPC/monster voice line (AUD-03)."""
     client = _get_audio_client()
-    safe_name = _sanitize_cs_identifier(name) or "voice"
+    safe_name = sanitize_cs_identifier(name) or "voice"
     output_rel = f"Assets/Resources/Audio/Voice/{safe_name}.mp3"
 
     if settings.unity_project_path:
@@ -326,7 +326,7 @@ async def _handle_audio_generate_ambient(
 ) -> str:
     """Generate layered ambient soundscape (AUD-04)."""
     client = _get_audio_client()
-    safe_biome = _sanitize_cs_identifier(biome) or "ambient"
+    safe_biome = sanitize_cs_identifier(biome) or "ambient"
     output_rel = f"Assets/Resources/Audio/Ambient/{safe_biome}"
 
     if settings.unity_project_path:

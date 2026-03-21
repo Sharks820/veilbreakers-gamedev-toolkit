@@ -20,42 +20,7 @@ from __future__ import annotations
 
 import re
 
-# ---------------------------------------------------------------------------
-# Sanitization helpers (local copies per established codebase pattern)
-# ---------------------------------------------------------------------------
-
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal.
-
-    Prevents C# code injection by escaping backslashes, quotes, and
-    newlines.
-
-    Args:
-        value: Raw string value.
-
-    Returns:
-        Escaped string safe for C# string literal interpolation.
-    """
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier (class name, method name).
-
-    Strips all characters that are not alphanumeric or underscore.
-
-    Args:
-        value: Raw name string.
-
-    Returns:
-        Sanitized identifier safe for C# class/method names.
-    """
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +56,7 @@ def _safe_identifier(name: str) -> str:
     Raises:
         ValueError: If the sanitized result is empty.
     """
-    result = _sanitize_cs_identifier(name)
+    result = sanitize_cs_identifier(name)
     if not result:
         raise ValueError(f"Identifier is empty after sanitization: {name!r}")
     if result[0].isdigit():
@@ -191,7 +156,7 @@ def _safe_default(default: str, type_str: str) -> str:
         inner = default.strip()
         if inner.startswith('"') and inner.endswith('"'):
             return inner
-        return f'"{_sanitize_cs_string(inner)}"'
+        return f'"{sanitize_cs_string(inner)}"'
 
     # For other types: strip semicolons and braces that could inject code
     sanitized = re.sub(r"[;{}]", "", default)
@@ -228,7 +193,7 @@ def _format_field(field: dict, indent: str) -> list[str]:
         safe_name = f"_{safe_name[0].lower()}{safe_name[1:]}" if len(safe_name) > 1 else f"_{safe_name.lower()}"
 
     if summary:
-        lines.append(f"{indent}/// <summary>{_sanitize_cs_string(summary)}</summary>")
+        lines.append(f"{indent}/// <summary>{sanitize_cs_string(summary)}</summary>")
 
     for attr in attrs:
         lines.append(f"{indent}[{attr}]")
@@ -264,7 +229,7 @@ def _format_property(prop: dict, indent: str) -> list[str]:
     safe_name = _safe_identifier(raw_name)
 
     if summary:
-        lines.append(f"{indent}/// <summary>{_sanitize_cs_string(summary)}</summary>")
+        lines.append(f"{indent}/// <summary>{sanitize_cs_string(summary)}</summary>")
 
     if getter or setter:
         # Custom getter/setter
@@ -310,7 +275,7 @@ def _format_method(method: dict, indent: str, is_interface: bool = False) -> lis
     safe_name = _safe_identifier(raw_name)
 
     if summary:
-        lines.append(f"{indent}/// <summary>{_sanitize_cs_string(summary)}</summary>")
+        lines.append(f"{indent}/// <summary>{sanitize_cs_string(summary)}</summary>")
 
     for attr in attrs:
         lines.append(f"{indent}[{attr}]")
@@ -393,7 +358,7 @@ def _build_cs_class(
     # 3. XML summary comment
     if summary:
         lines.append(f"{indent}/// <summary>")
-        lines.append(f"{indent}/// {_sanitize_cs_string(summary)}")
+        lines.append(f"{indent}/// {sanitize_cs_string(summary)}")
         lines.append(f"{indent}/// </summary>")
 
     # 4. Class attributes
@@ -507,7 +472,7 @@ def generate_class(
         attrs = list(attributes) if attributes else []
         has_cam = any("CreateAssetMenu" in a for a in attrs)
         if not has_cam:
-            menu_name = _sanitize_cs_string(safe_name)
+            menu_name = sanitize_cs_string(safe_name)
             attrs.insert(0, f'CreateAssetMenu(menuName = "VeilBreakers/{menu_name}", fileName = "{menu_name}")')
         attributes = attrs
         build_type = "class"
@@ -564,7 +529,7 @@ def _sanitize_member_list(members: list[dict]) -> list[dict]:
     for m in members:
         clean = dict(m)
         if "name" in clean:
-            clean["name"] = _sanitize_cs_identifier(clean["name"])
+            clean["name"] = sanitize_cs_identifier(clean["name"])
         result.append(clean)
     return result
 
@@ -791,7 +756,7 @@ def generate_editor_window(
         Complete C# source string.
     """
     safe_name = _safe_identifier(window_name)
-    safe_menu = _sanitize_cs_string(menu_path)
+    safe_menu = sanitize_cs_string(menu_path)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -965,7 +930,7 @@ def generate_inspector_drawer(
 
     if fields_to_draw:
         for field_name in fields_to_draw:
-            safe_field = _sanitize_cs_string(field_name)
+            safe_field = sanitize_cs_string(field_name)
             lines.append(f'{body_indent2}EditorGUILayout.PropertyField(serializedObject.FindProperty("{safe_field}"));')
     else:
         lines.append(f"{body_indent2}DrawDefaultInspector();")
@@ -1001,7 +966,7 @@ def generate_scene_overlay(
         Complete C# source string.
     """
     safe_name = _safe_identifier(overlay_name)
-    safe_display = _sanitize_cs_string(display_name)
+    safe_display = sanitize_cs_string(display_name)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -1019,7 +984,7 @@ def generate_scene_overlay(
     body_indent = indent + "    "
     body_indent2 = body_indent + "    "
 
-    lines.append(f'{indent}[Overlay(typeof(SceneView), "{_sanitize_cs_string(safe_name)}", "{safe_display}")]')
+    lines.append(f'{indent}[Overlay(typeof(SceneView), "{sanitize_cs_string(safe_name)}", "{safe_display}")]')
     lines.append(f"{indent}public class {safe_name} : Overlay, ITransientOverlay")
     lines.append(f"{indent}{{")
 
@@ -1748,7 +1713,7 @@ def generate_so_event_channel(
         # --- Specific typed event ---
         safe_event = _safe_identifier(event_name)
         if has_parameter:
-            safe_param = _sanitize_cs_string(parameter_type)
+            safe_param = sanitize_cs_string(parameter_type)
             lines.append(f"{indent}/// <summary>")
             lines.append(f"{indent}/// {safe_event} event channel carrying a {safe_param} parameter.")
             lines.append(f"{indent}/// </summary>")

@@ -38,19 +38,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -152,7 +140,7 @@ def generate_inventory_system_script(
     item_lines.append("    public enum EquipmentSlot")
     item_lines.append("    {")
     for i, slot in enumerate(equipment_slots):
-        safe_slot = _sanitize_cs_identifier(slot)
+        safe_slot = sanitize_cs_identifier(slot)
         comma = "," if i < len(equipment_slots) - 1 else ""
         item_lines.append("        " + safe_slot + comma)
     item_lines.append("    }")
@@ -378,7 +366,7 @@ def generate_inventory_system_script(
     inv_lines.append("                _equipmentSlots[slot].item = item;")
     inv_lines.append("                _equipmentSlots[slot].quantity = 1;")
     inv_lines.append("                OnEquipmentChanged?.Invoke(slot, item);")
-    inv_lines.append('                EventBus.Publish("OnEquipmentChanged", new { slot, item });')
+    inv_lines.append('                EventBus<OnEquipmentChangedEvent>.Raise(new OnEquipmentChangedEvent { slot = slot, item = item });')
     inv_lines.append("                return true;")
     inv_lines.append("            }")
     inv_lines.append("            return false;")
@@ -396,7 +384,7 @@ def generate_inventory_system_script(
     inv_lines.append("            _equipmentSlots[slot].item = null;")
     inv_lines.append("            _equipmentSlots[slot].quantity = 0;")
     inv_lines.append("            OnEquipmentChanged?.Invoke(slot, null);")
-    inv_lines.append('                EventBus.Publish("OnEquipmentUnequipped", new { slot });')
+    inv_lines.append('                EventBus<OnEquipmentUnequippedEvent>.Raise(new OnEquipmentUnequippedEvent { slot = slot });')
     inv_lines.append("            return true;")
     inv_lines.append("        }")
     inv_lines.append("")
@@ -436,14 +424,14 @@ def generate_inventory_system_script(
     inv_lines.append("        public void OpenStorage(StorageContainer container)")
     inv_lines.append("        {")
     inv_lines.append("            _activeStorage = container;")
-    inv_lines.append('            EventBus.Publish("OnStorageOpened", new { container });')
+    inv_lines.append('            EventBus<OnStorageOpenedEvent>.Raise(new OnStorageOpenedEvent { container = container });')
     inv_lines.append("        }")
     inv_lines.append("")
     inv_lines.append("        /// <summary>Close the active storage container.</summary>")
     inv_lines.append("        public void CloseStorage()")
     inv_lines.append("        {")
     inv_lines.append("            _activeStorage = null;")
-    inv_lines.append('            EventBus.Publish("OnStorageClosed", null);')
+    inv_lines.append('            EventBus<OnStorageClosedEvent>.Raise(new OnStorageClosedEvent());')
     inv_lines.append("        }")
     inv_lines.append("")
 
@@ -464,7 +452,7 @@ def generate_inventory_system_script(
     inv_lines.append("        private void NotifyChanged()")
     inv_lines.append("        {")
     inv_lines.append("            OnInventoryChanged?.Invoke();")
-    inv_lines.append('            EventBus.Publish("OnInventoryChanged", null);')
+    inv_lines.append('            EventBus<OnInventoryChangedEvent>.Raise(new OnInventoryChangedEvent());')
     inv_lines.append("        }")
     inv_lines.append("    }")
     inv_lines.append("}")
@@ -478,9 +466,9 @@ def generate_inventory_system_script(
     uxml_lines.append('        <ui:VisualElement name="equipment-panel" class="equipment-panel">')
     uxml_lines.append('            <ui:Label text="Equipment" class="panel-title" />')
     for slot in equipment_slots:
-        safe = _sanitize_cs_identifier(slot)
+        safe = sanitize_cs_identifier(slot)
         uxml_lines.append('            <ui:VisualElement name="equip-slot-' + safe.lower() + '" class="equip-slot">')
-        uxml_lines.append('                <ui:Label text="' + _sanitize_cs_string(slot) + '" class="slot-label" />')
+        uxml_lines.append('                <ui:Label text="' + sanitize_cs_string(slot) + '" class="slot-label" />')
         uxml_lines.append('                <ui:VisualElement name="equip-icon-' + safe.lower() + '" class="item-icon" />')
         uxml_lines.append("            </ui:VisualElement>")
     uxml_lines.append("        </ui:VisualElement>")
@@ -758,7 +746,7 @@ def generate_dialogue_system_script(
     sys_lines.append("            _currentLineIndex = 0;")
     sys_lines.append("            _isActive = true;")
     sys_lines.append("            OnDialogueStarted?.Invoke(node);")
-    sys_lines.append('            EventBus.Publish("OnDialogueStarted", new { nodeId = node.nodeId });')
+    sys_lines.append('            EventBus<OnDialogueStartedEvent>.Raise(new OnDialogueStartedEvent { nodeId = node.nodeId });')
     sys_lines.append("            if (_currentNode.lines.Count > 0)")
     sys_lines.append("                OnLineAdvanced?.Invoke(_currentNode.lines[0]);")
     sys_lines.append("        }")
@@ -798,12 +786,12 @@ def generate_dialogue_system_script(
     sys_lines.append("            if (!_isActive || _currentNode == null) return;")
     sys_lines.append("            if (choiceIndex < 0 || choiceIndex >= _currentNode.choices.Count) return;")
     sys_lines.append("            var choice = _currentNode.choices[choiceIndex];")
-    sys_lines.append('            EventBus.Publish("OnDialogueChoiceMade", new { choice = choice.text, nodeId = _currentNode.nodeId });')
+    sys_lines.append('            EventBus<OnDialogueChoiceMadeEvent>.Raise(new OnDialogueChoiceMadeEvent { choice = choice.text, nodeId = _currentNode.nodeId });')
     sys_lines.append("")
     sys_lines.append("            // Navigate to the choice's next node instead of ending dialogue")
     sys_lines.append("            if (!string.IsNullOrEmpty(choice.nextNodeId))")
     sys_lines.append("            {")
-    sys_lines.append('                EventBus.Publish("OnDialogueNavigate", new { nextNodeId = choice.nextNodeId });')
+    sys_lines.append('                EventBus<OnDialogueNavigateEvent>.Raise(new OnDialogueNavigateEvent { nextNodeId = choice.nextNodeId });')
     sys_lines.append("            }")
     sys_lines.append("            else")
     sys_lines.append("            {")
@@ -820,7 +808,7 @@ def generate_dialogue_system_script(
     sys_lines.append("            _currentNode = null;")
     sys_lines.append("            _currentLineIndex = 0;")
     sys_lines.append("            OnDialogueEnded?.Invoke();")
-    sys_lines.append('            EventBus.Publish("OnDialogueEnded", null);')
+    sys_lines.append('            EventBus<OnDialogueEndedEvent>.Raise(new OnDialogueEndedEvent());')
     sys_lines.append("        }")
     sys_lines.append("")
 
@@ -1129,7 +1117,7 @@ def generate_quest_system_script(
     qs_lines.append("            instance.state = QuestState.Active;")
     qs_lines.append("            _quests[questData.questId] = instance;")
     qs_lines.append("            OnQuestStarted?.Invoke(instance);")
-    qs_lines.append('            EventBus.Publish("OnQuestStarted", new { questId = questData.questId });')
+    qs_lines.append('            EventBus<OnQuestStartedEvent>.Raise(new OnQuestStartedEvent { questId = questData.questId });')
     qs_lines.append("            return true;")
     qs_lines.append("        }")
     qs_lines.append("")
@@ -1153,7 +1141,7 @@ def generate_quest_system_script(
     qs_lines.append("            {")
     qs_lines.append("                quest.state = QuestState.Complete;")
     qs_lines.append("                OnQuestCompleted?.Invoke(quest);")
-    qs_lines.append('                EventBus.Publish("OnQuestCompleted", new { questId });')
+    qs_lines.append('                EventBus<OnQuestCompletedEvent>.Raise(new OnQuestCompletedEvent { questId = questId });')
     qs_lines.append("            }")
     qs_lines.append("        }")
     qs_lines.append("")
@@ -1168,7 +1156,7 @@ def generate_quest_system_script(
     qs_lines.append("            quest.state = QuestState.TurnedIn;")
     qs_lines.append("            DistributeRewards(quest.data.reward);")
     qs_lines.append("            OnQuestTurnedIn?.Invoke(quest);")
-    qs_lines.append('            EventBus.Publish("OnQuestTurnedIn", new { questId });')
+    qs_lines.append('            EventBus<OnQuestTurnedInEvent>.Raise(new OnQuestTurnedInEvent { questId = questId });')
     qs_lines.append("            return true;")
     qs_lines.append("        }")
     qs_lines.append("")
@@ -1179,15 +1167,15 @@ def generate_quest_system_script(
     qs_lines.append("        {")
     qs_lines.append("            if (reward == null) return;")
     qs_lines.append("            if (reward.experiencePoints > 0)")
-    qs_lines.append('                EventBus.Publish("OnXPGained", new { amount = reward.experiencePoints });')
+    qs_lines.append('                EventBus<OnXPGainedEvent>.Raise(new OnXPGainedEvent { amount = reward.experiencePoints });')
     qs_lines.append("            if (reward.gold > 0)")
-    qs_lines.append('                EventBus.Publish("OnCurrencyGained", new { currency = "Gold", amount = reward.gold });')
+    qs_lines.append('                EventBus<OnCurrencyGainedEvent>.Raise(new OnCurrencyGainedEvent { currency = "Gold", amount = reward.gold });')
     qs_lines.append("            if (reward.rewardItems != null)")
     qs_lines.append("            {")
     qs_lines.append("                foreach (var item in reward.rewardItems)")
     qs_lines.append("                {")
     qs_lines.append("                    if (item != null)")
-    qs_lines.append('                        EventBus.Publish("OnItemReward", new { item });')
+    qs_lines.append('                        EventBus<OnItemRewardEvent>.Raise(new OnItemRewardEvent { item = item });')
     qs_lines.append("                }")
     qs_lines.append("            }")
     qs_lines.append("        }")
@@ -1517,7 +1505,7 @@ def generate_crafting_system_script(
     craft_lines.append("        {")
     craft_lines.append("            _activeStation = stationType;")
     craft_lines.append("            _isAtStation = true;")
-    craft_lines.append('            EventBus.Publish("OnCraftingStationOpened", new { stationType });')
+    craft_lines.append('            EventBus<OnCraftingStationOpenedEvent>.Raise(new OnCraftingStationOpenedEvent { stationType = stationType });')
     craft_lines.append("        }")
     craft_lines.append("")
 
@@ -1526,7 +1514,7 @@ def generate_crafting_system_script(
     craft_lines.append("        public void CloseStation()")
     craft_lines.append("        {")
     craft_lines.append("            _isAtStation = false;")
-    craft_lines.append('            EventBus.Publish("OnCraftingStationClosed", null);')
+    craft_lines.append('            EventBus<OnCraftingStationClosedEvent>.Raise(new OnCraftingStationClosedEvent());')
     craft_lines.append("        }")
     craft_lines.append("")
 
@@ -1535,7 +1523,7 @@ def generate_crafting_system_script(
     craft_lines.append("        public void UnlockRecipe(string recipeId)")
     craft_lines.append("        {")
     craft_lines.append("            _unlockedRecipes.Add(recipeId);")
-    craft_lines.append('            EventBus.Publish("OnRecipeUnlocked", new { recipeId });')
+    craft_lines.append('            EventBus<OnRecipeUnlockedEvent>.Raise(new OnRecipeUnlockedEvent { recipeId = recipeId });')
     craft_lines.append("        }")
     craft_lines.append("")
 
@@ -1574,7 +1562,7 @@ def generate_crafting_system_script(
     craft_lines.append("            // Add result")
     craft_lines.append("            inventory.AddItem(recipe.resultItem, recipe.resultQuantity);")
     craft_lines.append("            OnItemCrafted?.Invoke(recipe);")
-    craft_lines.append('            EventBus.Publish("OnItemCrafted", new { recipeId = recipe.recipeId, item = recipe.resultItem });')
+    craft_lines.append('            EventBus<OnItemCraftedEvent>.Raise(new OnItemCraftedEvent { recipeId = recipe.recipeId, item = recipe.resultItem });')
     craft_lines.append("            return true;")
     craft_lines.append("        }")
     craft_lines.append("")
@@ -1680,12 +1668,12 @@ def generate_skill_tree_script(
     tree_lines.append("namespace " + ns)
     tree_lines.append("{")
 
-    # HeroPath enum
+    # Path enum
     tree_lines.append("    /// <summary>VeilBreakers hero paths.</summary>")
-    tree_lines.append("    public enum HeroPath")
+    tree_lines.append("    public enum Path")
     tree_lines.append("    {")
     for i, path in enumerate(hero_paths):
-        safe_path = _sanitize_cs_identifier(path)
+        safe_path = sanitize_cs_identifier(path)
         comma = "," if i < len(hero_paths) - 1 else ""
         tree_lines.append("        " + safe_path + comma)
     tree_lines.append("    }")
@@ -1755,7 +1743,7 @@ def generate_skill_tree_script(
     tree_lines.append("            _availablePoints -= node.unlockCost;")
     tree_lines.append("            _unlockedNodes.Add(node.nodeId);")
     tree_lines.append("            OnSkillUnlocked?.Invoke(node);")
-    tree_lines.append('            EventBus.Publish("OnSkillUnlocked", new { nodeId = node.nodeId, path = node.heroPath });')
+    tree_lines.append('            EventBus<OnSkillUnlockedEvent>.Raise(new OnSkillUnlockedEvent { nodeId = node.nodeId, path = node.heroPath });')
     tree_lines.append("            return true;")
     tree_lines.append("        }")
     tree_lines.append("")
@@ -1767,7 +1755,7 @@ def generate_skill_tree_script(
     tree_lines.append("            _availablePoints = _totalPointsEarned;")
     tree_lines.append("            _unlockedNodes.Clear();")
     tree_lines.append("            OnTreeReset?.Invoke();")
-    tree_lines.append('            EventBus.Publish("OnSkillTreeReset", null);')
+    tree_lines.append('            EventBus<OnSkillTreeResetEvent>.Raise(new OnSkillTreeResetEvent());')
     tree_lines.append("        }")
     tree_lines.append("")
 
@@ -1867,7 +1855,7 @@ def generate_dps_calculator_script(
     lines.append("        private static readonly string[] BrandNames = new string[]")
     lines.append("        {")
     for i, brand in enumerate(brands):
-        safe = _sanitize_cs_string(brand)
+        safe = sanitize_cs_string(brand)
         comma = "," if i < len(brands) - 1 else ""
         lines.append('            "' + safe + '"' + comma)
     lines.append("        };")
@@ -2317,7 +2305,7 @@ def generate_shop_system_script(
     ss_lines.append("        {")
     ss_lines.append("            _activeMerchant = merchant;")
     ss_lines.append("            _playerGold = playerGold;")
-    ss_lines.append('            EventBus.Publish("OnShopOpened", new { merchantId = merchant.merchantId });')
+    ss_lines.append('            EventBus<OnShopOpenedEvent>.Raise(new OnShopOpenedEvent { merchantId = merchant.merchantId });')
     ss_lines.append("        }")
     ss_lines.append("")
 
@@ -2326,7 +2314,7 @@ def generate_shop_system_script(
     ss_lines.append("        public void CloseShop()")
     ss_lines.append("        {")
     ss_lines.append("            _activeMerchant = null;")
-    ss_lines.append('            EventBus.Publish("OnShopClosed", null);')
+    ss_lines.append('            EventBus<OnShopClosedEvent>.Raise(new OnShopClosedEvent());')
     ss_lines.append("        }")
     ss_lines.append("")
 
@@ -2370,7 +2358,7 @@ def generate_shop_system_script(
     ss_lines.append("            _playerGold -= price;")
     ss_lines.append("            if (merchantItem.stock > 0) merchantItem.stock--;")
     ss_lines.append("            OnItemPurchased?.Invoke(merchantItem.item);")
-    ss_lines.append('            EventBus.Publish("OnItemPurchased", new { item = merchantItem.item, price });')
+    ss_lines.append('            EventBus<OnItemPurchasedEvent>.Raise(new OnItemPurchasedEvent { item = merchantItem.item, price = price });')
     ss_lines.append("            return true;")
     ss_lines.append("        }")
     ss_lines.append("")
@@ -2386,7 +2374,7 @@ def generate_shop_system_script(
     ss_lines.append("            int sellPrice = GetSellPrice(item);")
     ss_lines.append("            _playerGold += sellPrice;")
     ss_lines.append("            OnItemSold?.Invoke(item);")
-    ss_lines.append('            EventBus.Publish("OnItemSold", new { item, price = sellPrice });')
+    ss_lines.append('            EventBus<OnItemSoldEvent>.Raise(new OnItemSoldEvent { item = item, price = sellPrice });')
     ss_lines.append("            return true;")
     ss_lines.append("        }")
     ss_lines.append("")
@@ -2624,7 +2612,7 @@ def generate_journal_system_script(
     js_lines.append("            if (entry == null) return false;")
     js_lines.append("            _discoveredEntries.Add(entryId);")
     js_lines.append("            OnEntryDiscovered?.Invoke(entry);")
-    js_lines.append('            EventBus.Publish("OnJournalEntryDiscovered", new { entryId, entryType = entry.entryType.ToString() });')
+    js_lines.append('            EventBus<OnJournalEntryDiscoveredEvent>.Raise(new OnJournalEntryDiscoveredEvent { entryId = entryId, entryType = entry.entryType.ToString() });')
     js_lines.append("            return true;")
     js_lines.append("        }")
     js_lines.append("")

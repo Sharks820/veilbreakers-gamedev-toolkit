@@ -17,7 +17,7 @@ from veilbreakers_mcp.shared.unity_templates.quality_templates import (
     generate_texture_quality_check_script,
     generate_aaa_validation_script,
 )
-from veilbreakers_mcp.shared.unity_templates.code_templates import _sanitize_cs_identifier
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 
 
 
@@ -51,7 +51,7 @@ async def unity_quality(
     """AAA quality enforcement -- polygon budgets, master materials, texture quality, and combined quality auditing."""
     try:
         if action == "check_poly_budget":
-            safe_type = _sanitize_cs_identifier(asset_type) or "prop"
+            safe_type = sanitize_cs_identifier(asset_type) or "prop"
             script = generate_poly_budget_check_script(
                 asset_type=safe_type,
                 target_path=target_path,
@@ -99,7 +99,7 @@ async def unity_quality(
             })
 
         elif action == "aaa_audit":
-            safe_type = _sanitize_cs_identifier(asset_type) or "prop"
+            safe_type = sanitize_cs_identifier(asset_type) or "prop"
             script = generate_aaa_validation_script(
                 target_folder=target_folder,
                 asset_type=safe_type,

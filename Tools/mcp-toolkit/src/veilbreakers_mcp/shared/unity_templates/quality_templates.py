@@ -13,37 +13,16 @@ Exports:
     generate_texture_quality_check_script  -- AAA-06: Texture quality validation
     generate_aaa_validation_script         -- Combined AAA quality audit
 
-Helpers:
-    _sanitize_cs_string                    -- C# string literal escaping
-    _sanitize_cs_identifier                -- C# identifier sanitization
+Helpers (imported from _cs_sanitize):
+    sanitize_cs_string                     -- C# string literal escaping
+    sanitize_cs_identifier                 -- C# identifier sanitization
 """
 
 from __future__ import annotations
 
 import re
 
-
-# ---------------------------------------------------------------------------
-# Sanitization helpers (each template module has its own copy)
-# ---------------------------------------------------------------------------
-
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal.
-
-    Prevents C# code injection by escaping backslashes, quotes, and
-    newlines.
-    """
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier (class name, method name)."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -135,8 +114,8 @@ def generate_poly_budget_check_script(
     Returns:
         Complete C# source string for a Unity editor script.
     """
-    safe_type = _sanitize_cs_identifier(asset_type)
-    safe_path = _sanitize_cs_string(target_path or "Assets")
+    safe_type = sanitize_cs_identifier(asset_type)
+    safe_path = sanitize_cs_string(target_path or "Assets")
     budget_min, budget_max = _BUDGET_MAP.get(asset_type, (500, 6000))
 
     auto_flag_block = ""
@@ -165,7 +144,7 @@ def generate_poly_budget_check_script(
         "{",
         "    private const int BudgetMin = " + str(budget_min) + ";",
         "    private const int BudgetMax = " + str(budget_max) + ";",
-        '    private const string AssetType = "' + _sanitize_cs_string(asset_type) + '";',
+        '    private const string AssetType = "' + sanitize_cs_string(asset_type) + '";',
         "",
         '    [MenuItem("VeilBreakers/Quality/Check Poly Budget")]',
         "    public static void CheckPolyBudget()",
@@ -278,13 +257,13 @@ def generate_master_material_script(
         Complete C# source string for a Unity editor script.
     """
     mats = materials or _DEFAULT_MATERIALS
-    safe_folder = _sanitize_cs_string(output_folder)
+    safe_folder = sanitize_cs_string(output_folder)
 
     # Generate material creation code blocks
     mat_blocks = []
     for mat in mats:
-        name = _sanitize_cs_string(mat["name"])
-        safe_id = _sanitize_cs_identifier(mat["name"])
+        name = sanitize_cs_string(mat["name"])
+        safe_id = sanitize_cs_identifier(mat["name"])
         color_hex = mat.get("color_hex", "808080")
         metallic = mat.get("metallic", 0.0)
         roughness = mat.get("roughness", 0.5)
@@ -400,7 +379,7 @@ def generate_texture_quality_check_script(
     Returns:
         Complete C# source string for a Unity editor script.
     """
-    safe_folder = _sanitize_cs_string(target_folder)
+    safe_folder = sanitize_cs_string(target_folder)
     texel_str = "%.2ff" % target_texel_density
 
     normal_check_block = ""
@@ -589,8 +568,8 @@ def generate_aaa_validation_script(
     Returns:
         Complete C# source string for a Unity editor script.
     """
-    safe_folder = _sanitize_cs_string(target_folder)
-    safe_type = _sanitize_cs_identifier(asset_type)
+    safe_folder = sanitize_cs_string(target_folder)
+    safe_type = sanitize_cs_identifier(asset_type)
     budget_min, budget_max = _BUDGET_MAP.get(asset_type, (500, 6000))
 
     poly_block = ""
@@ -713,7 +692,7 @@ def generate_aaa_validation_script(
         '        sb.Append("{");',
         '        sb.AppendFormat("\\"tool\\": \\"aaa_validation\\", ");',
         '        sb.AppendFormat("\\"target_folder\\": \\"' + safe_folder + '\\", ");',
-        '        sb.AppendFormat("\\"asset_type\\": \\"' + _sanitize_cs_string(asset_type) + '\\", ");',
+        '        sb.AppendFormat("\\"asset_type\\": \\"' + sanitize_cs_string(asset_type) + '\\", ");',
         '        sb.AppendFormat("\\"total_checks\\": {0}, ", totalChecks);',
         '        sb.AppendFormat("\\"passed\\": {0}, ", passCount);',
         '        sb.AppendFormat("\\"failed\\": {0}, ", failCount);',
