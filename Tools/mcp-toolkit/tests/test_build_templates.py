@@ -1,4 +1,4 @@
-"""Tests for Unity build & deploy C# template generators.
+"""Tests for Unity build & deploy template generators.
 
 Covers:
 - generate_multi_platform_build_script (BUILD-01): 6 platform targets,
@@ -7,12 +7,22 @@ Covers:
 - generate_addressables_config_script (BUILD-02): AddressableAssetSettings,
   CreateGroup, BundledAssetGroupSchema, ContentUpdateGroupSchema,
   local/remote paths, BuildPlayerContent, namespace wrapping
+- generate_github_actions_workflow (BUILD-03): GameCI v4 actions, matrix
+  builds, license secrets, Library caching, LFS checkout
+- generate_gitlab_ci_config (BUILD-03): GameCI Docker images, test/build
+  stages, artifacts, caching, license activation
+- generate_version_management_script (BUILD-04): PlayerSettings.bundleVersion,
+  SemVer parsing, Android/iOS version sync, namespace wrapping
+- generate_changelog (BUILD-04): git log via Process, conventional commits,
+  CHANGELOG.md generation, vb_result.json output
 - generate_platform_config_script (BUILD-05): Android manifest with permissions
   and tools:node="merge", iOS PostProcessBuild with PlistDocument/PBXProject,
   WebGL PlayerSettings with Brotli compression
 - generate_shader_stripping_script (SHDR-03): IPreprocessShaders, OnProcessShader,
   ShaderKeyword, shaderKeywordSet.IsEnabled, RemoveAt, callbackOrder,
   log stripping toggle
+- generate_store_metadata (ACC-02): store description, ESRB/PEGI content
+  ratings, privacy policy template, screenshot specifications
 - _validate_platforms, _validate_addressable_groups: pure-logic validators
 """
 
@@ -24,9 +34,14 @@ from veilbreakers_mcp.shared.unity_templates.build_templates import (
     _validate_addressable_groups,
     _validate_platforms,
     generate_addressables_config_script,
+    generate_changelog,
+    generate_github_actions_workflow,
+    generate_gitlab_ci_config,
     generate_multi_platform_build_script,
     generate_platform_config_script,
     generate_shader_stripping_script,
+    generate_store_metadata,
+    generate_version_management_script,
 )
 
 
@@ -576,3 +591,244 @@ class TestValidationHelpers:
             {"name": "Group2", "packing": "PackSeparately"},
         ]
         assert _validate_addressable_groups(valid) is True
+
+
+# =====================================================================
+# GitHub Actions Workflow Tests (BUILD-03)
+# =====================================================================
+
+
+class TestGitHubActionsWorkflow:
+    """Tests for generate_github_actions_workflow output."""
+
+    @pytest.fixture
+    def workflow_yaml(self) -> str:
+        return generate_github_actions_workflow()
+
+    def test_yaml_contains_workflow_name(self, workflow_yaml: str):
+        assert "Unity Build Pipeline" in workflow_yaml
+
+    def test_gameci_builder(self, workflow_yaml: str):
+        assert "game-ci/unity-builder@v4" in workflow_yaml
+
+    def test_gameci_test_runner(self, workflow_yaml: str):
+        assert "game-ci/unity-test-runner@v4" in workflow_yaml
+
+    def test_checkout_with_lfs(self, workflow_yaml: str):
+        assert "lfs: true" in workflow_yaml
+
+    def test_upload_artifact(self, workflow_yaml: str):
+        assert "actions/upload-artifact@v4" in workflow_yaml
+
+    def test_library_cache(self, workflow_yaml: str):
+        assert "Library" in workflow_yaml
+        assert "cache" in workflow_yaml.lower()
+
+    def test_license_secrets(self, workflow_yaml: str):
+        assert "UNITY_LICENSE" in workflow_yaml
+        assert "UNITY_EMAIL" in workflow_yaml
+        assert "UNITY_PASSWORD" in workflow_yaml
+
+    def test_all_default_platforms(self, workflow_yaml: str):
+        for plat in ["StandaloneWindows64", "StandaloneOSX", "StandaloneLinux64",
+                      "Android", "iOS", "WebGL"]:
+            assert plat in workflow_yaml
+
+    def test_custom_platforms(self):
+        out = generate_github_actions_workflow(platforms=["StandaloneWindows64"])
+        assert "StandaloneWindows64" in out
+        assert "StandaloneOSX" not in out
+        assert "WebGL" not in out
+
+    def test_custom_unity_version(self):
+        out = generate_github_actions_workflow(unity_version="2023.2.0f1")
+        assert "2023.2.0f1" in out
+
+    def test_no_tests(self):
+        out = generate_github_actions_workflow(run_tests=False)
+        assert "game-ci/unity-test-runner@v4" not in out
+        # Build should still exist
+        assert "game-ci/unity-builder@v4" in out
+
+    def test_workflow_dispatch(self, workflow_yaml: str):
+        assert "workflow_dispatch" in workflow_yaml
+
+
+# =====================================================================
+# GitLab CI Config Tests (BUILD-03)
+# =====================================================================
+
+
+class TestGitLabCIConfig:
+    """Tests for generate_gitlab_ci_config output."""
+
+    @pytest.fixture
+    def gitlab_yaml(self) -> str:
+        return generate_gitlab_ci_config()
+
+    def test_stages(self, gitlab_yaml: str):
+        assert "test" in gitlab_yaml
+        assert "build" in gitlab_yaml
+
+    def test_unityci_image(self, gitlab_yaml: str):
+        assert "unityci/editor" in gitlab_yaml
+
+    def test_all_platforms(self, gitlab_yaml: str):
+        # At least 3 platforms should appear in job names or build targets
+        platform_count = sum(1 for p in ["StandaloneWindows64", "StandaloneOSX",
+                                          "StandaloneLinux64", "Android", "iOS", "WebGL"]
+                             if p in gitlab_yaml)
+        assert platform_count >= 3
+
+    def test_artifacts(self, gitlab_yaml: str):
+        assert "artifacts" in gitlab_yaml
+
+    def test_cache(self, gitlab_yaml: str):
+        assert "cache" in gitlab_yaml
+        assert "Library" in gitlab_yaml
+
+    def test_custom_unity_version(self):
+        out = generate_gitlab_ci_config(unity_version="2023.2.0f1")
+        assert "2023.2.0f1" in out
+
+    def test_license_variable(self, gitlab_yaml: str):
+        assert "UNITY_LICENSE" in gitlab_yaml or "UNITY_LICENSE_CONTENT" in gitlab_yaml
+
+    def test_output_length(self, gitlab_yaml: str):
+        assert len(gitlab_yaml) > 200
+
+
+# =====================================================================
+# Version Management Tests (BUILD-04)
+# =====================================================================
+
+
+class TestVersionManagement:
+    """Tests for generate_version_management_script output."""
+
+    @pytest.fixture
+    def version_cs(self) -> str:
+        return generate_version_management_script()
+
+    def test_menu_item(self, version_cs: str):
+        assert "[MenuItem" in version_cs
+
+    def test_bundle_version(self, version_cs: str):
+        assert "PlayerSettings.bundleVersion" in version_cs
+
+    def test_patch_increment(self, version_cs: str):
+        # Default is patch increment -- should have split/parse logic
+        assert "Split" in version_cs
+        assert "TryParse" in version_cs
+
+    def test_android_version_code(self, version_cs: str):
+        assert "bundleVersionCode" in version_cs
+
+    def test_ios_build_number(self, version_cs: str):
+        assert "buildNumber" in version_cs
+
+    def test_no_android_when_disabled(self):
+        out = generate_version_management_script(update_android=False)
+        assert "bundleVersionCode" not in out
+
+    def test_result_json(self, version_cs: str):
+        assert "vb_result.json" in version_cs
+
+    def test_balanced_braces(self, version_cs: str):
+        assert version_cs.count("{") == version_cs.count("}")
+
+    def test_custom_version(self):
+        out = generate_version_management_script(version="2.5.0")
+        assert "2.5.0" in out
+
+    def test_namespace(self):
+        out = generate_version_management_script(namespace="VB.Version")
+        assert "namespace VB.Version" in out
+
+
+# =====================================================================
+# Changelog Tests (BUILD-04)
+# =====================================================================
+
+
+class TestChangelog:
+    """Tests for generate_changelog output."""
+
+    @pytest.fixture
+    def changelog_cs(self) -> str:
+        return generate_changelog()
+
+    def test_process_start(self, changelog_cs: str):
+        assert "Process" in changelog_cs or "ProcessStartInfo" in changelog_cs
+
+    def test_git_log(self, changelog_cs: str):
+        assert "git" in changelog_cs
+        assert "log" in changelog_cs
+
+    def test_changelog_file(self, changelog_cs: str):
+        assert "CHANGELOG" in changelog_cs
+
+    def test_menu_item(self, changelog_cs: str):
+        assert "[MenuItem" in changelog_cs
+
+    def test_project_name(self):
+        out = generate_changelog(project_name="MyGame")
+        assert "MyGame" in out
+
+    def test_result_json(self, changelog_cs: str):
+        assert "vb_result.json" in changelog_cs
+
+    def test_balanced_braces(self, changelog_cs: str):
+        assert changelog_cs.count("{") == changelog_cs.count("}")
+
+    def test_output_length(self, changelog_cs: str):
+        assert len(changelog_cs) > 300
+
+
+# =====================================================================
+# Store Metadata Tests (ACC-02)
+# =====================================================================
+
+
+class TestStoreMetadata:
+    """Tests for generate_store_metadata output."""
+
+    @pytest.fixture
+    def metadata_md(self) -> str:
+        return generate_store_metadata()
+
+    def test_game_title(self, metadata_md: str):
+        assert "VeilBreakers" in metadata_md
+
+    def test_custom_title(self):
+        out = generate_store_metadata(game_title="MyRPG")
+        assert "MyRPG" in out
+
+    def test_esrb_section(self, metadata_md: str):
+        assert "ESRB" in metadata_md
+
+    def test_pegi_section(self, metadata_md: str):
+        assert "PEGI" in metadata_md
+
+    def test_privacy_policy(self, metadata_md: str):
+        assert "Privacy Policy" in metadata_md
+
+    def test_review_disclaimer(self, metadata_md: str):
+        assert "REVIEW BEFORE SUBMISSION" in metadata_md
+
+    def test_lawyer_disclaimer(self, metadata_md: str):
+        assert "TEMPLATE" in metadata_md or "CONSULT" in metadata_md
+
+    def test_screenshot_specs(self, metadata_md: str):
+        assert "Screenshot" in metadata_md or "screenshot" in metadata_md
+        assert "1920 x 1080" in metadata_md
+
+    def test_iap_section(self):
+        out = generate_store_metadata(has_iap=True)
+        assert "In-App" in out or "Purchase" in out
+
+    def test_no_ads_by_default(self):
+        out = generate_store_metadata(has_ads=False)
+        # Should not mention specific ad network names
+        assert "AdMob" not in out
+        assert "Facebook Audience" not in out
