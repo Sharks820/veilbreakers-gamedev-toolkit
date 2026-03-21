@@ -1,12 +1,13 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-20 (Phase 17 planned)
+**Updated:** 2026-03-21 (v3.0 roadmap added)
 
 ## Milestones
 
 - [x] **v1.0 Foundation & Full Pipeline** - Phases 1-8 (shipped 2026-03-19)
-- [ ] **v2.0 Complete Unity Game Development Coverage** - Phases 9-17 (in progress)
+- [x] **v2.0 Complete Unity Game Development Coverage** - Phases 9-17 (shipped 2026-03-21)
+- [ ] **v3.0 AAA Mesh Quality + Professional Systems** - Phases 18-24 (planned)
 
 ## Phases
 
@@ -26,17 +27,32 @@
 
 </details>
 
-### v2.0 Complete Unity Game Development Coverage
+<details>
+<summary>v2.0 Complete Unity Game Development Coverage (Phases 9-17) - SHIPPED 2026-03-21</summary>
 
-- [ ] **Phase 9: Unity Editor Deep Control** - Prefabs, components, hierarchy, physics, project settings, packages, import configuration, asset operations
-- [ ] **Phase 10: C# Programming Framework** - General-purpose code generation, script modification, editor tooling, test framework, architecture patterns
+- [x] **Phase 9: Unity Editor Deep Control** - Prefabs, components, hierarchy, physics, project settings, packages, import configuration, asset operations
+- [x] **Phase 10: C# Programming Framework** - General-purpose code generation, script modification, editor tooling, test framework, architecture patterns
 - [x] **Phase 11: Data Architecture & Asset Pipeline** - ScriptableObjects, JSON config, localization, game data tools, Git LFS, normal map baking, sprite atlasing
-- [ ] **Phase 12: Core Game Systems** - Save/load, health/damage, character controller, Input System, settings menu, VeilBreakers combat systems
-- [ ] **Phase 13: Content & Progression Systems** - Inventory, dialogue, quests, loot tables, crafting, skill trees, combat balancing, equipment systems
-- [ ] **Phase 14: Camera, Cinematics & Scene Management** - Cinemachine, Timeline, cutscenes, scene loading, lighting, probes, terrain detail, world design, RPG world systems
-- [ ] **Phase 15: Game UX & Encounter Design** - Minimap, tutorials, damage numbers, interaction prompts, encounter scripting, AI director
-- [ ] **Phase 16: Quality Assurance & Testing** - Unity TCP bridge, test runner, automated play, profiling, memory leaks, static analysis, crash reporting, live inspection
-- [ ] **Phase 17: Build & Deploy Pipeline** - Multi-platform builds, Addressables, CI/CD, versioning, platform configs, shader stripping, store metadata (1/3 plans complete)
+- [x] **Phase 12: Core Game Systems** - Save/load, health/damage, character controller, Input System, settings menu, VeilBreakers combat systems
+- [x] **Phase 13: Content & Progression Systems** - Inventory, dialogue, quests, loot tables, crafting, skill trees, combat balancing, equipment systems
+- [x] **Phase 14: Camera, Cinematics & Scene Management** - Cinemachine, Timeline, cutscenes, scene loading, lighting, probes, terrain detail, world design, RPG world systems
+- [x] **Phase 15: Game UX & Encounter Design** - Minimap, tutorials, damage numbers, interaction prompts, encounter scripting, AI director
+- [x] **Phase 16: Quality Assurance & Testing** - Unity TCP bridge, test runner, automated play, profiling, memory leaks, static analysis, crash reporting, live inspection
+- [x] **Phase 17: Build & Deploy Pipeline** - Multi-platform builds, Addressables, CI/CD, versioning, platform configs, shader stripping, store metadata
+
+**Delivered:** 37 MCP tools (15 Blender + 22 Unity), 309 actions, 7,182 tests, 135 bugs fixed.
+
+</details>
+
+### v3.0 AAA Mesh Quality + Professional Systems
+
+- [ ] **Phase 18: Procedural Mesh Integration + Terrain Depth** - Wire 127 procedural meshes into worldbuilding/environment, add cliff/cave/waterfall/bridge/multi-biome terrain features, LOD variants
+- [ ] **Phase 19: Character Excellence** - Body proportion validation, hair card generation, face/hand/foot topology validation, character-aware LOD retopology, armor seam hiding
+- [ ] **Phase 20: Advanced Animation + FromSoft Combat Feel** - Combat timing system (anticipation/active/recovery), animation events, blend trees, additive layers, root motion refinement, AI motion, cinematic sequences
+- [ ] **Phase 21: Audio Middleware Architecture** - Spatial audio propagation/occlusion, layered sound design, audio event chains, dynamic music (re-sequencing/stingers), portal propagation, audio LOD
+- [ ] **Phase 22: AAA Dark Fantasy UI/UX Polish** - Procedural ornate UI frames, 3D icon render pipeline, dark fantasy cursors, rich tooltips, radial menus, notification toasts, loading screens
+- [ ] **Phase 23: VFX Mastery** - Flipbook textures, VFX Graph node composition, projectile VFX chains, AoE VFX, per-brand status effects, environmental VFX depth, directional hit VFX, boss phase transitions
+- [ ] **Phase 24: Production Pipeline** - Compile error auto-recovery, asset conflict detection, multi-tool pipeline orchestration, art style consistency validation, build verification smoke tests
 
 ## Phase Details
 
@@ -178,6 +194,9 @@ Plans:
 - [x] 08-03-PLAN.md -- Compound tool wiring: unity_gameplay + unity_performance in unity_server.py
 
 </details>
+
+<details>
+<summary>v2.0 Phase Details (Phases 9-17) - SHIPPED</summary>
 
 ### Phase 9: Unity Editor Deep Control
 **Goal**: Claude has complete programmatic control over the Unity Editor -- prefabs, components, hierarchy, physics, project settings, packages, and asset import configuration
@@ -335,14 +354,101 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 17-01-PLAN.md -- Build template generators batch 1: multi-platform build orchestrator, Addressable Asset Groups, platform configs (Android/iOS/WebGL), shader variant stripping (BUILD-01, BUILD-02, BUILD-05, SHDR-03)
-- [ ] 17-02-PLAN.md -- Build template generators batch 2: CI/CD pipelines (GitHub Actions, GitLab CI), version management, changelog, store publishing metadata (BUILD-03, BUILD-04, ACC-02)
-- [ ] 17-03-PLAN.md -- Compound tool wiring: unity_build (7 actions) + deep C# syntax tests (all 7 requirements)
+- [x] 17-01-PLAN.md -- Build template generators batch 1: multi-platform build orchestrator, Addressable Asset Groups, platform configs (Android/iOS/WebGL), shader variant stripping (BUILD-01, BUILD-02, BUILD-05, SHDR-03)
+- [x] 17-02-PLAN.md -- Build template generators batch 2: CI/CD pipelines (GitHub Actions, GitLab CI), version management, changelog, store publishing metadata (BUILD-03, BUILD-04, ACC-02)
+- [x] 17-03-PLAN.md -- Compound tool wiring: unity_build (7 actions) + deep C# syntax tests (all 7 requirements)
+
+</details>
+
+### v3.0 Phase Details (Phases 18-24)
+
+### Phase 18: Procedural Mesh Integration + Terrain Depth
+**Goal**: Every worldbuilding and environment handler uses real procedural meshes instead of primitive cubes/cones, and terrain generation supports vertical geometry (cliffs, caves, waterfalls, bridges) beyond 2.5D heightmaps
+**Depends on**: Phase 6 (environment/worldbuilding handlers to extend), Phase 2 (mesh pipeline for LOD generation)
+**Requirements**: MESH3-01, MESH3-02, MESH3-03, MESH3-04, MESH3-05, TERR-01, TERR-02, TERR-03, TERR-04, TERR-05
+**Success Criteria** (what must be TRUE):
+  1. A generated dungeon contains actual torch sconce meshes, altar meshes, prison door meshes, and trap meshes from the procedural library -- not cubes or cones standing in as placeholders
+  2. A generated castle includes real gate, rampart, drawbridge, and fountain meshes, and environment scatter places real rocks, trees, and mushrooms instead of geometric primitives
+  3. Claude can generate vertical cliff face geometry that extends beyond heightmap limitations, and cave entrance meshes transition seamlessly from terrain surface into underground space
+  4. Claude can generate multi-biome terrain with smooth blend zones (forest-to-swamp, swamp-to-mountain), waterfall/cascade geometry with stepped water mesh, and bridges that span detected rivers or chasms
+  5. Every procedural mesh generator produces LOD variants (high/medium/low poly) that respect platform performance budgets, verified by game-readiness checks on each LOD level
+**Plans**: TBD
+
+### Phase 19: Character Excellence
+**Goal**: Claude can validate and generate character meshes at ZBrush-level quality -- correct body proportions, proper face topology for deformation, hair card systems, and seamless armor attachment
+**Depends on**: Phase 4 (rigging pipeline for deformation testing), Phase 18 (LOD pipeline for character-aware retopology)
+**Requirements**: CHAR-01, CHAR-02, CHAR-03, CHAR-04, CHAR-05, CHAR-06
+**Success Criteria** (what must be TRUE):
+  1. Claude can validate a character mesh against game-world scale specs (hero=1.8m, boss=3-6m, NPC=1.7m) and receive a pass/fail report with specific proportion issues (head-to-body ratio, limb lengths, shoulder width)
+  2. Claude can generate strip-based hair card meshes with proper UV layout for alpha textures, and the hair cards render correctly with transparency sorting in Blender's viewport
+  3. Claude can validate face topology and receive a report identifying whether edge loops exist around eyes, mouth, and nose -- flagging missing loops that would cause deformation artifacts during facial animation
+  4. Claude can perform character-aware LOD retopology that preserves face and hand detail while aggressively reducing body/extremity polygon count, and the LOD chain passes deformation testing at each level
+  5. Claude can generate armor seam-hiding overlap rings at mesh split points (neck, wrist, ankle) that prevent visible skin gaps when armor pieces are swapped, and validate hand/foot topology for proper finger separation and edge flow
+**Plans**: TBD
+
+### Phase 20: Advanced Animation + FromSoft Combat Feel
+**Goal**: Claude can configure frame-precise combat animation timing, inject animation events, generate blend trees and additive layers, refine root motion, generate AI-driven motion clips, and create cinematic animation sequences
+**Depends on**: Phase 5 (animation generation pipeline), Phase 19 (character meshes for animation testing)
+**Requirements**: ANIM3-01, ANIM3-02, ANIM3-03, ANIM3-04, ANIM3-05, ANIM3-06, ANIM3-07
+**Success Criteria** (what must be TRUE):
+  1. Claude can configure combat animation timing with separate anticipation, active, and recovery frame counts per attack type -- and the timing data exports correctly for Unity's Animator to consume
+  2. Claude can inject animation events at specific keyframes (hit frame, VFX spawn, sound trigger, footstep) and the events appear in the exported animation clip with correct frame positions
+  3. Claude can generate blend trees for directional movement (8-way + speed blending) and additive animation layers (damage reactions overlaid on locomotion) that configure correctly in Unity's Animator Controller
+  4. Claude can refine root motion curves to eliminate drift and sliding, and the root motion data exports cleanly for Unity's root motion system
+  5. Claude can generate AI-driven motion clips via MotionGPT/HunyuanVideo integration (completing the existing stub), and create cinematic animation sequences with camera cuts and character staging integrated into Unity Timeline
+**Plans**: TBD
+
+### Phase 21: Audio Middleware Architecture
+**Goal**: Claude can set up Wwise/FMOD-level audio architecture in Unity without middleware cost -- spatial audio with propagation and occlusion, layered sound design, dynamic music systems, and performance-aware audio LOD
+**Depends on**: Phase 7 (existing audio tools foundation), Phase 16 (Unity TCP bridge for audio testing)
+**Requirements**: AUDM-01, AUDM-02, AUDM-03, AUDM-04, AUDM-05, AUDM-06
+**Success Criteria** (what must be TRUE):
+  1. Claude can set up a spatial audio system where sounds attenuate with distance, are occluded by geometry (walls block sound), and propagate realistically in 3D space
+  2. Claude can create layered sound designs that combine multiple audio clips into complex sounds (e.g., sword impact = metal clang + bone crack + cloth rustle) with independent volume/pitch per layer
+  3. Claude can create audio event chains where one sound triggers the next in sequence (impact -> reverb tail -> debris scatter) with configurable delays and conditions
+  4. Claude can set up a dynamic music system with horizontal re-sequencing (section reordering), vertical layering (add/remove instrument stems), and combat stingers that trigger on events
+  5. Claude can configure sound propagation through portals and doors (sound attenuates between rooms, opens up when door opens) and audio LOD that reduces quality/channels at distance for performance
+**Plans**: TBD
+
+### Phase 22: AAA Dark Fantasy UI/UX Polish
+**Goal**: Claude can generate hand-crafted dark fantasy UI elements that rival Baldur's Gate 3 and Elden Ring -- ornate procedural frames, 3D-rendered item icons, themed cursors, rich tooltips, radial menus, and polished notification systems
+**Depends on**: Phase 7 (UI generation foundation), Phase 15 (existing UX templates to extend)
+**Requirements**: UIPOL-01, UIPOL-02, UIPOL-03, UIPOL-04, UIPOL-05, UIPOL-06, UIPOL-07
+**Success Criteria** (what must be TRUE):
+  1. Claude can generate procedural UI frames with ornate dark fantasy borders (rune decorations, weathered edges, metal rivets) that tile correctly at any panel size and look hand-crafted
+  2. Claude can generate equipment/item icons through a 3D render pipeline (render item mesh -> stylize -> add border/background) that produces consistent, inventory-ready icon images
+  3. Claude can generate context-sensitive dark fantasy cursors (default pointer, interact hand, attack crosshair, loot grab) that switch automatically based on what the player is hovering over
+  4. Claude can generate a tooltip system with rich content display (item stats with color-coded values, lore text, equipment comparison showing stat deltas) that positions correctly near the cursor without clipping screen edges
+  5. Claude can generate a radial menu (ability wheel / quick-select for items and spells), a notification/toast system (quest updates, item pickups, level-up, achievements with auto-dismiss), and a loading screen system (tips, lore text, concept art display with progress bar)
+**Plans**: TBD
+
+### Phase 23: VFX Mastery
+**Goal**: Claude can create Diablo 4 / Path of Exile quality visual effects -- flipbook animations, programmatic VFX Graph composition, full projectile-to-impact VFX chains, per-brand status effects, and environmental atmospheric depth
+**Depends on**: Phase 7 (VFX Graph foundation), Phase 10 (C# code generation for VFX scripting)
+**Requirements**: VFX3-01, VFX3-02, VFX3-03, VFX3-04, VFX3-05, VFX3-06, VFX3-07, VFX3-08
+**Success Criteria** (what must be TRUE):
+  1. Claude can generate flipbook texture sheets (animated sprite sequences for fire, smoke, energy effects) and compose VFX Graph nodes programmatically (actual node graph construction, not just parameter tweaking)
+  2. Claude can generate complete projectile VFX chains (spawn burst -> travel trail -> impact explosion -> aftermath residue) where each stage triggers the next automatically
+  3. Claude can generate area-of-effect VFX (ground circles, expanding domes, cone blasts with brand-appropriate colors) and per-brand status effect VFX for all 10 combat brands (burning, poisoned, frozen, stunned, blessed, cursed, etc.)
+  4. Claude can generate environmental VFX with atmospheric depth (volumetric fog, god rays, heat distortion, water caustics) that integrate with the existing scene lighting setup
+  5. Claude can generate directional combat hit VFX (blood splatter, sparks, energy bursts matched to damage brand and hit direction) and boss phase transition VFX (corruption wave, power surge, arena transformation) with full particle/shader coordination
+**Plans**: TBD
+
+### Phase 24: Production Pipeline
+**Goal**: Claude can detect and recover from compilation errors autonomously, prevent asset conflicts before they happen, orchestrate multi-tool pipelines as single commands, validate art style consistency across asset batches, and run build verification smoke tests
+**Depends on**: Phase 16 (QA/testing infrastructure), Phase 17 (build pipeline for smoke tests)
+**Requirements**: PROD-01, PROD-02, PROD-03, PROD-04, PROD-05
+**Success Criteria** (what must be TRUE):
+  1. Claude can detect Unity compilation errors, diagnose the root cause, apply a fix, and trigger recompilation -- completing the detect-diagnose-fix-recompile cycle without human intervention
+  2. Claude can check for asset and class name conflicts before writing new files, preventing duplicate type compilation errors that would otherwise require manual cleanup
+  3. Claude can execute multi-tool pipelines as single orchestrated commands (e.g., "create character" triggers mesh generation -> cleanup -> UV -> texture -> rig -> animate -> export in sequence)
+  4. Claude can validate art style consistency across a batch of assets by checking color palette adherence, roughness value distributions, and detail density against project standards -- flagging outliers
+  5. Claude can run build verification smoke tests after every build, confirming the build launches, loads a scene, and passes basic sanity checks before the build is considered good
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their surrounding integers.
+Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between their surrounding integers.
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -362,17 +468,17 @@ Phases execute in numeric order. Decimal phases (e.g., 9.1) insert between their
 | 14. Camera, Cinematics & Scene Management | v2.0 | 5/5 | Complete | 2026-03-20 |
 | 15. Game UX & Encounter Design | v2.0 | 4/4 | Complete | 2026-03-20 |
 | 16. Quality Assurance & Testing | v2.0 | 4/4 | Complete | 2026-03-20 |
-| 17. Build & Deploy Pipeline | 3/3 | Complete    | 2026-03-21 | - |
+| 17. Build & Deploy Pipeline | v2.0 | 3/3 | Complete | 2026-03-21 |
+| 18. Procedural Mesh Integration + Terrain Depth | v3.0 | 0/0 | Not started | - |
+| 19. Character Excellence | v3.0 | 0/0 | Not started | - |
+| 20. Advanced Animation + FromSoft Combat Feel | v3.0 | 0/0 | Not started | - |
+| 21. Audio Middleware Architecture | v3.0 | 0/0 | Not started | - |
+| 22. AAA Dark Fantasy UI/UX Polish | v3.0 | 0/0 | Not started | - |
+| 23. VFX Mastery | v3.0 | 0/0 | Not started | - |
+| 24. Production Pipeline | v3.0 | 0/0 | Not started | - |
 
 ---
 *Roadmap created: 2026-03-18*
 *v2.0 phases added: 2026-03-19*
-*Phase 10 planned: 2026-03-20*
-*Phase 11 planned: 2026-03-20*
-*Phase 11 complete: 2026-03-20*
-*Phase 12 planned: 2026-03-20*
-*Phase 13 planned: 2026-03-20*
-*Phase 14 planned: 2026-03-20*
-*Phase 15 planned: 2026-03-20*
-*Phase 16 planned: 2026-03-20*
-*Phase 17 planned: 2026-03-20*
+*v2.0 shipped: 2026-03-21*
+*v3.0 phases added: 2026-03-21*
