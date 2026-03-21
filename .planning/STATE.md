@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v3.0
 milestone_name: AAA Mesh Quality + Professional Systems
 status: in_progress
-stopped_at: Completed Phase 20 - Advanced Animation + FromSoft Combat Feel (3 plans, 7 requirements)
-last_updated: "2026-03-21T10:27:15.000Z"
+stopped_at: Completed Phase 21 - Audio Middleware Architecture (8 requirements, 157 tests)
+last_updated: "2026-03-21T10:57:00.000Z"
 last_activity: 2026-03-21
 progress:
   total_phases: 18
-  completed_phases: 18
+  completed_phases: 19
   total_plans: 66
-  completed_plans: 66
+  completed_plans: 67
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -20,17 +20,17 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-21)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** v3.0 Phase 20 complete -- ready for Phase 21
+**Current focus:** v3.0 Phase 21 complete -- ready for Phase 22
 
 ## Current Position
 
-Phase: 20 of 24 (Advanced Animation + FromSoft Combat Feel) -- COMPLETE
-Plan: 3 of 3 complete in current phase (Plans 20-01, 20-02, 20-03)
-Status: Phase 20 complete -- all 3 plans executed, 7 ANIM3 requirements fulfilled
-Last activity: 2026-03-21 -- Completed Phase 20 (198 new tests, 7712 total passing)
+Phase: 21 of 24 (Audio Middleware Architecture) -- COMPLETE
+Plan: 1 of 1 complete in current phase (all 8 AUDM requirements in single plan)
+Status: Phase 21 complete -- 8 audio middleware generators, 157 tests, 8 requirements fulfilled
+Last activity: 2026-03-21 -- Completed Phase 21 (157 new tests, 7869 total passing)
 
 ```
-v3.0 Progress: [############] Phase 20 complete (3/3 plans)
+v3.0 Progress: [##############] Phase 21 complete (AUDM-01 through AUDM-08)
 ```
 
 ## Performance Metrics
@@ -52,7 +52,9 @@ v3.0 Progress: [############] Phase 20 complete (3/3 plans)
 | v3.0 Phase 19 duration | 14min, 3 plans, 6 files created |
 | v3.0 Phase 20 tests | 198 (84 combat timing + 47 blend trees + 67 cinematic) |
 | v3.0 Phase 20 duration | 17min, 3 plans, 7 files touched |
-| Total tests passing | 7,712 |
+| v3.0 Phase 21 tests | 157 (8 generators: spatial, LOD, layered, chains, foley, music, portal, VO) |
+| v3.0 Phase 21 duration | 9min, 1 plan, 2 files created |
+| Total tests passing | 7,869 |
 
 ## Accumulated Context
 
@@ -83,6 +85,13 @@ Recent decisions affecting v3.0 work:
 - [v3.0-20]: Procedural AI motion fallback when no API endpoint configured
 - [v3.0-20]: requests library for HTTP API calls (avoids urllib file:// vulnerability)
 - [v3.0-20]: Shot-based cinematic composition with cumulative timing and transition blending
+- [v3.0-21]: Dict return pattern (script_path, script_content, next_steps) for all audio middleware generators
+- [v3.0-21]: Runtime-only MonoBehaviours (no UnityEditor imports) for build compatibility
+- [v3.0-21]: ScriptableObject data assets for layered sounds, event chains, VO database
+- [v3.0-21]: Multi-ray occlusion (3 rays) for accurate spatial audio geometry sampling
+- [v3.0-21]: Coroutine-based sequencing for event chains and music crossfades
+- [v3.0-21]: Singleton DynamicMusic manager with DontDestroyOnLoad
+- [v3.0-21]: Priority-based VO queue with interruption support and lip sync visemes
 
 ### Blockers
 
@@ -90,10 +99,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-21T10:27:15.000Z
-Stopped at: Completed Phase 20 - Advanced Animation + FromSoft Combat Feel (3 plans, 7 requirements)
-Next action: Plan/execute Phase 21
+Last session: 2026-03-21T10:57:00.000Z
+Stopped at: Completed Phase 21 - Audio Middleware Architecture (8 requirements, 157 tests)
+Next action: Plan/execute Phase 22
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-21 -- Phase 20 complete (advanced animation + FromSoft combat feel -- 7 ANIM3 requirements)*
+*Last updated: 2026-03-21 -- Phase 21 complete (audio middleware architecture -- 8 AUDM requirements)*

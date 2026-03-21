@@ -433,14 +433,14 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 
 ### Audio Middleware
 
-- [ ] **AUDM-01**: Claude can set up spatial audio system (3D sound propagation, distance attenuation, occlusion by geometry)
-- [ ] **AUDM-02**: Claude can create layered sound designs (combine multiple audio clips into complex impact/ability sounds)
-- [ ] **AUDM-03**: Claude can create audio event chains (impact → reverb tail → debris scatter trigger sequences)
-- [ ] **AUDM-04**: Claude can set up dynamic music system (horizontal re-sequencing, vertical layering, combat stingers)
-- [ ] **AUDM-05**: Claude can set up sound propagation through portals/doors (realistic attenuation between rooms)
-- [ ] **AUDM-06**: Claude can configure audio LOD (reduce quality/channels at distance for performance)
-- [ ] **AUDM-07**: Claude can set up dialogue/VO audio pipeline (lip sync markers, emotion tags, localized VO slots)
-- [ ] **AUDM-08**: Claude can generate procedural foley (cloth rustle, metal clinks, leather creaks based on movement speed and animation tags)
+- [x] **AUDM-01**: Claude can set up spatial audio system (3D sound propagation, distance attenuation, occlusion by geometry)
+- [x] **AUDM-02**: Claude can create layered sound designs (combine multiple audio clips into complex impact/ability sounds)
+- [x] **AUDM-03**: Claude can create audio event chains (impact → reverb tail → debris scatter trigger sequences)
+- [x] **AUDM-04**: Claude can set up dynamic music system (horizontal re-sequencing, vertical layering, combat stingers)
+- [x] **AUDM-05**: Claude can set up sound propagation through portals/doors (realistic attenuation between rooms)
+- [x] **AUDM-06**: Claude can configure audio LOD (reduce quality/channels at distance for performance)
+- [x] **AUDM-07**: Claude can set up dialogue/VO audio pipeline (lip sync markers, emotion tags, localized VO slots)
+- [x] **AUDM-08**: Claude can generate procedural foley (cloth rustle, metal clinks, leather creaks based on movement speed and animation tags)
 
 ### AAA UI/UX Polish
 
@@ -511,14 +511,14 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 | ANIM3-05 | Phase 20 | Complete |
 | ANIM3-06 | Phase 20 | Complete |
 | ANIM3-07 | Phase 20 | Complete |
-| AUDM-01 | Phase 21 | Pending |
-| AUDM-02 | Phase 21 | Pending |
-| AUDM-03 | Phase 21 | Pending |
-| AUDM-04 | Phase 21 | Pending |
-| AUDM-05 | Phase 21 | Pending |
-| AUDM-06 | Phase 21 | Pending |
-| AUDM-07 | Phase 21 | Pending |
-| AUDM-08 | Phase 21 | Pending |
+| AUDM-01 | Phase 21 | Complete |
+| AUDM-02 | Phase 21 | Complete |
+| AUDM-03 | Phase 21 | Complete |
+| AUDM-04 | Phase 21 | Complete |
+| AUDM-05 | Phase 21 | Complete |
+| AUDM-06 | Phase 21 | Complete |
+| AUDM-07 | Phase 21 | Complete |
+| AUDM-08 | Phase 21 | Complete |
 | UIPOL-01 | Phase 22 | Pending |
 | UIPOL-02 | Phase 22 | Pending |
 | UIPOL-03 | Phase 22 | Pending |
