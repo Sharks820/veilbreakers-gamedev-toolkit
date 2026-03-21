@@ -119,7 +119,7 @@ Actions: `generate_dungeon` | `generate_cave` | `generate_town` | `generate_buil
 
 **IMPORTANT**: Every Unity tool writes C# to the project and returns `next_steps`. You must:
 1. Read the `next_steps` array in the response
-2. Typically: call `unity_editor` action=`recompile`, then execute the menu item via mcp-unity
+2. Typically: call `unity_editor` action=`recompile`, then open Unity Editor and run the menu item from the menu bar
 
 ### unity_editor
 Actions: `recompile` | `enter_play_mode` | `exit_play_mode` | `screenshot` | `console_logs` | `gemini_review`
@@ -130,7 +130,7 @@ Actions: `recompile` | `enter_play_mode` | `exit_play_mode` | `screenshot` | `co
 ### unity_vfx
 Actions: `create_particle_vfx` | `create_brand_vfx` | `create_environmental_vfx` | `create_trail_vfx` | `create_aura_vfx` | `create_corruption_shader` | `create_shader` | `setup_post_processing` | `create_screen_effect` | `create_ability_vfx`
 - create_particle_vfx: `name`, `rate`, `lifetime`, `size`, `color` [r,g,b,a], `shape`
-- create_brand_vfx: `brand` (IRON/VENOM/SURGE/DREAD/BLAZE)
+- create_brand_vfx: `brand` (IRON/SAVAGE/SURGE/VENOM/DREAD/LEECH/GRACE/MEND/RUIN/VOID)
 - create_shader: `shader_type` (dissolve/force_field/water/foliage/outline/damage_overlay)
 - setup_post_processing: `bloom_intensity`, `bloom_threshold`, `vignette_intensity`, `ao_intensity`, `dof_focus_distance`
 
