@@ -368,6 +368,7 @@ public class VB_CompileRecovery : EditorWindow
 
     static VB_CompileRecovery()
     {{
+        CompilationPipeline.assemblyCompilationFinished -= OnAssemblyCompilationFinished;
         CompilationPipeline.assemblyCompilationFinished += OnAssemblyCompilationFinished;
     }}
 
@@ -1224,6 +1225,7 @@ public class VB_PipelineOrchestrator : EditorWindow
         public StepStatus Status;
         public string ErrorMessage;
         public float DurationMs;
+        public int RetryCount;
     }}
 
     [Serializable]
@@ -1377,10 +1379,19 @@ public class VB_PipelineOrchestrator : EditorWindow
                     return;
 
                 case FailureMode.Retry:
-                    // Retry once by re-executing
-                    step.Status = StepStatus.Pending;
-                    step.ErrorMessage = null;
-                    ExecuteCurrentStep();
+                    // Retry once only (track via RetryCount)
+                    if (step.RetryCount < 1)
+                    {{
+                        step.RetryCount++;
+                        step.Status = StepStatus.Pending;
+                        step.ErrorMessage = null;
+                        ExecuteCurrentStep();
+                        return;
+                    }}
+                    // Exhausted retries -- treat as stop
+                    for (int i = currentStepIndex + 1; i < currentSteps.Count; i++)
+                        currentSteps[i].Status = StepStatus.Skipped;
+                    FinishPipeline();
                     return;
 
                 case FailureMode.Continue:
@@ -1795,7 +1806,8 @@ public class VB_ArtStyleValidator : EditorWindow
         }}
 
         // Build report
-        int passCount = totalAssets - issues.Count(i => i.Severity == CheckSeverity.Fail);
+        int failingAssets = issues.Where(i => i.Severity == CheckSeverity.Fail).Select(i => i.AssetPath).Distinct().Count();
+        int passCount = Mathf.Max(0, totalAssets - failingAssets);
         int warnCount = issues.Count(i => i.Severity == CheckSeverity.Warning);
         int failCount = issues.Count(i => i.Severity == CheckSeverity.Fail);
 
@@ -2079,65 +2091,76 @@ public class VB_BuildSmokeTest : EditorWindow
             return;
         }}
 
-        // Check 4: Process survives for timeout period
-        var check4 = new SmokeTestCheck {{ Name = "process_stable" }};
-        sw.Restart();
-        bool crashed = false;
-        await Task.Delay(timeoutSeconds * 1000);
-        if (proc != null && proc.HasExited)
+        try
         {{
-            crashed = true;
-            check4.Passed = false;
-            check4.Details = $"Process exited with code {{proc.ExitCode}} within {{timeoutSeconds}}s";
+            // Check 4: Process survives for timeout period
+            var check4 = new SmokeTestCheck {{ Name = "process_stable" }};
+            sw.Restart();
+            bool crashed = false;
+            await Task.Delay(timeoutSeconds * 1000);
+            if (proc != null && proc.HasExited)
+            {{
+                crashed = true;
+                check4.Passed = false;
+                check4.Details = $"Process exited with code {{proc.ExitCode}} within {{timeoutSeconds}}s";
+            }}
+            else
+            {{
+                check4.Passed = true;
+                check4.Details = $"Process stable for {{timeoutSeconds}}s";
+            }}
+            check4.DurationMs = sw.ElapsedMilliseconds;
+            report.Checks.Add(check4);
+
+            // Check 5: Read player log for errors
+            var check5 = new SmokeTestCheck {{ Name = "log_analysis" }};
+            sw.Restart();
+            string playerLogPath = GetPlayerLogPath();
+            if (File.Exists(playerLogPath))
+            {{
+                string logContent = File.ReadAllText(playerLogPath);
+                var errorLines = Regex.Matches(logContent, @".*(?:Error|Exception|CRASH|Fatal).*",
+                    RegexOptions.IgnoreCase | RegexOptions.Multiline);
+                var warnLines = Regex.Matches(logContent, @".*Warning.*",
+                    RegexOptions.IgnoreCase | RegexOptions.Multiline);
+
+                foreach (Match m in errorLines)
+                    report.LogErrors.Add(m.Value.Trim());
+                foreach (Match m in warnLines)
+                    report.LogWarnings.Add(m.Value.Trim());
+
+                report.ErrorCount = report.LogErrors.Count;
+                report.WarningCount = report.LogWarnings.Count;
+
+                check5.Passed = report.ErrorCount == 0;
+                check5.Details = $"Errors: {{report.ErrorCount}}, Warnings: {{report.WarningCount}}";
+            }}
+            else
+            {{
+                check5.Passed = true;
+                check5.Details = "Player log not found (may be expected)";
+            }}
+            check5.DurationMs = sw.ElapsedMilliseconds;
+            report.Checks.Add(check5);
+
+            report.OverallPass = report.Checks.All(c => c.Passed);
+            FinishReport(report, totalTimer);
         }}
-        else
+        catch (Exception ex)
         {{
-            check4.Passed = true;
-            check4.Details = $"Process stable for {{timeoutSeconds}}s";
+            Debug.LogException(ex);
+            report.OverallPass = false;
+            FinishReport(report, totalTimer);
         }}
-        check4.DurationMs = sw.ElapsedMilliseconds;
-        report.Checks.Add(check4);
-
-        // Check 5: Read player log for errors
-        var check5 = new SmokeTestCheck {{ Name = "log_analysis" }};
-        sw.Restart();
-        string playerLogPath = GetPlayerLogPath();
-        if (File.Exists(playerLogPath))
+        finally
         {{
-            string logContent = File.ReadAllText(playerLogPath);
-            var errorLines = Regex.Matches(logContent, @".*(?:Error|Exception|CRASH|Fatal).*",
-                RegexOptions.IgnoreCase | RegexOptions.Multiline);
-            var warnLines = Regex.Matches(logContent, @".*Warning.*",
-                RegexOptions.IgnoreCase | RegexOptions.Multiline);
-
-            foreach (Match m in errorLines)
-                report.LogErrors.Add(m.Value.Trim());
-            foreach (Match m in warnLines)
-                report.LogWarnings.Add(m.Value.Trim());
-
-            report.ErrorCount = report.LogErrors.Count;
-            report.WarningCount = report.LogWarnings.Count;
-
-            check5.Passed = report.ErrorCount == 0;
-            check5.Details = $"Errors: {{report.ErrorCount}}, Warnings: {{report.WarningCount}}";
+            // Always clean up: kill process
+            if (proc != null && !proc.HasExited)
+            {{
+                try {{ proc.Kill(); }}
+                catch {{ }}
+            }}
         }}
-        else
-        {{
-            check5.Passed = true;
-            check5.Details = "Player log not found (may be expected)";
-        }}
-        check5.DurationMs = sw.ElapsedMilliseconds;
-        report.Checks.Add(check5);
-
-        // Clean up: kill process
-        if (proc != null && !proc.HasExited)
-        {{
-            try {{ proc.Kill(); }}
-            catch {{ }}
-        }}
-
-        report.OverallPass = report.Checks.All(c => c.Passed);
-        FinishReport(report, totalTimer);
     }}
 
     private void FinishReport(SmokeTestReport report, Stopwatch timer)
