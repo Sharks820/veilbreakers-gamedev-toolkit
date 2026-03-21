@@ -15,19 +15,31 @@ All procedural animation generation — gait engines, combat animations, creatur
 
 ## YOUR Files (ONLY touch these)
 ```
-blender_addon/handlers/animation_generate.py
-blender_addon/handlers/animation_combat.py
-blender_addon/handlers/animation_utils.py
-src/veilbreakers_mcp/shared/_combat_timing.py
+blender_addon/handlers/animation.py          # Main animation handler (generate, idle, custom)
+blender_addon/handlers/animation_gaits.py    # Gait engines (biped, quadruped, hexapod, etc.)
+blender_addon/handlers/animation_export.py   # FBX batch export, Mixamo retarget
+blender_addon/handlers/_combat_timing.py     # Combat timing data (Frame-accurate hit/cancel windows)
+tests/test_animation_handlers.py
+tests/test_animation_gaits.py
+tests/test_animation_export.py
 ```
 New files must go in `blender_addon/handlers/` with `animation_` prefix, or in `tests/` with `test_animation_` prefix.
 
 ## DO NOT TOUCH (owned by other terminals)
 ```
 blender_addon/handlers/__init__.py          # SHARED — see Registration Protocol below
-blender_addon/handlers/rig_*.py             # Terminal 1
+blender_addon/handlers/rigging.py           # Terminal 1
+blender_addon/handlers/rigging_advanced.py  # Terminal 1
+blender_addon/handlers/rigging_templates.py # Terminal 1
+blender_addon/handlers/rigging_weights.py   # Terminal 1
 blender_addon/handlers/environment.py       # Terminal 4
+blender_addon/handlers/environment_scatter.py # Terminal 4
 blender_addon/handlers/worldbuilding.py     # Terminal 4
+blender_addon/handlers/worldbuilding_layout.py # Terminal 4
+blender_addon/handlers/_terrain_*.py        # Terminal 4
+blender_addon/handlers/_scatter_engine.py   # Terminal 4
+blender_addon/handlers/_building_grammar.py # Terminal 4
+blender_addon/handlers/_dungeon_gen.py      # Terminal 4
 blender_addon/handlers/export.py            # Phase 1 (done)
 src/veilbreakers_mcp/blender_server.py      # Terminal 4
 src/veilbreakers_mcp/unity_tools/*          # Terminal 3 & 4
