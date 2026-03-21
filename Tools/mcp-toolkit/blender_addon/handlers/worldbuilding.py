@@ -28,6 +28,12 @@ from ._building_grammar import (
     MODULAR_CATALOG,
 )
 from ._dungeon_gen import generate_multi_floor_dungeon
+from ._mesh_bridge import (
+    mesh_from_spec,
+    FURNITURE_GENERATOR_MAP,
+    CASTLE_ELEMENT_MAP,
+    DUNGEON_PROP_MAP,
+)
 from .worldbuilding_layout import (
     generate_boss_arena_spec,
     generate_easter_egg_spec,
@@ -171,7 +177,9 @@ def _build_building_result(name: str, spec: BuildingSpec) -> dict:
     }
 
 
-def _build_castle_result(name: str, spec: BuildingSpec) -> dict:
+def _build_castle_result(
+    name: str, spec: BuildingSpec, procedural_mesh_count: int = 0,
+) -> dict:
     """Build handler return dict for a castle from its spec."""
     roles = [op.get("role") for op in spec.operations]
     component_count = len(set(roles))
@@ -179,6 +187,7 @@ def _build_castle_result(name: str, spec: BuildingSpec) -> dict:
         "name": name,
         "component_count": component_count,
         "roles": list(set(roles)),
+        "procedural_mesh_count": procedural_mesh_count,
     }
 
 
@@ -202,6 +211,7 @@ def _build_interior_result(
     name: str,
     room_type: str,
     layout: list[dict],
+    procedural_mesh_count: int = 0,
 ) -> dict:
     """Build handler return dict for interior layout."""
     return {
@@ -209,6 +219,7 @@ def _build_interior_result(
         "room_type": room_type,
         "furniture_count": len(layout),
         "items": [item["type"] for item in layout],
+        "procedural_mesh_count": procedural_mesh_count,
     }
 
 
@@ -327,7 +338,87 @@ def handle_generate_castle(params: dict) -> dict:
     bm = _spec_to_bmesh(spec)
     obj = _create_mesh_object(name, bm)
 
-    result = _build_castle_result(name, spec)
+    # Add procedural castle detail elements
+    details_coll = bpy.data.collections.new(f"{name}_CastleDetails")
+    bpy.context.scene.collection.children.link(details_coll)
+
+    half = outer_size / 2.0
+    procedural_count = 0
+
+    # Gate at front center
+    gate_entry = CASTLE_ELEMENT_MAP.get("gate")
+    if gate_entry is not None:
+        gen_func, gen_kwargs = gate_entry
+        gate_spec = gen_func(**gen_kwargs)
+        mesh_from_spec(
+            gate_spec,
+            name=f"{name}_gate",
+            location=(0, half, 0),
+            collection=details_coll,
+            parent=obj,
+        )
+        procedural_count += 1
+
+    # Ramparts along wall tops (4 sides)
+    rampart_entry = CASTLE_ELEMENT_MAP.get("rampart")
+    if rampart_entry is not None:
+        gen_func, gen_kwargs = rampart_entry
+        rampart_spacing = 4.0
+        num_per_side = max(1, int(outer_size / rampart_spacing))
+        for side_idx, (sx, sy, angle) in enumerate([
+            (1, 0, 0),       # east wall
+            (-1, 0, math.pi),  # west wall
+            (0, 1, math.pi / 2),   # north wall
+            (0, -1, -math.pi / 2),  # south wall
+        ]):
+            for i in range(num_per_side):
+                t = -half + (i + 0.5) * rampart_spacing
+                if abs(t) > half:
+                    continue
+                if sx != 0:
+                    px, py = sx * half, t
+                else:
+                    px, py = t, sy * half
+                ramp_spec = gen_func(**gen_kwargs)
+                mesh_from_spec(
+                    ramp_spec,
+                    name=f"{name}_rampart_{side_idx}_{i}",
+                    location=(px, py, 0),
+                    rotation=(0, 0, angle),
+                    collection=details_coll,
+                    parent=obj,
+                )
+                procedural_count += 1
+
+    # Drawbridge at gate position, extending outward
+    draw_entry = CASTLE_ELEMENT_MAP.get("drawbridge")
+    if draw_entry is not None:
+        gen_func, gen_kwargs = draw_entry
+        draw_spec = gen_func(**gen_kwargs)
+        mesh_from_spec(
+            draw_spec,
+            name=f"{name}_drawbridge",
+            location=(0, half + 2.0, 0),
+            collection=details_coll,
+            parent=obj,
+        )
+        procedural_count += 1
+
+    # Fountain at courtyard center
+    fountain_entry = CASTLE_ELEMENT_MAP.get("fountain")
+    if fountain_entry is not None:
+        gen_func, gen_kwargs = fountain_entry
+        fountain_spec = gen_func(**gen_kwargs)
+        mesh_from_spec(
+            fountain_spec,
+            name=f"{name}_fountain",
+            location=(0, 0, 0),
+            collection=details_coll,
+            parent=obj,
+        )
+        procedural_count += 1
+
+    result = _build_castle_result(name, spec, procedural_count)
     return {"status": "success", "result": result}
 
 
@@ -385,35 +476,51 @@ def handle_generate_interior(params: dict) -> dict:
 
     layout = generate_interior_layout(room_type, width, depth, height, seed)
 
-    # Create placeholder geometry for each furniture item
     # Create an empty as the room parent
     room_empty = bpy.data.objects.new(name, None)
     room_empty.empty_display_type = "CUBE"
     room_empty.empty_display_size = max(width, depth) / 2
     bpy.context.collection.objects.link(room_empty)
 
+    procedural_count = 0
     for item in layout:
         item_name = f"{name}_{item['type']}"
-        item_bm = bmesh.new()
+        item_type = item["type"]
         sx, sy, sz = item["scale"]
-        bmesh.ops.create_cube(item_bm, size=1.0)
-        # Scale the cube to furniture dimensions
-        for v in item_bm.verts:
-            v.co.x *= sx
-            v.co.y *= sy
-            v.co.z *= sz
-            # Shift to sit on ground (cube center to bottom)
-            v.co.z += sz / 2
-        item_mesh = bpy.data.meshes.new(item_name)
-        item_bm.to_mesh(item_mesh)
-        item_bm.free()
-        item_obj = bpy.data.objects.new(item_name, item_mesh)
-        item_obj.location = tuple(item["position"])
-        item_obj.rotation_euler = (0, 0, item["rotation"])
-        item_obj.parent = room_empty
-        bpy.context.collection.objects.link(item_obj)
 
-    result = _build_interior_result(name, room_type, layout)
+        gen_entry = FURNITURE_GENERATOR_MAP.get(item_type)
+        if gen_entry is not None:
+            # Use procedural mesh generator
+            gen_func, gen_kwargs = gen_entry
+            spec = gen_func(**gen_kwargs)
+            item_obj = mesh_from_spec(
+                spec,
+                name=item_name,
+                location=tuple(item["position"]),
+                rotation=(0, 0, item["rotation"]),
+                scale=(sx, sy, sz),
+                parent=room_empty,
+            )
+            procedural_count += 1
+        else:
+            # Fallback: cube for unmapped furniture types
+            item_bm = bmesh.new()
+            bmesh.ops.create_cube(item_bm, size=1.0)
+            for v in item_bm.verts:
+                v.co.x *= sx
+                v.co.y *= sy
+                v.co.z *= sz
+                v.co.z += sz / 2
+            item_mesh = bpy.data.meshes.new(item_name)
+            item_bm.to_mesh(item_mesh)
+            item_bm.free()
+            item_obj = bpy.data.objects.new(item_name, item_mesh)
+            item_obj.location = tuple(item["position"])
+            item_obj.rotation_euler = (0, 0, item["rotation"])
+            item_obj.parent = room_empty
+            bpy.context.collection.objects.link(item_obj)
+
+    result = _build_interior_result(name, room_type, layout, procedural_count)
     return {"status": "success", "result": result}
 
 
