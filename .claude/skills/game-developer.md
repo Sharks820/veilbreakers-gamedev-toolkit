@@ -147,17 +147,16 @@ Actions: `generate_dungeon` | `generate_cave` | `generate_town` | `generate_buil
 3. Execute the generated menu item in Unity Editor
 
 **Direct-action tools** (execute immediately or write non-C# files -- no menu item needed):
-`unity_editor` (recompile, screenshot, console_logs, gemini_review, run_tests, enter/exit_play_mode), `unity_qa` (setup_bridge, check_compile_status, run_tests, profile_scene, detect_memory_leaks, analyze_code, inspect_live_state), `unity_build` (build_multi_platform, generate_ci_pipeline, manage_version, generate_store_metadata), `unity_audio` (generate_sfx, generate_music_loop, generate_voice_line, generate_ambient -- these call AI APIs and write audio files), `unity_ui` (validate_layout, check_contrast, test_responsive, compare_screenshots)
+`unity_editor` (recompile, screenshot, console_logs, run_tests, enter/exit_play_mode), `unity_qa` (setup_bridge, check_compile_status, run_tests, profile_scene, detect_memory_leaks, analyze_code, inspect_live_state), `unity_build` (build_multi_platform, generate_ci_pipeline, manage_version, generate_store_metadata), `unity_audio` (generate_sfx, generate_music_loop, generate_voice_line, generate_ambient -- these call AI APIs and write audio files), `unity_ui` (validate_layout, check_contrast, test_responsive, compare_screenshots)
 - These return results directly. No recompile or menu item step needed.
 
 **Blender tools** (all 15 vb-blender tools):
 - Execute directly via TCP to Blender (localhost:9876). No compilation step. Most mutations return viewport screenshots automatically.
 
 #### unity_editor
-Actions: `recompile` | `enter_play_mode` | `exit_play_mode` | `screenshot` | `console_logs` | `gemini_review` | `run_tests`
-- screenshot: `screenshot_path`, `supersize` (1-4)
+Actions: `recompile` | `enter_play_mode` | `exit_play_mode` | `screenshot` | `console_logs` | `run_tests`
+- screenshot: `screenshot_path`, `supersize` (1-4). Returns image to Claude for direct visual inspection.
 - console_logs: `log_filter` (all/error/warning/log), `log_count`
-- gemini_review: `gemini_prompt`, `gemini_criteria`
 - run_tests: `test_mode` (EditMode/PlayMode), `assembly_filter`, `category_filter`
 
 #### unity_vfx
