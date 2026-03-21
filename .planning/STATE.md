@@ -3,137 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Complete Unity Game Development Coverage
 status: executing
-stopped_at: Completed 16-04-PLAN.md (unity_qa tool wiring + 18 deep syntax tests, Phase 16 complete)
-last_updated: "2026-03-20T23:45:22.042Z"
-last_activity: 2026-03-20 -- Completed 16-04-PLAN.md (unity_qa tool wiring + 18 deep syntax tests, Phase 16 complete)
+stopped_at: Completed 17-01-PLAN.md (4 build template generators + 128 tests)
+last_updated: "2026-03-21T00:19:47Z"
+last_activity: 2026-03-21 -- Completed 17-01-PLAN.md (4 build template generators + 128 tests)
 progress:
   total_phases: 9
   completed_phases: 8
-  total_plans: 30
-  completed_plans: 30
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 16-04-PLAN.md (unity_qa tool wiring + 18 deep syntax tests, Phase 16 complete)
-last_updated: "2026-03-20T22:57:30Z"
-last_activity: 2026-03-20 -- Completed 16-04-PLAN.md (unity_qa tool wiring + 18 syntax tests, Phase 16 complete)
-progress:
-  total_phases: 9
-  completed_phases: 8
-  total_plans: 33
-  completed_plans: 33
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators)
-last_updated: "2026-03-20T22:35:08.264Z"
-last_activity: 2026-03-20 -- Completed 16-03-PLAN.md (crash reporting + analytics + live inspector generators, 78 tests)
-progress:
-  total_phases: 9
-  completed_phases: 7
-  total_plans: 30
-  completed_plans: 29
-  percent: 97
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 15-04-PLAN.md (tool wiring + 31 syntax tests, Phase 15 complete)
-last_updated: "2026-03-20T21:19:24.423Z"
-last_activity: 2026-03-20 -- Completed 15-04-PLAN.md (tool wiring + 31 syntax tests, Phase 15 complete)
-progress:
-  [██████████] 97%
-  completed_phases: 7
-  total_plans: 26
-  completed_plans: 26
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 15-02-PLAN.md (6 UX generators + 168 tests)
-last_updated: "2026-03-20T20:01:35.325Z"
-last_activity: 2026-03-20 -- Completed 15-01-PLAN.md (6 UX generators + 93 tests, 5611 total)
-progress:
-  total_phases: 9
-  completed_phases: 6
-  total_plans: 26
-  completed_plans: 25
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 15-01-PLAN.md (6 UX generators + 93 tests, 5611 total)
-last_updated: "2026-03-20T19:50:19.328Z"
-last_activity: 2026-03-20 -- Completed 15-01-PLAN.md (6 UX generators + 93 tests, 5611 total)
-progress:
-  total_phases: 9
-  completed_phases: 6
-  total_plans: 26
-  completed_plans: 24
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, Phase 14 complete)
-last_updated: "2026-03-20T19:48:26.311Z"
-last_activity: 2026-03-20 -- Completed 15-03-PLAN.md (4 encounter/AI generators + 98 tests)
-progress:
-  total_phases: 9
-  completed_phases: 6
-  total_plans: 26
-  completed_plans: 24
-  percent: 92
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, Phase 14 complete)
-last_updated: "2026-03-20T19:46:32.944Z"
-last_activity: 2026-03-20 -- Completed 14-05-PLAN.md (tool wiring + 73 syntax tests, 5420 total)
-progress:
-  [█████████░] 92%
-  completed_phases: 6
-  total_plans: 26
-  completed_plans: 23
----
-
----
-gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: Complete Unity Game Development Coverage
-status: executing
-stopped_at: Completed 15-01-PLAN.md (6 UX generators + 93 tests, 5611 total)
-last_updated: "2026-03-20T19:45:38Z"
-last_activity: 2026-03-20 -- Completed 15-01-PLAN.md (6 UX generators + 93 tests)
-progress:
-  total_phases: 9
-  completed_phases: 6
-  total_plans: 29
-  completed_plans: 26
-  percent: 90
+  total_plans: 36
+  completed_plans: 34
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -143,18 +20,18 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-19)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** v2.0 Phase 16 complete (Quality Assurance & Testing)
+**Current focus:** v2.0 Phase 17 in progress (Build & Deploy Pipeline)
 
 ## Current Position
 
-Phase: 16 of 17 (Quality Assurance & Testing)
-Plan: 4 of 4 in current phase (4 complete)
-Status: Phase 16 Complete
-Last activity: 2026-03-20 -- Completed 16-04-PLAN.md (unity_qa tool wiring + 18 deep syntax tests, Phase 16 complete)
+Phase: 17 of 17 (Build & Deploy Pipeline)
+Plan: 1 of 3 in current phase (1 complete)
+Status: Executing Phase 17
+Last activity: 2026-03-21 -- Completed 17-01-PLAN.md (4 build template generators + 128 tests)
 
 ```
-Phase Progress: [██████████████████████████████] 33/33 plans complete
-v2.0 Progress:  [██████████████████████████████] 33/33 plans complete
+Phase Progress: [██████████████████████████████████] 34/36 plans complete
+v2.0 Progress:  [█████████████████████████████░░░░] 34/36 plans complete (94%)
 ```
 
 ## Performance Metrics
@@ -168,9 +45,9 @@ v2.0 Progress:  [█████████████████████
 | v1.0 bugs fixed | 55 total across 4 scan rounds |
 | v2.0 requirements | 76 across 11 categories |
 | v2.0 phases planned | 9 (phases 9-17) |
-| v2.0 plans completed | 33 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-04, 16-01 through 16-04) |
-| v2.0 tests added | 3,535 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter + 84 ux-batch2 + 93 ux-batch1 + 283 tool-wiring-p15 + 118 qa-bridge + 111 qa-testing + 78 qa-observability + 126 tool-wiring-p16) |
-| v2.0 total tests passing | 6,318 |
+| v2.0 plans completed | 34 (09-01 through 13-03, 14-01 through 14-05, 15-01 through 15-04, 16-01 through 16-04, 17-01) |
+| v2.0 tests added | 3,663 (118 prefab + 78 settings + 96 assets + 49 code-gen + 43 shader-v2 + 47 test+arch + 260 tool-wiring + 72 pipeline + 64 quality + 105 tool-wiring-p11 + 93 core-game + 87 vb-combat + 98 tool-wiring-p12 + 105 equipment + 201 content + 212 tool-wiring-p13 + 71 camera + 110 world-templates + 89 world-design + 143 rpg-world + 567 tool-wiring-p14 + 98 encounter + 84 ux-batch2 + 93 ux-batch1 + 283 tool-wiring-p15 + 118 qa-bridge + 111 qa-testing + 78 qa-observability + 126 tool-wiring-p16 + 128 build-templates) |
+| v2.0 total tests passing | 6,446 |
 | v2.0 MCP tools | 36 (15 Blender + 21 Unity) |
 | 09-01 duration | 16 min |
 | 09-02 duration | 13 min |
@@ -202,6 +79,7 @@ v2.0 Progress:  [█████████████████████
 | 16-03 duration | 19 min | 1 task | 2 files |
 | Phase 16 P02 | 23 min | 2 tasks | 2 files |
 | 16-04 duration | 19 min | 2 tasks | 3 files |
+| 17-01 duration | 7 min | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -309,6 +187,10 @@ v2.0 Progress:  [█████████████████████
 | Brace-counting method body tracker for hot method detection | Pragmatic approach for single-file analysis without full C# AST parsing | 16 |
 | setup_bridge writes both server + commands scripts in single action | Natural pairing -- bridge is useless without command handlers | 16 |
 | analyze_code returns Python-side analysis without writing C# | Static analysis runs at code-gen time, no Unity compilation needed | 16 |
+| Line-based string concatenation for all 4 build C# generators | Consistent with Phase 11+ convention, avoids f-string/brace escaping | 17 |
+| Platform dispatch in generate_platform_config_script | Routes android/ios/webgl to private _generate_*_config helpers | 17 |
+| Shader stripper + IPostprocessBuildWithReport companion class | Separate class for build summary JSON output | 17 |
+| Android manifest as inline C# string | Self-contained editor script, no separate XML template needed | 17 |
 
 ### Architecture Notes
 - v2.0 extends the existing unity_server.py with deeper Editor control
@@ -323,10 +205,10 @@ None currently.
 
 ## Session Continuity
 
-Last session: 2026-03-20T22:57:30Z
-Stopped at: Completed 16-04-PLAN.md (unity_qa tool wiring + 18 deep syntax tests, Phase 16 complete)
-Next action: Phase 16 complete. All 33 v2.0 plans executed. Ready for Phase 17 or milestone completion.
+Last session: 2026-03-21T00:19:47Z
+Stopped at: Completed 17-01-PLAN.md (4 build template generators + 128 tests)
+Next action: Execute 17-02-PLAN.md (CI/CD, versioning, store metadata generators)
 
 ---
 *State initialized: 2026-03-18*
-*Last updated: 2026-03-20 -- Completed 15-01-PLAN.md (6 UX generators + 93 tests)*
+*Last updated: 2026-03-21 -- Completed 17-01-PLAN.md (4 build template generators + 128 tests)*

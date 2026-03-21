@@ -84,11 +84,11 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 ### Build & Deploy
 
-- [ ] **BUILD-01**: Claude can orchestrate multi-platform builds (Windows, Mac, Linux, Android, iOS, WebGL) with per-platform settings
-- [ ] **BUILD-02**: Claude can configure Addressable Asset Groups (remote/local paths, content catalogs, memory management)
+- [x] **BUILD-01**: Claude can orchestrate multi-platform builds (Windows, Mac, Linux, Android, iOS, WebGL) with per-platform settings
+- [x] **BUILD-02**: Claude can configure Addressable Asset Groups (remote/local paths, content catalogs, memory management)
 - [ ] **BUILD-03**: Claude can generate CI/CD pipeline configs (GitHub Actions, GitLab CI) for automated Unity builds and tests
 - [ ] **BUILD-04**: Claude can manage version numbers, release branches, and changelogs
-- [ ] **BUILD-05**: Claude can configure platform-specific settings (Android manifest, iOS plist, WebGL template)
+- [x] **BUILD-05**: Claude can configure platform-specific settings (Android manifest, iOS plist, WebGL template)
 - [x] **BUILD-06**: Claude can set up sprite sheet packing, texture atlasing, and sprite animation
 
 ### Quality & Testing
@@ -127,7 +127,7 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 - [x] **SHDR-01**: Claude can write arbitrary HLSL/ShaderLab shaders (not just predefined templates)
 - [x] **SHDR-02**: Claude can create custom URP ScriptableRendererFeatures and render passes
-- [ ] **SHDR-03**: Claude can manage shader variant stripping and keyword sets for build size optimization
+- [x] **SHDR-03**: Claude can manage shader variant stripping and keyword sets for build size optimization
 - [x] **SHDR-04**: Claude can generate DOTween/LeanTween animation sequences for UI polish and game juice
 
 ### 2D Systems
@@ -309,14 +309,14 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 | QA-06 | Phase 16 | Complete |
 | QA-07 | Phase 16 | Complete |
 | QA-08 | Phase 16 | Complete |
-| BUILD-01 | Phase 17 | Pending |
-| BUILD-02 | Phase 17 | Pending |
+| BUILD-01 | Phase 17 | Complete |
+| BUILD-02 | Phase 17 | Complete |
 | BUILD-03 | Phase 17 | Pending |
 | BUILD-04 | Phase 17 | Pending |
-| BUILD-05 | Phase 17 | Pending |
+| BUILD-05 | Phase 17 | Complete |
 | SHDR-01 | Phase 10 | Complete |
 | SHDR-02 | Phase 10 | Complete |
-| SHDR-03 | Phase 17 | Pending |
+| SHDR-03 | Phase 17 | Complete |
 | SHDR-04 | Phase 15 | Complete |
 | TWO-01 | Phase 14 | Complete |
 | TWO-02 | Phase 14 | Complete |
