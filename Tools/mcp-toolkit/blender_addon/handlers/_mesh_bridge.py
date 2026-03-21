@@ -108,6 +108,7 @@ FURNITURE_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]
     "cauldron": (generate_cauldron_mesh, {}),
     "sarcophagus": (generate_sarcophagus_mesh, {}),
     "chain": (generate_chain_mesh, {}),
+    "chains": (generate_chain_mesh, {}),
     # ---- Close matches (9) ----
     "large_table": (generate_table_mesh, {"width": 1.8, "depth": 1.2}),
     "long_table": (generate_table_mesh, {"width": 1.8, "depth": 4.0}),
