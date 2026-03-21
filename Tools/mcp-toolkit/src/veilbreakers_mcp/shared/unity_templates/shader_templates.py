@@ -1312,6 +1312,18 @@ def _sanitize_cs_identifier(name: str) -> str:
     return sanitized or 'Unnamed'
 
 
+def _sanitize_cs_attribute(attr: str) -> str:
+    """Sanitize a C# attribute expression (e.g. ``Range(0f, 1f)``).
+
+    Allows alphanumerics, underscores, parentheses, commas, dots, spaces,
+    and quotes -- the characters valid inside a C# attribute declaration.
+    Strips everything else to prevent code injection while preserving
+    typical attribute syntax.
+    """
+    sanitized = re.sub(r'[^A-Za-z0-9_().,\s"\']', '', attr)
+    return sanitized
+
+
 _VALID_RENDER_PASS_EVENTS = frozenset({
     'BeforeRendering', 'BeforeRenderingShadows', 'AfterRenderingShadows',
     'BeforeRenderingPrePasses', 'AfterRenderingPrePasses',
@@ -1379,10 +1391,10 @@ def generate_renderer_feature(
     # --- Settings class body ---
     settings_body_lines = []
     for f in fields:
-        attr = f.get('attribute', '')
+        attr = _sanitize_cs_attribute(f.get('attribute', '')) if f.get('attribute', '') else ''
         ftype = _safe_type(f.get('type', 'float'))
         fname = _sanitize_cs_identifier(f.get('name', 'value')) or 'value'
-        fdefault = f.get('default', '')
+        fdefault = _sanitize_cs_string(str(f.get('default', ''))) if f.get('default', '') else ''
         attr_line = f'        [{attr}] ' if attr else '        '
         default_part = f' = {fdefault};' if fdefault else ';'
         settings_body_lines.append(f'{attr_line}public {ftype} {fname}{default_part}')
