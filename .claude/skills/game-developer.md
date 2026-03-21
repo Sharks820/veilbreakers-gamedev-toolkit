@@ -138,10 +138,20 @@ Actions: `generate_dungeon` | `generate_cave` | `generate_town` | `generate_buil
 
 ### Unity Tools (vb-unity) -- 22 Tools
 
-**CRITICAL**: Every Unity tool writes C# to the project and returns `next_steps`. You must:
+**CRITICAL**: Unity tools fall into three execution categories. Using the wrong workflow will cause failures.
+
+**Script-generating tools** (write C# editor scripts with menu items -- require recompile + execute):
+`unity_prefab`, `unity_settings`, `unity_assets`, `unity_code`, `unity_shader`, `unity_data`, `unity_quality`, `unity_pipeline`, `unity_game`, `unity_content`, `unity_camera`, `unity_world`, `unity_ux`, `unity_gameplay`, `unity_vfx` (create_shader, setup_post_processing), `unity_scene`, `unity_audio` (setup_* actions), `unity_ui` (generate_ui_screen)
 1. Read the `next_steps` array in the response
 2. Call `unity_editor` action=`recompile` to compile the new script
 3. Execute the generated menu item in Unity Editor
+
+**Direct-action tools** (execute immediately or write non-C# files -- no menu item needed):
+`unity_editor` (recompile, screenshot, console_logs, gemini_review, run_tests, enter/exit_play_mode), `unity_qa` (setup_bridge, check_compile_status, run_tests, profile_scene, detect_memory_leaks, analyze_code, inspect_live_state), `unity_build` (build_multi_platform, generate_ci_pipeline, manage_version, generate_store_metadata), `unity_audio` (generate_sfx, generate_music_loop, generate_voice_line, generate_ambient -- these call AI APIs and write audio files), `unity_ui` (validate_layout, check_contrast, test_responsive, compare_screenshots)
+- These return results directly. No recompile or menu item step needed.
+
+**Blender tools** (all 15 vb-blender tools):
+- Execute directly via TCP to Blender (localhost:9876). No compilation step. Most mutations return viewport screenshots automatically.
 
 #### unity_editor
 Actions: `recompile` | `enter_play_mode` | `exit_play_mode` | `screenshot` | `console_logs` | `gemini_review` | `run_tests`
@@ -291,6 +301,9 @@ blender_viewport action=contact_sheet object_name="ObjectName"
 # Step 3: Material -- check textures, UV mapping, PBR response
 blender_viewport action=set_shading shading_type=MATERIAL
 blender_viewport action=contact_sheet object_name="ObjectName"
+# TIP: For texel density verification, temporarily assign a checkerboard material
+# (blender_material with a checker texture) to visually confirm uniform texel density
+# across all UV islands. Squares should appear the same size everywhere on the mesh.
 
 # Step 4: Rendered -- check final lighting, shadows, reflections
 blender_viewport action=set_shading shading_type=RENDERED
@@ -336,6 +349,56 @@ blender_rig action=validate object_name="ObjectName"
 | `asset_pipeline` generate_3d/cleanup | Tier 3 (full) |
 | `concept_art` generate | Tier 1 (image is returned) |
 | `blender_export` | No visual (run game_check first) |
+| `blender_execute` | Tier 1 or Tier 2 (depends on what the code does) |
+| `asset_pipeline` generate_weapon/split_character/fit_armor | Tier 2 |
+| `asset_pipeline` render_equipment_icon | Tier 1 (icon image is returned) |
+| `asset_pipeline` tag_metadata/catalog_add/catalog_query | No visual (check return value) |
+
+### Non-Visual Tools Verification
+
+Not all tools produce visual output. For tools that generate code, audio, data, or configuration, use programmatic verification instead of screenshots.
+
+#### Code-Generating Unity Tools
+After any script-generating Unity tool (`unity_prefab`, `unity_code`, `unity_game`, `unity_content`, `unity_gameplay`, `unity_data`, `unity_settings`, `unity_pipeline`, `unity_quality`, `unity_camera`, `unity_world`, `unity_ux`, `unity_shader`):
+```
+1. unity_editor action=recompile
+2. unity_qa action=check_compile_status       -- verify no compile errors
+3. unity_editor action=console_logs log_filter=error  -- check for runtime errors
+4. unity_editor action=run_tests              -- run relevant test suite if tests exist
+```
+
+#### Audio Generation Tools
+After `unity_audio` generate_sfx / generate_music_loop / generate_voice_line / generate_ambient:
+```
+-- These write audio files directly. Verify the file was generated:
+1. Check the response for the output file path
+2. unity_editor action=console_logs log_filter=error  -- ensure no API errors
+```
+
+#### Build / CI Tools
+After `unity_build` actions (build_multi_platform, generate_ci_pipeline, manage_version, generate_store_metadata):
+```
+1. Check the response for success/failure status
+2. unity_editor action=console_logs log_filter=error  -- verify no build errors
+3. For builds: verify output file path exists in the response
+```
+
+#### QA / Testing Tools
+After `unity_qa` actions (run_tests, profile_scene, detect_memory_leaks, analyze_code):
+```
+-- These return diagnostic data directly. Review the results:
+1. Check pass/fail counts for test runs
+2. Check performance metrics against budgets for profiling
+3. Check leak reports for memory analysis
+```
+
+#### Settings / Configuration Tools
+After `unity_settings` actions (configure_physics, configure_build, configure_quality, etc.):
+```
+1. unity_editor action=recompile              -- some settings generate scripts
+2. unity_qa action=check_compile_status
+3. unity_editor action=console_logs log_filter=error  -- verify no configuration errors
+```
 
 ### MANDATORY: After Every Unity Mutation
 
@@ -460,9 +523,26 @@ gemini_criteria=["clipping", "scale", "alpha", "density", "brand_colors"]
 
 **Scene Composition**:
 ```
-gemini_prompt="Check scene for: object floating above or sunk into ground, repetitive placement patterns, empty areas lacking detail, LOD popping, and overall visual density"
-gemini_criteria=["grounding", "variety", "density", "lod", "atmosphere"]
+gemini_prompt="Check scene for: object floating above or sunk into ground, repetitive placement patterns, empty areas lacking detail, LOD popping, z-fighting (overlapping coplanar faces causing flickering), and overall visual density"
+gemini_criteria=["grounding", "variety", "density", "lod", "z_fighting", "atmosphere"]
 ```
+
+**Brand Color Accessibility (Colorblind Check)**:
+```
+gemini_prompt="Check these brand VFX colors for distinguishability under simulated colorblind conditions (protanopia, deuteranopia, tritanopia). Verify that all 10 brand colors remain visually distinct from each other so players with color vision deficiency can tell brands apart"
+gemini_criteria=["protanopia_distinguishability", "deuteranopia_distinguishability", "tritanopia_distinguishability", "overall_contrast"]
+```
+
+### Non-Visual Domain Verification (No Gemini Review)
+
+Gemini review is for VISUAL verification only -- it analyzes screenshots. The following domains do not produce visual output and must be verified programmatically instead:
+
+- **Audio**: Verify file generation succeeded, check file size > 0, play-test in Unity. No screenshot to review.
+- **Camera/Cinemachine**: After setup, take a screenshot to verify framing, then use gemini_review with the Scene Composition prompt.
+- **Gameplay/AI**: Verify compile status, run EditMode tests, enter PlayMode and check console_logs for runtime errors. For behavior trees and AI: use `unity_qa action=run_play_session` to simulate.
+- **Build/CI**: Check build output for success/failure. Verify build artifacts exist. Review CI pipeline YAML for correctness.
+- **QA/Testing**: Review test results (pass/fail counts). Review profiling metrics against budgets. These tools ARE the verification -- they don't need further verification.
+- **Data/Content**: Verify compile status. Check that ScriptableObject assets were created. Run tests if a data validation test suite exists.
 
 ---
 
@@ -523,7 +603,12 @@ For each monster type:
 2.  asset_pipeline action=cleanup
     VERIFY: Tier 3 multi-shading inspection
 
-3.  blender_rig action=apply_template template=[humanoid/quadruped/etc]
+3.  blender_rig action=apply_template template=<TEMPLATE> object_name="MonsterName"
+    -- Choose template based on creature anatomy:
+    --   humanoid: bipedal creatures (skeletons, demons, cultists, golems)
+    --   quadruped: four-legged beasts (wolves, bears, drakes, hounds)
+    --   bird: winged creatures (harpies, corrupted ravens, gargoyles)
+    --   serpent: snake-like creatures (wyrms, naga, tentacle beasts)
     VERIFY: Tier 5 rig verification
 
 4.  blender_animation action=generate_idle
@@ -577,32 +662,49 @@ For each monster type:
 2.  blender_environment action=scatter_vegetation
     VERIFY: Tier 2 contact sheet (check distribution)
 
-3.  blender_worldbuilding action=generate_building/dungeon/castle
-    VERIFY: Tier 2 contact sheet for each structure
+3a. blender_worldbuilding action=generate_building  -- for standalone structures
+    VERIFY: Tier 2 contact sheet
+3b. blender_worldbuilding action=generate_dungeon width=10 height=10 seed=42  -- for underground areas
+    VERIFY: Tier 2 contact sheet
+3c. blender_worldbuilding action=generate_castle outer_size=30 tower_count=4  -- for fortifications
+    VERIFY: Tier 2 contact sheet
+3d. blender_worldbuilding action=generate_ruins  -- for ancient/destroyed sites
+    VERIFY: Tier 2 contact sheet
+    (Choose the appropriate worldbuilding action based on the level design requirements)
 
 4.  blender_environment action=add_storytelling_props
     VERIFY: Tier 1 screenshot
 
-5.  blender_export export_format=fbx
+5.  QUALITY GATE (before export):
+    blender_mesh action=game_check poly_budget=100000 platform=pc  -- level budget is higher
+    blender_mesh action=analyze  -- check all objects for manifold issues
+    asset_pipeline action=validate_export
 
-6.  unity_scene action=setup_terrain heightmap_path="..."
+6.  blender_export export_format=fbx
+
+7.  unity_scene action=setup_terrain heightmap_path="..."
     VERIFY: unity_editor action=screenshot
 
-7.  unity_scene action=setup_lighting time_of_day=dusk
+8.  unity_scene action=setup_lighting time_of_day=dusk
     VERIFY: Screenshot at multiple times of day (see lighting protocol)
 
-8.  unity_world action=create_npc_placement
+9.  unity_world action=create_npc_placement
     VERIFY: unity_editor action=screenshot
 
-9.  unity_world action=create_dungeon_lighting
+10. unity_world action=create_dungeon_lighting
     VERIFY: unity_editor action=screenshot + gemini_review
 
-10. unity_gameplay action=create_spawn_system
+11. unity_gameplay action=create_spawn_system
     VERIFY: unity_qa action=check_compile_status
 
-11. unity_world action=create_puzzle
+12. unity_world action=create_puzzle
     unity_world action=create_trap
     VERIFY: unity_qa action=check_compile_status
+
+13. QUALITY GATE (after level setup):
+    unity_performance action=profile_scene  -- check frame time, draw calls, memory
+    unity_performance action=audit_assets   -- find oversized/unused assets
+    unity_quality action=aaa_audit          -- combined quality check
 ```
 
 ### Dungeon Pipeline
@@ -622,14 +724,22 @@ For each monster type:
 5.  blender_worldbuilding action=generate_overrun_variant
     VERIFY: Tier 2 contact sheet (compare clean vs corrupted)
 
-6.  blender_export export_format=fbx
+6.  QUALITY GATE (before export):
+    blender_mesh action=game_check poly_budget=80000 platform=pc
+    asset_pipeline action=validate_export
 
-7.  unity_world action=create_dungeon_lighting
+7.  blender_export export_format=fbx
+
+8.  unity_world action=create_dungeon_lighting
     VERIFY: Unity screenshot + gemini_review for atmosphere
 
-8.  unity_gameplay action=create_encounter_system
+9.  unity_gameplay action=create_encounter_system
     unity_gameplay action=create_boss_ai
     VERIFY: unity_qa action=check_compile_status
+
+10. QUALITY GATE (after dungeon setup):
+    unity_performance action=profile_scene
+    unity_quality action=aaa_audit
 ```
 
 ### Combat System Pipeline
@@ -663,7 +773,19 @@ For each monster type:
 
 ### UI/UX Pipeline
 ```
-1.  unity_ui action=generate_ui_screen screen_spec={...} theme=dark_fantasy
+1.  unity_ui action=generate_ui_screen theme=dark_fantasy screen_name="InventoryScreen" screen_spec={
+      "title": "Inventory",
+      "layout": "grid",
+      "sections": [
+        {"name": "equipment_slots", "type": "grid", "columns": 4, "rows": 6},
+        {"name": "character_preview", "type": "panel", "position": "left"},
+        {"name": "item_details", "type": "panel", "position": "right"},
+        {"name": "currency_bar", "type": "header", "position": "top"}
+      ],
+      "buttons": ["sort", "filter", "close"],
+      "bindings": ["inventory_data", "equipped_items"]
+    }
+    -- Adapt screen_spec fields to match the screen you are building (HUD, shop, skill tree, etc.)
     VERIFY: Full UI verification protocol:
       a. unity_ui action=validate_layout
       b. unity_ui action=check_contrast
