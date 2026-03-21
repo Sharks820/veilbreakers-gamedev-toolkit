@@ -396,10 +396,10 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 
 ### Mesh Integration
 
-- [ ] **MESH3-01**: Worldbuilding handlers use procedural mesh library (real furniture, props, vegetation — not primitive cubes/cones)
-- [ ] **MESH3-02**: Environment scatter uses procedural rocks, trees, mushrooms, roots instead of geometric primitives
-- [ ] **MESH3-03**: Dungeon generation places actual trap meshes, altar meshes, prison doors, torch sconces from procedural library
-- [ ] **MESH3-04**: Castle generation uses actual gate, rampart, drawbridge, fountain meshes
+- [x] **MESH3-01**: Worldbuilding handlers use procedural mesh library (real furniture, props, vegetation -- not primitive cubes/cones)
+- [x] **MESH3-02**: Environment scatter uses procedural rocks, trees, mushrooms, roots instead of geometric primitives
+- [x] **MESH3-03**: Dungeon generation places actual trap meshes, altar meshes, prison doors, torch sconces from procedural library
+- [x] **MESH3-04**: Castle generation uses actual gate, rampart, drawbridge, fountain meshes
 - [ ] **MESH3-05**: All procedural meshes have LOD variants (high/medium/low poly) for performance budgets
 
 ### Terrain Depth
@@ -486,10 +486,10 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| MESH3-01 | Phase 18 | Pending |
-| MESH3-02 | Phase 18 | Pending |
-| MESH3-03 | Phase 18 | Pending |
-| MESH3-04 | Phase 18 | Pending |
+| MESH3-01 | Phase 18 | Complete |
+| MESH3-02 | Phase 18 | Complete |
+| MESH3-03 | Phase 18 | Complete |
+| MESH3-04 | Phase 18 | Complete |
 | MESH3-05 | Phase 18 | Pending |
 | TERR-01 | Phase 18 | Pending |
 | TERR-02 | Phase 18 | Pending |
