@@ -36,7 +36,7 @@
 - [ ] **Phase 14: Camera, Cinematics & Scene Management** - Cinemachine, Timeline, cutscenes, scene loading, lighting, probes, terrain detail, world design, RPG world systems
 - [ ] **Phase 15: Game UX & Encounter Design** - Minimap, tutorials, damage numbers, interaction prompts, encounter scripting, AI director
 - [ ] **Phase 16: Quality Assurance & Testing** - Unity TCP bridge, test runner, automated play, profiling, memory leaks, static analysis, crash reporting, live inspection
-- [ ] **Phase 17: Build & Deploy Pipeline** - Multi-platform builds, Addressables, CI/CD, versioning, platform configs, shader stripping, store metadata
+- [ ] **Phase 17: Build & Deploy Pipeline** - Multi-platform builds, Addressables, CI/CD, versioning, platform configs, shader stripping, store metadata (1/3 plans complete)
 
 ## Phase Details
 
