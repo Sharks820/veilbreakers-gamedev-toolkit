@@ -455,14 +455,14 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 
 ### VFX Mastery
 
-- [ ] **VFX3-01**: Claude can generate flipbook texture sheets (animated sprite sequences for fire, smoke, energy effects)
-- [ ] **VFX3-02**: Claude can compose VFX Graph nodes programmatically (not just parameters — actual node graph construction)
-- [ ] **VFX3-03**: Claude can generate projectile VFX chains (spawn → travel trail → impact burst → aftermath residue)
-- [ ] **VFX3-04**: Claude can generate area-of-effect VFX (ground circles, expanding domes, cone blasts with brand colors)
-- [ ] **VFX3-05**: Claude can generate per-brand status effect VFX (burning, poisoned, frozen, stunned, blessed, cursed for all 10 brands)
-- [ ] **VFX3-06**: Claude can generate environmental VFX depth (volumetric fog, god rays, heat distortion, water caustics)
-- [ ] **VFX3-07**: Claude can generate directional combat hit VFX (blood splatter, sparks, energy bursts matched to brand)
-- [ ] **VFX3-08**: Claude can generate boss phase transition VFX (corruption wave, power surge, arena transformation)
+- [x] **VFX3-01**: Claude can generate flipbook texture sheets (animated sprite sequences for fire, smoke, energy effects)
+- [x] **VFX3-02**: Claude can compose VFX Graph nodes programmatically (not just parameters — actual node graph construction)
+- [x] **VFX3-03**: Claude can generate projectile VFX chains (spawn → travel trail → impact burst → aftermath residue)
+- [x] **VFX3-04**: Claude can generate area-of-effect VFX (ground circles, expanding domes, cone blasts with brand colors)
+- [x] **VFX3-05**: Claude can generate per-brand status effect VFX (burning, poisoned, frozen, stunned, blessed, cursed for all 10 brands)
+- [x] **VFX3-06**: Claude can generate environmental VFX depth (volumetric fog, god rays, heat distortion, water caustics)
+- [x] **VFX3-07**: Claude can generate directional combat hit VFX (blood splatter, sparks, energy bursts matched to brand)
+- [x] **VFX3-08**: Claude can generate boss phase transition VFX (corruption wave, power surge, arena transformation)
 
 ### Production Pipeline
 
@@ -527,14 +527,14 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 | UIPOL-06 | Phase 22 | Complete |
 | UIPOL-07 | Phase 22 | Complete |
 | UIPOL-08 | Phase 22 | Complete |
-| VFX3-01 | Phase 23 | Pending |
-| VFX3-02 | Phase 23 | Pending |
-| VFX3-03 | Phase 23 | Pending |
-| VFX3-04 | Phase 23 | Pending |
-| VFX3-05 | Phase 23 | Pending |
-| VFX3-06 | Phase 23 | Pending |
-| VFX3-07 | Phase 23 | Pending |
-| VFX3-08 | Phase 23 | Pending |
+| VFX3-01 | Phase 23 | Complete |
+| VFX3-02 | Phase 23 | Complete |
+| VFX3-03 | Phase 23 | Complete |
+| VFX3-04 | Phase 23 | Complete |
+| VFX3-05 | Phase 23 | Complete |
+| VFX3-06 | Phase 23 | Complete |
+| VFX3-07 | Phase 23 | Complete |
+| VFX3-08 | Phase 23 | Complete |
 | PROD-01 | Phase 24 | Pending |
 | PROD-02 | Phase 24 | Pending |
 | PROD-03 | Phase 24 | Pending |
