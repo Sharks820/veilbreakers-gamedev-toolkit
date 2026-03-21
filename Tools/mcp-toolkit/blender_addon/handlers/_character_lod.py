@@ -94,7 +94,8 @@ def _compute_face_importance(
         if not face:
             face_importance.append(0.0)
             continue
-        avg = sum(vertex_weights[i] for i in face if i < len(vertex_weights)) / len(face)
+        valid = [vertex_weights[i] for i in face if i < len(vertex_weights)]
+        avg = sum(valid) / max(len(valid), 1)
         face_importance.append(avg)
     return face_importance
 
@@ -168,10 +169,21 @@ def character_aware_lod(
             tuple(index_remap[i] for i in face) for face in kept_faces
         ]
 
-        # Remap UVs if per-vertex
-        lod_uvs = uvs
-        if uvs and len(uvs) == len(verts):
-            lod_uvs = [uvs[i] for i in used_vert_indices]
+        # Remap UVs based on format
+        lod_uvs: list[tuple[float, float]] = []
+        if uvs:
+            if len(uvs) == len(verts):
+                # Per-vertex UVs: remap to compacted vertices
+                lod_uvs = [uvs[i] for i in used_vert_indices]
+            else:
+                # Per-face-corner UVs: keep only UVs for kept faces
+                # Each face contributes len(face) UV entries in order
+                uv_offset = 0
+                for fi in range(len(faces)):
+                    face_uv_count = len(faces[fi])
+                    if fi in set(kept_face_indices):
+                        lod_uvs.extend(uvs[uv_offset:uv_offset + face_uv_count])
+                    uv_offset += face_uv_count
 
         lod_spec: MeshSpec = {
             "vertices": lod_verts,
