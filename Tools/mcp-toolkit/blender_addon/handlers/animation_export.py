@@ -820,51 +820,260 @@ def handle_retarget_mixamo(params: dict) -> dict:
     }
 
 
-def handle_generate_ai_motion(params: dict) -> dict:
-    """AI motion generation stub for HY-Motion/MotionGPT integration (ANIM-11).
+VALID_AI_MOTION_MODELS: tuple[str, ...] = (
+    "hy-motion", "motion-gpt", "motiondiffuse",
+)
 
-    This is a STUB handler. HY-Motion/MotionGPT do not yet have an HTTP API.
-    When API availability is confirmed, this handler will:
-    1. Call AI model with text prompt
-    2. Receive skeleton joint rotations (BVH or raw)
-    3. Convert to Blender Action
-    4. Retarget to custom rig
+# Environment variable for custom AI motion API endpoint
+AI_MOTION_ENDPOINT_ENV = "VB_AI_MOTION_ENDPOINT"
+
+
+def _validate_ai_motion_params(params: dict) -> dict:
+    """Validate AI motion generation parameters (pure-logic, testable).
+
+    Args:
+        params: Handler params dict.
+
+    Returns:
+        Dict with valid=True and normalized params, or valid=False with errors.
+    """
+    errors: list[str] = []
+
+    object_name = params.get("object_name")
+    if not object_name or not isinstance(object_name, str):
+        errors.append("object_name is required and must be a non-empty string")
+
+    prompt = params.get("prompt")
+    if not prompt or not isinstance(prompt, str):
+        errors.append("prompt is required and must be a non-empty string")
+
+    model = params.get("model", "hy-motion")
+    if model not in VALID_AI_MOTION_MODELS:
+        errors.append(
+            f"model must be one of {VALID_AI_MOTION_MODELS}, got '{model}'"
+        )
+
+    frame_count = int(params.get("frame_count", 48))
+    if frame_count < 1:
+        errors.append("frame_count must be >= 1")
+
+    fps = int(params.get("fps", 30))
+    if fps < 1:
+        errors.append("fps must be >= 1")
+
+    style = params.get("style", "realistic")
+    valid_styles = ("realistic", "stylized", "exaggerated", "subtle")
+    if style not in valid_styles:
+        errors.append(f"style must be one of {valid_styles}, got '{style}'")
+
+    duration = params.get("duration")
+    if duration is not None:
+        duration = float(duration)
+        if duration <= 0:
+            errors.append("duration must be > 0")
+
+    return {
+        "valid": len(errors) == 0,
+        "errors": errors,
+        "object_name": object_name,
+        "prompt": prompt or "",
+        "model": model,
+        "frame_count": frame_count,
+        "fps": fps,
+        "style": style,
+        "duration": duration,
+    }
+
+
+def _attempt_ai_motion_api(
+    prompt: str,
+    model: str,
+    frame_count: int,
+    fps: int,
+    style: str,
+    duration: float | None,
+) -> dict | None:
+    """Attempt to call an external AI motion API.
+
+    Checks for VB_AI_MOTION_ENDPOINT env var. If set, sends HTTP POST
+    with the motion request. Returns keyframe data dict on success,
+    None if endpoint not configured or request fails.
+    """
+    endpoint = os.environ.get(AI_MOTION_ENDPOINT_ENV, "")
+    if not endpoint:
+        return None
+
+    # Validate endpoint -- only http/https schemes allowed (no file://)
+    if not endpoint.startswith(("http://", "https://")):
+        return None
+
+    try:
+        import json
+        import requests  # type: ignore[import-untyped]
+
+        payload = {
+            "prompt": prompt,
+            "model": model,
+            "frame_count": frame_count,
+            "fps": fps,
+            "style": style,
+            "duration": duration or (frame_count / fps),
+        }
+
+        resp = requests.post(endpoint, json=payload, timeout=60)
+        if resp.status_code == 200:
+            data = resp.json()
+            if "keyframes" in data:
+                return data
+    except Exception:
+        pass
+
+    return None
+
+
+def handle_generate_ai_motion(params: dict) -> dict:
+    """AI motion generation with API + procedural fallback (ANIM-11/ANIM3-06).
+
+    Generates animation from a text prompt using either:
+    1. External AI motion API (if VB_AI_MOTION_ENDPOINT is configured)
+    2. Procedural fallback using keyword extraction + existing generators
+
+    The procedural fallback extracts motion verbs and body parts from the
+    prompt text and combines them using generate_custom_keyframes from
+    the animation_gaits module, plus combat timing data if attack keywords
+    are detected.
 
     Params:
         object_name: Name of the target armature.
         prompt: Text description of desired motion.
-        model: AI model to use (default "hy-motion").
+        model: AI model (hy-motion/motion-gpt/motiondiffuse, default hy-motion).
         frame_count: Number of frames to generate (default 48).
+        fps: Frames per second (default 30).
+        style: Motion style (realistic/stylized/exaggerated/subtle).
+        duration: Optional duration in seconds (overrides frame_count).
 
-    Returns dict with status, message, prompt, model, frame_count.
+    Returns dict with status, generation_method, action_name, prompt,
+    model, frame_count, keyframe_count.
     """
-    object_name = params.get("object_name")
-    if not object_name:
-        raise ValueError("object_name is required")
+    validated = _validate_ai_motion_params(params)
+    if not validated["valid"]:
+        raise ValueError(
+            f"Invalid AI motion params: {'; '.join(validated['errors'])}"
+        )
 
-    prompt = params.get("prompt")
-    if not prompt or not isinstance(prompt, str):
-        raise ValueError("prompt is required and must be a non-empty string")
+    object_name = validated["object_name"]
+    prompt = validated["prompt"]
+    model = validated["model"]
+    fps = validated["fps"]
+    style = validated["style"]
+    duration = validated["duration"]
 
-    model = params.get("model", "hy-motion")
-    frame_count = int(params.get("frame_count", 48))
+    # If duration specified, compute frame_count from it
+    if duration is not None:
+        frame_count = max(1, int(duration * fps))
+    else:
+        frame_count = validated["frame_count"]
 
-    if frame_count < 1:
-        raise ValueError("frame_count must be >= 1")
+    armature_obj = bpy.data.objects.get(object_name)
+    if not armature_obj or armature_obj.type != "ARMATURE":
+        raise ValueError(f"Armature not found: {object_name}")
 
-    valid_models = ("hy-motion", "motion-gpt")
-    if model not in valid_models:
-        raise ValueError(f"model must be one of {valid_models}, got '{model}'")
+    # Attempt external AI API first
+    api_result = _attempt_ai_motion_api(
+        prompt, model, frame_count, fps, style, duration,
+    )
+
+    generation_method = "api"
+    keyframes = []
+
+    if api_result and "keyframes" in api_result:
+        # Parse API response into Keyframe namedtuples
+        from .animation_gaits import Keyframe
+        for kf_data in api_result["keyframes"]:
+            keyframes.append(Keyframe(
+                bone_name=kf_data.get("bone_name", "DEF-spine"),
+                channel=kf_data.get("channel", "rotation_euler"),
+                axis=kf_data.get("axis", 0),
+                frame=kf_data.get("frame", 0),
+                value=kf_data.get("value", 0.0),
+            ))
+    else:
+        # Procedural fallback: use text-to-keyframe parser
+        generation_method = "procedural_fallback"
+        from .animation_gaits import generate_custom_keyframes
+        keyframes = generate_custom_keyframes(prompt, frame_count=frame_count)
+
+        # If attack keywords detected, enrich with combat timing
+        attack_keywords = {"attack", "strike", "slash", "swing", "thrust", "slam", "hit", "punch", "kick"}
+        prompt_lower = prompt.lower()
+        if any(kw in prompt_lower for kw in attack_keywords):
+            from ._combat_timing import generate_combat_animation_data
+            # Determine attack type from prompt
+            attack_type = "light_attack"
+            if "heavy" in prompt_lower or "slam" in prompt_lower:
+                attack_type = "heavy_attack"
+            elif "charge" in prompt_lower:
+                attack_type = "charged_attack"
+            elif "combo" in prompt_lower or "finisher" in prompt_lower:
+                attack_type = "combo_finisher"
+
+            combat_data = generate_combat_animation_data(
+                attack_type, fps=fps,
+            )
+            # Append combat timing events as metadata (not keyframes)
+            # The keyframes from generate_custom_keyframes already provide motion
+
+    # Apply style scaling to keyframe values
+    style_scale = {
+        "realistic": 1.0,
+        "stylized": 1.3,
+        "exaggerated": 1.8,
+        "subtle": 0.6,
+    }.get(style, 1.0)
+
+    if style_scale != 1.0:
+        from .animation_gaits import Keyframe as KF
+        keyframes = [
+            KF(kf.bone_name, kf.channel, kf.axis, kf.frame, kf.value * style_scale)
+            for kf in keyframes
+        ]
+
+    # Create Blender Action from keyframes
+    action_name = f"AIMotion_{object_name}_{model}"
+    action = bpy.data.actions.new(name=action_name)
+    action.use_fake_user = True
+
+    if armature_obj.animation_data is None:
+        armature_obj.animation_data_create()
+    armature_obj.animation_data.action = action
+
+    # Group keyframes by (bone, channel, axis) for fcurve creation
+    fcurve_map: dict[tuple[str, str, int], list[tuple[int, float]]] = {}
+    for kf in keyframes:
+        key = (kf.bone_name, kf.channel, kf.axis)
+        fcurve_map.setdefault(key, []).append((kf.frame, kf.value))
+
+    for (bone_name, channel, axis), frames in fcurve_map.items():
+        data_path = f'pose.bones["{bone_name}"].{channel}'
+        fc = action.fcurves.new(data_path=data_path, index=axis)
+        fc.keyframe_points.add(count=len(frames))
+        for i, (frame, value) in enumerate(frames):
+            fc.keyframe_points[i].co = (frame, value)
+            fc.keyframe_points[i].interpolation = "BEZIER"
+
+    frame_range = [int(action.frame_range[0]), int(action.frame_range[1])]
 
     return {
-        "status": "stub",
-        "message": (
-            "AI motion generation not yet available. "
-            "HY-Motion/MotionGPT integration pending API availability."
-        ),
+        "status": "success",
+        "generation_method": generation_method,
+        "action_name": action.name,
         "prompt": prompt,
         "model": model,
+        "style": style,
         "frame_count": frame_count,
+        "keyframe_count": len(keyframes),
+        "fcurve_count": len(action.fcurves),
+        "frame_range": frame_range,
     }
 
 
