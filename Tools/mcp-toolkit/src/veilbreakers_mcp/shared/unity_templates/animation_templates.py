@@ -30,7 +30,12 @@ def _sanitize_cs_string(value: str) -> str:
 
 def _sanitize_cs_identifier(value: str) -> str:
     """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+    result = re.sub(r"[^a-zA-Z0-9_]", "", value)
+    if not result:
+        return "_unnamed"
+    if result[0].isdigit():
+        result = "_" + result
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -356,7 +361,9 @@ def generate_additive_layer_script(
 
     # Configure base layer
     lines.append(f'            // Base layer: {safe_base_layer} (Override, weight=1.0)')
-    lines.append(f'            controller.layers[0].name = "{safe_base_layer}";')
+    lines.append(f"            var allLayers = controller.layers;")
+    lines.append(f'            allLayers[0].name = "{safe_base_layer}";')
+    lines.append(f"            controller.layers = allLayers;")
     lines.append("            var baseSM = controller.layers[0].stateMachine;")
     lines.append("")
 
@@ -390,8 +397,11 @@ def generate_additive_layer_script(
 
         lines.append(f"            // Additive layer: {safe_layer}")
         lines.append(f"            controller.AddLayer(\"{safe_layer}\");")
-        lines.append(f"            var layers = controller.layers;")
-        lines.append(f"            var layer_{safe_layer_id} = layers[{layer_idx + 1}];")
+        if layer_idx == 0:
+            lines.append(f"            var additiveLayers = controller.layers;")
+        else:
+            lines.append(f"            additiveLayers = controller.layers;")
+        lines.append(f"            var layer_{safe_layer_id} = additiveLayers[{layer_idx + 1}];")
         lines.append(f"            layer_{safe_layer_id}.defaultWeight = {default_weight}f;")
 
         if blend_mode == "Additive":
@@ -424,7 +434,8 @@ def generate_additive_layer_script(
             lines.append(f"                mask_{safe_layer_id}.SetHumanoidBodyPartActive((AvatarMaskBodyPart)i, true);")
 
         lines.append(f"            layer_{safe_layer_id}.avatarMask = mask_{safe_layer_id};")
-        lines.append(f"            controller.layers = layers;")
+        lines.append(f"            additiveLayers[{layer_idx + 1}] = layer_{safe_layer_id};")
+        lines.append(f"            controller.layers = additiveLayers;")
         lines.append("")
 
         # Add states to additive layer
