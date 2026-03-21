@@ -280,6 +280,148 @@ Write to `docs/GAPS_FROM_T4.md` — do NOT edit their files.
 
 ---
 
+## APPENDIX E — Additional Audit Findings & Template Bug Fixes
+
+### IMPORTANT: Additional File Scope
+These Appendix E items require you to also touch these template files (small bug fixes only):
+```
+src/veilbreakers_mcp/shared/unity_templates/game_templates.py
+src/veilbreakers_mcp/shared/unity_templates/gameplay_templates.py
+src/veilbreakers_mcp/shared/unity_templates/content_templates.py
+src/veilbreakers_mcp/shared/unity_templates/scene_templates.py
+src/veilbreakers_mcp/shared/unity_templates/prefab_templates.py
+src/veilbreakers_mcp/shared/screenshot_diff.py
+src/veilbreakers_mcp/shared/delight.py
+src/veilbreakers_mcp/shared/palette_validator.py
+blender_addon/blender_client.py
+```
+
+### G2: delight.py Module-Level ImportError Crashes MCP Server (~15 min)
+**File:** `shared/delight.py` (imported at module load by blender_server.py)
+**What:** `raise ImportError` at module level if numpy missing — crashes the ENTIRE MCP server.
+**Fix:** Wrap in try/except, set a module-level flag, and check at runtime:
+```python
+try:
+    import numpy as np
+    _HAS_NUMPY = True
+except ImportError:
+    _HAS_NUMPY = False
+
+def delight_albedo(...):
+    if not _HAS_NUMPY:
+        return {"error": "numpy required for delight operation"}
+    ...
+```
+
+### G3: palette_validator.py Same Crash (~15 min)
+**File:** `shared/palette_validator.py` (lines 21-27)
+**Same fix as G2:** Lazy import with fallback instead of hard crash.
+
+### G4: Race Condition in Lazy _connection Singleton (~30 min)
+**File:** `blender_server.py` (lines 42-58)
+**What:** Lazy `_connection` singleton has no threading lock. Concurrent MCP requests could create duplicate connections.
+**Fix:** Add `threading.Lock()` around the connection initialization.
+
+### G5: Unhandled JSONDecodeError on Malformed Blender Response (~15 min)
+**File:** `blender_addon/blender_client.py` (line 96)
+**What:** `json.loads()` on TCP response from Blender — no try/except for malformed JSON.
+**Fix:** Wrap in try/except JSONDecodeError, return structured error response.
+
+### G6: Double controller.Move() in Character Controller (~15 min)
+**File:** `game_templates.py`
+**What:** Character controller template calls `controller.Move()` twice per frame (horizontal movement applied twice).
+**Fix:** Remove the duplicate `controller.Move()` call. Keep only the one that combines horizontal + vertical movement.
+
+### G7: ReDoS Risk in Prefab Regex Selector (~30 min)
+**File:** `prefab_templates.py`
+**What:** User-provided regex passed directly to `new Regex()` in generated C# — catastrophic backtracking possible.
+**Fix:** Add `RegexOptions.None` with a timeout: `new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(1))`. Also sanitize the pattern in the Python template to reject known-dangerous patterns.
+
+### G10: UV Padding Default Too Low (~5 min)
+**File:** `blender_server.py` (line ~510)
+**What:** UV padding default is 2px. AAA needs 4-8px minimum at 1024+ for mipmap safety.
+**Fix:** Change `padding: int = 2` to `padding: int = 4`. Add a note in the param description.
+
+### G11: screenshot_diff.py Pixel-by-Pixel Loop (~2h)
+**File:** `shared/screenshot_diff.py` (lines 62-68, 141-153)
+**What:** Python loop iterating every pixel — 100ms per 1080p image. Should be instant.
+**Fix:** Replace with numpy array operations: `diff = np.abs(img1.astype(float) - img2.astype(float))`, threshold with `np.where()`.
+
+### G12: texture_ops Wear Map Nested Loops (~2h)
+**File:** `shared/texture_ops.py` (lines 617-636)
+**What:** `_render_wear_numpy()` has nested Python loops for wear map — 1.75s per call despite "numpy" in the name.
+**Fix:** Replace inner loops with vectorized numpy operations (distance maps, threshold arrays, blending via `np.where`).
+
+### G9: MikkTSpace Tangent Basis for Normal Map Baking (~2h)
+**File:** `shared/texture_ops.py` or relevant bake handler
+**What:** No MikkTSpace tangent basis option for normal map baking. Unity expects MikkTSpace tangents.
+**Fix:** When baking normal maps, ensure tangent space matches Unity's MikkTSpace convention. Add a `tangent_space` parameter defaulting to `"mikktspace"`.
+
+### FIX: NavMeshBuildSource Struct-Copy Bug (~15 min)
+**File:** `scene_templates.py`
+**What:** NavMeshBuildSource is a struct — modifying a copy from a list doesn't modify the original. The generated C# modifies a local copy that gets discarded.
+**Fix:** Store the struct in a local variable, modify it, then assign back: `var src = sources[i]; src.shape = ...; sources[i] = src;`
+
+### FIX: Behavior Tree Leaf Nodes Are Stubs (~4h)
+**File:** `gameplay_templates.py`
+**What:** Behavior tree leaf nodes always return `Running` — they never complete. Tree will hang.
+**Fix:** Implement real leaf node logic:
+- `MoveToTarget`: return `Success` when within range, `Running` while moving, `Failure` if unreachable
+- `Attack`: return `Success` when attack completes, `Running` during animation
+- `Wait`: return `Success` after duration, `Running` during wait
+- `CheckHealth`: return `Success` if above threshold, `Failure` if below
+
+### FIX: Content Templates — Quest Gating + Crafting Order (~2h)
+**File:** `content_templates.py`
+**What:** (1) Quest gating ignored — all quests always available regardless of prerequisites. (2) Crafting system consumes materials BEFORE checking success — failed craft loses mats.
+**Fix:**
+- Quest: add prerequisite check before `StartQuest()` — check `completedQuests.Contains(prereqId)`
+- Crafting: check success FIRST (roll against success rate), THEN consume materials only if successful. Move the `RemoveItem()` calls after the success check.
+
+### FIX: WCAG Silently Skips Missing Backgrounds (~1h)
+**File:** `shared/wcag_checker.py`
+**What:** Elements with missing background colors are silently skipped instead of flagged.
+**Fix:** When background color is missing, add a warning to the results: `"Warning: element '{name}' has no background color — contrast cannot be verified"`. Don't skip the element entirely.
+
+### FIX: USS Theme Drift from ThemeManager.cs (~2h)
+**File:** `shared/unity_templates/ui_templates.py`
+**What:** Generated USS uses hardcoded hex color values instead of CSS custom properties that match the VB project's `ThemeManager.cs`.
+**Fix:** Replace hardcoded colors with CSS custom properties:
+- `color: #2a2a2a` → `color: var(--vb-bg-primary)`
+- `color: #c0a060` → `color: var(--vb-accent-gold)`
+- Define the custom property mapping at the top of generated USS
+
+### UPGRADE: Scatter Vegetation Improvements (~4h)
+**File:** `blender_addon/handlers/environment.py`
+**What:** Audit Section 4 notes no moisture map support, no terrain-normal tilt filtering, no biome-edge blending.
+**Add:**
+- Tilt filtering: reject scatter points where terrain normal angle > configurable threshold (default 45°, prevents trees on cliffs)
+- Moisture map: accept optional moisture heightmap, use it to vary vegetation type (dry=grass, wet=ferns, etc.)
+- Biome blending: at biome boundaries, randomly mix both biomes' vegetation within a transition zone
+
+### UPGRADE: Dungeon Generation Improvements (~4h)
+**File:** `blender_addon/handlers/worldbuilding.py`
+**What:** Audit Section 4 notes no T-junction cleanup, no room-type specialization, no height variation.
+**Add:**
+- T-junction cleanup: detect where 3 corridors meet at a wall and clean up the intersection geometry
+- Room types: `room_type` field on generated rooms — `"normal"`, `"boss"`, `"treasure"`, `"entrance"`, `"secret"`. Boss rooms are 2x size, treasure rooms are smaller
+- Height variation: rooms can be at different Y levels, connected by stairs/ramps in corridors
+
+### UPGRADE: Mesh LOD Silhouette Preservation (~2h)
+**File:** `blender_addon/handlers/environment.py` or mesh handler
+**What:** LOD generation uses uniform decimation — no silhouette preservation. Characters become blobby at distance.
+**Fix:** When generating LODs, use Blender's `DECIMATE` modifier with `use_symmetry=True` and protect boundary edges. Add `protect_boundary` option that marks silhouette-important edges (character outline) and prevents their collapse.
+
+### P4-I11: API Documentation Generation (~4h)
+**What:** No generated API docs exist. Was in original Phase 4 plan but was accidentally dropped.
+**How:**
+- Add `mkdocs` + `mkdocs-material` to dev dependencies
+- Create `mkdocs.yml` at repo root with basic config
+- Create `docs/api/` with auto-generated content from docstrings
+- Not a full docs site — just enough to make the 37 tools browsable
+
+---
+
 ## Quality Bar
 - Token reduction must be measurable (document before/after counts)
 - defusedxml must be a real dependency that installs
@@ -290,5 +432,17 @@ Write to `docs/GAPS_FROM_T4.md` — do NOT edit their files.
 - All shader pragmas produce valid URP shaders
 - pyproject.toml version = "3.1.0"
 - Legacy directories removed (if safe)
+- No module-level ImportError crashes (G2, G3)
+- No race conditions in singleton init (G4)
+- No unhandled JSONDecodeError (G5)
+- No double controller.Move() (G6)
+- No ReDoS-vulnerable regex (G7)
+- UV padding default ≥ 4px
+- screenshot_diff uses numpy, not pixel loops
+- texture_ops wear map uses numpy, not nested loops
+- NavMesh struct-copy bug fixed
+- Behavior tree leaves return proper status codes
+- Quest gating enforced, crafting doesn't lose mats on failure
+- WCAG flags missing backgrounds instead of skipping
 - All new code has tests
 - All tests pass after every commit

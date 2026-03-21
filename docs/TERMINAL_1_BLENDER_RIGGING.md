@@ -203,11 +203,41 @@ Write to `docs/GAPS_FROM_T1.md` — do NOT edit their files.
 
 ---
 
+## APPENDIX E — Additional Audit Findings (Originally Missing)
+
+### G8: Dragon Template Wing Membrane Bones
+**File:** `rig_templates.py` (DRAGON_BONES or bird template)
+**What:** Dragon/bird template missing wing membrane "finger" bones (3-5 per wing) needed for membrane skinning.
+**How:** Add 3-5 bones fanning out from the wing wrist, named `wing_finger_1.L/R` through `wing_finger_5.L/R`. These allow the wing membrane mesh to deform properly when the wing folds/unfolds.
+
+### UPGRADE: Rig Validation Enhancements
+**File:** `rig_validation.py`
+**What:** Current validation only checks naming conventions. Missing critical checks.
+**Add these validation checks:**
+- Zero-weight bone detection (bones that influence no vertices)
+- Influence limit verification (flag vertices with >4 influences)
+- Symmetry validation (L/R bone count mismatch, position asymmetry)
+- Bone roll verification (flag bones with default 0 roll that should have been set)
+- Twist bone presence check (flag limbs without twist bones)
+
+### UPGRADE: Humanoid Template Completeness
+**What:** Audit Section 5 notes humanoid template is missing shoulder bones, finger bones (5 per hand), toe bones.
+**How:** Add these bone chains to the humanoid template:
+- Shoulder bones: `clavicle.L/R` between spine.003 and upper_arm
+- Finger bones: `thumb_01-03`, `index_01-03`, `middle_01-03`, `ring_01-03`, `pinky_01-03` per hand
+- Toe bones: `toe_01-02` per foot (big toe + small toes)
+- These are required for Unity Humanoid full-body mapping
+
+---
+
 ## Quality Bar
 - Twist bones: 180° forearm rotation = no candy-wrapper
 - Spring bones: visible secondary motion when parent moves
 - Bone rolls: Unity Humanoid auto-maps without errors
 - Weight limit: no vertex exceeds 4 influences
 - Facial rig: all 17 FACS AUs and 15 visemes functional
+- Dragon wings: membrane bones allow proper wing deformation
+- Humanoid: fingers, toes, clavicles all present
+- Rig validation catches all common deformation issues
 - All new handler functions have tests
 - All tests pass after every commit
