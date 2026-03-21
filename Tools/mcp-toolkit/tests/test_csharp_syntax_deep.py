@@ -296,6 +296,18 @@ from veilbreakers_mcp.shared.unity_templates.qa_templates import (
     generate_live_inspector_script,
 )
 
+# ---------------------------------------------------------------------------
+# build_templates.py generators (Phase 17 -- Build & Deploy Pipeline)
+# ---------------------------------------------------------------------------
+from veilbreakers_mcp.shared.unity_templates.build_templates import (
+    generate_multi_platform_build_script,
+    generate_addressables_config_script,
+    generate_platform_config_script,
+    generate_shader_stripping_script,
+    generate_version_management_script,
+    generate_changelog,
+)
+
 
 # ===================================================================
 # Build a list of (name, callable, is_csharp) for every generator
@@ -809,6 +821,32 @@ ALL_GENERATORS: list[tuple[str, callable, str]] = [
     ("qa/analytics_events", lambda: generate_analytics_script(event_names=["custom_event", "boss_killed"]), "cs"),
     ("qa/live_inspector_default", lambda: generate_live_inspector_script(), "cs"),
     ("qa/live_inspector_custom", lambda: generate_live_inspector_script(update_interval_frames=30, max_tracked_objects=50), "cs"),
+
+    # --- build & deploy (Phase 17) ---
+    ("build/multi_platform_default", lambda: generate_multi_platform_build_script(), "cs"),
+    ("build/multi_platform_dev", lambda: generate_multi_platform_build_script(development=True), "cs"),
+    ("build/multi_platform_custom", lambda: generate_multi_platform_build_script(platforms=[{"name": "Win", "target": "StandaloneWindows64", "group": "Standalone", "backend": "IL2CPP", "extension": ".exe"}]), "cs"),
+    ("build/multi_platform_ns", lambda: generate_multi_platform_build_script(namespace="VB.Build"), "cs"),
+    ("build/addressables_default", lambda: generate_addressables_config_script(), "cs"),
+    ("build/addressables_remote", lambda: generate_addressables_config_script(build_remote=True), "cs"),
+    ("build/addressables_custom", lambda: generate_addressables_config_script(groups=[{"name": "MyGroup", "packing": "PackTogether", "local": False}]), "cs"),
+    ("build/addressables_ns", lambda: generate_addressables_config_script(namespace="VB.Build"), "cs"),
+    ("build/platform_android", lambda: generate_platform_config_script(platform="android"), "cs"),
+    ("build/platform_android_perms", lambda: generate_platform_config_script(platform="android", permissions=["android.permission.CAMERA"]), "cs"),
+    ("build/platform_ios", lambda: generate_platform_config_script(platform="ios"), "cs"),
+    ("build/platform_ios_entries", lambda: generate_platform_config_script(platform="ios", plist_entries=[{"key": "NSCameraUsageDescription", "value": "AR", "type": "string"}]), "cs"),
+    ("build/platform_webgl", lambda: generate_platform_config_script(platform="webgl"), "cs"),
+    ("build/platform_webgl_512", lambda: generate_platform_config_script(platform="webgl", webgl_memory_mb=512), "cs"),
+    ("build/shader_strip_default", lambda: generate_shader_stripping_script(), "cs"),
+    ("build/shader_strip_custom", lambda: generate_shader_stripping_script(keywords_to_strip=["FOG_LINEAR", "_SHADOWS_SOFT"]), "cs"),
+    ("build/shader_strip_nolog", lambda: generate_shader_stripping_script(log_stripping=False), "cs"),
+    ("build/shader_strip_ns", lambda: generate_shader_stripping_script(namespace="VB.Build"), "cs"),
+    ("build/version_default", lambda: generate_version_management_script(), "cs"),
+    ("build/version_major", lambda: generate_version_management_script(auto_increment="major"), "cs"),
+    ("build/version_no_android", lambda: generate_version_management_script(update_android=False), "cs"),
+    ("build/version_ns", lambda: generate_version_management_script(namespace="VB.Build"), "cs"),
+    ("build/changelog_default", lambda: generate_changelog(), "cs"),
+    ("build/changelog_custom", lambda: generate_changelog(project_name="MyGame", version="2.0.0"), "cs"),
 ]
 
 # Also test the non-C# generators separately for their own validity
