@@ -28,8 +28,14 @@ class TestElevenLabsAudioClientStubMode:
         assert client.stub_mode is True
 
     def test_stub_mode_when_none_key(self):
-        client = ElevenLabsAudioClient(api_key=None)
-        assert client.stub_mode is True
+        import os
+        old_val = os.environ.pop("ELEVENLABS_API_KEY", None)
+        try:
+            client = ElevenLabsAudioClient(api_key=None)
+            assert client.stub_mode is True
+        finally:
+            if old_val is not None:
+                os.environ["ELEVENLABS_API_KEY"] = old_val
 
     def test_not_stub_mode_with_key(self):
         client = ElevenLabsAudioClient(api_key="test-key-123")

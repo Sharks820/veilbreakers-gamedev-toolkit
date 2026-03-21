@@ -62,12 +62,18 @@ class TestGeminiReviewClientStubMode:
         assert "no API key" in result["summary"].lower() or "unavailable" in result["summary"].lower()
 
     def test_none_api_key_is_stub_mode(self):
-        client = GeminiReviewClient(api_key=None)
-        result = client.review_screenshot(
-            image_path="fake/path.png",
-            prompt="Review this screenshot",
-        )
-        assert result["quality_score"] == 0.0
+        import os
+        old_val = os.environ.pop("GEMINI_API_KEY", None)
+        try:
+            client = GeminiReviewClient(api_key=None)
+            result = client.review_screenshot(
+                image_path="fake/path.png",
+                prompt="Review this screenshot",
+            )
+            assert result["quality_score"] == 0.0
+        finally:
+            if old_val is not None:
+                os.environ["GEMINI_API_KEY"] = old_val
 
     def test_default_api_key_is_stub_mode(self):
         """When no api_key arg given and no env var, should be stub mode."""
