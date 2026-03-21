@@ -18,24 +18,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    result = re.sub(r"[^a-zA-Z0-9_]", "", value)
-    if not result:
-        return "_unnamed"
-    if result[0].isdigit():
-        result = "_" + result
-    return result
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -100,8 +83,8 @@ def generate_blend_tree_script(
             f"Unknown blend_type: {blend_type!r}. Valid: {valid_types}"
         )
 
-    safe_name = _sanitize_cs_identifier(controller_name.replace(" ", "_").replace("-", "_"))
-    safe_name_str = _sanitize_cs_string(controller_name)
+    safe_name = sanitize_cs_identifier(controller_name.replace(" ", "_").replace("-", "_"))
+    safe_name_str = sanitize_cs_string(controller_name)
 
     if motion_clips is None:
         motion_clips = {}
@@ -153,28 +136,28 @@ def generate_blend_tree_script(
                 sname = state.get("name", f"State_{i}")
                 clip_path = motion_clips.get(sname, state.get("motion_path", ""))
                 pos = positions[i] if i < len(positions) else {"x": 0.0, "y": 0.0}
-                safe_sname = _sanitize_cs_identifier(sname)
+                safe_sname = sanitize_cs_identifier(sname)
                 if clip_path:
-                    lines.append(f'            var clip_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{_sanitize_cs_string(clip_path)}");')
+                    lines.append(f'            var clip_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(clip_path)}");')
                     lines.append(f"            if (clip_{safe_sname} != null)")
                     lines.append(f"                blendTree.AddChild(clip_{safe_sname}, new Vector2({pos['x']}f, {pos['y']}f));")
                     lines.append(f"            else")
-                    lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{_sanitize_cs_string(sname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
+                    lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(sname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
                 else:
-                    lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{_sanitize_cs_string(sname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
+                    lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(sname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
         else:
             for pos in positions:
                 pname = pos["name"]
                 clip_path = motion_clips.get(pname, "")
-                safe_pname = _sanitize_cs_identifier(pname)
+                safe_pname = sanitize_cs_identifier(pname)
                 if clip_path:
-                    lines.append(f'            var clip_{safe_pname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{_sanitize_cs_string(clip_path)}");')
+                    lines.append(f'            var clip_{safe_pname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(clip_path)}");')
                     lines.append(f"            if (clip_{safe_pname} != null)")
                     lines.append(f"                blendTree.AddChild(clip_{safe_pname}, new Vector2({pos['x']}f, {pos['y']}f));")
                     lines.append(f"            else")
-                    lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{_sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
+                    lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
                 else:
-                    lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{_sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
+                    lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
 
     elif blend_type == "speed_blend":
         lines.append('            controller.AddParameter("speed", AnimatorControllerParameterType.Float);')
@@ -192,28 +175,28 @@ def generate_blend_tree_script(
                 sname = state.get("name", f"Speed_{i}")
                 clip_path = motion_clips.get(sname, state.get("motion_path", ""))
                 thresh = thresholds[i]["threshold"] if i < len(thresholds) else float(i)
-                safe_sname = _sanitize_cs_identifier(sname)
+                safe_sname = sanitize_cs_identifier(sname)
                 if clip_path:
-                    lines.append(f'            var clip_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{_sanitize_cs_string(clip_path)}");')
+                    lines.append(f'            var clip_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(clip_path)}");')
                     lines.append(f"            if (clip_{safe_sname} != null)")
                     lines.append(f"                blendTree.AddChild(clip_{safe_sname}, {thresh}f);")
                     lines.append(f"            else")
-                    lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{_sanitize_cs_string(sname)}" }}, {thresh}f);')
+                    lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(sname)}" }}, {thresh}f);')
                 else:
-                    lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{_sanitize_cs_string(sname)}" }}, {thresh}f);')
+                    lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(sname)}" }}, {thresh}f);')
         else:
             for t in thresholds:
                 tname = t["name"]
                 clip_path = motion_clips.get(tname, "")
-                safe_tname = _sanitize_cs_identifier(tname)
+                safe_tname = sanitize_cs_identifier(tname)
                 if clip_path:
-                    lines.append(f'            var clip_{safe_tname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{_sanitize_cs_string(clip_path)}");')
+                    lines.append(f'            var clip_{safe_tname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(clip_path)}");')
                     lines.append(f"            if (clip_{safe_tname} != null)")
                     lines.append(f'                blendTree.AddChild(clip_{safe_tname}, {t["threshold"]}f);')
                     lines.append(f"            else")
-                    lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{_sanitize_cs_string(tname)}" }}, {t["threshold"]}f);')
+                    lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(tname)}" }}, {t["threshold"]}f);')
                 else:
-                    lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{_sanitize_cs_string(tname)}" }}, {t["threshold"]}f);')
+                    lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(tname)}" }}, {t["threshold"]}f);')
 
     elif blend_type == "directional_speed":
         lines.append('            controller.AddParameter("moveX", AnimatorControllerParameterType.Float);')
@@ -232,15 +215,15 @@ def generate_blend_tree_script(
         for pos in _DIRECTIONAL_8WAY_POSITIONS:
             pname = pos["name"]
             clip_path = motion_clips.get(pname, "")
-            safe_pname = _sanitize_cs_identifier(pname)
+            safe_pname = sanitize_cs_identifier(pname)
             if clip_path:
-                lines.append(f'            var clip_{safe_pname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{_sanitize_cs_string(clip_path)}");')
+                lines.append(f'            var clip_{safe_pname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(clip_path)}");')
                 lines.append(f"            if (clip_{safe_pname} != null)")
                 lines.append(f"                blendTree.AddChild(clip_{safe_pname}, new Vector2({pos['x']}f, {pos['y']}f));")
                 lines.append(f"            else")
-                lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{_sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
+                lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
             else:
-                lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{_sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
+                lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
 
     lines.append("")
     lines.append("            AssetDatabase.SaveAssets();")
@@ -329,9 +312,9 @@ def generate_additive_layer_script(
             {"name": "Run"},
         ]
 
-    safe_name = _sanitize_cs_identifier(controller_name.replace(" ", "_").replace("-", "_"))
-    safe_name_str = _sanitize_cs_string(controller_name)
-    safe_base_layer = _sanitize_cs_string(base_layer_name)
+    safe_name = sanitize_cs_identifier(controller_name.replace(" ", "_").replace("-", "_"))
+    safe_name_str = sanitize_cs_string(controller_name)
+    safe_base_layer = sanitize_cs_string(base_layer_name)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -369,12 +352,12 @@ def generate_additive_layer_script(
 
     # Add base states
     for i, state in enumerate(base_states):
-        sname = _sanitize_cs_string(state["name"])
-        safe_sname = _sanitize_cs_identifier(state["name"])
+        sname = sanitize_cs_string(state["name"])
+        safe_sname = sanitize_cs_identifier(state["name"])
         motion_path = state.get("motion_path", "")
         lines.append(f'            var baseState_{safe_sname} = baseSM.AddState("{sname}");')
         if motion_path:
-            lines.append(f'            var baseClip_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{_sanitize_cs_string(motion_path)}");')
+            lines.append(f'            var baseClip_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(motion_path)}");')
             lines.append(f"            if (baseClip_{safe_sname} != null) baseState_{safe_sname}.motion = baseClip_{safe_sname};")
 
     lines.append("")
@@ -382,14 +365,14 @@ def generate_additive_layer_script(
     # Add weight parameters for additive layers
     for layer in additive_layers:
         weight_param = layer.get("weight_param", f"{layer['name']}Weight")
-        lines.append(f'            controller.AddParameter("{_sanitize_cs_string(weight_param)}", AnimatorControllerParameterType.Float);')
+        lines.append(f'            controller.AddParameter("{sanitize_cs_string(weight_param)}", AnimatorControllerParameterType.Float);')
     lines.append("")
 
     # Add additive layers
     for layer_idx, layer in enumerate(additive_layers):
         layer_name = layer["name"]
-        safe_layer = _sanitize_cs_string(layer_name)
-        safe_layer_id = _sanitize_cs_identifier(layer_name)
+        safe_layer = sanitize_cs_string(layer_name)
+        safe_layer_id = sanitize_cs_identifier(layer_name)
         blend_mode = layer.get("blend_mode", "Additive")
         default_weight = layer.get("default_weight", 0.0)
         mask_type = layer.get("avatar_mask", "full_body")
@@ -441,12 +424,12 @@ def generate_additive_layer_script(
         # Add states to additive layer
         lines.append(f"            var sm_{safe_layer_id} = controller.layers[{layer_idx + 1}].stateMachine;")
         for si, state in enumerate(layer_states):
-            sname = _sanitize_cs_string(state["name"])
-            safe_sname = _sanitize_cs_identifier(state["name"])
+            sname = sanitize_cs_string(state["name"])
+            safe_sname = sanitize_cs_identifier(state["name"])
             lines.append(f'            var state_{safe_layer_id}_{safe_sname} = sm_{safe_layer_id}.AddState("{sname}");')
             mpath = state.get("motion_path", "")
             if mpath:
-                lines.append(f'            var clip_{safe_layer_id}_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{_sanitize_cs_string(mpath)}");')
+                lines.append(f'            var clip_{safe_layer_id}_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(mpath)}");')
                 lines.append(f"            if (clip_{safe_layer_id}_{safe_sname} != null) state_{safe_layer_id}_{safe_sname}.motion = clip_{safe_layer_id}_{safe_sname};")
             if state.get("is_default", False):
                 lines.append(f"            sm_{safe_layer_id}.defaultState = state_{safe_layer_id}_{safe_sname};")

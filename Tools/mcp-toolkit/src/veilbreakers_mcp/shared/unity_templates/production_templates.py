@@ -18,28 +18,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    result = re.sub(r"[^a-zA-Z0-9_]", "", value)
-    if not result:
-        return "Default"
-    if result[0].isdigit():
-        result = "_" + result
-    return result
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -267,10 +246,10 @@ def generate_compile_recovery_script(
     if watch_assemblies is None:
         watch_assemblies = []
 
-    safe_log_path = _sanitize_cs_string(log_path)
+    safe_log_path = sanitize_cs_string(log_path)
     assembly_filter = ""
     if watch_assemblies:
-        entries = ", ".join(f'"{_sanitize_cs_string(a)}"' for a in watch_assemblies)
+        entries = ", ".join(f'"{sanitize_cs_string(a)}"' for a in watch_assemblies)
         assembly_filter = f"new HashSet<string> {{ {entries} }}"
     else:
         assembly_filter = "null"
@@ -735,9 +714,9 @@ def generate_conflict_detector_script(
     if ignore_patterns is None:
         ignore_patterns = [r".*\/Editor\/.*Test.*", r".*\.meta$"]
 
-    safe_ns = _sanitize_cs_identifier(namespace_prefix)
-    paths_cs = ", ".join(f'"{_sanitize_cs_string(p)}"' for p in scan_paths)
-    ignores_cs = ", ".join(f'@"{_sanitize_cs_string(p)}"' for p in ignore_patterns)
+    safe_ns = sanitize_cs_identifier(namespace_prefix)
+    paths_cs = ", ".join(f'"{sanitize_cs_string(p)}"' for p in scan_paths)
+    ignores_cs = ", ".join(f'@"{sanitize_cs_string(p)}"' for p in ignore_patterns)
 
     script = f'''using UnityEngine;
 using UnityEditor;
@@ -1149,7 +1128,7 @@ def generate_pipeline_orchestrator_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = _sanitize_cs_identifier(pipeline_name)
+    safe_name = sanitize_cs_identifier(pipeline_name)
     if on_failure not in ("stop", "continue", "retry"):
         on_failure = "stop"
 
@@ -1164,9 +1143,9 @@ def generate_pipeline_orchestrator_script(
 
     step_entries = []
     for i, step in enumerate(steps):
-        s_name = _sanitize_cs_string(step.get("name", f"step_{i}"))
-        s_tool = _sanitize_cs_string(step.get("tool", "unknown"))
-        s_action = _sanitize_cs_string(step.get("action", "unknown"))
+        s_name = sanitize_cs_string(step.get("name", f"step_{i}"))
+        s_tool = sanitize_cs_string(step.get("tool", "unknown"))
+        s_action = sanitize_cs_string(step.get("action", "unknown"))
         s_timeout = step.get("timeout", 30)
         step_entries.append(
             f'            new PipelineStep {{ Name = "{s_name}", Tool = "{s_tool}", '
@@ -1186,7 +1165,7 @@ def generate_pipeline_orchestrator_script(
                 f'Timeout = {s["timeout"]}, Status = StepStatus.Pending }}'
             )
         steps_code = ",\n".join(p_steps)
-        desc = _sanitize_cs_string(pdef["description"])
+        desc = sanitize_cs_string(pdef["description"])
         builtin_entries.append(
             f'        builtInPipelines["{pname}"] = new PipelineDefinition {{\n'
             f'            Name = "{pname}",\n'
@@ -1631,7 +1610,7 @@ def generate_art_style_validator_script(
     # Build palette entries for C# array initialization
     palette_entries = []
     for pc in palette_colors:
-        name = _sanitize_cs_string(pc.get("name", "unnamed"))
+        name = sanitize_cs_string(pc.get("name", "unnamed"))
         hsv = pc.get("hsv", [0, 0, 0.5])
         tol = pc.get("tolerance", 25)
         palette_entries.append(
@@ -1642,7 +1621,7 @@ def generate_art_style_validator_script(
     palette_init = ",\n".join(palette_entries)
 
     r_min, r_max = roughness_range
-    safe_naming = _sanitize_cs_string(naming_pattern)
+    safe_naming = sanitize_cs_string(naming_pattern)
 
     script = f'''using UnityEngine;
 using UnityEditor;
@@ -1943,8 +1922,8 @@ def generate_build_smoke_test_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_build_path = _sanitize_cs_string(build_path)
-    safe_scene = _sanitize_cs_string(scene_to_load)
+    safe_build_path = sanitize_cs_string(build_path)
+    safe_scene = sanitize_cs_string(scene_to_load)
 
     script = f'''using UnityEngine;
 using UnityEditor;

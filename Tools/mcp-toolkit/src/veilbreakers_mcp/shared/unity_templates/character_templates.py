@@ -14,23 +14,7 @@ from __future__ import annotations
 
 import re
 
-# ---------------------------------------------------------------------------
-# Sanitization helpers (local copies per codebase convention)
-# ---------------------------------------------------------------------------
-
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 _URP_CORE_INCLUDE = '#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"'
@@ -158,8 +142,8 @@ def generate_cloth_setup_script(
     Returns:
         Complete C# source string for editor script.
     """
-    safe_name = _sanitize_cs_identifier(mesh_name) or "CharacterCloth"
-    safe_type = _sanitize_cs_string(cloth_type)
+    safe_name = sanitize_cs_identifier(mesh_name) or "CharacterCloth"
+    safe_type = sanitize_cs_string(cloth_type)
 
     preset = _CLOTH_PRESETS.get(cloth_type, _CLOTH_PRESETS["cape"])
 
@@ -184,7 +168,7 @@ def generate_cloth_setup_script(
         sphere_lines.append("            // Setup collision spheres")
         sphere_lines.append("            var spherePairs = new System.Collections.Generic.List<ClothSphereColliderPair>();")
         for i, sphere in enumerate(collision_spheres):
-            t_name = _sanitize_cs_string(sphere.get("transform_name", "Hips"))
+            t_name = sanitize_cs_string(sphere.get("transform_name", "Hips"))
             radius = sphere.get("radius", 0.1)
             sphere_lines.append(f'            var sphere{i}Obj = GameObject.Find("{t_name}");')
             sphere_lines.append(f"            if (sphere{i}Obj != null)")
@@ -209,11 +193,11 @@ public static class VeilBreakers_ClothSetup_{safe_name}
     {{
         try
         {{
-            var target = GameObject.Find("{_sanitize_cs_string(mesh_name)}");
+            var target = GameObject.Find("{sanitize_cs_string(mesh_name)}");
             if (target == null)
             {{
-                Debug.LogError("[VeilBreakers] Cannot find GameObject: {_sanitize_cs_string(mesh_name)}");
-                string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"cloth_setup\\", \\"message\\": \\"GameObject not found: {_sanitize_cs_string(mesh_name)}\\"}}";
+                Debug.LogError("[VeilBreakers] Cannot find GameObject: {sanitize_cs_string(mesh_name)}");
+                string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"cloth_setup\\", \\"message\\": \\"GameObject not found: {sanitize_cs_string(mesh_name)}\\"}}";
                 File.WriteAllText("Temp/vb_result.json", json);
                 return;
             }}
@@ -221,7 +205,7 @@ public static class VeilBreakers_ClothSetup_{safe_name}
             var smr = target.GetComponent<SkinnedMeshRenderer>();
             if (smr == null)
             {{
-                Debug.LogError("[VeilBreakers] No SkinnedMeshRenderer on: {_sanitize_cs_string(mesh_name)}");
+                Debug.LogError("[VeilBreakers] No SkinnedMeshRenderer on: {sanitize_cs_string(mesh_name)}");
                 string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"cloth_setup\\", \\"message\\": \\"No SkinnedMeshRenderer on target\\"}}";
                 File.WriteAllText("Temp/vb_result.json", json);
                 return;
@@ -291,9 +275,9 @@ public static class VeilBreakers_ClothSetup_{safe_name}
             }}
 
             EditorUtility.SetDirty(target);
-            string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"cloth_setup\\", \\"cloth_type\\": \\"{safe_type}\\", \\"mesh_name\\": \\"{_sanitize_cs_string(mesh_name)}\\", \\"stretching_stiffness\\": {stretch_val}, \\"damping\\": {damp_val}}}";
+            string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"cloth_setup\\", \\"cloth_type\\": \\"{safe_type}\\", \\"mesh_name\\": \\"{sanitize_cs_string(mesh_name)}\\", \\"stretching_stiffness\\": {stretch_val}, \\"damping\\": {damp_val}}}";
             File.WriteAllText("Temp/vb_result.json", resultJson);
-            Debug.Log("[VeilBreakers] Cloth configured on {_sanitize_cs_string(mesh_name)} (type: {safe_type})");
+            Debug.Log("[VeilBreakers] Cloth configured on {sanitize_cs_string(mesh_name)} (type: {safe_type})");
         }}
         catch (System.Exception ex)
         {{
@@ -785,8 +769,8 @@ def generate_micro_detail_normal_script(
     Returns:
         Complete C# source string for runtime component.
     """
-    safe_base = _sanitize_cs_string(base_normal_property)
-    safe_detail = _sanitize_cs_string(detail_normal_property)
+    safe_base = sanitize_cs_string(base_normal_property)
+    safe_detail = sanitize_cs_string(detail_normal_property)
 
     return f'''using UnityEngine;
 #if UNITY_EDITOR

@@ -17,24 +17,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    result = re.sub(r"[^a-zA-Z0-9_]", "", value)
-    if not result:
-        return "_unnamed"
-    if result[0].isdigit():
-        result = "_" + result
-    return result
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -195,9 +178,9 @@ def generate_cinematic_script(
             f"Invalid shots: {'; '.join(validation['errors'])}"
         )
 
-    safe_name = _sanitize_cs_identifier(sequence_name.replace(" ", "_").replace("-", "_"))
-    safe_name_str = _sanitize_cs_string(sequence_name)
-    safe_path = _sanitize_cs_string(output_path)
+    safe_name = sanitize_cs_identifier(sequence_name.replace(" ", "_").replace("-", "_"))
+    safe_name_str = sanitize_cs_string(sequence_name)
+    safe_path = sanitize_cs_string(output_path)
     total_duration = validation["total_duration"]
 
     # Compute cumulative shot start times
@@ -265,14 +248,14 @@ def generate_cinematic_script(
 
     for i, shot in enumerate(shots):
         sname = shot.get("name", f"Shot_{i}")
-        safe_sname = _sanitize_cs_identifier(sname)
+        safe_sname = sanitize_cs_identifier(sname)
         cam_pos = shot["camera_position"]
         cam_tgt = shot["camera_target"]
         dur = shot.get("duration", 1.0)
         transition = shot.get("transition", "cut")
         start_time = shot_starts[i]
 
-        lines.append(f"{indent}            // Shot {i + 1}: {_sanitize_cs_string(sname)}")
+        lines.append(f"{indent}            // Shot {i + 1}: {sanitize_cs_string(sname)}")
         lines.append(f'{indent}            GameObject cam_{safe_sname} = new GameObject("VCam_{safe_sname}");')
         lines.append(f"{indent}            cam_{safe_sname}.transform.SetParent(cinemaRoot.transform);")
         lines.append(f"{indent}            cam_{safe_sname}.transform.position = new Vector3({cam_pos[0]}f, {cam_pos[1]}f, {cam_pos[2]}f);")
@@ -295,7 +278,7 @@ def generate_cinematic_script(
             blend_in = 0.3
 
         lines.append(f"{indent}            var clip_{safe_sname} = cameraTrack.CreateDefaultClip();")
-        lines.append(f"{indent}            clip_{safe_sname}.displayName = \"{_sanitize_cs_string(sname)}\";")
+        lines.append(f"{indent}            clip_{safe_sname}.displayName = \"{sanitize_cs_string(sname)}\";")
         lines.append(f"{indent}            clip_{safe_sname}.start = {start_time}d;")
         lines.append(f"{indent}            clip_{safe_sname}.duration = {dur}d;")
         if blend_in > 0:
@@ -312,11 +295,11 @@ def generate_cinematic_script(
     lines.append(f'{indent}            var markerTrack = timeline.CreateTrack<ActivationTrack>(null, "Shot Markers");')
     for i, shot in enumerate(shots):
         sname = shot.get("name", f"Shot_{i}")
-        safe_sname = _sanitize_cs_identifier(sname)
+        safe_sname = sanitize_cs_identifier(sname)
         start_time = shot_starts[i]
         dur = shot.get("duration", 1.0)
         lines.append(f"{indent}            var marker_{safe_sname} = markerTrack.CreateDefaultClip();")
-        lines.append(f'{indent}            marker_{safe_sname}.displayName = "Shot: {_sanitize_cs_string(sname)}";')
+        lines.append(f'{indent}            marker_{safe_sname}.displayName = "Shot: {sanitize_cs_string(sname)}";')
         lines.append(f"{indent}            marker_{safe_sname}.start = {start_time}d;")
         lines.append(f"{indent}            marker_{safe_sname}.duration = {dur}d;")
     lines.append("")
