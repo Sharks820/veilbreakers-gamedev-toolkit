@@ -134,12 +134,12 @@ class TestDamageNumbers:
         assert "VENOM" in result
         assert "SURGE" in result
         assert "DREAD" in result
-        assert "BLAZE" in result
+        assert "SAVAGE" in result
 
     def test_damage_numbers_all_10_brands(self):
         result = generate_damage_numbers_script("DmgNum")
-        for brand in ["IRON", "VENOM", "SURGE", "DREAD", "BLAZE",
-                       "FROST", "VOID", "HOLY", "NATURE", "SHADOW"]:
+        for brand in ["IRON", "SAVAGE", "SURGE", "VENOM", "DREAD",
+                       "LEECH", "GRACE", "MEND", "RUIN", "VOID"]:
             assert brand in result, f"Missing brand color: {brand}"
 
     def test_damage_numbers_crit_scaling(self):
@@ -667,14 +667,14 @@ class TestCharacterSelect:
 
     def test_character_select_hero_paths(self):
         _, manager, _, _ = generate_character_select_script()
-        assert "IRON" in manager
-        assert "VENOM" in manager
-        assert "SURGE" in manager
+        assert "IRONBOUND" in manager
+        assert "FANGBORN" in manager
+        assert "VOIDTOUCHED" in manager
 
-    def test_character_select_all_5_paths(self):
+    def test_character_select_all_4_paths(self):
         _, manager, _, _ = generate_character_select_script()
-        assert "DREAD" in manager
-        assert "BLAZE" in manager
+        assert "UNCHAINED" in manager
+        assert "IRONBOUND" in manager
 
     def test_character_select_carousel(self):
         _, manager, _, _ = generate_character_select_script()

@@ -96,15 +96,15 @@ def _wrap_namespace(lines: list[str], namespace: str) -> list[str]:
 
 _BRAND_COLORS = {
     "IRON": ("0.6f", "0.6f", "0.6f", "1f"),
-    "VENOM": ("0.2f", "0.8f", "0.2f", "1f"),
+    "SAVAGE": ("0.9f", "0.2f", "0.1f", "1f"),
     "SURGE": ("0.2f", "0.4f", "1f", "1f"),
+    "VENOM": ("0.2f", "0.8f", "0.2f", "1f"),
     "DREAD": ("0.6f", "0.1f", "0.9f", "1f"),
-    "BLAZE": ("1f", "0.5f", "0f", "1f"),
-    "FROST": ("0f", "0.9f", "0.9f", "1f"),
-    "VOID": ("0.3f", "0f", "0.5f", "1f"),
-    "HOLY": ("1f", "0.85f", "0f", "1f"),
-    "NATURE": ("0.13f", "0.55f", "0.13f", "1f"),
-    "SHADOW": ("0.3f", "0.3f", "0.3f", "1f"),
+    "LEECH": ("0.4f", "0.15f", "0.5f", "1f"),
+    "GRACE": ("1f", "0.85f", "0.4f", "1f"),
+    "MEND": ("0.13f", "0.7f", "0.55f", "1f"),
+    "RUIN": ("0.5f", "0.35f", "0.2f", "1f"),
+    "VOID": ("0.15f", "0f", "0.3f", "1f"),
 }
 
 
@@ -1857,7 +1857,7 @@ def generate_character_select_script(
         namespace: Optional C# namespace.
     """
     if hero_paths is None:
-        hero_paths = ["IRON", "VENOM", "SURGE", "DREAD", "BLAZE"]
+        hero_paths = ["IRONBOUND", "FANGBORN", "VOIDTOUCHED", "UNCHAINED"]
 
     # --- Hero Path Data SO ---
     so_body: list[str] = []

@@ -6468,9 +6468,12 @@ async def _handle_game_player_combat(
     light_combo_count: int, heavy_combo_count: int,
     dodge_iframe_duration: float, dodge_distance: float,
     block_stamina_drain: float, stamina_max: float,
-    stamina_regen_rate: float, ns_kwargs: dict,
+    stamina_regen_rate: float, combat_mode: str = "realtime",
+    ns_kwargs: dict = None,
 ) -> str:
     """Create player combat controller (VB-01)."""
+    if ns_kwargs is None:
+        ns_kwargs = {}
     script = generate_player_combat_script(
         light_combo_count=light_combo_count,
         heavy_combo_count=heavy_combo_count,
@@ -6479,6 +6482,7 @@ async def _handle_game_player_combat(
         block_stamina_drain=block_stamina_drain,
         stamina_max=stamina_max,
         stamina_regen_rate=stamina_regen_rate,
+        combat_mode=combat_mode,
         **ns_kwargs,
     )
     rel_path = "Assets/Scripts/Runtime/Combat/PlayerCombat.cs"
