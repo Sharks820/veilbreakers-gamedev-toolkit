@@ -390,5 +390,153 @@ Requirements for v2.0 -- closing every gap for complete Unity game development c
 
 **Categories:** EDIT (15), CODE (10), GAME (12), CAM (4), SCNE (6), DATA (4), BUILD (7), QA (8), IMP (4), UIX (4), AID (3), SHDR (4), TWO (3), PHYS (2), ACC (2), PIPE (3), MEDIA (2), ANIMA (3), AAA (6), EQUIP (8), WORLD (10), VB (10), RPG (13)
 
+## v3 Requirements
+
+Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
+
+### Mesh Integration
+
+- [ ] **MESH3-01**: Worldbuilding handlers use procedural mesh library (real furniture, props, vegetation — not primitive cubes/cones)
+- [ ] **MESH3-02**: Environment scatter uses procedural rocks, trees, mushrooms, roots instead of geometric primitives
+- [ ] **MESH3-03**: Dungeon generation places actual trap meshes, altar meshes, prison doors, torch sconces from procedural library
+- [ ] **MESH3-04**: Castle generation uses actual gate, rampart, drawbridge, fountain meshes
+- [ ] **MESH3-05**: All procedural meshes have LOD variants (high/medium/low poly) for performance budgets
+
+### Terrain Depth
+
+- [ ] **TERR-01**: Claude can generate vertical cliff face geometry (not limited to 2.5D heightmap)
+- [ ] **TERR-02**: Claude can generate cave entrance transition meshes (seamless terrain-to-cave geometry)
+- [ ] **TERR-03**: Claude can generate multi-biome terrain with smooth transitions (forest→swamp→mountain blend zones)
+- [ ] **TERR-04**: Claude can generate waterfall/cascade geometry with stepped water mesh
+- [ ] **TERR-05**: Claude can generate bridges spanning rivers/chasms (stone arch, rope, drawbridge)
+
+### Character Excellence
+
+- [ ] **CHAR-01**: Claude can validate character body proportions against game-world scale specs (hero=1.8m, boss=3-6m, NPC=1.7m)
+- [ ] **CHAR-02**: Claude can generate hair card meshes (strip-based hair cards with UV layout for alpha textures)
+- [ ] **CHAR-03**: Claude can validate face topology (detect edge loops around eyes/mouth/nose for proper deformation)
+- [ ] **CHAR-04**: Claude can perform character-aware LOD retopology (preserve face detail while reducing body/extremities)
+- [ ] **CHAR-05**: Claude can generate armor seam-hiding overlap rings at split points (neck, wrist, ankle)
+- [ ] **CHAR-06**: Claude can validate hand/foot topology (finger separation, proper edge flow for deformation)
+
+### Advanced Animation
+
+- [ ] **ANIM3-01**: Claude can configure combat animation timing (anticipation frames, active frames, recovery frames per attack type)
+- [ ] **ANIM3-02**: Claude can inject animation events at specific keyframes (hit, VFX spawn, sound trigger, footstep)
+- [ ] **ANIM3-03**: Claude can generate blend trees for directional movement and speed blending
+- [ ] **ANIM3-04**: Claude can create additive animation layers (damage reactions on top of locomotion)
+- [ ] **ANIM3-05**: Claude can refine root motion curves (smooth drift, prevent sliding)
+- [ ] **ANIM3-06**: Claude can generate AI-driven motion (implement generate_ai_motion stub with MotionGPT/HunyuanVideo integration)
+- [ ] **ANIM3-07**: Claude can generate cinematic animation sequences (camera cuts, character staging, Timeline integration)
+
+### Audio Middleware
+
+- [ ] **AUDM-01**: Claude can set up spatial audio system (3D sound propagation, distance attenuation, occlusion by geometry)
+- [ ] **AUDM-02**: Claude can create layered sound designs (combine multiple audio clips into complex impact/ability sounds)
+- [ ] **AUDM-03**: Claude can create audio event chains (impact → reverb tail → debris scatter trigger sequences)
+- [ ] **AUDM-04**: Claude can set up dynamic music system (horizontal re-sequencing, vertical layering, combat stingers)
+- [ ] **AUDM-05**: Claude can set up sound propagation through portals/doors (realistic attenuation between rooms)
+- [ ] **AUDM-06**: Claude can configure audio LOD (reduce quality/channels at distance for performance)
+
+### AAA UI/UX Polish
+
+- [ ] **UIPOL-01**: Claude can generate procedural UI frames (ornate dark fantasy borders, rune decorations, weathered edges)
+- [ ] **UIPOL-02**: Claude can generate equipment/item icons via 3D render pipeline (render → stylize → border → background)
+- [ ] **UIPOL-03**: Claude can generate dark fantasy themed cursors (context-sensitive: default, interact, attack, loot)
+- [ ] **UIPOL-04**: Claude can generate tooltip system with rich content (item stats, lore text, equipment comparison)
+- [ ] **UIPOL-05**: Claude can generate radial menu (ability wheel, quick-select for items/spells)
+- [ ] **UIPOL-06**: Claude can generate notification/toast system (quest updates, item pickups, level-up, achievements)
+- [ ] **UIPOL-07**: Claude can generate loading screen system (tips, lore, concept art display with progress bar)
+
+### VFX Mastery
+
+- [ ] **VFX3-01**: Claude can generate flipbook texture sheets (animated sprite sequences for fire, smoke, energy effects)
+- [ ] **VFX3-02**: Claude can compose VFX Graph nodes programmatically (not just parameters — actual node graph construction)
+- [ ] **VFX3-03**: Claude can generate projectile VFX chains (spawn → travel trail → impact burst → aftermath residue)
+- [ ] **VFX3-04**: Claude can generate area-of-effect VFX (ground circles, expanding domes, cone blasts with brand colors)
+- [ ] **VFX3-05**: Claude can generate per-brand status effect VFX (burning, poisoned, frozen, stunned, blessed, cursed for all 10 brands)
+- [ ] **VFX3-06**: Claude can generate environmental VFX depth (volumetric fog, god rays, heat distortion, water caustics)
+- [ ] **VFX3-07**: Claude can generate directional combat hit VFX (blood splatter, sparks, energy bursts matched to brand)
+- [ ] **VFX3-08**: Claude can generate boss phase transition VFX (corruption wave, power surge, arena transformation)
+
+### Production Pipeline
+
+- [ ] **PROD-01**: Claude can detect and auto-recover from Unity compilation errors (detect → diagnose → fix → recompile cycle)
+- [ ] **PROD-02**: Claude can detect asset/class name conflicts before writing (prevent duplicate type errors)
+- [ ] **PROD-03**: Claude can orchestrate multi-tool pipelines as single commands (character creation, level building)
+- [ ] **PROD-04**: Claude can validate art style consistency across batches of assets (palette, roughness, detail density checks)
+- [ ] **PROD-05**: Claude can run build verification smoke tests after every build
+
+## Out of Scope (v3)
+
+| Feature | Reason |
+|---------|--------|
+| Console SDK integration | Requires licensed devkits (PlayStation, Xbox, Switch) |
+| Multiplayer/networking | VeilBreakers is single-player |
+| Live ops infrastructure | Development tool, not production ops |
+| Motion capture pipeline | Requires hardware; AI motion generation covers the use case |
+| Cloth/soft body simulation | Unity Cloth component is limited; defer to physics middleware |
+
+## v3 Traceability
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| MESH3-01 | Phase 18 | Pending |
+| MESH3-02 | Phase 18 | Pending |
+| MESH3-03 | Phase 18 | Pending |
+| MESH3-04 | Phase 18 | Pending |
+| MESH3-05 | Phase 18 | Pending |
+| TERR-01 | Phase 18 | Pending |
+| TERR-02 | Phase 18 | Pending |
+| TERR-03 | Phase 18 | Pending |
+| TERR-04 | Phase 18 | Pending |
+| TERR-05 | Phase 18 | Pending |
+| CHAR-01 | Phase 19 | Pending |
+| CHAR-02 | Phase 19 | Pending |
+| CHAR-03 | Phase 19 | Pending |
+| CHAR-04 | Phase 19 | Pending |
+| CHAR-05 | Phase 19 | Pending |
+| CHAR-06 | Phase 19 | Pending |
+| ANIM3-01 | Phase 20 | Pending |
+| ANIM3-02 | Phase 20 | Pending |
+| ANIM3-03 | Phase 20 | Pending |
+| ANIM3-04 | Phase 20 | Pending |
+| ANIM3-05 | Phase 20 | Pending |
+| ANIM3-06 | Phase 20 | Pending |
+| ANIM3-07 | Phase 20 | Pending |
+| AUDM-01 | Phase 21 | Pending |
+| AUDM-02 | Phase 21 | Pending |
+| AUDM-03 | Phase 21 | Pending |
+| AUDM-04 | Phase 21 | Pending |
+| AUDM-05 | Phase 21 | Pending |
+| AUDM-06 | Phase 21 | Pending |
+| UIPOL-01 | Phase 22 | Pending |
+| UIPOL-02 | Phase 22 | Pending |
+| UIPOL-03 | Phase 22 | Pending |
+| UIPOL-04 | Phase 22 | Pending |
+| UIPOL-05 | Phase 22 | Pending |
+| UIPOL-06 | Phase 22 | Pending |
+| UIPOL-07 | Phase 22 | Pending |
+| VFX3-01 | Phase 23 | Pending |
+| VFX3-02 | Phase 23 | Pending |
+| VFX3-03 | Phase 23 | Pending |
+| VFX3-04 | Phase 23 | Pending |
+| VFX3-05 | Phase 23 | Pending |
+| VFX3-06 | Phase 23 | Pending |
+| VFX3-07 | Phase 23 | Pending |
+| VFX3-08 | Phase 23 | Pending |
+| PROD-01 | Phase 24 | Pending |
+| PROD-02 | Phase 24 | Pending |
+| PROD-03 | Phase 24 | Pending |
+| PROD-04 | Phase 24 | Pending |
+| PROD-05 | Phase 24 | Pending |
+
+**Coverage:**
+- v3 requirements: 51 total (across 8 categories)
+- Mapped to phases: 51/51
+- Unmapped: 0
+
+**Categories:** MESH3 (5), TERR (5), CHAR (6), ANIM3 (7), AUDM (6), UIPOL (7), VFX3 (8), PROD (5)
+
 ---
-*Requirements defined: 2026-03-18 (v1), updated 2026-03-19 (v2 with traceability)*
+*Requirements defined: 2026-03-18 (v1), updated 2026-03-19 (v2), updated 2026-03-21 (v3)*
