@@ -1358,7 +1358,7 @@ async def blender_animation(
         "add_secondary",       # ANIM-08: Secondary motion physics bake
         "extract_root_motion", # ANIM-09: Root motion + animation events
         "retarget_mixamo",     # ANIM-10: Mixamo animation retargeting
-        "generate_ai_motion",  # ANIM-11: AI motion generation (stub)
+        "generate_ai_motion",  # ANIM-11: AI motion generation (API + procedural fallback)
         "batch_export",        # ANIM-12: Batch export as Unity clips
     ],
     object_name: str,

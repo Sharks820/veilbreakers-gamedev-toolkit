@@ -37,12 +37,47 @@ class BlenderConnection:
         sock.settimeout(self.timeout)
         try:
             sock.connect((self.host, self.port))
-        except (ConnectionRefusedError, OSError, TimeoutError) as exc:
+        except ConnectionRefusedError as exc:
             sock.close()
             self._socket = None
             raise ConnectionError(
-                f"Cannot connect to Blender on {self.host}:{self.port}. "
-                "Start Blender and enable the VeilBreakers addon."
+                f"Cannot connect to Blender on {self.host}:{self.port} "
+                "(connection refused). Blender is not running or the "
+                "VeilBreakers addon is not enabled.\n\n"
+                "To fix this:\n"
+                "  1. Start Blender\n"
+                "  2. Go to Edit > Preferences > Add-ons\n"
+                "  3. Search for 'VeilBreakers' and enable the addon\n"
+                "  4. Verify the addon status bar shows 'Listening on "
+                f"{self.host}:{self.port}'\n"
+                "  5. Retry the command"
+            ) from exc
+        except TimeoutError as exc:
+            sock.close()
+            self._socket = None
+            raise ConnectionError(
+                f"Connection to Blender on {self.host}:{self.port} timed out "
+                f"after {self.timeout}s. Blender may be busy with a long "
+                "operation (rendering, baking, heavy computation) or the "
+                "VeilBreakers addon socket listener is not responding.\n\n"
+                "To fix this:\n"
+                "  1. Check if Blender is frozen or processing a task\n"
+                "  2. If Blender is idle, disable and re-enable the "
+                "VeilBreakers addon in Edit > Preferences > Add-ons\n"
+                "  3. Retry the command"
+            ) from exc
+        except OSError as exc:
+            sock.close()
+            self._socket = None
+            raise ConnectionError(
+                f"Network error connecting to Blender on "
+                f"{self.host}:{self.port}: {exc}\n\n"
+                "To fix this:\n"
+                "  1. Ensure Blender is running with the VeilBreakers addon "
+                "enabled (Edit > Preferences > Add-ons)\n"
+                "  2. Check that no firewall is blocking localhost connections\n"
+                "  3. Verify the addon is listening on the correct port\n"
+                "  4. Retry the command"
             ) from exc
         self._socket = sock
 
@@ -55,9 +90,19 @@ class BlenderConnection:
             self._socket = None
 
     def is_alive(self) -> bool:
-        # Simple liveness check — don't ping since server is connection-per-command.
-        # The actual liveness is tested when a command is sent.
-        return self._socket is not None
+        """Check if a connection to Blender can be established.
+
+        Since the server uses connection-per-command, this performs a quick
+        TCP connect/disconnect probe rather than checking socket state.
+        """
+        probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        probe.settimeout(2)
+        try:
+            probe.connect((self.host, self.port))
+            probe.close()
+            return True
+        except (ConnectionRefusedError, TimeoutError, OSError):
+            return False
 
     def reconnect(self) -> None:
         self.disconnect()
@@ -68,12 +113,24 @@ class BlenderConnection:
             raise ConnectionError("Not connected to Blender")
         chunks: list[bytes] = []
         received = 0
-        while received < n:
-            chunk = self._socket.recv(n - received)
-            if not chunk:
-                raise ConnectionError("Connection closed by Blender")
-            chunks.append(chunk)
-            received += len(chunk)
+        try:
+            while received < n:
+                chunk = self._socket.recv(n - received)
+                if not chunk:
+                    raise ConnectionError(
+                        "Connection closed by Blender mid-response. "
+                        "The addon may have crashed or restarted. "
+                        "Check the Blender console for errors and retry."
+                    )
+                chunks.append(chunk)
+                received += len(chunk)
+        except socket.timeout as exc:
+            raise ConnectionError(
+                f"Blender stopped responding while sending data "
+                f"(received {received}/{n} bytes). The operation may "
+                "be taking longer than expected. Check Blender's status "
+                "and retry, or increase the timeout."
+            ) from exc
         return b"".join(chunks)
 
     def _sync_send(self, command_type: str, params: dict[str, Any]) -> Any:
