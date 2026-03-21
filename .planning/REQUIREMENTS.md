@@ -419,6 +419,7 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 - [ ] **CHAR-05**: Claude can generate armor seam-hiding overlap rings at split points (neck, wrist, ankle)
 - [ ] **CHAR-06**: Claude can validate hand/foot topology (finger separation, proper edge flow for deformation)
 - [ ] **CHAR-07**: Claude can configure Unity Cloth component on character meshes (vertex weight painting, collision spheres/capsules, wind interaction, stiffness/damping for capes, robes, hair, banners, and cloth armor pieces)
+- [ ] **CHAR-08**: Claude can generate subsurface scattering skin shaders, parallax eye shaders, and micro-detail normal maps for AAA character heads
 
 ### Advanced Animation
 
@@ -438,6 +439,8 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 - [ ] **AUDM-04**: Claude can set up dynamic music system (horizontal re-sequencing, vertical layering, combat stingers)
 - [ ] **AUDM-05**: Claude can set up sound propagation through portals/doors (realistic attenuation between rooms)
 - [ ] **AUDM-06**: Claude can configure audio LOD (reduce quality/channels at distance for performance)
+- [ ] **AUDM-07**: Claude can set up dialogue/VO audio pipeline (lip sync markers, emotion tags, localized VO slots)
+- [ ] **AUDM-08**: Claude can generate procedural foley (cloth rustle, metal clinks, leather creaks based on movement speed and animation tags)
 
 ### AAA UI/UX Polish
 
@@ -448,6 +451,7 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 - [ ] **UIPOL-05**: Claude can generate radial menu (ability wheel, quick-select for items/spells)
 - [ ] **UIPOL-06**: Claude can generate notification/toast system (quest updates, item pickups, level-up, achievements)
 - [ ] **UIPOL-07**: Claude can generate loading screen system (tips, lore, concept art display with progress bar)
+- [ ] **UIPOL-08**: Claude can generate material-based UI shaders (gold-leaf shine, blood-stain overlays, dynamic rune glowing for dark fantasy UI elements)
 
 ### VFX Mastery
 
@@ -499,6 +503,7 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 | CHAR-05 | Phase 19 | Pending |
 | CHAR-06 | Phase 19 | Pending |
 | CHAR-07 | Phase 19 | Pending |
+| CHAR-08 | Phase 19 | Pending |
 | ANIM3-01 | Phase 20 | Pending |
 | ANIM3-02 | Phase 20 | Pending |
 | ANIM3-03 | Phase 20 | Pending |
@@ -512,6 +517,8 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 | AUDM-04 | Phase 21 | Pending |
 | AUDM-05 | Phase 21 | Pending |
 | AUDM-06 | Phase 21 | Pending |
+| AUDM-07 | Phase 21 | Pending |
+| AUDM-08 | Phase 21 | Pending |
 | UIPOL-01 | Phase 22 | Pending |
 | UIPOL-02 | Phase 22 | Pending |
 | UIPOL-03 | Phase 22 | Pending |
@@ -519,6 +526,7 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 | UIPOL-05 | Phase 22 | Pending |
 | UIPOL-06 | Phase 22 | Pending |
 | UIPOL-07 | Phase 22 | Pending |
+| UIPOL-08 | Phase 22 | Pending |
 | VFX3-01 | Phase 23 | Pending |
 | VFX3-02 | Phase 23 | Pending |
 | VFX3-03 | Phase 23 | Pending |
@@ -534,7 +542,7 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 | PROD-05 | Phase 24 | Pending |
 
 **Coverage:**
-- v3 requirements: 52 total (across 8 categories)
+- v3 requirements: 56 total (across 8 categories)
 - Mapped to phases: 51/51
 - Unmapped: 0
 
