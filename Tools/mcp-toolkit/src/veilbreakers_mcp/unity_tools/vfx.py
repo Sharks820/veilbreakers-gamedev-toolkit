@@ -579,19 +579,3 @@ async def _handle_vfx_ability(
     )
 
 
-# ---------------------------------------------------------------------------
-# Audio tool -- lazy ElevenLabs client
-# ---------------------------------------------------------------------------
-
-_audio_client: ElevenLabsAudioClient | None = None
-
-
-def _get_audio_client() -> ElevenLabsAudioClient:
-    """Lazily initialise the ElevenLabs audio client."""
-    global _audio_client
-    if _audio_client is None:
-        _audio_client = ElevenLabsAudioClient(
-            api_key=settings.elevenlabs_api_key or None,
-            unity_project_path=settings.unity_project_path,
-        )
-    return _audio_client
