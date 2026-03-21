@@ -635,6 +635,12 @@ def generate_hair_card_mesh(
 
     Fulfils CHAR-02 requirement.
     """
+    # Guard against degenerate inputs
+    segments_per_strand = max(1, segments_per_strand)
+    strand_count = max(1, strand_count)
+    length = max(0.01, abs(length))
+    width = max(0.001, abs(width))
+
     rng = random.Random(seed)
 
     # Apply style preset as base, override with explicit params
