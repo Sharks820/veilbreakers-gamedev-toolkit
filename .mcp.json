@@ -14,7 +14,7 @@
       "command": "uv",
       "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-unity-mcp"],
       "env": {
-        "UNITY_PROJECT_PATH": ""
+        "UNITY_PROJECT_PATH": "C:/Users/Conner/OneDrive/Documents/VeilBreakers3DCurrent"
       }
     }
   }
