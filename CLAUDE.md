@@ -1,6 +1,6 @@
 # VeilBreakers MCP Toolkit -- Claude Code Instructions
 
-You are the AI game development assistant for **VeilBreakers**, a dark fantasy action RPG. You have 22 compound MCP tools (15 Blender, 7 Unity) that give you direct control over both applications.
+You are the AI game development assistant for **VeilBreakers**, a dark fantasy action RPG. You have 37 compound MCP tools (15 Blender, 22 Unity) that give you direct control over both applications.
 
 ## Project Structure
 
@@ -8,7 +8,7 @@ You are the AI game development assistant for **VeilBreakers**, a dark fantasy a
 Tools/mcp-toolkit/           # MCP server source
   src/veilbreakers_mcp/
     blender_server.py        # 15 Blender compound tools
-    unity_server.py          # 7 Unity compound tools
+    unity_server.py          # 22 Unity compound tools
   blender_addon/             # Blender socket addon (handlers/)
   tests/                     # pytest suite
 .mcp.json                    # MCP server config (vb-blender, vb-unity)
@@ -17,7 +17,7 @@ Tools/mcp-toolkit/           # MCP server source
 
 ## Tool Architecture
 
-All tools use a **compound pattern**: one tool name per domain, `action` param selects the operation. This gives 100+ operations across 22 tools.
+All tools use a **compound pattern**: one tool name per domain, `action` param selects the operation. This gives 300+ operations across 37 tools.
 
 - **Blender tools** connect via TCP to Blender (localhost:9876). Most mutations return viewport screenshots.
 - **Unity tools** generate C# editor scripts, write to Unity project, return `next_steps` for compile+execute.
@@ -167,6 +167,59 @@ Actions: `profile_scene` | `setup_lod_groups` | `bake_lightmaps` | `audit_assets
 - setup_lod_groups: `lod_count`, `screen_percentages` (descending)
 - audit_assets: `max_texture_size`, `allowed_audio_formats`
 - automate_build: `build_target` (e.g. StandaloneWindows64), `scenes`, `build_options`
+
+### unity_prefab (v2.0)
+Actions: `create` | `modify` | `delete` | `variant` | `scaffold` | `variant_matrix` | `add_component` | `remove_component` | `configure` | `reflect_component` | `batch_configure` | `hierarchy` | `joint_setup` | `navmesh_setup` | `bone_socket` | `validate_project` | `batch_job`
+- create: auto-wire components based on prefab type (monster/hero/prop/ui profiles)
+- variant_matrix: corruption tier × brand × archetype from one base prefab
+- batch_job: multiple operations in one compilation cycle
+
+### unity_settings (v2.0)
+Actions: `player_settings` | `build_settings` | `quality_settings` | `physics_settings` | `physics_material` | `package_install` | `package_remove` | `tag_layer` | `tag_layer_sync` | `time_settings` | `graphics_settings`
+- tag_layer_sync: auto-sync tags/layers from Constants.cs
+- package_install: UPM, OpenUPM, git URL sources
+
+### unity_assets (v2.0)
+Actions: `move` | `rename` | `delete` | `duplicate` | `create_folder` | `fbx_import` | `texture_import` | `material_remap` | `material_auto_generate` | `asmdef` | `preset_create` | `preset_apply` | `reference_scan` | `atomic_import`
+
+### unity_code (v2.0)
+Actions: `generate_class` | `modify_script` | `editor_window` | `property_drawer` | `inspector_drawer` | `scene_overlay` | `generate_test` | `service_locator` | `object_pool` | `singleton` | `state_machine` | `event_channel`
+
+### unity_shader (v2.0)
+Actions: `create_shader` | `create_renderer_feature`
+- create_shader: arbitrary HLSL/ShaderLab with configurable properties
+- create_renderer_feature: URP ScriptableRendererFeature with RenderGraph API
+
+### unity_data (v2.0)
+Actions: `so_definition` | `create_asset` | `json_validator` | `json_loader` | `localization_setup` | `localization_entries` | `data_authoring_window`
+
+### unity_quality (v2.0)
+Actions: `poly_budget_check` | `master_material_library` | `texture_quality_check` | `aaa_audit`
+
+### unity_pipeline (v2.0)
+Actions: `git_lfs` | `normal_map_bake` | `sprite_atlas` | `sprite_animation` | `asset_postprocessor`
+
+### unity_game (v2.0)
+Actions: `save_system` | `health_system` | `character_controller` | `input_config` | `settings_menu` | `http_client` | `interactable` | `player_combat` | `ability_system` | `synergy_engine` | `corruption_gameplay` | `xp_leveling` | `currency_system` | `damage_types`
+
+### unity_content (v2.0)
+Actions: `inventory` | `dialogue` | `quest` | `loot_table` | `crafting` | `skill_tree` | `dps_calculator` | `encounter_simulator` | `stat_curve_editor` | `shop` | `journal` | `equipment_attachment`
+
+### unity_camera (v2.0)
+Actions: `virtual_camera` | `state_driven` | `camera_shake` | `camera_blend` | `timeline` | `cutscene` | `animation_clip` | `animator_modify` | `avatar_mask` | `video_player`
+
+### unity_world (v2.0)
+Actions: `create_scene` | `scene_transitions` | `reflection_probes` | `occlusion_culling` | `environment` | `terrain_detail` | `tilemap` | `physics_2d` | `time_of_day` | `fast_travel` | `environmental_puzzle` | `dungeon_trap` | `spatial_loot` | `weather` | `day_night_cycle` | `npc_placement` | `dungeon_lighting` | `terrain_blend`
+
+### unity_ux (v2.0)
+Actions: `minimap` | `damage_numbers` | `interaction_prompt` | `primetween_sequence` | `tmp_font` | `tmp_component` | `tutorial` | `accessibility` | `character_select` | `world_map` | `rarity_vfx` | `corruption_vfx`
+
+### unity_qa (v2.0)
+Actions: `test_runner` | `play_session` | `profiler` | `memory_leak` | `static_analysis` | `crash_reporting` | `analytics` | `live_inspector` | `check_compile_status`
+- check_compile_status: detect Unity compilation errors via TCP bridge
+
+### unity_build (v2.0)
+Actions: `build_multi_platform` | `configure_addressables` | `generate_ci_pipeline` | `manage_version` | `configure_platform` | `setup_shader_stripping` | `generate_store_metadata`
 
 ## Workflow Rules
 
