@@ -27,39 +27,7 @@ from __future__ import annotations
 import hashlib
 import re
 
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal.
-
-    Prevents C# code injection by escaping backslashes, quotes, and
-    newlines. This is critical for any user-supplied string that will
-    appear between double quotes in generated C# code.
-
-    Args:
-        value: Raw string value.
-
-    Returns:
-        Escaped string safe for C# string literal interpolation.
-    """
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier (class name, method name).
-
-    Strips all characters that are not alphanumeric or underscore.
-
-    Args:
-        value: Raw name string.
-
-    Returns:
-        Sanitized identifier safe for C# class/method names.
-    """
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -99,8 +67,8 @@ def generate_physics_settings_script(
         # Build C# code to resolve layers and set collision
         layer_resolves = ""
         for name in safe_layers:
-            safe_name = _sanitize_cs_identifier(name)
-            safe_str = _sanitize_cs_string(name)
+            safe_name = sanitize_cs_identifier(name)
+            safe_str = sanitize_cs_string(name)
             layer_resolves += f'            int layer_{safe_name} = LayerMask.NameToLayer("{safe_str}");\n'
             layer_resolves += f'            if (layer_{safe_name} == -1) {{ warnings.Add("Layer not found: {safe_str}"); }}\n'
 
@@ -108,8 +76,8 @@ def generate_physics_settings_script(
         collision_pairs = ""
         for i, name_a in enumerate(safe_layers):
             for name_b in safe_layers[i:]:
-                safe_a = _sanitize_cs_identifier(name_a)
-                safe_b = _sanitize_cs_identifier(name_b)
+                safe_a = sanitize_cs_identifier(name_a)
+                safe_b = sanitize_cs_identifier(name_b)
                 # Check if this pair should collide
                 a_collides_b = name_b in collision_matrix.get(name_a, [])
                 b_collides_a = name_a in collision_matrix.get(name_b, [])
@@ -197,10 +165,10 @@ def generate_physics_material_script(
     Returns:
         Complete C# source string.
     """
-    safe_name = _sanitize_cs_string(name)
-    safe_id = _sanitize_cs_identifier(name)
-    safe_friction_combine = _sanitize_cs_identifier(friction_combine)
-    safe_bounce_combine = _sanitize_cs_identifier(bounce_combine)
+    safe_name = sanitize_cs_string(name)
+    safe_id = sanitize_cs_identifier(name)
+    safe_friction_combine = sanitize_cs_identifier(friction_combine)
+    safe_bounce_combine = sanitize_cs_identifier(bounce_combine)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -293,31 +261,31 @@ def generate_player_settings_script(
     changed_assets = ['"ProjectSettings/ProjectSettings.asset"']
 
     if company:
-        safe = _sanitize_cs_string(company)
+        safe = sanitize_cs_string(company)
         settings_lines.append(f'            PlayerSettings.companyName = "{safe}";')
 
     if product:
-        safe = _sanitize_cs_string(product)
+        safe = sanitize_cs_string(product)
         settings_lines.append(f'            PlayerSettings.productName = "{safe}";')
 
     if color_space:
-        safe = _sanitize_cs_identifier(color_space)
+        safe = sanitize_cs_identifier(color_space)
         settings_lines.append(f'            PlayerSettings.colorSpace = ColorSpace.{safe};')
 
     if scripting_backend:
-        safe = _sanitize_cs_identifier(scripting_backend)
+        safe = sanitize_cs_identifier(scripting_backend)
         settings_lines.append(
             f'            PlayerSettings.SetScriptingBackend(BuildTargetGroup.Standalone, ScriptingImplementation.{safe});'
         )
 
     if api_level:
-        safe = _sanitize_cs_identifier(api_level)
+        safe = sanitize_cs_identifier(api_level)
         settings_lines.append(
             f'            PlayerSettings.SetApiCompatibilityLevel(BuildTargetGroup.Standalone, ApiCompatibilityLevel.{safe});'
         )
 
     if icon_path:
-        safe = _sanitize_cs_string(icon_path)
+        safe = sanitize_cs_string(icon_path)
         settings_lines.append(
             f'            var icon = AssetDatabase.LoadAssetAtPath<Texture2D>("{safe}");'
         )
@@ -326,7 +294,7 @@ def generate_player_settings_script(
         )
 
     if splash_path:
-        safe = _sanitize_cs_string(splash_path)
+        safe = sanitize_cs_string(splash_path)
         settings_lines.append(
             f'            // Load sprite from asset path (persistent) instead of creating non-persistent Sprite'
         )
@@ -466,7 +434,7 @@ def generate_build_settings_script(
 
     if scenes:
         scene_array_items = ", ".join(
-            f'new EditorBuildSettingsScene("{_sanitize_cs_string(s)}", true)' for s in scenes
+            f'new EditorBuildSettingsScene("{sanitize_cs_string(s)}", true)' for s in scenes
         )
         settings_lines.append(
             f'            EditorBuildSettings.scenes = new EditorBuildSettingsScene[] {{ {scene_array_items} }};'
@@ -483,17 +451,17 @@ def generate_build_settings_script(
             )
         group, target = _PLATFORM_MAP[platform]
         settings_lines.append(
-            f'            EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.{group}, BuildTarget.{_sanitize_cs_identifier(target)});'
+            f'            EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.{group}, BuildTarget.{sanitize_cs_identifier(target)});'
         )
         settings_lines.append(
-            f'            Debug.Log("[VeilBreakers] Switched platform to {_sanitize_cs_string(platform)}.");'
+            f'            Debug.Log("[VeilBreakers] Switched platform to {sanitize_cs_string(platform)}.");'
         )
 
     if defines:
-        defines_str = ";".join(_sanitize_cs_string(d) for d in defines)
+        defines_str = ";".join(sanitize_cs_string(d) for d in defines)
         defines_group = _PLATFORM_MAP[platform][0] if platform and platform in _PLATFORM_MAP else "Standalone"
         settings_lines.append(
-            f'            PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.{_sanitize_cs_identifier(defines_group)}, "{defines_str}");'
+            f'            PlayerSettings.SetScriptingDefineSymbolsForGroup(BuildTargetGroup.{sanitize_cs_identifier(defines_group)}, "{defines_str}");'
         )
         settings_lines.append(
             f'            Debug.Log("[VeilBreakers] Set scripting defines: {defines_str}");'
@@ -558,13 +526,13 @@ def generate_quality_settings_script(
     # Build per-level configuration code
     level_configs = ""
     for i, level in enumerate(levels):
-        name = _sanitize_cs_string(level.get("name", f"Level_{i}"))
+        name = sanitize_cs_string(level.get("name", f"Level_{i}"))
         shadow_dist = level.get("shadow_distance", 150)
         tex_quality = level.get("texture_quality", 0)
         aa = level.get("anti_aliasing", 0)
         vsync_val = level.get("vsync", 0)
         lod_bias = level.get("lod_bias", 1.0)
-        shadow_res = _sanitize_cs_identifier(level.get("shadow_resolution", "High"))
+        shadow_res = sanitize_cs_identifier(level.get("shadow_resolution", "High"))
 
         level_configs += f"""
             // Quality Level {i}: {name}
@@ -643,13 +611,13 @@ def generate_package_install_script(
     Returns:
         Complete C# source string.
     """
-    safe_package_id = _sanitize_cs_string(package_id)
+    safe_package_id = sanitize_cs_string(package_id)
 
     if source == "openupm":
         # OpenUPM: edit manifest.json to add scoped registry
-        safe_url = _sanitize_cs_string(registry_url or "https://package.openupm.com")
+        safe_url = sanitize_cs_string(registry_url or "https://package.openupm.com")
         scopes_list = scopes or [package_id.rsplit(".", 1)[0]] if "." in package_id else [package_id]
-        scopes_cs = ", ".join(f'\\"{_sanitize_cs_string(s)}\\"' for s in scopes_list)
+        scopes_cs = ", ".join(f'\\"{sanitize_cs_string(s)}\\"' for s in scopes_list)
 
         return f'''using UnityEngine;
 using UnityEditor;
@@ -800,7 +768,7 @@ public static class VeilBreakers_InstallPackage
 
     else:
         # UPM: standard registry install
-        version_suffix = f"@{_sanitize_cs_string(version)}" if version else ""
+        version_suffix = f"@{sanitize_cs_string(version)}" if version else ""
         return f'''using UnityEngine;
 using UnityEditor;
 using UnityEditor.PackageManager;
@@ -827,7 +795,7 @@ public static class VeilBreakers_InstallPackage
                 {{
                     string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"install_package\\", "
                         + "\\"package_id\\": \\"{safe_package_id}\\", "
-                        + "\\"version\\": \\"{_sanitize_cs_string(version)}\\", "
+                        + "\\"version\\": \\"{sanitize_cs_string(version)}\\", "
                         + "\\"source\\": \\"upm\\", "
                         + "\\"changed_assets\\": [\\"Packages/manifest.json\\"], "
                         + "\\"validation_status\\": \\"ok\\"}}";
@@ -863,7 +831,7 @@ def generate_package_remove_script(package_id: str) -> str:
     Returns:
         Complete C# source string.
     """
-    safe_package_id = _sanitize_cs_string(package_id)
+    safe_package_id = sanitize_cs_string(package_id)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -943,19 +911,19 @@ def generate_tag_layer_script(
     if tags:
         tag_entries = ""
         for tag in tags:
-            safe = _sanitize_cs_string(tag)
+            safe = sanitize_cs_string(tag)
             tag_entries += f"""
                 // Add tag: {safe}
-                bool tagExists_{_sanitize_cs_identifier(tag)} = false;
+                bool tagExists_{sanitize_cs_identifier(tag)} = false;
                 for (int i = 0; i < tagsProp.arraySize; i++)
                 {{
                     if (tagsProp.GetArrayElementAtIndex(i).stringValue == "{safe}")
                     {{
-                        tagExists_{_sanitize_cs_identifier(tag)} = true;
+                        tagExists_{sanitize_cs_identifier(tag)} = true;
                         break;
                     }}
                 }}
-                if (!tagExists_{_sanitize_cs_identifier(tag)})
+                if (!tagExists_{sanitize_cs_identifier(tag)})
                 {{
                     tagsProp.InsertArrayElementAtIndex(tagsProp.arraySize);
                     tagsProp.GetArrayElementAtIndex(tagsProp.arraySize - 1).stringValue = "{safe}";
@@ -973,27 +941,27 @@ def generate_tag_layer_script(
     if layers:
         layer_entries = ""
         for layer in layers:
-            safe = _sanitize_cs_string(layer)
+            safe = sanitize_cs_string(layer)
             layer_entries += f"""
                 // Add layer: {safe}
-                bool layerAdded_{_sanitize_cs_identifier(layer)} = false;
+                bool layerAdded_{sanitize_cs_identifier(layer)} = false;
                 for (int i = 8; i <= 31; i++)
                 {{
                     var layerProp = layersProp.GetArrayElementAtIndex(i);
                     if (string.IsNullOrEmpty(layerProp.stringValue))
                     {{
                         layerProp.stringValue = "{safe}";
-                        layerAdded_{_sanitize_cs_identifier(layer)} = true;
+                        layerAdded_{sanitize_cs_identifier(layer)} = true;
                         layersAdded++;
                         break;
                     }}
                     if (layerProp.stringValue == "{safe}")
                     {{
-                        layerAdded_{_sanitize_cs_identifier(layer)} = true;
+                        layerAdded_{sanitize_cs_identifier(layer)} = true;
                         break;
                     }}
                 }}
-                if (!layerAdded_{_sanitize_cs_identifier(layer)})
+                if (!layerAdded_{sanitize_cs_identifier(layer)})
                 {{
                     warnings.Add("No empty slot for layer: {safe}");
                 }}
@@ -1009,20 +977,20 @@ def generate_tag_layer_script(
     if sorting_layers:
         sorting_entries = ""
         for sl in sorting_layers:
-            safe = _sanitize_cs_string(sl)
+            safe = sanitize_cs_string(sl)
             sorting_entries += f"""
                 // Add sorting layer: {safe}
-                bool sortingExists_{_sanitize_cs_identifier(sl)} = false;
+                bool sortingExists_{sanitize_cs_identifier(sl)} = false;
                 for (int i = 0; i < sortingLayersProp.arraySize; i++)
                 {{
                     var entry = sortingLayersProp.GetArrayElementAtIndex(i);
                     if (entry.FindPropertyRelative("name").stringValue == "{safe}")
                     {{
-                        sortingExists_{_sanitize_cs_identifier(sl)} = true;
+                        sortingExists_{sanitize_cs_identifier(sl)} = true;
                         break;
                     }}
                 }}
-                if (!sortingExists_{_sanitize_cs_identifier(sl)})
+                if (!sortingExists_{sanitize_cs_identifier(sl)})
                 {{
                     sortingLayersProp.InsertArrayElementAtIndex(sortingLayersProp.arraySize);
                     var newEntry = sortingLayersProp.GetArrayElementAtIndex(sortingLayersProp.arraySize - 1);
@@ -1099,7 +1067,7 @@ def generate_tag_layer_sync_script(constants_cs_path: str) -> str:
     Returns:
         Complete C# source string.
     """
-    safe_path = _sanitize_cs_string(constants_cs_path)
+    safe_path = sanitize_cs_string(constants_cs_path)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -1341,7 +1309,7 @@ def generate_graphics_settings_script(
     settings_lines = []
 
     if render_pipeline_path:
-        safe = _sanitize_cs_string(render_pipeline_path)
+        safe = sanitize_cs_string(render_pipeline_path)
         settings_lines.append(
             f'            var pipelineAsset = AssetDatabase.LoadAssetAtPath<UnityEngine.Rendering.RenderPipelineAsset>("{safe}");'
         )
@@ -1382,7 +1350,7 @@ def generate_graphics_settings_script(
             "Exponential": "FogMode.Exponential",
             "ExponentialSquared": "FogMode.ExponentialSquared",
         }
-        cs_fog_mode = fog_mode_map.get(fog_mode, f"FogMode.{_sanitize_cs_identifier(fog_mode)}")
+        cs_fog_mode = fog_mode_map.get(fog_mode, f"FogMode.{sanitize_cs_identifier(fog_mode)}")
         settings_lines.append(f'            RenderSettings.fog = true;')
         settings_lines.append(f'            RenderSettings.fogMode = {cs_fog_mode};')
 

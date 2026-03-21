@@ -377,7 +377,7 @@ async def _handle_ux_character_select(
     )
     paths = []
     paths.append(_write_to_unity(
-        data_so_cs, "Assets/ScriptableObjects/UX/VB_HeroPathData.cs",
+        data_so_cs, "Assets/ScriptableObjects/UX/VB_PathData.cs",
     ))
     paths.append(_write_to_unity(
         manager_cs, "Assets/Scripts/Runtime/UX/VB_CharacterSelectManager.cs",

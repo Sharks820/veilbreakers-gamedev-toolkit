@@ -23,19 +23,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -145,8 +133,8 @@ def generate_minimap_script(
     Returns:
         Tuple of (editor_cs: str, runtime_cs: str).
     """
-    safe_name = _sanitize_cs_identifier(name)
-    safe_target = _sanitize_cs_string(follow_target)
+    safe_name = sanitize_cs_identifier(name)
+    safe_target = sanitize_cs_string(follow_target)
     layers = culling_layers or ["Minimap", "Terrain"]
     markers = marker_types or ["Quest", "NPC", "Enemy", "POI"]
 
@@ -185,7 +173,7 @@ def generate_minimap_script(
     e_body.append("        cam.transform.rotation = Quaternion.Euler(90, 0, 0);")
     e_body.append("        cam.transform.position = new Vector3(0, 100f, 0);")
     # Set culling mask
-    layer_str = " | ".join([f'LayerMask.GetMask("{_sanitize_cs_string(layer)}")' for layer in layers])
+    layer_str = " | ".join([f'LayerMask.GetMask("{sanitize_cs_string(layer)}")' for layer in layers])
     e_body.append(f"        cam.cullingMask = {layer_str};")
     e_body.append("")
     e_body.append("        // Create Canvas with RawImage for minimap display")
@@ -262,7 +250,7 @@ def generate_minimap_script(
     r_body.append("    public enum MarkerType")
     r_body.append("    {")
     for m in markers:
-        r_body.append(f"        {_sanitize_cs_identifier(m)},")
+        r_body.append(f"        {sanitize_cs_identifier(m)},")
     r_body.append("    }")
     r_body.append("")
     # Zoom property
@@ -289,7 +277,7 @@ def generate_minimap_script(
     r_body.append("            _minimapCamera.backgroundColor = new Color(0.05f, 0.05f, 0.1f, 1f);")
     r_body.append("            _minimapCamera.transform.rotation = Quaternion.Euler(90, 0, 0);")
     # Set culling mask at runtime too
-    layer_mask_str = " | ".join([f'LayerMask.GetMask("{_sanitize_cs_string(layer)}")' for layer in layers])
+    layer_mask_str = " | ".join([f'LayerMask.GetMask("{sanitize_cs_string(layer)}")' for layer in layers])
     r_body.append(f"            _minimapCamera.cullingMask = {layer_mask_str};")
     r_body.append("        }")
     r_body.append("    }")
@@ -408,7 +396,7 @@ def generate_damage_numbers_script(
     Returns:
         C# MonoBehaviour source string.
     """
-    safe_name = _sanitize_cs_identifier(name)
+    safe_name = sanitize_cs_identifier(name)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -584,8 +572,8 @@ def generate_interaction_prompts_script(
     Returns:
         C# MonoBehaviour source string.
     """
-    safe_name = _sanitize_cs_identifier(name)
-    safe_prompt = _sanitize_cs_string(prompt_text)
+    safe_name = sanitize_cs_identifier(name)
+    safe_prompt = sanitize_cs_string(prompt_text)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -750,7 +738,7 @@ def generate_primetween_sequence_script(
     Returns:
         C# utility class source string.
     """
-    safe_name = _sanitize_cs_identifier(name)
+    safe_name = sanitize_cs_identifier(name)
     class_name = f"VB_{safe_name}Animations" if name != "default" else "VB_UIAnimations"
 
     lines: list[str] = []
@@ -894,8 +882,8 @@ def generate_tmp_font_asset_script(
     Returns:
         C# editor script source string.
     """
-    safe_font_path = _sanitize_cs_string(font_path)
-    safe_output_path = _sanitize_cs_string(output_path)
+    safe_font_path = sanitize_cs_string(font_path)
+    safe_output_path = sanitize_cs_string(output_path)
 
     # Default character set: ASCII 32-126 + common extended Latin
     default_chars = (
@@ -917,7 +905,7 @@ def generate_tmp_font_asset_script(
         "\\u00F9\\u00FA\\u00FB\\u00FC"  # u-accents
         "\\u00DF\\u00FF"  # sharp-s, y-umlaut
     )
-    char_set = _sanitize_cs_string(character_set) if character_set else default_chars
+    char_set = sanitize_cs_string(character_set) if character_set else default_chars
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -1051,8 +1039,8 @@ def generate_tmp_component_script(
     Returns:
         C# editor script source string.
     """
-    safe_name = _sanitize_cs_identifier(name)
-    safe_font_path = _sanitize_cs_string(font_asset_path) if font_asset_path else ""
+    safe_name = sanitize_cs_identifier(name)
+    safe_font_path = sanitize_cs_string(font_asset_path) if font_asset_path else ""
     rgba = color or [1.0, 1.0, 1.0, 1.0]
     r, g, b, a = rgba[0], rgba[1], rgba[2], rgba[3]
 
@@ -1217,7 +1205,7 @@ def generate_tutorial_system_script(
         steps: Optional preset steps (unused in template -- runtime configured).
         namespace: Optional C# namespace.
     """
-    safe_name = _sanitize_cs_identifier(name)
+    safe_name = sanitize_cs_identifier(name)
 
     # --- Tutorial Step ScriptableObject ---
     so_body: list[str] = []
@@ -1509,7 +1497,7 @@ def generate_accessibility_script(
         name: Base name for the accessibility system.
         namespace: Optional C# namespace.
     """
-    safe_name = _sanitize_cs_identifier(name)
+    safe_name = sanitize_cs_identifier(name)
 
     # --- Accessibility Settings MonoBehaviour ---
     settings_body: list[str] = []
@@ -1867,8 +1855,8 @@ def generate_character_select_script(
     so_body.append("/// ScriptableObject containing hero path data for character selection.")
     so_body.append("/// Generated by VeilBreakers MCP toolkit.")
     so_body.append("/// </summary>")
-    so_body.append('[CreateAssetMenu(fileName = "NewHeroPath", menuName = "VeilBreakers/Character/Hero Path")]')
-    so_body.append("public class VB_HeroPathData : ScriptableObject")
+    so_body.append('[CreateAssetMenu(fileName = "NewPath", menuName = "VeilBreakers/Character/Hero Path")]')
+    so_body.append("public class VB_PathData : ScriptableObject")
     so_body.append("{")
     so_body.append('    [Header("Identity")]')
     so_body.append("    public string pathName;")
@@ -1917,7 +1905,7 @@ def generate_character_select_script(
     mgr_body.append("public class CharacterSelectManager : MonoBehaviour")
     mgr_body.append("{")
     mgr_body.append('    [Header("Hero Paths")]')
-    mgr_body.append("    [SerializeField] private List<VB_HeroPathData> _heroPaths = new List<VB_HeroPathData>();")
+    mgr_body.append("    [SerializeField] private List<VB_PathData> _paths = new List<VB_PathData>();")
     mgr_body.append("")
     mgr_body.append('    [Header("Appearance Options")]')
     mgr_body.append('    [SerializeField] private string[] _skinColors = { "Pale", "Fair", "Olive", "Bronze", "Dark", "Ebony" };')
@@ -1945,11 +1933,11 @@ def generate_character_select_script(
     mgr_body.append("    public event Action<int> OnPathSelected;")
     mgr_body.append("")
     mgr_body.append("    /// <summary>Fired when the player clicks Embark with valid data.</summary>")
-    mgr_body.append("    public event Action<VB_HeroPathData, CharacterAppearance, string> OnCharacterCreated;")
+    mgr_body.append("    public event Action<VB_PathData, CharacterAppearance, string> OnCharacterCreated;")
     mgr_body.append("")
     paths_str = ", ".join(['"' + p + '"' for p in hero_paths])
     mgr_body.append("    /// <summary>Default hero path names for reference.</summary>")
-    mgr_body.append("    public static readonly string[] DefaultHeroPaths = { " + paths_str + " };")
+    mgr_body.append("    public static readonly string[] DefaultPaths = { " + paths_str + " };")
     mgr_body.append("")
     mgr_body.append("    private void Awake()")
     mgr_body.append("    {")
@@ -1976,8 +1964,8 @@ def generate_character_select_script(
     mgr_body.append("    /// <summary>Navigate to the previous hero path in the carousel.</summary>")
     mgr_body.append("    public void NavigatePrevious()")
     mgr_body.append("    {")
-    mgr_body.append("        if (_heroPaths.Count == 0) return;")
-    mgr_body.append("        _currentPathIndex = (_currentPathIndex - 1 + _heroPaths.Count) % _heroPaths.Count;")
+    mgr_body.append("        if (_paths.Count == 0) return;")
+    mgr_body.append("        _currentPathIndex = (_currentPathIndex - 1 + _paths.Count) % _paths.Count;")
     mgr_body.append("        AnimateCarouselTransition(-1);")
     mgr_body.append("        OnPathSelected?.Invoke(_currentPathIndex);")
     mgr_body.append("    }")
@@ -1985,8 +1973,8 @@ def generate_character_select_script(
     mgr_body.append("    /// <summary>Navigate to the next hero path in the carousel.</summary>")
     mgr_body.append("    public void NavigateNext()")
     mgr_body.append("    {")
-    mgr_body.append("        if (_heroPaths.Count == 0) return;")
-    mgr_body.append("        _currentPathIndex = (_currentPathIndex + 1) % _heroPaths.Count;")
+    mgr_body.append("        if (_paths.Count == 0) return;")
+    mgr_body.append("        _currentPathIndex = (_currentPathIndex + 1) % _paths.Count;")
     mgr_body.append("        AnimateCarouselTransition(1);")
     mgr_body.append("        OnPathSelected?.Invoke(_currentPathIndex);")
     mgr_body.append("    }")
@@ -2010,8 +1998,8 @@ def generate_character_select_script(
     mgr_body.append('            Debug.LogWarning("Invalid character name. Must be 3-20 alphanumeric characters.");')
     mgr_body.append("            return;")
     mgr_body.append("        }")
-    mgr_body.append("        if (_heroPaths.Count == 0) return;")
-    mgr_body.append("        var selectedPath = _heroPaths[_currentPathIndex];")
+    mgr_body.append("        if (_paths.Count == 0) return;")
+    mgr_body.append("        var selectedPath = _paths[_currentPathIndex];")
     mgr_body.append("        OnCharacterCreated?.Invoke(selectedPath, _appearance, _characterName);")
     mgr_body.append("    }")
     mgr_body.append("")
@@ -2030,8 +2018,8 @@ def generate_character_select_script(
     mgr_body.append("")
     mgr_body.append("    private void UpdateDisplay()")
     mgr_body.append("    {")
-    mgr_body.append("        if (_heroPaths.Count == 0) return;")
-    mgr_body.append("        var path = _heroPaths[_currentPathIndex];")
+    mgr_body.append("        if (_paths.Count == 0) return;")
+    mgr_body.append("        var path = _paths[_currentPathIndex];")
     mgr_body.append("        if (_pathNameLabel != null) _pathNameLabel.text = path.pathName;")
     mgr_body.append("        if (_pathDescLabel != null) _pathDescLabel.text = path.description;")
     mgr_body.append("        if (_statsLabel != null)")
@@ -2213,7 +2201,7 @@ def generate_world_map_script(
         fog_resolution: Resolution of the fog-of-war mask (square).
         namespace: Optional C# namespace.
     """
-    safe_name = _sanitize_cs_identifier(name)
+    safe_name = sanitize_cs_identifier(name)
 
     # --- Editor Script: Generate map from TerrainData ---
     editor_body: list[str] = []
@@ -2486,7 +2474,7 @@ def generate_rarity_vfx_script(
         name: Base name for the rarity VFX controller.
         namespace: Optional C# namespace.
     """
-    safe_name = _sanitize_cs_identifier(name)
+    safe_name = sanitize_cs_identifier(name)
 
     body: list[str] = []
     body.append("using UnityEngine;")
@@ -2628,7 +2616,7 @@ def generate_corruption_vfx_script(
         name: Base name for the corruption VFX controller.
         namespace: Optional C# namespace.
     """
-    safe_name = _sanitize_cs_identifier(name)
+    safe_name = sanitize_cs_identifier(name)
 
     body: list[str] = []
     body.append("using UnityEngine;")

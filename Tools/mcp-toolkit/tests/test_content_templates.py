@@ -607,7 +607,7 @@ class TestSkillTree:
 
     def test_skill_tree_has_hero_path_enum(self):
         _, tree = generate_skill_tree_script()
-        assert "enum HeroPath" in tree
+        assert "enum Path" in tree
 
     def test_skill_tree_get_nodes_by_path(self):
         _, tree = generate_skill_tree_script()

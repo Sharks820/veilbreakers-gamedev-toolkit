@@ -29,8 +29,8 @@ Exports:
 Helpers:
     _resolve_selector_snippet          -- Deterministic GameObject selector
     _load_auto_wire_profile            -- Load auto-wire JSON profile
-    _sanitize_cs_string                -- C# string literal escaping
-    _sanitize_cs_identifier            -- C# identifier sanitization
+    sanitize_cs_string                 -- C# string literal escaping (from _cs_sanitize)
+    sanitize_cs_identifier             -- C# identifier sanitization (from _cs_sanitize)
 """
 
 from __future__ import annotations
@@ -40,28 +40,7 @@ import re
 from pathlib import Path
 from typing import Optional
 
-
-# ---------------------------------------------------------------------------
-# Sanitization helpers (each template module has its own copy)
-# ---------------------------------------------------------------------------
-
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal.
-
-    Prevents C# code injection by escaping backslashes, quotes, and
-    newlines.
-    """
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier (class name, method name)."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -117,7 +96,7 @@ def _resolve_selector_snippet(selector: dict | str) -> str:
         selector = {"by": "name", "value": selector}
 
     mode = selector.get("by", "name")
-    value = _sanitize_cs_string(selector.get("value", ""))
+    value = sanitize_cs_string(selector.get("value", ""))
 
     if mode == "name":
         return f'''            GameObject target = GameObject.Find("{value}");
@@ -219,8 +198,8 @@ def _property_setter_snippet(prop: dict) -> str:
     Returns:
         C# code line setting the property value.
     """
-    safe_prop = _sanitize_cs_string(prop["property"])
-    safe_val = _sanitize_cs_string(str(prop["value"]))
+    safe_prop = sanitize_cs_string(prop["property"])
+    safe_val = sanitize_cs_string(str(prop["value"]))
     prop_type = prop.get("type", "string")
 
     if prop_type == "float":
@@ -265,16 +244,16 @@ def generate_prefab_create_script(
     Returns:
         Complete C# source string.
     """
-    safe_name = _sanitize_cs_identifier(name)
-    safe_display_name = _sanitize_cs_string(name)
-    safe_dir = _sanitize_cs_string(save_dir)
+    safe_name = sanitize_cs_identifier(name)
+    safe_display_name = sanitize_cs_string(name)
+    safe_dir = sanitize_cs_string(save_dir)
 
     if components is None:
         try:
             profile = _load_auto_wire_profile(prefab_type)
             components = profile.get("components", [])
-            default_layer = _sanitize_cs_string(profile.get("default_layer", "Default"))
-            default_tag = _sanitize_cs_string(profile.get("default_tag", "Untagged"))
+            default_layer = sanitize_cs_string(profile.get("default_layer", "Default"))
+            default_tag = sanitize_cs_string(profile.get("default_tag", "Untagged"))
         except FileNotFoundError:
             components = []
             default_layer = "Default"
@@ -286,7 +265,7 @@ def generate_prefab_create_script(
     # Build component add lines
     comp_lines = []
     for comp in components:
-        comp_type = _sanitize_cs_string(comp["type"])
+        comp_type = sanitize_cs_string(comp["type"])
         # Handle namespaced types
         if "." in comp_type:
             comp_lines.append(f'            Undo.AddComponent(go, typeof({comp_type}));')
@@ -383,8 +362,8 @@ def generate_scaffold_prefab_script(name: str, prefab_type: str) -> str:
     Returns:
         Complete C# source string.
     """
-    safe_name = _sanitize_cs_identifier(name)
-    safe_display_name = _sanitize_cs_string(name)
+    safe_name = sanitize_cs_identifier(name)
+    safe_display_name = sanitize_cs_string(name)
 
     try:
         profile = _load_auto_wire_profile(prefab_type)
@@ -394,7 +373,7 @@ def generate_scaffold_prefab_script(name: str, prefab_type: str) -> str:
 
     comp_lines = []
     for comp in components:
-        comp_type = _sanitize_cs_string(comp["type"])
+        comp_type = sanitize_cs_string(comp["type"])
         if "." in comp_type:
             comp_lines.append(f'            Undo.AddComponent(go, typeof({comp_type}));')
         else:
@@ -479,18 +458,18 @@ def generate_prefab_variant_script(
     Returns:
         Complete C# source string.
     """
-    safe_name = _sanitize_cs_identifier(name)
-    safe_display_name = _sanitize_cs_string(name)
-    safe_base = _sanitize_cs_string(base_prefab_path)
+    safe_name = sanitize_cs_identifier(name)
+    safe_display_name = sanitize_cs_string(name)
+    safe_base = sanitize_cs_string(base_prefab_path)
 
     override_lines = ""
     if overrides:
         lines = []
         for prop_name, prop_val in overrides.items():
-            sp = _sanitize_cs_string(prop_name)
-            sv = _sanitize_cs_string(prop_val)
-            lines.append(f'''            var prop_{_sanitize_cs_identifier(prop_name)} = so.FindProperty("{sp}");
-            if (prop_{_sanitize_cs_identifier(prop_name)} != null) prop_{_sanitize_cs_identifier(prop_name)}.stringValue = "{sv}";''')
+            sp = sanitize_cs_string(prop_name)
+            sv = sanitize_cs_string(prop_val)
+            lines.append(f'''            var prop_{sanitize_cs_identifier(prop_name)} = so.FindProperty("{sp}");
+            if (prop_{sanitize_cs_identifier(prop_name)} != null) prop_{sanitize_cs_identifier(prop_name)}.stringValue = "{sv}";''')
         override_lines = "\n".join(lines)
 
     return f'''using UnityEngine;
@@ -573,7 +552,7 @@ def generate_prefab_modify_script(
     Returns:
         Complete C# source string.
     """
-    safe_path = _sanitize_cs_string(prefab_path)
+    safe_path = sanitize_cs_string(prefab_path)
 
     mod_lines = []
     for mod in modifications:
@@ -639,7 +618,7 @@ def generate_prefab_delete_script(prefab_path: str) -> str:
     Returns:
         Complete C# source string.
     """
-    safe_path = _sanitize_cs_string(prefab_path)
+    safe_path = sanitize_cs_string(prefab_path)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -708,7 +687,7 @@ def generate_add_component_script(
     Returns:
         Complete C# source string.
     """
-    safe_comp = _sanitize_cs_string(component_type)
+    safe_comp = sanitize_cs_string(component_type)
     selector_code = _resolve_selector_snippet(selector)
 
     prop_lines = ""
@@ -773,7 +752,7 @@ def generate_remove_component_script(
     Returns:
         Complete C# source string.
     """
-    safe_comp = _sanitize_cs_string(component_type)
+    safe_comp = sanitize_cs_string(component_type)
     selector_code = _resolve_selector_snippet(selector)
 
     return f'''using UnityEngine;
@@ -838,7 +817,7 @@ def generate_configure_component_script(
     Returns:
         Complete C# source string.
     """
-    safe_comp = _sanitize_cs_string(component_type)
+    safe_comp = sanitize_cs_string(component_type)
     selector_code = _resolve_selector_snippet(selector)
 
     prop_lines = []
@@ -909,7 +888,7 @@ def generate_reflect_component_script(
     Returns:
         Complete C# source string.
     """
-    safe_comp = _sanitize_cs_string(component_type)
+    safe_comp = sanitize_cs_string(component_type)
     selector_code = _resolve_selector_snippet(selector)
 
     return f'''using UnityEngine;
@@ -978,10 +957,10 @@ def generate_hierarchy_script(operation: str, **kwargs) -> str:
     Returns:
         Complete C# source string.
     """
-    safe_op = _sanitize_cs_identifier(operation)
+    safe_op = sanitize_cs_identifier(operation)
 
     if operation == "create_empty":
-        obj_name = _sanitize_cs_string(kwargs.get("name", "NewEmpty"))
+        obj_name = sanitize_cs_string(kwargs.get("name", "NewEmpty"))
         return f'''using UnityEngine;
 using UnityEditor;
 using System.IO;
@@ -1019,7 +998,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
     selector_code = _resolve_selector_snippet(selector)
 
     if operation == "reparent":
-        parent = _sanitize_cs_string(kwargs.get("parent_name", ""))
+        parent = sanitize_cs_string(kwargs.get("parent_name", ""))
         return f'''using UnityEngine;
 using UnityEditor;
 using System.IO;
@@ -1063,7 +1042,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
 '''
 
     elif operation == "set_layer":
-        layer_name = _sanitize_cs_string(kwargs.get("layer", "Default"))
+        layer_name = sanitize_cs_string(kwargs.get("layer", "Default"))
         return f'''using UnityEngine;
 using UnityEditor;
 using System.IO;
@@ -1106,7 +1085,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
 '''
 
     elif operation == "set_tag":
-        tag_name = _sanitize_cs_string(kwargs.get("tag", "Untagged"))
+        tag_name = sanitize_cs_string(kwargs.get("tag", "Untagged"))
         return f'''using UnityEngine;
 using UnityEditor;
 using System.IO;
@@ -1184,7 +1163,7 @@ public static class VeilBreakers_Hierarchy_{safe_op}
 '''
 
     elif operation == "rename":
-        new_name = _sanitize_cs_string(kwargs.get("new_name", "Renamed"))
+        new_name = sanitize_cs_string(kwargs.get("new_name", "Renamed"))
         return f'''using UnityEngine;
 using UnityEditor;
 using System.IO;
@@ -1327,9 +1306,9 @@ def generate_batch_configure_script(
     Returns:
         Complete C# source string.
     """
-    safe_comp = _sanitize_cs_string(component_type)
+    safe_comp = sanitize_cs_string(component_type)
     mode = selector.get("by", "tag")
-    value = _sanitize_cs_string(selector.get("value", ""))
+    value = sanitize_cs_string(selector.get("value", ""))
 
     if mode == "tag":
         find_code = f'            var objects = GameObject.FindGameObjectsWithTag("{value}");'
@@ -1428,12 +1407,12 @@ def generate_variant_matrix_script(
     Returns:
         Complete C# source string.
     """
-    safe_base_name = _sanitize_cs_string(base_name)
-    safe_base_path = _sanitize_cs_string(base_prefab_path)
-    safe_output_dir = _sanitize_cs_string(output_dir)
+    safe_base_name = sanitize_cs_string(base_name)
+    safe_base_path = sanitize_cs_string(base_prefab_path)
+    safe_output_dir = sanitize_cs_string(output_dir)
 
     tiers_cs = ", ".join(str(t) for t in corruption_tiers)
-    brands_cs = ", ".join(f'"{_sanitize_cs_string(b)}"' for b in brands)
+    brands_cs = ", ".join(f'"{sanitize_cs_string(b)}"' for b in brands)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -1558,14 +1537,14 @@ def generate_joint_setup_script(
     Returns:
         Complete C# source string.
     """
-    safe_joint = _sanitize_cs_identifier(joint_type)
+    safe_joint = sanitize_cs_identifier(joint_type)
     selector_code = _resolve_selector_snippet(selector)
 
     # Build config lines
     config_lines = []
     for key, val in config.items():
-        safe_key = _sanitize_cs_identifier(key)
-        safe_val = _sanitize_cs_string(str(val))
+        safe_key = sanitize_cs_identifier(key)
+        safe_val = sanitize_cs_string(str(val))
         if key == "physics_material":
             config_lines.append(f'''            // Load or create persistent PhysicMaterial asset
             string physMatDir = "Assets/Physics";
@@ -1670,7 +1649,7 @@ def generate_navmesh_setup_script(
         Complete C# source string.
     """
     selector_code = _resolve_selector_snippet(selector)
-    safe_op = _sanitize_cs_identifier(operation)
+    safe_op = sanitize_cs_identifier(operation)
 
     if operation == "add_obstacle":
         carve = str(kwargs.get("carve", True)).lower()
@@ -1866,7 +1845,7 @@ def generate_bone_socket_script(
     if sockets is None:
         sockets = _STANDARD_SOCKETS
 
-    safe_path = _sanitize_cs_string(prefab_path)
+    safe_path = sanitize_cs_string(prefab_path)
 
     # Build bone map dictionary entries
     bone_map_entries = []
@@ -1876,7 +1855,7 @@ def generate_bone_socket_script(
     bone_map_cs = ",\n".join(bone_map_entries)
 
     # Build socket list
-    socket_list_entries = ", ".join(f'"{_sanitize_cs_string(s)}"' for s in sockets)
+    socket_list_entries = ", ".join(f'"{sanitize_cs_string(s)}"' for s in sockets)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -2128,7 +2107,7 @@ public static class VeilBreakers_JobScript
         action = op.get("action", "")
         step_num = i + 1
         selector = op.get("selector", op.get("object_name", ""))
-        comp_type = _sanitize_cs_string(op.get("component_type", ""))
+        comp_type = sanitize_cs_string(op.get("component_type", ""))
         properties = op.get("properties", [])
 
         selector_code = _resolve_selector_snippet(selector)
@@ -2208,11 +2187,11 @@ public static class VeilBreakers_JobScript
 
         elif action == "hierarchy":
             hier_op = op.get("operation", "create_empty")
-            hier_name = _sanitize_cs_string(op.get("name", "NewEmpty"))
-            hier_new_name = _sanitize_cs_string(op.get("new_name", "Renamed"))
-            hier_parent = _sanitize_cs_string(op.get("parent_name", ""))
-            hier_layer = _sanitize_cs_string(op.get("layer", "Default"))
-            hier_tag = _sanitize_cs_string(op.get("tag", "Untagged"))
+            hier_name = sanitize_cs_string(op.get("name", "NewEmpty"))
+            hier_new_name = sanitize_cs_string(op.get("new_name", "Renamed"))
+            hier_parent = sanitize_cs_string(op.get("parent_name", ""))
+            hier_layer = sanitize_cs_string(op.get("layer", "Default"))
+            hier_tag = sanitize_cs_string(op.get("tag", "Untagged"))
             hier_active = "true" if hier_op == "enable" else "false"
 
             if hier_op == "create_empty":
@@ -2329,7 +2308,7 @@ public static class VeilBreakers_JobScript
                 steps.Add("{{\\"step\\": {step_num}, \\"action\\": \\"hierarchy\\", \\"status\\": \\"skipped\\", \\"message\\": \\"Unknown hierarchy operation: {hier_op}\\"}}");''')
 
         elif action == "setup_joints":
-            jt = _sanitize_cs_identifier(op.get("joint_type", "HingeJoint"))
+            jt = sanitize_cs_identifier(op.get("joint_type", "HingeJoint"))
             step_blocks.append(f'''
                 // Step {step_num}: Setup joint {jt}
                 try

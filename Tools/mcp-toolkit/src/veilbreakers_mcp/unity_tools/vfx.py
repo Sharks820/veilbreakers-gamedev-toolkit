@@ -42,7 +42,7 @@ from veilbreakers_mcp.shared.unity_templates.vfx_mastery_templates import (
     generate_directional_hit_vfx_script,
     generate_boss_transition_vfx_script,
 )
-from veilbreakers_mcp.shared.unity_templates.code_templates import _sanitize_cs_identifier
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 
 
 
@@ -395,7 +395,7 @@ async def _handle_vfx_aura(
 async def _handle_vfx_corruption_shader(name: str) -> str:
     """Generate corruption scaling HLSL shader (VFX-06)."""
     shader = generate_corruption_shader()
-    safe_name = _sanitize_cs_identifier(name) or "Shader"
+    safe_name = sanitize_cs_identifier(name) or "Shader"
     shader_path = f"Assets/Shaders/Generated/{safe_name}_Corruption.shader"
 
     try:
@@ -445,7 +445,7 @@ async def _handle_vfx_shader(name: str, shader_type: str) -> str:
 
     shader = shader_generators[shader_type]()
     type_label = shader_type.title().replace("_", "")
-    safe_name = _sanitize_cs_identifier(name) or "Shader"
+    safe_name = sanitize_cs_identifier(name) or "Shader"
     shader_path = f"Assets/Shaders/Generated/{safe_name}_{type_label}.shader"
 
     try:
