@@ -1053,88 +1053,90 @@ def handle_edit_bone(params: dict) -> dict:
 
     if mode == "edit":
         bpy.ops.object.mode_set(mode="EDIT")
-        ebone = arm_obj.data.edit_bones.get(bone_name)
-        if not ebone:
+        try:
+            ebone = arm_obj.data.edit_bones.get(bone_name)
+            if not ebone:
+                raise ValueError(
+                    f"Bone '{bone_name}' not found. "
+                    f"Available: {[b.name for b in arm_obj.data.edit_bones]}"
+                )
+
+            if operation == "move":
+                from mathutils import Vector
+                offset = Vector(value)
+                ebone.head += offset
+                ebone.tail += offset
+                result["new_head"] = tuple(ebone.head)
+                result["new_tail"] = tuple(ebone.tail)
+
+            elif operation == "scale":
+                scale_factor = value[0] if isinstance(value, (list, tuple)) else value
+                center = (ebone.head + ebone.tail) / 2
+                head_off = ebone.head - center
+                tail_off = ebone.tail - center
+                ebone.head = center + head_off * scale_factor
+                ebone.tail = center + tail_off * scale_factor
+                result["new_head"] = tuple(ebone.head)
+                result["new_tail"] = tuple(ebone.tail)
+
+            elif operation == "rotate":
+                from mathutils import Euler
+                rot = Euler(value)
+                center = ebone.head.copy()
+                mat = rot.to_matrix().to_4x4()
+                tail_offset = ebone.tail - ebone.head
+                new_tail = center + mat @ tail_offset
+                ebone.tail = new_tail
+                result["new_head"] = tuple(ebone.head)
+                result["new_tail"] = tuple(ebone.tail)
+
+            elif operation == "select":
+                ebone.select = True
+                ebone.select_head = True
+                ebone.select_tail = True
+
+            elif operation == "inspect":
+                result["head"] = tuple(ebone.head)
+                result["tail"] = tuple(ebone.tail)
+                result["roll"] = ebone.roll
+                result["length"] = ebone.length
+                result["parent"] = ebone.parent.name if ebone.parent else None
+                result["children"] = [c.name for c in ebone.children]
+                result["connected"] = ebone.use_connect
+        finally:
             bpy.ops.object.mode_set(mode="OBJECT")
-            raise ValueError(
-                f"Bone '{bone_name}' not found. "
-                f"Available: {[b.name for b in arm_obj.data.edit_bones]}"
-            )
-
-        if operation == "move":
-            from mathutils import Vector
-            offset = Vector(value)
-            ebone.head += offset
-            ebone.tail += offset
-            result["new_head"] = tuple(ebone.head)
-            result["new_tail"] = tuple(ebone.tail)
-
-        elif operation == "scale":
-            # Scale bone length (value[0] = scale factor)
-            scale_factor = value[0] if isinstance(value, (list, tuple)) else value
-            center = (ebone.head + ebone.tail) / 2
-            ebone.head = center + (ebone.head - center) * scale_factor
-            ebone.tail = center + (ebone.tail - center) * scale_factor
-            result["new_head"] = tuple(ebone.head)
-            result["new_tail"] = tuple(ebone.tail)
-
-        elif operation == "rotate":
-            from mathutils import Euler, Matrix
-            rot = Euler(value)
-            center = ebone.head.copy()
-            mat = rot.to_matrix().to_4x4()
-            tail_offset = ebone.tail - ebone.head
-            new_tail = center + mat @ tail_offset
-            ebone.tail = new_tail
-            result["new_head"] = tuple(ebone.head)
-            result["new_tail"] = tuple(ebone.tail)
-
-        elif operation == "select":
-            ebone.select = True
-            ebone.select_head = True
-            ebone.select_tail = True
-
-        elif operation == "inspect":
-            result["head"] = tuple(ebone.head)
-            result["tail"] = tuple(ebone.tail)
-            result["roll"] = ebone.roll
-            result["length"] = ebone.length
-            result["parent"] = ebone.parent.name if ebone.parent else None
-            result["children"] = [c.name for c in ebone.children]
-            result["connected"] = ebone.use_connect
-
-        bpy.ops.object.mode_set(mode="OBJECT")
 
     elif mode == "pose":
         bpy.ops.object.mode_set(mode="POSE")
-        pbone = arm_obj.pose.bones.get(bone_name)
-        if not pbone:
+        try:
+            pbone = arm_obj.pose.bones.get(bone_name)
+            if not pbone:
+                raise ValueError(f"Pose bone '{bone_name}' not found")
+
+            from mathutils import Vector, Euler
+
+            if operation == "move":
+                pbone.location = Vector(value)
+                result["location"] = tuple(pbone.location)
+
+            elif operation == "rotate":
+                pbone.rotation_mode = "XYZ"
+                pbone.rotation_euler = Euler(value)
+                result["rotation"] = tuple(pbone.rotation_euler)
+
+            elif operation == "scale":
+                pbone.scale = Vector(value)
+                result["scale"] = tuple(pbone.scale)
+
+            elif operation == "inspect":
+                result["location"] = tuple(pbone.location)
+                result["rotation"] = tuple(pbone.rotation_euler)
+                result["scale"] = tuple(pbone.scale)
+                result["constraints"] = [c.name for c in pbone.constraints]
+
+            bpy.context.view_layer.update()
+        finally:
             bpy.ops.object.mode_set(mode="OBJECT")
-            raise ValueError(f"Pose bone '{bone_name}' not found")
-
-        from mathutils import Vector, Euler
-
-        if operation == "move":
-            pbone.location = Vector(value)
-            result["location"] = tuple(pbone.location)
-
-        elif operation == "rotate":
-            pbone.rotation_mode = "XYZ"
-            pbone.rotation_euler = Euler(value)
-            result["rotation"] = tuple(pbone.rotation_euler)
-
-        elif operation == "scale":
-            pbone.scale = Vector(value)
-            result["scale"] = tuple(pbone.scale)
-
-        elif operation == "inspect":
-            result["location"] = tuple(pbone.location)
-            result["rotation"] = tuple(pbone.rotation_euler)
-            result["scale"] = tuple(pbone.scale)
-            result["constraints"] = [c.name for c in pbone.constraints]
-
-        bpy.context.view_layer.update()
-        bpy.ops.object.mode_set(mode="OBJECT")
 
     return result
 
