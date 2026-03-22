@@ -242,9 +242,9 @@ def generate_brand_basic_attack(
             arm_val = -0.7 * p * intensity
             spine_val = -0.1 * p * intensity
         elif frame <= strike_end:
-            # Strike phase
+            # Strike phase — p normalized 0-1 within phase
+            # strike_speed already controls phase duration via strike_end calc
             p = (frame - antic_end) / (strike_end - antic_end) if strike_end > antic_end else 1.0
-            p = min(1.0, p * strike_speed)
             arm_val = _lerp(-0.7, 1.2, p) * intensity
             spine_val = _lerp(-0.1, 0.2, p) * intensity
         else:
