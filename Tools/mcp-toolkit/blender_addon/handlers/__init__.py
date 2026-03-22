@@ -195,6 +195,46 @@ from .monster_bodies import (  # noqa: F401 -- Monster body type system
     ALL_BRANDS,
     BRAND_FEATURES,
 )
+from .rarity_system import (  # noqa: F401 -- Rarity visual differentiation
+    RARITY_TIERS,
+    VALID_RARITIES,
+    RARITY_ORDER,
+    BRAND_EMISSION_COLORS,
+    apply_rarity_to_mesh,
+    compute_gem_socket_positions,
+    get_rarity_material_tier,
+    get_rarity_tier,
+    validate_rarity,
+)
+from .legendary_weapons import (  # noqa: F401 -- Legendary unique weapons
+    LEGENDARY_WEAPONS,
+    LEGENDARY_GENERATORS,
+    generate_legendary_weapon_mesh,
+)
+from .world_map import (  # noqa: F401 -- World map generator + landmarks + storytelling
+    generate_world_map,
+    place_landmarks,
+    generate_storytelling_scene,
+    world_map_to_dict,
+    BIOME_TYPES,
+    POI_TYPES,
+    LANDMARK_TYPES,
+    STORYTELLING_PATTERNS,
+)
+from .light_integration import (  # noqa: F401 -- Light source integration
+    compute_light_placements,
+    merge_nearby_lights,
+    compute_light_budget,
+    LIGHT_PROP_MAP,
+    FLICKER_PRESETS,
+)
+from .atmospheric_volumes import (  # noqa: F401 -- Atmospheric volume props
+    compute_atmospheric_placements,
+    compute_volume_mesh_spec,
+    estimate_atmosphere_performance,
+    ATMOSPHERIC_VOLUMES,
+    BIOME_ATMOSPHERE_RULES,
+)
 
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "ping": lambda params: {"status": "success", "result": "pong"},
@@ -387,5 +427,40 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         hummock_count=params.get("hummock_count", 12),
         island_count=params.get("island_count", 4),
         seed=params.get("seed", 42),
+    ),
+    # World map generation (pure logic -- returns world map spec)
+    "world_generate_world_map": lambda params: world_map_to_dict(
+        generate_world_map(
+            num_regions=params.get("num_regions", 6),
+            map_size=params.get("map_size", 2000.0),
+            seed=params.get("seed", 42),
+            min_pois=params.get("min_pois", 300),
+        )
+    ),
+    # Light integration (pure logic -- returns light placements)
+    "env_compute_light_placements": lambda params: compute_light_placements(
+        prop_positions=params.get("prop_positions", []),
+    ),
+    "env_merge_lights": lambda params: merge_nearby_lights(
+        lights=params.get("lights", []),
+        merge_distance=params.get("merge_distance", 2.0),
+    ),
+    "env_light_budget": lambda params: compute_light_budget(
+        lights=params.get("lights", []),
+    ),
+    # Atmospheric volumes (pure logic -- returns volume placements)
+    "env_compute_atmospheric_placements": lambda params: compute_atmospheric_placements(
+        biome_name=params.get("biome_name", "dark_forest"),
+        area_bounds=tuple(params.get("area_bounds", (0, 0, 100, 100))),
+        seed=params.get("seed", 42),
+        density_scale=params.get("density_scale", 1.0),
+    ),
+    "env_volume_mesh_spec": lambda params: compute_volume_mesh_spec(
+        volume_type=params.get("volume_type", "ground_fog"),
+        position=tuple(params.get("position", (0, 0, 0))),
+        scale=params.get("scale", 1.0),
+    ),
+    "env_atmosphere_performance": lambda params: estimate_atmosphere_performance(
+        placements=params.get("placements", []),
     ),
 }
