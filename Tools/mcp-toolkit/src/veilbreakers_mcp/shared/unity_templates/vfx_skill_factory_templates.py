@@ -367,7 +367,7 @@ _CS_ARCHETYPE_ARC_BOLT = r'''
             // -- Glow trail particles along path --
             var glowGO = CreateChild(boltGO, "GlowTrail");
             var ps = AddParticleSystem(glowGO, glow, 40, lifetime * 0.5f, 0.06f * scale);
-            var shape = ps.shape; shape.shapeType = ParticleSystemShapeType.SingleSidedEdge;
+            var shape = ps.shape; shape.shapeType = ParticleSystemShapeType.Cone;
             shape.radius = Vector3.Distance(start, end);
             var em = ps.emission; em.rateOverTime = 60f;
 
