@@ -85,6 +85,36 @@ from .animation_ik import smooth_corrections
 "apply_ik_foot_placement"
 ```
 
+### Brand Ability Handlers (animation_abilities.py)
+```python
+from .animation_abilities import generate_ability_keyframes
+from .animation_abilities import validate_ability_params
+from .animation_abilities import generate_brand_basic_attack
+from .animation_abilities import generate_brand_defend
+from .animation_abilities import generate_brand_skill
+from .animation_abilities import generate_brand_ultimate
+from .animation_abilities import generate_status_effect_keyframes
+from .animation_abilities import generate_combo_keyframes
+from .animation_abilities import generate_creature_combat_idle
+from .animation_abilities import validate_status_effect_params
+```
+
+## New action Literals for blender_animation (abilities)
+
+```python
+# Brand ability slot actions
+"generate_brand_attack" | "generate_brand_defend" | "generate_brand_skill" | "generate_brand_ultimate"
+
+# Status effects
+"generate_status_effect"
+
+# Combo system
+"generate_combo"
+
+# Creature-type combat idle
+"generate_creature_idle"
+```
+
 ## New speed literals for blender_animation walk/run
 
 VALID_SPEEDS now includes: `"walk"` | `"run"` | `"trot"` | `"canter"` | `"gallop"`
