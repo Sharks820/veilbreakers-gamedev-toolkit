@@ -3,7 +3,7 @@
 ## What Was Accomplished This Session
 
 **Branch:** `feature/code-reviewer-upgrade` (pushed to GitHub)
-**Tests:** 13,914 passed, 0 failed
+**Tests:** 13,952+ passed, 0 failed
 **Code Review:** 0 CRITICAL, 0 HIGH, 0 MEDIUM (626 LOW = all false positives)
 **Total new code:** ~70,000+ lines across 84 handler files
 **Mesh generators:** 265+ in procedural_meshes.py alone
@@ -188,12 +188,15 @@ All saved in `.planning/research/`:
 ### P1 — Editability (from Opus editability scan):
 10. Only 4 of 30+ Blender sculpt brushes exposed (expand sculpt operations)
 11. No proportional editing (soft selection falloff)
-12. No knife/cut/bisect operation
+12. No knife/cut/bisect operation (NOTE: bisect is trivial, see #71)
 13. No undo/checkpoint system for mesh edits
 14. No terrain stamp/feature placement on existing terrain
 15. No live vertex color painting at coordinates
 16. No object-to-terrain surface snapping
 17. No autonomous generate→evaluate→fix loop for Blender
+- ~~GAP-01 position select~~ **DONE this session**
+- ~~GAP-02 move/rotate/scale~~ **DONE this session**
+- ~~GAP-09 terrain sculpt~~ **DONE this session**
 
 ### P2 — Performance (from Opus performance scan):
 18. Heightmap generation pure-Python O(w*h*octaves) — needs numpy vectorization (50-200x)
@@ -301,6 +304,24 @@ All saved in `.planning/research/`:
 64. Pose libraries and animation layers
 65. Graph/dope-sheet editing for curve timing and polish
 66. Contact solving — foot locking and hand-contact stabilization
+
+**Additional from Opus Verification (14 items NOT in any gap list):**
+67. Voxel Remesh action (`bpy.ops.object.voxel_remesh`) — even topology for sculpt-friendly meshes
+68. Face Sets for sculpt isolation (`bpy.ops.sculpt.face_sets_create`)
+69. Multires Modifier for non-destructive subdivision sculpting
+70. Mesh Filter expansion — add SHARPEN, ENHANCE_DETAILS, RELAX, RANDOM, SURFACE_SMOOTH (~60 lines)
+71. Bisect/Clip plane (`bmesh.ops.bisect_plane`) — clean mesh cuts, trivial to implement
+72. Dynamic Topology toggle for adaptive sculpt detail
+73. Per-face instance scattering (NanoMesh equivalent) — detail mesh on every face
+74. Particle-to-mesh conversion (FiberMesh) — convert Blender particles to exportable geometry
+75. Terrain flow maps — extract flow direction from erosion for shader water/moss
+76. Bridge Edge Loops (`bpy.ops.mesh.bridge_edge_loops`) — connect separate mesh parts
+77. Circularize Edge Loop (LoopTools) — make edge loops perfectly circular
+78. Geometry Nodes exposure via MCP — Blender's modern procedural system (biggest architectural gap)
+79. Register hair_system.py in COMMAND_HANDLERS (exists but NOT callable via MCP!)
+80. Register equipment_fitting.py in COMMAND_HANDLERS (exists but NOT callable via MCP!)
+
+**TOTAL REMAINING GAPS: 80** (33 original + 33 Gemini/Codex + 14 Opus verification)
 
 ### Key Techniques from Research (implement these):
 - **ZBrush DynaMesh** → `bpy.ops.mesh.voxel_remesh()` (free in Blender)
