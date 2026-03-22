@@ -28,7 +28,7 @@ async def _execute_menu_item(menu_path: str) -> dict | None:
     try:
         conn = UnityConnection(timeout=30)
         return await conn.send_command("execute_menu_item", {"menu_path": menu_path})
-    except Exception:
+    except (ConnectionError, TimeoutError, OSError):
         return None
 
 
@@ -58,7 +58,7 @@ async def _bridge_recompile_and_execute(menu_path: str) -> dict | None:
         # Execute menu item
         result = await conn.send_command("execute_menu_item", {"menu_path": menu_path})
         return result
-    except Exception:
+    except (ConnectionError, TimeoutError, OSError):
         return None
 
 logger = logging.getLogger("veilbreakers_mcp.unity")

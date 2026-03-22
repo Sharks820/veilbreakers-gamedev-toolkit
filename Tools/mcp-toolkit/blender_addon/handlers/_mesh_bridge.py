@@ -56,8 +56,12 @@ from .procedural_meshes import (
     generate_drawbridge_mesh,
     # Containers
     generate_crate_mesh,
+    generate_sack_mesh,
+    generate_basket_mesh,
     # Light sources
     generate_brazier_mesh,
+    generate_lantern_mesh,
+    generate_campfire_mesh,
     # Wall decor
     generate_banner_mesh,
     generate_rug_mesh,
@@ -67,6 +71,20 @@ from .procedural_meshes import (
     generate_forge_mesh,
     generate_workbench_mesh,
     generate_cauldron_mesh,
+    generate_market_stall_mesh,
+    # Vehicles & transport
+    generate_cart_mesh,
+    # Fences
+    generate_fence_mesh,
+    # Structural
+    generate_well_mesh,
+    # Signs & markers
+    generate_signpost_mesh,
+    generate_gravestone_mesh,
+    # Natural formations
+    generate_fallen_log_mesh,
+    # Misc containers
+    generate_potion_bottle_mesh,
 )
 
 # Type alias matching procedural_meshes convention
@@ -175,6 +193,49 @@ CASTLE_ELEMENT_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]]] = 
 }
 
 # ---------------------------------------------------------------------------
+# PROP_GENERATOR_MAP
+# ---------------------------------------------------------------------------
+# Maps prop type strings (as used in PROP_AFFINITY and _GENERIC_PROPS in
+# _scatter_engine.py) to (generator_function, kwargs_override) tuples.
+# Every prop type appearing in PROP_AFFINITY or _GENERIC_PROPS must have
+# an entry here. Types without a perfect generator match use the closest
+# available generator with appropriate kwargs.
+# ---------------------------------------------------------------------------
+
+PROP_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]]] = {
+    # ---- Direct matches ----
+    "barrel": (generate_barrel_mesh, {}),
+    "crate": (generate_crate_mesh, {}),
+    "lantern": (generate_lantern_mesh, {}),
+    "cart": (generate_cart_mesh, {}),
+    "anvil": (generate_anvil_mesh, {}),
+    "rock": (generate_rock_mesh, {"rock_type": "boulder"}),
+    "mushroom": (generate_mushroom_mesh, {}),
+    "fence": (generate_fence_mesh, {}),
+    "sack": (generate_sack_mesh, {}),
+    "basket": (generate_basket_mesh, {}),
+    "well": (generate_well_mesh, {}),
+    "market_stall": (generate_market_stall_mesh, {}),
+    "signpost": (generate_signpost_mesh, {}),
+    "campfire": (generate_campfire_mesh, {}),
+    "gravestone": (generate_gravestone_mesh, {}),
+    "torch_sconce": (generate_torch_sconce_mesh, {}),
+    "brazier": (generate_brazier_mesh, {}),
+    # ---- Close matches (aliases using best-fit generators) ----
+    "bench": (generate_chair_mesh, {"style": "wooden_bench"}),
+    "mug": (generate_potion_bottle_mesh, {"style": "round_flask"}),
+    "pot": (generate_cauldron_mesh, {"size": 0.3}),
+    "tombstone": (generate_gravestone_mesh, {}),
+    "dead_tree": (generate_tree_mesh, {"canopy_style": "dead_twisted"}),
+    "log": (generate_fallen_log_mesh, {}),
+    "bush": (generate_mushroom_mesh, {"cap_style": "cluster"}),
+    "rope_coil": (generate_basket_mesh, {"handle": False}),
+    "anchor": (generate_anvil_mesh, {"size": 0.8}),
+    "weapon_rack": (generate_shelf_mesh, {"tiers": 2, "width": 1.0}),
+    "coal_pile": (generate_rock_mesh, {"rock_type": "rubble_pile", "size": 0.5}),
+}
+
+# ---------------------------------------------------------------------------
 # All maps by name (for resolve_generator)
 # ---------------------------------------------------------------------------
 
@@ -183,6 +244,7 @@ _ALL_MAPS: dict[str, dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]]]] 
     "vegetation": VEGETATION_GENERATOR_MAP,
     "dungeon_prop": DUNGEON_PROP_MAP,
     "castle": CASTLE_ELEMENT_MAP,
+    "prop": PROP_GENERATOR_MAP,
 }
 
 
@@ -286,7 +348,7 @@ try:
     import bmesh
 
     _HAS_BPY = True
-except Exception:
+except ImportError:
     pass
 
 

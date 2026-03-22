@@ -115,7 +115,7 @@ class ElevenLabsAudioClient:
         for attempt in range(max_retries + 1):
             try:
                 return fn(*args, **kwargs)
-            except Exception as exc:
+            except (ConnectionError, TimeoutError, OSError, ValueError, KeyError) as exc:
                 is_rate_limit = "429" in str(exc) or "rate" in str(exc).lower()
                 if is_rate_limit and attempt < max_retries:
                     time.sleep(2 ** (attempt + 1))

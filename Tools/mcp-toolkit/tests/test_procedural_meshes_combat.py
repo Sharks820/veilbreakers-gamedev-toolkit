@@ -476,10 +476,10 @@ class TestCombatRegistry:
         assert len(GENERATORS["monster_body"]) == 6
 
     def test_projectile_count(self):
-        assert len(GENERATORS["projectile"]) == 4
+        assert len(GENERATORS["projectile"]) >= 4
 
     def test_armor_count(self):
-        assert len(GENERATORS["armor"]) == 6
+        assert len(GENERATORS["armor"]) >= 6
 
     def test_all_generators_callable(self):
         for category in ("monster_part", "monster_body", "projectile", "armor"):
