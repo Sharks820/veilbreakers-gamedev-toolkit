@@ -29,11 +29,11 @@ class TestValidateTerrainParams:
         assert result["erosion"] == "none"
 
     def test_raises_resolution_too_large(self):
-        """Resolution > 1024 raises ValueError."""
+        """Resolution > 8192 raises ValueError."""
         from blender_addon.handlers.environment import _validate_terrain_params
 
         with pytest.raises(ValueError, match="Resolution"):
-            _validate_terrain_params({"resolution": 2048})
+            _validate_terrain_params({"resolution": 8193})
 
     def test_raises_resolution_too_small(self):
         """Resolution < 3 raises ValueError."""
@@ -56,12 +56,26 @@ class TestValidateTerrainParams:
         with pytest.raises(ValueError, match="erosion"):
             _validate_terrain_params({"erosion": "wind"})
 
-    def test_max_resolution_1024_passes(self):
-        """Resolution 1024 (maximum) passes validation."""
+    def test_max_resolution_8192_passes(self):
+        """Resolution 8192 (maximum) passes validation."""
         from blender_addon.handlers.environment import _validate_terrain_params
 
-        result = _validate_terrain_params({"resolution": 1024})
-        assert result["resolution"] == 1024
+        result = _validate_terrain_params({"resolution": 8192})
+        assert result["resolution"] == 8192
+
+    def test_resolution_4096_passes(self):
+        """Resolution 4096 passes validation (4096+ support)."""
+        from blender_addon.handlers.environment import _validate_terrain_params
+
+        result = _validate_terrain_params({"resolution": 4096})
+        assert result["resolution"] == 4096
+
+    def test_default_erosion_iterations_5000(self):
+        """Default erosion_iterations is 5000."""
+        from blender_addon.handlers.environment import _validate_terrain_params
+
+        result = _validate_terrain_params({})
+        assert result["erosion_iterations"] == 5000
 
     def test_all_terrain_types_valid(self):
         """All 6 terrain types pass validation."""

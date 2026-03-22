@@ -1053,7 +1053,7 @@ class TestTool14BlenderEnvironment:
 
     def test_validate_terrain_params_oversized(self):
         with pytest.raises(ValueError, match="exceeds maximum"):
-            _validate_terrain_params({"resolution": 2048})
+            _validate_terrain_params({"resolution": 8193})
 
     def test_validate_terrain_params_bad_erosion(self):
         with pytest.raises(ValueError, match="Unknown erosion"):

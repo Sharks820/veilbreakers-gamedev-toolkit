@@ -143,6 +143,24 @@ class TestGenerateHeightmap:
         # Different octave count should produce different result
         assert not np.array_equal(h_default, h_custom)
 
+    def test_large_resolution_256(self):
+        """256x256 heightmap generates correctly with vectorized path."""
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        hmap = generate_heightmap(256, 256, seed=42, terrain_type="mountains")
+        assert hmap.shape == (256, 256)
+        assert hmap.min() >= 0.0
+        assert hmap.max() <= 1.0
+
+    def test_non_square_heightmap(self):
+        """Non-square heightmaps generate correctly."""
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        hmap = generate_heightmap(128, 64, seed=42, terrain_type="hills")
+        assert hmap.shape == (64, 128)
+        assert hmap.min() >= 0.0
+        assert hmap.max() <= 1.0
+
 
 # ---------------------------------------------------------------------------
 # Terrain presets tests
