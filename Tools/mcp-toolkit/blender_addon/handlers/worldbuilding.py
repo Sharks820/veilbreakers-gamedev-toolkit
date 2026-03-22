@@ -438,8 +438,8 @@ def _opening_to_cutout_spec(
     role = opening_op.get("role", "opening")
     style = opening_op.get("style", "square")
 
-    # Compute the recess depth (slightly deeper than wall thickness)
-    recess_depth = max(wall_sx, wall_sy) * 1.1
+    # Compute the recess depth from wall THICKNESS (min dimension), not length
+    recess_depth = min(wall_sx, wall_sy) * 1.1
 
     # Determine cutout box position based on wall orientation
     # wall_index 0 = front (Y=0 face), 1 = back (Y=depth face),
@@ -455,7 +455,7 @@ def _opening_to_cutout_spec(
     elif wall_index == 1:
         # Back wall: extends along X, thin in Y (anchored to far Y edge)
         cx = wall_px + open_offset
-        cy = wall_py + wall_sy - open_offset - open_w
+        cy = wall_py + wall_sy - recess_depth  # start inside wall, extend outward
         cz = wall_pz + open_z
         csx = open_w
         csy = recess_depth
