@@ -795,15 +795,20 @@ public class BT_Attack_{safe_name} : BT_Leaf_{safe_name}
 {{
     public float cooldown = 1.5f;
     public float damage = 10f;
-    private float _lastAttackTime = -Mathf.Infinity;
+
+    private const string KEY_LAST_ATTACK = "BT_Attack_lastAttackTime";
 
     public override NodeState_{safe_name} Evaluate(BehaviorTreeRunner_{safe_name} runner)
     {{
-        float elapsed = Time.time - _lastAttackTime;
+        float lastAttackTime = runner.blackboard.ContainsKey(KEY_LAST_ATTACK)
+            ? (float)runner.blackboard[KEY_LAST_ATTACK]
+            : -Mathf.Infinity;
+
+        float elapsed = Time.time - lastAttackTime;
         if (elapsed < cooldown)
             return NodeState_{safe_name}.Running;
 
-        _lastAttackTime = Time.time;
+        runner.blackboard[KEY_LAST_ATTACK] = Time.time;
         Debug.Log("[BT] Attack executed, damage=" + damage);
         return NodeState_{safe_name}.Success;
     }}
@@ -817,21 +822,29 @@ public class BT_Attack_{safe_name} : BT_Leaf_{safe_name}
 public class BT_Wait_{safe_name} : BT_Leaf_{safe_name}
 {{
     public float duration = 2f;
-    private float _elapsed;
-    private bool _started;
+
+    private const string KEY_ELAPSED = "BT_Wait_elapsed";
+    private const string KEY_STARTED = "BT_Wait_started";
 
     public override NodeState_{safe_name} Evaluate(BehaviorTreeRunner_{safe_name} runner)
     {{
-        if (!_started)
+        bool started = runner.blackboard.ContainsKey(KEY_STARTED) && (bool)runner.blackboard[KEY_STARTED];
+
+        if (!started)
         {{
-            _elapsed = 0f;
-            _started = true;
+            runner.blackboard[KEY_ELAPSED] = 0f;
+            runner.blackboard[KEY_STARTED] = true;
         }}
 
-        _elapsed += Time.deltaTime;
-        if (_elapsed >= duration)
+        float elapsed = runner.blackboard.ContainsKey(KEY_ELAPSED)
+            ? (float)runner.blackboard[KEY_ELAPSED]
+            : 0f;
+        elapsed += Time.deltaTime;
+        runner.blackboard[KEY_ELAPSED] = elapsed;
+
+        if (elapsed >= duration)
         {{
-            _started = false;
+            runner.blackboard[KEY_STARTED] = false;
             return NodeState_{safe_name}.Success;
         }}
         return NodeState_{safe_name}.Running;
@@ -961,6 +974,14 @@ public class BehaviorTreeRunner_{safe_name} : MonoBehaviour
 
     [Header("Runtime State")]
     public Transform targetTransform;
+
+    /// <summary>
+    /// Per-runner blackboard for leaf-node runtime state.
+    /// Keyed by node-type + field name so shared ScriptableObject nodes
+    /// never leak state between runners.
+    /// </summary>
+    [System.NonSerialized]
+    public Dictionary<string, object> blackboard = new Dictionary<string, object>();
 
     private void Update()
     {{

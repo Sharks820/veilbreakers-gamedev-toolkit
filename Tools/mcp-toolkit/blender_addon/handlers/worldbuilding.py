@@ -453,9 +453,9 @@ def _opening_to_cutout_spec(
         csy = recess_depth
         csz = open_h
     elif wall_index == 1:
-        # Back wall: extends along X, thin in Y
+        # Back wall: extends along X, thin in Y (anchored to far Y edge)
         cx = wall_px + open_offset
-        cy = wall_py - 0.05
+        cy = wall_py + wall_sy - open_offset - open_w
         cz = wall_pz + open_z
         csx = open_w
         csy = recess_depth
@@ -469,8 +469,8 @@ def _opening_to_cutout_spec(
         csy = open_w
         csz = open_h
     else:
-        # Right wall: extends along Y, thin in X
-        cx = wall_px - 0.05
+        # Right wall: extends along Y, thin in X (anchored to far X edge)
+        cx = wall_px + wall_sx - recess_depth
         cy = wall_py + open_offset
         cz = wall_pz + open_z
         csx = recess_depth
@@ -2151,6 +2151,7 @@ def handle_generate_landmark(params: dict) -> dict:
     bpy.context.collection.objects.link(parent)
 
     # Main structure
+    obj = None
     if spec is not None:
         bm = _spec_to_bmesh(spec)
         obj = _create_mesh_object(f"{name}_structure", bm)
@@ -2196,6 +2197,12 @@ def handle_generate_landmark(params: dict) -> dict:
         if bsdf:
             color = corruption_tint["base_color"]
             bsdf.inputs["Base Color"].default_value = tuple(color)
+        # Assign corruption material to the structure mesh
+        if obj is not None:
+            if obj.data.materials:
+                obj.data.materials[0] = mat  # replace first material
+            else:
+                obj.data.materials.append(mat)
         parent["corruption_level"] = corruption_level
         parent["corruption_tint"] = str(corruption_tint["base_color"])
 
