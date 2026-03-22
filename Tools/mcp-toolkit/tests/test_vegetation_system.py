@@ -135,7 +135,7 @@ def _make_varied_terrain(
 
 
 class TestBiomeVegetationSets:
-    """Validate all 8 biomes have proper vegetation configurations."""
+    """Validate all 14 biomes have proper vegetation configurations."""
 
     EXPECTED_BIOMES = [
         "thornwood_forest",
@@ -146,16 +146,27 @@ class TestBiomeVegetationSets:
         "frozen_hollows",
         "blighted_mire",
         "ruined_citadel",
+        "desert",
+        "coastal",
+        "grasslands",
+        "mushroom_forest",
+        "crystal_cavern",
+        "deep_forest",
     ]
 
-    def test_all_eight_biomes_exist(self):
-        """All 8 biomes are defined in BIOME_VEGETATION_SETS."""
+    NEW_BIOMES = [
+        "desert", "coastal", "grasslands",
+        "mushroom_forest", "crystal_cavern", "deep_forest",
+    ]
+
+    def test_all_fourteen_biomes_exist(self):
+        """All 14 biomes are defined in BIOME_VEGETATION_SETS."""
         for biome in self.EXPECTED_BIOMES:
             assert biome in BIOME_VEGETATION_SETS, f"Missing biome: {biome}"
 
-    def test_biome_count_is_eight(self):
-        """Exactly 8 biomes are defined."""
-        assert len(BIOME_VEGETATION_SETS) == 8
+    def test_biome_count_is_fourteen(self):
+        """Exactly 14 biomes are defined."""
+        assert len(BIOME_VEGETATION_SETS) == 14
 
     def test_each_biome_has_required_categories(self):
         """Each biome has trees, ground_cover, and rocks categories."""
@@ -652,3 +663,106 @@ class TestVegetationIntegration:
             assert px < 60, (
                 f"Tree at x={px:.1f} should not be on steep right half"
             )
+
+
+# ===================================================================
+# New biome vegetation sets
+# ===================================================================
+
+
+class TestNewBiomeVegetationSets:
+    """Tests specific to the 6 new biome vegetation configurations."""
+
+    NEW_BIOMES = [
+        "desert", "coastal", "grasslands",
+        "mushroom_forest", "crystal_cavern", "deep_forest",
+    ]
+
+    @pytest.mark.parametrize("biome_name", NEW_BIOMES)
+    def test_new_biome_exists(self, biome_name):
+        assert biome_name in BIOME_VEGETATION_SETS
+
+    @pytest.mark.parametrize("biome_name", NEW_BIOMES)
+    def test_new_biome_has_categories(self, biome_name):
+        biome = BIOME_VEGETATION_SETS[biome_name]
+        for cat in ("trees", "ground_cover", "rocks"):
+            assert cat in biome
+
+    @pytest.mark.parametrize("biome_name", NEW_BIOMES)
+    def test_new_biome_entries_valid(self, biome_name):
+        biome = BIOME_VEGETATION_SETS[biome_name]
+        for cat in ("trees", "ground_cover", "rocks"):
+            for entry in biome[cat]:
+                assert "type" in entry
+                assert "density" in entry
+                assert "scale_range" in entry
+                assert 0.0 < entry["density"] <= 1.0
+                sr = entry["scale_range"]
+                assert len(sr) == 2
+                assert sr[0] > 0
+                assert sr[1] >= sr[0]
+
+    def test_desert_has_sparse_vegetation(self):
+        """Desert biome should have low vegetation density."""
+        biome = BIOME_VEGETATION_SETS["desert"]
+        total_density = sum(
+            e["density"]
+            for cat in ("trees", "ground_cover", "rocks")
+            for e in biome[cat]
+        )
+        # Desert should be sparse
+        assert total_density < 0.5
+
+    def test_grasslands_has_dense_ground_cover(self):
+        """Grasslands should have high ground cover density."""
+        biome = BIOME_VEGETATION_SETS["grasslands"]
+        gc_density = sum(e["density"] for e in biome["ground_cover"])
+        assert gc_density >= 0.5
+
+    def test_crystal_cavern_no_trees(self):
+        """Crystal cavern should have no trees (underground)."""
+        biome = BIOME_VEGETATION_SETS["crystal_cavern"]
+        assert len(biome["trees"]) == 0
+
+    def test_deep_forest_has_large_trees(self):
+        """Deep forest trees should include very large scale ranges."""
+        biome = BIOME_VEGETATION_SETS["deep_forest"]
+        max_scale = max(e["scale_range"][1] for e in biome["trees"])
+        assert max_scale >= 4.0
+
+    def test_mushroom_forest_has_mushroom_types(self):
+        """Mushroom forest should have mushroom vegetation types."""
+        biome = BIOME_VEGETATION_SETS["mushroom_forest"]
+        all_types = set()
+        for cat in ("trees", "ground_cover", "rocks"):
+            for e in biome[cat]:
+                all_types.add(e["type"])
+        assert "mushroom" in all_types
+
+    @pytest.mark.parametrize("biome_name", NEW_BIOMES)
+    def test_new_biome_produces_placements(self, biome_name):
+        """Each new biome produces placements on flat terrain."""
+        verts, faces, normals, bounds = _make_flat_terrain(
+            size=200.0, resolution=20,
+        )
+        placements = compute_vegetation_placement(
+            verts, faces, normals, biome_name, bounds,
+            seed=42, min_distance=5.0,
+        )
+        # crystal_cavern has no trees but should still produce rocks/ground_cover
+        assert len(placements) > 0, (
+            f"Biome '{biome_name}' produced no placements"
+        )
+
+    def test_no_tropical_styles_in_new_biomes(self):
+        """New biomes should not contain bright/tropical styles."""
+        forbidden = {"palm", "tropical", "lush", "bright", "cherry_blossom"}
+        for biome_name in self.NEW_BIOMES:
+            biome = BIOME_VEGETATION_SETS[biome_name]
+            for cat in ("trees", "ground_cover", "rocks"):
+                for entry in biome[cat]:
+                    style = entry.get("style", "")
+                    assert style not in forbidden, (
+                        f"Style '{style}' in {biome_name} is too bright "
+                        f"for dark fantasy"
+                    )
