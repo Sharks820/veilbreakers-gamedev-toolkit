@@ -252,7 +252,7 @@ MONSTER_TEMPLATE_MAP: dict[str, dict] = {
     "ravener": {
         "template": "humanoid", "body": "large",
         "features": ["hunched_posture", "digitigrade_legs", "frenzy_morph", "spine_spikes"],
-        "notes": "Werewolf beast, bipedal hunched, large claws, spiny back",
+        "notes": "Werewolf beast, bipedal hunched in art (JSON says quadrupedal — rigged as bipedal per concept art, use digitigrade_legs)",
     },
     "voltgeist": {
         "template": "humanoid", "body": "medium",
@@ -317,7 +317,7 @@ MONSTER_TEMPLATE_MAP: dict[str, dict] = {
     "gluttony_polyp": {
         "template": "humanoid", "body": "large",
         "features": ["belly_distension_morph", "transparent_belly"],
-        "notes": "Large hunched humanoid with huge transparent belly containing organisms",
+        "notes": "Large hunched humanoid with transparent belly (art shows arms/legs; JSON desc says floating sac — rigged as humanoid per concept art)",
     },
     # --- Multi-armed ---
     "the_congregation": {
@@ -423,6 +423,9 @@ STATUS_EFFECT_SOCKETS: dict[str, dict[str, str]] = {
         "floating": "spine.002",
         "insect": "spine.002",
         "dragon": "spine.006",
+        "serpent": "spine.008",
+        "multi_armed": "spine.005",
+        "amorphous": "spine.003",
     },
     "chest": {
         "humanoid": "spine.002",
@@ -431,6 +434,9 @@ STATUS_EFFECT_SOCKETS: dict[str, dict[str, str]] = {
         "floating": "spine.001",
         "insect": "spine.001",
         "dragon": "spine.002",
+        "serpent": "spine.004",
+        "multi_armed": "spine.002",
+        "amorphous": "spine.001",
     },
     "root": {
         "humanoid": "spine",
@@ -439,22 +445,29 @@ STATUS_EFFECT_SOCKETS: dict[str, dict[str, str]] = {
         "floating": "spine",
         "insect": "spine",
         "dragon": "spine",
+        "serpent": "spine",
+        "multi_armed": "spine",
+        "amorphous": "spine",
     },
     "left_hand": {
         "humanoid": "hand.L",
         "quadruped": "hand.L",
         "dragon": "hand.L",
+        "multi_armed": "hand.L",
     },
     "right_hand": {
         "humanoid": "hand.R",
         "quadruped": "hand.R",
         "dragon": "hand.R",
+        "multi_armed": "hand.R",
     },
     "overhead": {
         "humanoid": "spine.005",
         "quadruped": "spine.004",
         "floating": "spine.002",
         "dragon": "spine.006",
+        "serpent": "spine.008",
+        "multi_armed": "spine.005",
     },
 }
 
@@ -545,7 +558,6 @@ def _validate_monster_rig_config(monster_id: str) -> dict:
     template = config["template"]
 
     # Verify template exists
-    from .rigging_templates import TEMPLATE_CATALOG
     if template not in TEMPLATE_CATALOG:
         errors.append(f"Template '{template}' not in TEMPLATE_CATALOG")
 
