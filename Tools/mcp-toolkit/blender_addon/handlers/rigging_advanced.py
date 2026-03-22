@@ -20,7 +20,7 @@ import math
 import re
 
 import bpy
-from mathutils import Vector
+from mathutils import Euler, Vector
 
 from ._context import get_3d_context_override
 
@@ -1080,7 +1080,8 @@ def handle_setup_facial(params: dict) -> dict:
                 if "location" in transform:
                     pbone.location = Vector(transform["location"])
                 if "rotation" in transform:
-                    pbone.rotation_euler = Vector(transform["rotation"])
+                    pbone.rotation_mode = "XYZ"
+                    pbone.rotation_euler = Euler(transform["rotation"])
 
             # Store as a pose marker (custom property for retrieval)
             rig_obj[f"expression_{expr_name}"] = True
@@ -1089,7 +1090,7 @@ def handle_setup_facial(params: dict) -> dict:
             # Reset pose for next expression
             for pbone in rig_obj.pose.bones:
                 pbone.location = Vector((0, 0, 0))
-                pbone.rotation_euler = Vector((0, 0, 0))
+                pbone.rotation_euler = Euler((0, 0, 0))
 
         bpy.ops.object.mode_set(mode="OBJECT")
 
@@ -1334,7 +1335,8 @@ def handle_setup_ragdoll(params: dict) -> dict:
 
     colliders: list[str] = []
     joint_count = 0
-    prev_collider = None
+    # Map bone names to their collider objects for parent-based joint chaining
+    bone_collider_lookup: dict[str, object] = {}
 
     # Sort bones by hierarchy depth (parent bones first) for correct joint chaining
     def _bone_depth(bone_name):
@@ -1394,16 +1396,21 @@ def handle_setup_ragdoll(params: dict) -> dict:
         collider.parent_type = "BONE"
 
         colliders.append(collider.name)
+        bone_collider_lookup[bone_name] = collider
 
-        # Create rigid body constraint between adjacent colliders
-        if prev_collider:
+        # Create rigid body constraint to PARENT bone's collider (not linear chain)
+        parent_bone = bone.parent
+        parent_collider = None
+        if parent_bone:
+            parent_collider = bone_collider_lookup.get(parent_bone.name)
+        if parent_collider:
             bpy.ops.object.empty_add(location=collider.location)
             joint_obj = bpy.context.object
             joint_obj.name = f"ragdoll_joint_{bone_name}"
 
             bpy.ops.rigidbody.constraint_add(type="GENERIC")
             rbc = joint_obj.rigid_body_constraint
-            rbc.object1 = prev_collider
+            rbc.object1 = parent_collider
             rbc.object2 = collider
 
             # Apply joint angle limits
@@ -1418,8 +1425,6 @@ def handle_setup_ragdoll(params: dict) -> dict:
             rbc.limit_ang_z_upper = spec.get("ang_z_max", 0.3)
 
             joint_count += 1
-
-        prev_collider = collider
 
     return {
         "colliders": colliders,

@@ -796,9 +796,12 @@ def handle_analyze_for_rigging(params: dict) -> dict:
             bbox_dims = (0.0, 0.0, 0.0)
             has_symmetry = False
         else:
-            xs = [v.co.x for v in bm.verts]
-            ys = [v.co.y for v in bm.verts]
-            zs = [v.co.z for v in bm.verts]
+            # Transform vertices to world space via matrix_world
+            mw = obj.matrix_world
+            world_coords = [(mw @ v.co) for v in bm.verts]
+            xs = [co.x for co in world_coords]
+            ys = [co.y for co in world_coords]
+            zs = [co.z for co in world_coords]
             bbox_dims = (
                 max(xs) - min(xs),  # width (X)
                 max(ys) - min(ys),  # depth (Y)
@@ -808,13 +811,13 @@ def handle_analyze_for_rigging(params: dict) -> dict:
             # Check X-axis symmetry: compare mirrored vertex positions
             tolerance = max(bbox_dims) * 0.02  # 2% of largest dim
             sym_matches = 0
-            for v in bm.verts:
-                mirror_x = -v.co.x
-                for v2 in bm.verts:
+            for co in world_coords:
+                mirror_x = -co.x
+                for co2 in world_coords:
                     if (
-                        abs(v2.co.x - mirror_x) < tolerance
-                        and abs(v2.co.y - v.co.y) < tolerance
-                        and abs(v2.co.z - v.co.z) < tolerance
+                        abs(co2.x - mirror_x) < tolerance
+                        and abs(co2.y - co.y) < tolerance
+                        and abs(co2.z - co.z) < tolerance
                     ):
                         sym_matches += 1
                         break
