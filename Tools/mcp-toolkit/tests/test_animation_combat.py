@@ -173,11 +173,16 @@ class TestFlee:
 
     def test_has_turn_phase(self):
         kfs = generate_flee_keyframes()
-        spine_y = [kf for kf in kfs if kf.bone_name == "DEF-spine"
-                    and kf.channel == "rotation_euler" and kf.axis == 1]
-        if spine_y:
-            max_rot = max(kf.value for kf in spine_y)
-            assert max_rot >= math.pi * 0.9  # ~180 degree turn
+        # Turn is now distributed across 3 spine bones (~60 deg each = ~180 total)
+        spine_bones = [kf for kf in kfs if "spine" in kf.bone_name
+                       and kf.channel == "rotation_euler" and kf.axis == 1]
+        if spine_bones:
+            # Sum of max rotations across spine chain should approximate 180 deg
+            by_bone = {}
+            for kf in spine_bones:
+                by_bone.setdefault(kf.bone_name, []).append(kf.value)
+            total_turn = sum(max(vals) for vals in by_bone.values())
+            assert total_turn >= math.pi * 0.9  # ~180 degree distributed turn
 
 
 class TestTargetSwitch:

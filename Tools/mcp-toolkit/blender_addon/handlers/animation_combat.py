@@ -318,12 +318,17 @@ def generate_flee_keyframes(
 
         if frame <= turn_end:
             turn_t = frame / turn_end if turn_end > 0 else 1.0
-            # Spin 180 degrees (expressed as Y rotation on spine)
-            keyframes.append(Keyframe("DEF-spine", "rotation_euler", 1, frame, math.pi * turn_t))
+            # Distribute 180-deg turn across 3 spine bones to prevent
+            # candy-wrapper deformation (max ~60 deg per bone)
+            keyframes.append(Keyframe("DEF-spine", "rotation_euler", 1, frame, 1.05 * turn_t))
+            keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 1, frame, 1.05 * turn_t))
+            keyframes.append(Keyframe("DEF-spine.002", "rotation_euler", 1, frame, 1.05 * turn_t))
         else:
-            # Running away
+            # Running away — turn held across spine chain
             run_t = (frame - turn_end) / (frame_count - turn_end) if frame_count > turn_end else 0.0
-            keyframes.append(Keyframe("DEF-spine", "rotation_euler", 1, frame, math.pi))
+            keyframes.append(Keyframe("DEF-spine", "rotation_euler", 1, frame, 1.05))
+            keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 1, frame, 1.05))
+            keyframes.append(Keyframe("DEF-spine.002", "rotation_euler", 1, frame, 1.05))
 
             # Panicked run (faster, larger amplitude)
             leg_amp = 0.7
