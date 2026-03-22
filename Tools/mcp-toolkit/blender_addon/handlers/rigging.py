@@ -220,27 +220,198 @@ def _generate_multi_arm_bones(arm_count: int) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 # VeilBreakers monster ID to rig template mapping
+# Monster-to-template mapping derived from VISUAL ANALYSIS of actual VB concept art.
+# Each monster was visually inspected to determine correct body topology.
 MONSTER_TEMPLATE_MAP: dict[str, dict] = {
-    "bloodshade": {"template": "humanoid", "features": ["corruption_morph"], "body": "medium"},
-    "chainbound": {"template": "humanoid", "features": ["mechanical_joints"], "body": "heavy"},
-    "corrodex": {"template": "amorphous", "features": ["dissolution_morph"], "body": "medium"},
-    "crackling": {"template": "floating", "features": ["energy_tendrils"], "body": "small"},
-    "flicker": {"template": "floating", "features": ["fire_trail"], "body": "small"},
-    "gluttony_polyp": {"template": "amorphous", "features": ["mouth_expand"], "body": "large"},
-    "grimthorn": {"template": "amorphous", "features": ["vine_tendrils", "thorn_protrusions"], "body": "medium"},
-    "hollow": {"template": "humanoid", "features": ["void_distortion", "corruption_morph"], "body": "medium"},
-    "ironjaw": {"template": "humanoid", "features": ["heavy_armor_sockets"], "body": "heavy"},
-    "mawling": {"template": "quadruped", "features": ["jaw_extend"], "body": "medium"},
-    "needlefang": {"template": "insect", "features": ["spike_protrusions"], "body": "small"},
-    "ravener": {"template": "quadruped", "features": ["frenzy_morph"], "body": "large"},
-    "skitter_teeth": {"template": "arachnid", "features": ["mandible_extend"], "body": "medium"},
-    "sporecaller": {"template": "floating", "features": ["spore_emitters"], "body": "medium"},
-    "the_broodmother": {"template": "arachnid", "features": ["egg_sacs", "spawn_points", "mandible_extend"], "body": "boss"},
-    "the_bulwark": {"template": "humanoid", "features": ["heavy_armor_sockets", "shield_mount"], "body": "boss"},
-    "the_congregation": {"template": "multi_armed", "features": ["swarm_detach", "corruption_morph"], "body": "boss"},
-    "the_vessel": {"template": "humanoid", "features": ["corruption_morph", "void_distortion"], "body": "boss"},
-    "the_weeping": {"template": "humanoid", "features": ["cloth_drip", "corruption_morph"], "body": "boss"},
-    "voltgeist": {"template": "floating", "features": ["energy_tendrils", "arc_emitters"], "body": "small"},
+    # --- Humanoid bipedal monsters ---
+    "skitter_teeth": {
+        "template": "humanoid", "body": "heavy",
+        "features": ["oversized_hands", "spine_plates", "hunched_posture"],
+        "notes": "Hunched bipedal with massive armored claw-arms, skull face, bone armor",
+    },
+    "chainbound": {
+        "template": "humanoid", "body": "heavy",
+        "features": ["chain_spring_bones", "glowing_core", "mechanical_joints"],
+        "notes": "Armored humanoid wrapped in chains, glowing ember core in chest",
+    },
+    "corrodex": {
+        "template": "humanoid", "body": "medium",
+        "features": ["acid_drip_emitters", "corroded_armor"],
+        "notes": "Armored humanoid knight leaking green acid from joints and hands",
+    },
+    "crackling": {
+        "template": "humanoid", "body": "small",
+        "features": ["electric_hair_spring", "scale_0.6"],
+        "notes": "Small child-like humanoid with electric blue hair, scaled-down rig",
+    },
+    "ironjaw": {
+        "template": "humanoid", "body": "heavy",
+        "features": ["hunched_posture", "jaw_extend", "weapon_socket", "spine_plates"],
+        "notes": "Bear-like beast-man, bipedal, skull face, holds spiked mace",
+    },
+    "ravener": {
+        "template": "humanoid", "body": "large",
+        "features": ["hunched_posture", "digitigrade_legs", "frenzy_morph", "spine_spikes"],
+        "notes": "Werewolf beast, bipedal hunched, large claws, spiny back",
+    },
+    "voltgeist": {
+        "template": "humanoid", "body": "medium",
+        "features": ["energy_trail_emitters", "electric_arc_bones"],
+        "notes": "Sleek humanoid with lightning coursing through cracked body",
+    },
+    "the_bulwark": {
+        "template": "humanoid", "body": "boss",
+        "features": ["hunched_posture", "heavy_armor_sockets", "chain_spring_bones", "thorn_protrusions"],
+        "notes": "BOSS: Hulking zombie in thorny armor with chains, hunched shambling gait",
+    },
+    "the_vessel": {
+        "template": "humanoid", "body": "boss",
+        "features": ["cloth_spring_bones", "halo_bone", "hover_offset", "corruption_morph"],
+        "notes": "BOSS: Hooded robed figure with halo, floating/hovering, hands outstretched",
+    },
+    # --- Humanoid upper body + tentacle/amorphous lower (wraith type) ---
+    "bloodshade": {
+        "template": "humanoid", "body": "medium",
+        "features": ["no_legs_tentacle_base", "tendril_spring_bones", "corruption_morph"],
+        "notes": "Dark wraith — humanoid torso with arms, lower body is dark flowing tendrils (no legs)",
+    },
+    "hollow": {
+        "template": "humanoid", "body": "large",
+        "features": ["no_legs_tentacle_base", "glowing_core", "void_distortion", "corruption_morph"],
+        "notes": "Massive dark humanoid upper body, lower dissolves into writhing tentacle mass",
+    },
+    # --- Serpent body WITH arms ---
+    "grimthorn": {
+        "template": "serpent", "body": "medium",
+        "features": ["arm_pair_addon", "spike_protrusions", "glowing_eyes"],
+        "notes": "Serpentine body with 2 clawed arms, covered in spikes, green glow",
+    },
+    "needlefang": {
+        "template": "serpent", "body": "medium",
+        "features": ["arm_pair_addon", "spike_protrusions", "glowing_eyes"],
+        "notes": "Serpentine with arms and spike protrusions (similar topology to grimthorn)",
+    },
+    # --- Quadruped ---
+    "sporecaller": {
+        "template": "quadruped", "body": "medium",
+        "features": ["antler_bones", "growth_sockets", "mushroom_protrusions"],
+        "notes": "Corrupted deer/elk quadruped with antlers and mushrooms growing from body",
+    },
+    # --- Insect (with wings) ---
+    "flicker": {
+        "template": "insect", "body": "small",
+        "features": ["wing_pair_addon", "electric_trail"],
+        "notes": "Flying insect-spider hybrid with 4 translucent wings and 6+ legs",
+    },
+    "the_broodmother": {
+        "template": "insect", "body": "boss",
+        "features": ["wing_pair_addon", "egg_sac_distension", "spawn_points", "mandible_extend"],
+        "notes": "BOSS: Giant insect with wings, translucent egg sac abdomen with larvae, 6 legs",
+    },
+    # --- Floating/amorphous ---
+    "mawling": {
+        "template": "floating", "body": "small",
+        "features": ["oversized_jaw", "drip_emitters"],
+        "notes": "Small floating dark blob with enormous toothy mouth, no limbs",
+    },
+    "gluttony_polyp": {
+        "template": "humanoid", "body": "large",
+        "features": ["belly_distension_morph", "transparent_belly"],
+        "notes": "Large hunched humanoid with huge transparent belly containing organisms",
+    },
+    # --- Multi-armed ---
+    "the_congregation": {
+        "template": "multi_armed", "body": "boss",
+        "features": ["arm_count_6", "tentacle_base", "swarm_detach", "corruption_morph"],
+        "notes": "BOSS: 6-armed humanoid upper fused into mass of writhing bodies/tentacles",
+    },
+    # --- Pure amorphous ---
+    "the_weeping": {
+        "template": "amorphous", "body": "boss",
+        "features": ["multi_eye_array", "tendril_spring_bones"],
+        "notes": "BOSS: Organic mass covered in 15+ eyeballs and dark tendrils, no humanoid features",
+    },
+}
+
+
+# Rig feature flags that indicate special bone/morph requirements
+# beyond what the base template provides
+RIG_FEATURE_DEFINITIONS: dict[str, dict] = {
+    "no_legs_tentacle_base": {
+        "description": "Replace leg bones with tentacle chain (wraith-type lower body)",
+        "removes": ["thigh.L", "thigh.R", "shin.L", "shin.R", "foot.L", "foot.R"],
+        "adds": ["tentacle_base", "tentacle_base.001", "tentacle_base.002"],
+    },
+    "arm_pair_addon": {
+        "description": "Add humanoid arm pair to a non-humanoid template (e.g. serpent)",
+        "adds": ["upper_arm.L", "forearm.L", "hand.L", "upper_arm.R", "forearm.R", "hand.R"],
+    },
+    "wing_pair_addon": {
+        "description": "Add wing bones to insect template for flying creatures",
+        "adds": ["wing_upper.L", "wing_lower.L", "wing_upper.R", "wing_lower.R"],
+    },
+    "oversized_jaw": {
+        "description": "Add jaw bone to floating template for mouth creatures",
+        "adds": ["jaw", "jaw.001"],
+    },
+    "antler_bones": {
+        "description": "Add antler/horn bone chains for deer/elk/horned creatures",
+        "adds": ["antler.L", "antler.L.001", "antler.R", "antler.R.001"],
+    },
+    "weapon_socket": {
+        "description": "Add weapon hold bone in hand for weapon-wielding creatures",
+        "adds": ["weapon_hold.R"],
+    },
+    "multi_eye_array": {
+        "description": "Multiple independent eye bones for eye-covered creatures",
+        "adds": [f"eye_{i}" for i in range(8)],
+    },
+    "hunched_posture": {
+        "description": "Modify spine curve for hunched/beast-man stance",
+        "modifies": ["spine.002", "spine.003"],
+    },
+    "digitigrade_legs": {
+        "description": "Extra joint in leg chain for digitigrade (toe-walking) stance",
+        "adds": ["metatarsal.L", "metatarsal.R"],
+    },
+    "chain_spring_bones": {
+        "description": "Spring bone chains for dangling chains/accessories",
+        "adds": ["chain_1", "chain_1.001", "chain_2", "chain_2.001"],
+    },
+    "cloth_spring_bones": {
+        "description": "Spring bone mesh for robes/capes/cloth simulation",
+        "adds": ["cloth_front", "cloth_front.001", "cloth_back", "cloth_back.001"],
+    },
+    "belly_distension_morph": {
+        "description": "Blend shape for belly expansion (gluttony/egg sac)",
+        "morph_target": "belly_expand",
+    },
+    "egg_sac_distension": {
+        "description": "Pulsing/expanding egg sac with larva movement",
+        "morph_target": "egg_sac_pulse",
+        "adds": ["egg_sac", "egg_sac.001"],
+    },
+    "corruption_morph": {
+        "description": "4-stage corruption blend shapes (25/50/75/100%)",
+        "morph_targets": ["corruption_stage_1", "corruption_stage_2",
+                          "corruption_stage_3", "corruption_stage_4"],
+    },
+    "halo_bone": {
+        "description": "Floating halo/crown bone above head",
+        "adds": ["halo"],
+    },
+    "hover_offset": {
+        "description": "Root bone offset for floating/hovering creatures",
+        "modifies": ["spine"],
+    },
+    "spine_plates": {
+        "description": "Armor plate bones along spine for armored creatures",
+        "adds": ["plate_1", "plate_2", "plate_3"],
+    },
+    "growth_sockets": {
+        "description": "Attachment points for organic growths (mushrooms, barnacles)",
+        "adds": ["growth_socket_1", "growth_socket_2", "growth_socket_3", "growth_socket_4"],
+    },
 }
 
 # Bone sockets where status effect VFX should attach per body type
