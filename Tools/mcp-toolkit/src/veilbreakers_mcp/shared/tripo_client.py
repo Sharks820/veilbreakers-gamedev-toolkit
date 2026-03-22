@@ -143,7 +143,7 @@ class TripoGenerator:
 
             return result
 
-        except Exception as exc:
+        except (ConnectionError, TimeoutError, OSError, ValueError, KeyError) as exc:
             return {
                 "status": "failed",
                 "error": str(exc),
@@ -151,7 +151,7 @@ class TripoGenerator:
         finally:
             try:
                 client.close()
-            except Exception:
+            except (OSError, RuntimeError):
                 pass
 
     async def generate_from_image(
@@ -235,7 +235,7 @@ class TripoGenerator:
 
             return result
 
-        except Exception as exc:
+        except (ConnectionError, TimeoutError, OSError, ValueError, KeyError) as exc:
             return {
                 "status": "failed",
                 "error": str(exc),
@@ -243,5 +243,5 @@ class TripoGenerator:
         finally:
             try:
                 client.close()
-            except Exception:
+            except (OSError, ConnectionError):
                 pass

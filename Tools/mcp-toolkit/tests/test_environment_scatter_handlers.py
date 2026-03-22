@@ -173,6 +173,87 @@ class TestCreateBreakableLogic:
             )
 
 
+class TestPropGeneratorMapCoverage:
+    """Verify PROP_GENERATOR_MAP covers all prop types used by the scatter engine."""
+
+    def test_prop_generator_map_covers_all_affinity_types(self):
+        """Every prop type in PROP_AFFINITY has a PROP_GENERATOR_MAP entry."""
+        from blender_addon.handlers._scatter_engine import PROP_AFFINITY
+        from blender_addon.handlers._mesh_bridge import PROP_GENERATOR_MAP
+
+        missing = []
+        for building_type, prop_list in PROP_AFFINITY.items():
+            for prop_type, _weight in prop_list:
+                if prop_type not in PROP_GENERATOR_MAP:
+                    missing.append(f"{building_type}->{prop_type}")
+
+        assert not missing, (
+            f"PROP_GENERATOR_MAP is missing entries for: {missing}"
+        )
+
+    def test_prop_generator_map_covers_generic_props(self):
+        """Every prop type in _GENERIC_PROPS has a PROP_GENERATOR_MAP entry."""
+        from blender_addon.handlers._scatter_engine import _GENERIC_PROPS
+        from blender_addon.handlers._mesh_bridge import PROP_GENERATOR_MAP
+
+        missing = []
+        for prop_type, _weight in _GENERIC_PROPS:
+            if prop_type not in PROP_GENERATOR_MAP:
+                missing.append(prop_type)
+
+        assert not missing, (
+            f"PROP_GENERATOR_MAP is missing generic prop entries: {missing}"
+        )
+
+    def test_all_prop_generators_are_callable(self):
+        """All generator functions in PROP_GENERATOR_MAP are callable."""
+        from blender_addon.handlers._mesh_bridge import PROP_GENERATOR_MAP
+
+        for prop_type, (gen_func, _kwargs) in PROP_GENERATOR_MAP.items():
+            assert callable(gen_func), (
+                f"Generator for '{prop_type}' is not callable: {gen_func}"
+            )
+
+    def test_all_prop_generators_produce_valid_meshspec(self):
+        """All generators in PROP_GENERATOR_MAP produce valid MeshSpec dicts."""
+        from blender_addon.handlers._mesh_bridge import PROP_GENERATOR_MAP
+
+        for prop_type, (gen_func, gen_kwargs) in PROP_GENERATOR_MAP.items():
+            spec = gen_func(**gen_kwargs)
+            assert isinstance(spec, dict), (
+                f"Generator for '{prop_type}' did not return a dict"
+            )
+            assert "vertices" in spec, (
+                f"MeshSpec for '{prop_type}' missing 'vertices'"
+            )
+            assert "faces" in spec, (
+                f"MeshSpec for '{prop_type}' missing 'faces'"
+            )
+            assert len(spec["vertices"]) > 0, (
+                f"MeshSpec for '{prop_type}' has empty vertices"
+            )
+            assert len(spec["faces"]) > 0, (
+                f"MeshSpec for '{prop_type}' has empty faces"
+            )
+
+    def test_prop_generator_map_in_all_maps(self):
+        """PROP_GENERATOR_MAP is registered in _ALL_MAPS for resolve_generator."""
+        from blender_addon.handlers._mesh_bridge import _ALL_MAPS, PROP_GENERATOR_MAP
+
+        assert "prop" in _ALL_MAPS, (
+            "PROP_GENERATOR_MAP not registered in _ALL_MAPS"
+        )
+        assert _ALL_MAPS["prop"] is PROP_GENERATOR_MAP
+
+    def test_prop_map_has_minimum_entries(self):
+        """PROP_GENERATOR_MAP has at least 20 entries (all affinity + generic)."""
+        from blender_addon.handlers._mesh_bridge import PROP_GENERATOR_MAP
+
+        assert len(PROP_GENERATOR_MAP) >= 20, (
+            f"Expected at least 20 entries, got {len(PROP_GENERATOR_MAP)}"
+        )
+
+
 class TestHandlerImports:
     """Test that handler module can be partially imported."""
 
@@ -192,3 +273,9 @@ class TestHandlerImports:
         assert callable(generate_breakable_variants)
         assert isinstance(PROP_AFFINITY, dict)
         assert isinstance(BREAKABLE_PROPS, dict)
+
+    def test_prop_generator_map_importable(self):
+        """PROP_GENERATOR_MAP imports without bpy."""
+        from blender_addon.handlers._mesh_bridge import PROP_GENERATOR_MAP
+        assert isinstance(PROP_GENERATOR_MAP, dict)
+        assert len(PROP_GENERATOR_MAP) > 0

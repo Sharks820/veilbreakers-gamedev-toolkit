@@ -605,6 +605,14 @@ def generate_location_spec(
         "fortress": ["barracks", "armory", "war_room", "guard_tower", "gatehouse"],
         "dungeon_entrance": ["ruined_tower", "cave_mouth", "guard_post"],
         "camp": ["tent", "campfire", "supply_cart", "lookout_post"],
+        "fishing_village": ["dock", "boat_house", "tavern", "cottage", "cottage"],
+        "mining_town": ["mine_entrance", "smelter", "barracks", "tavern", "general_store"],
+        "port_city": ["harbor_dock", "warehouse", "lighthouse", "tavern", "market_stall", "guard_tower"],
+        "monastery": ["temple", "dormitory", "library", "garden", "bell_tower"],
+        "necropolis": ["catacomb", "mausoleum", "shrine", "ossuary"],
+        "military_outpost": ["barracks", "watchtower", "armory", "stable", "command_tent"],
+        "crossroads_inn": ["tavern", "stable", "cottage"],
+        "bandit_hideout": ["cave_entrance", "tent", "lookout_post"],
     }
     building_types = _BUILDING_TYPES.get(location_type, ["building"])
 
@@ -859,3 +867,137 @@ def generate_easter_egg_spec(
         })
 
     return easter_eggs
+
+
+# ---------------------------------------------------------------------------
+# Settlement Layout Templates (Task #47)
+# ---------------------------------------------------------------------------
+
+SETTLEMENT_TEMPLATES: dict[str, dict[str, Any]] = {
+    "fishing_village": {
+        "buildings": ["dock", "boat_house", "fish_market", "cottage", "cottage", "tavern"],
+        "features": ["pier", "drying_rack", "net_rack"],
+    },
+    "mining_town": {
+        "buildings": ["mine_entrance", "smelter", "barracks", "tavern", "general_store"],
+        "features": ["ore_cart", "mine_track", "slag_heap"],
+    },
+    "port_city": {
+        "buildings": ["harbor_dock", "warehouse", "lighthouse", "tavern", "market_stall", "guard_tower"],
+        "features": ["crane", "ship_wreck"],
+    },
+    "monastery": {
+        "buildings": ["temple", "dormitory", "library", "garden", "bell_tower"],
+        "features": ["meditation_circle", "herb_garden"],
+    },
+    "necropolis": {
+        "buildings": ["catacomb", "mausoleum", "shrine", "ossuary"],
+        "features": ["gravestone", "angel_statue", "iron_fence"],
+    },
+    "military_outpost": {
+        "buildings": ["barracks", "watchtower", "armory", "stable", "command_tent"],
+        "features": ["palisade", "training_dummy", "flag_pole"],
+    },
+    "crossroads_inn": {
+        "buildings": ["tavern", "stable", "cottage"],
+        "features": ["signpost", "well", "hitching_post"],
+    },
+    "bandit_hideout": {
+        "buildings": ["cave_entrance", "tent", "lookout_post"],
+        "features": ["barricade", "campfire", "stolen_goods_pile"],
+    },
+}
+
+SETTLEMENT_NAMES: list[str] = sorted(SETTLEMENT_TEMPLATES.keys())
+
+
+def get_settlement_template(settlement_type: str) -> dict[str, Any]:
+    """Return the settlement template for a given type.
+
+    Args:
+        settlement_type: One of the keys in SETTLEMENT_TEMPLATES.
+
+    Returns:
+        Dict with ``buildings`` and ``features`` lists.
+
+    Raises:
+        ValueError: If settlement_type is not recognised.
+    """
+    template = SETTLEMENT_TEMPLATES.get(settlement_type)
+    if template is None:
+        raise ValueError(
+            f"Unknown settlement type '{settlement_type}'. "
+            f"Valid types: {', '.join(SETTLEMENT_NAMES)}"
+        )
+    # Return a copy to prevent mutation
+    return {
+        "buildings": list(template["buildings"]),
+        "features": list(template["features"]),
+    }
+
+
+def list_settlement_types() -> list[str]:
+    """Return sorted list of all available settlement type names."""
+    return list(SETTLEMENT_NAMES)
+
+
+def generate_settlement_spec(
+    settlement_type: str = "fishing_village",
+    seed: int = 0,
+    poi_count: int = 3,
+) -> dict[str, Any]:
+    """Generate a complete settlement layout from a template.
+
+    Combines the settlement template's building and feature lists with
+    the existing ``generate_location_spec`` function to produce a fully
+    specified settlement.
+
+    Args:
+        settlement_type: One of the keys in SETTLEMENT_TEMPLATES.
+        seed: Random seed for deterministic placement.
+        poi_count: Number of additional points of interest.
+
+    Returns:
+        Dict with terrain_bounds, buildings, paths, pois, features,
+        settlement_type.
+
+    Raises:
+        ValueError: If settlement_type is not recognised.
+    """
+    template = get_settlement_template(settlement_type)
+    rng = random.Random(seed)
+
+    building_count = len(template["buildings"])
+
+    # Use generate_location_spec as the base layout engine
+    base = generate_location_spec(
+        location_type=settlement_type,
+        building_count=building_count,
+        path_count=max(2, building_count - 1),
+        poi_count=poi_count,
+        seed=seed,
+    )
+
+    # Override building types with template-specific ones
+    for i, building in enumerate(base.get("buildings", [])):
+        if i < len(template["buildings"]):
+            building["type"] = template["buildings"][i]
+
+    # Add features as additional POI-like placements
+    terrain_size = base.get("terrain_bounds", {}).get("size", 100.0)
+    half = terrain_size / 2.0
+    features: list[dict[str, Any]] = []
+    for feature_type in template["features"]:
+        features.append({
+            "type": feature_type,
+            "position": (
+                round(rng.uniform(-half * 0.4, half * 0.4), 2),
+                round(rng.uniform(-half * 0.4, half * 0.4), 2),
+            ),
+        })
+
+    base["features"] = features
+    base["settlement_type"] = settlement_type
+    base["template"] = template
+
+    return base

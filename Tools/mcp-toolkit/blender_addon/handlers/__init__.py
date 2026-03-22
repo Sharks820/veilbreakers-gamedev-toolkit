@@ -24,6 +24,11 @@ from .viewport import (
     handle_render_contact_sheet,
     handle_set_shading,
     handle_navigate_camera,
+    handle_setup_beauty_scene,
+    handle_setup_dark_fantasy_lighting,
+    handle_setup_ground_plane,
+    handle_auto_frame_camera,
+    handle_run_quality_checks,
 )
 from .materials import (
     handle_material_create,
@@ -88,8 +93,14 @@ from .texture import (
     handle_generate_wear_map,
     handle_get_uv_region,
     handle_get_seam_pixels,
+    handle_bake_procedural_to_images,
+    handle_bake_id_map,
+    handle_bake_thickness_map,
+    handle_channel_pack,
+    handle_ensure_flat_albedo,
 )
 from .pipeline_lod import handle_generate_lods
+from .lod_pipeline import handle_generate_lods as handle_generate_lod_chain
 from .rigging import (
     handle_analyze_for_rigging,
     handle_apply_rig_template,
@@ -202,6 +213,12 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "render_contact_sheet": handle_render_contact_sheet,
     "set_shading": handle_set_shading,
     "navigate_camera": handle_navigate_camera,
+    # Beauty setup
+    "setup_beauty_scene": handle_setup_beauty_scene,
+    "setup_dark_fantasy_lighting": handle_setup_dark_fantasy_lighting,
+    "setup_ground_plane": handle_setup_ground_plane,
+    "auto_frame_camera": handle_auto_frame_camera,
+    "run_quality_checks": handle_run_quality_checks,
     # Materials
     "material_create": handle_material_create,
     "material_assign": handle_material_assign,
@@ -247,8 +264,14 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "texture_generate_wear": handle_generate_wear_map,
     "texture_get_uv_region": handle_get_uv_region,
     "texture_get_seam_pixels": handle_get_seam_pixels,
+    "texture_bake_procedural": handle_bake_procedural_to_images,
+    "texture_bake_id_map": handle_bake_id_map,
+    "texture_bake_thickness": handle_bake_thickness_map,
+    "texture_channel_pack": handle_channel_pack,
+    "texture_ensure_flat_albedo": handle_ensure_flat_albedo,
     # Pipeline operations
     "pipeline_generate_lods": handle_generate_lods,
+    "pipeline_generate_lod_chain": handle_generate_lod_chain,
     # Rigging operations
     "rig_analyze": handle_analyze_for_rigging,
     "rig_apply_template": handle_apply_rig_template,

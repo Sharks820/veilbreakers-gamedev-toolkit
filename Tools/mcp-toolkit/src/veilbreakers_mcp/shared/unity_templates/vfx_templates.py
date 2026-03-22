@@ -21,37 +21,26 @@ Exports:
 
 from __future__ import annotations
 
-import re
-
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
 # Brand VFX config dictionaries
 # ---------------------------------------------------------------------------
 
-BRAND_PRIMARY_COLORS: dict[str, list[float]] = {"IRON":[0.55,0.59,0.65,1.0],"SAVAGE":[0.71,0.18,0.18,1.0],"SURGE":[0.24,0.55,0.86,1.0],"VENOM":[0.31,0.71,0.24,1.0],"DREAD":[0.47,0.24,0.63,1.0],"LEECH":[0.55,0.16,0.31,1.0],"GRACE":[0.86,0.86,0.94,1.0],"MEND":[0.78,0.67,0.31,1.0],"RUIN":[0.86,0.47,0.16,1.0],"VOID":[0.16,0.08,0.24,1.0]}
-BRAND_GLOW_COLORS: dict[str, list[float]] = {"IRON":[0.71,0.75,0.80,1.0],"SAVAGE":[0.86,0.27,0.27,1.0],"SURGE":[0.39,0.71,1.00,1.0],"VENOM":[0.47,0.86,0.39,1.0],"DREAD":[0.63,0.39,0.78,1.0],"LEECH":[0.71,0.24,0.43,1.0],"GRACE":[1.00,1.00,1.00,1.0],"MEND":[0.94,0.82,0.47,1.0],"RUIN":[1.00,0.63,0.31,1.0],"VOID":[0.39,0.24,0.55,1.0]}
-BRAND_DARK_COLORS: dict[str, list[float]] = {"IRON":[0.31,0.35,0.39,1.0],"SAVAGE":[0.47,0.10,0.10,1.0],"SURGE":[0.12,0.31,0.55,1.0],"VENOM":[0.16,0.39,0.12,1.0],"DREAD":[0.27,0.12,0.39,1.0],"LEECH":[0.35,0.08,0.20,1.0],"GRACE":[0.63,0.63,0.71,1.0],"MEND":[0.55,0.43,0.16,1.0],"RUIN":[0.63,0.27,0.08,1.0],"VOID":[0.06,0.02,0.10,1.0]}
+# Brand color palettes — corrected per VB art direction audit
+# IRON: rust-bronze (not gray), LEECH: sickly yellow-green (not red),
+# DREAD: fear-green (distinct from VOID's dark purple)
+BRAND_PRIMARY_COLORS: dict[str, list[float]] = {"IRON":[0.55,0.35,0.22,1.0],"SAVAGE":[0.71,0.18,0.18,1.0],"SURGE":[0.24,0.55,0.86,1.0],"VENOM":[0.31,0.71,0.24,1.0],"DREAD":[0.24,0.47,0.27,1.0],"LEECH":[0.55,0.53,0.20,1.0],"GRACE":[0.86,0.86,0.94,1.0],"MEND":[0.78,0.67,0.31,1.0],"RUIN":[0.86,0.47,0.16,1.0],"VOID":[0.16,0.08,0.24,1.0]}
+BRAND_GLOW_COLORS: dict[str, list[float]] = {"IRON":[0.80,0.55,0.30,1.0],"SAVAGE":[0.86,0.27,0.27,1.0],"SURGE":[0.39,0.71,1.00,1.0],"VENOM":[0.47,0.86,0.39,1.0],"DREAD":[0.35,0.70,0.40,1.0],"LEECH":[0.70,0.65,0.25,1.0],"GRACE":[1.00,1.00,1.00,1.0],"MEND":[0.94,0.82,0.47,1.0],"RUIN":[1.00,0.63,0.31,1.0],"VOID":[0.39,0.24,0.55,1.0]}
+BRAND_DARK_COLORS: dict[str, list[float]] = {"IRON":[0.35,0.22,0.12,1.0],"SAVAGE":[0.47,0.10,0.10,1.0],"SURGE":[0.12,0.31,0.55,1.0],"VENOM":[0.16,0.39,0.12,1.0],"DREAD":[0.12,0.27,0.14,1.0],"LEECH":[0.35,0.33,0.10,1.0],"GRACE":[0.63,0.63,0.71,1.0],"MEND":[0.55,0.43,0.16,1.0],"RUIN":[0.63,0.27,0.08,1.0],"VOID":[0.06,0.02,0.10,1.0]}
 
 BRAND_VFX_CONFIGS: dict[str, dict] = {
     "IRON": {
         "rate": 200,
         "lifetime": 0.5,
         "size": 0.1,
-        "color": [0.55, 0.59, 0.65, 1.0],
+        "color": [0.55, 0.35, 0.22, 1.0],
         "shape": "cone",
         "desc": "metallic sparks",
     },
@@ -75,9 +64,9 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "rate": 20,
         "lifetime": 5.0,
         "size": 0.8,
-        "color": [0.47, 0.24, 0.63, 1.0],
+        "color": [0.24, 0.47, 0.27, 1.0],
         "shape": "sphere",
-        "desc": "shadow wisps",
+        "desc": "fear wisps",
     },
     "SAVAGE": {
         "rate": 250,
@@ -91,9 +80,9 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "rate": 40,
         "lifetime": 2.5,
         "size": 0.25,
-        "color": [0.55, 0.16, 0.31, 1.0],
+        "color": [0.55, 0.53, 0.20, 1.0],
         "shape": "sphere",
-        "desc": "dark drain tendrils",
+        "desc": "parasitic drain tendrils",
     },
     "GRACE": {
         "rate": 60,
@@ -218,8 +207,8 @@ def generate_particle_vfx_script(
         color = [1.0, 1.0, 1.0, 1.0]
 
     r, g, b, a = color[0], color[1], color[2], color[3]
-    safe_name = _sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
-    safe_display = _sanitize_cs_string(name)
+    safe_name = sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
+    safe_display = sanitize_cs_string(name)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -480,8 +469,8 @@ def generate_trail_vfx_script(
         color = [1.0, 1.0, 1.0, 1.0]
 
     r, g, b, a = color[0], color[1], color[2], color[3]
-    safe_name = _sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
-    safe_display = _sanitize_cs_string(name)
+    safe_name = sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
+    safe_display = sanitize_cs_string(name)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -583,8 +572,8 @@ def generate_aura_vfx_script(
         color = [1.0, 1.0, 1.0, 1.0]
 
     r, g, b, a = color[0], color[1], color[2], color[3]
-    safe_name = _sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
-    safe_display = _sanitize_cs_string(name)
+    safe_name = sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
+    safe_display = sanitize_cs_string(name)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -999,10 +988,10 @@ def generate_ability_vfx_script(
     Returns:
         Complete C# source string.
     """
-    safe_name = _sanitize_cs_identifier(ability_name.replace(" ", "_").replace("-", "_"))
-    safe_display = _sanitize_cs_string(ability_name)
-    safe_vfx_prefab = _sanitize_cs_string(vfx_prefab)
-    safe_anim_clip = _sanitize_cs_string(anim_clip)
+    safe_name = sanitize_cs_identifier(ability_name.replace(" ", "_").replace("-", "_"))
+    safe_display = sanitize_cs_string(ability_name)
+    safe_vfx_prefab = sanitize_cs_string(vfx_prefab)
+    safe_anim_clip = sanitize_cs_string(anim_clip)
 
     return f'''using UnityEngine;
 using UnityEditor;

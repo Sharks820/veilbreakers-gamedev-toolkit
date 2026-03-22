@@ -71,7 +71,7 @@ class GeminiReviewClient:
             return self._call_via_sdk(image_path, prompt)
         except ImportError:
             return self._call_via_rest(image_path, prompt)
-        except Exception as exc:
+        except (ConnectionError, TimeoutError, OSError, ValueError, KeyError) as exc:
             return {
                 "quality_score": 0.0,
                 "issues": [f"Gemini API error: {exc}"],

@@ -8,7 +8,13 @@ Categories:
 - FURNITURE: tables, chairs, shelves, chests, barrels, candelabras, bookshelves
 - VEGETATION: trees, rocks, mushrooms, roots, ivy
 - DUNGEON PROPS: torch sconces, prison doors, sarcophagi, altars, pillars, archways, chains, skull piles
-- WEAPONS: hammers, spears, crossbows, scythes, flails, whips, claws, tomes
+- WEAPONS: hammers, spears, crossbows, scythes, flails, whips, claws, tomes,
+  greatswords, curved swords, hand axes, battle axes, greataxes, clubs, maces,
+  warhammers, halberds, glaives, shortbows, longbows, magic staves, wands,
+  throwing knives, paired daggers, twin swords, dual axes, dual claws,
+  brass knuckles, cestus, bladed gauntlets, iron fists, rapiers, estocs,
+  javelins, throwing axes, shurikens, bolas, orb focus, skull fetish,
+  holy symbol, totem (41 total)
 - ARCHITECTURE: gargoyles, fountains, statues, bridges, gates, staircases
 - FENCES & BARRIERS: fences, barricades, railings
 - TRAPS: spike traps, bear traps, pressure plates, dart launchers, swinging blades, falling cages
@@ -27,6 +33,15 @@ Categories:
 - CRAFTING & TRADE: anvils, forges, workbenches, cauldrons, grinding wheels, looms, market stalls
 - SIGNS & MARKERS: signposts, gravestones, waystones, milestones
 - NATURAL FORMATIONS: stalactites, stalagmites, bone piles, nests, geyser vents, fallen logs
+- CONSUMABLES: health potions, mana potions, antidotes, bread, cheese, meat, apples, mushrooms, fish
+- CRAFTING MATERIALS: ore, leather, herbs, gems, bone shards
+- CURRENCY: coins, coin pouches
+- KEY ITEMS: keys, map scrolls, lockpicks
+- FOREST ANIMALS: deer, wolves, foxes, rabbits, owls, crows
+- MOUNTAIN ANIMALS: mountain goats, eagles, bears
+- DOMESTIC ANIMALS: horses, chickens, dogs, cats
+- VERMIN: rats, bats, spiders, beetles
+- SWAMP ANIMALS: frogs, snakes, turtles
 
 All functions are pure Python with math-only dependencies (no bpy/bmesh).
 """
@@ -1989,7 +2004,7 @@ def generate_pillar_mesh(
     """Generate a pillar/column mesh.
 
     Args:
-        style: "stone_round", "stone_square", or "carved_serpent".
+        style: "stone_round", "stone_square", "carved_serpent", "wooden", or "broken".
         height: Pillar height.
         radius: Pillar radius.
 
@@ -2057,6 +2072,71 @@ def generate_pillar_mesh(
         )
         parts.append((cv, cf))
 
+    elif style == "wooden":
+        # Rough wooden post with grain ridges
+        shaft_profile = []
+        shaft_rings = 16
+        for i in range(shaft_rings + 1):
+            t = i / shaft_rings
+            y = t * height
+            # Wood grain creates slight irregularity
+            grain = 1.0 + 0.02 * math.sin(t * 12.0 * math.pi)
+            r = radius * 0.9 * grain
+            shaft_profile.append((r, y))
+        sv, sf = _make_lathe(shaft_profile, segments=8, close_bottom=True, close_top=True)
+        parts.append((sv, sf))
+
+        # Cross braces near top and bottom
+        for brace_y in [height * 0.15, height * 0.85]:
+            for angle_off in [0, math.pi / 2]:
+                bx = math.cos(angle_off) * radius * 0.02
+                bz = math.sin(angle_off) * radius * 0.02
+                bv, bf = _make_box(bx, brace_y, bz,
+                                   radius * 1.2, 0.015, 0.015)
+                parts.append((bv, bf))
+
+    elif style == "broken":
+        # Truncated column with rubble at the break point
+        break_h = height * 0.55
+        # Base (wider disc)
+        base_profile = [
+            (radius * 1.5, 0),
+            (radius * 1.5, height * 0.02),
+            (radius * 1.3, height * 0.03),
+            (radius * 1.1, height * 0.05),
+        ]
+        bv, bf = _make_lathe(base_profile, segments=12, close_bottom=True)
+        parts.append((bv, bf))
+
+        # Truncated shaft
+        shaft_profile = []
+        shaft_rings = 8
+        for i in range(shaft_rings + 1):
+            t = i / shaft_rings
+            y = height * 0.05 + t * (break_h - height * 0.05)
+            entasis = 1.0 + 0.03 * math.sin(t * math.pi)
+            r = radius * entasis
+            shaft_profile.append((r, y))
+        sv, sf = _make_lathe(shaft_profile, segments=12, close_top=True)
+        parts.append((sv, sf))
+
+        # Rubble chunks at the break point
+        import random as _rng_pillar
+        _rng_pillar.seed(77)
+        for _ in range(6):
+            rx = _rng_pillar.uniform(-radius * 1.5, radius * 1.5)
+            rz = _rng_pillar.uniform(-radius * 1.5, radius * 1.5)
+            ry = break_h + _rng_pillar.uniform(-0.05, 0.1)
+            rs = _rng_pillar.uniform(radius * 0.15, radius * 0.4)
+            rv, rf = _make_beveled_box(rx, ry, rz, rs, rs * 0.7, rs * 0.8, bevel=0.005)
+            parts.append((rv, rf))
+
+        # Fallen chunk on the ground nearby
+        fv, ff = _make_beveled_box(radius * 2.0, radius * 0.4, 0,
+                                   radius * 0.6, radius * 0.4, radius * 0.5,
+                                   bevel=0.008)
+        parts.append((fv, ff))
+
     else:  # carved_serpent
         # Round column with spiral carved groove
         profile = []
@@ -2086,6 +2166,7 @@ def generate_archway_mesh(
     width: float = 1.5,
     height: float = 2.5,
     depth: float = 0.4,
+    style: str = "stone_round",
 ) -> MeshSpec:
     """Generate a doorway/passage archway frame.
 
@@ -2093,6 +2174,7 @@ def generate_archway_mesh(
         width: Opening width.
         height: Total height (arch peak).
         depth: Wall thickness.
+        style: "stone_round", "stone_pointed", "wooden", or "ruined".
 
     Returns:
         MeshSpec with vertices, faces, uvs, and metadata.
@@ -2117,54 +2199,165 @@ def generate_archway_mesh(
     )
     parts.append((rv, rf))
 
-    # Arch (semi-circular top)
-    arch_inner_r = width / 2
-    arch_outer_r = arch_inner_r + post_w
-    spring_y = height * 0.6  # Where the arch springs from
+    if style == "stone_pointed":
+        # Gothic pointed arch
+        arch_inner_r = width / 2
+        arch_outer_r = arch_inner_r + post_w
+        spring_y = height * 0.55
+        peak_y = height
 
-    arch_verts: list[tuple[float, float, float]] = []
-    arch_faces: list[tuple[int, ...]] = []
+        arch_verts: list[tuple[float, float, float]] = []
+        arch_faces: list[tuple[int, ...]] = []
 
-    for i in range(arch_segs + 1):
-        t = i / arch_segs
-        angle = math.pi * t
-        # Inner edge
-        ix = -math.cos(angle) * arch_inner_r
-        iy = spring_y + math.sin(angle) * arch_inner_r
-        # Outer edge
-        ox = -math.cos(angle) * arch_outer_r
-        oy = spring_y + math.sin(angle) * arch_outer_r
+        for i in range(arch_segs + 1):
+            t = i / arch_segs
+            # Pointed arch: two arcs meeting at apex
+            if t <= 0.5:
+                s = t * 2.0
+                ix = -width / 2 + s * width * 0.1
+                iy = spring_y + s * (peak_y - spring_y)
+                ox = ix - post_w * (1.0 - s * 0.6)
+                oy = iy + post_w * 0.3
+            else:
+                s = (t - 0.5) * 2.0
+                ix = -width * 0.4 + s * (width / 2 + width * 0.4)
+                iy = spring_y + (1.0 - s) * (peak_y - spring_y)
+                ox = ix + post_w * (1.0 - (1.0 - s) * 0.6)
+                oy = iy + post_w * 0.3
 
-        # Front and back faces (depth)
-        arch_verts.append((ix, iy, -depth / 2))
-        arch_verts.append((ox, oy, -depth / 2))
-        arch_verts.append((ix, iy, depth / 2))
-        arch_verts.append((ox, oy, depth / 2))
+            arch_verts.append((ix, iy, -depth / 2))
+            arch_verts.append((ox, oy, -depth / 2))
+            arch_verts.append((ix, iy, depth / 2))
+            arch_verts.append((ox, oy, depth / 2))
 
-    # Connect arch segments
-    for i in range(arch_segs):
-        b = i * 4
-        # Front face (outer)
-        arch_faces.append((b + 1, b + 5, b + 4, b + 0))
-        # Back face (outer)
-        arch_faces.append((b + 2, b + 6, b + 7, b + 3))
-        # Top (outer surface)
-        arch_faces.append((b + 1, b + 3, b + 7, b + 5))
-        # Bottom (inner surface)
-        arch_faces.append((b + 0, b + 4, b + 6, b + 2))
+        for i in range(arch_segs):
+            b = i * 4
+            arch_faces.append((b + 1, b + 5, b + 4, b + 0))
+            arch_faces.append((b + 2, b + 6, b + 7, b + 3))
+            arch_faces.append((b + 1, b + 3, b + 7, b + 5))
+            arch_faces.append((b + 0, b + 4, b + 6, b + 2))
 
-    parts.append((arch_verts, arch_faces))
+        parts.append((arch_verts, arch_faces))
 
-    # Keystone at top
-    kv, kf = _make_beveled_box(
-        0, spring_y + arch_outer_r + 0.02, 0,
-        post_w * 0.4, post_w * 0.3, depth / 2 + 0.01,
-        bevel=0.008,
-    )
-    parts.append((kv, kf))
+        # Pointed keystone
+        kv, kf = _make_beveled_box(
+            0, peak_y + 0.02, 0,
+            post_w * 0.35, post_w * 0.4, depth / 2 + 0.01,
+            bevel=0.006,
+        )
+        parts.append((kv, kf))
+
+    elif style == "wooden":
+        # Simple wooden lintel arch (flat top beam)
+        lintel_y = height * 0.8
+        # Extend posts to full height
+        for x_side in [-width / 2 - post_w / 2, width / 2 + post_w / 2]:
+            pv, pf = _make_box(x_side, lintel_y / 2, 0,
+                               post_w * 0.4, lintel_y / 2, depth * 0.4)
+            parts.append((pv, pf))
+
+        # Horizontal lintel beam
+        beam_h = 0.12
+        bv2, bf2 = _make_beveled_box(
+            0, lintel_y + beam_h / 2, 0,
+            width / 2 + post_w + 0.05, beam_h / 2, depth * 0.4,
+            bevel=0.008,
+        )
+        parts.append((bv2, bf2))
+
+        # Cross braces (diagonal supports)
+        brace_w = 0.04
+        for x_sign in [-1, 1]:
+            bx = x_sign * (width / 2 + post_w * 0.3)
+            brace_v, brace_f = _make_box(bx, lintel_y * 0.7, 0,
+                                         brace_w / 2, lintel_y * 0.12, brace_w / 2)
+            parts.append((brace_v, brace_f))
+
+    elif style == "ruined":
+        # Crumbling stone arch with missing sections
+        arch_inner_r = width / 2
+        arch_outer_r = arch_inner_r + post_w
+        spring_y = height * 0.6
+
+        # Only build partial arch (60% of the arc, simulating collapse)
+        partial_segs = int(arch_segs * 0.6)
+        arch_verts2: list[tuple[float, float, float]] = []
+        arch_faces2: list[tuple[int, ...]] = []
+
+        for i in range(partial_segs + 1):
+            t = i / arch_segs
+            angle = math.pi * t
+            ix = -math.cos(angle) * arch_inner_r
+            iy = spring_y + math.sin(angle) * arch_inner_r
+            ox = -math.cos(angle) * arch_outer_r
+            oy = spring_y + math.sin(angle) * arch_outer_r
+
+            arch_verts2.append((ix, iy, -depth / 2))
+            arch_verts2.append((ox, oy, -depth / 2))
+            arch_verts2.append((ix, iy, depth / 2))
+            arch_verts2.append((ox, oy, depth / 2))
+
+        for i in range(partial_segs):
+            b = i * 4
+            arch_faces2.append((b + 1, b + 5, b + 4, b + 0))
+            arch_faces2.append((b + 2, b + 6, b + 7, b + 3))
+            arch_faces2.append((b + 1, b + 3, b + 7, b + 5))
+            arch_faces2.append((b + 0, b + 4, b + 6, b + 2))
+
+        parts.append((arch_verts2, arch_faces2))
+
+        # Fallen rubble on the ground (from collapsed portion)
+        import random as _rng_arch
+        _rng_arch.seed(99)
+        for _ in range(5):
+            rx = _rng_arch.uniform(-width * 0.3, width * 0.8)
+            rz = _rng_arch.uniform(-depth, depth)
+            rs = _rng_arch.uniform(0.05, 0.15)
+            rv, rf = _make_beveled_box(rx, rs * 0.5, rz,
+                                       rs, rs * 0.5, rs * 0.8, bevel=0.005)
+            parts.append((rv, rf))
+
+    else:  # stone_round (default)
+        # Arch (semi-circular top)
+        arch_inner_r = width / 2
+        arch_outer_r = arch_inner_r + post_w
+        spring_y = height * 0.6
+
+        arch_verts3: list[tuple[float, float, float]] = []
+        arch_faces3: list[tuple[int, ...]] = []
+
+        for i in range(arch_segs + 1):
+            t = i / arch_segs
+            angle = math.pi * t
+            ix = -math.cos(angle) * arch_inner_r
+            iy = spring_y + math.sin(angle) * arch_inner_r
+            ox = -math.cos(angle) * arch_outer_r
+            oy = spring_y + math.sin(angle) * arch_outer_r
+
+            arch_verts3.append((ix, iy, -depth / 2))
+            arch_verts3.append((ox, oy, -depth / 2))
+            arch_verts3.append((ix, iy, depth / 2))
+            arch_verts3.append((ox, oy, depth / 2))
+
+        for i in range(arch_segs):
+            b = i * 4
+            arch_faces3.append((b + 1, b + 5, b + 4, b + 0))
+            arch_faces3.append((b + 2, b + 6, b + 7, b + 3))
+            arch_faces3.append((b + 1, b + 3, b + 7, b + 5))
+            arch_faces3.append((b + 0, b + 4, b + 6, b + 2))
+
+        parts.append((arch_verts3, arch_faces3))
+
+        # Keystone at top
+        kv, kf = _make_beveled_box(
+            0, spring_y + arch_outer_r + 0.02, 0,
+            post_w * 0.4, post_w * 0.3, depth / 2 + 0.01,
+            bevel=0.008,
+        )
+        parts.append((kv, kf))
 
     verts, faces = _merge_meshes(*parts)
-    return _make_result("Archway", verts, faces, category="dungeon_prop")
+    return _make_result(f"Archway_{style}", verts, faces, style=style, category="dungeon_prop")
 
 
 def generate_chain_mesh(
@@ -2863,6 +3056,2257 @@ def generate_tome_mesh(
 
     verts, faces = _merge_meshes(*parts)
     return _make_result("Tome", verts, faces, pages=pages, category="weapon")
+
+
+def generate_greatsword_mesh(style: str = "standard") -> MeshSpec:
+    """Generate a greatsword mesh -- wide blade, ricasso, two-hand grip.
+
+    Args:
+        style: "standard", "flamberge", or "executioner".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    handle_len = 0.35
+    handle_r = 0.018
+    hv, hf = _make_tapered_cylinder(0, 0, 0, handle_r * 1.1, handle_r * 0.95, handle_len, segs, rings=4)
+    parts.append((hv, hf))
+    pv, pf = _make_sphere(0, -0.025, 0, handle_r * 2.0, rings=5, sectors=8)
+    parts.append((pv, pf))
+    for gi in range(7):
+        gy = 0.02 + gi * handle_len * 0.12
+        gv, gf = _make_torus_ring(0, gy, 0, handle_r * 1.25, handle_r * 0.12, major_segments=segs, minor_segments=3)
+        parts.append((gv, gf))
+    guard_y = handle_len
+    gv2, gf2 = _make_beveled_box(0, guard_y + 0.0075, 0, 0.06, 0.0075, 0.01, bevel=0.004)
+    parts.append((gv2, gf2))
+    ricasso_h = 0.08
+    rv, rf = _make_beveled_box(0, guard_y + 0.015 + ricasso_h / 2, 0, 0.0175, ricasso_h / 2, 0.0035, bevel=0.003)
+    parts.append((rv, rf))
+    blade_base_y = guard_y + 0.015 + ricasso_h
+    if style == "flamberge":
+        blade_h, blade_segs, blade_thick = 0.8, 16, 0.005
+        bv_l: list[tuple[float, float, float]] = []
+        bf_l: list[tuple[int, ...]] = []
+        for i in range(blade_segs + 1):
+            t = i / blade_segs
+            y = blade_base_y + t * blade_h
+            wave = math.sin(t * math.pi * 4) * 0.008
+            w = 0.03 * (1.0 - t * 0.6) + wave
+            bv_l.extend([(-w, y, blade_thick), (w, y, blade_thick), (w, y, -blade_thick), (-w, y, -blade_thick)])
+        for i in range(blade_segs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                bf_l.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        tip_y = blade_base_y + blade_h
+        bv_l.append((0, tip_y + 0.04, 0))
+        tb = blade_segs * 4
+        ti = len(bv_l) - 1
+        for j in range(4):
+            bf_l.append((tb + j, tb + (j + 1) % 4, ti))
+        parts.append((bv_l, bf_l))
+        trail_top_y = tip_y + 0.04
+    elif style == "executioner":
+        bv3, bf3 = _make_beveled_box(0, blade_base_y + 0.325, 0, 0.045, 0.325, 0.006, bevel=0.004)
+        parts.append((bv3, bf3))
+        trail_top_y = blade_base_y + 0.65
+    else:
+        blade_h, blade_segs, blade_thick = 0.75, 10, 0.005
+        bv2: list[tuple[float, float, float]] = []
+        bf2: list[tuple[int, ...]] = []
+        for i in range(blade_segs + 1):
+            t = i / blade_segs
+            y = blade_base_y + t * blade_h
+            w = 0.03 * (1.0 - t * 0.4)
+            bv2.extend([(-w, y, blade_thick), (w, y, blade_thick), (w, y, -blade_thick), (-w, y, -blade_thick)])
+        for i in range(blade_segs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                bf2.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        tip_y2 = blade_base_y + blade_h
+        bv2.append((0, tip_y2 + 0.05, 0))
+        tb2 = blade_segs * 4
+        ti2 = len(bv2) - 1
+        for j in range(4):
+            bf2.append((tb2 + j, tb2 + (j + 1) % 4, ti2))
+        parts.append((bv2, bf2))
+        trail_top_y = tip_y2 + 0.05
+    fv, ff = _make_beveled_box(0, blade_base_y + 0.25, 0, 0.005, 0.2, 0.001, bevel=0.001)
+    parts.append((fv, ff))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Greatsword_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, handle_len * 0.4, 0.0), trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.0, blade_base_y, 0.0))
+
+
+def generate_curved_sword_mesh(style: str = "scimitar") -> MeshSpec:
+    """Generate a curved single-edge sword mesh.
+
+    Args:
+        style: "scimitar", "katana", or "falchion".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    handle_len, handle_r = 0.2, 0.014
+    hv, hf = _make_tapered_cylinder(0, 0, 0, handle_r * 1.1, handle_r * 0.9, handle_len, segs, rings=3)
+    parts.append((hv, hf))
+    pv, pf = _make_sphere(0, -0.02, 0, handle_r * 1.8, rings=4, sectors=6)
+    parts.append((pv, pf))
+    for gi in range(4):
+        gy = 0.02 + gi * handle_len * 0.2
+        gv, gf = _make_torus_ring(0, gy, 0, handle_r * 1.2, handle_r * 0.1, major_segments=segs, minor_segments=3)
+        parts.append((gv, gf))
+    guard_y = handle_len
+    if style == "katana":
+        tv, tf = _make_cylinder(0, guard_y, 0, 0.04, 0.005, segments=12)
+        parts.append((tv, tf))
+    else:
+        gv2, gf2 = _make_beveled_box(0, guard_y + 0.008, 0, 0.03, 0.008, 0.012, bevel=0.003)
+        parts.append((gv2, gf2))
+    blade_base_y = guard_y + 0.016
+    blade_len = 0.6 if style != "falchion" else 0.45
+    blade_segs, blade_thick = 12, 0.004
+    curve_amount = 0.08 if style == "scimitar" else (0.05 if style == "katana" else 0.1)
+    blade_w_base = 0.025 if style != "falchion" else 0.035
+    bvl: list[tuple[float, float, float]] = []
+    bfl: list[tuple[int, ...]] = []
+    for i in range(blade_segs + 1):
+        t = i / blade_segs
+        y = blade_base_y + t * blade_len
+        x_off = math.sin(t * math.pi * 0.5) * curve_amount
+        w = blade_w_base * (1.0 - t * 0.5) if style != "falchion" else blade_w_base * (1.0 + t * 0.3 - t * t * 1.2)
+        w = max(w, 0.003)
+        bvl.extend([(x_off - w * 0.3, y, blade_thick), (x_off + w, y, 0), (x_off - w * 0.3, y, -blade_thick)])
+    for i in range(blade_segs):
+        b = i * 3
+        for j in range(3):
+            j2 = (j + 1) % 3
+            bfl.append((b + j, b + j2, b + 3 + j2, b + 3 + j))
+    tip_x = math.sin(math.pi * 0.5) * curve_amount
+    tip_y = blade_base_y + blade_len + 0.03
+    bvl.append((tip_x, tip_y, 0))
+    tb = blade_segs * 3
+    ti = len(bvl) - 1
+    for j in range(3):
+        bfl.append((tb + j, tb + (j + 1) % 3, ti))
+    parts.append((bvl, bfl))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"CurvedSword_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, handle_len * 0.4, 0.0), trail_top=(tip_x, tip_y, 0.0),
+                        trail_bottom=(0.0, blade_base_y, 0.0))
+
+
+def generate_hand_axe_mesh(style: str = "standard") -> MeshSpec:
+    """Generate a small single-head hand axe mesh.
+
+    Args:
+        style: "standard", "bearded", or "tomahawk".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    haft_len, haft_r = 0.35, 0.012
+    hv, hf = _make_tapered_cylinder(0, 0, 0, haft_r * 1.05, haft_r * 0.95, haft_len, segs, rings=3)
+    parts.append((hv, hf))
+    pv, pf = _make_sphere(0, -0.015, 0, haft_r * 1.5, rings=3, sectors=6)
+    parts.append((pv, pf))
+    head_y = haft_len * 0.8
+    if style == "bearded":
+        bv = [(0.06, head_y + 0.03, 0.006), (0.06, head_y - 0.06, 0.006),
+              (0.0, head_y - 0.02, 0.006), (0.0, head_y + 0.04, 0.006),
+              (0.06, head_y + 0.03, -0.006), (0.06, head_y - 0.06, -0.006),
+              (0.0, head_y - 0.02, -0.006), (0.0, head_y + 0.04, -0.006)]
+    elif style == "tomahawk":
+        bv = [(0.055, head_y + 0.025, 0.005), (0.055, head_y - 0.025, 0.005),
+              (0.0, head_y - 0.015, 0.005), (0.0, head_y + 0.015, 0.005),
+              (0.055, head_y + 0.025, -0.005), (0.055, head_y - 0.025, -0.005),
+              (0.0, head_y - 0.015, -0.005), (0.0, head_y + 0.015, -0.005)]
+    else:
+        bv = [(0.065, head_y + 0.035, 0.006), (0.065, head_y - 0.035, 0.006),
+              (0.0, head_y - 0.02, 0.006), (0.0, head_y + 0.02, 0.006),
+              (0.065, head_y + 0.035, -0.006), (0.065, head_y - 0.035, -0.006),
+              (0.0, head_y - 0.02, -0.006), (0.0, head_y + 0.02, -0.006)]
+    bf = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (2, 6, 7, 3), (0, 3, 7, 4), (1, 5, 6, 2)]
+    parts.append((bv, bf))
+    ev, ef = _make_torus_ring(0, head_y, 0, haft_r * 1.5, haft_r * 0.3, major_segments=segs, minor_segments=3)
+    parts.append((ev, ef))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"HandAxe_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, haft_len * 0.3, 0.0), trail_top=(0.065, head_y + 0.04, 0.0),
+                        trail_bottom=(0.065, head_y - 0.035, 0.0))
+
+
+def generate_battle_axe_mesh(style: str = "double") -> MeshSpec:
+    """Generate a battle axe mesh with medium haft.
+
+    Args:
+        style: "double", "crescent", or "single_large".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    haft_len, haft_r = 0.7, 0.014
+    hv, hf = _make_tapered_cylinder(0, 0, 0, haft_r * 1.1, haft_r * 0.9, haft_len, segs, rings=5)
+    parts.append((hv, hf))
+    pv, pf = _make_sphere(0, -0.02, 0, haft_r * 1.8, rings=4, sectors=6)
+    parts.append((pv, pf))
+    for gi in range(5):
+        gy = 0.02 + gi * 0.05
+        gv, gf = _make_torus_ring(0, gy, 0, haft_r * 1.3, haft_r * 0.12, major_segments=segs, minor_segments=3)
+        parts.append((gv, gf))
+    head_y = haft_len * 0.82
+    bd = 0.008
+    if style == "double":
+        for side in [1, -1]:
+            bv = [(side * 0.1, head_y + 0.06, bd), (side * 0.1, head_y - 0.06, bd),
+                  (side * 0.01, head_y - 0.03, bd), (side * 0.01, head_y + 0.03, bd),
+                  (side * 0.1, head_y + 0.06, -bd), (side * 0.1, head_y - 0.06, -bd),
+                  (side * 0.01, head_y - 0.03, -bd), (side * 0.01, head_y + 0.03, -bd)]
+            bf = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (2, 6, 7, 3), (0, 3, 7, 4), (1, 5, 6, 2)]
+            parts.append((bv, bf))
+        trail_top_y = head_y + 0.06
+    elif style == "crescent":
+        bsegs = 10
+        bvl: list[tuple[float, float, float]] = []
+        bfl: list[tuple[int, ...]] = []
+        for i in range(bsegs + 1):
+            t = i / bsegs
+            angle = (t - 0.5) * math.pi * 0.8
+            bvl.extend([(math.cos(angle) * 0.1, head_y + math.sin(angle) * 0.1, bd),
+                        (math.cos(angle) * 0.03, head_y + math.sin(angle) * 0.03, bd),
+                        (math.cos(angle) * 0.03, head_y + math.sin(angle) * 0.03, -bd),
+                        (math.cos(angle) * 0.1, head_y + math.sin(angle) * 0.1, -bd)])
+        for i in range(bsegs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                bfl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        parts.append((bvl, bfl))
+        trail_top_y = head_y + 0.1
+    else:
+        bv3 = [(0.12, head_y + 0.07, bd), (0.12, head_y - 0.07, bd),
+               (0.0, head_y - 0.035, bd), (0.0, head_y + 0.035, bd),
+               (0.12, head_y + 0.07, -bd), (0.12, head_y - 0.07, -bd),
+               (0.0, head_y - 0.035, -bd), (0.0, head_y + 0.035, -bd)]
+        bf3 = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (2, 6, 7, 3), (0, 3, 7, 4), (1, 5, 6, 2)]
+        parts.append((bv3, bf3))
+        trail_top_y = head_y + 0.07
+    ev, ef = _make_torus_ring(0, head_y, 0, haft_r * 2, haft_r * 0.4, major_segments=segs, minor_segments=3)
+    parts.append((ev, ef))
+    sv, sf = _make_cone(0, head_y + 0.03, 0, haft_r * 1.5, 0.06, segments=6)
+    parts.append((sv, sf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"BattleAxe_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, haft_len * 0.25, 0.0), trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.1, head_y - 0.07, 0.0))
+
+
+def generate_greataxe_mesh(style: str = "massive") -> MeshSpec:
+    """Generate a greataxe mesh -- massive head, long haft.
+
+    Args:
+        style: "massive", "cleaver", or "moon".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    haft_len, haft_r = 1.2, 0.016
+    hv, hf = _make_tapered_cylinder(0, 0, 0, haft_r * 1.15, haft_r * 0.9, haft_len, segs, rings=6)
+    parts.append((hv, hf))
+    pv, pf = _make_sphere(0, -0.03, 0, haft_r * 2.2, rings=5, sectors=8)
+    parts.append((pv, pf))
+    for gi in range(8):
+        gy = 0.03 + gi * 0.045
+        gv, gf = _make_torus_ring(0, gy, 0, haft_r * 1.3, haft_r * 0.12, major_segments=segs, minor_segments=3)
+        parts.append((gv, gf))
+    head_y = haft_len * 0.85
+    bd = 0.01
+    if style == "moon":
+        bsegs = 14
+        bvl: list[tuple[float, float, float]] = []
+        bfl: list[tuple[int, ...]] = []
+        for i in range(bsegs + 1):
+            t = i / bsegs
+            angle = (t - 0.5) * math.pi
+            x_o, y_o = math.cos(angle) * 0.15, head_y + math.sin(angle) * 0.15
+            x_i, y_i = math.cos(angle) * 0.05, head_y + math.sin(angle) * 0.05
+            bvl.extend([(x_o, y_o, bd), (x_i, y_i, bd), (x_i, y_i, -bd), (x_o, y_o, -bd)])
+        for i in range(bsegs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                bfl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        parts.append((bvl, bfl))
+        trail_top_y = head_y + 0.15
+    elif style == "cleaver":
+        bv, bf = _make_beveled_box(0.08, head_y, 0, 0.08, 0.1, bd, bevel=0.005)
+        parts.append((bv, bf))
+        trail_top_y = head_y + 0.1
+    else:
+        for side in [1, -1]:
+            bv2 = [(side * 0.14, head_y + 0.09, bd), (side * 0.14, head_y - 0.09, bd),
+                   (side * 0.02, head_y - 0.05, bd), (side * 0.02, head_y + 0.05, bd),
+                   (side * 0.14, head_y + 0.09, -bd), (side * 0.14, head_y - 0.09, -bd),
+                   (side * 0.02, head_y - 0.05, -bd), (side * 0.02, head_y + 0.05, -bd)]
+            bf2 = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (2, 6, 7, 3), (0, 3, 7, 4), (1, 5, 6, 2)]
+            parts.append((bv2, bf2))
+        trail_top_y = head_y + 0.09
+    ev, ef = _make_torus_ring(0, head_y, 0, haft_r * 2.5, haft_r * 0.5, major_segments=segs, minor_segments=4)
+    parts.append((ev, ef))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Greataxe_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, haft_len * 0.2, 0.0), trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.14, head_y - 0.09, 0.0))
+
+
+def generate_club_mesh(style: str = "wooden") -> MeshSpec:
+    """Generate a rough club mesh with nail/spike extrusions.
+
+    Args:
+        style: "wooden", "spiked", or "bone".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    handle_len, handle_r = 0.3, 0.02
+    hv, hf = _make_tapered_cylinder(0, 0, 0, handle_r, handle_r * 0.85, handle_len, segs, rings=3)
+    parts.append((hv, hf))
+    body_len = 0.4
+    body_r_top = 0.045 if style != "bone" else 0.05
+    bv, bf = _make_tapered_cylinder(0, handle_len, 0, handle_r * 1.2, body_r_top, body_len, segs, rings=4)
+    parts.append((bv, bf))
+    tv, tf = _make_sphere(0, handle_len + body_len, 0, body_r_top * 0.95, rings=4, sectors=segs)
+    parts.append((tv, tf))
+    if style == "spiked":
+        head_cy = handle_len + body_len * 0.7
+        for si in range(10):
+            s_phi = math.pi * (0.3 + 0.4 * (si // 5))
+            s_theta = 2 * math.pi * (si % 5) / 5 + (si // 5) * math.pi / 5
+            sx = math.sin(s_phi) * math.cos(s_theta) * body_r_top
+            sy = head_cy + math.cos(s_phi) * body_r_top * 1.5
+            sz = math.sin(s_phi) * math.sin(s_theta) * body_r_top
+            nv, nf = _make_tapered_cylinder(sx * 1.2, sy, sz * 1.2, 0.004, 0.002, 0.025, segments=4, rings=1)
+            parts.append((nv, nf))
+    elif style == "bone":
+        for ki in range(5):
+            angle = 2 * math.pi * ki / 5
+            kv, kf = _make_sphere(math.cos(angle) * body_r_top * 0.9, handle_len + body_len * 0.75,
+                                  math.sin(angle) * body_r_top * 0.9, 0.012, rings=3, sectors=4)
+            parts.append((kv, kf))
+    for ri in range(3):
+        ry = handle_len + body_len * (0.3 + ri * 0.2)
+        r_at = handle_r * 1.2 + (body_r_top - handle_r * 1.2) * (0.3 + ri * 0.2)
+        rv, rf = _make_torus_ring(0, ry, 0, r_at * 0.95, 0.003, major_segments=segs, minor_segments=3)
+        parts.append((rv, rf))
+    verts, faces = _merge_meshes(*parts)
+    trail_top_y = handle_len + body_len + body_r_top
+    return _make_result(f"Club_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, handle_len * 0.4, 0.0), trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.0, handle_len + body_len * 0.5, 0.0))
+
+
+def generate_mace_mesh(style: str = "flanged") -> MeshSpec:
+    """Generate a mace mesh with flanged or studded head.
+
+    Args:
+        style: "flanged", "studded", or "morningstar".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    handle_len, handle_r = 0.35, 0.014
+    hv, hf = _make_tapered_cylinder(0, 0, 0, handle_r * 1.1, handle_r * 0.9, handle_len, segs, rings=3)
+    parts.append((hv, hf))
+    pv, pf = _make_sphere(0, -0.02, 0, handle_r * 1.8, rings=4, sectors=6)
+    parts.append((pv, pf))
+    for gi in range(4):
+        gy = 0.02 + gi * handle_len * 0.2
+        gv, gf = _make_torus_ring(0, gy, 0, handle_r * 1.2, handle_r * 0.1, major_segments=segs, minor_segments=3)
+        parts.append((gv, gf))
+    head_y = handle_len + 0.01
+    head_r = 0.035
+    if style == "flanged":
+        sv, sf = _make_sphere(0, head_y + head_r, 0, head_r, rings=5, sectors=8)
+        parts.append((sv, sf))
+        for fi in range(7):
+            angle = 2 * math.pi * fi / 7
+            fx, fz = math.cos(angle), math.sin(angle)
+            fv = [(fx * head_r, head_y + head_r + head_r * 0.7, fz * head_r),
+                  (fx * head_r, head_y + head_r - head_r * 0.7, fz * head_r),
+                  (fx * head_r * 1.6, head_y + head_r, fz * head_r * 1.6)]
+            parts.append((fv, [(0, 1, 2)]))
+    elif style == "studded":
+        sv, sf = _make_sphere(0, head_y + head_r, 0, head_r, rings=5, sectors=8)
+        parts.append((sv, sf))
+        for si in range(12):
+            s_phi = math.pi * (si // 4 + 0.5) / 3 + 0.3
+            s_theta = 2 * math.pi * (si % 4) / 4 + (si // 4) * math.pi / 4
+            sx = math.sin(s_phi) * math.cos(s_theta) * head_r
+            sy = head_y + head_r + math.cos(s_phi) * head_r
+            sz = math.sin(s_phi) * math.sin(s_theta) * head_r
+            sv2, sf2 = _make_sphere(sx, sy, sz, 0.006, rings=3, sectors=4)
+            parts.append((sv2, sf2))
+    else:
+        sv, sf = _make_sphere(0, head_y + head_r, 0, head_r, rings=5, sectors=8)
+        parts.append((sv, sf))
+        for si in range(12):
+            s_phi = math.pi * (si // 4 + 0.5) / 3 + 0.3
+            s_theta = 2 * math.pi * (si % 4) / 4 + (si // 4) * math.pi / 4
+            sx = math.sin(s_phi) * math.cos(s_theta) * head_r * 1.1
+            sy = head_y + head_r + math.cos(s_phi) * head_r * 1.1
+            sz = math.sin(s_phi) * math.sin(s_theta) * head_r * 1.1
+            spv, spf = _make_cone(sx, sy, sz, 0.008, 0.025, segments=4)
+            parts.append((spv, spf))
+    cv, cf = _make_torus_ring(0, head_y, 0, handle_r * 1.5, handle_r * 0.3, major_segments=segs, minor_segments=3)
+    parts.append((cv, cf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Mace_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, handle_len * 0.35, 0.0), trail_top=(0.0, head_y + head_r * 2, 0.0),
+                        trail_bottom=(0.0, head_y, 0.0))
+
+
+def generate_warhammer_mesh(style: str = "standard") -> MeshSpec:
+    """Generate a warhammer mesh -- flat striking face + pick on back.
+
+    Args:
+        style: "standard", "maul", or "lucerne".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    handle_len, handle_r = 0.55, 0.015
+    hv, hf = _make_tapered_cylinder(0, 0, 0, handle_r * 1.1, handle_r * 0.9, handle_len, segs, rings=4)
+    parts.append((hv, hf))
+    pv, pf = _make_sphere(0, -0.02, 0, handle_r * 2.0, rings=4, sectors=6)
+    parts.append((pv, pf))
+    for gi in range(5):
+        gy = 0.02 + gi * handle_len * 0.1
+        gv, gf = _make_torus_ring(0, gy, 0, handle_r * 1.25, handle_r * 0.12, major_segments=segs, minor_segments=3)
+        parts.append((gv, gf))
+    head_y = handle_len * 0.82
+    if style == "maul":
+        mv, mf = _make_beveled_box(0, head_y, 0, 0.06, 0.04, 0.03, bevel=0.006)
+        parts.append((mv, mf))
+        trail_top_y = head_y + 0.04
+    elif style == "lucerne":
+        fv, ff = _make_beveled_box(0.04, head_y, 0, 0.03, 0.03, 0.03, bevel=0.004)
+        parts.append((fv, ff))
+        pkverts = [(-0.02, head_y + 0.01, 0.01), (-0.02, head_y - 0.01, 0.01),
+                   (-0.02, head_y + 0.01, -0.01), (-0.02, head_y - 0.01, -0.01), (-0.1, head_y, 0)]
+        parts.append((pkverts, [(0, 1, 4), (1, 3, 4), (3, 2, 4), (2, 0, 4), (0, 2, 3, 1)]))
+        tsv, tsf = _make_cone(0, head_y + 0.03, 0, handle_r * 1.5, 0.1, segments=6)
+        parts.append((tsv, tsf))
+        trail_top_y = head_y + 0.13
+    else:
+        fv, ff = _make_beveled_box(0.03, head_y, 0, 0.02, 0.025, 0.02, bevel=0.005)
+        parts.append((fv, ff))
+        pkverts2 = [(-0.015, head_y + 0.015, 0.01), (-0.015, head_y - 0.015, 0.01),
+                    (-0.015, head_y + 0.015, -0.01), (-0.015, head_y - 0.015, -0.01), (-0.09, head_y, 0)]
+        parts.append((pkverts2, [(0, 1, 4), (1, 3, 4), (3, 2, 4), (2, 0, 4), (0, 2, 3, 1)]))
+        trail_top_y = head_y + 0.025
+    ev, ef = _make_torus_ring(0, head_y, 0, handle_r * 2, handle_r * 0.4, major_segments=segs, minor_segments=3)
+    parts.append((ev, ef))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Warhammer_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, handle_len * 0.3, 0.0), trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.04, head_y - 0.04, 0.0))
+
+
+def generate_halberd_mesh(style: str = "standard") -> MeshSpec:
+    """Generate a halberd mesh -- axe head + spike + hook on pole.
+
+    Args:
+        style: "standard", "voulge", or "partisan".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    pole_len, pole_r = 2.0, 0.014
+    pv, pf = _make_tapered_cylinder(0, 0, 0, pole_r, pole_r * 0.9, pole_len, segs, rings=8)
+    parts.append((pv, pf))
+    bv, bf = _make_sphere(0, -0.015, 0, pole_r * 1.5, rings=3, sectors=6)
+    parts.append((bv, bf))
+    head_y = pole_len * 0.85
+    bd = 0.007
+    bw = 0.12
+    if style == "voulge":
+        bw = 0.08
+        blade_h = 0.35
+        bvl = [(bw, head_y + blade_h * 0.4, bd), (bw, head_y - blade_h * 0.6, bd),
+               (0, head_y - blade_h * 0.5, bd), (0, head_y + blade_h * 0.3, bd),
+               (bw, head_y + blade_h * 0.4, -bd), (bw, head_y - blade_h * 0.6, -bd),
+               (0, head_y - blade_h * 0.5, -bd), (0, head_y + blade_h * 0.3, -bd)]
+        parts.append((bvl, [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (2, 6, 7, 3), (0, 3, 7, 4), (1, 5, 6, 2)]))
+        tsv, tsf = _make_cone(0, head_y + blade_h * 0.3, 0, pole_r * 2, 0.15, segments=6)
+        parts.append((tsv, tsf))
+        trail_top_y = head_y + blade_h * 0.3 + 0.15
+    elif style == "partisan":
+        bw = 0.04
+        blade_h = 0.25
+        bvl2 = [(0, head_y + blade_h, 0), (-bw, head_y, bd), (bw, head_y, bd), (-bw, head_y, -bd), (bw, head_y, -bd)]
+        parts.append((bvl2, [(0, 1, 2), (0, 4, 3), (0, 2, 4), (0, 3, 1), (1, 3, 4, 2)]))
+        for side in [1, -1]:
+            lv = [(side * 0.07, head_y + 0.02, bd * 0.5), (side * 0.07, head_y - 0.02, bd * 0.5),
+                  (0, head_y, bd * 0.5), (side * 0.07, head_y + 0.02, -bd * 0.5),
+                  (side * 0.07, head_y - 0.02, -bd * 0.5), (0, head_y, -bd * 0.5)]
+            parts.append((lv, [(0, 1, 2), (5, 4, 3), (0, 3, 4, 1), (1, 4, 5, 2), (0, 2, 5, 3)]))
+        trail_top_y = head_y + blade_h
+    else:
+        blade_h = 0.18
+        bvl3 = [(bw, head_y + blade_h * 0.5, bd), (bw, head_y - blade_h * 0.5, bd),
+                (0, head_y - blade_h * 0.3, bd), (0, head_y + blade_h * 0.3, bd),
+                (bw, head_y + blade_h * 0.5, -bd), (bw, head_y - blade_h * 0.5, -bd),
+                (0, head_y - blade_h * 0.3, -bd), (0, head_y + blade_h * 0.3, -bd)]
+        parts.append((bvl3, [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (2, 6, 7, 3), (0, 3, 7, 4), (1, 5, 6, 2)]))
+        tsv, tsf = _make_cone(0, head_y + blade_h * 0.3, 0, pole_r * 2, 0.15, segments=6)
+        parts.append((tsv, tsf))
+        hkverts = [(-0.015, head_y + 0.02, bd * 0.5), (-0.015, head_y - 0.02, bd * 0.5),
+                   (-0.015, head_y + 0.02, -bd * 0.5), (-0.015, head_y - 0.02, -bd * 0.5), (-0.06, head_y - 0.01, 0)]
+        parts.append((hkverts, [(0, 1, 4), (1, 3, 4), (3, 2, 4), (2, 0, 4), (0, 2, 3, 1)]))
+        trail_top_y = head_y + blade_h * 0.3 + 0.15
+    for angle in [0, math.pi]:
+        lv, lf = _make_beveled_box(math.cos(angle) * pole_r * 0.8, head_y - 0.15,
+                                    math.sin(angle) * pole_r * 0.8, 0.004, 0.07, 0.004, bevel=0.002)
+        parts.append((lv, lf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Halberd_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, pole_len * 0.3, 0.0), trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(bw if style != "partisan" else 0.04, head_y - 0.1, 0.0))
+
+
+def generate_glaive_mesh(style: str = "curved") -> MeshSpec:
+    """Generate a glaive mesh -- curved blade on pole.
+
+    Args:
+        style: "curved", "naginata", or "guandao".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    pole_len, pole_r = 1.8, 0.013
+    pv, pf = _make_tapered_cylinder(0, 0, 0, pole_r, pole_r * 0.9, pole_len, segs, rings=7)
+    parts.append((pv, pf))
+    bv, bf = _make_sphere(0, -0.015, 0, pole_r * 1.4, rings=3, sectors=6)
+    parts.append((bv, bf))
+    head_y = pole_len * 0.88
+    bt = 0.005
+    bsegs = 10
+    if style == "naginata":
+        blen, bw = 0.4, 0.03
+        bvl: list[tuple[float, float, float]] = []
+        bfl: list[tuple[int, ...]] = []
+        for i in range(bsegs + 1):
+            t = i / bsegs
+            y = head_y + t * blen
+            cx = t * t * 0.02
+            w = bw * (1.0 - t * 0.5)
+            bvl.extend([(cx - w * 0.3, y, bt), (cx + w, y, 0), (cx - w * 0.3, y, -bt)])
+        for i in range(bsegs):
+            b = i * 3
+            for j in range(3):
+                j2 = (j + 1) % 3
+                bfl.append((b + j, b + j2, b + 3 + j2, b + 3 + j))
+        bvl.append((0.02, head_y + blen + 0.02, 0))
+        tb, ti = bsegs * 3, len(bvl) - 1
+        for j in range(3):
+            bfl.append((tb + j, tb + (j + 1) % 3, ti))
+        parts.append((bvl, bfl))
+        trail_top_y = head_y + blen + 0.02
+    elif style == "guandao":
+        blen, bw = 0.45, 0.06
+        bvl2: list[tuple[float, float, float]] = []
+        bfl2: list[tuple[int, ...]] = []
+        for i in range(bsegs + 1):
+            t = i / bsegs
+            y = head_y + t * blen
+            cx = math.sin(t * math.pi * 0.5) * 0.04
+            w = bw * math.sin(t * math.pi * 0.8 + 0.2) * (1.0 - t * 0.3)
+            w = max(w, 0.005)
+            bvl2.extend([(cx, y, bt), (cx + w, y, 0), (cx, y, -bt)])
+        for i in range(bsegs):
+            b = i * 3
+            for j in range(3):
+                j2 = (j + 1) % 3
+                bfl2.append((b + j, b + j2, b + 3 + j2, b + 3 + j))
+        bvl2.append((0.04, head_y + blen + 0.03, 0))
+        tb2, ti2 = bsegs * 3, len(bvl2) - 1
+        for j in range(3):
+            bfl2.append((tb2 + j, tb2 + (j + 1) % 3, ti2))
+        parts.append((bvl2, bfl2))
+        trail_top_y = head_y + blen + 0.03
+    else:
+        blen, bw = 0.35, 0.035
+        bvl3: list[tuple[float, float, float]] = []
+        bfl3: list[tuple[int, ...]] = []
+        for i in range(bsegs + 1):
+            t = i / bsegs
+            y = head_y + t * blen
+            cx = math.sin(t * math.pi * 0.6) * 0.05
+            w = bw * (1.0 - t * 0.4)
+            bvl3.extend([(cx - w * 0.3, y, bt), (cx + w, y, 0), (cx - w * 0.3, y, -bt)])
+        for i in range(bsegs):
+            b = i * 3
+            for j in range(3):
+                j2 = (j + 1) % 3
+                bfl3.append((b + j, b + j2, b + 3 + j2, b + 3 + j))
+        last_cx = math.sin(math.pi * 0.6) * 0.05
+        bvl3.append((last_cx, head_y + blen + 0.02, 0))
+        tb3, ti3 = bsegs * 3, len(bvl3) - 1
+        for j in range(3):
+            bfl3.append((tb3 + j, tb3 + (j + 1) % 3, ti3))
+        parts.append((bvl3, bfl3))
+        trail_top_y = head_y + blen + 0.02
+    cv, cf = _make_torus_ring(0, head_y, 0, pole_r * 2, pole_r * 0.4, major_segments=segs, minor_segments=3)
+    parts.append((cv, cf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Glaive_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, pole_len * 0.3, 0.0), trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.0, head_y, 0.0))
+
+
+def _make_bow_limb(cx: float, cy: float, cz: float, length: float, curve: float,
+                   limb_width: float, limb_thick: float, segments: int,
+                   direction: int = 1) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]:
+    """Generate a curved bow limb along Y axis."""
+    verts: list[tuple[float, float, float]] = []
+    faces_out: list[tuple[int, ...]] = []
+    for i in range(segments + 1):
+        t = i / segments
+        y = cy + direction * t * length
+        z = cz + math.sin(t * math.pi * 0.8) * curve
+        w = limb_width * (1.0 - t * 0.6)
+        d = limb_thick * (1.0 - t * 0.4)
+        verts.extend([(cx - w, y, z + d), (cx + w, y, z + d), (cx + w, y, z - d), (cx - w, y, z - d)])
+    for i in range(segments):
+        b = i * 4
+        for j in range(4):
+            j2 = (j + 1) % 4
+            faces_out.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+    return verts, faces_out
+
+
+def generate_shortbow_mesh(style: str = "recurve") -> MeshSpec:
+    """Generate a shortbow mesh with curved limbs and string.
+
+    Args:
+        style: "recurve", "flat", or "composite".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    grip_h, grip_w, grip_d = 0.12, 0.015, 0.02
+    gv, gf = _make_beveled_box(0, 0, 0, grip_w, grip_h / 2, grip_d, bevel=0.004)
+    parts.append((gv, gf))
+    nv, nf = _make_box(0, 0.01, grip_d + 0.005, 0.005, 0.005, 0.005)
+    parts.append((nv, nf))
+    limb_len = 0.35
+    curve = 0.06 if style == "recurve" else (0.03 if style == "flat" else 0.08)
+    limb_w = 0.012 if style != "composite" else 0.015
+    uv, uf = _make_bow_limb(0, grip_h / 2, 0, limb_len, curve, limb_w, 0.008, segments=8, direction=1)
+    parts.append((uv, uf))
+    lv, lf = _make_bow_limb(0, -grip_h / 2, 0, limb_len, curve, limb_w, 0.008, segments=8, direction=-1)
+    parts.append((lv, lf))
+    nock_z = math.sin(0.8 * math.pi) * curve
+    for y_pos in [grip_h / 2 + limb_len, -(grip_h / 2 + limb_len)]:
+        tv, tf = _make_sphere(0, y_pos, nock_z, 0.005, rings=3, sectors=4)
+        parts.append((tv, tf))
+    str_top = grip_h / 2 + limb_len
+    str_bot = -(grip_h / 2 + limb_len)
+    sv, sf = _make_tapered_cylinder(0, str_bot, nock_z * 0.15, 0.001, 0.001, str_top - str_bot, segments=4, rings=3)
+    parts.append((sv, sf))
+    if style == "composite":
+        for yi in range(3):
+            for d in [1, -1]:
+                wy = d * (grip_h / 2 + limb_len * (0.2 + yi * 0.25))
+                wv, wf = _make_torus_ring(0, wy, 0, limb_w * 1.3, 0.002, major_segments=6, minor_segments=3)
+                parts.append((wv, wf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Shortbow_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.0, 0.0), trail_top=(0.0, str_top, 0.0), trail_bottom=(0.0, str_bot, 0.0))
+
+
+def generate_longbow_mesh(style: str = "recurve") -> MeshSpec:
+    """Generate a longbow mesh -- taller than shortbow with longer limbs.
+
+    Args:
+        style: "recurve", "english", or "elven".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    grip_h, grip_w, grip_d = 0.15, 0.018, 0.022
+    gv, gf = _make_beveled_box(0, 0, 0, grip_w, grip_h / 2, grip_d, bevel=0.005)
+    parts.append((gv, gf))
+    nv, nf = _make_box(0, 0.01, grip_d + 0.006, 0.006, 0.006, 0.006)
+    parts.append((nv, nf))
+    limb_len = 0.7
+    if style == "english":
+        curve, limb_w = 0.02, 0.016
+    elif style == "elven":
+        curve, limb_w = 0.1, 0.01
+    else:
+        curve, limb_w = 0.08, 0.014
+    uv, uf = _make_bow_limb(0, grip_h / 2, 0, limb_len, curve, limb_w, 0.009, segments=10, direction=1)
+    parts.append((uv, uf))
+    lv, lf = _make_bow_limb(0, -grip_h / 2, 0, limb_len, curve, limb_w, 0.009, segments=10, direction=-1)
+    parts.append((lv, lf))
+    nock_z = math.sin(0.8 * math.pi) * curve
+    for y_pos in [grip_h / 2 + limb_len, -(grip_h / 2 + limb_len)]:
+        tv, tf = _make_sphere(0, y_pos, nock_z, 0.006, rings=3, sectors=4)
+        parts.append((tv, tf))
+    str_top = grip_h / 2 + limb_len
+    str_bot = -(grip_h / 2 + limb_len)
+    sv, sf = _make_tapered_cylinder(0, str_bot, nock_z * 0.15, 0.0012, 0.0012, str_top - str_bot, segments=4, rings=4)
+    parts.append((sv, sf))
+    if style == "elven":
+        for gi in range(3):
+            gy = -grip_h * 0.3 + gi * grip_h * 0.3
+            gv2, gf2 = _make_torus_ring(0, gy, 0, grip_w * 1.4, 0.003, major_segments=6, minor_segments=3)
+            parts.append((gv2, gf2))
+    for gi in range(4):
+        gy = -grip_h * 0.35 + gi * grip_h * 0.2
+        wv, wf = _make_torus_ring(0, gy, 0, grip_w * 1.15, 0.002, major_segments=6, minor_segments=3)
+        parts.append((wv, wf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Longbow_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.0, 0.0), trail_top=(0.0, str_top, 0.0), trail_bottom=(0.0, str_bot, 0.0))
+
+
+def generate_staff_magic_mesh(style: str = "gnarled") -> MeshSpec:
+    """Generate a magic staff mesh -- gnarled wood with crystal/orb head.
+
+    Args:
+        style: "gnarled", "crystal", or "runic".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    shaft_len, shaft_r = 1.6, 0.016
+    if style == "gnarled":
+        s_segs = 12
+        svl: list[tuple[float, float, float]] = []
+        sfl: list[tuple[int, ...]] = []
+        for ring in range(s_segs + 1):
+            t = ring / s_segs
+            y = t * shaft_len
+            r = shaft_r * (1.0 + 0.15 * math.sin(t * math.pi * 5)) * (1.0 - t * 0.2)
+            for i in range(segs):
+                angle = 2 * math.pi * i / segs
+                wobble = 0.003 * math.sin(angle * 3 + t * 7)
+                svl.append((math.cos(angle) * (r + wobble), y, math.sin(angle) * (r + wobble)))
+        for ring in range(s_segs):
+            for i in range(segs):
+                i2 = (i + 1) % segs
+                sfl.append((ring * segs + i, ring * segs + i2, (ring + 1) * segs + i2, (ring + 1) * segs + i))
+        sfl.append(tuple(i for i in range(segs - 1, -1, -1)))
+        sfl.append(tuple(s_segs * segs + i for i in range(segs)))
+        parts.append((svl, sfl))
+        for ri in range(3):
+            angle = 2 * math.pi * ri / 3
+            rv, rf = _make_tapered_cylinder(math.cos(angle) * shaft_r * 2, -0.05, math.sin(angle) * shaft_r * 2,
+                                            shaft_r * 0.6, shaft_r * 0.2, 0.08, segments=4, rings=2)
+            parts.append((rv, rf))
+        cv, cf = _make_sphere(0, shaft_len + 0.03, 0, 0.03, rings=5, sectors=8)
+        parts.append((cv, cf))
+        for ti in range(4):
+            angle = 2 * math.pi * ti / 4
+            tv, tf = _make_tapered_cylinder(math.cos(angle) * 0.018, shaft_len - 0.02, math.sin(angle) * 0.018,
+                                            0.005, 0.003, 0.08, segments=4, rings=2)
+            parts.append((tv, tf))
+    elif style == "crystal":
+        sv, sf = _make_tapered_cylinder(0, 0, 0, shaft_r, shaft_r * 0.85, shaft_len, segs, rings=6)
+        parts.append((sv, sf))
+        for ci in range(5):
+            angle = 2 * math.pi * ci / 5
+            tilt = 0.15 + ci * 0.05
+            cx = math.sin(tilt) * math.cos(angle) * 0.02
+            cz = math.sin(tilt) * math.sin(angle) * 0.02
+            cv, cf = _make_cone(cx, shaft_len + ci * 0.01, cz, max(0.012 - ci * 0.001, 0.005),
+                                0.06 + ci * 0.015, segments=6)
+            parts.append((cv, cf))
+    else:
+        sv, sf = _make_tapered_cylinder(0, 0, 0, shaft_r, shaft_r, shaft_len, segs, rings=6)
+        parts.append((sv, sf))
+        for ri in range(6):
+            ry = shaft_len * (0.15 + ri * 0.12)
+            rv, rf = _make_torus_ring(0, ry, 0, shaft_r * 1.15, 0.003, major_segments=segs, minor_segments=3)
+            parts.append((rv, rf))
+        ov, of_ = _make_sphere(0, shaft_len + 0.025, 0, 0.025, rings=5, sectors=8)
+        parts.append((ov, of_))
+        for ci in range(3):
+            angle = 2 * math.pi * ci / 3
+            cv, cf = _make_tapered_cylinder(math.cos(angle) * 0.015, shaft_len - 0.01, math.sin(angle) * 0.015,
+                                            0.004, 0.002, 0.04, segments=4, rings=1)
+            parts.append((cv, cf))
+    bv, bf = _make_sphere(0, -0.02, 0, shaft_r * 1.3, rings=3, sectors=6)
+    parts.append((bv, bf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"StaffMagic_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, shaft_len * 0.35, 0.0), trail_top=(0.0, shaft_len + 0.06, 0.0),
+                        trail_bottom=(0.0, 0.0, 0.0))
+
+
+def generate_wand_mesh(style: str = "straight") -> MeshSpec:
+    """Generate a magic wand mesh -- short shaft with ornate tip.
+
+    Args:
+        style: "straight", "twisted", or "bone".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 6
+    wand_len, wand_r = 0.35, 0.008
+    if style == "twisted":
+        t_segs = 16
+        tvl: list[tuple[float, float, float]] = []
+        tfl: list[tuple[int, ...]] = []
+        for ring in range(t_segs + 1):
+            t = ring / t_segs
+            y = t * wand_len
+            r = wand_r * (1.0 - t * 0.3)
+            ta = t * math.pi * 3
+            for i in range(segs):
+                angle = 2 * math.pi * i / segs + ta
+                tvl.append((math.cos(angle) * r, y, math.sin(angle) * r))
+        for ring in range(t_segs):
+            for i in range(segs):
+                i2 = (i + 1) % segs
+                tfl.append((ring * segs + i, ring * segs + i2, (ring + 1) * segs + i2, (ring + 1) * segs + i))
+        tfl.append(tuple(i for i in range(segs - 1, -1, -1)))
+        tfl.append(tuple(t_segs * segs + i for i in range(segs)))
+        parts.append((tvl, tfl))
+    elif style == "bone":
+        sv, sf = _make_tapered_cylinder(0, 0, 0, wand_r * 0.9, wand_r * 0.7, wand_len, segs, rings=4)
+        parts.append((sv, sf))
+        for ki in range(3):
+            kv, kf = _make_sphere(0, wand_len * (0.25 + ki * 0.25), 0, wand_r * 1.4, rings=3, sectors=5)
+            parts.append((kv, kf))
+    else:
+        sv, sf = _make_tapered_cylinder(0, 0, 0, wand_r * 1.1, wand_r * 0.7, wand_len, segs, rings=4)
+        parts.append((sv, sf))
+    pv, pf = _make_sphere(0, -0.01, 0, wand_r * 1.6, rings=4, sectors=6)
+    parts.append((pv, pf))
+    for gi in range(3):
+        gy = 0.02 + gi * 0.025
+        gv, gf = _make_torus_ring(0, gy, 0, wand_r * 1.2, wand_r * 0.15, major_segments=segs, minor_segments=3)
+        parts.append((gv, gf))
+    if style == "bone":
+        sv2, sf2 = _make_sphere(0, wand_len + 0.012, 0, 0.012, rings=4, sectors=6)
+        parts.append((sv2, sf2))
+        for side in [-1, 1]:
+            ev, ef = _make_sphere(side * 0.005, wand_len + 0.015, 0.008, 0.004, rings=2, sectors=4)
+            parts.append((ev, ef))
+    else:
+        cv, cf = _make_cone(0, wand_len, 0, 0.01, 0.025, segments=6)
+        parts.append((cv, cf))
+        rv, rf = _make_torus_ring(0, wand_len + 0.002, 0, 0.012, 0.003, major_segments=segs, minor_segments=3)
+        parts.append((rv, rf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Wand_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, wand_len * 0.15, 0.0), trail_top=(0.0, wand_len + 0.025, 0.0),
+                        trail_bottom=(0.0, wand_len * 0.5, 0.0))
+
+
+def generate_throwing_knife_weapon_mesh(style: str = "balanced") -> MeshSpec:
+    """Generate a balanced throwing knife mesh (weapon-class, not projectile).
+
+    Args:
+        style: "balanced", "kunai", or "star".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    if style == "kunai":
+        bl = 0.18
+        bw, bd = 0.02, 0.005
+        bv = [(0, bl, 0), (-bw, bl * 0.3, bd), (bw, bl * 0.3, bd), (-bw, bl * 0.3, -bd), (bw, bl * 0.3, -bd),
+              (0, 0, bd * 0.5), (0, 0, -bd * 0.5)]
+        parts.append((bv, [(0, 1, 2), (0, 4, 3), (0, 2, 4), (0, 3, 1), (1, 5, 6, 3), (2, 4, 6, 5), (1, 3, 6, 5)]))
+        rv, rf = _make_torus_ring(0, -0.03, 0, 0.015, 0.003, major_segments=8, minor_segments=3)
+        parts.append((rv, rf))
+        hv, hf = _make_tapered_cylinder(0, -0.03, 0, 0.008, 0.006, 0.06, segments=4, rings=2)
+        parts.append((hv, hf))
+        wv, wf = _make_tapered_cylinder(0, 0, 0, 0.009, 0.007, 0.05, segments=4, rings=2)
+        parts.append((wv, wf))
+        trail_top_y = bl
+    elif style == "star":
+        cr = 0.02
+        cv, cf = _make_cylinder(0, -0.003, 0, cr, 0.006, segments=8)
+        parts.append((cv, cf))
+        for bi in range(4):
+            angle = 2 * math.pi * bi / 4
+            bx, bz = math.cos(angle), math.sin(angle)
+            br = 0.05
+            bv2 = [(bx * cr, 0.003, bz * cr), (bx * br, 0.003, bz * br),
+                   (bx * cr, -0.003, bz * cr), (bx * br, -0.003, bz * br),
+                   (bx * br * 0.8 + bz * 0.015, 0, bz * br * 0.8 - bx * 0.015)]
+            parts.append((bv2, [(0, 1, 4), (2, 4, 3), (0, 4, 2), (1, 3, 4), (0, 2, 3, 1)]))
+        trail_top_y = 0.05
+    else:
+        bl = 0.15
+        bw, bd = 0.018, 0.004
+        bv3 = [(0, bl, 0), (-bw, bl * 0.6, bd), (bw, bl * 0.6, bd), (-bw, bl * 0.6, -bd), (bw, bl * 0.6, -bd),
+               (-bw * 0.6, 0, bd * 0.8), (bw * 0.6, 0, bd * 0.8), (-bw * 0.6, 0, -bd * 0.8), (bw * 0.6, 0, -bd * 0.8)]
+        parts.append((bv3, [(0, 1, 2), (0, 4, 3), (0, 2, 4), (0, 3, 1), (1, 5, 6, 2), (4, 8, 7, 3),
+                            (2, 6, 8, 4), (1, 3, 7, 5), (5, 7, 8, 6)]))
+        hv, hf = _make_tapered_cylinder(0, -0.08, 0, bw * 0.35, bw * 0.25, 0.08, segments=6, rings=2)
+        parts.append((hv, hf))
+        gv, gf = _make_box(0, 0, 0, bw * 0.8, bd * 1.5, bd * 1.5)
+        parts.append((gv, gf))
+        pv, pf = _make_sphere(0, -0.09, 0, bw * 0.4, rings=3, sectors=5)
+        parts.append((pv, pf))
+        trail_top_y = bl
+    verts, faces = _merge_meshes(*parts)
+    grip_y = -0.03 if style != "star" else 0.0
+    return _make_result(f"ThrowingKnifeWeapon_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, grip_y, 0.0), trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.0, 0.0, 0.0))
+
+
+# =========================================================================
+# CATEGORY 4b: DUAL-WIELD PAIRED WEAPONS
+# =========================================================================
+
+
+def generate_paired_daggers_mesh(style: str = "standard") -> MeshSpec:
+    """Generate a pair of mirrored daggers for dual-wielding.
+
+    Args:
+        style: "standard", "curved", or "serrated".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 6
+
+    for side_x in [-0.06, 0.06]:
+        mirror = -1.0 if side_x < 0 else 1.0
+        # Handle
+        handle_len, handle_r = 0.1, 0.01
+        hv, hf = _make_tapered_cylinder(side_x, 0, 0, handle_r * 1.1, handle_r * 0.9, handle_len, segs, rings=2)
+        parts.append((hv, hf))
+        # Pommel
+        pv, pf = _make_sphere(side_x, -0.012, 0, handle_r * 1.4, rings=3, sectors=5)
+        parts.append((pv, pf))
+        # Guard -- small cross-guard
+        gv, gf = _make_beveled_box(side_x, handle_len + 0.005, 0, 0.018, 0.005, 0.008, bevel=0.002)
+        parts.append((gv, gf))
+        # Blade
+        blade_base_y = handle_len + 0.01
+        blade_len = 0.18
+        blade_segs, blade_thick = 6, 0.003
+        bvl: list[tuple[float, float, float]] = []
+        bfl: list[tuple[int, ...]] = []
+        for i in range(blade_segs + 1):
+            t = i / blade_segs
+            y = blade_base_y + t * blade_len
+            w = 0.015 * (1.0 - t * 0.7)
+            if style == "curved":
+                x_off = side_x + mirror * math.sin(t * math.pi * 0.4) * 0.015
+            elif style == "serrated":
+                x_off = side_x + mirror * math.sin(t * math.pi * 6) * 0.003 * (1.0 - t)
+            else:
+                x_off = side_x
+            bvl.extend([(x_off - w, y, blade_thick), (x_off + w, y, blade_thick),
+                        (x_off + w, y, -blade_thick), (x_off - w, y, -blade_thick)])
+        for i in range(blade_segs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                bfl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        # Tip
+        tip_y = blade_base_y + blade_len + 0.02
+        bvl.append((side_x, tip_y, 0))
+        tb = blade_segs * 4
+        ti = len(bvl) - 1
+        for j in range(4):
+            bfl.append((tb + j, tb + (j + 1) % 4, ti))
+        parts.append((bvl, bfl))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"PairedDaggers_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.04, 0.0), trail_top=(0.06, 0.31, 0.0),
+                        trail_bottom=(0.06, 0.11, 0.0), dual_wield=True)
+
+
+def generate_twin_swords_mesh(style: str = "standard") -> MeshSpec:
+    """Generate matched pair of swords for dual-wielding.
+
+    Args:
+        style: "standard", "falcata", or "gladius".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    for side_x in [-0.07, 0.07]:
+        mirror = -1.0 if side_x < 0 else 1.0
+        handle_len, handle_r = 0.15, 0.013
+        hv, hf = _make_tapered_cylinder(side_x, 0, 0, handle_r * 1.1, handle_r * 0.9, handle_len, segs, rings=3)
+        parts.append((hv, hf))
+        pv, pf = _make_sphere(side_x, -0.018, 0, handle_r * 1.6, rings=3, sectors=6)
+        parts.append((pv, pf))
+        for gi in range(3):
+            gy = 0.02 + gi * handle_len * 0.25
+            gv, gf = _make_torus_ring(side_x, gy, 0, handle_r * 1.2, handle_r * 0.1, major_segments=segs, minor_segments=3)
+            parts.append((gv, gf))
+        # Guard
+        guard_w = 0.035 if style != "gladius" else 0.02
+        gv2, gf2 = _make_beveled_box(side_x, handle_len + 0.007, 0, guard_w, 0.007, 0.01, bevel=0.003)
+        parts.append((gv2, gf2))
+        # Blade
+        blade_base_y = handle_len + 0.014
+        if style == "gladius":
+            blade_len, blade_w = 0.45, 0.025
+        elif style == "falcata":
+            blade_len, blade_w = 0.4, 0.03
+        else:
+            blade_len, blade_w = 0.5, 0.022
+        blade_segs, blade_thick = 8, 0.004
+        bvl: list[tuple[float, float, float]] = []
+        bfl: list[tuple[int, ...]] = []
+        for i in range(blade_segs + 1):
+            t = i / blade_segs
+            y = blade_base_y + t * blade_len
+            if style == "falcata":
+                w = blade_w * (1.0 + t * 0.3 - t * t * 1.3)
+                x_off = side_x + mirror * math.sin(t * math.pi * 0.3) * 0.02
+            elif style == "gladius":
+                leaf = 1.0 + 0.3 * math.sin(t * math.pi) - t * 0.3
+                w = blade_w * leaf
+                x_off = side_x
+            else:
+                w = blade_w * (1.0 - t * 0.5)
+                x_off = side_x
+            w = max(w, 0.003)
+            bvl.extend([(x_off - w, y, blade_thick), (x_off + w, y, blade_thick),
+                        (x_off + w, y, -blade_thick), (x_off - w, y, -blade_thick)])
+        for i in range(blade_segs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                bfl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        tip_y = blade_base_y + blade_len + 0.03
+        bvl.append((side_x, tip_y, 0))
+        tb = blade_segs * 4
+        ti = len(bvl) - 1
+        for j in range(4):
+            bfl.append((tb + j, tb + (j + 1) % 4, ti))
+        parts.append((bvl, bfl))
+
+    verts, faces = _merge_meshes(*parts)
+    trail_top_y = 0.15 + 0.014 + (0.5 if style == "standard" else 0.45 if style == "gladius" else 0.4) + 0.03
+    return _make_result(f"TwinSwords_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.06, 0.0), trail_top=(0.07, trail_top_y, 0.0),
+                        trail_bottom=(0.07, 0.164, 0.0), dual_wield=True)
+
+
+def generate_dual_axes_mesh(style: str = "hand") -> MeshSpec:
+    """Generate paired hand/throwing axes for dual-wielding.
+
+    Args:
+        style: "hand", "hatchet", or "tomahawk".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    for side_x in [-0.08, 0.08]:
+        mirror = 1.0 if side_x > 0 else -1.0
+        haft_len, haft_r = 0.3, 0.011
+        hv, hf = _make_tapered_cylinder(side_x, 0, 0, haft_r * 1.05, haft_r * 0.9, haft_len, segs, rings=3)
+        parts.append((hv, hf))
+        pv, pf = _make_sphere(side_x, -0.012, 0, haft_r * 1.4, rings=3, sectors=5)
+        parts.append((pv, pf))
+        # Axe head
+        head_y = haft_len * 0.8
+        bd = 0.005
+        if style == "hatchet":
+            bv = [(side_x + mirror * 0.05, head_y + 0.035, bd),
+                  (side_x + mirror * 0.05, head_y - 0.025, bd),
+                  (side_x, head_y - 0.015, bd), (side_x, head_y + 0.02, bd),
+                  (side_x + mirror * 0.05, head_y + 0.035, -bd),
+                  (side_x + mirror * 0.05, head_y - 0.025, -bd),
+                  (side_x, head_y - 0.015, -bd), (side_x, head_y + 0.02, -bd)]
+        elif style == "tomahawk":
+            bv = [(side_x + mirror * 0.045, head_y + 0.02, bd),
+                  (side_x + mirror * 0.045, head_y - 0.02, bd),
+                  (side_x, head_y - 0.012, bd), (side_x, head_y + 0.012, bd),
+                  (side_x + mirror * 0.045, head_y + 0.02, -bd),
+                  (side_x + mirror * 0.045, head_y - 0.02, -bd),
+                  (side_x, head_y - 0.012, -bd), (side_x, head_y + 0.012, -bd)]
+        else:
+            bv = [(side_x + mirror * 0.055, head_y + 0.03, bd),
+                  (side_x + mirror * 0.055, head_y - 0.03, bd),
+                  (side_x, head_y - 0.018, bd), (side_x, head_y + 0.018, bd),
+                  (side_x + mirror * 0.055, head_y + 0.03, -bd),
+                  (side_x + mirror * 0.055, head_y - 0.03, -bd),
+                  (side_x, head_y - 0.018, -bd), (side_x, head_y + 0.018, -bd)]
+        bf = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (2, 6, 7, 3), (0, 3, 7, 4), (1, 5, 6, 2)]
+        parts.append((bv, bf))
+        # Collar ring
+        ev, ef = _make_torus_ring(side_x, head_y, 0, haft_r * 1.4, haft_r * 0.25, major_segments=segs, minor_segments=3)
+        parts.append((ev, ef))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"DualAxes_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.1, 0.0), trail_top=(0.08, 0.27, 0.0),
+                        trail_bottom=(0.08, 0.21, 0.0), dual_wield=True)
+
+
+def generate_dual_claws_mesh(style: str = "tiger") -> MeshSpec:
+    """Generate paired claw weapons for dual-wielding.
+
+    Args:
+        style: "tiger", "hook", or "katar".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 6
+
+    for side_x in [-0.06, 0.06]:
+        mirror = 1.0 if side_x > 0 else -1.0
+        if style == "katar":
+            # H-frame grip
+            grip_w, grip_h = 0.025, 0.08
+            gv, gf = _make_beveled_box(side_x, grip_h / 2, 0, grip_w, grip_h / 2, 0.012, bevel=0.003)
+            parts.append((gv, gf))
+            # Cross bars
+            for bar_y in [0.01, grip_h - 0.01]:
+                bv, bf = _make_beveled_box(side_x, bar_y, 0, grip_w * 1.3, 0.004, 0.004, bevel=0.001)
+                parts.append((bv, bf))
+            # Single triangular blade
+            blade_len = 0.2
+            blade_base_y = grip_h
+            bvl: list[tuple[float, float, float]] = []
+            bfl_l: list[tuple[int, ...]] = []
+            blade_segs = 6
+            for i in range(blade_segs + 1):
+                t = i / blade_segs
+                y = blade_base_y + t * blade_len
+                w = 0.018 * (1.0 - t * 0.8)
+                bvl.extend([(side_x - w, y, 0.004), (side_x + w, y, 0.004),
+                            (side_x + w, y, -0.004), (side_x - w, y, -0.004)])
+            for i in range(blade_segs):
+                b = i * 4
+                for j in range(4):
+                    j2 = (j + 1) % 4
+                    bfl_l.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+            bvl.append((side_x, blade_base_y + blade_len + 0.02, 0))
+            tb = blade_segs * 4
+            ti = len(bvl) - 1
+            for j in range(4):
+                bfl_l.append((tb + j, tb + (j + 1) % 4, ti))
+            parts.append((bvl, bfl_l))
+        else:
+            # Fist grip bar
+            gv, gf = _make_cylinder(side_x, 0, 0, 0.012, 0.07, segments=segs)
+            parts.append((gv, gf))
+            # Knuckle plate
+            kv, kf = _make_beveled_box(side_x, 0.07, 0, 0.02, 0.008, 0.015, bevel=0.003)
+            parts.append((kv, kf))
+            # Claw blades
+            num_claws = 3 if style == "tiger" else 2
+            for ci in range(num_claws):
+                claw_z = 0.015 * (ci - (num_claws - 1) / 2.0)
+                blade_len = 0.15 if style == "tiger" else 0.12
+                claw_segs = 5
+                cvl: list[tuple[float, float, float]] = []
+                cfl: list[tuple[int, ...]] = []
+                for i in range(claw_segs + 1):
+                    t = i / claw_segs
+                    y = 0.078 + t * blade_len
+                    w = 0.005 * (1.0 - t * 0.6)
+                    if style == "hook":
+                        x_off = side_x + mirror * math.sin(t * math.pi * 0.6) * 0.03
+                    else:
+                        x_off = side_x + mirror * t * 0.005
+                    cvl.extend([(x_off - w, y, claw_z + 0.002), (x_off + w, y, claw_z + 0.002),
+                                (x_off + w, y, claw_z - 0.002), (x_off - w, y, claw_z - 0.002)])
+                for i in range(claw_segs):
+                    b = i * 4
+                    for j in range(4):
+                        j2 = (j + 1) % 4
+                        cfl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+                # Claw tip
+                tip_y = 0.078 + blade_len + 0.015
+                if style == "hook":
+                    tip_x = side_x + mirror * math.sin(math.pi * 0.6) * 0.03
+                else:
+                    tip_x = side_x + mirror * 0.005
+                cvl.append((tip_x, tip_y, claw_z))
+                tb = claw_segs * 4
+                ti = len(cvl) - 1
+                for j in range(4):
+                    cfl.append((tb + j, tb + (j + 1) % 4, ti))
+                parts.append((cvl, cfl))
+
+    verts, faces = _merge_meshes(*parts)
+    trail_top_y = 0.3 if style == "katar" else 0.243
+    return _make_result(f"DualClaws_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.035, 0.0), trail_top=(0.06, trail_top_y, 0.0),
+                        trail_bottom=(0.06, 0.078, 0.0), dual_wield=True)
+
+
+# =========================================================================
+# CATEGORY 4c: FIST / GAUNTLET WEAPONS
+# =========================================================================
+
+
+def generate_brass_knuckles_mesh(style: str = "standard") -> MeshSpec:
+    """Generate brass knuckles / knuckle-duster mesh.
+
+    Args:
+        style: "standard", "spiked", or "bladed".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    # Main frame bar (across knuckles)
+    frame_w, frame_h, frame_d = 0.06, 0.012, 0.01
+    fv, ff = _make_beveled_box(0, 0.04, 0, frame_w, frame_h, frame_d, bevel=0.003)
+    parts.append((fv, ff))
+    # Grip bar (palm side)
+    gv, gf = _make_beveled_box(0, 0.0, 0, frame_w * 0.85, 0.008, frame_d * 0.8, bevel=0.002)
+    parts.append((gv, gf))
+    # Side connectors
+    for sx in [-frame_w + 0.008, frame_w - 0.008]:
+        cv, cf = _make_beveled_box(sx, 0.02, 0, 0.005, 0.02, frame_d * 0.6, bevel=0.002)
+        parts.append((cv, cf))
+    # Finger rings
+    for fi in range(4):
+        fx = -0.04 + fi * 0.027
+        rv, rf = _make_torus_ring(fx, 0.04, 0, 0.012, 0.004, major_segments=segs, minor_segments=4)
+        parts.append((rv, rf))
+
+    if style == "spiked":
+        for fi in range(4):
+            fx = -0.04 + fi * 0.027
+            sv, sf = _make_cone(fx, 0.054, 0, 0.006, 0.025, segments=5)
+            parts.append((sv, sf))
+    elif style == "bladed":
+        bv, bf = _make_beveled_box(0, 0.065, 0, frame_w * 0.9, 0.015, 0.003, bevel=0.002)
+        parts.append((bv, bf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"BrassKnuckles_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.0, 0.0), trail_top=(0.0, 0.065 if style != "spiked" else 0.079, 0.0),
+                        trail_bottom=(0.0, 0.028, 0.0))
+
+
+def generate_cestus_mesh(style: str = "leather") -> MeshSpec:
+    """Generate wrapped fighting glove / cestus mesh.
+
+    Args:
+        style: "leather", "studded", or "iron".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    # Main glove body (tapered box)
+    glove_h = 0.12
+    gv, gf = _make_tapered_cylinder(0, 0, 0, 0.035, 0.03, glove_h, segs, rings=4)
+    parts.append((gv, gf))
+    # Wrist cuff
+    wv, wf = _make_torus_ring(0, 0.0, 0, 0.038, 0.006, major_segments=segs, minor_segments=4)
+    parts.append((wv, wf))
+    # Finger knuckle ridge
+    kv, kf = _make_beveled_box(0, glove_h - 0.01, 0, 0.032, 0.008, 0.025, bevel=0.004)
+    parts.append((kv, kf))
+
+    if style == "studded":
+        for si in range(6):
+            s_angle = 2.0 * math.pi * si / 6
+            sx = math.cos(s_angle) * 0.033
+            sz = math.sin(s_angle) * 0.033
+            sv, sf = _make_sphere(sx, glove_h * 0.5 + si * 0.005, sz, 0.005, rings=3, sectors=4)
+            parts.append((sv, sf))
+    elif style == "iron":
+        # Metal plate overlays
+        for pi in range(3):
+            py = 0.03 + pi * 0.03
+            pv, pf = _make_beveled_box(0, py, 0.028, 0.025, 0.012, 0.003, bevel=0.002)
+            parts.append((pv, pf))
+        # Iron knuckle guard
+        igv, igf = _make_beveled_box(0, glove_h, 0, 0.035, 0.006, 0.028, bevel=0.003)
+        parts.append((igv, igf))
+
+    # Wrap bands
+    for wi in range(3):
+        wy = 0.02 + wi * 0.035
+        wbv, wbf = _make_torus_ring(0, wy, 0, 0.036, 0.003, major_segments=segs, minor_segments=3)
+        parts.append((wbv, wbf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Cestus_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.0, 0.0), trail_top=(0.0, glove_h, 0.0),
+                        trail_bottom=(0.0, glove_h * 0.7, 0.0))
+
+
+def generate_bladed_gauntlet_mesh(style: str = "wrist_blade") -> MeshSpec:
+    """Generate a gauntlet with integrated blades.
+
+    Args:
+        style: "wrist_blade", "finger_blades", or "claw_tips".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    # Forearm guard
+    arm_h = 0.18
+    av, af = _make_tapered_cylinder(0, 0, 0, 0.035, 0.03, arm_h, segs, rings=4)
+    parts.append((av, af))
+    # Wrist ring
+    wv, wf = _make_torus_ring(0, 0, 0, 0.038, 0.005, major_segments=segs, minor_segments=4)
+    parts.append((wv, wf))
+    # Hand section
+    hv, hf = _make_tapered_cylinder(0, arm_h, 0, 0.03, 0.025, 0.08, segs, rings=3)
+    parts.append((hv, hf))
+    # Knuckle guard
+    kv, kf = _make_beveled_box(0, arm_h + 0.07, 0, 0.028, 0.006, 0.02, bevel=0.003)
+    parts.append((kv, kf))
+
+    blade_top_y = arm_h + 0.08
+    if style == "wrist_blade":
+        # Single retractable blade from top of forearm
+        blade_len = 0.22
+        blade_segs = 6
+        bvl: list[tuple[float, float, float]] = []
+        bfl: list[tuple[int, ...]] = []
+        for i in range(blade_segs + 1):
+            t = i / blade_segs
+            y = arm_h + 0.08 + t * blade_len
+            w = 0.012 * (1.0 - t * 0.7)
+            bvl.extend([(-w, y, 0.003), (w, y, 0.003), (w, y, -0.003), (-w, y, -0.003)])
+        for i in range(blade_segs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                bfl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        bvl.append((0, arm_h + 0.08 + blade_len + 0.02, 0))
+        tb = blade_segs * 4
+        ti = len(bvl) - 1
+        for j in range(4):
+            bfl.append((tb + j, tb + (j + 1) % 4, ti))
+        parts.append((bvl, bfl))
+        blade_top_y = arm_h + 0.08 + blade_len + 0.02
+    elif style == "finger_blades":
+        for fi in range(4):
+            fz = -0.015 + fi * 0.01
+            blade_len = 0.1
+            fvl: list[tuple[float, float, float]] = []
+            ffl: list[tuple[int, ...]] = []
+            f_segs = 4
+            for i in range(f_segs + 1):
+                t = i / f_segs
+                y = arm_h + 0.08 + t * blade_len
+                w = 0.004 * (1.0 - t * 0.6)
+                fvl.extend([(-w, y, fz + 0.002), (w, y, fz + 0.002),
+                            (w, y, fz - 0.002), (-w, y, fz - 0.002)])
+            for i in range(f_segs):
+                b = i * 4
+                for j in range(4):
+                    j2 = (j + 1) % 4
+                    ffl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+            fvl.append((0, arm_h + 0.08 + blade_len + 0.01, fz))
+            tb = f_segs * 4
+            ti = len(fvl) - 1
+            for j in range(4):
+                ffl.append((tb + j, tb + (j + 1) % 4, ti))
+            parts.append((fvl, ffl))
+        blade_top_y = arm_h + 0.08 + 0.11
+    else:  # claw_tips
+        for ci in range(3):
+            cz = -0.01 + ci * 0.01
+            claw_len = 0.08
+            c_segs = 4
+            cvl: list[tuple[float, float, float]] = []
+            cfl: list[tuple[int, ...]] = []
+            for i in range(c_segs + 1):
+                t = i / c_segs
+                y = arm_h + 0.08 + t * claw_len
+                x_off = math.sin(t * math.pi * 0.4) * 0.015
+                w = 0.005 * (1.0 - t * 0.5)
+                cvl.extend([(x_off - w, y, cz + 0.002), (x_off + w, y, cz + 0.002),
+                            (x_off + w, y, cz - 0.002), (x_off - w, y, cz - 0.002)])
+            for i in range(c_segs):
+                b = i * 4
+                for j in range(4):
+                    j2 = (j + 1) % 4
+                    cfl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+            tip_x = math.sin(math.pi * 0.4) * 0.015
+            cvl.append((tip_x, arm_h + 0.08 + claw_len + 0.01, cz))
+            tb = c_segs * 4
+            ti = len(cvl) - 1
+            for j in range(4):
+                cfl.append((tb + j, tb + (j + 1) % 4, ti))
+            parts.append((cvl, cfl))
+        blade_top_y = arm_h + 0.08 + 0.09
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"BladedGauntlet_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.0, 0.0), trail_top=(0.0, blade_top_y, 0.0),
+                        trail_bottom=(0.0, arm_h + 0.08, 0.0))
+
+
+def generate_iron_fist_mesh(style: str = "standard") -> MeshSpec:
+    """Generate a heavy metal fist weapon.
+
+    Args:
+        style: "standard", "hammer_fist", or "spiked".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    # Forearm brace
+    brace_h = 0.15
+    bv, bf = _make_tapered_cylinder(0, 0, 0, 0.032, 0.028, brace_h, segs, rings=3)
+    parts.append((bv, bf))
+    # Wrist joint
+    wv, wf = _make_torus_ring(0, brace_h, 0, 0.03, 0.008, major_segments=segs, minor_segments=4)
+    parts.append((wv, wf))
+
+    fist_base_y = brace_h + 0.01
+    if style == "hammer_fist":
+        # Oversized rectangular hammer head on fist
+        hv, hf = _make_beveled_box(0, fist_base_y + 0.04, 0, 0.04, 0.04, 0.035, bevel=0.005)
+        parts.append((hv, hf))
+        # Flat striking face
+        sv, sf = _make_beveled_box(0, fist_base_y + 0.08, 0, 0.035, 0.005, 0.03, bevel=0.003)
+        parts.append((sv, sf))
+        trail_top_y = fist_base_y + 0.085
+    elif style == "spiked":
+        # Round fist with spikes
+        fv, ff = _make_sphere(0, fist_base_y + 0.035, 0, 0.035, rings=5, sectors=8)
+        parts.append((fv, ff))
+        # Spikes radiating out
+        for si in range(6):
+            s_angle = 2.0 * math.pi * si / 6
+            sx = math.cos(s_angle) * 0.03
+            sz = math.sin(s_angle) * 0.03
+            sv, sf = _make_cone(sx, fist_base_y + 0.035 + abs(math.sin(s_angle)) * 0.01, sz,
+                                0.008, 0.03, segments=5)
+            parts.append((sv, sf))
+        # Top spike
+        tv, tf = _make_cone(0, fist_base_y + 0.07, 0, 0.008, 0.035, segments=5)
+        parts.append((tv, tf))
+        trail_top_y = fist_base_y + 0.105
+    else:
+        # Standard iron fist -- rounded box
+        fv, ff = _make_beveled_box(0, fist_base_y + 0.035, 0, 0.035, 0.035, 0.03, bevel=0.006)
+        parts.append((fv, ff))
+        # Knuckle ridge
+        kv, kf = _make_beveled_box(0, fist_base_y + 0.065, 0, 0.032, 0.006, 0.025, bevel=0.003)
+        parts.append((kv, kf))
+        trail_top_y = fist_base_y + 0.071
+
+    # Straps
+    for si in range(2):
+        sy = 0.03 + si * 0.06
+        sv2, sf2 = _make_torus_ring(0, sy, 0, 0.034, 0.004, major_segments=segs, minor_segments=3)
+        parts.append((sv2, sf2))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"IronFist_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.0, 0.0), trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.0, fist_base_y, 0.0))
+
+
+# =========================================================================
+# CATEGORY 4d: RAPIERS / THRUSTING SWORDS
+# =========================================================================
+
+
+def generate_rapier_mesh(style: str = "standard") -> MeshSpec:
+    """Generate a rapier with thin blade and swept hilt.
+
+    Args:
+        style: "standard", "ornate", or "basket_hilt".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    # Handle -- wire-wrapped grip
+    handle_len, handle_r = 0.14, 0.012
+    hv, hf = _make_tapered_cylinder(0, 0, 0, handle_r * 1.05, handle_r * 0.95, handle_len, segs, rings=3)
+    parts.append((hv, hf))
+    # Pommel -- faceted
+    pv, pf = _make_sphere(0, -0.02, 0, handle_r * 2.0, rings=4, sectors=6)
+    parts.append((pv, pf))
+    # Grip wraps
+    for gi in range(5):
+        gy = 0.015 + gi * handle_len * 0.18
+        gv, gf = _make_torus_ring(0, gy, 0, handle_r * 1.15, handle_r * 0.08, major_segments=segs, minor_segments=3)
+        parts.append((gv, gf))
+
+    guard_y = handle_len
+    if style == "basket_hilt":
+        # Basket guard -- series of curved bars
+        for bi in range(6):
+            b_angle = 2.0 * math.pi * bi / 6
+            bar_r = 0.04
+            bar_segs = 6
+            bvl: list[tuple[float, float, float]] = []
+            bfl_l: list[tuple[int, ...]] = []
+            for i in range(bar_segs + 1):
+                t = i / bar_segs
+                arc_angle = t * math.pi * 0.7
+                bx = math.cos(b_angle) * bar_r * math.sin(arc_angle)
+                bz = math.sin(b_angle) * bar_r * math.sin(arc_angle)
+                by = guard_y + math.cos(arc_angle) * 0.03
+                bvl.extend([(bx - 0.003, by, bz - 0.003), (bx + 0.003, by, bz - 0.003),
+                            (bx + 0.003, by, bz + 0.003), (bx - 0.003, by, bz + 0.003)])
+            for i in range(bar_segs):
+                b = i * 4
+                for j in range(4):
+                    j2 = (j + 1) % 4
+                    bfl_l.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+            parts.append((bvl, bfl_l))
+    elif style == "ornate":
+        # Elaborate swept guard with quillons + knuckle bow
+        gv2, gf2 = _make_beveled_box(0, guard_y + 0.006, 0, 0.05, 0.006, 0.008, bevel=0.003)
+        parts.append((gv2, gf2))
+        # Knuckle bow
+        bow_segs = 8
+        bvl2: list[tuple[float, float, float]] = []
+        bfl2: list[tuple[int, ...]] = []
+        for i in range(bow_segs + 1):
+            t = i / bow_segs
+            arc = t * math.pi
+            bx = math.sin(arc) * 0.03
+            by = guard_y + 0.006 - math.cos(arc) * 0.04
+            bvl2.extend([(bx - 0.003, by, 0.003), (bx + 0.003, by, 0.003),
+                         (bx + 0.003, by, -0.003), (bx - 0.003, by, -0.003)])
+        for i in range(bow_segs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                bfl2.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        parts.append((bvl2, bfl2))
+        # Decorative rings on quillons
+        for qx in [-0.04, 0.04]:
+            rv, rf = _make_torus_ring(qx, guard_y + 0.006, 0, 0.008, 0.003, major_segments=6, minor_segments=3)
+            parts.append((rv, rf))
+    else:
+        # Standard swept guard
+        gv2, gf2 = _make_beveled_box(0, guard_y + 0.006, 0, 0.04, 0.006, 0.01, bevel=0.003)
+        parts.append((gv2, gf2))
+        # Simple knuckle guard
+        bow_segs = 6
+        bvl3: list[tuple[float, float, float]] = []
+        bfl3: list[tuple[int, ...]] = []
+        for i in range(bow_segs + 1):
+            t = i / bow_segs
+            arc = t * math.pi * 0.8
+            bx = math.sin(arc) * 0.025
+            by = guard_y - math.cos(arc) * 0.035
+            bvl3.extend([(bx - 0.003, by, 0.003), (bx + 0.003, by, 0.003),
+                         (bx + 0.003, by, -0.003), (bx - 0.003, by, -0.003)])
+        for i in range(bow_segs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                bfl3.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        parts.append((bvl3, bfl3))
+
+    # Thin blade -- diamond cross section
+    blade_base_y = guard_y + 0.012
+    blade_len = 0.8
+    blade_segs = 14
+    blade_w_base = 0.01
+    bvl_b: list[tuple[float, float, float]] = []
+    bfl_b: list[tuple[int, ...]] = []
+    for i in range(blade_segs + 1):
+        t = i / blade_segs
+        y = blade_base_y + t * blade_len
+        w = blade_w_base * (1.0 - t * 0.6)
+        d = 0.005 * (1.0 - t * 0.5)
+        # Diamond cross-section: 4 points
+        bvl_b.extend([(0, y, d), (w, y, 0), (0, y, -d), (-w, y, 0)])
+    for i in range(blade_segs):
+        b = i * 4
+        for j in range(4):
+            j2 = (j + 1) % 4
+            bfl_b.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+    # Tip
+    tip_y = blade_base_y + blade_len + 0.03
+    bvl_b.append((0, tip_y, 0))
+    tb = blade_segs * 4
+    ti = len(bvl_b) - 1
+    for j in range(4):
+        bfl_b.append((tb + j, tb + (j + 1) % 4, ti))
+    parts.append((bvl_b, bfl_b))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Rapier_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, handle_len * 0.4, 0.0),
+                        trail_top=(0.0, tip_y, 0.0),
+                        trail_bottom=(0.0, blade_base_y, 0.0))
+
+
+def generate_estoc_mesh(style: str = "standard") -> MeshSpec:
+    """Generate an estoc -- stiff thrusting sword with triangular cross-section.
+
+    Args:
+        style: "standard", "heavy", or "light".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    if style == "heavy":
+        handle_len, handle_r = 0.22, 0.015
+    elif style == "light":
+        handle_len, handle_r = 0.14, 0.011
+    else:
+        handle_len, handle_r = 0.18, 0.013
+
+    # Handle
+    hv, hf = _make_tapered_cylinder(0, 0, 0, handle_r * 1.1, handle_r * 0.9, handle_len, segs, rings=3)
+    parts.append((hv, hf))
+    # Pommel
+    pv, pf = _make_sphere(0, -0.02, 0, handle_r * 1.8, rings=4, sectors=6)
+    parts.append((pv, pf))
+    # Grip wraps
+    for gi in range(4):
+        gy = 0.02 + gi * handle_len * 0.2
+        gv, gf = _make_torus_ring(0, gy, 0, handle_r * 1.2, handle_r * 0.1, major_segments=segs, minor_segments=3)
+        parts.append((gv, gf))
+    # Guard -- simple cross
+    gv2, gf2 = _make_beveled_box(0, handle_len + 0.007, 0, 0.035, 0.007, 0.01, bevel=0.003)
+    parts.append((gv2, gf2))
+
+    # Blade -- triangular cross-section (3 verts per ring)
+    blade_base_y = handle_len + 0.014
+    if style == "heavy":
+        blade_len, blade_w = 0.75, 0.016
+    elif style == "light":
+        blade_len, blade_w = 0.6, 0.01
+    else:
+        blade_len, blade_w = 0.7, 0.013
+
+    blade_segs = 10
+    bvl: list[tuple[float, float, float]] = []
+    bfl: list[tuple[int, ...]] = []
+    for i in range(blade_segs + 1):
+        t = i / blade_segs
+        y = blade_base_y + t * blade_len
+        w = blade_w * (1.0 - t * 0.7)
+        d = w * 0.866  # equilateral triangle depth
+        bvl.extend([(0, y, d * 0.667), (-w, y, -d * 0.333), (w, y, -d * 0.333)])
+    for i in range(blade_segs):
+        b = i * 3
+        for j in range(3):
+            j2 = (j + 1) % 3
+            bfl.append((b + j, b + j2, b + 3 + j2, b + 3 + j))
+    # Tip
+    tip_y = blade_base_y + blade_len + 0.03
+    bvl.append((0, tip_y, 0))
+    tb = blade_segs * 3
+    ti = len(bvl) - 1
+    for j in range(3):
+        bfl.append((tb + j, tb + (j + 1) % 3, ti))
+    parts.append((bvl, bfl))
+
+    # Ricasso / blade reinforcement near base
+    rv, rf = _make_beveled_box(0, blade_base_y + 0.03, 0, blade_w * 1.1, 0.03, blade_w * 0.6, bevel=0.002)
+    parts.append((rv, rf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Estoc_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, handle_len * 0.4, 0.0),
+                        trail_top=(0.0, tip_y, 0.0),
+                        trail_bottom=(0.0, blade_base_y, 0.0))
+
+
+# =========================================================================
+# CATEGORY 4e: THROWING WEAPONS
+# =========================================================================
+
+
+def generate_javelin_mesh(style: str = "standard") -> MeshSpec:
+    """Generate a javelin -- heavy thrown spear.
+
+    Args:
+        style: "standard", "barbed", or "fire".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    shaft_len, shaft_r = 1.2, 0.01
+    hv, hf = _make_tapered_cylinder(0, 0, 0, shaft_r * 1.05, shaft_r * 0.9, shaft_len, segs, rings=6)
+    parts.append((hv, hf))
+    # Grip wrap at balance point
+    for gi in range(3):
+        gy = shaft_len * 0.4 + gi * 0.03
+        gv, gf = _make_torus_ring(0, gy, 0, shaft_r * 1.3, shaft_r * 0.15, major_segments=segs, minor_segments=3)
+        parts.append((gv, gf))
+    # Rear stabilizer fin (simple)
+    fv, ff = _make_beveled_box(0, 0.02, 0, 0.003, 0.04, 0.015, bevel=0.001)
+    parts.append((fv, ff))
+
+    # Head
+    head_base_y = shaft_len
+    if style == "barbed":
+        # Barbed head with backward-pointing hooks
+        head_len = 0.12
+        head_w = 0.02
+        bvl: list[tuple[float, float, float]] = []
+        bfl: list[tuple[int, ...]] = []
+        h_segs = 5
+        for i in range(h_segs + 1):
+            t = i / h_segs
+            y = head_base_y + t * head_len
+            w = head_w * (1.0 - t * 0.8)
+            if t > 0.3 and t < 0.6:
+                w *= 1.4  # Barb bulge
+            bvl.extend([(-w, y, 0.004), (w, y, 0.004), (w, y, -0.004), (-w, y, -0.004)])
+        for i in range(h_segs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                bfl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        bvl.append((0, head_base_y + head_len + 0.02, 0))
+        tb = h_segs * 4
+        ti = len(bvl) - 1
+        for j in range(4):
+            bfl.append((tb + j, tb + (j + 1) % 4, ti))
+        parts.append((bvl, bfl))
+        # Barb fins
+        for bx_sign in [-1, 1]:
+            barb_v = [(bx_sign * 0.015, head_base_y + head_len * 0.5, 0.003),
+                      (bx_sign * 0.03, head_base_y + head_len * 0.3, 0.003),
+                      (bx_sign * 0.015, head_base_y + head_len * 0.35, 0.003),
+                      (bx_sign * 0.015, head_base_y + head_len * 0.5, -0.003),
+                      (bx_sign * 0.03, head_base_y + head_len * 0.3, -0.003),
+                      (bx_sign * 0.015, head_base_y + head_len * 0.35, -0.003)]
+            parts.append((barb_v, [(0, 1, 2), (3, 5, 4), (0, 3, 4, 1), (1, 4, 5, 2), (0, 2, 5, 3)]))
+        trail_top_y = head_base_y + head_len + 0.02
+    elif style == "fire":
+        # Wider leaf-shaped head with oil channels
+        cv, cf = _make_cone(0, head_base_y, 0, 0.018, 0.15, segments=8)
+        parts.append((cv, cf))
+        # Wrap for fire material
+        for wi in range(2):
+            wy = head_base_y + 0.02 + wi * 0.04
+            wv, wf = _make_torus_ring(0, wy, 0, 0.02, 0.004, major_segments=segs, minor_segments=3)
+            parts.append((wv, wf))
+        trail_top_y = head_base_y + 0.15
+    else:
+        # Standard conical head
+        cv, cf = _make_cone(0, head_base_y, 0, 0.015, 0.12, segments=8)
+        parts.append((cv, cf))
+        # Binding ring
+        rv, rf = _make_torus_ring(0, head_base_y, 0, shaft_r * 1.5, shaft_r * 0.3, major_segments=segs, minor_segments=3)
+        parts.append((rv, rf))
+        trail_top_y = head_base_y + 0.12
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Javelin_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, shaft_len * 0.4, 0.0),
+                        trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.0, head_base_y, 0.0))
+
+
+def generate_throwing_axe_mesh(style: str = "tomahawk") -> MeshSpec:
+    """Generate a balanced throwing axe.
+
+    Args:
+        style: "tomahawk", "francisca", or "double".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    haft_len, haft_r = 0.28, 0.01
+    hv, hf = _make_tapered_cylinder(0, 0, 0, haft_r * 1.05, haft_r * 0.9, haft_len, segs, rings=3)
+    parts.append((hv, hf))
+    pv, pf = _make_sphere(0, -0.012, 0, haft_r * 1.4, rings=3, sectors=5)
+    parts.append((pv, pf))
+
+    head_y = haft_len * 0.85
+    bd = 0.005
+    if style == "francisca":
+        # Curved forward-weighted head
+        f_segs = 8
+        fvl: list[tuple[float, float, float]] = []
+        ffl: list[tuple[int, ...]] = []
+        for i in range(f_segs + 1):
+            t = i / f_segs
+            angle = (t - 0.5) * math.pi * 0.7
+            x_o = math.cos(angle) * 0.06
+            y_o = head_y + math.sin(angle) * 0.04
+            x_i = math.cos(angle) * 0.015
+            y_i = head_y + math.sin(angle) * 0.01
+            fvl.extend([(x_o, y_o, bd), (x_i, y_i, bd), (x_i, y_i, -bd), (x_o, y_o, -bd)])
+        for i in range(f_segs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                ffl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        parts.append((fvl, ffl))
+    elif style == "double":
+        # Double-bladed throwing axe
+        for side in [1, -1]:
+            bv = [(side * 0.05, head_y + 0.025, bd), (side * 0.05, head_y - 0.025, bd),
+                  (0, head_y - 0.012, bd), (0, head_y + 0.012, bd),
+                  (side * 0.05, head_y + 0.025, -bd), (side * 0.05, head_y - 0.025, -bd),
+                  (0, head_y - 0.012, -bd), (0, head_y + 0.012, -bd)]
+            bf = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (2, 6, 7, 3), (0, 3, 7, 4), (1, 5, 6, 2)]
+            parts.append((bv, bf))
+    else:  # tomahawk
+        bv = [(0.05, head_y + 0.022, bd), (0.05, head_y - 0.022, bd),
+              (0, head_y - 0.012, bd), (0, head_y + 0.012, bd),
+              (0.05, head_y + 0.022, -bd), (0.05, head_y - 0.022, -bd),
+              (0, head_y - 0.012, -bd), (0, head_y + 0.012, -bd)]
+        bf = [(0, 1, 2, 3), (7, 6, 5, 4), (0, 4, 5, 1), (2, 6, 7, 3), (0, 3, 7, 4), (1, 5, 6, 2)]
+        parts.append((bv, bf))
+
+    # Collar ring
+    ev, ef = _make_torus_ring(0, head_y, 0, haft_r * 1.4, haft_r * 0.25, major_segments=segs, minor_segments=3)
+    parts.append((ev, ef))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"ThrowingAxe_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, haft_len * 0.3, 0.0),
+                        trail_top=(0.05, head_y + 0.025, 0.0),
+                        trail_bottom=(0.0, head_y - 0.025, 0.0))
+
+
+def generate_shuriken_mesh(style: str = "four_point") -> MeshSpec:
+    """Generate a throwing star / shuriken.
+
+    Args:
+        style: "four_point", "six_point", or "circular".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    center_r = 0.015
+    thick = 0.003
+    # Central disc
+    cv, cf = _make_cylinder(0, -thick, 0, center_r, thick * 2, segments=12)
+    parts.append((cv, cf))
+
+    if style == "circular":
+        # Circular blade ring with serrations
+        ring_r = 0.06
+        ring_segs = 24
+        rvl: list[tuple[float, float, float]] = []
+        rfl: list[tuple[int, ...]] = []
+        for i in range(ring_segs):
+            angle = 2.0 * math.pi * i / ring_segs
+            serration = 0.005 * (1 if i % 2 == 0 else -1)
+            outer_r = ring_r + serration
+            inner_r = ring_r - 0.01
+            rvl.extend([(math.cos(angle) * outer_r, thick, math.sin(angle) * outer_r),
+                        (math.cos(angle) * inner_r, thick, math.sin(angle) * inner_r),
+                        (math.cos(angle) * inner_r, -thick, math.sin(angle) * inner_r),
+                        (math.cos(angle) * outer_r, -thick, math.sin(angle) * outer_r)])
+        for i in range(ring_segs):
+            b = i * 4
+            nb = ((i + 1) % ring_segs) * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                rfl.append((b + j, b + j2, nb + j2, nb + j))
+        parts.append((rvl, rfl))
+    else:
+        num_points = 4 if style == "four_point" else 6
+        blade_r = 0.055
+        for pi in range(num_points):
+            angle = 2.0 * math.pi * pi / num_points
+            ca, sa = math.cos(angle), math.sin(angle)
+            # Each blade is a flattened wedge
+            tip_x, tip_z = ca * blade_r, sa * blade_r
+            # Perpendicular direction for blade width
+            px, pz = -sa * 0.012, ca * 0.012
+            base_x, base_z = ca * center_r, sa * center_r
+            bv = [(base_x + px, thick, base_z + pz),
+                  (base_x - px, thick, base_z - pz),
+                  (tip_x, thick, tip_z),
+                  (base_x + px, -thick, base_z + pz),
+                  (base_x - px, -thick, base_z - pz),
+                  (tip_x, -thick, tip_z)]
+            bf = [(0, 1, 2), (5, 4, 3),
+                  (0, 3, 4, 1), (1, 4, 5, 2), (0, 2, 5, 3)]
+            parts.append((bv, bf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Shuriken_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.0, 0.0),
+                        trail_top=(0.0, thick, 0.055),
+                        trail_bottom=(0.0, -thick, -0.055))
+
+
+def generate_bola_mesh(style: str = "standard") -> MeshSpec:
+    """Generate a bola -- weighted rope/chain weapon.
+
+    Args:
+        style: "standard", "chain", or "spiked".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    num_weights = 3
+    rope_len = 0.25
+    for wi in range(num_weights):
+        angle = 2.0 * math.pi * wi / num_weights
+        wx = math.cos(angle) * rope_len
+        wz = math.sin(angle) * rope_len
+        # Weight ball
+        if style == "spiked":
+            sv, sf = _make_sphere(wx, 0, wz, 0.025, rings=5, sectors=6)
+            parts.append((sv, sf))
+            for si in range(4):
+                s_a = 2.0 * math.pi * si / 4
+                sx = wx + math.cos(s_a) * 0.02
+                sz = wz + math.sin(s_a) * 0.02
+                spike_v, spike_f = _make_cone(sx, 0, sz, 0.006, 0.02, segments=4)
+                parts.append((spike_v, spike_f))
+        else:
+            w_r = 0.02 if style == "standard" else 0.018
+            wv, wf = _make_sphere(wx, 0, wz, w_r, rings=4, sectors=6)
+            parts.append((wv, wf))
+
+        # Rope/chain segments connecting to center
+        rope_segs = 6
+        for ri in range(rope_segs):
+            t = ri / rope_segs
+            rx = wx * t
+            rz = wz * t
+            if style == "chain":
+                lv, lf = _make_torus_ring(rx, 0, rz, 0.006, 0.002, major_segments=6, minor_segments=3)
+            else:
+                lv, lf = _make_cylinder(rx, -0.003, rz, 0.003, 0.006, segments=4)
+            parts.append((lv, lf))
+
+    # Central knot
+    cv, cf = _make_sphere(0, 0, 0, 0.012, rings=4, sectors=6)
+    parts.append((cv, cf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Bola_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, 0.0, 0.0),
+                        trail_top=(0.0, 0.025, rope_len),
+                        trail_bottom=(0.0, -0.025, -rope_len))
+
+
+# =========================================================================
+# CATEGORY 4f: OFF-HAND FOCUS ITEMS
+# =========================================================================
+
+
+def generate_orb_focus_mesh(style: str = "crystal") -> MeshSpec:
+    """Generate a mage's focus orb for off-hand.
+
+    Args:
+        style: "crystal", "elemental", or "void".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 10
+
+    # Handle / grip cradle
+    cradle_h = 0.08
+    cv, cf = _make_tapered_cylinder(0, 0, 0, 0.012, 0.018, cradle_h, segs, rings=3)
+    parts.append((cv, cf))
+    # Cradle prongs
+    for pi in range(4):
+        p_angle = 2.0 * math.pi * pi / 4
+        px = math.cos(p_angle) * 0.015
+        pz = math.sin(p_angle) * 0.015
+        prong_segs = 4
+        pvl: list[tuple[float, float, float]] = []
+        pfl: list[tuple[int, ...]] = []
+        for i in range(prong_segs + 1):
+            t = i / prong_segs
+            y = cradle_h + t * 0.04
+            r_off = 0.015 + math.sin(t * math.pi) * 0.01
+            vx = math.cos(p_angle) * r_off
+            vz = math.sin(p_angle) * r_off
+            pvl.extend([(vx - 0.003, y, vz), (vx + 0.003, y, vz),
+                        (vx, y, vz + 0.003), (vx, y, vz - 0.003)])
+        for i in range(prong_segs):
+            b = i * 4
+            for j in range(4):
+                j2 = (j + 1) % 4
+                pfl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+        parts.append((pvl, pfl))
+
+    orb_y = cradle_h + 0.04
+    orb_r = 0.04
+    if style == "crystal":
+        # Faceted crystal orb
+        ov, of = _make_sphere(0, orb_y, 0, orb_r, rings=6, sectors=8)
+        parts.append((ov, of))
+        # Inner crystal facets -- smaller sphere
+        iv, i_f = _make_sphere(0, orb_y, 0, orb_r * 0.6, rings=4, sectors=6)
+        parts.append((iv, i_f))
+    elif style == "elemental":
+        # Orb with elemental swirl bands
+        ov, of = _make_sphere(0, orb_y, 0, orb_r, rings=7, sectors=10)
+        parts.append((ov, of))
+        # Swirl ring bands
+        for ri in range(3):
+            r_angle = math.pi * 0.3 * (ri - 1)
+            ry = orb_y + math.sin(r_angle) * orb_r * 0.5
+            rr = math.cos(r_angle) * orb_r * 0.8
+            rv, rf = _make_torus_ring(0, ry, 0, max(rr, 0.01), 0.003, major_segments=segs, minor_segments=3)
+            parts.append((rv, rf))
+    else:  # void
+        # Dark sphere with cracks
+        ov, of = _make_sphere(0, orb_y, 0, orb_r * 1.1, rings=6, sectors=8)
+        parts.append((ov, of))
+        # Void tendrils
+        for ti in range(3):
+            t_angle = 2.0 * math.pi * ti / 3
+            tv, tf = _make_cone(
+                math.cos(t_angle) * orb_r * 0.8, orb_y + 0.01, math.sin(t_angle) * orb_r * 0.8,
+                0.005, 0.04, segments=4)
+            parts.append((tv, tf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"OrbFocus_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, cradle_h * 0.3, 0.0),
+                        trail_top=(0.0, orb_y + orb_r, 0.0),
+                        trail_bottom=(0.0, orb_y - orb_r, 0.0),
+                        offhand=True)
+
+
+def generate_skull_fetish_mesh(style: str = "human") -> MeshSpec:
+    """Generate a skull fetish -- necromancer off-hand focus.
+
+    Args:
+        style: "human", "beast", or "demon".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    # Bone handle
+    handle_h = 0.15
+    hv, hf = _make_tapered_cylinder(0, 0, 0, 0.01, 0.008, handle_h, segs, rings=3)
+    parts.append((hv, hf))
+    # Wrapping sinew
+    for wi in range(3):
+        wy = 0.02 + wi * 0.04
+        wv, wf = _make_torus_ring(0, wy, 0, 0.012, 0.003, major_segments=segs, minor_segments=3)
+        parts.append((wv, wf))
+
+    skull_y = handle_h + 0.01
+    if style == "beast":
+        # Elongated beast skull with snout
+        sv, sf = _make_beveled_box(0, skull_y + 0.03, 0, 0.03, 0.025, 0.025, bevel=0.008)
+        parts.append((sv, sf))
+        # Snout
+        mv, mf = _make_tapered_cylinder(0, skull_y + 0.01, 0.03, 0.015, 0.008, 0.04, segs, rings=2)
+        parts.append((mv, mf))
+        # Horns
+        for hx in [-0.025, 0.025]:
+            horn_v, horn_f = _make_cone(hx, skull_y + 0.05, 0, 0.008, 0.06, segments=5)
+            parts.append((horn_v, horn_f))
+        # Eye sockets
+        for ex in [-0.012, 0.012]:
+            ev, ef = _make_sphere(ex, skull_y + 0.04, 0.02, 0.006, rings=3, sectors=4)
+            parts.append((ev, ef))
+        trail_top_y = skull_y + 0.11
+    elif style == "demon":
+        # Wide demonic skull with large horns
+        sv, sf = _make_sphere(0, skull_y + 0.03, 0, 0.035, rings=5, sectors=8)
+        parts.append((sv, sf))
+        # Large curved horns
+        for hx_sign in [-1, 1]:
+            horn_segs = 6
+            hvl: list[tuple[float, float, float]] = []
+            hfl: list[tuple[int, ...]] = []
+            for i in range(horn_segs + 1):
+                t = i / horn_segs
+                hy = skull_y + 0.05 + t * 0.08
+                hx = hx_sign * (0.03 + t * 0.03)
+                hr = 0.008 * (1.0 - t * 0.6)
+                hvl.extend([(hx - hr, hy, hr), (hx + hr, hy, hr), (hx + hr, hy, -hr), (hx - hr, hy, -hr)])
+            for i in range(horn_segs):
+                b = i * 4
+                for j in range(4):
+                    j2 = (j + 1) % 4
+                    hfl.append((b + j, b + j2, b + 4 + j2, b + 4 + j))
+            hvl.append((hx_sign * 0.06, skull_y + 0.14, 0))
+            tb = horn_segs * 4
+            ti = len(hvl) - 1
+            for j in range(4):
+                hfl.append((tb + j, tb + (j + 1) % 4, ti))
+            parts.append((hvl, hfl))
+        # Jaw
+        jv, jf = _make_beveled_box(0, skull_y + 0.005, 0.02, 0.025, 0.008, 0.015, bevel=0.004)
+        parts.append((jv, jf))
+        trail_top_y = skull_y + 0.14
+    else:  # human
+        # Human skull shape
+        sv, sf = _make_sphere(0, skull_y + 0.03, 0, 0.03, rings=5, sectors=8)
+        parts.append((sv, sf))
+        # Jaw
+        jv, jf = _make_beveled_box(0, skull_y + 0.005, 0.015, 0.02, 0.01, 0.012, bevel=0.004)
+        parts.append((jv, jf))
+        # Eye sockets
+        for ex in [-0.012, 0.012]:
+            ev, ef = _make_sphere(ex, skull_y + 0.035, 0.025, 0.007, rings=3, sectors=4)
+            parts.append((ev, ef))
+        trail_top_y = skull_y + 0.06
+
+    # Dangling trinkets / bones
+    for di in range(2):
+        dx = -0.015 + di * 0.03
+        dv, df = _make_cylinder(dx, -0.02, 0, 0.003, 0.04, segments=4)
+        parts.append((dv, df))
+        bead_v, bead_f = _make_sphere(dx, -0.025, 0, 0.005, rings=3, sectors=4)
+        parts.append((bead_v, bead_f))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"SkullFetish_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, handle_h * 0.4, 0.0),
+                        trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.0, skull_y, 0.0),
+                        offhand=True)
+
+
+def generate_holy_symbol_mesh(style: str = "pendant") -> MeshSpec:
+    """Generate a holy symbol -- paladin off-hand focus.
+
+    Args:
+        style: "pendant", "reliquary", or "chalice".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    if style == "chalice":
+        # Stem
+        sv, sf = _make_tapered_cylinder(0, 0, 0, 0.015, 0.008, 0.1, segs, rings=3)
+        parts.append((sv, sf))
+        # Base
+        bv, bf = _make_cylinder(0, -0.005, 0, 0.03, 0.005, segments=segs)
+        parts.append((bv, bf))
+        # Cup bowl
+        cup_profile = [(0.01, 0.1), (0.025, 0.12), (0.035, 0.16), (0.035, 0.2), (0.03, 0.22)]
+        cupv, cupf = _make_lathe(cup_profile, segments=segs, close_bottom=True)
+        parts.append((cupv, cupf))
+        # Decorative ring
+        rv, rf = _make_torus_ring(0, 0.1, 0, 0.018, 0.004, major_segments=segs, minor_segments=4)
+        parts.append((rv, rf))
+        grip_y = 0.05
+        trail_top_y = 0.22
+        trail_bottom_y = 0.0
+    elif style == "reliquary":
+        # Handle
+        hv, hf = _make_tapered_cylinder(0, 0, 0, 0.01, 0.008, 0.1, segs, rings=2)
+        parts.append((hv, hf))
+        # Reliquary box on top
+        rv, rf = _make_beveled_box(0, 0.13, 0, 0.03, 0.03, 0.02, bevel=0.005)
+        parts.append((rv, rf))
+        # Cross on front
+        crv1, crf1 = _make_beveled_box(0, 0.13, 0.022, 0.004, 0.018, 0.002, bevel=0.001)
+        parts.append((crv1, crf1))
+        crv2, crf2 = _make_beveled_box(0, 0.14, 0.022, 0.012, 0.004, 0.002, bevel=0.001)
+        parts.append((crv2, crf2))
+        # Decorative corners
+        for cx, cy_off in [(-0.025, -0.025), (0.025, -0.025), (-0.025, 0.025), (0.025, 0.025)]:
+            dv, df = _make_sphere(cx, 0.13 + cy_off, 0.02, 0.005, rings=3, sectors=4)
+            parts.append((dv, df))
+        # Chain loop
+        lv, lf = _make_torus_ring(0, 0.16, 0, 0.008, 0.003, major_segments=6, minor_segments=3)
+        parts.append((lv, lf))
+        grip_y = 0.04
+        trail_top_y = 0.16
+        trail_bottom_y = 0.0
+    else:  # pendant
+        # Chain / handle
+        for ci in range(5):
+            cy = 0.0 + ci * 0.025
+            lv, lf = _make_torus_ring(0, cy, 0, 0.008, 0.002, major_segments=6, minor_segments=3)
+            parts.append((lv, lf))
+        # Pendant disc
+        pv, pf = _make_cylinder(0, 0.12, 0, 0.03, 0.004, segments=segs)
+        parts.append((pv, pf))
+        # Sun / cross emblem
+        crv1, crf1 = _make_beveled_box(0, 0.125, 0, 0.003, 0.02, 0.002, bevel=0.001)
+        parts.append((crv1, crf1))
+        crv2, crf2 = _make_beveled_box(0, 0.135, 0, 0.015, 0.003, 0.002, bevel=0.001)
+        parts.append((crv2, crf2))
+        # Sun rays
+        for ri in range(8):
+            r_angle = 2.0 * math.pi * ri / 8
+            rx = math.cos(r_angle) * 0.025
+            ry = 0.122 + math.sin(r_angle) * 0.025
+            ray_v, ray_f = _make_beveled_box(rx, ry, 0, 0.002, 0.008, 0.002, bevel=0.001)
+            parts.append((ray_v, ray_f))
+        grip_y = 0.04
+        trail_top_y = 0.155
+        trail_bottom_y = 0.0
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"HolySymbol_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, grip_y, 0.0),
+                        trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.0, trail_bottom_y, 0.0),
+                        offhand=True)
+
+
+def generate_totem_mesh(style: str = "wooden") -> MeshSpec:
+    """Generate a druid/shaman totem -- off-hand focus.
+
+    Args:
+        style: "wooden", "bone", or "stone".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    # Main shaft
+    shaft_h = 0.2
+    if style == "bone":
+        shaft_r = 0.012
+        sv, sf = _make_tapered_cylinder(0, 0, 0, shaft_r * 1.2, shaft_r * 0.8, shaft_h, segs, rings=4)
+        parts.append((sv, sf))
+        # Bone knobs
+        for ki in range(3):
+            ky = 0.03 + ki * 0.06
+            kv, kf = _make_sphere(0, ky, 0, shaft_r * 1.5, rings=3, sectors=5)
+            parts.append((kv, kf))
+    elif style == "stone":
+        shaft_r = 0.015
+        sv, sf = _make_tapered_cylinder(0, 0, 0, shaft_r, shaft_r * 0.9, shaft_h * 0.7, segs, rings=3)
+        parts.append((sv, sf))
+        # Stone head -- rough hewn
+        shv, shf = _make_beveled_box(0, shaft_h * 0.7 + 0.03, 0, 0.025, 0.03, 0.02, bevel=0.008)
+        parts.append((shv, shf))
+    else:  # wooden
+        shaft_r = 0.013
+        sv, sf = _make_tapered_cylinder(0, 0, 0, shaft_r * 1.1, shaft_r * 0.85, shaft_h, segs, rings=4)
+        parts.append((sv, sf))
+
+    # Totem carving at top
+    totem_y = shaft_h
+    if style == "wooden":
+        # Carved face
+        tv, tf = _make_beveled_box(0, totem_y + 0.025, 0, 0.02, 0.025, 0.018, bevel=0.006)
+        parts.append((tv, tf))
+        # Eyes
+        for ex in [-0.008, 0.008]:
+            ev, ef = _make_sphere(ex, totem_y + 0.035, 0.016, 0.005, rings=3, sectors=4)
+            parts.append((ev, ef))
+        # Feathers
+        for fi in range(2):
+            fx = -0.015 + fi * 0.03
+            fv, ff = _make_beveled_box(fx, totem_y + 0.06, 0, 0.003, 0.02, 0.008, bevel=0.001)
+            parts.append((fv, ff))
+        trail_top_y = totem_y + 0.08
+    elif style == "bone":
+        # Skull-like top
+        bsv, bsf = _make_sphere(0, totem_y + 0.02, 0, 0.02, rings=4, sectors=6)
+        parts.append((bsv, bsf))
+        # Teeth
+        for ti in range(4):
+            tx = -0.01 + ti * 0.007
+            tv2, tf2 = _make_cone(tx, totem_y + 0.005, 0.015, 0.003, 0.01, segments=4)
+            parts.append((tv2, tf2))
+        trail_top_y = totem_y + 0.04
+    else:  # stone
+        # Rune-carved stone piece
+        rsv, rsf = _make_sphere(0, shaft_h * 0.7 + 0.06, 0, 0.022, rings=4, sectors=6)
+        parts.append((rsv, rsf))
+        trail_top_y = shaft_h * 0.7 + 0.082
+
+    # Hanging charms
+    for chi in range(3):
+        ch_angle = 2.0 * math.pi * chi / 3
+        chx = math.cos(ch_angle) * 0.02
+        chz = math.sin(ch_angle) * 0.02
+        # Thread
+        thv, thf = _make_cylinder(chx, shaft_h * 0.6, chz, 0.002, 0.03, segments=3)
+        parts.append((thv, thf))
+        # Charm bead
+        cbv, cbf = _make_sphere(chx, shaft_h * 0.58, chz, 0.005, rings=3, sectors=4)
+        parts.append((cbv, cbf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Totem_{style}", verts, faces, style=style, category="weapon",
+                        grip_point=(0.0, shaft_h * 0.3, 0.0),
+                        trail_top=(0.0, trail_top_y, 0.0),
+                        trail_bottom=(0.0, shaft_h * 0.5, 0.0),
+                        offhand=True)
 
 
 # =========================================================================
@@ -10684,6 +13128,8377 @@ def generate_shield_mesh(style: str = "round_buckler", size: float = 1.0) -> Mes
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Shield_{style}", verts, faces, style=style, size=size, category="armor")
 
+
+# =========================================================================
+# EXPANDED SHIELD TYPES (8 new shield variants)
+# =========================================================================
+
+
+def generate_heater_shield_mesh(size: float = 1.0) -> MeshSpec:
+    """Generate a classic medieval heater shield (inverted triangle top)."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    sw, sh, thick = 0.25 * size, 0.40 * size, 0.02 * size
+    segs = 10
+    front: list[tuple[float, float, float]] = [
+        (-sw, sh * 0.5, thick * 0.3), (sw, sh * 0.5, thick * 0.3),
+        (sw, sh * 0.1, thick * 0.2), (sw * 0.5, -sh * 0.2, thick * 0.1),
+        (0, -sh * 0.5, 0), (-sw * 0.5, -sh * 0.2, thick * 0.1),
+        (-sw, sh * 0.1, thick * 0.2),
+    ]
+    back = [(v[0], v[1], -thick * 0.2) for v in front]
+    parts.append((front, [(0, 1, 2, 6), (6, 2, 3, 5), (5, 3, 4)]))
+    parts.append((back, [(6, 2, 1, 0), (5, 3, 2, 6), (4, 3, 5)]))
+    nv = len(front)
+    for i in range(nv):
+        i2 = (i + 1) % nv
+        parts.append(([front[i], front[i2], back[i2], back[i]], [(0, 1, 2, 3)]))
+    bv, bf = _make_sphere(0, sh * 0.15, thick * 0.5, thick * 2.5, rings=4, sectors=6)
+    parts.append((bv, bf))
+    rim_v, rim_f = _make_torus_ring(0, sh * 0.15, 0, sw * 0.5, thick * 0.3,
+                                    major_segments=segs, minor_segments=3)
+    parts.append((rim_v, rim_f))
+    hv, hf = _make_cylinder(0, sh * 0.05, -thick * 0.8, thick * 0.3, sw * 0.5,
+                            segments=4, cap_top=True, cap_bottom=True)
+    hv = [(v[2], v[1], v[0]) for v in hv]
+    parts.append((hv, hf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Shield_heater", verts, faces, style="heater", size=size, category="armor")
+
+
+def generate_pavise_mesh(size: float = 1.0) -> MeshSpec:
+    """Generate a full-body standing pavise shield with prop stand."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    pw, ph, thick = 0.35 * size, 0.80 * size, 0.03 * size
+    subdiv_x, subdiv_y = 6, 10
+    pv: list[tuple[float, float, float]] = []
+    pf: list[tuple[int, ...]] = []
+    for iy in range(subdiv_y + 1):
+        ty = iy / subdiv_y
+        y = -ph * 0.5 + ty * ph
+        for ix in range(subdiv_x + 1):
+            tx = ix / subdiv_x
+            x = -pw * 0.5 + tx * pw
+            z = thick * 0.5 * math.cos(tx * math.pi)
+            pv.append((x, y, z))
+    cols = subdiv_x + 1
+    for iy in range(subdiv_y):
+        for ix in range(subdiv_x):
+            v0 = iy * cols + ix
+            pf.append((v0, v0 + 1, v0 + cols + 1, v0 + cols))
+    parts.append((pv, pf))
+    bv, bf = _make_box(0, 0, -thick * 0.3, pw * 0.48, ph * 0.48, thick * 0.1)
+    parts.append((bv, bf))
+    for sx in [-pw * 0.3, pw * 0.3]:
+        lv, lf = _make_box(sx, -ph * 0.1, -thick * 2.0, thick * 0.3, ph * 0.35, thick * 0.15)
+        parts.append((lv, lf))
+    cbv, cbf = _make_box(0, -ph * 0.2, -thick * 1.5, pw * 0.25, thick * 0.2, thick * 0.1)
+    parts.append((cbv, cbf))
+    tv, tf = _make_box(0, ph * 0.48, thick * 0.15, pw * 0.50, thick * 0.5, thick * 0.15)
+    parts.append((tv, tf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Shield_pavise", verts, faces, style="pavise", size=size, category="armor")
+
+
+def generate_targe_mesh(size: float = 1.0) -> MeshSpec:
+    """Generate a small highland targe shield with spike."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    tr = 0.18 * size
+    thick = 0.015 * size
+    segs = 12
+    profile = [(tr, thick * 0.3), (tr * 0.9, thick * 0.8),
+               (tr * 0.6, thick * 1.2), (tr * 0.2, thick * 1.3)]
+    sv, sf = _make_lathe(profile, segments=segs, close_bottom=True, close_top=True)
+    parts.append((sv, sf))
+    bkv, bkf = _make_cylinder(0, -thick * 0.3, 0, tr * 0.85, thick * 0.3,
+                              segments=segs, cap_top=True, cap_bottom=True)
+    parts.append((bkv, bkf))
+    spv, spf = _make_cone(0, thick * 1.3, 0, thick * 1.0, tr * 0.5, segments=6)
+    parts.append((spv, spf))
+    for ri in range(3):
+        rr = tr * (0.3 + ri * 0.25)
+        rv, rf = _make_torus_ring(0, thick * 0.5, 0, rr, thick * 0.15,
+                                  major_segments=segs, minor_segments=3)
+        parts.append((rv, rf))
+    hv, hf = _make_box(0, -thick * 0.8, 0, tr * 0.3, thick * 0.3, thick * 0.5)
+    parts.append((hv, hf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Shield_targe", verts, faces, style="targe", size=size, category="armor")
+
+
+def generate_magical_barrier_mesh(size: float = 1.0) -> MeshSpec:
+    """Generate a translucent energy/magical barrier shield."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    br = 0.30 * size
+    segs = 16
+    # Upper hemisphere dome via lathe profile
+    dome_profile = []
+    for _ri in range(7):
+        phi = math.pi * 0.5 * _ri / 6
+        dome_profile.append((br * math.cos(phi), br * math.sin(phi)))
+    sv, sf = _make_lathe(dome_profile, segments=segs, close_bottom=True, close_top=True)
+    parts.append((sv, sf))
+    hex_rings = 3
+    for ring in range(1, hex_rings + 1):
+        hex_count = ring * 6
+        ring_r = br * ring / (hex_rings + 1)
+        for hi in range(hex_count):
+            ha = 2.0 * math.pi * hi / hex_count
+            hx = math.cos(ha) * ring_r
+            hz = math.sin(ha) * ring_r
+            hy = math.sqrt(max(0, br * br - ring_r * ring_r)) * 0.9
+            hv, hf = _make_torus_ring(hx, hy, hz, br * 0.06, br * 0.008,
+                                      major_segments=6, minor_segments=3)
+            parts.append((hv, hf))
+    cv, cf = _make_sphere(0, br * 0.85, 0, br * 0.08, rings=4, sectors=6)
+    parts.append((cv, cf))
+    rv, rf = _make_torus_ring(0, 0, 0, br, br * 0.02, major_segments=segs, minor_segments=4)
+    parts.append((rv, rf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Shield_magical_barrier", verts, faces,
+                        style="magical_barrier", size=size, category="armor")
+
+
+def generate_bone_shield_mesh(size: float = 1.0) -> MeshSpec:
+    """Generate a shield made from monster bones."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    s_r = 0.25 * size
+    thick = 0.03 * size
+    segs = 8
+    cv, cf = _make_sphere(0, 0, thick * 0.5, s_r * 0.25, rings=5, sectors=7)
+    parts.append((cv, cf))
+    rib_count = 8
+    for ri in range(rib_count):
+        ra = 2.0 * math.pi * ri / rib_count
+        rx, rz_dir = math.cos(ra), math.sin(ra)
+        rv, rf = _make_tapered_cylinder(rx * s_r * 0.2, rz_dir * s_r * 0.2, thick * 0.3,
+                                        thick * 0.8, thick * 0.3, s_r * 0.7, segments=4, rings=2)
+        rv_rot: list[tuple[float, float, float]] = []
+        for v in rv:
+            lx = v[0] - rx * s_r * 0.2
+            ly = v[1] - rz_dir * s_r * 0.2
+            dist = v[2] - thick * 0.3
+            rv_rot.append((rx * (s_r * 0.2 + dist) + lx * 0.3,
+                           rz_dir * (s_r * 0.2 + dist) + ly * 0.3,
+                           thick * 0.3 + abs(lx) * 0.2))
+        parts.append((rv_rot, rf))
+        kx = rx * s_r * 0.85
+        ky = rz_dir * s_r * 0.85
+        kv, kf = _make_sphere(kx, ky, thick * 0.3, thick * 0.6, rings=3, sectors=4)
+        parts.append((kv, kf))
+    for ri in range(rib_count):
+        ra1 = 2.0 * math.pi * ri / rib_count
+        ra2 = 2.0 * math.pi * ((ri + 1) % rib_count) / rib_count
+        mid_a = (ra1 + ra2) / 2
+        mx = math.cos(mid_a) * s_r * 0.5
+        my = math.sin(mid_a) * s_r * 0.5
+        mpv, mpf = _make_box(mx, my, thick * 0.15, s_r * 0.15, s_r * 0.15, thick * 0.05)
+        parts.append((mpv, mpf))
+    for li in range(3):
+        lr = s_r * (0.3 + li * 0.2)
+        lv, lf = _make_torus_ring(0, 0, thick * 0.3, lr, thick * 0.08,
+                                  major_segments=segs, minor_segments=3)
+        parts.append((lv, lf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Shield_bone", verts, faces, style="bone", size=size, category="armor")
+
+
+def generate_crystal_shield_mesh(size: float = 1.0) -> MeshSpec:
+    """Generate a crystalline shield with faceted geometry."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    cr = 0.28 * size
+    thick = 0.04 * size
+    hex_segs = 6
+    hex_vf: list[tuple[float, float, float]] = []
+    hex_vb: list[tuple[float, float, float]] = []
+    for i in range(hex_segs):
+        a = 2.0 * math.pi * i / hex_segs + math.pi / 6
+        hex_vf.append((math.cos(a) * cr, math.sin(a) * cr, thick * 0.5))
+        hex_vb.append((math.cos(a) * cr, math.sin(a) * cr, -thick * 0.3))
+    parts.append((hex_vf, [(0, 1, 2), (0, 2, 3), (0, 3, 4), (0, 4, 5)]))
+    parts.append((hex_vb, [(2, 1, 0), (3, 2, 0), (4, 3, 0), (5, 4, 0)]))
+    for i in range(hex_segs):
+        i2 = (i + 1) % hex_segs
+        parts.append(([hex_vf[i], hex_vf[i2], hex_vb[i2], hex_vb[i]], [(0, 1, 2, 3)]))
+    for sx, sy in [(0, cr * 0.3), (cr * 0.3, -cr * 0.1),
+                   (-cr * 0.25, cr * 0.15), (cr * 0.1, -cr * 0.35)]:
+        spv, spf = _make_cone(sx, sy, thick * 0.5, thick * 0.8, cr * 0.25, segments=5)
+        parts.append((spv, spf))
+    for i in range(hex_segs):
+        a = 2.0 * math.pi * i / hex_segs
+        iv, i_f = _make_box(math.cos(a) * cr * 0.5, math.sin(a) * cr * 0.5,
+                            thick * 0.4, thick * 0.5, thick * 0.5, thick * 0.15)
+        parts.append((iv, i_f))
+    gv, gf = _make_sphere(0, 0, thick * 0.8, thick * 1.5, rings=4, sectors=6)
+    parts.append((gv, gf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Shield_crystal", verts, faces, style="crystal", size=size, category="armor")
+
+
+def generate_living_wood_shield_mesh(size: float = 1.0) -> MeshSpec:
+    """Generate an organic living wood shield with growing branches."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    wr = 0.27 * size
+    thick = 0.025 * size
+    segs = 12
+    profile = [(wr * 0.85, thick * 0.4), (wr * 0.95, thick * 0.2),
+               (wr, 0), (wr * 0.90, -thick * 0.3), (wr * 0.70, -thick * 0.4)]
+    sv, sf = _make_lathe(profile, segments=segs, close_bottom=True, close_top=True)
+    parts.append((sv, sf))
+    for ri in range(4):
+        rr = wr * (0.3 + ri * 0.18)
+        rv, rf = _make_torus_ring(0, 0, 0, rr, thick * 0.15,
+                                  major_segments=segs, minor_segments=3)
+        parts.append((rv, rf))
+    for bx, by, bz, br_r, bl in [(0, wr * 0.85, thick * 0.3, 0.06, 0.15),
+                                  (wr * 0.6, wr * 0.5, thick * 0.2, 0.05, 0.12),
+                                  (-wr * 0.5, wr * 0.6, thick * 0.25, 0.05, 0.10),
+                                  (wr * 0.7, -wr * 0.3, thick * 0.2, 0.04, 0.08),
+                                  (-wr * 0.65, -wr * 0.4, thick * 0.15, 0.04, 0.09)]:
+        brv, brf = _make_tapered_cylinder(bx, by, bz, br_r * size, br_r * 0.3 * size,
+                                          bl * size, segments=5, rings=2)
+        parts.append((brv, brf))
+    for lx, ly, lz in [(0, wr * 0.95, thick * 0.5), (wr * 0.65, wr * 0.6, thick * 0.4),
+                        (-wr * 0.55, wr * 0.7, thick * 0.45)]:
+        leaf_v, leaf_f = _make_sphere(lx, ly, lz, thick * 1.5, rings=3, sectors=4)
+        leaf_v = [(v[0], v[1], lz + (v[2] - lz) * 0.3) for v in leaf_v]
+        parts.append((leaf_v, leaf_f))
+    vine_segs = 24
+    vine_r = thick * 0.2
+    vv: list[tuple[float, float, float]] = []
+    vf: list[tuple[int, ...]] = []
+    tube = 3
+    for i in range(vine_segs):
+        a = 2.0 * math.pi * i / vine_segs * 1.5
+        vr = wr * 0.7 + thick * math.sin(a * 3) * 2
+        vx = math.cos(a) * vr
+        vy = math.sin(a) * vr
+        vz = thick * 0.3 + math.sin(a * 2) * thick * 0.3
+        for j in range(tube):
+            ta = 2.0 * math.pi * j / tube
+            vv.append((vx + (-math.sin(a)) * math.cos(ta) * vine_r,
+                       vy + math.cos(a) * math.cos(ta) * vine_r,
+                       vz + math.sin(ta) * vine_r))
+    for i in range(vine_segs - 1):
+        for j in range(tube):
+            j2 = (j + 1) % tube
+            vf.append((i * tube + j, i * tube + j2, (i + 1) * tube + j2, (i + 1) * tube + j))
+    parts.append((vv, vf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Shield_living_wood", verts, faces,
+                        style="living_wood", size=size, category="armor")
+
+
+def generate_aegis_mesh(size: float = 1.0) -> MeshSpec:
+    """Generate an ornate ceremonial aegis shield with face relief."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    ar = 0.30 * size
+    thick = 0.025 * size
+    segs = 14
+    profile = [(ar, thick * 0.2), (ar * 0.95, thick * 0.6), (ar * 0.80, thick * 1.0),
+               (ar * 0.50, thick * 1.3), (ar * 0.15, thick * 1.4)]
+    sv, sf = _make_lathe(profile, segments=segs, close_bottom=True, close_top=True)
+    parts.append((sv, sf))
+    rim_v, rim_f = _make_torus_ring(0, 0, 0, ar, thick * 0.6,
+                                    major_segments=segs, minor_segments=5)
+    parts.append((rim_v, rim_f))
+    for ex in [-ar * 0.12, ar * 0.12]:
+        ev, ef = _make_sphere(ex, ar * 0.08, thick * 1.5, thick * 0.8, rings=3, sectors=5)
+        parts.append((ev, ef))
+    nose_v, nose_f = _make_box(0, -ar * 0.02, thick * 1.5, thick * 0.4, thick * 0.8, thick * 0.3)
+    parts.append((nose_v, nose_f))
+    mouth_v, mouth_f = _make_box(0, -ar * 0.12, thick * 1.3, thick * 1.5, thick * 0.3, thick * 0.2)
+    parts.append((mouth_v, mouth_f))
+    fcv, fcf = _make_box(0, ar * 0.20, thick * 1.2, ar * 0.18, thick * 0.5, thick * 0.3)
+    parts.append((fcv, fcf))
+    for fi in range(12):
+        fa = 2.0 * math.pi * fi / 12
+        fv, ff = _make_cone(math.cos(fa) * ar * 0.85, math.sin(fa) * ar * 0.85,
+                            thick * 0.3, thick * 0.8, ar * 0.12, segments=4)
+        parts.append((fv, ff))
+    for si in range(2):
+        s_phase = si * math.pi
+        s_segs_count = 20
+        s_tube = 3
+        s_r = thick * 0.6
+        ssv: list[tuple[float, float, float]] = []
+        ssf: list[tuple[int, ...]] = []
+        for i in range(s_segs_count):
+            a = 2.0 * math.pi * i / s_segs_count + s_phase
+            wave = math.sin(a * 4 + s_phase) * thick * 2
+            sx_s = math.cos(a) * (ar + thick * 0.5)
+            sy_s = math.sin(a) * (ar + thick * 0.5)
+            for j in range(s_tube):
+                ta = 2.0 * math.pi * j / s_tube
+                ssv.append((sx_s + (-math.sin(a)) * math.cos(ta) * s_r,
+                            sy_s + math.cos(a) * math.cos(ta) * s_r,
+                            wave + math.sin(ta) * s_r))
+        for i in range(s_segs_count - 1):
+            for j in range(s_tube):
+                j2 = (j + 1) % s_tube
+                ssf.append((i * s_tube + j, i * s_tube + j2,
+                            (i + 1) * s_tube + j2, (i + 1) * s_tube + j))
+        parts.append((ssv, ssf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Shield_aegis", verts, faces, style="aegis", size=size, category="armor")
+
+
+# =========================================================================
+# SPELL SCROLLS, RUNE STONES & SPECIAL AMMO
+# =========================================================================
+
+
+def generate_spell_scroll_mesh(style: str = "fire") -> MeshSpec:
+    """Generate a spell scroll mesh with distinct visual per element.
+
+    Styles: fire, ice, lightning, teleport, protection, identify.
+    """
+    _STYLES = ["fire", "ice", "lightning", "teleport", "protection", "identify"]
+    if style not in _STYLES:
+        style = "fire"
+
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    scroll_len = 0.22
+    scroll_r = scroll_len * 0.07
+    segs = 10
+
+    sv, sf = _make_cylinder(0, 0, 0, scroll_r, scroll_len, segments=segs)
+    sv = [(v[0], v[2], v[1]) for v in sv]
+    parts.append((sv, sf))
+    for z_end in [-scroll_len * 0.5, scroll_len * 0.5]:
+        kv, kf = _make_sphere(0, 0, z_end, scroll_r * 1.3, rings=3, sectors=6)
+        parts.append((kv, kf))
+
+    seal_y = scroll_r * 1.3
+    seal_z = 0
+    if style == "fire":
+        wsv, wsf = _make_cone(0, seal_y, seal_z, scroll_r * 0.6, scroll_r * 1.2, segments=5)
+        parts.append((wsv, wsf))
+        wbv, wbf = _make_sphere(0, seal_y, seal_z, scroll_r * 0.5, rings=3, sectors=5)
+        parts.append((wbv, wbf))
+    elif style == "ice":
+        wbv, wbf = _make_sphere(0, seal_y, seal_z, scroll_r * 0.45, rings=3, sectors=6)
+        parts.append((wbv, wbf))
+        for ci in range(6):
+            ca = ci * math.pi / 3
+            cv, c_f = _make_box(math.cos(ca) * scroll_r * 0.5, seal_y,
+                               seal_z + math.sin(ca) * scroll_r * 0.5,
+                               scroll_r * 0.08, scroll_r * 0.15, scroll_r * 0.08)
+            parts.append((cv, c_f))
+    elif style == "lightning":
+        wbv, wbf = _make_sphere(0, seal_y, seal_z, scroll_r * 0.4, rings=3, sectors=5)
+        parts.append((wbv, wbf))
+        bolt_pts = [(-scroll_r * 0.3, seal_y + scroll_r * 0.6),
+                    (scroll_r * 0.15, seal_y + scroll_r * 0.3),
+                    (-scroll_r * 0.1, seal_y),
+                    (scroll_r * 0.3, seal_y - scroll_r * 0.5)]
+        for bi in range(len(bolt_pts) - 1):
+            bbv, bbf = _make_box((bolt_pts[bi][0] + bolt_pts[bi + 1][0]) / 2,
+                                 (bolt_pts[bi][1] + bolt_pts[bi + 1][1]) / 2,
+                                 seal_z, scroll_r * 0.06, scroll_r * 0.15, scroll_r * 0.04)
+            parts.append((bbv, bbf))
+    elif style == "teleport":
+        wrv, wrf = _make_torus_ring(0, seal_y, seal_z, scroll_r * 0.5, scroll_r * 0.12,
+                                    major_segments=8, minor_segments=3)
+        parts.append((wrv, wrf))
+        wcv, wcf = _make_sphere(0, seal_y, seal_z, scroll_r * 0.25, rings=3, sectors=5)
+        parts.append((wcv, wcf))
+    elif style == "protection":
+        wbv, wbf = _make_box(0, seal_y, seal_z, scroll_r * 0.5, scroll_r * 0.55, scroll_r * 0.1)
+        parts.append((wbv, wbf))
+        wcv, wcf = _make_sphere(0, seal_y, seal_z + scroll_r * 0.1,
+                                scroll_r * 0.25, rings=3, sectors=5)
+        parts.append((wcv, wcf))
+    elif style == "identify":
+        wcv, wcf = _make_sphere(0, seal_y, seal_z, scroll_r * 0.4, rings=4, sectors=6)
+        parts.append((wcv, wcf))
+        wpv, wpf = _make_sphere(0, seal_y + scroll_r * 0.15, seal_z,
+                                scroll_r * 0.15, rings=2, sectors=4)
+        parts.append((wpv, wpf))
+
+    rbv, rbf = _make_box(0, seal_y - scroll_r * 0.3, seal_z,
+                         scroll_r * 0.15, scroll_r * 0.8, scroll_r * 0.03)
+    parts.append((rbv, rbf))
+    for rx in [-scroll_r * 0.08, scroll_r * 0.08]:
+        rfv, rff = _make_box(rx, seal_y - scroll_r * 1.0, seal_z,
+                             scroll_r * 0.05, scroll_r * 0.25, scroll_r * 0.02)
+        parts.append((rfv, rff))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"SpellScroll_{style}", verts, faces,
+                        style=style, category="combat_item")
+
+
+_BRAND_NAMES = ["IRON", "SAVAGE", "SURGE", "VENOM", "DREAD",
+                "LEECH", "GRACE", "MEND", "RUIN", "VOID"]
+
+
+def generate_rune_stone_mesh(brand: str = "IRON") -> MeshSpec:
+    """Generate a brand-specific rune stone with distinct geometry per brand."""
+    if brand not in _BRAND_NAMES:
+        brand = "IRON"
+
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    base_r = 0.04
+    segs = 8
+
+    if brand == "IRON":
+        bv, bf = _make_box(0, base_r * 0.5, 0, base_r, base_r * 0.5, base_r * 0.6)
+        parts.append((bv, bf))
+        nv, nf = _make_box(0, base_r * 1.05, 0, base_r * 0.4, base_r * 0.08, base_r * 0.65)
+        parts.append((nv, nf))
+        rv, rf = _make_box(0, base_r * 0.5, base_r * 0.65, base_r * 0.6, base_r * 0.3, base_r * 0.03)
+        parts.append((rv, rf))
+    elif brand == "SAVAGE":
+        sv, sf = _make_sphere(0, base_r, 0, base_r, rings=5, sectors=6)
+        sv = [(v[0] * (1 + 0.15 * math.sin(v[1] * 20)), v[1],
+               v[2] * (1 + 0.1 * math.cos(v[0] * 15))) for v in sv]
+        parts.append((sv, sf))
+        for ci in range(3):
+            cv, c_f = _make_box(-base_r * 0.3 + ci * base_r * 0.3, base_r * 1.0, base_r * 0.8,
+                               base_r * 0.02, base_r * 0.6, base_r * 0.02)
+            parts.append((cv, c_f))
+    elif brand == "SURGE":
+        sv, sf = _make_cone(0, 0, 0, base_r * 0.6, base_r * 1.5, segments=6)
+        parts.append((sv, sf))
+        sv2, sf2 = _make_cone(0, 0, 0, base_r * 0.6, -base_r * 0.8, segments=6)
+        parts.append((sv2, sf2))
+        for ri in range(2):
+            rv, rf = _make_torus_ring(0, base_r * (0.5 + ri * 0.5), 0, base_r * 0.4,
+                                      base_r * 0.04, major_segments=6, minor_segments=3)
+            parts.append((rv, rf))
+    elif brand == "VENOM":
+        sv, sf = _make_tapered_cylinder(0, 0, 0, base_r * 0.7, base_r * 0.2,
+                                        base_r * 2, segments=segs, rings=3)
+        parts.append((sv, sf))
+        for di in range(3):
+            da = di * math.pi * 2 / 3
+            dv, df = _make_cone(math.cos(da) * base_r * 0.5, -base_r * 0.2,
+                                math.sin(da) * base_r * 0.5, base_r * 0.08, base_r * 0.4, segments=4)
+            dv = [(v[0], -v[1], v[2]) for v in dv]
+            parts.append((dv, df))
+    elif brand == "DREAD":
+        sv, sf = _make_sphere(0, base_r, 0, base_r, rings=5, sectors=7)
+        parts.append((sv, sf))
+        for ex in [-base_r * 0.35, base_r * 0.35]:
+            ev, ef = _make_sphere(ex, base_r * 1.15, base_r * 0.7,
+                                  base_r * 0.2, rings=3, sectors=4)
+            parts.append((ev, ef))
+        jv, jf = _make_box(0, base_r * 0.4, base_r * 0.6,
+                           base_r * 0.5, base_r * 0.1, base_r * 0.15)
+        parts.append((jv, jf))
+    elif brand == "LEECH":
+        sv, sf = _make_sphere(0, base_r, 0, base_r * 0.9, rings=5, sectors=7)
+        parts.append((sv, sf))
+        for ti in range(5):
+            ta = ti * math.pi * 2 / 5
+            tv, tf = _make_tapered_cylinder(math.cos(ta) * base_r * 0.8, base_r * 0.5,
+                                            math.sin(ta) * base_r * 0.8,
+                                            base_r * 0.08, base_r * 0.02,
+                                            base_r * 0.6, segments=4, rings=2)
+            parts.append((tv, tf))
+        mmv, mmf = _make_torus_ring(0, base_r * 0.3, base_r * 0.85,
+                                    base_r * 0.25, base_r * 0.06,
+                                    major_segments=6, minor_segments=3)
+        parts.append((mmv, mmf))
+    elif brand == "GRACE":
+        sv, sf = _make_sphere(0, base_r, 0, base_r * 0.8, rings=6, sectors=8)
+        parts.append((sv, sf))
+        hv, hf = _make_torus_ring(0, base_r * 1.6, 0, base_r * 0.7, base_r * 0.05,
+                                  major_segments=12, minor_segments=4)
+        parts.append((hv, hf))
+        for ri in range(4):
+            ra = ri * math.pi / 2
+            rrv, rrf = _make_box(math.cos(ra) * base_r * 0.7, base_r * 1.6,
+                                 math.sin(ra) * base_r * 0.7,
+                                 base_r * 0.02, base_r * 0.02, base_r * 0.15)
+            parts.append((rrv, rrf))
+    elif brand == "MEND":
+        sv, sf = _make_sphere(0, base_r, 0, base_r * 0.85, rings=5, sectors=7)
+        parts.append((sv, sf))
+        cv, c_f = _make_box(0, base_r, base_r * 0.9,
+                           base_r * 0.08, base_r * 0.5, base_r * 0.03)
+        parts.append((cv, c_f))
+        chv, chf = _make_box(0, base_r * 1.2, base_r * 0.9,
+                            base_r * 0.3, base_r * 0.08, base_r * 0.03)
+        parts.append((chv, chf))
+        wv, wf = _make_torus_ring(0, base_r, 0, base_r * 0.9, base_r * 0.04,
+                                  major_segments=segs, minor_segments=3)
+        parts.append((wv, wf))
+    elif brand == "RUIN":
+        ov, of = _make_tapered_cylinder(0, 0, 0, base_r * 0.5, base_r * 0.3,
+                                        base_r * 2.5, segments=5, rings=3)
+        parts.append((ov, of))
+        for ci in range(3):
+            cv, c_f = _make_box(base_r * 0.35, base_r * (0.5 + ci * 0.6), 0,
+                               base_r * 0.02, base_r * 0.3, base_r * 0.1)
+            parts.append((cv, c_f))
+        for di in range(4):
+            da = di * math.pi * 2 / 4
+            dv, df = _make_box(math.cos(da) * base_r * 0.6, base_r * 0.1,
+                               math.sin(da) * base_r * 0.6,
+                               base_r * 0.12, base_r * 0.12, base_r * 0.1)
+            parts.append((dv, df))
+    elif brand == "VOID":
+        sv, sf = _make_sphere(0, base_r, 0, base_r, rings=6, sectors=8)
+        parts.append((sv, sf))
+        iv, i_f = _make_sphere(0, base_r, 0, base_r * 0.5, rings=4, sectors=6)
+        parts.append((iv, i_f))
+        for fi in range(3):
+            fa = fi * math.pi * 2 / 3
+            fv, ff = _make_box(math.cos(fa) * base_r * 0.9, base_r,
+                               math.sin(fa) * base_r * 0.9,
+                               base_r * 0.05, base_r * 0.3, base_r * 0.05)
+            parts.append((fv, ff))
+        for oi in range(4):
+            oa = oi * math.pi / 2
+            oov, oof = _make_box(math.cos(oa) * base_r * 1.4, base_r,
+                                 math.sin(oa) * base_r * 1.4,
+                                 base_r * 0.08, base_r * 0.08, base_r * 0.08)
+            parts.append((oov, oof))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"RuneStone_{brand}", verts, faces,
+                        brand=brand, category="combat_item")
+
+
+# -- Elemental & Special Ammo Variants --
+
+
+def generate_fire_arrow_mesh(shaft_length: float = 0.7) -> MeshSpec:
+    """Generate a fire arrow with burning head and oil-soaked wrapping."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    sr = shaft_length * 0.008
+    sv, sf = _make_cylinder(0, 0, 0, sr, shaft_length, segments=6, cap_top=False, cap_bottom=True)
+    parts.append((sv, sf))
+    for fi in range(3):
+        a = fi * math.pi * 2 / 3
+        parts.append(([(math.cos(a) * sr, shaft_length * 0.02, math.sin(a) * sr),
+                       (math.cos(a) * sr * 4, shaft_length * 0.06, math.sin(a) * sr * 4),
+                       (math.cos(a) * sr * 3, shaft_length * 0.14, math.sin(a) * sr * 3),
+                       (math.cos(a) * sr, shaft_length * 0.12, math.sin(a) * sr)],
+                      [(0, 1, 2, 3)]))
+    hy = shaft_length
+    hh, hw = shaft_length * 0.06, sr * 5
+    dv = [(0, hy, 0), (hw, hy + hh * 0.4, 0), (0, hy + hh, 0), (-hw, hy + hh * 0.4, 0)]
+    parts.append((dv, [(0, 1, 2, 3)]))
+    parts.append(([(v[0], v[1], sr * 0.5) for v in dv], [(3, 2, 1, 0)]))
+    wv, wf = _make_sphere(0, hy - shaft_length * 0.02, 0, sr * 4, rings=4, sectors=6)
+    parts.append((wv, wf))
+    for wi in range(3):
+        wa = wi * math.pi * 2 / 3
+        fv, ff = _make_cone(math.cos(wa) * sr * 3, hy + hh * 0.2,
+                            math.sin(wa) * sr * 3, sr * 1.5, shaft_length * 0.04, segments=4)
+        parts.append((fv, ff))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Arrow_fire", verts, faces, element="fire", category="projectile")
+
+
+def generate_ice_arrow_mesh(shaft_length: float = 0.7) -> MeshSpec:
+    """Generate an ice arrow with crystalline frost head."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    sr = shaft_length * 0.008
+    sv, sf = _make_cylinder(0, 0, 0, sr, shaft_length, segments=6, cap_top=False, cap_bottom=True)
+    parts.append((sv, sf))
+    for fi in range(3):
+        a = fi * math.pi * 2 / 3
+        parts.append(([(math.cos(a) * sr, shaft_length * 0.02, math.sin(a) * sr),
+                       (math.cos(a) * sr * 4, shaft_length * 0.06, math.sin(a) * sr * 4),
+                       (math.cos(a) * sr * 3, shaft_length * 0.14, math.sin(a) * sr * 3),
+                       (math.cos(a) * sr, shaft_length * 0.12, math.sin(a) * sr)],
+                      [(0, 1, 2, 3)]))
+    hy = shaft_length
+    cv, cf = _make_cone(0, hy, 0, sr * 3, shaft_length * 0.10, segments=4)
+    parts.append((cv, cf))
+    for ci in range(4):
+        ca = ci * math.pi / 2
+        scv, scf = _make_cone(math.cos(ca) * sr * 3, hy + shaft_length * 0.02,
+                              math.sin(ca) * sr * 3, sr * 1.2, shaft_length * 0.05, segments=3)
+        parts.append((scv, scf))
+    frv, frf = _make_torus_ring(0, hy - shaft_length * 0.01, 0,
+                                sr * 4, sr * 0.5, major_segments=6, minor_segments=3)
+    parts.append((frv, frf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Arrow_ice", verts, faces, element="ice", category="projectile")
+
+
+def generate_poison_arrow_mesh(shaft_length: float = 0.7) -> MeshSpec:
+    """Generate a poison arrow with dripping venom coating."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    sr = shaft_length * 0.008
+    sv, sf = _make_cylinder(0, 0, 0, sr, shaft_length, segments=6, cap_top=False, cap_bottom=True)
+    parts.append((sv, sf))
+    for fi in range(3):
+        a = fi * math.pi * 2 / 3
+        parts.append(([(math.cos(a) * sr, shaft_length * 0.02, math.sin(a) * sr),
+                       (math.cos(a) * sr * 4, shaft_length * 0.06, math.sin(a) * sr * 4),
+                       (math.cos(a) * sr * 3, shaft_length * 0.14, math.sin(a) * sr * 3),
+                       (math.cos(a) * sr, shaft_length * 0.12, math.sin(a) * sr)],
+                      [(0, 1, 2, 3)]))
+    hy = shaft_length
+    hhv, hhf = _make_cone(0, hy, 0, sr * 2.5, shaft_length * 0.06, segments=4)
+    parts.append((hhv, hhf))
+    for bi in range(2):
+        ba = bi * math.pi
+        bx = math.cos(ba) * sr * 2
+        bz = math.sin(ba) * sr * 2
+        parts.append(([(bx, hy + shaft_length * 0.02, bz),
+                       (bx * 1.8, hy - shaft_length * 0.01, bz * 1.8),
+                       (bx * 0.5, hy - shaft_length * 0.005, bz * 0.5)], [(0, 1, 2)]))
+    for di in range(3):
+        da = di * math.pi * 2 / 3
+        dx = math.cos(da) * sr * 2.5
+        dz = math.sin(da) * sr * 2.5
+        ddv, ddf = _make_sphere(dx, hy - shaft_length * 0.015, dz,
+                                sr * 1.2, rings=3, sectors=4)
+        ddv = [(v[0], v[1] - abs(v[1] - hy + shaft_length * 0.015) * 0.5, v[2]) for v in ddv]
+        parts.append((ddv, ddf))
+    vcv, vcf = _make_torus_ring(0, hy - shaft_length * 0.02, 0,
+                                sr * 3, sr * 0.6, major_segments=6, minor_segments=3)
+    parts.append((vcv, vcf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Arrow_poison", verts, faces, element="poison", category="projectile")
+
+
+def generate_explosive_bolt_mesh(shaft_length: float = 0.5) -> MeshSpec:
+    """Generate a crossbow bolt with explosive charge head."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    sr = shaft_length * 0.012
+    sv, sf = _make_cylinder(0, 0, 0, sr, shaft_length, segments=6, cap_top=False, cap_bottom=True)
+    parts.append((sv, sf))
+    for fi in range(2):
+        a = fi * math.pi
+        parts.append(([(math.cos(a) * sr, shaft_length * 0.02, math.sin(a) * sr),
+                       (math.cos(a) * sr * 3, shaft_length * 0.04, math.sin(a) * sr * 3),
+                       (math.cos(a) * sr * 2.5, shaft_length * 0.10, math.sin(a) * sr * 2.5),
+                       (math.cos(a) * sr, shaft_length * 0.08, math.sin(a) * sr)],
+                      [(0, 1, 2, 3)]))
+    hy = shaft_length
+    ev, ef = _make_sphere(0, hy + sr * 4, 0, sr * 5, rings=5, sectors=7)
+    parts.append((ev, ef))
+    fuse_v, fuse_f = _make_cylinder(0, hy + sr * 9, 0, sr * 0.5, sr * 4,
+                                    segments=3, cap_top=True, cap_bottom=True)
+    parts.append((fuse_v, fuse_f))
+    for ri in range(2):
+        rrv, rrf = _make_torus_ring(0, hy + sr * (2 + ri * 4), 0, sr * 5.2, sr * 0.5,
+                                    major_segments=8, minor_segments=3)
+        parts.append((rrv, rrf))
+    pv, pf = _make_cone(0, hy + sr * 9, 0, sr * 1.5, sr * 3, segments=4)
+    parts.append((pv, pf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Bolt_explosive", verts, faces, element="explosive", category="projectile")
+
+
+def generate_silver_arrow_mesh(shaft_length: float = 0.7) -> MeshSpec:
+    """Generate a silver arrow for slaying undead/werewolves."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    sr = shaft_length * 0.008
+    sv, sf = _make_cylinder(0, 0, 0, sr, shaft_length, segments=8, cap_top=False, cap_bottom=True)
+    parts.append((sv, sf))
+    for fi in range(3):
+        a = fi * math.pi * 2 / 3
+        parts.append(([(math.cos(a) * sr, shaft_length * 0.02, math.sin(a) * sr),
+                       (math.cos(a) * sr * 5, shaft_length * 0.05, math.sin(a) * sr * 5),
+                       (math.cos(a) * sr * 4, shaft_length * 0.16, math.sin(a) * sr * 4),
+                       (math.cos(a) * sr, shaft_length * 0.14, math.sin(a) * sr)],
+                      [(0, 1, 2, 3)]))
+    hy = shaft_length
+    hh = shaft_length * 0.07
+    hw = sr * 7
+    ddv = [(0, hy, 0), (hw, hy + hh * 0.3, 0), (hw * 0.6, hy + hh * 0.7, 0),
+           (0, hy + hh, 0), (-hw * 0.6, hy + hh * 0.7, 0), (-hw, hy + hh * 0.3, 0)]
+    parts.append((ddv, [(0, 1, 2, 3), (0, 3, 4, 5)]))
+    parts.append(([(v[0], v[1], sr * 0.4) for v in ddv], [(3, 2, 1, 0), (5, 4, 3, 0)]))
+    for ri in range(2):
+        rrv, rrf = _make_torus_ring(0, shaft_length * (0.4 + ri * 0.2), 0, sr * 1.5, sr * 0.15,
+                                    major_segments=6, minor_segments=3)
+        parts.append((rrv, rrf))
+    nock_v, nock_f = _make_cylinder(0, 0, 0, sr * 1.3, shaft_length * 0.02,
+                                    segments=6, cap_top=True, cap_bottom=True)
+    parts.append((nock_v, nock_f))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Arrow_silver", verts, faces, element="silver", category="projectile")
+
+
+def generate_barbed_arrow_mesh(shaft_length: float = 0.7) -> MeshSpec:
+    """Generate a barbed arrow designed to cause bleeding on removal."""
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    sr = shaft_length * 0.008
+    sv, sf = _make_cylinder(0, 0, 0, sr, shaft_length, segments=6, cap_top=False, cap_bottom=True)
+    parts.append((sv, sf))
+    for fi in range(3):
+        a = fi * math.pi * 2 / 3
+        parts.append(([(math.cos(a) * sr, shaft_length * 0.02, math.sin(a) * sr),
+                       (math.cos(a) * sr * 4, shaft_length * 0.06, math.sin(a) * sr * 4),
+                       (math.cos(a) * sr * 3, shaft_length * 0.14, math.sin(a) * sr * 3),
+                       (math.cos(a) * sr, shaft_length * 0.12, math.sin(a) * sr)],
+                      [(0, 1, 2, 3)]))
+    hy = shaft_length
+    hhv, hhf = _make_cone(0, hy, 0, sr * 3, shaft_length * 0.06, segments=4)
+    parts.append((hhv, hhf))
+    for level in range(3):
+        ly = hy + shaft_length * 0.01 * level
+        for bi in range(3):
+            ba = bi * math.pi * 2 / 3 + level * math.pi / 3
+            bx = math.cos(ba) * sr * 2.5
+            bz = math.sin(ba) * sr * 2.5
+            parts.append(([(bx, ly + shaft_length * 0.015, bz),
+                           (bx * 1.6, ly - shaft_length * 0.005, bz * 1.6),
+                           (bx * 0.8, ly - shaft_length * 0.012, bz * 0.8)], [(0, 1, 2)]))
+    sev, sef = _make_torus_ring(0, hy, 0, sr * 3.5, sr * 0.3,
+                                major_segments=6, minor_segments=3)
+    parts.append((sev, sef))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Arrow_barbed", verts, faces, element="barbed", category="projectile")
+
+
+# =========================================================================
+# INTERIOR FURNITURE & PROPS (bed, wardrobe, cabinet, curtain, mirror,
+#   hay_bale, wine_rack, bathtub, fireplace)
+# =========================================================================
+
+
+def generate_bed_mesh(
+    style: str = "simple",
+    width: float = 2.0,
+    depth: float = 0.9,
+    height: float = 0.5,
+) -> MeshSpec:
+    """Generate a bed mesh.
+
+    Args:
+        style: "simple" (wooden frame + mattress), "ornate" (headboard + footboard + posts),
+               or "bedroll" (rolled fabric on ground).
+        width: Bed length along X.
+        depth: Bed width along Z.
+        height: Bed height along Y.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "bedroll":
+        # Rolled fabric on ground -- simple cylinder + flat pad
+        # Flat pad
+        pad_h = 0.04
+        pv, pf = _make_beveled_box(0, pad_h / 2, 0, width * 0.4, pad_h / 2, depth * 0.4,
+                                    bevel=0.005)
+        parts.append((pv, pf))
+        # Rolled portion at one end
+        roll_r = 0.08
+        rv, rf = _make_cylinder(width * 0.35, pad_h, 0, roll_r, depth * 0.6,
+                                segments=10, cap_top=True, cap_bottom=True)
+        # Rotate cylinder to lie along Z -- swap Y/Z
+        rv_rot = [(v[0], v[2] + pad_h + roll_r, v[1]) for v in rv]
+        parts.append((rv_rot, rf))
+        # Small pillow bump
+        sv, sf = _make_sphere(-width * 0.25, pad_h + 0.03, 0, 0.07,
+                              rings=4, sectors=6)
+        parts.append((sv, sf))
+    else:
+        # --- Frame rails ---
+        rail_h = 0.04
+        rail_w = 0.04
+        leg_r = 0.03
+        leg_segs = 6
+        frame_top = height * 0.55
+        mattress_h = height * 0.35
+
+        # Side rails (along X)
+        for z_off in [-depth / 2 + rail_w / 2, depth / 2 - rail_w / 2]:
+            rv, rf = _make_beveled_box(0, frame_top - rail_h / 2, z_off,
+                                       width / 2, rail_h / 2, rail_w / 2,
+                                       bevel=0.003)
+            parts.append((rv, rf))
+
+        # End rails (along Z)
+        for x_off in [-width / 2 + rail_w / 2, width / 2 - rail_w / 2]:
+            rv, rf = _make_beveled_box(x_off, frame_top - rail_h / 2, 0,
+                                       rail_w / 2, rail_h / 2, depth / 2 - rail_w,
+                                       bevel=0.003)
+            parts.append((rv, rf))
+
+        # Slat support board
+        sv, sf = _make_beveled_box(0, frame_top - rail_h, 0,
+                                   width / 2 - rail_w, 0.01, depth / 2 - rail_w,
+                                   bevel=0.002)
+        parts.append((sv, sf))
+
+        # 4 legs
+        leg_height = frame_top - rail_h
+        for xm in [-1, 1]:
+            for zm in [-1, 1]:
+                lx = xm * (width / 2 - leg_r)
+                lz = zm * (depth / 2 - leg_r)
+                lv, lf = _make_tapered_cylinder(
+                    lx, 0, lz, leg_r * 1.1, leg_r * 0.9,
+                    leg_height, leg_segs, rings=2,
+                    cap_top=True, cap_bottom=True,
+                )
+                parts.append((lv, lf))
+
+        # Mattress -- slightly rounded beveled box on top of frame
+        mat_y = frame_top
+        mv, mf = _make_beveled_box(0, mat_y + mattress_h / 2, 0,
+                                   width / 2 - rail_w * 0.5,
+                                   mattress_h / 2,
+                                   depth / 2 - rail_w * 0.5,
+                                   bevel=0.015)
+        parts.append((mv, mf))
+
+        # Pillow
+        pv, pf = _make_beveled_box(-width * 0.35, mat_y + mattress_h + 0.03, 0,
+                                   0.12, 0.03, depth * 0.3,
+                                   bevel=0.01)
+        parts.append((pv, pf))
+
+        if style == "ornate":
+            # Headboard
+            hb_h = height * 0.7
+            hb_w = depth - 0.02
+            hv, hf = _make_beveled_box(-width / 2 + 0.02, frame_top + hb_h / 2, 0,
+                                       0.02, hb_h / 2, hb_w / 2,
+                                       bevel=0.005)
+            parts.append((hv, hf))
+
+            # Footboard (shorter)
+            fb_h = height * 0.3
+            fv, ff = _make_beveled_box(width / 2 - 0.02, frame_top + fb_h / 2, 0,
+                                       0.02, fb_h / 2, hb_w / 2,
+                                       bevel=0.005)
+            parts.append((fv, ff))
+
+            # 4 corner posts (taller)
+            post_h = height * 0.9
+            post_r = 0.025
+            for xm in [-1, 1]:
+                for zm in [-1, 1]:
+                    px = xm * (width / 2 - 0.01)
+                    pz = zm * (depth / 2 - 0.01)
+                    ppv, ppf = _make_tapered_cylinder(
+                        px, frame_top, pz,
+                        post_r, post_r * 0.7, post_h,
+                        segments=6, rings=3,
+                        cap_top=True, cap_bottom=True,
+                    )
+                    parts.append((ppv, ppf))
+                    # Finial ball on top
+                    bsv, bsf = _make_sphere(px, frame_top + post_h + post_r * 0.5, pz,
+                                            post_r * 0.9, rings=4, sectors=6)
+                    parts.append((bsv, bsf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Bed_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_wardrobe_mesh(
+    style: str = "wooden",
+    width: float = 1.0,
+    depth: float = 0.5,
+    height: float = 2.0,
+) -> MeshSpec:
+    """Generate a wardrobe / armoire mesh.
+
+    Args:
+        style: "wooden" (simple doors), "ornate" (carved panels), "armoire" (tall with crown).
+        width: Width along X.
+        depth: Depth along Z.
+        height: Height along Y.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    wall = 0.025  # wall thickness
+    door_gap = 0.005
+
+    # Main body shell (outer)
+    bv, bf = _make_beveled_box(0, height / 2, 0,
+                               width / 2, height / 2, depth / 2,
+                               bevel=0.008)
+    parts.append((bv, bf))
+
+    # Hollow interior (slightly smaller box, inverted normals approximation --
+    # we just add the inner box since the outer shell + inner box give thickness)
+    inner_w = width / 2 - wall
+    inner_h = height / 2 - wall
+    inner_d = depth / 2 - wall
+    iv, i_f = _make_box(0, height / 2, 0, inner_w, inner_h, inner_d)
+    parts.append((iv, i_f))
+
+    # Two front doors (slightly recessed)
+    door_w = (width / 2 - door_gap * 1.5) / 1.0
+    door_h = height - wall * 4
+    door_thick = 0.015
+    for side in [-1, 1]:
+        dx = side * (door_w / 2 + door_gap / 2)
+        dv, df = _make_beveled_box(dx, height / 2, -depth / 2 + door_thick / 2 - 0.001,
+                                   door_w / 2 - door_gap, door_h / 2, door_thick / 2,
+                                   bevel=0.004)
+        parts.append((dv, df))
+
+        # Door handle knob
+        kv, kf = _make_sphere(dx - side * (door_w / 2 - 0.06),
+                              height * 0.5,
+                              -depth / 2 - 0.01,
+                              0.012, rings=3, sectors=6)
+        parts.append((kv, kf))
+
+    # Internal shelves (3 shelves)
+    shelf_thick = 0.012
+    for i in range(3):
+        sy = wall * 2 + (i + 1) * (height - wall * 4) / 4
+        shv, shf = _make_box(0, sy, 0,
+                             inner_w - 0.005, shelf_thick / 2, inner_d - 0.005)
+        parts.append((shv, shf))
+
+    if style == "ornate":
+        # Carved panel insets on doors (recessed rectangles)
+        panel_w = door_w * 0.35
+        panel_h = door_h * 0.3
+        for side in [-1, 1]:
+            dx = side * (door_w / 2 + door_gap / 2)
+            for py_mult in [0.33, 0.67]:
+                pv, pf = _make_beveled_box(
+                    dx, height * py_mult, -depth / 2 - 0.015,
+                    panel_w, panel_h / 2, 0.003,
+                    bevel=0.003,
+                )
+                parts.append((pv, pf))
+
+    elif style == "armoire":
+        # Crown molding strip along top
+        crown_h = 0.04
+        crown_overhang = 0.02
+        cv, cf = _make_beveled_box(0, height + crown_h / 2, 0,
+                                   width / 2 + crown_overhang,
+                                   crown_h / 2,
+                                   depth / 2 + crown_overhang,
+                                   bevel=0.006)
+        parts.append((cv, cf))
+
+        # Base molding
+        base_h = 0.05
+        bmv, bmf = _make_beveled_box(0, base_h / 2, 0,
+                                     width / 2 + crown_overhang * 0.5,
+                                     base_h / 2,
+                                     depth / 2 + crown_overhang * 0.5,
+                                     bevel=0.005)
+        parts.append((bmv, bmf))
+
+        # Feet (small spheres)
+        for xm in [-1, 1]:
+            for zm in [-1, 1]:
+                fv, ff = _make_sphere(
+                    xm * (width / 2 - 0.05), 0.02,
+                    zm * (depth / 2 - 0.05),
+                    0.025, rings=3, sectors=6,
+                )
+                parts.append((fv, ff))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Wardrobe_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_cabinet_mesh(
+    style: str = "simple",
+    width: float = 0.8,
+    depth: float = 0.4,
+    height: float = 1.0,
+) -> MeshSpec:
+    """Generate a cabinet mesh.
+
+    Args:
+        style: "simple", "apothecary" (many small drawers), or "display" (glass front).
+        width: Width along X.
+        depth: Depth along Z.
+        height: Height along Y.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    wall = 0.02
+
+    # Main body
+    bv, bf = _make_beveled_box(0, height / 2, 0,
+                               width / 2, height / 2, depth / 2,
+                               bevel=0.006)
+    parts.append((bv, bf))
+
+    if style == "apothecary":
+        # Grid of small drawers (4 columns x 5 rows)
+        cols, rows = 4, 5
+        drawer_gap = 0.008
+        total_gap_x = drawer_gap * (cols + 1)
+        total_gap_y = drawer_gap * (rows + 1)
+        dw = (width - total_gap_x - wall * 2) / cols
+        dh = (height - total_gap_y - wall * 2) / rows
+        d_thick = 0.01
+
+        for r in range(rows):
+            for c in range(cols):
+                dx = -width / 2 + wall + drawer_gap + c * (dw + drawer_gap) + dw / 2
+                dy = wall + drawer_gap + r * (dh + drawer_gap) + dh / 2
+                # Drawer face
+                dv, df = _make_beveled_box(
+                    dx, dy, -depth / 2 - 0.001,
+                    dw / 2 - 0.002, dh / 2 - 0.002, d_thick / 2,
+                    bevel=0.002,
+                )
+                parts.append((dv, df))
+                # Tiny knob
+                kv, kf = _make_sphere(dx, dy, -depth / 2 - d_thick,
+                                      0.006, rings=3, sectors=4)
+                parts.append((kv, kf))
+
+    elif style == "display":
+        # Single large glass-front door
+        door_h = height - wall * 4
+        door_w = width - wall * 4
+        d_thick = 0.008
+
+        # Door frame
+        dv, df = _make_beveled_box(0, height / 2, -depth / 2 - 0.001,
+                                   door_w / 2, door_h / 2, d_thick / 2,
+                                   bevel=0.003)
+        parts.append((dv, df))
+
+        # Glass pane (thin flat quad inside frame)
+        # Slightly inset
+        gv, gf = _make_box(0, height / 2, -depth / 2 - d_thick,
+                           door_w / 2 - 0.015, door_h / 2 - 0.015, 0.002)
+        parts.append((gv, gf))
+
+        # Handle
+        hv, hf = _make_sphere(door_w / 2 - 0.03, height * 0.5,
+                              -depth / 2 - d_thick - 0.005,
+                              0.01, rings=3, sectors=6)
+        parts.append((hv, hf))
+
+        # 2 internal shelves
+        for i in range(2):
+            sy = wall + (i + 1) * (height - wall * 2) / 3
+            sv, sf = _make_box(0, sy, 0,
+                               width / 2 - wall - 0.005,
+                               0.006,
+                               depth / 2 - wall - 0.005)
+            parts.append((sv, sf))
+    else:
+        # Simple: 2 doors + 1 shelf
+        door_w = (width - wall * 2 - 0.01) / 2
+        door_h = height - wall * 4
+        d_thick = 0.012
+
+        for side in [-1, 1]:
+            dx = side * (door_w / 2 + 0.003)
+            dv, df = _make_beveled_box(dx, height / 2, -depth / 2 - 0.001,
+                                       door_w / 2 - 0.003, door_h / 2, d_thick / 2,
+                                       bevel=0.003)
+            parts.append((dv, df))
+            # Knob
+            kv, kf = _make_sphere(dx - side * (door_w / 2 - 0.04), height * 0.5,
+                                  -depth / 2 - d_thick,
+                                  0.008, rings=3, sectors=5)
+            parts.append((kv, kf))
+
+        # 1 internal shelf
+        sv, sf = _make_box(0, height * 0.5, 0,
+                           width / 2 - wall - 0.005, 0.006,
+                           depth / 2 - wall - 0.005)
+        parts.append((sv, sf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Cabinet_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_curtain_mesh(
+    style: str = "hanging",
+    width: float = 1.0,
+    height: float = 1.5,
+    folds: int = 8,
+) -> MeshSpec:
+    """Generate a curtain mesh -- a flat subdivided plane with wave deformation.
+
+    Args:
+        style: "hanging" (straight drape), "gathered" (bunched folds),
+               or "tattered" (torn lower edge).
+        width: Curtain width along X.
+        height: Curtain height along Y.
+        folds: Number of wave folds across width.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    # Subdivided plane with wave deformation
+    res_x = max(folds * 4, 16)  # horizontal resolution
+    res_y = 12  # vertical resolution
+    verts: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+    uvs: list[tuple[float, float]] = []
+
+    for iy in range(res_y + 1):
+        ty = iy / res_y
+        y = height * (1.0 - ty)  # top to bottom
+        for ix in range(res_x + 1):
+            tx = ix / res_x
+            x = (tx - 0.5) * width
+
+            # Wave deformation along Z
+            wave_amp = 0.03
+            if style == "gathered":
+                wave_amp = 0.06 + 0.02 * math.sin(ty * math.pi)
+                # Gather toward center at bottom
+                gather = (1.0 - ty) * 0.3
+                x *= (1.0 - gather * 0.5)
+            elif style == "tattered":
+                wave_amp = 0.03 + 0.01 * math.sin(ty * 7.0)
+
+            z = math.sin(tx * folds * math.pi * 2) * wave_amp
+
+            # For tattered style: cut the bottom edge irregularly
+            if style == "tattered" and ty > 0.7:
+                # Irregular bottom by varying y based on x position
+                tear_offset = math.sin(tx * 13.7) * 0.15 + math.sin(tx * 7.3) * 0.1
+                y -= max(0, tear_offset * (ty - 0.7) / 0.3) * height * 0.2
+
+            verts.append((x, y, z))
+            uvs.append((tx, 1.0 - ty))
+
+    # Faces
+    for iy in range(res_y):
+        for ix in range(res_x):
+            i0 = iy * (res_x + 1) + ix
+            i1 = i0 + 1
+            i2 = i0 + (res_x + 1) + 1
+            i3 = i0 + (res_x + 1)
+            faces.append((i0, i1, i2, i3))
+
+    # Curtain rod (cylinder at top)
+    rod_r = 0.012
+    rod_len = width * 1.1
+    rod_segs = 8
+    rod_base = len(verts)
+    rv, rf = _make_cylinder(0, height + rod_r, 0, rod_r, rod_len,
+                            segments=rod_segs, cap_top=True, cap_bottom=True,
+                            base_idx=rod_base)
+    # Rotate to lie along X axis: swap Y with local-axis
+    rv_rotated = [(-rod_len / 2 + v[1] - (height + rod_r),
+                   height + rod_r + v[0],
+                   v[2]) for v in rv]
+    verts.extend(rv_rotated)
+    faces.extend(rf)
+
+    return _make_result(f"Curtain_{style}", verts, faces, uvs=uvs,
+                        style=style, folds=folds, category="furniture")
+
+
+def generate_mirror_mesh(
+    style: str = "wall",
+    width: float = 0.5,
+    height: float = 0.7,
+) -> MeshSpec:
+    """Generate a mirror mesh with frame and reflective surface.
+
+    Args:
+        style: "wall" (rectangular wall-mounted), "standing" (floor mirror with legs),
+               or "hand" (small oval hand mirror).
+        width: Mirror width along X.
+        height: Mirror height along Y.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "hand":
+        # Small oval hand mirror with handle
+        mirror_r = 0.06
+        frame_thick = 0.008
+        handle_len = 0.1
+
+        # Mirror face (disc approximation via lathe)
+        profile = [(0.0, 0.0), (mirror_r, 0.0), (mirror_r, frame_thick)]
+        dv, df = _make_lathe(profile, segments=10,
+                             close_bottom=True, close_top=True)
+        parts.append((dv, df))
+
+        # Frame ring
+        rv, rf = _make_torus_ring(0, frame_thick / 2, 0,
+                                  mirror_r, frame_thick * 0.6,
+                                  major_segments=12, minor_segments=4)
+        parts.append((rv, rf))
+
+        # Handle
+        hv, hf = _make_tapered_cylinder(
+            0, -mirror_r - handle_len / 2, 0,
+            0.012, 0.008, handle_len,
+            segments=6, rings=2,
+            cap_top=True, cap_bottom=True,
+        )
+        # Rotate handle to point downward from mirror
+        hv_rot = [(v[0], -mirror_r + (v[1] + mirror_r + handle_len / 2) * -1, v[2])
+                  for v in hv]
+        # Simpler: just position handle below
+        hv2, hf2 = _make_tapered_cylinder(
+            0, -(mirror_r + 0.01), 0,
+            0.012, 0.008, handle_len,
+            segments=6, rings=2,
+            cap_top=True, cap_bottom=True,
+        )
+        parts.append((hv2, hf2))
+
+    elif style == "standing":
+        frame_w = 0.015
+        frame_d = 0.01
+
+        # Mirror glass (thin flat box)
+        gv, gf = _make_box(0, height / 2 + 0.3, 0,
+                           width / 2 - frame_w, height / 2, 0.003)
+        parts.append((gv, gf))
+
+        # Frame around mirror (4 beveled box strips)
+        cy = height / 2 + 0.3
+        # Top
+        fv, ff = _make_beveled_box(0, cy + height / 2, 0,
+                                   width / 2, frame_w / 2, frame_d / 2,
+                                   bevel=0.003)
+        parts.append((fv, ff))
+        # Bottom
+        fv2, ff2 = _make_beveled_box(0, cy - height / 2, 0,
+                                     width / 2, frame_w / 2, frame_d / 2,
+                                     bevel=0.003)
+        parts.append((fv2, ff2))
+        # Left
+        fv3, ff3 = _make_beveled_box(-width / 2, cy, 0,
+                                     frame_w / 2, height / 2, frame_d / 2,
+                                     bevel=0.003)
+        parts.append((fv3, ff3))
+        # Right
+        fv4, ff4 = _make_beveled_box(width / 2, cy, 0,
+                                     frame_w / 2, height / 2, frame_d / 2,
+                                     bevel=0.003)
+        parts.append((fv4, ff4))
+
+        # Two legs (A-frame)
+        leg_h = cy - height / 2
+        for side in [-1, 1]:
+            lv, lf = _make_tapered_cylinder(
+                side * width * 0.4, 0, 0.05,
+                0.015, 0.012, leg_h + 0.05,
+                segments=6, rings=2,
+                cap_top=True, cap_bottom=True,
+            )
+            parts.append((lv, lf))
+
+        # Rear support strut
+        sv, sf = _make_tapered_cylinder(0, 0, 0.12,
+                                        0.012, 0.01, leg_h * 0.7,
+                                        segments=6, rings=2,
+                                        cap_top=True, cap_bottom=True)
+        parts.append((sv, sf))
+
+    else:  # wall
+        frame_w = 0.02
+        frame_d = 0.015
+
+        # Mirror glass
+        gv, gf = _make_box(0, 0, 0,
+                           width / 2 - frame_w, height / 2 - frame_w, 0.003)
+        parts.append((gv, gf))
+
+        # Frame (4 strips)
+        # Top
+        fv, ff = _make_beveled_box(0, height / 2, 0,
+                                   width / 2 + frame_w * 0.3, frame_w / 2, frame_d / 2,
+                                   bevel=0.004)
+        parts.append((fv, ff))
+        # Bottom
+        fv2, ff2 = _make_beveled_box(0, -height / 2, 0,
+                                     width / 2 + frame_w * 0.3, frame_w / 2, frame_d / 2,
+                                     bevel=0.004)
+        parts.append((fv2, ff2))
+        # Left
+        fv3, ff3 = _make_beveled_box(-width / 2, 0, 0,
+                                     frame_w / 2, height / 2 + frame_w * 0.3, frame_d / 2,
+                                     bevel=0.004)
+        parts.append((fv3, ff3))
+        # Right
+        fv4, ff4 = _make_beveled_box(width / 2, 0, 0,
+                                     frame_w / 2, height / 2 + frame_w * 0.3, frame_d / 2,
+                                     bevel=0.004)
+        parts.append((fv4, ff4))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Mirror_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_hay_bale_mesh(
+    style: str = "rectangular",
+    width: float = 0.9,
+    height: float = 0.45,
+    depth: float = 0.45,
+) -> MeshSpec:
+    """Generate a hay bale mesh.
+
+    Args:
+        style: "rectangular", "round" (cylindrical), or "scattered" (loose pile).
+        width: Bale length along X.
+        height: Bale height along Y.
+        depth: Bale depth along Z.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "round":
+        # Cylindrical hay bale lying on side
+        radius = height * 0.8
+        length = width
+        cv, cf = _make_cylinder(0, radius, 0, radius, length,
+                                segments=14, cap_top=True, cap_bottom=True)
+        # Rotate to lie along X: swap Y and local axis
+        cv_rot = [(v[1] - radius, radius + v[0], v[2]) for v in cv]
+        # Re-center along X
+        cv_final = [(v[0] - length / 2, v[1] - radius, v[2]) for v in cv_rot]
+        parts.append((cv_final, cf))
+
+        # Binding straps (2 torus rings)
+        for xpos in [-length * 0.25, length * 0.25]:
+            tv, tf = _make_torus_ring(xpos, radius, 0,
+                                      radius + 0.005, 0.008,
+                                      major_segments=12, minor_segments=4)
+            parts.append((tv, tf))
+
+    elif style == "scattered":
+        # Loose pile: several small irregular boxes
+        import random as _rng
+        _rng.seed(42)  # Deterministic
+        for _ in range(8):
+            sx = _rng.uniform(0.05, 0.15)
+            sy = _rng.uniform(0.02, 0.06)
+            sz = _rng.uniform(0.03, 0.08)
+            px = _rng.uniform(-0.3, 0.3)
+            py = sy  # sit on ground
+            pz = _rng.uniform(-0.3, 0.3)
+            sv, sf = _make_beveled_box(px, py, pz, sx, sy, sz, bevel=0.005)
+            parts.append((sv, sf))
+
+    else:  # rectangular
+        # Main bale body with beveled edges
+        bv, bf = _make_beveled_box(0, height / 2, 0,
+                                   width / 2, height / 2, depth / 2,
+                                   bevel=0.01)
+        parts.append((bv, bf))
+
+        # Binding straps (2 thin bands)
+        strap_h = 0.005
+        strap_w = 0.015
+        for xpos in [-width * 0.25, width * 0.25]:
+            # Top strap
+            sv, sf = _make_box(xpos, height + strap_h / 2, 0,
+                               strap_w / 2, strap_h / 2, depth / 2 + 0.005)
+            parts.append((sv, sf))
+            # Side straps (front + back)
+            for zm in [-1, 1]:
+                ssv, ssf = _make_box(xpos, height / 2, zm * (depth / 2 + strap_h / 2),
+                                     strap_w / 2, height / 2, strap_h / 2)
+                parts.append((ssv, ssf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"HayBale_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_wine_rack_mesh(
+    style: str = "wall",
+    cols: int = 4,
+    rows: int = 3,
+    cell_size: float = 0.12,
+) -> MeshSpec:
+    """Generate a wine rack mesh with a grid of bottle slots.
+
+    Args:
+        style: "wall" (wall-mounted grid), "diamond" (X-pattern slots),
+               or "barrel" (built into barrel end).
+        cols: Number of columns.
+        rows: Number of rows.
+        cell_size: Size of each bottle slot.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    total_w = cols * cell_size + 0.04
+    total_h = rows * cell_size + 0.04
+    depth = cell_size * 1.8
+    frame_thick = 0.015
+
+    if style == "diamond":
+        # Diamond / X-pattern rack
+        # Outer frame
+        fv, ff = _make_beveled_box(0, total_h / 2, 0,
+                                   total_w / 2, total_h / 2, depth / 2,
+                                   bevel=0.005)
+        parts.append((fv, ff))
+
+        # X-pattern dividers
+        div_thick = 0.008
+        for r in range(rows + 1):
+            for c in range(cols + 1):
+                cx = -total_w / 2 + 0.02 + c * cell_size
+                cy = 0.02 + r * cell_size
+                if c < cols and r < rows:
+                    # Horizontal divider piece
+                    hv, hf = _make_box(cx + cell_size / 2, cy + cell_size / 2, 0,
+                                       cell_size / 2 - 0.005, div_thick / 2, depth / 2 - 0.01)
+                    parts.append((hv, hf))
+
+    elif style == "barrel":
+        # Barrel end with bottle holes
+        barrel_r = max(total_w, total_h) * 0.6
+        profile = [(barrel_r, -depth / 2), (barrel_r, depth / 2)]
+        bv, bf = _make_lathe(profile, segments=12,
+                             close_bottom=True, close_top=True)
+        parts.append((bv, bf))
+
+        # Grid of cylindrical cutouts approximated as small cylinders
+        for r in range(rows):
+            for c in range(cols):
+                cx = -cols * cell_size / 2 + c * cell_size + cell_size / 2
+                cy = -rows * cell_size / 2 + r * cell_size + cell_size / 2
+                rv, rf = _make_cylinder(cx, cy, -depth / 2,
+                                        cell_size * 0.35, depth,
+                                        segments=6, cap_top=False, cap_bottom=False)
+                # Re-orient: swap y/z for depth along Z
+                rv_rot = [(v[0], v[2] + cy, v[1] - cy + cy) for v in rv]
+                parts.append((rv_rot, rf))
+
+    else:  # wall
+        # Outer frame
+        fv, ff = _make_beveled_box(0, total_h / 2, 0,
+                                   total_w / 2, total_h / 2, depth / 2,
+                                   bevel=0.005)
+        parts.append((fv, ff))
+
+        # Grid dividers -- horizontal bars
+        for r in range(rows + 1):
+            hy = 0.02 + r * cell_size
+            hv, hf = _make_box(0, hy, 0,
+                               total_w / 2 - frame_thick,
+                               frame_thick / 2, depth / 2 - 0.005)
+            parts.append((hv, hf))
+
+        # Vertical dividers
+        for c in range(cols + 1):
+            vx = -total_w / 2 + 0.02 + c * cell_size
+            vv, vf = _make_box(vx, total_h / 2, 0,
+                               frame_thick / 2,
+                               total_h / 2 - frame_thick,
+                               depth / 2 - 0.005)
+            parts.append((vv, vf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"WineRack_{style}", verts, faces,
+                        style=style, cols=cols, rows=rows, category="furniture")
+
+
+def generate_bathtub_mesh(
+    style: str = "wooden",
+    length: float = 1.4,
+    width: float = 0.7,
+    height: float = 0.6,
+) -> MeshSpec:
+    """Generate a bathtub mesh.
+
+    Args:
+        style: "wooden" (barrel-like tub), or "metal" (clawfoot cast iron).
+        length: Tub length along X.
+        width: Tub width along Z.
+        height: Tub height along Y.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "metal":
+        # Clawfoot bathtub -- elongated oval profile
+        segments = 16
+        rings = 6
+        wall_thick = 0.025
+
+        # Outer shell via lathe-like approach: build elliptical cross-sections
+        verts_outer: list[tuple[float, float, float]] = []
+        faces_outer: list[tuple[int, ...]] = []
+
+        for ri in range(rings + 1):
+            t = ri / rings
+            y = t * height
+            # Taper slightly toward bottom
+            scale = 0.85 + 0.15 * t
+            rx = length / 2 * scale
+            rz = width / 2 * scale
+            for si in range(segments):
+                angle = 2.0 * math.pi * si / segments
+                verts_outer.append((
+                    rx * math.cos(angle),
+                    y,
+                    rz * math.sin(angle),
+                ))
+
+        # Side faces
+        for ri in range(rings):
+            for si in range(segments):
+                s2 = (si + 1) % segments
+                r0 = ri * segments
+                r1 = (ri + 1) * segments
+                faces_outer.append((r0 + si, r0 + s2, r1 + s2, r1 + si))
+
+        # Bottom cap
+        faces_outer.append(tuple(range(segments - 1, -1, -1)))
+
+        parts.append((verts_outer, faces_outer))
+
+        # Rolled rim at top (torus ring)
+        rim_r = 0.018
+        # Approximate elliptical rim with individual torus segments
+        for si in range(segments):
+            angle = 2.0 * math.pi * si / segments
+            rx = length / 2
+            rz = width / 2
+            px = rx * math.cos(angle)
+            pz = rz * math.sin(angle)
+            sv, sf = _make_sphere(px, height, pz, rim_r, rings=3, sectors=4)
+            parts.append((sv, sf))
+
+        # 4 claw feet
+        foot_h = 0.06
+        for xm in [-1, 1]:
+            for zm in [-1, 1]:
+                fx = xm * length * 0.3
+                fz = zm * width * 0.25
+                # Claw shape: tapered cylinder + sphere
+                fv, ff = _make_tapered_cylinder(fx, -foot_h, fz,
+                                                0.025, 0.015, foot_h,
+                                                segments=6, rings=2,
+                                                cap_top=True, cap_bottom=True)
+                parts.append((fv, ff))
+                # Ball under claw
+                bv, bf = _make_sphere(fx, -foot_h, fz, 0.018,
+                                      rings=3, sectors=5)
+                parts.append((bv, bf))
+
+    else:  # wooden
+        # Barrel-like wooden tub: cylinder with staves implied
+        segments = 16
+        outer_r_x = length / 2
+        outer_r_z = width / 2
+        inner_offset = 0.03
+
+        # Outer wall
+        verts_all: list[tuple[float, float, float]] = []
+        faces_all: list[tuple[int, ...]] = []
+
+        rings_count = 4
+        for ri in range(rings_count + 1):
+            t = ri / rings_count
+            y = t * height
+            # Slight barrel bulge
+            bulge = 1.0 + 0.05 * math.sin(t * math.pi)
+            for si in range(segments):
+                angle = 2.0 * math.pi * si / segments
+                verts_all.append((
+                    outer_r_x * bulge * math.cos(angle),
+                    y,
+                    outer_r_z * bulge * math.sin(angle),
+                ))
+
+        for ri in range(rings_count):
+            for si in range(segments):
+                s2 = (si + 1) % segments
+                r0 = ri * segments
+                r1 = (ri + 1) * segments
+                faces_all.append((r0 + si, r0 + s2, r1 + s2, r1 + si))
+
+        # Bottom cap
+        faces_all.append(tuple(range(segments - 1, -1, -1)))
+
+        parts.append((verts_all, faces_all))
+
+        # Metal bands (2 torus rings)
+        for band_t in [0.25, 0.75]:
+            band_y = band_t * height
+            bulge = 1.0 + 0.05 * math.sin(band_t * math.pi)
+            # Approximate elliptical band
+            band_r = (outer_r_x * bulge + outer_r_z * bulge) / 2
+            tv, tf = _make_torus_ring(0, band_y, 0,
+                                      band_r + 0.005, 0.008,
+                                      major_segments=16, minor_segments=4)
+            parts.append((tv, tf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Bathtub_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_fireplace_mesh(
+    style: str = "stone",
+    width: float = 1.2,
+    height: float = 1.0,
+    depth: float = 0.5,
+) -> MeshSpec:
+    """Generate a fireplace mesh with surround, mantel, hearth, and firebox.
+
+    Args:
+        style: "stone" (rustic), "grand" (ornate mantel + columns), or "simple" (hearth only).
+        width: Fireplace width along X.
+        height: Fireplace height along Y.
+        depth: Fireplace depth along Z.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    wall_thick = 0.06
+    firebox_w = width * 0.55
+    firebox_h = height * 0.5
+    firebox_d = depth * 0.7
+
+    if style == "simple":
+        # Simple hearth: just a raised stone platform + back wall + fire area
+        # Hearth platform
+        hearth_h = 0.08
+        hearth_w = width * 0.8
+        hearth_d = depth * 0.5
+        hv, hf = _make_beveled_box(0, hearth_h / 2, 0,
+                                   hearth_w / 2, hearth_h / 2, hearth_d / 2,
+                                   bevel=0.008)
+        parts.append((hv, hf))
+
+        # Back wall
+        bw_h = height * 0.6
+        bw, bf = _make_beveled_box(0, hearth_h + bw_h / 2, depth * 0.35,
+                                   hearth_w / 2 + 0.02, bw_h / 2, wall_thick / 2,
+                                   bevel=0.005)
+        parts.append((bw, bf))
+
+        # Side walls
+        for side in [-1, 1]:
+            sv, sf = _make_beveled_box(
+                side * hearth_w / 2, hearth_h + bw_h * 0.3, depth * 0.2,
+                wall_thick / 2, bw_h * 0.3, hearth_d * 0.3,
+                bevel=0.005,
+            )
+            parts.append((sv, sf))
+
+    else:
+        # Full fireplace surround (stone or grand)
+
+        # Back panel (full height)
+        bv, bf = _make_beveled_box(0, height / 2, depth / 2 - wall_thick / 2,
+                                   width / 2, height / 2, wall_thick / 2,
+                                   bevel=0.005)
+        parts.append((bv, bf))
+
+        # Left surround pillar
+        for side in [-1, 1]:
+            pv, pf = _make_beveled_box(
+                side * (firebox_w / 2 + wall_thick / 2), height * 0.4, 0,
+                wall_thick / 2, height * 0.4, depth / 2 - wall_thick,
+                bevel=0.005,
+            )
+            parts.append((pv, pf))
+
+        # Firebox interior (recessed cavity)
+        fbv, fbf = _make_box(0, firebox_h / 2 + 0.02, depth * 0.1,
+                             firebox_w / 2 - 0.01, firebox_h / 2,
+                             firebox_d / 2)
+        parts.append((fbv, fbf))
+
+        # Hearth (floor extension)
+        hearth_h = 0.06
+        hearth_extend = 0.15
+        hhv, hhf = _make_beveled_box(0, hearth_h / 2, -hearth_extend / 2,
+                                     width / 2 + 0.05, hearth_h / 2,
+                                     depth / 2 + hearth_extend / 2,
+                                     bevel=0.008)
+        parts.append((hhv, hhf))
+
+        # Mantel shelf
+        mantel_h = 0.04
+        mantel_overhang = 0.06
+        mv, mf = _make_beveled_box(
+            0, height * 0.8 + mantel_h / 2, -mantel_overhang / 2,
+            width / 2 + mantel_overhang, mantel_h / 2,
+            depth * 0.3 + mantel_overhang,
+            bevel=0.006,
+        )
+        parts.append((mv, mf))
+
+        # Arch over firebox
+        arch_segs = 8
+        arch_r = firebox_w / 2
+        arch_cy = firebox_h + 0.02
+        for i in range(arch_segs + 1):
+            t = i / arch_segs
+            angle = math.pi * t
+            ax = math.cos(angle) * arch_r
+            ay = arch_cy + math.sin(angle) * arch_r * 0.3
+            av, af = _make_beveled_box(ax, ay, 0,
+                                       0.025, 0.025, depth * 0.15,
+                                       bevel=0.004)
+            parts.append((av, af))
+
+        if style == "grand":
+            # Ornate columns flanking firebox
+            col_r = 0.04
+            col_h = height * 0.75
+            for side in [-1, 1]:
+                cx = side * (firebox_w / 2 + wall_thick + col_r + 0.01)
+                cv, cf = _make_tapered_cylinder(cx, 0, -depth * 0.1,
+                                                col_r, col_r * 0.85, col_h,
+                                                segments=10, rings=5,
+                                                cap_top=True, cap_bottom=True)
+                parts.append((cv, cf))
+
+                # Column capital (sphere)
+                capv, capf = _make_sphere(cx, col_h + col_r * 0.5, -depth * 0.1,
+                                          col_r * 1.2, rings=4, sectors=8)
+                parts.append((capv, capf))
+
+                # Column base (wider disc)
+                basev, basef = _make_cylinder(cx, 0, -depth * 0.1,
+                                              col_r * 1.5, 0.03,
+                                              segments=10,
+                                              cap_top=True, cap_bottom=True)
+                parts.append((basev, basef))
+
+            # Decorative keystone at arch apex
+            ksv, ksf = _make_beveled_box(0, arch_cy + arch_r * 0.3 + 0.03, -depth * 0.05,
+                                         0.04, 0.04, depth * 0.1,
+                                         bevel=0.005)
+            parts.append((ksv, ksf))
+
+        # Chimney stack above mantel
+        chimney_w = firebox_w * 0.6
+        chimney_h = height * 0.18
+        chv, chf = _make_beveled_box(0, height + chimney_h / 2, depth * 0.25,
+                                     chimney_w / 2, chimney_h / 2, depth * 0.2,
+                                     bevel=0.005)
+        parts.append((chv, chf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Fireplace_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+# =========================================================================
+# CATEGORY: ITEMS & CONSUMABLES
+# =========================================================================
+
+
+def generate_health_potion_mesh(style: str = "small") -> MeshSpec:
+    """Generate a health potion bottle mesh.
+
+    Args:
+        style: "small" (8cm), "medium" (12cm), or "large" (15cm).
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 10
+    scale = {"small": 0.08, "medium": 0.12, "large": 0.15}.get(style, 0.08)
+    h = scale
+
+    if style == "small":
+        profile = [
+            (0.001, 0), (h * 0.35, h * 0.03), (h * 0.50, h * 0.12),
+            (h * 0.55, h * 0.30), (h * 0.52, h * 0.50), (h * 0.40, h * 0.62),
+            (h * 0.18, h * 0.72), (h * 0.14, h * 0.78), (h * 0.14, h * 0.88),
+            (h * 0.16, h * 0.90), (h * 0.14, h * 0.92),
+        ]
+    elif style == "medium":
+        profile = [
+            (0.001, 0), (h * 0.30, h * 0.02), (h * 0.45, h * 0.08),
+            (h * 0.50, h * 0.20), (h * 0.52, h * 0.35), (h * 0.50, h * 0.50),
+            (h * 0.42, h * 0.58), (h * 0.28, h * 0.65), (h * 0.15, h * 0.72),
+            (h * 0.12, h * 0.78), (h * 0.12, h * 0.88), (h * 0.14, h * 0.90),
+            (h * 0.12, h * 0.93),
+        ]
+    else:
+        profile = [
+            (0.001, 0), (h * 0.28, h * 0.02), (h * 0.42, h * 0.06),
+            (h * 0.48, h * 0.14), (h * 0.50, h * 0.25), (h * 0.50, h * 0.45),
+            (h * 0.48, h * 0.55), (h * 0.38, h * 0.62), (h * 0.22, h * 0.68),
+            (h * 0.14, h * 0.74), (h * 0.12, h * 0.80), (h * 0.12, h * 0.90),
+            (h * 0.15, h * 0.92), (h * 0.12, h * 0.95),
+        ]
+
+    bv, bf = _make_lathe(profile, segments=segs, close_bottom=True, close_top=True)
+    parts.append((bv, bf))
+    cork_y = profile[-1][1]
+    sv, sf = _make_cylinder(0, cork_y, 0, h * 0.10, h * 0.08, segments=6)
+    parts.append((sv, sf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"HealthPotion_{style}", verts, faces,
+                        style=style, category="consumable")
+
+
+def generate_mana_potion_mesh(style: str = "small") -> MeshSpec:
+    """Generate a mana potion bottle mesh -- angular/ornate shape.
+
+    Args:
+        style: "small", "medium", or "large".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    scale = {"small": 0.08, "medium": 0.12, "large": 0.15}.get(style, 0.08)
+    h = scale
+
+    if style == "small":
+        profile = [
+            (0.001, 0), (h * 0.20, h * 0.02), (h * 0.45, h * 0.10),
+            (h * 0.48, h * 0.35), (h * 0.45, h * 0.55), (h * 0.20, h * 0.65),
+            (h * 0.12, h * 0.70), (h * 0.12, h * 0.85), (h * 0.15, h * 0.88),
+            (h * 0.12, h * 0.92),
+        ]
+    elif style == "medium":
+        profile = [
+            (0.001, 0), (h * 0.18, h * 0.02), (h * 0.40, h * 0.08),
+            (h * 0.50, h * 0.15), (h * 0.52, h * 0.30), (h * 0.50, h * 0.48),
+            (h * 0.38, h * 0.58), (h * 0.18, h * 0.66), (h * 0.12, h * 0.72),
+            (h * 0.10, h * 0.82), (h * 0.10, h * 0.90), (h * 0.13, h * 0.92),
+            (h * 0.10, h * 0.95),
+        ]
+    else:
+        profile = [
+            (0.001, 0), (h * 0.22, h * 0.02), (h * 0.42, h * 0.06),
+            (h * 0.55, h * 0.12), (h * 0.58, h * 0.28), (h * 0.55, h * 0.45),
+            (h * 0.42, h * 0.55), (h * 0.22, h * 0.64), (h * 0.14, h * 0.70),
+            (h * 0.10, h * 0.78), (h * 0.10, h * 0.88), (h * 0.14, h * 0.90),
+            (h * 0.10, h * 0.94),
+        ]
+
+    bv, bf = _make_lathe(profile, segments=segs, close_bottom=True, close_top=True)
+    parts.append((bv, bf))
+    cork_y = profile[-1][1]
+    sv, sf = _make_cone(0, cork_y, 0, h * 0.08, h * 0.12, segments=segs)
+    parts.append((sv, sf))
+    neck_y = profile[-4][1] if len(profile) > 4 else h * 0.70
+    rv, rf = _make_torus_ring(0, neck_y, 0, h * 0.16, h * 0.02,
+                              major_segments=segs, minor_segments=4)
+    parts.append((rv, rf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"ManaPotion_{style}", verts, faces,
+                        style=style, category="consumable")
+
+
+def generate_antidote_mesh(style: str = "vial") -> MeshSpec:
+    """Generate an antidote vial mesh with wax seal.
+
+    Args:
+        style: "vial", "ampoule", or "flask".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    h = 0.10
+    segs = 10
+
+    if style == "vial":
+        profile = [
+            (0.001, 0), (h * 0.15, h * 0.02), (h * 0.20, h * 0.08),
+            (h * 0.22, h * 0.40), (h * 0.20, h * 0.55), (h * 0.10, h * 0.65),
+            (h * 0.06, h * 0.70), (h * 0.06, h * 0.88), (h * 0.08, h * 0.90),
+            (h * 0.06, h * 0.93),
+        ]
+    elif style == "ampoule":
+        profile = [
+            (0.001, 0), (h * 0.12, h * 0.02), (h * 0.18, h * 0.10),
+            (h * 0.20, h * 0.35), (h * 0.18, h * 0.50), (h * 0.05, h * 0.60),
+            (h * 0.04, h * 0.65), (h * 0.10, h * 0.75), (h * 0.12, h * 0.85),
+            (h * 0.08, h * 0.95), (h * 0.001, h * 1.0),
+        ]
+    else:
+        profile = [
+            (0.001, 0), (h * 0.20, h * 0.02), (h * 0.30, h * 0.10),
+            (h * 0.32, h * 0.35), (h * 0.30, h * 0.50), (h * 0.15, h * 0.60),
+            (h * 0.08, h * 0.68), (h * 0.08, h * 0.85), (h * 0.10, h * 0.88),
+            (h * 0.08, h * 0.92),
+        ]
+
+    bv, bf = _make_lathe(profile, segments=segs, close_bottom=True, close_top=True)
+    parts.append((bv, bf))
+    if style != "ampoule":
+        seal_y = profile[-1][1]
+        wv, wf = _make_cylinder(0, seal_y, 0, h * 0.09, h * 0.03, segments=8)
+        parts.append((wv, wf))
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Antidote_{style}", verts, faces,
+                        style=style, category="consumable")
+
+
+def generate_bread_mesh(style: str = "loaf") -> MeshSpec:
+    """Generate a bread mesh.
+
+    Args:
+        style: "loaf", "roll", or "flatbread".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "loaf":
+        width = 0.10
+        height = 0.08
+        length = 0.20
+        sv, sf = _make_sphere(0, height, 0, 1.0, rings=6, sectors=10)
+        sv = [(v[0] * width, v[1] * height, v[2] * length) for v in sv]
+        sv = [(v[0], max(v[1], 0.0), v[2]) for v in sv]
+        parts.append((sv, sf))
+        for i in range(3):
+            z_off = -0.06 + i * 0.06
+            sv2, sf2 = _make_box(0, height * 1.6, z_off, width * 0.6, 0.003, 0.005)
+            parts.append((sv2, sf2))
+    elif style == "roll":
+        sv, sf = _make_sphere(0, 0.04, 0, 0.04, rings=6, sectors=8)
+        sv = [(v[0], max(v[1], 0.0), v[2]) for v in sv]
+        parts.append((sv, sf))
+        sv2, sf2 = _make_box(0, 0.075, 0, 0.03, 0.002, 0.003)
+        parts.append((sv2, sf2))
+        sv3, sf3 = _make_box(0, 0.075, 0, 0.003, 0.002, 0.03)
+        parts.append((sv3, sf3))
+    else:
+        profile = [
+            (0.001, 0), (0.10, 0.002), (0.12, 0.008),
+            (0.12, 0.015), (0.10, 0.020), (0.001, 0.022),
+        ]
+        bv, bf = _make_lathe(profile, segments=12, close_bottom=True, close_top=True)
+        parts.append((bv, bf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Bread_{style}", verts, faces,
+                        style=style, category="consumable")
+
+
+def generate_cheese_mesh(style: str = "wheel") -> MeshSpec:
+    """Generate a cheese mesh.
+
+    Args:
+        style: "wheel", "wedge", or "block".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "wheel":
+        cv, cf = _make_cylinder(0, 0, 0, 0.10, 0.05, segments=16)
+        parts.append((cv, cf))
+        rv, rf = _make_torus_ring(0, 0.025, 0, 0.10, 0.008,
+                                  major_segments=16, minor_segments=4)
+        parts.append((rv, rf))
+    elif style == "wedge":
+        w = 0.10
+        h_val = 0.05
+        d = 0.12
+        verts_raw: list[tuple[float, float, float]] = [
+            (0, 0, 0), (w, 0, 0), (0, 0, d),
+            (0, h_val, 0), (w, h_val, 0), (0, h_val, d),
+        ]
+        faces_raw: list[tuple[int, ...]] = [
+            (0, 2, 1), (3, 4, 5), (0, 1, 4, 3), (1, 2, 5, 4), (0, 3, 5, 2),
+        ]
+        parts.append((verts_raw, faces_raw))
+    else:
+        bv, bf = _make_beveled_box(0, 0.03, 0, 0.06, 0.03, 0.08, bevel=0.005)
+        parts.append((bv, bf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Cheese_{style}", verts, faces,
+                        style=style, category="consumable")
+
+
+def generate_meat_mesh(style: str = "drumstick") -> MeshSpec:
+    """Generate a cooked meat mesh.
+
+    Args:
+        style: "drumstick", "steak", or "ham".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "drumstick":
+        bv, bf = _make_cylinder(0, 0, 0, 0.008, 0.12, segments=6)
+        parts.append((bv, bf))
+        kv, kf = _make_sphere(0, 0, 0, 0.012, rings=4, sectors=6)
+        parts.append((kv, kf))
+        mv, mf = _make_sphere(0, 0.10, 0, 0.04, rings=6, sectors=8)
+        mv = [(v[0] * 1.1, v[1], v[2] * 1.1) for v in mv]
+        parts.append((mv, mf))
+    elif style == "steak":
+        profile = [
+            (0.001, 0), (0.06, 0.003), (0.08, 0.01),
+            (0.08, 0.02), (0.06, 0.027), (0.001, 0.03),
+        ]
+        sv, sf = _make_lathe(profile, segments=10, close_bottom=True, close_top=True)
+        sv = [(v[0], v[1], v[2] * 1.4) for v in sv]
+        parts.append((sv, sf))
+        tv, tf = _make_box(0, 0.015, 0, 0.002, 0.015, 0.06)
+        parts.append((tv, tf))
+        tv2, tf2 = _make_box(0, 0.015, -0.05, 0.03, 0.008, 0.003)
+        parts.append((tv2, tf2))
+    else:
+        profile = [
+            (0.001, 0), (0.04, 0.01), (0.07, 0.04), (0.08, 0.10),
+            (0.07, 0.16), (0.05, 0.20), (0.03, 0.22), (0.015, 0.24),
+        ]
+        hv, hf = _make_lathe(profile, segments=10, close_bottom=True, close_top=True)
+        parts.append((hv, hf))
+        bv, bf = _make_cylinder(0, 0.24, 0, 0.008, 0.04, segments=6)
+        parts.append((bv, bf))
+        kv, kf = _make_sphere(0, 0.28, 0, 0.012, rings=4, sectors=6)
+        parts.append((kv, kf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Meat_{style}", verts, faces,
+                        style=style, category="consumable")
+
+
+def generate_apple_mesh(style: str = "whole") -> MeshSpec:
+    """Generate a fruit (apple) mesh.
+
+    Args:
+        style: "whole", "bitten", or "rotten".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    r = 0.035
+
+    if style == "whole":
+        profile = [
+            (0.001, 0), (r * 0.30, r * 0.08), (r * 0.70, r * 0.20),
+            (r * 0.95, r * 0.45), (r * 1.0, r * 0.70), (r * 0.95, r * 0.90),
+            (r * 0.80, r * 1.05), (r * 0.50, r * 1.15), (r * 0.20, r * 1.20),
+            (r * 0.05, r * 1.22),
+        ]
+        av, af = _make_lathe(profile, segments=10, close_bottom=True, close_top=True)
+        parts.append((av, af))
+        sv, sf = _make_cylinder(0, r * 1.22, 0, r * 0.06, r * 0.30, segments=4)
+        parts.append((sv, sf))
+        lv, lf = _make_box(r * 0.10, r * 1.40, 0, r * 0.20, r * 0.02, r * 0.08)
+        parts.append((lv, lf))
+    elif style == "bitten":
+        profile = [
+            (0.001, 0), (r * 0.30, r * 0.08), (r * 0.70, r * 0.20),
+            (r * 0.95, r * 0.45), (r * 1.0, r * 0.70), (r * 0.95, r * 0.90),
+            (r * 0.80, r * 1.05), (r * 0.50, r * 1.15), (r * 0.20, r * 1.20),
+            (r * 0.05, r * 1.22),
+        ]
+        av, af = _make_lathe(profile, segments=10, close_bottom=True, close_top=True)
+        parts.append((av, af))
+        bv, bf = _make_sphere(r * 0.8, r * 0.65, 0, r * 0.45, rings=4, sectors=6)
+        parts.append((bv, bf))
+        sv, sf = _make_cylinder(0, r * 1.22, 0, r * 0.06, r * 0.30, segments=4)
+        parts.append((sv, sf))
+    else:
+        profile = [
+            (0.001, 0), (r * 0.35, r * 0.05), (r * 0.75, r * 0.15),
+            (r * 0.90, r * 0.35), (r * 0.85, r * 0.55), (r * 0.70, r * 0.70),
+            (r * 0.45, r * 0.80), (r * 0.20, r * 0.85), (r * 0.05, r * 0.88),
+        ]
+        av, af = _make_lathe(profile, segments=10, close_bottom=True, close_top=True)
+        import random as _rng
+        gen = _rng.Random(42)
+        av = [(v[0] + gen.uniform(-r * 0.08, r * 0.08),
+               v[1] + gen.uniform(-r * 0.04, r * 0.04),
+               v[2] + gen.uniform(-r * 0.08, r * 0.08)) for v in av]
+        parts.append((av, af))
+        sv, sf = _make_cylinder(r * 0.01, r * 0.85, 0, r * 0.05, r * 0.15, segments=4)
+        parts.append((sv, sf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Apple_{style}", verts, faces,
+                        style=style, category="consumable")
+
+
+def generate_mushroom_food_mesh(style: str = "cap") -> MeshSpec:
+    """Generate an edible mushroom mesh (smaller than scatter mushrooms).
+
+    Args:
+        style: "cap" or "cluster".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    def _single_mush(
+        cx: float, cz: float, mh: float, cap_r: float,
+    ) -> list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]]:
+        p: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+        sv, sf = _make_tapered_cylinder(cx, 0, cz, mh * 0.12, mh * 0.08,
+                                        mh * 0.65, segments=6, rings=2)
+        p.append((sv, sf))
+        cap_profile = [
+            (0.001, 0), (cap_r * 0.50, cap_r * 0.10), (cap_r * 0.90, cap_r * 0.30),
+            (cap_r * 1.0, cap_r * 0.50), (cap_r * 0.80, cap_r * 0.70),
+            (cap_r * 0.40, cap_r * 0.80), (cap_r * 0.10, cap_r * 0.85),
+        ]
+        cap_profile = [(rr, y + mh * 0.55) for rr, y in cap_profile]
+        cv, cf = _make_lathe(cap_profile, segments=8, close_bottom=True, close_top=True)
+        cv = [(v[0] + cx, v[1], v[2] + cz) for v in cv]
+        p.append((cv, cf))
+        return p
+
+    if style == "cap":
+        parts.extend(_single_mush(0, 0, 0.04, 0.02))
+    else:
+        parts.extend(_single_mush(0, 0, 0.04, 0.02))
+        parts.extend(_single_mush(0.025, 0.015, 0.035, 0.018))
+        parts.extend(_single_mush(-0.015, 0.02, 0.03, 0.015))
+        parts.extend(_single_mush(0.01, -0.02, 0.028, 0.014))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"MushroomFood_{style}", verts, faces,
+                        style=style, category="consumable")
+
+
+def generate_fish_mesh(style: str = "whole") -> MeshSpec:
+    """Generate a fish mesh.
+
+    Args:
+        style: "whole" or "fillet".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "whole":
+        profile = [
+            (0.001, 0), (0.015, 0.01), (0.030, 0.03), (0.035, 0.06),
+            (0.035, 0.10), (0.030, 0.14), (0.020, 0.17), (0.010, 0.20),
+            (0.005, 0.22),
+        ]
+        fv, ff = _make_lathe(profile, segments=8, close_bottom=True, close_top=True)
+        fv = [(v[0], v[1], v[2] * 0.5) for v in fv]
+        fv = [(v[0], v[2] + 0.02, v[1]) for v in fv]
+        parts.append((fv, ff))
+        tail_v: list[tuple[float, float, float]] = [
+            (0, 0.02, 0.22), (0.04, 0.02, 0.25),
+            (0, 0.02, 0.28), (-0.04, 0.02, 0.25),
+        ]
+        parts.append((tail_v, [(0, 1, 2, 3)]))
+        dv: list[tuple[float, float, float]] = [
+            (0, 0.035, 0.06), (0, 0.05, 0.10), (0, 0.035, 0.14),
+        ]
+        parts.append((dv, [(0, 1, 2)]))
+        ev, ef = _make_sphere(0.02, 0.025, 0.04, 0.005, rings=3, sectors=4)
+        parts.append((ev, ef))
+    else:
+        profile = [
+            (0.001, 0), (0.04, 0.003), (0.05, 0.008),
+            (0.05, 0.012), (0.04, 0.015), (0.001, 0.018),
+        ]
+        fv, ff = _make_lathe(profile, segments=8, close_bottom=True, close_top=True)
+        fv = [(v[0], v[1], v[2] * 2.0) for v in fv]
+        parts.append((fv, ff))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Fish_{style}", verts, faces,
+                        style=style, category="consumable")
+
+
+# =========================================================================
+# CATEGORY: CRAFTING MATERIALS
+# =========================================================================
+
+
+def generate_ore_mesh(style: str = "iron") -> MeshSpec:
+    """Generate a raw ore chunk mesh.
+
+    Args:
+        style: "iron", "copper", "gold", or "dark_crystal".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    import random as _rng
+    seed_map = {"iron": 10, "copper": 20, "gold": 30, "dark_crystal": 40}
+    gen = _rng.Random(seed_map.get(style, 10))
+
+    if style == "dark_crystal":
+        for ci in range(4):
+            angle = ci * math.pi * 2 / 4 + gen.uniform(-0.3, 0.3)
+            dist = gen.uniform(0.01, 0.03)
+            cx = math.cos(angle) * dist
+            cz = math.sin(angle) * dist
+            cr_h = gen.uniform(0.04, 0.08)
+            cr_r = gen.uniform(0.01, 0.02)
+            cv, cf = _make_tapered_cylinder(cx, 0, cz, cr_r, cr_r * 0.1, cr_h,
+                                            segments=5, rings=1)
+            parts.append((cv, cf))
+        bv, bf = _make_sphere(0, 0.01, 0, 0.035, rings=4, sectors=6)
+        bv = [(v[0], max(v[1], 0.0), v[2]) for v in bv]
+        parts.append((bv, bf))
+    else:
+        base_r = {"iron": 0.04, "copper": 0.045, "gold": 0.035}.get(style, 0.04)
+        sv, sf = _make_sphere(0, base_r, 0, base_r, rings=4, sectors=6)
+        sv = [(v[0] + gen.uniform(-base_r * 0.3, base_r * 0.3),
+               max(v[1] + gen.uniform(-base_r * 0.2, base_r * 0.2), 0.0),
+               v[2] + gen.uniform(-base_r * 0.3, base_r * 0.3)) for v in sv]
+        parts.append((sv, sf))
+        frag_r = base_r * 0.5
+        offset_x = gen.uniform(base_r * 0.6, base_r * 0.9)
+        fv, ff = _make_sphere(offset_x, frag_r, 0, frag_r, rings=3, sectors=5)
+        fv = [(v[0] + gen.uniform(-frag_r * 0.2, frag_r * 0.2),
+               max(v[1] + gen.uniform(-frag_r * 0.15, frag_r * 0.15), 0.0),
+               v[2] + gen.uniform(-frag_r * 0.2, frag_r * 0.2)) for v in fv]
+        parts.append((fv, ff))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Ore_{style}", verts, faces,
+                        style=style, category="crafting_material")
+
+
+def generate_leather_mesh(style: str = "folded") -> MeshSpec:
+    """Generate a leather material mesh.
+
+    Args:
+        style: "folded", "strip", or "hide".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "folded":
+        for i in range(3):
+            y = i * 0.012
+            offset_x = i * 0.005 - 0.005
+            offset_z = i * 0.003 - 0.003
+            sv, sf = _make_beveled_box(offset_x, y + 0.005, offset_z,
+                                       0.06, 0.004, 0.08, bevel=0.002)
+            parts.append((sv, sf))
+    elif style == "strip":
+        strip_segs = 8
+        strip_l = 0.20
+        for i in range(strip_segs):
+            t = i / (strip_segs - 1)
+            z = -strip_l / 2 + t * strip_l
+            y = 0.003 + math.sin(t * math.pi) * 0.01
+            sv, sf = _make_box(0, y, z, 0.01, 0.002, strip_l / strip_segs * 0.55)
+            parts.append((sv, sf))
+    else:
+        profile = [
+            (0.001, 0), (0.08, 0.001), (0.14, 0.003),
+            (0.15, 0.005), (0.14, 0.007), (0.08, 0.009), (0.001, 0.010),
+        ]
+        hv, hf = _make_lathe(profile, segments=12, close_bottom=True, close_top=True)
+        import random as _rng
+        gen = _rng.Random(77)
+        hv = [(v[0] + gen.uniform(-0.01, 0.01), v[1],
+               v[2] + gen.uniform(-0.01, 0.01)) for v in hv]
+        parts.append((hv, hf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Leather_{style}", verts, faces,
+                        style=style, category="crafting_material")
+
+
+def generate_herb_mesh(style: str = "leaf") -> MeshSpec:
+    """Generate a medicinal herb mesh.
+
+    Args:
+        style: "leaf", "bundle", or "flower".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "leaf":
+        sv, sf = _make_cylinder(0, 0, 0, 0.002, 0.08, segments=4)
+        parts.append((sv, sf))
+        lv1: list[tuple[float, float, float]] = [
+            (0, 0.05, 0), (0.02, 0.065, 0.002), (0, 0.09, 0), (-0.02, 0.065, -0.002),
+        ]
+        lf1: list[tuple[int, ...]] = [(0, 1, 2, 3)]
+        parts.append((lv1, lf1))
+        lv2: list[tuple[float, float, float]] = [
+            (0, 0.03, 0), (-0.015, 0.045, -0.002), (0, 0.07, 0), (0.015, 0.045, 0.002),
+        ]
+        parts.append((lv2, lf1))
+    elif style == "bundle":
+        for i in range(5):
+            angle = i * math.pi * 2 / 5
+            cx = math.cos(angle) * 0.008
+            cz = math.sin(angle) * 0.008
+            sv, sf = _make_cylinder(cx, 0, cz, 0.002, 0.10, segments=4)
+            parts.append((sv, sf))
+            lv: list[tuple[float, float, float]] = [
+                (cx, 0.08, cz), (cx + 0.012, 0.10, cz),
+                (cx, 0.12, cz), (cx - 0.012, 0.10, cz),
+            ]
+            parts.append((lv, [(0, 1, 2, 3)]))
+        tv, tf = _make_torus_ring(0, 0.03, 0, 0.012, 0.003,
+                                  major_segments=8, minor_segments=4)
+        parts.append((tv, tf))
+    else:
+        sv, sf = _make_cylinder(0, 0, 0, 0.003, 0.07, segments=4)
+        parts.append((sv, sf))
+        for i in range(5):
+            angle = i * math.pi * 2 / 5
+            px = math.cos(angle) * 0.015
+            pz = math.sin(angle) * 0.015
+            pv: list[tuple[float, float, float]] = [
+                (0, 0.07, 0), (px * 0.5, 0.072, pz * 0.5),
+                (px, 0.068, pz), (px * 0.5, 0.066, pz * 0.5),
+            ]
+            parts.append((pv, [(0, 1, 2, 3)]))
+        cv, cf = _make_sphere(0, 0.072, 0, 0.005, rings=3, sectors=4)
+        parts.append((cv, cf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Herb_{style}", verts, faces,
+                        style=style, category="crafting_material")
+
+
+def generate_gem_mesh(style: str = "ruby") -> MeshSpec:
+    """Generate a cut gemstone mesh (brilliant-cut faceted crystal).
+
+    Args:
+        style: "ruby", "sapphire", "emerald", "diamond", or "amethyst".
+    """
+    size_map = {
+        "ruby": (0.012, 0.008), "sapphire": (0.014, 0.009),
+        "emerald": (0.010, 0.012), "diamond": (0.013, 0.010),
+        "amethyst": (0.015, 0.011),
+    }
+    r, crown_h = size_map.get(style, (0.012, 0.008))
+    pavilion_h = r * 1.2
+    verts: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+    n_sides = 8
+
+    table_r = r * 0.55
+    for i in range(n_sides):
+        angle = 2.0 * math.pi * i / n_sides
+        verts.append((table_r * math.cos(angle), crown_h, table_r * math.sin(angle)))
+    for i in range(n_sides):
+        angle = 2.0 * math.pi * i / n_sides
+        verts.append((r * math.cos(angle), 0, r * math.sin(angle)))
+    verts.append((0, -pavilion_h, 0))
+
+    faces.append(tuple(range(n_sides)))
+    for i in range(n_sides):
+        i2 = (i + 1) % n_sides
+        faces.append((i, i2, n_sides + i2))
+        faces.append((i, n_sides + i2, n_sides + i))
+    culet = 2 * n_sides
+    for i in range(n_sides):
+        i2 = (i + 1) % n_sides
+        faces.append((n_sides + i, n_sides + i2, culet))
+
+    return _make_result(f"Gem_{style}", verts, faces,
+                        style=style, category="crafting_material")
+
+
+def generate_bone_shard_mesh(style: str = "fragment") -> MeshSpec:
+    """Generate a monster bone drop mesh.
+
+    Args:
+        style: "fragment", "fang", or "horn".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "fragment":
+        import random as _rng
+        gen = _rng.Random(55)
+        sv, sf = _make_sphere(0, 0.025, 0, 0.025, rings=4, sectors=6)
+        sv = [(v[0] + gen.uniform(-0.008, 0.008),
+               max(v[1] + gen.uniform(-0.005, 0.005), 0.0),
+               v[2] + gen.uniform(-0.008, 0.008)) for v in sv]
+        parts.append((sv, sf))
+        spv, spf = _make_tapered_cylinder(0.02, 0, 0, 0.008, 0.002, 0.05,
+                                          segments=5, rings=1)
+        parts.append((spv, spf))
+    elif style == "fang":
+        profile = [
+            (0.015, 0), (0.018, 0.01), (0.016, 0.03), (0.012, 0.05),
+            (0.008, 0.07), (0.003, 0.09), (0.001, 0.10),
+        ]
+        fv, ff = _make_lathe(profile, segments=6, close_bottom=True, close_top=True)
+        parts.append((fv, ff))
+        rv, rf = _make_sphere(0, 0.005, 0, 0.02, rings=3, sectors=6)
+        rv = [(v[0], max(v[1], 0.0), v[2]) for v in rv]
+        parts.append((rv, rf))
+    else:
+        horn_segs = 8
+        horn_r_base = 0.02
+        horn_h = 0.12
+        for i in range(horn_segs):
+            t = i / (horn_segs - 1)
+            seg_r = horn_r_base * (1.0 - t * 0.85)
+            y = t * horn_h
+            x_off = t * t * 0.04
+            cv, cf = _make_cylinder(x_off, y, 0, seg_r, horn_h / horn_segs * 0.55,
+                                    segments=6)
+            parts.append((cv, cf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"BoneShard_{style}", verts, faces,
+                        style=style, category="crafting_material")
+
+
+# =========================================================================
+# CATEGORY: CURRENCY
+# =========================================================================
+
+
+def generate_coin_mesh(style: str = "gold") -> MeshSpec:
+    """Generate a currency coin mesh with embossed detail.
+
+    Args:
+        style: "copper", "silver", or "gold".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    size_map = {"copper": 0.012, "silver": 0.014, "gold": 0.016}
+    r = size_map.get(style, 0.014)
+    thickness = r * 0.15
+
+    cv, cf = _make_cylinder(0, 0, 0, r, thickness, segments=16)
+    parts.append((cv, cf))
+    rv, rf = _make_torus_ring(0, thickness / 2, 0, r * 0.90, r * 0.04,
+                              major_segments=16, minor_segments=4)
+    parts.append((rv, rf))
+    ev, ef = _make_cylinder(0, thickness, 0, r * 0.4, r * 0.02, segments=8)
+    parts.append((ev, ef))
+    ev2, ef2 = _make_cylinder(0, -r * 0.02, 0, r * 0.35, r * 0.02, segments=6)
+    parts.append((ev2, ef2))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Coin_{style}", verts, faces,
+                        style=style, category="currency")
+
+
+def generate_coin_pouch_mesh(style: str = "small") -> MeshSpec:
+    """Generate a coin pouch/money bag mesh.
+
+    Args:
+        style: "small" or "large".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 10
+
+    if style == "small":
+        profile = [
+            (0.001, 0), (0.025, 0.005), (0.035, 0.015), (0.040, 0.030),
+            (0.038, 0.045), (0.030, 0.055), (0.015, 0.060), (0.008, 0.065),
+            (0.010, 0.070), (0.005, 0.075),
+        ]
+        pv, pf = _make_lathe(profile, segments=segs, close_bottom=True, close_top=True)
+        parts.append((pv, pf))
+        tv, tf = _make_torus_ring(0, 0.062, 0, 0.012, 0.002,
+                                  major_segments=8, minor_segments=3)
+        parts.append((tv, tf))
+        rv, rf = _make_cylinder(0.012, 0.065, 0, 0.001, 0.015, segments=3)
+        parts.append((rv, rf))
+    else:
+        profile = [
+            (0.001, 0), (0.06, 0.01), (0.09, 0.03), (0.10, 0.06),
+            (0.10, 0.10), (0.08, 0.13), (0.05, 0.15), (0.025, 0.16),
+            (0.015, 0.17), (0.020, 0.18), (0.010, 0.19),
+        ]
+        pv, pf = _make_lathe(profile, segments=segs, close_bottom=True, close_top=True)
+        parts.append((pv, pf))
+        tv, tf = _make_torus_ring(0, 0.16, 0, 0.022, 0.003,
+                                  major_segments=8, minor_segments=3)
+        parts.append((tv, tf))
+        for ci in range(3):
+            angle = ci * math.pi * 2 / 3 + 0.5
+            cx = math.cos(angle) * 0.10
+            cz = math.sin(angle) * 0.10
+            cv, cf = _make_cylinder(cx, 0, cz, 0.014, 0.003, segments=8)
+            parts.append((cv, cf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"CoinPouch_{style}", verts, faces,
+                        style=style, category="currency")
+
+
+# =========================================================================
+# CATEGORY: KEY ITEMS
+# =========================================================================
+
+
+def generate_key_mesh(style: str = "skeleton") -> MeshSpec:
+    """Generate a key mesh.
+
+    Args:
+        style: "skeleton", "dungeon", or "master".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "skeleton":
+        bv, bf = _make_torus_ring(0, 0.07, 0, 0.018, 0.004,
+                                  major_segments=12, minor_segments=4)
+        parts.append((bv, bf))
+        sv, sf = _make_box(0, 0.035, 0, 0.003, 0.035, 0.003)
+        parts.append((sv, sf))
+        for i in range(3):
+            x_off = 0.006 * (i - 1)
+            tooth_h = 0.010 + i * 0.004
+            tv, tf = _make_box(x_off, tooth_h / 2, 0.005, 0.002, tooth_h / 2, 0.002)
+            parts.append((tv, tf))
+        dv, df = _make_sphere(0, 0.07, 0, 0.006, rings=3, sectors=4)
+        parts.append((dv, df))
+    elif style == "dungeon":
+        bv, bf = _make_torus_ring(0, 0.06, 0, 0.012, 0.003,
+                                  major_segments=8, minor_segments=3)
+        parts.append((bv, bf))
+        sv, sf = _make_box(0, 0.03, 0, 0.004, 0.03, 0.004)
+        parts.append((sv, sf))
+        for i in range(2):
+            x_off = 0.006 * (i * 2 - 1)
+            tv, tf = _make_box(x_off, 0.006, 0.006, 0.002, 0.006, 0.002)
+            parts.append((tv, tf))
+    else:
+        bv, bf = _make_torus_ring(0, 0.08, 0, 0.022, 0.005,
+                                  major_segments=8, minor_segments=5)
+        parts.append((bv, bf))
+        iv, i_f = _make_torus_ring(0, 0.08, 0, 0.012, 0.002,
+                                   major_segments=8, minor_segments=3)
+        parts.append((iv, i_f))
+        sv, sf = _make_box(0, 0.038, 0, 0.004, 0.038, 0.004)
+        parts.append((sv, sf))
+        for i in range(4):
+            y = 0.015 + i * 0.012
+            nv, nf = _make_box(0.005, y, 0, 0.002, 0.003, 0.005)
+            parts.append((nv, nf))
+        for i in range(4):
+            x_off = 0.004 * (i - 1.5)
+            tooth_h = 0.006 + (i % 2) * 0.006
+            tv, tf = _make_box(x_off, tooth_h / 2, 0.006, 0.002, tooth_h / 2, 0.002)
+            parts.append((tv, tf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Key_{style}", verts, faces,
+                        style=style, category="key_item")
+
+
+def generate_map_scroll_mesh(style: str = "rolled") -> MeshSpec:
+    """Generate a map/document scroll mesh.
+
+    Args:
+        style: "rolled", "open", or "sealed".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "rolled":
+        length = 0.18
+        scroll_r = 0.014
+        sv, sf = _make_cylinder(0, 0, 0, scroll_r, length, segments=10)
+        sv = [(v[0], v[2], v[1]) for v in sv]
+        parts.append((sv, sf))
+        for z_end in [0.0, length]:
+            kv, kf = _make_sphere(0, z_end, 0, scroll_r * 1.3, rings=4, sectors=6)
+            kv = [(v[0], v[2], v[1]) for v in kv]
+            parts.append((kv, kf))
+        rv, rf = _make_torus_ring(0, length * 0.5, 0, scroll_r * 1.1, 0.002,
+                                  major_segments=8, minor_segments=3)
+        rv = [(v[0], v[2], v[1]) for v in rv]
+        parts.append((rv, rf))
+        tv, tf = _make_box(0, length * 0.5, scroll_r * 1.3, 0.002, 0.025, 0.001)
+        tv = [(v[0], v[2], v[1]) for v in tv]
+        parts.append((tv, tf))
+    elif style == "open":
+        map_w = 0.20
+        map_h = 0.15
+        thickness = 0.002
+        sv, sf = _make_box(0, thickness / 2, 0, map_w / 2, thickness / 2, map_h / 2)
+        parts.append((sv, sf))
+        for sx, sz in [(-1, -1), (1, -1), (-1, 1), (1, 1)]:
+            curl_r = 0.008
+            cx = sx * (map_w / 2 - curl_r)
+            cz = sz * (map_h / 2 - curl_r)
+            cv, cf = _make_cylinder(cx, thickness, cz, curl_r, 0.012, segments=6)
+            parts.append((cv, cf))
+    else:
+        length = 0.16
+        scroll_r = 0.012
+        sv, sf = _make_cylinder(0, 0, 0, scroll_r, length, segments=10)
+        sv = [(v[0], v[2], v[1]) for v in sv]
+        parts.append((sv, sf))
+        seal_r = 0.015
+        wv, wf = _make_cylinder(0, length * 0.5, scroll_r, seal_r, 0.004, segments=8)
+        wv = [(v[0], v[2], v[1]) for v in wv]
+        parts.append((wv, wf))
+        ev, ef = _make_cylinder(0, length * 0.5, scroll_r + 0.004,
+                                seal_r * 0.5, 0.002, segments=6)
+        ev = [(v[0], v[2], v[1]) for v in ev]
+        parts.append((ev, ef))
+        rv, rf = _make_box(0, length * 0.5, scroll_r + 0.002,
+                           seal_r * 0.8, 0.001, 0.002)
+        rv = [(v[0], v[2], v[1]) for v in rv]
+        parts.append((rv, rf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"MapScroll_{style}", verts, faces,
+                        style=style, category="key_item")
+
+
+def generate_lockpick_mesh(style: str = "set") -> MeshSpec:
+    """Generate a lockpick tool set mesh.
+
+    Args:
+        style: "set", "single", or "skeleton_key".
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "set":
+        roll_w = 0.08
+        roll_h = 0.12
+        rv, rf = _make_box(0, 0.002, 0, roll_w / 2, 0.002, roll_h / 2)
+        parts.append((rv, rf))
+        for i in range(5):
+            x = -roll_w / 2 + 0.01 + i * 0.015
+            sv, sf = _make_box(x, 0.005, 0, 0.001, 0.001, roll_h * 0.45)
+            parts.append((sv, sf))
+            tip_z = roll_h * 0.45
+            if i % 3 == 0:
+                tv, tf = _make_box(x, 0.007, tip_z, 0.002, 0.002, 0.004)
+            elif i % 3 == 1:
+                tv, tf = _make_box(x, 0.006, tip_z, 0.003, 0.003, 0.003)
+            else:
+                tv, tf = _make_box(x, 0.005, tip_z, 0.001, 0.001, 0.008)
+            parts.append((tv, tf))
+            hv, hf = _make_cylinder(x, 0.005, -roll_h * 0.40,
+                                    0.003, 0.015, segments=4)
+            parts.append((hv, hf))
+        tv, tf = _make_box(roll_w / 2 + 0.005, 0.003, 0,
+                           0.002, 0.002, roll_h * 0.3)
+        parts.append((tv, tf))
+    elif style == "single":
+        hv, hf = _make_cylinder(0, 0, 0, 0.004, 0.03, segments=6)
+        parts.append((hv, hf))
+        sv, sf = _make_box(0, 0.03, 0, 0.001, 0.04, 0.001)
+        parts.append((sv, sf))
+        tv, tf = _make_box(0.003, 0.068, 0, 0.003, 0.003, 0.001)
+        parts.append((tv, tf))
+    else:
+        hv, hf = _make_torus_ring(0, 0, 0, 0.008, 0.003,
+                                  major_segments=8, minor_segments=4)
+        parts.append((hv, hf))
+        sv, sf = _make_box(0, 0.04, 0, 0.0015, 0.04, 0.0015)
+        parts.append((sv, sf))
+        tv, tf = _make_box(0, 0.078, 0, 0.004, 0.004, 0.001)
+        parts.append((tv, tf))
+        tv2, tf2 = _make_box(0.004, 0.074, 0, 0.001, 0.008, 0.001)
+        parts.append((tv2, tf2))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Lockpick_{style}", verts, faces,
+                        style=style, category="key_item")
+
+
+# =========================================================================
+# CATEGORY: OUTDOOR STRUCTURES & FORTIFICATIONS
+# =========================================================================
+
+
+def generate_palisade_mesh(
+    style: str = "pointed",
+    width: float = 3.0,
+    height: float = 2.5,
+) -> MeshSpec:
+    """Generate a palisade wall section.
+
+    Args:
+        style: "pointed" (sharpened tips), "flat" (cut tops), "damaged" (gaps/broken logs).
+        width: Total width of the palisade section.
+        height: Total height of the palisade.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    log_radius = 0.08
+    log_spacing = log_radius * 2.2
+    n_logs = max(3, int(width / log_spacing))
+    actual_spacing = width / n_logs
+    segs = 8
+
+    if style == "pointed":
+        for i in range(n_logs):
+            x = -width / 2 + (i + 0.5) * actual_spacing
+            # Main log cylinder
+            lv, lf = _make_cylinder(x, 0, 0, log_radius, height * 0.85, segments=segs)
+            parts.append((lv, lf))
+            # Pointed tip cone
+            cv, cf = _make_cone(x, height * 0.85, 0, log_radius, height * 0.15, segments=segs)
+            parts.append((cv, cf))
+
+        # Horizontal cross-beam at back
+        for beam_y in [height * 0.3, height * 0.65]:
+            bv, bf = _make_box(0, beam_y, log_radius + 0.03,
+                               width / 2, 0.04, 0.04)
+            parts.append((bv, bf))
+
+    elif style == "flat":
+        for i in range(n_logs):
+            x = -width / 2 + (i + 0.5) * actual_spacing
+            lv, lf = _make_cylinder(x, 0, 0, log_radius, height, segments=segs)
+            parts.append((lv, lf))
+
+        # Cross-beams
+        for beam_y in [height * 0.25, height * 0.6]:
+            bv, bf = _make_box(0, beam_y, log_radius + 0.03,
+                               width / 2, 0.04, 0.04)
+            parts.append((bv, bf))
+
+    else:  # damaged
+        for i in range(n_logs):
+            x = -width / 2 + (i + 0.5) * actual_spacing
+            # Some logs are shorter or missing (deterministic pattern)
+            skip = (i * 13 + 5) % 7 == 0
+            if skip:
+                continue
+            h_mult = 0.5 + 0.5 * ((i * 17 + 3) % 5) / 4
+            log_h = height * h_mult
+            lv, lf = _make_cylinder(x, 0, 0, log_radius, log_h, segments=segs)
+            parts.append((lv, lf))
+            # Jagged broken top (small irregular cone)
+            if h_mult < 0.9:
+                cv, cf = _make_cone(x, log_h, 0, log_radius * 0.7,
+                                    height * 0.06, segments=4)
+                parts.append((cv, cf))
+            else:
+                cv, cf = _make_cone(x, log_h, 0, log_radius, height * 0.12,
+                                    segments=segs)
+                parts.append((cv, cf))
+
+        # Partially broken cross-beam
+        bv, bf = _make_box(0, height * 0.3, log_radius + 0.03,
+                           width * 0.35, 0.04, 0.04)
+        parts.append((bv, bf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Palisade_{style}", verts, faces,
+                        style=style, category="fortification")
+
+
+def generate_watchtower_mesh(
+    style: str = "wooden",
+    base_size: float = 3.0,
+    height: float = 6.0,
+) -> MeshSpec:
+    """Generate a multi-level watchtower.
+
+    Args:
+        style: "wooden" (log construction), "stone" (masonry), "ruined".
+        base_size: Width/depth of the base.
+        height: Total height.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    hs = base_size / 2
+
+    if style == "wooden":
+        # Four corner posts
+        post_r = 0.1
+        for sx in [-1, 1]:
+            for sz in [-1, 1]:
+                px = sx * (hs - post_r)
+                pz = sz * (hs - post_r)
+                pv, pf = _make_cylinder(px, 0, pz, post_r, height, segments=6)
+                parts.append((pv, pf))
+
+        # Floor platforms at 3 levels
+        for level in range(3):
+            floor_y = level * height / 3
+            fv, ff = _make_box(0, floor_y, 0, hs, 0.04, hs)
+            parts.append((fv, ff))
+
+        # Lookout platform at top (slightly wider)
+        top_hs = hs + 0.2
+        tv, tf = _make_box(0, height, 0, top_hs, 0.05, top_hs)
+        parts.append((tv, tf))
+
+        # Railing on top platform
+        rail_h = 0.8
+        rail_r = 0.03
+        for sx in [-1, 1]:
+            for sz in [-1, 1]:
+                rv, rf = _make_cylinder(sx * top_hs, height + 0.05, sz * top_hs,
+                                        rail_r, rail_h, segments=4)
+                parts.append((rv, rf))
+        # Horizontal rails
+        for sx in [-1, 1]:
+            bv, bf = _make_box(sx * top_hs, height + 0.05 + rail_h,
+                               0, rail_r, rail_r, top_hs)
+            parts.append((bv, bf))
+        for sz in [-1, 1]:
+            bv, bf = _make_box(0, height + 0.05 + rail_h,
+                               sz * top_hs, top_hs, rail_r, rail_r)
+            parts.append((bv, bf))
+
+        # Ladder (simple rungs)
+        ladder_x = hs - 0.15
+        for rung in range(int(height / 0.4)):
+            ry = 0.2 + rung * 0.4
+            rv, rf = _make_box(ladder_x, ry, 0, 0.15, 0.02, 0.02)
+            parts.append((rv, rf))
+        # Ladder side rails
+        for lz in [-0.15, 0.15]:
+            sv, sf = _make_box(ladder_x, height / 2, lz, 0.02, height / 2, 0.02)
+            parts.append((sv, sf))
+
+    elif style == "stone":
+        # Solid stone walls with windows
+        wall_thick = 0.2
+        # Four walls
+        for axis, sx, sz in [("x", -1, 0), ("x", 1, 0), ("z", 0, -1), ("z", 0, 1)]:
+            wx = sx * hs
+            wz = sz * hs
+            if axis == "x":
+                wv, wf = _make_beveled_box(wx, height / 2, 0,
+                                           wall_thick / 2, height / 2, hs,
+                                           bevel=0.01)
+            else:
+                wv, wf = _make_beveled_box(0, height / 2, wz,
+                                           hs, height / 2, wall_thick / 2,
+                                           bevel=0.01)
+            parts.append((wv, wf))
+
+        # Floor platforms
+        for level in [0, height * 0.33, height * 0.66]:
+            fv, ff = _make_box(0, level, 0, hs - wall_thick, 0.05, hs - wall_thick)
+            parts.append((fv, ff))
+
+        # Crenellated top
+        merlon_w = 0.3
+        merlon_h = 0.4
+        n_merlons = max(2, int(base_size / merlon_w / 2))
+        for side_x, side_z, along in [(hs, 0, "z"), (-hs, 0, "z"),
+                                       (0, hs, "x"), (0, -hs, "x")]:
+            for mi in range(n_merlons):
+                offset = -hs + (mi * 2 + 1) * hs / n_merlons
+                if along == "z":
+                    mv, mf = _make_box(side_x, height + merlon_h / 2, offset,
+                                       wall_thick / 2 + 0.02, merlon_h / 2, merlon_w / 2)
+                else:
+                    mv, mf = _make_box(offset, height + merlon_h / 2, side_z,
+                                       merlon_w / 2, merlon_h / 2, wall_thick / 2 + 0.02)
+                parts.append((mv, mf))
+
+    else:  # ruined
+        # Partial stone walls at varying heights
+        wall_thick = 0.2
+        wall_heights = [height * 0.8, height * 0.5, height * 0.6, height * 0.3]
+        positions = [(-hs, 0, "x"), (hs, 0, "x"), (0, -hs, "z"), (0, hs, "z")]
+
+        for (wx, wz, axis), wh in zip(positions, wall_heights):
+            if axis == "x":
+                wv, wf = _make_beveled_box(wx, wh / 2, 0,
+                                           wall_thick / 2, wh / 2, hs,
+                                           bevel=0.01)
+            else:
+                wv, wf = _make_beveled_box(0, wh / 2, wz,
+                                           hs, wh / 2, wall_thick / 2,
+                                           bevel=0.01)
+            parts.append((wv, wf))
+
+        # Rubble at base
+        for i in range(5):
+            rx = -hs * 0.5 + i * hs * 0.25
+            rz = hs * 0.3 * ((i * 3) % 3 - 1)
+            rv, rf = _make_beveled_box(rx, 0.1, rz, 0.15, 0.1, 0.12, bevel=0.02)
+            parts.append((rv, rf))
+
+        # Broken floor
+        fv, ff = _make_box(0, 0, 0, hs - wall_thick, 0.04, hs - wall_thick)
+        parts.append((fv, ff))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Watchtower_{style}", verts, faces,
+                        style=style, category="fortification")
+
+
+def generate_battlement_mesh(
+    style: str = "stone",
+    width: float = 4.0,
+    height: float = 1.2,
+) -> MeshSpec:
+    """Generate a crenellated battlement wall top section.
+
+    Args:
+        style: "stone" (standard), "weathered" (chipped edges), "ruined" (partially collapsed).
+        width: Total width of the battlement section.
+        height: Total height including merlons.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    wall_thick = 0.4
+    wall_h = height * 0.5  # Lower wall portion
+    merlon_h = height * 0.5  # Upper merlon portion
+
+    if style == "stone":
+        # Base wall
+        wv, wf = _make_beveled_box(0, wall_h / 2, 0,
+                                   width / 2, wall_h / 2, wall_thick / 2,
+                                   bevel=0.01)
+        parts.append((wv, wf))
+
+        # Alternating merlons (raised) and crenels (gaps)
+        merlon_w = 0.5
+        n_merlons = max(2, int(width / (merlon_w * 2)))
+        merlon_spacing = width / (n_merlons * 2)
+        for i in range(n_merlons):
+            mx = -width / 2 + (i * 2 + 0.5) * merlon_spacing * 2
+            mv, mf = _make_beveled_box(mx, wall_h + merlon_h / 2, 0,
+                                       merlon_w / 2, merlon_h / 2, wall_thick / 2 + 0.02,
+                                       bevel=0.008)
+            parts.append((mv, mf))
+
+    elif style == "weathered":
+        # Slightly rougher wall
+        wv, wf = _make_beveled_box(0, wall_h / 2, 0,
+                                   width / 2, wall_h / 2, wall_thick / 2,
+                                   bevel=0.015)
+        parts.append((wv, wf))
+
+        # Weathered merlons with slight size variation
+        merlon_w = 0.5
+        n_merlons = max(2, int(width / (merlon_w * 2)))
+        merlon_spacing = width / (n_merlons * 2)
+        for i in range(n_merlons):
+            mx = -width / 2 + (i * 2 + 0.5) * merlon_spacing * 2
+            # Slight height variation
+            h_var = 1.0 - 0.15 * ((i * 7 + 2) % 3) / 2
+            mv, mf = _make_beveled_box(mx, wall_h + merlon_h * h_var / 2, 0,
+                                       merlon_w / 2 * 0.95, merlon_h * h_var / 2,
+                                       wall_thick / 2 + 0.02,
+                                       bevel=0.012)
+            parts.append((mv, mf))
+
+    else:  # ruined
+        # Broken wall base
+        wv, wf = _make_beveled_box(0, wall_h / 2, 0,
+                                   width / 2, wall_h / 2, wall_thick / 2,
+                                   bevel=0.02)
+        parts.append((wv, wf))
+
+        # Only some merlons remain
+        merlon_w = 0.5
+        n_merlons = max(2, int(width / (merlon_w * 2)))
+        merlon_spacing = width / (n_merlons * 2)
+        for i in range(n_merlons):
+            if (i * 11 + 3) % 4 == 0:
+                continue  # Missing merlon
+            mx = -width / 2 + (i * 2 + 0.5) * merlon_spacing * 2
+            h_var = 0.4 + 0.6 * ((i * 13 + 1) % 5) / 4
+            mv, mf = _make_beveled_box(mx, wall_h + merlon_h * h_var / 2, 0,
+                                       merlon_w / 2, merlon_h * h_var / 2,
+                                       wall_thick / 2,
+                                       bevel=0.015)
+            parts.append((mv, mf))
+
+        # Rubble pieces
+        for i in range(3):
+            rx = -width * 0.3 + i * width * 0.3
+            rv, rf = _make_box(rx, 0.05, wall_thick / 2 + 0.1,
+                               0.12, 0.05, 0.08)
+            parts.append((rv, rf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Battlement_{style}", verts, faces,
+                        style=style, category="fortification")
+
+
+def generate_moat_edge_mesh(
+    style: str = "stone",
+    width: float = 4.0,
+    depth: float = 1.5,
+) -> MeshSpec:
+    """Generate a moat edge section with sloped bank and retaining wall.
+
+    Args:
+        style: "stone" (masonry retaining wall), "earth" (natural slope), "reinforced" (buttressed).
+        width: Total width of the section.
+        depth: Depth of the moat.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    section_d = 2.0  # Depth along Z axis
+
+    if style == "stone":
+        # Vertical retaining wall
+        wall_thick = 0.3
+        wv, wf = _make_beveled_box(0, -depth / 2, 0,
+                                   width / 2, depth / 2, wall_thick / 2,
+                                   bevel=0.01)
+        parts.append((wv, wf))
+
+        # Top edge / lip
+        lv, lf = _make_beveled_box(0, 0.05, -wall_thick / 2 - 0.1,
+                                   width / 2 + 0.05, 0.05, 0.15,
+                                   bevel=0.008)
+        parts.append((lv, lf))
+
+        # Ground surface behind wall
+        gv, gf = _make_box(0, 0, -wall_thick / 2 - section_d / 2 - 0.1,
+                           width / 2 + 0.1, 0.03, section_d / 2)
+        parts.append((gv, gf))
+
+        # Stone blocks detail
+        block_h = depth / 4
+        for row in range(4):
+            for col in range(max(2, int(width / 0.8))):
+                bx = -width / 2 + (col + 0.5) * width / max(2, int(width / 0.8))
+                by = -depth + (row + 0.5) * block_h
+                sv, sf = _make_box(bx, by, wall_thick / 2 + 0.005,
+                                   0.35, block_h / 2 - 0.01, 0.005)
+                parts.append((sv, sf))
+
+    elif style == "earth":
+        # Sloped bank using a wedge shape
+        # Top ground level
+        gv, gf = _make_box(0, 0, -section_d / 2,
+                           width / 2, 0.03, section_d / 2)
+        parts.append((gv, gf))
+
+        # Slope as series of stepped boxes
+        n_steps = 6
+        for i in range(n_steps):
+            t = i / n_steps
+            sx = width / 2
+            sy = -t * depth
+            sz = t * section_d / 2
+            step_h = depth / n_steps
+            sv, sf = _make_box(0, sy - step_h / 2, sz,
+                               sx * (1.0 - t * 0.3), step_h / 2, section_d / n_steps / 2)
+            parts.append((sv, sf))
+
+    else:  # reinforced
+        # Stone wall with buttresses
+        wall_thick = 0.35
+        wv, wf = _make_beveled_box(0, -depth / 2, 0,
+                                   width / 2, depth / 2, wall_thick / 2,
+                                   bevel=0.01)
+        parts.append((wv, wf))
+
+        # Buttresses
+        n_buttresses = max(2, int(width / 1.5))
+        for i in range(n_buttresses):
+            bx = -width / 2 + (i + 0.5) * width / n_buttresses
+            # Tapered buttress
+            bv, bf = _make_tapered_cylinder(bx, -depth, wall_thick / 2,
+                                            0.15, 0.08, depth,
+                                            segments=4, rings=1)
+            parts.append((bv, bf))
+
+        # Top lip
+        lv, lf = _make_beveled_box(0, 0.05, -wall_thick / 2 - 0.1,
+                                   width / 2 + 0.1, 0.06, 0.15,
+                                   bevel=0.01)
+        parts.append((lv, lf))
+
+        # Ground surface
+        gv, gf = _make_box(0, 0, -wall_thick / 2 - section_d / 2 - 0.1,
+                           width / 2, 0.03, section_d / 2)
+        parts.append((gv, gf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"MoatEdge_{style}", verts, faces,
+                        style=style, category="fortification")
+
+
+def generate_windmill_mesh(
+    style: str = "wooden",
+    base_radius: float = 2.0,
+    height: float = 8.0,
+) -> MeshSpec:
+    """Generate a windmill mesh.
+
+    Args:
+        style: "wooden" (Dutch style) or "stone" (tower mill).
+        base_radius: Radius of the base.
+        height: Total height of the tower.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    segs = 12
+
+    if style == "wooden":
+        # Tapered octagonal body
+        body_v, body_f = _make_tapered_cylinder(
+            0, 0, 0, base_radius, base_radius * 0.6, height * 0.8,
+            segments=8, rings=3)
+        parts.append((body_v, body_f))
+
+        # Roof (cone)
+        roof_v, roof_f = _make_cone(0, height * 0.8, 0, base_radius * 0.65,
+                                     height * 0.2, segments=8)
+        parts.append((roof_v, roof_f))
+
+        # Door
+        door_w = 0.4
+        door_h = 1.0
+        dv, df = _make_beveled_box(0, door_h / 2, base_radius + 0.02,
+                                   door_w / 2, door_h / 2, 0.03,
+                                   bevel=0.005)
+        parts.append((dv, df))
+
+        # Windows (2 levels)
+        for level in [height * 0.35, height * 0.6]:
+            for angle_idx in range(4):
+                angle = math.pi * 2 * angle_idx / 4
+                r_at_h = base_radius + (base_radius * 0.6 - base_radius) * level / (height * 0.8)
+                wx = math.cos(angle) * (r_at_h + 0.02)
+                wz = math.sin(angle) * (r_at_h + 0.02)
+                wv, wf = _make_box(wx, level, wz, 0.12, 0.15, 0.03)
+                parts.append((wv, wf))
+
+        # Four sails/blades
+        blade_len = height * 0.45
+        hub_y = height * 0.7
+        hub_z = base_radius * 0.65 + 0.1
+        # Hub
+        hv, hf = _make_cylinder(0, hub_y, hub_z, 0.12, 0.15, segments=8)
+        parts.append((hv, hf))
+
+        for blade in range(4):
+            angle = math.pi / 2 * blade + math.pi / 8
+            # Blade arm
+            bx = math.cos(angle) * blade_len / 2
+            by = hub_y + math.sin(angle) * blade_len / 2
+            arm_v, arm_f = _make_box(bx, by, hub_z + 0.08,
+                                     0.03, blade_len / 2, 0.02)
+            parts.append((arm_v, arm_f))
+
+            # Sail cloth (thin plane along each arm)
+            sail_offset_x = math.cos(angle) * blade_len * 0.4
+            sail_offset_y = math.sin(angle) * blade_len * 0.4
+            sv, sf = _make_box(sail_offset_x, hub_y + sail_offset_y,
+                               hub_z + 0.1,
+                               0.25, blade_len * 0.35, 0.005)
+            parts.append((sv, sf))
+
+    else:  # stone
+        # Cylindrical stone tower
+        body_v, body_f = _make_tapered_cylinder(
+            0, 0, 0, base_radius, base_radius * 0.8, height * 0.85,
+            segments=segs, rings=4)
+        parts.append((body_v, body_f))
+
+        # Conical roof
+        roof_v, roof_f = _make_cone(0, height * 0.85, 0, base_radius * 0.85,
+                                     height * 0.15, segments=segs)
+        parts.append((roof_v, roof_f))
+
+        # Door
+        dv, df = _make_beveled_box(0, 0.5, base_radius + 0.02,
+                                   0.4, 0.5, 0.03, bevel=0.005)
+        parts.append((dv, df))
+
+        # Stone band details
+        for band_y in [height * 0.25, height * 0.5, height * 0.75]:
+            r_at = base_radius + (base_radius * 0.8 - base_radius) * band_y / (height * 0.85)
+            bv, bf = _make_torus_ring(0, band_y, 0, r_at + 0.02, 0.03,
+                                      major_segments=segs, minor_segments=4)
+            parts.append((bv, bf))
+
+        # Four sails
+        blade_len = height * 0.4
+        hub_y = height * 0.75
+        r_at_hub = base_radius + (base_radius * 0.8 - base_radius) * hub_y / (height * 0.85)
+        hub_z = r_at_hub + 0.15
+        hv, hf = _make_cylinder(0, hub_y, hub_z, 0.1, 0.12, segments=8)
+        parts.append((hv, hf))
+
+        for blade in range(4):
+            angle = math.pi / 2 * blade
+            bx = math.cos(angle) * blade_len * 0.4
+            by = hub_y + math.sin(angle) * blade_len * 0.4
+            sv, sf = _make_box(bx, by, hub_z + 0.08,
+                               0.25, blade_len * 0.35, 0.005)
+            parts.append((sv, sf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Windmill_{style}", verts, faces,
+                        style=style, category="infrastructure")
+
+
+def generate_dock_mesh(
+    style: str = "wooden",
+    width: float = 3.0,
+    length: float = 8.0,
+) -> MeshSpec:
+    """Generate a waterfront dock/pier.
+
+    Args:
+        style: "wooden" (plank pier) or "stone" (masonry pier).
+        width: Dock width.
+        length: Dock length along Z axis.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    if style == "wooden":
+        # Support posts underneath
+        post_r = 0.08
+        post_h = 1.5
+        n_post_rows = max(2, int(length / 2.0))
+        for row in range(n_post_rows):
+            z = -length / 2 + (row + 0.5) * length / n_post_rows
+            for side in [-1, 1]:
+                x = side * (width / 2 - 0.1)
+                pv, pf = _make_cylinder(x, -post_h, z, post_r, post_h,
+                                        segments=6)
+                parts.append((pv, pf))
+
+        # Main deck (planks)
+        deck_h = 0.05
+        dv, df = _make_box(0, -deck_h / 2, 0, width / 2, deck_h / 2, length / 2)
+        parts.append((dv, df))
+
+        # Plank line details
+        n_planks = int(width / 0.2)
+        for i in range(n_planks):
+            px = -width / 2 + (i + 0.5) * width / n_planks
+            lv, lf = _make_box(px, 0.005, 0, 0.003, 0.005, length / 2 - 0.05)
+            parts.append((lv, lf))
+
+        # Mooring posts
+        for z_pos in [-length / 2 + 0.5, length / 2 - 0.5]:
+            for side in [-1, 1]:
+                mx = side * (width / 2 - 0.15)
+                mv, mf = _make_cylinder(mx, 0, z_pos, 0.06, 0.5, segments=6)
+                parts.append((mv, mf))
+                # Top cap
+                cv, cf = _make_sphere(mx, 0.52, z_pos, 0.07, rings=4, sectors=6)
+                parts.append((cv, cf))
+
+        # Rope cleats
+        for z_pos in [-length * 0.25, length * 0.25]:
+            cv, cf = _make_box(width / 2 - 0.05, 0.03, z_pos,
+                               0.04, 0.02, 0.08)
+            parts.append((cv, cf))
+
+    else:  # stone
+        # Solid stone base
+        base_h = 1.0
+        bv, bf = _make_beveled_box(0, -base_h / 2, 0,
+                                   width / 2, base_h / 2, length / 2,
+                                   bevel=0.02)
+        parts.append((bv, bf))
+
+        # Stone surface
+        sv, sf = _make_box(0, 0.02, 0, width / 2 + 0.02, 0.02, length / 2 + 0.02)
+        parts.append((sv, sf))
+
+        # Mooring posts (stone bollards)
+        for z_pos in [-length / 2 + 0.5, length / 2 - 0.5]:
+            for side in [-1, 1]:
+                mx = side * (width / 2 - 0.2)
+                mv, mf = _make_tapered_cylinder(mx, 0, z_pos, 0.1, 0.07, 0.4,
+                                                 segments=8, rings=1)
+                parts.append((mv, mf))
+
+        # Step blocks at end
+        for i in range(3):
+            sy = -i * 0.25
+            sv, sf = _make_beveled_box(0, sy, length / 2 + 0.15 + i * 0.3,
+                                       width / 2 * 0.8, 0.1, 0.12,
+                                       bevel=0.01)
+            parts.append((sv, sf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Dock_{style}", verts, faces,
+                        style=style, category="infrastructure")
+
+
+def generate_bridge_stone_mesh(
+    style: str = "arch",
+    span: float = 10.0,
+    width: float = 3.0,
+) -> MeshSpec:
+    """Generate a stone bridge.
+
+    Args:
+        style: "arch" (single arch), "multi_arch" (3 arches), "flat" (beam bridge).
+        span: Total length of the bridge.
+        width: Bridge width.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    deck_thick = 0.2
+    railing_h = 0.6
+
+    if style == "arch":
+        # Single arch
+        arch_segs = 20
+        arch_h = span * 0.2
+
+        # Deck with slight crown
+        deck_verts: list[tuple[float, float, float]] = []
+        deck_faces: list[tuple[int, ...]] = []
+        for i in range(arch_segs + 1):
+            t = i / arch_segs
+            z = -span / 2 + t * span
+            y_crown = math.sin(t * math.pi) * arch_h * 0.08
+            deck_verts.append((-width / 2, y_crown, z))
+            deck_verts.append((-width / 2, y_crown - deck_thick, z))
+            deck_verts.append((width / 2, y_crown - deck_thick, z))
+            deck_verts.append((width / 2, y_crown, z))
+
+        for i in range(arch_segs):
+            b = i * 4
+            deck_faces.append((b + 0, b + 3, b + 7, b + 4))
+            deck_faces.append((b + 1, b + 5, b + 6, b + 2))
+            deck_faces.append((b + 0, b + 4, b + 5, b + 1))
+            deck_faces.append((b + 3, b + 2, b + 6, b + 7))
+        parts.append((deck_verts, deck_faces))
+
+        # Arch underneath
+        arch_thick = 0.12
+        arch_v: list[tuple[float, float, float]] = []
+        arch_f: list[tuple[int, ...]] = []
+        for i in range(arch_segs + 1):
+            t = i / arch_segs
+            z = -span / 2 + t * span
+            y = -math.sin(t * math.pi) * arch_h - deck_thick
+            for dx in [-width * 0.4, width * 0.4]:
+                arch_v.append((dx - arch_thick / 2, y, z))
+                arch_v.append((dx + arch_thick / 2, y, z))
+                arch_v.append((dx + arch_thick / 2, y - arch_thick, z))
+                arch_v.append((dx - arch_thick / 2, y - arch_thick, z))
+
+        for i in range(arch_segs):
+            for side in range(2):
+                b = i * 8 + side * 4
+                for j in range(4):
+                    j2 = (j + 1) % 4
+                    arch_f.append((b + j, b + j2, b + 8 + j2, b + 8 + j))
+        parts.append((arch_v, arch_f))
+
+        # Railings
+        for sx in [-width / 2, width / 2]:
+            rv, rf = _make_box(sx, railing_h / 2, 0,
+                               0.08, railing_h / 2, span / 2)
+            parts.append((rv, rf))
+
+        # Cobble surface detail
+        for i in range(int(span / 0.5)):
+            z = -span / 2 + (i + 0.5) * 0.5
+            sv, sf = _make_box(0, 0.005, z, width / 2 - 0.1, 0.005, 0.2)
+            parts.append((sv, sf))
+
+    elif style == "multi_arch":
+        n_arches = 3
+        arch_span = span / n_arches
+        arch_h = arch_span * 0.35
+
+        # Deck
+        dv, df = _make_beveled_box(0, 0, 0,
+                                   width / 2, deck_thick / 2, span / 2,
+                                   bevel=0.01)
+        parts.append((dv, df))
+
+        # Three arches underneath
+        arch_segs = 12
+        for a in range(n_arches):
+            center_z = -span / 2 + (a + 0.5) * arch_span
+            arch_v: list[tuple[float, float, float]] = []
+            arch_f: list[tuple[int, ...]] = []
+            for i in range(arch_segs + 1):
+                t = i / arch_segs
+                z = center_z - arch_span / 2 + t * arch_span
+                y = -math.sin(t * math.pi) * arch_h - deck_thick
+                arch_v.append((-width * 0.35, y, z))
+                arch_v.append((-width * 0.35, y - 0.1, z))
+                arch_v.append((width * 0.35, y - 0.1, z))
+                arch_v.append((width * 0.35, y, z))
+
+            for i in range(arch_segs):
+                b = i * 4
+                arch_f.append((b + 0, b + 3, b + 7, b + 4))
+                arch_f.append((b + 1, b + 5, b + 6, b + 2))
+                arch_f.append((b + 0, b + 4, b + 5, b + 1))
+                arch_f.append((b + 3, b + 2, b + 6, b + 7))
+            parts.append((arch_v, arch_f))
+
+        # Piers between arches
+        for p in range(n_arches - 1):
+            pz = -span / 2 + (p + 1) * arch_span
+            pv, pf = _make_beveled_box(0, -arch_h / 2 - deck_thick, pz,
+                                       width / 2 * 0.9, arch_h / 2, 0.2,
+                                       bevel=0.01)
+            parts.append((pv, pf))
+
+        # Railings
+        for sx in [-width / 2, width / 2]:
+            rv, rf = _make_box(sx, railing_h / 2 + deck_thick / 2, 0,
+                               0.08, railing_h / 2, span / 2)
+            parts.append((rv, rf))
+
+    else:  # flat
+        # Simple beam bridge
+        dv, df = _make_beveled_box(0, 0, 0,
+                                   width / 2, deck_thick / 2, span / 2,
+                                   bevel=0.01)
+        parts.append((dv, df))
+
+        # Support beams underneath
+        n_beams = max(3, int(span / 2.5))
+        for i in range(n_beams):
+            bz = -span / 2 + (i + 0.5) * span / n_beams
+            bv, bf = _make_box(0, -deck_thick / 2 - 0.15, bz,
+                               width / 2 - 0.1, 0.1, 0.08)
+            parts.append((bv, bf))
+
+        # Railings
+        for sx in [-width / 2, width / 2]:
+            rv, rf = _make_box(sx, railing_h / 2 + deck_thick / 2, 0,
+                               0.06, railing_h / 2, span / 2)
+            parts.append((rv, rf))
+
+        # Railing posts
+        n_posts = max(2, int(span / 1.5))
+        for sx in [-width / 2, width / 2]:
+            for i in range(n_posts):
+                pz = -span / 2 + (i + 0.5) * span / n_posts
+                pv, pf = _make_cylinder(sx, deck_thick / 2, pz,
+                                        0.04, railing_h, segments=6)
+                parts.append((pv, pf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"StoneBridge_{style}", verts, faces,
+                        style=style, category="infrastructure")
+
+
+def generate_rope_bridge_mesh(
+    style: str = "simple",
+    span: float = 8.0,
+    width: float = 1.5,
+) -> MeshSpec:
+    """Generate a rope/plank bridge with catenary sag.
+
+    Args:
+        style: "simple" (basic planks), "sturdy" (reinforced), "damaged" (missing planks).
+        span: Bridge span length.
+        width: Bridge width.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    plank_count = int(span / 0.18)
+    rope_r = 0.015
+    rope_h = 0.7
+    sag_factor = 0.06
+
+    if style == "simple":
+        # Planks with catenary sag
+        for i in range(plank_count):
+            z = -span / 2 + (i + 0.5) * span / plank_count
+            t = (z + span / 2) / span
+            sag = -math.sin(t * math.pi) * span * sag_factor
+            pv, pf = _make_box(0, sag, z, width / 2 * 0.9, 0.015, 0.07)
+            parts.append((pv, pf))
+
+        # Rope handrails (series of short cylinders following catenary)
+        rope_segs = plank_count // 2
+        for sx in [-width / 2, width / 2]:
+            for i in range(rope_segs):
+                z = -span / 2 + (i + 0.5) * span / rope_segs
+                t = (z + span / 2) / span
+                sag = -math.sin(t * math.pi) * span * sag_factor
+                # Vertical rope posts
+                pv, pf = _make_cylinder(sx, sag, z, rope_r * 2, rope_h, segments=4)
+                parts.append((pv, pf))
+
+        # Top rope rails
+        for sx in [-width / 2, width / 2]:
+            rv, rf = _make_box(sx, rope_h * 0.5, 0, rope_r, rope_r, span / 2)
+            parts.append((rv, rf))
+
+    elif style == "sturdy":
+        # More planks, thicker ropes
+        for i in range(plank_count):
+            z = -span / 2 + (i + 0.5) * span / plank_count
+            t = (z + span / 2) / span
+            sag = -math.sin(t * math.pi) * span * sag_factor * 0.5
+            pv, pf = _make_box(0, sag, z, width / 2 * 0.95, 0.025, 0.08)
+            parts.append((pv, pf))
+
+        # Sturdier support posts
+        n_posts = max(4, int(span / 1.5))
+        for sx in [-width / 2, width / 2]:
+            for i in range(n_posts):
+                z = -span / 2 + (i + 0.5) * span / n_posts
+                t = (z + span / 2) / span
+                sag = -math.sin(t * math.pi) * span * sag_factor * 0.5
+                pv, pf = _make_cylinder(sx, sag, z, rope_r * 3, rope_h,
+                                        segments=6)
+                parts.append((pv, pf))
+
+        # Double rope rails
+        for sx in [-width / 2, width / 2]:
+            for ry in [rope_h * 0.4, rope_h * 0.8]:
+                rv, rf = _make_box(sx, ry, 0, rope_r * 1.5, rope_r * 1.5, span / 2)
+                parts.append((rv, rf))
+
+        # Cross-bracing underneath
+        for i in range(int(span / 2)):
+            z = -span / 2 + (i + 0.5) * 2.0
+            cv, cf = _make_box(0, -0.1, z, width / 2, 0.01, 0.02)
+            parts.append((cv, cf))
+
+    else:  # damaged
+        # Some planks missing
+        for i in range(plank_count):
+            if (i * 11 + 7) % 5 == 0:
+                continue  # Missing plank
+            z = -span / 2 + (i + 0.5) * span / plank_count
+            t = (z + span / 2) / span
+            sag = -math.sin(t * math.pi) * span * sag_factor * 1.2
+            # Some planks are tilted/broken
+            y_off = 0.02 * ((i * 7) % 3 - 1)
+            pv, pf = _make_box(0, sag + y_off, z,
+                               width / 2 * (0.7 + 0.2 * ((i * 3) % 3)),
+                               0.012, 0.065)
+            parts.append((pv, pf))
+
+        # Frayed rope posts (fewer)
+        n_posts = max(3, int(span / 2.5))
+        for sx in [-width / 2, width / 2]:
+            for i in range(n_posts):
+                z = -span / 2 + (i + 0.5) * span / n_posts
+                t = (z + span / 2) / span
+                sag = -math.sin(t * math.pi) * span * sag_factor * 1.2
+                pv, pf = _make_cylinder(sx, sag, z, rope_r * 1.5,
+                                        rope_h * (0.5 + 0.5 * ((i * 7) % 3) / 2),
+                                        segments=4)
+                parts.append((pv, pf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"RopeBridge_{style}", verts, faces,
+                        style=style, category="infrastructure")
+
+
+def generate_tent_mesh(
+    style: str = "small",
+) -> MeshSpec:
+    """Generate a camping tent.
+
+    Args:
+        style: "small" (A-frame), "large" (pavilion), "command" (multi-room).
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    if style == "small":
+        # A-frame tent
+        tent_w = 1.2
+        tent_h = 1.0
+        tent_d = 1.8
+        hw = tent_w / 2
+        hd = tent_d / 2
+
+        # Tent body as triangular prism
+        tent_verts = [
+            (-hw, 0, -hd),
+            (hw, 0, -hd),
+            (0, tent_h, -hd),
+            (-hw, 0, hd),
+            (hw, 0, hd),
+            (0, tent_h, hd),
+        ]
+        tent_faces = [
+            (0, 2, 1),
+            (3, 4, 5),
+            (0, 3, 5, 2),
+            (1, 2, 5, 4),
+            (0, 1, 4, 3),
+        ]
+        parts.append((tent_verts, tent_faces))
+
+        # Support poles
+        pv, pf = _make_cylinder(0, 0, -hd - 0.05, 0.02, tent_h + 0.1, segments=4)
+        parts.append((pv, pf))
+        pv, pf = _make_cylinder(0, 0, hd + 0.05, 0.02, tent_h + 0.1, segments=4)
+        parts.append((pv, pf))
+
+        # Ridge pole
+        rv, rf = _make_box(0, tent_h + 0.02, 0, 0.015, 0.015, hd + 0.05)
+        parts.append((rv, rf))
+
+        # Guy rope anchors
+        for sx in [-1, 1]:
+            for sz in [-1, 1]:
+                gv, gf = _make_box(sx * (hw + 0.3), 0.01, sz * (hd + 0.3),
+                                   0.005, 0.005, 0.005)
+                parts.append((gv, gf))
+
+    elif style == "large":
+        # Pavilion tent (4-pole)
+        tent_w = 3.0
+        tent_h = 2.5
+        tent_d = 3.0
+        hw = tent_w / 2
+        hd = tent_d / 2
+        wall_h = 1.2
+
+        # Four corner poles
+        for sx in [-1, 1]:
+            for sz in [-1, 1]:
+                pv, pf = _make_cylinder(sx * (hw - 0.05), 0, sz * (hd - 0.05),
+                                        0.04, wall_h + 0.5, segments=6)
+                parts.append((pv, pf))
+
+        # Center pole
+        pv, pf = _make_cylinder(0, 0, 0, 0.05, tent_h, segments=6)
+        parts.append((pv, pf))
+
+        # Roof (pyramid)
+        roof_verts = [
+            (-hw, wall_h, -hd),
+            (hw, wall_h, -hd),
+            (hw, wall_h, hd),
+            (-hw, wall_h, hd),
+            (0, tent_h, 0),
+        ]
+        roof_faces = [
+            (0, 1, 4),
+            (1, 2, 4),
+            (2, 3, 4),
+            (3, 0, 4),
+        ]
+        parts.append((roof_verts, roof_faces))
+
+        # Wall panels
+        wall_thick = 0.02
+        for sz in [-hd, hd]:
+            wv, wf = _make_box(0, wall_h / 2, sz, hw, wall_h / 2, wall_thick)
+            parts.append((wv, wf))
+        for sx in [-hw, hw]:
+            wv, wf = _make_box(sx, wall_h / 2, 0, wall_thick, wall_h / 2, hd)
+            parts.append((wv, wf))
+
+        # Entrance flap
+        fv, ff = _make_box(hw * 0.3, wall_h / 2, -hd - 0.03,
+                           hw * 0.25, wall_h / 2, wall_thick)
+        parts.append((fv, ff))
+
+    else:  # command
+        # Multi-room command tent
+        tent_w = 4.0
+        tent_h = 2.8
+        tent_d = 5.0
+        hw = tent_w / 2
+        hd = tent_d / 2
+        wall_h = 1.5
+
+        # Main poles (6)
+        for sx in [-1, 0, 1]:
+            for sz in [-1, 1]:
+                pv, pf = _make_cylinder(sx * (hw - 0.1), 0, sz * (hd - 0.1),
+                                        0.05, wall_h + 0.8, segments=6)
+                parts.append((pv, pf))
+
+        # Two center poles for ridge
+        for sz in [-hd * 0.4, hd * 0.4]:
+            pv, pf = _make_cylinder(0, 0, sz, 0.06, tent_h, segments=6)
+            parts.append((pv, pf))
+
+        # Ridge beam
+        rv, rf = _make_box(0, tent_h, 0, 0.03, 0.03, hd * 0.8)
+        parts.append((rv, rf))
+
+        # Roof panels (two slopes)
+        for sx_sign in [-1, 1]:
+            roof_verts = [
+                (sx_sign * hw, wall_h, -hd),
+                (0, tent_h, -hd * 0.8),
+                (0, tent_h, hd * 0.8),
+                (sx_sign * hw, wall_h, hd),
+            ]
+            roof_faces = [(0, 1, 2, 3)]
+            parts.append((roof_verts, roof_faces))
+
+        # End caps (triangles)
+        for sz_sign in [-1, 1]:
+            cap_verts = [
+                (-hw, wall_h, sz_sign * hd),
+                (hw, wall_h, sz_sign * hd),
+                (0, tent_h, sz_sign * hd * 0.8),
+            ]
+            cap_faces = [(0, 1, 2) if sz_sign == -1 else (0, 2, 1)]
+            parts.append((cap_verts, cap_faces))
+
+        # Wall panels
+        for sz in [-hd, hd]:
+            wv, wf = _make_box(0, wall_h / 2, sz, hw, wall_h / 2, 0.02)
+            parts.append((wv, wf))
+        for sx in [-hw, hw]:
+            wv, wf = _make_box(sx, wall_h / 2, 0, 0.02, wall_h / 2, hd)
+            parts.append((wv, wf))
+
+        # Interior divider wall
+        dv, df = _make_box(0, wall_h / 2, 0, hw * 0.9, wall_h / 2, 0.015)
+        parts.append((dv, df))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Tent_{style}", verts, faces,
+                        style=style, category="camp")
+
+
+def generate_hitching_post_mesh(
+    style: str = "wooden",
+) -> MeshSpec:
+    """Generate a hitching post for tying horses.
+
+    Args:
+        style: "wooden" (rough timber) or "iron" (metal post).
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    post_h = 1.0
+    bar_len = 1.5
+
+    if style == "wooden":
+        for sx in [-bar_len / 2, bar_len / 2]:
+            pv, pf = _make_beveled_box(sx, post_h / 2, 0,
+                                       0.05, post_h / 2, 0.05,
+                                       bevel=0.005)
+            parts.append((pv, pf))
+
+        bv, bf = _make_beveled_box(0, post_h, 0,
+                                   bar_len / 2, 0.04, 0.04,
+                                   bevel=0.005)
+        parts.append((bv, bf))
+
+        for i in range(3):
+            rx = -bar_len / 3 + i * bar_len / 3
+            rv, rf = _make_torus_ring(rx, post_h - 0.08, 0.06,
+                                      0.04, 0.008,
+                                      major_segments=8, minor_segments=4)
+            parts.append((rv, rf))
+
+    else:  # iron
+        for sx in [-bar_len / 2, bar_len / 2]:
+            pv, pf = _make_cylinder(sx, 0, 0, 0.03, post_h, segments=8)
+            parts.append((pv, pf))
+            cv, cf = _make_sphere(sx, post_h + 0.03, 0, 0.04, rings=4, sectors=6)
+            parts.append((cv, cf))
+
+        hv, hf = _make_box(0, post_h * 0.85, 0, bar_len / 2, 0.02, 0.02)
+        parts.append((hv, hf))
+
+        for i in range(3):
+            rx = -bar_len / 3 + i * bar_len / 3
+            rv, rf = _make_torus_ring(rx, post_h * 0.85 - 0.06, 0.04,
+                                      0.035, 0.006,
+                                      major_segments=8, minor_segments=4)
+            parts.append((rv, rf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"HitchingPost_{style}", verts, faces,
+                        style=style, category="camp")
+
+
+def generate_feeding_trough_mesh(
+    style: str = "wooden",
+) -> MeshSpec:
+    """Generate an animal feeding trough.
+
+    Args:
+        style: "wooden" (timber) or "stone" (masonry).
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    trough_w = 1.2
+    trough_h = 0.4
+    trough_d = 0.5
+
+    if style == "wooden":
+        ov, of_ = _make_beveled_box(0, trough_h / 2 + 0.3, 0,
+                                    trough_w / 2, trough_h / 2, trough_d / 2,
+                                    bevel=0.01)
+        parts.append((ov, of_))
+
+        iv, if_ = _make_box(0, trough_h / 2 + 0.33, 0,
+                            trough_w / 2 - 0.04, trough_h / 2 - 0.03,
+                            trough_d / 2 - 0.04)
+        parts.append((iv, if_))
+
+        leg_h = 0.3
+        for sx in [-1, 1]:
+            for sz in [-1, 1]:
+                lx = sx * (trough_w / 2 - 0.08)
+                lz = sz * (trough_d / 2 - 0.06)
+                lv, lf = _make_beveled_box(lx, leg_h / 2, lz,
+                                           0.04, leg_h / 2, 0.04,
+                                           bevel=0.005)
+                parts.append((lv, lf))
+
+    else:  # stone
+        ov, of_ = _make_beveled_box(0, trough_h / 2 + 0.2, 0,
+                                    trough_w / 2, trough_h / 2, trough_d / 2,
+                                    bevel=0.015)
+        parts.append((ov, of_))
+
+        iv, if_ = _make_box(0, trough_h / 2 + 0.25, 0,
+                            trough_w / 2 - 0.06, trough_h / 2 - 0.04,
+                            trough_d / 2 - 0.06)
+        parts.append((iv, if_))
+
+        bv, bf = _make_beveled_box(0, 0.1, 0,
+                                   trough_w / 2 + 0.03, 0.1, trough_d / 2 + 0.03,
+                                   bevel=0.01)
+        parts.append((bv, bf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"FeedingTrough_{style}", verts, faces,
+                        style=style, category="camp")
+
+
+def generate_barricade_outdoor_mesh(
+    style: str = "wooden",
+    width: float = 2.0,
+    height: float = 1.2,
+) -> MeshSpec:
+    """Generate a defensive barricade for outdoor fortification.
+
+    Args:
+        style: "wooden" (angled stakes), "sandbag" (stacked bags), "rubble" (piled debris).
+        width: Barricade width.
+        height: Barricade height.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    if style == "wooden":
+        n_stakes = max(4, int(width / 0.25))
+        stake_r = 0.03
+        for i in range(n_stakes):
+            x = -width / 2 + (i + 0.5) * width / n_stakes
+            sv, sf = _make_cylinder(x, 0, 0, stake_r, height, segments=6)
+            tilt = 0.15
+            tilted = []
+            for v in sv:
+                ny = v[1]
+                nz = v[2] + (v[1] / height) * tilt * height
+                tilted.append((v[0], ny, nz))
+            parts.append((tilted, sf))
+
+            cv, cf = _make_cone(x, height, tilt * height,
+                                stake_r * 1.5, height * 0.12, segments=4)
+            parts.append((cv, cf))
+
+        bv, bf = _make_box(0, height * 0.4, -0.05,
+                           width / 2, 0.03, 0.03)
+        parts.append((bv, bf))
+
+        lv, lf = _make_box(0, 0.04, -0.1, width / 2, 0.04, 0.06)
+        parts.append((lv, lf))
+
+    elif style == "sandbag":
+        bag_w = 0.35
+        bag_h = 0.12
+        bag_d = 0.25
+        rows = max(2, int(height / (bag_h * 0.9)))
+
+        total_h = 0.0
+        for row in range(rows):
+            bags_in_row = max(2, int(width / bag_w))
+            y = total_h + bag_h / 2
+            offset_x = bag_w * 0.5 if row % 2 else 0
+            for i in range(bags_in_row):
+                x = -width / 2 + offset_x + (i + 0.5) * width / bags_in_row
+                sv, sf = _make_beveled_box(x, y, 0,
+                                           bag_w / 2 * 0.9, bag_h / 2,
+                                           bag_d / 2,
+                                           bevel=0.01)
+                parts.append((sv, sf))
+            total_h += bag_h * 0.9
+
+    else:  # rubble
+        n_pieces = max(8, int(width * height * 5))
+        for i in range(n_pieces):
+            t = i / n_pieces
+            x = -width / 2 + t * width + 0.1 * ((i * 7 + 3) % 5 - 2)
+            h_frac = 1.0 - abs(t - 0.5) * 2
+            y = h_frac * height * ((i * 11 + 1) % 5) / 5
+            z = 0.15 * ((i * 13 + 2) % 4 - 2)
+            sz_x = 0.08 + 0.12 * ((i * 17 + 1) % 3) / 2
+            sz_y = 0.05 + 0.08 * ((i * 19 + 3) % 3) / 2
+            sz_z = 0.06 + 0.1 * ((i * 23 + 2) % 3) / 2
+            rv, rf = _make_beveled_box(x, y + sz_y, z,
+                                       sz_x, sz_y, sz_z,
+                                       bevel=0.01)
+            parts.append((rv, rf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"BarricadeOutdoor_{style}", verts, faces,
+                        style=style, category="camp")
+
+
+def generate_lookout_post_mesh(
+    style: str = "raised",
+) -> MeshSpec:
+    """Generate an elevated observation/lookout post.
+
+    Args:
+        style: "raised" (tall platform) or "ground" (low blind).
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    if style == "raised":
+        platform_h = 3.0
+        platform_size = 1.5
+        hs = platform_size / 2
+        post_r = 0.06
+
+        for sx in [-1, 1]:
+            for sz in [-1, 1]:
+                top_x = sx * (hs - 0.05)
+                top_z = sz * (hs - 0.05)
+                bot_x = sx * (hs + 0.15)
+                bot_z = sz * (hs + 0.15)
+                pv, pf = _make_cylinder(top_x, 0, top_z, post_r,
+                                        platform_h, segments=6)
+                splayed = []
+                for v in pv:
+                    t = v[1] / platform_h
+                    nx = v[0] + (1.0 - t) * (bot_x - top_x)
+                    nz = v[2] + (1.0 - t) * (bot_z - top_z)
+                    splayed.append((nx, v[1], nz))
+                parts.append((splayed, pf))
+
+        for brace_h in [platform_h * 0.3, platform_h * 0.6]:
+            bv, bf = _make_box(0, brace_h, 0, hs + 0.1, 0.02, 0.02)
+            parts.append((bv, bf))
+            bv, bf = _make_box(0, brace_h, 0, 0.02, 0.02, hs + 0.1)
+            parts.append((bv, bf))
+
+        fv, ff = _make_box(0, platform_h, 0, hs + 0.1, 0.04, hs + 0.1)
+        parts.append((fv, ff))
+
+        rail_h = 0.7
+        for sx in [-1, 1]:
+            for sz in [-1, 1]:
+                rv, rf = _make_cylinder(sx * hs, platform_h + 0.04, sz * hs,
+                                        0.025, rail_h, segments=4)
+                parts.append((rv, rf))
+        for sx in [-hs, hs]:
+            hv, hf = _make_box(sx, platform_h + 0.04 + rail_h, 0,
+                               0.02, 0.02, hs)
+            parts.append((hv, hf))
+        for sz in [-hs, hs]:
+            hv, hf = _make_box(0, platform_h + 0.04 + rail_h, sz,
+                               hs, 0.02, 0.02)
+            parts.append((hv, hf))
+
+        roof_h = 1.0
+        for sx in [-1, 1]:
+            for sz in [-1, 1]:
+                rv, rf = _make_cylinder(sx * (hs - 0.05),
+                                        platform_h + 0.04 + rail_h, sz * (hs - 0.05),
+                                        0.02, roof_h, segments=4)
+                parts.append((rv, rf))
+        roof_top = platform_h + 0.04 + rail_h + roof_h
+        rv, rf = _make_box(0, roof_top, 0, hs + 0.15, 0.03, hs + 0.15)
+        parts.append((rv, rf))
+
+        ladder_x = hs + 0.05
+        for rung in range(int(platform_h / 0.35)):
+            ry = 0.2 + rung * 0.35
+            rv, rf = _make_box(ladder_x, ry, 0, 0.12, 0.015, 0.015)
+            parts.append((rv, rf))
+        for lz in [-0.12, 0.12]:
+            sv, sf = _make_box(ladder_x, platform_h / 2, lz,
+                               0.015, platform_h / 2, 0.015)
+            parts.append((sv, sf))
+
+    else:  # ground
+        blind_w = 1.5
+        blind_h = 1.2
+        blind_d = 1.5
+
+        wv, wf = _make_box(0, blind_h / 2, -blind_d / 2,
+                           blind_w / 2, blind_h / 2, 0.04)
+        parts.append((wv, wf))
+        for sx in [-blind_w / 2, blind_w / 2]:
+            wv, wf = _make_box(sx, blind_h / 2, 0,
+                               0.04, blind_h / 2, blind_d / 2)
+            parts.append((wv, wf))
+
+        rv, rf = _make_box(0, blind_h + 0.03, -blind_d * 0.1,
+                           blind_w / 2 + 0.1, 0.03, blind_d / 2 + 0.1)
+        parts.append((rv, rf))
+
+        sv, sf = _make_box(0, blind_h * 0.7, blind_d / 2 - 0.04,
+                           blind_w * 0.3, 0.05, 0.02)
+        parts.append((sv, sf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"LookoutPost_{style}", verts, faces,
+                        style=style, category="camp")
+
+
+def generate_spike_fence_mesh(
+    style: str = "iron",
+    length: float = 3.0,
+    height: float = 1.5,
+) -> MeshSpec:
+    """Generate a defensive spiked fence section.
+
+    Args:
+        style: "iron" (ornamental) or "wood" (rough stakes).
+        length: Total fence length.
+        height: Total fence height.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    if style == "iron":
+        n_spikes = max(4, int(length / 0.15))
+        spike_spacing = length / n_spikes
+        bar_r = 0.012
+
+        for i in range(n_spikes):
+            x = -length / 2 + (i + 0.5) * spike_spacing
+            sv, sf = _make_cylinder(x, 0, 0, bar_r, height * 0.85,
+                                    segments=6)
+            parts.append((sv, sf))
+            tv, tf = _make_cone(x, height * 0.85, 0, bar_r * 2.5,
+                                height * 0.15, segments=4)
+            parts.append((tv, tf))
+
+        for ry in [height * 0.15, height * 0.5, height * 0.8]:
+            rv, rf = _make_box(0, ry, 0, length / 2, bar_r * 1.2, bar_r * 1.2)
+            parts.append((rv, rf))
+
+        for sx in [-length / 2, length / 2]:
+            pv, pf = _make_cylinder(sx, 0, 0, bar_r * 3, height, segments=8)
+            parts.append((pv, pf))
+            fv, ff = _make_sphere(sx, height + 0.02, 0, bar_r * 4,
+                                  rings=4, sectors=6)
+            parts.append((fv, ff))
+
+        for i in range(max(1, n_spikes // 4)):
+            x = -length / 2 + (i + 0.5) * length / max(1, n_spikes // 4)
+            dv, df = _make_torus_ring(x, height * 0.65, 0,
+                                      0.04, 0.005,
+                                      major_segments=8, minor_segments=3)
+            parts.append((dv, df))
+
+    else:  # wood
+        n_stakes = max(4, int(length / 0.2))
+        stake_spacing = length / n_stakes
+
+        for i in range(n_stakes):
+            x = -length / 2 + (i + 0.5) * stake_spacing
+            h_var = 0.85 + 0.15 * ((i * 7 + 2) % 4) / 3
+            stake_h = height * h_var
+            sv, sf = _make_cylinder(x, 0, 0, 0.03, stake_h * 0.8,
+                                    segments=5)
+            parts.append((sv, sf))
+            tv, tf = _make_cone(x, stake_h * 0.8, 0, 0.04, stake_h * 0.2,
+                                segments=4)
+            parts.append((tv, tf))
+
+        for ry in [height * 0.2, height * 0.55]:
+            rv, rf = _make_box(0, ry, 0.04, length / 2, 0.03, 0.03)
+            parts.append((rv, rf))
+
+        for sx in [-length / 2, length / 2]:
+            pv, pf = _make_cylinder(sx, 0, 0, 0.05, height, segments=6)
+            parts.append((pv, pf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"SpikeFence_{style}", verts, faces,
+                        style=style, category="camp")
+
+
+# =========================================================================
+# CATEGORY: DUNGEON PROPS & TRAPS (expanded)
+# =========================================================================
+
+
+def generate_portcullis_mesh(
+    width: float = 2.0,
+    height: float = 2.5,
+) -> MeshSpec:
+    """Generate an iron portcullis gate mesh.
+
+    Args:
+        width: Gate width.
+        height: Gate height.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    bar_r = 0.018
+    h_bar_r = 0.012
+    v_bar_count = 8
+    h_bar_count = 5
+    bar_spacing = width / (v_bar_count + 1)
+
+    # Vertical bars with pointed bottoms
+    for i in range(v_bar_count):
+        bx = -width / 2 + (i + 1) * bar_spacing
+        bv, bf = _make_cylinder(bx, 0, 0, bar_r, height, segments=6)
+        parts.append((bv, bf))
+        # Pointed tip at bottom
+        pv, pf = _make_cone(bx, -0.08, 0, bar_r, 0.08, segments=6)
+        parts.append((pv, pf))
+
+    # Horizontal bars
+    for j in range(h_bar_count):
+        hy = (j + 1) * height / (h_bar_count + 1)
+        hv, hf = _make_box(0, hy, 0, width / 2, h_bar_r, h_bar_r)
+        parts.append((hv, hf))
+
+    # Top frame bar
+    tv, tf = _make_beveled_box(0, height + 0.03, 0,
+                               width / 2 + 0.04, 0.03, 0.03,
+                               bevel=0.005)
+    parts.append((tv, tf))
+
+    # Track channels on sides
+    track_depth = 0.04
+    track_width = bar_r * 3
+    for side in [-1, 1]:
+        tx = side * (width / 2 + track_width)
+        tv2, tf2 = _make_beveled_box(tx, height / 2, 0,
+                                     track_width / 2, height / 2, track_depth,
+                                     bevel=0.003)
+        parts.append((tv2, tf2))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Portcullis", verts, faces, category="dungeon_prop")
+
+
+def generate_iron_gate_mesh(
+    width: float = 1.2,
+    height: float = 2.0,
+    style: str = "barred",
+) -> MeshSpec:
+    """Generate an iron gate/door mesh.
+
+    Args:
+        width: Gate width.
+        height: Gate height.
+        style: "barred", "solid", or "ornate".
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    frame_w = 0.06
+    frame_d = 0.04
+
+    # Door frame
+    lv, lf = _make_beveled_box(-width / 2 - frame_w / 2, height / 2, 0,
+                               frame_w / 2, height / 2, frame_d,
+                               bevel=0.005)
+    parts.append((lv, lf))
+    rv, rf = _make_beveled_box(width / 2 + frame_w / 2, height / 2, 0,
+                               frame_w / 2, height / 2, frame_d,
+                               bevel=0.005)
+    parts.append((rv, rf))
+    tv, tf = _make_beveled_box(0, height + frame_w / 2, 0,
+                               width / 2 + frame_w, frame_w / 2, frame_d,
+                               bevel=0.005)
+    parts.append((tv, tf))
+
+    if style == "barred":
+        bar_r = 0.012
+        bar_count = 6
+        spacing = width / (bar_count + 1)
+        for i in range(bar_count):
+            bx = -width / 2 + (i + 1) * spacing
+            bv, bf = _make_cylinder(bx, 0, 0, bar_r, height, segments=6)
+            parts.append((bv, bf))
+        cv, cf = _make_box(0, height * 0.5, 0, width / 2, 0.015, 0.015)
+        parts.append((cv, cf))
+        cv2, cf2 = _make_box(0, height * 0.25, 0, width / 2, 0.015, 0.015)
+        parts.append((cv2, cf2))
+
+    elif style == "solid":
+        panel_thick = 0.02
+        pv, pf = _make_beveled_box(0, height / 2, 0,
+                                   width / 2 - 0.01, height / 2 - 0.01, panel_thick,
+                                   bevel=0.003)
+        parts.append((pv, pf))
+        rivet_r = 0.006
+        for rx in [-width * 0.3, 0, width * 0.3]:
+            for ry in [height * 0.2, height * 0.5, height * 0.8]:
+                sv, sf = _make_sphere(rx, ry, panel_thick + rivet_r * 0.5,
+                                      rivet_r, rings=3, sectors=4)
+                parts.append((sv, sf))
+
+    else:  # ornate
+        bar_r = 0.014
+        bar_count = 5
+        spacing = width / (bar_count + 1)
+        for i in range(bar_count):
+            bx = -width / 2 + (i + 1) * spacing
+            bv, bf = _make_cylinder(bx, 0, 0, bar_r, height, segments=6)
+            parts.append((bv, bf))
+            sv, sf = _make_torus_ring(bx, height * 0.5, 0,
+                                      0.04, 0.006,
+                                      major_segments=8, minor_segments=4)
+            parts.append((sv, sf))
+        for i in range(8):
+            angle = math.pi * i / 7
+            ox = -width * 0.3 + math.cos(angle) * width * 0.3
+            oy = height - 0.1 + math.sin(angle) * 0.15
+            sv2, sf2 = _make_sphere(ox, oy, 0, 0.012, rings=3, sectors=4)
+            parts.append((sv2, sf2))
+
+    # Hinge hardware
+    for hy in [height * 0.2, height * 0.8]:
+        hv, hf = _make_cylinder(-width / 2 - frame_w, hy, 0,
+                                0.015, 0.06, segments=6)
+        parts.append((hv, hf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"IronGate_{style}", verts, faces,
+                        style=style, category="dungeon_prop")
+
+
+def generate_bridge_plank_mesh(
+    length: float = 3.0,
+    width: float = 1.0,
+    style: str = "wooden",
+) -> MeshSpec:
+    """Generate a bridge plank/walkway mesh.
+
+    Args:
+        length: Bridge length.
+        width: Bridge width.
+        style: "wooden", "stone", or "rope".
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    if style == "wooden":
+        plank_d = 0.12
+        gap = 0.02
+        plank_count = max(1, int(length / (plank_d + gap)))
+        plank_w = width * 0.9
+        plank_thick = 0.03
+
+        for i in range(plank_count):
+            z = -length / 2 + i * (plank_d + gap)
+            pv, pf = _make_beveled_box(0, -plank_thick / 2, z,
+                                       plank_w / 2, plank_thick / 2, plank_d / 2,
+                                       bevel=0.003)
+            parts.append((pv, pf))
+
+        for bx in [-width * 0.35, width * 0.35]:
+            sv, sf = _make_box(bx, -plank_thick - 0.03, 0,
+                               0.04, 0.03, length / 2)
+            parts.append((sv, sf))
+
+    elif style == "stone":
+        slab_thick = 0.08
+        sv, sf = _make_beveled_box(0, -slab_thick / 2, 0,
+                                   width / 2, slab_thick / 2, length / 2,
+                                   bevel=0.01)
+        parts.append((sv, sf))
+
+        post_count = max(2, int(length / 0.8))
+        for i in range(post_count):
+            z = -length / 2 + (i + 0.5) * length / post_count
+            for x_side in [-width / 2 - 0.05, width / 2 + 0.05]:
+                pv, pf = _make_beveled_box(x_side, 0.25, z,
+                                           0.04, 0.25, 0.04,
+                                           bevel=0.005)
+                parts.append((pv, pf))
+
+    else:  # rope
+        plank_count = max(2, int(length / 0.18))
+        plank_w = width * 0.8
+        plank_thick = 0.02
+        rope_r = 0.012
+
+        for i in range(plank_count):
+            t = i / max(plank_count - 1, 1)
+            z = -length / 2 + t * length
+            sag = -math.sin(t * math.pi) * length * 0.04
+            pv, pf = _make_box(0, sag, z, plank_w / 2, plank_thick / 2, 0.06)
+            parts.append((pv, pf))
+
+        for x_side in [-width / 2, width / 2]:
+            rope_segs = plank_count * 2
+            for j in range(rope_segs):
+                t0 = j / rope_segs
+                t1 = (j + 1) / rope_segs
+                z0 = -length / 2 + t0 * length
+                z1 = -length / 2 + t1 * length
+                sag0 = -math.sin(t0 * math.pi) * length * 0.03 + 0.3
+                sag1 = -math.sin(t1 * math.pi) * length * 0.03 + 0.3
+                rv, rf = _make_box(x_side, (sag0 + sag1) / 2, (z0 + z1) / 2,
+                                   rope_r, rope_r, abs(z1 - z0) / 2 + 0.001)
+                parts.append((rv, rf))
+
+        for i in range(0, plank_count, 2):
+            t = i / max(plank_count - 1, 1)
+            z = -length / 2 + t * length
+            sag = -math.sin(t * math.pi) * length * 0.04
+            rail_y = -math.sin(t * math.pi) * length * 0.03 + 0.3
+            for x_side in [-width / 2, width / 2]:
+                rv2, rf2 = _make_box(x_side, (sag + rail_y) / 2, z,
+                                     rope_r, max(0.001, (rail_y - sag) / 2), rope_r)
+                parts.append((rv2, rf2))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"BridgePlank_{style}", verts, faces,
+                        style=style, category="dungeon_prop")
+
+
+def generate_shackle_mesh(
+    style: str = "wall",
+) -> MeshSpec:
+    """Generate an iron shackle/manacle mesh.
+
+    Args:
+        style: "wall" (wall-mounted), "floor", or "hanging".
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    ring_r = 0.035
+    wire_r = 0.006
+    chain_link_r = 0.015
+    chain_wire = 0.004
+
+    if style == "wall":
+        mv, mf = _make_beveled_box(0, 0, -0.02, 0.04, 0.04, 0.02, bevel=0.003)
+        parts.append((mv, mf))
+        bv, bf = _make_cylinder(0, 0, -0.04, 0.008, 0.01, segments=6)
+        parts.append((bv, bf))
+        for i in range(4):
+            cy = -ring_r * 2 - i * chain_link_r * 2.5
+            if i % 2 == 0:
+                cv, cf = _make_torus_ring(0, cy, 0, chain_link_r, chain_wire,
+                                          major_segments=6, minor_segments=3)
+            else:
+                cv, cf = _make_torus_ring(0, cy, 0, chain_link_r, chain_wire,
+                                          major_segments=6, minor_segments=3)
+                cv = [(v[2], v[1], v[0]) for v in cv]
+            parts.append((cv, cf))
+        shackle_y = -ring_r * 2 - 4 * chain_link_r * 2.5
+        for j in range(10):
+            angle = math.pi * 0.15 + j * math.pi * 1.4 / 9
+            sx = math.cos(angle) * ring_r
+            sy = shackle_y + math.sin(angle) * ring_r
+            sv, sf = _make_sphere(sx, sy, 0, wire_r, rings=3, sectors=4)
+            parts.append((sv, sf))
+
+    elif style == "floor":
+        pv, pf = _make_cylinder(0, -0.01, 0, 0.06, 0.01, segments=8)
+        parts.append((pv, pf))
+        rv, rf = _make_torus_ring(0, 0.005, 0, 0.03, 0.006,
+                                  major_segments=8, minor_segments=4)
+        parts.append((rv, rf))
+        for i in range(3):
+            cy = 0.02 + i * chain_link_r * 2.5
+            if i % 2 == 0:
+                cv, cf = _make_torus_ring(0, cy, 0, chain_link_r, chain_wire,
+                                          major_segments=6, minor_segments=3)
+            else:
+                cv, cf = _make_torus_ring(0, cy, 0, chain_link_r, chain_wire,
+                                          major_segments=6, minor_segments=3)
+                cv = [(v[2], v[1], v[0]) for v in cv]
+            parts.append((cv, cf))
+        shackle_y = 0.02 + 3 * chain_link_r * 2.5
+        sv, sf = _make_torus_ring(0, shackle_y, 0, ring_r, wire_r,
+                                  major_segments=10, minor_segments=4)
+        parts.append((sv, sf))
+
+    else:  # hanging
+        mv, mf = _make_cylinder(0, 0, 0, 0.03, 0.02, segments=8)
+        parts.append((mv, mf))
+        for i in range(8):
+            cy = -0.03 - i * chain_link_r * 2.5
+            if i % 2 == 0:
+                cv, cf = _make_torus_ring(0, cy, 0, chain_link_r, chain_wire,
+                                          major_segments=6, minor_segments=3)
+            else:
+                cv, cf = _make_torus_ring(0, cy, 0, chain_link_r, chain_wire,
+                                          major_segments=6, minor_segments=3)
+                cv = [(v[2], v[1], v[0]) for v in cv]
+            parts.append((cv, cf))
+        shackle_y = -0.03 - 8 * chain_link_r * 2.5
+        sv, sf = _make_torus_ring(0, shackle_y, 0, ring_r, wire_r,
+                                  major_segments=10, minor_segments=4)
+        parts.append((sv, sf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Shackle_{style}", verts, faces,
+                        style=style, category="dungeon_prop")
+
+
+def generate_cage_mesh(
+    style: str = "hanging",
+    size: float = 0.8,
+) -> MeshSpec:
+    """Generate a prison cage mesh.
+
+    Args:
+        style: "hanging", "floor", or "gibbet".
+        size: Overall cage size.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    bar_r = size * 0.008
+    cage_r = size * 0.35
+    cage_h = size
+
+    if style == "hanging":
+        bar_count = 10
+        for i in range(bar_count):
+            angle = 2.0 * math.pi * i / bar_count
+            bx = math.cos(angle) * cage_r
+            bz = math.sin(angle) * cage_r
+            bv, bf = _make_cylinder(bx, 0, bz, bar_r, cage_h, segments=4)
+            parts.append((bv, bf))
+        for ry in [0.0, cage_h * 0.33, cage_h * 0.66, cage_h]:
+            rv, rf = _make_torus_ring(0, ry, 0, cage_r, bar_r * 1.5,
+                                      major_segments=bar_count, minor_segments=3)
+            parts.append((rv, rf))
+        cv, cf = _make_cone(0, cage_h, 0, cage_r, size * 0.15, segments=bar_count)
+        parts.append((cv, cf))
+        bpv, bpf = _make_cylinder(0, -bar_r, 0, cage_r, bar_r * 2, segments=bar_count)
+        parts.append((bpv, bpf))
+        chv, chf = _make_cylinder(0, cage_h + size * 0.15, 0,
+                                  bar_r * 2, size * 0.5, segments=4)
+        parts.append((chv, chf))
+
+    elif style == "floor":
+        cage_w = size * 0.6
+        cage_d = size * 0.6
+        bar_count_side = 5
+        for i in range(bar_count_side):
+            bx = -cage_w / 2 + (i + 0.5) * cage_w / bar_count_side
+            for z_side in [-cage_d / 2, cage_d / 2]:
+                bv, bf = _make_cylinder(bx, 0, z_side, bar_r, cage_h, segments=4)
+                parts.append((bv, bf))
+        for j in range(bar_count_side):
+            bz = -cage_d / 2 + (j + 0.5) * cage_d / bar_count_side
+            for x_side in [-cage_w / 2, cage_w / 2]:
+                bv, bf = _make_cylinder(x_side, 0, bz, bar_r, cage_h, segments=4)
+                parts.append((bv, bf))
+        for fy in [-0.01, cage_h]:
+            for pos_pair in [
+                (0, fy, -cage_d / 2, cage_w / 2, bar_r * 2, bar_r * 2),
+                (0, fy, cage_d / 2, cage_w / 2, bar_r * 2, bar_r * 2),
+                (-cage_w / 2, fy, 0, bar_r * 2, bar_r * 2, cage_d / 2),
+                (cage_w / 2, fy, 0, bar_r * 2, bar_r * 2, cage_d / 2),
+            ]:
+                fv, ff = _make_box(*pos_pair)
+                parts.append((fv, ff))
+
+    else:  # gibbet
+        n_rings = 6
+        for ring_i in range(n_rings):
+            t = ring_i / (n_rings - 1)
+            ry = t * cage_h
+            shape = 1.0 - 2.0 * abs(t - 0.4)
+            rr = cage_r * max(0.4, shape)
+            rv, rf = _make_torus_ring(0, ry, 0, rr, bar_r * 1.5,
+                                      major_segments=8, minor_segments=3)
+            parts.append((rv, rf))
+        for i in range(8):
+            angle = 2.0 * math.pi * i / 8
+            for seg in range(n_rings - 1):
+                t0 = seg / (n_rings - 1)
+                t1 = (seg + 1) / (n_rings - 1)
+                shape0 = max(0.4, 1.0 - 2.0 * abs(t0 - 0.4))
+                shape1 = max(0.4, 1.0 - 2.0 * abs(t1 - 0.4))
+                x0 = math.cos(angle) * cage_r * shape0
+                z0 = math.sin(angle) * cage_r * shape0
+                y0 = t0 * cage_h
+                y1 = t1 * cage_h
+                sv, sf = _make_box(
+                    (x0 + math.cos(angle) * cage_r * shape1) / 2,
+                    (y0 + y1) / 2,
+                    (z0 + math.sin(angle) * cage_r * shape1) / 2,
+                    bar_r, (y1 - y0) / 2, bar_r,
+                )
+                parts.append((sv, sf))
+        hv, hf = _make_cone(0, cage_h + 0.02, 0, bar_r * 3, 0.05, segments=6)
+        parts.append((hv, hf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Cage_{style}", verts, faces,
+                        style=style, category="dungeon_prop")
+
+
+def generate_stocks_mesh() -> MeshSpec:
+    """Generate a wooden stocks (pillory) mesh for prisoners.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    board_w = 0.8
+    board_h = 0.04
+    board_d = 0.25
+
+    post_h = 1.0
+    post_r = 0.05
+    for x_side in [-board_w / 2 - 0.02, board_w / 2 + 0.02]:
+        pv, pf = _make_beveled_box(x_side, post_h / 2, 0,
+                                   post_r, post_h / 2, post_r,
+                                   bevel=0.005)
+        parts.append((pv, pf))
+
+    board_y = post_h * 0.65
+    bv, bf = _make_beveled_box(0, board_y, 0,
+                               board_w / 2, board_h / 2, board_d / 2,
+                               bevel=0.003)
+    parts.append((bv, bf))
+    tv, tf = _make_beveled_box(0, board_y + board_h + 0.005, 0,
+                               board_w / 2, board_h / 2, board_d / 2,
+                               bevel=0.003)
+    parts.append((tv, tf))
+
+    head_r = 0.07
+    hv, hf = _make_torus_ring(0, board_y + board_h / 2, 0,
+                               head_r, 0.008,
+                               major_segments=10, minor_segments=4)
+    parts.append((hv, hf))
+
+    hand_r = 0.04
+    for hx in [-board_w * 0.3, board_w * 0.3]:
+        handv, handf = _make_torus_ring(hx, board_y + board_h / 2, 0,
+                                        hand_r, 0.006,
+                                        major_segments=8, minor_segments=3)
+        parts.append((handv, handf))
+
+    basev, basef = _make_beveled_box(0, 0.02, 0,
+                                     board_w / 2 + 0.1, 0.02, 0.15,
+                                     bevel=0.005)
+    parts.append((basev, basef))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("Stocks", verts, faces, category="dungeon_prop")
+
+
+def generate_iron_maiden_mesh() -> MeshSpec:
+    """Generate a medieval iron maiden mesh.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    w = 0.35
+    h = 1.8
+    d = 0.3
+
+    body_profile = [
+        (w * 0.4, 0),
+        (w * 0.48, h * 0.05),
+        (w * 0.5, h * 0.15),
+        (w * 0.5, h * 0.65),
+        (w * 0.45, h * 0.80),
+        (w * 0.35, h * 0.90),
+        (w * 0.2, h * 0.95),
+        (w * 0.05, h),
+    ]
+    bv, bf = _make_lathe(body_profile, segments=10, close_bottom=True, close_top=True)
+    parts.append((bv, bf))
+
+    door_profile = [
+        (w * 0.38, 0),
+        (w * 0.46, h * 0.05),
+        (w * 0.48, h * 0.15),
+        (w * 0.48, h * 0.65),
+        (w * 0.43, h * 0.80),
+        (w * 0.33, h * 0.90),
+        (w * 0.18, h * 0.95),
+        (w * 0.03, h),
+    ]
+    door_segs = 5
+    door_verts: list[tuple[float, float, float]] = []
+    door_faces: list[tuple[int, ...]] = []
+    n_prof = len(door_profile)
+    door_offset_x = w * 0.6
+
+    for i in range(n_prof):
+        r, y = door_profile[i]
+        for j in range(door_segs + 1):
+            angle = -math.pi / 2 + j * math.pi / door_segs
+            door_verts.append((
+                door_offset_x + r * math.cos(angle),
+                y,
+                d * 0.3 + r * math.sin(angle),
+            ))
+
+    for i in range(n_prof - 1):
+        for j in range(door_segs):
+            v0 = i * (door_segs + 1) + j
+            v1 = v0 + 1
+            v2 = v0 + door_segs + 2
+            v3 = v0 + door_segs + 1
+            door_faces.append((v0, v1, v2, v3))
+
+    parts.append((door_verts, door_faces))
+
+    spike_count = 8
+    for i in range(spike_count):
+        sy = h * 0.1 + i * h * 0.7 / spike_count
+        for angle_off in [-0.5, 0, 0.5]:
+            spike_r = w * 0.35
+            sx = math.cos(math.pi + angle_off) * spike_r * 0.3
+            sz = math.sin(math.pi + angle_off) * spike_r * 0.3
+            sv, sf = _make_cone(sx, sy, sz, 0.005, 0.04, segments=4)
+            parts.append((sv, sf))
+
+    for hy in [h * 0.2, h * 0.8]:
+        hv, hf = _make_cylinder(w * 0.5, hy, d * 0.15, 0.01, 0.04, segments=6)
+        parts.append((hv, hf))
+
+    basev, basef = _make_beveled_box(0, -0.02, 0,
+                                     w * 0.6, 0.02, d * 0.5,
+                                     bevel=0.005)
+    parts.append((basev, basef))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("IronMaiden", verts, faces, category="dungeon_prop")
+
+
+def generate_prisoner_skeleton_mesh() -> MeshSpec:
+    """Generate a chained prisoner skeleton prop mesh.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    bone_r = 0.012
+
+    sv, sf = _make_sphere(0, 1.6, 0, 0.08, rings=5, sectors=8)
+    parts.append((sv, sf))
+    for ex in [-0.025, 0.025]:
+        ev, ef = _make_sphere(ex, 1.62, 0.06, 0.02, rings=3, sectors=4)
+        parts.append((ev, ef))
+    jv, jf = _make_sphere(0, 1.55, 0.02, 0.04, rings=3, sectors=6)
+    parts.append((jv, jf))
+
+    for i in range(8):
+        sy = 1.5 - i * 0.06
+        sv2, sf2 = _make_cylinder(0, sy, 0, bone_r, 0.05, segments=5)
+        parts.append((sv2, sf2))
+
+    for i in range(5):
+        rib_y = 1.35 - i * 0.05
+        for side in [-1, 1]:
+            for j in range(4):
+                angle = side * (0.3 + j * 0.25)
+                rx = math.sin(angle) * 0.12
+                rz = math.cos(angle) * 0.12 - 0.05
+                rv, rf = _make_sphere(rx, rib_y, rz, bone_r * 0.8,
+                                      rings=2, sectors=4)
+                parts.append((rv, rf))
+
+    pv, pf = _make_sphere(0, 1.0, 0, 0.07, rings=4, sectors=6)
+    parts.append((pv, pf))
+
+    for side in [-1, 1]:
+        for j in range(4):
+            ay = 1.45 - j * 0.08
+            ax = side * (0.15 + j * 0.01)
+            av, af = _make_cylinder(ax, ay, 0, bone_r, 0.07, segments=4)
+            parts.append((av, af))
+        for j in range(4):
+            ay = 1.12 - j * 0.08
+            ax = side * 0.19
+            av, af = _make_cylinder(ax, ay, 0, bone_r * 0.9, 0.07, segments=4)
+            parts.append((av, af))
+        wrist_y = 1.12 - 4 * 0.08
+        sv3, sf3 = _make_torus_ring(side * 0.19, wrist_y, 0,
+                                    0.025, 0.005,
+                                    major_segments=8, minor_segments=3)
+        parts.append((sv3, sf3))
+
+    for side in [-1, 1]:
+        for j in range(6):
+            ly = 0.95 - j * 0.08
+            lx = side * 0.06
+            lv, lf = _make_cylinder(lx, ly, 0, bone_r, 0.07, segments=4)
+            parts.append((lv, lf))
+
+    chain_r = 0.015
+    chain_wire = 0.004
+    for i in range(4):
+        cy = 1.75 + i * chain_r * 2.5
+        if i % 2 == 0:
+            cv, cf = _make_torus_ring(0, cy, 0, chain_r, chain_wire,
+                                      major_segments=6, minor_segments=3)
+        else:
+            cv, cf = _make_torus_ring(0, cy, 0, chain_r, chain_wire,
+                                      major_segments=6, minor_segments=3)
+            cv = [(v[2], v[1], v[0]) for v in cv]
+        parts.append((cv, cf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("PrisonerSkeleton", verts, faces, category="dungeon_prop")
+
+
+def generate_summoning_circle_mesh(
+    radius: float = 1.5,
+    rune_count: int = 8,
+) -> MeshSpec:
+    """Generate a summoning circle floor marking mesh.
+
+    Args:
+        radius: Circle radius.
+        rune_count: Number of rune symbols.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    line_h = 0.008
+    line_w = 0.015
+
+    orv, orf = _make_torus_ring(0, line_h, 0, radius, line_w,
+                                major_segments=32, minor_segments=4)
+    parts.append((orv, orf))
+
+    inner_r = radius * 0.65
+    irv, irf = _make_torus_ring(0, line_h, 0, inner_r, line_w * 0.8,
+                                major_segments=24, minor_segments=4)
+    parts.append((irv, irf))
+
+    star_r = radius * 0.6
+    for i in range(5):
+        angle0 = math.pi / 2 + i * 2 * math.pi / 5
+        angle1 = math.pi / 2 + ((i + 2) % 5) * 2 * math.pi / 5
+        x0 = math.cos(angle0) * star_r
+        z0 = math.sin(angle0) * star_r
+        x1 = math.cos(angle1) * star_r
+        z1 = math.sin(angle1) * star_r
+        mx = (x0 + x1) / 2
+        mz = (z0 + z1) / 2
+        line_len = math.sqrt((x1 - x0) ** 2 + (z1 - z0) ** 2) / 2
+        lv, lf = _make_box(mx, line_h, mz, line_w, line_h * 0.5, line_len)
+        ang = math.atan2(z1 - z0, x1 - x0)
+        ca, sa = math.cos(ang), math.sin(ang)
+        l_verts = []
+        for v in lv:
+            nx = mx + (v[0] - mx) * ca - (v[2] - mz) * sa
+            nz = mz + (v[0] - mx) * sa + (v[2] - mz) * ca
+            l_verts.append((nx, v[1], nz))
+        parts.append((l_verts, lf))
+
+    for i in range(rune_count):
+        angle = 2.0 * math.pi * i / rune_count
+        rx = math.cos(angle) * radius
+        rz = math.sin(angle) * radius
+        rv, rf = _make_beveled_box(rx, 0.02, rz,
+                                   0.025, 0.02, 0.015,
+                                   bevel=0.003)
+        parts.append((rv, rf))
+
+    cv, cf = _make_sphere(0, 0.02, 0, 0.03, rings=4, sectors=6)
+    parts.append((cv, cf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("SummoningCircle", verts, faces,
+                        rune_count=rune_count, category="dark_fantasy")
+
+
+def generate_ritual_candles_mesh(
+    count: int = 5,
+    arrangement: str = "circle",
+) -> MeshSpec:
+    """Generate a cluster of ritual candles.
+
+    Args:
+        count: Number of candles (3-9).
+        arrangement: "circle" or "cluster".
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    import random as _rng_candles
+    _rng_candles.seed(55)
+    parts = []
+    count = max(3, min(9, count))
+
+    for i in range(count):
+        if arrangement == "circle":
+            angle = 2.0 * math.pi * i / count
+            dist = 0.12
+            cx = math.cos(angle) * dist
+            cz = math.sin(angle) * dist
+        else:
+            cx = _rng_candles.uniform(-0.1, 0.1)
+            cz = _rng_candles.uniform(-0.1, 0.1)
+
+        candle_h = 0.08 + _rng_candles.uniform(0, 0.06)
+        candle_r = 0.008 + _rng_candles.uniform(0, 0.004)
+
+        cv, cf = _make_tapered_cylinder(cx, 0, cz,
+                                        candle_r, candle_r * 0.85, candle_h,
+                                        segments=6, cap_top=True, cap_bottom=True)
+        parts.append((cv, cf))
+
+        dv, df = _make_sphere(cx + candle_r * 0.5, candle_h * 0.7, cz,
+                              candle_r * 0.4, rings=3, sectors=4)
+        parts.append((dv, df))
+
+        fv, ff = _make_cone(cx, candle_h, cz,
+                            candle_r * 0.5, candle_r * 2.5, segments=4)
+        parts.append((fv, ff))
+
+        wv, wf = _make_cylinder(cx, candle_h - 0.002, cz,
+                                0.001, candle_r * 1.5, segments=3)
+        parts.append((wv, wf))
+
+    pool_r = 0.15 if arrangement == "circle" else 0.12
+    pv, pf = _make_cylinder(0, -0.002, 0, pool_r, 0.002, segments=12)
+    parts.append((pv, pf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("RitualCandles", verts, faces,
+                        count=count, category="dark_fantasy")
+
+
+def generate_occult_symbols_mesh(
+    symbol_type: str = "pentagram",
+) -> MeshSpec:
+    """Generate floor-level occult symbol geometry.
+
+    Args:
+        symbol_type: "pentagram", "runes", or "sigil".
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    line_h = 0.005
+    line_w = 0.012
+
+    if symbol_type == "pentagram":
+        radius = 0.4
+        orv, orf = _make_torus_ring(0, line_h, 0, radius, line_w,
+                                    major_segments=24, minor_segments=3)
+        parts.append((orv, orf))
+        for i in range(5):
+            a0 = math.pi / 2 + i * 2 * math.pi / 5
+            a1 = math.pi / 2 + ((i + 2) % 5) * 2 * math.pi / 5
+            x0 = math.cos(a0) * radius * 0.9
+            z0 = math.sin(a0) * radius * 0.9
+            x1 = math.cos(a1) * radius * 0.9
+            z1 = math.sin(a1) * radius * 0.9
+            mx, mz = (x0 + x1) / 2, (z0 + z1) / 2
+            line_len = math.sqrt((x1 - x0) ** 2 + (z1 - z0) ** 2)
+            lv, lf = _make_box(mx, line_h, mz, line_w, line_h, line_len / 2)
+            ang = math.atan2(z1 - z0, x1 - x0)
+            ca, sa = math.cos(ang), math.sin(ang)
+            l_verts = [(mx + (v[0] - mx) * ca - (v[2] - mz) * sa,
+                        v[1],
+                        mz + (v[0] - mx) * sa + (v[2] - mz) * ca) for v in lv]
+            parts.append((l_verts, lf))
+
+    elif symbol_type == "runes":
+        for i in range(5):
+            rx = -0.3 + i * 0.15
+            rv, rf = _make_beveled_box(rx, 0.015, 0,
+                                       0.025, 0.015, 0.035,
+                                       bevel=0.003)
+            parts.append((rv, rf))
+            lv, lf = _make_box(rx, 0.031, 0, 0.002, 0.001, 0.025)
+            parts.append((lv, lf))
+            lv2, lf2 = _make_box(rx + 0.008, 0.031, 0.01, 0.008, 0.001, 0.002)
+            parts.append((lv2, lf2))
+
+    else:  # sigil
+        for ring_r in [0.15, 0.25, 0.35]:
+            rv, rf = _make_torus_ring(0, line_h, 0, ring_r, line_w * 0.8,
+                                      major_segments=20, minor_segments=3)
+            parts.append((rv, rf))
+        for angle in [0, math.pi / 2, math.pi / 4, -math.pi / 4]:
+            x0 = math.cos(angle) * 0.35
+            z0 = math.sin(angle) * 0.35
+            lv, lf = _make_box(x0 / 2, line_h, z0 / 2,
+                               line_w, line_h, 0.175)
+            ca, sa = math.cos(angle), math.sin(angle)
+            l_verts = [(v[0] * ca - v[2] * sa, v[1],
+                        v[0] * sa + v[2] * ca) for v in lv]
+            parts.append((l_verts, lf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"OccultSymbols_{symbol_type}", verts, faces,
+                        symbol_type=symbol_type, category="dark_fantasy")
+
+
+def generate_cobweb_mesh(
+    style: str = "corner",
+    size: float = 0.5,
+) -> MeshSpec:
+    """Generate a cobweb mesh.
+
+    Args:
+        style: "corner", "spanning", or "draped".
+        size: Overall web size.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    strand_r = 0.002
+
+    if style == "corner":
+        radials = 6
+        rings = 4
+        for i in range(radials):
+            t = i / max(radials - 1, 1)
+            ex = size * (1.0 - t)
+            ez = size * t
+            n_segs = rings * 2
+            for j in range(n_segs):
+                s0 = j / n_segs
+                s1 = (j + 1) / n_segs
+                x0, z0 = ex * s0, ez * s0
+                x1, z1 = ex * s1, ez * s1
+                sag = -0.01 * math.sin(s0 * math.pi) * size
+                seg_len = max(0.001, math.sqrt((x1 - x0) ** 2 + (z1 - z0) ** 2) / 2)
+                sv, sf = _make_box((x0 + x1) / 2, sag, (z0 + z1) / 2,
+                                   strand_r, strand_r, seg_len)
+                parts.append((sv, sf))
+
+        for ring in range(1, rings + 1):
+            rt = ring / rings
+            arc_segs = radials * 2
+            for i in range(arc_segs):
+                a0 = i / arc_segs
+                a1 = (i + 1) / arc_segs
+                x0 = size * (1.0 - a0) * rt
+                z0 = size * a0 * rt
+                x1 = size * (1.0 - a1) * rt
+                z1 = size * a1 * rt
+                sag = -0.005 * math.sin(rt * math.pi) * size
+                seg_len = max(0.001, math.sqrt((x1 - x0) ** 2 + (z1 - z0) ** 2) / 2)
+                sv, sf = _make_box((x0 + x1) / 2, sag, (z0 + z1) / 2,
+                                   strand_r, strand_r, seg_len)
+                parts.append((sv, sf))
+
+    elif style == "spanning":
+        radials = 8
+        rings = 5
+        hv, hf = _make_sphere(0, 0, 0, strand_r * 3, rings=3, sectors=4)
+        parts.append((hv, hf))
+
+        for i in range(radials):
+            angle = 2.0 * math.pi * i / radials
+            n_segs = rings * 2
+            for j in range(n_segs):
+                s = (j + 0.5) / n_segs
+                x0 = math.cos(angle) * size * j / n_segs
+                z0 = math.sin(angle) * size * j / n_segs
+                sag = -0.015 * math.sin(s * math.pi) * size
+                sv, sf = _make_box(x0, sag, z0,
+                                   strand_r, strand_r, size / n_segs / 2)
+                ca, sa = math.cos(angle), math.sin(angle)
+                s_verts = [(v[0] * ca - v[2] * sa, v[1],
+                            v[0] * sa + v[2] * ca) for v in sv]
+                parts.append((s_verts, sf))
+
+        for ring in range(1, rings + 1):
+            ring_r = size * ring / rings
+            n_arc = radials * 3
+            for i in range(n_arc):
+                a0 = 2.0 * math.pi * i / n_arc
+                a1 = 2.0 * math.pi * (i + 1) / n_arc
+                x0 = math.cos(a0) * ring_r
+                z0 = math.sin(a0) * ring_r
+                x1 = math.cos(a1) * ring_r
+                z1 = math.sin(a1) * ring_r
+                sag = -0.008 * math.sin((ring / rings) * math.pi) * size
+                sv, sf = _make_box((x0 + x1) / 2, sag, (z0 + z1) / 2,
+                                   strand_r, strand_r,
+                                   ring_r * math.pi / n_arc)
+                mid_angle = (a0 + a1) / 2
+                ca, sa = math.cos(mid_angle + math.pi / 2), math.sin(mid_angle + math.pi / 2)
+                s_verts = [(v[0] * ca - v[2] * sa, v[1],
+                            v[0] * sa + v[2] * ca) for v in sv]
+                parts.append((s_verts, sf))
+
+    else:  # draped
+        strand_count = 8
+        for i in range(strand_count):
+            sx = -size / 2 + i * size / max(strand_count - 1, 1)
+            n_segs = 6
+            for j in range(n_segs):
+                t = j / n_segs
+                sy = -t * size * 0.8
+                sag = math.sin(t * math.pi) * 0.03 * (1 + (i % 3) * 0.5)
+                sv, sf = _make_box(sx, sy, sag,
+                                   strand_r, size * 0.8 / n_segs / 2, strand_r)
+                parts.append((sv, sf))
+            if i < strand_count - 1:
+                for j in range(0, n_segs, 2):
+                    t = j / n_segs
+                    y = -t * size * 0.8
+                    x0 = sx
+                    x1 = -size / 2 + (i + 1) * size / max(strand_count - 1, 1)
+                    cv, cf = _make_box((x0 + x1) / 2, y, 0,
+                                       abs(x1 - x0) / 2, strand_r, strand_r)
+                    parts.append((cv, cf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Cobweb_{style}", verts, faces,
+                        style=style, category="dungeon_prop")
+
+
+def generate_spider_egg_sac_mesh(
+    count: int = 5,
+) -> MeshSpec:
+    """Generate a cluster of spider egg sacs.
+
+    Args:
+        count: Number of egg sacs in the cluster.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    import random as _rng_eggs
+    _rng_eggs.seed(88)
+    parts = []
+
+    for _ in range(count):
+        ox = _rng_eggs.uniform(-0.08, 0.08)
+        oy = _rng_eggs.uniform(-0.03, 0.03)
+        oz = _rng_eggs.uniform(-0.08, 0.08)
+        sac_r = _rng_eggs.uniform(0.02, 0.04)
+
+        egg_profile = [
+            (0.001, oy - sac_r * 0.8),
+            (sac_r * 0.6, oy - sac_r * 0.5),
+            (sac_r, oy),
+            (sac_r * 0.8, oy + sac_r * 0.4),
+            (sac_r * 0.3, oy + sac_r * 0.7),
+            (0.001, oy + sac_r * 0.8),
+        ]
+        ev, ef = _make_lathe(egg_profile, segments=6, close_bottom=True, close_top=True)
+        e_verts = [(v[0] + ox, v[1], v[2] + oz) for v in ev]
+        parts.append((e_verts, ef))
+
+    thread_r = 0.001
+    _rng_eggs.seed(88)
+    positions = []
+    for _ in range(count):
+        positions.append((
+            _rng_eggs.uniform(-0.08, 0.08),
+            _rng_eggs.uniform(-0.03, 0.03),
+            _rng_eggs.uniform(-0.08, 0.08),
+        ))
+    for i in range(min(count - 1, 4)):
+        p0 = positions[i]
+        p1 = positions[i + 1]
+        mx = (p0[0] + p1[0]) / 2
+        my = (p0[1] + p1[1]) / 2
+        mz = (p0[2] + p1[2]) / 2
+        dist = max(0.001, math.sqrt(sum((a - b) ** 2 for a, b in zip(p0, p1))) / 2)
+        tv, tf = _make_box(mx, my, mz, thread_r, thread_r, dist)
+        parts.append((tv, tf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("SpiderEggSac", verts, faces,
+                        count=count, category="dungeon_prop")
+
+
+def generate_rubble_pile_mesh(
+    style: str = "stone",
+    size: float = 0.5,
+) -> MeshSpec:
+    """Generate a pile of rubble/debris.
+
+    Args:
+        style: "stone", "wood", or "mixed".
+        size: Overall pile size.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    import random as _rng_rubble
+    _rng_rubble.seed(44)
+    parts = []
+
+    mound_profile = [
+        (0.001, 0),
+        (size * 0.6, size * 0.02),
+        (size * 0.8, size * 0.08),
+        (size * 0.6, size * 0.15),
+        (size * 0.3, size * 0.2),
+        (0.001, size * 0.22),
+    ]
+    mv, mf = _make_lathe(mound_profile, segments=8, close_bottom=True, close_top=True)
+    parts.append((mv, mf))
+
+    chunk_count = 12 if style in ("stone", "mixed") else 8
+
+    for _ in range(chunk_count):
+        cx = _rng_rubble.uniform(-size * 0.6, size * 0.6)
+        cz = _rng_rubble.uniform(-size * 0.6, size * 0.6)
+        dist = math.sqrt(cx * cx + cz * cz)
+        if dist > size * 0.7:
+            continue
+        cy = size * 0.15 * (1.0 - dist / size) + _rng_rubble.uniform(0, size * 0.05)
+
+        if style == "stone" or (style == "mixed" and _rng_rubble.random() > 0.4):
+            cs = _rng_rubble.uniform(size * 0.04, size * 0.12)
+            cv, cf = _make_beveled_box(cx, cy, cz,
+                                       cs, cs * _rng_rubble.uniform(0.5, 1.0),
+                                       cs * _rng_rubble.uniform(0.6, 1.2),
+                                       bevel=cs * 0.1)
+            parts.append((cv, cf))
+        else:
+            pw = _rng_rubble.uniform(size * 0.02, size * 0.04)
+            pl = _rng_rubble.uniform(size * 0.1, size * 0.25)
+            ph = _rng_rubble.uniform(size * 0.01, size * 0.03)
+            cv, cf = _make_box(cx, cy, cz, pw, ph, pl)
+            parts.append((cv, cf))
+
+    dv, df = _make_cylinder(0, -0.005, 0, size * 0.7, 0.005, segments=10)
+    parts.append((dv, df))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"RubblePile_{style}", verts, faces,
+                        style=style, category="dungeon_prop")
+
+
+def generate_hanging_skeleton_mesh() -> MeshSpec:
+    """Generate a skeleton hanging from chains.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    bone_r = 0.01
+
+    chain_r = 0.015
+    chain_wire = 0.004
+    for i in range(6):
+        cy = 2.0 + i * chain_r * 2.5
+        if i % 2 == 0:
+            cv, cf = _make_torus_ring(0, cy, 0, chain_r, chain_wire,
+                                      major_segments=6, minor_segments=3)
+        else:
+            cv, cf = _make_torus_ring(0, cy, 0, chain_r, chain_wire,
+                                      major_segments=6, minor_segments=3)
+            cv = [(v[2], v[1], v[0]) for v in cv]
+        parts.append((cv, cf))
+
+    sv, sf = _make_sphere(0, 1.95, 0, 0.07, rings=5, sectors=8)
+    parts.append((sv, sf))
+    for ex in [-0.02, 0.02]:
+        ev, ef = _make_sphere(ex, 1.97, 0.05, 0.018, rings=3, sectors=4)
+        parts.append((ev, ef))
+
+    for i in range(6):
+        sy = 1.85 - i * 0.06
+        sv2, sf2 = _make_cylinder(0, sy, 0, bone_r, 0.05, segments=4)
+        parts.append((sv2, sf2))
+
+    for i in range(4):
+        rib_y = 1.75 - i * 0.06
+        for side in [-1, 1]:
+            for j in range(3):
+                rx = side * (0.02 + j * 0.03)
+                rz = -0.02 - j * 0.01
+                rv, rf = _make_sphere(rx, rib_y - j * 0.01, rz,
+                                      bone_r * 0.7, rings=2, sectors=4)
+                parts.append((rv, rf))
+
+    for side in [-1, 1]:
+        for j in range(6):
+            ay = 1.80 - j * 0.07
+            ax = side * (0.1 + j * 0.005)
+            av, af = _make_cylinder(ax, ay, 0, bone_r * 0.8, 0.06, segments=4)
+            parts.append((av, af))
+
+    for side in [-1, 1]:
+        for j in range(5):
+            ly = 1.50 - j * 0.08
+            lv, lf = _make_cylinder(side * 0.04, ly, 0, bone_r, 0.07, segments=4)
+            parts.append((lv, lf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("HangingSkeleton", verts, faces, category="dungeon_prop")
+
+
+def generate_dripping_water_mesh() -> MeshSpec:
+    """Generate a stalactite with water drip formation.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    length = 0.4
+    thickness = 0.06
+
+    profile = [
+        (0.001, -length),
+        (thickness * 0.1, -length * 0.93),
+        (thickness * 0.25, -length * 0.80),
+        (thickness * 0.4, -length * 0.65),
+        (thickness * 0.55, -length * 0.45),
+        (thickness * 0.7, -length * 0.25),
+        (thickness * 0.85, -length * 0.10),
+        (thickness, 0),
+    ]
+    sv, sf = _make_lathe(profile, segments=8, close_bottom=True, close_top=True)
+    parts.append((sv, sf))
+
+    base_profile = [
+        (thickness, 0),
+        (thickness * 1.3, 0.01),
+        (thickness * 1.4, 0.025),
+        (thickness * 1.2, 0.035),
+    ]
+    bv, bf = _make_lathe(base_profile, segments=8, close_top=True)
+    parts.append((bv, bf))
+
+    dv, df = _make_sphere(0, -length - 0.008, 0, 0.006, rings=3, sectors=4)
+    parts.append((dv, df))
+
+    pool_y = -length - 1.5
+    pv, pf = _make_cylinder(0, pool_y, 0, 0.05, 0.003, segments=8)
+    parts.append((pv, pf))
+
+    d2v, d2f = _make_tapered_cylinder(thickness * 0.3, -length * 0.6, thickness * 0.2,
+                                      0.001, thickness * 0.2, length * 0.3,
+                                      segments=5, cap_top=True, cap_bottom=True)
+    parts.append((d2v, d2f))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("DrippingWater", verts, faces, category="dungeon_prop")
+
+
+def generate_rat_nest_mesh() -> MeshSpec:
+    """Generate a small rat nest (debris pile).
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    import random as _rng_nest
+    _rng_nest.seed(66)
+    parts = []
+    nest_r = 0.12
+
+    mound_profile = [
+        (0.001, 0),
+        (nest_r * 0.7, 0.005),
+        (nest_r, 0.012),
+        (nest_r * 0.8, 0.025),
+        (nest_r * 0.4, 0.035),
+        (0.001, 0.04),
+    ]
+    mv, mf = _make_lathe(mound_profile, segments=8, close_bottom=True, close_top=True)
+    parts.append((mv, mf))
+
+    for _ in range(10):
+        sx = _rng_nest.uniform(-nest_r * 0.7, nest_r * 0.7)
+        sz = _rng_nest.uniform(-nest_r * 0.7, nest_r * 0.7)
+        if math.sqrt(sx * sx + sz * sz) > nest_r * 0.8:
+            continue
+        sy = _rng_nest.uniform(0.01, 0.035)
+        pw = _rng_nest.uniform(0.005, 0.015)
+        pl = _rng_nest.uniform(0.01, 0.03)
+        sv, sf = _make_box(sx, sy, sz, pw, 0.002, pl)
+        parts.append((sv, sf))
+
+    for _ in range(3):
+        bx = _rng_nest.uniform(-nest_r * 0.5, nest_r * 0.5)
+        bz = _rng_nest.uniform(-nest_r * 0.5, nest_r * 0.5)
+        bv, bf = _make_cylinder(bx, 0.02, bz, 0.003, 0.025, segments=4)
+        parts.append((bv, bf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("RatNest", verts, faces, category="dungeon_prop")
+
+
+def generate_rotting_barrel_mesh() -> MeshSpec:
+    """Generate a damaged/rotting barrel variant.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    height = 0.8
+    radius = 0.22
+
+    barrel_profile = []
+    rings = 12
+    for i in range(rings + 1):
+        t = i / rings
+        y = t * height
+        bulge = 1.0 + 0.08 * math.sin(t * math.pi)
+        damage = 1.0 - 0.04 * max(0, math.sin(t * 5.0))
+        r = radius * bulge * damage
+        barrel_profile.append((r, y))
+
+    bv, bf = _make_lathe(barrel_profile, segments=10, close_bottom=True, close_top=True)
+    parts.append((bv, bf))
+
+    band_h = 0.008
+    for band_y in [height * 0.25, height * 0.75]:
+        t = band_y / height
+        bulge = 1.0 + 0.08 * math.sin(t * math.pi)
+        br = radius * bulge + 0.003
+        rv, rf = _make_torus_ring(0, band_y, 0, br, band_h,
+                                  major_segments=10, minor_segments=3)
+        parts.append((rv, rf))
+
+    gap_angle = 1.2
+    gx = math.cos(gap_angle) * radius * 0.9
+    gz = math.sin(gap_angle) * radius * 0.9
+    gv, gf = _make_box(gx, height * 0.4, gz, 0.03, height * 0.15, 0.01)
+    parts.append((gv, gf))
+
+    lid_profile = [
+        (radius * 0.95, height - 0.005),
+        (radius * 0.9, height),
+        (radius * 0.4, height + 0.01),
+        (0.001, height + 0.012),
+    ]
+    lv, lf = _make_lathe(lid_profile, segments=10, close_bottom=True, close_top=True)
+    l_verts = [(v[0] + 0.02, v[1] + 0.01, v[2]) for v in lv]
+    parts.append((l_verts, lf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("RottingBarrel", verts, faces, category="dungeon_prop")
+
+
+def generate_treasure_chest_mesh(
+    style: str = "locked",
+    size: float = 1.0,
+) -> MeshSpec:
+    """Generate a dungeon treasure chest mesh.
+
+    Args:
+        style: "locked", "open", "trapped", or "ornate".
+        size: Scale factor.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+    w = 0.5 * size
+    h = 0.3 * size
+    d = 0.35 * size
+
+    bv, bf = _make_beveled_box(0, h * 0.4, 0,
+                               w / 2, h * 0.4, d / 2,
+                               bevel=0.008 * size)
+    parts.append((bv, bf))
+
+    if style == "open":
+        lid_v, lid_f = _make_beveled_box(0, h * 0.85, -d / 2 - 0.05 * size,
+                                         w / 2 - 0.01, 0.015 * size, d / 2 * 0.3,
+                                         bevel=0.005 * size)
+        parts.append((lid_v, lid_f))
+        inner_v, inner_f = _make_box(0, h * 0.45, 0,
+                                     w / 2 - 0.02 * size, h * 0.1,
+                                     d / 2 - 0.02 * size)
+        parts.append((inner_v, inner_f))
+        for i in range(5):
+            angle = i * math.pi * 2 / 5
+            gx = math.cos(angle) * w * 0.15
+            gz = math.sin(angle) * d * 0.15
+            gv, gf = _make_sphere(gx, h * 0.55, gz, 0.012 * size,
+                                  rings=3, sectors=4)
+            parts.append((gv, gf))
+    else:
+        lid_segs = 10
+        lid_verts: list[tuple[float, float, float]] = []
+        lid_faces: list[tuple[int, ...]] = []
+        lid_base_y = h * 0.8
+        lid_radius = d / 2
+
+        for i in range(lid_segs + 1):
+            t = i / lid_segs
+            angle = math.pi * t
+            y = lid_base_y + math.sin(angle) * lid_radius * 0.4
+            z_scale = math.cos(angle)
+            for xpos in [-w / 2, w / 2]:
+                lid_verts.append((xpos, y, z_scale * lid_radius))
+
+        for i in range(lid_segs):
+            bi = i * 2
+            lid_faces.append((bi, bi + 1, bi + 3, bi + 2))
+
+        left_indices = [i * 2 for i in range(lid_segs + 1)]
+        right_indices = [i * 2 + 1 for i in range(lid_segs + 1)]
+        lid_faces.append(tuple(left_indices[::-1]))
+        lid_faces.append(tuple(right_indices))
+        parts.append((lid_verts, lid_faces))
+
+    band_h = 0.01 * size
+    band_offset = 0.005 * size
+    for band_y in [h * 0.2, h * 0.6]:
+        bv2, bf2 = _make_box(0, band_y, 0,
+                              w / 2 + band_offset, band_h, d / 2 + band_offset)
+        parts.append((bv2, bf2))
+
+    if style == "locked":
+        lv, lf = _make_beveled_box(0, h * 0.75, d / 2 + 0.01 * size,
+                                   0.04 * size, 0.04 * size, 0.008 * size,
+                                   bevel=0.003 * size)
+        parts.append((lv, lf))
+        cv, cf = _make_cylinder(0, h * 0.68, d / 2 + 0.018 * size,
+                                0.015 * size, 0.04 * size, segments=8)
+        parts.append((cv, cf))
+
+    elif style == "trapped":
+        pp_v, pp_f = _make_beveled_box(0, h * 0.1, d / 2 + 0.02 * size,
+                                       w * 0.3, 0.01 * size, 0.015 * size,
+                                       bevel=0.002 * size)
+        parts.append((pp_v, pp_f))
+        tw_v, tw_f = _make_box(-w * 0.3, h * 0.3, d / 2 + 0.03 * size,
+                               w * 0.3, 0.002 * size, 0.002 * size)
+        parts.append((tw_v, tw_f))
+        lv2, lf2 = _make_beveled_box(0, h * 0.75, d / 2 + 0.008 * size,
+                                     0.03 * size, 0.03 * size, 0.006 * size,
+                                     bevel=0.002 * size)
+        parts.append((lv2, lf2))
+
+    elif style == "ornate":
+        corner_r = 0.02 * size
+        for xoff in [-w / 2, w / 2]:
+            for zoff in [-d / 2, d / 2]:
+                for yoff in [0, h * 0.78]:
+                    sv, sf = _make_sphere(xoff, yoff, zoff,
+                                          corner_r, rings=4, sectors=6)
+                    parts.append((sv, sf))
+        ev, ef = _make_beveled_box(0, h * 0.4, d / 2 + 0.005 * size,
+                                   w * 0.25, h * 0.2, 0.003 * size,
+                                   bevel=0.002 * size)
+        parts.append((ev, ef))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"TreasureChest_{style}", verts, faces,
+                        style=style, category="dungeon_prop")
+
+
+def generate_gem_pile_mesh(
+    size: float = 0.3,
+    gem_count: int = 12,
+) -> MeshSpec:
+    """Generate a scattered pile of gems.
+
+    Args:
+        size: Pile spread radius.
+        gem_count: Number of gems.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    import random as _rng_gems
+    _rng_gems.seed(33)
+    parts = []
+
+    for _ in range(gem_count):
+        gx = _rng_gems.uniform(-size * 0.6, size * 0.6)
+        gz = _rng_gems.uniform(-size * 0.6, size * 0.6)
+        dist = math.sqrt(gx * gx + gz * gz)
+        if dist > size * 0.7:
+            continue
+        gy = 0.005 + _rng_gems.uniform(0, size * 0.04)
+        gem_r = _rng_gems.uniform(size * 0.03, size * 0.06)
+
+        cv, cf = _make_cone(gx, gy, gz, gem_r, gem_r * 1.0, segments=6)
+        parts.append((cv, cf))
+        bv, bf = _make_sphere(gx, gy - gem_r * 0.2, gz,
+                              gem_r * 0.5, rings=3, sectors=6)
+        parts.append((bv, bf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("GemPile", verts, faces,
+                        gem_count=gem_count, category="dungeon_prop")
+
+
+def generate_gold_pile_mesh(
+    size: float = 0.3,
+    coin_count: int = 25,
+) -> MeshSpec:
+    """Generate a scattered pile of gold coins.
+
+    Args:
+        size: Pile spread radius.
+        coin_count: Number of coins.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    import random as _rng_gold
+    _rng_gold.seed(42)
+    parts = []
+
+    mound_profile = [
+        (0.001, 0),
+        (size * 0.5, 0.003),
+        (size * 0.7, 0.012),
+        (size * 0.5, 0.02),
+        (size * 0.2, 0.025),
+        (0.001, 0.028),
+    ]
+    mv, mf = _make_lathe(mound_profile, segments=8, close_bottom=True, close_top=True)
+    parts.append((mv, mf))
+
+    for _ in range(coin_count):
+        cx = _rng_gold.uniform(-size * 0.6, size * 0.6)
+        cz = _rng_gold.uniform(-size * 0.6, size * 0.6)
+        dist = math.sqrt(cx * cx + cz * cz)
+        if dist > size * 0.7:
+            continue
+        cy = 0.015 * (1.0 - dist / size) + _rng_gold.uniform(0, 0.008)
+        coin_r = _rng_gold.uniform(0.008, 0.012)
+        cv, cf = _make_cylinder(cx, cy, cz, coin_r, 0.002, segments=6)
+        parts.append((cv, cf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result("GoldPile", verts, faces,
+                        coin_count=coin_count, category="dungeon_prop")
+
+
+def generate_lore_tablet_mesh(
+    style: str = "stone",
+) -> MeshSpec:
+    """Generate a stone tablet with carved surface for lore text.
+
+    Args:
+        style: "stone", "clay", or "obsidian".
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    if style == "stone":
+        w, h, d = 0.25, 0.35, 0.04
+        bv, bf = _make_beveled_box(0, h / 2, 0, w / 2, h / 2, d / 2, bevel=0.008)
+        parts.append((bv, bf))
+        cap_segs = 6
+        cap_r = w / 2
+        for i in range(cap_segs):
+            angle0 = i * math.pi / cap_segs
+            angle1 = (i + 1) * math.pi / cap_segs
+            x0 = math.cos(angle0) * cap_r
+            y0 = h + math.sin(angle0) * cap_r * 0.3
+            x1 = math.cos(angle1) * cap_r
+            y1 = h + math.sin(angle1) * cap_r * 0.3
+            cv, cf = _make_box((x0 + x1) / 2, (y0 + y1) / 2, 0,
+                               abs(x1 - x0) / 2 + 0.001, abs(y1 - y0) / 2 + 0.001, d / 2)
+            parts.append((cv, cf))
+        for i in range(5):
+            ly = h * 0.2 + i * h * 0.12
+            lv, lf = _make_box(0, ly, d / 2 + 0.001,
+                               w * 0.35, 0.003, 0.001)
+            parts.append((lv, lf))
+
+    elif style == "clay":
+        w, h, d = 0.2, 0.15, 0.03
+        bv, bf = _make_beveled_box(0, h / 2 + 0.01, 0,
+                                   w / 2, h / 2, d / 2, bevel=0.01)
+        parts.append((bv, bf))
+        for row in range(3):
+            for col in range(5):
+                mx = -w * 0.3 + col * w * 0.15
+                my = h * 0.25 + row * h * 0.22 + 0.01
+                mv2, mf2 = _make_box(mx, my, d / 2 + 0.001,
+                                     0.006, 0.004, 0.001)
+                parts.append((mv2, mf2))
+
+    else:  # obsidian
+        w, h, d = 0.22, 0.3, 0.025
+        bv, bf = _make_beveled_box(0, h / 2, 0, w / 2, h / 2, d / 2, bevel=0.005)
+        parts.append((bv, bf))
+        for i in range(3):
+            ry = h * 0.25 + i * h * 0.2
+            rv, rf = _make_torus_ring(0, ry, d / 2 + 0.001,
+                                      w * 0.15, 0.003,
+                                      major_segments=8, minor_segments=3)
+            parts.append((rv, rf))
+
+    stand_v, stand_f = _make_beveled_box(0, -0.015, 0,
+                                         0.06, 0.015, 0.05, bevel=0.003)
+    parts.append((stand_v, stand_f))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"LoreTablet_{style}", verts, faces,
+                        style=style, category="dungeon_prop")
+
+
+# =========================================================================
+# CATEGORY: FOREST ANIMALS
+# =========================================================================
+
+
+def generate_deer_mesh(style: str = "adult") -> MeshSpec:
+    """Generate a stylized deer mesh with antlers.
+
+    Args:
+        style: "adult" (full antlers) or "fawn" (no antlers, smaller).
+
+    Returns:
+        MeshSpec ~2-4K tris. Dark fantasy silhouette-readable deer.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    is_fawn = style == "fawn"
+    sc = 0.7 if is_fawn else 1.0
+
+    # Body - elongated barrel
+    body_len = 0.9 * sc
+    body_r = 0.18 * sc
+    bv, bf = _make_tapered_cylinder(
+        0, 0.55 * sc, 0, body_r * 0.9, body_r,
+        body_len, segments=segs, rings=3, cap_top=True, cap_bottom=True,
+    )
+    # Rotate body to lie along Z axis
+    bv_rot = [(v[0], 0.55 * sc + (v[2]) * 0.15, v[1] - 0.55 * sc + body_len * 0.1)
+              for v in bv]
+    parts.append((bv_rot, bf))
+
+    # Torso sphere for volume
+    tv, tf = _make_sphere(0, 0.6 * sc, 0, body_r * 1.05, rings=5, sectors=segs)
+    parts.append((tv, tf))
+
+    # Haunches (rear bulk)
+    hv, hf = _make_sphere(0, 0.58 * sc, -body_len * 0.35, body_r * 0.95,
+                           rings=5, sectors=segs)
+    parts.append((hv, hf))
+
+    # Neck - tapered cylinder angled forward/up
+    neck_r = 0.08 * sc
+    neck_h = 0.35 * sc
+    nv, nf = _make_tapered_cylinder(
+        0, 0.65 * sc, body_len * 0.35,
+        neck_r * 1.3, neck_r, neck_h, segments=6, rings=2,
+    )
+    # Angle the neck forward
+    nv_angled = [(v[0], v[1] + (v[1] - 0.65 * sc) * 0.3,
+                  v[2] + (v[1] - 0.65 * sc) * 0.5) for v in nv]
+    parts.append((nv_angled, nf))
+
+    # Head
+    head_y = 0.95 * sc
+    head_z = body_len * 0.45
+    head_r = 0.07 * sc
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=5, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Snout
+    snout_r = 0.04 * sc
+    sv, sf = _make_tapered_cylinder(
+        0, head_y - 0.02 * sc, head_z + head_r * 0.8,
+        snout_r * 1.1, snout_r * 0.6, 0.08 * sc, segments=6, rings=1,
+    )
+    sv_rot = [(v[0], v[1], v[2]) for v in sv]
+    parts.append((sv_rot, sf))
+
+    # Ears (two thin cones)
+    for side in [-1.0, 1.0]:
+        ev, ef = _make_cone(
+            side * 0.04 * sc, head_y + head_r * 0.6, head_z - 0.01 * sc,
+            0.015 * sc, 0.06 * sc, segments=4,
+        )
+        parts.append((ev, ef))
+
+    # Legs (4 legs: front-left, front-right, rear-left, rear-right)
+    leg_positions = [
+        (-0.09 * sc, body_len * 0.25),
+        (0.09 * sc, body_len * 0.25),
+        (-0.09 * sc, -body_len * 0.3),
+        (0.09 * sc, -body_len * 0.3),
+    ]
+    for lx, lz in leg_positions:
+        # Upper leg
+        ulv, ulf = _make_tapered_cylinder(
+            lx, 0.28 * sc, lz,
+            0.035 * sc, 0.025 * sc, 0.28 * sc, segments=6, rings=2,
+        )
+        parts.append((ulv, ulf))
+        # Lower leg (thinner)
+        llv, llf = _make_tapered_cylinder(
+            lx, 0, lz + 0.02 * sc,
+            0.02 * sc, 0.015 * sc, 0.3 * sc, segments=6, rings=1,
+        )
+        parts.append((llv, llf))
+
+    # Tail (short, upward)
+    tlv, tlf = _make_tapered_cylinder(
+        0, 0.6 * sc, -body_len * 0.42,
+        0.02 * sc, 0.008 * sc, 0.1 * sc, segments=4, rings=1,
+    )
+    parts.append((tlv, tlf))
+
+    # Antlers (only for adult)
+    if not is_fawn:
+        for side in [-1.0, 1.0]:
+            ax = side * 0.03
+            # Main beam
+            abv, abf = _make_tapered_cylinder(
+                ax, head_y + head_r * 0.5, head_z,
+                0.012, 0.006, 0.25, segments=4, rings=3,
+            )
+            # Angle outward
+            abv_a = [(v[0] + side * (v[1] - head_y - head_r * 0.5) * 0.4,
+                       v[1], v[2] - (v[1] - head_y - head_r * 0.5) * 0.15) for v in abv]
+            parts.append((abv_a, abf))
+            # Tines (2 per side)
+            for ti, th in enumerate([0.12, 0.2]):
+                ty = head_y + head_r * 0.5 + th
+                tx = ax + side * th * 0.4
+                tv2, tf2 = _make_tapered_cylinder(
+                    tx, ty, head_z - th * 0.15,
+                    0.008, 0.003, 0.08, segments=4, rings=1,
+                )
+                tv2_a = [(v[0] + side * (v[1] - ty) * 0.3, v[1],
+                          v[2] + (v[1] - ty) * 0.2) for v in tv2]
+                parts.append((tv2_a, tf2))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Deer_{style}", verts, faces,
+                        style=style, category="forest_animal")
+
+
+def generate_wolf_mesh(style: str = "adult") -> MeshSpec:
+    """Generate a stylized wolf/canine mesh.
+
+    Args:
+        style: "adult" (full size) or "pup" (smaller, rounder).
+
+    Returns:
+        MeshSpec ~2-4K tris. Dark fantasy wolf silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    is_pup = style == "pup"
+    sc = 0.6 if is_pup else 1.0
+
+    # Body barrel
+    body_r = 0.16 * sc
+    body_len = 0.7 * sc
+    bv, bf = _make_sphere(0, 0.45 * sc, 0, body_r, rings=6, sectors=segs)
+    parts.append((bv, bf))
+
+    # Extended torso
+    tv, tf = _make_tapered_cylinder(
+        0, 0.35 * sc, -body_len * 0.2,
+        body_r * 0.95, body_r * 0.85, body_len * 0.5,
+        segments=segs, rings=2, cap_top=True, cap_bottom=True,
+    )
+    tv_rot = [(v[0], 0.45 * sc + (v[2] + body_len * 0.2) * 0.05,
+               -body_len * 0.2 + (v[1] - 0.35 * sc)) for v in tv]
+    parts.append((tv_rot, tf))
+
+    # Chest (front bulk)
+    cv, cf = _make_sphere(0, 0.48 * sc, body_len * 0.2, body_r * 0.9,
+                           rings=5, sectors=segs)
+    parts.append((cv, cf))
+
+    # Neck
+    neck_r = 0.08 * sc
+    nv, nf = _make_tapered_cylinder(
+        0, 0.48 * sc, body_len * 0.3,
+        neck_r * 1.4, neck_r, 0.2 * sc, segments=6, rings=2,
+    )
+    parts.append((nv, nf))
+
+    # Head - slightly elongated
+    head_y = 0.55 * sc
+    head_z = body_len * 0.42
+    head_r = 0.07 * sc
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r * (1.3 if is_pup else 1.0),
+                             rings=5, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Snout (longer than deer)
+    snv, snf = _make_tapered_cylinder(
+        0, head_y - 0.015 * sc, head_z + head_r,
+        0.04 * sc, 0.02 * sc, 0.1 * sc, segments=6, rings=1,
+    )
+    parts.append((snv, snf))
+
+    # Ears (pointed triangular, larger than deer)
+    for side in [-1.0, 1.0]:
+        ev, ef = _make_cone(
+            side * 0.035 * sc, head_y + head_r * 0.7, head_z - 0.01,
+            0.018 * sc, 0.07 * sc, segments=4,
+        )
+        parts.append((ev, ef))
+
+    # Legs
+    leg_positions = [
+        (-0.08 * sc, body_len * 0.15),
+        (0.08 * sc, body_len * 0.15),
+        (-0.08 * sc, -body_len * 0.25),
+        (0.08 * sc, -body_len * 0.25),
+    ]
+    for lx, lz in leg_positions:
+        ulv, ulf = _make_tapered_cylinder(
+            lx, 0.22 * sc, lz, 0.03 * sc, 0.022 * sc,
+            0.24 * sc, segments=6, rings=2,
+        )
+        parts.append((ulv, ulf))
+        llv, llf = _make_tapered_cylinder(
+            lx, 0, lz + 0.015 * sc, 0.018 * sc, 0.013 * sc,
+            0.24 * sc, segments=6, rings=1,
+        )
+        parts.append((llv, llf))
+
+    # Tail - bushy, curved down
+    tail_segs = 6
+    for i in range(tail_segs):
+        t = i / tail_segs
+        tr = (0.03 - t * 0.015) * sc
+        ty = 0.45 * sc - t * 0.12 * sc
+        tz = -body_len * 0.35 - t * 0.08 * sc
+        tsv, tsf = _make_sphere(0, ty, tz, tr, rings=4, sectors=5)
+        parts.append((tsv, tsf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Wolf_{style}", verts, faces,
+                        style=style, category="forest_animal")
+
+
+def generate_fox_mesh(style: str = "adult") -> MeshSpec:
+    """Generate a stylized fox mesh (smaller canine).
+
+    Args:
+        style: "adult" or "kit" (smaller, proportionally larger head/ears).
+
+    Returns:
+        MeshSpec ~1-3K tris.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    is_kit = style == "kit"
+    sc = 0.5 if is_kit else 0.75  # Fox is smaller than wolf
+
+    # Body
+    body_r = 0.12 * sc
+    bv, bf = _make_sphere(0, 0.35 * sc, 0, body_r, rings=5, sectors=segs)
+    parts.append((bv, bf))
+
+    # Rear
+    rv, rf = _make_sphere(0, 0.33 * sc, -0.15 * sc, body_r * 0.9, rings=5, sectors=segs)
+    parts.append((rv, rf))
+
+    # Chest
+    cv, cf = _make_sphere(0, 0.37 * sc, 0.12 * sc, body_r * 0.85, rings=5, sectors=segs)
+    parts.append((cv, cf))
+
+    # Neck
+    nv, nf = _make_tapered_cylinder(
+        0, 0.38 * sc, 0.18 * sc,
+        0.06 * sc, 0.045 * sc, 0.15 * sc, segments=6, rings=1,
+    )
+    parts.append((nv, nf))
+
+    # Head - more pointed than wolf
+    head_y = 0.48 * sc
+    head_z = 0.28 * sc
+    head_r = 0.055 * sc * (1.2 if is_kit else 1.0)
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=5, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Pointed snout
+    snv, snf = _make_cone(
+        0, head_y - 0.01 * sc, head_z + head_r * 0.9,
+        0.025 * sc, 0.09 * sc, segments=6,
+    )
+    # Rotate cone to point forward (swap Y/Z)
+    snv_rot = [(v[0], head_y - 0.01 * sc + (v[2] - head_z - head_r * 0.9) * 0.1,
+                head_z + head_r * 0.9 + (v[1] - head_y + 0.01 * sc)) for v in snv]
+    parts.append((snv_rot, snf))
+
+    # Large pointed ears (fox hallmark)
+    ear_scale = 1.3 if is_kit else 1.0
+    for side in [-1.0, 1.0]:
+        ev, ef = _make_cone(
+            side * 0.03 * sc, head_y + head_r * 0.8, head_z - 0.005,
+            0.015 * sc * ear_scale, 0.08 * sc * ear_scale, segments=4,
+        )
+        parts.append((ev, ef))
+
+    # Legs (slender)
+    leg_positions = [
+        (-0.06 * sc, 0.1 * sc),
+        (0.06 * sc, 0.1 * sc),
+        (-0.06 * sc, -0.13 * sc),
+        (0.06 * sc, -0.13 * sc),
+    ]
+    for lx, lz in leg_positions:
+        lv, lf = _make_tapered_cylinder(
+            lx, 0, lz, 0.015 * sc, 0.01 * sc,
+            0.35 * sc, segments=5, rings=2,
+        )
+        parts.append((lv, lf))
+
+    # Bushy tail - fox's signature feature, larger and fluffier
+    tail_segs = 8
+    for i in range(tail_segs):
+        t = i / tail_segs
+        tr = (0.035 - t * 0.01) * sc * (1.0 - t * 0.3)
+        ty = 0.32 * sc - t * 0.08 * sc
+        tz = -0.22 * sc - t * 0.06 * sc
+        tsv, tsf = _make_sphere(0, ty, tz, tr, rings=4, sectors=5)
+        parts.append((tsv, tsf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Fox_{style}", verts, faces,
+                        style=style, category="forest_animal")
+
+
+def generate_rabbit_mesh(style: str = "sitting") -> MeshSpec:
+    """Generate a stylized rabbit mesh in sitting pose.
+
+    Args:
+        style: "sitting" (upright) or "alert" (ears fully up, slightly taller).
+
+    Returns:
+        MeshSpec ~500-1K tris. Compact silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 6
+    is_alert = style == "alert"
+
+    # Body (round, sitting)
+    body_r = 0.06
+    bv, bf = _make_sphere(0, 0.08, 0, body_r, rings=5, sectors=segs)
+    parts.append((bv, bf))
+
+    # Haunches (larger sphere behind)
+    hv, hf = _make_sphere(0, 0.065, -0.04, body_r * 1.1, rings=5, sectors=segs)
+    parts.append((hv, hf))
+
+    # Head
+    head_r = 0.04
+    head_y = 0.16
+    hdv, hdf = _make_sphere(0, head_y, 0.03, head_r, rings=5, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Snout (tiny bump)
+    snv, snf = _make_sphere(0, head_y - 0.005, 0.03 + head_r * 0.9,
+                             0.015, rings=3, sectors=5)
+    parts.append((snv, snf))
+
+    # Ears (long, the most distinctive feature)
+    ear_h = 0.1 if is_alert else 0.08
+    for side in [-1.0, 1.0]:
+        # Ear as thin tapered cylinder
+        ev, ef = _make_tapered_cylinder(
+            side * 0.015, head_y + head_r * 0.6, 0.025,
+            0.01, 0.005, ear_h, segments=4, rings=2,
+        )
+        # Slight outward lean
+        ev_lean = [(v[0] + side * (v[1] - head_y - head_r * 0.6) * 0.15,
+                    v[1], v[2]) for v in ev]
+        parts.append((ev_lean, ef))
+
+    # Front paws (tiny)
+    for side in [-1.0, 1.0]:
+        pv, pf = _make_sphere(side * 0.025, 0.02, 0.04,
+                               0.012, rings=3, sectors=4)
+        parts.append((pv, pf))
+
+    # Hind legs (folded, sitting)
+    for side in [-1.0, 1.0]:
+        hlv, hlf = _make_sphere(side * 0.04, 0.04, -0.03,
+                                 0.025, rings=4, sectors=5)
+        parts.append((hlv, hlf))
+        # Hind foot
+        fv, ff = _make_tapered_cylinder(
+            side * 0.04, 0, -0.01,
+            0.012, 0.008, 0.015, segments=4, rings=1,
+        )
+        parts.append((fv, ff))
+
+    # Tail (cotton ball)
+    tlv, tlf = _make_sphere(0, 0.08, -0.07, 0.018, rings=3, sectors=5)
+    parts.append((tlv, tlf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Rabbit_{style}", verts, faces,
+                        style=style, category="forest_animal")
+
+
+def generate_owl_mesh(style: str = "perched") -> MeshSpec:
+    """Generate a stylized owl mesh in perched pose.
+
+    Args:
+        style: "perched" (sitting upright) or "spread" (wings partially open).
+
+    Returns:
+        MeshSpec ~800-1.5K tris. Rounded silhouette with distinctive face disc.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    # Body (round barrel shape, upright)
+    body_r = 0.06
+    bv, bf = _make_sphere(0, 0.1, 0, body_r, rings=5, sectors=segs)
+    parts.append((bv, bf))
+
+    # Breast
+    brv, brf = _make_sphere(0, 0.08, 0.02, body_r * 0.9, rings=4, sectors=segs)
+    parts.append((brv, brf))
+
+    # Head (large, round -- owls have big heads)
+    head_r = 0.045
+    head_y = 0.19
+    hdv, hdf = _make_sphere(0, head_y, 0.01, head_r, rings=5, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Facial disc (flat-ish sphere in front of face)
+    fdv, fdf = _make_sphere(0, head_y, 0.01 + head_r * 0.7,
+                             head_r * 0.8, rings=4, sectors=segs)
+    parts.append((fdv, fdf))
+
+    # Eye tufts / horn-like ear tufts
+    for side in [-1.0, 1.0]:
+        tv, tf = _make_cone(
+            side * 0.025, head_y + head_r * 0.7, 0.005,
+            0.008, 0.03, segments=4,
+        )
+        parts.append((tv, tf))
+
+    # Beak
+    bkv, bkf = _make_cone(
+        0, head_y - 0.01, 0.01 + head_r * 1.1,
+        0.008, 0.02, segments=4,
+    )
+    # Point forward
+    bkv_rot = [(v[0], head_y - 0.01 + (v[2] - 0.01 - head_r * 1.1) * 0.1,
+                0.01 + head_r * 1.1 + (v[1] - head_y + 0.01)) for v in bkv]
+    parts.append((bkv_rot, bkf))
+
+    # Wings (folded along body)
+    for side in [-1.0, 1.0]:
+        wv, wf = _make_tapered_cylinder(
+            side * 0.055, 0.06, -0.01,
+            0.025, 0.015, 0.1, segments=5, rings=2,
+        )
+        parts.append((wv, wf))
+
+    if style == "spread":
+        # Extended wing tips
+        for side in [-1.0, 1.0]:
+            ewv, ewf = _make_tapered_cylinder(
+                side * 0.09, 0.1, -0.01,
+                0.02, 0.008, 0.08, segments=4, rings=1,
+            )
+            # Angle outward
+            ewv_a = [(v[0] + side * (v[1] - 0.1) * 0.5, v[1], v[2]) for v in ewv]
+            parts.append((ewv_a, ewf))
+
+    # Talons (perching feet)
+    for side in [-1.0, 1.0]:
+        fv, ff = _make_sphere(side * 0.02, 0.01, 0.01, 0.012, rings=3, sectors=4)
+        parts.append((fv, ff))
+        # Toes (3 forward toes)
+        for ti in range(3):
+            angle = (ti - 1) * 0.4 + side * 0.1
+            tv, tf = _make_tapered_cylinder(
+                side * 0.02 + math.sin(angle) * 0.008, 0,
+                0.01 + math.cos(angle) * 0.008,
+                0.004, 0.002, 0.015, segments=3, rings=1,
+            )
+            parts.append((tv, tf))
+
+    # Tail feathers
+    tlv, tlf = _make_box(0, 0.04, -0.06, 0.02, 0.008, 0.025)
+    parts.append((tlv, tlf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Owl_{style}", verts, faces,
+                        style=style, category="forest_animal")
+
+
+def generate_crow_mesh(style: str = "perched") -> MeshSpec:
+    """Generate a stylized crow/raven mesh.
+
+    Args:
+        style: "perched" (sitting) or "flying" (wings spread).
+
+    Returns:
+        MeshSpec ~500-1K tris. Sleek dark silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 6
+
+    # Body (sleek, elongated)
+    body_rx = 0.03
+    body_ry = 0.035
+    bv, bf = _make_sphere(0, 0.08, 0, body_ry, rings=5, sectors=segs)
+    parts.append((bv, bf))
+
+    # Head (small, round)
+    head_r = 0.022
+    head_y = 0.13
+    head_z = 0.04
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=4, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Beak (long, pointed -- crow signature)
+    bkv, bkf = _make_cone(
+        0, head_y - 0.003, head_z + head_r,
+        0.006, 0.035, segments=4,
+    )
+    bkv_rot = [(v[0], head_y - 0.003 + (v[2] - head_z - head_r) * 0.05,
+                head_z + head_r + (v[1] - head_y + 0.003)) for v in bkv]
+    parts.append((bkv_rot, bkf))
+
+    # Neck
+    nv, nf = _make_tapered_cylinder(
+        0, 0.1, 0.03, 0.018, 0.015, 0.04, segments=5, rings=1,
+    )
+    parts.append((nv, nf))
+
+    if style == "flying":
+        # Wings spread wide
+        for side in [-1.0, 1.0]:
+            # Inner wing
+            iwv, iwf = _make_box(side * 0.06, 0.085, -0.01,
+                                  0.04, 0.003, 0.025)
+            parts.append((iwv, iwf))
+            # Outer wing
+            owv, owf = _make_box(side * 0.12, 0.09, -0.015,
+                                  0.035, 0.002, 0.02)
+            parts.append((owv, owf))
+    else:
+        # Wings folded
+        for side in [-1.0, 1.0]:
+            wv, wf = _make_tapered_cylinder(
+                side * 0.03, 0.06, -0.01,
+                0.015, 0.008, 0.06, segments=4, rings=1,
+            )
+            parts.append((wv, wf))
+
+    # Tail feathers (fan shape)
+    tfv, tff = _make_box(0, 0.06, -0.06, 0.015, 0.003, 0.025)
+    parts.append((tfv, tff))
+
+    # Legs and feet
+    for side in [-1.0, 1.0]:
+        lv, lf = _make_tapered_cylinder(
+            side * 0.015, 0, 0.005,
+            0.004, 0.003, 0.08, segments=4, rings=1,
+        )
+        parts.append((lv, lf))
+        # Toes
+        for ti in range(3):
+            angle = (ti - 1) * 0.5
+            tv, tf = _make_tapered_cylinder(
+                side * 0.015 + math.sin(angle) * 0.005, 0,
+                0.005 + math.cos(angle) * 0.005,
+                0.003, 0.001, 0.012, segments=3, rings=1,
+            )
+            parts.append((tv, tf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Crow_{style}", verts, faces,
+                        style=style, category="forest_animal")
+
+
+# =========================================================================
+# CATEGORY: MOUNTAIN ANIMALS
+# =========================================================================
+
+
+def generate_mountain_goat_mesh(style: str = "standing") -> MeshSpec:
+    """Generate a stylized mountain goat mesh with horns.
+
+    Args:
+        style: "standing" or "climbing" (front legs higher).
+
+    Returns:
+        MeshSpec ~1.5-3K tris. Stocky, sure-footed silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    is_climbing = style == "climbing"
+
+    # Body (stocky barrel)
+    body_r = 0.13
+    bv, bf = _make_sphere(0, 0.38, 0, body_r, rings=5, sectors=segs)
+    parts.append((bv, bf))
+
+    # Rear
+    rv, rf = _make_sphere(0, 0.36, -0.12, body_r * 0.95, rings=5, sectors=segs)
+    parts.append((rv, rf))
+
+    # Chest (deep)
+    cv, cf = _make_sphere(0, 0.4, 0.1, body_r * 0.9, rings=5, sectors=segs)
+    parts.append((cv, cf))
+
+    # Neck (thick, short)
+    nv, nf = _make_tapered_cylinder(
+        0, 0.42, 0.16, 0.065, 0.05, 0.15, segments=6, rings=1,
+    )
+    parts.append((nv, nf))
+
+    # Head
+    head_y = 0.52
+    head_z = 0.22
+    head_r = 0.05
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=5, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Snout
+    snv, snf = _make_tapered_cylinder(
+        0, head_y - 0.01, head_z + head_r * 0.8,
+        0.03, 0.02, 0.05, segments=5, rings=1,
+    )
+    parts.append((snv, snf))
+
+    # Horns (curved backward)
+    for side in [-1.0, 1.0]:
+        horn_segs = 5
+        for hi in range(horn_segs):
+            t = hi / horn_segs
+            hr = 0.01 - t * 0.005
+            hy = head_y + head_r * 0.5 + t * 0.1
+            hz = head_z - t * 0.06
+            hx = side * (0.025 + t * 0.015)
+            hsv, hsf = _make_sphere(hx, hy, hz, hr, rings=3, sectors=4)
+            parts.append((hsv, hsf))
+
+    # Ears
+    for side in [-1.0, 1.0]:
+        ev, ef = _make_cone(
+            side * 0.035, head_y + head_r * 0.3, head_z - 0.01,
+            0.01, 0.03, segments=4,
+        )
+        ev_a = [(v[0] + side * (v[1] - head_y - head_r * 0.3) * 0.3,
+                 v[1], v[2]) for v in ev]
+        parts.append((ev_a, ef))
+
+    # Legs (sturdy, shorter)
+    front_y_offset = 0.03 if is_climbing else 0
+    leg_positions = [
+        (-0.07, 0.14, front_y_offset),
+        (0.07, 0.14, front_y_offset),
+        (-0.07, -0.1, 0),
+        (0.07, -0.1, 0),
+    ]
+    for lx, lz, ly_off in leg_positions:
+        ulv, ulf = _make_tapered_cylinder(
+            lx, 0.18 + ly_off, lz,
+            0.028, 0.02, 0.2, segments=6, rings=2,
+        )
+        parts.append((ulv, ulf))
+        llv, llf = _make_tapered_cylinder(
+            lx, ly_off, lz + 0.01,
+            0.016, 0.013, 0.2, segments=5, rings=1,
+        )
+        parts.append((llv, llf))
+
+    # Tail (short)
+    tlv, tlf = _make_tapered_cylinder(
+        0, 0.38, -0.17, 0.012, 0.005, 0.05, segments=4, rings=1,
+    )
+    parts.append((tlv, tlf))
+
+    # Beard (goat signature)
+    bdv, bdf = _make_cone(
+        0, head_y - head_r * 0.8, head_z + 0.01,
+        0.008, 0.04, segments=4,
+    )
+    bdv_a = [(v[0], v[1], v[2]) for v in bdv]
+    parts.append((bdv_a, bdf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"MountainGoat_{style}", verts, faces,
+                        style=style, category="mountain_animal")
+
+
+def generate_eagle_mesh(style: str = "perched") -> MeshSpec:
+    """Generate a stylized eagle mesh (large bird of prey).
+
+    Args:
+        style: "perched" or "soaring" (wings fully spread).
+
+    Returns:
+        MeshSpec ~1-2K tris. Imposing raptor silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+
+    # Body (larger than crow, more muscular)
+    body_r = 0.06
+    bv, bf = _make_sphere(0, 0.12, 0, body_r, rings=5, sectors=segs)
+    parts.append((bv, bf))
+
+    # Breast (prominent)
+    brv, brf = _make_sphere(0, 0.11, 0.03, body_r * 0.9, rings=4, sectors=segs)
+    parts.append((brv, brf))
+
+    # Head
+    head_r = 0.03
+    head_y = 0.2
+    head_z = 0.05
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=5, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Brow ridge (fierce look)
+    brow_v, brow_f = _make_box(0, head_y + head_r * 0.3,
+                                head_z + head_r * 0.5, 0.025, 0.005, 0.008)
+    parts.append((brow_v, brow_f))
+
+    # Hooked beak (raptor signature)
+    bkv, bkf = _make_cone(
+        0, head_y - 0.005, head_z + head_r * 0.9,
+        0.01, 0.04, segments=5,
+    )
+    bkv_rot = [(v[0], head_y - 0.005 + (v[2] - head_z - head_r * 0.9) * 0.15,
+                head_z + head_r * 0.9 + (v[1] - head_y + 0.005) * 0.8) for v in bkv]
+    parts.append((bkv_rot, bkf))
+
+    # Neck
+    nv, nf = _make_tapered_cylinder(
+        0, 0.14, 0.035, 0.025, 0.02, 0.06, segments=6, rings=1,
+    )
+    parts.append((nv, nf))
+
+    if style == "soaring":
+        # Wide wingspan
+        for side in [-1.0, 1.0]:
+            # Inner wing
+            iwv, iwf = _make_box(side * 0.1, 0.13, -0.01, 0.06, 0.004, 0.035)
+            parts.append((iwv, iwf))
+            # Middle wing
+            mwv, mwf = _make_box(side * 0.2, 0.135, -0.015, 0.05, 0.003, 0.03)
+            parts.append((mwv, mwf))
+            # Outer wing (tapered)
+            owv, owf = _make_box(side * 0.28, 0.14, -0.02, 0.035, 0.002, 0.02)
+            parts.append((owv, owf))
+    else:
+        # Folded wings
+        for side in [-1.0, 1.0]:
+            wv, wf = _make_tapered_cylinder(
+                side * 0.05, 0.08, -0.02,
+                0.025, 0.012, 0.1, segments=5, rings=2,
+            )
+            parts.append((wv, wf))
+
+    # Tail feathers (wider, fan-shaped)
+    tfv, tff = _make_box(0, 0.08, -0.09, 0.025, 0.004, 0.03)
+    parts.append((tfv, tff))
+
+    # Talons (powerful)
+    for side in [-1.0, 1.0]:
+        # Leg
+        lv, lf = _make_tapered_cylinder(
+            side * 0.025, 0, 0.01,
+            0.008, 0.006, 0.12, segments=5, rings=1,
+        )
+        parts.append((lv, lf))
+        # Talon toes
+        for ti in range(3):
+            angle = (ti - 1) * 0.5 + side * 0.1
+            tv, tf = _make_cone(
+                side * 0.025 + math.sin(angle) * 0.01, 0,
+                0.01 + math.cos(angle) * 0.01,
+                0.004, 0.02, segments=3,
+            )
+            tv_rot = [(v[0], (v[2] - 0.01 - math.cos(angle) * 0.01) * 0.3,
+                        0.01 + math.cos(angle) * 0.01 + (v[1]) * 0.5) for v in tv]
+            parts.append((tv_rot, tf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Eagle_{style}", verts, faces,
+                        style=style, category="mountain_animal")
+
+
+def generate_bear_mesh(style: str = "standing") -> MeshSpec:
+    """Generate a stylized bear mesh (large quadruped).
+
+    Args:
+        style: "standing" (on all fours) or "rearing" (on hind legs).
+
+    Returns:
+        MeshSpec ~3-5K tris. Massive, hulking silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 10
+    is_rearing = style == "rearing"
+
+    # Body (massive barrel)
+    body_r = 0.25
+    if is_rearing:
+        body_y = 0.6
+        bv, bf = _make_sphere(0, body_y, 0, body_r, rings=6, sectors=segs)
+    else:
+        body_y = 0.45
+        bv, bf = _make_sphere(0, body_y, 0, body_r, rings=6, sectors=segs)
+    parts.append((bv, bf))
+
+    # Rear bulk
+    rear_z = -0.2
+    rv, rf = _make_sphere(0, body_y - 0.03, rear_z, body_r * 0.95,
+                           rings=5, sectors=segs)
+    parts.append((rv, rf))
+
+    # Shoulder hump (bear signature)
+    shv, shf = _make_sphere(0, body_y + 0.08, 0.1, body_r * 0.7,
+                             rings=5, sectors=segs)
+    parts.append((shv, shf))
+
+    # Neck (thick)
+    neck_y = body_y + 0.05
+    neck_z = 0.2
+    nv, nf = _make_tapered_cylinder(
+        0, neck_y - 0.05, neck_z, 0.12, 0.09, 0.2,
+        segments=segs, rings=2,
+    )
+    parts.append((nv, nf))
+
+    # Head (broad, flat)
+    head_y = body_y + 0.1 if is_rearing else body_y + 0.02
+    head_z = 0.35 if not is_rearing else 0.25
+    head_r = 0.09
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=5, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Snout (elongated)
+    snv, snf = _make_tapered_cylinder(
+        0, head_y - 0.02, head_z + head_r * 0.8,
+        0.05, 0.03, 0.08, segments=6, rings=1,
+    )
+    parts.append((snv, snf))
+
+    # Nose tip
+    nosev, nosef = _make_sphere(0, head_y - 0.015, head_z + head_r * 0.8 + 0.08,
+                                 0.015, rings=3, sectors=5)
+    parts.append((nosev, nosef))
+
+    # Ears (small, round)
+    for side in [-1.0, 1.0]:
+        ev, ef = _make_sphere(side * 0.06, head_y + head_r * 0.7, head_z - 0.01,
+                               0.018, rings=3, sectors=4)
+        parts.append((ev, ef))
+
+    if is_rearing:
+        # Hind legs (weight-bearing, thick)
+        for side in [-1.0, 1.0]:
+            ulv, ulf = _make_tapered_cylinder(
+                side * 0.12, 0.25, -0.1,
+                0.06, 0.05, 0.35, segments=segs, rings=3,
+            )
+            parts.append((ulv, ulf))
+            llv, llf = _make_tapered_cylinder(
+                side * 0.12, 0, -0.08,
+                0.05, 0.06, 0.27, segments=segs, rings=2,
+            )
+            parts.append((llv, llf))
+        # Front legs (raised)
+        for side in [-1.0, 1.0]:
+            ulv, ulf = _make_tapered_cylinder(
+                side * 0.15, body_y + 0.05, 0.15,
+                0.05, 0.04, 0.2, segments=8, rings=2,
+            )
+            ulv_a = [(v[0] + side * (v[1] - body_y - 0.05) * 0.15,
+                      v[1], v[2] + (v[1] - body_y - 0.05) * 0.3) for v in ulv]
+            parts.append((ulv_a, ulf))
+            # Paw
+            pv, pf = _make_sphere(side * 0.18, body_y + 0.22, 0.2,
+                                   0.04, rings=4, sectors=6)
+            parts.append((pv, pf))
+    else:
+        # All four legs (thick, powerful)
+        leg_positions = [
+            (-0.12, 0.15),
+            (0.12, 0.15),
+            (-0.12, -0.18),
+            (0.12, -0.18),
+        ]
+        for lx, lz in leg_positions:
+            ulv, ulf = _make_tapered_cylinder(
+                lx, 0.2, lz, 0.05, 0.04,
+                0.27, segments=8, rings=2,
+            )
+            parts.append((ulv, ulf))
+            llv, llf = _make_tapered_cylinder(
+                lx, 0, lz + 0.02, 0.04, 0.045,
+                0.22, segments=8, rings=1,
+            )
+            parts.append((llv, llf))
+            # Paw
+            pv, pf = _make_sphere(lx, 0.02, lz + 0.02,
+                                   0.035, rings=3, sectors=5)
+            parts.append((pv, pf))
+
+    # Tail (short stub)
+    tail_y = body_y - 0.05
+    tail_z = rear_z - 0.15
+    tlv, tlf = _make_sphere(0, tail_y, tail_z, 0.025, rings=3, sectors=5)
+    parts.append((tlv, tlf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Bear_{style}", verts, faces,
+                        style=style, category="mountain_animal")
+
+
+# =========================================================================
+# CATEGORY: DOMESTIC ANIMALS
+# =========================================================================
+
+
+def generate_horse_mesh(style: str = "standing") -> MeshSpec:
+    """Generate a stylized horse mesh.
+
+    Args:
+        style: "standing" or "galloping" (legs extended).
+
+    Returns:
+        MeshSpec ~3-5K tris. Elegant, muscular silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 10
+
+    # Body (long, muscular barrel)
+    body_r = 0.2
+    body_len = 0.9
+    bv, bf = _make_sphere(0, 0.7, 0, body_r, rings=6, sectors=segs)
+    parts.append((bv, bf))
+
+    # Rear
+    rv, rf = _make_sphere(0, 0.68, -body_len * 0.3, body_r * 0.95,
+                           rings=5, sectors=segs)
+    parts.append((rv, rf))
+
+    # Chest
+    cv, cf = _make_sphere(0, 0.72, body_len * 0.25, body_r * 0.9,
+                           rings=5, sectors=segs)
+    parts.append((cv, cf))
+
+    # Neck (long, arched)
+    neck_base_y = 0.75
+    neck_base_z = body_len * 0.35
+    nv, nf = _make_tapered_cylinder(
+        0, neck_base_y, neck_base_z,
+        0.09, 0.06, 0.4, segments=8, rings=3,
+    )
+    # Angle neck upward
+    nv_angled = [(v[0], v[1] + (v[1] - neck_base_y) * 0.5,
+                  v[2] + (v[1] - neck_base_y) * 0.4) for v in nv]
+    parts.append((nv_angled, nf))
+
+    # Head (long, refined)
+    head_y = 1.1
+    head_z = body_len * 0.5
+    head_r = 0.06
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=5, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Long snout/muzzle
+    snv, snf = _make_tapered_cylinder(
+        0, head_y - 0.02, head_z + head_r * 0.8,
+        0.04, 0.03, 0.12, segments=6, rings=2,
+    )
+    parts.append((snv, snf))
+
+    # Nostrils (small spheres)
+    for side in [-1.0, 1.0]:
+        nsv, nsf = _make_sphere(side * 0.02, head_y - 0.03, head_z + head_r + 0.1,
+                                 0.008, rings=3, sectors=4)
+        parts.append((nsv, nsf))
+
+    # Ears (small, pointed)
+    for side in [-1.0, 1.0]:
+        ev, ef = _make_cone(
+            side * 0.03, head_y + head_r * 0.7, head_z - 0.01,
+            0.01, 0.05, segments=4,
+        )
+        parts.append((ev, ef))
+
+    # Mane (along neck - series of thin boxes)
+    for i in range(6):
+        t = i / 5
+        my = neck_base_y + t * (head_y - neck_base_y) * 0.8
+        mz = neck_base_z + t * (head_z - neck_base_z) * 0.8
+        mv, mf = _make_box(0, my + 0.03, mz, 0.003, 0.025, 0.015)
+        parts.append((mv, mf))
+
+    is_galloping = style == "galloping"
+
+    # Legs (long, slender)
+    if is_galloping:
+        leg_configs = [
+            (-0.09, body_len * 0.2, 0.06, -0.03),   # FL forward
+            (0.09, body_len * 0.2, -0.02, 0.02),     # FR mid
+            (-0.09, -body_len * 0.25, -0.03, 0.06),  # RL back
+            (0.09, -body_len * 0.25, 0.04, -0.02),   # RR mid
+        ]
+    else:
+        leg_configs = [
+            (-0.09, body_len * 0.2, 0, 0),
+            (0.09, body_len * 0.2, 0, 0),
+            (-0.09, -body_len * 0.25, 0, 0),
+            (0.09, -body_len * 0.25, 0, 0),
+        ]
+    for lx, lz, z_upper_off, z_lower_off in leg_configs:
+        # Upper leg
+        ulv, ulf = _make_tapered_cylinder(
+            lx, 0.35, lz + z_upper_off,
+            0.04, 0.03, 0.36, segments=8, rings=2,
+        )
+        parts.append((ulv, ulf))
+        # Lower leg
+        llv, llf = _make_tapered_cylinder(
+            lx, 0, lz + z_lower_off,
+            0.025, 0.02, 0.37, segments=6, rings=2,
+        )
+        parts.append((llv, llf))
+        # Hoof
+        hfv, hff = _make_cylinder(
+            lx, 0, lz + z_lower_off,
+            0.025, 0.03, segments=6,
+        )
+        parts.append((hfv, hff))
+
+    # Tail (long, flowing)
+    tail_segs = 8
+    for i in range(tail_segs):
+        t = i / tail_segs
+        tr = 0.015 - t * 0.005
+        ty = 0.65 - t * 0.2
+        tz = -body_len * 0.4 - t * 0.1
+        tsv, tsf = _make_sphere(0, ty, tz, tr, rings=3, sectors=4)
+        parts.append((tsv, tsf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Horse_{style}", verts, faces,
+                        style=style, category="domestic_animal")
+
+
+def generate_chicken_mesh(style: str = "standing") -> MeshSpec:
+    """Generate a stylized chicken mesh.
+
+    Args:
+        style: "standing" or "pecking" (head lowered).
+
+    Returns:
+        MeshSpec ~500-800 tris. Plump barnyard bird.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 6
+
+    # Body (plump, round)
+    body_r = 0.05
+    bv, bf = _make_sphere(0, 0.1, 0, body_r, rings=5, sectors=segs)
+    parts.append((bv, bf))
+
+    # Breast
+    brv, brf = _make_sphere(0, 0.09, 0.025, body_r * 0.85, rings=4, sectors=segs)
+    parts.append((brv, brf))
+
+    # Head
+    head_y = 0.17 if style != "pecking" else 0.12
+    head_z = 0.04 if style != "pecking" else 0.08
+    head_r = 0.022
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=4, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Beak (short, pointed)
+    bkv, bkf = _make_cone(
+        0, head_y - 0.005, head_z + head_r * 0.9,
+        0.006, 0.015, segments=4,
+    )
+    bkv_rot = [(v[0], head_y - 0.005 + (v[2] - head_z - head_r * 0.9) * 0.1,
+                head_z + head_r * 0.9 + (v[1] - head_y + 0.005)) for v in bkv]
+    parts.append((bkv_rot, bkf))
+
+    # Comb (on top of head)
+    cmv, cmf = _make_box(0, head_y + head_r * 0.7, head_z + 0.005,
+                          0.003, 0.01, 0.008)
+    parts.append((cmv, cmf))
+
+    # Wattle (below beak)
+    wv, wf = _make_sphere(0, head_y - head_r * 0.7, head_z + head_r * 0.5,
+                           0.006, rings=3, sectors=4)
+    parts.append((wv, wf))
+
+    # Neck
+    nv, nf = _make_tapered_cylinder(
+        0, 0.12, 0.03, 0.018, 0.015, 0.05, segments=5, rings=1,
+    )
+    parts.append((nv, nf))
+
+    # Wings (folded)
+    for side in [-1.0, 1.0]:
+        wgv, wgf = _make_tapered_cylinder(
+            side * 0.04, 0.08, -0.01,
+            0.015, 0.008, 0.05, segments=4, rings=1,
+        )
+        parts.append((wgv, wgf))
+
+    # Tail feathers (upward fan)
+    for i in range(3):
+        angle = (i - 1) * 0.3
+        tfv, tff = _make_box(
+            math.sin(angle) * 0.008, 0.12 + i * 0.01, -0.06 - i * 0.005,
+            0.003, 0.015, 0.008,
+        )
+        parts.append((tfv, tff))
+
+    # Legs
+    for side in [-1.0, 1.0]:
+        lv, lf = _make_tapered_cylinder(
+            side * 0.02, 0, 0.005,
+            0.005, 0.004, 0.1, segments=4, rings=1,
+        )
+        parts.append((lv, lf))
+        # Toes (3 forward, 1 back)
+        for ti in range(3):
+            ta = (ti - 1) * 0.4
+            tv, tf = _make_tapered_cylinder(
+                side * 0.02 + math.sin(ta) * 0.006, 0,
+                0.005 + math.cos(ta) * 0.006,
+                0.003, 0.001, 0.012, segments=3, rings=1,
+            )
+            parts.append((tv, tf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Chicken_{style}", verts, faces,
+                        style=style, category="domestic_animal")
+
+
+def generate_dog_mesh(style: str = "sitting") -> MeshSpec:
+    """Generate a stylized medium dog mesh.
+
+    Args:
+        style: "sitting" or "standing".
+
+    Returns:
+        MeshSpec ~1.5-3K tris. Loyal companion silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    is_sitting = style == "sitting"
+
+    # Body
+    body_r = 0.1
+    body_y = 0.3 if not is_sitting else 0.2
+    bv, bf = _make_sphere(0, body_y, 0, body_r, rings=5, sectors=segs)
+    parts.append((bv, bf))
+
+    # Chest
+    cv, cf = _make_sphere(0, body_y + 0.02, 0.08, body_r * 0.85,
+                           rings=5, sectors=segs)
+    parts.append((cv, cf))
+
+    # Haunches
+    hv, hf = _make_sphere(0, body_y - 0.02, -0.1, body_r * 0.9,
+                           rings=5, sectors=segs)
+    parts.append((hv, hf))
+
+    # Neck
+    nv, nf = _make_tapered_cylinder(
+        0, body_y + 0.03, 0.12,
+        0.05, 0.04, 0.12, segments=6, rings=1,
+    )
+    parts.append((nv, nf))
+
+    # Head
+    head_y = body_y + 0.12
+    head_z = 0.18
+    head_r = 0.05
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=5, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Snout
+    snv, snf = _make_tapered_cylinder(
+        0, head_y - 0.01, head_z + head_r * 0.8,
+        0.03, 0.018, 0.06, segments=5, rings=1,
+    )
+    parts.append((snv, snf))
+
+    # Nose
+    nosev, nosef = _make_sphere(0, head_y - 0.005, head_z + head_r + 0.05,
+                                 0.01, rings=3, sectors=4)
+    parts.append((nosev, nosef))
+
+    # Ears (floppy)
+    for side in [-1.0, 1.0]:
+        ev, ef = _make_tapered_cylinder(
+            side * 0.035, head_y + head_r * 0.3, head_z - 0.01,
+            0.015, 0.01, 0.05, segments=4, rings=1,
+        )
+        # Flop downward
+        ev_a = [(v[0] + side * (v[1] - head_y - head_r * 0.3) * 0.4,
+                 v[1] - abs(v[1] - head_y - head_r * 0.3) * 0.3, v[2]) for v in ev]
+        parts.append((ev_a, ef))
+
+    if is_sitting:
+        # Front legs straight
+        for side in [-1.0, 1.0]:
+            flv, flf = _make_tapered_cylinder(
+                side * 0.06, 0, 0.08,
+                0.02, 0.015, 0.2, segments=6, rings=2,
+            )
+            parts.append((flv, flf))
+        # Hind legs folded
+        for side in [-1.0, 1.0]:
+            hlv, hlf = _make_sphere(side * 0.07, 0.1, -0.08,
+                                     0.04, rings=4, sectors=6)
+            parts.append((hlv, hlf))
+            hfv, hff = _make_tapered_cylinder(
+                side * 0.07, 0, -0.04,
+                0.015, 0.012, 0.05, segments=5, rings=1,
+            )
+            parts.append((hfv, hff))
+    else:
+        # All four legs standing
+        leg_positions = [
+            (-0.06, 0.08),
+            (0.06, 0.08),
+            (-0.06, -0.1),
+            (0.06, -0.1),
+        ]
+        for lx, lz in leg_positions:
+            ulv, ulf = _make_tapered_cylinder(
+                lx, 0.14, lz, 0.025, 0.018,
+                0.17, segments=6, rings=2,
+            )
+            parts.append((ulv, ulf))
+            llv, llf = _make_tapered_cylinder(
+                lx, 0, lz + 0.01, 0.015, 0.012,
+                0.16, segments=5, rings=1,
+            )
+            parts.append((llv, llf))
+
+    # Tail (curved upward)
+    tail_segs = 5
+    for i in range(tail_segs):
+        t = i / tail_segs
+        tr = 0.012 - t * 0.005
+        ty = body_y - 0.02 + t * 0.06
+        tz = -0.15 - t * 0.04
+        tsv, tsf = _make_sphere(0, ty, tz, tr, rings=3, sectors=4)
+        parts.append((tsv, tsf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Dog_{style}", verts, faces,
+                        style=style, category="domestic_animal")
+
+
+def generate_cat_mesh(style: str = "sitting") -> MeshSpec:
+    """Generate a stylized cat mesh.
+
+    Args:
+        style: "sitting" (upright) or "walking".
+
+    Returns:
+        MeshSpec ~1-2K tris. Sleek feline silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    is_sitting = style == "sitting"
+
+    # Body (sleek, smaller than dog)
+    body_r = 0.06
+    body_y = 0.15 if is_sitting else 0.2
+    bv, bf = _make_sphere(0, body_y, 0, body_r, rings=5, sectors=segs)
+    parts.append((bv, bf))
+
+    # Chest
+    cv, cf = _make_sphere(0, body_y + 0.01, 0.05, body_r * 0.8,
+                           rings=4, sectors=segs)
+    parts.append((cv, cf))
+
+    # Haunches
+    hv, hf = _make_sphere(0, body_y - 0.01, -0.06, body_r * 0.9,
+                           rings=4, sectors=segs)
+    parts.append((hv, hf))
+
+    # Neck (slender)
+    nv, nf = _make_tapered_cylinder(
+        0, body_y + 0.03, 0.07,
+        0.03, 0.025, 0.08, segments=6, rings=1,
+    )
+    parts.append((nv, nf))
+
+    # Head (round, proportionally large)
+    head_y = body_y + 0.1
+    head_z = 0.1
+    head_r = 0.04
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=5, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Snout (small, delicate)
+    snv, snf = _make_sphere(0, head_y - 0.01, head_z + head_r * 0.85,
+                             0.015, rings=3, sectors=5)
+    parts.append((snv, snf))
+
+    # Ears (large, triangular -- cat signature)
+    for side in [-1.0, 1.0]:
+        ev, ef = _make_cone(
+            side * 0.025, head_y + head_r * 0.8, head_z - 0.005,
+            0.012, 0.04, segments=4,
+        )
+        parts.append((ev, ef))
+
+    if is_sitting:
+        # Front paws
+        for side in [-1.0, 1.0]:
+            fpv, fpf = _make_tapered_cylinder(
+                side * 0.035, 0, 0.04,
+                0.012, 0.01, 0.15, segments=5, rings=1,
+            )
+            parts.append((fpv, fpf))
+        # Hind legs tucked
+        for side in [-1.0, 1.0]:
+            hlv, hlf = _make_sphere(side * 0.04, 0.07, -0.04,
+                                     0.025, rings=4, sectors=5)
+            parts.append((hlv, hlf))
+    else:
+        # Four legs standing
+        leg_positions = [
+            (-0.035, 0.04),
+            (0.035, 0.04),
+            (-0.035, -0.05),
+            (0.035, -0.05),
+        ]
+        for lx, lz in leg_positions:
+            lv, lf = _make_tapered_cylinder(
+                lx, 0, lz, 0.012, 0.008,
+                0.2, segments=5, rings=2,
+            )
+            parts.append((lv, lf))
+
+    # Tail (long, curved, elegant)
+    tail_segs = 8
+    for i in range(tail_segs):
+        t = i / tail_segs
+        tr = 0.008 - t * 0.003
+        ty = body_y - 0.02 + t * 0.05 + math.sin(t * math.pi) * 0.03
+        tz = -0.09 - t * 0.06
+        tx = math.sin(t * math.pi * 0.5) * 0.02
+        tsv, tsf = _make_sphere(tx, ty, tz, tr, rings=3, sectors=4)
+        parts.append((tsv, tsf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Cat_{style}", verts, faces,
+                        style=style, category="domestic_animal")
+
+
+# =========================================================================
+# CATEGORY: VERMIN
+# =========================================================================
+
+
+def generate_rat_mesh(style: str = "standing") -> MeshSpec:
+    """Generate a stylized rat mesh (tiny quadruped).
+
+    Args:
+        style: "standing" or "crouching".
+
+    Returns:
+        MeshSpec ~300-600 tris. Small, hunched rodent.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 6
+
+    # Body (hunched, elongated)
+    body_r = 0.025
+    body_y = 0.035
+    bv, bf = _make_sphere(0, body_y, 0, body_r, rings=4, sectors=segs)
+    parts.append((bv, bf))
+
+    # Rear (slightly larger)
+    rv, rf = _make_sphere(0, body_y - 0.003, -0.025, body_r * 1.05,
+                           rings=4, sectors=segs)
+    parts.append((rv, rf))
+
+    # Head (pointed)
+    head_y = body_y + 0.01 if style != "crouching" else body_y
+    head_z = 0.03
+    head_r = 0.018
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=4, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Snout (very pointed)
+    snv, snf = _make_cone(
+        0, head_y - 0.003, head_z + head_r * 0.9,
+        0.008, 0.02, segments=4,
+    )
+    snv_rot = [(v[0], head_y - 0.003 + (v[2] - head_z - head_r * 0.9) * 0.05,
+                head_z + head_r * 0.9 + (v[1] - head_y + 0.003)) for v in snv]
+    parts.append((snv_rot, snf))
+
+    # Ears (round, relatively large)
+    for side in [-1.0, 1.0]:
+        ev, ef = _make_sphere(side * 0.012, head_y + head_r * 0.6, head_z - 0.003,
+                               0.008, rings=3, sectors=4)
+        parts.append((ev, ef))
+
+    # Legs (tiny)
+    leg_positions = [
+        (-0.015, 0.015),
+        (0.015, 0.015),
+        (-0.015, -0.02),
+        (0.015, -0.02),
+    ]
+    for lx, lz in leg_positions:
+        lv, lf = _make_tapered_cylinder(
+            lx, 0, lz, 0.006, 0.004,
+            body_y, segments=4, rings=1,
+        )
+        parts.append((lv, lf))
+
+    # Tail (long, thin, naked)
+    tail_segs = 6
+    for i in range(tail_segs):
+        t = i / tail_segs
+        tr = 0.004 - t * 0.002
+        ty = body_y - 0.01 - t * 0.01
+        tz = -0.04 - t * 0.03
+        tsv, tsf = _make_sphere(0, ty, tz, tr, rings=3, sectors=3)
+        parts.append((tsv, tsf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Rat_{style}", verts, faces,
+                        style=style, category="vermin")
+
+
+def generate_bat_mesh(style: str = "flying") -> MeshSpec:
+    """Generate a stylized bat mesh with wings spread.
+
+    Args:
+        style: "flying" (wings fully spread) or "hanging" (wings folded, upside down).
+
+    Returns:
+        MeshSpec ~400-800 tris. Distinctive wing silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 6
+
+    # Body (small, compact)
+    body_r = 0.02
+    bv, bf = _make_sphere(0, 0, 0, body_r, rings=4, sectors=segs)
+    parts.append((bv, bf))
+
+    # Head (tiny)
+    head_r = 0.012
+    head_y = 0.025
+    hdv, hdf = _make_sphere(0, head_y, 0.005, head_r, rings=4, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Ears (large for echolocation -- bat signature)
+    for side in [-1.0, 1.0]:
+        ev, ef = _make_cone(
+            side * 0.008, head_y + head_r * 0.7, 0.002,
+            0.005, 0.02, segments=4,
+        )
+        parts.append((ev, ef))
+
+    # Snout (tiny)
+    snv, snf = _make_sphere(0, head_y - 0.002, 0.005 + head_r * 0.9,
+                             0.005, rings=3, sectors=3)
+    parts.append((snv, snf))
+
+    if style == "flying":
+        # Wings spread (the dominant feature)
+        for side in [-1.0, 1.0]:
+            # Wing membrane: flat boxes for segments
+            # Inner wing
+            iwv, iwf = _make_box(side * 0.04, 0.005, -0.005,
+                                  0.025, 0.002, 0.018)
+            parts.append((iwv, iwf))
+            # Mid wing
+            mwv, mwf = _make_box(side * 0.08, 0.01, -0.008,
+                                  0.022, 0.001, 0.02)
+            parts.append((mwv, mwf))
+            # Outer wing
+            owv, owf = _make_box(side * 0.115, 0.015, -0.01,
+                                  0.018, 0.001, 0.016)
+            parts.append((owv, owf))
+            # Wing finger bones
+            for bi in range(3):
+                bx = side * (0.03 + bi * 0.035)
+                bbv, bbf = _make_tapered_cylinder(
+                    bx, 0.003, -0.01, 0.002, 0.001,
+                    0.035, segments=3, rings=1,
+                )
+                parts.append((bbv, bbf))
+    else:
+        # Wings folded (hanging bat)
+        for side in [-1.0, 1.0]:
+            wv, wf = _make_tapered_cylinder(
+                side * 0.02, -0.01, 0,
+                0.012, 0.008, 0.03, segments=4, rings=1,
+            )
+            parts.append((wv, wf))
+
+    # Tiny legs
+    for side in [-1.0, 1.0]:
+        lv, lf = _make_tapered_cylinder(
+            side * 0.01, -body_r, 0,
+            0.003, 0.002, 0.015, segments=3, rings=1,
+        )
+        parts.append((lv, lf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Bat_{style}", verts, faces,
+                        style=style, category="vermin")
+
+
+def generate_small_spider_mesh(style: str = "standard") -> MeshSpec:
+    """Generate a stylized small spider mesh (8-legged).
+
+    Args:
+        style: "standard" or "fat" (wider abdomen, for cave spiders).
+
+    Returns:
+        MeshSpec ~300-600 tris. Creepy eight-legged silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 6
+    is_fat = style == "fat"
+
+    # Cephalothorax (front body)
+    ct_r = 0.015
+    ctv, ctf = _make_sphere(0, 0.02, 0.015, ct_r, rings=4, sectors=segs)
+    parts.append((ctv, ctf))
+
+    # Abdomen (rear, larger)
+    ab_r = 0.022 if not is_fat else 0.03
+    abv, abf = _make_sphere(0, 0.022, -0.02, ab_r, rings=4, sectors=segs)
+    parts.append((abv, abf))
+
+    # Eyes (cluster of tiny bumps)
+    for side in [-1.0, 1.0]:
+        for row in range(2):
+            esv, esf = _make_sphere(
+                side * 0.005, 0.028 + row * 0.003, 0.025 + row * 0.002,
+                0.003, rings=2, sectors=3,
+            )
+            parts.append((esv, esf))
+
+    # Mandibles
+    for side in [-1.0, 1.0]:
+        mv, mf = _make_cone(
+            side * 0.005, 0.015, 0.03,
+            0.003, 0.012, segments=3,
+        )
+        mv_rot = [(v[0], 0.015 + (v[2] - 0.03) * 0.2,
+                    0.03 + (v[1] - 0.015) * 0.8) for v in mv]
+        parts.append((mv_rot, mf))
+
+    # 8 legs (4 pairs)
+    for pair in range(4):
+        pair_z = 0.015 - pair * 0.008
+        for side in [-1.0, 1.0]:
+            # Upper leg (outward and up)
+            angle_out = 0.3 + pair * 0.2
+            ul_len = 0.035 + pair * 0.005
+            ulv, ulf = _make_tapered_cylinder(
+                side * ct_r * 0.8, 0.02, pair_z,
+                0.003, 0.002, ul_len, segments=3, rings=1,
+            )
+            # Angle outward
+            ulv_a = [(v[0] + side * (v[1] - 0.02) * 1.2,
+                      v[1] + (v[1] - 0.02) * 0.3, v[2]) for v in ulv]
+            parts.append((ulv_a, ulf))
+            # Lower leg (downward)
+            ll_x = side * (ct_r * 0.8 + ul_len * 0.8)
+            ll_y = 0.02 + ul_len * 0.4
+            llv, llf = _make_tapered_cylinder(
+                ll_x, 0, pair_z, 0.002, 0.001,
+                ll_y, segments=3, rings=1,
+            )
+            parts.append((llv, llf))
+
+    # Spinnerets (tiny bump at rear)
+    spv, spf = _make_cone(0, 0.018, -0.02 - ab_r * 0.8,
+                           0.004, 0.008, segments=3)
+    spv_rot = [(v[0], 0.018 + (v[2] + 0.02 + ab_r * 0.8) * 0.1,
+                -0.02 - ab_r * 0.8 + (v[1] - 0.018) * -0.5) for v in spv]
+    parts.append((spv_rot, spf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"SmallSpider_{style}", verts, faces,
+                        style=style, category="vermin")
+
+
+def generate_beetle_mesh(style: str = "standard") -> MeshSpec:
+    """Generate a stylized beetle mesh.
+
+    Args:
+        style: "standard" or "horned" (with horn on head).
+
+    Returns:
+        MeshSpec ~200-400 tris. Compact insect silhouette.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 6
+    is_horned = style == "horned"
+
+    # Elytra (wing covers -- the dome shape, beetle signature)
+    el_r = 0.018
+    elv, elf = _make_sphere(0, 0.015, -0.005, el_r, rings=4, sectors=segs)
+    # Flatten the bottom
+    elv_flat = [(v[0], max(v[1], 0.005), v[2]) for v in elv]
+    parts.append((elv_flat, elf))
+
+    # Head (small, forward)
+    head_r = 0.01
+    head_z = 0.015
+    hdv, hdf = _make_sphere(0, 0.012, head_z, head_r, rings=3, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Horn (if horned style)
+    if is_horned:
+        hrnv, hrnf = _make_cone(
+            0, 0.018, head_z + head_r * 0.5,
+            0.004, 0.025, segments=4,
+        )
+        hrnv_rot = [(v[0], 0.018 + (v[2] - head_z - head_r * 0.5) * 0.3,
+                     head_z + head_r * 0.5 + (v[1] - 0.018) * 0.6) for v in hrnv]
+        parts.append((hrnv_rot, hrnf))
+
+    # Mandibles
+    for side in [-1.0, 1.0]:
+        mv, mf = _make_tapered_cylinder(
+            side * 0.004, 0.01, head_z + head_r * 0.7,
+            0.002, 0.001, 0.008, segments=3, rings=1,
+        )
+        parts.append((mv, mf))
+
+    # Antennae
+    for side in [-1.0, 1.0]:
+        av, af = _make_tapered_cylinder(
+            side * 0.006, 0.018, head_z + head_r * 0.3,
+            0.001, 0.0008, 0.015, segments=3, rings=1,
+        )
+        av_a = [(v[0] + side * (v[1] - 0.018) * 0.3, v[1], v[2]) for v in av]
+        parts.append((av_a, af))
+
+    # Legs (6 -- 3 pairs)
+    for pair in range(3):
+        pz = 0.005 - pair * 0.008
+        for side in [-1.0, 1.0]:
+            lv, lf = _make_tapered_cylinder(
+                side * el_r * 0.7, 0, pz,
+                0.002, 0.001, 0.015, segments=3, rings=1,
+            )
+            lv_a = [(v[0] + side * (v[1]) * 0.8, v[1], v[2]) for v in lv]
+            parts.append((lv_a, lf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Beetle_{style}", verts, faces,
+                        style=style, category="vermin")
+
+
+# =========================================================================
+# CATEGORY: SWAMP ANIMALS
+# =========================================================================
+
+
+def generate_frog_mesh(style: str = "sitting") -> MeshSpec:
+    """Generate a stylized frog mesh in sitting pose.
+
+    Args:
+        style: "sitting" (crouched) or "leaping" (legs extended).
+
+    Returns:
+        MeshSpec ~400-800 tris. Wide, squat amphibian.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 6
+    is_leaping = style == "leaping"
+
+    # Body (wide, flat, squat)
+    body_rx = 0.035
+    body_ry = 0.02
+    bv, bf = _make_sphere(0, 0.03, 0, body_ry, rings=4, sectors=segs)
+    # Squash vertically, widen horizontally
+    bv_squash = [(v[0] * 1.5, v[1] * 0.7, v[2] * 1.2) for v in bv]
+    parts.append((bv_squash, bf))
+
+    # Head (wide, flat)
+    head_y = 0.035
+    head_z = 0.03
+    hdv, hdf = _make_sphere(0, head_y, head_z, 0.018, rings=4, sectors=segs)
+    hdv_sq = [(v[0] * 1.4, v[1] * 0.8, v[2]) for v in hdv]
+    parts.append((hdv_sq, hdf))
+
+    # Bulging eyes (frog signature)
+    for side in [-1.0, 1.0]:
+        ev, ef = _make_sphere(side * 0.02, head_y + 0.012, head_z + 0.005,
+                               0.008, rings=3, sectors=4)
+        parts.append((ev, ef))
+
+    # Mouth line (wide jaw)
+    mjv, mjf = _make_box(0, head_y - 0.01, head_z + 0.015,
+                          0.025, 0.003, 0.005)
+    parts.append((mjv, mjf))
+
+    if is_leaping:
+        # Hind legs extended back
+        for side in [-1.0, 1.0]:
+            # Thigh
+            thv, thf = _make_tapered_cylinder(
+                side * 0.03, 0.01, -0.03,
+                0.012, 0.008, 0.04, segments=4, rings=1,
+            )
+            thv_a = [(v[0] + side * (v[1] - 0.01) * 0.3,
+                      v[1] - abs(v[1] - 0.01) * 0.2,
+                      v[2] - abs(v[1] - 0.01) * 0.3) for v in thv]
+            parts.append((thv_a, thf))
+            # Shin
+            shv, shf = _make_tapered_cylinder(
+                side * 0.04, 0.005, -0.06,
+                0.007, 0.005, 0.035, segments=4, rings=1,
+            )
+            parts.append((shv, shf))
+            # Webbed foot
+            fv, ff = _make_box(side * 0.04, 0, -0.085, 0.01, 0.002, 0.012)
+            parts.append((fv, ff))
+    else:
+        # Hind legs tucked (sitting)
+        for side in [-1.0, 1.0]:
+            hlv, hlf = _make_sphere(side * 0.03, 0.015, -0.02,
+                                     0.015, rings=4, sectors=5)
+            parts.append((hlv, hlf))
+            # Folded shin
+            fsv, fsf = _make_tapered_cylinder(
+                side * 0.035, 0, -0.01,
+                0.006, 0.008, 0.02, segments=4, rings=1,
+            )
+            parts.append((fsv, fsf))
+
+    # Front legs (small)
+    for side in [-1.0, 1.0]:
+        flv, flf = _make_tapered_cylinder(
+            side * 0.025, 0, 0.02,
+            0.006, 0.004, 0.03, segments=4, rings=1,
+        )
+        parts.append((flv, flf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Frog_{style}", verts, faces,
+                        style=style, category="swamp_animal")
+
+
+def generate_snake_ambient_mesh(style: str = "coiled") -> MeshSpec:
+    """Generate a stylized non-monster snake mesh (ambient wildlife).
+
+    Args:
+        style: "coiled" (resting coil) or "slithering" (S-curve).
+
+    Returns:
+        MeshSpec ~300-600 tris. Thin serpentine silhouette.
+    """
+    is_coiled = style == "coiled"
+    rs = 6  # ring segments
+    total_segs = 16
+    thickness = 0.008
+    length = 0.3
+
+    verts: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+
+    for i in range(total_segs + 1):
+        t = i / total_segs
+        # Taper: thicker in middle, thin at head and tail
+        env = math.sin(t * math.pi)
+        if t < 0.1:
+            env = t / 0.1 * math.sin(0.1 * math.pi)
+        r = thickness * max(0.3, env)
+
+        if is_coiled:
+            # Spiral coil
+            coil_angle = t * math.pi * 4
+            coil_r = 0.04 * (1.0 - t * 0.3)
+            cx = math.cos(coil_angle) * coil_r
+            cz = math.sin(coil_angle) * coil_r
+            cy = thickness * 0.5 + r + t * 0.03  # Stack upward slightly
+        else:
+            # S-curve
+            cx = math.sin(t * math.pi * 2) * 0.04
+            cy = thickness * 0.5 + r
+            cz = t * length - length / 2
+
+        for j in range(rs):
+            a = 2.0 * math.pi * j / rs
+            verts.append((
+                cx + math.cos(a) * r,
+                cy + math.sin(a) * r * 0.8,
+                cz,
+            ))
+
+    # Side faces
+    for i in range(total_segs):
+        for j in range(rs):
+            j2 = (j + 1) % rs
+            faces.append((
+                i * rs + j, i * rs + j2,
+                (i + 1) * rs + j2, (i + 1) * rs + j,
+            ))
+
+    # End caps
+    faces.append(tuple(range(rs)))
+    faces.append(tuple(total_segs * rs + j for j in range(rs - 1, -1, -1)))
+
+    # Head (slightly wider at front end -- index total_segs)
+    head_t = 1.0  # at the end of body
+    if is_coiled:
+        coil_a = head_t * math.pi * 4
+        coil_r2 = 0.04 * (1.0 - head_t * 0.3)
+        hx = math.cos(coil_a) * coil_r2
+        hz = math.sin(coil_a) * coil_r2
+        hy = thickness * 0.5 + thickness * 0.3 + head_t * 0.03
+    else:
+        hx = math.sin(head_t * math.pi * 2) * 0.04
+        hy = thickness * 0.5 + thickness * 0.3
+        hz = head_t * length - length / 2
+
+    head_parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    hv, hf = _make_sphere(hx, hy + 0.003, hz, thickness * 1.3, rings=3, sectors=5)
+    head_parts.append((hv, hf))
+
+    # Eyes
+    for side in [-1.0, 1.0]:
+        esv, esf = _make_sphere(hx + side * thickness * 1.0,
+                                 hy + 0.006, hz + thickness * 0.5,
+                                 0.002, rings=2, sectors=3)
+        head_parts.append((esv, esf))
+
+    head_v, head_f = _merge_meshes(*head_parts)
+    # Merge head onto body
+    offset = len(verts)
+    verts.extend(head_v)
+    for face in head_f:
+        faces.append(tuple(idx + offset for idx in face))
+
+    return _make_result(f"SnakeAmbient_{style}", verts, faces,
+                        style=style, category="swamp_animal")
+
+
+def generate_turtle_mesh(style: str = "standing") -> MeshSpec:
+    """Generate a stylized turtle mesh with shell.
+
+    Args:
+        style: "standing" (walking) or "retracted" (head/legs partially pulled in).
+
+    Returns:
+        MeshSpec ~500-1K tris. Dome shell with peeking limbs.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    segs = 8
+    is_retracted = style == "retracted"
+
+    # Shell (dome -- the most important feature)
+    shell_r = 0.05
+    # Upper shell (half sphere)
+    usv, usf = _make_sphere(0, 0.03, 0, shell_r, rings=5, sectors=segs)
+    # Flatten the bottom half
+    usv_dome = [(v[0], max(v[1], 0.015), v[2]) for v in usv]
+    parts.append((usv_dome, usf))
+
+    # Plastron (bottom shell -- flat disc)
+    pv, pf = _make_cylinder(0, 0.01, 0, shell_r * 0.9, 0.008,
+                             segments=segs, cap_top=True, cap_bottom=True)
+    parts.append((pv, pf))
+
+    # Shell ridge pattern (rings on top)
+    for ring_i in range(3):
+        ring_r = shell_r * (0.8 - ring_i * 0.2)
+        ring_y = 0.03 + shell_r * 0.3 * (1.0 - (ring_i * 0.25))
+        rv, rf = _make_torus_ring(0, ring_y, 0, ring_r, 0.003,
+                                   major_segments=segs, minor_segments=3)
+        parts.append((rv, rf))
+
+    head_extend = 0.6 if is_retracted else 1.0
+
+    # Head
+    head_z = shell_r * 0.9 * head_extend
+    head_y = 0.03
+    head_r = 0.015
+    hdv, hdf = _make_sphere(0, head_y, head_z, head_r, rings=4, sectors=segs)
+    parts.append((hdv, hdf))
+
+    # Neck
+    nv, nf = _make_tapered_cylinder(
+        0, head_y - 0.005, shell_r * 0.5,
+        0.01, 0.008, head_z - shell_r * 0.5, segments=5, rings=1,
+    )
+    parts.append((nv, nf))
+
+    # Eyes
+    for side in [-1.0, 1.0]:
+        esv, esf = _make_sphere(side * 0.008, head_y + 0.008,
+                                 head_z + head_r * 0.5,
+                                 0.004, rings=2, sectors=3)
+        parts.append((esv, esf))
+
+    # Legs (4 stubby legs poking out from under shell)
+    leg_extend = 0.5 if is_retracted else 1.0
+    leg_positions = [
+        (-0.035, 0.025),
+        (0.035, 0.025),
+        (-0.035, -0.025),
+        (0.035, -0.025),
+    ]
+    for lx, lz in leg_positions:
+        lv, lf = _make_tapered_cylinder(
+            lx * leg_extend, 0, lz * leg_extend,
+            0.01, 0.008, 0.02, segments=4, rings=1,
+        )
+        # Angle outward
+        lv_a = [(v[0] + (lx / abs(lx) if lx != 0 else 0) * v[1] * 0.3,
+                 v[1], v[2]) for v in lv]
+        parts.append((lv_a, lf))
+
+    # Tail (tiny)
+    tlv, tlf = _make_cone(0, 0.02, -shell_r * 0.85 * leg_extend,
+                           0.005, 0.015, segments=3)
+    tlv_rot = [(v[0], 0.02 + (v[2] + shell_r * 0.85 * leg_extend) * 0.1,
+                -shell_r * 0.85 * leg_extend + (v[1] - 0.02) * -0.5) for v in tlv]
+    parts.append((tlv_rot, tlf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Turtle_{style}", verts, faces,
+                        style=style, category="swamp_animal")
+
+
+# =========================================================================
+# Buildings & Structures (Task #43)
+# =========================================================================
+
+
+def generate_mine_entrance_mesh(style: str = "timber") -> MeshSpec:
+    """Generate a mine shaft entrance with support beams, track, and cart.
+
+    Args:
+        style: "timber" (wooden beam supports), "stone" (hewn rock),
+               "abandoned" (collapsed, overgrown).
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    tunnel_w = 2.0
+    tunnel_h = 2.5
+    tunnel_d = 3.0
+    hw = tunnel_w / 2
+    hd = tunnel_d / 2
+
+    if style == "timber":
+        # Frame archway -- two vertical posts + crossbeam
+        beam_r = 0.1
+        for sx in [-1, 1]:
+            pv, pf = _make_box(sx * hw, tunnel_h / 2, -hd,
+                               beam_r, tunnel_h / 2, beam_r)
+            parts.append((pv, pf))
+        # Crossbeam
+        cv, cf = _make_box(0, tunnel_h + beam_r, -hd,
+                           hw + beam_r, beam_r, beam_r)
+        parts.append((cv, cf))
+
+        # Interior support beams (3 sets receding into the mine)
+        for i in range(3):
+            z_off = -hd - (i + 1) * 1.5
+            for sx in [-1, 1]:
+                sv, sf = _make_box(sx * (hw - 0.05), tunnel_h / 2, z_off,
+                                   beam_r * 0.8, tunnel_h / 2, beam_r * 0.8)
+                parts.append((sv, sf))
+            # Crossbeam
+            cbv, cbf = _make_box(0, tunnel_h + beam_r * 0.8, z_off,
+                                 hw, beam_r * 0.8, beam_r * 0.8)
+            parts.append((cbv, cbf))
+
+        # Ground platform
+        gv, gf = _make_box(0, -0.05, -hd * 2, hw + 0.5, 0.05, hd * 2)
+        parts.append((gv, gf))
+
+        # Rail tracks (two rails running into the mine)
+        rail_w = 0.04
+        rail_h = 0.03
+        track_spacing = 0.5
+        track_len = tunnel_d + 3.0
+        for sx in [-1, 1]:
+            rv, rf = _make_box(sx * track_spacing, rail_h / 2, -track_len / 2,
+                               rail_w / 2, rail_h / 2, track_len / 2)
+            parts.append((rv, rf))
+
+        # Rail ties
+        tie_count = int(track_len / 0.5)
+        for i in range(tie_count):
+            tz = -0.5 + (i + 0.5) * track_len / tie_count - track_len / 2
+            tv, tf = _make_box(0, 0.005, tz,
+                               track_spacing + 0.15, 0.01, 0.06)
+            parts.append((tv, tf))
+
+        # Mine cart (simple box on the track)
+        cart_w = 0.6
+        cart_h = 0.4
+        cart_d = 0.8
+        # Cart body
+        mv, mf = _make_beveled_box(0, rail_h + cart_h / 2 + 0.1, 1.0,
+                                   cart_w / 2, cart_h / 2, cart_d / 2,
+                                   bevel=0.02)
+        parts.append((mv, mf))
+        # Cart wheels (4 small cylinders)
+        for sz in [-1, 1]:
+            for sx in [-1, 1]:
+                wv, wf = _make_cylinder(sx * (cart_w / 2 + 0.02),
+                                        rail_h + 0.08,
+                                        1.0 + sz * cart_d * 0.35,
+                                        0.06, 0.04, segments=6)
+                parts.append((wv, wf))
+
+    elif style == "stone":
+        # Hewn stone entrance arch
+        arch_thick = 0.3
+        for sx in [-1, 1]:
+            pv, pf = _make_beveled_box(sx * hw, tunnel_h / 2, -hd,
+                                       arch_thick / 2, tunnel_h / 2, arch_thick / 2,
+                                       bevel=0.02)
+            parts.append((pv, pf))
+        # Stone lintel
+        lv, lf = _make_beveled_box(0, tunnel_h + arch_thick / 2, -hd,
+                                   hw + arch_thick, arch_thick / 2, arch_thick / 2,
+                                   bevel=0.02)
+        parts.append((lv, lf))
+
+        # Rough rock face around entrance
+        for i in range(4):
+            rx = -hw - 0.5 + i * (tunnel_w + 1.0) / 3
+            ry = tunnel_h * 0.3 + i * 0.2
+            rv, rf = _make_beveled_box(rx, ry, -hd - 0.3,
+                                       0.4, 0.3, 0.2, bevel=0.05)
+            parts.append((rv, rf))
+
+        # Stone floor
+        gv, gf = _make_beveled_box(0, -0.05, -hd * 2, hw + 0.3, 0.05, hd * 2,
+                                   bevel=0.01)
+        parts.append((gv, gf))
+
+        # Rail tracks
+        for sx in [-1, 1]:
+            rv, rf = _make_box(sx * 0.5, 0.02, -tunnel_d, 0.03, 0.02, tunnel_d)
+            parts.append((rv, rf))
+
+    else:  # abandoned
+        # Collapsed timber frame
+        beam_r = 0.1
+        # One standing post, one tilted
+        pv, pf = _make_box(-hw, tunnel_h / 2, -hd,
+                           beam_r, tunnel_h / 2, beam_r)
+        parts.append((pv, pf))
+        # Tilted post (lean inward)
+        tv = [(-hw + tunnel_w * 0.9, 0, -hd - beam_r),
+              (-hw + tunnel_w * 0.9 + beam_r * 2, 0, -hd - beam_r),
+              (-hw + tunnel_w * 0.9 + beam_r * 2, 0, -hd + beam_r),
+              (-hw + tunnel_w * 0.9, 0, -hd + beam_r),
+              (-hw + tunnel_w * 0.7, tunnel_h * 0.7, -hd - beam_r),
+              (-hw + tunnel_w * 0.7 + beam_r * 2, tunnel_h * 0.7, -hd - beam_r),
+              (-hw + tunnel_w * 0.7 + beam_r * 2, tunnel_h * 0.7, -hd + beam_r),
+              (-hw + tunnel_w * 0.7, tunnel_h * 0.7, -hd + beam_r)]
+        tf = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
+              (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+        parts.append((tv, tf))
+
+        # Fallen crossbeam
+        fcv, fcf = _make_box(0, 0.15, -hd, hw * 0.8, beam_r * 0.8, beam_r * 0.8)
+        parts.append((fcv, fcf))
+
+        # Rubble pile
+        for i in range(6):
+            rx = -hw * 0.6 + i * hw * 0.24
+            rz = -hd + 0.5 * ((i * 7) % 3 - 1)
+            rv, rf = _make_beveled_box(rx, 0.1, rz, 0.2, 0.1, 0.15, bevel=0.03)
+            parts.append((rv, rf))
+
+        # Overgrown ground
+        gv, gf = _make_box(0, -0.05, -hd, hw + 0.5, 0.05, hd + 0.5)
+        parts.append((gv, gf))
+
+        # Rusted broken rail
+        rv, rf = _make_box(0, 0.02, -1.0, 0.03, 0.02, 1.5)
+        parts.append((rv, rf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"MineEntrance_{style}", verts, faces,
+                        style=style, category="building")
+
+
+def generate_sewer_tunnel_mesh(style: str = "brick") -> MeshSpec:
+    """Generate a brick-lined sewer tunnel section with water channel and walkway.
+
+    Args:
+        style: "brick" (intact masonry), "stone" (rough-hewn),
+               "collapsed" (partially caved in).
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    tunnel_w = 3.0
+    tunnel_h = 2.5
+    tunnel_d = 6.0
+    hw = tunnel_w / 2
+    hd = tunnel_d / 2
+    wall_thick = 0.2
+
+    if style == "brick":
+        # Tunnel walls (left and right)
+        for sx in [-1, 1]:
+            wv, wf = _make_beveled_box(sx * (hw + wall_thick / 2), tunnel_h / 2, 0,
+                                       wall_thick / 2, tunnel_h / 2, hd,
+                                       bevel=0.01)
+            parts.append((wv, wf))
+
+        # Ceiling (arched approximation -- flat slab)
+        cv, cf = _make_beveled_box(0, tunnel_h + wall_thick / 2, 0,
+                                   hw + wall_thick, wall_thick / 2, hd,
+                                   bevel=0.01)
+        parts.append((cv, cf))
+
+        # Floor
+        fv, ff = _make_box(0, -0.05, 0, hw + wall_thick, 0.05, hd)
+        parts.append((fv, ff))
+
+        # Water channel (central trough)
+        channel_w = 1.0
+        channel_d = 0.3
+        # Channel depression
+        chv, chf = _make_box(0, -channel_d / 2 - 0.05, 0,
+                             channel_w / 2, channel_d / 2, hd - 0.1)
+        parts.append((chv, chf))
+        # Water surface (slightly below floor level)
+        wsv, wsf = _make_box(0, -0.15, 0, channel_w / 2 - 0.05, 0.01, hd - 0.2)
+        parts.append((wsv, wsf))
+
+        # Walkways (raised edges along each side of channel)
+        for sx in [-1, 1]:
+            walk_x = sx * (channel_w / 2 + (hw - channel_w / 2) / 2)
+            walk_w = (hw - channel_w / 2) / 2
+            wkv, wkf = _make_box(walk_x, 0.02, 0, walk_w, 0.07, hd - 0.05)
+            parts.append((wkv, wkf))
+
+        # Grate openings (ceiling drains)
+        for z in [-hd * 0.5, 0, hd * 0.5]:
+            gv, gf = _make_box(0, tunnel_h - 0.01, z, 0.3, 0.01, 0.3)
+            parts.append((gv, gf))
+
+        # Pipe outlets (side wall)
+        for z in [-hd * 0.3, hd * 0.4]:
+            pv, pf = _make_cylinder(hw, tunnel_h * 0.4, z,
+                                    0.12, wall_thick + 0.1, segments=8)
+            parts.append((pv, pf))
+
+    elif style == "stone":
+        # Rougher stone walls
+        for sx in [-1, 1]:
+            wv, wf = _make_beveled_box(sx * (hw + wall_thick / 2), tunnel_h / 2, 0,
+                                       wall_thick / 2 + 0.03, tunnel_h / 2, hd,
+                                       bevel=0.03)
+            parts.append((wv, wf))
+
+        # Rough ceiling
+        cv, cf = _make_beveled_box(0, tunnel_h + wall_thick / 2, 0,
+                                   hw + wall_thick + 0.03, wall_thick / 2 + 0.03, hd,
+                                   bevel=0.03)
+        parts.append((cv, cf))
+
+        # Uneven floor
+        fv, ff = _make_beveled_box(0, -0.05, 0,
+                                   hw + wall_thick, 0.05, hd, bevel=0.02)
+        parts.append((fv, ff))
+
+        # Central water channel
+        chv, chf = _make_box(0, -0.2, 0, 0.6, 0.15, hd - 0.2)
+        parts.append((chv, chf))
+
+        # Walkways
+        for sx in [-1, 1]:
+            wkv, wkf = _make_beveled_box(sx * (hw * 0.6), 0.03, 0,
+                                         hw * 0.3, 0.08, hd - 0.1,
+                                         bevel=0.02)
+            parts.append((wkv, wkf))
+
+        # Stalactites from ceiling
+        for i in range(4):
+            sz = -hd * 0.6 + i * hd * 0.4
+            sx = (-1) ** i * hw * 0.3
+            sv, sf = _make_tapered_cylinder(sx, tunnel_h, sz,
+                                            0.06, 0.01, -0.3,
+                                            segments=5, rings=1)
+            parts.append((sv, sf))
+
+    else:  # collapsed
+        # Partial walls
+        wv, wf = _make_beveled_box(-hw - wall_thick / 2, tunnel_h / 2, 0,
+                                   wall_thick / 2, tunnel_h / 2, hd,
+                                   bevel=0.02)
+        parts.append((wv, wf))
+        # Right wall partially collapsed
+        wv2, wf2 = _make_beveled_box(hw + wall_thick / 2, tunnel_h * 0.35, 0,
+                                     wall_thick / 2 + 0.05, tunnel_h * 0.35, hd,
+                                     bevel=0.03)
+        parts.append((wv2, wf2))
+
+        # Broken ceiling
+        cv, cf = _make_beveled_box(-hw * 0.3, tunnel_h + wall_thick / 2, hd * 0.3,
+                                   hw * 0.7, wall_thick / 2, hd * 0.6,
+                                   bevel=0.02)
+        parts.append((cv, cf))
+
+        # Floor with debris
+        fv, ff = _make_box(0, -0.05, 0, hw + wall_thick, 0.05, hd)
+        parts.append((fv, ff))
+
+        # Rubble pile from collapsed section
+        for i in range(8):
+            rx = hw * 0.2 + i * 0.2
+            rz = -hd * 0.3 + (i * 5) % 4 * 0.4
+            ry = 0.05 + i * 0.05
+            rv, rf = _make_beveled_box(rx, ry, rz, 0.15, 0.1, 0.12, bevel=0.03)
+            parts.append((rv, rf))
+
+        # Stagnant water pool
+        wsv, wsf = _make_box(0, -0.1, 0, 0.8, 0.01, hd * 0.7)
+        parts.append((wsv, wsf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"SewerTunnel_{style}", verts, faces,
+                        style=style, category="building")
+
+
+def generate_catacomb_mesh(style: str = "ossuary") -> MeshSpec:
+    """Generate a narrow corridor with burial niches in walls.
+
+    Args:
+        style: "ossuary" (skull-lined walls), "crypt" (stone sarcophagi),
+               "burial_chamber" (open grave niches).
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    corridor_w = 2.0
+    corridor_h = 2.8
+    corridor_d = 8.0
+    hw = corridor_w / 2
+    hd = corridor_d / 2
+    wall_thick = 0.25
+
+    # Base corridor walls
+    for sx in [-1, 1]:
+        wv, wf = _make_beveled_box(sx * (hw + wall_thick / 2), corridor_h / 2, 0,
+                                   wall_thick / 2, corridor_h / 2, hd,
+                                   bevel=0.01)
+        parts.append((wv, wf))
+
+    # Ceiling (vaulted -- flat approximation)
+    cv, cf = _make_beveled_box(0, corridor_h + wall_thick / 2, 0,
+                               hw + wall_thick, wall_thick / 2, hd,
+                               bevel=0.01)
+    parts.append((cv, cf))
+
+    # Floor
+    fv, ff = _make_beveled_box(0, -0.05, 0,
+                               hw + wall_thick, 0.05, hd, bevel=0.01)
+    parts.append((fv, ff))
+
+    niche_count = 6  # per side
+
+    if style == "ossuary":
+        # Skull-lined niches along both walls
+        for sx in [-1, 1]:
+            for i in range(niche_count):
+                nz = -hd + (i + 0.5) * corridor_d / niche_count
+                ny = corridor_h * 0.4
+                # Niche recess (box cutout visual)
+                nv, nf = _make_box(sx * (hw + wall_thick * 0.3), ny, nz,
+                                   wall_thick * 0.4, 0.25, 0.3)
+                parts.append((nv, nf))
+                # Skull placeholder (small sphere)
+                sv, sf = _make_sphere(sx * (hw + wall_thick * 0.2), ny, nz,
+                                      0.07, rings=4, sectors=6)
+                parts.append((sv, sf))
+            # Second row higher
+            for i in range(niche_count):
+                nz = -hd + (i + 0.5) * corridor_d / niche_count
+                ny = corridor_h * 0.7
+                nv, nf = _make_box(sx * (hw + wall_thick * 0.3), ny, nz,
+                                   wall_thick * 0.4, 0.2, 0.25)
+                parts.append((nv, nf))
+                sv, sf = _make_sphere(sx * (hw + wall_thick * 0.2), ny, nz,
+                                      0.06, rings=4, sectors=6)
+                parts.append((sv, sf))
+
+    elif style == "crypt":
+        # Stone sarcophagi in wall alcoves
+        for sx in [-1, 1]:
+            for i in range(niche_count // 2):
+                nz = -hd + (i + 0.5) * corridor_d / (niche_count // 2)
+                # Alcove
+                av, af = _make_box(sx * (hw + wall_thick), corridor_h * 0.35, nz,
+                                   wall_thick * 0.8, 0.35, 0.5)
+                parts.append((av, af))
+                # Sarcophagus lid
+                lv, lf = _make_beveled_box(sx * (hw + wall_thick), corridor_h * 0.55, nz,
+                                           wall_thick * 0.6, 0.08, 0.4,
+                                           bevel=0.02)
+                parts.append((lv, lf))
+
+        # Floor slab markers
+        for i in range(4):
+            fmv, fmf = _make_box(0, 0.01, -hd * 0.6 + i * hd * 0.4,
+                                 hw * 0.7, 0.005, 0.35)
+            parts.append((fmv, fmf))
+
+    else:  # burial_chamber
+        # Open grave niches (rectangular holes in walls)
+        for sx in [-1, 1]:
+            for i in range(niche_count):
+                nz = -hd + (i + 0.5) * corridor_d / niche_count
+                # Lower niche
+                nv, nf = _make_box(sx * (hw + wall_thick * 0.5),
+                                   corridor_h * 0.3, nz,
+                                   wall_thick * 0.6, 0.3, 0.4)
+                parts.append((nv, nf))
+                # Upper niche
+                nv2, nf2 = _make_box(sx * (hw + wall_thick * 0.5),
+                                     corridor_h * 0.65, nz,
+                                     wall_thick * 0.6, 0.25, 0.35)
+                parts.append((nv2, nf2))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Catacomb_{style}", verts, faces,
+                        style=style, category="building")
+
+
+def generate_temple_mesh(style: str = "gothic") -> MeshSpec:
+    """Generate a large temple with nave, columns, and altar platform.
+
+    Args:
+        style: "gothic" (pointed arches, tall), "ancient" (classical columns),
+               "ruined" (collapsed roof, broken columns).
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    temple_w = 10.0
+    temple_d = 16.0
+    temple_h = 8.0
+    hw = temple_w / 2
+    hd = temple_d / 2
+    wall_thick = 0.3
+
+    if style == "gothic":
+        # Floor
+        fv, ff = _make_beveled_box(0, -0.05, 0, hw + wall_thick, 0.05, hd + wall_thick,
+                                   bevel=0.02)
+        parts.append((fv, ff))
+
+        # Side walls
+        for sx in [-1, 1]:
+            wv, wf = _make_beveled_box(sx * (hw + wall_thick / 2), temple_h / 2, 0,
+                                       wall_thick / 2, temple_h / 2, hd,
+                                       bevel=0.02)
+            parts.append((wv, wf))
+
+        # Back wall
+        bwv, bwf = _make_beveled_box(0, temple_h / 2, -hd - wall_thick / 2,
+                                     hw + wall_thick, temple_h / 2, wall_thick / 2,
+                                     bevel=0.02)
+        parts.append((bwv, bwf))
+
+        # Front wall (with entrance gap -- two segments)
+        front_half = hw * 0.35
+        for sx in [-1, 1]:
+            fwv, fwf = _make_beveled_box(sx * (hw - front_half / 2 + wall_thick / 2),
+                                         temple_h / 2, hd + wall_thick / 2,
+                                         front_half / 2, temple_h / 2, wall_thick / 2,
+                                         bevel=0.02)
+            parts.append((fwv, fwf))
+
+        # Nave columns (two rows)
+        col_spacing = temple_d / 6
+        col_r = 0.2
+        for sx in [-1, 1]:
+            for i in range(5):
+                cz = -hd + (i + 1) * col_spacing
+                cv, cf = _make_cylinder(sx * (hw * 0.6), 0, cz,
+                                        col_r, temple_h, segments=8)
+                parts.append((cv, cf))
+
+        # Pointed roof (two slanted planes)
+        ridge_h = temple_h + 3.0
+        roof_verts = [
+            (-hw - wall_thick, temple_h, -hd - wall_thick),
+            (hw + wall_thick, temple_h, -hd - wall_thick),
+            (0, ridge_h, -hd - wall_thick),
+            (-hw - wall_thick, temple_h, hd + wall_thick),
+            (hw + wall_thick, temple_h, hd + wall_thick),
+            (0, ridge_h, hd + wall_thick),
+        ]
+        roof_faces = [
+            (0, 2, 1),
+            (3, 4, 5),
+            (0, 3, 5, 2),
+            (1, 2, 5, 4),
+        ]
+        parts.append((roof_verts, roof_faces))
+
+        # Altar platform
+        av, af = _make_beveled_box(0, 0.3, -hd + 2.0, 1.5, 0.3, 1.0, bevel=0.03)
+        parts.append((av, af))
+        # Altar slab on top
+        asv, asf = _make_beveled_box(0, 0.75, -hd + 2.0, 1.0, 0.15, 0.6, bevel=0.02)
+        parts.append((asv, asf))
+
+    elif style == "ancient":
+        # Raised platform (stylobate)
+        step_h = 0.2
+        for i in range(3):
+            sv, sf = _make_beveled_box(0, i * step_h + step_h / 2, 0,
+                                       hw + wall_thick + (2 - i) * 0.3,
+                                       step_h / 2,
+                                       hd + wall_thick + (2 - i) * 0.3,
+                                       bevel=0.01)
+            parts.append((sv, sf))
+
+        base_y = 3 * step_h
+
+        # Floor
+        fv, ff = _make_box(0, base_y, 0, hw, 0.05, hd)
+        parts.append((fv, ff))
+
+        # Peristyle columns (around perimeter)
+        col_r = 0.25
+        n_side = 6
+        n_front = 4
+        # Front/back columns
+        for row_z, count in [(hd - 0.3, n_front), (-hd + 0.3, n_front)]:
+            for i in range(count):
+                cx_pos = -hw + (i + 0.5) * temple_w / count + 0.3
+                cv, cf = _make_tapered_cylinder(cx_pos, base_y, row_z,
+                                                col_r, col_r * 0.85, temple_h - base_y,
+                                                segments=8, rings=1)
+                parts.append((cv, cf))
+        # Side columns
+        for side_x in [-hw + 0.3, hw - 0.3]:
+            for i in range(n_side):
+                cz_pos = -hd + (i + 0.5) * temple_d / n_side + 0.3
+                cv, cf = _make_tapered_cylinder(side_x, base_y, cz_pos,
+                                                col_r, col_r * 0.85, temple_h - base_y,
+                                                segments=8, rings=1)
+                parts.append((cv, cf))
+
+        # Entablature (beam across top of columns)
+        ev, ef = _make_box(0, temple_h + 0.15, 0,
+                           hw + 0.3, 0.3, hd + 0.3)
+        parts.append((ev, ef))
+
+        # Pediment (triangular gable on front)
+        ped_h = 2.0
+        ped_verts = [
+            (-hw - 0.3, temple_h + 0.3, hd + 0.3),
+            (hw + 0.3, temple_h + 0.3, hd + 0.3),
+            (0, temple_h + 0.3 + ped_h, hd + 0.3),
+        ]
+        ped_faces = [(0, 1, 2)]
+        parts.append((ped_verts, ped_faces))
+
+        # Altar
+        av, af = _make_beveled_box(0, base_y + 0.5, -hd * 0.5,
+                                   0.8, 0.5, 0.5, bevel=0.02)
+        parts.append((av, af))
+
+    else:  # ruined
+        # Broken floor
+        fv, ff = _make_beveled_box(0, -0.05, 0, hw + wall_thick, 0.05, hd,
+                                   bevel=0.02)
+        parts.append((fv, ff))
+
+        # Partial walls (varying heights)
+        wall_configs = [
+            (-hw - wall_thick / 2, 0, temple_h * 0.6, hd),       # left
+            (hw + wall_thick / 2, 0, temple_h * 0.4, hd * 0.7),  # right partial
+            (0, -hd - wall_thick / 2, temple_h * 0.5, hw),       # back partial
+        ]
+        for wx, wz, wh, wlen in wall_configs:
+            if abs(wx) > abs(wz):
+                wv, wf = _make_beveled_box(wx, wh / 2, 0,
+                                           wall_thick / 2, wh / 2, wlen,
+                                           bevel=0.02)
+            else:
+                wv, wf = _make_beveled_box(0, wh / 2, wz,
+                                           wlen, wh / 2, wall_thick / 2,
+                                           bevel=0.02)
+            parts.append((wv, wf))
+
+        # Broken columns (some standing, some fallen)
+        col_r = 0.2
+        standing = [(-hw * 0.6, -hd * 0.3), (hw * 0.6, hd * 0.2)]
+        for cx_pos, cz_pos in standing:
+            ch = temple_h * 0.5 + abs(cx_pos) * 0.3
+            cv, cf = _make_cylinder(cx_pos, 0, cz_pos, col_r, ch, segments=8)
+            parts.append((cv, cf))
+
+        # Fallen column (horizontal)
+        fcv, fcf = _make_cylinder(hw * 0.2, col_r, hd * 0.3,
+                                  col_r, temple_h * 0.4, segments=8)
+        # Rotate 90 degrees by swapping Y and Z
+        fcv_rot = [(v[0], v[2] - hd * 0.3 + col_r, v[1] + hd * 0.3) for v in fcv]
+        parts.append((fcv_rot, fcf))
+
+        # Rubble
+        for i in range(8):
+            rx = -hw * 0.5 + i * hw * 0.15
+            rz = hd * 0.1 * ((i * 3) % 5 - 2)
+            rv, rf = _make_beveled_box(rx, 0.12, rz, 0.2, 0.12, 0.18, bevel=0.03)
+            parts.append((rv, rf))
+
+        # Broken altar
+        av, af = _make_beveled_box(0.3, 0.25, -hd * 0.4, 0.7, 0.25, 0.5, bevel=0.03)
+        parts.append((av, af))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Temple_{style}", verts, faces,
+                        style=style, category="building")
+
+
+def generate_harbor_dock_mesh(style: str = "wooden") -> MeshSpec:
+    """Generate an extended dock complex with multiple berths, crane, and warehouse.
+
+    Args:
+        style: "wooden" (timber construction), "stone" (masonry quay),
+               "fortified" (military harbor with defensive elements).
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts = []
+
+    dock_w = 12.0
+    dock_d = 18.0
+    hw = dock_w / 2
+    hd = dock_d / 2
+
+    if style == "wooden":
+        # Main pier platform
+        deck_h = 0.1
+        dv, df = _make_box(0, -deck_h / 2, 0, hw, deck_h / 2, hd)
+        parts.append((dv, df))
+
+        # Support piles (grid)
+        pile_r = 0.12
+        pile_h = 2.0
+        n_rows = 6
+        n_cols = 4
+        for row in range(n_rows):
+            for col in range(n_cols):
+                px = -hw + (col + 0.5) * dock_w / n_cols
+                pz = -hd + (row + 0.5) * dock_d / n_rows
+                pv, pf = _make_cylinder(px, -pile_h, pz, pile_r, pile_h, segments=6)
+                parts.append((pv, pf))
+
+        # Berth fingers (3 perpendicular docks)
+        finger_w = 2.0
+        finger_d = 6.0
+        for i in range(3):
+            fz = -hd + (i + 1) * dock_d / 4
+            fv, ff = _make_box(hw + finger_d / 2, -deck_h / 2, fz,
+                               finger_d / 2, deck_h / 2, finger_w / 2)
+            parts.append((fv, ff))
+            # Finger piles
+            for j in range(3):
+                fpx = hw + (j + 0.5) * finger_d / 3
+                for side in [-1, 1]:
+                    fpz = fz + side * finger_w / 2 * 0.8
+                    fpv, fpf = _make_cylinder(fpx, -pile_h, fpz,
+                                              pile_r * 0.8, pile_h, segments=6)
+                    parts.append((fpv, fpf))
+
+            # Mooring bollards
+            for side in [-1, 1]:
+                bv, bf = _make_cylinder(hw + finger_d - 0.3, 0,
+                                        fz + side * finger_w * 0.35,
+                                        0.08, 0.4, segments=6)
+                parts.append((bv, bf))
+
+        # Crane structure (A-frame crane)
+        crane_x = -hw * 0.5
+        crane_z = hd * 0.5
+        crane_h = 5.0
+        # Two legs
+        for sx in [-0.4, 0.4]:
+            lv = [(crane_x + sx, 0, crane_z),
+                  (crane_x + sx + 0.1, 0, crane_z),
+                  (crane_x + sx + 0.1, 0, crane_z + 0.1),
+                  (crane_x + sx, 0, crane_z + 0.1),
+                  (crane_x + 0.05, crane_h, crane_z + 0.05),
+                  (crane_x + 0.15, crane_h, crane_z + 0.05),
+                  (crane_x + 0.15, crane_h, crane_z + 0.15),
+                  (crane_x + 0.05, crane_h, crane_z + 0.15)]
+            lf = [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4),
+                  (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]
+            parts.append((lv, lf))
+        # Boom arm
+        bav, baf = _make_box(crane_x, crane_h + 0.05, crane_z + 2.0,
+                             0.05, 0.05, 2.0)
+        parts.append((bav, baf))
+        # Pulley block
+        pbv, pbf = _make_box(crane_x, crane_h - 0.5, crane_z + 3.5,
+                             0.05, 0.5, 0.05)
+        parts.append((pbv, pbf))
+
+        # Warehouse (simple box building)
+        wh_w = 4.0
+        wh_h = 3.0
+        wh_d = 5.0
+        whv, whf = _make_beveled_box(-hw * 0.3, wh_h / 2, -hd + wh_d / 2,
+                                     wh_w / 2, wh_h / 2, wh_d / 2, bevel=0.03)
+        parts.append((whv, whf))
+        # Warehouse roof (slightly larger)
+        wrv, wrf = _make_box(-hw * 0.3, wh_h + 0.1, -hd + wh_d / 2,
+                             wh_w / 2 + 0.2, 0.1, wh_d / 2 + 0.2)
+        parts.append((wrv, wrf))
+
+    elif style == "stone":
+        # Solid stone quay
+        quay_h = 1.5
+        qv, qf = _make_beveled_box(0, quay_h / 2, 0, hw, quay_h / 2, hd,
+                                   bevel=0.03)
+        parts.append((qv, qf))
+
+        # Quay surface
+        sv, sf = _make_box(0, quay_h + 0.02, 0, hw + 0.1, 0.02, hd + 0.1)
+        parts.append((sv, sf))
+
+        # Berth recesses (3 indentations in the quay face)
+        for i in range(3):
+            bz = -hd + (i + 1) * dock_d / 4
+            bv, bf = _make_box(hw + 0.5, quay_h * 0.4, bz,
+                               0.5, quay_h * 0.4, 1.5)
+            parts.append((bv, bf))
+
+        # Stone bollards
+        for i in range(6):
+            bz = -hd + (i + 0.5) * dock_d / 6
+            bv, bf = _make_tapered_cylinder(hw - 0.3, quay_h, bz,
+                                            0.12, 0.08, 0.5,
+                                            segments=8, rings=1)
+            parts.append((bv, bf))
+
+        # Stone crane base
+        crane_bv, crane_bf = _make_beveled_box(-hw * 0.4, quay_h + 0.5,
+                                                hd * 0.5,
+                                                0.5, 0.5, 0.5, bevel=0.02)
+        parts.append((crane_bv, crane_bf))
+        # Crane arm
+        cav, caf = _make_box(-hw * 0.4, quay_h + 3.0, hd * 0.5 + 1.5,
+                             0.06, 0.06, 1.5)
+        parts.append((cav, caf))
+
+        # Stone warehouse
+        whv, whf = _make_beveled_box(-hw * 0.3, quay_h + 2.0, -hd + 3.0,
+                                     2.5, 2.0, 2.5, bevel=0.03)
+        parts.append((whv, whf))
+
+    else:  # fortified
+        # Reinforced stone quay with battlements
+        quay_h = 2.0
+        qv, qf = _make_beveled_box(0, quay_h / 2, 0, hw, quay_h / 2, hd,
+                                   bevel=0.03)
+        parts.append((qv, qf))
+
+        # Surface
+        sv, sf = _make_box(0, quay_h + 0.02, 0, hw + 0.1, 0.02, hd + 0.1)
+        parts.append((sv, sf))
+
+        # Defensive wall on seaward side
+        dw_h = 3.0
+        dwv, dwf = _make_beveled_box(hw + 0.2, quay_h + dw_h / 2, 0,
+                                     0.2, dw_h / 2, hd, bevel=0.02)
+        parts.append((dwv, dwf))
+
+        # Merlons (crenellations)
+        merlon_w = 0.4
+        n_merlons = int(dock_d / (merlon_w * 2))
+        for i in range(n_merlons):
+            mz = -hd + (i * 2 + 0.5) * dock_d / (n_merlons * 2)
+            mv, mf = _make_box(hw + 0.2, quay_h + dw_h + 0.25, mz,
+                               0.22, 0.25, merlon_w / 2)
+            parts.append((mv, mf))
+
+        # Guard towers at corners
+        tower_r = 1.0
+        tower_h = 5.0
+        for tz in [-hd + tower_r, hd - tower_r]:
+            tv, tf = _make_cylinder(hw, quay_h, tz,
+                                    tower_r, tower_h, segments=8)
+            parts.append((tv, tf))
+            # Tower cap
+            tcv, tcf = _make_tapered_cylinder(hw, quay_h + tower_h, tz,
+                                              tower_r * 1.1, tower_r * 0.3, 1.5,
+                                              segments=8, rings=1)
+            parts.append((tcv, tcf))
+
+        # Chain boom anchors
+        for tz in [-hd * 0.3, hd * 0.3]:
+            cbv, cbf = _make_cylinder(hw + 0.5, quay_h, tz,
+                                      0.15, 1.0, segments=6)
+            parts.append((cbv, cbf))
+
+        # Military warehouse (armored)
+        whv, whf = _make_beveled_box(-hw * 0.3, quay_h + 2.5, -hd + 3.5,
+                                     2.5, 2.5, 3.0, bevel=0.04)
+        parts.append((whv, whf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"HarborDock_{style}", verts, faces,
+                        style=style, category="building")
+
+
 # =========================================================================
 # Registry: all generators by category
 # =========================================================================
@@ -10697,6 +21512,15 @@ GENERATORS = {
         "barrel": generate_barrel_mesh,
         "candelabra": generate_candelabra_mesh,
         "bookshelf": generate_bookshelf_mesh,
+        "bed": generate_bed_mesh,
+        "wardrobe": generate_wardrobe_mesh,
+        "cabinet": generate_cabinet_mesh,
+        "curtain": generate_curtain_mesh,
+        "mirror": generate_mirror_mesh,
+        "hay_bale": generate_hay_bale_mesh,
+        "wine_rack": generate_wine_rack_mesh,
+        "bathtub": generate_bathtub_mesh,
+        "fireplace": generate_fireplace_mesh,
     },
     "vegetation": {
         "tree": generate_tree_mesh,
@@ -10714,6 +21538,29 @@ GENERATORS = {
         "archway": generate_archway_mesh,
         "chain": generate_chain_mesh,
         "skull_pile": generate_skull_pile_mesh,
+        # Structural
+        "portcullis": generate_portcullis_mesh,
+        "iron_gate": generate_iron_gate_mesh,
+        "bridge_plank": generate_bridge_plank_mesh,
+        # Imprisonment
+        "shackle": generate_shackle_mesh,
+        "cage": generate_cage_mesh,
+        "stocks": generate_stocks_mesh,
+        "iron_maiden": generate_iron_maiden_mesh,
+        "prisoner_skeleton": generate_prisoner_skeleton_mesh,
+        # Ambiance
+        "cobweb": generate_cobweb_mesh,
+        "spider_egg_sac": generate_spider_egg_sac_mesh,
+        "rubble_pile": generate_rubble_pile_mesh,
+        "hanging_skeleton": generate_hanging_skeleton_mesh,
+        "dripping_water": generate_dripping_water_mesh,
+        "rat_nest": generate_rat_nest_mesh,
+        "rotting_barrel": generate_rotting_barrel_mesh,
+        # Loot/Discovery
+        "treasure_chest": generate_treasure_chest_mesh,
+        "gem_pile": generate_gem_pile_mesh,
+        "gold_pile": generate_gold_pile_mesh,
+        "lore_tablet": generate_lore_tablet_mesh,
     },
     "weapon": {
         "hammer": generate_hammer_mesh,
@@ -10724,6 +21571,44 @@ GENERATORS = {
         "whip": generate_whip_mesh,
         "claw": generate_claw_mesh,
         "tome": generate_tome_mesh,
+        "greatsword": generate_greatsword_mesh,
+        "curved_sword": generate_curved_sword_mesh,
+        "hand_axe": generate_hand_axe_mesh,
+        "battle_axe": generate_battle_axe_mesh,
+        "greataxe": generate_greataxe_mesh,
+        "club": generate_club_mesh,
+        "mace": generate_mace_mesh,
+        "warhammer": generate_warhammer_mesh,
+        "halberd": generate_halberd_mesh,
+        "glaive": generate_glaive_mesh,
+        "shortbow": generate_shortbow_mesh,
+        "longbow": generate_longbow_mesh,
+        "staff_magic": generate_staff_magic_mesh,
+        "wand": generate_wand_mesh,
+        "throwing_knife_weapon": generate_throwing_knife_weapon_mesh,
+        # Dual-wield paired weapons
+        "paired_daggers": generate_paired_daggers_mesh,
+        "twin_swords": generate_twin_swords_mesh,
+        "dual_axes": generate_dual_axes_mesh,
+        "dual_claws": generate_dual_claws_mesh,
+        # Fist / gauntlet weapons
+        "brass_knuckles": generate_brass_knuckles_mesh,
+        "cestus": generate_cestus_mesh,
+        "bladed_gauntlet": generate_bladed_gauntlet_mesh,
+        "iron_fist": generate_iron_fist_mesh,
+        # Rapiers / thrusting swords
+        "rapier": generate_rapier_mesh,
+        "estoc": generate_estoc_mesh,
+        # Throwing weapons
+        "javelin": generate_javelin_mesh,
+        "throwing_axe": generate_throwing_axe_mesh,
+        "shuriken": generate_shuriken_mesh,
+        "bola": generate_bola_mesh,
+        # Off-hand focus items
+        "orb_focus": generate_orb_focus_mesh,
+        "skull_fetish": generate_skull_fetish_mesh,
+        "holy_symbol": generate_holy_symbol_mesh,
+        "totem": generate_totem_mesh,
     },
     "architecture": {
         "gargoyle": generate_gargoyle_mesh,
@@ -10771,6 +21656,10 @@ GENERATORS = {
         "spider_web": generate_spider_web_mesh,
         "coffin": generate_coffin_mesh,
         "gibbet": generate_gibbet_mesh,
+        # Ritual
+        "summoning_circle": generate_summoning_circle_mesh,
+        "ritual_candles": generate_ritual_candles_mesh,
+        "occult_symbols": generate_occult_symbols_mesh,
     },
     "container": {
         "urn": generate_urn_mesh,
@@ -10849,6 +21738,12 @@ GENERATORS = {
         "magic_orb": generate_magic_orb_mesh,
         "throwing_knife": generate_throwing_knife_mesh,
         "bomb": generate_bomb_mesh,
+        "fire_arrow": generate_fire_arrow_mesh,
+        "ice_arrow": generate_ice_arrow_mesh,
+        "poison_arrow": generate_poison_arrow_mesh,
+        "explosive_bolt": generate_explosive_bolt_mesh,
+        "silver_arrow": generate_silver_arrow_mesh,
+        "barbed_arrow": generate_barbed_arrow_mesh,
     },
     "armor": {
         "helmet": generate_helmet_mesh,
@@ -10857,5 +21752,101 @@ GENERATORS = {
         "greave": generate_greave_mesh,
         "breastplate": generate_breastplate_mesh,
         "shield": generate_shield_mesh,
+        "heater_shield": generate_heater_shield_mesh,
+        "pavise": generate_pavise_mesh,
+        "targe": generate_targe_mesh,
+        "magical_barrier": generate_magical_barrier_mesh,
+        "bone_shield": generate_bone_shield_mesh,
+        "crystal_shield": generate_crystal_shield_mesh,
+        "living_wood_shield": generate_living_wood_shield_mesh,
+        "aegis": generate_aegis_mesh,
+    },
+    "combat_item": {
+        "spell_scroll": generate_spell_scroll_mesh,
+        "rune_stone": generate_rune_stone_mesh,
+    },
+    "fortification": {
+        "palisade": generate_palisade_mesh,
+        "watchtower": generate_watchtower_mesh,
+        "battlement": generate_battlement_mesh,
+        "moat_edge": generate_moat_edge_mesh,
+    },
+    "infrastructure": {
+        "windmill": generate_windmill_mesh,
+        "dock": generate_dock_mesh,
+        "bridge_stone": generate_bridge_stone_mesh,
+        "rope_bridge": generate_rope_bridge_mesh,
+    },
+    "camp": {
+        "tent": generate_tent_mesh,
+        "hitching_post": generate_hitching_post_mesh,
+        "feeding_trough": generate_feeding_trough_mesh,
+        "barricade_outdoor": generate_barricade_outdoor_mesh,
+        "lookout_post": generate_lookout_post_mesh,
+        "spike_fence": generate_spike_fence_mesh,
+    },
+    "consumable": {
+        "health_potion": generate_health_potion_mesh,
+        "mana_potion": generate_mana_potion_mesh,
+        "antidote": generate_antidote_mesh,
+        "bread": generate_bread_mesh,
+        "cheese": generate_cheese_mesh,
+        "meat": generate_meat_mesh,
+        "apple": generate_apple_mesh,
+        "mushroom_food": generate_mushroom_food_mesh,
+        "fish": generate_fish_mesh,
+    },
+    "crafting_material": {
+        "ore": generate_ore_mesh,
+        "leather": generate_leather_mesh,
+        "herb": generate_herb_mesh,
+        "gem": generate_gem_mesh,
+        "bone_shard": generate_bone_shard_mesh,
+    },
+    "currency": {
+        "coin": generate_coin_mesh,
+        "coin_pouch": generate_coin_pouch_mesh,
+    },
+    "key_item": {
+        "key": generate_key_mesh,
+        "map_scroll": generate_map_scroll_mesh,
+        "lockpick": generate_lockpick_mesh,
+    },
+    "forest_animals": {
+        "deer": generate_deer_mesh,
+        "wolf": generate_wolf_mesh,
+        "fox": generate_fox_mesh,
+        "rabbit": generate_rabbit_mesh,
+        "owl": generate_owl_mesh,
+        "crow": generate_crow_mesh,
+    },
+    "mountain_animals": {
+        "mountain_goat": generate_mountain_goat_mesh,
+        "eagle": generate_eagle_mesh,
+        "bear": generate_bear_mesh,
+    },
+    "domestic_animals": {
+        "horse": generate_horse_mesh,
+        "chicken": generate_chicken_mesh,
+        "dog": generate_dog_mesh,
+        "cat": generate_cat_mesh,
+    },
+    "vermin": {
+        "rat": generate_rat_mesh,
+        "bat": generate_bat_mesh,
+        "small_spider": generate_small_spider_mesh,
+        "beetle": generate_beetle_mesh,
+    },
+    "swamp_animals": {
+        "frog": generate_frog_mesh,
+        "snake_ambient": generate_snake_ambient_mesh,
+        "turtle": generate_turtle_mesh,
+    },
+    "building": {
+        "mine_entrance": generate_mine_entrance_mesh,
+        "sewer_tunnel": generate_sewer_tunnel_mesh,
+        "catacomb": generate_catacomb_mesh,
+        "temple": generate_temple_mesh,
+        "harbor_dock": generate_harbor_dock_mesh,
     },
 }
