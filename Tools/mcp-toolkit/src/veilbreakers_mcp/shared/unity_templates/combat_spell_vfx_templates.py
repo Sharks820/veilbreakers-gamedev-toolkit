@@ -295,7 +295,7 @@ _CS_PARTICLE_HELPER = '''
         if (_particleMat == null)
         {
             var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-            if (shader == null) shader = Shader.Find("Particles/Standard Unlit");
+            if (shader == null) shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
             _particleMat = new Material(shader);
             _particleMat.SetFloat("_Surface", 1f); // Transparent
             _particleMat.SetFloat("_Blend", 0f);   // Alpha
@@ -310,7 +310,7 @@ _CS_PARTICLE_HELPER = '''
         if (_additiveMat == null)
         {
             var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-            if (shader == null) shader = Shader.Find("Particles/Standard Unlit");
+            if (shader == null) shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
             _additiveMat = new Material(shader);
             _additiveMat.SetFloat("_Surface", 1f); // Transparent
             _additiveMat.SetFloat("_Blend", 1f);   // Additive
