@@ -201,7 +201,7 @@ namespace VeilBreakers.Editor.CodeReview
             new ReviewRule("BUG-11", Severity.HIGH, Category.Bug,
                 "async void method -- exceptions are silently swallowed",
                 "Use async Task/UniTask instead; only async void for event handlers.",
-                @"async\s+void\s+(?!On[A-Z])\w+\s*\(", guard: NotInComment),
+                @"async\s+void\s+(?!On[A-Z]|Start|Awake)\w+\s*\(", guard: NotInComment),
             new ReviewRule("BUG-12", Severity.MEDIUM, Category.Bug,
                 "Coroutine started but may never be stopped -- potential memory leak",
                 "Store the Coroutine reference and call StopCoroutine in OnDisable/OnDestroy.",
@@ -1559,10 +1559,12 @@ RULES: list[Rule] = [
          "Use datetime.now(tz=timezone.utc) or datetime.now(ZoneInfo('...')).",
          re.compile(r"datetime\.now\s*\(\s*\)"), guard=_active_code),
     Rule("PY-COR-06", Severity.MEDIUM, Category.Correctness,
-         "dict.get() with mutable default -- returns same object every call",
+         "dict.get() with mutable default -- result is mutated (shared object bug)",
          "Use dict.get(key) with None check, then create mutable separately.",
          re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
-         guard=_active_code),
+         guard=lambda line, a, i: _active_code(line, a, i) and any(
+             ".append" in a[j] or ".extend" in a[j] or "self." in a[j]
+             for j in range(i, min(len(a), i + 3)))),
     Rule("PY-COR-07", Severity.MEDIUM, Category.Correctness,
          "Class with __del__ -- unpredictable GC timing, prevents ref cycle collection",
          "Use context managers (__enter__/__exit__) or weakref.finalize instead.",
@@ -1640,6 +1642,7 @@ RULES: list[Rule] = [
          "Unused import detected",
          "Remove the unused import to keep the namespace clean.",
          re.compile(r"SENTINEL_NEVER_MATCHES_PLACEHOLDER")),  # handled by AST pass
+    # PY-STY-08: Only flag public functions (no _ prefix)
     Rule("PY-STY-08", Severity.LOW, Category.Style,
          "Missing type annotation on public function",
          "Add return type annotation and parameter type hints.",
