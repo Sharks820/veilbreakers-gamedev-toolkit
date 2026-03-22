@@ -23,6 +23,9 @@ from veilbreakers_mcp.shared.unity_templates.qa_templates import (
     generate_analytics_script,
     generate_live_inspector_script,
 )
+from veilbreakers_mcp.shared.unity_templates.code_review_templates import (
+    generate_code_reviewer_script,
+)
 from veilbreakers_mcp.shared.unity_templates.production_templates import (
     generate_compile_recovery_script,
     generate_conflict_detector_script,
@@ -55,6 +58,7 @@ async def unity_qa(
         "list_pipeline_steps",      # PROD-03b: list available pipeline step definitions
         "validate_art_style",       # PROD-04: art style consistency validation
         "build_smoke_test",         # PROD-05: post-build smoke test verification
+        "code_review",              # PROD-06: deploy unified C#/Python code reviewer
     ],
     name: str = "default",
     # bridge params
@@ -356,6 +360,12 @@ async def unity_qa(
                     build_path=build_path, timeout_seconds=smoke_timeout_seconds,
                     scene_to_load=scene_to_load, expected_fps_min=expected_fps_min,
                 ),
+            )
+
+        elif action == "code_review":
+            return await _handle_dict_template(
+                "code_review",
+                generate_code_reviewer_script(),
             )
 
         else:
