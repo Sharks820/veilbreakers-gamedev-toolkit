@@ -915,7 +915,7 @@ def generate_character_controller_script(
     lines.append("            moveDir.Normalize();")
     lines.append("")
     lines.append("            float speed = _moveSpeed * (_isSprinting ? _sprintMultiplier : 1f);")
-    lines.append("            _controller.Move(moveDir * speed * Time.deltaTime);")
+    lines.append("            _velocity += moveDir * speed;")
     lines.append("")
     if mode == "third_person":
         lines.append("            // Rotate character to face movement direction (third-person)")
@@ -960,7 +960,7 @@ def generate_character_controller_script(
     lines.append("                if (slopeAngle > _maxSlopeAngle)")
     lines.append("                {")
     lines.append("                    Vector3 slideDir = Vector3.ProjectOnPlane(Vector3.down, hit.normal).normalized;")
-    lines.append("                    _controller.Move(slideDir * _slideSpeed * Time.deltaTime);")
+    lines.append("                    _velocity += slideDir * _slideSpeed;")
     lines.append("                }")
     lines.append("            }")
     lines.append("        }")
