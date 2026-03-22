@@ -54,7 +54,7 @@ Noise Texture (detail) → Mix overlay for knots
 Bump Node from wave → Normal input
 ```
 
-**Roof Slate:**
+**Roof Slate/Tile:**
 ```
 Brick Texture (offset 0.5) → shape mask
 Noise per-brick → color variation
@@ -67,6 +67,189 @@ Noise Texture (large scale) → rust pattern mask
 Mix Shader: clean metal (low rough, high metal) + rust (high rough, low metal)
 Scratches via fine noise → roughness detail
 ```
+
+---
+
+## COMPREHENSIVE TEXTURE & MATERIAL REFERENCE
+
+### Texture Map Types (Every Asset Needs These)
+| Map | Purpose | Format | Notes |
+|-----|---------|--------|-------|
+| **Albedo/Diffuse** | Base color without lighting | sRGB, RGB | NO baked shadows or AO |
+| **Normal Map** | Surface detail without geometry | Linear, RGB (tangent space) | Blue-dominant, from high-poly bake or procedural |
+| **Roughness** | Micro-surface smoothness | Linear, Grayscale | 0=mirror, 1=matte. Worn edges=smoother, crevices=rougher |
+| **Metallic** | Metal vs non-metal | Linear, Grayscale | Binary in practice: 0=dielectric, 1=metal. Rust transitions |
+| **AO (Ambient Occlusion)** | Crevice darkening | Linear, Grayscale | Baked from mesh concavities. Multiply into albedo or separate |
+| **Emission** | Self-illumination | sRGB, RGB | Brand-colored glows, magic runes, lava, crystals |
+| **Displacement/Height** | Actual surface deformation | Linear, Grayscale | For terrain, stone walls. Costly — use sparingly |
+| **Opacity/Alpha** | Transparency mask | Linear, Grayscale | Foliage, hair cards, cloth edges, glass |
+
+### Texture Resolution Per Asset Type
+| Asset | Albedo | Normal | Rough/Metal | AO |
+|-------|--------|--------|-------------|-----|
+| **Hero character** | 4096 | 4096 | 2048 | 2048 |
+| **Common monster** | 2048 | 2048 | 1024 | 1024 |
+| **Weapon (held)** | 2048 | 2048 | 1024 | 1024 |
+| **Building exterior** | 2048 tiling | 2048 tiling | 1024 tiling | 1024 tiling |
+| **Furniture/prop** | 1024 | 1024 | 512 | 512 |
+| **Small item** | 512 | 512 | 256 | 256 |
+| **Terrain (per tile)** | 2048 tiling | 2048 tiling | 1024 tiling | — |
+| **Vegetation** | 1024 atlas | 1024 | 512 | — |
+| **Skybox** | 4096 | — | — | — |
+
+### COMPLETE Material Library (30+ Materials)
+
+**ARCHITECTURE — Stone/Masonry**
+```
+1. rough_stone_wall    — Voronoi blocks + mortar lines + noise variation + bump
+2. smooth_stone        — Subtle noise + low roughness + polished feel
+3. cobblestone_floor   — Round Voronoi cells + mortar + worn-smooth tops
+4. brick_wall          — Brick Texture node + mortar + per-brick color shift
+5. crumbling_stone     — rough_stone + edge damage mask + debris particles
+6. mossy_stone         — rough_stone + green noise mask at bottom (height gradient)
+7. marble              — Wave Texture (veins) + low roughness + subtle color variation
+```
+
+**ARCHITECTURE — Wood**
+```
+8. rough_timber        — Wave Texture (grain) + high roughness + knot noise
+9. polished_wood       — Wave Texture (fine grain) + low roughness + warm color
+10. rotten_wood        — rough_timber + green/brown noise spots + high roughness
+11. charred_wood       — Dark base + noise cracks revealing orange embers
+12. plank_floor        — Repeating planks via Brick Texture (stretched) + gap lines
+```
+
+**ARCHITECTURE — Roofing**
+```
+13. slate_tiles        — Brick Texture (offset rows) + per-tile noise + edge chip bump
+14. thatch_roof        — Noise-driven grass/straw pattern + very high roughness
+15. wooden_shingles    — Small Brick Texture + wood grain per shingle
+```
+
+**METALS**
+```
+16. rusted_iron        — Mix: clean metal (high metallic, low rough) + rust (low metallic, high rough)
+17. polished_steel     — High metallic + very low roughness + subtle scratch noise
+18. tarnished_bronze   — Warm metallic base + green patina noise in crevices
+19. chain_metal        — High metallic + medium roughness + small-scale noise
+20. gold_ornament      — Warm yellow metallic + polished + minor scratch detail
+```
+
+**ORGANIC — Creature Surfaces**
+```
+21. monster_skin       — Subsurface scattering + pore noise + roughness variation
+22. scales             — Voronoi pattern + per-scale color shift + smooth bump
+23. chitin/carapace    — High metallic sheen + hard surface + segment lines
+24. fur_base           — Dark base with noise strands (for under hair cards)
+25. bone               — Off-white + fine noise + smooth-to-rough gradient
+26. membrane           — Subsurface + translucency + vein noise (wings, webbing)
+```
+
+**ORGANIC — Vegetation**
+```
+27. bark               — High-frequency noise + vertical stretch + deep crevice bump
+28. leaf               — Green gradient + translucency + vein pattern
+29. moss               — Soft green noise + very high roughness + no specular
+30. mushroom_cap       — Smooth dome + subtle spotting + subsurface glow
+```
+
+**TERRAIN**
+```
+31. grass              — Green base + blade noise + high roughness
+32. dirt               — Brown noise + pebble bump + medium roughness
+33. mud                — Dark wet brown + very low roughness (wet) + displacement
+34. snow               — White + subsurface blue tint + sparkle noise in roughness
+35. sand               — Warm beige noise + fine grain bump + medium roughness
+36. cliff_rock         — Layered noise at multiple scales + strong normal detail
+```
+
+**SPECIAL / VFX**
+```
+37. corruption_overlay — Purple/dark noise + vein pattern + emission pulse
+38. brand_glow_[10]    — Per-brand emission color (from BrandSystem.cs) + fresnel edge
+39. magic_rune         — Emission pattern from UV-mapped rune texture + pulse animation
+40. blood_splatter     — Dark red + high roughness + alpha-masked decal
+41. water_surface      — Transparent + fresnel + animated normal scroll + foam edge
+42. lava/ember         — Black base + orange emission in cracks (noise mask)
+43. ice/crystal        — Transparent + high IOR refraction + internal scatter
+44. glass              — Transparent + low roughness + slight tint
+45. cloth/fabric       — Woven pattern (Brick Texture) + high roughness + color dye
+```
+
+### Texture Techniques
+
+**Tiling Textures (Architecture/Terrain)**
+- All architectural surfaces use TILING textures (seamless repeat)
+- UV scale controlled by Mapping node — consistent texel density across assets
+- Per-instance variation via Object Info > Random node offset
+- Witcher 3 rule: max 7 base textures + 2 trim textures per district
+
+**Trim Sheets (Detail Strips)**
+- A single texture containing multiple detail strips side-by-side
+- UV mapped so different mesh faces sample different strips
+- Used for: molding, cornices, window frames, door frames, edge trim
+- One 2048 trim sheet can detail 50+ buildings
+
+**Texture Atlasing**
+- Multiple small assets share one texture (e.g., all potions on one 2048 atlas)
+- Reduces draw calls in game engine
+- UV islands packed into shared atlas space
+- Categories: weapon atlas, armor atlas, prop atlas, vegetation atlas
+
+**Decals (Overlaid Detail)**
+- Blood: alpha-masked splatter projected onto surfaces
+- Dirt/grime: vertex-color-driven darkening at base of walls
+- Moss/lichen: green noise masked by height + moisture
+- Cracks: normal-map-only decals for damage detail
+- Footprints: alpha-stamped trail decals
+- Rain streaks: vertical smear pattern on building sides
+
+**Vertex Color Channels for Material Blending**
+```
+Channel R: AO / cavity darkness
+Channel G: Curvature / edge wear (convex = bright, concave = dark)
+Channel B: Height gradient (bottom=1, top=0) for moss/dirt
+Channel A: Damage/wetness mask
+```
+Materials read vertex colors via Attribute node and use them to blend between clean and weathered variants.
+
+**Brand-Specific Texture Effects**
+Each of the 10 VB brands has visual identity in textures:
+| Brand | Emission Color | Surface Effect | Texture Detail |
+|-------|---------------|----------------|----------------|
+| IRON | Steel gray glow (0.71,0.75,0.80) | Metallic sheen | Chain/rivet pattern |
+| SAVAGE | Blood red (0.86,0.27,0.27) | Organic veins | Claw scratch marks |
+| SURGE | Electric blue (0.39,0.71,1.0) | Lightning arcs | Crackling energy lines |
+| VENOM | Toxic green (0.47,0.86,0.39) | Bubbling surface | Acid erosion pitting |
+| DREAD | Deep purple (0.63,0.39,0.78) | Shadow tendrils | Fear-rune inscriptions |
+| LEECH | Dark crimson (0.71,0.24,0.43) | Pulsing veins | Parasitic growth |
+| GRACE | Holy silver (1.0,1.0,1.0) | Radiant glow | Feather/light patterns |
+| MEND | Healing gold (0.94,0.82,0.47) | Warm pulse | Cell/growth patterns |
+| RUIN | Flame orange (1.0,0.63,0.31) | Heat distortion | Crack/fragment lines |
+| VOID | Void dark (0.39,0.24,0.55) | Reality warp | Dimensional tear noise |
+
+**Corruption Tier Visual Effects on Textures**
+| Tier | Albedo Effect | Normal Effect | Emission |
+|------|--------------|---------------|----------|
+| ASCENDED (0-10%) | Slight golden tint | Smooth, clean | Soft warm glow |
+| PURIFIED (11-25%) | Normal colors | Normal detail | None |
+| UNSTABLE (26-50%) | Slight purple veins | Vein bump pattern | Occasional flicker |
+| CORRUPTED (51-75%) | Dark purple overlay | Heavy vein bumps | Pulsing dark glow |
+| ABYSSAL (76-100%) | Near-black with purple | Distorted, chaotic | Strong dark emission |
+
+### Procedural vs Image-Based Decision Matrix
+| Scenario | Use Procedural | Use Image-Based |
+|----------|---------------|-----------------|
+| Tiling surfaces (stone, wood, terrain) | YES — infinite resolution, no seams | NO |
+| Unique character detail (face, tattoo) | NO | YES — painted texture |
+| Equipment trim/ornament | Trim sheet (image) | — |
+| Brand VFX glow | YES — shader-driven | NO |
+| Skybox | NO | YES — HDRI or painted |
+| Terrain splat | Vertex color blend (procedural) | Base textures (image) |
+| Decals (blood, dirt) | NO | YES — alpha-masked projections |
+| Weapon engravings | Trim sheet or normal-only decal | — |
+
+---
 
 ### 1C. Auto Scene Setup
 Every generation auto-creates:
