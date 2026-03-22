@@ -266,7 +266,8 @@ def generate_brand_basic_attack(
             if lt <= wind_up_pct:
                 left_val = -0.5 * (lt / wind_up_pct) * intensity
             elif lt <= 0.5:
-                left_val = _lerp(-0.5, 0.9, (lt - wind_up_pct) / (0.5 - wind_up_pct)) * intensity
+                denom = (0.5 - wind_up_pct) if (0.5 - wind_up_pct) != 0 else 1.0
+                left_val = _lerp(-0.5, 0.9, (lt - wind_up_pct) / denom) * intensity
             else:
                 left_val = _lerp(0.9, 0.0, (lt - 0.5) / 0.5) * intensity
             keyframes.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, left_val))
