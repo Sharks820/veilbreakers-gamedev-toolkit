@@ -274,6 +274,8 @@ def _enhanced_rig_validation(
     bone_parents: dict[str, str | None],
     vertex_influence_counts: list[int],
     max_influences: int = 4,
+    vertex_weights: list[list[tuple[int, float]]] | None = None,
+    vertex_group_names: list[str] | None = None,
 ) -> dict:
     """Enhanced rig validation with additional checks beyond basic grading.
 
@@ -290,6 +292,8 @@ def _enhanced_rig_validation(
         bone_parents: Mapping bone name -> parent (or None).
         vertex_influence_counts: Per-vertex influence count list.
         max_influences: Limit for over-limit check (default 4).
+        vertex_weights: Optional per-vertex list of (group_index, weight) tuples.
+        vertex_group_names: Optional mapping of group indices to names.
 
     Returns:
         Dict with zero_weight_bones, over_limit_vertices,
@@ -299,11 +303,22 @@ def _enhanced_rig_validation(
     issues: list[str] = []
 
     # Zero weight bones: bones that exist but no vertex references them
-    # (We approximate by checking bone_names that are NOT in bone_rolls --
-    #  but since we receive all data, we just report bones whose names
-    #  suggest deformation but have no roll set. In practice, caller
-    #  filters vertex groups; here we focus on structural checks.)
     zero_weight_bones: list[str] = []
+    if vertex_weights is not None and vertex_group_names is not None:
+        weighted_indices: set[int] = set()
+        for vw in vertex_weights:
+            for group_idx, weight in vw:
+                if weight > 0.01:
+                    weighted_indices.add(group_idx)
+        weighted_names = {
+            vertex_group_names[i]
+            for i in weighted_indices
+            if i < len(vertex_group_names)
+        }
+        bone_set = set(bone_names)
+        zero_weight_bones = sorted(
+            name for name in bone_set if name not in weighted_names
+        )
 
     # Over limit vertices
     over_limit = sum(1 for c in vertex_influence_counts if c > max_influences)
@@ -686,8 +701,9 @@ def handle_enforce_weight_limit(params: dict) -> dict:
     for vi, new_weights in enumerate(result["vertex_weights"]):
         v = mesh_data.vertices[vi]
         # Clear all existing groups for this vertex
-        for g in v.groups:
-            mesh_obj.vertex_groups[g.group].remove([vi])
+        group_indices = [g.group for g in v.groups]
+        for gi in group_indices:
+            mesh_obj.vertex_groups[gi].remove([vi])
         # Re-assign clamped weights
         for bone_name, weight in new_weights:
             vg = mesh_obj.vertex_groups.get(bone_name)

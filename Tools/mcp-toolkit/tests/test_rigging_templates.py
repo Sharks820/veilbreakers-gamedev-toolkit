@@ -603,7 +603,7 @@ class TestDragonWingMembrane:
 class TestTwistBones:
     """Test twist bones in humanoid, dragon, multi_armed templates."""
 
-    @pytest.mark.parametrize("template_name", ["humanoid", "multi_armed"])
+    @pytest.mark.parametrize("template_name", ["humanoid", "quadruped", "bird", "multi_armed"])
     def test_has_arm_twist_bones(self, template_name):
         """Template has upper_arm_twist and forearm_twist L/R."""
         from blender_addon.handlers.rigging_templates import TEMPLATE_CATALOG
@@ -612,7 +612,7 @@ class TestTwistBones:
             assert f"{twist}.L" in bones, f"Missing {twist}.L in {template_name}"
             assert f"{twist}.R" in bones, f"Missing {twist}.R in {template_name}"
 
-    @pytest.mark.parametrize("template_name", ["humanoid", "multi_armed"])
+    @pytest.mark.parametrize("template_name", ["humanoid", "quadruped", "bird", "multi_armed"])
     def test_has_leg_twist_bones(self, template_name):
         """Template has thigh_twist and shin_twist L/R."""
         from blender_addon.handlers.rigging_templates import TEMPLATE_CATALOG
