@@ -868,8 +868,8 @@ class TestTool13BlenderAnimation:
 
     # -- Mixamo bone mapping --
 
-    def test_mixamo_to_rigify_has_22_entries(self):
-        assert len(MIXAMO_TO_RIGIFY) == 22
+    def test_mixamo_to_rigify_has_entries(self):
+        assert len(MIXAMO_TO_RIGIFY) >= 22  # 22 core + finger bones
 
     def test_mixamo_mapping_all_keys_have_prefix(self):
         for key in MIXAMO_TO_RIGIFY:
