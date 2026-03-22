@@ -758,6 +758,139 @@ public class BT_{safe_nt}_{safe_name} : BT_Leaf_{safe_name}
 }}
 '''
 
+    # Built-in concrete leaf nodes with proper return logic
+    builtin_leaves = f'''
+
+// ---------------------------------------------------------------------------
+// Built-in leaf: MoveToTarget
+// ---------------------------------------------------------------------------
+/// <summary>Moves toward runner.targetTransform. Returns Success when close, Failure if no target.</summary>
+[CreateAssetMenu(menuName = "VeilBreakers/BehaviorTree/{safe_name}/MoveToTarget")]
+public class BT_MoveToTarget_{safe_name} : BT_Leaf_{safe_name}
+{{
+    public float stoppingDistance = 1.5f;
+    public float moveSpeed = 3.5f;
+
+    public override NodeState_{safe_name} Evaluate(BehaviorTreeRunner_{safe_name} runner)
+    {{
+        if (runner.targetTransform == null)
+            return NodeState_{safe_name}.Failure;
+
+        float distance = Vector3.Distance(runner.transform.position, runner.targetTransform.position);
+        if (distance <= stoppingDistance)
+            return NodeState_{safe_name}.Success;
+
+        Vector3 direction = (runner.targetTransform.position - runner.transform.position).normalized;
+        runner.transform.position += direction * moveSpeed * Time.deltaTime;
+        return NodeState_{safe_name}.Running;
+    }}
+}}
+
+// ---------------------------------------------------------------------------
+// Built-in leaf: Attack
+// ---------------------------------------------------------------------------
+/// <summary>Executes an attack on cooldown. Returns Success when attack fires, Running during cooldown.</summary>
+[CreateAssetMenu(menuName = "VeilBreakers/BehaviorTree/{safe_name}/Attack")]
+public class BT_Attack_{safe_name} : BT_Leaf_{safe_name}
+{{
+    public float cooldown = 1.5f;
+    public float damage = 10f;
+
+    private string _bbKey;
+    private string BBKey => _bbKey ??= "BT_Attack_" + GetInstanceID() + "_lastAttackTime";
+
+    public override NodeState_{safe_name} Evaluate(BehaviorTreeRunner_{safe_name} runner)
+    {{
+        float lastAttackTime = runner.blackboard.ContainsKey(BBKey)
+            ? (float)runner.blackboard[BBKey]
+            : -Mathf.Infinity;
+
+        float elapsed = Time.time - lastAttackTime;
+        if (elapsed < cooldown)
+            return NodeState_{safe_name}.Running;
+
+        runner.blackboard[BBKey] = Time.time;
+        Debug.Log("[BT] Attack executed, damage=" + damage);
+        return NodeState_{safe_name}.Success;
+    }}
+}}
+
+// ---------------------------------------------------------------------------
+// Built-in leaf: Wait
+// ---------------------------------------------------------------------------
+/// <summary>Waits for a duration then returns Success.</summary>
+[CreateAssetMenu(menuName = "VeilBreakers/BehaviorTree/{safe_name}/Wait")]
+public class BT_Wait_{safe_name} : BT_Leaf_{safe_name}
+{{
+    public float duration = 2f;
+
+    private string _elapsedKey;
+    private string _startedKey;
+    private string ElapsedKey => _elapsedKey ??= "BT_Wait_" + GetInstanceID() + "_elapsed";
+    private string StartedKey => _startedKey ??= "BT_Wait_" + GetInstanceID() + "_started";
+
+    public override NodeState_{safe_name} Evaluate(BehaviorTreeRunner_{safe_name} runner)
+    {{
+        bool started = runner.blackboard.ContainsKey(StartedKey) && (bool)runner.blackboard[StartedKey];
+
+        if (!started)
+        {{
+            runner.blackboard[ElapsedKey] = 0f;
+            runner.blackboard[StartedKey] = true;
+        }}
+
+        float elapsed = runner.blackboard.ContainsKey(ElapsedKey)
+            ? (float)runner.blackboard[ElapsedKey]
+            : 0f;
+        elapsed += Time.deltaTime;
+        runner.blackboard[ElapsedKey] = elapsed;
+
+        if (elapsed >= duration)
+        {{
+            runner.blackboard[StartedKey] = false;
+            return NodeState_{safe_name}.Success;
+        }}
+        return NodeState_{safe_name}.Running;
+    }}
+}}
+
+// ---------------------------------------------------------------------------
+// Built-in leaf: CheckCondition
+// ---------------------------------------------------------------------------
+/// <summary>Checks a boolean condition. Returns Success or Failure immediately (never Running).</summary>
+[CreateAssetMenu(menuName = "VeilBreakers/BehaviorTree/{safe_name}/CheckCondition")]
+public class BT_CheckCondition_{safe_name} : BT_Leaf_{safe_name}
+{{
+    public enum ConditionType {{ HasTarget, IsAlive, TargetInRange }}
+    public ConditionType condition;
+    public float conditionRange = 10f;
+
+    public override NodeState_{safe_name} Evaluate(BehaviorTreeRunner_{safe_name} runner)
+    {{
+        switch (condition)
+        {{
+            case ConditionType.HasTarget:
+                return runner.targetTransform != null
+                    ? NodeState_{safe_name}.Success
+                    : NodeState_{safe_name}.Failure;
+            case ConditionType.IsAlive:
+                return runner.gameObject.activeInHierarchy
+                    ? NodeState_{safe_name}.Success
+                    : NodeState_{safe_name}.Failure;
+            case ConditionType.TargetInRange:
+                if (runner.targetTransform == null)
+                    return NodeState_{safe_name}.Failure;
+                float dist = Vector3.Distance(runner.transform.position, runner.targetTransform.position);
+                return dist <= conditionRange
+                    ? NodeState_{safe_name}.Success
+                    : NodeState_{safe_name}.Failure;
+            default:
+                return NodeState_{safe_name}.Failure;
+        }}
+    }}
+}}
+'''
+
     return f'''using UnityEngine;
 using System.Collections.Generic;
 
@@ -833,7 +966,7 @@ public abstract class BT_Leaf_{safe_name} : BT_Node_{safe_name}
 {{
     // Subclasses implement Evaluate() with specific behavior
 }}
-{custom_nodes}
+{custom_nodes}{builtin_leaves}
 // ---------------------------------------------------------------------------
 // BehaviorTreeRunner: MonoBehaviour that ticks the root node each frame
 // ---------------------------------------------------------------------------
@@ -844,6 +977,14 @@ public class BehaviorTreeRunner_{safe_name} : MonoBehaviour
 
     [Header("Runtime State")]
     public Transform targetTransform;
+
+    /// <summary>
+    /// Per-runner blackboard for leaf-node runtime state.
+    /// Keyed by node-type + field name so shared ScriptableObject nodes
+    /// never leak state between runners.
+    /// </summary>
+    [System.NonSerialized]
+    public Dictionary<string, object> blackboard = new Dictionary<string, object>();
 
     private void Update()
     {{

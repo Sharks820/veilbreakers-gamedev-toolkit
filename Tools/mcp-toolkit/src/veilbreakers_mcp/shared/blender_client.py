@@ -152,10 +152,8 @@ class BlenderConnection:
                 response_bytes = self._receive_exactly(length)
                 try:
                     response_data = json.loads(response_bytes)
-                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-                    raise ConnectionError(
-                        f"Blender returned invalid JSON ({len(response_bytes)} bytes): {exc}"
-                    ) from exc
+                except json.JSONDecodeError as e:
+                    return {"error": f"Invalid JSON response from Blender: {e}", "raw": response_bytes[:200].decode("utf-8", errors="replace")}
                 response = BlenderResponse(**response_data)
                 if response.status == "error":
                     raise BlenderCommandError(response)

@@ -192,3 +192,160 @@ class TestSculptOperationMapping:
 
         with pytest.raises(ValueError, match="Unknown sculpt operation"):
             _sculpt_operation_to_filter_type("pinch")
+
+
+# ---------------------------------------------------------------------------
+# _validate_modifier_params tests
+# ---------------------------------------------------------------------------
+
+
+class TestValidateModifierParams:
+    """Test modifier parameter validation (pure logic, no Blender)."""
+
+    def test_missing_modifier_type_errors(self):
+        """Missing modifier_type produces an error."""
+        from blender_addon.handlers.mesh import _validate_modifier_params
+
+        errors = _validate_modifier_params({})
+        assert len(errors) == 1
+        assert "modifier_type is required" in errors[0]
+
+    def test_invalid_modifier_type_errors(self):
+        """Unrecognised modifier_type produces an error."""
+        from blender_addon.handlers.mesh import _validate_modifier_params
+
+        errors = _validate_modifier_params({"modifier_type": "CLOTH"})
+        assert len(errors) == 1
+        assert "Invalid modifier_type" in errors[0]
+        assert "'CLOTH'" in errors[0]
+
+    def test_valid_modifier_type_no_errors(self):
+        """Valid modifier_type with no settings produces no errors."""
+        from blender_addon.handlers.mesh import _validate_modifier_params
+
+        for mod_type in (
+            "SUBSURF", "BEVEL", "MIRROR", "ARRAY", "SOLIDIFY",
+            "DECIMATE", "REMESH", "SMOOTH", "BOOLEAN", "WIREFRAME",
+            "SKIN", "LATTICE", "SHRINKWRAP",
+        ):
+            errors = _validate_modifier_params({"modifier_type": mod_type})
+            assert errors == [], f"Unexpected errors for {mod_type}: {errors}"
+
+    def test_valid_settings_keys_accepted(self):
+        """Valid settings keys for a modifier type produce no errors."""
+        from blender_addon.handlers.mesh import _validate_modifier_params
+
+        errors = _validate_modifier_params({
+            "modifier_type": "SUBSURF",
+            "settings": {"levels": 3, "render_levels": 4},
+        })
+        assert errors == []
+
+    def test_invalid_settings_keys_rejected(self):
+        """Settings keys not valid for the modifier type produce errors."""
+        from blender_addon.handlers.mesh import _validate_modifier_params
+
+        errors = _validate_modifier_params({
+            "modifier_type": "SUBSURF",
+            "settings": {"levels": 3, "thickness": 0.5},
+        })
+        assert len(errors) == 1
+        assert "Invalid settings keys" in errors[0]
+        assert "thickness" in errors[0]
+
+    def test_empty_settings_dict_no_errors(self):
+        """Empty settings dict produces no errors."""
+        from blender_addon.handlers.mesh import _validate_modifier_params
+
+        errors = _validate_modifier_params({
+            "modifier_type": "BEVEL",
+            "settings": {},
+        })
+        assert errors == []
+
+    def test_skin_with_no_default_keys_rejects_any_settings(self):
+        """SKIN modifier has no default keys, so any settings key is invalid."""
+        from blender_addon.handlers.mesh import _validate_modifier_params
+
+        errors = _validate_modifier_params({
+            "modifier_type": "SKIN",
+            "settings": {"branch_smoothing": 0.5},
+        })
+        assert len(errors) == 1
+        assert "Invalid settings keys" in errors[0]
+
+    def test_multiple_bad_keys_all_reported(self):
+        """Multiple invalid settings keys are all listed in the error."""
+        from blender_addon.handlers.mesh import _validate_modifier_params
+
+        errors = _validate_modifier_params({
+            "modifier_type": "ARRAY",
+            "settings": {"count": 5, "bad_key_1": 1, "bad_key_2": 2},
+        })
+        assert len(errors) == 1
+        assert "bad_key_1" in errors[0]
+        assert "bad_key_2" in errors[0]
+
+
+class TestModifierDefaults:
+    """Test MODIFIER_DEFAULTS and VALID_MODIFIER_TYPES constants."""
+
+    def test_valid_modifier_types_matches_defaults_keys(self):
+        """VALID_MODIFIER_TYPES must exactly match MODIFIER_DEFAULTS keys."""
+        from blender_addon.handlers.mesh import MODIFIER_DEFAULTS, VALID_MODIFIER_TYPES
+
+        assert VALID_MODIFIER_TYPES == frozenset(MODIFIER_DEFAULTS.keys())
+
+    def test_all_thirteen_types_present(self):
+        """All 13 documented modifier types are present."""
+        from blender_addon.handlers.mesh import VALID_MODIFIER_TYPES
+
+        expected = {
+            "SUBSURF", "BEVEL", "MIRROR", "ARRAY", "SOLIDIFY",
+            "DECIMATE", "REMESH", "SMOOTH", "BOOLEAN", "WIREFRAME",
+            "SKIN", "LATTICE", "SHRINKWRAP",
+        }
+        assert expected == VALID_MODIFIER_TYPES
+
+    def test_subsurf_defaults(self):
+        """SUBSURF defaults include levels, render_levels, quality."""
+        from blender_addon.handlers.mesh import MODIFIER_DEFAULTS
+
+        d = MODIFIER_DEFAULTS["SUBSURF"]
+        assert d["levels"] == 2
+        assert d["render_levels"] == 3
+        assert d["quality"] == 3
+
+    def test_bevel_defaults(self):
+        """BEVEL defaults include width, segments, limit_method, angle_limit."""
+        from blender_addon.handlers.mesh import MODIFIER_DEFAULTS
+
+        d = MODIFIER_DEFAULTS["BEVEL"]
+        assert d["width"] == 0.02
+        assert d["segments"] == 3
+        assert d["limit_method"] == "ANGLE"
+        assert abs(d["angle_limit"] - 0.524) < 0.001
+
+    def test_mirror_defaults(self):
+        """MIRROR defaults include use_axis and use_bisect_axis lists."""
+        from blender_addon.handlers.mesh import MODIFIER_DEFAULTS
+
+        d = MODIFIER_DEFAULTS["MIRROR"]
+        assert d["use_axis"] == [True, False, False]
+        assert d["use_bisect_axis"] == [False, False, False]
+
+    def test_array_defaults(self):
+        """ARRAY defaults include count and relative_offset_displace."""
+        from blender_addon.handlers.mesh import MODIFIER_DEFAULTS
+
+        d = MODIFIER_DEFAULTS["ARRAY"]
+        assert d["count"] == 3
+        assert d["relative_offset_displace"] == [1.0, 0.0, 0.0]
+
+    def test_boolean_defaults(self):
+        """BOOLEAN defaults include operation and object."""
+        from blender_addon.handlers.mesh import MODIFIER_DEFAULTS
+
+        d = MODIFIER_DEFAULTS["BOOLEAN"]
+        assert d["operation"] == "DIFFERENCE"
+        assert d["object"] == ""

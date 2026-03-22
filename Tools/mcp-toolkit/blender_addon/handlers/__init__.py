@@ -5,6 +5,13 @@ from .scene import (
     handle_clear_scene,
     handle_configure_scene,
     handle_list_objects,
+    handle_setup_world,
+    handle_add_light,
+    handle_add_camera,
+    handle_configure_render,
+    handle_create_collection,
+    handle_move_to_collection,
+    handle_set_visibility,
 )
 from .objects import (
     handle_create_object,
@@ -43,6 +50,30 @@ from .mesh import (
     handle_boolean_op,
     handle_retopologize,
     handle_sculpt,
+    handle_loop_cut,
+    handle_bevel_edges,
+    handle_knife_project,
+    handle_proportional_edit,
+    handle_sculpt_brush,
+    handle_enter_sculpt_mode,
+    handle_exit_sculpt_mode,
+    handle_vertex_color,
+    handle_custom_normals,
+    handle_edge_data,
+    handle_shape_key,
+)
+from .text_objects import (
+    handle_create_text,
+    handle_text_to_mesh,
+)
+from .drivers import (
+    handle_add_driver,
+    handle_remove_driver,
+)
+from .curves import (
+    handle_create_curve,
+    handle_curve_to_mesh,
+    handle_extrude_along_curve,
 )
 from .uv import (  # noqa: F401, E402
     handle_analyze_uv,
@@ -144,96 +175,16 @@ from .equipment import (
     handle_equipment_fit_armor,
     handle_equipment_render_icon,
 )
-from .procedural_materials import (
-    handle_create_procedural_material,
+from .particles import (
+    handle_add_particle_system,
+    handle_configure_particle_physics,
+    handle_hair_grooming,
 )
-from .vertex_colors import (
-    handle_auto_paint_vertex_colors,
-)
-from .weathering import (
-    handle_apply_weathering,
-)
-from .terrain_materials import (
-    handle_setup_terrain_biome,
-    handle_create_biome_terrain,
-)
-from .vegetation_system import (
-    handle_scatter_biome_vegetation,
-)
-from .road_network import (  # noqa: F401 -- road network generation
-    compute_road_network,
-    compute_mst_edges,
-    ROAD_TYPES,
-)
-from .coastline import (  # noqa: F401 -- coastline terrain generation
-    generate_coastline,
-    COASTLINE_STYLES,
-)
-from .terrain_features import (  # noqa: F401 -- terrain feature generators
-    generate_canyon,
-    generate_waterfall,
-    generate_cliff_face,
-    generate_swamp_terrain,
-)
-from .material_tiers import (  # noqa: F401 -- material tier system (EQ-040)
-    METAL_TIERS,
-    WOOD_TIERS,
-    LEATHER_TIERS,
-    CLOTH_TIERS,
-    get_material_tier,
-    get_tier_names,
-    apply_material_tier_to_equipment,
-)
-from .armor_meshes import ARMOR_GENERATORS  # noqa: F401 -- 22-style armor system
-from .npc_characters import (  # noqa: F401 -- NPC body mesh generation
-    generate_npc_body_mesh,
-    NPC_GENERATORS,
-)
-from .monster_bodies import (  # noqa: F401 -- Monster body type system
-    generate_monster_body,
-    ALL_BODY_TYPES,
-    ALL_BRANDS,
-    BRAND_FEATURES,
-)
-from .rarity_system import (  # noqa: F401 -- Rarity visual differentiation
-    RARITY_TIERS,
-    VALID_RARITIES,
-    RARITY_ORDER,
-    BRAND_EMISSION_COLORS,
-    apply_rarity_to_mesh,
-    compute_gem_socket_positions,
-    get_rarity_material_tier,
-    get_rarity_tier,
-    validate_rarity,
-)
-from .legendary_weapons import (  # noqa: F401 -- Legendary unique weapons
-    LEGENDARY_WEAPONS,
-    LEGENDARY_GENERATORS,
-    generate_legendary_weapon_mesh,
-)
-from .world_map import (  # noqa: F401 -- World map generator + landmarks + storytelling
-    generate_world_map,
-    place_landmarks,
-    generate_storytelling_scene,
-    world_map_to_dict,
-    BIOME_TYPES,
-    POI_TYPES,
-    LANDMARK_TYPES,
-    STORYTELLING_PATTERNS,
-)
-from .light_integration import (  # noqa: F401 -- Light source integration
-    compute_light_placements,
-    merge_nearby_lights,
-    compute_light_budget,
-    LIGHT_PROP_MAP,
-    FLICKER_PRESETS,
-)
-from .atmospheric_volumes import (  # noqa: F401 -- Atmospheric volume props
-    compute_atmospheric_placements,
-    compute_volume_mesh_spec,
-    estimate_atmosphere_performance,
-    ATMOSPHERIC_VOLUMES,
-    BIOME_ATMOSPHERE_RULES,
+from .physics import (
+    handle_add_rigid_body,
+    handle_add_cloth,
+    handle_add_soft_body,
+    handle_bake_physics,
 )
 
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
@@ -243,6 +194,15 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "clear_scene": handle_clear_scene,
     "configure_scene": handle_configure_scene,
     "list_objects": handle_list_objects,
+    # Scene/World settings
+    "setup_world": handle_setup_world,
+    "add_light": handle_add_light,
+    "add_camera": handle_add_camera,
+    "configure_render": handle_configure_render,
+    # Collection operations
+    "create_collection": handle_create_collection,
+    "move_to_collection": handle_move_to_collection,
+    "set_visibility": handle_set_visibility,
     # Objects
     "create_object": handle_create_object,
     "modify_object": handle_modify_object,
@@ -279,6 +239,14 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "mesh_boolean": handle_boolean_op,
     "mesh_retopologize": handle_retopologize,
     "mesh_sculpt": handle_sculpt,
+    "mesh_loop_cut": handle_loop_cut,
+    "mesh_bevel_edges": handle_bevel_edges,
+    "mesh_knife_project": handle_knife_project,
+    "mesh_proportional_edit": handle_proportional_edit,
+    # Curve operations
+    "curve_create": handle_create_curve,
+    "curve_to_mesh": handle_curve_to_mesh,
+    "curve_extrude_along": handle_extrude_along_curve,
     # UV operations
     "uv_analyze": handle_analyze_uv,
     "uv_unwrap_xatlas": handle_unwrap_xatlas,
@@ -370,97 +338,29 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "equipment_split_character": handle_equipment_split_character,
     "equipment_fit_armor": handle_equipment_fit_armor,
     "equipment_render_icon": handle_equipment_render_icon,
-    # Procedural material operations
-    "material_create_procedural": handle_create_procedural_material,
-    # Vertex color operations
-    "vertex_colors_auto_paint": handle_auto_paint_vertex_colors,
-    # Weathering operations
-    "weathering_apply": handle_apply_weathering,
-    # Terrain biome material operations
-    "terrain_setup_biome": handle_setup_terrain_biome,
-    "terrain_create_biome_material": handle_create_biome_terrain,
-    # Per-biome vegetation quality system
-    "env_scatter_biome_vegetation": handle_scatter_biome_vegetation,
-    # Road network generation (pure logic -- returns mesh specs)
-    "env_compute_road_network": lambda params: compute_road_network(
-        waypoints=[tuple(wp) for wp in params.get("waypoints", [])],
-        terrain_heightmap=params.get("terrain_heightmap"),
-        water_level=params.get("water_level", 0.0),
-        seed=params.get("seed", 42),
-    ),
-    # Coastline generation (pure logic -- returns mesh specs)
-    "env_generate_coastline": lambda params: generate_coastline(
-        length=params.get("length", 200.0),
-        width=params.get("width", 50.0),
-        style=params.get("style", "rocky"),
-        resolution=params.get("resolution", 64),
-        seed=params.get("seed", 42),
-    ),
-    # Terrain features (pure logic -- return mesh specs)
-    "env_generate_canyon": lambda params: generate_canyon(
-        width=params.get("width", 5.0),
-        length=params.get("length", 50.0),
-        depth=params.get("depth", 15.0),
-        wall_roughness=params.get("wall_roughness", 0.5),
-        num_side_caves=params.get("num_side_caves", 3),
-        seed=params.get("seed", 42),
-    ),
-    "env_generate_waterfall": lambda params: generate_waterfall(
-        height=params.get("height", 10.0),
-        width=params.get("width", 3.0),
-        pool_radius=params.get("pool_radius", 4.0),
-        num_steps=params.get("num_steps", 3),
-        has_cave_behind=params.get("has_cave_behind", True),
-        seed=params.get("seed", 42),
-    ),
-    "env_generate_cliff_face": lambda params: generate_cliff_face(
-        width=params.get("width", 20.0),
-        height=params.get("height", 15.0),
-        overhang=params.get("overhang", 3.0),
-        num_cave_entrances=params.get("num_cave_entrances", 2),
-        has_ledge_path=params.get("has_ledge_path", True),
-        seed=params.get("seed", 42),
-    ),
-    "env_generate_swamp_terrain": lambda params: generate_swamp_terrain(
-        size=params.get("size", 50.0),
-        water_level=params.get("water_level", 0.3),
-        hummock_count=params.get("hummock_count", 12),
-        island_count=params.get("island_count", 4),
-        seed=params.get("seed", 42),
-    ),
-    # World map generation (pure logic -- returns world map spec)
-    "world_generate_world_map": lambda params: world_map_to_dict(
-        generate_world_map(
-            num_regions=params.get("num_regions", 6),
-            map_size=params.get("map_size", 2000.0),
-            seed=params.get("seed", 42),
-            min_pois=params.get("min_pois", 300),
-        )
-    ),
-    # Light integration (pure logic -- returns light placements)
-    "env_compute_light_placements": lambda params: compute_light_placements(
-        prop_positions=params.get("prop_positions", []),
-    ),
-    "env_merge_lights": lambda params: merge_nearby_lights(
-        lights=params.get("lights", []),
-        merge_distance=params.get("merge_distance", 2.0),
-    ),
-    "env_light_budget": lambda params: compute_light_budget(
-        lights=params.get("lights", []),
-    ),
-    # Atmospheric volumes (pure logic -- returns volume placements)
-    "env_compute_atmospheric_placements": lambda params: compute_atmospheric_placements(
-        biome_name=params.get("biome_name", "dark_forest"),
-        area_bounds=tuple(params.get("area_bounds", (0, 0, 100, 100))),
-        seed=params.get("seed", 42),
-        density_scale=params.get("density_scale", 1.0),
-    ),
-    "env_volume_mesh_spec": lambda params: compute_volume_mesh_spec(
-        volume_type=params.get("volume_type", "ground_fog"),
-        position=tuple(params.get("position", (0, 0, 0))),
-        scale=params.get("scale", 1.0),
-    ),
-    "env_atmosphere_performance": lambda params: estimate_atmosphere_performance(
-        placements=params.get("placements", []),
-    ),
+    # Sculpt mode operations
+    "sculpt_brush": handle_sculpt_brush,
+    "sculpt_enter": handle_enter_sculpt_mode,
+    "sculpt_exit": handle_exit_sculpt_mode,
+    # Vertex colors and custom data operations
+    "mesh_vertex_color": handle_vertex_color,
+    "mesh_custom_normals": handle_custom_normals,
+    "mesh_edge_data": handle_edge_data,
+    # Particle system operations
+    "particle_add_system": handle_add_particle_system,
+    "particle_configure_physics": handle_configure_particle_physics,
+    "particle_hair_groom": handle_hair_grooming,
+    # Physics simulation operations
+    "physics_add_rigid_body": handle_add_rigid_body,
+    "physics_add_cloth": handle_add_cloth,
+    "physics_add_soft_body": handle_add_soft_body,
+    "physics_bake": handle_bake_physics,
+    # Text object operations
+    "text_create": handle_create_text,
+    "text_to_mesh": handle_text_to_mesh,
+    # Shape key workflow operations
+    "mesh_shape_key": handle_shape_key,
+    # Driver operations
+    "driver_add": handle_add_driver,
+    "driver_remove": handle_remove_driver,
 }
