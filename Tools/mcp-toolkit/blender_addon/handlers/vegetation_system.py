@@ -17,6 +17,12 @@ Biomes:
   - frozen_hollows: Ice-covered pines, frozen boulders, frost lichen
   - blighted_mire: Mangrove roots, toxic mushrooms, sludge rocks
   - ruined_citadel: Overgrown vines, crumbled stone, corrupted saplings
+  - desert: Dead brush, cacti-shaped rocks, tumbleweeds
+  - coastal: Sea grass, coastal scrub, driftwood
+  - grasslands: Tall grass, wildflowers, lone trees
+  - mushroom_forest: Giant mushrooms, bioluminescent ground cover, spore clusters
+  - crystal_cavern: Crystal growths, mineral formations
+  - deep_forest: Massive ancient trees, thick ferns, hanging moss
 """
 
 from __future__ import annotations
@@ -127,6 +133,78 @@ BIOME_VEGETATION_SETS: dict[str, dict[str, list[dict[str, Any]]]] = {
         ],
         "rocks": [
             {"type": "rock", "style": "crumbled_stone", "density": 0.18, "scale_range": (0.3, 1.0)},
+        ],
+    },
+    "desert": {
+        "trees": [
+            {"type": "bush", "style": "dead_brush", "density": 0.06, "scale_range": (0.3, 0.7)},
+        ],
+        "ground_cover": [
+            {"type": "tumbleweed", "density": 0.04, "scale_range": (0.2, 0.5)},
+        ],
+        "rocks": [
+            {"type": "rock", "style": "cactus_rock", "density": 0.08, "scale_range": (0.5, 1.5)},
+            {"type": "rock", "style": "wind_eroded", "density": 0.05, "scale_range": (0.4, 1.2)},
+        ],
+    },
+    "coastal": {
+        "trees": [
+            {"type": "bush", "style": "coastal_scrub", "density": 0.10, "scale_range": (0.3, 0.8)},
+        ],
+        "ground_cover": [
+            {"type": "grass", "style": "sea_grass", "density": 0.25, "scale_range": (0.2, 0.5)},
+        ],
+        "rocks": [
+            {"type": "rock", "style": "driftwood", "density": 0.08, "scale_range": (0.3, 1.0)},
+            {"type": "rock", "style": "sea_worn", "density": 0.10, "scale_range": (0.3, 0.9)},
+        ],
+    },
+    "grasslands": {
+        "trees": [
+            {"type": "tree", "style": "lone_windswept", "density": 0.03, "scale_range": (1.5, 3.0)},
+        ],
+        "ground_cover": [
+            {"type": "grass", "style": "tall_grass", "density": 0.50, "scale_range": (0.3, 0.8)},
+            {"type": "flower", "style": "wildflower", "density": 0.15, "scale_range": (0.1, 0.3)},
+        ],
+        "rocks": [
+            {"type": "rock", "style": "field_stone", "density": 0.04, "scale_range": (0.3, 0.8)},
+        ],
+    },
+    "mushroom_forest": {
+        "trees": [
+            {"type": "mushroom", "style": "giant_mushroom", "density": 0.12, "scale_range": (1.0, 3.0)},
+            {"type": "mushroom", "style": "shelf_mushroom", "density": 0.08, "scale_range": (0.3, 0.8)},
+        ],
+        "ground_cover": [
+            {"type": "moss", "style": "bioluminescent", "density": 0.30, "scale_range": (0.1, 0.3)},
+            {"type": "mushroom", "style": "spore_cluster", "density": 0.20, "scale_range": (0.1, 0.4)},
+        ],
+        "rocks": [
+            {"type": "rock", "style": "fungal_log", "density": 0.06, "scale_range": (0.4, 1.0)},
+        ],
+    },
+    "crystal_cavern": {
+        "trees": [],
+        "ground_cover": [
+            {"type": "crystal", "style": "small_growth", "density": 0.20, "scale_range": (0.2, 0.6)},
+        ],
+        "rocks": [
+            {"type": "rock", "style": "crystal_cluster", "density": 0.15, "scale_range": (0.5, 2.0)},
+            {"type": "rock", "style": "mineral_formation", "density": 0.10, "scale_range": (0.3, 1.2)},
+        ],
+    },
+    "deep_forest": {
+        "trees": [
+            {"type": "tree", "style": "ancient_massive", "density": 0.08, "scale_range": (2.0, 5.0)},
+            {"type": "tree", "style": "gnarled_elder", "density": 0.05, "scale_range": (1.5, 3.0)},
+        ],
+        "ground_cover": [
+            {"type": "fern", "style": "thick_fern", "density": 0.40, "scale_range": (0.3, 0.7)},
+            {"type": "moss", "style": "hanging_moss", "density": 0.30, "scale_range": (0.2, 0.6)},
+        ],
+        "rocks": [
+            {"type": "rock", "style": "root_boulder", "density": 0.08, "scale_range": (0.5, 1.5)},
         ],
     },
 }

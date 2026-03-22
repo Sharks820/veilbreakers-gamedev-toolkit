@@ -1,14 +1,17 @@
 """Terrain biome material system with per-biome palettes.
 
 Builds on the procedural_materials.py MATERIAL_LIBRARY to provide:
-  - BIOME_PALETTES: 8 named biome definitions mapping terrain zones to materials
+  - BIOME_PALETTES: 14 named biome definitions mapping terrain zones to materials
   - TERRAIN_MATERIALS: Additional terrain-specific materials not in MATERIAL_LIBRARY
   - Pure-logic slope/height analysis functions (no bpy dependency)
   - Vertex color splatmap blending (R=grass, G=rock, B=dirt, A=special)
   - Corruption tint overlay system
+  - Biome transition zone blending (compute_biome_transition)
 
 Biomes: thornwood_forest, corrupted_swamp, mountain_pass, ruined_fortress,
-        abandoned_village, veil_crack_zone, cemetery, battlefield
+        abandoned_village, veil_crack_zone, cemetery, battlefield,
+        desert, coastal, grasslands, mushroom_forest, crystal_cavern,
+        deep_forest
 
 All colors follow VeilBreakers dark fantasy palette rules:
   - Environment saturation NEVER exceeds 40%
@@ -522,6 +525,348 @@ TERRAIN_MATERIALS: dict[str, dict[str, Any]] = {
         "wear_intensity": 0.10,
         "node_recipe": "terrain",
     },
+
+    # -- Desert/Arid --
+    "sand": {
+        "base_color": (0.22, 0.18, 0.12, 1.0),
+        "roughness": 0.88,
+        "roughness_variation": 0.08,
+        "metallic": 0.0,
+        "normal_strength": 0.3,
+        "detail_scale": 12.0,
+        "wear_intensity": 0.10,
+        "node_recipe": "terrain",
+    },
+    "cracked_clay": {
+        "base_color": (0.18, 0.14, 0.09, 1.0),
+        "roughness": 0.92,
+        "roughness_variation": 0.14,
+        "metallic": 0.0,
+        "normal_strength": 1.2,
+        "detail_scale": 6.0,
+        "wear_intensity": 0.40,
+        "node_recipe": "terrain",
+    },
+    "sandstone": {
+        "base_color": (0.20, 0.16, 0.10, 1.0),
+        "roughness": 0.86,
+        "roughness_variation": 0.12,
+        "metallic": 0.0,
+        "normal_strength": 1.0,
+        "detail_scale": 5.0,
+        "wear_intensity": 0.30,
+        "node_recipe": "stone",
+    },
+    "exposed_rock_warm": {
+        "base_color": (0.19, 0.15, 0.11, 1.0),
+        "roughness": 0.84,
+        "roughness_variation": 0.14,
+        "metallic": 0.0,
+        "normal_strength": 1.4,
+        "detail_scale": 5.0,
+        "wear_intensity": 0.35,
+        "node_recipe": "stone",
+    },
+    "layered_sandstone": {
+        "base_color": (0.21, 0.17, 0.11, 1.0),
+        "roughness": 0.82,
+        "roughness_variation": 0.12,
+        "metallic": 0.0,
+        "normal_strength": 1.6,
+        "detail_scale": 4.0,
+        "wear_intensity": 0.35,
+        "node_recipe": "stone",
+    },
+    "salt_flat": {
+        "base_color": (0.30, 0.28, 0.25, 1.0),
+        "roughness": 0.75,
+        "roughness_variation": 0.06,
+        "metallic": 0.0,
+        "normal_strength": 0.4,
+        "detail_scale": 10.0,
+        "wear_intensity": 0.05,
+        "node_recipe": "terrain",
+    },
+
+    # -- Coastal/Maritime --
+    "wet_sand": {
+        "base_color": (0.16, 0.14, 0.10, 1.0),
+        "roughness": 0.45,
+        "roughness_variation": 0.10,
+        "metallic": 0.0,
+        "normal_strength": 0.3,
+        "detail_scale": 10.0,
+        "wear_intensity": 0.08,
+        "node_recipe": "terrain",
+    },
+    "beach_pebbles": {
+        "base_color": (0.18, 0.16, 0.14, 1.0),
+        "roughness": 0.80,
+        "roughness_variation": 0.16,
+        "metallic": 0.0,
+        "normal_strength": 1.0,
+        "detail_scale": 14.0,
+        "wear_intensity": 0.15,
+        "node_recipe": "terrain",
+    },
+    "sea_weathered_rock": {
+        "base_color": (0.14, 0.13, 0.12, 1.0),
+        "roughness": 0.70,
+        "roughness_variation": 0.14,
+        "metallic": 0.0,
+        "normal_strength": 1.3,
+        "detail_scale": 6.0,
+        "wear_intensity": 0.45,
+        "node_recipe": "stone",
+    },
+    "coastal_grass": {
+        "base_color": (0.08, 0.10, 0.06, 1.0),
+        "roughness": 0.82,
+        "roughness_variation": 0.10,
+        "metallic": 0.0,
+        "normal_strength": 0.4,
+        "detail_scale": 12.0,
+        "wear_intensity": 0.08,
+        "node_recipe": "terrain",
+    },
+    "sea_cliff_stone": {
+        "base_color": (0.12, 0.11, 0.10, 1.0),
+        "roughness": 0.78,
+        "roughness_variation": 0.16,
+        "metallic": 0.0,
+        "normal_strength": 1.5,
+        "detail_scale": 5.0,
+        "wear_intensity": 0.50,
+        "node_recipe": "stone",
+    },
+    "tidal_pool": {
+        "base_color": (0.06, 0.08, 0.10, 1.0),
+        "roughness": 0.12,
+        "roughness_variation": 0.04,
+        "metallic": 0.0,
+        "normal_strength": 0.4,
+        "detail_scale": 4.0,
+        "wear_intensity": 0.05,
+        "node_recipe": "terrain",
+    },
+    "sea_foam_edge": {
+        "base_color": (0.22, 0.22, 0.24, 1.0),
+        "roughness": 0.30,
+        "roughness_variation": 0.08,
+        "metallic": 0.0,
+        "normal_strength": 0.2,
+        "detail_scale": 8.0,
+        "wear_intensity": 0.03,
+        "node_recipe": "terrain",
+    },
+
+    # -- Grasslands/Plains --
+    "tall_grass_ground": {
+        "base_color": (0.08, 0.10, 0.05, 1.0),
+        "roughness": 0.84,
+        "roughness_variation": 0.10,
+        "metallic": 0.0,
+        "normal_strength": 0.4,
+        "detail_scale": 14.0,
+        "wear_intensity": 0.08,
+        "node_recipe": "terrain",
+    },
+    "wildflower_soil": {
+        "base_color": (0.10, 0.09, 0.06, 1.0),
+        "roughness": 0.86,
+        "roughness_variation": 0.12,
+        "metallic": 0.0,
+        "normal_strength": 0.5,
+        "detail_scale": 10.0,
+        "wear_intensity": 0.12,
+        "node_recipe": "terrain",
+    },
+    "grass_covered_rock": {
+        "base_color": (0.10, 0.11, 0.07, 1.0),
+        "roughness": 0.80,
+        "roughness_variation": 0.14,
+        "metallic": 0.0,
+        "normal_strength": 1.0,
+        "detail_scale": 6.0,
+        "wear_intensity": 0.25,
+        "node_recipe": "stone",
+    },
+    "exposed_earth_green": {
+        "base_color": (0.12, 0.10, 0.07, 1.0),
+        "roughness": 0.88,
+        "roughness_variation": 0.14,
+        "metallic": 0.0,
+        "normal_strength": 0.8,
+        "detail_scale": 7.0,
+        "wear_intensity": 0.30,
+        "node_recipe": "terrain",
+    },
+    "riverbank_grass": {
+        "base_color": (0.06, 0.08, 0.04, 1.0),
+        "roughness": 0.78,
+        "roughness_variation": 0.10,
+        "metallic": 0.0,
+        "normal_strength": 0.3,
+        "detail_scale": 12.0,
+        "wear_intensity": 0.06,
+        "node_recipe": "terrain",
+    },
+
+    # -- Mushroom Forest --
+    "mycelium_soil": {
+        "base_color": (0.10, 0.08, 0.12, 1.0),
+        "roughness": 0.88,
+        "roughness_variation": 0.14,
+        "metallic": 0.0,
+        "normal_strength": 0.6,
+        "detail_scale": 8.0,
+        "wear_intensity": 0.20,
+        "node_recipe": "organic",
+    },
+    "spore_dust": {
+        "base_color": (0.12, 0.10, 0.14, 1.0),
+        "roughness": 0.82,
+        "roughness_variation": 0.10,
+        "metallic": 0.0,
+        "normal_strength": 0.3,
+        "detail_scale": 10.0,
+        "wear_intensity": 0.10,
+        "node_recipe": "terrain",
+    },
+    "fungal_rock": {
+        "base_color": (0.11, 0.09, 0.13, 1.0),
+        "roughness": 0.80,
+        "roughness_variation": 0.16,
+        "metallic": 0.0,
+        "normal_strength": 1.2,
+        "detail_scale": 6.0,
+        "wear_intensity": 0.35,
+        "node_recipe": "stone",
+    },
+    "bioluminescent_stone": {
+        "base_color": (0.08, 0.06, 0.12, 1.0),
+        "roughness": 0.72,
+        "roughness_variation": 0.12,
+        "metallic": 0.05,
+        "normal_strength": 1.4,
+        "detail_scale": 5.0,
+        "wear_intensity": 0.30,
+        "node_recipe": "stone",
+    },
+    "luminous_pool_edge": {
+        "base_color": (0.07, 0.08, 0.14, 1.0),
+        "roughness": 0.18,
+        "roughness_variation": 0.06,
+        "metallic": 0.0,
+        "normal_strength": 0.4,
+        "detail_scale": 4.0,
+        "wear_intensity": 0.05,
+        "node_recipe": "terrain",
+    },
+
+    # -- Crystal Cavern --
+    "geode_floor": {
+        "base_color": (0.12, 0.10, 0.14, 1.0),
+        "roughness": 0.75,
+        "roughness_variation": 0.12,
+        "metallic": 0.08,
+        "normal_strength": 0.8,
+        "detail_scale": 8.0,
+        "wear_intensity": 0.20,
+        "node_recipe": "stone",
+    },
+    "crystal_dust": {
+        "base_color": (0.18, 0.16, 0.22, 1.0),
+        "roughness": 0.60,
+        "roughness_variation": 0.10,
+        "metallic": 0.12,
+        "normal_strength": 0.4,
+        "detail_scale": 12.0,
+        "wear_intensity": 0.08,
+        "node_recipe": "terrain",
+    },
+    "prismatic_rock": {
+        "base_color": (0.14, 0.12, 0.18, 1.0),
+        "roughness": 0.40,
+        "roughness_variation": 0.15,
+        "metallic": 0.20,
+        "normal_strength": 1.0,
+        "detail_scale": 6.0,
+        "wear_intensity": 0.25,
+        "node_recipe": "stone",
+    },
+    "crystal_wall": {
+        "base_color": (0.16, 0.14, 0.22, 1.0),
+        "roughness": 0.15,
+        "roughness_variation": 0.08,
+        "metallic": 0.30,
+        "normal_strength": 0.6,
+        "detail_scale": 10.0,
+        "wear_intensity": 0.10,
+        "node_recipe": "stone",
+    },
+    "mineral_pool": {
+        "base_color": (0.10, 0.12, 0.18, 1.0),
+        "roughness": 0.08,
+        "roughness_variation": 0.04,
+        "metallic": 0.05,
+        "normal_strength": 0.3,
+        "detail_scale": 4.0,
+        "wear_intensity": 0.03,
+        "node_recipe": "terrain",
+    },
+
+    # -- Deep Ancient Forest --
+    "thick_leaf_litter": {
+        "base_color": (0.06, 0.05, 0.03, 1.0),
+        "roughness": 0.92,
+        "roughness_variation": 0.14,
+        "metallic": 0.0,
+        "normal_strength": 0.7,
+        "detail_scale": 8.0,
+        "wear_intensity": 0.18,
+        "node_recipe": "terrain",
+    },
+    "ancient_root_soil": {
+        "base_color": (0.08, 0.06, 0.04, 1.0),
+        "roughness": 0.90,
+        "roughness_variation": 0.12,
+        "metallic": 0.0,
+        "normal_strength": 0.9,
+        "detail_scale": 6.0,
+        "wear_intensity": 0.28,
+        "node_recipe": "wood",
+    },
+    "moss_blanket_rock": {
+        "base_color": (0.08, 0.10, 0.06, 1.0),
+        "roughness": 0.78,
+        "roughness_variation": 0.14,
+        "metallic": 0.0,
+        "normal_strength": 1.0,
+        "detail_scale": 6.0,
+        "wear_intensity": 0.30,
+        "node_recipe": "stone",
+    },
+    "root_covered_cliff": {
+        "base_color": (0.09, 0.07, 0.05, 1.0),
+        "roughness": 0.85,
+        "roughness_variation": 0.16,
+        "metallic": 0.0,
+        "normal_strength": 1.5,
+        "detail_scale": 5.0,
+        "wear_intensity": 0.40,
+        "node_recipe": "stone",
+    },
+    "forest_stream_bed": {
+        "base_color": (0.07, 0.06, 0.05, 1.0),
+        "roughness": 0.35,
+        "roughness_variation": 0.10,
+        "metallic": 0.0,
+        "normal_strength": 0.5,
+        "detail_scale": 8.0,
+        "wear_intensity": 0.12,
+        "node_recipe": "terrain",
+    },
 }
 
 
@@ -577,6 +922,42 @@ BIOME_PALETTES: dict[str, dict[str, list[str]]] = {
         "slopes": ["scorched_ground"],
         "cliffs": ["shattered_rock"],
         "water_edges": ["polluted_water"],
+    },
+    "desert": {
+        "ground": ["sand", "cracked_clay"],
+        "slopes": ["sandstone", "exposed_rock_warm"],
+        "cliffs": ["layered_sandstone"],
+        "water_edges": ["dried_mud", "salt_flat"],
+    },
+    "coastal": {
+        "ground": ["wet_sand", "beach_pebbles"],
+        "slopes": ["sea_weathered_rock", "coastal_grass"],
+        "cliffs": ["sea_cliff_stone"],
+        "water_edges": ["tidal_pool", "sea_foam_edge"],
+    },
+    "grasslands": {
+        "ground": ["tall_grass_ground", "wildflower_soil"],
+        "slopes": ["grass_covered_rock"],
+        "cliffs": ["exposed_earth_green"],
+        "water_edges": ["riverbank_grass"],
+    },
+    "mushroom_forest": {
+        "ground": ["mycelium_soil", "spore_dust"],
+        "slopes": ["fungal_rock"],
+        "cliffs": ["bioluminescent_stone"],
+        "water_edges": ["luminous_pool_edge"],
+    },
+    "crystal_cavern": {
+        "ground": ["geode_floor", "crystal_dust"],
+        "slopes": ["prismatic_rock"],
+        "cliffs": ["crystal_wall"],
+        "water_edges": ["mineral_pool"],
+    },
+    "deep_forest": {
+        "ground": ["thick_leaf_litter", "ancient_root_soil"],
+        "slopes": ["moss_blanket_rock"],
+        "cliffs": ["root_covered_cliff"],
+        "water_edges": ["forest_stream_bed"],
     },
 }
 
@@ -908,6 +1289,191 @@ def apply_corruption_tint(
 
 
 # ---------------------------------------------------------------------------
+# Pure-logic: biome transition zone blending
+# ---------------------------------------------------------------------------
+
+def _simple_noise_2d(x: float, y: float, seed: int = 0) -> float:
+    """Deterministic pseudo-noise for transition edge irregularity.
+
+    Uses a hash-based approach (no external dependency) to produce values
+    in [-1, 1] that vary smoothly with position. Not true Perlin noise
+    but sufficient for organic-looking biome boundaries.
+
+    Pure-logic function -- no bpy dependency.
+    """
+    # Integer grid corners
+    ix = int(math.floor(x))
+    iy = int(math.floor(y))
+    fx = x - ix
+    fy = y - iy
+
+    # Smooth interpolation (Hermite)
+    ux = fx * fx * (3.0 - 2.0 * fx)
+    uy = fy * fy * (3.0 - 2.0 * fy)
+
+    def _hash(xi: int, yi: int) -> float:
+        # Simple hash producing a float in [-1, 1]
+        h = ((xi * 374761393 + yi * 668265263 + seed * 1274126177) ^ 0x5DEECE66D) & 0x7FFFFFFF
+        return (h % 10000) / 5000.0 - 1.0
+
+    n00 = _hash(ix, iy)
+    n10 = _hash(ix + 1, iy)
+    n01 = _hash(ix, iy + 1)
+    n11 = _hash(ix + 1, iy + 1)
+
+    nx0 = n00 * (1.0 - ux) + n10 * ux
+    nx1 = n01 * (1.0 - ux) + n11 * ux
+
+    return nx0 * (1.0 - uy) + nx1 * uy
+
+
+def compute_biome_transition(
+    vertices: list[tuple[float, float, float]],
+    face_normals: list[tuple[float, float, float]],
+    faces: list[tuple[int, ...]],
+    biome_a: str,
+    biome_b: str,
+    transition_width: float = 20.0,
+    boundary_axis: str = "x",
+    boundary_position: float = 0.0,
+    noise_scale: float = 0.1,
+    noise_amplitude: float = 5.0,
+    noise_seed: int = 42,
+) -> list[tuple[float, float, float, float]]:
+    """Compute per-vertex splatmap weights for a transition zone between two biomes.
+
+    Produces blended RGBA weights where:
+    - Near biome_a (before boundary): weights from biome_a's terrain layers
+    - Near biome_b (past boundary): weights from biome_b's terrain layers
+    - In transition zone: smooth blend between both, with noise-based
+      edge for organic (not straight line) transition
+
+    The transition is computed along a single axis. Noise displaces the
+    boundary position per-vertex to create an organic, non-linear edge.
+
+    Pure-logic function -- no bpy dependency.
+
+    Parameters
+    ----------
+    vertices : list of (x, y, z)
+        Mesh vertex positions.
+    face_normals : list of (nx, ny, nz)
+        Per-face normals (one per face in ``faces``).
+    faces : list of index tuples
+        Face index lists.
+    biome_a : str
+        Name of the first biome (near negative side of axis).
+    biome_b : str
+        Name of the second biome (near positive side of axis).
+    transition_width : float
+        Width of the blending zone in world units (default 20.0).
+    boundary_axis : str
+        Axis along which the boundary runs: "x" or "y" (default "x").
+    boundary_position : float
+        Position along the axis where the boundary center is (default 0.0).
+    noise_scale : float
+        Scale of the noise function (smaller = larger features). Default 0.1.
+    noise_amplitude : float
+        Maximum displacement of the boundary in world units. Default 5.0.
+    noise_seed : int
+        Seed for the noise function. Default 42.
+
+    Returns
+    -------
+    list of (R, G, B, A)
+        Per-vertex splatmap weights blended between the two biomes.
+        Values are normalised so R + G + B + A = 1.0.
+
+    Raises
+    ------
+    ValueError
+        If biome_a or biome_b is not found in BIOME_PALETTES_V2,
+        or if boundary_axis is not "x" or "y".
+    """
+    if biome_a not in BIOME_PALETTES_V2:
+        raise ValueError(
+            f"Unknown biome_a '{biome_a}'. "
+            f"Available: {sorted(BIOME_PALETTES_V2.keys())}"
+        )
+    if biome_b not in BIOME_PALETTES_V2:
+        raise ValueError(
+            f"Unknown biome_b '{biome_b}'. "
+            f"Available: {sorted(BIOME_PALETTES_V2.keys())}"
+        )
+    if boundary_axis not in ("x", "y"):
+        raise ValueError(
+            f"boundary_axis must be 'x' or 'y', got '{boundary_axis}'"
+        )
+
+    if not vertices:
+        return []
+
+    # Get terrain layer weights for each biome
+    weights_a = auto_assign_terrain_layers(
+        vertices, face_normals, faces, biome_a,
+    )
+    weights_b = auto_assign_terrain_layers(
+        vertices, face_normals, faces, biome_b,
+    )
+
+    half_width = max(transition_width / 2.0, 0.001)
+
+    result: list[tuple[float, float, float, float]] = []
+
+    for vi, (vx, vy, vz) in enumerate(vertices):
+        # Position along boundary axis
+        if boundary_axis == "x":
+            pos = vx
+            # Noise input from the perpendicular axis
+            noise_x = vy * noise_scale
+            noise_y = vz * noise_scale
+        else:
+            pos = vy
+            noise_x = vx * noise_scale
+            noise_y = vz * noise_scale
+
+        # Noise-displaced boundary
+        noise_val = _simple_noise_2d(noise_x, noise_y, seed=noise_seed)
+        displaced_boundary = boundary_position + noise_val * noise_amplitude
+
+        # Compute blend factor: 0 = fully biome_a, 1 = fully biome_b
+        dist_from_boundary = pos - displaced_boundary
+        t = (dist_from_boundary + half_width) / (2.0 * half_width)
+        t = max(0.0, min(1.0, t))
+
+        # Smooth step for nicer transitions
+        t = t * t * (3.0 - 2.0 * t)
+
+        # Blend weights
+        wa = weights_a[vi]
+        wb = weights_b[vi]
+
+        r = wa[0] * (1.0 - t) + wb[0] * t
+        g = wa[1] * (1.0 - t) + wb[1] * t
+        b = wa[2] * (1.0 - t) + wb[2] * t
+        a = wa[3] * (1.0 - t) + wb[3] * t
+
+        # Normalise (should already be ~1.0 but ensure precision)
+        total = r + g + b + a
+        if total > 1e-9:
+            r /= total
+            g /= total
+            b /= total
+            a /= total
+        else:
+            r, g, b, a = 0.0, 0.0, 1.0, 0.0
+
+        result.append((
+            max(0.0, min(1.0, r)),
+            max(0.0, min(1.0, g)),
+            max(0.0, min(1.0, b)),
+            max(0.0, min(1.0, a)),
+        ))
+
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Blender handler: handle_setup_terrain_biome
 # ---------------------------------------------------------------------------
 
@@ -1131,6 +1697,42 @@ BIOME_PALETTES_V2: dict[str, dict[str, dict[str, Any]]] = {
         "slope": {"base_color": (0.12, 0.12, 0.06, 1.0), "roughness": 0.85, "roughness_variation": 0.12, "metallic": 0.0, "normal_strength": 0.6, "detail_scale": 10.0, "wear_intensity": 0.2, "node_recipe": "terrain", "description": "Trampled grass (yellow-green, high roughness)"},
         "cliff": {"base_color": (0.14, 0.10, 0.07, 1.0), "roughness": 0.88, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 1.0, "detail_scale": 5.0, "wear_intensity": 0.35, "node_recipe": "terrain", "description": "Earthen embankment (brown, high roughness)"},
         "special": {"base_color": (0.04, 0.03, 0.03, 1.0), "roughness": 0.95, "roughness_variation": 0.10, "metallic": 0.0, "normal_strength": 1.2, "detail_scale": 8.0, "wear_intensity": 0.6, "node_recipe": "terrain", "description": "Scorched ground (black, very high roughness)"},
+    },
+    "desert": {
+        "ground": {"base_color": (0.22, 0.18, 0.12, 1.0), "roughness": 0.88, "roughness_variation": 0.10, "metallic": 0.0, "normal_strength": 0.4, "detail_scale": 12.0, "wear_intensity": 0.1, "node_recipe": "terrain", "description": "Wind-swept sand + cracked clay (warm tan, high roughness)"},
+        "slope": {"base_color": (0.20, 0.16, 0.10, 1.0), "roughness": 0.86, "roughness_variation": 0.12, "metallic": 0.0, "normal_strength": 1.0, "detail_scale": 5.0, "wear_intensity": 0.3, "node_recipe": "stone", "description": "Sandstone + exposed warm rock (layered, eroded)"},
+        "cliff": {"base_color": (0.21, 0.17, 0.11, 1.0), "roughness": 0.82, "roughness_variation": 0.12, "metallic": 0.0, "normal_strength": 1.6, "detail_scale": 4.0, "wear_intensity": 0.35, "node_recipe": "stone", "description": "Layered sandstone cliff (horizontal strata, warm gray)"},
+        "special": {"base_color": (0.30, 0.28, 0.25, 1.0), "roughness": 0.75, "roughness_variation": 0.06, "metallic": 0.0, "normal_strength": 0.4, "detail_scale": 10.0, "wear_intensity": 0.05, "node_recipe": "terrain", "description": "Salt flat / dried oasis (pale, cracked)"},
+    },
+    "coastal": {
+        "ground": {"base_color": (0.16, 0.14, 0.10, 1.0), "roughness": 0.50, "roughness_variation": 0.12, "metallic": 0.0, "normal_strength": 0.4, "detail_scale": 10.0, "wear_intensity": 0.1, "node_recipe": "terrain", "description": "Wet sand + beach pebbles (damp, low roughness)"},
+        "slope": {"base_color": (0.14, 0.13, 0.12, 1.0), "roughness": 0.72, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 1.2, "detail_scale": 6.0, "wear_intensity": 0.4, "node_recipe": "stone", "description": "Sea-weathered rock + coastal grass (gray-green, eroded)"},
+        "cliff": {"base_color": (0.12, 0.11, 0.10, 1.0), "roughness": 0.78, "roughness_variation": 0.16, "metallic": 0.0, "normal_strength": 1.5, "detail_scale": 5.0, "wear_intensity": 0.5, "node_recipe": "stone", "description": "Sea cliff stone (dark gray, salt-worn, dramatic)"},
+        "special": {"base_color": (0.06, 0.08, 0.10, 1.0), "roughness": 0.12, "roughness_variation": 0.04, "metallic": 0.0, "normal_strength": 0.4, "detail_scale": 4.0, "wear_intensity": 0.05, "node_recipe": "terrain", "description": "Tidal pool surface (dark reflective, translucent)", "alpha": 0.5},
+    },
+    "grasslands": {
+        "ground": {"base_color": (0.08, 0.10, 0.05, 1.0), "roughness": 0.84, "roughness_variation": 0.10, "metallic": 0.0, "normal_strength": 0.5, "detail_scale": 14.0, "wear_intensity": 0.08, "node_recipe": "terrain", "description": "Tall grass + wildflower soil (muted green, soft)"},
+        "slope": {"base_color": (0.10, 0.11, 0.07, 1.0), "roughness": 0.80, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 1.0, "detail_scale": 6.0, "wear_intensity": 0.25, "node_recipe": "stone", "description": "Grass-covered rock (gray-green, mossy)"},
+        "cliff": {"base_color": (0.12, 0.10, 0.07, 1.0), "roughness": 0.88, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 0.8, "detail_scale": 7.0, "wear_intensity": 0.3, "node_recipe": "terrain", "description": "Exposed earth with green patches (brown, high roughness)"},
+        "special": {"base_color": (0.06, 0.08, 0.04, 1.0), "roughness": 0.78, "roughness_variation": 0.10, "metallic": 0.0, "normal_strength": 0.3, "detail_scale": 12.0, "wear_intensity": 0.06, "node_recipe": "organic", "description": "Riverbank grass (dark green, damp)"},
+    },
+    "mushroom_forest": {
+        "ground": {"base_color": (0.10, 0.08, 0.12, 1.0), "roughness": 0.88, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 0.6, "detail_scale": 8.0, "wear_intensity": 0.2, "node_recipe": "organic", "description": "Mycelium soil + spore dust (purple-tinted dark earth)"},
+        "slope": {"base_color": (0.11, 0.09, 0.13, 1.0), "roughness": 0.80, "roughness_variation": 0.16, "metallic": 0.0, "normal_strength": 1.2, "detail_scale": 6.0, "wear_intensity": 0.35, "node_recipe": "stone", "description": "Fungal rock (purple-gray, spongy texture)"},
+        "cliff": {"base_color": (0.08, 0.06, 0.12, 1.0), "roughness": 0.72, "roughness_variation": 0.12, "metallic": 0.05, "normal_strength": 1.4, "detail_scale": 5.0, "wear_intensity": 0.3, "node_recipe": "stone", "description": "Bioluminescent stone (deep purple, faint glow)", "emission_color": (0.10, 0.05, 0.18, 1.0), "emission_strength": 0.3},
+        "special": {"base_color": (0.07, 0.08, 0.14, 1.0), "roughness": 0.18, "roughness_variation": 0.06, "metallic": 0.0, "normal_strength": 0.4, "detail_scale": 4.0, "wear_intensity": 0.05, "node_recipe": "terrain", "description": "Luminous pool edge (blue-purple, wet, glowing)", "emission_color": (0.08, 0.06, 0.20, 1.0), "emission_strength": 0.6},
+    },
+    "crystal_cavern": {
+        "ground": {"base_color": (0.12, 0.10, 0.14, 1.0), "roughness": 0.75, "roughness_variation": 0.12, "metallic": 0.08, "normal_strength": 0.8, "detail_scale": 8.0, "wear_intensity": 0.2, "node_recipe": "stone", "description": "Geode floor + crystal dust (purple-gray, slightly metallic)"},
+        "slope": {"base_color": (0.14, 0.12, 0.18, 1.0), "roughness": 0.40, "roughness_variation": 0.15, "metallic": 0.20, "normal_strength": 1.0, "detail_scale": 6.0, "wear_intensity": 0.25, "node_recipe": "stone", "description": "Prismatic rock (faceted, high metallic, refractive)"},
+        "cliff": {"base_color": (0.16, 0.14, 0.22, 1.0), "roughness": 0.15, "roughness_variation": 0.08, "metallic": 0.30, "normal_strength": 0.6, "detail_scale": 10.0, "wear_intensity": 0.1, "node_recipe": "stone", "description": "Crystal wall (low roughness, high metallic, translucent)", "emission_color": (0.12, 0.08, 0.25, 1.0), "emission_strength": 0.4, "alpha": 0.7},
+        "special": {"base_color": (0.10, 0.12, 0.18, 1.0), "roughness": 0.08, "roughness_variation": 0.04, "metallic": 0.05, "normal_strength": 0.3, "detail_scale": 4.0, "wear_intensity": 0.03, "node_recipe": "terrain", "description": "Mineral pool (dark reflective, mineral-rich)", "emission_color": (0.06, 0.08, 0.15, 1.0), "emission_strength": 0.3},
+    },
+    "deep_forest": {
+        "ground": {"base_color": (0.06, 0.05, 0.03, 1.0), "roughness": 0.92, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 0.8, "detail_scale": 8.0, "wear_intensity": 0.2, "node_recipe": "terrain", "description": "Thick leaf litter + ancient root soil (near-black, very dark)"},
+        "slope": {"base_color": (0.08, 0.10, 0.06, 1.0), "roughness": 0.78, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 1.0, "detail_scale": 6.0, "wear_intensity": 0.3, "node_recipe": "stone", "description": "Moss-blanketed rock (deep green over gray stone)"},
+        "cliff": {"base_color": (0.09, 0.07, 0.05, 1.0), "roughness": 0.85, "roughness_variation": 0.16, "metallic": 0.0, "normal_strength": 1.5, "detail_scale": 5.0, "wear_intensity": 0.4, "node_recipe": "stone", "description": "Root-covered cliff (exposed earth with gnarled roots)"},
+        "special": {"base_color": (0.07, 0.06, 0.05, 1.0), "roughness": 0.35, "roughness_variation": 0.10, "metallic": 0.0, "normal_strength": 0.5, "detail_scale": 8.0, "wear_intensity": 0.12, "node_recipe": "terrain", "description": "Forest stream bed (wet, dark, smooth pebbles)"},
     },
 }
 
