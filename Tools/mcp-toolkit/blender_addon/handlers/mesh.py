@@ -141,6 +141,61 @@ _SCULPT_OPERATIONS = {
     "crease": "SHARPEN",
 }
 
+# Valid brush types for real sculpt mode (handle_sculpt_brush).
+_SCULPT_BRUSH_TYPES = frozenset({
+    "DRAW", "CLAY_STRIPS", "CREASE", "GRAB", "INFLATE", "SMOOTH",
+    "FLATTEN", "PINCH", "SNAKE_HOOK", "LAYER", "BLOB", "SCRAPE",
+})
+
+
+def _validate_sculpt_brush_params(params: dict) -> list[str]:
+    """Validate sculpt brush parameters. Returns list of errors (empty = valid)."""
+    errors: list[str] = []
+
+    name = params.get("name")
+    if not name or not isinstance(name, str):
+        errors.append("name is required and must be a non-empty string")
+
+    brush_type = params.get("brush_type")
+    if not brush_type:
+        errors.append("brush_type is required")
+    elif brush_type not in _SCULPT_BRUSH_TYPES:
+        errors.append(
+            f"Invalid brush_type: {brush_type!r}. "
+            f"Valid: {sorted(_SCULPT_BRUSH_TYPES)}"
+        )
+
+    strength = params.get("strength", 0.5)
+    if not isinstance(strength, (int, float)) or strength < 0 or strength > 1:
+        errors.append(f"strength must be a float between 0 and 1, got {strength!r}")
+
+    radius = params.get("radius", 50.0)
+    if not isinstance(radius, (int, float)) or radius <= 0:
+        errors.append(f"radius must be a positive number, got {radius!r}")
+
+    stroke_points = params.get("stroke_points")
+    if stroke_points is not None:
+        if not isinstance(stroke_points, list):
+            errors.append("stroke_points must be a list of [x,y,z] coordinates")
+        else:
+            for i, pt in enumerate(stroke_points):
+                if not isinstance(pt, (list, tuple)) or len(pt) != 3:
+                    errors.append(
+                        f"stroke_points[{i}] must be [x,y,z], got {pt!r}"
+                    )
+                    break
+                if not all(isinstance(c, (int, float)) for c in pt):
+                    errors.append(
+                        f"stroke_points[{i}] coordinates must be numeric"
+                    )
+                    break
+
+    detail_size = params.get("detail_size", 12.0)
+    if not isinstance(detail_size, (int, float)) or detail_size <= 0:
+        errors.append(f"detail_size must be a positive number, got {detail_size!r}")
+
+    return errors
+
 _AXIS_MAP = {"X": 0, "Y": 1, "Z": 2}
 
 # Valid bevel selection modes for handle_bevel_edges.
@@ -153,6 +208,18 @@ _PROPORTIONAL_FALLOFF_TYPES = frozenset({
 
 # Valid knife/bisect cut types.
 _KNIFE_CUT_TYPES = frozenset({"bisect", "loop"})
+
+# Valid shape key operations.
+_SHAPE_KEY_OPERATIONS = frozenset({"CREATE", "SET_VALUE", "EDIT", "DELETE", "LIST", "ADD_DRIVER"})
+
+# Valid vertex color operations.
+_VERTEX_COLOR_OPERATIONS = frozenset({"CREATE_LAYER", "PAINT", "FILL"})
+
+# Valid custom normal operations.
+_CUSTOM_NORMAL_OPERATIONS = frozenset({"CALCULATE", "TRANSFER", "CLEAR"})
+
+# Valid edge data operations.
+_EDGE_DATA_OPERATIONS = frozenset({"SET_CREASE", "SET_BEVEL_WEIGHT", "SET_SHARP"})
 
 
 def _parse_selection_criteria(params: dict) -> dict:
@@ -333,6 +400,134 @@ def _validate_proportional_edit_params(params: dict) -> dict:
         "offset": [float(c) for c in offset],
         "radius": float(radius),
         "falloff_type": falloff_type,
+    }
+
+
+def _validate_vertex_color_params(params: dict) -> dict:
+    """Validate and normalise vertex color parameters.
+
+    Returns dict with validated ``name``, ``operation``, ``layer_name``,
+    ``color``, ``vertex_indices``.
+    Raises ``ValueError`` for invalid values.
+    """
+    name = params.get("name")
+    if not name or not isinstance(name, str):
+        raise ValueError("name is required and must be a non-empty string")
+
+    operation = params.get("operation", "CREATE_LAYER")
+    if operation not in _VERTEX_COLOR_OPERATIONS:
+        raise ValueError(
+            f"Invalid operation: {operation!r}. "
+            f"Valid: {sorted(_VERTEX_COLOR_OPERATIONS)}"
+        )
+
+    layer_name = params.get("layer_name", "Col")
+    if not isinstance(layer_name, str) or not layer_name:
+        raise ValueError(f"layer_name must be a non-empty string, got {layer_name!r}")
+
+    color = params.get("color", [1.0, 1.0, 1.0, 1.0])
+    if not isinstance(color, (list, tuple)) or len(color) != 4:
+        raise ValueError(f"color must be a 4-element [r,g,b,a] list, got {color!r}")
+    for i, c in enumerate(color):
+        if not isinstance(c, (int, float)):
+            raise ValueError(f"color[{i}] must be numeric, got {type(c).__name__}")
+        if c < 0.0 or c > 1.0:
+            raise ValueError(f"color[{i}] must be between 0 and 1, got {c}")
+
+    vertex_indices = params.get("vertex_indices")
+    if vertex_indices is not None:
+        if not isinstance(vertex_indices, (list, tuple)):
+            raise ValueError("vertex_indices must be a list of integers")
+        for idx in vertex_indices:
+            if not isinstance(idx, int) or idx < 0:
+                raise ValueError(
+                    f"vertex_indices must contain non-negative integers, got {idx!r}"
+                )
+
+    return {
+        "name": name,
+        "operation": operation,
+        "layer_name": layer_name,
+        "color": [float(c) for c in color],
+        "vertex_indices": list(vertex_indices) if vertex_indices is not None else None,
+    }
+
+
+def _validate_custom_normals_params(params: dict) -> dict:
+    """Validate and normalise custom normals parameters.
+
+    Returns dict with validated ``name``, ``operation``, ``source_object``,
+    ``split_angle``.
+    Raises ``ValueError`` for invalid values.
+    """
+    name = params.get("name")
+    if not name or not isinstance(name, str):
+        raise ValueError("name is required and must be a non-empty string")
+
+    operation = params.get("operation", "CALCULATE")
+    if operation not in _CUSTOM_NORMAL_OPERATIONS:
+        raise ValueError(
+            f"Invalid operation: {operation!r}. "
+            f"Valid: {sorted(_CUSTOM_NORMAL_OPERATIONS)}"
+        )
+
+    source_object = params.get("source_object")
+    if operation == "TRANSFER" and (not source_object or not isinstance(source_object, str)):
+        raise ValueError("source_object is required for TRANSFER operation")
+
+    split_angle = params.get("split_angle", 30.0)
+    if not isinstance(split_angle, (int, float)):
+        raise ValueError(f"split_angle must be a number, got {type(split_angle).__name__}")
+    if split_angle < 0.0 or split_angle > 180.0:
+        raise ValueError(f"split_angle must be between 0 and 180, got {split_angle}")
+
+    return {
+        "name": name,
+        "operation": operation,
+        "source_object": source_object,
+        "split_angle": float(split_angle),
+    }
+
+
+def _validate_edge_data_params(params: dict) -> dict:
+    """Validate and normalise edge data parameters.
+
+    Returns dict with validated ``name``, ``operation``, ``edge_indices``,
+    ``value``.
+    Raises ``ValueError`` for invalid values.
+    """
+    name = params.get("name")
+    if not name or not isinstance(name, str):
+        raise ValueError("name is required and must be a non-empty string")
+
+    operation = params.get("operation", "SET_CREASE")
+    if operation not in _EDGE_DATA_OPERATIONS:
+        raise ValueError(
+            f"Invalid operation: {operation!r}. "
+            f"Valid: {sorted(_EDGE_DATA_OPERATIONS)}"
+        )
+
+    edge_indices = params.get("edge_indices")
+    if edge_indices is not None:
+        if not isinstance(edge_indices, (list, tuple)):
+            raise ValueError("edge_indices must be a list of integers")
+        for idx in edge_indices:
+            if not isinstance(idx, int) or idx < 0:
+                raise ValueError(
+                    f"edge_indices must contain non-negative integers, got {idx!r}"
+                )
+
+    value = params.get("value", 1.0)
+    if not isinstance(value, (int, float)):
+        raise ValueError(f"value must be a number, got {type(value).__name__}")
+    if value < 0.0 or value > 1.0:
+        raise ValueError(f"value must be between 0 and 1, got {value}")
+
+    return {
+        "name": name,
+        "operation": operation,
+        "edge_indices": list(edge_indices) if edge_indices is not None else None,
+        "value": float(value),
     }
 
 
@@ -1706,3 +1901,704 @@ def handle_proportional_edit(params: dict) -> dict:
         "vertex_count": vert_count,
         "face_count": face_count,
     }
+
+
+# ---------------------------------------------------------------------------
+# Real sculpt mode handlers (brush strokes, enter/exit sculpt mode)
+# ---------------------------------------------------------------------------
+
+
+def handle_enter_sculpt_mode(params: dict) -> dict:
+    """Enter sculpt mode for the specified mesh object.
+
+    Params:
+        name: Object name (required).
+        use_dyntopo: Enable dynamic topology (default False).
+        detail_size: Dyntopo detail size (default 12.0).
+
+    Returns dict with mode status.
+    """
+    name = params.get("name")
+    obj = _get_mesh_object(name)
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for sculpt mode")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="SCULPT")
+
+    use_dyntopo = params.get("use_dyntopo", False)
+    detail_size = params.get("detail_size", 12.0)
+
+    if use_dyntopo:
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.sculpt.dynamic_topology_toggle()
+            bpy.context.scene.tool_settings.sculpt.detail_size = detail_size
+
+    return {
+        "object_name": name,
+        "mode": "SCULPT",
+        "dyntopo_enabled": use_dyntopo,
+        "detail_size": detail_size if use_dyntopo else None,
+    }
+
+
+def handle_exit_sculpt_mode(params: dict) -> dict:
+    """Exit sculpt mode back to object mode.
+
+    Params:
+        name: Object name (required).
+
+    Returns dict with mode status.
+    """
+    name = params.get("name")
+    obj = _get_mesh_object(name)
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for mode switch")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    with bpy.context.temp_override(**ctx):
+        # Disable dyntopo if active before exiting
+        if (hasattr(bpy.context, "sculpt_object")
+                and bpy.context.sculpt_object
+                and obj.data.is_editmode is False):
+            try:
+                if bpy.context.scene.tool_settings.sculpt.detail_type_method:
+                    bpy.ops.sculpt.dynamic_topology_toggle()
+            except (AttributeError, RuntimeError):
+                pass
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    return {
+        "object_name": name,
+        "mode": "OBJECT",
+    }
+
+
+def handle_sculpt_brush(params: dict) -> dict:
+    """Apply a sculpt brush stroke along a path of 3D points.
+
+    Params:
+        name: Object name (required).
+        brush_type: Brush type string (required). One of DRAW, CLAY_STRIPS,
+            CREASE, GRAB, INFLATE, SMOOTH, FLATTEN, PINCH, SNAKE_HOOK,
+            LAYER, BLOB, SCRAPE.
+        strength: Brush strength 0-1 (default 0.5).
+        radius: Brush radius in pixels (default 50.0).
+        stroke_points: List of [x,y,z] coordinates defining the stroke path.
+            If not provided, applies a single dab at object origin.
+        use_dyntopo: Enable dynamic topology (default False).
+        detail_size: Dyntopo detail size (default 12.0).
+
+    Returns dict with operation details.
+    """
+    errors = _validate_sculpt_brush_params(params)
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    name = params["name"]
+    obj = _get_mesh_object(name)
+    brush_type = params["brush_type"]
+    strength = params.get("strength", 0.5)
+    radius = params.get("radius", 50.0)
+    stroke_points = params.get("stroke_points")
+    use_dyntopo = params.get("use_dyntopo", False)
+    detail_size = params.get("detail_size", 12.0)
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for sculpt brush")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="SCULPT")
+
+        # Enable dyntopo if requested
+        if use_dyntopo:
+            try:
+                if not obj.data.use_paint_symmetry_x:
+                    pass  # Just check we're in sculpt context
+                bpy.ops.sculpt.dynamic_topology_toggle()
+                bpy.context.scene.tool_settings.sculpt.detail_size = detail_size
+            except RuntimeError:
+                pass
+
+        # Set the active brush
+        sculpt = bpy.context.scene.tool_settings.sculpt
+        brush = bpy.data.brushes.get(brush_type)
+        if brush is None:
+            brush = bpy.data.brushes.new(name=brush_type, mode="SCULPT")
+        brush.sculpt_tool = brush_type
+        brush.strength = strength
+        brush.size = int(radius)
+        sculpt.brush = brush
+
+        # Build stroke data
+        stroke = []
+        if stroke_points:
+            for pt in stroke_points:
+                stroke.append({
+                    "name": "stroke",
+                    "is_start": len(stroke) == 0,
+                    "location": (pt[0], pt[1], pt[2]),
+                    "mouse": (0, 0),
+                    "mouse_event": (0, 0),
+                    "pen_flip": False,
+                    "pressure": 1.0,
+                    "size": int(radius),
+                    "time": 0.0,
+                    "x_tilt": 0.0,
+                    "y_tilt": 0.0,
+                })
+        else:
+            # Single dab at object center
+            loc = obj.location
+            stroke.append({
+                "name": "stroke",
+                "is_start": True,
+                "location": (loc.x, loc.y, loc.z),
+                "mouse": (0, 0),
+                "mouse_event": (0, 0),
+                "pen_flip": False,
+                "pressure": 1.0,
+                "size": int(radius),
+                "time": 0.0,
+                "x_tilt": 0.0,
+                "y_tilt": 0.0,
+            })
+
+        bpy.ops.sculpt.brush_stroke(stroke=stroke)
+
+        # Disable dyntopo before exiting if we enabled it
+        if use_dyntopo:
+            try:
+                bpy.ops.sculpt.dynamic_topology_toggle()
+            except RuntimeError:
+                pass
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    return {
+        "object_name": name,
+        "brush_type": brush_type,
+        "strength": strength,
+        "radius": radius,
+        "stroke_points_count": len(stroke_points) if stroke_points else 1,
+        "use_dyntopo": use_dyntopo,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Vertex colors, custom normals, and edge data handlers
+# ---------------------------------------------------------------------------
+
+
+def handle_vertex_color(params: dict) -> dict:
+    """Vertex color operations: create layer, paint, fill.
+
+    Params:
+        name: Object name (required).
+        operation: "CREATE_LAYER", "PAINT", or "FILL" (default "CREATE_LAYER").
+        layer_name: Vertex color layer name (default "Col").
+        color: [r, g, b, a] color to paint/fill (default [1, 1, 1, 1]).
+        vertex_indices: List of vertex indices for selective paint (optional).
+
+    Returns dict with layer info and operation details.
+    """
+    validated = _validate_vertex_color_params(params)
+    name = validated["name"]
+    operation = validated["operation"]
+    layer_name = validated["layer_name"]
+    color = validated["color"]
+    vertex_indices = validated["vertex_indices"]
+
+    obj = _get_mesh_object(name)
+    mesh = obj.data
+
+    if operation == "CREATE_LAYER":
+        # Check if layer already exists
+        existing = mesh.color_attributes.get(layer_name)
+        if existing is not None:
+            return {
+                "object_name": name,
+                "operation": operation,
+                "layer_name": layer_name,
+                "created": False,
+                "message": f"Layer '{layer_name}' already exists",
+            }
+        mesh.color_attributes.new(
+            name=layer_name,
+            type="FLOAT_COLOR",
+            domain="POINT",
+        )
+        return {
+            "object_name": name,
+            "operation": operation,
+            "layer_name": layer_name,
+            "created": True,
+        }
+
+    elif operation == "FILL":
+        layer = mesh.color_attributes.get(layer_name)
+        if layer is None:
+            raise ValueError(
+                f"Vertex color layer '{layer_name}' not found on '{name}'. "
+                f"Create it first with operation='CREATE_LAYER'."
+            )
+        # Fill all vertices with the color
+        for i in range(len(layer.data)):
+            layer.data[i].color = tuple(color)
+        mesh.update()
+        return {
+            "object_name": name,
+            "operation": operation,
+            "layer_name": layer_name,
+            "color": color,
+            "vertices_painted": len(layer.data),
+        }
+
+    elif operation == "PAINT":
+        layer = mesh.color_attributes.get(layer_name)
+        if layer is None:
+            raise ValueError(
+                f"Vertex color layer '{layer_name}' not found on '{name}'. "
+                f"Create it first with operation='CREATE_LAYER'."
+            )
+        if vertex_indices is not None:
+            # Validate indices
+            total = len(layer.data)
+            for idx in vertex_indices:
+                if idx >= total:
+                    raise ValueError(
+                        f"vertex index {idx} out of range "
+                        f"(layer has {total} data points)"
+                    )
+            for idx in vertex_indices:
+                layer.data[idx].color = tuple(color)
+            painted = len(vertex_indices)
+        else:
+            # Paint all
+            for i in range(len(layer.data)):
+                layer.data[i].color = tuple(color)
+            painted = len(layer.data)
+        mesh.update()
+        return {
+            "object_name": name,
+            "operation": operation,
+            "layer_name": layer_name,
+            "color": color,
+            "vertices_painted": painted,
+        }
+
+    raise ValueError(f"Unhandled operation: {operation}")
+
+
+def handle_custom_normals(params: dict) -> dict:
+    """Custom normals operations: calculate, transfer, clear.
+
+    Params:
+        name: Object name (required).
+        operation: "CALCULATE", "TRANSFER", or "CLEAR" (default "CALCULATE").
+        source_object: Source object name for TRANSFER (required for TRANSFER).
+        split_angle: Auto-smooth split angle in degrees for CALCULATE (default 30).
+
+    Returns dict with operation details.
+    """
+    validated = _validate_custom_normals_params(params)
+    name = validated["name"]
+    operation = validated["operation"]
+    source_object = validated["source_object"]
+    split_angle = validated["split_angle"]
+
+    obj = _get_mesh_object(name)
+    mesh = obj.data
+
+    if operation == "CALCULATE":
+        # Enable auto smooth and set angle
+        split_angle_rad = math.radians(split_angle)
+        if hasattr(mesh, "use_auto_smooth"):
+            mesh.use_auto_smooth = True
+            mesh.auto_smooth_angle = split_angle_rad
+        # Calculate split normals
+        mesh.calc_normals_split()
+        return {
+            "object_name": name,
+            "operation": operation,
+            "split_angle": split_angle,
+            "has_custom_normals": mesh.has_custom_normals,
+        }
+
+    elif operation == "TRANSFER":
+        source = bpy.data.objects.get(source_object)
+        if source is None:
+            raise ValueError(f"Source object not found: {source_object!r}")
+        if source.type != "MESH":
+            raise ValueError(f"Source object '{source_object}' is not a mesh")
+
+        # Add data transfer modifier
+        mod = obj.modifiers.new(name="NormalTransfer", type="DATA_TRANSFER")
+        mod.object = source
+        mod.use_loop_data = True
+        mod.data_types_loops = {"CUSTOM_NORMAL"}
+        mod.loop_mapping = "POLYINTERP_NEAREST"
+
+        ctx = get_3d_context_override()
+        if ctx is None:
+            raise RuntimeError("No 3D Viewport available for normal transfer")
+
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.modifier_apply(modifier=mod.name)
+
+        return {
+            "object_name": name,
+            "operation": operation,
+            "source_object": source_object,
+            "has_custom_normals": mesh.has_custom_normals,
+        }
+
+    elif operation == "CLEAR":
+        if hasattr(mesh, "use_auto_smooth"):
+            mesh.use_auto_smooth = False
+        mesh.free_normals_split()
+        return {
+            "object_name": name,
+            "operation": operation,
+            "has_custom_normals": mesh.has_custom_normals,
+        }
+
+    raise ValueError(f"Unhandled operation: {operation}")
+
+
+def handle_edge_data(params: dict) -> dict:
+    """Edge data operations: set crease, bevel weight, sharp.
+
+    Params:
+        name: Object name (required).
+        operation: "SET_CREASE", "SET_BEVEL_WEIGHT", or "SET_SHARP"
+                   (default "SET_CREASE").
+        edge_indices: List of edge indices to affect (optional, all edges if None).
+        value: Value to set, 0.0-1.0 for crease/bevel_weight,
+               1.0 = sharp for SET_SHARP (default 1.0).
+
+    Returns dict with operation details and edges affected.
+    """
+    validated = _validate_edge_data_params(params)
+    name = validated["name"]
+    operation = validated["operation"]
+    edge_indices = validated["edge_indices"]
+    value = validated["value"]
+
+    obj = _get_mesh_object(name)
+
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        bm.edges.ensure_lookup_table()
+
+        total_edges = len(bm.edges)
+
+        # Determine which edges to affect
+        if edge_indices is not None:
+            for idx in edge_indices:
+                if idx >= total_edges:
+                    raise ValueError(
+                        f"edge index {idx} out of range "
+                        f"(mesh has {total_edges} edges)"
+                    )
+            target_edges = [bm.edges[i] for i in edge_indices]
+        else:
+            target_edges = bm.edges[:]
+
+        if operation == "SET_CREASE":
+            crease_layer = bm.edges.layers.float.get("crease_edge")
+            if crease_layer is None:
+                crease_layer = bm.edges.layers.float.new("crease_edge")
+            for e in target_edges:
+                e[crease_layer] = value
+
+        elif operation == "SET_BEVEL_WEIGHT":
+            bevel_layer = bm.edges.layers.float.get("bevel_weight_edge")
+            if bevel_layer is None:
+                bevel_layer = bm.edges.layers.float.new("bevel_weight_edge")
+            for e in target_edges:
+                e[bevel_layer] = value
+
+        elif operation == "SET_SHARP":
+            is_sharp = value >= 0.5
+            for e in target_edges:
+                e.smooth = not is_sharp
+
+        bm.to_mesh(obj.data)
+        obj.data.update()
+        affected = len(target_edges)
+    finally:
+        bm.free()
+
+    return {
+        "object_name": name,
+        "operation": operation,
+        "edges_affected": affected,
+        "value": value,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Shape Key workflow (SHAPEKEY-01)
+# ---------------------------------------------------------------------------
+
+
+def _validate_shape_key_operation(params: dict) -> list[str]:
+    """Validate shape key operation parameters. Returns list of errors (empty = valid)."""
+    errors: list[str] = []
+
+    name = params.get("name")
+    if not name or not isinstance(name, str):
+        errors.append("name (object name) is required and must be a non-empty string")
+
+    operation = params.get("operation")
+    if not operation:
+        errors.append("operation is required")
+    elif operation not in _SHAPE_KEY_OPERATIONS:
+        errors.append(
+            f"Invalid operation: {operation!r}. "
+            f"Valid: {sorted(_SHAPE_KEY_OPERATIONS)}"
+        )
+
+    if operation == "CREATE":
+        key_name = params.get("key_name")
+        if not key_name or not isinstance(key_name, str):
+            errors.append("key_name is required for CREATE operation")
+
+    elif operation == "SET_VALUE":
+        key_name = params.get("key_name")
+        if not key_name or not isinstance(key_name, str):
+            errors.append("key_name is required for SET_VALUE operation")
+        value = params.get("value")
+        if value is not None:
+            if not isinstance(value, (int, float)):
+                errors.append(f"value must be a number, got {type(value).__name__}")
+            elif value < 0 or value > 1:
+                errors.append(f"value must be between 0 and 1, got {value}")
+
+    elif operation == "EDIT":
+        key_name = params.get("key_name")
+        if not key_name or not isinstance(key_name, str):
+            errors.append("key_name is required for EDIT operation")
+        vertex_offsets = params.get("vertex_offsets")
+        if not isinstance(vertex_offsets, dict):
+            errors.append("vertex_offsets must be a dict for EDIT operation")
+        elif len(vertex_offsets) == 0:
+            errors.append("vertex_offsets must not be empty for EDIT operation")
+        else:
+            for idx, offset in vertex_offsets.items():
+                # Keys may arrive as strings from JSON
+                try:
+                    int_idx = int(idx)
+                except (TypeError, ValueError):
+                    errors.append(f"vertex index must be an integer, got {idx!r}")
+                    continue
+                if int_idx < 0:
+                    errors.append(f"vertex index must be non-negative, got {int_idx}")
+                if not isinstance(offset, (list, tuple)) or len(offset) != 3:
+                    errors.append(
+                        f"vertex {idx}: offset must be [dx, dy, dz], got {offset!r}"
+                    )
+
+    elif operation == "DELETE":
+        key_name = params.get("key_name")
+        if not key_name or not isinstance(key_name, str):
+            errors.append("key_name is required for DELETE operation")
+
+    elif operation == "ADD_DRIVER":
+        key_name = params.get("key_name")
+        if not key_name or not isinstance(key_name, str):
+            errors.append("key_name is required for ADD_DRIVER operation")
+        driver_expression = params.get("driver_expression")
+        if not driver_expression or not isinstance(driver_expression, str):
+            errors.append("driver_expression is required for ADD_DRIVER operation")
+
+    # LIST requires no extra params beyond name
+
+    return errors
+
+
+def handle_shape_key(params: dict) -> dict:
+    """Shape key workflow: create, set value, edit, delete, list, add driver (SHAPEKEY-01).
+
+    Params:
+        name: Object name (required).
+        operation: CREATE | SET_VALUE | EDIT | DELETE | LIST | ADD_DRIVER
+        key_name: Shape key name (required for most operations).
+        from_mix: For CREATE, create from current mix (default False).
+        value: For SET_VALUE, float 0-1.
+        vertex_offsets: For EDIT, dict of vertex_index -> [dx, dy, dz].
+        driver_expression: For ADD_DRIVER, Python expression string.
+        variable_bone: For ADD_DRIVER, bone name to drive from.
+
+    Returns dict with operation results.
+    """
+    errors = _validate_shape_key_operation(params)
+    if errors:
+        raise ValueError(f"Invalid shape key params: {'; '.join(errors)}")
+
+    obj_name = params["name"]
+    operation = params["operation"]
+
+    obj = bpy.data.objects.get(obj_name)
+    if not obj or obj.type != "MESH":
+        raise ValueError(f"Mesh object not found: {obj_name}")
+
+    if operation == "LIST":
+        keys = []
+        if obj.data.shape_keys:
+            for kb in obj.data.shape_keys.key_blocks:
+                keys.append({
+                    "name": kb.name,
+                    "value": kb.value,
+                    "mute": kb.mute,
+                    "relative_key": kb.relative_key.name if kb.relative_key else None,
+                })
+        return {
+            "object_name": obj_name,
+            "shape_keys": keys,
+            "count": len(keys),
+        }
+
+    elif operation == "CREATE":
+        key_name = params["key_name"]
+        from_mix = params.get("from_mix", False)
+
+        # Ensure Basis exists
+        if not obj.data.shape_keys:
+            obj.shape_key_add(name="Basis")
+
+        sk = obj.shape_key_add(name=key_name, from_mix=from_mix)
+        total = len(obj.data.shape_keys.key_blocks)
+        return {
+            "object_name": obj_name,
+            "key_name": sk.name,
+            "from_mix": from_mix,
+            "total_shape_keys": total,
+        }
+
+    elif operation == "SET_VALUE":
+        key_name = params["key_name"]
+        value = float(params.get("value", 0.0))
+
+        if not obj.data.shape_keys:
+            raise ValueError(f"Object '{obj_name}' has no shape keys")
+
+        kb = obj.data.shape_keys.key_blocks.get(key_name)
+        if not kb:
+            raise ValueError(
+                f"Shape key '{key_name}' not found on '{obj_name}'"
+            )
+
+        kb.value = value
+        return {
+            "object_name": obj_name,
+            "key_name": key_name,
+            "value": value,
+        }
+
+    elif operation == "EDIT":
+        key_name = params["key_name"]
+        vertex_offsets = params["vertex_offsets"]
+
+        if not obj.data.shape_keys:
+            raise ValueError(f"Object '{obj_name}' has no shape keys")
+
+        kb = obj.data.shape_keys.key_blocks.get(key_name)
+        if not kb:
+            raise ValueError(
+                f"Shape key '{key_name}' not found on '{obj_name}'"
+            )
+
+        vertices_modified = 0
+        for idx_str, offset in vertex_offsets.items():
+            idx = int(idx_str)
+            if 0 <= idx < len(kb.data):
+                kb.data[idx].co.x += offset[0]
+                kb.data[idx].co.y += offset[1]
+                kb.data[idx].co.z += offset[2]
+                vertices_modified += 1
+
+        return {
+            "object_name": obj_name,
+            "key_name": key_name,
+            "vertices_modified": vertices_modified,
+        }
+
+    elif operation == "DELETE":
+        key_name = params["key_name"]
+
+        if not obj.data.shape_keys:
+            raise ValueError(f"Object '{obj_name}' has no shape keys")
+
+        kb = obj.data.shape_keys.key_blocks.get(key_name)
+        if not kb:
+            raise ValueError(
+                f"Shape key '{key_name}' not found on '{obj_name}'"
+            )
+
+        obj.shape_key_remove(kb)
+        remaining = (
+            len(obj.data.shape_keys.key_blocks) if obj.data.shape_keys else 0
+        )
+        return {
+            "object_name": obj_name,
+            "deleted_key": key_name,
+            "remaining_shape_keys": remaining,
+        }
+
+    elif operation == "ADD_DRIVER":
+        key_name = params["key_name"]
+        driver_expression = params["driver_expression"]
+        variable_bone = params.get("variable_bone")
+
+        if not obj.data.shape_keys:
+            raise ValueError(f"Object '{obj_name}' has no shape keys")
+
+        kb = obj.data.shape_keys.key_blocks.get(key_name)
+        if not kb:
+            raise ValueError(
+                f"Shape key '{key_name}' not found on '{obj_name}'"
+            )
+
+        # Add driver to shape key value
+        fcurve = kb.driver_add("value")
+        driver = fcurve.driver
+        driver.type = "SCRIPTED"
+        driver.expression = driver_expression
+
+        # If a bone name is provided, set up a transform variable
+        if variable_bone:
+            var = driver.variables.new()
+            var.name = "bone_val"
+            var.type = "TRANSFORMS"
+            target = var.targets[0]
+            target.id = obj
+            target.bone_target = variable_bone
+            target.transform_type = "LOC_Z"
+            target.transform_space = "LOCAL_SPACE"
+
+        return {
+            "object_name": obj_name,
+            "key_name": key_name,
+            "driver_expression": driver_expression,
+            "variable_bone": variable_bone,
+        }
+
+    raise ValueError(f"Unhandled operation: {operation}")
