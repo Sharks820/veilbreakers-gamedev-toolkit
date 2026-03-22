@@ -649,6 +649,63 @@ QUADRUPED_BONES: dict[str, dict] = {
         "parent": "tail.001",
         "rigify_type": "",
     },
+    # Twist bones
+    "upper_arm_twist.L": {
+        "head": (0.15, -0.44, 0.55),
+        "tail": (0.15, -0.435, 0.48),
+        "roll": 0.0,
+        "parent": "upper_arm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "upper_arm_twist.R": {
+        "head": (-0.15, -0.44, 0.55),
+        "tail": (-0.15, -0.435, 0.48),
+        "roll": 0.0,
+        "parent": "upper_arm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.L": {
+        "head": (0.15, -0.425, 0.25),
+        "tail": (0.15, -0.42, 0.18),
+        "roll": 1.5708,
+        "parent": "forearm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.R": {
+        "head": (-0.15, -0.425, 0.25),
+        "tail": (-0.15, -0.42, 0.18),
+        "roll": -1.5708,
+        "parent": "forearm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.L": {
+        "head": (0.12, 0.06, 0.575),
+        "tail": (0.12, 0.065, 0.49),
+        "roll": 0.0,
+        "parent": "thigh.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.R": {
+        "head": (-0.12, 0.06, 0.575),
+        "tail": (-0.12, 0.065, 0.49),
+        "roll": 0.0,
+        "parent": "thigh.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.L": {
+        "head": (0.12, 0.06, 0.25),
+        "tail": (0.12, 0.055, 0.18),
+        "roll": 0.0,
+        "parent": "shin.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.R": {
+        "head": (-0.12, 0.06, 0.25),
+        "tail": (-0.12, 0.055, 0.18),
+        "roll": 0.0,
+        "parent": "shin.R",
+        "rigify_type": "basic.super_copy",
+    },
 }
 
 
@@ -800,6 +857,63 @@ BIRD_BONES: dict[str, dict] = {
         "roll": 0.0,
         "parent": "tail",
         "rigify_type": "",
+    },
+    # Twist bones
+    "upper_arm_twist.L": {
+        "head": (0.215, -0.135, 0.565),
+        "tail": (0.28, -0.128, 0.558),
+        "roll": 0.0,
+        "parent": "upper_arm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "upper_arm_twist.R": {
+        "head": (-0.215, -0.135, 0.565),
+        "tail": (-0.28, -0.128, 0.558),
+        "roll": 0.0,
+        "parent": "upper_arm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.L": {
+        "head": (0.475, -0.11, 0.535),
+        "tail": (0.538, -0.105, 0.528),
+        "roll": 1.5708,
+        "parent": "forearm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.R": {
+        "head": (-0.475, -0.11, 0.535),
+        "tail": (-0.538, -0.105, 0.528),
+        "roll": -1.5708,
+        "parent": "forearm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.L": {
+        "head": (0.06, 0.03, 0.35),
+        "tail": (0.06, 0.035, 0.3),
+        "roll": 0.0,
+        "parent": "thigh.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.R": {
+        "head": (-0.06, 0.03, 0.35),
+        "tail": (-0.06, 0.035, 0.3),
+        "roll": 0.0,
+        "parent": "thigh.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.L": {
+        "head": (0.06, 0.03, 0.155),
+        "tail": (0.06, 0.025, 0.11),
+        "roll": 0.0,
+        "parent": "shin.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.R": {
+        "head": (-0.06, 0.03, 0.155),
+        "tail": (-0.06, 0.025, 0.11),
+        "roll": 0.0,
+        "parent": "shin.R",
+        "rigify_type": "basic.super_copy",
     },
 }
 
