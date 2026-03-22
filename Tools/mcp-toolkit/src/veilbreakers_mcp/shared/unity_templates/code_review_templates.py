@@ -13,7 +13,6 @@ Exports:
 
 from __future__ import annotations
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 def generate_code_reviewer_script() -> dict:
