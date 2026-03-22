@@ -224,9 +224,10 @@ def handle_curve_to_mesh(params: dict) -> dict:
         obj.data.fill_mode = "FULL"
     # CUSTOM: assume bevel object is already assigned
 
-    # Convert curve to mesh
-    bpy.context.view_layer.objects.active = obj
+    # Convert curve to mesh -- isolate selection first
+    bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
     bpy.ops.object.convert(target="MESH")
 
     return {
@@ -261,8 +262,9 @@ def handle_extrude_along_curve(params: dict) -> dict:
 
     # If the profile is a mesh, convert it to a curve first
     if profile_obj.type == "MESH":
-        bpy.context.view_layer.objects.active = profile_obj
+        bpy.ops.object.select_all(action='DESELECT')
         profile_obj.select_set(True)
+        bpy.context.view_layer.objects.active = profile_obj
         bpy.ops.object.convert(target="CURVE")
         # Re-fetch after conversion
         profile_obj = bpy.data.objects.get(profile_name)
@@ -271,9 +273,10 @@ def handle_extrude_along_curve(params: dict) -> dict:
     curve_obj.data.bevel_object = profile_obj
     curve_obj.data.use_fill_caps = True
 
-    # Convert the result to mesh
-    bpy.context.view_layer.objects.active = curve_obj
+    # Convert the result to mesh -- isolate selection first
+    bpy.ops.object.select_all(action='DESELECT')
     curve_obj.select_set(True)
+    bpy.context.view_layer.objects.active = curve_obj
     bpy.ops.object.convert(target="MESH")
 
     return {

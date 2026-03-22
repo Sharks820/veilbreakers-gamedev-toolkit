@@ -293,7 +293,7 @@ def generate_bsp_dungeon(
     doors = _place_doors(grid, rooms, height, width)
 
     # 7. Assign room types (pass grid dims for boss room boundary clamping)
-    _assign_room_types(rooms, rng, grid_width=width, grid_height=height)
+    _assign_room_types(rooms, rng, grid=grid, grid_width=width, grid_height=height)
 
     # 8. Spawn / loot points
     spawn_points = _place_spawn_points(rooms, grid, rng)
@@ -379,7 +379,7 @@ def _place_doors(
 
 
 def _assign_room_types(
-    rooms: list[Room], rng: random.Random, grid_width: int = 0, grid_height: int = 0
+    rooms: list[Room], rng: random.Random, grid: np.ndarray | None = None, grid_width: int = 0, grid_height: int = 0
 ) -> None:
     """Assign specialised room types with size-based heuristics.
 
@@ -418,6 +418,14 @@ def _assign_room_types(
             new_h = min(new_h, grid_height - boss.y)
         boss.width = max(new_w, boss.width)
         boss.height = max(new_h, boss.height)
+
+        # Carve expanded floor tiles into grid so walls don't remain
+        if grid is not None:
+            g_h, g_w = grid.shape
+            for cy in range(boss.y, min(boss.y + boss.height, g_h)):
+                for cx in range(boss.x, min(boss.x + boss.width, g_w)):
+                    if grid[cy, cx] == 0:  # wall
+                        grid[cy, cx] = 1  # floor
 
     # Pick 1-2 treasure rooms from middle, preferring smaller ones
     middle = [r for r in rooms[1:-1] if r.room_type == "generic"] if len(rooms) > 2 else []

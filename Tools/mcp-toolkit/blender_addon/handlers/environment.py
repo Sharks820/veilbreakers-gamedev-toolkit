@@ -341,10 +341,10 @@ def handle_generate_terrain(params: dict) -> dict:
             effective["erosion_iterations"] = biome_preset.get("erosion_iterations", 5000)
         else:
             effective["erosion"] = "none"
-        if biome_preset.get("seed") is not None:
-            effective["seed"] = biome_preset["seed"]
         # Explicit params override preset defaults (except terrain_type which
-        # was the biome name -- we already resolved the real terrain_type)
+        # was the biome name -- we already resolved the real terrain_type).
+        # Note: preset seed is intentionally NOT applied -- caller's seed
+        # (or downstream default) always takes precedence.
         for key in ("name", "resolution", "height_scale", "scale", "seed",
                      "octaves", "persistence", "lacunarity", "erosion",
                      "erosion_iterations"):

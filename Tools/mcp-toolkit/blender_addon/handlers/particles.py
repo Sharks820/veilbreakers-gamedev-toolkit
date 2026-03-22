@@ -321,43 +321,44 @@ def handle_hair_grooming(params: dict) -> dict:
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
 
-    # Enter particle edit mode
+    # Enter particle edit mode -- wrap in try/finally to guarantee
+    # we restore OBJECT mode even if grooming operations fail.
     bpy.ops.object.mode_set(mode="PARTICLE_EDIT")
+    try:
+        # Configure tool settings
+        pe = bpy.context.scene.tool_settings.particle_edit
+        pe.use_emitter_deflect = False
 
-    # Configure tool settings
-    pe = bpy.context.scene.tool_settings.particle_edit
-    pe.use_emitter_deflect = False
+        tool_map = {
+            "COMB": "COMB",
+            "CUT": "CUT",
+            "LENGTH": "LENGTH",
+            "PUFF": "PUFF",
+            "SMOOTH": "SMOOTH",
+        }
+        pe.tool = tool_map[operation]
+        pe.brush.strength = strength
+        pe.brush.size = int(radius)
 
-    tool_map = {
-        "COMB": "COMB",
-        "CUT": "CUT",
-        "LENGTH": "LENGTH",
-        "PUFF": "PUFF",
-        "SMOOTH": "SMOOTH",
-    }
-    pe.tool = tool_map[operation]
-    pe.brush.strength = strength
-    pe.brush.size = int(radius)
+        # Apply a stroke at object center
+        loc = obj.location
+        stroke = [{
+            "name": "stroke",
+            "is_start": True,
+            "location": (loc.x, loc.y, loc.z),
+            "mouse": (0, 0),
+            "mouse_event": (0, 0),
+            "pen_flip": False,
+            "pressure": 1.0,
+            "size": int(radius),
+            "time": 0.0,
+            "x_tilt": 0.0,
+            "y_tilt": 0.0,
+        }]
 
-    # Apply a stroke at object center
-    loc = obj.location
-    stroke = [{
-        "name": "stroke",
-        "is_start": True,
-        "location": (loc.x, loc.y, loc.z),
-        "mouse": (0, 0),
-        "mouse_event": (0, 0),
-        "pen_flip": False,
-        "pressure": 1.0,
-        "size": int(radius),
-        "time": 0.0,
-        "x_tilt": 0.0,
-        "y_tilt": 0.0,
-    }]
-
-    bpy.ops.particle.brush_edit(stroke=stroke)
-
-    bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.particle.brush_edit(stroke=stroke)
+    finally:
+        bpy.ops.object.mode_set(mode="OBJECT")
 
     return {
         "object_name": name,

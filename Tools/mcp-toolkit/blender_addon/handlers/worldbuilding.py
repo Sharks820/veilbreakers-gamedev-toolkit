@@ -9,6 +9,7 @@ ruined fortresses, abandoned villages, forges, and themed dungeons.
 
 from __future__ import annotations
 
+import copy
 import logging
 import math
 import random
@@ -447,7 +448,7 @@ def _opening_to_cutout_spec(
     if wall_index == 0:
         # Front wall: extends along X, thin in Y
         cx = wall_px + open_offset
-        cy = wall_py - 0.05  # slightly outside wall
+        cy = wall_py - recess_depth  # consistent with other walls
         cz = wall_pz + open_z
         csx = open_w
         csy = recess_depth
@@ -1009,7 +1010,7 @@ def _apply_weathering(
         return spec
 
     rng = random.Random(seed)
-    new_ops = list(spec.operations)
+    new_ops = [copy.deepcopy(op) for op in spec.operations]
 
     width, depth = spec.footprint
 
