@@ -1273,3 +1273,10 @@ The system is EXTENSIBLE — adding new monsters, weapons, building styles, or b
 - **Witcher 3**: Material quality, weathering, vegetation density
 - **Monster Hunter World**: Creature detail, environmental props, camp layouts
 - **Dark Souls 3**: Gothic architecture, connected world design, atmospheric fog
+- **God of War Ragnarok**: AAA material kits, modular weathering, environment detail density
+
+---
+
+## EXPERT REVIEW GAPS — 3-Agent Ultrathink Findings
+
+See docs/EXPERT_REVIEW_GAPS.md for the complete 150+ item list from environment artist, character artist, and technical artist reviews.
