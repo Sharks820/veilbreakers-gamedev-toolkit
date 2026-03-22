@@ -3530,11 +3530,12 @@ RULES: list[Rule] = [
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"daemon"])),
 
     Rule("PY-COR-09", Severity.LOW, Category.Bug,
-         "json.loads without error handling",
-         "Wrap in try/except json.JSONDecodeError.",
+         "json.loads/load without error handling — crashes on malformed input",
+         "Wrap in try/except json.JSONDecodeError to handle corrupt JSON gracefully.",
          re.compile(r"json\.loads?\s*\("),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"except.*JSON",
                         r"\btry\s*:", r"\bexcept\b"]),
+         confidence=68,
          anti_radius=10),
 
     Rule("PY-COR-10", Severity.LOW, Category.Bug,
@@ -4070,7 +4071,14 @@ def main() -> None:
                     code = issue.matched_text[:90]
                     print(f"       Code: {code}")
                 if conf_pct < 70:
-                    print(f"       Note: {conf_pct}% confidence - review manually before fixing")
+                    # Explain WHY confidence is low
+                    reasons = {
+                        "PY-COR-09": "try/except may exist but beyond scan radius (30 lines). Check enclosing function.",
+                        "PY-PERF-02": "Only matters if called repeatedly in a loop. Single-use re.search is fine.",
+                        "PY-STY-01": "os.path is valid Python; pathlib is preferred but not required.",
+                    }
+                    reason = reasons.get(issue.rule_id, "Pattern match is contextual — verify the surrounding code.")
+                    print(f"       Why {conf_pct}%: {reason}")
                 print(f"       Rule: {issue.rule_id}  |  Confidence: {conf_pct}%  |  Priority: {issue.priority}/100")
 
         # Summary
