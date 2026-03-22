@@ -981,6 +981,32 @@ public class AAAParticleBuilder
     }
 
     // -------------------------------------------------------------------
+    // Per-frame raycast budget for blood stain placement (Fix 6)
+    // -------------------------------------------------------------------
+    public const int MAX_RAYCASTS_PER_FRAME = 5;
+    private static int _raycastFrameCount;
+    private static int _raycastsThisFrame;
+
+    /// <summary>
+    /// Check if a raycast is allowed this frame. Returns true and increments
+    /// the counter if under budget. Resets automatically each frame.
+    /// Call this before any VFX-related Physics.Raycast (e.g., blood stain placement).
+    /// </summary>
+    public static bool TryConsumeRaycast()
+    {
+        int frame = Time.frameCount;
+        if (frame != _raycastFrameCount)
+        {
+            _raycastFrameCount = frame;
+            _raycastsThisFrame = 0;
+        }
+        if (_raycastsThisFrame >= MAX_RAYCASTS_PER_FRAME)
+            return false;
+        _raycastsThisFrame++;
+        return true;
+    }
+
+    // -------------------------------------------------------------------
     // Builder instance data
     // -------------------------------------------------------------------
     private string _effectName;
@@ -1173,7 +1199,7 @@ public class AAAParticleBuilder
         float size = 1.5f,
         float speed = 0.5f)
     {
-        count = Mathf.Clamp(count, 5, 10);
+        count = Mathf.Clamp(count, 5, 25); // Fix 7 -- increased from 10 to 25 (Opus M-03)
 
         _layerBuilders.Add(root =>
         {
