@@ -337,19 +337,21 @@ def delight_albedo(...):
 **Fix:** Add `threading.Lock()` around the connection initialization.
 
 ### G5: Unhandled JSONDecodeError on Malformed Blender Response (~15 min)
-**File:** `blender_addon/blender_client.py` (line 96)
-**What:** `json.loads()` on TCP response from Blender — no try/except for malformed JSON.
-**Fix:** Wrap in try/except JSONDecodeError, return structured error response.
+**File:** `src/veilbreakers_mcp/shared/blender_client.py` (line 153)
+**What:** `response_data = json.loads(response_bytes)` — no try/except for malformed JSON from Blender TCP.
+**Fix:** Wrap in try/except JSONDecodeError, return structured error response with the raw bytes for debugging.
 
-### G6: Double controller.Move() in Character Controller (~15 min)
-**File:** `game_templates.py`
-**What:** Character controller template calls `controller.Move()` twice per frame (horizontal movement applied twice).
-**Fix:** Remove the duplicate `controller.Move()` call. Keep only the one that combines horizontal + vertical movement.
+### G6: Triple controller.Move() in Character Controller (~30 min)
+**File:** `game_templates.py` (lines 887, 918, 963)
+**What:** Character controller template calls `_controller.Move()` THREE times per frame — once for velocity, once for direction, once for slope. Movement is applied 3x causing triple-speed artifacts.
+**Fix:** Consolidate all three Move() calls into a SINGLE call that combines velocity + direction + gravity into one `Vector3 finalMove` vector, then call `_controller.Move(finalMove * Time.deltaTime)` once.
 
-### G7: ReDoS Risk in Prefab Regex Selector (~30 min)
-**File:** `prefab_templates.py`
-**What:** User-provided regex passed directly to `new Regex()` in generated C# — catastrophic backtracking possible.
-**Fix:** Add `RegexOptions.None` with a timeout: `new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(1))`. Also sanitize the pattern in the Python template to reject known-dangerous patterns.
+### G7: Regex Injection in Prefab Selector (~30 min)
+**File:** `prefab_templates.py` (lines 156, 1327)
+**What:** User-provided selector value injected directly into `new System.Text.RegularExpressions.Regex("{value}")` — regex special chars (.+?[]) cause compilation errors, quotes cause C# syntax errors. Also ReDoS risk from catastrophic backtracking.
+**Fix:** Two layers:
+1. In Python template: `sanitize_cs_string()` the value before embedding in the C# string literal
+2. In generated C#: add timeout `new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(1))`
 
 ### G10: UV Padding Default Too Low (~5 min)
 **File:** `blender_server.py` (line ~510)
@@ -385,17 +387,18 @@ def delight_albedo(...):
 - `Wait`: return `Success` after duration, `Running` during wait
 - `CheckHealth`: return `Success` if above threshold, `Failure` if below
 
-### FIX: Content Templates — Quest Gating + Crafting Order (~2h)
-**File:** `content_templates.py`
-**What:** (1) Quest gating ignored — all quests always available regardless of prerequisites. (2) Crafting system consumes materials BEFORE checking success — failed craft loses mats.
+### FIX: Content Templates — RemoveItem Safety + Crafting Order (~2h)
+**File:** `content_templates.py` (RemoveItem at lines 320, 352, 1561, 2373; prerequisites at lines 1035, 1631, 1643, 1729-1734)
+**What:** (1) `RemoveItem()` is called without checking return value — inventory operations silently fail. (2) Crafting consumes materials BEFORE checking success — failed craft loses mats. (3) Skill tree prerequisite checks on nullable `VB_SkillNode` objects risk NullReferenceException.
 **Fix:**
-- Quest: add prerequisite check before `StartQuest()` — check `completedQuests.Contains(prereqId)`
-- Crafting: check success FIRST (roll against success rate), THEN consume materials only if successful. Move the `RemoveItem()` calls after the success check.
+- All RemoveItem calls: check return value `if (!inventory.RemoveItem(item)) { /* handle failure */ }`
+- Crafting: roll against success rate FIRST, THEN consume materials only if successful. Move `RemoveItem()` calls after the success check.
+- Skill tree: add null check on prerequisite nodes before accessing `.isUnlocked`
 
 ### FIX: WCAG Silently Skips Missing Backgrounds (~1h)
-**File:** `shared/wcag_checker.py`
-**What:** Elements with missing background colors are silently skipped instead of flagged.
-**Fix:** When background color is missing, add a warning to the results: `"Warning: element '{name}' has no background color — contrast cannot be verified"`. Don't skip the element entirely.
+**File:** `shared/wcag_checker.py` (line 320)
+**What:** `if fg_color and current_bg:` — elements without background color are silently skipped. Text on default backgrounds never gets contrast-checked.
+**Fix:** When `current_bg` is None/empty, add a warning: `"Warning: element '{name}' has no explicit background color — contrast cannot be verified against default background"`. Consider also checking against the USS theme default background `#1a1a1a` as a fallback.
 
 ### FIX: USS Theme Drift from ThemeManager.cs (~2h)
 **File:** `shared/unity_templates/ui_templates.py`

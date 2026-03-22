@@ -507,9 +507,9 @@ class TestCraftingSystem:
         assert "OpenStation" in craft
         assert "CloseStation" in craft
 
-    def test_crafting_has_event_bus(self):
+    def test_crafting_has_events(self):
         _, craft = generate_crafting_system_script()
-        assert "EventBus" in craft
+        assert "Invoke" in craft
 
     def test_no_editor_namespace_recipe(self):
         recipe, _ = generate_crafting_system_script()
@@ -588,9 +588,9 @@ class TestSkillTree:
         assert "_availablePoints" in tree
         assert "AvailablePoints" in tree
 
-    def test_skill_tree_has_event_bus(self):
+    def test_skill_tree_has_events(self):
         _, tree = generate_skill_tree_script()
-        assert "EventBus" in tree
+        assert "Invoke" in tree
 
     def test_custom_hero_paths(self):
         _, tree = generate_skill_tree_script(hero_paths=["PathA", "PathB"])
@@ -874,9 +874,9 @@ class TestShopSystem:
         assert "CompareStats" in ss
         assert "StatComparison" in ss
 
-    def test_shop_system_has_event_bus(self):
+    def test_shop_system_has_events(self):
         _, ss, _, _ = generate_shop_system_script()
-        assert "EventBus" in ss
+        assert "Invoke" in ss
 
     def test_uxml_has_buy_sell(self):
         _, _, uxml, _ = generate_shop_system_script()

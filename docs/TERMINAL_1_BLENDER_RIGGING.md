@@ -67,19 +67,33 @@ When you create new handler functions that need command dispatch:
 ## Interface Contract (READ THIS — other terminals depend on you)
 
 ### Bone Naming Convention (Terminal 2 depends on this)
-Terminal 2's animation generators reference bones by name. You MUST preserve these existing names:
+Terminal 2's animation generators reference bones by name. The template uses Rigify conventions.
+
+**CURRENT bone names (MUST preserve — T2 animates these):**
 ```
-spine, spine.001, spine.002, spine.003 (torso chain)
-shoulder.L/R, upper_arm.L/R, forearm.L/R, hand.L/R
-thigh.L/R, shin.L/R, foot.L/R, toe.L/R
-head, neck
+spine, spine.001, spine.002, spine.003, spine.004, spine.005 (spine chain, .005=head)
+upper_arm.L/R, forearm.L/R, hand.L/R (arm chain — NO shoulder bone currently)
+thigh.L/R, shin.L/R, foot.L/R (leg chain — NO toe bone currently)
+tail, tail.001, tail.002 (quadruped/dragon)
+wing_upper.L/R, wing_fore.L/R, wing_tip.L/R (dragon/bird)
 ```
-When adding twist bones, use this naming pattern:
+NOTE: Rigify auto-creates `DEF-` prefixed deform bones. Animations key the CONTROL bones (no prefix), not DEF bones.
+
+**NEW bones you will ADD (T2 should check existence before keying):**
 ```
-upper_arm_twist.L/R    (between shoulder and forearm)
+# Twist bones (P2-A1)
+upper_arm_twist.L/R    (between upper_arm and forearm)
 forearm_twist.L/R      (between forearm and hand)
 thigh_twist.L/R        (between thigh and shin)
 shin_twist.L/R         (between shin and foot)
+
+# Humanoid completeness (UPGRADE task)
+clavicle.L/R           (between spine.003 and upper_arm)
+thumb_01-03.L/R, index_01-03.L/R, middle_01-03.L/R, ring_01-03.L/R, pinky_01-03.L/R
+toe.L/R, toe.001.L/R   (big toe + small toes)
+
+# Dragon wing membrane (G8)
+wing_finger_1-5.L/R    (membrane bones fanning from wing wrist)
 ```
 
 ### Rig Template Output Format
