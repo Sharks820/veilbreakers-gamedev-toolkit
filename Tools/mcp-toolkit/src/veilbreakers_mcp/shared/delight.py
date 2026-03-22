@@ -14,11 +14,10 @@ import os
 
 try:
     import numpy as np
+    _HAS_NUMPY = True
 except ImportError:
-    raise ImportError(
-        "numpy is required for delight.py. "
-        "Install with: pip install numpy"
-    )
+    _HAS_NUMPY = False
+    np = None  # type: ignore
 
 from PIL import Image, ImageFilter
 
@@ -74,6 +73,9 @@ def delight_albedo(
             mean_luminance_before, mean_luminance_after,
             correction_applied (bool).
     """
+    if not _HAS_NUMPY:
+        return {"error": "numpy is required for this operation but is not installed"}
+
     # Load image
     img = Image.open(image_path).convert("RGB")
     width, height = img.size
