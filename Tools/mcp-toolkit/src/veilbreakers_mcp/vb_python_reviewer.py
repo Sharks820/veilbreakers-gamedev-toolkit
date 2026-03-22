@@ -50,7 +50,7 @@ class FindingType(IntEnum):
 
 
 # Map severity to default confidence/priority
-_SEV_CONF = {Severity.CRITICAL: 95, Severity.HIGH: 85, Severity.MEDIUM: 75, Severity.LOW: 60}
+_SEV_CONF = {Severity.CRITICAL: 95, Severity.HIGH: 85, Severity.MEDIUM: 75, Severity.LOW: 70}
 _SEV_PRI = {Severity.CRITICAL: 95, Severity.HIGH: 75, Severity.MEDIUM: 50, Severity.LOW: 20}
 
 
@@ -514,7 +514,8 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
                 rule_id="PY-STY-07", severity=Severity.LOW.name,
                 category=Category.Quality.name, file=filepath, line=lineno,
                 description=f"Unused import: '{name}'",
-                fix="Remove the unused import.", matched_text=name))
+                fix="Remove the unused import.", matched_text=name,
+                finding_type="STRENGTHENING"))
 
     # PY-STY-08: Missing type annotations on public functions (no _ prefix)
     # Only flag functions listed in __all__ or with docstrings if module has __all__
@@ -546,7 +547,8 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
                     rule_id="PY-STY-08", severity=Severity.LOW.name,
                     category=Category.Quality.name, file=filepath, line=node.lineno,
                     description=f"Public function '{node.name}' missing return type annotation",
-                    fix="Add: def func(...) -> ReturnType:", matched_text=node.name))
+                    fix="Add: def func(...) -> ReturnType:", matched_text=node.name,
+                    finding_type="STRENGTHENING", confidence=85))
 
     # PY-STY-05: Missing __main__ guard
     has_main_guard = False
@@ -566,7 +568,8 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
             rule_id="PY-STY-05", severity=Severity.LOW.name,
             category=Category.Quality.name, file=filepath, line=1,
             description="Module has top-level executable code without __main__ guard",
-            fix="Wrap in: if __name__ == '__main__':"))
+            fix="Wrap in: if __name__ == '__main__':",
+            finding_type="STRENGTHENING", confidence=90))
 
     # PY-STY-06: Missing __all__ -- only flag public functions (no _ prefix)
     public_names = [
@@ -578,7 +581,8 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
             rule_id="PY-STY-06", severity=Severity.LOW.name,
             category=Category.Quality.name, file=filepath, line=1,
             description=f"Module exports {len(public_names)} public names but has no __all__",
-            fix="Add __all__ = [...]."))
+            fix="Add __all__ = [...].",
+            finding_type="STRENGTHENING", confidence=80))
 
     # PY-STY-09: Function length -- skip templates entirely (their length is
     # dominated by C# string literals, not Python complexity). MCP handlers use
@@ -601,7 +605,8 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
                             line=node.lineno,
                             description=f"Function '{node.name}' is {length} lines (threshold: {threshold})",
                             fix="Break into smaller helpers.",
-                            matched_text=node.name))
+                            matched_text=node.name,
+                            finding_type="STRENGTHENING", confidence=90))
 
     # PY-COR-13: Import inside function body
     # Skip known heavy/optional deps that are intentionally lazy-imported

@@ -90,7 +90,7 @@ namespace VeilBreakers.Editor.CodeReview
             Type = type;
             // Auto-derive confidence + priority from severity when not specified
             Confidence = confidence >= 0 ? confidence
-                : sev == Severity.CRITICAL ? 95 : sev == Severity.HIGH ? 85 : sev == Severity.MEDIUM ? 75 : 60;
+                : sev == Severity.CRITICAL ? 95 : sev == Severity.HIGH ? 85 : sev == Severity.MEDIUM ? 75 : 70;
             Priority = priority >= 0 ? priority
                 : sev == Severity.CRITICAL ? 95 : sev == Severity.HIGH ? 75 : sev == Severity.MEDIUM ? 50 : 20;
             // Auto-derive type from category when default
@@ -3248,7 +3248,7 @@ class FindingType(IntEnum):
 
 
 # Map severity to default confidence/priority
-_SEV_CONF = {Severity.CRITICAL: 95, Severity.HIGH: 85, Severity.MEDIUM: 75, Severity.LOW: 60}
+_SEV_CONF = {Severity.CRITICAL: 95, Severity.HIGH: 85, Severity.MEDIUM: 75, Severity.LOW: 70}
 _SEV_PRI = {Severity.CRITICAL: 95, Severity.HIGH: 75, Severity.MEDIUM: 50, Severity.LOW: 20}
 
 
@@ -3779,7 +3779,8 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
             rule_id="PY-STY-06", severity=Severity.LOW.name,
             category=Category.Quality.name, file=filepath, line=1,
             description=f"Module exports {len(public_names)} public names but has no __all__",
-            fix="Add __all__ = [...]."))
+            fix="Add __all__ = [...].",
+            finding_type="STRENGTHENING", confidence=80))
 
     # PY-STY-09: Function length -- skip templates entirely (their length is
     # dominated by C# string literals, not Python complexity). MCP handlers use
@@ -3802,7 +3803,8 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
                             line=node.lineno,
                             description=f"Function '{node.name}' is {length} lines (threshold: {threshold})",
                             fix="Break into smaller helpers.",
-                            matched_text=node.name))
+                            matched_text=node.name,
+                            finding_type="STRENGTHENING", confidence=90))
 
     # PY-COR-13: Import inside function body
     # Skip known heavy/optional deps that are intentionally lazy-imported
