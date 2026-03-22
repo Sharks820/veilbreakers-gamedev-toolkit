@@ -1146,7 +1146,7 @@ def generate_foot_mesh(
 
         # Create bridge triangles from toe base ring to foot front edge
         foot_top_v = foot_front_top + best_col
-        foot_top_v2 = foot_front_top + min(best_col + 1, grid_cols)
+        foot_top_v2 = foot_front_top + min(best_col + 1, grid_cols - 1)
         if foot_top_v < len(all_verts) and foot_top_v2 < len(all_verts):
             # Top bridge: connect toe ring top vertices to foot top edge
             all_faces.append((toe_start, toe_start + 1, foot_top_v2, foot_top_v))
