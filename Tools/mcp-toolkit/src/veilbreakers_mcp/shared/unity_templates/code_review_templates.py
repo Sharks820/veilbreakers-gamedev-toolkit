@@ -1957,6 +1957,23 @@ namespace VeilBreakers.Editor.CodeReview
             }
         }
 
+        // Check if a regex match position falls inside a quoted string on the line
+        static bool IsMatchInString(string line, int matchPos)
+        {
+            bool inSingle = false, inDouble = false;
+            bool escaped = false;
+            for (int k = 0; k < line.Length && k <= matchPos; k++)
+            {
+                if (escaped) { escaped = false; continue; }
+                char c = line[k];
+                if (c == '\\') { escaped = true; continue; }
+                if (c == '\'' && !inDouble) inSingle = !inSingle;
+                else if (c == '"' && !inSingle) inDouble = !inDouble;
+                if (k == matchPos) return inSingle || inDouble;
+            }
+            return false;
+        }
+
         // =====================================================================
         //  Batch scan with EditorApplication.delayCall for progress rendering
         // =====================================================================
@@ -2183,12 +2200,20 @@ namespace VeilBreakers.Editor.CodeReview
                     if (trimmed.Contains(pyTripleDQ) || trimmed.Contains(pyTripleSQ)) inTripleQuote = false;
                     continue;
                 }
-                if (trimmed.StartsWith(pyTripleDQ) || trimmed.StartsWith(pyTripleSQ))
+                // Handle triple-quoted strings with optional prefix (r, b, f, rb, etc.)
+                string stripped = trimmed.TrimStart('r', 'b', 'f', 'u', 'R', 'B', 'F', 'U');
+                if (stripped.StartsWith(pyTripleDQ) || stripped.StartsWith(pyTripleSQ) ||
+                    trimmed.Contains("= r" + pyTripleSQ) || trimmed.Contains("= r" + pyTripleDQ) ||
+                    trimmed.Contains("=" + pyTripleSQ) || trimmed.Contains("=" + pyTripleDQ))
                 {
                     pyCtx[i] = LineContext.StringLiteral;
-                    // Check if it closes on the same line
-                    string rest = trimmed.Substring(3);
-                    if (!rest.Contains(pyTripleDQ) && !rest.Contains(pyTripleSQ)) inTripleQuote = true;
+                    int dqCount = 0, sqCount = 0;
+                    for (int k = 0; k + 2 < trimmed.Length; k++)
+                    {
+                        if (trimmed[k] == '"' && trimmed[k+1] == '"' && trimmed[k+2] == '"') dqCount++;
+                        if (trimmed[k] == (char)39 && trimmed[k+1] == (char)39 && trimmed[k+2] == (char)39) sqCount++;
+                    }
+                    if ((dqCount + sqCount) % 2 == 1) inTripleQuote = true;
                     continue;
                 }
                 if (trimmed.StartsWith("#"))
@@ -2209,7 +2234,11 @@ namespace VeilBreakers.Editor.CodeReview
                     if (lines[i].Contains("VB-IGNORE")) continue;
                     if (pyCtx[i] == LineContext.Comment || pyCtx[i] == LineContext.StringLiteral) continue;
 
-                    if (!rule.Pattern.IsMatch(lines[i])) continue;
+                    var pm = rule.Pattern.Match(lines[i]);
+                    if (!pm.Success) continue;
+
+                    // Skip if match is inside a quoted string on this line
+                    if (IsMatchInString(lines[i], pm.Index)) continue;
 
                     // Anti-pattern suppression
                     if (rule.AntiPatterns != null && rule.AntiPatterns.Length > 0)
