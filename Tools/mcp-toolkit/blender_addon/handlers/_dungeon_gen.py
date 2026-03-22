@@ -292,8 +292,8 @@ def generate_bsp_dungeon(
     # 6. Place doors where corridors meet room edges
     doors = _place_doors(grid, rooms, height, width)
 
-    # 7. Assign room types
-    _assign_room_types(rooms, rng)
+    # 7. Assign room types (pass grid dims for boss room boundary clamping)
+    _assign_room_types(rooms, rng, grid_width=width, grid_height=height)
 
     # 8. Spawn / loot points
     spawn_points = _place_spawn_points(rooms, grid, rng)
@@ -378,15 +378,28 @@ def _place_doors(
     return doors
 
 
-def _assign_room_types(rooms: list[Room], rng: random.Random) -> None:
+def _assign_room_types(
+    rooms: list[Room], rng: random.Random, grid_width: int = 0, grid_height: int = 0
+) -> None:
     """Assign specialised room types with size-based heuristics.
 
     Room type assignments:
     - entrance: first room
-    - boss: last room, expanded to 2x size (clamped to grid)
+    - boss: last room, expanded to 2x size (clamped to grid bounds)
     - treasure: 1-2 smaller rooms chosen from the middle
     - secret: 10% chance for remaining generic rooms (smallest first)
     - generic: everything else
+
+    Parameters
+    ----------
+    rooms : list[Room]
+        Rooms to assign types to.
+    rng : random.Random
+        Seeded RNG for secret room assignment.
+    grid_width : int
+        Grid width for boundary clamping (0 = no clamping).
+    grid_height : int
+        Grid height for boundary clamping (0 = no clamping).
     """
     if not rooms:
         return
@@ -396,9 +409,15 @@ def _assign_room_types(rooms: list[Room], rng: random.Random) -> None:
     if len(rooms) > 1:
         boss = rooms[-1]
         boss.room_type = "boss"
-        # Expand boss room to ~2x area by doubling dimensions
-        boss.width = boss.width * 2
-        boss.height = boss.height * 2
+        # Expand boss room to ~2x area, clamped to grid bounds
+        new_w = boss.width * 2
+        new_h = boss.height * 2
+        if grid_width > 0:
+            new_w = min(new_w, grid_width - boss.x)
+        if grid_height > 0:
+            new_h = min(new_h, grid_height - boss.y)
+        boss.width = max(new_w, boss.width)
+        boss.height = max(new_h, boss.height)
 
     # Pick 1-2 treasure rooms from middle, preferring smaller ones
     middle = [r for r in rooms[1:-1] if r.room_type == "generic"] if len(rooms) > 2 else []

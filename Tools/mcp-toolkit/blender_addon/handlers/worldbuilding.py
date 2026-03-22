@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import math
+import random
 from typing import Any
 
 import bpy
@@ -972,6 +973,145 @@ def _create_mesh_object(name: str, bm: bmesh.types.BMesh) -> Any:
 
 
 # ---------------------------------------------------------------------------
+# Building weathering deformation
+# ---------------------------------------------------------------------------
+
+
+def _apply_weathering(
+    spec: BuildingSpec,
+    weathering_level: float,
+    seed: int = 0,
+) -> BuildingSpec:
+    """Apply procedural weathering deformation to a building spec.
+
+    Modifies the building's operations list to add visual wear:
+    - Wall cracks: thin box cutouts at random positions on walls
+    - Edge wear: inward vertex offsets on corner wall edges (chamfer sim)
+    - Roof sag: downward vertex offsets on roof geometry
+    - Moss/debris: small prop-like box specs at building base
+
+    Parameters
+    ----------
+    spec : BuildingSpec
+        The building spec to weather (not mutated; returns a new spec).
+    weathering_level : float
+        0.0 = pristine, 1.0 = heavily ruined.  Clamped to [0, 1].
+    seed : int
+        Random seed for deterministic weathering.
+
+    Returns
+    -------
+    BuildingSpec
+        New spec with weathering operations appended.
+    """
+    level = max(0.0, min(1.0, weathering_level))
+    if level <= 0.0:
+        return spec
+
+    rng = random.Random(seed)
+    new_ops = list(spec.operations)
+
+    width, depth = spec.footprint
+
+    # --- 1. Wall cracks: thin box cutouts on wall surfaces ---
+    num_cracks = int(round(level * rng.randint(3, 5)))
+    wall_ops = [
+        op for op in spec.operations
+        if op.get("type") == "box" and op.get("role") == "wall"
+    ]
+    for _ in range(num_cracks):
+        if not wall_ops:
+            break
+        wall = rng.choice(wall_ops)
+        w_pos = wall["position"]
+        w_size = wall["size"]
+        # Crack is a thin box on the wall surface
+        crack_w = rng.uniform(0.3, 0.8)
+        crack_h = rng.uniform(0.5, 1.5)
+        crack_depth = 0.05
+        # Random position along wall
+        offset_x = rng.uniform(0.1, max(0.2, w_size[0] - crack_w - 0.1))
+        offset_z = rng.uniform(0.1, max(0.2, w_size[2] - crack_h - 0.1))
+        new_ops.append({
+            "type": "box",
+            "position": [
+                w_pos[0] + offset_x,
+                w_pos[1] - crack_depth * 0.5,
+                w_pos[2] + offset_z,
+            ],
+            "size": [crack_w, crack_depth, crack_h],
+            "material": "crack",
+            "role": "weathering_crack",
+        })
+
+    # --- 2. Edge wear: shrink corner wall boxes inward slightly ---
+    edge_wear_amount = level * rng.uniform(0.1, 0.3)
+    for op in new_ops:
+        if op.get("role") == "wall" and op.get("type") == "box":
+            # Shrink wall size slightly to simulate worn edges
+            original_size = list(op["size"])
+            original_pos = list(op["position"])
+            # Reduce the long axis by edge_wear_amount and shift inward
+            for axis in range(3):
+                if original_size[axis] > 1.0:
+                    shrink = edge_wear_amount * rng.uniform(0.3, 1.0)
+                    original_size[axis] -= shrink
+                    original_pos[axis] += shrink * 0.5
+            op["size"] = original_size
+            op["position"] = original_pos
+
+    # --- 3. Roof sag: push roof vertices downward ---
+    roof_sag_amount = level * rng.uniform(0.2, 0.5)
+    for op in new_ops:
+        if op.get("role") == "roof" and op.get("type") == "box":
+            pos = list(op["position"])
+            # Sag center of roof downward
+            pos[2] -= roof_sag_amount * rng.uniform(0.3, 1.0)
+            op["position"] = pos
+
+    # --- 4. Moss/debris: small prop specs at building base ---
+    num_debris = int(round(level * rng.randint(5, 10)))
+    debris_types = [
+        ("rubble_pile", (0.3, 0.3, 0.2)),
+        ("moss_patch", (0.5, 0.5, 0.05)),
+        ("fallen_stone", (0.2, 0.2, 0.15)),
+        ("debris_chunk", (0.25, 0.25, 0.1)),
+    ]
+    for _ in range(num_debris):
+        dtype, dsize = rng.choice(debris_types)
+        # Place around building perimeter at ground level
+        side = rng.choice(["front", "back", "left", "right"])
+        if side == "front":
+            dx = rng.uniform(-width * 0.4, width * 0.4)
+            dy = -depth * 0.5 - rng.uniform(0.2, 1.5)
+        elif side == "back":
+            dx = rng.uniform(-width * 0.4, width * 0.4)
+            dy = depth * 0.5 + rng.uniform(0.2, 1.5)
+        elif side == "left":
+            dx = -width * 0.5 - rng.uniform(0.2, 1.5)
+            dy = rng.uniform(-depth * 0.4, depth * 0.4)
+        else:
+            dx = width * 0.5 + rng.uniform(0.2, 1.5)
+            dy = rng.uniform(-depth * 0.4, depth * 0.4)
+
+        scale = rng.uniform(0.6, 1.4)
+        new_ops.append({
+            "type": "box",
+            "position": [dx, dy, 0.0],
+            "size": [dsize[0] * scale, dsize[1] * scale, dsize[2] * scale],
+            "material": dtype,
+            "role": "weathering_debris",
+        })
+
+    return BuildingSpec(
+        footprint=spec.footprint,
+        floors=spec.floors,
+        style=spec.style,
+        operations=new_ops,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Handler Functions
 # ---------------------------------------------------------------------------
 
@@ -987,6 +1127,7 @@ def handle_generate_building(params: dict) -> dict:
         floors: number of floors (default 2)
         style: style preset name (default "medieval")
         seed: random seed (default 0)
+        weathering_level: 0.0-1.0, controls cracks/edge wear/roof sag/debris (default 0.0)
     """
     logger.info("Generating building")
 
@@ -1005,17 +1146,23 @@ def handle_generate_building(params: dict) -> dict:
     floors = params.get("floors", preset["floors"] if preset else 2)
     style = params.get("style", preset["style"] if preset else "medieval")
     seed = params.get("seed", 0)
+    weathering_level = params.get("weathering_level", 0.0)
 
     if style not in STYLE_CONFIGS:
         raise ValueError(f"Unknown style '{style}'. Valid: {list(STYLE_CONFIGS.keys())}")
 
     spec = evaluate_building_grammar(width, depth, floors, style, seed)
 
+    # Apply weathering deformation after base generation
+    if weathering_level > 0.0:
+        spec = _apply_weathering(spec, weathering_level, seed)
+
     # Create Blender geometry
     bm = _spec_to_bmesh(spec)
     obj = _create_mesh_object(name, bm)
 
     result = _build_building_result(name, spec)
+    result["weathering_level"] = weathering_level
     if preset:
         result["preset"] = preset_name
         result["preset_props"] = preset.get("props", [])
