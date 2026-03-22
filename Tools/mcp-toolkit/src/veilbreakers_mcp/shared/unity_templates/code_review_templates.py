@@ -439,7 +439,10 @@ namespace VeilBreakers.Editor.CodeReview
                 "'is null' on UnityEngine.Object -- Unity overloads == for destroyed object check",
                 "Use '== null' instead of 'is null' for Unity objects.",
                 @"\bis\s+null\b",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"System\.", @"struct\s" }),
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"System\.", @"struct\s",
+                                     @"string\s", @"List<", @"Dictionary<", @"I[A-Z]\w+\s" },
+                confidence: 55,
+                reasoning: "'is null' is correct for plain C# objects, strings, interfaces, and generics. Only wrong when used on UnityEngine.Object subclasses where == null checks for destroyed objects."),
 
             // BUG-11: already excludes Start/Awake/OnXxx event handlers
             new ReviewRule("BUG-11", Severity.HIGH, Category.Bug, Language.CSharp,
@@ -704,7 +707,10 @@ namespace VeilBreakers.Editor.CodeReview
                 "Closure allocation in lambda/delegate in hot path",
                 "Capture in a struct or pass via static method + state parameter.",
                 @"=>\s*\{?[^}]*\b(this|[a-z_]\w*)\b",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"static\s+(void|bool|int)" }),
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"static\s+(void|bool|int)",
+                                     @"static\s*\(", @"static\s*\w+\s*=>" },
+                confidence: 50,
+                reasoning: "Most lambdas in Update don't allocate closures in modern Unity/.NET. Only a concern with captured locals that change per-frame."),
 
             new ReviewRule("PERF-03", Severity.LOW, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
@@ -802,7 +808,9 @@ namespace VeilBreakers.Editor.CodeReview
                 "AudioSource spatialBlend 0 but using distance attenuation",
                 "Set spatialBlend to 1 for 3D or remove rolloff settings.",
                 @"spatialBlend\s*=\s*0",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                confidence: 45,
+                reasoning: "spatialBlend=0 is correct for 2D audio (UI sounds, music). Only problematic if distance attenuation is also configured."),
 
             new ReviewRule("PERF-16", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
@@ -837,7 +845,9 @@ namespace VeilBreakers.Editor.CodeReview
                 "Multiple cameras rendering -- ensure proper culling/depth",
                 "Reduce camera count or use stacking with optimized clear flags.",
                 @"new\s+.*Camera\b.*enabled\s*=\s*true|Camera\.allCameras",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                confidence: 40,
+                reasoning: "First branch 'new...Camera...enabled=true' is too loose and matches many unrelated patterns. Camera.allCameras is a valid query. Only a concern when multiple cameras render simultaneously without proper culling."),
 
             new ReviewRule("PERF-21", Severity.HIGH, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
@@ -968,16 +978,18 @@ namespace VeilBreakers.Editor.CodeReview
                     return false;
                 }),
 
-            new ReviewRule("UNITY-03", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-03", Severity.MEDIUM, Category.Unity, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
-                "Accessing .gameObject/.transform after Destroy -- use-after-destroy risk",
-                "Null-check or return immediately after Destroy().",
+                "Accessing .gameObject/.transform near Destroy(gameObject) -- potential use-after-destroy",
+                "Add 'return;' after Destroy(gameObject) or null-check before accessing destroyed object's members.",
                 @"\.(gameObject|transform)\b",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"if\s*\(\s*\w+\s*!=\s*null" },
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"if\s*\(\s*\w+\s*!=\s*null", @"return\s*;" },
+                confidence: 50, priority: 55,
+                reasoning: "Heuristic: flags .gameObject/.transform within 3 lines after Destroy(gameObject). Cannot verify the access targets the same object. Review manually.",
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
-                    for (int j = Math.Max(0, i - 5); j < i; j++)
-                        if (Regex.IsMatch(all[j], @"Destroy\s*\([^)]+\)")) return true;
+                    for (int j = Math.Max(0, i - 3); j < i; j++)
+                        if (Regex.IsMatch(all[j], @"Destroy\s*\(\s*(gameObject|this\.gameObject)\s*\)")) return true;
                     return false;
                 }),
 
@@ -1016,19 +1028,25 @@ namespace VeilBreakers.Editor.CodeReview
                 "Scene loaded without additive mode may leak DontDestroyOnLoad objects",
                 "Use LoadSceneMode.Additive or clean up persistent objects.",
                 @"SceneManager\.LoadScene\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Additive" }),
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Additive" },
+                confidence: 40,
+                reasoning: "Single-mode scene loading is the Unity default and correct in most cases. Only a concern with DontDestroyOnLoad objects."),
 
             new ReviewRule("UNITY-08", Severity.HIGH, Category.Unity, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
-                "Event += without matching -= -- memory leak risk",
-                "Unsubscribe in OnDisable/OnDestroy.",
-                @"\+=\s*\w+\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                "Event += without matching -= -- memory leak if subscriber outlives publisher",
+                "Add -= unsubscribe in OnDisable() or OnDestroy().",
+                @"\w+\.\w+\s*\+=\s*\w+\s*;",
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\+=\s*\d", @"\+=\s*""" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
-                    var m = Regex.Match(line, @"\+=\s*(\w+)\s*;");
+                    // Must be member.Event += Handler pattern, not arithmetic
+                    var m = Regex.Match(line, @"(\w+\.\w+)\s*\+=\s*(\w+)\s*;");
                     if (!m.Success) return false;
-                    string handler = m.Groups[1].Value;
+                    string handler = m.Groups[2].Value;
+                    // Skip common arithmetic variable names
+                    if (Regex.IsMatch(handler, @"^\d|^(count|score|total|sum|delta|offset|speed|health|mana|damage|bonus|amount|value|size|time|duration|timer|progress)$", RegexOptions.IgnoreCase))
+                        return false;
                     for (int j = 0; j < all.Length; j++)
                         if (all[j].Contains("-= " + handler)) return false;
                     return true;
@@ -1545,12 +1563,7 @@ namespace VeilBreakers.Editor.CodeReview
                 confidence: 60, priority: 60,
                 reasoning: "MovePosition/MoveRotation should be called in FixedUpdate for smooth physics. However, they are valid in Update for kinematic rigidbodies. Check the Rigidbody.isKinematic setting."),
 
-            new ReviewRule("UNITY-22", Severity.LOW, Category.Unity, Language.CSharp,
-                RuleScope.ClassLevel, FileFilter.Runtime,
-                "UI Image/Text with Raycast Target enabled -- blocks raycasts unnecessarily",
-                "Disable Raycast Target on non-interactive UI elements to improve UI performance.",
-                @"raycastTarget\s*=\s*true",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Button", @"Toggle", @"Slider", @"Dropdown", @"InputField" }),
+            // UNITY-22 removed: raycastTarget=true is intentional code, ~100% FP rate
 
             new ReviewRule("UNITY-23", Severity.MEDIUM, Category.Unity, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
@@ -1869,7 +1882,81 @@ namespace VeilBreakers.Editor.CodeReview
                 "using UnityEditor outside #if UNITY_EDITOR -- causes build failure",
                 "Wrap in #if UNITY_EDITOR / #endif or move to Editor/ folder.",
                 @"^using\s+UnityEditor",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"#if\s+UNITY_EDITOR", @"/Editor/" })
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"#if\s+UNITY_EDITOR", @"/Editor/" }),
+
+            // ---- UNITY DOCS GAP RULES ----
+
+            new ReviewRule("UNITY-28", Severity.HIGH, Category.Unity, Language.CSharp,
+                RuleScope.AnyMethod, FileFilter.Runtime,
+                "NativeArray/NativeContainer not Disposed -- leaks unmanaged memory, Unity logs error",
+                "Call .Dispose() in OnDestroy, use Allocator.Temp (auto-disposes at frame end), or wrap in using statement.",
+                @"new\s+Native(Array|List|HashSet|HashMap|Queue|Stack|MultiHashMap)\s*<",
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\.Dispose\s*\(", @"using\s+var", @"using\s*\(", @"Allocator\.Temp\b" },
+                antiRadius: 20),
+
+            new ReviewRule("UNITY-31", Severity.CRITICAL, Category.Bug, Language.CSharp,
+                RuleScope.ClassLevel, FileFilter.Runtime,
+                "Unity Object created in field initializer -- runs on loading thread, crashes in release builds",
+                "Move to Awake() or Start(). Field initializers run on the loading thread where Unity APIs are unavailable.",
+                @"=\s*new\s+(GameObject|Texture2D|Material|Mesh|RenderTexture|Sprite|ComputeBuffer)\s*\(",
+                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                guard: (line, all, i, ctx) => {
+                    if (ctx[i] == LineContext.Comment) return false;
+                    // Only flag field-level initializers (not inside methods)
+                    for (int j = i; j >= Math.Max(0, i - 20); j--)
+                    {
+                        if (Regex.IsMatch(all[j], @"(void|Task|IEnumerator|async)\s+\w+\s*\(")) return false;
+                        if (Regex.IsMatch(all[j], @"^\s*(class|struct)\s+")) return true;
+                    }
+                    return false;
+                }),
+
+            new ReviewRule("PERF-32", Severity.HIGH, Category.Performance, Language.CSharp,
+                RuleScope.AnyMethod, FileFilter.Runtime,
+                "Manual GC.Collect() causes frame hitch -- let Unity manage garbage collection timing",
+                "Remove GC.Collect(). Only acceptable during loading screens with GC.WaitForPendingFinalizers().",
+                @"GC\.Collect\s*\(",
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"loading", @"Loading", @"SceneManager", @"#if\s+UNITY_EDITOR" }),
+
+            new ReviewRule("PERF-36", Severity.MEDIUM, Category.Performance, Language.CSharp,
+                RuleScope.HotPath, FileFilter.Runtime,
+                "Shader.PropertyToID not cached -- recalculates string hash every call",
+                "Cache: static readonly int _PropID = Shader.PropertyToID(\"_PropName\"); then use _PropID.",
+                @"Shader\.PropertyToID\s*\(",
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"static\s+readonly\s+int", @"static\s+int" }),
+
+            new ReviewRule("BUG-55", Severity.HIGH, Category.Bug, Language.CSharp,
+                RuleScope.AnyMethod, FileFilter.Runtime,
+                "await in OnDestroy/OnDisable -- continuation runs after object destruction, NullReferenceException",
+                "Use destroyCancellationToken (Unity 2023+) or avoid async in teardown. Move cleanup to synchronous code.",
+                @"await\s+",
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"destroyCancellationToken", @"CancellationToken" },
+                guard: (line, all, i, ctx) => {
+                    if (ctx[i] == LineContext.Comment) return false;
+                    for (int j = i; j >= Math.Max(0, i - 15); j--)
+                    {
+                        if (Regex.IsMatch(all[j], @"void\s+(OnDestroy|OnDisable)\s*\(")) return true;
+                        if (j < i && Regex.IsMatch(all[j], @"(void|Task|async)\s+\w+\s*\(")) return false;
+                    }
+                    return false;
+                }),
+
+            new ReviewRule("BUG-56", Severity.MEDIUM, Category.Bug, Language.CSharp,
+                RuleScope.AnyMethod, FileFilter.Runtime,
+                "Accumulating eulerAngles causes gimbal lock and 0/360 wrapping artifacts",
+                "Use transform.Rotate(delta) or accumulate in a Vector3 field, then apply: transform.rotation = Quaternion.Euler(accum);",
+                @"\.eulerAngles\s*\+=",
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Quaternion\.Euler", @"Rotate\s*\(" },
+                confidence: 65, priority: 60,
+                reasoning: "eulerAngles += is almost always wrong due to gimbal lock. However, some 2D games safely use z-axis-only rotation this way."),
+
+            new ReviewRule("BUG-57", Severity.HIGH, Category.Bug, Language.CSharp,
+                RuleScope.AnyMethod, FileFilter.Runtime,
+                "UnityWebRequest downloadHandler accessed without checking .result -- silent failure on network errors",
+                "Check: if (request.result == UnityWebRequest.Result.Success) before accessing .downloadHandler.text/data.",
+                @"\.downloadHandler\.(text|data|bytes)\b",
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\.result\s*[!=]=", @"\.isNetworkError", @"\.isHttpError", @"ConnectionError", @"ProtocolError", @"Success" },
+                antiRadius: 10)
         };
 
         // =====================================================================
@@ -3494,7 +3581,8 @@ RULES: list[Rule] = [
          "Comparing with None using == instead of 'is None'",
          "Use 'is None' or 'is not None'.",
          re.compile(r"[!=]=\s*None\b"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-COR-04", Severity.MEDIUM, Category.Bug,
          "open() without context manager -- file may not close",
@@ -3507,7 +3595,8 @@ RULES: list[Rule] = [
          "datetime.now() without timezone -- ambiguous",
          "Use datetime.now(tz=timezone.utc).",
          re.compile(r"datetime\.now\s*\(\s*\)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         finding_type=FindingType.STRENGTHENING),
 
     # PY-COR-06: only flag if result is mutated, not just read
     Rule("PY-COR-06", Severity.MEDIUM, Category.Bug,
@@ -3521,7 +3610,8 @@ RULES: list[Rule] = [
          "Class with __del__ -- unpredictable GC, prevents ref cycle collection",
          "Use context managers or weakref.finalize.",
          re.compile(r"def\s+__del__\s*\(\s*self"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-COR-08", Severity.MEDIUM, Category.Bug,
          "Thread without daemon=True -- may prevent clean shutdown",
@@ -3549,7 +3639,8 @@ RULES: list[Rule] = [
          "Use 'raise X(...) from e'.",
          re.compile(r"raise\s+\w+\([^)]*\)\s*$"),
          _compile_anti([r"#\s*VB-IGNORE", r"\bfrom\s+\w+"]),
-         guard=lambda line, a, i: any("except" in a[j] for j in range(max(0, i - 5), i))),
+         guard=lambda line, a, i: any("except" in a[j] for j in range(max(0, i - 5), i)),
+         finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-COR-12", Severity.MEDIUM, Category.Bug,
          "Exception type too broad -- catches bugs with expected errors",
