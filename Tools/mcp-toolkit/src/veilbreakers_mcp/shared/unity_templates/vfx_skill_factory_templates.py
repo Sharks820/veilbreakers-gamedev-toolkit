@@ -129,10 +129,19 @@ _CS_CONFIG_STRUCTS = r'''
             public float chromAbIntensity = 0f;
             public float slowMoScale = 1f;
             public float slowMoDuration = 0f;
+    public SkillVFXConfig DeepClone()
+    {
+        var clone = (SkillVFXConfig)MemberwiseClone();
+        if (chargePhase != null) clone.chargePhase = (ArchetypeCall[])chargePhase.Clone();
+        if (executePhase != null) clone.executePhase = (ArchetypeCall[])executePhase.Clone();
+        if (impactPhase != null) clone.impactPhase = (ArchetypeCall[])impactPhase.Clone();
+        if (aftermathPhase != null) clone.aftermathPhase = (ArchetypeCall[])aftermathPhase.Clone();
+        return clone;
+    }
 
             public SkillVFXConfig Clone()
             {
-                return (SkillVFXConfig)MemberwiseClone();
+                return (SkillVFXConfig)DeepClone();
             }
         }
 
