@@ -351,7 +351,7 @@ namespace VeilBreakers.Editor.CodeReview
 
         // =====================================================================
         //  C# RULES (105 rules: BUG 1-33, PERF 1-22, SEC 1-10,
-        //            UNITY 1-17, QUAL 1-23, DEEP 1-3)
+        //            UNITY 1-17, QUAL 1-23, DEEP 1-5)
         // =====================================================================
 
         public static readonly ReviewRule[] CSharpRules = new ReviewRule[]
@@ -2375,48 +2375,153 @@ namespace VeilBreakers.Editor.CodeReview
     }
 
     // =========================================================================
-    //  Pass 2: AST-aware deep analysis (C# only -- Python AST in CLI tool)
+    //  Pass 2: Semantic deep analysis (C# only -- Python AST in CLI tool)
+    //  Roslyn-inspired scope/type/flow tracking without Roslyn dependency.
+    //  Pre-parses method boundaries, variable types, destroy flow, coroutines.
     // =========================================================================
 
     public static class DeepAnalyzer
     {
+        // ----- Data structures -----
+
+        sealed class MethodInfo
+        {
+            public string Name;
+            public string ReturnType;
+            public int StartLine, EndLine;
+            public bool IsHotPath;       // Update / FixedUpdate / LateUpdate
+            public bool IsLifecycle;     // Awake / Start / OnEnable / OnDisable / OnDestroy / OnGUI / etc.
+            public bool IsOnDestroy;
+            public bool IsOnDisable;
+            public bool IsOnEnable;
+            public bool IsAwakeOrStart;  // Awake or Start
+            public Dictionary<string, string> LocalVarTypes = new Dictionary<string, string>();
+            public List<DestroyCall> DestroyCalls = new List<DestroyCall>();
+            public List<CoroutineStart> StartedCoroutines = new List<CoroutineStart>();
+            public List<EventSub> EventSubscriptions = new List<EventSub>();
+            public List<EventSub> EventUnsubscriptions = new List<EventSub>();
+        }
+
+        sealed class DestroyCall
+        {
+            public int Line;
+            public string DestroyedVar; // the variable/expression passed to Destroy()
+        }
+
+        sealed class CoroutineStart
+        {
+            public int Line;
+            public string CoroutineName; // method name passed to StartCoroutine
+            public bool ResultStored;    // whether result is assigned to a variable
+        }
+
+        sealed class EventSub
+        {
+            public string Source;   // e.g. "button.onClick"
+            public string Handler;  // e.g. "OnClick"
+            public int Line;
+        }
+
         sealed class ClassInfo
         {
             public string Name;
             public int StartLine, EndLine;
             public bool IsMonoBehaviour, IsScriptableObject;
-            public List<string> EventSubs = new List<string>();
-            public List<string> EventUnsubs = new List<string>();
+            public List<MethodInfo> Methods = new List<MethodInfo>();
             public HashSet<string> DeclaredFields = new HashSet<string>();
             public HashSet<string> UsedFields = new HashSet<string>();
             public HashSet<string> SerializedFields = new HashSet<string>();
+            public bool HasStopAllCoroutines;
+            public HashSet<string> StoredCoroutineFields = new HashSet<string>();
         }
 
-        static readonly Regex ClassDecl = new Regex(@"class\s+(\w+)\s*(?::\s*([\w<>,\s]+))?\s*\{", RegexOptions.Compiled);
-        static readonly Regex FieldDecl = new Regex(@"^\s+(?:\[[\w(,\s""=.]+\]\s*)*(private|protected|public|internal)?\s*(?:static\s+)?(?:readonly\s+)?(\w+(?:<[\w<>,\s]+>)?)\s+(\w+)\s*[;=]", RegexOptions.Compiled);
-        static readonly Regex SubRx = new Regex(@"(\w+(?:\.\w+)*)\s*\+=\s*(\w+)", RegexOptions.Compiled);
-        static readonly Regex UnsubRx = new Regex(@"(\w+(?:\.\w+)*)\s*-=\s*(\w+)", RegexOptions.Compiled);
-        static readonly Regex FieldUseRx = new Regex(@"\b([_a-z]\w*)\b", RegexOptions.Compiled);
+        // ----- Compiled regexes -----
+
+        static readonly Regex ClassDecl = new Regex(
+            @"class\s+(\w+)\s*(?::\s*([\w<>,\s]+))?\s*\{", RegexOptions.Compiled);
+        static readonly Regex FieldDecl = new Regex(
+            @"^\s+(?:\[[\w(,\s""=.]+\]\s*)*(private|protected|public|internal)?\s*(?:static\s+)?(?:readonly\s+)?(\w+(?:<[\w<>,\s]+>)?)\s+(\w+)\s*[;=]",
+            RegexOptions.Compiled);
+        static readonly Regex MethodDecl = new Regex(
+            @"^\s*(?:(?:public|private|protected|internal|static|virtual|override|abstract|async|sealed|new)\s+)*(\w+(?:<[\w<>,\s]+>)?)\s+(\w+)\s*\(([^)]*)\)\s*(?:\{?\s*$)",
+            RegexOptions.Compiled);
+        static readonly Regex SubRx = new Regex(
+            @"(\w+(?:\.\w+)*)\s*\+=\s*(\w+)", RegexOptions.Compiled);
+        static readonly Regex UnsubRx = new Regex(
+            @"(\w+(?:\.\w+)*)\s*-=\s*(\w+)", RegexOptions.Compiled);
+        static readonly Regex FieldUseRx = new Regex(
+            @"\b([_a-z]\w*)\b", RegexOptions.Compiled);
+        // Variable declaration: explicit type
+        static readonly Regex VarDeclExplicit = new Regex(
+            @"^\s*(\w+(?:<[\w<>,\s]+>)?)\s+(\w+)\s*=", RegexOptions.Compiled);
+        // Variable declaration: var with GetComponent<T>()
+        static readonly Regex VarDeclGetComponent = new Regex(
+            @"^\s*var\s+(\w+)\s*=\s*\w*\.?GetComponent<(\w+)>\s*\(", RegexOptions.Compiled);
+        // Variable declaration: var x = something.gameObject / .transform
+        static readonly Regex VarDeclUnityProp = new Regex(
+            @"^\s*var\s+(\w+)\s*=\s*\w+\.(gameObject|transform|collider|rigidbody)\b",
+            RegexOptions.Compiled);
+        // Destroy(expr) or DestroyImmediate(expr)
+        static readonly Regex DestroyRx = new Regex(
+            @"(?:Destroy|DestroyImmediate)\s*\(\s*(\w+(?:\.\w+)?)", RegexOptions.Compiled);
+        // StartCoroutine(MethodName(...)) or StartCoroutine("MethodName")
+        static readonly Regex StartCoroutineRx = new Regex(
+            @"StartCoroutine\s*\(\s*(?:""(\w+)""|(\w+)\s*\()", RegexOptions.Compiled);
+        // Assignment storing coroutine result
+        static readonly Regex CoroutineAssignRx = new Regex(
+            @"(\w+)\s*=\s*StartCoroutine\s*\(", RegexOptions.Compiled);
+        // StopAllCoroutines
+        static readonly Regex StopAllRx = new Regex(
+            @"StopAllCoroutines\s*\(", RegexOptions.Compiled);
+        // Coroutine field declaration
+        static readonly Regex CoroutineFieldRx = new Regex(
+            @"Coroutine\s+(\w+)", RegexOptions.Compiled);
+
+        static readonly HashSet<string> HotPathMethods = new HashSet<string> {
+            "Update", "FixedUpdate", "LateUpdate", "OnGUI"
+        };
+        static readonly HashSet<string> LifecycleMethods = new HashSet<string> {
+            "Awake", "Start", "OnEnable", "OnDisable", "OnDestroy", "OnGUI",
+            "Update", "FixedUpdate", "LateUpdate", "OnApplicationQuit",
+            "OnBecameVisible", "OnBecameInvisible", "OnCollisionEnter",
+            "OnCollisionExit", "OnTriggerEnter", "OnTriggerExit"
+        };
+        static readonly HashSet<string> UnityObjectTypes = new HashSet<string> {
+            "GameObject", "Transform", "Rigidbody", "Rigidbody2D",
+            "Collider", "Collider2D", "BoxCollider", "SphereCollider",
+            "CapsuleCollider", "MeshCollider", "Renderer", "MeshRenderer",
+            "SkinnedMeshRenderer", "SpriteRenderer", "Camera", "Light",
+            "AudioSource", "Animator", "Animation", "Canvas", "Image",
+            "Text", "TextMeshProUGUI", "Button", "ParticleSystem",
+            "NavMeshAgent", "CharacterController", "Component", "MonoBehaviour"
+        };
+        // Map Unity property shortcuts to types
+        static readonly Dictionary<string, string> UnityPropTypes = new Dictionary<string, string> {
+            { "gameObject", "GameObject" }, { "transform", "Transform" },
+            { "collider", "Collider" }, { "rigidbody", "Rigidbody" }
+        };
+        // Primitive / non-Unity types to skip in variable tracking
+        static readonly HashSet<string> SkipVarTypes = new HashSet<string> {
+            "var", "int", "float", "string", "bool", "double", "long",
+            "byte", "short", "uint", "ulong", "ushort", "sbyte", "char",
+            "decimal", "void", "object", "dynamic"
+        };
+
+        // =================================================================
+        //  Public API
+        // =================================================================
 
         public static List<ReviewIssue> Analyze(string filePath, string[] lines)
         {
             var issues = new List<ReviewIssue>();
             var classes = ParseClasses(lines);
+
             foreach (var cls in classes)
             {
-                // DEEP-01: Unmatched event subscriptions
-                foreach (var sub in cls.EventSubs)
-                {
-                    if (!cls.EventUnsubs.Contains(sub) && cls.IsMonoBehaviour)
-                        issues.Add(new ReviewIssue { RuleId = "DEEP-01", Severity = Severity.HIGH,
-                            Category = Category.Unity, Lang = Language.CSharp, FilePath = filePath,
-                            Line = cls.StartLine + 1, Confidence = 85, Priority = 80,
-                            Type = FindingType.Bug,
-                            Description = $"Event '{sub}' subscribed but never unsubscribed in {cls.Name}",
-                            Fix = "Add -= unsubscribe in OnDisable() or OnDestroy().", MatchedText = sub,
-                            Reasoning = "Cross-class analysis confirms += without matching -=. Memory leak is highly likely." });
-                }
-                // DEEP-02: Unused private fields
+                // ---- DEEP-01: Enhanced event balance analysis ----
+                CheckEventBalance(cls, filePath, issues);
+
+                // ---- DEEP-02: Unused private fields ----
                 foreach (var field in cls.DeclaredFields)
                 {
                     if (!cls.UsedFields.Contains(field) && !cls.SerializedFields.Contains(field))
@@ -2429,13 +2534,11 @@ namespace VeilBreakers.Editor.CodeReview
                             MatchedText = field,
                             Reasoning = "Field declared but not referenced in the same class. May be accessed via reflection, serialization, or editor tooling. Verify before removing." });
                 }
-                // DEEP-03: MonoBehaviour without lifecycle methods
+
+                // ---- DEEP-03: MonoBehaviour without lifecycle methods ----
                 if (cls.IsMonoBehaviour)
                 {
-                    bool hasLife = false;
-                    for (int i = cls.StartLine; i <= cls.EndLine && i < lines.Length; i++)
-                        if (Regex.IsMatch(lines[i], @"void\s+(Awake|Start|OnEnable|OnDisable|Update|FixedUpdate|LateUpdate|OnDestroy|OnGUI)\s*\("))
-                        { hasLife = true; break; }
+                    bool hasLife = cls.Methods.Any(m => m.IsLifecycle || m.IsHotPath);
                     if (!hasLife)
                         issues.Add(new ReviewIssue { RuleId = "DEEP-03", Severity = Severity.LOW,
                             Category = Category.Quality, Lang = Language.CSharp, FilePath = filePath,
@@ -2446,9 +2549,206 @@ namespace VeilBreakers.Editor.CodeReview
                             MatchedText = cls.Name,
                             Reasoning = "This class inherits MonoBehaviour but doesn't override any lifecycle methods (Awake, Start, Update, etc.). It may be using MonoBehaviour solely for coroutine support or Inspector serialization, which are valid uses. Check if the class needs to be attached to a GameObject." });
                 }
+
+                // ---- DEEP-04: Destroy flow analysis ----
+                CheckDestroyFlow(cls, lines, filePath, issues);
+
+                // ---- DEEP-05: Coroutine lifecycle analysis ----
+                CheckCoroutineLifecycle(cls, filePath, issues);
             }
             return issues;
         }
+
+        // =================================================================
+        //  Method lookup: find enclosing method for a given line index
+        // =================================================================
+
+        /// <summary>Returns the MethodInfo containing the given line, or null.</summary>
+        static MethodInfo FindMethodAt(List<MethodInfo> methods, int lineIdx)
+        {
+            foreach (var m in methods)
+                if (lineIdx >= m.StartLine && lineIdx <= m.EndLine) return m;
+            return null;
+        }
+
+        // =================================================================
+        //  DEEP-01: Enhanced event balance analysis
+        // =================================================================
+
+        static void CheckEventBalance(ClassInfo cls, string filePath, List<ReviewIssue> issues)
+        {
+            if (!cls.IsMonoBehaviour) return;
+
+            // Collect all subscriptions and unsubscriptions with their method context
+            var subsByMethod = new Dictionary<string, List<EventSub>>();
+            var unsubsByMethod = new Dictionary<string, List<EventSub>>();
+
+            foreach (var method in cls.Methods)
+            {
+                foreach (var s in method.EventSubscriptions)
+                {
+                    if (!subsByMethod.ContainsKey(method.Name))
+                        subsByMethod[method.Name] = new List<EventSub>();
+                    subsByMethod[method.Name].Add(s);
+                }
+                foreach (var u in method.EventUnsubscriptions)
+                {
+                    if (!unsubsByMethod.ContainsKey(method.Name))
+                        unsubsByMethod[method.Name] = new List<EventSub>();
+                    unsubsByMethod[method.Name].Add(u);
+                }
+            }
+
+            // Build a flat set of all unsub keys for fallback matching
+            var allUnsubKeys = new HashSet<string>();
+            foreach (var kvp in unsubsByMethod)
+                foreach (var u in kvp.Value)
+                    allUnsubKeys.Add(u.Source + "+=" + u.Handler);
+
+            // Check: += in OnEnable should have -= in OnDisable
+            if (subsByMethod.ContainsKey("OnEnable"))
+            {
+                var disableUnsubs = unsubsByMethod.ContainsKey("OnDisable")
+                    ? unsubsByMethod["OnDisable"] : new List<EventSub>();
+                var disableKeys = new HashSet<string>(disableUnsubs.Select(u => u.Source + "+=" + u.Handler));
+
+                foreach (var sub in subsByMethod["OnEnable"])
+                {
+                    string key = sub.Source + "+=" + sub.Handler;
+                    if (!disableKeys.Contains(key) && !allUnsubKeys.Contains(key))
+                        issues.Add(new ReviewIssue { RuleId = "DEEP-01", Severity = Severity.HIGH,
+                            Category = Category.Unity, Lang = Language.CSharp, FilePath = filePath,
+                            Line = sub.Line + 1, Confidence = 90, Priority = 85,
+                            Type = FindingType.Bug,
+                            Description = $"Event '{sub.Source} += {sub.Handler}' in OnEnable without matching -= in OnDisable in {cls.Name}",
+                            Fix = "Add matching -= unsubscribe in OnDisable().",
+                            MatchedText = key,
+                            Reasoning = "OnEnable/OnDisable should be a matched pair. Subscribing in OnEnable without unsubscribing in OnDisable causes duplicate subscriptions on re-enable and memory leaks." });
+                }
+            }
+
+            // Check: += in Awake/Start should have -= in OnDestroy
+            foreach (var initMethod in new[] { "Awake", "Start" })
+            {
+                if (!subsByMethod.ContainsKey(initMethod)) continue;
+                var destroyUnsubs = unsubsByMethod.ContainsKey("OnDestroy")
+                    ? unsubsByMethod["OnDestroy"] : new List<EventSub>();
+                var destroyKeys = new HashSet<string>(destroyUnsubs.Select(u => u.Source + "+=" + u.Handler));
+
+                foreach (var sub in subsByMethod[initMethod])
+                {
+                    string key = sub.Source + "+=" + sub.Handler;
+                    if (!destroyKeys.Contains(key) && !allUnsubKeys.Contains(key))
+                        issues.Add(new ReviewIssue { RuleId = "DEEP-01", Severity = Severity.HIGH,
+                            Category = Category.Unity, Lang = Language.CSharp, FilePath = filePath,
+                            Line = sub.Line + 1, Confidence = 85, Priority = 80,
+                            Type = FindingType.Bug,
+                            Description = $"Event '{sub.Source} += {sub.Handler}' in {initMethod} without matching -= in OnDestroy in {cls.Name}",
+                            Fix = $"Add matching -= unsubscribe in OnDestroy().",
+                            MatchedText = key,
+                            Reasoning = $"Subscribing in {initMethod} without unsubscribing in OnDestroy causes memory leaks when the object is destroyed." });
+                }
+            }
+
+            // Fallback: any remaining += without ANY -= anywhere in the class
+            foreach (var kvp in subsByMethod)
+            {
+                if (kvp.Key == "OnEnable" || kvp.Key == "Awake" || kvp.Key == "Start") continue;
+                foreach (var sub in kvp.Value)
+                {
+                    string key = sub.Source + "+=" + sub.Handler;
+                    if (!allUnsubKeys.Contains(key))
+                        issues.Add(new ReviewIssue { RuleId = "DEEP-01", Severity = Severity.HIGH,
+                            Category = Category.Unity, Lang = Language.CSharp, FilePath = filePath,
+                            Line = sub.Line + 1, Confidence = 80, Priority = 75,
+                            Type = FindingType.Bug,
+                            Description = $"Event '{sub.Source} += {sub.Handler}' in {kvp.Key} never unsubscribed in {cls.Name}",
+                            Fix = "Add -= unsubscribe in OnDisable() or OnDestroy().",
+                            MatchedText = key,
+                            Reasoning = "Cross-method analysis confirms += without matching -= anywhere in the class. Memory leak is highly likely." });
+                }
+            }
+        }
+
+        // =================================================================
+        //  DEEP-04: Destroy flow analysis
+        // =================================================================
+
+        static void CheckDestroyFlow(ClassInfo cls, string[] lines, string filePath, List<ReviewIssue> issues)
+        {
+            foreach (var method in cls.Methods)
+            {
+                if (method.DestroyCalls.Count == 0) continue;
+                foreach (var dc in method.DestroyCalls)
+                {
+                    if (string.IsNullOrEmpty(dc.DestroyedVar)) continue;
+                    string varName = dc.DestroyedVar;
+                    // Look for accesses to the destroyed variable AFTER the Destroy line
+                    var accessRx = new Regex(@"\b" + Regex.Escape(varName) + @"\s*[\.\[\(]", RegexOptions.Compiled);
+                    var assignRx = new Regex(@"\b" + Regex.Escape(varName) + @"\s*=\s*", RegexOptions.Compiled);
+                    var nullCheckRx = new Regex(@"\b" + Regex.Escape(varName) + @"\s*[!=]=\s*null\b", RegexOptions.Compiled);
+                    var nullCheckRevRx = new Regex(@"null\s*[!=]=\s*" + Regex.Escape(varName) + @"\b", RegexOptions.Compiled);
+                    for (int i = dc.Line + 1; i <= method.EndLine && i < lines.Length; i++)
+                    {
+                        string ln = lines[i];
+                        string trimmed = ln.TrimStart();
+                        // Skip comments
+                        if (trimmed.StartsWith("//")) continue;
+                        // If variable is reassigned, stop tracking -- it points to a new reference
+                        if (assignRx.IsMatch(ln)) break;
+                        // If there is a return/break/continue right after Destroy, no issue
+                        if (trimmed.StartsWith("return") || trimmed.StartsWith("break") || trimmed.StartsWith("continue")) break;
+                        // Check if variable is accessed (member access, indexer, method call)
+                        if (accessRx.IsMatch(ln))
+                        {
+                            // Don't flag null checks
+                            if (nullCheckRx.IsMatch(ln)) continue;
+                            if (nullCheckRevRx.IsMatch(ln)) continue;
+                            issues.Add(new ReviewIssue { RuleId = "DEEP-04", Severity = Severity.HIGH,
+                                Category = Category.Bug, Lang = Language.CSharp, FilePath = filePath,
+                                Line = i + 1, Confidence = 85, Priority = 85,
+                                Type = FindingType.Bug,
+                                Description = $"Accessing destroyed object '{varName}' after Destroy() call on line {dc.Line + 1}",
+                                Fix = "Add 'return;' after Destroy() or null-check before accessing the destroyed reference.",
+                                MatchedText = varName,
+                                Reasoning = "Semantic analysis detected Destroy() at line " + (dc.Line + 1) + " followed by member access on the same variable at line " + (i + 1) + ". Unity marks the object as destroyed but the C# reference persists, causing MissingReferenceException." });
+                            break; // One finding per destroy call to avoid noise
+                        }
+                    }
+                }
+            }
+        }
+
+        // =================================================================
+        //  DEEP-05: Coroutine lifecycle analysis
+        // =================================================================
+
+        static void CheckCoroutineLifecycle(ClassInfo cls, string filePath, List<ReviewIssue> issues)
+        {
+            if (!cls.IsMonoBehaviour) return;
+            foreach (var method in cls.Methods)
+            {
+                foreach (var cr in method.StartedCoroutines)
+                {
+                    if (cr.ResultStored) continue; // stored result means it can be stopped
+                    if (cls.HasStopAllCoroutines) continue; // StopAllCoroutines covers it
+                    // Check if ANY coroutine field exists (class stores coroutine refs elsewhere)
+                    if (cls.StoredCoroutineFields.Count > 0) continue;
+                    issues.Add(new ReviewIssue { RuleId = "DEEP-05", Severity = Severity.MEDIUM,
+                        Category = Category.Unity, Lang = Language.CSharp, FilePath = filePath,
+                        Line = cr.Line + 1, Confidence = 75, Priority = 55,
+                        Type = FindingType.Bug,
+                        Description = $"StartCoroutine('{cr.CoroutineName}') result not stored -- cannot be stopped individually",
+                        Fix = "Store: _coroutine = StartCoroutine(X()); then StopCoroutine(_coroutine) in cleanup.",
+                        MatchedText = cr.CoroutineName,
+                        Reasoning = "StartCoroutine result is not assigned to a variable and the class has no StopAllCoroutines call. If the coroutine needs to be cancelled (e.g. on disable, scene change, or state transition), there is no way to stop it individually. Fire-and-forget coroutines are sometimes intentional, hence moderate confidence." });
+                }
+            }
+        }
+
+        // =================================================================
+        //  Parsing: classes + methods + variable types + flow data
+        // =================================================================
 
         static List<ClassInfo> ParseClasses(string[] lines)
         {
@@ -2467,6 +2767,8 @@ namespace VeilBreakers.Editor.CodeReview
                     depth += LineClassifier.CountChar(lines[j], '{') - LineClassifier.CountChar(lines[j], '}');
                     if (depth <= 0 && j > i) { cls.EndLine = j; break; }
                     if (j == lines.Length - 1) cls.EndLine = j;
+
+                    // Field declarations
                     var fm = FieldDecl.Match(lines[j]);
                     if (fm.Success && (fm.Groups[1].Value == "private" || fm.Groups[1].Value == ""))
                     {
@@ -2474,15 +2776,176 @@ namespace VeilBreakers.Editor.CodeReview
                         if (j > 0 && lines[j-1].Contains("[SerializeField]"))
                             cls.SerializedFields.Add(fm.Groups[3].Value);
                     }
-                    var sm = SubRx.Match(lines[j]);
-                    if (sm.Success) cls.EventSubs.Add(sm.Groups[1].Value + "+=" + sm.Groups[2].Value);
-                    var um = UnsubRx.Match(lines[j]);
-                    if (um.Success) cls.EventUnsubs.Add(um.Groups[1].Value + "+=" + um.Groups[2].Value);
-                    if (j != i) foreach (Match fu in FieldUseRx.Matches(lines[j])) cls.UsedFields.Add(fu.Groups[1].Value);
+
+                    // Field usage
+                    if (j != i) foreach (Match fu in FieldUseRx.Matches(lines[j]))
+                        cls.UsedFields.Add(fu.Groups[1].Value);
+
+                    // StopAllCoroutines detection
+                    if (StopAllRx.IsMatch(lines[j]))
+                        cls.HasStopAllCoroutines = true;
+
+                    // Coroutine field storage detection (Coroutine _xxx)
+                    var crFieldMatch = CoroutineFieldRx.Match(lines[j]);
+                    if (crFieldMatch.Success)
+                        cls.StoredCoroutineFields.Add(crFieldMatch.Groups[1].Value);
                 }
+
+                // Parse methods within this class
+                cls.Methods = ParseMethods(lines, cls.StartLine, cls.EndLine);
                 classes.Add(cls);
             }
             return classes;
+        }
+
+        /// <summary>
+        /// Parse all method declarations within the class body.
+        /// Tracks brace depth for accurate method boundaries, then scans
+        /// each method body for variable declarations, Destroy calls,
+        /// coroutine starts, and event subscriptions.
+        /// </summary>
+        static List<MethodInfo> ParseMethods(string[] lines, int classStart, int classEnd)
+        {
+            var methods = new List<MethodInfo>();
+            int classDepth = 0;
+            for (int i = classStart; i <= classEnd && i < lines.Length; i++)
+            {
+                int openCount = LineClassifier.CountChar(lines[i], '{');
+                int closeCount = LineClassifier.CountChar(lines[i], '}');
+                int prevDepth = classDepth;
+                classDepth += openCount - closeCount;
+
+                // Method declarations appear at depth 1 (inside class, outside nested blocks)
+                if (prevDepth != 1 && !(prevDepth == 0 && openCount > 0 && i > classStart))
+                    continue;
+
+                var mm = MethodDecl.Match(lines[i]);
+                if (!mm.Success) continue;
+
+                string returnType = mm.Groups[1].Value;
+                string methodName = mm.Groups[2].Value;
+
+                var mi = new MethodInfo
+                {
+                    Name = methodName,
+                    ReturnType = returnType,
+                    StartLine = i,
+                    IsHotPath = HotPathMethods.Contains(methodName),
+                    IsLifecycle = LifecycleMethods.Contains(methodName),
+                    IsOnDestroy = methodName == "OnDestroy",
+                    IsOnDisable = methodName == "OnDisable",
+                    IsOnEnable = methodName == "OnEnable",
+                    IsAwakeOrStart = methodName == "Awake" || methodName == "Start"
+                };
+
+                // Find method body end using brace depth tracking
+                int methodDepth = 0;
+                bool foundBody = false;
+                for (int j = i; j <= classEnd && j < lines.Length; j++)
+                {
+                    int mOpen = LineClassifier.CountChar(lines[j], '{');
+                    int mClose = LineClassifier.CountChar(lines[j], '}');
+                    methodDepth += mOpen - mClose;
+                    if (mOpen > 0 && !foundBody) foundBody = true;
+                    if (foundBody && methodDepth <= 0)
+                    {
+                        mi.EndLine = j;
+                        break;
+                    }
+                    if (j == classEnd || j == lines.Length - 1) mi.EndLine = j;
+                }
+
+                // Scan method body for semantic data
+                ScanMethodBody(lines, mi);
+                methods.Add(mi);
+            }
+            return methods;
+        }
+
+        /// <summary>
+        /// Scan a method body for variable declarations, type inference,
+        /// Destroy() calls, StartCoroutine calls, and event subscriptions.
+        /// </summary>
+        static void ScanMethodBody(string[] lines, MethodInfo mi)
+        {
+            for (int i = mi.StartLine; i <= mi.EndLine && i < lines.Length; i++)
+            {
+                string ln = lines[i];
+                string trimmed = ln.TrimStart();
+                if (trimmed.StartsWith("//")) continue;
+
+                // -- Variable type tracking --
+
+                // Explicit type: Transform t = ...; Animator anim = ...;
+                var explicitMatch = VarDeclExplicit.Match(ln);
+                if (explicitMatch.Success)
+                {
+                    string vType = explicitMatch.Groups[1].Value;
+                    string vName = explicitMatch.Groups[2].Value;
+                    if (!SkipVarTypes.Contains(vType))
+                        mi.LocalVarTypes[vName] = vType;
+                }
+
+                // var x = GetComponent<T>() or var x = obj.GetComponent<T>()
+                var gcMatch = VarDeclGetComponent.Match(ln);
+                if (gcMatch.Success)
+                    mi.LocalVarTypes[gcMatch.Groups[1].Value] = gcMatch.Groups[2].Value;
+
+                // var x = something.gameObject / .transform / etc.
+                var propMatch = VarDeclUnityProp.Match(ln);
+                if (propMatch.Success)
+                {
+                    string propName = propMatch.Groups[2].Value;
+                    if (UnityPropTypes.ContainsKey(propName))
+                        mi.LocalVarTypes[propMatch.Groups[1].Value] = UnityPropTypes[propName];
+                }
+
+                // -- Destroy call tracking --
+                var destroyMatch = DestroyRx.Match(ln);
+                if (destroyMatch.Success)
+                {
+                    string destroyedExpr = destroyMatch.Groups[1].Value;
+                    // Extract base variable name (strip .gameObject etc.)
+                    string baseVar = destroyedExpr.Contains(".")
+                        ? destroyedExpr.Substring(0, destroyedExpr.IndexOf('.'))
+                        : destroyedExpr;
+                    mi.DestroyCalls.Add(new DestroyCall { Line = i, DestroyedVar = baseVar });
+                }
+
+                // -- Coroutine tracking --
+                var crMatch = StartCoroutineRx.Match(ln);
+                if (crMatch.Success)
+                {
+                    string coroutineName = crMatch.Groups[1].Success
+                        ? crMatch.Groups[1].Value   // string form: "MethodName"
+                        : crMatch.Groups[2].Value;  // method form: MethodName(...)
+                    bool stored = CoroutineAssignRx.IsMatch(ln);
+                    mi.StartedCoroutines.Add(new CoroutineStart
+                    {
+                        Line = i,
+                        CoroutineName = coroutineName,
+                        ResultStored = stored
+                    });
+                }
+
+                // -- Event subscription tracking --
+                var subMatch = SubRx.Match(ln);
+                if (subMatch.Success)
+                    mi.EventSubscriptions.Add(new EventSub
+                    {
+                        Source = subMatch.Groups[1].Value,
+                        Handler = subMatch.Groups[2].Value,
+                        Line = i
+                    });
+                var unsubMatch = UnsubRx.Match(ln);
+                if (unsubMatch.Success)
+                    mi.EventUnsubscriptions.Add(new EventSub
+                    {
+                        Source = unsubMatch.Groups[1].Value,
+                        Handler = unsubMatch.Groups[2].Value,
+                        Line = i
+                    });
+            }
         }
     }
 
@@ -3479,6 +3942,26 @@ def _match_is_in_string(line: str, match_pos: int) -> bool:
     return False
 
 
+def _is_inside_except(line: str, all_lines: list[str], idx: int) -> bool:
+    """Return True if this raise is actually inside an except block body."""
+    raise_indent = len(line) - len(line.lstrip())
+    # Walk backward to find the nearest except: at a shallower indent
+    for j in range(idx - 1, max(0, idx - 10) - 1, -1):
+        stripped = all_lines[j].lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        line_indent = len(all_lines[j]) - len(all_lines[j].lstrip())
+        # If we hit a line at same or shallower indent that's NOT except, we're outside
+        if line_indent <= raise_indent and not stripped.startswith("except"):
+            # Check if it's continuation of except block (raise, return, pass, etc)
+            if stripped.startswith(("raise ", "return ", "pass", "logger", "log")):
+                continue
+            return False
+        if stripped.startswith("except") and line_indent < raise_indent:
+            return True
+    return False
+
+
 def _check_mutable_get(line: str, all_lines: list[str], idx: int) -> bool:
     """Return True only if the .get() result variable is actually mutated nearby."""
     # Skip if consumed read-only on the same line
@@ -3650,11 +4133,12 @@ RULES: list[Rule] = [
 
     Rule("PY-COR-11", Severity.MEDIUM, Category.Bug,
          "Re-raising exception without chain -- loses traceback",
-         "Use 'raise X(...) from e'.",
+         "Use 'raise NewException(...) from original_exc' to preserve the traceback chain.",
          re.compile(r"raise\s+\w+\([^)]*\)\s*$"),
          _compile_anti([r"#\s*VB-IGNORE", r"\bfrom\s+\w+"]),
-         guard=lambda line, a, i: any("except" in a[j] for j in range(max(0, i - 5), i)),
-         finding_type=FindingType.STRENGTHENING),
+         guard=lambda line, a, i: _is_inside_except(line, a, i),
+         finding_type=FindingType.STRENGTHENING,
+         confidence=72),
 
     Rule("PY-COR-12", Severity.MEDIUM, Category.Bug,
          "Exception type too broad -- catches bugs with expected errors",
@@ -3676,13 +4160,20 @@ RULES: list[Rule] = [
          re.compile(r"SENTINEL_AST_ONLY"),
          finding_type=FindingType.STRENGTHENING),  # handled by AST pass
 
-    # PY-COR-14: Variable shadowing built-in names
+    # PY-COR-14: Variable shadowing built-in names (skip keyword args like type="X")
     Rule("PY-COR-14", Severity.MEDIUM, Category.Bug,
-         "Variable shadows built-in name (list, dict, set, type, id, etc.)",
-         "Choose a different variable name: items, mapping, group, etc.",
+         "Variable shadows built-in name (list, dict, set, type, id, etc.) — may break code that needs the built-in later",
+         "Rename: items instead of list, mapping instead of dict, obj_type instead of type, obj_id instead of id.",
          re.compile(r"^\s*(list|dict|set|str|int|float|bool|tuple|type|id|input|filter|map|zip|range|len|sum|min|max|any|all|sorted|reversed|hash|next|iter|open|print|format|bytes|object|super)\s*=\s*"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"typing", r"import"]),
-         finding_type=FindingType.STRENGTHENING),
+         guard=lambda line, a, i: (
+             # Skip keyword arguments (line ends with , or ) — inside function call)
+             not line.rstrip().endswith(",")
+             and not line.rstrip().endswith(")")
+             # Skip if previous line has open paren (multi-line function call)
+             and not (i > 0 and "(" in a[i-1] and ")" not in a[i-1])),
+         finding_type=FindingType.STRENGTHENING,
+         confidence=72),
 
     # PY-COR-15: Late binding closure in loop
     Rule("PY-COR-15", Severity.HIGH, Category.Bug,

@@ -187,6 +187,26 @@ def _match_is_in_string(line: str, match_pos: int) -> bool:
     return False
 
 
+def _is_inside_except(line: str, all_lines: list[str], idx: int) -> bool:
+    """Return True if this raise is actually inside an except block body."""
+    raise_indent = len(line) - len(line.lstrip())
+    # Walk backward to find the nearest except: at a shallower indent
+    for j in range(idx - 1, max(0, idx - 10) - 1, -1):
+        stripped = all_lines[j].lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        line_indent = len(all_lines[j]) - len(all_lines[j].lstrip())
+        # If we hit a line at same or shallower indent that's NOT except, we're outside
+        if line_indent <= raise_indent and not stripped.startswith("except"):
+            # Check if it's continuation of except block (raise, return, pass, etc)
+            if stripped.startswith(("raise ", "return ", "pass", "logger", "log")):
+                continue
+            return False
+        if stripped.startswith("except") and line_indent < raise_indent:
+            return True
+    return False
+
+
 def _check_mutable_get(line: str, all_lines: list[str], idx: int) -> bool:
     """Return True only if the .get() result variable is actually mutated nearby."""
     # Skip if consumed read-only on the same line
@@ -358,11 +378,12 @@ RULES: list[Rule] = [
 
     Rule("PY-COR-11", Severity.MEDIUM, Category.Bug,
          "Re-raising exception without chain -- loses traceback",
-         "Use 'raise X(...) from e'.",
+         "Use 'raise NewException(...) from original_exc' to preserve the traceback chain.",
          re.compile(r"raise\s+\w+\([^)]*\)\s*$"),
          _compile_anti([r"#\s*VB-IGNORE", r"\bfrom\s+\w+"]),
-         guard=lambda line, a, i: any("except" in a[j] for j in range(max(0, i - 5), i)),
-         finding_type=FindingType.STRENGTHENING),
+         guard=lambda line, a, i: _is_inside_except(line, a, i),
+         finding_type=FindingType.STRENGTHENING,
+         confidence=72),
 
     Rule("PY-COR-12", Severity.MEDIUM, Category.Bug,
          "Exception type too broad -- catches bugs with expected errors",
@@ -384,13 +405,20 @@ RULES: list[Rule] = [
          re.compile(r"SENTINEL_AST_ONLY"),
          finding_type=FindingType.STRENGTHENING),  # handled by AST pass
 
-    # PY-COR-14: Variable shadowing built-in names
+    # PY-COR-14: Variable shadowing built-in names (skip keyword args like type="X")
     Rule("PY-COR-14", Severity.MEDIUM, Category.Bug,
-         "Variable shadows built-in name (list, dict, set, type, id, etc.)",
-         "Choose a different variable name: items, mapping, group, etc.",
+         "Variable shadows built-in name (list, dict, set, type, id, etc.) — may break code that needs the built-in later",
+         "Rename: items instead of list, mapping instead of dict, obj_type instead of type, obj_id instead of id.",
          re.compile(r"^\s*(list|dict|set|str|int|float|bool|tuple|type|id|input|filter|map|zip|range|len|sum|min|max|any|all|sorted|reversed|hash|next|iter|open|print|format|bytes|object|super)\s*=\s*"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"typing", r"import"]),
-         finding_type=FindingType.STRENGTHENING),
+         guard=lambda line, a, i: (
+             # Skip keyword arguments (line ends with , or ) — inside function call)
+             not line.rstrip().endswith(",")
+             and not line.rstrip().endswith(")")
+             # Skip if previous line has open paren (multi-line function call)
+             and not (i > 0 and "(" in a[i-1] and ")" not in a[i-1])),
+         finding_type=FindingType.STRENGTHENING,
+         confidence=72),
 
     # PY-COR-15: Late binding closure in loop
     Rule("PY-COR-15", Severity.HIGH, Category.Bug,
