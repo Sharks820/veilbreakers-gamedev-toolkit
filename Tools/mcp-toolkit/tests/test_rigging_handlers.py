@@ -1069,7 +1069,7 @@ class TestStatusEffectSockets:
     def test_head_socket_exists_for_all_templates(self):
         from blender_addon.handlers.rigging import STATUS_EFFECT_SOCKETS
         assert "head" in STATUS_EFFECT_SOCKETS
-        assert len(STATUS_EFFECT_SOCKETS["head"]) >= 4
+        assert len(STATUS_EFFECT_SOCKETS["head"]) >= 7
 
     def test_get_socket_returns_bone_name(self):
         from blender_addon.handlers.rigging import _get_status_effect_socket
@@ -1085,6 +1085,12 @@ class TestStatusEffectSockets:
         from blender_addon.handlers.rigging import STATUS_EFFECT_SOCKETS
         for template in ("humanoid", "quadruped", "arachnid", "floating", "insect", "dragon"):
             assert template in STATUS_EFFECT_SOCKETS["root"]
+
+    def test_serpent_and_multi_armed_have_sockets(self):
+        from blender_addon.handlers.rigging import STATUS_EFFECT_SOCKETS
+        assert "serpent" in STATUS_EFFECT_SOCKETS["root"]
+        assert "multi_armed" in STATUS_EFFECT_SOCKETS["root"]
+        assert "amorphous" in STATUS_EFFECT_SOCKETS["root"]
 
 
 # ---------------------------------------------------------------------------
