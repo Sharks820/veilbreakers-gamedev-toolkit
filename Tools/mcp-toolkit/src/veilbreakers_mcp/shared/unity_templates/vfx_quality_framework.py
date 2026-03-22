@@ -50,7 +50,6 @@ def generate_vfx_pool_manager_script(
 
     script = f'''using UnityEngine;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 
 /// <summary>
@@ -278,10 +277,17 @@ public class VFXPoolManager : MonoBehaviour
         foreach (var ps in systems)
         {{
             ps.Clear();
+            // Configure stop callback instead of coroutine (Fix 3)
+            var main = ps.main;
+            main.stopAction = ParticleSystemStopAction.Callback;
             ps.Play();
         }}
 
-        StartCoroutine(AutoReturnWhenStopped(vfxType, go, systems));
+        // Attach or configure the callback helper (Fix 3)
+        var helper = go.GetComponent<VFXAutoReturnHelper>();
+        if (helper == null)
+            helper = go.AddComponent<VFXAutoReturnHelper>();
+        helper.Configure(vfxType, this);
 
         return go;
     }}
@@ -327,32 +333,11 @@ public class VFXPoolManager : MonoBehaviour
     }}
 
     // -----------------------------------------------------------------------
-    // Auto-return coroutine
+    // Public return accessor (used by VFXAutoReturnHelper callback -- Fix 3)
     // -----------------------------------------------------------------------
-    private IEnumerator AutoReturnWhenStopped(string vfxType, GameObject go, ParticleSystem[] systems)
+    public void ReturnVFXFromCallback(string vfxType, GameObject go)
     {{
-        // Wait a frame to let particles initialize
-        yield return null;
-
-        // Poll until all particle systems have stopped
-        bool alive = true;
-        while (alive && go != null && go.activeInHierarchy)
-        {{
-            alive = false;
-            for (int i = 0; i < systems.Length; i++)
-            {{
-                if (systems[i] != null && systems[i].IsAlive(true))
-                {{
-                    alive = true;
-                    break;
-                }}
-            }}
-            if (alive)
-                yield return new WaitForSeconds(0.25f);
-        }}
-
-        if (go != null && go.activeInHierarchy)
-            ReturnVFX(vfxType, go);
+        ReturnVFX(vfxType, go);
     }}
 
     // -----------------------------------------------------------------------
@@ -462,6 +447,32 @@ public class VFXPoolManager : MonoBehaviour
                $"Culled This Frame: {{CulledThisFrame}}";
     }}
 }}
+
+/// <summary>
+/// Helper component attached to pooled VFX objects.
+/// Uses OnParticleSystemStopped callback instead of coroutines (Fix 3).
+/// </summary>
+public class VFXAutoReturnHelper : MonoBehaviour
+{{
+    private string _vfxType;
+    private VFXPoolManager _manager;
+
+    public void Configure(string vfxType, VFXPoolManager manager)
+    {{
+        _vfxType = vfxType;
+        _manager = manager;
+    }}
+
+    /// <summary>
+    /// Called by Unity when ParticleSystem.MainModule.stopAction == Callback
+    /// and the particle system stops playing.
+    /// </summary>
+    private void OnParticleSystemStopped()
+    {{
+        if (_manager != null && gameObject.activeInHierarchy)
+            _manager.ReturnVFXFromCallback(_vfxType, gameObject);
+    }}
+}}
 '''
 
     return {
@@ -545,14 +556,22 @@ public class VFXLODController : MonoBehaviour
     public int[] distortionLayerIndices = new int[0];
 
     // -------------------------------------------------------------------
+    // Static registry (Fix 9 -- replaces FindObjectsByType in quality switching)
+    // -------------------------------------------------------------------
+    private static readonly HashSet<VFXLODController> _activeControllers = new HashSet<VFXLODController>();
+    public static IReadOnlyCollection<VFXLODController> ActiveControllers => _activeControllers;
+
+    // -------------------------------------------------------------------
     // Internal state
     // -------------------------------------------------------------------
     private ParticleSystem[] _allSystems;
     private float[] _baseEmissionRates;
+    private float[] _baseAlpha;
     private bool[] _systemEnabled;
     private Light[] _lights;
     private float[] _baseLightIntensities;
     private LODTier _currentTier = LODTier.Close;
+    private float _currentBlend = 1.0f; // Smooth interpolation factor (Fix 4)
     private float _nextUpdateTime;
     private Camera _mainCamera;
     private Renderer[] _renderers;
@@ -568,21 +587,29 @@ public class VFXLODController : MonoBehaviour
 
     private void OnEnable()
     {
+        _activeControllers.Add(this); // Fix 9 -- register
         _mainCamera = Camera.main;
         _nextUpdateTime = 0f;
         ApplyTier(LODTier.Close);
+    }
+
+    private void OnDisable()
+    {
+        _activeControllers.Remove(this); // Fix 9 -- unregister
     }
 
     private void CacheComponents()
     {
         _allSystems = GetComponentsInChildren<ParticleSystem>(true);
         _baseEmissionRates = new float[_allSystems.Length];
+        _baseAlpha = new float[_allSystems.Length];
         _systemEnabled = new bool[_allSystems.Length];
 
         for (int i = 0; i < _allSystems.Length; i++)
         {
             var emission = _allSystems[i].emission;
             _baseEmissionRates[i] = emission.rateOverTime.constant;
+            _baseAlpha[i] = _allSystems[i].main.startColor.color.a;
             _systemEnabled[i] = true;
         }
 
@@ -610,11 +637,35 @@ public class VFXLODController : MonoBehaviour
         }
 
         LODTier newTier = EvaluateTier();
-        if (newTier != _currentTier)
+
+        // Smooth interpolation between tiers to avoid popping (Fix 4)
+        float dist = Vector3.Distance(_mainCamera.transform.position, transform.position);
+        float blend = CalculateBlend(dist);
+
+        if (newTier != _currentTier || Mathf.Abs(blend - _currentBlend) > 0.01f)
         {
-            ApplyTier(newTier);
             _currentTier = newTier;
+            _currentBlend = blend;
+            ApplyTierSmooth(newTier, blend);
         }
+    }
+
+    /// <summary>
+    /// Calculate a 0-1 blend factor based on distance between tier boundaries (Fix 4).
+    /// 1.0 = full Close quality, 0.0 = fully culled.
+    /// Uses InverseLerp between tier boundaries for smooth transitions.
+    /// </summary>
+    private float CalculateBlend(float dist)
+    {
+        if (dist >= farToCulledDist)
+            return 0f;
+        if (dist >= mediumToFarDist)
+            return Mathf.Lerp(farEmissionMult, mediumEmissionMult,
+                Mathf.InverseLerp(farToCulledDist, mediumToFarDist, dist));
+        if (dist >= closeToMediumDist)
+            return Mathf.Lerp(mediumEmissionMult, 1f,
+                Mathf.InverseLerp(mediumToFarDist, closeToMediumDist, dist));
+        return 1f;
     }
 
     // -------------------------------------------------------------------
@@ -692,35 +743,55 @@ public class VFXLODController : MonoBehaviour
     }
 
     // -------------------------------------------------------------------
-    // Apply quality tier
+    // Apply quality tier (kept for direct preset application)
     // -------------------------------------------------------------------
     private void ApplyTier(LODTier tier)
+    {
+        float blend = tier == LODTier.Close ? 1f :
+                      tier == LODTier.Medium ? mediumEmissionMult :
+                      tier == LODTier.Far ? farEmissionMult : 0f;
+        _currentTier = tier;
+        _currentBlend = blend;
+        ApplyTierSmooth(tier, blend);
+    }
+
+    // -------------------------------------------------------------------
+    // Smooth tier application with lerped emission and alpha (Fix 4)
+    // -------------------------------------------------------------------
+    private void ApplyTierSmooth(LODTier tier, float blend)
     {
         switch (tier)
         {
             case LODTier.Close:
-                SetEmissionMultiplier(1.0f);
+                SetEmissionMultiplierSmooth(blend);
+                SetAlphaMultiplier(blend);
                 EnableAllSystems(true);
-                SetLightsActive(true, 1.0f);
+                SetCollisionEnabled(true);
+                SetLightsActive(true, blend);
                 break;
 
             case LODTier.Medium:
-                SetEmissionMultiplier(mediumEmissionMult);
+                SetEmissionMultiplierSmooth(blend);
+                SetAlphaMultiplier(blend);
                 DisableSecondaryLayers();
                 DisableDistortionLayers();
-                SetLightsActive(true, 0.6f);
+                SetCollisionEnabled(true);
+                SetLightsActive(true, blend);
                 break;
 
             case LODTier.Far:
-                SetEmissionMultiplier(farEmissionMult);
+                SetEmissionMultiplierSmooth(blend);
+                SetAlphaMultiplier(blend);
                 // Only keep primary layer (index 0)
                 for (int i = 1; i < _allSystems.Length; i++)
                     SetSystemActive(i, false);
-                SetLightsActive(true, 0.3f);
+                SetCollisionEnabled(false); // Fix 10 -- disable collision at Far
+                SetLightsActive(true, blend);
                 break;
 
             case LODTier.Culled:
                 EnableAllSystems(false);
+                SetCollisionEnabled(false); // Fix 10 -- disable collision at Culled
                 SetLightsActive(false, 0f);
                 break;
         }
@@ -729,13 +800,38 @@ public class VFXLODController : MonoBehaviour
     // -------------------------------------------------------------------
     // System control helpers
     // -------------------------------------------------------------------
-    private void SetEmissionMultiplier(float mult)
+
+    /// <summary>Smoothly interpolated emission rate (Fix 4).</summary>
+    private void SetEmissionMultiplierSmooth(float blend)
     {
         for (int i = 0; i < _allSystems.Length; i++)
         {
             if (!_systemEnabled[i]) continue;
             var emission = _allSystems[i].emission;
-            emission.rateOverTime = _baseEmissionRates[i] * mult;
+            emission.rateOverTime = _baseEmissionRates[i] * blend;
+        }
+    }
+
+    /// <summary>Smoothly interpolated alpha via startColor (Fix 4).</summary>
+    private void SetAlphaMultiplier(float blend)
+    {
+        for (int i = 0; i < _allSystems.Length; i++)
+        {
+            if (!_systemEnabled[i]) continue;
+            var main = _allSystems[i].main;
+            Color c = main.startColor.color;
+            c.a = _baseAlpha[i] * blend;
+            main.startColor = c;
+        }
+    }
+
+    /// <summary>Enable or disable collision module on all child systems (Fix 10).</summary>
+    private void SetCollisionEnabled(bool enabled)
+    {
+        for (int i = 0; i < _allSystems.Length; i++)
+        {
+            var collision = _allSystems[i].collision;
+            collision.enabled = enabled;
         }
     }
 
@@ -890,10 +986,55 @@ using System.Collections.Generic;
 ///       .Build(position, parent);
 ///
 /// Particle counts are budget-conscious:
-///   Core glow: 5-15 | Sparks: 10-30 | Smoke: 5-10 | Total per effect: 20-55
+///   Core glow: 5-15 | Sparks: 10-30 | Smoke: 5-25 | Total per effect: 20-70
 /// </summary>
 public class AAAParticleBuilder
 {
+    // -------------------------------------------------------------------
+    // Cached shader references (Fix 1 -- avoid Shader.Find at runtime)
+    // -------------------------------------------------------------------
+    private static Shader _urpParticlesUnlit;
+    private static Shader _particlesStandardUnlit;
+    private static Shader _mobileParticlesAdditive;
+    private static Shader _vbDistortion;
+    private static bool _shadersInitialized;
+
+#if UNITY_EDITOR
+    [UnityEditor.InitializeOnLoadMethod]
+#endif
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void InitShaders()
+    {
+        _urpParticlesUnlit = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        _particlesStandardUnlit = Shader.Find("Particles/Standard Unlit");
+        _mobileParticlesAdditive = Shader.Find("Mobile/Particles/Additive");
+        _vbDistortion = Shader.Find("VeilBreakers/Distortion");
+        _shadersInitialized = true;
+    }
+
+    private static Shader GetAdditiveShader()
+    {
+        if (!_shadersInitialized) InitShaders();
+        if (_urpParticlesUnlit != null) return _urpParticlesUnlit;
+        if (_particlesStandardUnlit != null) return _particlesStandardUnlit;
+        return _mobileParticlesAdditive;
+    }
+
+    private static Shader GetAlphaBlendShader()
+    {
+        if (!_shadersInitialized) InitShaders();
+        if (_urpParticlesUnlit != null) return _urpParticlesUnlit;
+        return _particlesStandardUnlit;
+    }
+
+    private static Shader GetDistortionShader()
+    {
+        if (!_shadersInitialized) InitShaders();
+        if (_vbDistortion != null) return _vbDistortion;
+        if (_urpParticlesUnlit != null) return _urpParticlesUnlit;
+        return _particlesStandardUnlit;
+    }
+
     // -------------------------------------------------------------------
     // Standard AAA curves (the secret to AAA look)
     // -------------------------------------------------------------------
@@ -1071,7 +1212,7 @@ public class AAAParticleBuilder
             emission.rateOverTime = maxParticles * 0.3f / Mathf.Max(lifetime, 0.1f);
             emission.SetBursts(new ParticleSystem.Burst[]
             {
-                new ParticleSystem.Burst(0f, (short)(maxParticles * 0.7f))
+                new ParticleSystem.Burst(0f, Mathf.RoundToInt(maxParticles * 0.7f))
             });
 
             // Shape: small sphere for concentrated glow
@@ -1138,7 +1279,7 @@ public class AAAParticleBuilder
             emission.rateOverTime = 0f;
             emission.SetBursts(new ParticleSystem.Burst[]
             {
-                new ParticleSystem.Burst(0f, (short)count)
+                new ParticleSystem.Burst(0f, count)
             });
 
             // Cone shape for directional spread
@@ -1224,7 +1365,7 @@ public class AAAParticleBuilder
             emission.rateOverTime = count * 0.3f / Mathf.Max(lifetime, 0.1f);
             emission.SetBursts(new ParticleSystem.Burst[]
             {
-                new ParticleSystem.Burst(0.05f, (short)Mathf.Max(1, count / 3))
+                new ParticleSystem.Burst(0.05f, Mathf.Max(1, count / 3))
             });
 
             // Sphere shape for organic spread
@@ -1297,7 +1438,7 @@ public class AAAParticleBuilder
             emission.rateOverTime = count / Mathf.Max(lifetime, 0.1f) * 0.5f;
             emission.SetBursts(new ParticleSystem.Burst[]
             {
-                new ParticleSystem.Burst(0f, (short)(count / 2 + 1))
+                new ParticleSystem.Burst(0f, count / 2 + 1)
             });
 
             var shape = ps.shape;
@@ -1495,6 +1636,21 @@ public class AAAParticleBuilder
         );
     }
 
+    /// <summary>
+    /// Setup a MaterialPropertyBlock for per-instance color (Fix 2 -- avoids unique material instances).
+    /// Use as primary path; falls back to material cache when MPB is not supported.
+    /// </summary>
+    public static void SetupMaterialPropertyBlock(ParticleSystemRenderer renderer, Color color)
+    {
+        if (renderer == null) return;
+        var mpb = new MaterialPropertyBlock();
+        renderer.GetPropertyBlock(mpb);
+        mpb.SetColor("_BaseColor", color);
+        if (renderer.sharedMaterial != null && renderer.sharedMaterial.HasProperty("_EmissionColor"))
+            mpb.SetColor("_EmissionColor", color * 2f);
+        renderer.SetPropertyBlock(mpb);
+    }
+
     /// <summary>Create or retrieve cached Additive particle material.</summary>
     private static Material GetOrCreateAdditiveParticleMaterial(Color color)
     {
@@ -1502,11 +1658,7 @@ public class AAAParticleBuilder
         if (_materialCache.TryGetValue(key, out Material cached) && cached != null)
             return cached;
 
-        Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-        if (shader == null)
-            shader = Shader.Find("Particles/Standard Unlit");
-        if (shader == null)
-            shader = Shader.Find("Mobile/Particles/Additive");
+        Shader shader = GetAdditiveShader();
 
         Material mat = new Material(shader);
         mat.name = $"VFX_Additive_{ColorToHex(color)}";
@@ -1527,16 +1679,14 @@ public class AAAParticleBuilder
         return mat;
     }
 
-    /// <summary>Create or retrieve cached AlphaBlend particle material (for smoke).</summary>
+    /// <summary>Create or retrieve cached AlphaBlend particle material (for smoke/blood -- Fix 5).</summary>
     private static Material GetOrCreateAlphaBlendParticleMaterial(Color color)
     {
         int key = MaterialKey(color, 0);
         if (_materialCache.TryGetValue(key, out Material cached) && cached != null)
             return cached;
 
-        Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-        if (shader == null)
-            shader = Shader.Find("Particles/Standard Unlit");
+        Shader shader = GetAlphaBlendShader();
 
         Material mat = new Material(shader);
         mat.name = $"VFX_AlphaBlend_{ColorToHex(color)}";
@@ -1544,7 +1694,7 @@ public class AAAParticleBuilder
         if (mat.HasProperty("_Surface"))
         {
             mat.SetFloat("_Surface", 1f);
-            mat.SetFloat("_Blend", 0f);
+            mat.SetFloat("_Blend", 0f); // Alpha blend, NOT additive (Fix 5 -- blood must use alpha blend)
         }
         mat.SetColor("_BaseColor", color);
         mat.renderQueue = 3000;
@@ -1559,11 +1709,7 @@ public class AAAParticleBuilder
         if (_materialCache.TryGetValue(key, out Material cached) && cached != null)
             return cached;
 
-        Shader shader = Shader.Find("VeilBreakers/Distortion");
-        if (shader == null)
-            shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-        if (shader == null)
-            shader = Shader.Find("Particles/Standard Unlit");
+        Shader shader = GetDistortionShader();
 
         Material mat = new Material(shader);
         mat.name = "VFX_Distortion";
@@ -1693,13 +1839,13 @@ public class VFXQualityPresets : ScriptableObject
         public bool enableSecondaryLayers;
         public bool enableSmoke;
         public float[] lodDistances; // [closeToMed, medToFar, farToCulled]
-        public ShadowCastingMode shadowCasting;
+        public VFXShadowMode shadowCasting;
 
         public TierSettings() { }
         public TierSettings(
             string name, int maxParticles, int maxEffects, float mult,
             bool distortion, bool lights, bool secondary, bool smoke,
-            float[] lods, ShadowCastingMode shadows)
+            float[] lods, VFXShadowMode shadows)
         {
             tierName = name;
             maxActiveParticles = maxParticles;
@@ -1714,7 +1860,7 @@ public class VFXQualityPresets : ScriptableObject
         }
     }
 
-    public enum ShadowCastingMode { Off, OnClose, On }
+    public enum VFXShadowMode { Off, OnClose, On }
 
     // -------------------------------------------------------------------
     // Preset data
@@ -1723,13 +1869,13 @@ public class VFXQualityPresets : ScriptableObject
     public TierSettings[] tiers = new TierSettings[]
     {
         new TierSettings("LOW",    500,  10, 0.3f, false, false, false, false,
-            new float[] { 10f, 25f, 50f },  ShadowCastingMode.Off),
+            new float[] { 10f, 25f, 50f },  VFXShadowMode.Off),
         new TierSettings("MEDIUM", 1000, 20, 0.6f, false, true,  true,  false,
-            new float[] { 15f, 35f, 65f },  ShadowCastingMode.Off),
+            new float[] { 15f, 35f, 65f },  VFXShadowMode.Off),
         new TierSettings("HIGH",   2000, 40, 1.0f, true,  true,  true,  true,
-            new float[] { 20f, 50f, 100f }, ShadowCastingMode.OnClose),
+            new float[] { 20f, 50f, 100f }, VFXShadowMode.OnClose),
         new TierSettings("ULTRA",  4000, 80, 1.5f, true,  true,  true,  true,
-            new float[] { 30f, 60f, 120f }, ShadowCastingMode.On),
+            new float[] { 30f, 60f, 120f }, VFXShadowMode.On),
     };
 
     [Header("Runtime State")]
@@ -1783,10 +1929,10 @@ public class VFXQualityPresets : ScriptableObject
             VFXPoolManager.Instance.ParticleMultiplier = settings.particleMultiplier;
         }
 
-        // Update all LOD controllers in scene
-        var lodControllers = FindObjectsByType<VFXLODController>(FindObjectsSortMode.None);
-        foreach (var lod in lodControllers)
+        // Update all LOD controllers via static registry (Fix 9 -- no FindObjectsByType)
+        foreach (var lod in VFXLODController.ActiveControllers)
         {
+            if (lod == null) continue;
             if (settings.lodDistances != null && settings.lodDistances.Length >= 3)
             {
                 lod.closeToMediumDist = settings.lodDistances[0];
