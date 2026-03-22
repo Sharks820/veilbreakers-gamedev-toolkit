@@ -13,37 +13,16 @@ Exports:
     generate_sprite_editor_config_script -- TWO-03: C# editor script for Sprite Editor config
     generate_asset_postprocessor_script -- PIPE-08: C# AssetPostprocessor with folder rules
 
-Helpers:
-    _sanitize_cs_string                 -- C# string literal escaping
-    _sanitize_cs_identifier             -- C# identifier sanitization
+Helpers (imported from _cs_sanitize):
+    sanitize_cs_string                  -- C# string literal escaping
+    sanitize_cs_identifier              -- C# identifier sanitization
 """
 
 from __future__ import annotations
 
 import re
 
-
-# ---------------------------------------------------------------------------
-# Sanitization helpers (each template module has its own copy)
-# ---------------------------------------------------------------------------
-
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal.
-
-    Prevents C# code injection by escaping backslashes, quotes, and
-    newlines.
-    """
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier (class name, method name)."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # C# reserved words (needed by _safe_namespace)
@@ -471,12 +450,12 @@ def generate_sprite_atlas_script(
     Returns:
         Complete C# editor script source.
     """
-    safe_name = _sanitize_cs_identifier(atlas_name)
-    safe_folder = _sanitize_cs_string(source_folder)
+    safe_name = sanitize_cs_identifier(atlas_name)
+    safe_folder = sanitize_cs_string(source_folder)
 
     if not output_path:
-        output_path = f"Assets/Art/Atlases/{_sanitize_cs_identifier(atlas_name)}.spriteatlas"
-    safe_output = _sanitize_cs_string(output_path)
+        output_path = f"Assets/Art/Atlases/{sanitize_cs_identifier(atlas_name)}.spriteatlas"
+    safe_output = sanitize_cs_string(output_path)
 
     # Ensure .spriteatlas extension (V1 API)
     if not safe_output.endswith(".spriteatlas"):
@@ -607,12 +586,12 @@ def generate_sprite_animation_script(
     Returns:
         Complete C# editor script source.
     """
-    safe_name = _sanitize_cs_identifier(clip_name)
-    safe_folder = _sanitize_cs_string(sprite_folder)
+    safe_name = sanitize_cs_identifier(clip_name)
+    safe_folder = sanitize_cs_string(sprite_folder)
 
     if not output_path:
-        output_path = f"Assets/Art/Animations/{_sanitize_cs_identifier(clip_name)}.anim"
-    safe_output = _sanitize_cs_string(output_path)
+        output_path = f"Assets/Art/Animations/{sanitize_cs_identifier(clip_name)}.anim"
+    safe_output = sanitize_cs_string(output_path)
 
     wrap_mode = "WrapMode.Loop" if loop else "WrapMode.Once"
     loop_str = "true" if loop else "false"
@@ -743,8 +722,8 @@ def generate_sprite_editor_config_script(
     Returns:
         Complete C# editor script source.
     """
-    safe_path = _sanitize_cs_string(sprite_path)
-    safe_class = _sanitize_cs_identifier(
+    safe_path = sanitize_cs_string(sprite_path)
+    safe_class = sanitize_cs_identifier(
         sprite_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     )
 
@@ -861,8 +840,8 @@ def generate_asset_postprocessor_script(
     Returns:
         Complete C# AssetPostprocessor script source.
     """
-    safe_name = _sanitize_cs_identifier(processor_name)
-    safe_ns = _sanitize_cs_identifier(namespace.replace(".", "_"))
+    safe_name = sanitize_cs_identifier(processor_name)
+    safe_ns = sanitize_cs_identifier(namespace.replace(".", "_"))
     clean_ns = _safe_namespace(namespace)
 
     # Build texture rules code
@@ -1026,7 +1005,7 @@ def _build_preprocess_method(
     for rule in rules:
         folder_pattern = rule.get("folder_pattern", "")
         settings = rule.get("settings_dict", {})
-        safe_pattern = _sanitize_cs_string(folder_pattern)
+        safe_pattern = sanitize_cs_string(folder_pattern)
 
         keyword = "if" if first else "else if"
         lines.append(

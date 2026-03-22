@@ -26,19 +26,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -117,10 +105,10 @@ def generate_cinemachine_setup_script(
     if damping is None:
         damping = [1.0, 0.5, 0.0]
 
-    safe_cam_type = _sanitize_cs_identifier(camera_type)
-    safe_follow = _sanitize_cs_string(follow_target)
-    safe_look = _sanitize_cs_string(look_at_target)
-    safe_ns = _sanitize_cs_identifier(namespace.replace(".", ""))
+    safe_cam_type = sanitize_cs_identifier(camera_type)
+    safe_follow = sanitize_cs_string(follow_target)
+    safe_look = sanitize_cs_string(look_at_target)
+    safe_ns = sanitize_cs_identifier(namespace.replace(".", ""))
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -224,7 +212,7 @@ def generate_state_driven_camera_script(
             {"state_name": "Combat", "camera_name": "CombatCamera"},
         ]
 
-    safe_name = _sanitize_cs_identifier(camera_name)
+    safe_name = sanitize_cs_identifier(camera_name)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -244,7 +232,7 @@ def generate_state_driven_camera_script(
     lines.append(f"{indent}    public static void Execute()")
     lines.append(f"{indent}    {{")
 
-    lines.append(f'{indent}        GameObject sdGo = new GameObject("{_sanitize_cs_string(camera_name)}");')
+    lines.append(f'{indent}        GameObject sdGo = new GameObject("{sanitize_cs_string(camera_name)}");')
     lines.append(f"{indent}        CinemachineStateDrivenCamera sdc = sdGo.AddComponent<CinemachineStateDrivenCamera>();")
     lines.append("")
 
@@ -260,22 +248,22 @@ def generate_state_driven_camera_script(
     # Create child cameras for each state
     lines.append(f"{indent}        // Create child cameras for each state")
     for state_info in states:
-        s_name = _sanitize_cs_string(state_info.get("state_name", "Default"))
-        c_name = _sanitize_cs_string(state_info.get("camera_name", "Camera"))
-        lines.append(f'{indent}        GameObject child_{_sanitize_cs_identifier(s_name)} = new GameObject("{c_name}");')
-        lines.append(f"{indent}        child_{_sanitize_cs_identifier(s_name)}.transform.SetParent(sdGo.transform);")
-        lines.append(f"{indent}        CinemachineCamera cm_{_sanitize_cs_identifier(s_name)} = child_{_sanitize_cs_identifier(s_name)}.AddComponent<CinemachineCamera>();")
+        s_name = sanitize_cs_string(state_info.get("state_name", "Default"))
+        c_name = sanitize_cs_string(state_info.get("camera_name", "Camera"))
+        lines.append(f'{indent}        GameObject child_{sanitize_cs_identifier(s_name)} = new GameObject("{c_name}");')
+        lines.append(f"{indent}        child_{sanitize_cs_identifier(s_name)}.transform.SetParent(sdGo.transform);")
+        lines.append(f"{indent}        CinemachineCamera cm_{sanitize_cs_identifier(s_name)} = child_{sanitize_cs_identifier(s_name)}.AddComponent<CinemachineCamera>();")
     lines.append("")
 
     # Populate Instructions array to map animation states to child cameras
     lines.append(f"{indent}        // Map animation states to child cameras via Instructions")
     lines.append(f"{indent}        var instructions = new System.Collections.Generic.List<CinemachineStateDrivenCamera.Instruction>();")
     for state_info in states:
-        s_name = _sanitize_cs_string(state_info.get("state_name", "Default"))
+        s_name = sanitize_cs_string(state_info.get("state_name", "Default"))
         lines.append(f"{indent}        instructions.Add(new CinemachineStateDrivenCamera.Instruction")
         lines.append(f"{indent}        {{")
         lines.append(f'{indent}            FullHash = Animator.StringToHash("{s_name}"),')
-        lines.append(f"{indent}            Camera = cm_{_sanitize_cs_identifier(s_name)}")
+        lines.append(f"{indent}            Camera = cm_{sanitize_cs_identifier(s_name)}")
         lines.append(f"{indent}        }});")
     lines.append(f"{indent}        sdc.Instructions = instructions.ToArray();")
     lines.append("")
@@ -285,7 +273,7 @@ def generate_state_driven_camera_script(
     lines.append("")
 
     lines.append(f"{indent}        // Write result")
-    lines.append(f'{indent}        string json = "{{\\"status\\":\\"success\\",\\"camera_name\\":\\"{_sanitize_cs_string(camera_name)}\\",\\"state_count\\":{len(states)}}}";')
+    lines.append(f'{indent}        string json = "{{\\"status\\":\\"success\\",\\"camera_name\\":\\"{sanitize_cs_string(camera_name)}\\",\\"state_count\\":{len(states)}}}";')
     lines.append(f'{indent}        File.WriteAllText("Temp/vb_result.json", json);')
     lines.append(f'{indent}        Debug.Log("[VeilBreakers] State-driven camera created with {len(states)} states");')
 
@@ -391,7 +379,7 @@ def generate_camera_blend_script(
     if custom_blends is None:
         custom_blends = []
 
-    safe_style = _sanitize_cs_identifier(blend_style)
+    safe_style = sanitize_cs_identifier(blend_style)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -436,10 +424,10 @@ def generate_camera_blend_script(
         lines.append(f"{indent}        CinemachineBlenderSettings blenderSettings = ScriptableObject.CreateInstance<CinemachineBlenderSettings>();")
         lines.append(f"{indent}        CinemachineBlenderSettings.CustomBlend[] blends = new CinemachineBlenderSettings.CustomBlend[{len(custom_blends)}];")
         for i, blend in enumerate(custom_blends):
-            from_cam = _sanitize_cs_string(blend.get("from_cam", ""))
-            to_cam = _sanitize_cs_string(blend.get("to_cam", ""))
+            from_cam = sanitize_cs_string(blend.get("from_cam", ""))
+            to_cam = sanitize_cs_string(blend.get("to_cam", ""))
             btime = blend.get("time", 1.0)
-            bstyle = _sanitize_cs_identifier(blend.get("style", "EaseInOut"))
+            bstyle = sanitize_cs_identifier(blend.get("style", "EaseInOut"))
             lines.append(f"{indent}        blends[{i}] = new CinemachineBlenderSettings.CustomBlend")
             lines.append(f"{indent}        {{")
             lines.append(f'{indent}            From = "{from_cam}",')
@@ -495,8 +483,8 @@ def generate_timeline_setup_script(
             {"type": "cinemachine", "name": "Camera Cuts"},
         ]
 
-    safe_name = _sanitize_cs_identifier(timeline_name)
-    safe_path = _sanitize_cs_string(output_path)
+    safe_name = sanitize_cs_identifier(timeline_name)
+    safe_path = sanitize_cs_string(output_path)
 
     # Map track types to C# types
     track_type_map = {
@@ -555,7 +543,7 @@ def generate_timeline_setup_script(
     lines.append(f"{indent}        // Add tracks (after asset is persisted)")
     for track_info in tracks:
         ttype = track_info.get("type", "animation")
-        tname = _sanitize_cs_string(track_info.get("name", "Track"))
+        tname = sanitize_cs_string(track_info.get("name", "Track"))
         cs_type = track_type_map.get(ttype, "AnimationTrack")
         lines.append(f'{indent}        timeline.CreateTrack<{cs_type}>(null, "{tname}");')
     lines.append("")
@@ -595,9 +583,9 @@ def generate_cutscene_setup_script(
     Creates a PlayableDirector on the selected or new GameObject, assigns
     the specified Timeline asset, and configures wrap mode and play-on-awake.
     """
-    safe_name = _sanitize_cs_identifier(cutscene_name)
-    safe_timeline = _sanitize_cs_string(timeline_path)
-    safe_wrap = _sanitize_cs_identifier(wrap_mode)
+    safe_name = sanitize_cs_identifier(cutscene_name)
+    safe_timeline = sanitize_cs_string(timeline_path)
+    safe_wrap = sanitize_cs_identifier(wrap_mode)
     poa = "true" if play_on_awake else "false"
 
     lines: list[str] = []
@@ -620,7 +608,7 @@ def generate_cutscene_setup_script(
     lines.append(f"{indent}    {{")
 
     lines.append(f'{indent}        // Create or use selected GameObject')
-    lines.append(f'{indent}        GameObject cutsceneGo = Selection.activeGameObject ?? new GameObject("{_sanitize_cs_string(cutscene_name)}");')
+    lines.append(f'{indent}        GameObject cutsceneGo = Selection.activeGameObject ?? new GameObject("{sanitize_cs_string(cutscene_name)}");')
     lines.append("")
 
     lines.append(f"{indent}        // Add PlayableDirector")
@@ -653,7 +641,7 @@ def generate_cutscene_setup_script(
     lines.append(f"{indent}        // Write result")
     lines.append(f'{indent}        string json = "{{\\"status\\":\\"success\\",\\"cutscene_name\\":\\"{safe_name}\\",\\"wrap_mode\\":\\"{safe_wrap}\\",\\"play_on_awake\\":{poa}}}";')
     lines.append(f'{indent}        File.WriteAllText("Temp/vb_result.json", json);')
-    lines.append(f'{indent}        Debug.Log("[VeilBreakers] Cutscene configured: {_sanitize_cs_string(cutscene_name)}");')
+    lines.append(f'{indent}        Debug.Log("[VeilBreakers] Cutscene configured: {sanitize_cs_string(cutscene_name)}");')
 
     lines.append(f"{indent}    }}")
     lines.append(f"{indent}}}")
@@ -690,8 +678,8 @@ def generate_animation_clip_editor_script(
             },
         ]
 
-    safe_name = _sanitize_cs_identifier(clip_name)
-    safe_path = _sanitize_cs_string(output_path)
+    safe_name = sanitize_cs_identifier(clip_name)
+    safe_path = sanitize_cs_string(output_path)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -734,9 +722,9 @@ def generate_animation_clip_editor_script(
 
     # Add curves using EditorCurveBinding API
     for i, curve_info in enumerate(curves):
-        c_path = _sanitize_cs_string(curve_info.get("path", ""))
-        c_type = _sanitize_cs_identifier(curve_info.get("component_type", "Transform"))
-        c_prop = _sanitize_cs_string(curve_info.get("property", "localPosition.x"))
+        c_path = sanitize_cs_string(curve_info.get("path", ""))
+        c_type = sanitize_cs_identifier(curve_info.get("component_type", "Transform"))
+        c_prop = sanitize_cs_string(curve_info.get("property", "localPosition.x"))
         keyframes = curve_info.get("keyframes", [[0.0, 0.0]])
 
         lines.append(f"{indent}        // Curve {i}: {c_prop}")
@@ -809,7 +797,7 @@ def generate_animator_modifier_script(
     if sub_state_machines is None:
         sub_state_machines = []
 
-    safe_path = _sanitize_cs_string(controller_path)
+    safe_path = sanitize_cs_string(controller_path)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -842,8 +830,8 @@ def generate_animator_modifier_script(
     # Add parameters
     lines.append(f"{indent}        // Add parameters")
     for param in parameters:
-        p_name = _sanitize_cs_string(param.get("name", "Param"))
-        p_type = _sanitize_cs_identifier(param.get("type", "Float"))
+        p_name = sanitize_cs_string(param.get("name", "Param"))
+        p_type = sanitize_cs_identifier(param.get("type", "Float"))
         lines.append(f'{indent}        controller.AddParameter("{p_name}", AnimatorControllerParameterType.{p_type});')
     lines.append("")
 
@@ -856,8 +844,8 @@ def generate_animator_modifier_script(
     if sub_state_machines:
         lines.append(f"{indent}        // Add sub-state machines")
         for ssm_name in sub_state_machines:
-            safe_ssm = _sanitize_cs_string(ssm_name)
-            safe_ssm_id = _sanitize_cs_identifier(ssm_name)
+            safe_ssm = sanitize_cs_string(ssm_name)
+            safe_ssm_id = sanitize_cs_identifier(ssm_name)
             lines.append(f'{indent}        AnimatorStateMachine ssm_{safe_ssm_id} = sm.AddStateMachine("{safe_ssm}");')
         lines.append("")
 
@@ -865,16 +853,16 @@ def generate_animator_modifier_script(
     lines.append(f"{indent}        // Add states")
     lines.append(f"{indent}        Dictionary<string, AnimatorState> stateMap = new Dictionary<string, AnimatorState>();")
     for state_name in states_to_add:
-        safe_state = _sanitize_cs_string(state_name)
-        safe_state_id = _sanitize_cs_identifier(state_name)
+        safe_state = sanitize_cs_string(state_name)
+        safe_state_id = sanitize_cs_identifier(state_name)
         lines.append(f'{indent}        stateMap["{safe_state}"] = sm.AddState("{safe_state}");')
     lines.append("")
 
     # Add transitions
     lines.append(f"{indent}        // Add transitions")
     for trans in transitions:
-        from_s = _sanitize_cs_string(trans.get("from_state", ""))
-        to_s = _sanitize_cs_string(trans.get("to_state", ""))
+        from_s = sanitize_cs_string(trans.get("from_state", ""))
+        to_s = sanitize_cs_string(trans.get("to_state", ""))
         has_exit = "true" if trans.get("has_exit_time", False) else "false"
         duration = trans.get("duration", 0.25)
         lines.append(f'{indent}        if (stateMap.ContainsKey("{from_s}") && stateMap.ContainsKey("{to_s}"))')
@@ -938,8 +926,8 @@ def generate_avatar_mask_script(
     if transform_paths is None:
         transform_paths = []
 
-    safe_name = _sanitize_cs_identifier(mask_name)
-    safe_path = _sanitize_cs_string(output_path)
+    safe_name = sanitize_cs_identifier(mask_name)
+    safe_path = sanitize_cs_string(output_path)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -981,7 +969,7 @@ def generate_avatar_mask_script(
     # Set humanoid body parts
     lines.append(f"{indent}        // Configure humanoid body parts")
     for part_name, active in body_parts.items():
-        safe_part = _sanitize_cs_identifier(part_name)
+        safe_part = sanitize_cs_identifier(part_name)
         val = "true" if active else "false"
         lines.append(f"{indent}        mask.SetHumanoidBodyPartActive(AvatarMaskBodyPart.{safe_part}, {val});")
     lines.append("")
@@ -991,7 +979,7 @@ def generate_avatar_mask_script(
         lines.append(f"{indent}        // Configure transform paths (non-humanoid)")
         lines.append(f"{indent}        mask.transformCount = {len(transform_paths)};")
         for i, tpath in enumerate(transform_paths):
-            safe_tpath = _sanitize_cs_string(tpath)
+            safe_tpath = sanitize_cs_string(tpath)
             lines.append(f'{indent}        mask.SetTransformPath({i}, "{safe_tpath}");')
             lines.append(f"{indent}        mask.SetTransformActive({i}, true);")
         lines.append("")
@@ -1035,7 +1023,7 @@ def generate_video_player_script(
     Creates a VideoPlayer component with RenderTexture output, configured
     for either clip-based or URL-based video sources.
     """
-    safe_path = _sanitize_cs_string(video_path)
+    safe_path = sanitize_cs_string(video_path)
     loop_str = "true" if loop else "false"
     poa_str = "true" if play_on_awake else "false"
 

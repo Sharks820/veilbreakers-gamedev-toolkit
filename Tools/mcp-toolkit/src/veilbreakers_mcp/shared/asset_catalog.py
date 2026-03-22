@@ -7,10 +7,13 @@ resolution, LOD count, status, and arbitrary JSON metadata.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 # Columns that may be referenced in dynamic SQL.  Every key used in
@@ -39,6 +42,7 @@ class AssetCatalog:
         Args:
             db_path: Path to SQLite database file, or ":memory:" for in-memory.
         """
+        logger.info("Initializing AssetCatalog (db_path=%s)", db_path)
         self.db_path = db_path
         self.conn = sqlite3.connect(db_path)
         self.conn.row_factory = sqlite3.Row
@@ -101,6 +105,7 @@ class AssetCatalog:
         Returns:
             UUID string for the new asset entry.
         """
+        logger.info("Adding asset: name=%s, type=%s", name, asset_type)
         asset_id = str(uuid.uuid4())
         now = datetime.now(timezone.utc).isoformat()
         self.conn.execute(
@@ -203,6 +208,7 @@ class AssetCatalog:
         Returns:
             True if an asset was deleted, False if not found.
         """
+        logger.info("Deleting asset: %s", asset_id)
         cursor = self.conn.execute(
             "DELETE FROM assets WHERE id = ?", (asset_id,)
         )
@@ -234,6 +240,7 @@ class AssetCatalog:
         Returns:
             List of asset dicts matching all specified filters.
         """
+        logger.info("Querying assets (type=%s, status=%s, name_pattern=%s)", asset_type, status, name_pattern)
         cursor = self.conn.execute(
             "SELECT * FROM assets ORDER BY created_at DESC"
         )
@@ -321,5 +328,5 @@ class AssetCatalog:
                 try:
                     d[field] = json.loads(d[field])
                 except (json.JSONDecodeError, TypeError):
-                    pass
+                    logger.warning("Failed to deserialize JSON field %r for asset row", field)
         return d

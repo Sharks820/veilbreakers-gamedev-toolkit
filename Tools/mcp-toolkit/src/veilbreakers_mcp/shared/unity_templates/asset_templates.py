@@ -29,9 +29,9 @@ Exports:
     generate_reference_scan_script      -- IMP-01: Scan asset references
     generate_atomic_import_script       -- Combined atomic import sequence
 
-Helpers:
-    _sanitize_cs_string                 -- C# string literal escaping
-    _sanitize_cs_identifier             -- C# identifier sanitization
+Helpers (imported from _cs_sanitize):
+    sanitize_cs_string                  -- C# string literal escaping
+    sanitize_cs_identifier              -- C# identifier sanitization
 """
 
 from __future__ import annotations
@@ -39,28 +39,7 @@ from __future__ import annotations
 import json
 import re
 
-
-# ---------------------------------------------------------------------------
-# Sanitization helpers (each template module has its own copy)
-# ---------------------------------------------------------------------------
-
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal.
-
-    Prevents C# code injection by escaping backslashes, quotes, and
-    newlines.
-    """
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier (class name, method name)."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -146,8 +125,8 @@ def generate_asset_move_script(old_path: str, new_path: str) -> str:
     Returns:
         Complete C# source string.
     """
-    safe_old = _sanitize_cs_string(old_path)
-    safe_new = _sanitize_cs_string(new_path)
+    safe_old = sanitize_cs_string(old_path)
+    safe_new = sanitize_cs_string(new_path)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -224,8 +203,8 @@ def generate_asset_rename_script(asset_path: str, new_name: str) -> str:
     Returns:
         Complete C# source string.
     """
-    safe_path = _sanitize_cs_string(asset_path)
-    safe_name = _sanitize_cs_string(new_name)
+    safe_path = sanitize_cs_string(asset_path)
+    safe_name = sanitize_cs_string(new_name)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -292,7 +271,7 @@ def generate_asset_delete_script(
     Returns:
         Complete C# source string.
     """
-    safe_path = _sanitize_cs_string(asset_path)
+    safe_path = sanitize_cs_string(asset_path)
 
     if safe_delete:
         ref_scan_block = '''
@@ -392,8 +371,8 @@ def generate_asset_duplicate_script(source_path: str, dest_path: str) -> str:
     Returns:
         Complete C# source string.
     """
-    safe_source = _sanitize_cs_string(source_path)
-    safe_dest = _sanitize_cs_string(dest_path)
+    safe_source = sanitize_cs_string(source_path)
+    safe_dest = sanitize_cs_string(dest_path)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -469,7 +448,7 @@ def generate_create_folder_script(folder_path: str) -> str:
     Returns:
         Complete C# source string.
     """
-    safe_path = _sanitize_cs_string(folder_path)
+    safe_path = sanitize_cs_string(folder_path)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -556,10 +535,10 @@ def generate_fbx_import_script(
         import_animation = preset["import_animation"]
         optimize = preset["optimize"]
 
-    safe_path = _sanitize_cs_string(asset_path)
-    safe_compression = _sanitize_cs_identifier(mesh_compression)
-    safe_anim_type = _sanitize_cs_identifier(animation_type)
-    safe_normals = _sanitize_cs_identifier(normals_mode)
+    safe_path = sanitize_cs_string(asset_path)
+    safe_compression = sanitize_cs_identifier(mesh_compression)
+    safe_anim_type = sanitize_cs_identifier(animation_type)
+    safe_normals = sanitize_cs_identifier(normals_mode)
 
     import_anim_str = "true" if import_animation else "false"
     blend_shapes_str = "true" if import_blend_shapes else "false"
@@ -661,9 +640,9 @@ def generate_texture_import_script(
                 for k, v in _DEFAULT_PLATFORM_COMPRESSION.items()
             }
 
-    safe_path = _sanitize_cs_string(asset_path)
-    safe_filter = _sanitize_cs_identifier(filter_mode)
-    safe_wrap = _sanitize_cs_identifier(wrap_mode)
+    safe_path = sanitize_cs_string(asset_path)
+    safe_filter = sanitize_cs_identifier(filter_mode)
+    safe_wrap = sanitize_cs_identifier(wrap_mode)
 
     srgb_str = "true" if srgb else "false"
     mipmap_str = "true" if mipmap else "false"
@@ -691,7 +670,7 @@ def generate_texture_import_script(
 
     # Sprite mode block
     if sprite_mode:
-        safe_sprite = _sanitize_cs_identifier(sprite_mode)
+        safe_sprite = sanitize_cs_identifier(sprite_mode)
         sprite_block = f'''
             importer.textureType = TextureImporterType.Sprite;
             importer.spriteImportMode = SpriteImportMode.{safe_sprite};
@@ -703,9 +682,9 @@ def generate_texture_import_script(
     platform_blocks = ""
     if platform_overrides:
         for plat_name, plat_settings in platform_overrides.items():
-            safe_plat = _sanitize_cs_string(plat_name)
+            safe_plat = sanitize_cs_string(plat_name)
             fmt = plat_settings.get("format", "Automatic")
-            safe_fmt = _sanitize_cs_identifier(fmt)
+            safe_fmt = sanitize_cs_identifier(fmt)
             plat_max = plat_settings.get("max_size", max_size)
             platform_blocks += f'''
             {{
@@ -780,12 +759,12 @@ def generate_material_remap_script(
     Returns:
         Complete C# source string.
     """
-    safe_fbx = _sanitize_cs_string(fbx_path)
+    safe_fbx = sanitize_cs_string(fbx_path)
 
     remap_lines = ""
     for mat_name, mat_path in remappings.items():
-        safe_mat_name = _sanitize_cs_string(mat_name)
-        safe_mat_path = _sanitize_cs_string(mat_path)
+        safe_mat_name = sanitize_cs_string(mat_name)
+        safe_mat_path = sanitize_cs_string(mat_path)
         remap_lines += f'''
             {{
                 Material targetMat = AssetDatabase.LoadAssetAtPath<Material>("{safe_mat_path}");
@@ -877,9 +856,9 @@ def generate_material_auto_generate_script(
     Returns:
         Complete C# source string.
     """
-    safe_fbx = _sanitize_cs_string(fbx_path)
-    safe_tex_dir = _sanitize_cs_string(texture_dir)
-    safe_shader = _sanitize_cs_string(shader_name)
+    safe_fbx = sanitize_cs_string(fbx_path)
+    safe_tex_dir = sanitize_cs_string(texture_dir)
+    safe_shader = sanitize_cs_string(shader_name)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -1074,9 +1053,9 @@ def generate_preset_create_script(
     Returns:
         Complete C# source string.
     """
-    safe_name = _sanitize_cs_string(preset_name)
-    safe_source = _sanitize_cs_string(source_asset_path)
-    safe_dir = _sanitize_cs_string(save_dir)
+    safe_name = sanitize_cs_string(preset_name)
+    safe_source = sanitize_cs_string(source_asset_path)
+    safe_dir = sanitize_cs_string(save_dir)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -1154,8 +1133,8 @@ def generate_preset_apply_script(preset_path: str, target_path: str) -> str:
     Returns:
         Complete C# source string.
     """
-    safe_preset = _sanitize_cs_string(preset_path)
-    safe_target = _sanitize_cs_string(target_path)
+    safe_preset = sanitize_cs_string(preset_path)
+    safe_target = sanitize_cs_string(target_path)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -1239,7 +1218,7 @@ def generate_reference_scan_script(asset_path: str) -> str:
     Returns:
         Complete C# source string.
     """
-    safe_path = _sanitize_cs_string(asset_path)
+    safe_path = sanitize_cs_string(asset_path)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -1337,21 +1316,21 @@ def generate_atomic_import_script(
     Returns:
         Complete C# source string.
     """
-    safe_fbx = _sanitize_cs_string(fbx_path)
-    safe_mat_name = _sanitize_cs_string(material_name)
-    safe_shader = _sanitize_cs_string(shader_name)
+    safe_fbx = sanitize_cs_string(fbx_path)
+    safe_mat_name = sanitize_cs_string(material_name)
+    safe_shader = sanitize_cs_string(shader_name)
 
     # Build texture path array
     tex_entries = ", ".join(
-        f'"{_sanitize_cs_string(tp)}"' for tp in texture_paths
+        f'"{sanitize_cs_string(tp)}"' for tp in texture_paths
     )
 
     # Build remap block
     remap_block = ""
     if remappings:
         for mat_key, mat_val in remappings.items():
-            safe_key = _sanitize_cs_string(mat_key)
-            safe_val = _sanitize_cs_string(mat_val)
+            safe_key = sanitize_cs_string(mat_key)
+            safe_val = sanitize_cs_string(mat_val)
             remap_block += f'''
                 modelImporter.AddRemap(new AssetImporter.SourceAssetIdentifier(typeof(Material), "{safe_key}"), createdMat);
 '''

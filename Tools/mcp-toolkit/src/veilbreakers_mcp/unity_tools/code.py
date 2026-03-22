@@ -24,8 +24,8 @@ from veilbreakers_mcp.shared.unity_templates.code_templates import (
     generate_singleton,
     generate_state_machine,
     generate_so_event_channel,
-    _sanitize_cs_identifier,
 )
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 
 
 

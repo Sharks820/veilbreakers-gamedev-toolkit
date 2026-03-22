@@ -20,41 +20,9 @@ from __future__ import annotations
 
 import re
 
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
+
 _VALID_FILTER_TYPES = {"all", "error", "warning", "log", "exception", "assert"}
-
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal.
-
-    Prevents C# code injection by escaping backslashes, quotes, and
-    newlines. This is critical for any user-supplied string that will
-    appear between double quotes in generated C# code.
-
-    Args:
-        value: Raw string value.
-
-    Returns:
-        Escaped string safe for C# string literal interpolation.
-    """
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier (class name, method name).
-
-    Strips all characters that are not alphanumeric or underscore.
-
-    Args:
-        value: Raw name string.
-
-    Returns:
-        Sanitized identifier safe for C# class/method names.
-    """
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
 
 
 def generate_recompile_script() -> str:
@@ -160,7 +128,7 @@ def generate_screenshot_script(
     if supersize < 1:
         raise ValueError(f"supersize must be >= 1, got {supersize}")
 
-    safe_path = _sanitize_cs_string(output_path)
+    safe_path = sanitize_cs_string(output_path)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -346,9 +314,9 @@ def generate_gemini_review_script(
     if not criteria:
         raise ValueError("criteria must be a non-empty list of quality criteria")
 
-    safe_screenshot_path = _sanitize_cs_string(screenshot_path)
+    safe_screenshot_path = sanitize_cs_string(screenshot_path)
     criteria_json_items = ", ".join(
-        f'\\"{_sanitize_cs_string(c)}\\"' for c in criteria
+        f'\\"{sanitize_cs_string(c)}\\"' for c in criteria
     )
 
     return f'''using UnityEngine;
@@ -420,15 +388,15 @@ def generate_test_runner_script(
             f"test_mode must be one of {sorted(_VALID_TEST_MODES)}, got '{test_mode}'"
         )
 
-    safe_mode = _sanitize_cs_string(test_mode)
+    safe_mode = sanitize_cs_string(test_mode)
 
     # Build filter lines
     filter_extra = ""
     if assembly_filter:
-        safe_asm = _sanitize_cs_string(assembly_filter)
+        safe_asm = sanitize_cs_string(assembly_filter)
         filter_extra += f'\n                assemblyNames = new[] {{ "{safe_asm}" }},'
     if category_filter:
-        safe_cat = _sanitize_cs_string(category_filter)
+        safe_cat = sanitize_cs_string(category_filter)
         filter_extra += f'\n                categories = new[] {{ "{safe_cat}" }},'
 
     return f'''using UnityEngine;
