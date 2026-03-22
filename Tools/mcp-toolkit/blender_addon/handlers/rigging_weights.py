@@ -319,7 +319,6 @@ def _enforce_weight_limit_pure(
 
 def _compute_skinning_quality(
     vertex_weights: list[list[tuple[int, float]]],
-    vertex_positions: list[tuple[float, float, float]],
 ) -> dict:
     """Compute skinning quality metrics for weight paint analysis."""
     total = len(vertex_weights)
@@ -415,9 +414,12 @@ def _enhanced_rig_validation(
             issues.append(f"Missing R counterpart for '{lb}'")
 
     # Default roll bones (limb bones with roll exactly 0.0)
+    # Twist bones (e.g. upper_arm_twist.L) correctly have roll=0.0, so exclude them.
     limb_prefixes = ("upper_arm", "forearm", "thigh", "shin")
     default_roll_bones: list[str] = []
     for bname in bone_names:
+        if "twist" in bname:
+            continue
         base = bname.split(".")[0]
         if any(base.startswith(p) for p in limb_prefixes):
             roll = bone_rolls.get(bname, 0.0)

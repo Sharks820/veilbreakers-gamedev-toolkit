@@ -1239,20 +1239,18 @@ class TestSkinningQuality:
     def test_perfect_quality(self):
         from blender_addon.handlers.rigging_weights import _compute_skinning_quality
         weights = [[(0, 0.5), (1, 0.5)], [(0, 0.7), (1, 0.3)]]
-        positions = [(0, 0, 0), (1, 0, 0)]
-        r = _compute_skinning_quality(weights, positions)
+        r = _compute_skinning_quality(weights)
         assert r["quality_score"] > 0.8
 
     def test_all_unweighted(self):
         from blender_addon.handlers.rigging_weights import _compute_skinning_quality
         weights = [[], []]
-        positions = [(0, 0, 0), (1, 0, 0)]
-        r = _compute_skinning_quality(weights, positions)
+        r = _compute_skinning_quality(weights)
         assert r["quality_score"] < 0.6
 
     def test_empty_input(self):
         from blender_addon.handlers.rigging_weights import _compute_skinning_quality
-        r = _compute_skinning_quality([], [])
+        r = _compute_skinning_quality([])
         assert r["quality_score"] == 1.0
 
 
