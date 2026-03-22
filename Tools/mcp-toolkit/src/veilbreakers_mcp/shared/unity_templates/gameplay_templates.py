@@ -796,19 +796,20 @@ public class BT_Attack_{safe_name} : BT_Leaf_{safe_name}
     public float cooldown = 1.5f;
     public float damage = 10f;
 
-    private const string KEY_LAST_ATTACK = "BT_Attack_lastAttackTime";
+    private string _bbKey;
+    private string BBKey => _bbKey ??= "BT_Attack_" + GetInstanceID() + "_lastAttackTime";
 
     public override NodeState_{safe_name} Evaluate(BehaviorTreeRunner_{safe_name} runner)
     {{
-        float lastAttackTime = runner.blackboard.ContainsKey(KEY_LAST_ATTACK)
-            ? (float)runner.blackboard[KEY_LAST_ATTACK]
+        float lastAttackTime = runner.blackboard.ContainsKey(BBKey)
+            ? (float)runner.blackboard[BBKey]
             : -Mathf.Infinity;
 
         float elapsed = Time.time - lastAttackTime;
         if (elapsed < cooldown)
             return NodeState_{safe_name}.Running;
 
-        runner.blackboard[KEY_LAST_ATTACK] = Time.time;
+        runner.blackboard[BBKey] = Time.time;
         Debug.Log("[BT] Attack executed, damage=" + damage);
         return NodeState_{safe_name}.Success;
     }}
@@ -823,28 +824,30 @@ public class BT_Wait_{safe_name} : BT_Leaf_{safe_name}
 {{
     public float duration = 2f;
 
-    private const string KEY_ELAPSED = "BT_Wait_elapsed";
-    private const string KEY_STARTED = "BT_Wait_started";
+    private string _elapsedKey;
+    private string _startedKey;
+    private string ElapsedKey => _elapsedKey ??= "BT_Wait_" + GetInstanceID() + "_elapsed";
+    private string StartedKey => _startedKey ??= "BT_Wait_" + GetInstanceID() + "_started";
 
     public override NodeState_{safe_name} Evaluate(BehaviorTreeRunner_{safe_name} runner)
     {{
-        bool started = runner.blackboard.ContainsKey(KEY_STARTED) && (bool)runner.blackboard[KEY_STARTED];
+        bool started = runner.blackboard.ContainsKey(StartedKey) && (bool)runner.blackboard[StartedKey];
 
         if (!started)
         {{
-            runner.blackboard[KEY_ELAPSED] = 0f;
-            runner.blackboard[KEY_STARTED] = true;
+            runner.blackboard[ElapsedKey] = 0f;
+            runner.blackboard[StartedKey] = true;
         }}
 
-        float elapsed = runner.blackboard.ContainsKey(KEY_ELAPSED)
-            ? (float)runner.blackboard[KEY_ELAPSED]
+        float elapsed = runner.blackboard.ContainsKey(ElapsedKey)
+            ? (float)runner.blackboard[ElapsedKey]
             : 0f;
         elapsed += Time.deltaTime;
-        runner.blackboard[KEY_ELAPSED] = elapsed;
+        runner.blackboard[ElapsedKey] = elapsed;
 
         if (elapsed >= duration)
         {{
-            runner.blackboard[KEY_STARTED] = false;
+            runner.blackboard[StartedKey] = false;
             return NodeState_{safe_name}.Success;
         }}
         return NodeState_{safe_name}.Running;
