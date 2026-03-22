@@ -349,7 +349,7 @@ def validate_uxml_contrast(
                 violations.append({
                     "element": elem_id,
                     "foreground": fg_color,
-                    "background": None,
+                    "background": (0, 0, 0),  # assume dark theme default
                     "ratio": 0.0,
                     "required": 4.5,
                     "passes": True,  # informational only — parent/theme bg likely exists
