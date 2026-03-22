@@ -724,15 +724,18 @@ def _validate_retarget_mapping(
         unmapped_source (list), unmapped_target (list).
     """
     errors: list[str] = []
+    warnings: list[str] = []
 
     if not isinstance(mapping, dict) or len(mapping) == 0:
         errors.append("mapping must be a non-empty dict")
         return {
             "valid": False,
             "errors": errors,
+            "warnings": warnings,
             "mapped_count": 0,
             "unmapped_source": list(source_bones) if isinstance(source_bones, list) else [],
             "unmapped_target": list(target_bones) if isinstance(target_bones, list) else [],
+            "duplicate_targets": [],
         }
 
     source_set = set(source_bones) if isinstance(source_bones, list) else set()
@@ -748,6 +751,17 @@ def _validate_retarget_mapping(
         if tgt_bone not in target_set:
             errors.append(f"target bone '{tgt_bone}' not found in target rig")
 
+    # Check for duplicate targets
+    target_counts: dict[str, int] = {}
+    for tgt in mapping.values():
+        target_counts[tgt] = target_counts.get(tgt, 0) + 1
+    duplicate_targets = [t for t, c in target_counts.items() if c > 1]
+    if duplicate_targets:
+        for dt in duplicate_targets:
+            warnings.append(
+                f"Warning: target bone '{dt}' mapped from {target_counts[dt]} sources"
+            )
+
     # Compute unmapped bones
     mapped_sources = set(mapping.keys())
     mapped_targets = set(mapping.values())
@@ -757,9 +771,11 @@ def _validate_retarget_mapping(
     return {
         "valid": len(errors) == 0,
         "errors": errors,
+        "warnings": warnings,
         "mapped_count": len(mapping),
         "unmapped_source": unmapped_source,
         "unmapped_target": unmapped_target,
+        "duplicate_targets": duplicate_targets,
     }
 
 
@@ -1246,11 +1262,6 @@ def handle_setup_spring_bones(params: dict) -> dict:
         if not pbone:
             continue
 
-        # Add DAMPED_TRACK constraint for spring stiffness effect
-        dt_con = pbone.constraints.new("DAMPED_TRACK")
-        dt_con.influence = stiffness
-        dt_con.name = f"spring_stiffness_{bone_name}"
-
         # Add COPY_ROTATION from parent with decaying influence for damping
         if pbone.parent:
             cr_con = pbone.constraints.new("COPY_ROTATION")
@@ -1325,7 +1336,19 @@ def handle_setup_ragdoll(params: dict) -> dict:
     joint_count = 0
     prev_collider = None
 
-    for bone_name, spec in bone_collider_map.items():
+    # Sort bones by hierarchy depth (parent bones first) for correct joint chaining
+    def _bone_depth(bone_name):
+        depth = 0
+        b = rig_obj.data.bones.get(bone_name)
+        while b and b.parent:
+            depth += 1
+            b = b.parent
+        return depth
+
+    sorted_bones = sorted(bone_collider_map.keys(), key=_bone_depth)
+
+    for bone_name in sorted_bones:
+        spec = bone_collider_map[bone_name]
         # Check bone exists in rig
         bone = rig_obj.data.bones.get(bone_name)
         if not bone:
@@ -1562,9 +1585,11 @@ def handle_add_shape_keys(params: dict) -> dict:
         vertex_count = len(obj.data.vertices)
 
         # Damage: random-ish displacement scaled by convexity
+        import hashlib
         import random
 
-        seed = hash(shape_key_name) % (2**31)
+        # Use deterministic seed instead of Python's salted hash
+        seed = int(hashlib.md5(shape_key_name.encode()).hexdigest()[:8], 16)
         rng = random.Random(seed)
 
         for vi, vert in enumerate(obj.data.vertices):

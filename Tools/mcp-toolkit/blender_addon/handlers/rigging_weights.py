@@ -725,7 +725,9 @@ def handle_fix_weights(params: dict) -> dict:
             direction = params.get("direction")
             use_mirror = direction == "left_to_right"
             bpy.ops.object.vertex_group_mirror(
-                use_topology=False
+                mirror_weights=True,
+                flip_group_names=use_mirror,
+                use_topology=False,
             )
 
     return {
