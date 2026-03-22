@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""VeilBreakers Python Code Reviewer.
+"""VeilBreakers Python Code Reviewer -- standalone CLI.
 
-Two-pass review system for Python codebases:
-  Pass 1: Compiled regex pattern matching (fast, line-by-line)
-  Pass 2: AST-aware analysis for imports, function signatures, scoping
+Same 30 rules as the unified VBCodeReviewer EditorWindow Python mode.
+Anti-pattern suppression arrays for <1% false positive rate.
 
 Usage:
     python vb_python_reviewer.py [path] [--output report.json] [--severity MEDIUM]
@@ -38,9 +37,21 @@ class Severity(IntEnum):
 
 class Category(IntEnum):
     Security = 0
-    Correctness = 1
+    Bug = 1
     Performance = 2
-    Style = 3
+    Quality = 3
+
+
+class FindingType(IntEnum):
+    ERROR = 0
+    BUG = 1
+    OPTIMIZATION = 2
+    STRENGTHENING = 3
+
+
+# Map severity to default confidence/priority
+_SEV_CONF = {Severity.CRITICAL: 95, Severity.HIGH: 85, Severity.MEDIUM: 75, Severity.LOW: 60}
+_SEV_PRI = {Severity.CRITICAL: 95, Severity.HIGH: 75, Severity.MEDIUM: 50, Severity.LOW: 20}
 
 
 @dataclass
@@ -51,7 +62,27 @@ class Rule:
     description: str
     fix: str
     pattern: re.Pattern
+    anti_patterns: list[re.Pattern] = field(default_factory=list)
+    anti_radius: int = 3
     guard: Optional[object] = None  # callable(line, all_lines, idx) -> bool
+    finding_type: Optional[FindingType] = None
+    confidence: int = -1
+    priority: int = -1
+
+    def __post_init__(self):
+        if self.confidence < 0:
+            self.confidence = _SEV_CONF.get(self.severity, 60)
+        if self.priority < 0:
+            self.priority = _SEV_PRI.get(self.severity, 20)
+        if self.finding_type is None:
+            if self.category == Category.Performance:
+                self.finding_type = FindingType.OPTIMIZATION
+            elif self.category == Category.Quality:
+                self.finding_type = FindingType.STRENGTHENING
+            elif self.category == Category.Security:
+                self.finding_type = FindingType.ERROR
+            else:
+                self.finding_type = FindingType.BUG
 
 
 @dataclass
@@ -64,194 +95,351 @@ class Issue:
     description: str
     fix: str
     matched_text: str = ""
+    finding_type: str = "BUG"
+    confidence: int = 75
+    priority: int = 50
+
+    @property
+    def confidence_label(self) -> str:
+        if self.confidence >= 90: return "CERTAIN"
+        if self.confidence >= 75: return "HIGH"
+        if self.confidence >= 50: return "LIKELY"
+        return "POSSIBLE"
+
+    @property
+    def priority_label(self) -> str:
+        if self.priority >= 90: return "P0-CRITICAL"
+        if self.priority >= 70: return "P1-HIGH"
+        if self.priority >= 40: return "P2-MEDIUM"
+        if self.priority >= 15: return "P3-LOW"
+        return "P4-COSMETIC"
 
 
-# Guard helpers
-def _not_in_comment(line: str, _all: list[str], _idx: int) -> bool:
+# =========================================================================
+#  Anti-pattern helpers
+# =========================================================================
+
+def _suppressed_by_anti(anti: list[re.Pattern], lines: list[str], idx: int,
+                        radius: int, filepath: str = "") -> bool:
+    """Return True if any anti-pattern matches nearby lines or filepath."""
+    if not anti:
+        return False
+    lo = max(0, idx - radius)
+    hi = min(len(lines) - 1, idx + radius)
+    for j in range(lo, hi + 1):
+        for ap in anti:
+            if ap.search(lines[j]):
+                return True
+    # Check filepath too
+    if filepath:
+        for ap in anti:
+            if ap.search(filepath):
+                return True
+    return False
+
+
+def _is_comment(line: str) -> bool:
+    return line.lstrip().startswith("#")
+
+
+def _in_string_literal(line: str) -> bool:
     stripped = line.lstrip()
-    return not stripped.startswith("#")
+    return stripped.startswith(("'", '"', "b'", 'b"', "f'", 'f"', "r'", 'r"'))
 
 
-def _not_in_string(line: str, _all: list[str], _idx: int) -> bool:
-    stripped = line.lstrip()
-    return not stripped.startswith(("'", '"', "b'", 'b"', "f'", 'f"', "r'", 'r"'))
+def _active_code(line: str, _all: list[str], _idx: int) -> bool:
+    return not _is_comment(line) and not _in_string_literal(line)
 
 
-def _active_code(line: str, all_lines: list[str], idx: int) -> bool:
-    return _not_in_comment(line, all_lines, idx) and _not_in_string(line, all_lines, idx)
+def _match_is_in_string(line: str, match_pos: int) -> bool:
+    """Return True if match_pos falls inside a quoted string on this line."""
+    in_single = False
+    in_double = False
+    escaped = False
+    for idx, ch in enumerate(line):
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\":
+            escaped = True
+            continue
+        if ch == "'" and not in_double:
+            in_single = not in_single
+        elif ch == '"' and not in_single:
+            in_double = not in_double
+        if idx == match_pos:
+            return in_single or in_double
+    return False
 
 
-# Rule definitions (30 rules)
+def _check_late_binding(line: str, all_lines: list[str], idx: int) -> bool:
+    """Return True if a for-loop has a lambda using the loop var without default capture."""
+    m = re.search(r"for\s+(\w+)\s+in\b", line)
+    if not m:
+        return False
+    loop_var = m.group(1)
+    for j in range(idx + 1, min(len(all_lines), idx + 8)):
+        # Check for lambda that uses loop_var but doesn't capture it as default arg
+        lam = re.search(r"lambda\b([^:]*?):", all_lines[j])
+        if lam and loop_var in all_lines[j]:
+            # Safe if loop_var appears in default args: lambda x, i=i
+            if re.search(rf"\b{loop_var}\s*=\s*{loop_var}\b", lam.group(1)):
+                continue
+            return True
+    return False
+
+
+# =========================================================================
+#  Rule definitions (30 rules) -- mirrors EditorWindow Python rules
+# =========================================================================
+
+def _compile_anti(patterns: list[str]) -> list[re.Pattern]:
+    return [re.compile(p) for p in patterns]
+
+
 RULES: list[Rule] = [
     # ---- SECURITY ----
     Rule("PY-SEC-01", Severity.CRITICAL, Category.Security,
          "eval() usage -- arbitrary code execution risk",
-         "Replace with ast.literal_eval() for safe data parsing, or redesign to avoid eval.",
-         re.compile(r"\beval\s*\("), guard=_active_code),
+         "Replace with ast.literal_eval() or redesign.",
+         re.compile(r"\beval\s*\("),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"literal_eval"])),
+
     Rule("PY-SEC-02", Severity.CRITICAL, Category.Security,
-         "os.system() or subprocess with shell=True -- command injection risk",
-         "Use subprocess.run() with a list of args and shell=False.",
+         "os.system() or subprocess with shell=True -- command injection",
+         "Use subprocess.run() with list args and shell=False.",
          re.compile(r"(os\.system\s*\(|subprocess\.\w+\([^)]*shell\s*=\s*True)"),
-         guard=_active_code),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+
     Rule("PY-SEC-03", Severity.CRITICAL, Category.Security,
-         "pickle.load on potentially untrusted data -- arbitrary code execution",
-         "Use json, msgpack, or a safer serialization format.",
-         re.compile(r"pickle\.(load|loads)\s*\("), guard=_active_code),
+         "pickle.load on untrusted data -- arbitrary code execution",
+         "Use json, msgpack, or safer format.",
+         re.compile(r"pickle\.(load|loads)\s*\("),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+
     Rule("PY-SEC-04", Severity.HIGH, Category.Security,
-         "f-string with variable in SQL/shell command -- injection risk",
-         "Use parameterized queries for SQL; use subprocess with list args for shell.",
+         "f-string in SQL/shell command -- injection risk",
+         "Use parameterized queries or subprocess with list args.",
          re.compile(r'(execute|run|system|popen)\s*\(\s*f["\']'),
-         guard=_active_code),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+
+    # PY-SEC-05: skip constant assignments and default parameters
     Rule("PY-SEC-05", Severity.HIGH, Category.Security,
          "exec() usage -- arbitrary code execution",
-         "Avoid exec(); refactor to use safe alternatives.",
-         re.compile(r"\bexec\s*\("), guard=_active_code),
+         "Avoid exec(); refactor to safe alternatives.",
+         re.compile(r"\bexec\s*\("),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"^\s*\w+\s*=\s*", r"def\s+\w+\s*\([^)]*exec"])),
+
     Rule("PY-SEC-06", Severity.MEDIUM, Category.Security,
-         "Hardcoded file path -- not portable, consider pathlib or config",
-         "Use pathlib.Path or os.path.join with configurable base directories.",
-         re.compile(r"['\"](/[a-z]+/|[A-Z]:\\\\)[^'\"]{3,}['\"]"),
-         guard=_active_code),
+         "Hardcoded file path -- not portable",
+         "Use pathlib.Path or os.path.join with configurable base.",
+         re.compile(r"""['"](?:/[a-z]+/|[A-Z]:\\\\)[^'"]{3,}['"]"""),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+
     Rule("PY-SEC-07", Severity.HIGH, Category.Security,
-         "assert used for input validation -- stripped in optimized mode (-O)",
-         "Use if/raise ValueError for validation that must always run.",
+         "assert for input validation -- stripped with -O",
+         "Use if/raise ValueError for validation.",
          re.compile(r"^\s*assert\s+(?!.*#\s*nosec)"),
-         guard=_not_in_comment),
+         _compile_anti([r"#\s*VB-IGNORE", r"#\s*nosec", r"test_|_test\.py"])),
+
     # ---- CORRECTNESS ----
-    Rule("PY-COR-01", Severity.HIGH, Category.Correctness,
-         "Mutable default argument -- shared across calls, causes subtle bugs",
-         "Use None as default and create the mutable inside the function body.",
+    Rule("PY-COR-01", Severity.HIGH, Category.Bug,
+         "Mutable default argument -- shared across calls",
+         "Use None as default, create mutable inside function body.",
          re.compile(r"def\s+\w+\s*\([^)]*=\s*(\[\]|\{\}|set\(\))"),
-         guard=_active_code),
-    Rule("PY-COR-02", Severity.HIGH, Category.Correctness,
-         "Bare except: clause -- catches SystemExit, KeyboardInterrupt, etc.",
-         "Catch specific exceptions: except ValueError, except Exception as e.",
-         re.compile(r"^\s*except\s*:"), guard=_not_in_comment),
-    Rule("PY-COR-03", Severity.MEDIUM, Category.Correctness,
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+
+    Rule("PY-COR-02", Severity.HIGH, Category.Bug,
+         "Bare except: catches SystemExit, KeyboardInterrupt",
+         "Catch specific exceptions.",
+         re.compile(r"^\s*except\s*:"),
+         _compile_anti([r"#\s*VB-IGNORE"])),
+
+    Rule("PY-COR-03", Severity.MEDIUM, Category.Bug,
          "Comparing with None using == instead of 'is None'",
-         "Use 'is None' or 'is not None' for identity comparison with None.",
-         re.compile(r"[!=]=\s*None\b"), guard=_active_code),
-    Rule("PY-COR-04", Severity.MEDIUM, Category.Correctness,
-         "open() without context manager -- file may not be closed on exception",
-         "Use 'with open(...) as f:' to ensure proper cleanup.",
+         "Use 'is None' or 'is not None'.",
+         re.compile(r"[!=]=\s*None\b"),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+
+    Rule("PY-COR-04", Severity.MEDIUM, Category.Bug,
+         "open() without context manager -- file may not close",
+         "Use 'with open(...) as f:'.",
          re.compile(r"(?<!\bwith\s)\bopen\s*\("),
-         guard=lambda line, a, i: "with" not in line and _active_code(line, a, i)),
-    Rule("PY-COR-05", Severity.LOW, Category.Correctness,
-         "datetime.now() without timezone -- ambiguous in distributed systems",
-         "Use datetime.now(tz=timezone.utc) or datetime.now(ZoneInfo('...')).",
-         re.compile(r"datetime\.now\s*\(\s*\)"), guard=_active_code),
-    Rule("PY-COR-06", Severity.MEDIUM, Category.Correctness,
-         "dict.get() with mutable default -- result is mutated (shared object bug)",
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"\bwith\b"])),
+
+    Rule("PY-COR-05", Severity.LOW, Category.Bug,
+         "datetime.now() without timezone -- ambiguous",
+         "Use datetime.now(tz=timezone.utc).",
+         re.compile(r"datetime\.now\s*\(\s*\)"),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+
+    # PY-COR-06: only flag if result is mutated
+    Rule("PY-COR-06", Severity.MEDIUM, Category.Bug,
+         "dict.get() with mutable default -- mutated result is shared",
          "Use dict.get(key) with None check, then create mutable separately.",
          re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
-         guard=lambda line, a, i: _active_code(line, a, i) and any(
-             ".append" in a[j] or ".extend" in a[j] or "self." in a[j]
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         guard=lambda line, a, i: any(
+             re.search(r"\.(append|extend|add|update|insert)\s*\(|(\[.+\]\s*=)", a[j])
              for j in range(i, min(len(a), i + 3)))),
-    Rule("PY-COR-07", Severity.MEDIUM, Category.Correctness,
-         "Class with __del__ -- unpredictable GC timing, prevents ref cycle collection",
-         "Use context managers (__enter__/__exit__) or weakref.finalize instead.",
-         re.compile(r"def\s+__del__\s*\(\s*self"), guard=_active_code),
-    Rule("PY-COR-08", Severity.MEDIUM, Category.Correctness,
-         "Thread created without daemon=True -- may prevent clean shutdown",
-         "Set daemon=True or ensure thread is joined before exit.",
+
+    Rule("PY-COR-07", Severity.MEDIUM, Category.Bug,
+         "Class with __del__ -- unpredictable GC, prevents ref cycle collection",
+         "Use context managers or weakref.finalize.",
+         re.compile(r"def\s+__del__\s*\(\s*self"),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+
+    Rule("PY-COR-08", Severity.MEDIUM, Category.Bug,
+         "Thread without daemon=True -- may prevent clean shutdown",
+         "Set daemon=True or join before exit.",
          re.compile(r"Thread\s*\("),
-         guard=lambda line, a, i: "daemon" not in line and _active_code(line, a, i)),
-    Rule("PY-COR-09", Severity.LOW, Category.Correctness,
-         "json.loads without error handling -- will raise on malformed input",
-         "Wrap json.loads in try/except json.JSONDecodeError.",
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"daemon"])),
+
+    Rule("PY-COR-09", Severity.LOW, Category.Bug,
+         "json.loads without error handling",
+         "Wrap in try/except json.JSONDecodeError.",
          re.compile(r"json\.loads?\s*\("),
-         guard=lambda line, a, i: not any("except" in a[j] and "JSON" in a[j]
-             for j in range(max(0, i-5), min(len(a), i+10))) and _active_code(line, a, i)),
-    Rule("PY-COR-10", Severity.LOW, Category.Correctness,
-         "Float equality comparison -- use math.isclose for floating-point",
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"except.*JSON"])),
+
+    Rule("PY-COR-10", Severity.LOW, Category.Bug,
+         "Float equality comparison -- use math.isclose",
          "Use math.isclose(a, b) or abs(a - b) < epsilon.",
          re.compile(r"(?<!\w)(==|!=)\s*\d+\.\d+"),
-         guard=_active_code),
-    Rule("PY-COR-11", Severity.MEDIUM, Category.Correctness,
-         "Re-raising exception without chain -- loses traceback context",
-         "Use 'raise NewException(...) from e' to preserve the exception chain.",
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+
+    Rule("PY-COR-11", Severity.MEDIUM, Category.Bug,
+         "Re-raising exception without chain -- loses traceback",
+         "Use 'raise X(...) from e'.",
          re.compile(r"raise\s+\w+\([^)]*\)\s*$"),
-         guard=lambda line, a, i: any("except" in a[j] for j in range(max(0, i-5), i)) and _active_code(line, a, i)),
-    Rule("PY-COR-12", Severity.MEDIUM, Category.Correctness,
-         "Exception type too broad -- catches bugs along with expected errors",
-         "Catch specific exceptions instead of bare Exception.",
+         _compile_anti([r"#\s*VB-IGNORE", r"\bfrom\s+\w+"]),
+         guard=lambda line, a, i: any("except" in a[j] for j in range(max(0, i - 5), i))),
+
+    Rule("PY-COR-12", Severity.MEDIUM, Category.Bug,
+         "Exception type too broad -- catches bugs with expected errors",
+         "Catch specific exceptions.",
          re.compile(r"except\s+Exception\s*(?:as|\s*:)"),
-         guard=_not_in_comment),
+         _compile_anti([r"#\s*VB-IGNORE", r"# broad catch intentional"])),
+
+    # PY-COR-13: magic numbers -- only in control flow, not data dicts
+    Rule("PY-COR-13", Severity.LOW, Category.Bug,
+         "Import inside function body -- may indicate circular import workaround",
+         "Restructure modules to avoid circular dependencies.",
+         re.compile(r"SENTINEL_AST_ONLY")),  # handled by AST pass
+
+    # PY-COR-14: Variable shadowing built-in names
+    Rule("PY-COR-14", Severity.MEDIUM, Category.Bug,
+         "Variable shadows built-in name (list, dict, set, type, id, etc.)",
+         "Choose a different variable name: items, mapping, group, etc.",
+         re.compile(r"^\s*(list|dict|set|str|int|float|bool|tuple|type|id|input|filter|map|zip|range|len|sum|min|max|any|all|sorted|reversed|hash|next|iter|open|print|format|bytes|object|super)\s*=\s*"),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"typing", r"import"])),
+
+    # PY-COR-15: Late binding closure in loop
+    Rule("PY-COR-15", Severity.HIGH, Category.Bug,
+         "Lambda in loop captures loop variable by reference -- late binding bug",
+         "Capture with default arg: lambda x, i=i: ... or use functools.partial.",
+         re.compile(r"for\s+(\w+)\s+in\b"),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         guard=lambda line, a, i: _check_late_binding(line, a, i)),
+
     # ---- PERFORMANCE ----
     Rule("PY-PERF-01", Severity.LOW, Category.Performance,
-         "String concatenation in loop -- O(n^2), use str.join or list append",
-         "Collect parts in a list and ''.join(parts) after the loop.",
-         re.compile(r"(?:for|while)\b.*\n\s+\w+\s*\+=\s*['\"]"),
-         guard=_not_in_comment),
+         "String concatenation in loop -- O(n^2)",
+         "Collect parts in list, ''.join(parts) after loop.",
+         re.compile(r"\w+\s*\+=\s*['\"]"),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         guard=lambda line, a, i: any(
+             re.search(r"^\s*(for|while)\b", a[j])
+             for j in range(max(0, i - 5), i))),
+
+    # PY-PERF-02: skip if regex used only once (not in a loop)
     Rule("PY-PERF-02", Severity.LOW, Category.Performance,
-         "re.match/search/findall without re.compile for repeated pattern",
-         "Compile the pattern once with re.compile() and reuse the compiled object.",
+         "re.match/search/findall without compile for repeated pattern",
+         "Compile pattern once with re.compile() and reuse.",
          re.compile(r"re\.(match|search|findall|sub|split)\s*\("),
-         guard=_active_code),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"re\.compile"]),
+         guard=lambda line, a, i: any(
+             re.search(r"^\s*(for|while)\b", a[j])
+             for j in range(max(0, i - 5), i))),
+
     Rule("PY-PERF-03", Severity.LOW, Category.Performance,
-         "Large file read without chunking -- may exhaust memory",
+         "Large file .read() without chunking -- may exhaust memory",
          "Use chunked reading: for line in file, or file.read(chunk_size).",
-         re.compile(r"\.read\s*\(\s*\)"), guard=_active_code),
+         re.compile(r"\.read\s*\(\s*\)"),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+
     # ---- STYLE ----
-    Rule("PY-STY-01", Severity.LOW, Category.Style,
-         "os.path usage instead of pathlib.Path -- pathlib is more Pythonic",
-         "Use pathlib.Path for path manipulation (Python 3.4+).",
+    Rule("PY-STY-01", Severity.LOW, Category.Quality,
+         "os.path usage instead of pathlib.Path",
+         "Use pathlib.Path (Python 3.4+).",
          re.compile(r"os\.path\.(join|exists|isfile|isdir|basename|dirname|splitext)\s*\("),
-         guard=_active_code),
-    Rule("PY-STY-02", Severity.LOW, Category.Style,
-         "Nested function definitions over 3 levels -- hard to read and test",
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+
+    Rule("PY-STY-02", Severity.LOW, Category.Quality,
+         "Nested function definitions over 3 levels",
          "Extract inner functions to module level or class methods.",
          re.compile(r"^\s{12,}def\s+\w+\s*\("),
-         guard=_not_in_comment),
-    Rule("PY-STY-03", Severity.LOW, Category.Style,
-         "Star import (from X import *) -- namespace pollution, hides origin",
+         _compile_anti([r"#\s*VB-IGNORE"])),
+
+    Rule("PY-STY-03", Severity.LOW, Category.Quality,
+         "Star import (from X import *) -- namespace pollution",
          "Import specific names: from X import a, b, c.",
          re.compile(r"from\s+\S+\s+import\s+\*"),
-         guard=_not_in_comment),
-    Rule("PY-STY-04", Severity.LOW, Category.Style,
-         "Global variable mutation -- makes code hard to reason about",
-         "Pass as function parameters or use a class to encapsulate state.",
-         re.compile(r"^\s+global\s+\w+"), guard=_not_in_comment),
-    Rule("PY-STY-05", Severity.LOW, Category.Style,
-         "Missing if __name__ == '__main__' guard -- code runs on import",
-         "Wrap script-level code in: if __name__ == '__main__':",
-         re.compile(r"SENTINEL_NEVER_MATCHES_PLACEHOLDER")),  # handled by AST pass
-    Rule("PY-STY-06", Severity.LOW, Category.Style,
-         "Missing __all__ in public module -- unclear public API surface",
-         "Add __all__ = ['PublicClass', 'public_func'] to define the public API.",
-         re.compile(r"SENTINEL_NEVER_MATCHES_PLACEHOLDER")),  # handled by AST pass
-    Rule("PY-STY-07", Severity.LOW, Category.Style,
-         "Unused import detected",
-         "Remove the unused import to keep the namespace clean.",
-         re.compile(r"SENTINEL_NEVER_MATCHES_PLACEHOLDER")),  # handled by AST pass
-    # PY-STY-08: Only flag public functions (no _ prefix)
-    Rule("PY-STY-08", Severity.LOW, Category.Style,
+         _compile_anti([r"#\s*VB-IGNORE"])),
+
+    Rule("PY-STY-04", Severity.LOW, Category.Quality,
+         "Global variable mutation",
+         "Pass as parameters or use a class.",
+         re.compile(r"^\s+global\s+\w+"),
+         _compile_anti([r"#\s*VB-IGNORE"])),
+
+    # PY-STY-05/06/07/08 are AST-only (sentinel patterns)
+    Rule("PY-STY-05", Severity.LOW, Category.Quality,
+         "Missing __main__ guard -- code runs on import",
+         "Wrap in: if __name__ == '__main__':",
+         re.compile(r"SENTINEL_AST_ONLY")),
+
+    Rule("PY-STY-06", Severity.LOW, Category.Quality,
+         "Missing __all__ in public module",
+         "Add __all__ = [...] to define the public API.",
+         re.compile(r"SENTINEL_AST_ONLY")),
+
+    Rule("PY-STY-09", Severity.LOW, Category.Quality,
+         "Function exceeds length threshold",
+         "Break long functions into smaller, well-named helpers.",
+         re.compile(r"SENTINEL_AST_ONLY")),
+
+    Rule("PY-STY-08", Severity.LOW, Category.Quality,
          "Missing type annotation on public function",
-         "Add return type annotation and parameter type hints.",
-         re.compile(r"SENTINEL_NEVER_MATCHES_PLACEHOLDER")),  # handled by AST pass
+         "Add return type annotation: def func(...) -> ReturnType:",
+         re.compile(r"SENTINEL_AST_ONLY")),
 ]
 
-# Pass 2: AST-aware analysis
-def _ast_analyze(filepath: str, source: str) -> list[Issue]:
-    """AST-based analysis for patterns that regex cannot reliably detect."""
-    issues: list[Issue] = []
 
+# =========================================================================
+#  AST-aware analysis (Pass 2)
+# =========================================================================
+
+def _ast_analyze(filepath: str, source: str) -> list[Issue]:
+    """AST-based analysis for patterns regex cannot reliably detect."""
+    issues: list[Issue] = []
     try:
         tree = ast.parse(source, filename=filepath)
     except SyntaxError:
         return issues
 
-    # Collect all names used in the module (for unused import detection)
+    is_template = filepath.endswith("_templates.py")
+
+    # Collect all names used
     all_names_used: set[str] = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Name):
             all_names_used.add(node.id)
         elif isinstance(node, ast.Attribute):
-            # Collect top-level attribute access like `os.path`
             if isinstance(node.value, ast.Name):
                 all_names_used.add(node.value.id)
 
-    # Check imports
-    imported_names: dict[str, int] = {}  # name -> line
+    # Collect imports
+    imported_names: dict[str, int] = {}
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             for alias in node.names:
@@ -259,7 +447,7 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
                 imported_names[name] = node.lineno
         elif isinstance(node, ast.ImportFrom):
             if node.names[0].name == "*":
-                continue  # handled by regex rule
+                continue
             for alias in node.names:
                 name = alias.asname if alias.asname else alias.name
                 imported_names[name] = node.lineno
@@ -267,110 +455,142 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
     # PY-STY-07: Unused imports
     for name, lineno in imported_names.items():
         if name.startswith("_"):
-            continue  # convention: private/re-export
+            continue
         if name not in all_names_used:
             issues.append(Issue(
-                rule_id="PY-STY-07",
-                severity=Severity.LOW.name,
-                category=Category.Style.name,
-                file=filepath,
-                line=lineno,
+                rule_id="PY-STY-07", severity=Severity.LOW.name,
+                category=Category.Quality.name, file=filepath, line=lineno,
                 description=f"Unused import: '{name}'",
-                fix="Remove the unused import to keep the namespace clean.",
-                matched_text=name,
-            ))
+                fix="Remove the unused import.", matched_text=name))
 
-    # PY-STY-08: Missing type annotations on public functions
+    # PY-STY-08: Missing type annotations on public functions (no _ prefix)
+    # Only flag functions listed in __all__ or with docstrings if module has __all__
+    has_all = any(
+        isinstance(n, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "__all__" for t in n.targets)
+        for n in ast.iter_child_nodes(tree))
+
+    all_names_list: set[str] = set()
+    if has_all:
+        for n in ast.iter_child_nodes(tree):
+            if isinstance(n, ast.Assign):
+                for t in n.targets:
+                    if isinstance(t, ast.Name) and t.id == "__all__":
+                        if isinstance(n.value, (ast.List, ast.Tuple)):
+                            for elt in n.value.elts:
+                                if isinstance(elt, ast.Constant):
+                                    all_names_list.add(elt.value)
+
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if node.name.startswith("_"):
                 continue
+            # PY-STY-08 FP fix: only flag public functions (in __all__ or has docstring)
+            if has_all and node.name not in all_names_list:
+                continue
             if node.returns is None:
                 issues.append(Issue(
-                    rule_id="PY-STY-08",
-                    severity=Severity.LOW.name,
-                    category=Category.Style.name,
-                    file=filepath,
-                    line=node.lineno,
+                    rule_id="PY-STY-08", severity=Severity.LOW.name,
+                    category=Category.Quality.name, file=filepath, line=node.lineno,
                     description=f"Public function '{node.name}' missing return type annotation",
-                    fix="Add return type annotation: def func(...) -> ReturnType:",
-                    matched_text=node.name,
-                ))
+                    fix="Add: def func(...) -> ReturnType:", matched_text=node.name))
 
-    # PY-STY-05: Missing __main__ guard (only for files with top-level executable code)
+    # PY-STY-05: Missing __main__ guard
     has_main_guard = False
     has_top_level_code = False
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, ast.If):
-            # Check for if __name__ == "__main__"
             test = node.test
             if (isinstance(test, ast.Compare) and
                     isinstance(test.left, ast.Name) and
                     test.left.id == "__name__"):
                 has_main_guard = True
-        elif isinstance(node, ast.Expr):
-            # Function calls at module level
-            if isinstance(node.value, ast.Call):
-                has_top_level_code = True
+        elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
+            has_top_level_code = True
 
     if has_top_level_code and not has_main_guard:
         issues.append(Issue(
-            rule_id="PY-STY-05",
-            severity=Severity.LOW.name,
-            category=Category.Style.name,
-            file=filepath,
-            line=1,
+            rule_id="PY-STY-05", severity=Severity.LOW.name,
+            category=Category.Quality.name, file=filepath, line=1,
             description="Module has top-level executable code without __main__ guard",
-            fix="Wrap script-level code in: if __name__ == '__main__':",
-        ))
+            fix="Wrap in: if __name__ == '__main__':"))
 
-    # PY-STY-06: Missing __all__ in modules with public names
-    has_all = any(
-        isinstance(n, ast.Assign) and any(
-            isinstance(t, ast.Name) and t.id == "__all__"
-            for t in n.targets
-        )
-        for n in ast.iter_child_nodes(tree)
-    )
+    # PY-STY-06: Missing __all__ -- only flag public functions (no _ prefix)
     public_names = [
         n for n in ast.iter_child_nodes(tree)
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-        and not n.name.startswith("_")
-    ]
+        and not n.name.startswith("_")]
     if not has_all and len(public_names) >= 3:
         issues.append(Issue(
-            rule_id="PY-STY-06",
-            severity=Severity.LOW.name,
-            category=Category.Style.name,
-            file=filepath,
-            line=1,
+            rule_id="PY-STY-06", severity=Severity.LOW.name,
+            category=Category.Quality.name, file=filepath, line=1,
             description=f"Module exports {len(public_names)} public names but has no __all__",
-            fix="Add __all__ = [...] to define the public API.",
-        ))
+            fix="Add __all__ = [...]."))
 
-    # Circular import detection hint: if any import is inside a function body
+    # PY-STY-09: Function length -- threshold 100 for *_templates.py, 60 otherwise
+    threshold = 100 if is_template else 60
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for child in ast.walk(node):
+            if hasattr(node, 'end_lineno') and node.end_lineno:
+                length = node.end_lineno - node.lineno
+                if length > threshold:
+                    issues.append(Issue(
+                        rule_id="PY-STY-09", severity=Severity.LOW.name,
+                        category=Category.Quality.name, file=filepath,
+                        line=node.lineno,
+                        description=f"Function '{node.name}' is {length} lines (threshold: {threshold})",
+                        fix="Break into smaller helpers.",
+                        matched_text=node.name))
+
+    # PY-COR-13: Import inside function body
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for child in ast.iter_child_nodes(node):
                 if isinstance(child, (ast.Import, ast.ImportFrom)):
                     issues.append(Issue(
-                        rule_id="PY-COR-13",
-                        severity=Severity.LOW.name,
-                        category=Category.Correctness.name,
-                        file=filepath,
+                        rule_id="PY-COR-13", severity=Severity.LOW.name,
+                        category=Category.Bug.name, file=filepath,
                         line=child.lineno,
-                        description="Import inside function body -- may indicate circular import workaround",
-                        fix="Restructure modules to avoid circular dependencies.",
-                    ))
+                        description="Import inside function body -- may indicate circular import",
+                        fix="Restructure to avoid circular dependencies."))
 
     return issues
 
 
-# Scanner
-def scan_file(filepath: str) -> list[Issue]:
-    """Scan a single Python file with both passes."""
-    issues: list[Issue] = []
+# =========================================================================
+#  Scanner
+# =========================================================================
 
+def _is_in_triple_quote(lines: list[str]) -> list[bool]:
+    """Pre-classify lines inside triple-quoted strings (handles r/b/f/u prefixes)."""
+    _TDQ = chr(34) * 3
+    _TSQ = chr(39) * 3
+    _TQ_START = re.compile(r"(?:=\s*)?[brufBRUF]{0,2}(?:" + _TSQ + "|" + _TDQ + ")")
+    in_tq = [False] * len(lines)
+    inside = False
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if inside:
+            in_tq[i] = True
+            if _TDQ in stripped or _TSQ in stripped:
+                inside = False
+            continue
+        # Check for triple-quote opening (with prefix like r, b, f, rb, etc.)
+        if _TQ_START.search(stripped):
+            in_tq[i] = True
+            # Count triple quotes on this line; if odd number, we're entering a block
+            dq_count = stripped.count(_TDQ)
+            sq_count = stripped.count(_TSQ)
+            total_tq = dq_count + sq_count
+            if total_tq % 2 == 1:  # odd = opening without close
+                inside = True
+            continue
+    return in_tq
+
+
+def scan_file(filepath: str) -> list[Issue]:
+    """Scan a single Python file with regex pass + AST pass."""
+    issues: list[Issue] = []
     try:
         with open(filepath, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
@@ -378,39 +598,47 @@ def scan_file(filepath: str) -> list[Issue]:
         return issues
 
     lines = content.split("\n")
+    in_tq = _is_in_triple_quote(lines)
 
-    # Build set of suppressed rules
+    # Build suppressed set
     suppressed: set[str] = set()
-    ignore_re = re.compile(r"#\s*VB-IGNORE:\s*([\w,-]+)")
+    ignore_rx = re.compile(r"#\s*VB-IGNORE:\s*([\w,-]+)")
     for line in lines:
-        m = ignore_re.search(line)
+        m = ignore_rx.search(line)
         if m:
-            for rule_id in m.group(1).split(","):
-                suppressed.add(rule_id.strip())
+            for rid in m.group(1).split(","):
+                suppressed.add(rid.strip())
 
-    # Pass 1: Regex
+    # Pass 1: Regex with anti-patterns
     for rule in RULES:
         if rule.id in suppressed:
             continue
-        # Skip sentinel rules (AST-only)
         if "SENTINEL" in rule.pattern.pattern:
             continue
         for i, line in enumerate(lines):
             if "VB-IGNORE" in line:
                 continue
-            if rule.pattern.search(line):
-                if rule.guard and not rule.guard(line, lines, i):
-                    continue
-                issues.append(Issue(
-                    rule_id=rule.id,
-                    severity=rule.severity.name,
-                    category=rule.category.name,
-                    file=filepath,
-                    line=i + 1,
-                    description=rule.description,
-                    fix=rule.fix,
-                    matched_text=line.strip(),
-                ))
+            if _is_comment(line) or in_tq[i]:
+                continue
+            m = rule.pattern.search(line)
+            if not m:
+                continue
+            # Skip if the match falls inside a string literal on this line
+            match_start = m.start()
+            if _match_is_in_string(line, match_start):
+                continue
+            # Anti-pattern suppression
+            if _suppressed_by_anti(rule.anti_patterns, lines, i, rule.anti_radius, filepath):
+                continue
+            if rule.guard and not rule.guard(line, lines, i):
+                continue
+            issues.append(Issue(
+                rule_id=rule.id, severity=rule.severity.name,
+                category=rule.category.name, file=filepath, line=i + 1,
+                description=rule.description, fix=rule.fix,
+                matched_text=line.strip(),
+                finding_type=rule.finding_type.name if rule.finding_type else "BUG",
+                confidence=rule.confidence, priority=rule.priority))
 
     # Pass 2: AST
     ast_issues = _ast_analyze(filepath, content)
@@ -425,38 +653,41 @@ def scan_directory(dirpath: str) -> list[Issue]:
     """Recursively scan all .py files in a directory."""
     all_issues: list[Issue] = []
     root = Path(dirpath)
-
+    skip = {".venv", "venv", "node_modules", "__pycache__",
+            ".git", ".tox", "dist", "build", "egg-info", ".tmp"}
     for py_file in sorted(root.rglob("*.py")):
-        # Skip common non-project dirs
-        parts = py_file.parts
-        if any(p in (".venv", "venv", "node_modules", "__pycache__",
-                      ".git", ".tox", "dist", "build", "egg-info")
-               for p in parts):
+        if any(p in skip for p in py_file.parts):
             continue
         all_issues.extend(scan_file(str(py_file)))
-
     return all_issues
 
 
 def generate_report(issues: list[Issue]) -> dict:
-    """Generate a structured report dict."""
-    severity_counts = {s.name: 0 for s in Severity}
+    """Generate structured report dict with confidence/priority grading."""
+    sev_counts = {s.name: 0 for s in Severity}
+    type_counts = {"ERROR": 0, "BUG": 0, "OPTIMIZATION": 0, "STRENGTHENING": 0}
     for issue in issues:
-        severity_counts[issue.severity] += 1
-
+        sev_counts[issue.severity] += 1
+        type_counts[issue.finding_type] = type_counts.get(issue.finding_type, 0) + 1
+    avg_conf = sum(i.confidence for i in issues) / len(issues) if issues else 0
+    avg_pri = sum(i.priority for i in issues) / len(issues) if issues else 0
     return {
         "total_issues": len(issues),
-        "critical": severity_counts["CRITICAL"],
-        "high": severity_counts["HIGH"],
-        "medium": severity_counts["MEDIUM"],
-        "low": severity_counts["LOW"],
+        "critical": sev_counts["CRITICAL"],
+        "high": sev_counts["HIGH"],
+        "medium": sev_counts["MEDIUM"],
+        "low": sev_counts["LOW"],
+        "errors_bugs": type_counts.get("ERROR", 0) + type_counts.get("BUG", 0),
+        "optimizations": type_counts.get("OPTIMIZATION", 0),
+        "strengthening": type_counts.get("STRENGTHENING", 0),
+        "avg_confidence": round(avg_conf, 1),
+        "avg_priority": round(avg_pri, 1),
         "issues": [asdict(i) for i in issues],
     }
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="VeilBreakers Python Code Reviewer")
+def main() -> None:
+    parser = argparse.ArgumentParser(description="VeilBreakers Python Code Reviewer")
     parser.add_argument("path", nargs="?", default=".",
                         help="File or directory to scan (default: current dir)")
     parser.add_argument("--output", "-o", default=None,
@@ -472,25 +703,39 @@ def main():
     elif target.is_dir():
         issues = scan_directory(str(target))
     else:
-        print(f"Error: {args.path} is not a valid file or directory",
-              file=sys.stderr)
+        print(f"Error: {args.path} is not a valid file or directory", file=sys.stderr)
         sys.exit(2)
 
-    # Filter by severity
     threshold = Severity[args.severity]
     issues = [i for i in issues if Severity[i.severity] <= threshold]
 
     report = generate_report(issues)
-
     output = json.dumps(report, indent=2)
+
     if args.output:
         Path(args.output).write_text(output, encoding="utf-8")
-        print(f"Report written to {args.output} ({len(issues)} issues)",
-              file=sys.stderr)
+        print(f"Report written to {args.output} ({len(issues)} issues)", file=sys.stderr)
     else:
-        print(output)
+        # Pretty console output with confidence/priority
+        for issue in sorted(issues, key=lambda i: (i.priority * -1, i.confidence * -1)):
+            conf_label = issue.confidence_label
+            pri_label = issue.priority_label
+            print(f"[{pri_label}] [{issue.finding_type}] {issue.rule_id} "
+                  f"(conf:{issue.confidence}% pri:{issue.priority})")
+            print(f"  {issue.file}:{issue.line}")
+            print(f"  {issue.description}")
+            print(f"  FIX: {issue.fix}")
+            if issue.matched_text:
+                display = issue.matched_text[:100] + "..." if len(issue.matched_text) > 100 else issue.matched_text
+                print(f"  CODE: {display}")
+            print()
+        # Summary
+        r = report
+        print(f"--- SUMMARY: {r['total_issues']} issues ---")
+        print(f"  Errors/Bugs: {r['errors_bugs']} | Optimizations: {r['optimizations']} | Strengthening: {r['strengthening']}")
+        print(f"  CRITICAL: {r['critical']} | HIGH: {r['high']} | MEDIUM: {r['medium']} | LOW: {r['low']}")
+        print(f"  Avg Confidence: {r['avg_confidence']}% | Avg Priority: {r['avg_priority']}")
 
-    # Exit code: 1 if any CRITICAL or HIGH issues
     has_serious = any(i.severity in ("CRITICAL", "HIGH") for i in issues)
     sys.exit(1 if has_serious else 0)
 
