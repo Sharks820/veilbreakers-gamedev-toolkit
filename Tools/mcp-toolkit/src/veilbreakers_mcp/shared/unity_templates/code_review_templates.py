@@ -1387,7 +1387,9 @@ namespace VeilBreakers.Editor.CodeReview
             Debug.Log(RunHeadless());
         }
     }
-}
+} // class VBCodeReviewer
+} // namespace (if any)
+} // end
 '''
 
     return {
