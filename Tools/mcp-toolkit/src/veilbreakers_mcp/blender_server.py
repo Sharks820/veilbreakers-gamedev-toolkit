@@ -315,6 +315,10 @@ async def blender_mesh(
     face_normal_direction: list[float] | None = None,
     normal_threshold: float = 0.7,
     loose_parts: bool = False,
+    # Position-based selection (GAP-01)
+    position_box: dict | None = None,
+    position_sphere: dict | None = None,
+    position_plane: dict | None = None,
     # Edit params
     operation: str | None = None,
     offset: list[float] | None = None,
@@ -323,6 +327,20 @@ async def blender_mesh(
     axis: str = "X",
     separate_type: str = "SELECTED",
     object_names: list[str] | None = None,
+    # Transform params (GAP-02)
+    angle: float = 0.0,
+    center: list[float] | None = None,
+    factor: list[float] | float | None = None,
+    # Loop cut params (GAP-03)
+    edge_index: int | None = None,
+    cuts: int = 1,
+    # Bevel params (GAP-04)
+    width: float = 0.1,
+    segments: int = 1,
+    profile: float = 0.5,
+    clamp_overlap: bool = True,
+    # Merge/dissolve params (GAP-05)
+    merge_type: str = "CENTER",
     # Boolean params
     cutter_name: str | None = None,
     remove_cutter: bool = True,
@@ -338,7 +356,11 @@ async def blender_mesh(
     iterations: int = 3,
     capture_viewport: bool = True
 ):
-    """Mesh topology analysis, repair, editing, booleans, retopology, and sculpting."""
+    """Mesh topology analysis, repair, editing, booleans, retopology, and sculpting.
+
+    Extended with position-based selection (GAP-01), transform operations (GAP-02),
+    loop cuts (GAP-03), bevel (GAP-04), and merge/dissolve (GAP-05).
+    """
     blender = get_blender_connection()
 
     if action == "analyze":
@@ -382,6 +404,13 @@ async def blender_mesh(
             params["normal_threshold"] = normal_threshold
         if loose_parts:
             params["loose_parts"] = loose_parts
+        # Position-based selection (GAP-01)
+        if position_box is not None:
+            params["position_box"] = position_box
+        if position_sphere is not None:
+            params["position_sphere"] = position_sphere
+        if position_plane is not None:
+            params["position_plane"] = position_plane
         result = await blender.send_command("mesh_select", params)
         return [json.dumps(result, indent=2, default=str)]
 
@@ -397,6 +426,23 @@ async def blender_mesh(
         params["separate_type"] = separate_type
         if object_names is not None:
             params["object_names"] = object_names
+        # Transform params (GAP-02)
+        params["angle"] = angle
+        if center is not None:
+            params["center"] = center
+        if factor is not None:
+            params["factor"] = factor
+        # Loop cut params (GAP-03)
+        if edge_index is not None:
+            params["edge_index"] = edge_index
+        params["cuts"] = cuts
+        # Bevel params (GAP-04)
+        params["width"] = width
+        params["segments"] = segments
+        params["profile"] = profile
+        params["clamp_overlap"] = clamp_overlap
+        # Merge/dissolve params (GAP-05)
+        params["merge_type"] = merge_type
         result = await blender.send_command("mesh_edit", params)
         return await _with_screenshot(blender, result, capture_viewport)
 
@@ -438,7 +484,6 @@ async def blender_mesh(
         return await _with_screenshot(blender, result, capture_viewport)
 
     return ["Unknown action"]
-
 
 
 @mcp.tool()
@@ -1441,6 +1486,7 @@ async def blender_environment(
         "scatter_props",
         "create_breakable",
         "add_storytelling_props",
+        "sculpt_terrain",
     ],
     # Common params
     name: str | None = None,
@@ -1484,10 +1530,16 @@ async def blender_environment(
     target_interior: str | None = None,
     density_modifier: float | None = None,
     prop_types: list[str] | None = None,
+    # sculpt_terrain params (GAP-09)
+    radius: float | None = None,
+    strength: float | None = None,
+    operation: str | None = None,
+    falloff: str = "smooth",
+    heightmap: list[list[float]] | None = None,
     # Visual feedback
     capture_viewport: bool = True
 ):
-    """Environment generation."""
+    """Environment generation, terrain sculpting, and scatter operations."""
     blender = get_blender_connection()
 
     if action == "generate_terrain":
@@ -1634,6 +1686,26 @@ async def blender_environment(
         if seed is not None:
             params["seed"] = seed
         result = await blender.send_command("env_add_storytelling_props", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "sculpt_terrain":
+        params = {}
+        if terrain_name is not None:
+            params["terrain_name"] = terrain_name
+        elif name is not None:
+            params["terrain_name"] = name
+        if position is not None:
+            params["position"] = position
+        if radius is not None:
+            params["radius"] = radius
+        if strength is not None:
+            params["strength"] = strength
+        if operation is not None:
+            params["operation"] = operation
+        params["falloff"] = falloff
+        if heightmap is not None:
+            params["heightmap"] = heightmap
+        result = await blender.send_command("terrain_sculpt", params)
         return await _with_screenshot(blender, result, capture_viewport)
 
     return "Unknown action"
