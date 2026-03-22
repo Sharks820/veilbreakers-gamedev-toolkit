@@ -10684,6 +10684,1060 @@ def generate_shield_mesh(style: str = "round_buckler", size: float = 1.0) -> Mes
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Shield_{style}", verts, faces, style=style, size=size, category="armor")
 
+
+# =========================================================================
+# INTERIOR FURNITURE & PROPS (bed, wardrobe, cabinet, curtain, mirror,
+#   hay_bale, wine_rack, bathtub, fireplace)
+# =========================================================================
+
+
+def generate_bed_mesh(
+    style: str = "simple",
+    width: float = 2.0,
+    depth: float = 0.9,
+    height: float = 0.5,
+) -> MeshSpec:
+    """Generate a bed mesh.
+
+    Args:
+        style: "simple" (wooden frame + mattress), "ornate" (headboard + footboard + posts),
+               or "bedroll" (rolled fabric on ground).
+        width: Bed length along X.
+        depth: Bed width along Z.
+        height: Bed height along Y.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "bedroll":
+        # Rolled fabric on ground -- simple cylinder + flat pad
+        # Flat pad
+        pad_h = 0.04
+        pv, pf = _make_beveled_box(0, pad_h / 2, 0, width * 0.4, pad_h / 2, depth * 0.4,
+                                    bevel=0.005)
+        parts.append((pv, pf))
+        # Rolled portion at one end
+        roll_r = 0.08
+        rv, rf = _make_cylinder(width * 0.35, pad_h, 0, roll_r, depth * 0.6,
+                                segments=10, cap_top=True, cap_bottom=True)
+        # Rotate cylinder to lie along Z -- swap Y/Z
+        rv_rot = [(v[0], v[2] + pad_h + roll_r, v[1]) for v in rv]
+        parts.append((rv_rot, rf))
+        # Small pillow bump
+        sv, sf = _make_sphere(-width * 0.25, pad_h + 0.03, 0, 0.07,
+                              rings=4, sectors=6)
+        parts.append((sv, sf))
+    else:
+        # --- Frame rails ---
+        rail_h = 0.04
+        rail_w = 0.04
+        leg_r = 0.03
+        leg_segs = 6
+        frame_top = height * 0.55
+        mattress_h = height * 0.35
+
+        # Side rails (along X)
+        for z_off in [-depth / 2 + rail_w / 2, depth / 2 - rail_w / 2]:
+            rv, rf = _make_beveled_box(0, frame_top - rail_h / 2, z_off,
+                                       width / 2, rail_h / 2, rail_w / 2,
+                                       bevel=0.003)
+            parts.append((rv, rf))
+
+        # End rails (along Z)
+        for x_off in [-width / 2 + rail_w / 2, width / 2 - rail_w / 2]:
+            rv, rf = _make_beveled_box(x_off, frame_top - rail_h / 2, 0,
+                                       rail_w / 2, rail_h / 2, depth / 2 - rail_w,
+                                       bevel=0.003)
+            parts.append((rv, rf))
+
+        # Slat support board
+        sv, sf = _make_beveled_box(0, frame_top - rail_h, 0,
+                                   width / 2 - rail_w, 0.01, depth / 2 - rail_w,
+                                   bevel=0.002)
+        parts.append((sv, sf))
+
+        # 4 legs
+        leg_height = frame_top - rail_h
+        for xm in [-1, 1]:
+            for zm in [-1, 1]:
+                lx = xm * (width / 2 - leg_r)
+                lz = zm * (depth / 2 - leg_r)
+                lv, lf = _make_tapered_cylinder(
+                    lx, 0, lz, leg_r * 1.1, leg_r * 0.9,
+                    leg_height, leg_segs, rings=2,
+                    cap_top=True, cap_bottom=True,
+                )
+                parts.append((lv, lf))
+
+        # Mattress -- slightly rounded beveled box on top of frame
+        mat_y = frame_top
+        mv, mf = _make_beveled_box(0, mat_y + mattress_h / 2, 0,
+                                   width / 2 - rail_w * 0.5,
+                                   mattress_h / 2,
+                                   depth / 2 - rail_w * 0.5,
+                                   bevel=0.015)
+        parts.append((mv, mf))
+
+        # Pillow
+        pv, pf = _make_beveled_box(-width * 0.35, mat_y + mattress_h + 0.03, 0,
+                                   0.12, 0.03, depth * 0.3,
+                                   bevel=0.01)
+        parts.append((pv, pf))
+
+        if style == "ornate":
+            # Headboard
+            hb_h = height * 0.7
+            hb_w = depth - 0.02
+            hv, hf = _make_beveled_box(-width / 2 + 0.02, frame_top + hb_h / 2, 0,
+                                       0.02, hb_h / 2, hb_w / 2,
+                                       bevel=0.005)
+            parts.append((hv, hf))
+
+            # Footboard (shorter)
+            fb_h = height * 0.3
+            fv, ff = _make_beveled_box(width / 2 - 0.02, frame_top + fb_h / 2, 0,
+                                       0.02, fb_h / 2, hb_w / 2,
+                                       bevel=0.005)
+            parts.append((fv, ff))
+
+            # 4 corner posts (taller)
+            post_h = height * 0.9
+            post_r = 0.025
+            for xm in [-1, 1]:
+                for zm in [-1, 1]:
+                    px = xm * (width / 2 - 0.01)
+                    pz = zm * (depth / 2 - 0.01)
+                    ppv, ppf = _make_tapered_cylinder(
+                        px, frame_top, pz,
+                        post_r, post_r * 0.7, post_h,
+                        segments=6, rings=3,
+                        cap_top=True, cap_bottom=True,
+                    )
+                    parts.append((ppv, ppf))
+                    # Finial ball on top
+                    bsv, bsf = _make_sphere(px, frame_top + post_h + post_r * 0.5, pz,
+                                            post_r * 0.9, rings=4, sectors=6)
+                    parts.append((bsv, bsf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Bed_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_wardrobe_mesh(
+    style: str = "wooden",
+    width: float = 1.0,
+    depth: float = 0.5,
+    height: float = 2.0,
+) -> MeshSpec:
+    """Generate a wardrobe / armoire mesh.
+
+    Args:
+        style: "wooden" (simple doors), "ornate" (carved panels), "armoire" (tall with crown).
+        width: Width along X.
+        depth: Depth along Z.
+        height: Height along Y.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    wall = 0.025  # wall thickness
+    door_gap = 0.005
+
+    # Main body shell (outer)
+    bv, bf = _make_beveled_box(0, height / 2, 0,
+                               width / 2, height / 2, depth / 2,
+                               bevel=0.008)
+    parts.append((bv, bf))
+
+    # Hollow interior (slightly smaller box, inverted normals approximation --
+    # we just add the inner box since the outer shell + inner box give thickness)
+    inner_w = width / 2 - wall
+    inner_h = height / 2 - wall
+    inner_d = depth / 2 - wall
+    iv, i_f = _make_box(0, height / 2, 0, inner_w, inner_h, inner_d)
+    parts.append((iv, i_f))
+
+    # Two front doors (slightly recessed)
+    door_w = (width / 2 - door_gap * 1.5) / 1.0
+    door_h = height - wall * 4
+    door_thick = 0.015
+    for side in [-1, 1]:
+        dx = side * (door_w / 2 + door_gap / 2)
+        dv, df = _make_beveled_box(dx, height / 2, -depth / 2 + door_thick / 2 - 0.001,
+                                   door_w / 2 - door_gap, door_h / 2, door_thick / 2,
+                                   bevel=0.004)
+        parts.append((dv, df))
+
+        # Door handle knob
+        kv, kf = _make_sphere(dx - side * (door_w / 2 - 0.06),
+                              height * 0.5,
+                              -depth / 2 - 0.01,
+                              0.012, rings=3, sectors=6)
+        parts.append((kv, kf))
+
+    # Internal shelves (3 shelves)
+    shelf_thick = 0.012
+    for i in range(3):
+        sy = wall * 2 + (i + 1) * (height - wall * 4) / 4
+        shv, shf = _make_box(0, sy, 0,
+                             inner_w - 0.005, shelf_thick / 2, inner_d - 0.005)
+        parts.append((shv, shf))
+
+    if style == "ornate":
+        # Carved panel insets on doors (recessed rectangles)
+        panel_w = door_w * 0.35
+        panel_h = door_h * 0.3
+        for side in [-1, 1]:
+            dx = side * (door_w / 2 + door_gap / 2)
+            for py_mult in [0.33, 0.67]:
+                pv, pf = _make_beveled_box(
+                    dx, height * py_mult, -depth / 2 - 0.015,
+                    panel_w, panel_h / 2, 0.003,
+                    bevel=0.003,
+                )
+                parts.append((pv, pf))
+
+    elif style == "armoire":
+        # Crown molding strip along top
+        crown_h = 0.04
+        crown_overhang = 0.02
+        cv, cf = _make_beveled_box(0, height + crown_h / 2, 0,
+                                   width / 2 + crown_overhang,
+                                   crown_h / 2,
+                                   depth / 2 + crown_overhang,
+                                   bevel=0.006)
+        parts.append((cv, cf))
+
+        # Base molding
+        base_h = 0.05
+        bmv, bmf = _make_beveled_box(0, base_h / 2, 0,
+                                     width / 2 + crown_overhang * 0.5,
+                                     base_h / 2,
+                                     depth / 2 + crown_overhang * 0.5,
+                                     bevel=0.005)
+        parts.append((bmv, bmf))
+
+        # Feet (small spheres)
+        for xm in [-1, 1]:
+            for zm in [-1, 1]:
+                fv, ff = _make_sphere(
+                    xm * (width / 2 - 0.05), 0.02,
+                    zm * (depth / 2 - 0.05),
+                    0.025, rings=3, sectors=6,
+                )
+                parts.append((fv, ff))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Wardrobe_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_cabinet_mesh(
+    style: str = "simple",
+    width: float = 0.8,
+    depth: float = 0.4,
+    height: float = 1.0,
+) -> MeshSpec:
+    """Generate a cabinet mesh.
+
+    Args:
+        style: "simple", "apothecary" (many small drawers), or "display" (glass front).
+        width: Width along X.
+        depth: Depth along Z.
+        height: Height along Y.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    wall = 0.02
+
+    # Main body
+    bv, bf = _make_beveled_box(0, height / 2, 0,
+                               width / 2, height / 2, depth / 2,
+                               bevel=0.006)
+    parts.append((bv, bf))
+
+    if style == "apothecary":
+        # Grid of small drawers (4 columns x 5 rows)
+        cols, rows = 4, 5
+        drawer_gap = 0.008
+        total_gap_x = drawer_gap * (cols + 1)
+        total_gap_y = drawer_gap * (rows + 1)
+        dw = (width - total_gap_x - wall * 2) / cols
+        dh = (height - total_gap_y - wall * 2) / rows
+        d_thick = 0.01
+
+        for r in range(rows):
+            for c in range(cols):
+                dx = -width / 2 + wall + drawer_gap + c * (dw + drawer_gap) + dw / 2
+                dy = wall + drawer_gap + r * (dh + drawer_gap) + dh / 2
+                # Drawer face
+                dv, df = _make_beveled_box(
+                    dx, dy, -depth / 2 - 0.001,
+                    dw / 2 - 0.002, dh / 2 - 0.002, d_thick / 2,
+                    bevel=0.002,
+                )
+                parts.append((dv, df))
+                # Tiny knob
+                kv, kf = _make_sphere(dx, dy, -depth / 2 - d_thick,
+                                      0.006, rings=3, sectors=4)
+                parts.append((kv, kf))
+
+    elif style == "display":
+        # Single large glass-front door
+        door_h = height - wall * 4
+        door_w = width - wall * 4
+        d_thick = 0.008
+
+        # Door frame
+        dv, df = _make_beveled_box(0, height / 2, -depth / 2 - 0.001,
+                                   door_w / 2, door_h / 2, d_thick / 2,
+                                   bevel=0.003)
+        parts.append((dv, df))
+
+        # Glass pane (thin flat quad inside frame)
+        # Slightly inset
+        gv, gf = _make_box(0, height / 2, -depth / 2 - d_thick,
+                           door_w / 2 - 0.015, door_h / 2 - 0.015, 0.002)
+        parts.append((gv, gf))
+
+        # Handle
+        hv, hf = _make_sphere(door_w / 2 - 0.03, height * 0.5,
+                              -depth / 2 - d_thick - 0.005,
+                              0.01, rings=3, sectors=6)
+        parts.append((hv, hf))
+
+        # 2 internal shelves
+        for i in range(2):
+            sy = wall + (i + 1) * (height - wall * 2) / 3
+            sv, sf = _make_box(0, sy, 0,
+                               width / 2 - wall - 0.005,
+                               0.006,
+                               depth / 2 - wall - 0.005)
+            parts.append((sv, sf))
+    else:
+        # Simple: 2 doors + 1 shelf
+        door_w = (width - wall * 2 - 0.01) / 2
+        door_h = height - wall * 4
+        d_thick = 0.012
+
+        for side in [-1, 1]:
+            dx = side * (door_w / 2 + 0.003)
+            dv, df = _make_beveled_box(dx, height / 2, -depth / 2 - 0.001,
+                                       door_w / 2 - 0.003, door_h / 2, d_thick / 2,
+                                       bevel=0.003)
+            parts.append((dv, df))
+            # Knob
+            kv, kf = _make_sphere(dx - side * (door_w / 2 - 0.04), height * 0.5,
+                                  -depth / 2 - d_thick,
+                                  0.008, rings=3, sectors=5)
+            parts.append((kv, kf))
+
+        # 1 internal shelf
+        sv, sf = _make_box(0, height * 0.5, 0,
+                           width / 2 - wall - 0.005, 0.006,
+                           depth / 2 - wall - 0.005)
+        parts.append((sv, sf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Cabinet_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_curtain_mesh(
+    style: str = "hanging",
+    width: float = 1.0,
+    height: float = 1.5,
+    folds: int = 8,
+) -> MeshSpec:
+    """Generate a curtain mesh -- a flat subdivided plane with wave deformation.
+
+    Args:
+        style: "hanging" (straight drape), "gathered" (bunched folds),
+               or "tattered" (torn lower edge).
+        width: Curtain width along X.
+        height: Curtain height along Y.
+        folds: Number of wave folds across width.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    # Subdivided plane with wave deformation
+    res_x = max(folds * 4, 16)  # horizontal resolution
+    res_y = 12  # vertical resolution
+    verts: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+    uvs: list[tuple[float, float]] = []
+
+    for iy in range(res_y + 1):
+        ty = iy / res_y
+        y = height * (1.0 - ty)  # top to bottom
+        for ix in range(res_x + 1):
+            tx = ix / res_x
+            x = (tx - 0.5) * width
+
+            # Wave deformation along Z
+            wave_amp = 0.03
+            if style == "gathered":
+                wave_amp = 0.06 + 0.02 * math.sin(ty * math.pi)
+                # Gather toward center at bottom
+                gather = (1.0 - ty) * 0.3
+                x *= (1.0 - gather * 0.5)
+            elif style == "tattered":
+                wave_amp = 0.03 + 0.01 * math.sin(ty * 7.0)
+
+            z = math.sin(tx * folds * math.pi * 2) * wave_amp
+
+            # For tattered style: cut the bottom edge irregularly
+            if style == "tattered" and ty > 0.7:
+                # Irregular bottom by varying y based on x position
+                tear_offset = math.sin(tx * 13.7) * 0.15 + math.sin(tx * 7.3) * 0.1
+                y -= max(0, tear_offset * (ty - 0.7) / 0.3) * height * 0.2
+
+            verts.append((x, y, z))
+            uvs.append((tx, 1.0 - ty))
+
+    # Faces
+    for iy in range(res_y):
+        for ix in range(res_x):
+            i0 = iy * (res_x + 1) + ix
+            i1 = i0 + 1
+            i2 = i0 + (res_x + 1) + 1
+            i3 = i0 + (res_x + 1)
+            faces.append((i0, i1, i2, i3))
+
+    # Curtain rod (cylinder at top)
+    rod_r = 0.012
+    rod_len = width * 1.1
+    rod_segs = 8
+    rod_base = len(verts)
+    rv, rf = _make_cylinder(0, height + rod_r, 0, rod_r, rod_len,
+                            segments=rod_segs, cap_top=True, cap_bottom=True,
+                            base_idx=rod_base)
+    # Rotate to lie along X axis: swap Y with local-axis
+    rv_rotated = [(-rod_len / 2 + v[1] - (height + rod_r),
+                   height + rod_r + v[0],
+                   v[2]) for v in rv]
+    verts.extend(rv_rotated)
+    faces.extend(rf)
+
+    return _make_result(f"Curtain_{style}", verts, faces, uvs=uvs,
+                        style=style, folds=folds, category="furniture")
+
+
+def generate_mirror_mesh(
+    style: str = "wall",
+    width: float = 0.5,
+    height: float = 0.7,
+) -> MeshSpec:
+    """Generate a mirror mesh with frame and reflective surface.
+
+    Args:
+        style: "wall" (rectangular wall-mounted), "standing" (floor mirror with legs),
+               or "hand" (small oval hand mirror).
+        width: Mirror width along X.
+        height: Mirror height along Y.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "hand":
+        # Small oval hand mirror with handle
+        mirror_r = 0.06
+        frame_thick = 0.008
+        handle_len = 0.1
+
+        # Mirror face (disc approximation via lathe)
+        profile = [(0.0, 0.0), (mirror_r, 0.0), (mirror_r, frame_thick)]
+        dv, df = _make_lathe(profile, segments=10,
+                             close_bottom=True, close_top=True)
+        parts.append((dv, df))
+
+        # Frame ring
+        rv, rf = _make_torus_ring(0, frame_thick / 2, 0,
+                                  mirror_r, frame_thick * 0.6,
+                                  major_segments=12, minor_segments=4)
+        parts.append((rv, rf))
+
+        # Handle
+        hv, hf = _make_tapered_cylinder(
+            0, -mirror_r - handle_len / 2, 0,
+            0.012, 0.008, handle_len,
+            segments=6, rings=2,
+            cap_top=True, cap_bottom=True,
+        )
+        # Rotate handle to point downward from mirror
+        hv_rot = [(v[0], -mirror_r + (v[1] + mirror_r + handle_len / 2) * -1, v[2])
+                  for v in hv]
+        # Simpler: just position handle below
+        hv2, hf2 = _make_tapered_cylinder(
+            0, -(mirror_r + 0.01), 0,
+            0.012, 0.008, handle_len,
+            segments=6, rings=2,
+            cap_top=True, cap_bottom=True,
+        )
+        parts.append((hv2, hf2))
+
+    elif style == "standing":
+        frame_w = 0.015
+        frame_d = 0.01
+
+        # Mirror glass (thin flat box)
+        gv, gf = _make_box(0, height / 2 + 0.3, 0,
+                           width / 2 - frame_w, height / 2, 0.003)
+        parts.append((gv, gf))
+
+        # Frame around mirror (4 beveled box strips)
+        cy = height / 2 + 0.3
+        # Top
+        fv, ff = _make_beveled_box(0, cy + height / 2, 0,
+                                   width / 2, frame_w / 2, frame_d / 2,
+                                   bevel=0.003)
+        parts.append((fv, ff))
+        # Bottom
+        fv2, ff2 = _make_beveled_box(0, cy - height / 2, 0,
+                                     width / 2, frame_w / 2, frame_d / 2,
+                                     bevel=0.003)
+        parts.append((fv2, ff2))
+        # Left
+        fv3, ff3 = _make_beveled_box(-width / 2, cy, 0,
+                                     frame_w / 2, height / 2, frame_d / 2,
+                                     bevel=0.003)
+        parts.append((fv3, ff3))
+        # Right
+        fv4, ff4 = _make_beveled_box(width / 2, cy, 0,
+                                     frame_w / 2, height / 2, frame_d / 2,
+                                     bevel=0.003)
+        parts.append((fv4, ff4))
+
+        # Two legs (A-frame)
+        leg_h = cy - height / 2
+        for side in [-1, 1]:
+            lv, lf = _make_tapered_cylinder(
+                side * width * 0.4, 0, 0.05,
+                0.015, 0.012, leg_h + 0.05,
+                segments=6, rings=2,
+                cap_top=True, cap_bottom=True,
+            )
+            parts.append((lv, lf))
+
+        # Rear support strut
+        sv, sf = _make_tapered_cylinder(0, 0, 0.12,
+                                        0.012, 0.01, leg_h * 0.7,
+                                        segments=6, rings=2,
+                                        cap_top=True, cap_bottom=True)
+        parts.append((sv, sf))
+
+    else:  # wall
+        frame_w = 0.02
+        frame_d = 0.015
+
+        # Mirror glass
+        gv, gf = _make_box(0, 0, 0,
+                           width / 2 - frame_w, height / 2 - frame_w, 0.003)
+        parts.append((gv, gf))
+
+        # Frame (4 strips)
+        # Top
+        fv, ff = _make_beveled_box(0, height / 2, 0,
+                                   width / 2 + frame_w * 0.3, frame_w / 2, frame_d / 2,
+                                   bevel=0.004)
+        parts.append((fv, ff))
+        # Bottom
+        fv2, ff2 = _make_beveled_box(0, -height / 2, 0,
+                                     width / 2 + frame_w * 0.3, frame_w / 2, frame_d / 2,
+                                     bevel=0.004)
+        parts.append((fv2, ff2))
+        # Left
+        fv3, ff3 = _make_beveled_box(-width / 2, 0, 0,
+                                     frame_w / 2, height / 2 + frame_w * 0.3, frame_d / 2,
+                                     bevel=0.004)
+        parts.append((fv3, ff3))
+        # Right
+        fv4, ff4 = _make_beveled_box(width / 2, 0, 0,
+                                     frame_w / 2, height / 2 + frame_w * 0.3, frame_d / 2,
+                                     bevel=0.004)
+        parts.append((fv4, ff4))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Mirror_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_hay_bale_mesh(
+    style: str = "rectangular",
+    width: float = 0.9,
+    height: float = 0.45,
+    depth: float = 0.45,
+) -> MeshSpec:
+    """Generate a hay bale mesh.
+
+    Args:
+        style: "rectangular", "round" (cylindrical), or "scattered" (loose pile).
+        width: Bale length along X.
+        height: Bale height along Y.
+        depth: Bale depth along Z.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "round":
+        # Cylindrical hay bale lying on side
+        radius = height * 0.8
+        length = width
+        cv, cf = _make_cylinder(0, radius, 0, radius, length,
+                                segments=14, cap_top=True, cap_bottom=True)
+        # Rotate to lie along X: swap Y and local axis
+        cv_rot = [(v[1] - radius, radius + v[0], v[2]) for v in cv]
+        # Re-center along X
+        cv_final = [(v[0] - length / 2, v[1] - radius, v[2]) for v in cv_rot]
+        parts.append((cv_final, cf))
+
+        # Binding straps (2 torus rings)
+        for xpos in [-length * 0.25, length * 0.25]:
+            tv, tf = _make_torus_ring(xpos, radius, 0,
+                                      radius + 0.005, 0.008,
+                                      major_segments=12, minor_segments=4)
+            parts.append((tv, tf))
+
+    elif style == "scattered":
+        # Loose pile: several small irregular boxes
+        import random as _rng
+        _rng.seed(42)  # Deterministic
+        for _ in range(8):
+            sx = _rng.uniform(0.05, 0.15)
+            sy = _rng.uniform(0.02, 0.06)
+            sz = _rng.uniform(0.03, 0.08)
+            px = _rng.uniform(-0.3, 0.3)
+            py = sy  # sit on ground
+            pz = _rng.uniform(-0.3, 0.3)
+            sv, sf = _make_beveled_box(px, py, pz, sx, sy, sz, bevel=0.005)
+            parts.append((sv, sf))
+
+    else:  # rectangular
+        # Main bale body with beveled edges
+        bv, bf = _make_beveled_box(0, height / 2, 0,
+                                   width / 2, height / 2, depth / 2,
+                                   bevel=0.01)
+        parts.append((bv, bf))
+
+        # Binding straps (2 thin bands)
+        strap_h = 0.005
+        strap_w = 0.015
+        for xpos in [-width * 0.25, width * 0.25]:
+            # Top strap
+            sv, sf = _make_box(xpos, height + strap_h / 2, 0,
+                               strap_w / 2, strap_h / 2, depth / 2 + 0.005)
+            parts.append((sv, sf))
+            # Side straps (front + back)
+            for zm in [-1, 1]:
+                ssv, ssf = _make_box(xpos, height / 2, zm * (depth / 2 + strap_h / 2),
+                                     strap_w / 2, height / 2, strap_h / 2)
+                parts.append((ssv, ssf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"HayBale_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_wine_rack_mesh(
+    style: str = "wall",
+    cols: int = 4,
+    rows: int = 3,
+    cell_size: float = 0.12,
+) -> MeshSpec:
+    """Generate a wine rack mesh with a grid of bottle slots.
+
+    Args:
+        style: "wall" (wall-mounted grid), "diamond" (X-pattern slots),
+               or "barrel" (built into barrel end).
+        cols: Number of columns.
+        rows: Number of rows.
+        cell_size: Size of each bottle slot.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    total_w = cols * cell_size + 0.04
+    total_h = rows * cell_size + 0.04
+    depth = cell_size * 1.8
+    frame_thick = 0.015
+
+    if style == "diamond":
+        # Diamond / X-pattern rack
+        # Outer frame
+        fv, ff = _make_beveled_box(0, total_h / 2, 0,
+                                   total_w / 2, total_h / 2, depth / 2,
+                                   bevel=0.005)
+        parts.append((fv, ff))
+
+        # X-pattern dividers
+        div_thick = 0.008
+        for r in range(rows + 1):
+            for c in range(cols + 1):
+                cx = -total_w / 2 + 0.02 + c * cell_size
+                cy = 0.02 + r * cell_size
+                if c < cols and r < rows:
+                    # Horizontal divider piece
+                    hv, hf = _make_box(cx + cell_size / 2, cy + cell_size / 2, 0,
+                                       cell_size / 2 - 0.005, div_thick / 2, depth / 2 - 0.01)
+                    parts.append((hv, hf))
+
+    elif style == "barrel":
+        # Barrel end with bottle holes
+        barrel_r = max(total_w, total_h) * 0.6
+        profile = [(barrel_r, -depth / 2), (barrel_r, depth / 2)]
+        bv, bf = _make_lathe(profile, segments=12,
+                             close_bottom=True, close_top=True)
+        parts.append((bv, bf))
+
+        # Grid of cylindrical cutouts approximated as small cylinders
+        for r in range(rows):
+            for c in range(cols):
+                cx = -cols * cell_size / 2 + c * cell_size + cell_size / 2
+                cy = -rows * cell_size / 2 + r * cell_size + cell_size / 2
+                rv, rf = _make_cylinder(cx, cy, -depth / 2,
+                                        cell_size * 0.35, depth,
+                                        segments=6, cap_top=False, cap_bottom=False)
+                # Re-orient: swap y/z for depth along Z
+                rv_rot = [(v[0], v[2] + cy, v[1] - cy + cy) for v in rv]
+                parts.append((rv_rot, rf))
+
+    else:  # wall
+        # Outer frame
+        fv, ff = _make_beveled_box(0, total_h / 2, 0,
+                                   total_w / 2, total_h / 2, depth / 2,
+                                   bevel=0.005)
+        parts.append((fv, ff))
+
+        # Grid dividers -- horizontal bars
+        for r in range(rows + 1):
+            hy = 0.02 + r * cell_size
+            hv, hf = _make_box(0, hy, 0,
+                               total_w / 2 - frame_thick,
+                               frame_thick / 2, depth / 2 - 0.005)
+            parts.append((hv, hf))
+
+        # Vertical dividers
+        for c in range(cols + 1):
+            vx = -total_w / 2 + 0.02 + c * cell_size
+            vv, vf = _make_box(vx, total_h / 2, 0,
+                               frame_thick / 2,
+                               total_h / 2 - frame_thick,
+                               depth / 2 - 0.005)
+            parts.append((vv, vf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"WineRack_{style}", verts, faces,
+                        style=style, cols=cols, rows=rows, category="furniture")
+
+
+def generate_bathtub_mesh(
+    style: str = "wooden",
+    length: float = 1.4,
+    width: float = 0.7,
+    height: float = 0.6,
+) -> MeshSpec:
+    """Generate a bathtub mesh.
+
+    Args:
+        style: "wooden" (barrel-like tub), or "metal" (clawfoot cast iron).
+        length: Tub length along X.
+        width: Tub width along Z.
+        height: Tub height along Y.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "metal":
+        # Clawfoot bathtub -- elongated oval profile
+        segments = 16
+        rings = 6
+        wall_thick = 0.025
+
+        # Outer shell via lathe-like approach: build elliptical cross-sections
+        verts_outer: list[tuple[float, float, float]] = []
+        faces_outer: list[tuple[int, ...]] = []
+
+        for ri in range(rings + 1):
+            t = ri / rings
+            y = t * height
+            # Taper slightly toward bottom
+            scale = 0.85 + 0.15 * t
+            rx = length / 2 * scale
+            rz = width / 2 * scale
+            for si in range(segments):
+                angle = 2.0 * math.pi * si / segments
+                verts_outer.append((
+                    rx * math.cos(angle),
+                    y,
+                    rz * math.sin(angle),
+                ))
+
+        # Side faces
+        for ri in range(rings):
+            for si in range(segments):
+                s2 = (si + 1) % segments
+                r0 = ri * segments
+                r1 = (ri + 1) * segments
+                faces_outer.append((r0 + si, r0 + s2, r1 + s2, r1 + si))
+
+        # Bottom cap
+        faces_outer.append(tuple(range(segments - 1, -1, -1)))
+
+        parts.append((verts_outer, faces_outer))
+
+        # Rolled rim at top (torus ring)
+        rim_r = 0.018
+        # Approximate elliptical rim with individual torus segments
+        for si in range(segments):
+            angle = 2.0 * math.pi * si / segments
+            rx = length / 2
+            rz = width / 2
+            px = rx * math.cos(angle)
+            pz = rz * math.sin(angle)
+            sv, sf = _make_sphere(px, height, pz, rim_r, rings=3, sectors=4)
+            parts.append((sv, sf))
+
+        # 4 claw feet
+        foot_h = 0.06
+        for xm in [-1, 1]:
+            for zm in [-1, 1]:
+                fx = xm * length * 0.3
+                fz = zm * width * 0.25
+                # Claw shape: tapered cylinder + sphere
+                fv, ff = _make_tapered_cylinder(fx, -foot_h, fz,
+                                                0.025, 0.015, foot_h,
+                                                segments=6, rings=2,
+                                                cap_top=True, cap_bottom=True)
+                parts.append((fv, ff))
+                # Ball under claw
+                bv, bf = _make_sphere(fx, -foot_h, fz, 0.018,
+                                      rings=3, sectors=5)
+                parts.append((bv, bf))
+
+    else:  # wooden
+        # Barrel-like wooden tub: cylinder with staves implied
+        segments = 16
+        outer_r_x = length / 2
+        outer_r_z = width / 2
+        inner_offset = 0.03
+
+        # Outer wall
+        verts_all: list[tuple[float, float, float]] = []
+        faces_all: list[tuple[int, ...]] = []
+
+        rings_count = 4
+        for ri in range(rings_count + 1):
+            t = ri / rings_count
+            y = t * height
+            # Slight barrel bulge
+            bulge = 1.0 + 0.05 * math.sin(t * math.pi)
+            for si in range(segments):
+                angle = 2.0 * math.pi * si / segments
+                verts_all.append((
+                    outer_r_x * bulge * math.cos(angle),
+                    y,
+                    outer_r_z * bulge * math.sin(angle),
+                ))
+
+        for ri in range(rings_count):
+            for si in range(segments):
+                s2 = (si + 1) % segments
+                r0 = ri * segments
+                r1 = (ri + 1) * segments
+                faces_all.append((r0 + si, r0 + s2, r1 + s2, r1 + si))
+
+        # Bottom cap
+        faces_all.append(tuple(range(segments - 1, -1, -1)))
+
+        parts.append((verts_all, faces_all))
+
+        # Metal bands (2 torus rings)
+        for band_t in [0.25, 0.75]:
+            band_y = band_t * height
+            bulge = 1.0 + 0.05 * math.sin(band_t * math.pi)
+            # Approximate elliptical band
+            band_r = (outer_r_x * bulge + outer_r_z * bulge) / 2
+            tv, tf = _make_torus_ring(0, band_y, 0,
+                                      band_r + 0.005, 0.008,
+                                      major_segments=16, minor_segments=4)
+            parts.append((tv, tf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Bathtub_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
+def generate_fireplace_mesh(
+    style: str = "stone",
+    width: float = 1.2,
+    height: float = 1.0,
+    depth: float = 0.5,
+) -> MeshSpec:
+    """Generate a fireplace mesh with surround, mantel, hearth, and firebox.
+
+    Args:
+        style: "stone" (rustic), "grand" (ornate mantel + columns), or "simple" (hearth only).
+        width: Fireplace width along X.
+        height: Fireplace height along Y.
+        depth: Fireplace depth along Z.
+
+    Returns:
+        MeshSpec with vertices, faces, uvs, and metadata.
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    wall_thick = 0.06
+    firebox_w = width * 0.55
+    firebox_h = height * 0.5
+    firebox_d = depth * 0.7
+
+    if style == "simple":
+        # Simple hearth: just a raised stone platform + back wall + fire area
+        # Hearth platform
+        hearth_h = 0.08
+        hearth_w = width * 0.8
+        hearth_d = depth * 0.5
+        hv, hf = _make_beveled_box(0, hearth_h / 2, 0,
+                                   hearth_w / 2, hearth_h / 2, hearth_d / 2,
+                                   bevel=0.008)
+        parts.append((hv, hf))
+
+        # Back wall
+        bw_h = height * 0.6
+        bw, bf = _make_beveled_box(0, hearth_h + bw_h / 2, depth * 0.35,
+                                   hearth_w / 2 + 0.02, bw_h / 2, wall_thick / 2,
+                                   bevel=0.005)
+        parts.append((bw, bf))
+
+        # Side walls
+        for side in [-1, 1]:
+            sv, sf = _make_beveled_box(
+                side * hearth_w / 2, hearth_h + bw_h * 0.3, depth * 0.2,
+                wall_thick / 2, bw_h * 0.3, hearth_d * 0.3,
+                bevel=0.005,
+            )
+            parts.append((sv, sf))
+
+    else:
+        # Full fireplace surround (stone or grand)
+
+        # Back panel (full height)
+        bv, bf = _make_beveled_box(0, height / 2, depth / 2 - wall_thick / 2,
+                                   width / 2, height / 2, wall_thick / 2,
+                                   bevel=0.005)
+        parts.append((bv, bf))
+
+        # Left surround pillar
+        for side in [-1, 1]:
+            pv, pf = _make_beveled_box(
+                side * (firebox_w / 2 + wall_thick / 2), height * 0.4, 0,
+                wall_thick / 2, height * 0.4, depth / 2 - wall_thick,
+                bevel=0.005,
+            )
+            parts.append((pv, pf))
+
+        # Firebox interior (recessed cavity)
+        fbv, fbf = _make_box(0, firebox_h / 2 + 0.02, depth * 0.1,
+                             firebox_w / 2 - 0.01, firebox_h / 2,
+                             firebox_d / 2)
+        parts.append((fbv, fbf))
+
+        # Hearth (floor extension)
+        hearth_h = 0.06
+        hearth_extend = 0.15
+        hhv, hhf = _make_beveled_box(0, hearth_h / 2, -hearth_extend / 2,
+                                     width / 2 + 0.05, hearth_h / 2,
+                                     depth / 2 + hearth_extend / 2,
+                                     bevel=0.008)
+        parts.append((hhv, hhf))
+
+        # Mantel shelf
+        mantel_h = 0.04
+        mantel_overhang = 0.06
+        mv, mf = _make_beveled_box(
+            0, height * 0.8 + mantel_h / 2, -mantel_overhang / 2,
+            width / 2 + mantel_overhang, mantel_h / 2,
+            depth * 0.3 + mantel_overhang,
+            bevel=0.006,
+        )
+        parts.append((mv, mf))
+
+        # Arch over firebox
+        arch_segs = 8
+        arch_r = firebox_w / 2
+        arch_cy = firebox_h + 0.02
+        for i in range(arch_segs + 1):
+            t = i / arch_segs
+            angle = math.pi * t
+            ax = math.cos(angle) * arch_r
+            ay = arch_cy + math.sin(angle) * arch_r * 0.3
+            av, af = _make_beveled_box(ax, ay, 0,
+                                       0.025, 0.025, depth * 0.15,
+                                       bevel=0.004)
+            parts.append((av, af))
+
+        if style == "grand":
+            # Ornate columns flanking firebox
+            col_r = 0.04
+            col_h = height * 0.75
+            for side in [-1, 1]:
+                cx = side * (firebox_w / 2 + wall_thick + col_r + 0.01)
+                cv, cf = _make_tapered_cylinder(cx, 0, -depth * 0.1,
+                                                col_r, col_r * 0.85, col_h,
+                                                segments=10, rings=5,
+                                                cap_top=True, cap_bottom=True)
+                parts.append((cv, cf))
+
+                # Column capital (sphere)
+                capv, capf = _make_sphere(cx, col_h + col_r * 0.5, -depth * 0.1,
+                                          col_r * 1.2, rings=4, sectors=8)
+                parts.append((capv, capf))
+
+                # Column base (wider disc)
+                basev, basef = _make_cylinder(cx, 0, -depth * 0.1,
+                                              col_r * 1.5, 0.03,
+                                              segments=10,
+                                              cap_top=True, cap_bottom=True)
+                parts.append((basev, basef))
+
+            # Decorative keystone at arch apex
+            ksv, ksf = _make_beveled_box(0, arch_cy + arch_r * 0.3 + 0.03, -depth * 0.05,
+                                         0.04, 0.04, depth * 0.1,
+                                         bevel=0.005)
+            parts.append((ksv, ksf))
+
+        # Chimney stack above mantel
+        chimney_w = firebox_w * 0.6
+        chimney_h = height * 0.18
+        chv, chf = _make_beveled_box(0, height + chimney_h / 2, depth * 0.25,
+                                     chimney_w / 2, chimney_h / 2, depth * 0.2,
+                                     bevel=0.005)
+        parts.append((chv, chf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(f"Fireplace_{style}", verts, faces,
+                        style=style, category="furniture")
+
+
 # =========================================================================
 # Registry: all generators by category
 # =========================================================================
@@ -10697,6 +11751,15 @@ GENERATORS = {
         "barrel": generate_barrel_mesh,
         "candelabra": generate_candelabra_mesh,
         "bookshelf": generate_bookshelf_mesh,
+        "bed": generate_bed_mesh,
+        "wardrobe": generate_wardrobe_mesh,
+        "cabinet": generate_cabinet_mesh,
+        "curtain": generate_curtain_mesh,
+        "mirror": generate_mirror_mesh,
+        "hay_bale": generate_hay_bale_mesh,
+        "wine_rack": generate_wine_rack_mesh,
+        "bathtub": generate_bathtub_mesh,
+        "fireplace": generate_fireplace_mesh,
     },
     "vegetation": {
         "tree": generate_tree_mesh,
