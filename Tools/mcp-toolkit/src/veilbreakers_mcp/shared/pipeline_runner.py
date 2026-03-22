@@ -12,6 +12,8 @@ import struct
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from veilbreakers_mcp.shared.blender_client import BlenderCommandError
+
 if TYPE_CHECKING:
     from veilbreakers_mcp.shared.asset_catalog import AssetCatalog
     from veilbreakers_mcp.shared.blender_client import BlenderConnection
@@ -99,7 +101,7 @@ class PipelineRunner:
             results["status"] = "success"
             results["steps_completed"] = steps_completed
 
-        except (ConnectionError, TimeoutError, OSError, ValueError, RuntimeError) as exc:
+        except (ConnectionError, TimeoutError, OSError, ValueError, RuntimeError, BlenderCommandError) as exc:
             results["status"] = "failed"
             results["error"] = str(exc)
             results["steps_completed"] = steps_completed
@@ -324,7 +326,7 @@ class PipelineRunner:
                 try:
                     await self.blender.send_command(cmd, params_fn(obj_name))
                     obj_result["steps_completed"].append(step)
-                except (ConnectionError, TimeoutError, OSError, ValueError, RuntimeError) as exc:
+                except (ConnectionError, TimeoutError, OSError, ValueError, RuntimeError, BlenderCommandError) as exc:
                     obj_result["status"] = "failed"
                     obj_result["error"] = f"Step '{step}' failed: {exc}"
                     break
