@@ -16,7 +16,10 @@ Exports:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     import numpy as np
@@ -24,6 +27,7 @@ try:
 except ImportError:
     _HAS_NUMPY = False
     np = None  # type: ignore
+    logger.warning("numpy not installed; palette validation unavailable")
 
 from PIL import Image
 
@@ -100,6 +104,7 @@ def validate_palette(
             stats: {mean_saturation, mean_value, cool_ratio, warm_ratio,
                     value_below_min_pct, value_above_max_pct, total_sampled}.
     """
+    logger.info("Validating palette for: %s", image_path)
     if not _HAS_NUMPY:
         return {"error": "numpy is required for this operation but is not installed"}
 
@@ -251,6 +256,7 @@ def validate_roughness_map(
             min_variance: float -- Threshold used.
             severity: str -- "error" if flat, None if passed.
     """
+    logger.info("Validating roughness map: %s", image_path)
     if not _HAS_NUMPY:
         return {"error": "numpy is required for this operation but is not installed"}
 

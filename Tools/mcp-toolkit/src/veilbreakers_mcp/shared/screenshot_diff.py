@@ -10,8 +10,12 @@ Functions:
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 from PIL import Image, ImageChops, ImageDraw
+
+logger = logging.getLogger(__name__)
 
 
 # Noise threshold per channel (0-255) -- below this, differences are
@@ -40,6 +44,7 @@ def compare_screenshots(
             reference_size (tuple): (width, height) of the reference image.
             current_size (tuple): (width, height) of the current image.
     """
+    logger.info("Comparing screenshots: %s vs %s (threshold=%.4f)", reference_path, current_path, threshold)
     ref_img = Image.open(reference_path).convert("RGB")
     cur_img = Image.open(current_path).convert("RGB")
 
@@ -48,6 +53,7 @@ def compare_screenshots(
 
     # Resize current to match reference if sizes differ
     if cur_img.size != ref_img.size:
+        logger.warning("Screenshot sizes differ (ref=%s, cur=%s), resizing current", ref_size, cur_size)
         original_cur = cur_img
         cur_img = cur_img.resize(ref_img.size, Image.LANCZOS)
         original_cur.close()
@@ -114,6 +120,7 @@ def generate_diff_image(
     Returns:
         The output_path where the diff image was saved.
     """
+    logger.info("Generating diff image: %s", output_path)
     ref_img = Image.open(reference_path).convert("RGB")
     cur_img = Image.open(current_path).convert("RGB")
 
