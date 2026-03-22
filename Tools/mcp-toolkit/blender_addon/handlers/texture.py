@@ -1204,7 +1204,7 @@ def handle_bake_id_map(params: dict) -> dict:
             image = _prepare_bake_image(img_name, resolution, resolution, "sRGB")
 
             # Store original material emission values to restore later
-            original_emissions: list[tuple[Any, Any, float]] = []
+            original_emissions: list[tuple[Any, Any, tuple]] = []
 
             for i, mat_slot in enumerate(obj.material_slots):
                 mat = mat_slot.material
@@ -1228,7 +1228,7 @@ def handle_bake_id_map(params: dict) -> dict:
                 # Store original emission color
                 emit_input = _get_bsdf_input(bsdf, "emission")
                 original_color = list(emit_input.default_value)
-                original_emissions.append((bsdf, emit_input, emit_input.default_value[0]))
+                original_emissions.append((bsdf, emit_input, tuple(emit_input.default_value)))
 
                 # Set emission to ID color (temporarily)
                 emit_input.default_value = (*color, 1.0)
@@ -1254,8 +1254,8 @@ def handle_bake_id_map(params: dict) -> dict:
             filepath = _save_baked_image(image, abs_output_dir, img_name)
 
             # Restore original emission values
-            for bsdf_node, emit_input, _ in original_emissions:
-                emit_input.default_value = (0.0, 0.0, 0.0, 1.0)
+            for bsdf_node, emit_input, orig_color in original_emissions:
+                emit_input.default_value = orig_color
 
             _cleanup_bake_nodes(obj)
 
@@ -1360,21 +1360,22 @@ def handle_bake_thickness_map(params: dict) -> dict:
             bmesh.update_edit_mesh(obj.data)
             bpy.ops.object.mode_set(mode="OBJECT")
 
-            # Bake AO (from inside)
-            bake_kwargs = {"type": "AO", "margin": 16}
-            ctx = get_3d_context_override()
-            if ctx is not None:
-                with bpy.context.temp_override(**ctx):
+            try:
+                # Bake AO (from inside)
+                bake_kwargs = {"type": "AO", "margin": 16}
+                ctx = get_3d_context_override()
+                if ctx is not None:
+                    with bpy.context.temp_override(**ctx):
+                        bpy.ops.object.bake(**bake_kwargs)
+                else:
                     bpy.ops.object.bake(**bake_kwargs)
-            else:
-                bpy.ops.object.bake(**bake_kwargs)
-
-            # Flip normals back
-            bpy.ops.object.mode_set(mode="EDIT")
-            bm = bmesh.from_edit_mesh(obj.data)
-            bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
-            bmesh.update_edit_mesh(obj.data)
-            bpy.ops.object.mode_set(mode="OBJECT")
+            finally:
+                # Always flip normals back, even if bake fails
+                bpy.ops.object.mode_set(mode="EDIT")
+                bm = bmesh.from_edit_mesh(obj.data)
+                bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+                bmesh.update_edit_mesh(obj.data)
+                bpy.ops.object.mode_set(mode="OBJECT")
 
             # Save
             filepath = _save_baked_image(image, abs_output_dir, img_name)

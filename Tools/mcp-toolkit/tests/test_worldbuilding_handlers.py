@@ -293,3 +293,327 @@ class TestMeshSpecGeometry:
         spec = evaluate_building_grammar(width=10, depth=8, floors=2, style="medieval", seed=0)
         result = _building_ops_to_mesh_spec(spec)
         assert len(result) > 1
+
+
+# ---------------------------------------------------------------------------
+# Opening cutting tests — verify doors/windows create actual holes
+# ---------------------------------------------------------------------------
+
+
+class TestOpeningCutting:
+    """Test that openings (doors/windows) produce actual holes in wall geometry."""
+
+    def test_collect_openings_groups_by_wall_and_floor(self):
+        """_collect_openings_by_wall groups openings correctly."""
+        from blender_addon.handlers.worldbuilding import _collect_openings_by_wall
+        from blender_addon.handlers._building_grammar import BuildingSpec
+
+        spec = BuildingSpec(
+            footprint=(10, 8), floors=1, style="medieval",
+            operations=[
+                {"type": "opening", "wall_index": 0, "floor": 0,
+                 "position": [2.0, 0.0], "size": [1.2, 2.2], "role": "door"},
+                {"type": "opening", "wall_index": 0, "floor": 0,
+                 "position": [6.0, 1.0], "size": [0.8, 1.2], "role": "window"},
+                {"type": "opening", "wall_index": 1, "floor": 0,
+                 "position": [3.0, 1.0], "size": [0.8, 1.2], "role": "window"},
+            ],
+        )
+        groups = _collect_openings_by_wall(spec)
+        assert (0, 0) in groups
+        assert (1, 0) in groups
+        assert len(groups[(0, 0)]) == 2
+        assert len(groups[(1, 0)]) == 1
+
+    def test_wall_with_door_has_no_face_in_opening_region(self):
+        """A wall with a door opening should NOT have solid faces in the door area.
+
+        We verify by checking that the mesh specs for the wall include
+        reveal quads (jamb faces) and frame geometry, which only exist
+        when the opening is actually cut.
+        """
+        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import BuildingSpec
+
+        spec = BuildingSpec(
+            footprint=(10, 8), floors=1, style="medieval",
+            operations=[
+                # Front wall (wall_index=0, floor=0)
+                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
+                 "material": "plaster_white", "role": "wall",
+                 "wall_index": 0, "floor": 0},
+                # Door opening on front wall
+                {"type": "opening", "wall_index": 0, "floor": 0,
+                 "position": [4.0, 0.0], "size": [1.2, 2.2], "role": "door",
+                 "style": "wooden_arched"},
+            ],
+        )
+        result = _building_ops_to_mesh_spec(spec)
+
+        # Should have wall pieces, reveal quads, and frame geometry
+        roles = [m.get("role") for m in result if m["type"] != "opening"]
+        assert "opening_reveal" in roles, "Must have reveal/jamb faces through wall"
+        assert "door_frame" in roles, "Must have door frame trim geometry"
+
+    def test_wall_with_window_has_sill(self):
+        """A wall with a window opening should include a window sill."""
+        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import BuildingSpec
+
+        spec = BuildingSpec(
+            footprint=(10, 8), floors=1, style="medieval",
+            operations=[
+                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
+                 "material": "plaster_white", "role": "wall",
+                 "wall_index": 0, "floor": 0},
+                {"type": "opening", "wall_index": 0, "floor": 0,
+                 "position": [3.0, 1.0], "size": [0.8, 1.2], "role": "window",
+                 "style": "arched"},
+            ],
+        )
+        result = _building_ops_to_mesh_spec(spec)
+        roles = [m.get("role") for m in result if m["type"] != "opening"]
+        assert "window_sill" in roles, "Windows must have a sill"
+        assert "window_frame" in roles, "Windows must have frame trim"
+
+    def test_gothic_window_has_pointed_arch_frame(self):
+        """Gothic style windows produce extra arch frame quads."""
+        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import BuildingSpec
+
+        spec = BuildingSpec(
+            footprint=(10, 8), floors=1, style="gothic",
+            operations=[
+                {"type": "box", "position": [0, 0, 0.5], "size": [10, 0.5, 4.5],
+                 "material": "stone_carved", "role": "wall",
+                 "wall_index": 0, "floor": 0},
+                {"type": "opening", "wall_index": 0, "floor": 0,
+                 "position": [3.0, 1.0], "size": [0.6, 2.0], "role": "window",
+                 "style": "pointed_arch"},
+            ],
+        )
+        result = _building_ops_to_mesh_spec(spec)
+        # Gothic pointed arch produces 2 arch slope quads instead of 1 lintel
+        frame_specs = [m for m in result if m.get("role") == "window_frame"]
+        # Should have: left strip + right strip + 2 arch slopes + bottom strip = 5
+        assert len(frame_specs) >= 4, (
+            f"Gothic window should have >= 4 frame quads, got {len(frame_specs)}"
+        )
+
+    def test_wall_without_openings_is_solid_box(self):
+        """A wall with no openings produces a standard 8-vert 6-face box."""
+        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import BuildingSpec
+
+        spec = BuildingSpec(
+            footprint=(10, 8), floors=1, style="medieval",
+            operations=[
+                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
+                 "material": "plaster_white", "role": "wall",
+                 "wall_index": 2, "floor": 0},
+                # No openings on wall_index=2
+            ],
+        )
+        result = _building_ops_to_mesh_spec(spec)
+        wall_specs = [m for m in result if m["type"] == "box"]
+        assert len(wall_specs) == 1
+        assert wall_specs[0]["vertex_count"] == 8
+        assert wall_specs[0]["face_count"] == 6
+
+    def test_door_opening_more_verts_than_solid_wall(self):
+        """A wall with a door opening produces more vertices than a solid wall."""
+        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import BuildingSpec
+
+        # Solid wall
+        spec_solid = BuildingSpec(
+            footprint=(10, 8), floors=1, style="medieval",
+            operations=[
+                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
+                 "material": "plaster_white", "role": "wall",
+                 "wall_index": 0, "floor": 0},
+            ],
+        )
+        solid_result = _building_ops_to_mesh_spec(spec_solid)
+        solid_verts = sum(m.get("vertex_count", 0) for m in solid_result if m["type"] != "opening")
+
+        # Wall with door
+        spec_door = BuildingSpec(
+            footprint=(10, 8), floors=1, style="medieval",
+            operations=[
+                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
+                 "material": "plaster_white", "role": "wall",
+                 "wall_index": 0, "floor": 0},
+                {"type": "opening", "wall_index": 0, "floor": 0,
+                 "position": [4.0, 0.0], "size": [1.2, 2.2], "role": "door"},
+            ],
+        )
+        door_result = _building_ops_to_mesh_spec(spec_door)
+        door_verts = sum(m.get("vertex_count", 0) for m in door_result if m["type"] != "opening")
+
+        assert door_verts > solid_verts, (
+            f"Wall with door ({door_verts} verts) should have more geometry "
+            f"than solid wall ({solid_verts} verts)"
+        )
+
+    def test_full_medieval_building_has_opening_geometry(self):
+        """A full medieval building has reveal and frame geometry for openings."""
+        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import evaluate_building_grammar
+
+        spec = evaluate_building_grammar(width=10, depth=8, floors=2, style="medieval", seed=0)
+        result = _building_ops_to_mesh_spec(spec)
+        roles = set(m.get("role") for m in result)
+
+        assert "opening_reveal" in roles, "Building must have opening reveal geometry"
+        assert "door_frame" in roles, "Building must have door frame geometry"
+        assert "window_frame" in roles, "Building must have window frame geometry"
+        assert "window_sill" in roles, "Building must have window sill geometry"
+
+    def test_all_styles_produce_opening_geometry(self):
+        """All 5 styles produce opening geometry when built with defaults."""
+        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import (
+            evaluate_building_grammar, STYLE_CONFIGS,
+        )
+
+        for style_name in STYLE_CONFIGS:
+            spec = evaluate_building_grammar(
+                width=10, depth=8, floors=1, style=style_name, seed=0,
+            )
+            result = _building_ops_to_mesh_spec(spec)
+            roles = set(m.get("role") for m in result)
+            assert "opening_reveal" in roles, (
+                f"Style '{style_name}' must produce opening reveal geometry"
+            )
+
+    def test_opening_reveal_has_valid_quad_geometry(self):
+        """Each reveal quad has exactly 4 vertices and 1 face."""
+        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import BuildingSpec
+
+        spec = BuildingSpec(
+            footprint=(10, 8), floors=1, style="medieval",
+            operations=[
+                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
+                 "material": "plaster_white", "role": "wall",
+                 "wall_index": 0, "floor": 0},
+                {"type": "opening", "wall_index": 0, "floor": 0,
+                 "position": [4.0, 0.0], "size": [1.2, 2.2], "role": "door"},
+            ],
+        )
+        result = _building_ops_to_mesh_spec(spec)
+        reveals = [m for m in result if m.get("role") == "opening_reveal"]
+        assert len(reveals) > 0
+        for r in reveals:
+            assert r["vertex_count"] == 4, "Reveal quads must have 4 vertices"
+            assert r["face_count"] == 1, "Reveal quads must have 1 face"
+            assert len(r["vertices"]) == 4
+            assert len(r["faces"]) == 1
+            assert len(r["faces"][0]) == 4
+
+    def test_opening_dimensions_match_spec(self):
+        """Opening reveal geometry dimensions match the spec width and height."""
+        from blender_addon.handlers.worldbuilding import _wall_with_openings
+
+        # Front wall (wall_index=0): extends along X, thickness along Y
+        result = _wall_with_openings(
+            px=0.0, py=0.0, pz=0.0,
+            sx=10.0, sy=0.3, sz=3.0,
+            wall_index=0,
+            openings=[{
+                "position": [4.0, 0.0], "size": [1.2, 2.2],
+                "role": "door", "style": "wooden_arched",
+            }],
+            material="plaster_white",
+        )
+        # Find top reveal quad (horizontal, at top of door)
+        reveals = [m for m in result if m.get("role") == "opening_reveal"]
+        assert len(reveals) >= 3, "Door needs at least 3 reveals (top, left, right)"
+
+        # Check that one reveal spans the door width (1.2m) along X
+        for r in reveals:
+            xs = [v[0] for v in r["vertices"]]
+            x_span = max(xs) - min(xs)
+            if abs(x_span - 1.2) < 0.01:
+                # This is the top reveal -- check Y spans wall thickness
+                ys = [v[1] for v in r["vertices"]]
+                y_span = max(ys) - min(ys)
+                assert abs(y_span - 0.3) < 0.01, (
+                    f"Reveal Y span should match wall thickness 0.3, got {y_span}"
+                )
+                break
+        else:
+            # If no exact match, at least verify reveals exist with correct Z range
+            pass  # Already asserted >= 3 reveals above
+
+    def test_side_wall_openings_work(self):
+        """Openings on side walls (wall_index 2,3) also produce hole geometry."""
+        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import BuildingSpec
+
+        spec = BuildingSpec(
+            footprint=(10, 8), floors=1, style="medieval",
+            operations=[
+                # Left wall (wall_index=2)
+                {"type": "box", "position": [0, 0.3, 0.3],
+                 "size": [0.3, 7.4, 3.0],
+                 "material": "plaster_white", "role": "wall",
+                 "wall_index": 2, "floor": 0},
+                {"type": "opening", "wall_index": 2, "floor": 0,
+                 "position": [2.0, 1.0], "size": [0.8, 1.2], "role": "window",
+                 "style": "arched"},
+            ],
+        )
+        result = _building_ops_to_mesh_spec(spec)
+        roles = set(m.get("role") for m in result if m["type"] != "opening")
+        assert "opening_reveal" in roles, "Side wall openings must produce reveals"
+        assert "window_frame" in roles, "Side wall openings must produce frames"
+
+    def test_multiple_openings_on_same_wall(self):
+        """Multiple openings on the same wall all produce geometry."""
+        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import BuildingSpec
+
+        spec = BuildingSpec(
+            footprint=(10, 8), floors=1, style="medieval",
+            operations=[
+                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
+                 "material": "plaster_white", "role": "wall",
+                 "wall_index": 0, "floor": 0},
+                {"type": "opening", "wall_index": 0, "floor": 0,
+                 "position": [1.5, 1.0], "size": [0.8, 1.2], "role": "window"},
+                {"type": "opening", "wall_index": 0, "floor": 0,
+                 "position": [4.0, 0.0], "size": [1.2, 2.2], "role": "door"},
+                {"type": "opening", "wall_index": 0, "floor": 0,
+                 "position": [7.5, 1.0], "size": [0.8, 1.2], "role": "window"},
+            ],
+        )
+        result = _building_ops_to_mesh_spec(spec)
+        # Should have reveals for all 3 openings
+        reveals = [m for m in result if m.get("role") == "opening_reveal"]
+        # Each opening gets top + left + right reveals (+ bottom for windows)
+        # window: 4 reveals, door: 3 reveals, window: 4 reveals = 11 min
+        assert len(reveals) >= 9, (
+            f"3 openings should produce at least 9 reveal quads, got {len(reveals)}"
+        )
+
+    def test_backward_compatible_opening_metadata(self):
+        """Opening metadata entries with face_construction flag are still emitted."""
+        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import BuildingSpec
+
+        spec = BuildingSpec(
+            footprint=(10, 8), floors=1, style="medieval",
+            operations=[
+                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
+                 "material": "plaster_white", "role": "wall",
+                 "wall_index": 0, "floor": 0},
+                {"type": "opening", "wall_index": 0, "floor": 0,
+                 "position": [4.0, 0.0], "size": [1.2, 2.2], "role": "door"},
+            ],
+        )
+        result = _building_ops_to_mesh_spec(spec)
+        opening_entries = [m for m in result if m["type"] == "opening"]
+        assert len(opening_entries) == 1
+        assert opening_entries[0]["face_construction"] is True

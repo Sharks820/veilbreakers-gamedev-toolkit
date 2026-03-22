@@ -352,13 +352,12 @@ class TestSecurityBypassAttempts:
         assert any("__bases__" in v for v in violations)
 
     def test_nested_getattr_in_comprehension(self):
-        """getattr() nested in a list comprehension."""
+        """getattr() is allowed per user security policy — not in BLOCKED_FUNCTIONS."""
         from veilbreakers_mcp.shared.security import validate_code
 
         code = "[getattr(x, a) for x in objs for a in attrs]"
         safe, violations = validate_code(code)
-        assert safe is False
-        assert any("getattr" in v for v in violations)
+        assert safe is True
 
     def test_dunder_import_as_attribute(self):
         """Accessing __import__ as attribute (not call) should be blocked."""
@@ -368,21 +367,21 @@ class TestSecurityBypassAttempts:
         safe, violations = validate_code(code)
         assert safe is False
 
-    def test_setattr_blocked(self):
-        """setattr should be blocked as a function call."""
+    def test_setattr_allowed(self):
+        """setattr is allowed per user security policy — needed for Blender scripting."""
         from veilbreakers_mcp.shared.security import validate_code
 
         code = "setattr(obj, '__class__', Evil)"
         safe, violations = validate_code(code)
-        assert safe is False
+        assert safe is True
 
-    def test_delattr_blocked(self):
-        """delattr should be blocked."""
+    def test_delattr_allowed(self):
+        """delattr is allowed per user security policy — needed for Blender scripting."""
         from veilbreakers_mcp.shared.security import validate_code
 
         code = "delattr(obj, 'safe_attr')"
         safe, violations = validate_code(code)
-        assert safe is False
+        assert safe is True
 
     def test_compile_then_exec(self):
         """compile() followed by exec() -- both should be caught."""

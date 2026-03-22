@@ -1,0 +1,412 @@
+"""Tests for armor system mesh generators (armor_meshes.py).
+
+Validates all 6 generator functions across 22 style variants:
+- Non-empty vertex and face lists with valid indices
+- Poly counts within expected ranges (1500-5000 target, relaxed for simpler pieces)
+- Different styles produce distinct geometry
+- ARMOR_GENERATORS registry is complete
+- Metadata contains required fields
+"""
+
+from __future__ import annotations
+
+import importlib.util
+
+import pytest
+
+# Load armor_meshes without triggering blender_addon __init__ (needs bpy)
+_spec = importlib.util.spec_from_file_location(
+    "armor_meshes",
+    "blender_addon/handlers/armor_meshes.py",
+)
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+
+generate_helmet_mesh = _mod.generate_helmet_mesh
+generate_chest_armor_mesh = _mod.generate_chest_armor_mesh
+generate_gauntlet_mesh = _mod.generate_gauntlet_mesh
+generate_boot_mesh = _mod.generate_boot_mesh
+generate_pauldron_mesh = _mod.generate_pauldron_mesh
+generate_cape_mesh = _mod.generate_cape_mesh
+ARMOR_GENERATORS = _mod.ARMOR_GENERATORS
+
+
+# ---------------------------------------------------------------------------
+# Validation helper
+# ---------------------------------------------------------------------------
+
+def validate_mesh_spec(result: dict, name: str, min_verts: int = 4, min_faces: int = 1):
+    """Validate a mesh spec dict has all required fields and valid data."""
+    assert "vertices" in result, f"{name}: missing 'vertices'"
+    assert "faces" in result, f"{name}: missing 'faces'"
+    assert "uvs" in result, f"{name}: missing 'uvs'"
+    assert "metadata" in result, f"{name}: missing 'metadata'"
+
+    verts = result["vertices"]
+    faces = result["faces"]
+    meta = result["metadata"]
+
+    assert len(verts) >= min_verts, (
+        f"{name}: expected >= {min_verts} vertices, got {len(verts)}"
+    )
+    assert len(faces) >= min_faces, (
+        f"{name}: expected >= {min_faces} faces, got {len(faces)}"
+    )
+
+    for i, v in enumerate(verts):
+        assert len(v) == 3, f"{name}: vertex {i} has {len(v)} components, expected 3"
+        for comp in v:
+            assert isinstance(comp, (int, float)), (
+                f"{name}: vertex {i} component {comp} is not a number"
+            )
+
+    n_verts = len(verts)
+    for fi, face in enumerate(faces):
+        assert len(face) >= 3, f"{name}: face {fi} has {len(face)} verts, need >= 3"
+        for idx in face:
+            assert 0 <= idx < n_verts, (
+                f"{name}: face {fi} index {idx} out of range [0, {n_verts})"
+            )
+
+    assert "name" in meta, f"{name}: metadata missing 'name'"
+    assert "poly_count" in meta, f"{name}: metadata missing 'poly_count'"
+    assert "vertex_count" in meta, f"{name}: metadata missing 'vertex_count'"
+    assert "dimensions" in meta, f"{name}: metadata missing 'dimensions'"
+
+    assert meta["poly_count"] == len(faces), (
+        f"{name}: poly_count {meta['poly_count']} != actual {len(faces)}"
+    )
+    assert meta["vertex_count"] == len(verts), (
+        f"{name}: vertex_count {meta['vertex_count']} != actual {len(verts)}"
+    )
+
+    dims = meta["dimensions"]
+    assert "width" in dims and "height" in dims and "depth" in dims
+    for dim_name, val in dims.items():
+        assert val >= 0, f"{name}: dimension '{dim_name}' is negative: {val}"
+
+    return True
+
+
+# ---------------------------------------------------------------------------
+# HELMET tests
+# ---------------------------------------------------------------------------
+
+class TestHelmetMesh:
+    """Test helmet generators across all 5 styles."""
+
+    @pytest.mark.parametrize("style", [
+        "open_face", "full_helm", "hood", "crown", "skull_mask",
+    ])
+    def test_helmet_style_valid(self, style):
+        result = generate_helmet_mesh(style=style)
+        validate_mesh_spec(result, f"Helmet_{style}", min_verts=30, min_faces=10)
+
+    @pytest.mark.parametrize("style", [
+        "open_face", "full_helm", "hood", "crown", "skull_mask",
+    ])
+    def test_helmet_metadata_fields(self, style):
+        result = generate_helmet_mesh(style=style)
+        meta = result["metadata"]
+        assert meta["style"] == style
+        assert meta["slot"] == "helmet"
+        assert meta["category"] == "armor"
+
+    def test_helmet_styles_differ(self):
+        results = {s: generate_helmet_mesh(style=s) for s in
+                   ["open_face", "full_helm", "hood", "crown", "skull_mask"]}
+        # Each pair should differ
+        styles = list(results.keys())
+        for i in range(len(styles)):
+            for j in range(i + 1, len(styles)):
+                r1 = results[styles[i]]
+                r2 = results[styles[j]]
+                assert (
+                    r1["metadata"]["vertex_count"] != r2["metadata"]["vertex_count"]
+                    or r1["vertices"] != r2["vertices"]
+                ), f"Helmet styles {styles[i]} and {styles[j]} produced identical geometry"
+
+    def test_helmet_poly_count_range(self):
+        for style in ["open_face", "full_helm", "hood", "crown", "skull_mask"]:
+            result = generate_helmet_mesh(style=style)
+            pc = result["metadata"]["poly_count"]
+            assert 10 <= pc <= 5000, (
+                f"Helmet {style}: poly count {pc} outside expected range"
+            )
+
+    def test_helmet_invalid_style_fallback(self):
+        result = generate_helmet_mesh(style="nonexistent")
+        assert result["metadata"]["style"] == "open_face"
+
+
+# ---------------------------------------------------------------------------
+# CHEST ARMOR tests
+# ---------------------------------------------------------------------------
+
+class TestChestArmorMesh:
+    """Test chest armor generators across all 5 styles."""
+
+    @pytest.mark.parametrize("style", [
+        "plate", "chain", "leather", "robes", "light",
+    ])
+    def test_chest_style_valid(self, style):
+        result = generate_chest_armor_mesh(style=style)
+        validate_mesh_spec(result, f"ChestArmor_{style}", min_verts=30, min_faces=10)
+
+    @pytest.mark.parametrize("style", [
+        "plate", "chain", "leather", "robes", "light",
+    ])
+    def test_chest_metadata_fields(self, style):
+        result = generate_chest_armor_mesh(style=style)
+        meta = result["metadata"]
+        assert meta["style"] == style
+        assert meta["slot"] == "chest"
+        assert meta["category"] == "armor"
+
+    def test_chest_styles_differ(self):
+        results = {s: generate_chest_armor_mesh(style=s)
+                   for s in ["plate", "chain", "leather", "robes", "light"]}
+        styles = list(results.keys())
+        for i in range(len(styles)):
+            for j in range(i + 1, len(styles)):
+                r1 = results[styles[i]]
+                r2 = results[styles[j]]
+                assert (
+                    r1["metadata"]["vertex_count"] != r2["metadata"]["vertex_count"]
+                    or r1["vertices"] != r2["vertices"]
+                ), f"Chest styles {styles[i]} and {styles[j]} produced identical geometry"
+
+    def test_chest_poly_count_range(self):
+        for style in ["plate", "chain", "leather", "robes", "light"]:
+            result = generate_chest_armor_mesh(style=style)
+            pc = result["metadata"]["poly_count"]
+            assert 10 <= pc <= 5000, (
+                f"Chest {style}: poly count {pc} outside expected range"
+            )
+
+
+# ---------------------------------------------------------------------------
+# GAUNTLET tests
+# ---------------------------------------------------------------------------
+
+class TestGauntletMesh:
+    """Test gauntlet generators across all 3 styles."""
+
+    @pytest.mark.parametrize("style", ["plate", "leather", "wraps"])
+    def test_gauntlet_style_valid(self, style):
+        result = generate_gauntlet_mesh(style=style)
+        validate_mesh_spec(result, f"Gauntlet_{style}", min_verts=20, min_faces=8)
+
+    @pytest.mark.parametrize("style", ["plate", "leather", "wraps"])
+    def test_gauntlet_metadata_fields(self, style):
+        result = generate_gauntlet_mesh(style=style)
+        meta = result["metadata"]
+        assert meta["style"] == style
+        assert meta["slot"] == "gauntlet"
+        assert meta["category"] == "armor"
+
+    def test_gauntlet_styles_differ(self):
+        results = {s: generate_gauntlet_mesh(style=s)
+                   for s in ["plate", "leather", "wraps"]}
+        styles = list(results.keys())
+        for i in range(len(styles)):
+            for j in range(i + 1, len(styles)):
+                r1 = results[styles[i]]
+                r2 = results[styles[j]]
+                assert (
+                    r1["metadata"]["vertex_count"] != r2["metadata"]["vertex_count"]
+                    or r1["vertices"] != r2["vertices"]
+                ), f"Gauntlet styles {styles[i]} and {styles[j]} produced identical geometry"
+
+    def test_gauntlet_poly_count_range(self):
+        for style in ["plate", "leather", "wraps"]:
+            result = generate_gauntlet_mesh(style=style)
+            pc = result["metadata"]["poly_count"]
+            assert 8 <= pc <= 5000, (
+                f"Gauntlet {style}: poly count {pc} outside expected range"
+            )
+
+
+# ---------------------------------------------------------------------------
+# BOOT tests
+# ---------------------------------------------------------------------------
+
+class TestBootMesh:
+    """Test boot generators across all 3 styles."""
+
+    @pytest.mark.parametrize("style", ["plate", "leather", "sandals"])
+    def test_boot_style_valid(self, style):
+        result = generate_boot_mesh(style=style)
+        validate_mesh_spec(result, f"Boot_{style}", min_verts=20, min_faces=8)
+
+    @pytest.mark.parametrize("style", ["plate", "leather", "sandals"])
+    def test_boot_metadata_fields(self, style):
+        result = generate_boot_mesh(style=style)
+        meta = result["metadata"]
+        assert meta["style"] == style
+        assert meta["slot"] == "boot"
+        assert meta["category"] == "armor"
+
+    def test_boot_styles_differ(self):
+        results = {s: generate_boot_mesh(style=s) for s in ["plate", "leather", "sandals"]}
+        styles = list(results.keys())
+        for i in range(len(styles)):
+            for j in range(i + 1, len(styles)):
+                r1 = results[styles[i]]
+                r2 = results[styles[j]]
+                assert (
+                    r1["metadata"]["vertex_count"] != r2["metadata"]["vertex_count"]
+                    or r1["vertices"] != r2["vertices"]
+                ), f"Boot styles {styles[i]} and {styles[j]} produced identical geometry"
+
+    def test_boot_poly_count_range(self):
+        for style in ["plate", "leather", "sandals"]:
+            result = generate_boot_mesh(style=style)
+            pc = result["metadata"]["poly_count"]
+            assert 8 <= pc <= 5000, (
+                f"Boot {style}: poly count {pc} outside expected range"
+            )
+
+
+# ---------------------------------------------------------------------------
+# PAULDRON tests
+# ---------------------------------------------------------------------------
+
+class TestPauldronMesh:
+    """Test pauldron generators across all 3 styles."""
+
+    @pytest.mark.parametrize("style", ["plate", "fur", "bone"])
+    def test_pauldron_style_valid(self, style):
+        result = generate_pauldron_mesh(style=style)
+        validate_mesh_spec(result, f"Pauldron_{style}", min_verts=20, min_faces=8)
+
+    @pytest.mark.parametrize("style", ["plate", "fur", "bone"])
+    def test_pauldron_metadata_fields(self, style):
+        result = generate_pauldron_mesh(style=style)
+        meta = result["metadata"]
+        assert meta["style"] == style
+        assert meta["slot"] == "pauldron"
+        assert meta["category"] == "armor"
+
+    def test_pauldron_side_left_right(self):
+        r_left = generate_pauldron_mesh(style="plate", side="left")
+        r_right = generate_pauldron_mesh(style="plate", side="right")
+        assert r_left["metadata"]["side"] == "left"
+        assert r_right["metadata"]["side"] == "right"
+        # Geometry should differ (mirrored X)
+        assert r_left["vertices"] != r_right["vertices"]
+
+    def test_pauldron_styles_differ(self):
+        results = {s: generate_pauldron_mesh(style=s) for s in ["plate", "fur", "bone"]}
+        styles = list(results.keys())
+        for i in range(len(styles)):
+            for j in range(i + 1, len(styles)):
+                r1 = results[styles[i]]
+                r2 = results[styles[j]]
+                assert (
+                    r1["metadata"]["vertex_count"] != r2["metadata"]["vertex_count"]
+                    or r1["vertices"] != r2["vertices"]
+                ), f"Pauldron styles {styles[i]} and {styles[j]} produced identical geometry"
+
+    def test_pauldron_poly_count_range(self):
+        for style in ["plate", "fur", "bone"]:
+            result = generate_pauldron_mesh(style=style)
+            pc = result["metadata"]["poly_count"]
+            assert 8 <= pc <= 5000, (
+                f"Pauldron {style}: poly count {pc} outside expected range"
+            )
+
+
+# ---------------------------------------------------------------------------
+# CAPE tests
+# ---------------------------------------------------------------------------
+
+class TestCapeMesh:
+    """Test cape generators across all 3 styles."""
+
+    @pytest.mark.parametrize("style", ["full", "half", "tattered"])
+    def test_cape_style_valid(self, style):
+        result = generate_cape_mesh(style=style)
+        validate_mesh_spec(result, f"Cape_{style}", min_verts=20, min_faces=8)
+
+    @pytest.mark.parametrize("style", ["full", "half", "tattered"])
+    def test_cape_metadata_fields(self, style):
+        result = generate_cape_mesh(style=style)
+        meta = result["metadata"]
+        assert meta["style"] == style
+        assert meta["slot"] == "cape"
+        assert meta["category"] == "armor"
+
+    def test_cape_styles_differ(self):
+        results = {s: generate_cape_mesh(style=s) for s in ["full", "half", "tattered"]}
+        styles = list(results.keys())
+        for i in range(len(styles)):
+            for j in range(i + 1, len(styles)):
+                r1 = results[styles[i]]
+                r2 = results[styles[j]]
+                assert (
+                    r1["metadata"]["vertex_count"] != r2["metadata"]["vertex_count"]
+                    or r1["vertices"] != r2["vertices"]
+                ), f"Cape styles {styles[i]} and {styles[j]} produced identical geometry"
+
+    def test_cape_poly_count_range(self):
+        for style in ["full", "half", "tattered"]:
+            result = generate_cape_mesh(style=style)
+            pc = result["metadata"]["poly_count"]
+            assert 8 <= pc <= 5000, (
+                f"Cape {style}: poly count {pc} outside expected range"
+            )
+
+    def test_full_cape_has_clasp(self):
+        """Full cape should have clasp geometry (more verts than just the sheet)."""
+        result = generate_cape_mesh(style="full")
+        # 11x15 grid = 165 verts for sheet alone; clasp adds more
+        assert result["metadata"]["vertex_count"] > 165
+
+
+# ---------------------------------------------------------------------------
+# REGISTRY tests
+# ---------------------------------------------------------------------------
+
+class TestArmorRegistry:
+    """Test the ARMOR_GENERATORS registry completeness."""
+
+    def test_registry_has_all_slots(self):
+        expected_slots = {"helmet", "chest_armor", "gauntlet", "boot", "pauldron", "cape"}
+        assert set(ARMOR_GENERATORS.keys()) == expected_slots
+
+    def test_registry_entries_are_tuples(self):
+        for slot, entry in ARMOR_GENERATORS.items():
+            assert isinstance(entry, tuple), f"{slot}: entry is not a tuple"
+            assert len(entry) == 2, f"{slot}: entry should be (func, meta)"
+            func, meta = entry
+            assert callable(func), f"{slot}: first element not callable"
+            assert isinstance(meta, dict), f"{slot}: second element not dict"
+            assert "styles" in meta, f"{slot}: meta missing 'styles'"
+            assert isinstance(meta["styles"], list), f"{slot}: styles not a list"
+
+    def test_registry_style_counts(self):
+        expected = {
+            "helmet": 5,
+            "chest_armor": 5,
+            "gauntlet": 3,
+            "boot": 3,
+            "pauldron": 3,
+            "cape": 3,
+        }
+        for slot, count in expected.items():
+            styles = ARMOR_GENERATORS[slot][1]["styles"]
+            assert len(styles) == count, (
+                f"{slot}: expected {count} styles, got {len(styles)}"
+            )
+
+    def test_registry_all_styles_generate_valid_mesh(self):
+        """Comprehensive test: every (slot, style) in the registry produces valid geometry."""
+        for slot, (func, meta) in ARMOR_GENERATORS.items():
+            for style in meta["styles"]:
+                result = func(style=style)
+                validate_mesh_spec(result, f"{slot}_{style}", min_verts=10, min_faces=4)
+
+    def test_total_style_count_is_22(self):
+        total = sum(len(meta["styles"]) for _, (_, meta) in ARMOR_GENERATORS.items())
+        assert total == 22, f"Expected 22 total styles, got {total}"

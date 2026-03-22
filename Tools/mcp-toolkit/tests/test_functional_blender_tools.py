@@ -299,11 +299,10 @@ class TestTool5BlenderExecute:
         assert safe is False
         assert any("exec" in v for v in violations)
 
-    def test_dangerous_open_fails_validation(self):
-        """Calling open() is blocked."""
+    def test_dangerous_open_allowed_per_policy(self):
+        """open() is allowed per user security policy."""
         safe, violations = validate_code("f = open('/etc/passwd')")
-        assert safe is False
-        assert any("open" in v for v in violations)
+        assert safe is True
 
     def test_safe_mathutils_passes_validation(self):
         """mathutils imports are allowed."""
@@ -655,10 +654,10 @@ class TestValidateCodePureLogic:
         safe, violations = validate_code(code)
         assert safe is True
 
-    def test_blocked_getattr_call(self):
+    def test_allowed_getattr_call(self):
+        """getattr is allowed per user security policy."""
         safe, violations = validate_code("x = getattr(obj, 'name')")
-        assert safe is False
-        assert any("getattr" in v for v in violations)
+        assert safe is True
 
     def test_blocked_dunder_import(self):
         safe, violations = validate_code("__import__('os')")

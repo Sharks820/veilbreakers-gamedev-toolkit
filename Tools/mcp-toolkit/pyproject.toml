@@ -15,6 +15,7 @@ dependencies = [
     "opensimplex>=0.4.5",
     "elevenlabs>=2.39.0",
     "google-genai>=1.0.0",
+    "defusedxml>=0.7.1",
 ]
 
 [project.scripts]
