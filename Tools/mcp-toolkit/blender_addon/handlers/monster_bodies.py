@@ -16,6 +16,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from .mesh_smoothing import smooth_assembled_mesh, add_organic_noise
+
 # ---------------------------------------------------------------------------
 # Type aliases
 # ---------------------------------------------------------------------------
@@ -1577,6 +1579,30 @@ _BODY_GENERATORS = {
 }
 
 
+def _brand_material_region(brand: str) -> str:
+    """Map a brand name to its material region tag.
+
+    Returns a material region string for brand-specific geometry faces.
+    Brands are grouped into material categories:
+    - Metal brands (IRON) -> "brand_metal"
+    - Organic brands (SAVAGE, VENOM, LEECH) -> "brand_organic"
+    - Crystal/energy brands (SURGE, GRACE, MEND) -> "brand_crystal"
+    - Dark/void brands (DREAD, RUIN, VOID) -> "brand_dark"
+    """
+    metal_brands = {"IRON"}
+    organic_brands = {"SAVAGE", "VENOM", "LEECH"}
+    crystal_brands = {"SURGE", "GRACE", "MEND"}
+    # DREAD, RUIN, VOID fall through to dark
+    if brand in metal_brands:
+        return "brand_metal"
+    elif brand in organic_brands:
+        return "brand_organic"
+    elif brand in crystal_brands:
+        return "brand_crystal"
+    else:
+        return "brand_dark"
+
+
 def generate_monster_body(
     body_type: str = "humanoid",
     brand: str = "IRON",
@@ -1609,6 +1635,11 @@ def generate_monster_body(
     # Generate base body
     base_verts, base_faces, joint_positions = _BODY_GENERATORS[body_type](scale)
 
+    # Build material regions: base body faces -> "body_skin"
+    material_regions: dict[int, str] = {
+        fi: "body_skin" for fi in range(len(base_faces))
+    }
+
     # Sample surface points for brand feature placement
     surface_points, surface_normals = _sample_surface_points(base_verts, count=16)
 
@@ -1619,13 +1650,27 @@ def generate_monster_body(
 
     # Merge base body with brand features
     if feature_verts:
+        base_face_count = len(base_faces)
         all_verts, all_faces = _merge_parts(
             (base_verts, base_faces),
             (feature_verts, feature_faces),
         )
+        # Tag brand feature faces with brand-specific material region
+        brand_region = _brand_material_region(brand)
+        for fi in range(base_face_count, len(all_faces)):
+            material_regions[fi] = brand_region
     else:
         all_verts = base_verts
         all_faces = base_faces
+
+    # Smooth assembled geometry to eliminate primitive junctions
+    all_verts = smooth_assembled_mesh(
+        all_verts, all_faces, smooth_iterations=3,
+    )
+    # Add organic imperfection noise
+    all_verts = add_organic_noise(
+        all_verts, faces=all_faces, strength=0.003 * scale,
+    )
 
     # Compute bounding box
     bbox = _compute_bbox(all_verts)
@@ -1638,7 +1683,10 @@ def generate_monster_body(
         "scale": scale,
         "joint_positions": joint_positions,
         "brand_feature_points": brand_feature_points,
+        "material_regions": material_regions,
         "bounding_box": bbox,
         "vertex_count": len(all_verts),
         "face_count": len(all_faces),
+        "subdivision_levels": {"viewport": 1, "render": 2},
+        "smooth_shading": True,
     }

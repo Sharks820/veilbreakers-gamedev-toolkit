@@ -1,6 +1,6 @@
 """Armor system mesh generators for VeilBreakers dark-fantasy equipment.
 
-Provides parametric armor piece generators across 6 equipment slots (22 style
+Provides parametric armor piece generators across 12 equipment slots (52 style
 variants total).  Every function is pure Python/math -- no ``bpy`` dependency --
 and returns the same ``MeshSpec`` dict used by ``procedural_meshes.py``.
 
@@ -12,6 +12,12 @@ Slots & styles
 - **Boots** (3):  plate, leather, sandals
 - **Pauldrons / shoulders** (3):  plate, fur, bone
 - **Capes** (3):  full, half, tattered
+- **Belts** (5):  leather, chain, rope, ornate, utility
+- **Bracers** (5):  leather, metal_vambrace, enchanted, chain, bone
+- **Rings** (5):  band, gem_set, rune_etched, signet, twisted
+- **Amulets** (5):  pendant, choker, torc, medallion, holy_symbol
+- **Back items** (5):  backpack, quiver, wings, trophy_mount, bedroll
+- **Face items** (5):  mask, blindfold, war_paint_frame, plague_doctor, domino
 
 Construction notes
 ~~~~~~~~~~~~~~~~~~
@@ -20,6 +26,10 @@ Construction notes
 - Chest armour is built around a torso capsule.
 - Gauntlets / boots wrap around limb cylinders.
 - Capes are curved sheet meshes.
+- Belts/bracers wrap around waist/forearm cylinders.
+- Rings/amulets are small accessory meshes.
+- Back items mount to the upper back/shoulders.
+- Face items overlay the face region.
 - Target triangle counts: 1 500 -- 5 000 per piece.
 """
 
