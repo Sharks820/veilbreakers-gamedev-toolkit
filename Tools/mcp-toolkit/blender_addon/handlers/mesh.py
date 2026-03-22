@@ -124,10 +124,19 @@ _SELECTION_KEYS = frozenset({
     "face_normal_direction",
     "normal_threshold",
     "loose_parts",
+    "position_box",
+    "position_sphere",
+    "position_plane",
 })
 
 # Valid edit operations for handle_edit_mesh.
-_EDIT_OPERATIONS = frozenset({"extrude", "inset", "mirror", "separate", "join"})
+_EDIT_OPERATIONS = frozenset({
+    "extrude", "inset", "mirror", "separate", "join",
+    "move", "rotate", "scale",
+    "loop_cut",
+    "bevel",
+    "merge_vertices", "dissolve_edges", "dissolve_faces",
+})
 
 # Valid sculpt operations for handle_sculpt.
 _SCULPT_OPERATIONS = {
@@ -186,6 +195,97 @@ def _sculpt_operation_to_filter_type(operation: str) -> str | None:
             f"Valid: {sorted(_SCULPT_OPERATIONS)}"
         )
     return _SCULPT_OPERATIONS[operation]
+
+
+# ---------------------------------------------------------------------------
+# Pure-logic helpers for position-based selection (testable without Blender)
+# ---------------------------------------------------------------------------
+
+
+def _select_by_box(verts_coords: list[tuple[float, float, float]],
+                   box_min: tuple[float, float, float],
+                   box_max: tuple[float, float, float]) -> list[int]:
+    """Return indices of vertices inside an axis-aligned bounding box.
+
+    Args:
+        verts_coords: List of (x, y, z) tuples for each vertex.
+        box_min: (min_x, min_y, min_z) corner.
+        box_max: (max_x, max_y, max_z) corner.
+
+    Returns:
+        List of vertex indices inside the box.
+    """
+    selected: list[int] = []
+    for i, co in enumerate(verts_coords):
+        if (box_min[0] <= co[0] <= box_max[0]
+                and box_min[1] <= co[1] <= box_max[1]
+                and box_min[2] <= co[2] <= box_max[2]):
+            selected.append(i)
+    return selected
+
+
+def _select_by_sphere(verts_coords: list[tuple[float, float, float]],
+                      center: tuple[float, float, float],
+                      radius: float) -> list[int]:
+    """Return indices of vertices within a sphere.
+
+    Args:
+        verts_coords: List of (x, y, z) tuples for each vertex.
+        center: (cx, cy, cz) sphere center.
+        radius: Sphere radius.
+
+    Returns:
+        List of vertex indices within the sphere.
+    """
+    r_sq = radius * radius
+    selected: list[int] = []
+    for i, co in enumerate(verts_coords):
+        dx = co[0] - center[0]
+        dy = co[1] - center[1]
+        dz = co[2] - center[2]
+        if dx * dx + dy * dy + dz * dz <= r_sq:
+            selected.append(i)
+    return selected
+
+
+def _select_by_plane(verts_coords: list[tuple[float, float, float]],
+                     plane_point: tuple[float, float, float],
+                     plane_normal: tuple[float, float, float],
+                     side: str = "above") -> list[int]:
+    """Return indices of vertices on one side of a plane.
+
+    The plane is defined by a point and a normal vector. "above" means
+    vertices on the side the normal points to (dot product >= 0).
+
+    Args:
+        verts_coords: List of (x, y, z) tuples for each vertex.
+        plane_point: A point on the plane.
+        plane_normal: The plane normal direction (does not need to be normalized).
+        side: "above" (default) or "below".
+
+    Returns:
+        List of vertex indices on the specified side.
+    """
+    # Normalize the normal
+    nx, ny, nz = plane_normal
+    length = math.sqrt(nx * nx + ny * ny + nz * nz)
+    if length < 1e-10:
+        return []
+    nx /= length
+    ny /= length
+    nz /= length
+
+    selected: list[int] = []
+    for i, co in enumerate(verts_coords):
+        # Signed distance from plane
+        dist = ((co[0] - plane_point[0]) * nx
+                + (co[1] - plane_point[1]) * ny
+                + (co[2] - plane_point[2]) * nz)
+        if side == "above" and dist >= 0:
+            selected.append(i)
+        elif side == "below" and dist < 0:
+            selected.append(i)
+    return selected
 
 
 def _evaluate_game_readiness(
@@ -511,7 +611,7 @@ def _get_mesh_object(name: str | None) -> object:
 
 
 def handle_select_geometry(params: dict) -> dict:
-    """Select geometry by material, vertex group, face normal, or loose parts (MESH-03).
+    """Select geometry by material, vertex group, face normal, position, or loose parts (MESH-03, GAP-01).
 
     Params:
         object_name: Name of the Blender mesh object.
@@ -521,6 +621,9 @@ def handle_select_geometry(params: dict) -> dict:
         face_normal_direction: [x, y, z] direction vector for face normal selection.
         normal_threshold: Dot-product threshold for normal selection (default 0.7).
         loose_parts: If True, select vertices with no linked faces.
+        position_box: {"min": [x,y,z], "max": [x,y,z]} -- select verts in bounding box.
+        position_sphere: {"center": [x,y,z], "radius": r} -- select verts in sphere.
+        position_plane: {"point": [x,y,z], "normal": [x,y,z], "side": "above"|"below"}.
 
     Returns dict with selection counts and criteria used.
     """
@@ -598,6 +701,53 @@ def handle_select_geometry(params: dict) -> dict:
                 if len(v.link_faces) == 0:
                     v.select = True
 
+        # --- Position-based selection: bounding box ---
+        pos_box = criteria.get("position_box")
+        if pos_box is not None:
+            box_min = tuple(pos_box["min"])
+            box_max = tuple(pos_box["max"])
+            coords = [(v.co.x, v.co.y, v.co.z) for v in bm.verts]
+            for idx in _select_by_box(coords, box_min, box_max):
+                bm.verts[idx].select = True
+            # Select edges/faces where all verts are selected
+            for e in bm.edges:
+                if all(v.select for v in e.verts):
+                    e.select = True
+            for f in bm.faces:
+                if all(v.select for v in f.verts):
+                    f.select = True
+
+        # --- Position-based selection: sphere ---
+        pos_sphere = criteria.get("position_sphere")
+        if pos_sphere is not None:
+            center = tuple(pos_sphere["center"])
+            radius = float(pos_sphere["radius"])
+            coords = [(v.co.x, v.co.y, v.co.z) for v in bm.verts]
+            for idx in _select_by_sphere(coords, center, radius):
+                bm.verts[idx].select = True
+            for e in bm.edges:
+                if all(v.select for v in e.verts):
+                    e.select = True
+            for f in bm.faces:
+                if all(v.select for v in f.verts):
+                    f.select = True
+
+        # --- Position-based selection: plane ---
+        pos_plane = criteria.get("position_plane")
+        if pos_plane is not None:
+            plane_point = tuple(pos_plane["point"])
+            plane_normal = tuple(pos_plane["normal"])
+            side = pos_plane.get("side", "above")
+            coords = [(v.co.x, v.co.y, v.co.z) for v in bm.verts]
+            for idx in _select_by_plane(coords, plane_point, plane_normal, side):
+                bm.verts[idx].select = True
+            for e in bm.edges:
+                if all(v.select for v in e.verts):
+                    e.select = True
+            for f in bm.faces:
+                if all(v.select for v in f.verts):
+                    f.select = True
+
         # Count selections
         selected_verts = sum(1 for v in bm.verts if v.select)
         selected_edges = sum(1 for e in bm.edges if e.select)
@@ -619,17 +769,28 @@ def handle_select_geometry(params: dict) -> dict:
 
 
 def handle_edit_mesh(params: dict) -> dict:
-    """Surgical mesh editing: extrude, inset, mirror, separate, join (MESH-06).
+    """Surgical mesh editing with extended operations (MESH-06, GAP-02/03/04/05).
 
     Params:
         object_name: Name of the Blender mesh object.
-        operation: One of "extrude", "inset", "mirror", "separate", "join".
-        offset: [x, y, z] translation for extrude (default [0, 0, 0.5]).
+        operation: One of "extrude", "inset", "mirror", "separate", "join",
+            "move", "rotate", "scale", "loop_cut", "bevel",
+            "merge_vertices", "dissolve_edges", "dissolve_faces".
+        offset: [x, y, z] for extrude or move.
         thickness: Inset thickness (default 0.1).
         depth: Inset depth (default 0.0).
-        axis: Mirror axis -- "X", "Y", or "Z" (default "X").
+        axis: Mirror/rotate axis -- "X", "Y", or "Z" (default "X").
         separate_type: "SELECTED", "MATERIAL", or "LOOSE" (default "SELECTED").
         object_names: List of object names to join into the target.
+        angle: Rotation angle in degrees (for rotate).
+        center: [x,y,z] rotation/scale center (default: selection center).
+        factor: Scale factor -- float or [x,y,z] (for scale).
+        edge_index: Edge index for loop_cut (optional).
+        cuts: Number of cuts for loop_cut (default 1).
+        width: Bevel width (default 0.1).
+        segments: Bevel segments 1-10 (default 1).
+        profile: Bevel profile 0.0-1.0 (default 0.5).
+        merge_type: "CENTER", "FIRST", "LAST", "COLLAPSE" (for merge_vertices).
 
     Returns dict with post-operation vertex/face counts.
     """
@@ -765,6 +926,318 @@ def handle_edit_mesh(params: dict) -> dict:
 
         vert_count = len(obj.data.vertices)
         face_count = len(obj.data.polygons)
+
+    # --- GAP-02: Transform selected geometry ---
+
+    elif operation == "move":
+        move_offset = params.get("offset", [0, 0, 0])
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            selected = [v for v in bm.verts if v.select]
+            if not selected:
+                raise ValueError("No vertices selected for move. Run 'select' first.")
+            bmesh.ops.translate(bm, verts=selected, vec=mathutils.Vector(move_offset))
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    elif operation == "rotate":
+        angle_deg = params.get("angle", 0.0)
+        rot_axis = params.get("axis", "Z")
+        center = params.get("center")
+        angle_rad = math.radians(angle_deg)
+
+        # Build rotation matrix around the specified axis
+        axis_vectors = {
+            "X": mathutils.Vector((1, 0, 0)),
+            "Y": mathutils.Vector((0, 1, 0)),
+            "Z": mathutils.Vector((0, 0, 1)),
+        }
+        rot_vec = axis_vectors.get(rot_axis.upper())
+        if rot_vec is None:
+            raise ValueError(f"Invalid axis: {rot_axis!r}. Valid: X, Y, Z")
+
+        rot_matrix = mathutils.Matrix.Rotation(angle_rad, 4, rot_vec)
+
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            selected = [v for v in bm.verts if v.select]
+            if not selected:
+                raise ValueError("No vertices selected for rotate. Run 'select' first.")
+
+            # Determine rotation center
+            if center is not None:
+                cent = mathutils.Vector(center)
+            else:
+                # Average position of selected verts
+                cent = mathutils.Vector((0, 0, 0))
+                for v in selected:
+                    cent += v.co
+                cent /= len(selected)
+
+            bmesh.ops.rotate(
+                bm,
+                verts=selected,
+                cent=cent,
+                matrix=rot_matrix,
+            )
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    elif operation == "scale":
+        scale_factor = params.get("factor", [1, 1, 1])
+        center = params.get("center")
+        if isinstance(scale_factor, (int, float)):
+            scale_factor = [scale_factor, scale_factor, scale_factor]
+
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            selected = [v for v in bm.verts if v.select]
+            if not selected:
+                raise ValueError("No vertices selected for scale. Run 'select' first.")
+
+            # Determine scale center
+            if center is not None:
+                cent = mathutils.Vector(center)
+            else:
+                cent = mathutils.Vector((0, 0, 0))
+                for v in selected:
+                    cent += v.co
+                cent /= len(selected)
+
+            # bmesh.ops.scale expects vec= and space= matrix
+            # We translate to origin, scale, translate back
+            bmesh.ops.scale(
+                bm,
+                vec=mathutils.Vector(scale_factor),
+                verts=selected,
+                space=mathutils.Matrix.Translation(-cent),
+            )
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    # --- GAP-03: Edge Loop Insertion ---
+
+    elif operation == "loop_cut":
+        cuts = params.get("cuts", 1)
+        edge_index = params.get("edge_index")
+        loop_axis = params.get("axis", "X").upper()
+
+        ctx = get_3d_context_override()
+        if ctx is None:
+            raise RuntimeError("No 3D Viewport available for loop_cut operation")
+
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+        if edge_index is not None:
+            # Use operator with specific edge
+            with bpy.context.temp_override(**ctx):
+                bpy.ops.object.mode_set(mode="EDIT")
+                bpy.ops.mesh.loopcut_slide(
+                    MESH_OT_loopcut={
+                        "number_cuts": cuts,
+                        "edge_index": edge_index,
+                    },
+                    TRANSFORM_OT_edge_slide={"value": 0.0},
+                )
+                bpy.ops.object.mode_set(mode="OBJECT")
+        else:
+            # Fallback: subdivide selected edges
+            bm = bmesh.new()
+            try:
+                bm.from_mesh(obj.data)
+                bm.edges.ensure_lookup_table()
+                selected_edges = [e for e in bm.edges if e.select]
+                if not selected_edges:
+                    # Select edges aligned with the given axis
+                    axis_idx = _axis_to_index(loop_axis)
+                    for e in bm.edges:
+                        v0 = e.verts[0].co
+                        v1 = e.verts[1].co
+                        diff = [abs(v1[i] - v0[i]) for i in range(3)]
+                        # Edge is primarily along this axis
+                        if diff[axis_idx] > max(
+                            d for i, d in enumerate(diff) if i != axis_idx
+                        ) * 0.5:
+                            selected_edges.append(e)
+                if selected_edges:
+                    bmesh.ops.subdivide_edges(
+                        bm, edges=selected_edges, cuts=cuts,
+                    )
+                bm.to_mesh(obj.data)
+                obj.data.update()
+                vert_count = len(bm.verts)
+                face_count = len(bm.faces)
+            finally:
+                bm.free()
+            return {
+                "object_name": name,
+                "operation": operation,
+                "vertex_count": vert_count,
+                "face_count": face_count,
+            }
+
+        vert_count = len(obj.data.vertices)
+        face_count = len(obj.data.polygons)
+
+    # --- GAP-04: Bevel ---
+
+    elif operation == "bevel":
+        width = params.get("width", 0.1)
+        segments = max(1, min(params.get("segments", 1), 10))
+        profile = max(0.0, min(params.get("profile", 0.5), 1.0))
+        clamp_overlap = params.get("clamp_overlap", True)
+
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            bm.edges.ensure_lookup_table()
+
+            selected_verts = [v for v in bm.verts if v.select]
+            selected_edges = [e for e in bm.edges if e.select]
+
+            if not selected_verts and not selected_edges:
+                raise ValueError(
+                    "No geometry selected for bevel. Run 'select' first."
+                )
+
+            # Prefer edge bevel, fall back to vertex bevel
+            if selected_edges:
+                bmesh.ops.bevel(
+                    bm,
+                    geom=selected_edges,
+                    offset=width,
+                    offset_type="OFFSET",
+                    segments=segments,
+                    profile=profile,
+                    affect="EDGES",
+                    clamp_overlap=clamp_overlap,
+                )
+            else:
+                bmesh.ops.bevel(
+                    bm,
+                    geom=selected_verts,
+                    offset=width,
+                    offset_type="OFFSET",
+                    segments=segments,
+                    profile=profile,
+                    affect="VERTICES",
+                    clamp_overlap=clamp_overlap,
+                )
+
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    # --- GAP-05: Vertex Merge / Edge Dissolve / Face Dissolve ---
+
+    elif operation == "merge_vertices":
+        merge_type = params.get("merge_type", "CENTER").upper()
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            selected = [v for v in bm.verts if v.select]
+            if len(selected) < 2:
+                raise ValueError(
+                    "Need at least 2 selected vertices for merge."
+                )
+
+            if merge_type == "CENTER":
+                # Calculate center
+                center = mathutils.Vector((0, 0, 0))
+                for v in selected:
+                    center += v.co
+                center /= len(selected)
+                # Move all to center, then remove doubles
+                for v in selected:
+                    v.co = center
+                bmesh.ops.remove_doubles(bm, verts=selected, dist=0.0001)
+            elif merge_type == "FIRST":
+                target_co = selected[0].co.copy()
+                for v in selected[1:]:
+                    v.co = target_co
+                bmesh.ops.remove_doubles(bm, verts=selected, dist=0.0001)
+            elif merge_type == "LAST":
+                target_co = selected[-1].co.copy()
+                for v in selected[:-1]:
+                    v.co = target_co
+                bmesh.ops.remove_doubles(bm, verts=selected, dist=0.0001)
+            elif merge_type == "COLLAPSE":
+                bmesh.ops.collapse(bm, edges=[
+                    e for e in bm.edges
+                    if e.verts[0].select and e.verts[1].select
+                ])
+            else:
+                raise ValueError(
+                    f"Unknown merge_type: {merge_type!r}. "
+                    "Valid: CENTER, FIRST, LAST, COLLAPSE"
+                )
+
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    elif operation == "dissolve_edges":
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.edges.ensure_lookup_table()
+            selected_edges = [e for e in bm.edges if e.select]
+            if not selected_edges:
+                raise ValueError(
+                    "No edges selected for dissolve. Run 'select' first."
+                )
+            bmesh.ops.dissolve_edges(bm, edges=selected_edges)
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    elif operation == "dissolve_faces":
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.faces.ensure_lookup_table()
+            selected_faces = [f for f in bm.faces if f.select]
+            if not selected_faces:
+                raise ValueError(
+                    "No faces selected for dissolve. Run 'select' first."
+                )
+            bmesh.ops.dissolve_faces(bm, faces=selected_faces)
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
 
     else:
         raise ValueError(f"Unhandled operation: {operation}")

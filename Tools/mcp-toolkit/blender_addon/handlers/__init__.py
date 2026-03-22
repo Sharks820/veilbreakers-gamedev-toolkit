@@ -43,6 +43,10 @@ from .mesh import (
     handle_boolean_op,
     handle_retopologize,
     handle_sculpt,
+    # Pure-logic position selection helpers (GAP-01)
+    _select_by_box,
+    _select_by_sphere,
+    _select_by_plane,
 )
 from .uv import (  # noqa: F401, E402
     handle_analyze_uv,
@@ -227,6 +231,17 @@ from .light_integration import (  # noqa: F401 -- Light source integration
     compute_light_budget,
     LIGHT_PROP_MAP,
     FLICKER_PRESETS,
+)
+from .terrain_sculpt import (  # noqa: F401 -- Terrain sculpting (GAP-09)
+    handle_sculpt_terrain,
+    # Pure-logic helpers (exported for tests)
+    get_falloff_value,
+    compute_brush_weights,
+    compute_raise_displacements,
+    compute_lower_displacements,
+    compute_smooth_displacements,
+    compute_flatten_displacements,
+    compute_stamp_displacements,
 )
 from .atmospheric_volumes import (  # noqa: F401 -- Atmospheric volume props
     compute_atmospheric_placements,
@@ -448,6 +463,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "env_light_budget": lambda params: compute_light_budget(
         lights=params.get("lights", []),
     ),
+    # Terrain sculpting (GAP-09)
+    "terrain_sculpt": handle_sculpt_terrain,
     # Atmospheric volumes (pure logic -- returns volume placements)
     "env_compute_atmospheric_placements": lambda params: compute_atmospheric_placements(
         biome_name=params.get("biome_name", "dark_forest"),
