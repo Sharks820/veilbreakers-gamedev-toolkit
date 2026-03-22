@@ -158,8 +158,8 @@ UNITY_HUMANOID_BONE_MAP: dict[str, str] = {
     "DEF-spine.003": "UpperChest",
     "DEF-spine.004": "Neck",
     "DEF-spine.005": "Head",
-    "DEF-clavicle.L": "LeftShoulder",
-    "DEF-clavicle.R": "RightShoulder",
+    "DEF-shoulder.L": "LeftShoulder",
+    "DEF-shoulder.R": "RightShoulder",
     "DEF-upper_arm.L": "LeftUpperArm",
     "DEF-upper_arm.R": "RightUpperArm",
     "DEF-forearm.L": "LeftLowerArm",
@@ -600,11 +600,11 @@ def _get_corruption_stage(corruption_pct: float) -> dict | None:
 BONE_LOD_TIERS: dict[str, list[str]] = {
     "LOD0_full": [],  # All bones (default)
     "LOD1_no_fingers": [
-        "thumb_01", "thumb_02", "thumb_03",
-        "index_01", "index_02", "index_03",
-        "middle_01", "middle_02", "middle_03",
-        "ring_01", "ring_02", "ring_03",
-        "pinky_01", "pinky_02", "pinky_03",
+        "thumb.01", "thumb.02", "thumb.03",
+        "f_index.01", "f_index.02", "f_index.03",
+        "f_middle.01", "f_middle.02", "f_middle.03",
+        "f_ring.01", "f_ring.02", "f_ring.03",
+        "f_pinky.01", "f_pinky.02", "f_pinky.03",
     ],
     "LOD2_no_twist": [
         "upper_arm_twist", "forearm_twist",
@@ -613,17 +613,17 @@ BONE_LOD_TIERS: dict[str, list[str]] = {
         "thigh_twist_025", "shin_twist_025",
     ],
     "LOD3_minimal": [
-        # Everything from LOD1 + LOD2 plus toes and clavicles
-        "thumb_01", "thumb_02", "thumb_03",
-        "index_01", "index_02", "index_03",
-        "middle_01", "middle_02", "middle_03",
-        "ring_01", "ring_02", "ring_03",
-        "pinky_01", "pinky_02", "pinky_03",
+        # Everything from LOD1 + LOD2 plus toes and shoulders
+        "thumb.01", "thumb.02", "thumb.03",
+        "f_index.01", "f_index.02", "f_index.03",
+        "f_middle.01", "f_middle.02", "f_middle.03",
+        "f_ring.01", "f_ring.02", "f_ring.03",
+        "f_pinky.01", "f_pinky.02", "f_pinky.03",
         "upper_arm_twist", "forearm_twist",
         "thigh_twist", "shin_twist",
         "upper_arm_twist_025", "forearm_twist_025",
         "thigh_twist_025", "shin_twist_025",
-        "toe", "toe.001", "clavicle",
+        "toe", "toe.001", "shoulder",
     ],
 }
 

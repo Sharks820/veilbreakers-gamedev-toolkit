@@ -507,44 +507,44 @@ class TestLimbLibrary:
 
 
 class TestHumanoidCompleteness:
-    """Test humanoid template has clavicles, fingers, and toes."""
+    """Test humanoid template has shoulders, fingers, and toes."""
 
-    def test_has_clavicles(self):
-        """Humanoid has clavicle.L and clavicle.R."""
+    def test_has_shoulders(self):
+        """Humanoid has shoulder.L and shoulder.R."""
         from blender_addon.handlers.rigging_templates import HUMANOID_BONES
-        assert "clavicle.L" in HUMANOID_BONES
-        assert "clavicle.R" in HUMANOID_BONES
+        assert "shoulder.L" in HUMANOID_BONES
+        assert "shoulder.R" in HUMANOID_BONES
 
-    def test_upper_arm_parents_clavicle(self):
-        """upper_arm.L parent is clavicle.L, upper_arm.R parent is clavicle.R."""
+    def test_upper_arm_parents_shoulder(self):
+        """upper_arm.L parent is shoulder.L, upper_arm.R parent is shoulder.R."""
         from blender_addon.handlers.rigging_templates import HUMANOID_BONES
-        assert HUMANOID_BONES["upper_arm.L"]["parent"] == "clavicle.L"
-        assert HUMANOID_BONES["upper_arm.R"]["parent"] == "clavicle.R"
+        assert HUMANOID_BONES["upper_arm.L"]["parent"] == "shoulder.L"
+        assert HUMANOID_BONES["upper_arm.R"]["parent"] == "shoulder.R"
 
     def test_has_all_finger_bones(self):
-        """Humanoid has all 30 finger bones."""
+        """Humanoid has all 30 finger bones (Rigify convention)."""
         from blender_addon.handlers.rigging_templates import HUMANOID_BONES
-        fingers = ["thumb", "index", "middle", "ring", "pinky"]
+        fingers = ["thumb", "f_index", "f_middle", "f_ring", "f_pinky"]
         for finger in fingers:
             for num in ("01", "02", "03"):
                 for side in ("L", "R"):
-                    bone_name = f"{finger}_{num}.{side}"
+                    bone_name = f"{finger}.{num}.{side}"
                     assert bone_name in HUMANOID_BONES, f"Missing finger bone: {bone_name}"
 
     def test_finger_01_parents_hand(self):
         """First finger bones parent to hand."""
         from blender_addon.handlers.rigging_templates import HUMANOID_BONES
-        for finger in ["thumb", "index", "middle", "ring", "pinky"]:
-            assert HUMANOID_BONES[f"{finger}_01.L"]["parent"] == "hand.L"
-            assert HUMANOID_BONES[f"{finger}_01.R"]["parent"] == "hand.R"
+        for finger in ["thumb", "f_index", "f_middle", "f_ring", "f_pinky"]:
+            assert HUMANOID_BONES[f"{finger}.01.L"]["parent"] == "hand.L"
+            assert HUMANOID_BONES[f"{finger}.01.R"]["parent"] == "hand.R"
 
     def test_finger_chain_parents(self):
         """Finger bones chain: 02 parent is 01, 03 parent is 02."""
         from blender_addon.handlers.rigging_templates import HUMANOID_BONES
-        for finger in ["thumb", "index", "middle", "ring", "pinky"]:
+        for finger in ["thumb", "f_index", "f_middle", "f_ring", "f_pinky"]:
             for side in ("L", "R"):
-                assert HUMANOID_BONES[f"{finger}_02.{side}"]["parent"] == f"{finger}_01.{side}"
-                assert HUMANOID_BONES[f"{finger}_03.{side}"]["parent"] == f"{finger}_02.{side}"
+                assert HUMANOID_BONES[f"{finger}.02.{side}"]["parent"] == f"{finger}.01.{side}"
+                assert HUMANOID_BONES[f"{finger}.03.{side}"]["parent"] == f"{finger}.02.{side}"
 
     def test_has_toe_bones(self):
         """Humanoid has toe and toe.001 bones."""

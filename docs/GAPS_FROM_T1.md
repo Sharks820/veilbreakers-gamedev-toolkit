@@ -1,35 +1,18 @@
 # Gaps Found by Terminal 1 (Rigging)
 
-## Naming Mismatch: Clavicle/Shoulder Bones
+## ~~Naming Mismatch: Clavicle/Shoulder Bones~~ RESOLVED
 
-**Files:** `animation_export.py` (Terminal 2)
+T1 renamed `clavicle.L/R` to `shoulder.L/R` to match T2's `MIXAMO_TO_RIGIFY` mapping.
+No merge conflict expected.
 
-Terminal 2's `MIXAMO_TO_RIGIFY` mapping uses `DEF-shoulder.L/R` for clavicle bones.
-Terminal 1's humanoid template (per audit contract) uses `clavicle.L/R`.
+## ~~Naming Mismatch: Finger Bone Conventions~~ RESOLVED
 
-**Action needed:** Terminal 2 should either:
-- Add a `DEF-clavicle.L/R` entry alongside `DEF-shoulder.L/R`, OR
-- T1 and T2 agree on a single name before merge
+T1 adopted T2's Rigify-style naming convention:
+- `thumb_01` -> `thumb.01` (dot separator)
+- `index_01` -> `f_index.01` (f_ prefix + dot separator)
+- `middle_01` -> `f_middle.01`, `ring_01` -> `f_ring.01`, `pinky_01` -> `f_pinky.01`
 
-## Naming Mismatch: Finger Bone Conventions
-
-**Files:** `animation_export.py` (Terminal 2)
-
-| Terminal 2 (MIXAMO mapping) | Terminal 1 (Template) |
-|---|---|
-| `thumb.01.L` | `thumb_01.L` |
-| `f_index.01.L` | `index_01.L` |
-| `f_middle.01.L` | `middle_01.L` |
-| `f_ring.01.L` | `ring_01.L` |
-| `f_pinky.01.L` | `pinky_01.L` |
-
-Terminal 1 follows the audit Interface Contract naming. Terminal 2's MIXAMO mapping
-uses Rigify-style dot notation and `f_` prefix for non-thumb fingers.
-
-**Action needed:** Reconcile naming before merge. Options:
-1. T1 adopts T2's naming (requires audit contract amendment)
-2. T2 updates MIXAMO mapping to match T1's naming
-3. Add aliasing in the retarget handler to support both
+No merge conflict expected.
 
 ## Pre-existing Test Failure: MIXAMO Bone Count
 

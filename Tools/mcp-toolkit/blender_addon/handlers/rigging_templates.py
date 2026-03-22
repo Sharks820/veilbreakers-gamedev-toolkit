@@ -105,15 +105,15 @@ HUMANOID_BONES: dict[str, dict] = {
         "parent": "spine.004",
         "rigify_type": "",
     },
-    # Clavicles
-    "clavicle.L": {
+    # Shoulders (Rigify convention: shoulder.L/R)
+    "shoulder.L": {
         "head": (0.02, 0.0, 1.5),
         "tail": (0.18, 0.0, 1.5),
         "roll": 0.0,
         "parent": "spine.003",
         "rigify_type": "basic.super_copy",
     },
-    "clavicle.R": {
+    "shoulder.R": {
         "head": (-0.02, 0.0, 1.5),
         "tail": (-0.18, 0.0, 1.5),
         "roll": 0.0,
@@ -125,7 +125,7 @@ HUMANOID_BONES: dict[str, dict] = {
         "head": (0.18, 0.0, 1.5),
         "tail": (0.4, 0.0, 1.5),
         "roll": 0.0,
-        "parent": "clavicle.L",
+        "parent": "shoulder.L",
         "rigify_type": "limbs.arm",
     },
     "forearm.L": {
@@ -147,7 +147,7 @@ HUMANOID_BONES: dict[str, dict] = {
         "head": (-0.18, 0.0, 1.5),
         "tail": (-0.4, 0.0, 1.5),
         "roll": 0.0,
-        "parent": "clavicle.R",
+        "parent": "shoulder.R",
         "rigify_type": "limbs.arm",
     },
     "forearm.R": {
@@ -237,216 +237,216 @@ HUMANOID_BONES: dict[str, dict] = {
         "parent": "toe.R",
         "rigify_type": "",
     },
-    # Finger bones -- Left hand
-    "thumb_01.L": {
+    # Finger bones -- Left hand (Rigify convention: thumb.XX, f_finger.XX)
+    "thumb.01.L": {
         "head": (0.64, -0.02, 1.49),
         "tail": (0.66, -0.03, 1.48),
         "roll": 0.0,
         "parent": "hand.L",
         "rigify_type": "limbs.super_finger",
     },
-    "thumb_02.L": {
+    "thumb.02.L": {
         "head": (0.66, -0.03, 1.48),
         "tail": (0.68, -0.04, 1.47),
         "roll": 0.0,
-        "parent": "thumb_01.L",
+        "parent": "thumb.01.L",
         "rigify_type": "",
     },
-    "thumb_03.L": {
+    "thumb.03.L": {
         "head": (0.68, -0.04, 1.47),
         "tail": (0.70, -0.05, 1.46),
         "roll": 0.0,
-        "parent": "thumb_02.L",
+        "parent": "thumb.02.L",
         "rigify_type": "",
     },
-    "index_01.L": {
+    "f_index.01.L": {
         "head": (0.72, -0.01, 1.50),
         "tail": (0.75, -0.01, 1.50),
         "roll": 0.0,
         "parent": "hand.L",
         "rigify_type": "limbs.super_finger",
     },
-    "index_02.L": {
+    "f_index.02.L": {
         "head": (0.75, -0.01, 1.50),
         "tail": (0.78, -0.01, 1.50),
         "roll": 0.0,
-        "parent": "index_01.L",
+        "parent": "f_index.01.L",
         "rigify_type": "",
     },
-    "index_03.L": {
+    "f_index.03.L": {
         "head": (0.78, -0.01, 1.50),
         "tail": (0.81, -0.01, 1.50),
         "roll": 0.0,
-        "parent": "index_02.L",
+        "parent": "f_index.02.L",
         "rigify_type": "",
     },
-    "middle_01.L": {
+    "f_middle.01.L": {
         "head": (0.72, 0.0, 1.50),
         "tail": (0.75, 0.0, 1.50),
         "roll": 0.0,
         "parent": "hand.L",
         "rigify_type": "limbs.super_finger",
     },
-    "middle_02.L": {
+    "f_middle.02.L": {
         "head": (0.75, 0.0, 1.50),
         "tail": (0.78, 0.0, 1.50),
         "roll": 0.0,
-        "parent": "middle_01.L",
+        "parent": "f_middle.01.L",
         "rigify_type": "",
     },
-    "middle_03.L": {
+    "f_middle.03.L": {
         "head": (0.78, 0.0, 1.50),
         "tail": (0.81, 0.0, 1.50),
         "roll": 0.0,
-        "parent": "middle_02.L",
+        "parent": "f_middle.02.L",
         "rigify_type": "",
     },
-    "ring_01.L": {
+    "f_ring.01.L": {
         "head": (0.72, 0.01, 1.50),
         "tail": (0.75, 0.01, 1.50),
         "roll": 0.0,
         "parent": "hand.L",
         "rigify_type": "limbs.super_finger",
     },
-    "ring_02.L": {
+    "f_ring.02.L": {
         "head": (0.75, 0.01, 1.50),
         "tail": (0.78, 0.01, 1.50),
         "roll": 0.0,
-        "parent": "ring_01.L",
+        "parent": "f_ring.01.L",
         "rigify_type": "",
     },
-    "ring_03.L": {
+    "f_ring.03.L": {
         "head": (0.78, 0.01, 1.50),
         "tail": (0.81, 0.01, 1.50),
         "roll": 0.0,
-        "parent": "ring_02.L",
+        "parent": "f_ring.02.L",
         "rigify_type": "",
     },
-    "pinky_01.L": {
+    "f_pinky.01.L": {
         "head": (0.72, 0.02, 1.50),
         "tail": (0.74, 0.02, 1.50),
         "roll": 0.0,
         "parent": "hand.L",
         "rigify_type": "limbs.super_finger",
     },
-    "pinky_02.L": {
+    "f_pinky.02.L": {
         "head": (0.74, 0.02, 1.50),
         "tail": (0.76, 0.02, 1.50),
         "roll": 0.0,
-        "parent": "pinky_01.L",
+        "parent": "f_pinky.01.L",
         "rigify_type": "",
     },
-    "pinky_03.L": {
+    "f_pinky.03.L": {
         "head": (0.76, 0.02, 1.50),
         "tail": (0.78, 0.02, 1.50),
         "roll": 0.0,
-        "parent": "pinky_02.L",
+        "parent": "f_pinky.02.L",
         "rigify_type": "",
     },
-    # Finger bones -- Right hand
-    "thumb_01.R": {
+    # Finger bones -- Right hand (Rigify convention: thumb.XX, f_finger.XX)
+    "thumb.01.R": {
         "head": (-0.64, -0.02, 1.49),
         "tail": (-0.66, -0.03, 1.48),
         "roll": 0.0,
         "parent": "hand.R",
         "rigify_type": "limbs.super_finger",
     },
-    "thumb_02.R": {
+    "thumb.02.R": {
         "head": (-0.66, -0.03, 1.48),
         "tail": (-0.68, -0.04, 1.47),
         "roll": 0.0,
-        "parent": "thumb_01.R",
+        "parent": "thumb.01.R",
         "rigify_type": "",
     },
-    "thumb_03.R": {
+    "thumb.03.R": {
         "head": (-0.68, -0.04, 1.47),
         "tail": (-0.70, -0.05, 1.46),
         "roll": 0.0,
-        "parent": "thumb_02.R",
+        "parent": "thumb.02.R",
         "rigify_type": "",
     },
-    "index_01.R": {
+    "f_index.01.R": {
         "head": (-0.72, -0.01, 1.50),
         "tail": (-0.75, -0.01, 1.50),
         "roll": 0.0,
         "parent": "hand.R",
         "rigify_type": "limbs.super_finger",
     },
-    "index_02.R": {
+    "f_index.02.R": {
         "head": (-0.75, -0.01, 1.50),
         "tail": (-0.78, -0.01, 1.50),
         "roll": 0.0,
-        "parent": "index_01.R",
+        "parent": "f_index.01.R",
         "rigify_type": "",
     },
-    "index_03.R": {
+    "f_index.03.R": {
         "head": (-0.78, -0.01, 1.50),
         "tail": (-0.81, -0.01, 1.50),
         "roll": 0.0,
-        "parent": "index_02.R",
+        "parent": "f_index.02.R",
         "rigify_type": "",
     },
-    "middle_01.R": {
+    "f_middle.01.R": {
         "head": (-0.72, 0.0, 1.50),
         "tail": (-0.75, 0.0, 1.50),
         "roll": 0.0,
         "parent": "hand.R",
         "rigify_type": "limbs.super_finger",
     },
-    "middle_02.R": {
+    "f_middle.02.R": {
         "head": (-0.75, 0.0, 1.50),
         "tail": (-0.78, 0.0, 1.50),
         "roll": 0.0,
-        "parent": "middle_01.R",
+        "parent": "f_middle.01.R",
         "rigify_type": "",
     },
-    "middle_03.R": {
+    "f_middle.03.R": {
         "head": (-0.78, 0.0, 1.50),
         "tail": (-0.81, 0.0, 1.50),
         "roll": 0.0,
-        "parent": "middle_02.R",
+        "parent": "f_middle.02.R",
         "rigify_type": "",
     },
-    "ring_01.R": {
+    "f_ring.01.R": {
         "head": (-0.72, 0.01, 1.50),
         "tail": (-0.75, 0.01, 1.50),
         "roll": 0.0,
         "parent": "hand.R",
         "rigify_type": "limbs.super_finger",
     },
-    "ring_02.R": {
+    "f_ring.02.R": {
         "head": (-0.75, 0.01, 1.50),
         "tail": (-0.78, 0.01, 1.50),
         "roll": 0.0,
-        "parent": "ring_01.R",
+        "parent": "f_ring.01.R",
         "rigify_type": "",
     },
-    "ring_03.R": {
+    "f_ring.03.R": {
         "head": (-0.78, 0.01, 1.50),
         "tail": (-0.81, 0.01, 1.50),
         "roll": 0.0,
-        "parent": "ring_02.R",
+        "parent": "f_ring.02.R",
         "rigify_type": "",
     },
-    "pinky_01.R": {
+    "f_pinky.01.R": {
         "head": (-0.72, 0.02, 1.50),
         "tail": (-0.74, 0.02, 1.50),
         "roll": 0.0,
         "parent": "hand.R",
         "rigify_type": "limbs.super_finger",
     },
-    "pinky_02.R": {
+    "f_pinky.02.R": {
         "head": (-0.74, 0.02, 1.50),
         "tail": (-0.76, 0.02, 1.50),
         "roll": 0.0,
-        "parent": "pinky_01.R",
+        "parent": "f_pinky.01.R",
         "rigify_type": "",
     },
-    "pinky_03.R": {
+    "f_pinky.03.R": {
         "head": (-0.76, 0.02, 1.50),
         "tail": (-0.78, 0.02, 1.50),
         "roll": 0.0,
-        "parent": "pinky_02.R",
+        "parent": "f_pinky.02.R",
         "rigify_type": "",
     },
     # Twist bones (50% of segment)

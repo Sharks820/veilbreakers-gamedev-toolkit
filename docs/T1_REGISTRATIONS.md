@@ -51,5 +51,5 @@ from .rigging_weights import handle_enforce_weight_limit
 ### rigging_templates.py
 - Twist bones added to humanoid, quadruped, bird, dragon, multi_armed templates
 - Wing membrane bones added to dragon template
-- Clavicle, finger, and toe bones added to humanoid template
+- Shoulder (shoulder.L/R), finger (thumb.XX, f_index.XX, etc.), and toe bones added to humanoid template
 - Forearm bone rolls set to +/-1.5708 rad (90 deg) across all applicable templates
