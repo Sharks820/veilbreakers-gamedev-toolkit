@@ -972,9 +972,9 @@ _CS_MATERIALS = r'''
             unchecked
             {
                 int h = 17;
-                h = h * 31 + ((int)(c.r * 255f)) << 24;
-                h = h * 31 + ((int)(c.g * 255f)) << 16;
-                h = h * 31 + ((int)(c.b * 255f)) << 8;
+                h = h * 31 + (((int)(c.r * 255f)) << 24);
+                h = h * 31 + (((int)(c.g * 255f)) << 16);
+                h = h * 31 + (((int)(c.b * 255f)) << 8);
                 h = h * 31 + ((int)(c.a * 255f));
                 h = h * 31 + texType.GetHashCode();
                 h = h * 31 + blendMode.GetHashCode();
