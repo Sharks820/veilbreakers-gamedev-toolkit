@@ -509,7 +509,9 @@ namespace VeilBreakers.Editor.CodeReview
                 "foreach in hot path -- may allocate enumerator on older Mono",
                 "Use for loop with index instead.",
                 @"foreach\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Span<", @"ReadOnlySpan<" }),
+                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Span<", @"ReadOnlySpan<" },
+                confidence: 50,
+                reasoning: "Modern Unity (2021+) with .NET Standard 2.1 does not allocate enumerators for List<T> and arrays in foreach. Only a concern on older Mono backend or custom IEnumerable types."),
 
             new ReviewRule("BUG-20", Severity.LOW, Category.Bug, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
@@ -691,7 +693,8 @@ namespace VeilBreakers.Editor.CodeReview
                 "DontDestroyOnLoad(this) -- should use DontDestroyOnLoad(gameObject)",
                 "Pass gameObject instead of this to ensure the entire GameObject persists.",
                 @"DontDestroyOnLoad\s*\(\s*this\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                confidence: 90),
 
             // ---- PERFORMANCE (1-22) ----
 
@@ -780,14 +783,18 @@ namespace VeilBreakers.Editor.CodeReview
                     for (int j = i + 1; j < Math.Min(i + 8, all.Length); j++)
                         if (Regex.IsMatch(all[j], @"for\s*\([^)]+\)")) return true;
                     return false;
-                }),
+                },
+                confidence: 50,
+                reasoning: "Nested for loops over small fixed-size collections (e.g. 4x4 matrix, 3D vector components) are fine. Only a concern when both loops iterate over dynamic-sized collections."),
 
             new ReviewRule("PERF-12", Severity.LOW, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "SetParent without worldPositionStays=false",
                 "Pass false as second argument if world position preservation unneeded.",
                 @"\.SetParent\s*\(\s*[^,)]+\s*\)\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                confidence: 45,
+                reasoning: "worldPositionStays=true (the default) is often the intended behavior to preserve world position during reparenting. Passing false changes the object's world position, which may break gameplay. Only a perf concern in tight loops."),
 
             new ReviewRule("PERF-13", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
@@ -3353,6 +3360,7 @@ class Rule:
     finding_type: Optional[FindingType] = None
     confidence: int = -1
     priority: int = -1
+    reasoning: Optional[str] = None
 
     def __post_init__(self):
         if self.confidence < 0:
@@ -3383,6 +3391,7 @@ class Issue:
     finding_type: str = "BUG"
     confidence: int = 75
     priority: int = 50
+    reasoning: str = ""
 
     # Aliases so callers can use .message or .name
     @property
@@ -3541,14 +3550,14 @@ RULES: list[Rule] = [
 
     Rule("PY-SEC-04", Severity.HIGH, Category.Security,
          "f-string in SQL/shell command -- injection risk",
-         "Use parameterized queries or subprocess with list args.",
+         "For SQL: cursor.execute('SELECT * FROM t WHERE id = %s', (user_id,)). For shell: subprocess.run(['cmd', arg], shell=False).",
          re.compile(r'(execute|run|system|popen)\s*\(\s*f["\']'),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
 
     # PY-SEC-05: skip constant assignments and default parameters
     Rule("PY-SEC-05", Severity.HIGH, Category.Security,
          "exec() usage -- arbitrary code execution",
-         "Avoid exec(); refactor to safe alternatives.",
+         "Replace with getattr(module, name)() for dynamic dispatch, or a dict mapping names to callables.",
          re.compile(r"\bexec\s*\("),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"^\s*\w+\s*=\s*", r"def\s+\w+\s*\([^)]*exec"])),
 
@@ -3556,24 +3565,27 @@ RULES: list[Rule] = [
          "Hardcoded file path -- not portable",
          "Use pathlib.Path or os.path.join with configurable base.",
          re.compile(r"""['"](?:/[a-z]+/|[A-Z]:\\\\)[^'"]{3,}['"]"""),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-SEC-07", Severity.HIGH, Category.Security,
          "assert for input validation -- stripped with -O",
-         "Use if/raise ValueError for validation.",
+         "Replace 'assert x > 0' with 'if x <= 0: raise ValueError(\"x must be positive\")'.",
          re.compile(r"^\s*assert\s+(?!.*#\s*nosec)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"#\s*nosec", r"test_|_test\.py"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"#\s*nosec", r"test_|_test\.py"]),
+         confidence=65,
+         reasoning="Cannot distinguish input validation from internal invariant checks."),
 
     # ---- CORRECTNESS ----
     Rule("PY-COR-01", Severity.HIGH, Category.Bug,
          "Mutable default argument -- shared across calls",
-         "Use None as default, create mutable inside function body.",
+         "Change 'def f(items=[])' to 'def f(items=None):', then 'items = items if items is not None else []' in the body.",
          re.compile(r"def\s+\w+\s*\([^)]*=\s*(\[\]|\{\}|set\(\))"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
 
     Rule("PY-COR-02", Severity.HIGH, Category.Bug,
          "Bare except: catches SystemExit, KeyboardInterrupt",
-         "Catch specific exceptions.",
+         "Replace 'except:' with 'except Exception:' at minimum, or 'except (ValueError, KeyError):' for specific types.",
          re.compile(r"^\s*except\s*:"),
          _compile_anti([r"#\s*VB-IGNORE"])),
 
@@ -3604,14 +3616,16 @@ RULES: list[Rule] = [
          "Use dict.get(key) with None check, then create mutable separately.",
          re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
-         guard=_check_mutable_get),
+         guard=_check_mutable_get,
+         confidence=88),
 
     Rule("PY-COR-07", Severity.MEDIUM, Category.Bug,
          "Class with __del__ -- unpredictable GC, prevents ref cycle collection",
          "Use context managers or weakref.finalize.",
          re.compile(r"def\s+__del__\s*\(\s*self"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
-         finding_type=FindingType.STRENGTHENING),
+         finding_type=FindingType.STRENGTHENING,
+         confidence=85),
 
     Rule("PY-COR-08", Severity.MEDIUM, Category.Bug,
          "Thread without daemon=True -- may prevent clean shutdown",
@@ -3644,7 +3658,7 @@ RULES: list[Rule] = [
 
     Rule("PY-COR-12", Severity.MEDIUM, Category.Bug,
          "Exception type too broad -- catches bugs with expected errors",
-         "Catch specific exceptions.",
+         "Replace 'except Exception' with specific types: 'except (ValueError, KeyError, TypeError):' matching actual failure modes.",
          re.compile(r"except\s+Exception\s*(?:as|\s*:)"),
          _compile_anti([r"#\s*VB-IGNORE", r"# broad catch intentional",
                         r"logger\.exception", r"mcp\.tool", r"return\s+json\.dumps"]),
@@ -3659,14 +3673,16 @@ RULES: list[Rule] = [
     Rule("PY-COR-13", Severity.LOW, Category.Bug,
          "Import inside function body -- may indicate circular import workaround",
          "Restructure modules to avoid circular dependencies.",
-         re.compile(r"SENTINEL_AST_ONLY")),  # handled by AST pass
+         re.compile(r"SENTINEL_AST_ONLY"),
+         finding_type=FindingType.STRENGTHENING),  # handled by AST pass
 
     # PY-COR-14: Variable shadowing built-in names
     Rule("PY-COR-14", Severity.MEDIUM, Category.Bug,
          "Variable shadows built-in name (list, dict, set, type, id, etc.)",
          "Choose a different variable name: items, mapping, group, etc.",
          re.compile(r"^\s*(list|dict|set|str|int|float|bool|tuple|type|id|input|filter|map|zip|range|len|sum|min|max|any|all|sorted|reversed|hash|next|iter|open|print|format|bytes|object|super)\s*=\s*"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"typing", r"import"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"typing", r"import"]),
+         finding_type=FindingType.STRENGTHENING),
 
     # PY-COR-15: Late binding closure in loop
     Rule("PY-COR-15", Severity.HIGH, Category.Bug,
@@ -3674,7 +3690,8 @@ RULES: list[Rule] = [
          "Capture with default arg: lambda x, i=i: ... or use functools.partial.",
          re.compile(r"for\s+(\w+)\s+in\b"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
-         guard=lambda line, a, i: _check_late_binding(line, a, i)),
+         guard=lambda line, a, i: _check_late_binding(line, a, i),
+         confidence=92),
 
     # ---- PERFORMANCE ----
     Rule("PY-PERF-01", Severity.LOW, Category.Performance,
@@ -3704,7 +3721,9 @@ RULES: list[Rule] = [
          re.compile(r"\.read\s*\(\s*\)"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r'"rb"', r"BytesIO",
                         r"img_bytes", r"image_data", r"base64",
-                        r'encoding="utf-8"', r"\.read_text\s*\("])),
+                        r'encoding="utf-8"', r"\.read_text\s*\("]),
+         confidence=55,
+         reasoning=".read() is correct for small files. Pattern cannot determine file size."),
 
     # ---- STYLE ----
     Rule("PY-STY-01", Severity.LOW, Category.Quality,
@@ -3747,7 +3766,7 @@ RULES: list[Rule] = [
 
     Rule("PY-STY-06", Severity.LOW, Category.Quality,
          "Missing __all__ in public module",
-         "Add __all__ = [...] to define the public API.",
+         "Add __all__ = ['ClassName', 'public_func', 'CONSTANT'] at module top listing all intended public names.",
          re.compile(r"SENTINEL_AST_ONLY")),
 
     Rule("PY-STY-09", Severity.LOW, Category.Quality,
@@ -4048,7 +4067,8 @@ def scan_file(filepath: str) -> list[Issue]:
                 description=rule.description, fix=rule.fix,
                 matched_text=line.strip(),
                 finding_type=rule.finding_type.name if rule.finding_type else "BUG",
-                confidence=rule.confidence, priority=rule.priority))
+                confidence=rule.confidence, priority=rule.priority,
+                reasoning=rule.reasoning or ""))
 
     # Pass 2: AST
     ast_issues = _ast_analyze(filepath, content)
