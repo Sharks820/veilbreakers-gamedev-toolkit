@@ -1,4 +1,9 @@
-"""unity_editor tool handler."""
+"""unity_editor tool handler.
+
+Uses the VBBridge TCP connection (port 9877) for direct Unity Editor
+communication when available.  Falls back to generating C# scripts
+when the bridge is not connected.
+"""
 
 import json
 import logging
@@ -20,6 +25,26 @@ from veilbreakers_mcp.shared.unity_templates.editor_templates import (
     generate_test_runner_script,
 )
 from veilbreakers_mcp.shared.gemini_client import GeminiReviewClient
+from veilbreakers_mcp.shared.unity_client import UnityConnection, UnityCommandError
+
+
+# ---------------------------------------------------------------------------
+# TCP Bridge helpers -- direct communication with Unity Editor
+# ---------------------------------------------------------------------------
+
+async def _try_bridge(command: str, params: dict | None = None) -> dict | None:
+    """Try to execute a command via the VBBridge TCP connection.
+
+    Returns the result dict on success, or None if the bridge is not
+    available (falls back to script generation).
+    """
+    try:
+        conn = UnityConnection(timeout=30)
+        result = await conn.send_command(command, params or {})
+        return result
+    except (ConnectionError, UnityCommandError, OSError, Exception) as exc:
+        logger.debug("VBBridge not available for '%s': %s", command, exc)
+        return None
 
 
 
@@ -103,78 +128,65 @@ async def _handle_run_tests(
 
 
 async def _handle_recompile() -> str:
-    """Generate and write the recompile script."""
+    """Recompile via TCP bridge, fallback to script generation."""
+    # Try direct bridge first
+    result = await _try_bridge("recompile")
+    if result is not None:
+        return json.dumps({"status": "success", "action": "recompile", "bridge": True, **result})
+
+    # Fallback: generate script
     script = generate_recompile_script()
     script_path = "Assets/Editor/Generated/AutoRecompile/VeilBreakers_Recompile.cs"
-
     try:
         abs_path = _write_to_unity(script, script_path)
     except ValueError as exc:
         return json.dumps({"status": "error", "action": "recompile", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "recompile",
-            "script_path": abs_path,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
-    )
+    return json.dumps({"status": "success", "action": "recompile", "script_path": abs_path, "next_steps": STANDARD_NEXT_STEPS}, indent=2)
 
 
 async def _handle_play_mode(enter: bool) -> str:
-    """Generate and write the play mode script."""
-    script = generate_play_mode_script(enter=enter)
+    """Enter/exit play mode via TCP bridge, fallback to script."""
     action_name = "enter_play_mode" if enter else "exit_play_mode"
-    menu_label = "Enter Play Mode" if enter else "Exit Play Mode"
-    filename = f"VeilBreakers_PlayMode_{'enterplaymode' if enter else 'exitplaymode'}.cs"
-    script_path = f"Assets/Editor/Generated/PlayMode/{filename}"
+    cmd = "enter_play_mode" if enter else "exit_play_mode"
 
+    result = await _try_bridge(cmd)
+    if result is not None:
+        return json.dumps({"status": "success", "action": action_name, "bridge": True, **result})
+
+    # Fallback
+    script = generate_play_mode_script(enter=enter)
+    filename = f"VeilBreakers_PlayMode_{action_name}.cs"
+    script_path = f"Assets/Editor/Generated/PlayMode/{filename}"
     try:
         abs_path = _write_to_unity(script, script_path)
     except ValueError as exc:
         return json.dumps({"status": "error", "action": action_name, "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": action_name,
-            "script_path": abs_path,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
-    )
+    return json.dumps({"status": "success", "action": action_name, "script_path": abs_path, "next_steps": STANDARD_NEXT_STEPS}, indent=2)
 
 
 async def _handle_screenshot(screenshot_path: str, supersize: int) -> str:
-    """Generate and write the screenshot capture script."""
+    """Take screenshot via TCP bridge, fallback to script."""
+    result = await _try_bridge("screenshot", {"path": screenshot_path, "supersize": supersize})
+    if result is not None:
+        return json.dumps({"status": "success", "action": "screenshot", "bridge": True, "screenshot_path": screenshot_path, **result})
+
+    # Fallback
     script = generate_screenshot_script(output_path=screenshot_path, supersize=supersize)
     script_path = "Assets/Editor/Generated/Screenshot/VeilBreakers_Screenshot.cs"
-
     try:
         abs_path = _write_to_unity(script, script_path)
     except ValueError as exc:
         return json.dumps({"status": "error", "action": "screenshot", "message": str(exc)})
-
-    return json.dumps(
-        {
-            "status": "success",
-            "action": "screenshot",
-            "script_path": abs_path,
-            "screenshot_path": screenshot_path,
-            "supersize": supersize,
-            "next_steps": STANDARD_NEXT_STEPS,
-            "result_file": "Temp/vb_result.json",
-        },
-        indent=2,
-    )
+    return json.dumps({"status": "success", "action": "screenshot", "script_path": abs_path, "screenshot_path": screenshot_path, "next_steps": STANDARD_NEXT_STEPS}, indent=2)
 
 
 async def _handle_console_logs(log_filter: str, log_count: int) -> str:
-    """Generate and write the console log collection script."""
+    """Read console logs via TCP bridge, fallback to script."""
+    result = await _try_bridge("console_logs", {"filter": log_filter, "count": log_count})
+    if result is not None:
+        return json.dumps({"status": "success", "action": "console_logs", "bridge": True, **result})
+
+    # Fallback
     script = generate_console_log_script(filter_type=log_filter, count=log_count)
     script_path = "Assets/Editor/Generated/ConsoleLogs/VeilBreakers_ConsoleLogs.cs"
 
