@@ -349,6 +349,7 @@ All saved in `.planning/research/`:
 
 ### Key Techniques from Research (implement these):
 - **SDF + Marching Cubes** → pure numpy, replaces primitive assembly for organic meshes
+- **Blender Skin Modifier** → fastest path to organic bodies (skeleton vertices + radii → continuous mesh). Research recommends this as PRIMARY approach for NPC/monster body generation, replacing cylinder+sphere assembly entirely.
 - **ZBrush DynaMesh** → `bpy.ops.mesh.voxel_remesh()` (free in Blender)
 - **ZBrush ZRemesher** → `bpy.ops.mesh.quadriflow_remesh()` (free in Blender)
 - **SpeedTree branching** → L-system / space colonization algorithm (pure Python)
