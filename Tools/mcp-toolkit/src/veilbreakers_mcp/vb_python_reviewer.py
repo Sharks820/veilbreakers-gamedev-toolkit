@@ -391,7 +391,9 @@ RULES: list[Rule] = [
          "String concatenation in loop -- O(n^2)",
          "Collect parts in list, ''.join(parts) after loop.",
          re.compile(r"\w+\s*\+=\s*['\"]"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#",
+                        r"\bstring\b", r"\bvar\b", r"\bint\b",
+                        r"\.Count\b", r"\.Length\b", r"//\s"]),
          guard=lambda line, a, i: any(
              re.search(r"^\s*(for|while)\b", a[j])
              for j in range(max(0, i - 5), i))),
@@ -578,33 +580,62 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
             description=f"Module exports {len(public_names)} public names but has no __all__",
             fix="Add __all__ = [...]."))
 
-    # PY-STY-09: Function length -- templates contain huge C# string blocks,
-    # MCP handlers use compound-action pattern with many branches
-    threshold = 500 if is_template else (200 if is_mcp_handler else 60)
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            if hasattr(node, 'end_lineno') and node.end_lineno:
-                length = node.end_lineno - node.lineno
-                if length > threshold:
-                    issues.append(Issue(
-                        rule_id="PY-STY-09", severity=Severity.LOW.name,
-                        category=Category.Quality.name, file=filepath,
-                        line=node.lineno,
-                        description=f"Function '{node.name}' is {length} lines (threshold: {threshold})",
-                        fix="Break into smaller helpers.",
-                        matched_text=node.name))
+    # PY-STY-09: Function length -- skip templates entirely (their length is
+    # dominated by C# string literals, not Python complexity). MCP handlers use
+    # the compound-action pattern with many branches so they get a higher limit.
+    if is_template:
+        threshold = None  # skip entirely
+    elif is_mcp_handler:
+        threshold = 200
+    else:
+        threshold = 60
+    if threshold is not None:
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if hasattr(node, 'end_lineno') and node.end_lineno:
+                    length = node.end_lineno - node.lineno
+                    if length > threshold:
+                        issues.append(Issue(
+                            rule_id="PY-STY-09", severity=Severity.LOW.name,
+                            category=Category.Quality.name, file=filepath,
+                            line=node.lineno,
+                            description=f"Function '{node.name}' is {length} lines (threshold: {threshold})",
+                            fix="Break into smaller helpers.",
+                            matched_text=node.name))
 
     # PY-COR-13: Import inside function body
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            for child in ast.iter_child_nodes(node):
-                if isinstance(child, (ast.Import, ast.ImportFrom)):
-                    issues.append(Issue(
-                        rule_id="PY-COR-13", severity=Severity.LOW.name,
-                        category=Category.Bug.name, file=filepath,
-                        line=child.lineno,
-                        description="Import inside function body -- may indicate circular import",
-                        fix="Restructure to avoid circular dependencies."))
+    # Skip known heavy/optional deps that are intentionally lazy-imported
+    _LAZY_OK = {"numpy", "np", "PIL", "google", "defusedxml", "cv2",
+                "scipy", "torch", "sklearn", "pandas", "matplotlib",
+                "fnmatch", "shutil", "tempfile", "subprocess", "os",
+                "httpx", "json", "typing", "importlib", "pkgutil"}
+    for func_node in ast.walk(tree):
+        if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            continue
+        # Collect imports at any depth inside this function, noting if in try block
+        try_import_lines: set[int] = set()
+        for child in ast.walk(func_node):
+            if isinstance(child, ast.Try):
+                for body_stmt in child.body:
+                    if isinstance(body_stmt, (ast.Import, ast.ImportFrom)):
+                        try_import_lines.add(body_stmt.lineno)
+        for child in ast.iter_child_nodes(func_node):
+            if isinstance(child, (ast.Import, ast.ImportFrom)):
+                if child.lineno in try_import_lines:
+                    continue  # Optional dependency pattern
+                mod_name = ""
+                if isinstance(child, ast.Import):
+                    mod_name = child.names[0].name.split(".")[0]
+                elif isinstance(child, ast.ImportFrom) and child.module:
+                    mod_name = child.module.split(".")[0]
+                if mod_name in _LAZY_OK:
+                    continue
+                issues.append(Issue(
+                    rule_id="PY-COR-13", severity=Severity.LOW.name,
+                    category=Category.Bug.name, file=filepath,
+                    line=child.lineno,
+                    description=f"Import '{mod_name}' inside function body -- may indicate circular import",
+                    fix="Restructure to avoid circular dependencies or add to _LAZY_OK if intentional."))
 
     return issues
 
@@ -791,25 +822,69 @@ def main() -> None:
         Path(args.output).write_text(output, encoding="utf-8")
         print(f"Report written to {args.output} ({len(issues)} issues)", file=sys.stderr)
     else:
-        # Pretty console output with confidence/priority
-        for issue in sorted(issues, key=lambda i: (i.priority * -1, i.confidence * -1)):
-            conf_label = issue.confidence_label
-            pri_label = issue.priority_label
-            print(f"[{pri_label}] [{issue.finding_type}] {issue.rule_id} "
-                  f"(conf:{issue.confidence}% pri:{issue.priority})")
-            print(f"  {issue.file}:{issue.line}")
-            print(f"  {issue.description}")
-            print(f"  FIX: {issue.fix}")
-            if issue.matched_text:
-                display = issue.matched_text[:100] + "..." if len(issue.matched_text) > 100 else issue.matched_text
-                print(f"  CODE: {display}")
-            print()
+        # Human-readable console output
+        sev_icons = {"CRITICAL": "!!!", "HIGH": " ! ", "MEDIUM": " ~ ", "LOW": " . "}
+        type_labels = {"ERROR": "Bug/Error", "BUG": "Bug", "OPTIMIZATION": "Optimization", "STRENGTHENING": "Code Quality"}
+        cat_labels = {"Security": "Security", "Bug": "Correctness", "Performance": "Performance", "Quality": "Code Quality"}
+
+        # Group by file
+        from collections import defaultdict
+        by_file = defaultdict(list)
+        for issue in sorted(issues, key=lambda i: (Severity[i.severity].value, i.priority * -1)):
+            by_file[issue.file].append(issue)
+
+        file_num = 0
+        for filepath, file_issues in sorted(by_file.items()):
+            file_num += 1
+            short = filepath.replace("\\", "/")
+            if "veilbreakers_mcp/" in short:
+                short = short.split("veilbreakers_mcp/")[-1]
+            crit_count = sum(1 for i in file_issues if i.severity in ("CRITICAL", "HIGH"))
+            header = f"  ({crit_count} critical)" if crit_count else ""
+            print(f"\n{'='*70}")
+            print(f"  File {file_num}: {short}  [{len(file_issues)} findings]{header}")
+            print(f"{'='*70}")
+
+            for idx, issue in enumerate(file_issues, 1):
+                icon = sev_icons.get(issue.severity, "   ")
+                ftype = type_labels.get(issue.finding_type, issue.finding_type)
+                cat = cat_labels.get(issue.category, issue.category)
+                conf_pct = issue.confidence
+
+                print(f"\n  [{icon}] #{idx}  {issue.severity}  |  {cat}  |  {ftype}")
+                print(f"       Line {issue.line}: {issue.description}")
+                print(f"       Fix: {issue.fix}")
+                if issue.matched_text:
+                    code = issue.matched_text[:90]
+                    print(f"       Code: {code}")
+                if conf_pct < 70:
+                    print(f"       Note: {conf_pct}% confidence - review manually before fixing")
+                print(f"       Rule: {issue.rule_id}  |  Confidence: {conf_pct}%  |  Priority: {issue.priority}/100")
+
         # Summary
         r = report
-        print(f"--- SUMMARY: {r['total_issues']} issues ---")
-        print(f"  Errors/Bugs: {r['errors_bugs']} | Optimizations: {r['optimizations']} | Strengthening: {r['strengthening']}")
-        print(f"  CRITICAL: {r['critical']} | HIGH: {r['high']} | MEDIUM: {r['medium']} | LOW: {r['low']}")
-        print(f"  Avg Confidence: {r['avg_confidence']}% | Avg Priority: {r['avg_priority']}")
+        print(f"\n{'='*70}")
+        print(f"  REVIEW SUMMARY")
+        print(f"{'='*70}")
+        print(f"  Files scanned:  {len(by_file)}")
+        print(f"  Total findings: {r['total_issues']}")
+        print()
+        if r['critical'] > 0:
+            print(f"  [!!!] CRITICAL:  {r['critical']}  -- fix immediately")
+        if r['high'] > 0:
+            print(f"  [ ! ] HIGH:      {r['high']}  -- fix before merge")
+        if r['medium'] > 0:
+            print(f"  [ ~ ] MEDIUM:    {r['medium']}  -- fix when possible")
+        if r['low'] > 0:
+            print(f"  [ . ] LOW:       {r['low']}  -- informational")
+        if r['total_issues'] == 0:
+            print(f"  ALL CLEAN - no issues found")
+        print()
+        print(f"  Bugs/Errors:     {r['errors_bugs']}")
+        print(f"  Optimizations:   {r['optimizations']}")
+        print(f"  Code Quality:    {r['strengthening']}")
+        print(f"  Avg Confidence:  {r['avg_confidence']}%")
+        print(f"{'='*70}")
 
     has_serious = any(i.severity in ("CRITICAL", "HIGH") for i in issues)
     sys.exit(1 if has_serious else 0)

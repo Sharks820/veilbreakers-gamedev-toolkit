@@ -160,6 +160,15 @@ from .terrain_materials import (
 from .vegetation_system import (
     handle_scatter_biome_vegetation,
 )
+from .material_tiers import (  # noqa: F401 -- material tier system (EQ-040)
+    METAL_TIERS,
+    WOOD_TIERS,
+    LEATHER_TIERS,
+    CLOTH_TIERS,
+    get_material_tier,
+    get_tier_names,
+    apply_material_tier_to_equipment,
+)
 from .armor_meshes import ARMOR_GENERATORS  # noqa: F401 -- 22-style armor system
 from .npc_characters import (  # noqa: F401 -- NPC body mesh generation
     generate_npc_body_mesh,

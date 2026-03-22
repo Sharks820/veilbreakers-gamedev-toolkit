@@ -20,6 +20,8 @@ from __future__ import annotations
 import math
 from typing import Any
 
+from .mesh_smoothing import smooth_assembled_mesh, add_organic_noise
+
 
 # ---------------------------------------------------------------------------
 # Type alias
@@ -608,13 +610,18 @@ def generate_npc_body_mesh(
 
     all_verts: list[tuple[float, float, float]] = []
     all_faces: list[tuple[int, ...]] = []
+    material_regions: dict[int, str] = {}
 
     def _add(
         v: list[tuple[float, float, float]],
         f: list[tuple[int, ...]],
+        region: str = "body_skin",
     ) -> None:
+        face_start = len(all_faces)
         all_verts.extend(v)
         all_faces.extend(f)
+        for fi in range(face_start, len(all_faces)):
+            material_regions[fi] = region
 
     # --- Torso ---
     t_verts, t_faces = _generate_torso(
@@ -629,7 +636,7 @@ def generate_npc_body_mesh(
         sections=TORSO_SECTIONS,
         base_idx=len(all_verts),
     )
-    _add(t_verts, t_faces)
+    _add(t_verts, t_faces, "body_skin")
 
     # --- Neck ---
     neck_r = NECK_RADIUS * torso_width_mult * 0.9
@@ -643,7 +650,7 @@ def generate_npc_body_mesh(
         num_sections=2,
         base_idx=len(all_verts),
     )
-    _add(n_verts, n_faces)
+    _add(n_verts, n_faces, "head_skin")
 
     # --- Head ---
     head_r = HEAD_RADIUS * (1.05 if build == "heavy" else 1.0)
@@ -653,7 +660,7 @@ def generate_npc_body_mesh(
         segments=LIMB_SEGMENTS,
         base_idx=len(all_verts),
     )
-    _add(h_verts, h_faces)
+    _add(h_verts, h_faces, "head_skin")
 
     # --- Arms (both sides) ---
     for side in (-1, 1):
@@ -670,7 +677,7 @@ def generate_npc_body_mesh(
             num_sections=3,
             base_idx=len(all_verts),
         )
-        _add(ua_verts, ua_faces)
+        _add(ua_verts, ua_faces, "body_skin")
 
         # Lower arm: elbow to wrist
         forearm_x = arm_x + side * 0.12
@@ -685,7 +692,7 @@ def generate_npc_body_mesh(
             num_sections=3,
             base_idx=len(all_verts),
         )
-        _add(la_verts, la_faces)
+        _add(la_verts, la_faces, "body_skin")
 
         # Hand
         hand_cx = arm_x + side * 0.25
@@ -697,7 +704,7 @@ def generate_npc_body_mesh(
             divs_z=2,
             base_idx=len(all_verts),
         )
-        _add(hand_verts, hand_faces)
+        _add(hand_verts, hand_faces, "extremity_skin")
 
     # --- Legs (both sides) ---
     for side in (-1, 1):
@@ -714,7 +721,7 @@ def generate_npc_body_mesh(
             num_sections=3,
             base_idx=len(all_verts),
         )
-        _add(th_verts, th_faces)
+        _add(th_verts, th_faces, "body_skin")
 
         # Shin: knee to ankle
         sh_verts, sh_faces = _tapered_cylinder(
@@ -727,7 +734,7 @@ def generate_npc_body_mesh(
             num_sections=3,
             base_idx=len(all_verts),
         )
-        _add(sh_verts, sh_faces)
+        _add(sh_verts, sh_faces, "body_skin")
 
         # Foot: box with toe section
         foot_cx = leg_x
@@ -739,15 +746,27 @@ def generate_npc_body_mesh(
             divs_z=1,
             base_idx=len(all_verts),
         )
-        _add(foot_verts, foot_faces)
+        _add(foot_verts, foot_faces, "extremity_skin")
+
+    # Smooth assembled geometry to eliminate primitive junctions
+    all_verts = smooth_assembled_mesh(
+        all_verts, all_faces, smooth_iterations=3,
+    )
+    # Add organic imperfection noise
+    all_verts = add_organic_noise(
+        all_verts, faces=all_faces, strength=0.003,
+    )
 
     return {
         "vertices": all_verts,
         "faces": all_faces,
         "joint_positions": joints,
+        "material_regions": material_regions,
         "height": height,
         "gender": gender,
         "build": build,
+        "subdivision_levels": {"viewport": 1, "render": 2},
+        "smooth_shading": True,
         "metadata": {
             "name": f"NPC_{gender}_{build}",
             "poly_count": len(all_faces),
@@ -756,6 +775,7 @@ def generate_npc_body_mesh(
             "gender": gender,
             "build": build,
             "height": height,
+            "material_region_names": sorted(set(material_regions.values())),
         },
     }
 

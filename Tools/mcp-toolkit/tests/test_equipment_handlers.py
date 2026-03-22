@@ -5,11 +5,12 @@ Tests cover:
 - Character split parameter validation (_validate_split_params)
 - Armor fitting parameter validation (_validate_armor_params)
 - Icon rendering parameter validation (_validate_icon_params)
-- Weapon type constants (VALID_WEAPON_TYPES)
+- Weapon type constants (VALID_WEAPON_TYPES -- 29 types)
 - Body part/type defaults (DEFAULT_BODY_PARTS, DEFAULT_BODY_TYPES)
 - Weapon empty position computation (_compute_grip_point, _compute_trail_attach_*)
 - Weapon mesh generators (bmesh-based, tested via vertex/face counts on stub bmesh)
 - Weapon generator dispatch table (_WEAPON_GENERATORS)
+- Weapon classification sets (_POLEARM_TYPES, _TWO_HANDED_TYPES, etc.)
 
 All pure-logic -- no Blender required for validation tests.
 Mesh generator tests use the real bmesh module stub from conftest.
@@ -31,6 +32,12 @@ from blender_addon.handlers.equipment import (
     _validate_split_params,
     _validate_weapon_params,
     _WEAPON_GENERATORS,
+    _POLEARM_TYPES,
+    _TWO_HANDED_TYPES,
+    _RANGED_TYPES,
+    _MAGIC_TYPES,
+    _CHAIN_TYPES,
+    _THROWN_TYPES,
 )
 
 
@@ -42,33 +49,53 @@ from blender_addon.handlers.equipment import (
 class TestConstants:
     """Test that equipment constants are correct."""
 
-    def test_valid_weapon_types_has_seven(self):
-        assert len(VALID_WEAPON_TYPES) == 7
+    def test_valid_weapon_types_has_29(self):
+        assert len(VALID_WEAPON_TYPES) == 29
 
-    def test_valid_weapon_types_contains_sword(self):
-        assert "sword" in VALID_WEAPON_TYPES
+    def test_valid_weapon_types_original_seven(self):
+        original = {"sword", "axe", "mace", "staff", "bow", "dagger", "shield"}
+        assert original.issubset(VALID_WEAPON_TYPES)
 
-    def test_valid_weapon_types_contains_axe(self):
-        assert "axe" in VALID_WEAPON_TYPES
+    EXPECTED_ALL_TYPES = {
+        "sword", "axe", "mace", "staff", "bow", "dagger", "shield",
+        "hammer", "spear", "crossbow", "scythe", "flail", "whip",
+        "claw", "tome", "greatsword", "curved_sword", "hand_axe",
+        "battle_axe", "greataxe", "club", "warhammer", "halberd",
+        "glaive", "shortbow", "longbow", "staff_magic", "wand",
+        "throwing_knife",
+    }
 
-    def test_valid_weapon_types_contains_mace(self):
-        assert "mace" in VALID_WEAPON_TYPES
-
-    def test_valid_weapon_types_contains_staff(self):
-        assert "staff" in VALID_WEAPON_TYPES
-
-    def test_valid_weapon_types_contains_bow(self):
-        assert "bow" in VALID_WEAPON_TYPES
-
-    def test_valid_weapon_types_contains_dagger(self):
-        assert "dagger" in VALID_WEAPON_TYPES
-
-    def test_valid_weapon_types_contains_shield(self):
-        assert "shield" in VALID_WEAPON_TYPES
+    @pytest.mark.parametrize("wtype", sorted(EXPECTED_ALL_TYPES))
+    def test_valid_weapon_types_contains(self, wtype):
+        assert wtype in VALID_WEAPON_TYPES
 
     def test_valid_weapon_types_all_present(self):
-        expected = {"sword", "axe", "mace", "staff", "bow", "dagger", "shield"}
-        assert VALID_WEAPON_TYPES == expected
+        assert VALID_WEAPON_TYPES == self.EXPECTED_ALL_TYPES
+
+    def test_classification_sets_cover_extended_types(self):
+        """All extended weapon types belong to at least one classification set,
+        or are handled in the original/other categories."""
+        classified = (
+            _POLEARM_TYPES | _TWO_HANDED_TYPES | _RANGED_TYPES
+            | _MAGIC_TYPES | _CHAIN_TYPES | _THROWN_TYPES
+        )
+        # Remaining types are handled by specific if-branches (sword, dagger, etc.)
+        remaining = VALID_WEAPON_TYPES - classified
+        # All remaining should be explicitly handled in grip/trail functions
+        known_remaining = {
+            "sword", "axe", "mace", "staff", "dagger", "shield",
+            "hammer", "scythe", "claw", "curved_sword", "hand_axe",
+            "battle_axe", "club",
+        }
+        assert remaining == known_remaining
+
+    def test_classification_sets_no_overlap(self):
+        """Classification sets should not overlap."""
+        sets = [_POLEARM_TYPES, _TWO_HANDED_TYPES, _RANGED_TYPES,
+                _MAGIC_TYPES, _CHAIN_TYPES, _THROWN_TYPES]
+        for i, s1 in enumerate(sets):
+            for s2 in sets[i + 1:]:
+                assert not (s1 & s2), f"Overlap: {s1 & s2}"
 
     def test_default_body_parts_count(self):
         assert len(DEFAULT_BODY_PARTS) == 7
@@ -102,6 +129,10 @@ class TestConstants:
     def test_weapon_generators_all_callable(self):
         for wtype, gen in _WEAPON_GENERATORS.items():
             assert callable(gen), f"Generator for {wtype} is not callable"
+
+    def test_weapon_generators_count_matches_types(self):
+        """Generator dispatch table has same count as VALID_WEAPON_TYPES."""
+        assert len(_WEAPON_GENERATORS) == len(VALID_WEAPON_TYPES)
 
 
 # ---------------------------------------------------------------------------
@@ -149,7 +180,7 @@ class TestWeaponGeneration:
 
     def test_invalid_weapon_type_raises(self):
         with pytest.raises(ValueError, match="Unknown weapon_type"):
-            _validate_weapon_params({"weapon_type": "spear"})
+            _validate_weapon_params({"weapon_type": "lightsaber"})
 
     def test_negative_length_raises(self):
         with pytest.raises(ValueError, match="length must be positive"):
@@ -448,6 +479,52 @@ class TestGripPointComputation:
         pos = _compute_grip_point("mace", 1.0)
         assert pos[1] < 0.5
 
+    # --- Extended weapon type grip tests ---
+
+    def test_polearm_grip_at_third(self):
+        """Polearms grip at ~1/3 from bottom for leverage."""
+        for wtype in _POLEARM_TYPES:
+            pos = _compute_grip_point(wtype, 3.0)
+            assert 0.8 < pos[1] < 1.2, f"{wtype}: grip Y={pos[1]} not near 1.0"
+
+    def test_ranged_grip_at_center(self):
+        """All ranged weapons grip at center."""
+        for wtype in _RANGED_TYPES:
+            pos = _compute_grip_point(wtype, 1.0)
+            assert pos[1] == 0.0, f"{wtype}: grip Y={pos[1]} not at center"
+
+    def test_two_handed_grip_near_bottom(self):
+        """Two-handed weapons grip near the bottom."""
+        for wtype in _TWO_HANDED_TYPES:
+            pos = _compute_grip_point(wtype, 1.0)
+            assert pos[1] < 0.3, f"{wtype}: grip Y={pos[1]} too high"
+
+    def test_magic_grip_at_lower_section(self):
+        """Magic weapons grip at center/bottom."""
+        for wtype in _MAGIC_TYPES:
+            pos = _compute_grip_point(wtype, 1.0)
+            assert pos[1] < 0.5, f"{wtype}: grip Y={pos[1]} too high"
+
+    def test_chain_grip_at_handle(self):
+        """Chain weapons grip at handle end."""
+        for wtype in _CHAIN_TYPES:
+            pos = _compute_grip_point(wtype, 1.0)
+            assert pos[1] < 0.2, f"{wtype}: grip Y={pos[1]} too high"
+
+    def test_thrown_grip_at_center(self):
+        """Thrown weapons grip near center for balance."""
+        for wtype in _THROWN_TYPES:
+            pos = _compute_grip_point(wtype, 1.0)
+            assert pos[1] < 0.3, f"{wtype}: grip Y={pos[1]} too high"
+
+    def test_curved_sword_grip_near_hilt(self):
+        pos = _compute_grip_point("curved_sword", 1.0)
+        assert pos[1] < 0.3
+
+    def test_claw_grip_near_hilt(self):
+        pos = _compute_grip_point("claw", 1.0)
+        assert pos[1] < 0.3
+
 
 # ---------------------------------------------------------------------------
 # TestTrailAttachComputation
@@ -505,6 +582,35 @@ class TestTrailAttachComputation:
         pos = _compute_trail_attach_top("mace", 1.0, 0.2)
         assert pos[1] == 1.0
 
+    def test_polearm_trail_full_length(self):
+        """Polearms trail along full length."""
+        for wtype in _POLEARM_TYPES:
+            top = _compute_trail_attach_top(wtype, 2.0, 0.1)
+            bot = _compute_trail_attach_bottom(wtype, 2.0, 0.1)
+            assert top[1] > bot[1], f"{wtype}: trail top not above bottom"
+            assert top[1] >= 1.5, f"{wtype}: trail top too short"
+
+    def test_ranged_no_useful_trail(self):
+        """Ranged weapons trail attach points are at the arc, not along shaft."""
+        for wtype in _RANGED_TYPES:
+            top = _compute_trail_attach_top(wtype, 1.0, 0.15)
+            bot = _compute_trail_attach_bottom(wtype, 1.0, 0.15)
+            # Both should be at similar Y (no blade trail)
+            assert abs(top[1] - bot[1]) < 0.1, f"{wtype}: unexpected trail span"
+
+    def test_magic_vfx_at_top(self):
+        """Magic weapons have VFX point at top."""
+        for wtype in ("staff_magic", "wand"):
+            top = _compute_trail_attach_top(wtype, 1.0, 0.1)
+            assert top[1] >= 0.5, f"{wtype}: VFX point too low"
+
+    def test_chain_trail_at_head(self):
+        """Chain weapons: trail top is at head end, bottom where chain meets handle."""
+        for wtype in _CHAIN_TYPES:
+            top = _compute_trail_attach_top(wtype, 1.0, 0.15)
+            bot = _compute_trail_attach_bottom(wtype, 1.0, 0.15)
+            assert top[1] > bot[1], f"{wtype}: trail top not above bottom"
+
     @pytest.mark.parametrize("wtype", sorted(VALID_WEAPON_TYPES))
     def test_grip_returns_3_tuple(self, wtype):
         pos = _compute_grip_point(wtype, 1.0)
@@ -519,3 +625,10 @@ class TestTrailAttachComputation:
     def test_trail_bottom_returns_3_tuple(self, wtype):
         pos = _compute_trail_attach_bottom(wtype, 1.0, 0.15)
         assert len(pos) == 3
+
+    @pytest.mark.parametrize("wtype", sorted(VALID_WEAPON_TYPES))
+    def test_trail_top_above_or_at_bottom(self, wtype):
+        """Trail top Y should be >= trail bottom Y for all types."""
+        top = _compute_trail_attach_top(wtype, 1.0, 0.15)
+        bot = _compute_trail_attach_bottom(wtype, 1.0, 0.15)
+        assert top[1] >= bot[1], f"{wtype}: trail top ({top[1]}) below bottom ({bot[1]})"

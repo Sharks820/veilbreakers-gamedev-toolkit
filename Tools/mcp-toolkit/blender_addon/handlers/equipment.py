@@ -24,7 +24,34 @@ import mathutils
 # ---------------------------------------------------------------------------
 
 VALID_WEAPON_TYPES = frozenset({
+    # Original 7
     "sword", "axe", "mace", "staff", "bow", "dagger", "shield",
+    # Extended weapon types (synced with procedural_meshes.py generators)
+    "hammer", "spear", "crossbow", "scythe", "flail", "whip",
+    "claw", "tome", "greatsword", "curved_sword", "hand_axe",
+    "battle_axe", "greataxe", "club", "warhammer", "halberd",
+    "glaive", "shortbow", "longbow", "staff_magic", "wand",
+    "throwing_knife",
+})
+
+# Weapon classification by grip/trail behaviour
+_POLEARM_TYPES = frozenset({
+    "spear", "halberd", "glaive",
+})
+_TWO_HANDED_TYPES = frozenset({
+    "greatsword", "greataxe", "warhammer",
+})
+_RANGED_TYPES = frozenset({
+    "bow", "crossbow", "shortbow", "longbow",
+})
+_MAGIC_TYPES = frozenset({
+    "staff_magic", "wand", "tome",
+})
+_CHAIN_TYPES = frozenset({
+    "flail", "whip",
+})
+_THROWN_TYPES = frozenset({
+    "throwing_knife",
 })
 
 DEFAULT_BODY_PARTS = [
@@ -576,8 +603,555 @@ def _create_shield_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> N
         bm.faces.new((center, v1, v2))
 
 
+# ---------------------------------------------------------------------------
+# Extended weapon mesh generators (23 new types)
+# ---------------------------------------------------------------------------
+
+
+def _create_hammer_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create warhammer-style weapon: long handle with box head."""
+    _make_handle(bm, length * 0.75, width * 0.1, sides=6)
+    # Box head at top
+    head_y = length * 0.7
+    hw = width * 0.4
+    hd = width * 0.35
+    hh = width * 0.25
+    base_idx = len(bm.verts)
+    for dy in (-hh, hh):
+        bm.verts.new((-hw, head_y + dy, hd))
+        bm.verts.new((hw, head_y + dy, hd))
+        bm.verts.new((hw, head_y + dy, -hd))
+        bm.verts.new((-hw, head_y + dy, -hd))
+    bm.verts.ensure_lookup_table()
+    for j in range(4):
+        v0 = bm.verts[base_idx + j]
+        v1 = bm.verts[base_idx + (j + 1) % 4]
+        v2 = bm.verts[base_idx + 4 + (j + 1) % 4]
+        v3 = bm.verts[base_idx + 4 + j]
+        bm.faces.new((v0, v1, v2, v3))
+    # Cap faces
+    bm.faces.new([bm.verts[base_idx + i] for i in range(4)])
+    bm.faces.new([bm.verts[base_idx + 4 + i] for i in range(3, -1, -1)])
+
+
+def _create_spear_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create spear: long thin shaft with pointed head."""
+    _make_handle(bm, length * 0.85, width * 0.06, sides=6)
+    # Spearhead -- elongated diamond
+    head_base_y = length * 0.8
+    head_tip_y = length
+    segs = 4
+    for i in range(segs + 1):
+        t = i / segs
+        y = head_base_y + t * (head_tip_y - head_base_y)
+        hw = width * 0.3 * (1.0 - t)
+        depth = width * 0.05 * (1.0 - t)
+        bm.verts.new((-hw, y, depth))
+        bm.verts.new((hw, y, depth))
+        bm.verts.new((hw, y, -depth))
+        bm.verts.new((-hw, y, -depth))
+    bm.verts.ensure_lookup_table()
+    base_idx = len(bm.verts) - (segs + 1) * 4
+    for i in range(segs):
+        b = base_idx + i * 4
+        for j in range(4):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % 4],
+                          bm.verts[b + 4 + (j + 1) % 4], bm.verts[b + 4 + j]))
+
+
+def _create_crossbow_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create crossbow: stock + horizontal bow limbs."""
+    # Stock
+    _make_handle(bm, length * 0.6, width * 0.08, sides=4)
+    # Horizontal bow limbs
+    limb_segs = 6
+    limb_r = width * 0.04
+    base_idx = len(bm.verts)
+    mid_y = length * 0.5
+    for i in range(limb_segs + 1):
+        t = i / limb_segs
+        x = -width * 1.5 + t * width * 3.0
+        curve_z = width * 0.3 * math.sin(math.pi * t)
+        for a in range(4):
+            angle = a * math.pi * 0.5
+            bm.verts.new((x + math.cos(angle) * limb_r, mid_y,
+                          curve_z + math.sin(angle) * limb_r))
+    bm.verts.ensure_lookup_table()
+    for i in range(limb_segs):
+        b = base_idx + i * 4
+        for j in range(4):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % 4],
+                          bm.verts[b + 4 + (j + 1) % 4], bm.verts[b + 4 + j]))
+
+
+def _create_scythe_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create scythe: long shaft with curved blade at top."""
+    _make_handle(bm, length * 0.85, width * 0.07, sides=6)
+    # Curved blade
+    blade_segs = 8
+    base_idx = len(bm.verts)
+    blade_start_y = length * 0.8
+    for i in range(blade_segs + 1):
+        t = i / blade_segs
+        angle = t * math.pi * 0.7
+        x = width * 1.5 * math.sin(angle)
+        y = blade_start_y + width * 0.8 * (1.0 - math.cos(angle))
+        hw = width * 0.04 * (1.0 - t * 0.6)
+        bm.verts.new((x, y, hw))
+        bm.verts.new((x, y, -hw))
+    bm.verts.ensure_lookup_table()
+    for i in range(blade_segs):
+        b = base_idx + i * 2
+        bm.faces.new((bm.verts[b], bm.verts[b + 1],
+                      bm.verts[b + 3], bm.verts[b + 2]))
+
+
+def _create_flail_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create flail: handle + chain links + spiked ball head."""
+    _make_handle(bm, length * 0.5, width * 0.1, sides=6)
+    # Chain segment (simplified as thin cylinder sections)
+    chain_y = length * 0.5
+    for ci in range(3):
+        seg_y = chain_y + ci * width * 0.3
+        base_idx = len(bm.verts)
+        for dy in (0, width * 0.2):
+            for a in range(4):
+                angle = a * math.pi * 0.5
+                bm.verts.new((math.cos(angle) * width * 0.04,
+                              seg_y + dy,
+                              math.sin(angle) * width * 0.04))
+        bm.verts.ensure_lookup_table()
+        for j in range(4):
+            bm.faces.new((bm.verts[base_idx + j], bm.verts[base_idx + (j + 1) % 4],
+                          bm.verts[base_idx + 4 + (j + 1) % 4],
+                          bm.verts[base_idx + 4 + j]))
+    # Spiked ball head (reuse mace-style sphere)
+    _make_sphere_head(bm, length * 0.5 + width * 1.2, width * 0.35,
+                      rings=4, sectors=6)
+
+
+def _create_whip_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create whip: handle with tapering segmented lash."""
+    _make_handle(bm, length * 0.25, width * 0.1, sides=4)
+    # Lash -- tapering segmented strip
+    lash_segs = 12
+    base_idx = len(bm.verts)
+    for i in range(lash_segs + 1):
+        t = i / lash_segs
+        y = length * 0.25 + t * length * 0.75
+        # Wave pattern + taper
+        x = width * 0.3 * math.sin(t * math.pi * 3) * (1.0 - t * 0.8)
+        r = width * 0.06 * (1.0 - t * 0.85)
+        for a in range(4):
+            angle = a * math.pi * 0.5
+            bm.verts.new((x + math.cos(angle) * r, y, math.sin(angle) * r))
+    bm.verts.ensure_lookup_table()
+    for i in range(lash_segs):
+        b = base_idx + i * 4
+        for j in range(4):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % 4],
+                          bm.verts[b + 4 + (j + 1) % 4], bm.verts[b + 4 + j]))
+
+
+def _create_claw_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create claw weapon: knuckle guard with curved blades."""
+    # Knuckle guard -- flat curved bar
+    base_idx = len(bm.verts)
+    guard_segs = 6
+    for i in range(guard_segs + 1):
+        t = i / guard_segs
+        x = -width * 0.6 + t * width * 1.2
+        y = 0.0
+        bm.verts.new((x, y, width * 0.05))
+        bm.verts.new((x, y, -width * 0.05))
+        bm.verts.new((x, y + width * 0.15, width * 0.05))
+        bm.verts.new((x, y + width * 0.15, -width * 0.05))
+    bm.verts.ensure_lookup_table()
+    for i in range(guard_segs):
+        b = base_idx + i * 4
+        for j in range(2):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + j + 2],
+                          bm.verts[b + 4 + j + 2], bm.verts[b + 4 + j]))
+    # Three curved blades
+    for blade_i in range(3):
+        blade_x = -width * 0.4 + blade_i * width * 0.4
+        blade_base_idx = len(bm.verts)
+        blade_segs = 5
+        for i in range(blade_segs + 1):
+            t = i / blade_segs
+            cy = t * length * 0.8
+            cz = -width * 0.1 * math.sin(t * math.pi * 0.5)
+            hw = width * 0.02 * (1.0 - t * 0.7)
+            bm.verts.new((blade_x - hw, cy, cz))
+            bm.verts.new((blade_x + hw, cy, cz))
+        bm.verts.ensure_lookup_table()
+        for i in range(blade_segs):
+            b = blade_base_idx + i * 2
+            bm.faces.new((bm.verts[b], bm.verts[b + 1],
+                          bm.verts[b + 3], bm.verts[b + 2]))
+
+
+def _create_tome_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create tome/spellbook: thick rectangular book."""
+    bw = width * 1.5
+    bh = length * 0.6
+    bd = width * 0.4
+    base_idx = len(bm.verts)
+    # 8 corners of the book box
+    for z in (-bd, bd):
+        bm.verts.new((-bw * 0.5, 0, z))
+        bm.verts.new((bw * 0.5, 0, z))
+        bm.verts.new((bw * 0.5, bh, z))
+        bm.verts.new((-bw * 0.5, bh, z))
+    bm.verts.ensure_lookup_table()
+    # Front/back
+    bm.faces.new([bm.verts[base_idx + i] for i in range(4)])
+    bm.faces.new([bm.verts[base_idx + 4 + i] for i in range(3, -1, -1)])
+    # Side quads
+    for j in range(4):
+        bm.faces.new((bm.verts[base_idx + j], bm.verts[base_idx + (j + 1) % 4],
+                      bm.verts[base_idx + 4 + (j + 1) % 4],
+                      bm.verts[base_idx + 4 + j]))
+    # Spine ridge
+    spine_idx = len(bm.verts)
+    bm.verts.new((-bw * 0.55, 0, 0))
+    bm.verts.new((-bw * 0.55, bh, 0))
+    bm.verts.ensure_lookup_table()
+    bm.faces.new((bm.verts[base_idx], bm.verts[base_idx + 3],
+                  bm.verts[spine_idx + 1], bm.verts[spine_idx]))
+
+
+def _create_greatsword_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create greatsword: scaled-up sword with wider blade."""
+    _create_sword_mesh(bm, length * 1.4, width * 1.5)
+
+
+def _create_curved_sword_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create curved sword (scimitar): blade with lateral curve."""
+    blade_segs = 10
+    blade_base_y = 0.3 * length
+    blade_tip_y = length
+    for i in range(blade_segs + 1):
+        t = i / blade_segs
+        y = blade_base_y + t * (blade_tip_y - blade_base_y)
+        curve_x = width * 0.4 * math.sin(t * math.pi * 0.5)
+        hw = width * 0.45 * (1.0 - t * 0.85)
+        depth = width * 0.08 * (1.0 - t * 0.7)
+        bm.verts.new((curve_x - hw, y, depth))
+        bm.verts.new((curve_x + hw, y, depth))
+        bm.verts.new((curve_x + hw, y, -depth))
+        bm.verts.new((curve_x - hw, y, -depth))
+    bm.verts.ensure_lookup_table()
+    for i in range(blade_segs):
+        base = i * 4
+        for j in range(4):
+            bm.faces.new((bm.verts[base + j], bm.verts[base + (j + 1) % 4],
+                          bm.verts[base + 4 + (j + 1) % 4], bm.verts[base + 4 + j]))
+    # Hilt
+    hilt_base = len(bm.verts)
+    hilt_r = width * 0.12
+    for i in range(5):
+        t = i / 4
+        y = t * blade_base_y
+        for a in range(4):
+            angle = a * math.pi * 0.5
+            bm.verts.new((math.cos(angle) * hilt_r, y, math.sin(angle) * hilt_r))
+    bm.verts.ensure_lookup_table()
+    for i in range(4):
+        b = hilt_base + i * 4
+        for j in range(4):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % 4],
+                          bm.verts[b + 4 + (j + 1) % 4], bm.verts[b + 4 + j]))
+
+
+def _create_hand_axe_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create hand axe: shorter, lighter axe variant."""
+    _create_axe_mesh(bm, length * 0.6, width * 0.8)
+
+
+def _create_battle_axe_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create battle axe: double-headed axe."""
+    _create_axe_mesh(bm, length, width)
+    # Mirror the axe head to the other side
+    head_y = length * 0.65
+    head_h = width * 0.8
+    head_d = width * 0.1
+    head_d_back = width * 0.3
+    base_idx = len(bm.verts)
+    bm.verts.new((-width * 0.6, head_y - head_h * 0.5, head_d))
+    bm.verts.new((-width * 0.6, head_y + head_h * 0.5, head_d))
+    bm.verts.new((-width * 0.6, head_y + head_h * 0.5, -head_d))
+    bm.verts.new((-width * 0.6, head_y - head_h * 0.5, -head_d))
+    bm.verts.new((0, head_y - head_h * 0.3, head_d_back))
+    bm.verts.new((0, head_y + head_h * 0.3, head_d_back))
+    bm.verts.new((0, head_y + head_h * 0.3, -head_d_back))
+    bm.verts.new((0, head_y - head_h * 0.3, -head_d_back))
+    bm.verts.ensure_lookup_table()
+    for j in range(4):
+        bm.faces.new((bm.verts[base_idx + j], bm.verts[base_idx + (j + 1) % 4],
+                      bm.verts[base_idx + 4 + (j + 1) % 4],
+                      bm.verts[base_idx + 4 + j]))
+
+
+def _create_greataxe_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create greataxe: oversized two-handed axe."""
+    _create_battle_axe_mesh(bm, length * 1.3, width * 1.4)
+
+
+def _create_club_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create club: thick tapered cylinder, thicker at head."""
+    segs = 8
+    sides = 6
+    base_idx = len(bm.verts)
+    for i in range(segs + 1):
+        t = i / segs
+        y = t * length
+        # Thicker at the top (inverted taper from staff)
+        radius = width * 0.1 * (0.8 + t * 0.8)
+        for a in range(sides):
+            angle = a * 2 * math.pi / sides
+            bm.verts.new((math.cos(angle) * radius, y, math.sin(angle) * radius))
+    bm.verts.ensure_lookup_table()
+    for i in range(segs):
+        b = base_idx + i * sides
+        for j in range(sides):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % sides],
+                          bm.verts[b + sides + (j + 1) % sides],
+                          bm.verts[b + sides + j]))
+
+
+def _create_warhammer_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create warhammer: long handle with heavy rectangular head and spike."""
+    _make_handle(bm, length * 0.75, width * 0.09, sides=6)
+    # Heavy rectangular head
+    head_y = length * 0.7
+    hw = width * 0.5
+    hd = width * 0.4
+    hh = width * 0.2
+    base_idx = len(bm.verts)
+    for dy in (-hh, hh):
+        bm.verts.new((-hw, head_y + dy, hd))
+        bm.verts.new((hw, head_y + dy, hd))
+        bm.verts.new((hw, head_y + dy, -hd))
+        bm.verts.new((-hw, head_y + dy, -hd))
+    bm.verts.ensure_lookup_table()
+    for j in range(4):
+        bm.faces.new((bm.verts[base_idx + j], bm.verts[base_idx + (j + 1) % 4],
+                      bm.verts[base_idx + 4 + (j + 1) % 4],
+                      bm.verts[base_idx + 4 + j]))
+    bm.faces.new([bm.verts[base_idx + i] for i in range(4)])
+    bm.faces.new([bm.verts[base_idx + 4 + i] for i in range(3, -1, -1)])
+    # Top spike
+    spike_idx = len(bm.verts)
+    bm.verts.new((0, head_y + hh + width * 0.5, 0))
+    bm.verts.ensure_lookup_table()
+    for i in range(4):
+        bm.faces.new((bm.verts[base_idx + 4 + i],
+                      bm.verts[base_idx + 4 + (i + 1) % 4],
+                      bm.verts[spike_idx]))
+
+
+def _create_halberd_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create halberd: long shaft + axe blade + spear tip."""
+    _make_handle(bm, length * 0.9, width * 0.06, sides=6)
+    # Axe blade on one side
+    head_y = length * 0.8
+    base_idx = len(bm.verts)
+    bm.verts.new((width * 0.8, head_y - width * 0.4, width * 0.04))
+    bm.verts.new((width * 0.8, head_y + width * 0.4, width * 0.04))
+    bm.verts.new((width * 0.8, head_y + width * 0.4, -width * 0.04))
+    bm.verts.new((width * 0.8, head_y - width * 0.4, -width * 0.04))
+    bm.verts.new((0, head_y - width * 0.2, width * 0.1))
+    bm.verts.new((0, head_y + width * 0.2, width * 0.1))
+    bm.verts.new((0, head_y + width * 0.2, -width * 0.1))
+    bm.verts.new((0, head_y - width * 0.2, -width * 0.1))
+    bm.verts.ensure_lookup_table()
+    for j in range(4):
+        bm.faces.new((bm.verts[base_idx + j], bm.verts[base_idx + (j + 1) % 4],
+                      bm.verts[base_idx + 4 + (j + 1) % 4],
+                      bm.verts[base_idx + 4 + j]))
+    # Spear tip
+    tip_base = length * 0.88
+    tip_end = length
+    tip_idx = len(bm.verts)
+    for i in range(3):
+        t = i / 2
+        y = tip_base + t * (tip_end - tip_base)
+        hw = width * 0.15 * (1.0 - t)
+        bm.verts.new((-hw, y, hw * 0.3))
+        bm.verts.new((hw, y, hw * 0.3))
+        bm.verts.new((hw, y, -hw * 0.3))
+        bm.verts.new((-hw, y, -hw * 0.3))
+    bm.verts.ensure_lookup_table()
+    for i in range(2):
+        b = tip_idx + i * 4
+        for j in range(4):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % 4],
+                          bm.verts[b + 4 + (j + 1) % 4], bm.verts[b + 4 + j]))
+
+
+def _create_glaive_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create glaive: long shaft with single-edged blade at top."""
+    _make_handle(bm, length * 0.85, width * 0.06, sides=6)
+    # Wide blade at top
+    blade_segs = 6
+    base_idx = len(bm.verts)
+    blade_start = length * 0.75
+    for i in range(blade_segs + 1):
+        t = i / blade_segs
+        y = blade_start + t * length * 0.25
+        hw = width * 0.6 * (1.0 - t * 0.7)
+        depth = width * 0.03 * (1.0 - t * 0.5)
+        bm.verts.new((hw, y, depth))
+        bm.verts.new((hw, y, -depth))
+        bm.verts.new((-width * 0.02, y, -depth))
+        bm.verts.new((-width * 0.02, y, depth))
+    bm.verts.ensure_lookup_table()
+    for i in range(blade_segs):
+        b = base_idx + i * 4
+        for j in range(4):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % 4],
+                          bm.verts[b + 4 + (j + 1) % 4], bm.verts[b + 4 + j]))
+
+
+def _create_shortbow_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create shortbow: smaller, more curved bow variant."""
+    _create_bow_mesh(bm, length * 0.7, width * 0.8)
+
+
+def _create_longbow_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create longbow: taller, straighter bow variant."""
+    _create_bow_mesh(bm, length * 1.4, width * 0.6)
+
+
+def _create_staff_magic_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create magic staff: ornate staff with crystal head and rune bands."""
+    _create_staff_mesh(bm, length, width)
+    # Add rune band rings along the shaft
+    for ring_t in (0.3, 0.5):
+        ring_y = ring_t * length
+        ring_r = width * 0.14
+        base_idx = len(bm.verts)
+        for a in range(8):
+            angle = a * math.pi * 0.25
+            bm.verts.new((math.cos(angle) * ring_r, ring_y - width * 0.02,
+                          math.sin(angle) * ring_r))
+            bm.verts.new((math.cos(angle) * ring_r, ring_y + width * 0.02,
+                          math.sin(angle) * ring_r))
+        bm.verts.ensure_lookup_table()
+        for a in range(8):
+            b = base_idx + a * 2
+            nb = base_idx + ((a + 1) % 8) * 2
+            bm.faces.new((bm.verts[b], bm.verts[b + 1],
+                          bm.verts[nb + 1], bm.verts[nb]))
+
+
+def _create_wand_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create wand: short thin rod with ornate tip."""
+    # Thin tapered shaft
+    segs = 6
+    sides = 6
+    base_idx = len(bm.verts)
+    for i in range(segs + 1):
+        t = i / segs
+        y = t * length * 0.5
+        r = width * 0.05 * (1.0 - t * 0.2)
+        for a in range(sides):
+            angle = a * 2 * math.pi / sides
+            bm.verts.new((math.cos(angle) * r, y, math.sin(angle) * r))
+    bm.verts.ensure_lookup_table()
+    for i in range(segs):
+        b = base_idx + i * sides
+        for j in range(sides):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % sides],
+                          bm.verts[b + sides + (j + 1) % sides],
+                          bm.verts[b + sides + j]))
+    # Ornate tip (small orb)
+    _make_sphere_head(bm, length * 0.5 + width * 0.08, width * 0.1,
+                      rings=3, sectors=6)
+
+
+def _create_throwing_knife_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create throwing knife: balanced flat blade."""
+    blade_segs = 5
+    for i in range(blade_segs + 1):
+        t = i / blade_segs
+        y = t * length * 0.4
+        # Diamond cross-section, tapers to point
+        hw = width * 0.4 * (1.0 - abs(t - 0.5) * 1.5) if t < 0.9 else width * 0.02
+        depth = width * 0.02
+        bm.verts.new((-hw, y, depth))
+        bm.verts.new((hw, y, depth))
+        bm.verts.new((hw, y, -depth))
+        bm.verts.new((-hw, y, -depth))
+    bm.verts.ensure_lookup_table()
+    for i in range(blade_segs):
+        base = i * 4
+        for j in range(4):
+            bm.faces.new((bm.verts[base + j], bm.verts[base + (j + 1) % 4],
+                          bm.verts[base + 4 + (j + 1) % 4], bm.verts[base + 4 + j]))
+
+
+# ---------------------------------------------------------------------------
+# Shared bmesh helpers for extended generators
+# ---------------------------------------------------------------------------
+
+
+def _make_handle(bm: bmesh.types.BMesh, length: float, radius: float,
+                 sides: int = 6) -> None:
+    """Create a cylindrical handle from origin to (0, length, 0)."""
+    segs = max(4, int(length / 0.15))
+    base_idx = len(bm.verts)
+    for i in range(segs + 1):
+        t = i / segs
+        y = t * length
+        for a in range(sides):
+            angle = a * 2 * math.pi / sides
+            bm.verts.new((math.cos(angle) * radius, y, math.sin(angle) * radius))
+    bm.verts.ensure_lookup_table()
+    for i in range(segs):
+        b = base_idx + i * sides
+        for j in range(sides):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % sides],
+                          bm.verts[b + sides + (j + 1) % sides],
+                          bm.verts[b + sides + j]))
+
+
+def _make_sphere_head(bm: bmesh.types.BMesh, center_y: float, radius: float,
+                      rings: int = 4, sectors: int = 6) -> None:
+    """Create a sphere at (0, center_y, 0) with given radius."""
+    base_idx = len(bm.verts)
+    bm.verts.new((0, center_y - radius, 0))
+    for i in range(1, rings):
+        phi = math.pi * i / rings
+        ry = center_y - radius * math.cos(phi)
+        rr = radius * math.sin(phi)
+        for j in range(sectors):
+            theta = 2 * math.pi * j / sectors
+            bm.verts.new((rr * math.cos(theta), ry, rr * math.sin(theta)))
+    bm.verts.new((0, center_y + radius, 0))
+    bm.verts.ensure_lookup_table()
+
+    bottom = bm.verts[base_idx]
+    for j in range(sectors):
+        bm.faces.new((bottom, bm.verts[base_idx + 1 + j],
+                      bm.verts[base_idx + 1 + (j + 1) % sectors]))
+    for i in range(rings - 2):
+        for j in range(sectors):
+            r1 = base_idx + 1 + i * sectors
+            r2 = base_idx + 1 + (i + 1) * sectors
+            bm.faces.new((bm.verts[r1 + j], bm.verts[r1 + (j + 1) % sectors],
+                          bm.verts[r2 + (j + 1) % sectors], bm.verts[r2 + j]))
+    top = bm.verts[base_idx + 1 + (rings - 1) * sectors]
+    last_r = base_idx + 1 + (rings - 2) * sectors
+    for j in range(sectors):
+        bm.faces.new((top, bm.verts[last_r + (j + 1) % sectors],
+                      bm.verts[last_r + j]))
+
+
 # Dispatch table for weapon mesh generators
 _WEAPON_GENERATORS = {
+    # Original 7
     "sword": _create_sword_mesh,
     "axe": _create_axe_mesh,
     "mace": _create_mace_mesh,
@@ -585,6 +1159,29 @@ _WEAPON_GENERATORS = {
     "bow": _create_bow_mesh,
     "dagger": _create_dagger_mesh,
     "shield": _create_shield_mesh,
+    # Extended 16
+    "hammer": _create_hammer_mesh,
+    "spear": _create_spear_mesh,
+    "crossbow": _create_crossbow_mesh,
+    "scythe": _create_scythe_mesh,
+    "flail": _create_flail_mesh,
+    "whip": _create_whip_mesh,
+    "claw": _create_claw_mesh,
+    "tome": _create_tome_mesh,
+    "greatsword": _create_greatsword_mesh,
+    "curved_sword": _create_curved_sword_mesh,
+    "hand_axe": _create_hand_axe_mesh,
+    "battle_axe": _create_battle_axe_mesh,
+    "greataxe": _create_greataxe_mesh,
+    "club": _create_club_mesh,
+    "warhammer": _create_warhammer_mesh,
+    "halberd": _create_halberd_mesh,
+    "glaive": _create_glaive_mesh,
+    "shortbow": _create_shortbow_mesh,
+    "longbow": _create_longbow_mesh,
+    "staff_magic": _create_staff_magic_mesh,
+    "wand": _create_wand_mesh,
+    "throwing_knife": _create_throwing_knife_mesh,
 }
 
 
@@ -594,39 +1191,137 @@ _WEAPON_GENERATORS = {
 
 
 def _compute_grip_point(weapon_type: str, length: float) -> tuple[float, float, float]:
-    """Compute grip_point position based on weapon type."""
-    if weapon_type in ("sword", "dagger"):
+    """Compute grip_point position based on weapon type.
+
+    Categories:
+    - Bladed 1H (sword, dagger, curved_sword, claw): near hilt
+    - Polearms (spear, halberd, glaive): 1/3 from bottom
+    - Two-handed (greatsword, greataxe, warhammer): lower grip + off-hand
+    - Ranged (bow, crossbow, shortbow, longbow): center
+    - Magic (staff_magic, wand, tome): center/bottom
+    - Chain (flail, whip): handle end
+    - Thrown (throwing_knife): center (balanced)
+    - Blunt (mace, hammer, club): near bottom
+    - Axes 1H (axe, hand_axe, battle_axe, scythe): near bottom
+    - Shield: center back
+    - Staff: near bottom (1/3)
+    """
+    if weapon_type in ("sword", "dagger", "curved_sword", "claw"):
         return (0.0, length * 0.15, 0.0)
-    elif weapon_type == "bow":
+    elif weapon_type in _POLEARM_TYPES:
+        # Grip at 1/3 from bottom for leverage
+        return (0.0, length * 0.33, 0.0)
+    elif weapon_type in _TWO_HANDED_TYPES:
+        # Main hand grip (off-hand computed separately if needed)
+        return (0.0, length * 0.15, 0.0)
+    elif weapon_type in _RANGED_TYPES:
         return (0.0, 0.0, 0.0)
+    elif weapon_type in _MAGIC_TYPES:
+        if weapon_type == "tome":
+            return (0.0, length * 0.3, 0.0)
+        return (0.0, length * 0.2, 0.0)
+    elif weapon_type in _CHAIN_TYPES:
+        return (0.0, length * 0.1, 0.0)
+    elif weapon_type in _THROWN_TYPES:
+        return (0.0, length * 0.2, 0.0)
     elif weapon_type == "shield":
         return (0.0, length * 0.4, 0.0)
+    elif weapon_type in ("axe", "hand_axe", "battle_axe", "scythe"):
+        return (0.0, length * 0.15, 0.0)
+    elif weapon_type in ("mace", "hammer", "club"):
+        return (0.0, length * 0.15, 0.0)
+    elif weapon_type == "staff":
+        return (0.0, length * 0.15, 0.0)
     else:
         return (0.0, length * 0.15, 0.0)
 
 
 def _compute_trail_attach_top(weapon_type: str, length: float, width: float) -> tuple[float, float, float]:
-    """Compute trail_attach_top (weapon tip / striking end)."""
-    if weapon_type == "bow":
-        return (width * 2.0, length * 0.0, 0.0)  # top of arc
+    """Compute trail_attach_top (weapon tip / striking end).
+
+    Categories:
+    - Bladed: tip of blade
+    - Polearms: full length (spear tip / blade top)
+    - Two-handed: tip of oversized blade/head
+    - Ranged: no trail (top of arc for bow types)
+    - Magic: VFX emission point at top
+    - Chain: head end (ball/lash tip)
+    - Thrown: blade tip
+    """
+    if weapon_type in _RANGED_TYPES:
+        return (width * 2.0, 0.0, 0.0)
     elif weapon_type == "shield":
         return (0.0, length * 0.7, 0.0)
-    elif weapon_type == "axe":
+    elif weapon_type in ("axe", "hand_axe"):
         return (width * 0.6, length * 0.65, 0.0)
+    elif weapon_type in ("battle_axe", "greataxe"):
+        return (width * 0.6, length * 0.65, 0.0)
+    elif weapon_type == "scythe":
+        return (width * 1.5, length * 0.9, 0.0)
+    elif weapon_type in _POLEARM_TYPES:
+        return (0.0, length, 0.0)
+    elif weapon_type in _TWO_HANDED_TYPES:
+        if weapon_type == "greatsword":
+            return (0.0, length * 1.4, 0.0)
+        return (0.0, length, 0.0)
+    elif weapon_type in _MAGIC_TYPES:
+        if weapon_type == "tome":
+            return (0.0, length * 0.6, 0.0)
+        return (0.0, length, 0.0)
+    elif weapon_type in _CHAIN_TYPES:
+        if weapon_type == "flail":
+            return (0.0, length * 0.5 + width * 1.2, 0.0)
+        return (0.0, length, 0.0)
+    elif weapon_type == "claw":
+        return (0.0, length * 0.8, 0.0)
+    elif weapon_type in ("mace", "hammer", "club", "warhammer"):
+        return (0.0, length, 0.0)
     else:
         return (0.0, length, 0.0)
 
 
 def _compute_trail_attach_bottom(weapon_type: str, length: float, width: float) -> tuple[float, float, float]:
-    """Compute trail_attach_bottom (blade base / just above guard)."""
-    if weapon_type in ("sword", "dagger"):
+    """Compute trail_attach_bottom (blade base / just above guard).
+
+    Categories:
+    - Bladed: blade base / guard
+    - Polearms: start of blade section
+    - Two-handed: blade base
+    - Ranged: no trail
+    - Magic: shaft midpoint
+    - Chain: where chain meets handle
+    - Thrown: center
+    """
+    if weapon_type in ("sword", "dagger", "curved_sword"):
         return (0.0, length * 0.3, 0.0)
-    elif weapon_type == "bow":
-        return (width * 2.0, -length * 0.0, 0.0)
+    elif weapon_type in _RANGED_TYPES:
+        return (width * 2.0, 0.0, 0.0)
     elif weapon_type == "shield":
         return (0.0, length * 0.1, 0.0)
-    elif weapon_type == "axe":
+    elif weapon_type in ("axe", "hand_axe"):
         return (width * 0.6, length * 0.5, 0.0)
+    elif weapon_type in ("battle_axe", "greataxe"):
+        return (width * 0.6, length * 0.5, 0.0)
+    elif weapon_type == "scythe":
+        return (0.0, length * 0.8, 0.0)
+    elif weapon_type in _POLEARM_TYPES:
+        return (0.0, length * 0.75, 0.0)
+    elif weapon_type in _TWO_HANDED_TYPES:
+        if weapon_type == "greatsword":
+            return (0.0, length * 0.3, 0.0)
+        return (0.0, length * 0.5, 0.0)
+    elif weapon_type in _MAGIC_TYPES:
+        if weapon_type == "tome":
+            return (0.0, 0.0, 0.0)
+        return (0.0, length * 0.5, 0.0)
+    elif weapon_type in _CHAIN_TYPES:
+        return (0.0, length * 0.5, 0.0)
+    elif weapon_type in _THROWN_TYPES:
+        return (0.0, length * 0.1, 0.0)
+    elif weapon_type == "claw":
+        return (0.0, 0.0, 0.0)
+    elif weapon_type in ("mace", "hammer", "club", "warhammer"):
+        return (0.0, length * 0.5, 0.0)
     else:
         return (0.0, length * 0.3, 0.0)
 
@@ -640,7 +1335,11 @@ def handle_equipment_generate_weapon(params: dict) -> dict:
     """Generate parametric weapon mesh with empties and collision mesh (EQUIP-01).
 
     Params:
-        weapon_type: str -- sword/axe/mace/staff/bow/dagger/shield
+        weapon_type: str -- any of 23 types: sword, axe, mace, staff, bow,
+            dagger, shield, hammer, spear, crossbow, scythe, flail, whip,
+            claw, tome, greatsword, curved_sword, hand_axe, battle_axe,
+            greataxe, club, warhammer, halberd, glaive, shortbow, longbow,
+            staff_magic, wand, throwing_knife
         length: float -- weapon length (default 1.0)
         blade_width / head_size: float -- width parameter (default 0.15)
         material_name: str -- optional material to assign

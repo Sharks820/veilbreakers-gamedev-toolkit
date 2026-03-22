@@ -151,6 +151,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 4.0,
         "wear_intensity": 0.05,
         "node_recipe": "wood",
+        "coat_weight": 0.3,
     },
     "rotten_wood": {
         "base_color": (0.10, 0.08, 0.05, 1.0),
@@ -239,6 +240,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 20.0,
         "wear_intensity": 0.05,
         "node_recipe": "metal",
+        "anisotropic": 0.5,
     },
     "tarnished_bronze": {
         "base_color": _BRONZE_METAL,
@@ -259,6 +261,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 15.0,
         "wear_intensity": 0.3,
         "node_recipe": "metal",
+        "anisotropic": 0.3,
     },
     "gold_ornament": {
         "base_color": _GOLD_METAL,
@@ -269,6 +272,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 18.0,
         "wear_intensity": 0.1,
         "node_recipe": "metal",
+        "coat_weight": 0.5,
     },
 
     # =======================================================================
@@ -283,6 +287,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 12.0,
         "wear_intensity": 0.2,
         "node_recipe": "organic",
+        "subsurface": 0.2,
+        "sss_color": (0.8, 0.3, 0.2, 1.0),
+        "rim_color": (0.05, 0.05, 0.08, 1.0),
     },
     "scales": {
         "base_color": (0.10, 0.12, 0.08, 1.0),
@@ -293,6 +300,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 15.0,
         "wear_intensity": 0.15,
         "node_recipe": "organic",
+        "subsurface": 0.05,
     },
     "chitin_carapace": {
         "base_color": (0.08, 0.06, 0.04, 1.0),
@@ -303,6 +311,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 10.0,
         "wear_intensity": 0.2,
         "node_recipe": "organic",
+        "coat_weight": 0.7,
     },
     "fur_base": {
         "base_color": (0.15, 0.11, 0.08, 1.0),
@@ -313,6 +322,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 20.0,
         "wear_intensity": 0.1,
         "node_recipe": "organic",
+        "anisotropic": 0.7,
     },
     "bone": {
         "base_color": _BONE_WHITE,
@@ -323,6 +333,8 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 8.0,
         "wear_intensity": 0.15,
         "node_recipe": "organic",
+        "subsurface": 0.05,
+        "sss_color": (0.9, 0.8, 0.7, 1.0),
     },
     "membrane": {
         "base_color": (0.18, 0.10, 0.08, 1.0),
@@ -333,6 +345,8 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 6.0,
         "wear_intensity": 0.1,
         "node_recipe": "organic",
+        "subsurface": 0.4,
+        "transmission": 0.4,
     },
 
     # =======================================================================
@@ -357,6 +371,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 15.0,
         "wear_intensity": 0.05,
         "node_recipe": "organic",
+        "transmission": 0.3,
     },
     "moss": {
         "base_color": _MOSS_GREEN,
@@ -377,6 +392,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 10.0,
         "wear_intensity": 0.1,
         "node_recipe": "organic",
+        "subsurface": 0.15,
+        "sss_color": (0.6, 0.5, 0.3, 1.0),
+        "transmission": 0.1,
     },
 
     # =======================================================================
@@ -489,6 +507,8 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 6.0,
         "wear_intensity": 0.5,
         "node_recipe": "organic",
+        "emission_color": (0.12, 0.04, 0.14, 1.0),
+        "emission_strength": 0.3,
     },
     "lava_ember": {
         "base_color": _EMBER_ORANGE,
@@ -499,6 +519,8 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 4.0,
         "wear_intensity": 0.4,
         "node_recipe": "terrain",
+        "emission_color": (1.0, 0.4, 0.1, 1.0),
+        "emission_strength": 2.0,
     },
     "ice_crystal": {
         "base_color": (0.32, 0.40, 0.50, 1.0),
@@ -509,6 +531,8 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 8.0,
         "wear_intensity": 0.02,
         "node_recipe": "stone",
+        "emission_color": (0.6, 0.8, 1.0, 1.0),
+        "emission_strength": 0.1,
     },
     "glass": {
         "base_color": (0.40, 0.42, 0.44, 1.0),
@@ -635,6 +659,19 @@ def build_stone_material(mat: Any, params: dict[str, Any]) -> None:
     bsdf.inputs["Base Color"].default_value = params["base_color"]
     bsdf.inputs["Roughness"].default_value = params["roughness"]
     bsdf.inputs["Metallic"].default_value = params["metallic"]
+
+    # Emission for glowing stone/crystal materials (ice crystal, etc.)
+    emission_strength_val = params.get("emission_strength", 0.0)
+    if emission_strength_val > 0.0:
+        emission_input = _get_bsdf_input(bsdf, "Emission Color")
+        if emission_input is not None:
+            emission_input.default_value = params.get(
+                "emission_color", (0.0, 0.0, 0.0, 1.0)
+            )
+        emission_str_input = bsdf.inputs.get("Emission Strength")
+        if emission_str_input is not None:
+            emission_str_input.default_value = emission_strength_val
+
     links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
 
     # -- Texture Coordinate + Mapping --
@@ -744,6 +781,14 @@ def build_wood_material(mat: Any, params: dict[str, Any]) -> None:
     bsdf.inputs["Base Color"].default_value = params["base_color"]
     bsdf.inputs["Roughness"].default_value = params["roughness"]
     bsdf.inputs["Metallic"].default_value = params["metallic"]
+
+    # Coat weight for lacquered / polished wood surfaces
+    coat_val = params.get("coat_weight", 0.0)
+    if coat_val > 0.0:
+        coat_input = _get_bsdf_input(bsdf, "Coat Weight")
+        if coat_input is not None:
+            coat_input.default_value = coat_val
+
     links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
 
     tex_coord = _add_node(tree, "ShaderNodeTexCoord", -1200, 0, "Tex Coord")
@@ -848,6 +893,20 @@ def build_metal_material(mat: Any, params: dict[str, Any]) -> None:
     bsdf_clean.inputs["Roughness"].default_value = max(0.05, params["roughness"] * 0.3)
     bsdf_clean.inputs["Metallic"].default_value = params["metallic"]
 
+    # Anisotropic roughness for brushed metal / hair highlights
+    aniso_val = params.get("anisotropic", 0.0)
+    if aniso_val > 0.0:
+        aniso_input = _get_bsdf_input(bsdf_clean, "Anisotropic")
+        if aniso_input is not None:
+            aniso_input.default_value = aniso_val
+
+    # Coat weight for lacquered / polished metal surfaces
+    coat_val = params.get("coat_weight", 0.0)
+    if coat_val > 0.0:
+        coat_input = _get_bsdf_input(bsdf_clean, "Coat Weight")
+        if coat_input is not None:
+            coat_input.default_value = coat_val
+
     # -- Rusted/worn BSDF --
     bsdf_rust = _add_node(tree, "ShaderNodeBsdfPrincipled", 100, -200,
                           "Rust/Wear")
@@ -921,15 +980,45 @@ def build_organic_material(mat: Any, params: dict[str, Any]) -> None:
     bsdf.inputs["Roughness"].default_value = params["roughness"]
     bsdf.inputs["Metallic"].default_value = params["metallic"]
 
-    # Subsurface scattering for organic look
+    # Subsurface scattering for organic look (parameterized per-material)
     sss_input = _get_bsdf_input(bsdf, "Subsurface Weight")
     if sss_input is not None:
-        sss_input.default_value = 0.15
-    # Subsurface color -- slightly reddish for flesh
+        sss_input.default_value = params.get("subsurface", 0.15)
+    # Subsurface color -- per-material or derived from base color
     sss_color_input = bsdf.inputs.get("Subsurface Color")
     if sss_color_input is not None:
-        sss_color_input.default_value = (bc[0] * 1.5, bc[1] * 0.5,
-                                          bc[2] * 0.4, 1.0)
+        sss_color_input.default_value = params.get(
+            "sss_color", (bc[0] * 1.5, bc[1] * 0.5, bc[2] * 0.4, 1.0)
+        )
+
+    # Transmission for translucent organic materials (membrane, leaf, mushroom)
+    transmission_input = _get_bsdf_input(bsdf, "Transmission Weight")
+    if transmission_input is not None:
+        transmission_input.default_value = params.get("transmission", 0.0)
+
+    # Coat weight for glossy organic surfaces (chitin carapace, polished wood)
+    coat_input = _get_bsdf_input(bsdf, "Coat Weight")
+    if coat_input is not None:
+        coat_input.default_value = params.get("coat_weight", 0.0)
+
+    # Anisotropic roughness for hair/fur highlights
+    aniso_val = params.get("anisotropic", 0.0)
+    if aniso_val > 0.0:
+        aniso_input = _get_bsdf_input(bsdf, "Anisotropic")
+        if aniso_input is not None:
+            aniso_input.default_value = aniso_val
+
+    # Emission for magic/glowing organic materials
+    emission_strength_val = params.get("emission_strength", 0.0)
+    if emission_strength_val > 0.0:
+        emission_input = _get_bsdf_input(bsdf, "Emission Color")
+        if emission_input is not None:
+            emission_input.default_value = params.get(
+                "emission_color", (0.0, 0.0, 0.0, 1.0)
+            )
+        emission_str_input = bsdf.inputs.get("Emission Strength")
+        if emission_str_input is not None:
+            emission_str_input.default_value = emission_strength_val
 
     links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
 
@@ -988,6 +1077,22 @@ def build_organic_material(mat: Any, params: dict[str, Any]) -> None:
     links.new(math_bump_mix.outputs["Value"], bump.inputs["Height"])
     links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
 
+    # -- Fresnel / rim lighting for creature silhouette readability --
+    rim_color = params.get("rim_color")
+    if rim_color is not None:
+        layer_weight = _add_node(tree, "ShaderNodeLayerWeight", -600, -700,
+                                 "Rim Fresnel")
+        layer_weight.inputs["Blend"].default_value = 0.3
+
+        mix_rim = _add_node(tree, "ShaderNodeMixRGB", -400, -700, "Rim Mix")
+        mix_rim.inputs[1].default_value = (0.0, 0.0, 0.0, 1.0)
+        mix_rim.inputs[2].default_value = rim_color
+        links.new(layer_weight.outputs["Facing"], mix_rim.inputs["Fac"])
+
+        emission_rim = _get_bsdf_input(bsdf, "Emission Color")
+        if emission_rim is not None:
+            links.new(mix_rim.outputs[0], emission_rim)
+
 
 # ---------------------------------------------------------------------------
 # Builder: Terrain (ground surfaces)
@@ -1013,6 +1118,24 @@ def build_terrain_material(mat: Any, params: dict[str, Any]) -> None:
     bsdf.inputs["Base Color"].default_value = bc
     bsdf.inputs["Roughness"].default_value = params["roughness"]
     bsdf.inputs["Metallic"].default_value = params["metallic"]
+
+    # Transmission for translucent terrain materials (leaf ground cover, etc.)
+    transmission_input = _get_bsdf_input(bsdf, "Transmission Weight")
+    if transmission_input is not None:
+        transmission_input.default_value = params.get("transmission", 0.0)
+
+    # Emission for glowing terrain (lava, magic ground effects)
+    emission_strength_val = params.get("emission_strength", 0.0)
+    if emission_strength_val > 0.0:
+        emission_input = _get_bsdf_input(bsdf, "Emission Color")
+        if emission_input is not None:
+            emission_input.default_value = params.get(
+                "emission_color", (0.0, 0.0, 0.0, 1.0)
+            )
+        emission_str_input = bsdf.inputs.get("Emission Strength")
+        if emission_str_input is not None:
+            emission_str_input.default_value = emission_strength_val
+
     links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
 
     tex_coord = _add_node(tree, "ShaderNodeTexCoord", -1400, 0, "Tex Coord")
