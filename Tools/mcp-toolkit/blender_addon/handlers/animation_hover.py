@@ -165,7 +165,7 @@ def generate_hover_move_keyframes(
         lean = 0.15
         keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, lean))
 
-        # Banking: roll (Z-axis) follows a turn arc for realistic banking
+        # Banking: Z-axis roll for realistic turn banking
         bank = bank_angle * math.sin(t * 2 * math.pi)
         keyframes.append(Keyframe("DEF-spine", "rotation_euler", 2, frame, bank))
 
