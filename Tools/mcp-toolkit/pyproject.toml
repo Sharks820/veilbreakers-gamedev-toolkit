@@ -1,6 +1,6 @@
 [project]
 name = "veilbreakers-mcp"
-version = "0.1.0"
+version = "3.1.0"
 requires-python = ">=3.12"
 # Note: xatlas==0.0.11 is installed into Blender's Python at runtime
 # via the uv_ensure_xatlas handler. It is NOT a pip dependency of this package.
@@ -15,6 +15,7 @@ dependencies = [
     "opensimplex>=0.4.5",
     "elevenlabs>=2.39.0",
     "google-genai>=1.0.0",
+    "defusedxml>=0.7.1",
 ]
 
 [project.scripts]
