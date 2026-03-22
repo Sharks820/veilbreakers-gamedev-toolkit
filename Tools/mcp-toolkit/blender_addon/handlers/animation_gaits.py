@@ -729,7 +729,7 @@ def generate_cycle_keyframes(config: dict) -> list[Keyframe]:
         List of Keyframe namedtuples.
     """
     keyframes: list[Keyframe] = []
-    frame_count = config["frame_count"]
+    frame_count = max(1, config["frame_count"])
     frequency = config.get("frequency", 1.0)
 
     for bone_key, bone_cfg in config["bones"].items():
@@ -1103,6 +1103,7 @@ def generate_attack_keyframes(
         )
 
     config = ATTACK_CONFIGS[attack_type]
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     phases = config["phases"]
@@ -1235,6 +1236,7 @@ def generate_reaction_keyframes(
         )
 
     config = REACTION_CONFIGS[reaction_type]
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for bone_name, bone_cfg in config["bones"].items():
@@ -1389,6 +1391,7 @@ def generate_custom_keyframes(
 
     # Distribute frames proportionally
     frames_per_action = frame_count // len(actions)
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for i, (_phrase, bones, (channel, axis, magnitude)) in enumerate(actions):
