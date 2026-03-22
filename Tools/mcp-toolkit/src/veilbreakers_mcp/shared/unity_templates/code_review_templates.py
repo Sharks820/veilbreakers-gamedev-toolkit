@@ -149,121 +149,98 @@ namespace VeilBreakers.Editor.CodeReview
                 "GetComponent<T>() called in Update/LateUpdate/FixedUpdate -- cache in Awake/Start",
                 "Cache the component reference in a field during Awake() or Start().",
                 @"GetComponent\s*<", guard: InHotPath),
-
             new ReviewRule("BUG-02", Severity.CRITICAL, Category.Bug,
                 "Camera.main accessed in Update -- it calls FindGameObjectWithTag internally",
                 "Cache Camera.main in a field during Start().",
                 @"Camera\.main", guard: InHotPath),
-
             new ReviewRule("BUG-03", Severity.CRITICAL, Category.Bug,
                 "FindObjectOfType in Update -- O(n) scene scan every frame",
                 "Cache the result in Start() or use a singleton/service locator pattern.",
                 @"FindObjectOfType\s*[<(]", guard: InHotPath),
-
             new ReviewRule("BUG-04", Severity.HIGH, Category.Bug,
                 "Heap allocation (new List/Dictionary/HashSet) inside Update",
                 "Pre-allocate collections as fields and Clear() them in Update instead.",
                 @"new\s+(List|Dictionary|HashSet|Queue|Stack|LinkedList)\s*<", guard: InHotPath),
-
             new ReviewRule("BUG-05", Severity.HIGH, Category.Bug,
                 "String concatenation with + in Update -- allocates new string each frame",
                 "Use StringBuilder, string.Format, or interpolation cached outside the loop.",
                 @"""[^""]*""\s*\+|\+\s*""[^""]*""", guard: InHotPath),
-
             new ReviewRule("BUG-06", Severity.CRITICAL, Category.Bug,
                 "GameObject.Find() in Update -- string-based scene search every frame",
                 "Cache the reference in Start() or Awake().",
                 @"GameObject\.Find\s*\(", guard: InHotPath),
-
             new ReviewRule("BUG-07", Severity.MEDIUM, Category.Bug,
                 "transform.position/.rotation accessed multiple times -- crosses native boundary each time",
                 "Cache transform.position/rotation in a local variable at the start of the method.",
                 @"transform\.(position|rotation)\s*[;=\.\[].*transform\.(position|rotation)",
                 RegexOptions.Singleline),
-
             new ReviewRule("BUG-08", Severity.HIGH, Category.Bug,
                 "Accessing member after Destroy(gameObject) -- object is destroyed",
                 "Ensure no code runs after Destroy() on the same object within the same scope.",
                 @"Destroy\s*\(\s*gameObject\s*\)"),
-
             new ReviewRule("BUG-09", Severity.HIGH, Category.Bug,
                 "Missing null check after GetComponent -- may return null",
                 "Always null-check the result of GetComponent before use.",
                 @"=\s*GetComponent\s*<[^>]+>\s*\(\s*\)\s*;(?!\s*(if|Debug|//))",
                 guard: NotInComment),
-
             new ReviewRule("BUG-10", Severity.MEDIUM, Category.Bug,
                 "Using 'is null' on UnityEngine.Object -- Unity overloads == for destroyed object check",
                 "Use '== null' instead of 'is null' for Unity objects (respects destroyed state).",
                 @"\bis\s+null\b", guard: NotInComment),
-
             new ReviewRule("BUG-11", Severity.HIGH, Category.Bug,
                 "async void method -- exceptions are silently swallowed",
                 "Use async Task/UniTask instead; only async void for event handlers.",
                 @"async\s+void\s+(?!On[A-Z])\w+\s*\(", guard: NotInComment),
-
             new ReviewRule("BUG-12", Severity.MEDIUM, Category.Bug,
                 "Coroutine started but may never be stopped -- potential memory leak",
                 "Store the Coroutine reference and call StopCoroutine in OnDisable/OnDestroy.",
                 @"StartCoroutine\s*\(", guard: NotInComment),
-
             new ReviewRule("BUG-13", Severity.MEDIUM, Category.Bug,
                 "new WaitForSeconds() allocated every yield -- cache as a field",
                 "Declare a WaitForSeconds field and reuse it.",
                 @"yield\s+return\s+new\s+WaitForSeconds\s*\(", guard: NotInComment),
-
             new ReviewRule("BUG-14", Severity.HIGH, Category.Bug,
                 "SendMessage/BroadcastMessage used -- slow reflection-based messaging",
                 "Use C# events, UnityEvent, or direct method calls instead.",
                 @"\.(SendMessage|BroadcastMessage)\s*\(", guard: NotInComment),
-
             new ReviewRule("BUG-15", Severity.MEDIUM, Category.Bug,
                 "OnTriggerEnter/OnCollisionEnter handler -- ensure at least one object has a Rigidbody",
                 "At least one of the colliding objects must have a Rigidbody for callbacks to fire.",
                 @"void\s+(OnTriggerEnter|OnCollisionEnter|OnTriggerEnter2D|OnCollisionEnter2D)\s*\("),
-
             new ReviewRule("BUG-16", Severity.MEDIUM, Category.Bug,
                 "Physics.Raycast without LayerMask -- scans all layers",
                 "Add a LayerMask parameter to limit which layers are hit.",
                 @"Physics\d*\.Raycast\s*\([^)]*\)\s*;",
                 guard: (line, all, i) => !line.Contains("LayerMask") && !line.Contains("layerMask") && !line.Contains("layer") && NotInComment(line, all, i)),
-
             new ReviewRule("BUG-17", Severity.MEDIUM, Category.Bug,
                 "Time.deltaTime used in FixedUpdate -- use Time.fixedDeltaTime or omit (already fixed step)",
                 "Replace Time.deltaTime with Time.fixedDeltaTime, or just use the fixed timestep directly.",
                 @"Time\.deltaTime", guard: InFixedUpdate),
-
             new ReviewRule("BUG-18", Severity.LOW, Category.Bug,
                 "Empty Update/Start/Awake method -- Unity still calls it, wasting CPU cycles",
                 "Remove empty Unity lifecycle methods entirely.",
-                @"void\s+(Update|Start|Awake|LateUpdate|FixedUpdate)\s*\(\s*\)\s*\{\s*\}"),
-
+                @"void\s+(Update|Start|Awake|LateUpdate|FixedUpdate|OnGUI|OnAnimatorMove|OnTriggerEnter|OnCollisionEnter)\s*\(\s*\)\s*\{\s*\}"),
             new ReviewRule("BUG-19", Severity.MEDIUM, Category.Bug,
                 "foreach on collection in hot path -- may allocate enumerator on older Mono",
                 "Use a for loop with index, or cache the list and use for(int i...).",
                 @"foreach\s*\(", guard: InHotPath),
-
             new ReviewRule("BUG-20", Severity.LOW, Category.Bug,
                 "Debug.Log in production code -- wrap in #if UNITY_EDITOR or [Conditional]",
                 "Use #if UNITY_EDITOR or [System.Diagnostics.Conditional(\"UNITY_EDITOR\")] wrapper.",
                 @"Debug\.(Log|LogWarning|LogError|LogException)\s*\(",
                 guard: (line, all, i) => NotInEditorBlock(line, all, i) && NotInComment(line, all, i)),
-
             new ReviewRule("BUG-21", Severity.HIGH, Category.Bug,
                 "Resources.Load at runtime without caching -- disk I/O each call",
                 "Cache the loaded resource in a field or use Addressables.",
                 @"Resources\.Load\s*[<(]", guard: InHotPath),
-
             new ReviewRule("BUG-22", Severity.MEDIUM, Category.Bug,
                 "Instantiate without parent transform -- causes world-space recalculation",
                 "Pass a parent transform as the second argument to Instantiate.",
                 @"Instantiate\s*\(\s*[^,)]+\s*\)\s*;", guard: NotInComment),
-
             new ReviewRule("BUG-23", Severity.CRITICAL, Category.Bug,
                 "AddComponent in Update loop -- creates components every frame",
                 "Move AddComponent to initialization (Awake/Start) or a one-time event.",
                 @"\.AddComponent\s*[<(]", guard: InHotPath),
-
             new ReviewRule("BUG-24", Severity.LOW, Category.Bug,
                 "Private field used in Inspector missing [SerializeField]",
                 "Add [SerializeField] to private fields you want visible in the Inspector.",
@@ -275,7 +252,6 @@ namespace VeilBreakers.Editor.CodeReview
                     // Only flag if preceded by a [Tooltip] or [Header] that implies inspector use
                     return i > 0 && (all[i-1].Contains("[Tooltip") || all[i-1].Contains("[Header"));
                 }),
-
             new ReviewRule("BUG-25", Severity.LOW, Category.Bug,
                 "Public field should likely be [SerializeField] private for encapsulation",
                 "Use [SerializeField] private instead of public for Inspector-exposed fields.",
@@ -291,28 +267,23 @@ namespace VeilBreakers.Editor.CodeReview
                     }
                     return false;
                 }),
-
             new ReviewRule("BUG-26", Severity.MEDIUM, Category.Bug,
                 "Comparing tag with == instead of CompareTag() -- allocates string",
                 "Use gameObject.CompareTag(\"tag\") which avoids GC allocation.",
                 @"\.tag\s*==\s*""", guard: NotInComment),
-
             new ReviewRule("BUG-27", Severity.MEDIUM, Category.Bug,
                 "Vector3.Distance in loop -- use sqrMagnitude to avoid expensive sqrt",
                 "Use (a - b).sqrMagnitude < threshold * threshold instead.",
                 @"Vector\d\.Distance\s*\(", guard: InHotPath),
-
             new ReviewRule("BUG-28", Severity.HIGH, Category.Bug,
                 "LINQ used in Update -- allocates iterators, closures, and temp collections",
                 "Replace LINQ with manual loops in hot paths for zero-alloc operation.",
                 @"\.\s*(Where|Select|OrderBy|GroupBy|Any|All|First|Last|Count|Sum|Min|Max|ToList|ToArray|ToDictionary)\s*\(",
                 guard: InHotPath),
-
             new ReviewRule("BUG-29", Severity.MEDIUM, Category.Bug,
                 "Animator.StringToHash not cached -- recalculates hash every call",
                 "Declare static readonly int fields: static readonly int HashRun = Animator.StringToHash(\"Run\");",
                 @"Animator\.StringToHash\s*\(", guard: InHotPath),
-
             new ReviewRule("BUG-30", Severity.MEDIUM, Category.Bug,
                 "Material property access creating runtime instance -- use sharedMaterial or MaterialPropertyBlock",
                 "Use renderer.sharedMaterial (read-only) or MaterialPropertyBlock for per-instance values.",
@@ -324,105 +295,86 @@ namespace VeilBreakers.Editor.CodeReview
                 "Boxing value type to object -- causes GC allocation",
                 "Use generics or overloaded methods to avoid boxing.",
                 @"\(\s*object\s*\)\s*\w+", guard: InHotPath),
-
             new ReviewRule("PERF-02", Severity.MEDIUM, Category.Performance,
                 "Closure allocation in lambda/delegate in hot path",
                 "Capture variables in a struct or pass via static method + state parameter.",
                 @"=>\s*\{?[^}]*\b(this|[a-z_]\w*)\b",
                 guard: InHotPath),
-
             new ReviewRule("PERF-03", Severity.LOW, Category.Performance,
                 "Large struct passed by value -- consider in/ref parameter",
                 "Use 'in' keyword for readonly pass or 'ref' for mutable pass of large structs.",
                 @"\(\s*(Matrix4x4|Bounds|RaycastHit|ContactPoint|NavMeshHit)\s+\w+\s*[,)]",
                 guard: (line, all, i) => !line.Contains(" in ") && !line.Contains(" ref ") && NotInComment(line, all, i)),
-
             new ReviewRule("PERF-04", Severity.LOW, Category.Performance,
                 "Unbounded List.Add without Capacity pre-allocation",
                 "Set list.Capacity or use new List<T>(expectedSize) to avoid repeated array resizing.",
                 @"new\s+List\s*<[^>]+>\s*\(\s*\)",
                 guard: NotInComment),
-
             new ReviewRule("PERF-05", Severity.LOW, Category.Performance,
                 "String.Format in hot path -- use cached StringBuilder",
                 "Use StringBuilder.AppendFormat or pre-allocated string operations.",
                 @"[Ss]tring\.Format\s*\(", guard: InHotPath),
-
             new ReviewRule("PERF-06", Severity.MEDIUM, Category.Performance,
                 "Texture2D.GetPixel/SetPixel per-pixel loop -- use GetPixels32/SetPixels32 bulk API",
                 "Use GetPixels32()/SetPixels32() for bulk pixel manipulation.",
                 @"\.(GetPixel|SetPixel)\s*\(", guard: NotInComment),
-
             new ReviewRule("PERF-07", Severity.HIGH, Category.Performance,
                 "Mesh.vertices/.normals/.uv accessed in loop -- each access copies entire array",
                 "Cache mesh.vertices in a local array before the loop.",
                 @"mesh\.(vertices|normals|uv|tangents|colors|triangles)\b",
                 guard: InHotPath),
-
             new ReviewRule("PERF-08", Severity.MEDIUM, Category.Performance,
                 "Physics.Raycast without maxDistance -- scans to infinity",
                 "Always specify a maxDistance parameter to limit ray length.",
                 @"Physics\d*\.(Raycast|SphereCast|CapsuleCast|BoxCast)\s*\(\s*[^,]+\s*,\s*[^,]+\s*\)",
                 guard: NotInComment),
-
             new ReviewRule("PERF-09", Severity.LOW, Category.Performance,
                 "Mathf.Pow(x, 2) instead of x * x -- function call overhead for simple multiply",
                 "Use x * x instead of Mathf.Pow(x, 2f).",
                 @"Mathf\.Pow\s*\([^,]+,\s*2\.?0?f?\s*\)", guard: NotInComment),
-
             new ReviewRule("PERF-10", Severity.MEDIUM, Category.Performance,
                 "Camera.main.ScreenToWorldPoint in Update without caching Camera.main",
                 "Cache Camera.main in a field during Start().",
                 @"Camera\.main\.Screen", guard: InHotPath),
-
             new ReviewRule("PERF-11", Severity.MEDIUM, Category.Performance,
                 "Nested for loops potentially O(n^2) on large collections -- consider spatial hashing or early exit",
                 "Use spatial partitioning, break/continue, or reduce inner loop size.",
                 @"for\s*\([^)]+\)\s*\{[^}]*for\s*\([^)]+\)",
                 guard: InHotPath),
-
             new ReviewRule("PERF-12", Severity.LOW, Category.Performance,
                 "transform.SetParent without worldPositionStays=false -- recalculates world position",
                 "Pass false as second argument if you don't need to preserve world position.",
                 @"\.SetParent\s*\(\s*[^,)]+\s*\)\s*;", guard: NotInComment),
-
             new ReviewRule("PERF-13", Severity.MEDIUM, Category.Performance,
                 "ParticleSystem collision module on all layers -- use collision LayerMask",
                 "Set the collision LayerMask to only the layers you need.",
                 @"collisionModule\.(enabled\s*=\s*true|collidesWith)",
                 guard: (line, all, i) => !line.Contains("LayerMask") && NotInComment(line, all, i)),
-
             new ReviewRule("PERF-14", Severity.LOW, Category.Performance,
                 "Light with shadow casting on all objects -- use culling mask",
                 "Set the light's culling mask to limit which layers cast shadows.",
                 @"\.shadows\s*=\s*LightShadows\.(Soft|Hard)",
                 guard: NotInComment),
-
             new ReviewRule("PERF-15", Severity.LOW, Category.Performance,
                 "AudioSource with 3D spatial blend 0 but using distance attenuation",
                 "Set spatialBlend to 1 for 3D or remove distance-based rolloff settings.",
                 @"spatialBlend\s*=\s*0", guard: NotInComment),
-
             new ReviewRule("PERF-16", Severity.MEDIUM, Category.Performance,
                 "NavMesh.CalculatePath without caching NavMeshPath -- allocates each call",
                 "Reuse a NavMeshPath instance instead of creating a new one each time.",
                 @"new\s+NavMeshPath\s*\(\s*\)", guard: InHotPath),
-
             new ReviewRule("PERF-17", Severity.HIGH, Category.Performance,
                 "Canvas.ForceUpdateCanvases() called frequently -- very expensive",
                 "Avoid calling ForceUpdateCanvases; let Unity batch canvas updates naturally.",
                 @"ForceUpdateCanvases\s*\(\s*\)", guard: NotInComment),
-
             new ReviewRule("PERF-18", Severity.MEDIUM, Category.Performance,
                 "Layout group rebuild likely every frame -- disable and re-enable when content changes",
                 "Only enable LayoutGroup when content changes, then disable it after layout pass.",
                 @"LayoutRebuilder\.ForceRebuildLayoutImmediate\s*\(", guard: InHotPath),
-
             new ReviewRule("PERF-19", Severity.LOW, Category.Performance,
                 "Excessive SetActive toggling -- consider CanvasGroup.alpha or disable renderers",
                 "Use CanvasGroup.alpha = 0 or disable MeshRenderer instead of SetActive for frequent toggles.",
                 @"\.SetActive\s*\(", guard: InHotPath),
-
             new ReviewRule("PERF-20", Severity.MEDIUM, Category.Performance,
                 "Multiple cameras rendering simultaneously -- ensure proper culling and depth optimization",
                 "Reduce camera count or use camera stacking with clear flags optimized.",
@@ -436,52 +388,43 @@ namespace VeilBreakers.Editor.CodeReview
                 "Validate and sanitize file paths; reject '..' and absolute paths from user input.",
                 @"System\.IO\.(File|Directory)\.(Read|Write|Delete|Move|Copy|Create|Open|Append)",
                 guard: NotInComment),
-
             new ReviewRule("SEC-02", Severity.CRITICAL, Category.Security,
                 "Process.Start with potential user arguments -- command injection risk",
                 "Never pass user input to Process.Start; whitelist allowed commands.",
                 @"Process\.Start\s*\(", guard: NotInComment),
-
             new ReviewRule("SEC-03", Severity.HIGH, Category.Security,
                 "JsonUtility.FromJson on untrusted input -- validate schema after deserialization",
                 "Validate deserialized object fields and reject unexpected values.",
                 @"JsonUtility\.FromJson\s*[<(]", guard: NotInComment),
-
             new ReviewRule("SEC-04", Severity.HIGH, Category.Security,
                 "PlayerPrefs storing potentially sensitive data -- stored as plaintext",
                 "Encrypt sensitive data before storing in PlayerPrefs, or use a secure store.",
                 @"PlayerPrefs\.(SetString|SetInt|SetFloat)\s*\(\s*""(password|token|key|secret|credential|auth)",
                 RegexOptions.IgnoreCase),
-
             new ReviewRule("SEC-05", Severity.MEDIUM, Category.Security,
                 "HTTP URL (non-HTTPS) used in web request -- data transmitted in plaintext",
                 "Use HTTPS URLs for all network requests.",
                 @"(""http://|UnityWebRequest\.Get\s*\(\s*""http://)",
                 guard: (line, all, i) => !line.Contains("localhost") && !line.Contains("127.0.0.1") && NotInComment(line, all, i)),
-
             new ReviewRule("SEC-06", Severity.CRITICAL, Category.Security,
                 "CompileAssemblyFromSource/CSharpCodeProvider with user input -- arbitrary code execution",
                 "Never compile user-provided code at runtime.",
                 @"(CompileAssemblyFrom|CSharpCodeProvider|CodeDomProvider)", guard: NotInComment),
-
             new ReviewRule("SEC-07", Severity.CRITICAL, Category.Security,
                 "SQL query built with string concatenation -- SQL injection risk",
                 "Use parameterized queries instead of string concatenation.",
                 @"(SELECT|INSERT|UPDATE|DELETE)\s+.*""\s*\+\s*\w+",
                 RegexOptions.IgnoreCase, guard: NotInComment),
-
             new ReviewRule("SEC-08", Severity.CRITICAL, Category.Security,
                 "Hardcoded credential or API key in source code",
                 "Store secrets in environment variables, ScriptableObjects excluded from VCS, or a secure vault.",
                 @"(api[_-]?key|password|secret|token|credential)\s*=\s*""[^""]{8,}""",
                 RegexOptions.IgnoreCase, guard: NotInComment),
-
             new ReviewRule("SEC-09", Severity.HIGH, Category.Security,
                 "Resources.Load with user-provided path -- directory traversal risk",
                 "Whitelist allowed resource paths; never pass raw user input to Resources.Load.",
                 @"Resources\.Load\s*\(\s*\w+\s*\)",
                 guard: (line, all, i) => !line.Contains(@"""") && NotInComment(line, all, i)),
-
             new ReviewRule("SEC-10", Severity.HIGH, Category.Security,
                 "Application.OpenURL with dynamic URL -- URL injection risk",
                 "Validate and whitelist URLs before passing to Application.OpenURL.",
@@ -495,19 +438,16 @@ namespace VeilBreakers.Editor.CodeReview
                 "Unity manages MonoBehaviour lifecycle; use Awake/Start for initialization.",
                 @"class\s+\w+\s*:\s*MonoBehaviour[\s\S]*?\bpublic\s+\w+\s*\(\s*\)\s*\{",
                 guard: NotInComment),
-
             new ReviewRule("UNITY-02", Severity.HIGH, Category.Unity,
                 "ScriptableObject constructor used -- use OnEnable or CreateInstance",
                 "Use ScriptableObject.CreateInstance<T>() and OnEnable for initialization.",
                 @"class\s+\w+\s*:\s*ScriptableObject[\s\S]*?\bpublic\s+\w+\s*\(\s*\)\s*\{",
                 guard: NotInComment),
-
             new ReviewRule("UNITY-03", Severity.HIGH, Category.Unity,
                 "Accessing .gameObject or .transform on potentially destroyed object",
                 "Null-check the object before accessing .gameObject or .transform.",
                 @"Destroy\s*\([^)]+\)[\s\S]{0,200}\.(gameObject|transform)",
                 guard: NotInComment),
-
             new ReviewRule("UNITY-04", Severity.HIGH, Category.Unity,
                 "DontDestroyOnLoad without singleton duplicate check",
                 "Add a singleton pattern: if (Instance != null) { Destroy(gameObject); return; }",
@@ -521,24 +461,20 @@ namespace VeilBreakers.Editor.CodeReview
                     }
                     return NotInComment(line, all, i);
                 }),
-
             new ReviewRule("UNITY-05", Severity.MEDIUM, Category.Unity,
                 "Missing [RequireComponent] for dependent GetComponent in Awake/Start",
                 "Add [RequireComponent(typeof(T))] to ensure the component exists.",
                 @"(Awake|Start)\s*\(\s*\)[\s\S]*?GetComponent\s*<(\w+)>\s*\(\s*\)",
                 guard: NotInComment),
-
             new ReviewRule("UNITY-06", Severity.MEDIUM, Category.Unity,
                 "Invoke/InvokeRepeating with string method name -- refactor to coroutine or event",
                 "Use Coroutines, async/await, or direct method references instead.",
                 @"\.(Invoke|InvokeRepeating)\s*\(\s*""", guard: NotInComment),
-
             new ReviewRule("UNITY-07", Severity.MEDIUM, Category.Unity,
                 "Scene loaded without additive mode may leak DontDestroyOnLoad objects",
                 "Use LoadSceneMode.Additive or clean up persistent objects explicitly.",
                 @"SceneManager\.LoadScene\s*\(",
                 guard: (line, all, i) => !line.Contains("Additive") && NotInComment(line, all, i)),
-
             new ReviewRule("UNITY-08", Severity.HIGH, Category.Unity,
                 "UnityEvent mixed with C# event without proper unsubscribe -- memory leak risk",
                 "Unsubscribe C# events in OnDisable/OnDestroy; use RemoveListener for UnityEvent.",
@@ -554,7 +490,6 @@ namespace VeilBreakers.Editor.CodeReview
                     }
                     return !hasUnsub && NotInComment(line, all, i);
                 }),
-
             new ReviewRule("UNITY-09", Severity.MEDIUM, Category.Unity,
                 "Editor-only API used outside #if UNITY_EDITOR block",
                 "Wrap EditorApplication/AssetDatabase/etc. calls in #if UNITY_EDITOR.",
@@ -568,19 +503,16 @@ namespace VeilBreakers.Editor.CodeReview
                     }
                     return NotInComment(line, all, i);
                 }),
-
             new ReviewRule("UNITY-10", Severity.MEDIUM, Category.Unity,
                 "Serializing interface or abstract type -- Unity serializer cannot handle this",
                 "Use a concrete type or implement ISerializationCallbackReceiver.",
                 @"\[SerializeField\]\s*(private|protected|public)?\s*(I[A-Z]\w+|abstract\s+\w+)\s+\w+",
                 guard: NotInComment),
-
             new ReviewRule("UNITY-11", Severity.LOW, Category.Unity,
                 "Large array in ScriptableObject -- consider Addressables for large datasets",
                 "Use Addressables or split data into smaller chunks.",
                 @"ScriptableObject[\s\S]*?\[\]\s+\w+\s*=\s*new\s+\w+\[(?:[5-9]\d{2,}|\d{4,})\]",
                 guard: NotInComment),
-
             new ReviewRule("UNITY-12", Severity.HIGH, Category.Unity,
                 "Missing OnDisable/OnDestroy unsubscribe from events -- memory leak",
                 "Always unsubscribe (-=) from events in OnDisable or OnDestroy.",
@@ -595,7 +527,6 @@ namespace VeilBreakers.Editor.CodeReview
                     }
                     return !hasCleanup && NotInComment(line, all, i);
                 }),
-
             new ReviewRule("UNITY-13", Severity.LOW, Category.Unity,
                 "Awake execution order dependency without [DefaultExecutionOrder]",
                 "Add [DefaultExecutionOrder(N)] to control initialization order.",
@@ -608,7 +539,6 @@ namespace VeilBreakers.Editor.CodeReview
                     }
                     return NotInComment(line, all, i);
                 }),
-
             new ReviewRule("UNITY-14", Severity.MEDIUM, Category.Unity,
                 "Static field in MonoBehaviour -- shared across all instances, may cause bugs",
                 "Use instance fields or a dedicated static manager class instead.",
@@ -616,7 +546,6 @@ namespace VeilBreakers.Editor.CodeReview
                 guard: (line, all, i) => {
                     return !line.Contains("Instance") && !line.Contains("Singleton") && NotInComment(line, all, i);
                 }),
-
             new ReviewRule("UNITY-15", Severity.LOW, Category.Unity,
                 "Singleton MonoBehaviour missing [DisallowMultipleComponent]",
                 "Add [DisallowMultipleComponent] to prevent duplicate singleton components.",
@@ -635,31 +564,26 @@ namespace VeilBreakers.Editor.CodeReview
             new ReviewRule("BUG-31", Severity.CRITICAL, Category.Bug,
                 "Null-conditional ?. or ?? on UnityEngine.Object bypasses destroyed check (UNT0007)",
                 "Use explicit == null check: Unity overloads == to detect destroyed objects. ?. and ?? use System.Object null check which misses destroyed state.",
-                @"\b\w+\s*\?\.", guard: (line, all, i) => {
+                @"\b\w+\s*(\?\.|(\?\?))", guard: (line, all, i) => {
                     // Only flag if variable is likely a Unity type
                     return NotInComment(line, all, i) && Regex.IsMatch(line, @"(Component|GameObject|Transform|Renderer|Collider|Rigidbody|Camera|Light|MonoBehaviour)\s");
                 }),
-
             new ReviewRule("PERF-21", Severity.HIGH, Category.Performance,
                 "Use NonAlloc physics API to avoid array allocation every frame",
                 "Replace RaycastAll with RaycastNonAlloc, OverlapSphere with OverlapSphereNonAlloc, etc.",
                 @"Physics\.(RaycastAll|SphereCastAll|CapsuleCastAll|BoxCastAll|OverlapSphere|OverlapBox|OverlapCapsule)\s*\(", guard: InHotPath),
-
             new ReviewRule("BUG-32", Severity.CRITICAL, Category.Bug,
                 "GetComponentInChildren/InParent in Update -- even heavier than GetComponent, cache it",
                 "Cache in Awake/Start. GetComponentInChildren traverses the entire child hierarchy.",
                 @"GetComponent(InChildren|InParent)\s*[<(]", guard: InHotPath),
-
             new ReviewRule("BUG-33", Severity.CRITICAL, Category.Bug,
                 "FindWithTag/FindGameObjectsWithTag in Update -- O(n) scene scan",
                 "Cache the result in Start() or use a registry pattern.",
                 @"(FindWithTag|FindGameObjectsWithTag)\s*\(", guard: InHotPath),
-
             new ReviewRule("PERF-22", Severity.MEDIUM, Category.Performance,
                 "Setting material properties in Update creates Material instances -- use MaterialPropertyBlock",
                 "Use renderer.GetPropertyBlock()/SetPropertyBlock() for per-instance values without creating material clones.",
                 @"\.\s*material\s*\.\s*Set(Color|Float|Int|Vector|Texture|Matrix)", guard: InHotPath),
-
             new ReviewRule("UNITY-16", Severity.HIGH, Category.Unity,
                 "GetComponent/Destroy call in OnValidate -- fails during prefab import",
                 "OnValidate runs during serialization. Wrap unsafe calls in #if UNITY_EDITOR and use EditorApplication.delayCall.",
@@ -671,16 +595,11 @@ namespace VeilBreakers.Editor.CodeReview
                     }
                     return false;
                 }),
-
             new ReviewRule("UNITY-17", Severity.MEDIUM, Category.Unity,
                 "OnGUI called every frame with layout/repaint -- consider IMGUI alternatives or UI Toolkit",
                 "OnGUI is called multiple times per frame. For runtime UI prefer UI Toolkit or Canvas.",
                 @"void\s+OnGUI\s*\(\s*\)"),
-
-            new ReviewRule("BUG-34", Severity.HIGH, Category.Bug,
-                "CompareTag() not used -- string == tag allocates GC",
-                "Use gameObject.CompareTag(\"tag\") instead of gameObject.tag == \"tag\" to avoid string allocation.",
-                @"\.tag\s*==\s*"""),
+            // BUG-34 removed -- duplicate of BUG-26 (Codex review finding)
 
             // ---- CODE QUALITY (76-100) ----
 
@@ -699,13 +618,11 @@ namespace VeilBreakers.Editor.CodeReview
                     }
                     return false;
                 }),
-
             new ReviewRule("QUAL-02", Severity.LOW, Category.Quality,
                 "Excessive nesting depth (>4 levels) -- flatten with early returns or extraction",
                 "Use guard clauses, early returns, or extract nested logic into methods.",
                 @"^\s{20,}(if|for|while|foreach|switch)\b",
                 guard: NotInComment),
-
             new ReviewRule("QUAL-03", Severity.LOW, Category.Quality,
                 "Magic number in code -- use a named constant",
                 "Define a const or static readonly field with a descriptive name.",
@@ -715,7 +632,6 @@ namespace VeilBreakers.Editor.CodeReview
                            !Regex.IsMatch(line, @"(Color|Vector|Rect|new\s+\w+\[)") &&
                            NotInComment(line, all, i);
                 }),
-
             new ReviewRule("QUAL-04", Severity.LOW, Category.Quality,
                 "Missing XML documentation on public method",
                 "Add /// <summary> documentation to public API methods.",
@@ -723,7 +639,6 @@ namespace VeilBreakers.Editor.CodeReview
                 guard: (line, all, i) => {
                     return i > 0 && !all[i-1].TrimStart().StartsWith("///") && NotInComment(line, all, i);
                 }),
-
             new ReviewRule("QUAL-05", Severity.LOW, Category.Quality,
                 "Inconsistent naming -- private fields should use _camelCase",
                 "Follow Unity C# conventions: _camelCase for private fields, PascalCase for public.",
@@ -733,18 +648,15 @@ namespace VeilBreakers.Editor.CodeReview
                            !line.Contains("readonly") && !line.Contains("event") &&
                            NotInComment(line, all, i);
                 }),
-
             new ReviewRule("QUAL-06", Severity.LOW, Category.Quality,
                 "Empty catch block swallows exception silently",
                 "At minimum log the exception; never silently swallow errors.",
                 @"catch\s*(\([^)]*\))?\s*\{\s*\}", guard: NotInComment),
-
             new ReviewRule("QUAL-07", Severity.LOW, Category.Quality,
                 "TODO/FIXME/HACK comment found -- track or resolve",
                 "Create a task/issue for the TODO and reference its ID.",
                 @"//\s*(TODO|FIXME|HACK|XXX|TEMP|WORKAROUND)\b",
                 RegexOptions.IgnoreCase),
-
             new ReviewRule("QUAL-08", Severity.LOW, Category.Quality,
                 "Unused using directive -- remove for cleanliness",
                 "Remove unused using statements (IDE can auto-remove).",
@@ -766,53 +678,44 @@ namespace VeilBreakers.Editor.CodeReview
                     }
                     return usageCount == 0;
                 }),
-
             new ReviewRule("QUAL-09", Severity.LOW, Category.Quality,
                 "Complex boolean condition (>3 operators) -- extract to well-named method or variable",
                 "Extract complex conditions into a bool variable or method with a descriptive name.",
                 @"if\s*\(.*?(&&|\|\|).*?(&&|\|\|).*?(&&|\|\|)", guard: NotInComment),
-
             new ReviewRule("QUAL-10", Severity.LOW, Category.Quality,
                 "Switch statement missing default case",
                 "Add a default case, even if it just throws an ArgumentOutOfRangeException.",
                 @"switch\s*\([^)]+\)\s*\{(?:(?!default\s*:)[\s\S])*?\}",
                 guard: NotInComment),
-
             new ReviewRule("QUAL-11", Severity.LOW, Category.Quality,
                 "Non-sealed custom exception class -- seal to prevent unintended inheritance",
                 "Mark custom exception classes as sealed unless designed for inheritance.",
                 @"class\s+\w+Exception\s*:",
                 guard: (line, all, i) => !line.Contains("sealed") && NotInComment(line, all, i)),
-
             new ReviewRule("QUAL-12", Severity.MEDIUM, Category.Quality,
                 "Mutable static collection -- thread safety risk and hard to test",
                 "Use ConcurrentDictionary/ConcurrentBag, or make it readonly with immutable contents.",
                 @"static\s+(List|Dictionary|HashSet|Queue|Stack)\s*<",
                 guard: (line, all, i) => !line.Contains("readonly") && !line.Contains("Concurrent") && NotInComment(line, all, i)),
-
             new ReviewRule("QUAL-13", Severity.HIGH, Category.Quality,
                 "lock(this) or lock(typeof(...)) -- use a dedicated lock object",
                 "Use a private readonly object field: private readonly object _lock = new object();",
                 @"lock\s*\(\s*(this|typeof\s*\()", guard: NotInComment),
-
             new ReviewRule("QUAL-14", Severity.MEDIUM, Category.Quality,
                 "IDisposable not disposed -- use 'using' statement or call Dispose in OnDestroy",
                 "Wrap in a 'using' block or call Dispose() in a finally/OnDestroy.",
                 @"new\s+(StreamReader|StreamWriter|FileStream|BinaryReader|BinaryWriter|HttpClient|WebClient|MemoryStream|UnityWebRequest)\s*\(",
                 guard: (line, all, i) => !line.TrimStart().StartsWith("using") && !line.Contains("using (") && !line.Contains("using var") && NotInComment(line, all, i)),
-
             new ReviewRule("QUAL-15", Severity.LOW, Category.Quality,
                 "Redundant null check -- value types cannot be null",
                 "Remove null check on value types (int, float, bool, Vector3, etc.).",
                 @"(int|float|double|bool|byte|char|long|short|Vector[234]|Quaternion|Color|Rect|Bounds)\s+\w+.*==\s*null",
                 guard: NotInComment),
-
             new ReviewRule("QUAL-16", Severity.LOW, Category.Quality,
                 "Dead code -- unreachable code after return/break/continue/throw",
                 "Remove unreachable statements below return/break/continue/throw.",
                 @"(return\s+[^;]+;|break\s*;|continue\s*;|throw\s+[^;]+;)\s*\n\s+\w",
                 guard: NotInComment),
-
             new ReviewRule("QUAL-17", Severity.LOW, Category.Quality,
                 "God class with excessive responsibility -- consider splitting",
                 "Split large classes into focused, single-responsibility classes.",
@@ -828,34 +731,28 @@ namespace VeilBreakers.Editor.CodeReview
                     }
                     return false;
                 }),
-
             new ReviewRule("QUAL-18", Severity.LOW, Category.Quality,
                 "Unnecessary boxing in string interpolation with value type .ToString()",
                 "Call .ToString() explicitly on value types in interpolation to avoid boxing.",
                 @"\$""[^""]*\{(?!.*\.ToString)[^}]*\}",
                 guard: InHotPath),
-
             new ReviewRule("QUAL-19", Severity.LOW, Category.Quality,
                 "#region used for code organization -- prefer smaller, focused classes",
                 "Extract #region contents into separate classes or methods.",
                 @"#region\b", guard: NotInComment),
-
             new ReviewRule("QUAL-20", Severity.LOW, Category.Quality,
                 "Catch block only rethrows -- remove the try/catch or add handling logic",
                 "Remove redundant try/catch that just rethrows, or add logging/cleanup.",
                 @"catch\s*\([^)]*\)\s*\{\s*throw\s*;\s*\}", guard: NotInComment),
-
             new ReviewRule("QUAL-21", Severity.LOW, Category.Quality,
                 "String.Equals without StringComparison -- culture-dependent behavior",
                 "Use StringComparison.Ordinal or StringComparison.OrdinalIgnoreCase.",
                 @"\.Equals\s*\(\s*""",
                 guard: (line, all, i) => !line.Contains("StringComparison") && NotInComment(line, all, i)),
-
             new ReviewRule("QUAL-22", Severity.MEDIUM, Category.Quality,
                 "Nested ternary operator -- hard to read, use if/else",
                 "Replace nested ternaries with if/else or switch expressions.",
                 @"\?[^;:]*\?[^;]*:", guard: NotInComment),
-
             new ReviewRule("QUAL-23", Severity.LOW, Category.Quality,
                 "Parameter count exceeds 5 -- consider parameter object or builder pattern",
                 "Group related parameters into a struct/class, or use a builder.",
@@ -1597,174 +1494,144 @@ RULES: list[Rule] = [
          "eval() usage -- arbitrary code execution risk",
          "Replace with ast.literal_eval() for safe data parsing, or redesign to avoid eval.",
          re.compile(r"\beval\s*\("), guard=_active_code),
-
     Rule("PY-SEC-02", Severity.CRITICAL, Category.Security,
          "os.system() or subprocess with shell=True -- command injection risk",
          "Use subprocess.run() with a list of args and shell=False.",
          re.compile(r"(os\.system\s*\(|subprocess\.\w+\([^)]*shell\s*=\s*True)"),
          guard=_active_code),
-
     Rule("PY-SEC-03", Severity.CRITICAL, Category.Security,
          "pickle.load on potentially untrusted data -- arbitrary code execution",
          "Use json, msgpack, or a safer serialization format.",
          re.compile(r"pickle\.(load|loads)\s*\("), guard=_active_code),
-
     Rule("PY-SEC-04", Severity.HIGH, Category.Security,
          "f-string with variable in SQL/shell command -- injection risk",
          "Use parameterized queries for SQL; use subprocess with list args for shell.",
          re.compile(r'(execute|run|system|popen)\s*\(\s*f["\']'),
          guard=_active_code),
-
     Rule("PY-SEC-05", Severity.HIGH, Category.Security,
          "exec() usage -- arbitrary code execution",
          "Avoid exec(); refactor to use safe alternatives.",
          re.compile(r"\bexec\s*\("), guard=_active_code),
-
     Rule("PY-SEC-06", Severity.MEDIUM, Category.Security,
          "Hardcoded file path -- not portable, consider pathlib or config",
          "Use pathlib.Path or os.path.join with configurable base directories.",
          re.compile(r"['\"](/[a-z]+/|[A-Z]:\\\\)[^'\"]{3,}['\"]"),
          guard=_active_code),
-
     Rule("PY-SEC-07", Severity.HIGH, Category.Security,
          "assert used for input validation -- stripped in optimized mode (-O)",
          "Use if/raise ValueError for validation that must always run.",
          re.compile(r"^\s*assert\s+(?!.*#\s*nosec)"),
          guard=_not_in_comment),
-
     # ---- CORRECTNESS ----
     Rule("PY-COR-01", Severity.HIGH, Category.Correctness,
          "Mutable default argument -- shared across calls, causes subtle bugs",
          "Use None as default and create the mutable inside the function body.",
          re.compile(r"def\s+\w+\s*\([^)]*=\s*(\[\]|\{\}|set\(\))"),
          guard=_active_code),
-
     Rule("PY-COR-02", Severity.HIGH, Category.Correctness,
          "Bare except: clause -- catches SystemExit, KeyboardInterrupt, etc.",
          "Catch specific exceptions: except ValueError, except Exception as e.",
          re.compile(r"^\s*except\s*:"), guard=_not_in_comment),
-
     Rule("PY-COR-03", Severity.MEDIUM, Category.Correctness,
          "Comparing with None using == instead of 'is None'",
          "Use 'is None' or 'is not None' for identity comparison with None.",
          re.compile(r"[!=]=\s*None\b"), guard=_active_code),
-
     Rule("PY-COR-04", Severity.MEDIUM, Category.Correctness,
          "open() without context manager -- file may not be closed on exception",
          "Use 'with open(...) as f:' to ensure proper cleanup.",
          re.compile(r"(?<!\bwith\s)\bopen\s*\("),
          guard=lambda line, a, i: "with" not in line and _active_code(line, a, i)),
-
     Rule("PY-COR-05", Severity.LOW, Category.Correctness,
          "datetime.now() without timezone -- ambiguous in distributed systems",
          "Use datetime.now(tz=timezone.utc) or datetime.now(ZoneInfo('...')).",
          re.compile(r"datetime\.now\s*\(\s*\)"), guard=_active_code),
-
     Rule("PY-COR-06", Severity.MEDIUM, Category.Correctness,
          "dict.get() with mutable default -- returns same object every call",
          "Use dict.get(key) with None check, then create mutable separately.",
          re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
          guard=_active_code),
-
     Rule("PY-COR-07", Severity.MEDIUM, Category.Correctness,
          "Class with __del__ -- unpredictable GC timing, prevents ref cycle collection",
          "Use context managers (__enter__/__exit__) or weakref.finalize instead.",
          re.compile(r"def\s+__del__\s*\(\s*self"), guard=_active_code),
-
     Rule("PY-COR-08", Severity.MEDIUM, Category.Correctness,
          "Thread created without daemon=True -- may prevent clean shutdown",
          "Set daemon=True or ensure thread is joined before exit.",
          re.compile(r"Thread\s*\("),
          guard=lambda line, a, i: "daemon" not in line and _active_code(line, a, i)),
-
     Rule("PY-COR-09", Severity.LOW, Category.Correctness,
          "json.loads without error handling -- will raise on malformed input",
          "Wrap json.loads in try/except json.JSONDecodeError.",
          re.compile(r"json\.loads?\s*\("),
          guard=lambda line, a, i: not any("except" in a[j] and "JSON" in a[j]
              for j in range(max(0, i-5), min(len(a), i+10))) and _active_code(line, a, i)),
-
     Rule("PY-COR-10", Severity.LOW, Category.Correctness,
          "Float equality comparison -- use math.isclose for floating-point",
          "Use math.isclose(a, b) or abs(a - b) < epsilon.",
          re.compile(r"(?<!\w)(==|!=)\s*\d+\.\d+"),
          guard=_active_code),
-
     Rule("PY-COR-11", Severity.MEDIUM, Category.Correctness,
          "Re-raising exception without chain -- loses traceback context",
          "Use 'raise NewException(...) from e' to preserve the exception chain.",
          re.compile(r"raise\s+\w+\([^)]*\)\s*$"),
          guard=lambda line, a, i: any("except" in a[j] for j in range(max(0, i-5), i)) and _active_code(line, a, i)),
-
     Rule("PY-COR-12", Severity.MEDIUM, Category.Correctness,
          "Exception type too broad -- catches bugs along with expected errors",
          "Catch specific exceptions instead of bare Exception.",
          re.compile(r"except\s+Exception\s*(?:as|\s*:)"),
          guard=_not_in_comment),
-
     # ---- PERFORMANCE ----
     Rule("PY-PERF-01", Severity.LOW, Category.Performance,
          "String concatenation in loop -- O(n^2), use str.join or list append",
          "Collect parts in a list and ''.join(parts) after the loop.",
          re.compile(r"(?:for|while)\b.*\n\s+\w+\s*\+=\s*['\"]"),
          guard=_not_in_comment),
-
     Rule("PY-PERF-02", Severity.LOW, Category.Performance,
          "re.match/search/findall without re.compile for repeated pattern",
          "Compile the pattern once with re.compile() and reuse the compiled object.",
          re.compile(r"re\.(match|search|findall|sub|split)\s*\("),
          guard=_active_code),
-
     Rule("PY-PERF-03", Severity.LOW, Category.Performance,
          "Large file read without chunking -- may exhaust memory",
          "Use chunked reading: for line in file, or file.read(chunk_size).",
          re.compile(r"\.read\s*\(\s*\)"), guard=_active_code),
-
     # ---- STYLE ----
     Rule("PY-STY-01", Severity.LOW, Category.Style,
          "os.path usage instead of pathlib.Path -- pathlib is more Pythonic",
          "Use pathlib.Path for path manipulation (Python 3.4+).",
          re.compile(r"os\.path\.(join|exists|isfile|isdir|basename|dirname|splitext)\s*\("),
          guard=_active_code),
-
     Rule("PY-STY-02", Severity.LOW, Category.Style,
          "Nested function definitions over 3 levels -- hard to read and test",
          "Extract inner functions to module level or class methods.",
          re.compile(r"^\s{12,}def\s+\w+\s*\("),
          guard=_not_in_comment),
-
     Rule("PY-STY-03", Severity.LOW, Category.Style,
          "Star import (from X import *) -- namespace pollution, hides origin",
          "Import specific names: from X import a, b, c.",
          re.compile(r"from\s+\S+\s+import\s+\*"),
          guard=_not_in_comment),
-
     Rule("PY-STY-04", Severity.LOW, Category.Style,
          "Global variable mutation -- makes code hard to reason about",
          "Pass as function parameters or use a class to encapsulate state.",
          re.compile(r"^\s+global\s+\w+"), guard=_not_in_comment),
-
     Rule("PY-STY-05", Severity.LOW, Category.Style,
          "Missing if __name__ == '__main__' guard -- code runs on import",
          "Wrap script-level code in: if __name__ == '__main__':",
          re.compile(r"SENTINEL_NEVER_MATCHES_PLACEHOLDER")),  # handled by AST pass
-
     Rule("PY-STY-06", Severity.LOW, Category.Style,
          "Missing __all__ in public module -- unclear public API surface",
          "Add __all__ = ['PublicClass', 'public_func'] to define the public API.",
          re.compile(r"SENTINEL_NEVER_MATCHES_PLACEHOLDER")),  # handled by AST pass
-
     Rule("PY-STY-07", Severity.LOW, Category.Style,
          "Unused import detected",
          "Remove the unused import to keep the namespace clean.",
          re.compile(r"SENTINEL_NEVER_MATCHES_PLACEHOLDER")),  # handled by AST pass
-
     Rule("PY-STY-08", Severity.LOW, Category.Style,
          "Missing type annotation on public function",
          "Add return type annotation and parameter type hints.",
          re.compile(r"SENTINEL_NEVER_MATCHES_PLACEHOLDER")),  # handled by AST pass
 ]
-
 
 # Pass 2: AST-aware analysis
 def _ast_analyze(filepath: str, source: str) -> list[Issue]:
