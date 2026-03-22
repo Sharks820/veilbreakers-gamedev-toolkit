@@ -99,7 +99,7 @@ class PipelineRunner:
             results["status"] = "success"
             results["steps_completed"] = steps_completed
 
-        except Exception as exc:
+        except (ConnectionError, TimeoutError, OSError, ValueError, RuntimeError) as exc:
             results["status"] = "failed"
             results["error"] = str(exc)
             results["steps_completed"] = steps_completed
@@ -227,7 +227,7 @@ class PipelineRunner:
                     "count": materials,
                 }
 
-        except Exception as exc:
+        except (OSError, json.JSONDecodeError, ValueError, KeyError, struct.error) as exc:
             result["checks"]["parse_error"] = {
                 "passed": False,
                 "error": str(exc),
@@ -261,7 +261,7 @@ class PipelineRunner:
                             "passed": False,
                             "error": "Not a valid FBX file",
                         }
-        except Exception as exc:
+        except (OSError, ValueError, UnicodeDecodeError) as exc:
             result["checks"]["parse_error"] = {
                 "passed": False,
                 "error": str(exc),
@@ -324,7 +324,7 @@ class PipelineRunner:
                 try:
                     await self.blender.send_command(cmd, params_fn(obj_name))
                     obj_result["steps_completed"].append(step)
-                except Exception as exc:
+                except (ConnectionError, TimeoutError, OSError, ValueError, RuntimeError) as exc:
                     obj_result["status"] = "failed"
                     obj_result["error"] = f"Step '{step}' failed: {exc}"
                     break

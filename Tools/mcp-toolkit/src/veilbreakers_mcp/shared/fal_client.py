@@ -121,7 +121,7 @@ def generate_concept_art(
             "height": height,
         }
 
-    except Exception as exc:
+    except (ConnectionError, TimeoutError, OSError, ValueError, KeyError) as exc:
         return {
             "status": "error",
             "message": str(exc),

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import math
 import os
-from pathlib import Path
 from typing import Any
 
 import bpy
@@ -776,4 +775,816 @@ def handle_get_seam_pixels(params: dict) -> dict:
         "object_name": object_name,
         "texture_size": texture_size,
         "seam_pixels": seam_pixels,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: bake procedural materials to image textures
+# ---------------------------------------------------------------------------
+
+# PBR channels to bake, with their bake type, pass_filter, and colorspace.
+_PROCEDURAL_BAKE_CHANNELS: dict[str, tuple[str, set[str] | None, str]] = {
+    "albedo": ("DIFFUSE", {"COLOR"}, "sRGB"),
+    "normal": ("NORMAL", None, "Non-Color"),
+    "roughness": ("ROUGHNESS", None, "Non-Color"),
+    "metallic": ("EMIT", None, "Non-Color"),  # metallic baked via emission trick
+    "ao": ("AO", None, "Non-Color"),
+}
+
+
+def _prepare_bake_image(
+    name: str, width: int, height: int, colorspace: str
+) -> "bpy.types.Image":
+    """Create or get a blank image for baking."""
+    img = bpy.data.images.get(name)
+    if img is not None:
+        bpy.data.images.remove(img)
+    img = bpy.data.images.new(name, width, height, alpha=False)
+    img.colorspace_settings.name = colorspace
+    return img
+
+
+def _set_active_image_node(obj: Any, image: Any) -> bool:
+    """Set the active image texture node on all materials of an object.
+
+    Creates a temporary image texture node if one doesn't exist, sets it
+    as active and selected for baking. Returns True if at least one
+    material was configured.
+    """
+    configured = False
+    for mat_slot in obj.material_slots:
+        mat = mat_slot.material
+        if mat is None or not mat.use_nodes:
+            continue
+        tree = mat.node_tree
+        # Look for an existing image texture node with this image
+        target_node = None
+        for node in tree.nodes:
+            if node.type == "TEX_IMAGE" and node.image == image:
+                target_node = node
+                break
+        if target_node is None:
+            # Create a temporary bake target node
+            target_node = tree.nodes.new("ShaderNodeTexImage")
+            target_node.name = f"_bake_target_{image.name}"
+            target_node.location = (-800, 0)
+            target_node.image = image
+        # Set as active and selected
+        for node in tree.nodes:
+            node.select = False
+        target_node.select = True
+        tree.nodes.active = target_node
+        configured = True
+    return configured
+
+
+def _save_baked_image(image: Any, output_dir: str, filename: str) -> str:
+    """Save a baked Blender image to disk as PNG."""
+    filepath = os.path.join(output_dir, f"{filename}.png")
+    image.filepath_raw = filepath
+    image.file_format = "PNG"
+    image.save()
+    return filepath
+
+
+def _cleanup_bake_nodes(obj: Any) -> None:
+    """Remove temporary bake target nodes from all materials."""
+    for mat_slot in obj.material_slots:
+        mat = mat_slot.material
+        if mat is None or not mat.use_nodes:
+            continue
+        tree = mat.node_tree
+        to_remove = [n for n in tree.nodes if n.name.startswith("_bake_target_")]
+        for node in to_remove:
+            tree.nodes.remove(node)
+
+
+def _bake_metallic_via_emission(obj: Any, image: Any, samples: int) -> None:
+    """Bake the metallic channel by temporarily rewiring it through Emission.
+
+    The Metallic input is a scalar that Cycles cannot bake directly.
+    We temporarily disconnect the metallic source, wire it to an Emission
+    shader output, bake EMIT, then restore the original connections.
+    """
+    for mat_slot in obj.material_slots:
+        mat = mat_slot.material
+        if mat is None or not mat.use_nodes:
+            continue
+        tree = mat.node_tree
+        bsdf = None
+        for node in tree.nodes:
+            if node.type == "BSDF_PRINCIPLED":
+                bsdf = node
+                break
+        if bsdf is None:
+            continue
+
+        metallic_input = bsdf.inputs.get("Metallic")
+        if metallic_input is None:
+            continue
+
+        # Check if metallic has a connected link
+        if metallic_input.links:
+            source_socket = metallic_input.links[0].from_socket
+        else:
+            # Create a Value node with the default metallic value
+            val_node = tree.nodes.new("ShaderNodeValue")
+            val_node.name = "_bake_metallic_value"
+            val_node.outputs[0].default_value = metallic_input.default_value
+            source_socket = val_node.outputs[0]
+
+        # Create emission shader and wire metallic source to it
+        emit_node = tree.nodes.new("ShaderNodeEmission")
+        emit_node.name = "_bake_metallic_emit"
+        emit_node.location = (200, -200)
+
+        # Connect metallic source -> emission color (as grayscale)
+        tree.links.new(source_socket, emit_node.inputs["Color"])
+
+        # Find output node and store original connection
+        output_node = None
+        original_link_socket = None
+        for node in tree.nodes:
+            if node.type == "OUTPUT_MATERIAL":
+                output_node = node
+                if output_node.inputs["Surface"].links:
+                    original_link_socket = output_node.inputs["Surface"].links[0].from_socket
+                break
+
+        if output_node is not None:
+            # Wire emission to output
+            tree.links.new(emit_node.outputs["Emission"], output_node.inputs["Surface"])
+
+    # Bake EMIT
+    ctx = get_3d_context_override()
+    bake_kwargs = {"type": "EMIT", "margin": 16}
+    if ctx is not None:
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.bake(**bake_kwargs)
+    else:
+        bpy.ops.object.bake(**bake_kwargs)
+
+    # Restore original connections
+    for mat_slot in obj.material_slots:
+        mat = mat_slot.material
+        if mat is None or not mat.use_nodes:
+            continue
+        tree = mat.node_tree
+        # Remove temporary nodes
+        for nname in ("_bake_metallic_emit", "_bake_metallic_value"):
+            node = tree.nodes.get(nname)
+            if node is not None:
+                tree.nodes.remove(node)
+        # Re-link original output
+        output_node = None
+        bsdf = None
+        for node in tree.nodes:
+            if node.type == "OUTPUT_MATERIAL":
+                output_node = node
+            elif node.type == "BSDF_PRINCIPLED":
+                bsdf = node
+        if output_node is not None and bsdf is not None:
+            tree.links.new(bsdf.outputs["BSDF"], output_node.inputs["Surface"])
+
+
+def handle_bake_procedural_to_images(params: dict) -> dict:
+    """Bake procedural materials to image textures for export.
+
+    This is CRITICAL for FBX/glTF export -- procedural shader nodes
+    (Noise, Voronoi, Musgrave, etc.) do not survive export. This handler
+    bakes each PBR channel to an image texture and optionally replaces
+    the procedural nodes with Image Texture nodes.
+
+    Params:
+        object_name (str): Object with procedural materials.
+        resolution (int, default 2048): Bake resolution (512/1024/2048/4096).
+        output_dir (str): Directory to save baked textures.
+        channels (list[str], optional): Channels to bake. Default: all 5
+            (albedo, normal, roughness, metallic, ao).
+        samples (int, default 32): Cycles samples for baking.
+        replace_nodes (bool, default True): Replace procedural nodes with
+            Image Texture nodes after baking.
+        objects (list[str], optional): Multiple objects for batch baking.
+            If provided, overrides object_name.
+
+    Returns dict with baked_files, channels, resolution, objects.
+    """
+    object_name = params.get("object_name")
+    resolution = params.get("resolution", 2048)
+    output_dir = params.get("output_dir", "//textures/baked")
+    channels = params.get("channels", list(_PROCEDURAL_BAKE_CHANNELS.keys()))
+    samples = params.get("samples", 32)
+    replace_nodes = params.get("replace_nodes", True)
+    objects_list = params.get("objects")
+
+    # Build list of objects to process
+    if objects_list:
+        obj_names = objects_list
+    elif object_name:
+        obj_names = [object_name]
+    else:
+        raise ValueError("'object_name' or 'objects' is required")
+
+    # Resolve output directory (support Blender relative paths)
+    abs_output_dir = bpy.path.abspath(output_dir)
+    os.makedirs(abs_output_dir, exist_ok=True)
+
+    prev_engine = bpy.context.scene.render.engine
+    prev_samples = bpy.context.scene.cycles.samples
+
+    all_baked: dict[str, dict[str, str]] = {}
+
+    try:
+        bpy.context.scene.render.engine = "CYCLES"
+        bpy.context.scene.cycles.samples = samples
+        # Use GPU if available, CPU otherwise
+        bpy.context.scene.cycles.device = "GPU"
+
+        for oname in obj_names:
+            obj = bpy.data.objects.get(oname)
+            if obj is None:
+                raise ValueError(f"Object not found: {oname}")
+            if obj.type != "MESH":
+                raise ValueError(f"Object '{oname}' is type '{obj.type}', expected 'MESH'")
+
+            # Ensure object has UVs
+            if not obj.data.uv_layers:
+                raise ValueError(f"Object '{oname}' has no UV layers. UV unwrap first.")
+
+            # Select and activate
+            bpy.ops.object.select_all(action="DESELECT")
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+
+            obj_baked: dict[str, str] = {}
+
+            for ch_name in channels:
+                if ch_name not in _PROCEDURAL_BAKE_CHANNELS:
+                    continue
+
+                bake_type, pass_filter, colorspace = _PROCEDURAL_BAKE_CHANNELS[ch_name]
+                img_name = f"{oname}_{ch_name}"
+                image = _prepare_bake_image(img_name, resolution, resolution, colorspace)
+
+                # Set this image as active bake target on all materials
+                _set_active_image_node(obj, image)
+
+                if ch_name == "metallic":
+                    _bake_metallic_via_emission(obj, image, samples)
+                else:
+                    bake_kwargs: dict[str, Any] = {
+                        "type": bake_type,
+                        "margin": 16,
+                    }
+                    if pass_filter is not None:
+                        bake_kwargs["pass_filter"] = pass_filter
+
+                    if bake_type == "NORMAL":
+                        bake_kwargs["normal_space"] = "TANGENT"
+
+                    ctx = get_3d_context_override()
+                    if ctx is not None:
+                        with bpy.context.temp_override(**ctx):
+                            bpy.ops.object.bake(**bake_kwargs)
+                    else:
+                        bpy.ops.object.bake(**bake_kwargs)
+
+                # Save to disk
+                filepath = _save_baked_image(image, abs_output_dir, img_name)
+                obj_baked[ch_name] = filepath
+
+            # Replace procedural nodes with Image Texture nodes
+            if replace_nodes:
+                _replace_procedural_with_images(obj, obj_baked)
+
+            # Clean up temporary bake target nodes
+            _cleanup_bake_nodes(obj)
+
+            all_baked[oname] = obj_baked
+
+    finally:
+        bpy.context.scene.render.engine = prev_engine
+        bpy.context.scene.cycles.samples = prev_samples
+
+    return {
+        "baked_files": all_baked,
+        "channels": channels,
+        "resolution": resolution,
+        "output_dir": abs_output_dir,
+        "objects": obj_names,
+    }
+
+
+def _replace_procedural_with_images(
+    obj: Any, baked_files: dict[str, str]
+) -> None:
+    """Replace procedural nodes with Image Texture nodes pointing to baked files.
+
+    For each material on the object, removes procedural nodes (Noise, Voronoi,
+    Musgrave, etc.) and wires Image Texture nodes to the Principled BSDF.
+    """
+    channels = _build_channel_config()
+
+    for mat_slot in obj.material_slots:
+        mat = mat_slot.material
+        if mat is None or not mat.use_nodes:
+            continue
+        tree = mat.node_tree
+
+        # Find the Principled BSDF
+        bsdf = None
+        for node in tree.nodes:
+            if node.type == "BSDF_PRINCIPLED":
+                bsdf = node
+                break
+        if bsdf is None:
+            continue
+
+        # Remove procedural nodes (Noise, Voronoi, Musgrave, Wave, Brick, etc.)
+        procedural_types = {
+            "TEX_NOISE", "TEX_VORONOI", "TEX_MUSGRAVE", "TEX_WAVE",
+            "TEX_BRICK", "TEX_GRADIENT", "TEX_MAGIC", "TEX_CHECKER",
+            "BUMP", "MAPPING", "TEX_COORD", "MATH", "MIX_RGB",
+            "VALTORGB", "SEPARATE_XYZ", "COMBINE_XYZ",
+        }
+        to_remove = [
+            n for n in tree.nodes
+            if n.type in procedural_types and not n.name.startswith("_bake_target_")
+        ]
+        for node in to_remove:
+            tree.nodes.remove(node)
+
+        # Wire image textures for each baked channel
+        y_offset = 0
+        for ch_name, filepath in baked_files.items():
+            if ch_name not in channels:
+                continue
+            suffix, bsdf_input, colorspace, needs_normal = channels[ch_name]
+
+            tex_node = tree.nodes.new("ShaderNodeTexImage")
+            tex_node.location = (-600, y_offset)
+            tex_node.label = f"Baked {ch_name}"
+            tex_node.image = bpy.data.images.load(filepath)
+            tex_node.image.colorspace_settings.name = colorspace
+
+            if needs_normal:
+                normal_map = tree.nodes.new("ShaderNodeNormalMap")
+                normal_map.location = (-300, y_offset)
+                tree.links.new(tex_node.outputs["Color"], normal_map.inputs["Color"])
+                bsdf_socket = _get_bsdf_input(bsdf, "normal")
+                tree.links.new(normal_map.outputs["Normal"], bsdf_socket)
+            elif bsdf_input is not None:
+                semantic = bsdf_input.lower().replace(" ", "_")
+                bsdf_socket = _get_bsdf_input(bsdf, semantic)
+                tree.links.new(tex_node.outputs["Color"], bsdf_socket)
+
+            y_offset -= 300
+
+
+# ---------------------------------------------------------------------------
+# Handler: bake material ID map
+# ---------------------------------------------------------------------------
+
+def handle_bake_id_map(params: dict) -> dict:
+    """Bake a material ID map where each material gets a unique flat color.
+
+    Useful for Substance Painter workflows and material masking.
+
+    Params:
+        object_name (str): Object to bake ID map for.
+        resolution (int, default 1024): Output resolution.
+        output_dir (str): Directory to save the ID map.
+        objects (list[str], optional): Multiple objects for batch baking.
+
+    Returns dict with id_map_path, material_colors, resolution.
+    """
+    object_name = params.get("object_name")
+    resolution = params.get("resolution", 1024)
+    output_dir = params.get("output_dir", "//textures/baked")
+    objects_list = params.get("objects")
+
+    if objects_list:
+        obj_names = objects_list
+    elif object_name:
+        obj_names = [object_name]
+    else:
+        raise ValueError("'object_name' or 'objects' is required")
+
+    abs_output_dir = bpy.path.abspath(output_dir)
+    os.makedirs(abs_output_dir, exist_ok=True)
+
+    prev_engine = bpy.context.scene.render.engine
+
+    result_maps: dict[str, dict] = {}
+
+    try:
+        bpy.context.scene.render.engine = "CYCLES"
+        bpy.context.scene.cycles.samples = 1  # ID map needs minimal samples
+
+        for oname in obj_names:
+            obj = bpy.data.objects.get(oname)
+            if obj is None:
+                raise ValueError(f"Object not found: {oname}")
+            if obj.type != "MESH":
+                raise ValueError(f"Object '{oname}' is not a mesh")
+
+            if not obj.data.uv_layers:
+                raise ValueError(f"Object '{oname}' has no UV layers")
+
+            bpy.ops.object.select_all(action="DESELECT")
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+
+            # Generate unique colors for each material
+            mat_count = len(obj.material_slots)
+            material_colors: dict[str, list[float]] = {}
+            id_colors = _generate_id_colors(mat_count)
+
+            img_name = f"{oname}_id_map"
+            image = _prepare_bake_image(img_name, resolution, resolution, "sRGB")
+
+            # Store original material emission values to restore later
+            original_emissions: list[tuple[Any, Any, float]] = []
+
+            for i, mat_slot in enumerate(obj.material_slots):
+                mat = mat_slot.material
+                if mat is None:
+                    continue
+                if not mat.use_nodes:
+                    mat.use_nodes = True
+
+                tree = mat.node_tree
+                bsdf = None
+                for node in tree.nodes:
+                    if node.type == "BSDF_PRINCIPLED":
+                        bsdf = node
+                        break
+                if bsdf is None:
+                    continue
+
+                color = id_colors[i] if i < len(id_colors) else [1.0, 0.0, 1.0]
+                material_colors[mat.name] = color
+
+                # Store original emission color
+                emit_input = _get_bsdf_input(bsdf, "emission")
+                original_color = list(emit_input.default_value)
+                original_emissions.append((bsdf, emit_input, emit_input.default_value[0]))
+
+                # Set emission to ID color (temporarily)
+                emit_input.default_value = (*color, 1.0)
+
+                # Also disconnect any existing emission links
+                for link in list(tree.links):
+                    if link.to_socket == emit_input:
+                        tree.links.remove(link)
+
+                # Set active image node for baking
+                _set_active_image_node(obj, image)
+
+            # Bake EMIT to capture the flat ID colors
+            bake_kwargs = {"type": "EMIT", "margin": 16}
+            ctx = get_3d_context_override()
+            if ctx is not None:
+                with bpy.context.temp_override(**ctx):
+                    bpy.ops.object.bake(**bake_kwargs)
+            else:
+                bpy.ops.object.bake(**bake_kwargs)
+
+            # Save the ID map
+            filepath = _save_baked_image(image, abs_output_dir, img_name)
+
+            # Restore original emission values
+            for bsdf_node, emit_input, _ in original_emissions:
+                emit_input.default_value = (0.0, 0.0, 0.0, 1.0)
+
+            _cleanup_bake_nodes(obj)
+
+            result_maps[oname] = {
+                "id_map_path": filepath,
+                "material_colors": material_colors,
+            }
+
+    finally:
+        bpy.context.scene.render.engine = prev_engine
+
+    return {
+        "id_maps": result_maps,
+        "resolution": resolution,
+        "objects": obj_names,
+    }
+
+
+def _generate_id_colors(count: int) -> list[list[float]]:
+    """Generate visually distinct colors for material ID map.
+
+    Uses evenly spaced hues in HSV space at full saturation and value
+    for maximum visual distinction between materials.
+    """
+    import colorsys
+
+    colors: list[list[float]] = []
+    for i in range(max(count, 1)):
+        hue = i / max(count, 1)
+        r, g, b = colorsys.hsv_to_rgb(hue, 0.9, 0.95)
+        colors.append([r, g, b])
+    return colors
+
+
+# ---------------------------------------------------------------------------
+# Handler: bake thickness map for SSS
+# ---------------------------------------------------------------------------
+
+def handle_bake_thickness_map(params: dict) -> dict:
+    """Bake a thickness map for subsurface scattering.
+
+    Bakes AO from inside the mesh (inverted normals) to approximate
+    surface thickness. Thin areas (ears, fingers, nostrils) appear
+    bright, thick areas appear dark. Used for SSS quality in Unity.
+
+    Params:
+        object_name (str): Mesh object to bake.
+        resolution (int, default 1024): Output resolution.
+        output_dir (str): Directory to save the thickness map.
+        samples (int, default 16): Bake samples.
+        objects (list[str], optional): Multiple objects for batch baking.
+
+    Returns dict with thickness_map_paths, resolution, objects.
+    """
+    object_name = params.get("object_name")
+    resolution = params.get("resolution", 1024)
+    output_dir = params.get("output_dir", "//textures/baked")
+    samples = params.get("samples", 16)
+    objects_list = params.get("objects")
+
+    if objects_list:
+        obj_names = objects_list
+    elif object_name:
+        obj_names = [object_name]
+    else:
+        raise ValueError("'object_name' or 'objects' is required")
+
+    abs_output_dir = bpy.path.abspath(output_dir)
+    os.makedirs(abs_output_dir, exist_ok=True)
+
+    prev_engine = bpy.context.scene.render.engine
+    prev_samples = bpy.context.scene.cycles.samples
+
+    result_maps: dict[str, str] = {}
+
+    try:
+        bpy.context.scene.render.engine = "CYCLES"
+        bpy.context.scene.cycles.samples = samples
+
+        for oname in obj_names:
+            obj = bpy.data.objects.get(oname)
+            if obj is None:
+                raise ValueError(f"Object not found: {oname}")
+            if obj.type != "MESH":
+                raise ValueError(f"Object '{oname}' is not a mesh")
+            if not obj.data.uv_layers:
+                raise ValueError(f"Object '{oname}' has no UV layers")
+
+            bpy.ops.object.select_all(action="DESELECT")
+            obj.select_set(True)
+            bpy.context.view_layer.objects.active = obj
+
+            img_name = f"{oname}_thickness"
+            image = _prepare_bake_image(img_name, resolution, resolution, "Non-Color")
+            _set_active_image_node(obj, image)
+
+            # Flip normals temporarily to bake AO from inside
+            bpy.ops.object.mode_set(mode="EDIT")
+            import bmesh
+            bm = bmesh.from_edit_mesh(obj.data)
+            bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+            bmesh.update_edit_mesh(obj.data)
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+            # Bake AO (from inside)
+            bake_kwargs = {"type": "AO", "margin": 16}
+            ctx = get_3d_context_override()
+            if ctx is not None:
+                with bpy.context.temp_override(**ctx):
+                    bpy.ops.object.bake(**bake_kwargs)
+            else:
+                bpy.ops.object.bake(**bake_kwargs)
+
+            # Flip normals back
+            bpy.ops.object.mode_set(mode="EDIT")
+            bm = bmesh.from_edit_mesh(obj.data)
+            bmesh.ops.reverse_faces(bm, faces=bm.faces[:])
+            bmesh.update_edit_mesh(obj.data)
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+            # Save
+            filepath = _save_baked_image(image, abs_output_dir, img_name)
+            result_maps[oname] = filepath
+
+            _cleanup_bake_nodes(obj)
+
+    finally:
+        bpy.context.scene.render.engine = prev_engine
+        bpy.context.scene.cycles.samples = prev_samples
+
+    return {
+        "thickness_maps": result_maps,
+        "resolution": resolution,
+        "objects": obj_names,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: channel packing (R=Metallic, G=Roughness, B=AO)
+# ---------------------------------------------------------------------------
+
+def handle_channel_pack(params: dict) -> dict:
+    """Pack multiple grayscale textures into a single RGB channel-packed texture.
+
+    Default packing: R=Metallic, G=Roughness, B=AO.
+    Reduces draw calls and texture memory in Unity.
+
+    Params:
+        red_path (str): Path to image for red channel (metallic).
+        green_path (str): Path to image for green channel (roughness).
+        blue_path (str): Path to image for blue channel (AO).
+        output_path (str): Path to save the packed texture.
+        resolution (int, optional): Override resolution. If not set,
+            uses the resolution of the first input image.
+
+    Returns dict with output_path, resolution, channels.
+    """
+    import numpy as np
+    from PIL import Image as PILImage
+
+    red_path = params.get("red_path")
+    green_path = params.get("green_path")
+    blue_path = params.get("blue_path")
+    output_path = params.get("output_path")
+    resolution = params.get("resolution")
+
+    if not output_path:
+        raise ValueError("'output_path' is required")
+
+    def _load_channel(path: str | None, res: int) -> "np.ndarray":
+        """Load a single grayscale channel, resize to target resolution."""
+        if path and os.path.isfile(path):
+            img = PILImage.open(path).convert("L")
+            if img.size != (res, res):
+                img = img.resize((res, res), PILImage.Resampling.LANCZOS)
+            return np.array(img, dtype=np.uint8)
+        # Default: black (0) for metallic, mid-gray (128) for roughness, white (255) for AO
+        return np.zeros((res, res), dtype=np.uint8)
+
+    # Determine resolution from first available image
+    if resolution is None:
+        for path in (red_path, green_path, blue_path):
+            if path and os.path.isfile(path):
+                with PILImage.open(path) as img:
+                    resolution = img.size[0]
+                break
+    if resolution is None:
+        resolution = 1024
+
+    r_channel = _load_channel(red_path, resolution)
+    g_channel = _load_channel(green_path, resolution)
+    b_channel = _load_channel(blue_path, resolution)
+
+    # Stack into RGB
+    packed = np.stack([r_channel, g_channel, b_channel], axis=-1)
+    packed_img = PILImage.fromarray(packed, "RGB")
+
+    # Ensure output directory exists
+    out_dir = os.path.dirname(output_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    packed_img.save(output_path, format="PNG")
+
+    return {
+        "output_path": output_path,
+        "resolution": resolution,
+        "channels": {
+            "red": red_path or "default_black",
+            "green": green_path or "default_black",
+            "blue": blue_path or "default_black",
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: ensure flat albedo (de-lighting verification)
+# ---------------------------------------------------------------------------
+
+def handle_ensure_flat_albedo(params: dict) -> dict:
+    """Verify that an albedo texture has no baked-in lighting.
+
+    Checks for high-contrast shadows and directional lighting artifacts
+    in the albedo texture. If detected, flags the texture for de-lighting
+    or manual review.
+
+    Params:
+        image_path (str): Path to the albedo texture.
+        shadow_threshold (float, default 0.35): Maximum acceptable local
+            contrast ratio. Higher values are more permissive.
+        sample_grid (int, default 8): Grid size for sampling local regions.
+
+    Returns dict with is_flat, issues, contrast_stats, recommendation.
+    """
+    import numpy as np
+    from PIL import Image as PILImage
+
+    image_path = params.get("image_path")
+    shadow_threshold = params.get("shadow_threshold", 0.35)
+    sample_grid = params.get("sample_grid", 8)
+
+    if not image_path:
+        raise ValueError("'image_path' is required")
+
+    if not os.path.isfile(image_path):
+        raise ValueError(f"Image file not found: {image_path}")
+
+    img = PILImage.open(image_path).convert("RGB")
+    arr = np.array(img, dtype=np.float64) / 255.0
+    width, height = img.size
+
+    # Convert to luminance for analysis
+    luminance = 0.2126 * arr[:, :, 0] + 0.7152 * arr[:, :, 1] + 0.0722 * arr[:, :, 2]
+
+    # Analyze local contrast in grid cells
+    cell_h = height // sample_grid
+    cell_w = width // sample_grid
+    issues: list[str] = []
+    contrast_values: list[float] = []
+    high_contrast_cells = 0
+
+    for gy in range(sample_grid):
+        for gx in range(sample_grid):
+            y0 = gy * cell_h
+            y1 = min((gy + 1) * cell_h, height)
+            x0 = gx * cell_w
+            x1 = min((gx + 1) * cell_w, width)
+
+            cell = luminance[y0:y1, x0:x1]
+            if cell.size == 0:
+                continue
+
+            cell_min = float(np.min(cell))
+            cell_max = float(np.max(cell))
+            local_contrast = cell_max - cell_min
+            contrast_values.append(local_contrast)
+
+            if local_contrast > shadow_threshold:
+                high_contrast_cells += 1
+
+    total_cells = sample_grid * sample_grid
+    high_contrast_pct = high_contrast_cells / total_cells if total_cells > 0 else 0.0
+
+    # Overall statistics
+    global_min = float(np.min(luminance))
+    global_max = float(np.max(luminance))
+    global_contrast = global_max - global_min
+    avg_local_contrast = float(np.mean(contrast_values)) if contrast_values else 0.0
+
+    # Determine if the albedo is flat enough
+    is_flat = True
+    recommendation = "Albedo is flat -- suitable for PBR workflow."
+
+    if high_contrast_pct > 0.25:
+        is_flat = False
+        issues.append(
+            f"{high_contrast_pct:.0%} of cells have high local contrast "
+            f"(threshold: {shadow_threshold}). Likely baked-in shadows."
+        )
+        recommendation = "Run delight action to remove baked lighting."
+
+    if global_contrast > 0.7:
+        is_flat = False
+        issues.append(
+            f"Global contrast range is {global_contrast:.2f} "
+            "(max-min luminance). Exceeds 0.7 threshold."
+        )
+        if "delight" not in recommendation:
+            recommendation = "Run delight action to remove baked lighting."
+
+    if avg_local_contrast > shadow_threshold * 0.6:
+        if is_flat:
+            issues.append(
+                f"Average local contrast ({avg_local_contrast:.3f}) is borderline. "
+                "Consider manual review."
+            )
+            recommendation = "Borderline -- manually verify in-engine."
+            # Keep is_flat True but flag for review
+
+    return {
+        "is_flat": is_flat,
+        "issues": issues,
+        "contrast_stats": {
+            "global_contrast": round(global_contrast, 4),
+            "avg_local_contrast": round(avg_local_contrast, 4),
+            "high_contrast_cells_pct": round(high_contrast_pct, 4),
+            "global_min_luminance": round(global_min, 4),
+            "global_max_luminance": round(global_max, 4),
+        },
+        "recommendation": recommendation,
+        "image_path": image_path,
     }

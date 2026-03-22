@@ -1989,7 +1989,7 @@ def generate_pillar_mesh(
     """Generate a pillar/column mesh.
 
     Args:
-        style: "stone_round", "stone_square", or "carved_serpent".
+        style: "stone_round", "stone_square", "carved_serpent", "wooden", or "broken".
         height: Pillar height.
         radius: Pillar radius.
 
@@ -2057,6 +2057,71 @@ def generate_pillar_mesh(
         )
         parts.append((cv, cf))
 
+    elif style == "wooden":
+        # Rough wooden post with grain ridges
+        shaft_profile = []
+        shaft_rings = 16
+        for i in range(shaft_rings + 1):
+            t = i / shaft_rings
+            y = t * height
+            # Wood grain creates slight irregularity
+            grain = 1.0 + 0.02 * math.sin(t * 12.0 * math.pi)
+            r = radius * 0.9 * grain
+            shaft_profile.append((r, y))
+        sv, sf = _make_lathe(shaft_profile, segments=8, close_bottom=True, close_top=True)
+        parts.append((sv, sf))
+
+        # Cross braces near top and bottom
+        for brace_y in [height * 0.15, height * 0.85]:
+            for angle_off in [0, math.pi / 2]:
+                bx = math.cos(angle_off) * radius * 0.02
+                bz = math.sin(angle_off) * radius * 0.02
+                bv, bf = _make_box(bx, brace_y, bz,
+                                   radius * 1.2, 0.015, 0.015)
+                parts.append((bv, bf))
+
+    elif style == "broken":
+        # Truncated column with rubble at the break point
+        break_h = height * 0.55
+        # Base (wider disc)
+        base_profile = [
+            (radius * 1.5, 0),
+            (radius * 1.5, height * 0.02),
+            (radius * 1.3, height * 0.03),
+            (radius * 1.1, height * 0.05),
+        ]
+        bv, bf = _make_lathe(base_profile, segments=12, close_bottom=True)
+        parts.append((bv, bf))
+
+        # Truncated shaft
+        shaft_profile = []
+        shaft_rings = 8
+        for i in range(shaft_rings + 1):
+            t = i / shaft_rings
+            y = height * 0.05 + t * (break_h - height * 0.05)
+            entasis = 1.0 + 0.03 * math.sin(t * math.pi)
+            r = radius * entasis
+            shaft_profile.append((r, y))
+        sv, sf = _make_lathe(shaft_profile, segments=12, close_top=True)
+        parts.append((sv, sf))
+
+        # Rubble chunks at the break point
+        import random as _rng_pillar
+        _rng_pillar.seed(77)
+        for _ in range(6):
+            rx = _rng_pillar.uniform(-radius * 1.5, radius * 1.5)
+            rz = _rng_pillar.uniform(-radius * 1.5, radius * 1.5)
+            ry = break_h + _rng_pillar.uniform(-0.05, 0.1)
+            rs = _rng_pillar.uniform(radius * 0.15, radius * 0.4)
+            rv, rf = _make_beveled_box(rx, ry, rz, rs, rs * 0.7, rs * 0.8, bevel=0.005)
+            parts.append((rv, rf))
+
+        # Fallen chunk on the ground nearby
+        fv, ff = _make_beveled_box(radius * 2.0, radius * 0.4, 0,
+                                   radius * 0.6, radius * 0.4, radius * 0.5,
+                                   bevel=0.008)
+        parts.append((fv, ff))
+
     else:  # carved_serpent
         # Round column with spiral carved groove
         profile = []
@@ -2086,6 +2151,7 @@ def generate_archway_mesh(
     width: float = 1.5,
     height: float = 2.5,
     depth: float = 0.4,
+    style: str = "stone_round",
 ) -> MeshSpec:
     """Generate a doorway/passage archway frame.
 
@@ -2093,6 +2159,7 @@ def generate_archway_mesh(
         width: Opening width.
         height: Total height (arch peak).
         depth: Wall thickness.
+        style: "stone_round", "stone_pointed", "wooden", or "ruined".
 
     Returns:
         MeshSpec with vertices, faces, uvs, and metadata.
@@ -2117,54 +2184,165 @@ def generate_archway_mesh(
     )
     parts.append((rv, rf))
 
-    # Arch (semi-circular top)
-    arch_inner_r = width / 2
-    arch_outer_r = arch_inner_r + post_w
-    spring_y = height * 0.6  # Where the arch springs from
+    if style == "stone_pointed":
+        # Gothic pointed arch
+        arch_inner_r = width / 2
+        arch_outer_r = arch_inner_r + post_w
+        spring_y = height * 0.55
+        peak_y = height
 
-    arch_verts: list[tuple[float, float, float]] = []
-    arch_faces: list[tuple[int, ...]] = []
+        arch_verts: list[tuple[float, float, float]] = []
+        arch_faces: list[tuple[int, ...]] = []
 
-    for i in range(arch_segs + 1):
-        t = i / arch_segs
-        angle = math.pi * t
-        # Inner edge
-        ix = -math.cos(angle) * arch_inner_r
-        iy = spring_y + math.sin(angle) * arch_inner_r
-        # Outer edge
-        ox = -math.cos(angle) * arch_outer_r
-        oy = spring_y + math.sin(angle) * arch_outer_r
+        for i in range(arch_segs + 1):
+            t = i / arch_segs
+            # Pointed arch: two arcs meeting at apex
+            if t <= 0.5:
+                s = t * 2.0
+                ix = -width / 2 + s * width * 0.1
+                iy = spring_y + s * (peak_y - spring_y)
+                ox = ix - post_w * (1.0 - s * 0.6)
+                oy = iy + post_w * 0.3
+            else:
+                s = (t - 0.5) * 2.0
+                ix = -width * 0.4 + s * (width / 2 + width * 0.4)
+                iy = spring_y + (1.0 - s) * (peak_y - spring_y)
+                ox = ix + post_w * (1.0 - (1.0 - s) * 0.6)
+                oy = iy + post_w * 0.3
 
-        # Front and back faces (depth)
-        arch_verts.append((ix, iy, -depth / 2))
-        arch_verts.append((ox, oy, -depth / 2))
-        arch_verts.append((ix, iy, depth / 2))
-        arch_verts.append((ox, oy, depth / 2))
+            arch_verts.append((ix, iy, -depth / 2))
+            arch_verts.append((ox, oy, -depth / 2))
+            arch_verts.append((ix, iy, depth / 2))
+            arch_verts.append((ox, oy, depth / 2))
 
-    # Connect arch segments
-    for i in range(arch_segs):
-        b = i * 4
-        # Front face (outer)
-        arch_faces.append((b + 1, b + 5, b + 4, b + 0))
-        # Back face (outer)
-        arch_faces.append((b + 2, b + 6, b + 7, b + 3))
-        # Top (outer surface)
-        arch_faces.append((b + 1, b + 3, b + 7, b + 5))
-        # Bottom (inner surface)
-        arch_faces.append((b + 0, b + 4, b + 6, b + 2))
+        for i in range(arch_segs):
+            b = i * 4
+            arch_faces.append((b + 1, b + 5, b + 4, b + 0))
+            arch_faces.append((b + 2, b + 6, b + 7, b + 3))
+            arch_faces.append((b + 1, b + 3, b + 7, b + 5))
+            arch_faces.append((b + 0, b + 4, b + 6, b + 2))
 
-    parts.append((arch_verts, arch_faces))
+        parts.append((arch_verts, arch_faces))
 
-    # Keystone at top
-    kv, kf = _make_beveled_box(
-        0, spring_y + arch_outer_r + 0.02, 0,
-        post_w * 0.4, post_w * 0.3, depth / 2 + 0.01,
-        bevel=0.008,
-    )
-    parts.append((kv, kf))
+        # Pointed keystone
+        kv, kf = _make_beveled_box(
+            0, peak_y + 0.02, 0,
+            post_w * 0.35, post_w * 0.4, depth / 2 + 0.01,
+            bevel=0.006,
+        )
+        parts.append((kv, kf))
+
+    elif style == "wooden":
+        # Simple wooden lintel arch (flat top beam)
+        lintel_y = height * 0.8
+        # Extend posts to full height
+        for x_side in [-width / 2 - post_w / 2, width / 2 + post_w / 2]:
+            pv, pf = _make_box(x_side, lintel_y / 2, 0,
+                               post_w * 0.4, lintel_y / 2, depth * 0.4)
+            parts.append((pv, pf))
+
+        # Horizontal lintel beam
+        beam_h = 0.12
+        bv2, bf2 = _make_beveled_box(
+            0, lintel_y + beam_h / 2, 0,
+            width / 2 + post_w + 0.05, beam_h / 2, depth * 0.4,
+            bevel=0.008,
+        )
+        parts.append((bv2, bf2))
+
+        # Cross braces (diagonal supports)
+        brace_w = 0.04
+        for x_sign in [-1, 1]:
+            bx = x_sign * (width / 2 + post_w * 0.3)
+            brace_v, brace_f = _make_box(bx, lintel_y * 0.7, 0,
+                                         brace_w / 2, lintel_y * 0.12, brace_w / 2)
+            parts.append((brace_v, brace_f))
+
+    elif style == "ruined":
+        # Crumbling stone arch with missing sections
+        arch_inner_r = width / 2
+        arch_outer_r = arch_inner_r + post_w
+        spring_y = height * 0.6
+
+        # Only build partial arch (60% of the arc, simulating collapse)
+        partial_segs = int(arch_segs * 0.6)
+        arch_verts2: list[tuple[float, float, float]] = []
+        arch_faces2: list[tuple[int, ...]] = []
+
+        for i in range(partial_segs + 1):
+            t = i / arch_segs
+            angle = math.pi * t
+            ix = -math.cos(angle) * arch_inner_r
+            iy = spring_y + math.sin(angle) * arch_inner_r
+            ox = -math.cos(angle) * arch_outer_r
+            oy = spring_y + math.sin(angle) * arch_outer_r
+
+            arch_verts2.append((ix, iy, -depth / 2))
+            arch_verts2.append((ox, oy, -depth / 2))
+            arch_verts2.append((ix, iy, depth / 2))
+            arch_verts2.append((ox, oy, depth / 2))
+
+        for i in range(partial_segs):
+            b = i * 4
+            arch_faces2.append((b + 1, b + 5, b + 4, b + 0))
+            arch_faces2.append((b + 2, b + 6, b + 7, b + 3))
+            arch_faces2.append((b + 1, b + 3, b + 7, b + 5))
+            arch_faces2.append((b + 0, b + 4, b + 6, b + 2))
+
+        parts.append((arch_verts2, arch_faces2))
+
+        # Fallen rubble on the ground (from collapsed portion)
+        import random as _rng_arch
+        _rng_arch.seed(99)
+        for _ in range(5):
+            rx = _rng_arch.uniform(-width * 0.3, width * 0.8)
+            rz = _rng_arch.uniform(-depth, depth)
+            rs = _rng_arch.uniform(0.05, 0.15)
+            rv, rf = _make_beveled_box(rx, rs * 0.5, rz,
+                                       rs, rs * 0.5, rs * 0.8, bevel=0.005)
+            parts.append((rv, rf))
+
+    else:  # stone_round (default)
+        # Arch (semi-circular top)
+        arch_inner_r = width / 2
+        arch_outer_r = arch_inner_r + post_w
+        spring_y = height * 0.6
+
+        arch_verts3: list[tuple[float, float, float]] = []
+        arch_faces3: list[tuple[int, ...]] = []
+
+        for i in range(arch_segs + 1):
+            t = i / arch_segs
+            angle = math.pi * t
+            ix = -math.cos(angle) * arch_inner_r
+            iy = spring_y + math.sin(angle) * arch_inner_r
+            ox = -math.cos(angle) * arch_outer_r
+            oy = spring_y + math.sin(angle) * arch_outer_r
+
+            arch_verts3.append((ix, iy, -depth / 2))
+            arch_verts3.append((ox, oy, -depth / 2))
+            arch_verts3.append((ix, iy, depth / 2))
+            arch_verts3.append((ox, oy, depth / 2))
+
+        for i in range(arch_segs):
+            b = i * 4
+            arch_faces3.append((b + 1, b + 5, b + 4, b + 0))
+            arch_faces3.append((b + 2, b + 6, b + 7, b + 3))
+            arch_faces3.append((b + 1, b + 3, b + 7, b + 5))
+            arch_faces3.append((b + 0, b + 4, b + 6, b + 2))
+
+        parts.append((arch_verts3, arch_faces3))
+
+        # Keystone at top
+        kv, kf = _make_beveled_box(
+            0, spring_y + arch_outer_r + 0.02, 0,
+            post_w * 0.4, post_w * 0.3, depth / 2 + 0.01,
+            bevel=0.008,
+        )
+        parts.append((kv, kf))
 
     verts, faces = _merge_meshes(*parts)
-    return _make_result("Archway", verts, faces, category="dungeon_prop")
+    return _make_result(f"Archway_{style}", verts, faces, style=style, category="dungeon_prop")
 
 
 def generate_chain_mesh(

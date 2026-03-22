@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 import xml.etree.ElementTree as ET
+import defusedxml.ElementTree as _safe_ET  # safe parsing only
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -473,7 +474,7 @@ def validate_uxml_layout(uxml_string: str) -> dict[str, Any]:
     issues: list[dict[str, str]] = []
 
     try:
-        root = ET.fromstring(uxml_string)
+        root = _safe_ET.fromstring(uxml_string)
     except ET.ParseError as exc:
         return {
             "valid": False,

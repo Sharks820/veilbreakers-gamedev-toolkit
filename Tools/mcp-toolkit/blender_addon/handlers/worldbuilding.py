@@ -15,9 +15,6 @@ import bmesh
 from ._building_grammar import (
     evaluate_building_grammar,
     generate_castle_spec,
-    generate_tower_spec,
-    generate_bridge_spec,
-    generate_fortress_spec,
     apply_ruins_damage,
     generate_interior_layout,
     generate_modular_pieces,
@@ -25,7 +22,6 @@ from ._building_grammar import (
     add_storytelling_props,
     BuildingSpec,
     STYLE_CONFIGS,
-    MODULAR_CATALOG,
 )
 from ._dungeon_gen import generate_multi_floor_dungeon, generate_dungeon_prop_placements
 from ._mesh_bridge import (
@@ -49,13 +45,376 @@ from .worldbuilding_layout import (
 # ---------------------------------------------------------------------------
 
 
+def _collect_openings_by_wall(spec: BuildingSpec) -> dict[tuple[int, int], list[dict]]:
+    """Group opening operations by (wall_index, floor).
+
+    Returns dict mapping (wall_index, floor) -> list of opening ops sorted
+    by horizontal offset so left-to-right splitting is deterministic.
+    Pure-logic helper -- no bpy/bmesh.
+    """
+    openings: dict[tuple[int, int], list[dict]] = {}
+    for op in spec.operations:
+        if op.get("type") != "opening":
+            continue
+        key = (op.get("wall_index", 0), op.get("floor", 0))
+        openings.setdefault(key, [])
+        openings[key].append(op)
+    # Sort each group by horizontal offset (position[0])
+    for key in openings:
+        openings[key].sort(key=lambda o: o.get("position", [0, 0])[0])
+    return openings
+
+
+def _wall_with_openings(
+    px: float, py: float, pz: float,
+    sx: float, sy: float, sz: float,
+    wall_index: int,
+    openings: list[dict],
+    material: str,
+    style: str = "medieval",
+) -> list[dict]:
+    """Build mesh specs for a wall segment with rectangular openings cut through.
+
+    Walls 0,1 run along X (front/back); walls 2,3 run along Y (left/right).
+    Each opening's position[0] = offset along the wall's length axis,
+    position[1] = offset from the wall's base Z.
+
+    The wall is subdivided into horizontal strips. For each opening we create:
+      - Frame quads on both exterior faces (front/back of the wall)
+      - Reveal quads through the wall thickness (top, bottom, sides of hole)
+      - Optional pointed-arch top for gothic windows
+
+    Returns a list of mesh-spec dicts (type="box" with custom verts/faces).
+    """
+    result: list[dict] = []
+
+    # Determine wall-length axis and thickness axis
+    # Walls 0,1: length along X (sx), thickness along Y (sy)
+    # Walls 2,3: length along Y (sy), thickness along X (sx)
+    is_xy = wall_index < 2  # wall runs along X
+    wall_len = sx if is_xy else sy
+    wall_thick = sy if is_xy else sx
+    wall_height = sz
+
+    # Clamp openings to wall bounds
+    clamped = []
+    for op in openings:
+        o_off = op["position"][0]  # offset along wall length
+        o_z = op["position"][1]    # height from wall base
+        o_w = op["size"][0]
+        o_h = op["size"][1]
+        # Clamp to wall dimensions
+        o_off = max(0.0, min(o_off, wall_len - o_w))
+        o_z = max(0.0, min(o_z, wall_height - o_h))
+        clamped.append({
+            "off": o_off,
+            "z": o_z,
+            "w": o_w,
+            "h": o_h,
+            "role": op.get("role", "opening"),
+            "style": op.get("style", ""),
+        })
+
+    # Build the wall face with holes by constructing individual quads.
+    # We work in a local 2D coordinate system:
+    #   u = along wall length [0..wall_len]
+    #   v = along wall height [0..wall_height]
+    # Then map (u, v) back to 3D.
+
+    def _local_to_world(u: float, v: float, depth: float) -> tuple:
+        """Map local (u=along wall, v=up, depth=into wall) to world coords."""
+        if is_xy:
+            return (px + u, py + depth, pz + v)
+        else:
+            return (px + depth, py + u, pz + v)
+
+    def _make_quad(p0, p1, p2, p3, role: str, mat: str) -> dict:
+        """Create a single-quad mesh spec from 4 world-space points."""
+        verts = [p0, p1, p2, p3]
+        faces = [(0, 1, 2, 3)]
+        return {
+            "type": "box",
+            "vertices": verts,
+            "faces": faces,
+            "vertex_count": 4,
+            "face_count": 1,
+            "material": mat,
+            "role": role,
+        }
+
+    # For each face layer (front face at depth=0, back face at depth=wall_thick),
+    # build frame quads around each opening.
+
+    # Strategy: for each opening, emit the 4 (or 3 for doors at floor) frame
+    # strips on front and back faces, plus 4 reveal quads through the thickness.
+    # The solid portions of the wall (regions with no opening) are emitted as
+    # full-height quads spanning between openings.
+
+    # Step 1: Build solid wall strips between/around openings (front + back)
+    # Collect vertical "columns" separated by opening edges along u-axis
+    edges_u = [0.0]
+    for c in clamped:
+        edges_u.append(c["off"])
+        edges_u.append(c["off"] + c["w"])
+    edges_u.append(wall_len)
+    edges_u = sorted(set(edges_u))
+
+    for i in range(len(edges_u) - 1):
+        u0 = edges_u[i]
+        u1 = edges_u[i + 1]
+        if u1 - u0 < 1e-4:
+            continue
+
+        # Check which openings overlap this column
+        col_openings = []
+        for c in clamped:
+            if c["off"] < u1 - 1e-4 and c["off"] + c["w"] > u0 + 1e-4:
+                col_openings.append(c)
+
+        if not col_openings:
+            # Solid wall strip -- full height, front face
+            p0 = _local_to_world(u0, 0.0, 0.0)
+            p1 = _local_to_world(u1, 0.0, 0.0)
+            p2 = _local_to_world(u1, wall_height, 0.0)
+            p3 = _local_to_world(u0, wall_height, 0.0)
+            result.append(_make_quad(p0, p1, p2, p3, "wall", material))
+            # Back face
+            p0b = _local_to_world(u0, 0.0, wall_thick)
+            p1b = _local_to_world(u1, 0.0, wall_thick)
+            p2b = _local_to_world(u1, wall_height, wall_thick)
+            p3b = _local_to_world(u0, wall_height, wall_thick)
+            result.append(_make_quad(p1b, p0b, p3b, p2b, "wall", material))
+        else:
+            # This column overlaps one or more openings.
+            # Build horizontal strips: below opening, above opening, and between
+            # stacked openings (rare but handled).
+            v_edges = [0.0]
+            for c in col_openings:
+                v_edges.append(c["z"])
+                v_edges.append(c["z"] + c["h"])
+            v_edges.append(wall_height)
+            v_edges = sorted(set(v_edges))
+
+            for j in range(len(v_edges) - 1):
+                v0 = v_edges[j]
+                v1 = v_edges[j + 1]
+                if v1 - v0 < 1e-4:
+                    continue
+
+                # Is this v-span inside an opening?
+                is_opening = False
+                opening_for_span = None
+                for c in col_openings:
+                    if v0 >= c["z"] - 1e-4 and v1 <= c["z"] + c["h"] + 1e-4:
+                        is_opening = True
+                        opening_for_span = c
+                        break
+
+                if not is_opening:
+                    # Solid strip
+                    p0 = _local_to_world(u0, v0, 0.0)
+                    p1 = _local_to_world(u1, v0, 0.0)
+                    p2 = _local_to_world(u1, v1, 0.0)
+                    p3 = _local_to_world(u0, v1, 0.0)
+                    result.append(_make_quad(p0, p1, p2, p3, "wall", material))
+                    # Back face
+                    p0b = _local_to_world(u0, v0, wall_thick)
+                    p1b = _local_to_world(u1, v0, wall_thick)
+                    p2b = _local_to_world(u1, v1, wall_thick)
+                    p3b = _local_to_world(u0, v1, wall_thick)
+                    result.append(_make_quad(p1b, p0b, p3b, p2b, "wall", material))
+                # else: this is the opening hole -- no face here (walkable/visible)
+
+    # Step 2: Reveal/jamb quads through wall thickness for each opening
+    for c in clamped:
+        o_u0 = c["off"]
+        o_u1 = c["off"] + c["w"]
+        o_v0 = c["z"]
+        o_v1 = c["z"] + c["h"]
+
+        # Top reveal (horizontal quad at top of opening, connecting front to back)
+        t0 = _local_to_world(o_u0, o_v1, 0.0)
+        t1 = _local_to_world(o_u1, o_v1, 0.0)
+        t2 = _local_to_world(o_u1, o_v1, wall_thick)
+        t3 = _local_to_world(o_u0, o_v1, wall_thick)
+        result.append(_make_quad(t0, t1, t2, t3, "opening_reveal", material))
+
+        # Bottom reveal (only for windows, not for doors at floor level)
+        if o_v0 > 0.05:
+            b0 = _local_to_world(o_u0, o_v0, 0.0)
+            b1 = _local_to_world(o_u1, o_v0, 0.0)
+            b2 = _local_to_world(o_u1, o_v0, wall_thick)
+            b3 = _local_to_world(o_u0, o_v0, wall_thick)
+            result.append(_make_quad(b1, b0, b3, b2, "opening_reveal", material))
+
+            # Window sill (slightly protruding ledge for windows)
+            if c["role"] == "window":
+                sill_depth = 0.08
+                sill_thick = 0.05
+                s0 = _local_to_world(o_u0 - 0.02, o_v0 - sill_thick, -sill_depth)
+                s1 = _local_to_world(o_u1 + 0.02, o_v0 - sill_thick, -sill_depth)
+                s2 = _local_to_world(o_u1 + 0.02, o_v0, -sill_depth)
+                s3 = _local_to_world(o_u0 - 0.02, o_v0, -sill_depth)
+                result.append(_make_quad(s0, s1, s2, s3, "window_sill", material))
+                # Sill top face
+                s4 = _local_to_world(o_u0 - 0.02, o_v0, 0.0)
+                s5 = _local_to_world(o_u1 + 0.02, o_v0, 0.0)
+                result.append(_make_quad(s3, s2, s5, s4, "window_sill", material))
+
+        # Left reveal (vertical quad on left side of opening)
+        l0 = _local_to_world(o_u0, o_v0, 0.0)
+        l1 = _local_to_world(o_u0, o_v1, 0.0)
+        l2 = _local_to_world(o_u0, o_v1, wall_thick)
+        l3 = _local_to_world(o_u0, o_v0, wall_thick)
+        result.append(_make_quad(l1, l0, l3, l2, "opening_reveal", material))
+
+        # Right reveal (vertical quad on right side of opening)
+        r0 = _local_to_world(o_u1, o_v0, 0.0)
+        r1 = _local_to_world(o_u1, o_v1, 0.0)
+        r2 = _local_to_world(o_u1, o_v1, wall_thick)
+        r3 = _local_to_world(o_u1, o_v0, wall_thick)
+        result.append(_make_quad(r0, r1, r2, r3, "opening_reveal", material))
+
+    # Step 3: Door/window frame geometry (thin border around opening)
+    frame_thick = 0.06  # frame profile thickness
+    frame_depth = 0.04  # how far frame protrudes from wall face
+    for c in clamped:
+        o_u0 = c["off"]
+        o_u1 = c["off"] + c["w"]
+        o_v0 = c["z"]
+        o_v1 = c["z"] + c["h"]
+        frame_role = "door_frame" if c["role"] == "door" else "window_frame"
+        frame_mat = "wood_dark" if c["role"] == "door" else material
+
+        # Frame is 4 strips (3 for doors: no bottom strip) on the front face
+        # Left frame strip
+        fl0 = _local_to_world(o_u0 - frame_thick, o_v0, -frame_depth)
+        fl1 = _local_to_world(o_u0, o_v0, -frame_depth)
+        fl2 = _local_to_world(o_u0, o_v1, -frame_depth)
+        fl3 = _local_to_world(o_u0 - frame_thick, o_v1, -frame_depth)
+        result.append(_make_quad(fl0, fl1, fl2, fl3, frame_role, frame_mat))
+
+        # Right frame strip
+        fr0 = _local_to_world(o_u1, o_v0, -frame_depth)
+        fr1 = _local_to_world(o_u1 + frame_thick, o_v0, -frame_depth)
+        fr2 = _local_to_world(o_u1 + frame_thick, o_v1, -frame_depth)
+        fr3 = _local_to_world(o_u1, o_v1, -frame_depth)
+        result.append(_make_quad(fr0, fr1, fr2, fr3, frame_role, frame_mat))
+
+        # Top frame strip (lintel)
+        # For gothic pointed-arch windows, add a triangular peak
+        is_gothic = c.get("style", "") == "pointed_arch"
+        if is_gothic:
+            # Pointed arch: triangle peak above the rectangular top
+            arch_rise = min(c["w"] * 0.4, 0.5)
+            peak_u = (o_u0 + o_u1) / 2.0
+            peak_v = o_v1 + arch_rise
+            # Left arch slope
+            al0 = _local_to_world(o_u0 - frame_thick, o_v1, -frame_depth)
+            al1 = _local_to_world(peak_u, peak_v, -frame_depth)
+            al2 = _local_to_world(peak_u, peak_v + frame_thick, -frame_depth)
+            al3 = _local_to_world(o_u0 - frame_thick, o_v1 + frame_thick, -frame_depth)
+            result.append(_make_quad(al0, al1, al2, al3, frame_role, frame_mat))
+            # Right arch slope
+            ar0 = _local_to_world(peak_u, peak_v, -frame_depth)
+            ar1 = _local_to_world(o_u1 + frame_thick, o_v1, -frame_depth)
+            ar2 = _local_to_world(o_u1 + frame_thick, o_v1 + frame_thick, -frame_depth)
+            ar3 = _local_to_world(peak_u, peak_v + frame_thick, -frame_depth)
+            result.append(_make_quad(ar0, ar1, ar2, ar3, frame_role, frame_mat))
+        else:
+            ft0 = _local_to_world(o_u0 - frame_thick, o_v1, -frame_depth)
+            ft1 = _local_to_world(o_u1 + frame_thick, o_v1, -frame_depth)
+            ft2 = _local_to_world(o_u1 + frame_thick, o_v1 + frame_thick, -frame_depth)
+            ft3 = _local_to_world(o_u0 - frame_thick, o_v1 + frame_thick, -frame_depth)
+            result.append(_make_quad(ft0, ft1, ft2, ft3, frame_role, frame_mat))
+
+        # Bottom frame strip (only for windows with a sill, not doors)
+        if c["role"] == "window" and o_v0 > 0.05:
+            fb0 = _local_to_world(o_u0 - frame_thick, o_v0 - frame_thick, -frame_depth)
+            fb1 = _local_to_world(o_u1 + frame_thick, o_v0 - frame_thick, -frame_depth)
+            fb2 = _local_to_world(o_u1 + frame_thick, o_v0, -frame_depth)
+            fb3 = _local_to_world(o_u0 - frame_thick, o_v0, -frame_depth)
+            result.append(_make_quad(fb0, fb1, fb2, fb3, frame_role, frame_mat))
+
+    # Step 4: Top and bottom caps of the wall (unchanged)
+    # Bottom face
+    p_b0 = _local_to_world(0.0, 0.0, 0.0)
+    p_b1 = _local_to_world(wall_len, 0.0, 0.0)
+    p_b2 = _local_to_world(wall_len, 0.0, wall_thick)
+    p_b3 = _local_to_world(0.0, 0.0, wall_thick)
+    result.append(_make_quad(p_b0, p_b1, p_b2, p_b3, "wall", material))
+    # Top face
+    p_t0 = _local_to_world(0.0, wall_height, 0.0)
+    p_t1 = _local_to_world(wall_len, wall_height, 0.0)
+    p_t2 = _local_to_world(wall_len, wall_height, wall_thick)
+    p_t3 = _local_to_world(0.0, wall_height, wall_thick)
+    result.append(_make_quad(p_t1, p_t0, p_t3, p_t2, "wall", material))
+
+    # Left end cap (u=0)
+    ec_l0 = _local_to_world(0.0, 0.0, 0.0)
+    ec_l1 = _local_to_world(0.0, wall_height, 0.0)
+    ec_l2 = _local_to_world(0.0, wall_height, wall_thick)
+    ec_l3 = _local_to_world(0.0, 0.0, wall_thick)
+    result.append(_make_quad(ec_l1, ec_l0, ec_l3, ec_l2, "wall", material))
+    # Right end cap (u=wall_len)
+    ec_r0 = _local_to_world(wall_len, 0.0, 0.0)
+    ec_r1 = _local_to_world(wall_len, wall_height, 0.0)
+    ec_r2 = _local_to_world(wall_len, wall_height, wall_thick)
+    ec_r3 = _local_to_world(wall_len, 0.0, wall_thick)
+    result.append(_make_quad(ec_r0, ec_r1, ec_r2, ec_r3, "wall", material))
+
+    return result
+
+
+def _wall_solid_box(
+    px: float, py: float, pz: float,
+    sx: float, sy: float, sz: float,
+    material: str, role: str,
+) -> dict:
+    """Create a standard solid box mesh spec (no openings). Pure-logic."""
+    verts = [
+        (px, py, pz),
+        (px + sx, py, pz),
+        (px + sx, py + sy, pz),
+        (px, py + sy, pz),
+        (px, py, pz + sz),
+        (px + sx, py, pz + sz),
+        (px + sx, py + sy, pz + sz),
+        (px, py + sy, pz + sz),
+    ]
+    faces = [
+        (0, 1, 2, 3),  # bottom
+        (4, 7, 6, 5),  # top
+        (0, 4, 5, 1),  # front
+        (2, 6, 7, 3),  # back
+        (0, 3, 7, 4),  # left
+        (1, 5, 6, 2),  # right
+    ]
+    return {
+        "type": "box",
+        "vertices": verts,
+        "faces": faces,
+        "vertex_count": 8,
+        "face_count": 6,
+        "material": material,
+        "role": role,
+    }
+
+
 def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
     """Convert BuildingSpec operations to mesh primitive specs.
 
     Returns list of dicts describing vertices, faces, and metadata for each
     primitive. This is a pure-logic function -- no bpy/bmesh calls.
+
+    Openings (doors/windows) are now cut as actual holes in wall geometry:
+    walls with openings are split into frame quads with reveal/jamb faces
+    through the wall thickness, plus door/window frame trim geometry.
     """
     result: list[dict] = []
+
+    # Pre-collect openings grouped by (wall_index, floor)
+    openings_map = _collect_openings_by_wall(spec)
 
     for op in spec.operations:
         op_type = op.get("type")
@@ -66,35 +425,30 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
             px, py, pz = pos[0], pos[1], pos[2]
             sx, sy, sz = size[0], size[1], size[2]
 
-            # 8 vertices of an axis-aligned box
-            verts = [
-                (px, py, pz),
-                (px + sx, py, pz),
-                (px + sx, py + sy, pz),
-                (px, py + sy, pz),
-                (px, py, pz + sz),
-                (px + sx, py, pz + sz),
-                (px + sx, py + sy, pz + sz),
-                (px, py + sy, pz + sz),
-            ]
-            # 6 quad faces (each as 4-vertex index tuple)
-            faces = [
-                (0, 1, 2, 3),  # bottom
-                (4, 7, 6, 5),  # top
-                (0, 4, 5, 1),  # front
-                (2, 6, 7, 3),  # back
-                (0, 3, 7, 4),  # left
-                (1, 5, 6, 2),  # right
-            ]
-            result.append({
-                "type": "box",
-                "vertices": verts,
-                "faces": faces,
-                "vertex_count": 8,
-                "face_count": 6,
-                "material": op.get("material", "default"),
-                "role": op.get("role", "unknown"),
-            })
+            # Check if this is a wall with openings
+            if op.get("role") == "wall":
+                wall_idx = op.get("wall_index", -1)
+                floor_idx = op.get("floor", -1)
+                key = (wall_idx, floor_idx)
+                wall_openings = openings_map.get(key, [])
+
+                if wall_openings:
+                    # Generate wall with holes cut for openings
+                    wall_specs = _wall_with_openings(
+                        px, py, pz, sx, sy, sz,
+                        wall_idx, wall_openings,
+                        material=op.get("material", "default"),
+                        style=spec.style,
+                    )
+                    result.extend(wall_specs)
+                    continue
+
+            # Standard solid box (non-wall, or wall without openings)
+            result.append(_wall_solid_box(
+                px, py, pz, sx, sy, sz,
+                material=op.get("material", "default"),
+                role=op.get("role", "unknown"),
+            ))
 
         elif op_type == "cylinder":
             pos = op["position"]
@@ -138,7 +492,8 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
             })
 
         elif op_type == "opening":
-            # Openings are marked for face construction (no boolean subtract)
+            # Opening metadata entry kept for backwards compatibility.
+            # Actual geometry is now handled by _wall_with_openings above.
             result.append({
                 "type": "opening",
                 "wall_index": op.get("wall_index", 0),
@@ -247,7 +602,7 @@ def _spec_to_bmesh(spec: BuildingSpec) -> bmesh.types.BMesh:
 
     for ms in mesh_specs:
         if ms["type"] == "opening":
-            continue  # openings handled separately
+            continue  # metadata-only; geometry cut by _wall_with_openings
 
         verts = ms["vertices"]
         faces = ms["faces"]
