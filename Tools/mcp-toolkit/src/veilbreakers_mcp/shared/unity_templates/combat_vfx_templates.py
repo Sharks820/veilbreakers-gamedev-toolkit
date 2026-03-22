@@ -422,7 +422,7 @@ public class VB_ComboVFX_{safe_brand} : MonoBehaviour
 
         // Renderer
         var renderer = hitBurstPS.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
     }}
 
@@ -502,13 +502,13 @@ public class VB_ComboVFX_{safe_brand} : MonoBehaviour
         subShape.radius = 0.3f;
 
         var subRenderer = finisherSubPS.GetComponent<ParticleSystemRenderer>();
-        subRenderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        subRenderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
         subRenderer.renderMode = ParticleSystemRenderMode.Stretch;
         subRenderer.lengthScale = 2f;
 
         // Renderer for main finisher
         var renderer = finisherPS.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
     }}
 
@@ -1340,7 +1340,7 @@ public class ChannelVFXController : MonoBehaviour
         noise.octaveCount = 2;
 
         var renderer = channelPS.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
     }}
 
@@ -1393,7 +1393,7 @@ public class ChannelVFXController : MonoBehaviour
         sizeOL.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 1f, 1f, 0f));
 
         var renderer = releasePS.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
     }}
 
@@ -1598,7 +1598,7 @@ public class AuraVFXController : MonoBehaviour
         noise.damping = true;
 
         var renderer = auraPS.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
     }}
 
@@ -1640,7 +1640,7 @@ public class AuraVFXController : MonoBehaviour
         col.color = new ParticleSystem.MinMaxGradient(grad);
 
         var renderer = innerGlowPS.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
     }}
 
@@ -1853,7 +1853,7 @@ public class BeamVFXController : MonoBehaviour
         lineRenderer.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         lineRenderer.receiveShadows = false;
 
-        beamMaterial = new Material(Shader.Find("Particles/Standard Unlit"));
+        beamMaterial = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
         beamMaterial.SetFloat("_Mode", 1f); // Additive
         lineRenderer.material = beamMaterial;
     }}
@@ -1910,7 +1910,7 @@ public class BeamVFXController : MonoBehaviour
         noise.scrollSpeed = 1f;
 
         var renderer = beamPS.GetComponent<ParticleSystemRenderer>();
-        renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+        renderer.material = new Material(Shader.Find("Universal Render Pipeline/Particles/Unlit"));
         renderer.renderMode = ParticleSystemRenderMode.Billboard;
     }}
 
