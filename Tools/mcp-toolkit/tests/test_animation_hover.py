@@ -85,8 +85,9 @@ class TestHoverMove:
 
     def test_has_banking(self):
         kfs = generate_hover_move_keyframes(bank_angle=0.5)
+        # Banking is Z-axis roll (axis 2) for realistic turn banking
         roll_kfs = [kf for kf in kfs if kf.bone_name == "DEF-spine"
-                    and kf.channel == "rotation_euler" and kf.axis == 0]
+                    and kf.channel == "rotation_euler" and kf.axis == 2]
         assert len(roll_kfs) > 0
         max_roll = max(abs(kf.value) for kf in roll_kfs)
         assert max_roll > 0.1

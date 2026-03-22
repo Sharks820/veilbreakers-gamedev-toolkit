@@ -163,9 +163,9 @@ def generate_hover_move_keyframes(
         lean = 0.15
         keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, lean))
 
-        # Banking: roll follows a turn arc (sine curve for smooth turn)
+        # Banking: roll (Z-axis) follows a turn arc for realistic banking
         bank = bank_angle * math.sin(t * 2 * math.pi)
-        keyframes.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, bank))
+        keyframes.append(Keyframe("DEF-spine", "rotation_euler", 2, frame, bank))
 
         # Yaw follows bank (coordinated turn)
         yaw = 0.2 * math.sin(t * 2 * math.pi)
@@ -239,11 +239,13 @@ def generate_tentacle_float_keyframes(
     """Generate sinusoidal tentacle wave for amorphous/tentacle creatures.
 
     Each tentacle segment gets increasing phase delay for traveling wave.
-    Tentacles use bone naming: DEF-tentacle_N (N=1..tentacle_count)
-    with segments .001, .002, .003.
+    Supports multiple bone naming conventions:
+      - Positional: DEF-tentacle_fl, DEF-tentacle_fr, DEF-tentacle_bl, DEF-tentacle_br (FLOATING_BONES)
+      - Numbered L/R: DEF-tentacle_1.L, DEF-tentacle_1.R (AMORPHOUS_BONES)
+      - Generic indexed: DEF-tentacle_1, DEF-tentacle_2 (fallback)
 
     Args:
-        tentacle_count: Number of tentacles.
+        tentacle_count: Number of tentacles (2, 4, or 6).
         wave_amplitude: Wave magnitude.
         wave_frequency: Wave speed.
         frame_count: Total frames.
@@ -254,15 +256,27 @@ def generate_tentacle_float_keyframes(
     keyframes: list[Keyframe] = []
     segments_per_tentacle = 3
 
-    for tent_idx in range(1, tentacle_count + 1):
+    # Map tentacle index to possible bone name conventions
+    _TENTACLE_NAMES_4 = ["tentacle_fl", "tentacle_fr", "tentacle_bl", "tentacle_br"]
+    _TENTACLE_NAMES_6 = ["tentacle_fl", "tentacle_fr", "tentacle_bl", "tentacle_br", "tentacle_l", "tentacle_r"]
+    _TENTACLE_NAMES_2 = ["tentacle_1.L", "tentacle_1.R"]
+
+    if tentacle_count <= 2:
+        tent_names = _TENTACLE_NAMES_2[:tentacle_count]
+    elif tentacle_count <= 4:
+        tent_names = _TENTACLE_NAMES_4[:tentacle_count]
+    else:
+        tent_names = _TENTACLE_NAMES_6[:tentacle_count]
+
+    for tent_idx, tent_base in enumerate(tent_names):
         # Each tentacle has a different base phase
-        base_phase = (tent_idx - 1) * (2 * math.pi / tentacle_count)
+        base_phase = tent_idx * (2 * math.pi / len(tent_names))
 
         for seg_idx in range(segments_per_tentacle):
             if seg_idx == 0:
-                bone_name = f"DEF-tentacle_{tent_idx}"
+                bone_name = f"DEF-{tent_base}"
             else:
-                bone_name = f"DEF-tentacle_{tent_idx}.{seg_idx:03d}"
+                bone_name = f"DEF-{tent_base}.{seg_idx:03d}"
 
             # Phase delay increases along the tentacle (traveling wave)
             seg_phase = base_phase + seg_idx * math.pi / 4
