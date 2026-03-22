@@ -557,7 +557,7 @@ def handle_preview_animation(params: dict) -> dict:
             "angles": [list(ap) for ap in angle_pairs],
             "resolution": [resolution, resolution],
         })
-        all_paths.extend(result.get("paths", []))
+        all_paths.extend(result.get("paths") or [])
 
     return {
         "image_path": output_path or (all_paths[0] if all_paths else ""),
@@ -1056,7 +1056,7 @@ def _attempt_ai_motion_api(
             data = resp.json()
             if "keyframes" in data:
                 return data
-    except Exception:
+    except (ConnectionError, TimeoutError, OSError, ValueError, KeyError):
         pass
 
     return None
