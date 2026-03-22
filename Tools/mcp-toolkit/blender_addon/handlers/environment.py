@@ -45,7 +45,7 @@ from ._terrain_erosion import (
 
 _VALID_TERRAIN_TYPES = frozenset(TERRAIN_PRESETS.keys())
 _VALID_EROSION_MODES = frozenset({"none", "hydraulic", "thermal", "both"})
-_MAX_RESOLUTION = 8192
+_MAX_RESOLUTION = 4096  # 8192 can OOM Blender; 4096 is practical AAA limit
 
 # ---------------------------------------------------------------------------
 # VeilBreakers biome presets
