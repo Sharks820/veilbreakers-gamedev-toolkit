@@ -407,6 +407,11 @@ def _apply_keyframes_to_action(
     if tangent_type not in VALID_TANGENT_TYPES:
         tangent_type = DEFAULT_TANGENT_TYPE
 
+    from ._action_compat import (
+        setup_action_for_armature, new_fcurve,
+        get_frame_range, get_fcurve_count,
+    )
+
     # Create action
     action = bpy.data.actions.new(name=action_name)
     action.use_fake_user = True
@@ -416,54 +421,8 @@ def _apply_keyframes_to_action(
         armature_obj.animation_data_create()
     armature_obj.animation_data.action = action
 
-    # Blender 5.0+ uses layered actions (slots/layers/strips)
-    # Older Blender uses action.fcurves directly
-    _use_layered = not hasattr(action, "fcurves")
-
-    if _use_layered:
-        # Blender 5.0+: create slot, layer, strip for the action
-        if hasattr(action, "slots") and len(action.slots) == 0:
-            slot = action.slots.new(for_id=armature_obj)
-        elif hasattr(action, "slots") and len(action.slots) > 0:
-            slot = action.slots[0]
-        else:
-            slot = None
-
-        if slot and hasattr(armature_obj, "animation_data"):
-            armature_obj.animation_data.action_slot = slot
-
-        if hasattr(action, "layers") and len(action.layers) == 0:
-            layer = action.layers.new(name="Layer")
-        else:
-            layer = action.layers[0] if hasattr(action, "layers") and len(action.layers) > 0 else None
-
-        if layer and len(layer.strips) == 0:
-            strip = layer.strips.new(type='KEYFRAME')
-        else:
-            strip = layer.strips[0] if layer and len(layer.strips) > 0 else None
-
-        # Get the channelbag for our slot
-        channelbag = None
-        if strip and slot:
-            for cb in strip.channelbags:
-                if cb.slot == slot:
-                    channelbag = cb
-                    break
-            if channelbag is None:
-                channelbag = strip.channelbags.new(slot=slot)
-
-        def _get_or_create_fcurve(data_path, index):
-            if channelbag is not None:
-                for fc in channelbag.fcurves:
-                    if fc.data_path == data_path and fc.array_index == index:
-                        return fc
-                return channelbag.fcurves.new(data_path=data_path, index=index)
-            # Fallback
-            return action.fcurves.new(data_path=data_path, index=index)
-    else:
-        # Legacy Blender: action.fcurves directly
-        def _get_or_create_fcurve(data_path, index):
-            return action.fcurves.new(data_path=data_path, index=index)
+    # Set up for Blender 5.0+ layered API or legacy
+    _channelbag, _is_layered = setup_action_for_armature(action, armature_obj)
 
     # Group keyframes by (bone, channel, axis) for fcurve creation
     fcurve_map: dict[tuple[str, str, int], list[tuple[int, float]]] = {}
@@ -491,7 +450,7 @@ def _apply_keyframes_to_action(
                 axis = axis + 1
 
         data_path = f'pose.bones["{bone_name}"].{resolved_channel}'
-        fc = _get_or_create_fcurve(data_path, axis)
+        fc = new_fcurve(action, data_path, axis, _channelbag, _is_layered)
         fc.keyframe_points.add(count=len(frames))
         for i, (frame, value) in enumerate(frames):
             fc.keyframe_points[i].co = (frame, value)
@@ -507,24 +466,8 @@ def _apply_keyframes_to_action(
         if use_cyclic:
             fc.modifiers.new(type="CYCLES")
 
-    # Compute frame range and fcurve count (compatible with both APIs)
-    if _use_layered and channelbag is not None:
-        all_fc = list(channelbag.fcurves)
-        if all_fc:
-            all_frames = []
-            for fc in all_fc:
-                for kp in fc.keyframe_points:
-                    all_frames.append(kp.co[0])
-            frame_range = [int(min(all_frames)), int(max(all_frames))] if all_frames else [0, 0]
-        else:
-            frame_range = [0, 0]
-        fcurve_count = len(all_fc)
-    elif hasattr(action, "frame_range"):
-        frame_range = [int(action.frame_range[0]), int(action.frame_range[1])]
-        fcurve_count = len(action.fcurves) if hasattr(action, "fcurves") else 0
-    else:
-        frame_range = [0, 0]
-        fcurve_count = 0
+    frame_range = get_frame_range(action, _channelbag, _is_layered)
+    fcurve_count = get_fcurve_count(action, _channelbag, _is_layered)
 
     return {
         "action_name": action.name,
