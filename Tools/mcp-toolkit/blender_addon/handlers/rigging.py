@@ -1096,7 +1096,7 @@ PIPELINE_STEPS: list[dict] = [
         "tool": "blender_animation",
         "action": "generate_idle",
         "description": "Generate idle animation for the rigged character",
-        "required_params": ["armature_name"],
+        "required_params": ["rig_name"],
         "output": "animation_action",
         "next_animations": ["generate_walk", "generate_attack", "generate_reaction"],
     },
