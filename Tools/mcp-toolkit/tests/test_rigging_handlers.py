@@ -1319,9 +1319,9 @@ class TestSkinningModes:
 class TestPipelineIntegration:
     """Test end-to-end pipeline data and validation."""
 
-    def test_pipeline_has_16_steps(self):
+    def test_pipeline_has_21_steps(self):
         from blender_addon.handlers.rigging import PIPELINE_STEPS
-        assert len(PIPELINE_STEPS) == 16
+        assert len(PIPELINE_STEPS) == 21
 
     def test_all_steps_have_required_fields(self):
         from blender_addon.handlers.rigging import PIPELINE_STEPS
@@ -1334,14 +1334,14 @@ class TestPipelineIntegration:
     def test_steps_in_order(self):
         from blender_addon.handlers.rigging import PIPELINE_STEPS
         numbers = [s["step"] for s in PIPELINE_STEPS]
-        assert numbers == list(range(1, 17))
+        assert numbers == list(range(1, 22))
 
     def test_get_pipeline_for_known_monster(self):
         from blender_addon.handlers.rigging import _get_pipeline_for_monster
         result = _get_pipeline_for_monster("skitter_teeth")
         assert result["valid"] is True
         assert result["template"] == "humanoid"
-        assert len(result["steps"]) == 16
+        assert len(result["steps"]) == 21
         assert len(result["required_animations"]) >= 4
 
     def test_get_pipeline_for_unknown_monster(self):
