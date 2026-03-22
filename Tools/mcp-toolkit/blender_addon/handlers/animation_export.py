@@ -726,7 +726,7 @@ def handle_extract_root_motion(params: dict) -> dict:
         if fc.data_path == root_loc_data_path:
             _action_remove_fcurve(action, fc, armature_obj)
 
-    fc_root_x = (action.fcurves if hasattr(action, "fcurves") else get_fcurves(action)).new(data_path=root_loc_data_path, index=0) if hasattr(action, "fcurves") else new_fcurve(action, root_loc_data_path, 0)
+    fc_root_x = _action_new_fcurve(action, root_loc_data_path, 0, armature_obj)
     fc_root_y = _action_new_fcurve(action, root_loc_data_path, 1, armature_obj)
 
     fc_root_x.keyframe_points.add(count=len(hip_translations))
