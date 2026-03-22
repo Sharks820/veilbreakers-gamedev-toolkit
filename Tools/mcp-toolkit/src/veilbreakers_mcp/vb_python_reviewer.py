@@ -474,7 +474,9 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
     except SyntaxError:
         return issues
 
-    is_template = filepath.endswith("_templates.py")
+    _fp_norm = filepath.replace("\\", "/")
+    is_template = filepath.endswith("_templates.py") or "unity_templates/" in _fp_norm
+    is_mcp_handler = _fp_norm.endswith("_server.py") or "/unity_tools/" in _fp_norm
 
     # Collect all names used
     all_names_used: set[str] = set()
@@ -576,8 +578,9 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
             description=f"Module exports {len(public_names)} public names but has no __all__",
             fix="Add __all__ = [...]."))
 
-    # PY-STY-09: Function length -- threshold 100 for *_templates.py, 60 otherwise
-    threshold = 100 if is_template else 60
+    # PY-STY-09: Function length -- templates contain huge C# string blocks,
+    # MCP handlers use compound-action pattern with many branches
+    threshold = 500 if is_template else (200 if is_mcp_handler else 60)
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if hasattr(node, 'end_lineno') and node.end_lineno:
@@ -611,28 +614,51 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
 # =========================================================================
 
 def _is_in_triple_quote(lines: list[str]) -> list[bool]:
-    """Pre-classify lines inside triple-quoted strings (handles r/b/f/u prefixes)."""
+    """Pre-classify lines inside triple-quoted strings (handles r/b/f/u prefixes).
+
+    Tracks which quote type (single vs double) opened the block so that
+    e.g. triple-double-quotes inside a triple-single-quoted string do not
+    cause a false close.
+    """
     _TDQ = chr(34) * 3
     _TSQ = chr(39) * 3
     _TQ_START = re.compile(r"(?:=\s*)?[brufBRUF]{0,2}(?:" + _TSQ + "|" + _TDQ + ")")
     in_tq = [False] * len(lines)
     inside = False
+    open_quote = ""  # which triple-quote type opened the block: _TDQ or _TSQ
     for i, line in enumerate(lines):
         stripped = line.strip()
         if inside:
             in_tq[i] = True
-            if _TDQ in stripped or _TSQ in stripped:
+            # Only close on the SAME quote type that opened the block
+            if open_quote in stripped:
                 inside = False
+                open_quote = ""
             continue
         # Check for triple-quote opening (with prefix like r, b, f, rb, etc.)
         if _TQ_START.search(stripped):
             in_tq[i] = True
-            # Count triple quotes on this line; if odd number, we're entering a block
+            # Determine which quote type(s) are on this line
             dq_count = stripped.count(_TDQ)
             sq_count = stripped.count(_TSQ)
-            total_tq = dq_count + sq_count
-            if total_tq % 2 == 1:  # odd = opening without close
+            # If both types present, the one that appears first is the opener
+            if dq_count > 0 and sq_count > 0:
+                first_dq = stripped.index(_TDQ)
+                first_sq = stripped.index(_TSQ)
+                if first_dq < first_sq:
+                    if dq_count % 2 == 1:
+                        inside = True
+                        open_quote = _TDQ
+                else:
+                    if sq_count % 2 == 1:
+                        inside = True
+                        open_quote = _TSQ
+            elif dq_count % 2 == 1:
                 inside = True
+                open_quote = _TDQ
+            elif sq_count % 2 == 1:
+                inside = True
+                open_quote = _TSQ
             continue
     return in_tq
 
