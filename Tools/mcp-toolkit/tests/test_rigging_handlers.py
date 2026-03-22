@@ -1144,17 +1144,17 @@ class TestCorruptionMorph:
 class TestBoneLOD:
     def test_lod0_returns_all(self):
         from blender_addon.handlers.rigging import _get_bones_for_lod, BONE_LOD_TIERS
-        bones = {"spine": {}, "upper_arm.L": {}, "thumb_01.L": {}, "upper_arm_twist.L": {}}
+        bones = {"spine": {}, "upper_arm.L": {}, "thumb.01.L": {}, "upper_arm_twist.L": {}}
         result = _get_bones_for_lod(bones, "LOD0_full")
         assert len(result) == 4
 
     def test_lod1_strips_fingers(self):
         from blender_addon.handlers.rigging import _get_bones_for_lod
-        bones = {"spine": {}, "upper_arm.L": {}, "thumb_01.L": {}, "index_02.R": {}}
+        bones = {"spine": {}, "upper_arm.L": {}, "thumb.01.L": {}, "f_index.02.R": {}}
         result = _get_bones_for_lod(bones, "LOD1_no_fingers")
         assert "spine" in result
-        assert "thumb_01.L" not in result
-        assert "index_02.R" not in result
+        assert "thumb.01.L" not in result
+        assert "f_index.02.R" not in result
 
     def test_lod2_strips_twist(self):
         from blender_addon.handlers.rigging import _get_bones_for_lod
