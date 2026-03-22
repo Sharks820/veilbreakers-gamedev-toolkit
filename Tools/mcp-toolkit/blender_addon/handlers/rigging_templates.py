@@ -2597,13 +2597,78 @@ LIMB_LIBRARY: dict[str, callable] = {
 # Blender-dependent helper functions
 # ---------------------------------------------------------------------------
 
-def _create_template_bones(arm_obj, bone_defs: dict[str, dict]) -> None:
+def _compute_bone_scale_offset(
+    bone_defs: dict[str, dict],
+    mesh_obj,
+) -> tuple:
+    """Compute scale and offset to fit template bones inside a target mesh.
+
+    Calculates the bounding box of both the template bones and the mesh,
+    then returns (scale_factor, offset_vector) to map bones into mesh space.
+
+    Returns:
+        (scale: float, offset: tuple[float,float,float])
+    """
+    # Template bone bounding box
+    all_positions = []
+    for props in bone_defs.values():
+        all_positions.append(props["head"])
+        all_positions.append(props["tail"])
+
+    if not all_positions:
+        return (1.0, (0.0, 0.0, 0.0))
+
+    t_min_x = min(p[0] for p in all_positions)
+    t_max_x = max(p[0] for p in all_positions)
+    t_min_z = min(p[2] for p in all_positions)
+    t_max_z = max(p[2] for p in all_positions)
+    t_height = t_max_z - t_min_z
+    t_center_x = (t_min_x + t_max_x) / 2.0
+
+    # Mesh bounding box (in world space)
+    bbox_corners = [mesh_obj.matrix_world @ bpy.types.Object.bl_rna.properties["bound_box"].fixed_type(v)
+                    for v in mesh_obj.bound_box]
+    # Simpler: use mesh bound_box directly
+    bb = mesh_obj.bound_box
+    loc = mesh_obj.location
+    m_min_z = min(v[2] for v in bb) + loc.z
+    m_max_z = max(v[2] for v in bb) + loc.z
+    m_min_x = min(v[0] for v in bb) + loc.x
+    m_max_x = max(v[0] for v in bb) + loc.x
+    m_height = m_max_z - m_min_z
+    m_center_x = (m_min_x + m_max_x) / 2.0
+
+    if t_height < 0.001:
+        scale = 1.0
+    else:
+        scale = m_height / t_height
+
+    offset_x = m_center_x - t_center_x * scale
+    offset_z = m_min_z - t_min_z * scale
+
+    return (scale, (offset_x, 0.0, offset_z))
+
+
+def _create_template_bones(
+    arm_obj,
+    bone_defs: dict[str, dict],
+    mesh_obj=None,
+) -> None:
     """Create metarig bones from a template definition dict.
 
     Two-pass bone creation (create all bones, then set parents).
     Assigns rigify_types in object mode after bone creation.
     Never stores EditBone references across mode switches.
+
+    If mesh_obj is provided, bones are auto-scaled and positioned to
+    fit inside the mesh bounding box.
     """
+    # Compute scale/offset if a target mesh is provided
+    scale = 1.0
+    offset = (0.0, 0.0, 0.0)
+    if mesh_obj is not None:
+        scale, offset = _compute_bone_scale_offset(bone_defs, mesh_obj)
+
     ctx = get_3d_context_override()
     bpy.context.view_layer.objects.active = arm_obj
 
@@ -2615,11 +2680,17 @@ def _create_template_bones(arm_obj, bone_defs: dict[str, dict]) -> None:
 
     arm = arm_obj.data
 
-    # First pass: create all bones with positions
+    # First pass: create all bones with positions (scaled + offset)
     for name, props in bone_defs.items():
         bone = arm.edit_bones.new(name)
-        bone.head = props["head"]
-        bone.tail = props["tail"]
+        h = props["head"]
+        t = props["tail"]
+        bone.head = (h[0] * scale + offset[0],
+                     h[1] * scale + offset[1],
+                     h[2] * scale + offset[2])
+        bone.tail = (t[0] * scale + offset[0],
+                     t[1] * scale + offset[1],
+                     t[2] * scale + offset[2])
         bone.roll = props["roll"]
 
     # Second pass: set parents (all bones exist now)

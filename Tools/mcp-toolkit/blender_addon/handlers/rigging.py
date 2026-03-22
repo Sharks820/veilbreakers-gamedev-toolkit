@@ -869,8 +869,8 @@ def handle_apply_rig_template(params: dict) -> dict:
     bpy.context.collection.objects.link(arm_obj)
     arm_obj.location = obj.location
 
-    # Apply template bones
-    _create_template_bones(arm_obj, template_bones)
+    # Apply template bones (auto-scaled to fit mesh bounding box)
+    _create_template_bones(arm_obj, template_bones, mesh_obj=obj)
     bone_count = len(arm_data.bones)
 
     result = {
