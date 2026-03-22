@@ -246,7 +246,8 @@ def validate_uxml_contrast(
             required (float): Required minimum ratio.
             passes (bool): Whether it meets WCAG AA.
     """
-    import xml.etree.ElementTree as ET
+    import defusedxml.ElementTree as ET
+    from xml.etree.ElementTree import Element
 
     violations: list[dict[str, Any]] = []
 
@@ -299,7 +300,7 @@ def validate_uxml_contrast(
                     class_font_sizes[cls_name] = float(fs_match.group(1))
 
     # Walk all elements and check text elements
-    def _walk(elem: ET.Element, inherited_bg: tuple[int, int, int] | None = None) -> None:
+    def _walk(elem: Element, inherited_bg: tuple[int, int, int] | None = None) -> None:
         classes = elem.get("class", "").split()
         name = elem.get("name", "")
 
@@ -337,6 +338,17 @@ def validate_uxml_contrast(
                     "ratio": round(ratio, 2),
                     "required": 3.0 if is_large else 4.5,
                     "passes": passes,
+                })
+            elif fg_color and not current_bg:
+                elem_id = name or " ".join(classes) or local
+                violations.append({
+                    "element": elem_id,
+                    "foreground": fg_color,
+                    "background": None,
+                    "ratio": 0.0,
+                    "required": 4.5,
+                    "passes": False,
+                    "warning": "Element has no explicit background — contrast check skipped",
                 })
 
         # Recurse
