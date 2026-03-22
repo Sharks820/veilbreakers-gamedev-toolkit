@@ -16,6 +16,7 @@ Fulfils ANIM3-01, ANIM3-02, ANIM3-05 requirements.
 
 from __future__ import annotations
 
+import copy
 import math
 from typing import Any
 
@@ -149,7 +150,6 @@ def apply_brand_timing(timing_config: dict[str, Any], brand: str) -> dict[str, A
         raise ValueError(f"Unknown brand: {brand!r}. Valid: {sorted(BRAND_TIMING_MODIFIERS.keys())}")
 
     mods = BRAND_TIMING_MODIFIERS[brand_upper]
-    import copy
     result = copy.deepcopy(timing_config)
     frames = result["frames"]
 

@@ -29,7 +29,10 @@ from blender_addon.handlers.animation_gaits import (
     HEXAPOD_WALK_CONFIG,
     IDLE_CONFIG,
     Keyframe,
+    QUADRUPED_CANTER_CONFIG,
+    QUADRUPED_GALLOP_CONFIG,
     QUADRUPED_RUN_CONFIG,
+    QUADRUPED_TROT_CONFIG,
     QUADRUPED_WALK_CONFIG,
     REACTION_CONFIGS,
     SERPENT_RUN_CONFIG,
@@ -180,16 +183,22 @@ class TestBipedConfigs:
             assert bone in bones, f"Missing required bone: {bone}"
 
     def test_thighs_antiphase(self):
-        """Left and right thighs should have pi phase offset."""
+        """Left and right thighs should have pi phase offset (first harmonic)."""
         bones = BIPED_WALK_CONFIG["bones"]
-        phase_l = bones["DEF-thigh.L"]["phase"]
-        phase_r = bones["DEF-thigh.R"]["phase"]
+        thigh_l = bones["DEF-thigh.L"]
+        thigh_r = bones["DEF-thigh.R"]
+        # Support both simple phase and multi-harmonic configs
+        phase_l = thigh_l["harmonics"][0]["phase"] if "harmonics" in thigh_l else thigh_l["phase"]
+        phase_r = thigh_r["harmonics"][0]["phase"] if "harmonics" in thigh_r else thigh_r["phase"]
         diff = abs(phase_r - phase_l)
         assert diff == pytest.approx(math.pi, abs=1e-6)
 
     def test_run_higher_amplitude_than_walk(self):
-        walk_amp = BIPED_WALK_CONFIG["bones"]["DEF-thigh.L"]["amplitude"]
-        run_amp = BIPED_RUN_CONFIG["bones"]["DEF-thigh.L"]["amplitude"]
+        walk_cfg = BIPED_WALK_CONFIG["bones"]["DEF-thigh.L"]
+        run_cfg = BIPED_RUN_CONFIG["bones"]["DEF-thigh.L"]
+        # Support both simple amplitude and multi-harmonic configs
+        walk_amp = sum(h["amp"] for h in walk_cfg["harmonics"]) if "harmonics" in walk_cfg else walk_cfg["amplitude"]
+        run_amp = sum(h["amp"] for h in run_cfg["harmonics"]) if "harmonics" in run_cfg else run_cfg["amplitude"]
         assert run_amp > walk_amp
 
     def test_run_shorter_frame_count(self):
@@ -215,30 +224,39 @@ class TestBipedConfigs:
 
 
 class TestQuadrupedConfigs:
-    """Test quadruped walk and run configurations."""
+    """Test quadruped 4-beat walk configuration (P2-A10)."""
 
     def test_walk_has_four_leg_bones(self):
         bones = QUADRUPED_WALK_CONFIG["bones"]
         leg_bones = [b for b in bones if any(
             x in b for x in ["thigh", "shin", "upper_arm", "forearm"]
         ) and "spine" not in b]
-        # Should have at least 4 distinct leg groups (front L/R + rear L/R)
+        # Should have 8 leg bones (4 upper + 4 lower)
         assert len(leg_bones) >= 4
 
-    def test_diagonal_pair_phasing(self):
-        """Front-left and rear-right should be in phase (walk)."""
+    def test_walk_4beat_phases(self):
+        """4-beat walk: LH=0, LF=pi/2, RH=pi, RF=3pi/2."""
         bones = QUADRUPED_WALK_CONFIG["bones"]
-        fl_phase = bones["DEF-upper_arm.L"]["phase"]
-        rr_phase = bones["DEF-thigh.R"]["phase"]
-        assert fl_phase == pytest.approx(rr_phase, abs=1e-6)
+        assert bones["DEF-thigh.L"]["phase"] == pytest.approx(0.0, abs=1e-6)
+        assert bones["DEF-upper_arm.L"]["phase"] == pytest.approx(math.pi / 2, abs=1e-6)
+        assert bones["DEF-thigh.R"]["phase"] == pytest.approx(math.pi, abs=1e-6)
+        assert bones["DEF-upper_arm.R"]["phase"] == pytest.approx(3 * math.pi / 2, abs=1e-6)
 
-    def test_opposite_diagonal_antiphase(self):
-        """Front-right and rear-left should be in anti-phase to front-left/rear-right."""
+    def test_walk_frame_count_32(self):
+        assert QUADRUPED_WALK_CONFIG["frame_count"] == 32
+
+    def test_walk_amplitude_05(self):
         bones = QUADRUPED_WALK_CONFIG["bones"]
-        fl_phase = bones["DEF-upper_arm.L"]["phase"]
-        fr_phase = bones["DEF-upper_arm.R"]["phase"]
-        diff = abs(fr_phase - fl_phase)
-        assert diff == pytest.approx(math.pi, abs=1e-6)
+        assert bones["DEF-thigh.L"]["amplitude"] == pytest.approx(0.5)
+
+    def test_walk_shin_phase_delay(self):
+        """Shins have +0.5 phase delay from their thighs."""
+        bones = QUADRUPED_WALK_CONFIG["bones"]
+        assert bones["DEF-shin.L"]["phase"] == pytest.approx(0.5, abs=1e-6)
+
+    def test_run_backward_compat_alias(self):
+        """QUADRUPED_RUN_CONFIG should be QUADRUPED_GALLOP_CONFIG."""
+        assert QUADRUPED_RUN_CONFIG is QUADRUPED_GALLOP_CONFIG
 
     def test_run_higher_amplitude_than_walk(self):
         walk_amp = QUADRUPED_WALK_CONFIG["bones"]["DEF-upper_arm.L"]["amplitude"]
@@ -253,6 +271,126 @@ class TestQuadrupedConfigs:
     def test_walk_cycle_loops(self):
         kfs = generate_cycle_keyframes(QUADRUPED_WALK_CONFIG)
         fc = QUADRUPED_WALK_CONFIG["frame_count"]
+        by_bone: dict[str, dict[int, float]] = {}
+        for kf in kfs:
+            by_bone.setdefault(kf.bone_name, {})[kf.frame] = kf.value
+        for bone, frames in by_bone.items():
+            assert frames[0] == pytest.approx(frames[fc], abs=1e-6), bone
+
+
+# ---------------------------------------------------------------------------
+# TestQuadrupedTrotConfig
+# ---------------------------------------------------------------------------
+
+
+class TestQuadrupedTrotConfig:
+    """Test quadruped trot configuration (diagonal pairs)."""
+
+    def test_trot_frame_count_24(self):
+        assert QUADRUPED_TROT_CONFIG["frame_count"] == 24
+
+    def test_trot_name(self):
+        assert QUADRUPED_TROT_CONFIG["name"] == "quadruped_trot"
+
+    def test_trot_diagonal_pair_phasing(self):
+        """Front-left and rear-right should be in phase."""
+        bones = QUADRUPED_TROT_CONFIG["bones"]
+        fl_phase = bones["DEF-upper_arm.L"]["phase"]
+        rr_phase = bones["DEF-thigh.R"]["phase"]
+        assert fl_phase == pytest.approx(rr_phase, abs=1e-6)
+
+    def test_trot_opposite_diagonal_antiphase(self):
+        """Diagonal pair B should be pi offset from pair A."""
+        bones = QUADRUPED_TROT_CONFIG["bones"]
+        fl_phase = bones["DEF-upper_arm.L"]["phase"]
+        fr_phase = bones["DEF-upper_arm.R"]["phase"]
+        diff = abs(fr_phase - fl_phase)
+        assert diff == pytest.approx(math.pi, abs=1e-6)
+
+    def test_trot_cycle_loops(self):
+        kfs = generate_cycle_keyframes(QUADRUPED_TROT_CONFIG)
+        fc = QUADRUPED_TROT_CONFIG["frame_count"]
+        by_bone: dict[str, dict[int, float]] = {}
+        for kf in kfs:
+            by_bone.setdefault(kf.bone_name, {})[kf.frame] = kf.value
+        for bone, frames in by_bone.items():
+            assert frames[0] == pytest.approx(frames[fc], abs=1e-6), bone
+
+
+# ---------------------------------------------------------------------------
+# TestQuadrupedCanterConfig
+# ---------------------------------------------------------------------------
+
+
+class TestQuadrupedCanterConfig:
+    """Test quadruped canter configuration (3-beat asymmetric)."""
+
+    def test_canter_frame_count_20(self):
+        assert QUADRUPED_CANTER_CONFIG["frame_count"] == 20
+
+    def test_canter_name(self):
+        assert QUADRUPED_CANTER_CONFIG["name"] == "quadruped_canter"
+
+    def test_canter_3beat_phases(self):
+        """RH=0, LH+RF=2pi/3, LF=4pi/3."""
+        bones = QUADRUPED_CANTER_CONFIG["bones"]
+        assert bones["DEF-thigh.R"]["phase"] == pytest.approx(0.0, abs=1e-6)
+        assert bones["DEF-thigh.L"]["phase"] == pytest.approx(2 * math.pi / 3, abs=1e-6)
+        assert bones["DEF-upper_arm.R"]["phase"] == pytest.approx(2 * math.pi / 3, abs=1e-6)
+        assert bones["DEF-upper_arm.L"]["phase"] == pytest.approx(4 * math.pi / 3, abs=1e-6)
+
+    def test_canter_amplitude_06(self):
+        bones = QUADRUPED_CANTER_CONFIG["bones"]
+        assert bones["DEF-thigh.R"]["amplitude"] == pytest.approx(0.6)
+
+    def test_canter_spine_on_axis_0(self):
+        bones = QUADRUPED_CANTER_CONFIG["bones"]
+        assert bones["DEF-spine.001"]["axis"] == 0
+
+    def test_canter_cycle_loops(self):
+        kfs = generate_cycle_keyframes(QUADRUPED_CANTER_CONFIG)
+        fc = QUADRUPED_CANTER_CONFIG["frame_count"]
+        by_bone: dict[str, dict[int, float]] = {}
+        for kf in kfs:
+            by_bone.setdefault(kf.bone_name, {})[kf.frame] = kf.value
+        for bone, frames in by_bone.items():
+            assert frames[0] == pytest.approx(frames[fc], abs=1e-6), bone
+
+
+# ---------------------------------------------------------------------------
+# TestQuadrupedGallopConfig
+# ---------------------------------------------------------------------------
+
+
+class TestQuadrupedGallopConfig:
+    """Test quadruped gallop configuration (4-beat fastest)."""
+
+    def test_gallop_frame_count_16(self):
+        assert QUADRUPED_GALLOP_CONFIG["frame_count"] == 16
+
+    def test_gallop_name(self):
+        assert QUADRUPED_GALLOP_CONFIG["name"] == "quadruped_gallop"
+
+    def test_gallop_4beat_phases(self):
+        """RH=0, LH=pi/3, RF=2pi/3, LF=pi."""
+        bones = QUADRUPED_GALLOP_CONFIG["bones"]
+        assert bones["DEF-thigh.R"]["phase"] == pytest.approx(0.0, abs=1e-6)
+        assert bones["DEF-thigh.L"]["phase"] == pytest.approx(math.pi / 3, abs=1e-6)
+        assert bones["DEF-upper_arm.R"]["phase"] == pytest.approx(2 * math.pi / 3, abs=1e-6)
+        assert bones["DEF-upper_arm.L"]["phase"] == pytest.approx(math.pi, abs=1e-6)
+
+    def test_gallop_highest_amplitude(self):
+        """Gallop should have amplitude 0.9 (highest of all quadruped gaits)."""
+        bones = QUADRUPED_GALLOP_CONFIG["bones"]
+        assert bones["DEF-thigh.R"]["amplitude"] == pytest.approx(0.9)
+
+    def test_gallop_larger_spine_amplitude(self):
+        bones = QUADRUPED_GALLOP_CONFIG["bones"]
+        assert bones["DEF-spine.001"]["amplitude"] == pytest.approx(0.1)
+
+    def test_gallop_cycle_loops(self):
+        kfs = generate_cycle_keyframes(QUADRUPED_GALLOP_CONFIG)
+        fc = QUADRUPED_GALLOP_CONFIG["frame_count"]
         by_bone: dict[str, dict[int, float]] = {}
         for kf in kfs:
             by_bone.setdefault(kf.bone_name, {})[kf.frame] = kf.value
@@ -344,6 +482,42 @@ class TestArachnidConfigs:
             by_bone.setdefault(kf.bone_name, {})[kf.frame] = kf.value
         for bone, frames in by_bone.items():
             assert frames[0] == pytest.approx(frames[fc], abs=1e-6), bone
+
+    def test_walk_upper_legs_axis_2(self):
+        """Upper leg bones (not _lower) should use axis 2 for arachnid."""
+        bones = ARACHNID_WALK_CONFIG["bones"]
+        upper_legs = [b for b in bones if b.startswith("DEF-leg_") and "lower" not in b]
+        for bone_name in upper_legs:
+            assert bones[bone_name]["axis"] == 2, (
+                f"{bone_name} should be axis 2, got {bones[bone_name]['axis']}"
+            )
+
+    def test_walk_lower_legs_axis_0(self):
+        """Lower leg bones (_lower) should stay on axis 0."""
+        bones = ARACHNID_WALK_CONFIG["bones"]
+        lower_legs = [b for b in bones if "lower" in b]
+        for bone_name in lower_legs:
+            assert bones[bone_name]["axis"] == 0, (
+                f"{bone_name} should be axis 0, got {bones[bone_name]['axis']}"
+            )
+
+    def test_run_upper_legs_axis_2(self):
+        """Upper leg bones in run config should also use axis 2."""
+        bones = ARACHNID_RUN_CONFIG["bones"]
+        upper_legs = [b for b in bones if b.startswith("DEF-leg_") and "lower" not in b]
+        for bone_name in upper_legs:
+            assert bones[bone_name]["axis"] == 2, (
+                f"{bone_name} should be axis 2, got {bones[bone_name]['axis']}"
+            )
+
+    def test_run_lower_legs_axis_0(self):
+        """Lower leg bones in run config should stay on axis 0."""
+        bones = ARACHNID_RUN_CONFIG["bones"]
+        lower_legs = [b for b in bones if "lower" in b]
+        for bone_name in lower_legs:
+            assert bones[bone_name]["axis"] == 0, (
+                f"{bone_name} should be axis 0, got {bones[bone_name]['axis']}"
+            )
 
 
 # ---------------------------------------------------------------------------
