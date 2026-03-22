@@ -999,6 +999,179 @@ def handle_build_custom_rig(params: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Interactive bone editing handlers (AI-driven rig adjustment)
+# ---------------------------------------------------------------------------
+
+
+def handle_edit_bone(params: dict) -> dict:
+    """Select, move, scale, or rotate a bone in an armature (RIG-14).
+
+    Provides AI-driven interactive bone editing — select a bone by name,
+    move/scale/rotate it, and get a viewport screenshot to verify the result.
+
+    Params:
+        object_name: Name of the armature object.
+        bone_name: Name of the bone to edit.
+        operation: One of "move", "scale", "rotate", "select", "inspect".
+        value: For move: [x,y,z] offset. For scale: [x,y,z] scale.
+               For rotate: [x,y,z] euler radians. For select/inspect: ignored.
+        mode: "edit" (edit bone positions) or "pose" (pose bone transforms).
+              Default "edit".
+
+    Returns dict with bone_name, operation, new_head, new_tail, screenshot.
+    """
+    arm_name = params.get("object_name")
+    bone_name = params.get("bone_name")
+    operation = params.get("operation", "inspect")
+    value = params.get("value", [0, 0, 0])
+    mode = params.get("mode", "edit")
+
+    if not arm_name:
+        raise ValueError("'object_name' is required")
+    if not bone_name:
+        raise ValueError("'bone_name' is required")
+
+    arm_obj = bpy.data.objects.get(arm_name)
+    if not arm_obj or arm_obj.type != "ARMATURE":
+        raise ValueError(f"Armature not found: {arm_name}")
+
+    from ._context import get_3d_context_override
+
+    bpy.context.view_layer.objects.active = arm_obj
+    bpy.ops.object.select_all(action="DESELECT")
+    arm_obj.select_set(True)
+
+    result = {"bone_name": bone_name, "operation": operation}
+
+    if mode == "edit":
+        bpy.ops.object.mode_set(mode="EDIT")
+        ebone = arm_obj.data.edit_bones.get(bone_name)
+        if not ebone:
+            bpy.ops.object.mode_set(mode="OBJECT")
+            raise ValueError(
+                f"Bone '{bone_name}' not found. "
+                f"Available: {[b.name for b in arm_obj.data.edit_bones]}"
+            )
+
+        if operation == "move":
+            from mathutils import Vector
+            offset = Vector(value)
+            ebone.head += offset
+            ebone.tail += offset
+            result["new_head"] = tuple(ebone.head)
+            result["new_tail"] = tuple(ebone.tail)
+
+        elif operation == "scale":
+            # Scale bone length (value[0] = scale factor)
+            scale_factor = value[0] if isinstance(value, (list, tuple)) else value
+            center = (ebone.head + ebone.tail) / 2
+            ebone.head = center + (ebone.head - center) * scale_factor
+            ebone.tail = center + (ebone.tail - center) * scale_factor
+            result["new_head"] = tuple(ebone.head)
+            result["new_tail"] = tuple(ebone.tail)
+
+        elif operation == "rotate":
+            from mathutils import Euler, Matrix
+            rot = Euler(value)
+            center = ebone.head.copy()
+            mat = rot.to_matrix().to_4x4()
+            tail_offset = ebone.tail - ebone.head
+            new_tail = center + mat @ tail_offset
+            ebone.tail = new_tail
+            result["new_head"] = tuple(ebone.head)
+            result["new_tail"] = tuple(ebone.tail)
+
+        elif operation == "select":
+            ebone.select = True
+            ebone.select_head = True
+            ebone.select_tail = True
+
+        elif operation == "inspect":
+            result["head"] = tuple(ebone.head)
+            result["tail"] = tuple(ebone.tail)
+            result["roll"] = ebone.roll
+            result["length"] = ebone.length
+            result["parent"] = ebone.parent.name if ebone.parent else None
+            result["children"] = [c.name for c in ebone.children]
+            result["connected"] = ebone.use_connect
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    elif mode == "pose":
+        bpy.ops.object.mode_set(mode="POSE")
+        pbone = arm_obj.pose.bones.get(bone_name)
+        if not pbone:
+            bpy.ops.object.mode_set(mode="OBJECT")
+            raise ValueError(f"Pose bone '{bone_name}' not found")
+
+        from mathutils import Vector, Euler
+
+        if operation == "move":
+            pbone.location = Vector(value)
+            result["location"] = tuple(pbone.location)
+
+        elif operation == "rotate":
+            pbone.rotation_mode = "XYZ"
+            pbone.rotation_euler = Euler(value)
+            result["rotation"] = tuple(pbone.rotation_euler)
+
+        elif operation == "scale":
+            pbone.scale = Vector(value)
+            result["scale"] = tuple(pbone.scale)
+
+        elif operation == "inspect":
+            result["location"] = tuple(pbone.location)
+            result["rotation"] = tuple(pbone.rotation_euler)
+            result["scale"] = tuple(pbone.scale)
+            result["constraints"] = [c.name for c in pbone.constraints]
+
+        bpy.context.view_layer.update()
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    return result
+
+
+def handle_list_bones(params: dict) -> dict:
+    """List all bones in an armature with positions and hierarchy (RIG-15).
+
+    Params:
+        object_name: Name of the armature object.
+        filter_prefix: Optional prefix to filter bones (e.g. "DEF-", "ORG-").
+
+    Returns dict with bone list including names, positions, parents.
+    """
+    arm_name = params.get("object_name")
+    filter_prefix = params.get("filter_prefix", "")
+
+    if not arm_name:
+        raise ValueError("'object_name' is required")
+
+    arm_obj = bpy.data.objects.get(arm_name)
+    if not arm_obj or arm_obj.type != "ARMATURE":
+        raise ValueError(f"Armature not found: {arm_name}")
+
+    bones = []
+    for bone in arm_obj.data.bones:
+        if filter_prefix and not bone.name.startswith(filter_prefix):
+            continue
+        bones.append({
+            "name": bone.name,
+            "head": tuple(bone.head_local),
+            "tail": tuple(bone.tail_local),
+            "parent": bone.parent.name if bone.parent else None,
+            "length": bone.length,
+            "children": [c.name for c in bone.children],
+        })
+
+    return {
+        "armature": arm_name,
+        "bone_count": len(bones),
+        "filter": filter_prefix or "none",
+        "bones": bones,
+    }
+
+
+# ---------------------------------------------------------------------------
 # End-to-end pipeline: Modeling -> Rigging -> Animation -> VFX
 # ---------------------------------------------------------------------------
 
