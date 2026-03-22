@@ -719,6 +719,17 @@ def _compute_spring_chain_forces(
     Returns:
         New positions list for each bone after one simulation step.
     """
+    # Compute rest offsets from initial positions so the spring force
+    # maintains the bone's rest distance from its parent instead of
+    # collapsing all bones onto the parent position.
+    rest_offsets: list[tuple[float, float, float]] = [(0.0, 0.0, 0.0)]
+    for i in range(1, len(positions)):
+        rest_offsets.append((
+            positions[i][0] - positions[i - 1][0],
+            positions[i][1] - positions[i - 1][1],
+            positions[i][2] - positions[i - 1][2],
+        ))
+
     new_positions: list[tuple[float, float, float]] = []
     for i, (pos, vel) in enumerate(zip(positions, velocities)):
         if i == 0:
@@ -729,11 +740,16 @@ def _compute_spring_chain_forces(
         px, py, pz = pos
         vx, vy, vz = vel
 
-        # Spring force pulling back toward parent
+        # Rest position = parent position + rest offset
         parent = positions[i - 1]
-        spring_fx = stiffness * (parent[0] - px)
-        spring_fy = stiffness * (parent[1] - py)
-        spring_fz = stiffness * (parent[2] - pz)
+        rest_x = parent[0] + rest_offsets[i][0]
+        rest_y = parent[1] + rest_offsets[i][1]
+        rest_z = parent[2] + rest_offsets[i][2]
+
+        # Spring force pulling back toward rest position (not parent)
+        spring_fx = stiffness * (rest_x - px)
+        spring_fy = stiffness * (rest_y - py)
+        spring_fz = stiffness * (rest_z - pz)
 
         # Gravity in -Z
         grav_fz = -gravity

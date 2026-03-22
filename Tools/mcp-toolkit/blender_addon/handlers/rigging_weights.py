@@ -145,6 +145,14 @@ def _validate_rig_report(
             symmetry_issues += 1
             issues.append(f"Missing right counterpart for '{lb}'")
 
+    right_bones = [n for n in bone_names if n.endswith(".R")]
+    left_bones_set = {n for n in bone_names if n.endswith(".L")}
+    for rb in right_bones:
+        expected_left = rb[:-2] + ".L"
+        if expected_left not in left_bones_set:
+            symmetry_issues += 1
+            issues.append(f"Missing left counterpart for '{rb}'")
+
     # -- Roll consistency (L bone roll should be negative of R bone roll) --
     roll_issues = 0
     roll_tolerance = 0.05  # radians
