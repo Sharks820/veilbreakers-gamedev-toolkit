@@ -539,7 +539,7 @@ def generate_combat_animation_data(
     if brand_upper in BRAND_TIMING_MODIFIERS:
         timing = apply_brand_timing(timing, brand_upper)
 
-    events = generate_animation_events(timing, brand=brand)
+    events = generate_animation_events(timing, brand=brand_upper)
 
     result: dict[str, Any] = {
         "timing": timing,

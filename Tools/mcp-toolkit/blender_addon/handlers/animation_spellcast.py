@@ -153,6 +153,7 @@ def generate_channel_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     bones = _CAST_HAND_BONES.get(cast_hand, _CAST_HAND_BONES["both"])
 
@@ -242,6 +243,7 @@ def generate_release_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     bones = _CAST_HAND_BONES.get(cast_hand, _CAST_HAND_BONES["both"])
 
@@ -314,6 +316,7 @@ def generate_sustain_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     bones = _CAST_HAND_BONES.get(cast_hand, _CAST_HAND_BONES["both"])
 
