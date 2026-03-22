@@ -160,6 +160,21 @@ from .terrain_materials import (
 from .vegetation_system import (
     handle_scatter_biome_vegetation,
 )
+from .road_network import (  # noqa: F401 -- road network generation
+    compute_road_network,
+    compute_mst_edges,
+    ROAD_TYPES,
+)
+from .coastline import (  # noqa: F401 -- coastline terrain generation
+    generate_coastline,
+    COASTLINE_STYLES,
+)
+from .terrain_features import (  # noqa: F401 -- terrain feature generators
+    generate_canyon,
+    generate_waterfall,
+    generate_cliff_face,
+    generate_swamp_terrain,
+)
 from .material_tiers import (  # noqa: F401 -- material tier system (EQ-040)
     METAL_TIERS,
     WOOD_TIERS,
@@ -326,4 +341,51 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "terrain_create_biome_material": handle_create_biome_terrain,
     # Per-biome vegetation quality system
     "env_scatter_biome_vegetation": handle_scatter_biome_vegetation,
+    # Road network generation (pure logic -- returns mesh specs)
+    "env_compute_road_network": lambda params: compute_road_network(
+        waypoints=[tuple(wp) for wp in params.get("waypoints", [])],
+        terrain_heightmap=params.get("terrain_heightmap"),
+        water_level=params.get("water_level", 0.0),
+        seed=params.get("seed", 42),
+    ),
+    # Coastline generation (pure logic -- returns mesh specs)
+    "env_generate_coastline": lambda params: generate_coastline(
+        length=params.get("length", 200.0),
+        width=params.get("width", 50.0),
+        style=params.get("style", "rocky"),
+        resolution=params.get("resolution", 64),
+        seed=params.get("seed", 42),
+    ),
+    # Terrain features (pure logic -- return mesh specs)
+    "env_generate_canyon": lambda params: generate_canyon(
+        width=params.get("width", 5.0),
+        length=params.get("length", 50.0),
+        depth=params.get("depth", 15.0),
+        wall_roughness=params.get("wall_roughness", 0.5),
+        num_side_caves=params.get("num_side_caves", 3),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_waterfall": lambda params: generate_waterfall(
+        height=params.get("height", 10.0),
+        width=params.get("width", 3.0),
+        pool_radius=params.get("pool_radius", 4.0),
+        num_steps=params.get("num_steps", 3),
+        has_cave_behind=params.get("has_cave_behind", True),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_cliff_face": lambda params: generate_cliff_face(
+        width=params.get("width", 20.0),
+        height=params.get("height", 15.0),
+        overhang=params.get("overhang", 3.0),
+        num_cave_entrances=params.get("num_cave_entrances", 2),
+        has_ledge_path=params.get("has_ledge_path", True),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_swamp_terrain": lambda params: generate_swamp_terrain(
+        size=params.get("size", 50.0),
+        water_level=params.get("water_level", 0.3),
+        hummock_count=params.get("hummock_count", 12),
+        island_count=params.get("island_count", 4),
+        seed=params.get("seed", 42),
+    ),
 }

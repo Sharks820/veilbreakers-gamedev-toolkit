@@ -13230,7 +13230,12 @@ def generate_magical_barrier_mesh(size: float = 1.0) -> MeshSpec:
     parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
     br = 0.30 * size
     segs = 16
-    sv, sf = _make_half_sphere(0, 0, 0, br, rings=6, sectors=segs, top=True)
+    # Upper hemisphere dome via lathe profile
+    dome_profile = []
+    for _ri in range(7):
+        phi = math.pi * 0.5 * _ri / 6
+        dome_profile.append((br * math.cos(phi), br * math.sin(phi)))
+    sv, sf = _make_lathe(dome_profile, segments=segs, close_bottom=True, close_top=True)
     parts.append((sv, sf))
     hex_rings = 3
     for ring in range(1, hex_rings + 1):
