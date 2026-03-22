@@ -38,6 +38,15 @@ from .mesh import (
     handle_boolean_op,
     handle_retopologize,
     handle_sculpt,
+    handle_loop_cut,
+    handle_bevel_edges,
+    handle_knife_project,
+    handle_proportional_edit,
+)
+from .curves import (
+    handle_create_curve,
+    handle_curve_to_mesh,
+    handle_extrude_along_curve,
 )
 from .uv import (  # noqa: F401, E402
     handle_analyze_uv,
@@ -171,6 +180,14 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "mesh_boolean": handle_boolean_op,
     "mesh_retopologize": handle_retopologize,
     "mesh_sculpt": handle_sculpt,
+    "mesh_loop_cut": handle_loop_cut,
+    "mesh_bevel_edges": handle_bevel_edges,
+    "mesh_knife_project": handle_knife_project,
+    "mesh_proportional_edit": handle_proportional_edit,
+    # Curve operations
+    "curve_create": handle_create_curve,
+    "curve_to_mesh": handle_curve_to_mesh,
+    "curve_extrude_along": handle_extrude_along_curve,
     # UV operations
     "uv_analyze": handle_analyze_uv,
     "uv_unwrap_xatlas": handle_unwrap_xatlas,
