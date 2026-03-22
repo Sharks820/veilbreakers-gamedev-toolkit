@@ -41,8 +41,50 @@ before keying, so no crashes will occur if these bones are missing.
 
 When T1 adds these bones, T2 animations will automatically use them if present.
 
-## Terminal 3 (Unity VFX/Content) — No gaps found
+## Terminal 3 (Unity VFX/Content) — Camera Integration Opportunity
 
 T2's animation clip naming follows the documented contract:
 `{creature}_{gait}_{speed}` format. Combat timing data structure is
 backward-compatible (no fields removed/renamed, new fields added).
+
+### Camera Animation Integration (from T3 agent suggestions)
+During the audit, a background agent identified camera animation improvements:
+- Action cinematic system with multi-shot sequences
+- Party camera system for group combat
+- Camera shake integration with combat timing hit frames
+- Dead zone / soft zone config for Cinemachine
+
+These camera features complement T2's combat timing data. When T2's
+`COMBAT_TIMING_PRESETS` specify `camera_shake_frame`, T3's camera system
+should consume those frame numbers for synchronized screen effects.
+
+**Recommendation:** T3 should implement:
+1. `unity_camera` action for reading combat timing sidecars (.timing.json)
+2. Camera shake intensity mapped from `hitstop_frames` value
+3. Ultimate ability camera zoom based on frame_count (longer = more dramatic)
+
+## VeilBreakers3DCurrent Game Animation Gaps
+
+Based on analysis of the VB3DCurrent game project, the following animation
+categories are now covered by T2's toolkit:
+
+### Covered (new in this audit)
+- All 10 brand basic attacks with distinct combat feel
+- All 10 brand defend/guard stances
+- Brand skill animations (3 tiers of escalating drama)
+- Brand ultimate animations (60+ frame cinematic sequences)
+- 10 status effect persistent animations
+- Multi-hit combo sequences (1-6 hits)
+- 8 creature-type combat idles (humanoid through avian)
+- Spell-cast animations (channel/release/sustain)
+- 11 combat command flow animations
+- Hover/float system for flying monsters
+- Amorphous creature animations for blob/ooze types
+- IK foot placement for terrain adaptation
+
+### Not Yet Covered (future work)
+- Monster-specific named animations (e.g., "Chainbound_chain_whip")
+- Skill-to-AnimationClip automatic mapping system
+- Animation event insertion from combat timing data into FBX
+- Runtime procedural animation blending (Unity AnimationRigging)
+- Battle entry/exit animations (fade in from off-stage)
