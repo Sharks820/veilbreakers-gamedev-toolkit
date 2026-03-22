@@ -791,16 +791,17 @@ def generate_npc_body_mesh(
         )
         _add(sh_verts, sh_faces, "body_skin")
 
-        # Foot: box with toe section
+        # Foot -- Bug 14 fix: use anatomical foot mesh from facial_topology
         foot_cx = leg_x
         foot_z = feet_top * 0.5
-        foot_verts, foot_faces = _subdivided_box(
-            cx=foot_cx, cy=-0.04, cz=foot_z,
-            sx=0.04 * limb_mult, sy=0.10, sz=feet_top * 0.5,
-            divs_x=2,  # toe divisions
-            divs_z=1,
-            base_idx=len(all_verts),
-        )
+        foot_side = "left" if side == -1 else "right"
+        foot_spec = generate_foot_mesh(detail="low", side=foot_side)
+        foot_raw_verts = foot_spec["vertices"]
+        foot_raw_faces = foot_spec["faces"]
+        # Offset foot vertices to correct position; foot mesh is at origin
+        base_idx_foot = len(all_verts)
+        foot_verts = [(v[0] + foot_cx, v[1] - 0.04, v[2] + foot_z) for v in foot_raw_verts]
+        foot_faces = [tuple(idx + base_idx_foot for idx in f) for f in foot_raw_faces]
         _add(foot_verts, foot_faces, "extremity_skin")
 
     # Bug 4 fix: weld coincident vertices at primitive junctions
