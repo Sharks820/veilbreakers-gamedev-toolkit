@@ -21,7 +21,13 @@ import math
 from typing import Any
 
 from .mesh_smoothing import smooth_assembled_mesh, add_organic_noise
-from .facial_topology import generate_hand_mesh, generate_foot_mesh
+from .facial_topology import (
+    generate_hand_mesh,
+    generate_foot_mesh,
+    generate_claw_hand_mesh,
+    generate_hoof_mesh,
+    generate_paw_mesh,
+)
 
 
 # ---------------------------------------------------------------------------
