@@ -230,7 +230,7 @@ CORRECTIVE_SHAPE_DEFS: list[dict] = [
 POSE_SPACE_DEFORMATIONS: list[dict] = [
     {
         "name": "shoulder_raise_forward",
-        "driver_bones": ["upper_arm.L"],
+        "driver_bones": ["upper_arm.L", "upper_arm.L"],
         "driver_axes": ["Z", "X"],
         "thresholds": [60.0, 30.0],
         "description": "Deltoid volume preservation on forward + abduction",
