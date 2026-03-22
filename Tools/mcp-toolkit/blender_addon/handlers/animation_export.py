@@ -23,7 +23,42 @@ import os
 import bpy
 from mathutils import Vector
 
+from ._action_compat import (
+    get_fcurves, get_frame_range, get_fcurve_count,
+    is_layered_action, new_fcurve, remove_fcurve,
+    setup_action_for_armature,
+)
 from ._context import get_3d_context_override
+
+
+def _action_frame_range(action) -> list[int]:
+    """Get action frame range, compatible with Blender 4.x and 5.0+."""
+    if hasattr(action, "frame_range"):
+        return [_action_frame_range(action)[0], _action_frame_range(action)[1]]
+    return get_frame_range(action)
+
+
+def _action_fcurves_list(action):
+    """Get action fcurves as a list, compatible with Blender 4.x and 5.0+."""
+    if hasattr(action, "fcurves"):
+        return action.fcurves
+    return get_fcurves(action)
+
+
+def _action_new_fcurve(action, data_path, index, armature_obj=None):
+    """Create new fcurve on action, compatible with Blender 4.x and 5.0+."""
+    if hasattr(action, "fcurves"):
+        return action.fcurves.new(data_path=data_path, index=index)
+    cb, layered = setup_action_for_armature(action, armature_obj) if armature_obj else (None, True)
+    return new_fcurve(action, data_path, index, cb, layered)
+
+
+def _action_remove_fcurve(action, fc):
+    """Remove fcurve from action, compatible with Blender 4.x and 5.0+."""
+    if hasattr(action, "fcurves"):
+        _action_remove_fcurve(action, fc)
+    else:
+        remove_fcurve(action, fc)
 
 
 # ---------------------------------------------------------------------------
@@ -394,13 +429,13 @@ def _push_action_to_nla(armature_obj, action, strip_name=None):
     track = anim_data.nla_tracks.new()
     track.name = strip_name or action.name
 
-    start_frame = int(action.frame_range[0])
+    start_frame = int(_action_frame_range(action)[0])
     strip = track.strips.new(
         name=strip_name or action.name,
         start=start_frame,
         action=action,
     )
-    strip.frame_end = int(action.frame_range[1])
+    strip.frame_end = int(_action_frame_range(action)[1])
     return strip
 
 
@@ -493,8 +528,8 @@ def handle_preview_animation(params: dict) -> dict:
         action = armature_obj.animation_data.action
 
     # Calculate frames to render
-    frame_start = int(action.frame_range[0])
-    frame_end = int(action.frame_range[1])
+    frame_start = int(_action_frame_range(action)[0])
+    frame_end = int(_action_frame_range(action)[1])
     frames = list(range(frame_start, frame_end + 1, frame_step))
 
     # Resolve angle pairs
@@ -573,8 +608,9 @@ def handle_add_secondary_motion(params: dict) -> dict:
     armature_obj.animation_data.action = action
 
     # Determine frame range
-    frame_start = int(params.get("frame_start", action.frame_range[0]))
-    frame_end = int(params.get("frame_end", action.frame_range[1]))
+    _fr = _action_frame_range(action)
+    frame_start = int(params.get("frame_start", _fr[0]))
+    frame_end = int(params.get("frame_end", _fr[1]))
 
     # Enter pose mode and select spring bones
     bpy.context.view_layer.objects.active = armature_obj
@@ -668,8 +704,8 @@ def handle_extract_root_motion(params: dict) -> dict:
     if not root_pbone:
         raise ValueError(f"Root bone not found: {root_bone_name}")
 
-    frame_start = int(action.frame_range[0])
-    frame_end = int(action.frame_range[1])
+    frame_start = int(_action_frame_range(action)[0])
+    frame_end = int(_action_frame_range(action)[1])
 
     # Step 1: Read hip XY translation per frame (world space)
     hip_translations = []
@@ -682,12 +718,12 @@ def handle_extract_root_motion(params: dict) -> dict:
     root_loc_data_path = f'pose.bones["{root_bone_name}"].location'
 
     # Remove existing root bone location fcurves if present
-    for fc in list(action.fcurves):
+    for fc in list(_action_fcurves_list(action)):
         if fc.data_path == root_loc_data_path:
-            action.fcurves.remove(fc)
+            _action_remove_fcurve(action, fc)
 
-    fc_root_x = action.fcurves.new(data_path=root_loc_data_path, index=0)
-    fc_root_y = action.fcurves.new(data_path=root_loc_data_path, index=1)
+    fc_root_x = (action.fcurves if hasattr(action, "fcurves") else get_fcurves(action)).new(data_path=root_loc_data_path, index=0) if hasattr(action, "fcurves") else new_fcurve(action, root_loc_data_path, 0)
+    fc_root_y = _action_new_fcurve(action, root_loc_data_path, 1, armature_obj)
 
     fc_root_x.keyframe_points.add(count=len(hip_translations))
     fc_root_y.keyframe_points.add(count=len(hip_translations))
@@ -712,7 +748,7 @@ def handle_extract_root_motion(params: dict) -> dict:
     # Step 4: Subtract extracted XY from hip bone's local fcurves
     # Keep Z (vertical bob) intact
     hip_loc_data_path = f'pose.bones["{hip_bone_name}"].location'
-    for fc in action.fcurves:
+    for fc in _action_fcurves_list(action):
         if fc.data_path == hip_loc_data_path and fc.array_index in (0, 1):
             # Zero out X and Y on hip bone (motion moved to root)
             for kp in fc.keyframe_points:
@@ -729,13 +765,11 @@ def handle_extract_root_motion(params: dict) -> dict:
             rot_index = 2  # Z axis
 
         # Remove existing root rotation Z fcurve if present
-        for fc in list(action.fcurves):
+        for fc in list(_action_fcurves_list(action)):
             if fc.data_path == root_rot_data_path and fc.array_index == rot_index:
-                action.fcurves.remove(fc)
+                _action_remove_fcurve(action, fc)
 
-        fc_root_rz = action.fcurves.new(
-            data_path=root_rot_data_path, index=rot_index
-        )
+        fc_root_rz = _action_new_fcurve(action, root_rot_data_path, rot_index, armature_obj)
         fc_root_rz.keyframe_points.add(count=len(hip_translations))
 
         for i, (frame, hx, hy, hz) in enumerate(hip_translations):
@@ -874,8 +908,8 @@ def handle_retarget_mixamo(params: dict) -> dict:
         src_action = source_obj.animation_data.action
 
     if src_action:
-        frame_start = int(src_action.frame_range[0])
-        frame_end = int(src_action.frame_range[1])
+        frame_start = int(_action_frame_range(src_action)[0])
+        frame_end = int(_action_frame_range(src_action)[1])
     else:
         frame_start = int(bpy.context.scene.frame_start)
         frame_end = int(bpy.context.scene.frame_end)
@@ -1148,13 +1182,13 @@ def handle_generate_ai_motion(params: dict) -> dict:
 
     for (bone_name, channel, axis), frames in fcurve_map.items():
         data_path = f'pose.bones["{bone_name}"].{channel}'
-        fc = action.fcurves.new(data_path=data_path, index=axis)
+        fc = _action_new_fcurve(action, data_path, axis, armature_obj)
         fc.keyframe_points.add(count=len(frames))
         for i, (frame, value) in enumerate(frames):
             fc.keyframe_points[i].co = (frame, value)
             fc.keyframe_points[i].interpolation = "BEZIER"
 
-    frame_range = [int(action.frame_range[0]), int(action.frame_range[1])]
+    frame_range = [int(_action_frame_range(action)[0]), int(_action_frame_range(action)[1])]
 
     return {
         "status": "success",
@@ -1165,7 +1199,7 @@ def handle_generate_ai_motion(params: dict) -> dict:
         "style": style,
         "frame_count": frame_count,
         "keyframe_count": len(keyframes),
-        "fcurve_count": len(action.fcurves),
+        "fcurve_count": get_fcurve_count(action),
         "frame_range": frame_range,
     }
 
