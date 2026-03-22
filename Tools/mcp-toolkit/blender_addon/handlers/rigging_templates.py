@@ -2625,16 +2625,13 @@ def _compute_bone_scale_offset(
     t_height = t_max_z - t_min_z
     t_center_x = (t_min_x + t_max_x) / 2.0
 
-    # Mesh bounding box (in world space)
-    bbox_corners = [mesh_obj.matrix_world @ bpy.types.Object.bl_rna.properties["bound_box"].fixed_type(v)
-                    for v in mesh_obj.bound_box]
-    # Simpler: use mesh bound_box directly
-    bb = mesh_obj.bound_box
-    loc = mesh_obj.location
-    m_min_z = min(v[2] for v in bb) + loc.z
-    m_max_z = max(v[2] for v in bb) + loc.z
-    m_min_x = min(v[0] for v in bb) + loc.x
-    m_max_x = max(v[0] for v in bb) + loc.x
+    # Mesh bounding box in world space (handles rotation/scale)
+    from mathutils import Vector
+    world_corners = [mesh_obj.matrix_world @ Vector(v) for v in mesh_obj.bound_box]
+    m_min_z = min(c.z for c in world_corners)
+    m_max_z = max(c.z for c in world_corners)
+    m_min_x = min(c.x for c in world_corners)
+    m_max_x = max(c.x for c in world_corners)
     m_height = m_max_z - m_min_z
     m_center_x = (m_min_x + m_max_x) / 2.0
 

@@ -1041,6 +1041,14 @@ def handle_edit_bone(params: dict) -> dict:
     bpy.ops.object.select_all(action="DESELECT")
     arm_obj.select_set(True)
 
+    valid_operations = {"move", "scale", "rotate", "select", "inspect"}
+    if operation not in valid_operations:
+        raise ValueError(f"Unknown operation: '{operation}'. Valid: {sorted(valid_operations)}")
+
+    valid_modes = {"edit", "pose"}
+    if mode not in valid_modes:
+        raise ValueError(f"Unknown mode: '{mode}'. Valid: {sorted(valid_modes)}")
+
     result = {"bone_name": bone_name, "operation": operation}
 
     if mode == "edit":
