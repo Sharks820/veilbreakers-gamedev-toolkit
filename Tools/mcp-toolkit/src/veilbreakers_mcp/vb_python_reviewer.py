@@ -296,7 +296,8 @@ RULES: list[Rule] = [
          "Comparing with None using == instead of 'is None'",
          "Use 'is None' or 'is not None'.",
          re.compile(r"[!=]=\s*None\b"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-COR-04", Severity.MEDIUM, Category.Bug,
          "open() without context manager -- file may not close",
@@ -309,7 +310,8 @@ RULES: list[Rule] = [
          "datetime.now() without timezone -- ambiguous",
          "Use datetime.now(tz=timezone.utc).",
          re.compile(r"datetime\.now\s*\(\s*\)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         finding_type=FindingType.STRENGTHENING),
 
     # PY-COR-06: only flag if result is mutated, not just read
     Rule("PY-COR-06", Severity.MEDIUM, Category.Bug,
@@ -323,7 +325,8 @@ RULES: list[Rule] = [
          "Class with __del__ -- unpredictable GC, prevents ref cycle collection",
          "Use context managers or weakref.finalize.",
          re.compile(r"def\s+__del__\s*\(\s*self"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-COR-08", Severity.MEDIUM, Category.Bug,
          "Thread without daemon=True -- may prevent clean shutdown",
