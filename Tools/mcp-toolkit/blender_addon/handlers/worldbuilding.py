@@ -135,6 +135,96 @@ VB_DUNGEON_PRESETS: dict[str, dict] = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# VeilBreakers Landmark Presets -- unique one-of-a-kind world structures
+# ---------------------------------------------------------------------------
+
+# Maps landmark interior_rooms names -> valid _ROOM_CONFIGS keys for furnishing.
+_LANDMARK_ROOM_TYPE_MAP: dict[str, str] = {
+    "throne_room": "throne_room",
+    "prison": "dungeon_cell",
+    "shrine_room": "chapel",
+    "guard_post": "guard_barracks",
+    "storage": "armory",
+    "smithy": "blacksmith",
+    "barracks": "guard_barracks",
+}
+
+VB_LANDMARK_PRESETS: dict[str, dict] = {
+    "the_congregation_lair": {
+        "description": "Tutorial boss arena — abandoned village church consumed by darkness",
+        "base_style": "gothic",
+        "scale": 2.0,
+        "floors": 2,
+        "width": 15.0, "depth": 20.0,
+        "wall_height": 8.0,
+        "unique_features": ["corrupted_spire", "shattered_stained_glass", "soul_anchors", "darkness_veil"],
+        "interior_rooms": ["throne_room", "prison", "shrine_room"],
+        "corruption_level": 1.0,
+        "props": ["bone_throne", "soul_cage", "dark_obelisk", "sacrificial_circle", "corruption_crystal"],
+    },
+    "wardens_prison": {
+        "description": "Vex's origin — massive iron prison complex, chains everywhere",
+        "base_style": "fortress",
+        "scale": 1.5,
+        "floors": 3,
+        "width": 20.0, "depth": 25.0,
+        "wall_height": 6.0,
+        "unique_features": ["iron_gates", "guard_towers", "chain_bridges", "solitary_cells"],
+        "interior_rooms": ["prison", "prison", "guard_post", "storage", "prison"],
+        "corruption_level": 0.4,
+        "props": ["shackle", "chain", "iron_maiden", "cell_door_broken", "weapon_rack"],
+    },
+    "thornwood_heart": {
+        "description": "Ancient tree at the center of Thornwood Forest — sacred nature shrine",
+        "base_style": "organic",
+        "scale": 3.0,
+        "floors": 1,
+        "width": 10.0, "depth": 10.0,
+        "wall_height": 15.0,
+        "unique_features": ["giant_tree_trunk", "root_archways", "bioluminescent_fungi", "vine_bridges"],
+        "interior_rooms": ["shrine_room"],
+        "corruption_level": 0.1,
+        "props": ["altar", "mushroom_cluster", "crystal_light", "offering_bowl", "prayer_mat"],
+    },
+    "veil_breach": {
+        "description": "Major dimensional rift — reality torn open, floating debris, impossible geometry",
+        "base_style": "chaotic",
+        "scale": 2.5,
+        "floors": 0,
+        "width": 30.0, "depth": 30.0,
+        "wall_height": 20.0,
+        "unique_features": ["reality_crack", "floating_platforms", "inverted_gravity_zone", "void_portal"],
+        "interior_rooms": [],
+        "corruption_level": 0.9,
+        "props": ["corruption_crystal", "veil_tear", "floating_rock", "void_tendril", "dark_obelisk"],
+    },
+    "storm_citadel": {
+        "description": "Lightning-struck fortress on mountain peak — Voltgeist's domain",
+        "base_style": "fortress",
+        "scale": 2.0,
+        "floors": 4,
+        "width": 18.0, "depth": 18.0,
+        "wall_height": 7.0,
+        "unique_features": ["lightning_rods", "electrified_walls", "tesla_coil_towers", "storm_beacon"],
+        "interior_rooms": ["throne_room", "smithy", "barracks", "storage"],
+        "corruption_level": 0.6,
+        "props": ["lightning_rod", "crystal_cluster", "brazier", "weapon_rack", "anvil"],
+    },
+    "broodmother_nest": {
+        "description": "Massive spider cave — webs everywhere, egg sacs, chitinous walls",
+        "base_style": "organic",
+        "scale": 2.0,
+        "floors": 1,
+        "width": 25.0, "depth": 30.0,
+        "wall_height": 10.0,
+        "unique_features": ["web_canopy", "egg_chamber", "cocoon_gallery", "acid_pools"],
+        "interior_rooms": ["storage", "prison"],
+        "corruption_level": 0.7,
+        "props": ["spider_web", "egg_cluster", "cocoon", "bone_pile", "skull_pile"],
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # Preset lookup helpers
@@ -149,6 +239,11 @@ def get_vb_building_preset(name: str) -> dict | None:
 def get_vb_dungeon_preset(name: str) -> dict | None:
     """Return a VeilBreakers dungeon preset by name, or None if not found."""
     return VB_DUNGEON_PRESETS.get(name)
+
+
+def get_vb_landmark_preset(name: str) -> dict | None:
+    """Return a VeilBreakers landmark preset by name, or None if not found."""
+    return VB_LANDMARK_PRESETS.get(name)
 
 from ._building_grammar import (
     evaluate_building_grammar,
@@ -505,6 +600,323 @@ def _build_modular_kit_result(
         "piece_count": len(pieces),
         "pieces": [p["name"] for p in pieces],
         "cell_size": cell_size,
+    }
+
+
+def _generate_landmark_unique_features(
+    unique_features: list[str],
+    width: float,
+    depth: float,
+    wall_height: float,
+    scale: float,
+    seed: int = 0,
+) -> list[dict]:
+    """Generate geometry operations for landmark unique features.
+
+    Returns a list of BuildingSpec-compatible operation dicts (box/cylinder)
+    representing the unique architectural elements of a landmark.
+    Pure logic -- no bpy/bmesh calls.
+    """
+    import random as _random
+    rng = _random.Random(seed)
+    ops: list[dict] = []
+
+    for feat in unique_features:
+        if feat in ("corrupted_spire", "storm_beacon"):
+            # Tall central spire/beacon
+            radius = 0.8 * scale
+            h = wall_height * 1.5 * scale
+            ops.append({
+                "type": "cylinder",
+                "position": [width / 2 - radius, depth / 2 - radius, wall_height],
+                "radius": radius,
+                "height": h,
+                "segments": 8,
+                "material": "stone_dark",
+                "role": "landmark_spire",
+                "feature_name": feat,
+            })
+        elif feat in ("shattered_stained_glass", "iron_gates"):
+            # Decorative panel on front wall
+            panel_w = 3.0 * scale
+            panel_h = wall_height * 0.6
+            ops.append({
+                "type": "box",
+                "position": [width / 2 - panel_w / 2, -0.1, wall_height * 0.3],
+                "size": [panel_w, 0.15, panel_h],
+                "material": "glass_stained" if "glass" in feat else "iron",
+                "role": "landmark_decoration",
+                "feature_name": feat,
+            })
+        elif feat in ("soul_anchors", "lightning_rods", "tesla_coil_towers"):
+            # 4 corner pylons
+            for i in range(4):
+                cx = (width - 1.0) * (i % 2)
+                cy = (depth - 1.0) * (i // 2)
+                ops.append({
+                    "type": "cylinder",
+                    "position": [cx, cy, 0],
+                    "radius": 0.4 * scale,
+                    "height": wall_height * 1.2,
+                    "segments": 6,
+                    "material": "metal_dark",
+                    "role": "landmark_pylon",
+                    "feature_name": feat,
+                })
+        elif feat in ("darkness_veil", "void_portal"):
+            # Large translucent barrier/portal plane
+            ops.append({
+                "type": "box",
+                "position": [width * 0.1, depth / 2 - 0.05, 0],
+                "size": [width * 0.8, 0.1, wall_height],
+                "material": "veil_energy",
+                "role": "landmark_barrier",
+                "feature_name": feat,
+            })
+        elif feat in ("guard_towers", "electrified_walls"):
+            # Corner towers
+            for i in range(4):
+                cx = (width - 2.0) * (i % 2)
+                cy = (depth - 2.0) * (i // 2)
+                ops.append({
+                    "type": "cylinder",
+                    "position": [cx, cy, 0],
+                    "radius": 1.5 * scale,
+                    "height": wall_height * 1.4,
+                    "segments": 12,
+                    "material": "stone_fortified",
+                    "role": "landmark_tower",
+                    "feature_name": feat,
+                })
+        elif feat in ("chain_bridges", "vine_bridges"):
+            # Bridge connecting two sides
+            bridge_y = depth / 2 - 0.5
+            ops.append({
+                "type": "box",
+                "position": [-2.0, bridge_y, wall_height * 0.7],
+                "size": [width + 4.0, 1.0, 0.2],
+                "material": "chain" if "chain" in feat else "wood_vine",
+                "role": "landmark_bridge",
+                "feature_name": feat,
+            })
+        elif feat in ("solitary_cells", "cocoon_gallery"):
+            # Row of small enclosures along a wall
+            cell_count = rng.randint(3, 5)
+            spacing = depth / (cell_count + 1)
+            for ci in range(cell_count):
+                ops.append({
+                    "type": "box",
+                    "position": [-0.3, spacing * (ci + 1) - 1.0, 0],
+                    "size": [2.0, 2.0, wall_height * 0.6],
+                    "material": "iron" if "cell" in feat else "chitin",
+                    "role": "landmark_enclosure",
+                    "feature_name": feat,
+                })
+        elif feat in ("giant_tree_trunk",):
+            # Massive central cylinder
+            ops.append({
+                "type": "cylinder",
+                "position": [width / 2, depth / 2, 0],
+                "radius": min(width, depth) * 0.3,
+                "height": wall_height * scale,
+                "segments": 24,
+                "material": "bark",
+                "role": "landmark_tree",
+                "feature_name": feat,
+            })
+        elif feat in ("root_archways",):
+            # Arching root structures at 4 cardinal points
+            for i in range(4):
+                angle_offset = i * (math.pi / 2)
+                rx = width / 2 + math.cos(angle_offset) * width * 0.4
+                ry = depth / 2 + math.sin(angle_offset) * depth * 0.4
+                ops.append({
+                    "type": "box",
+                    "position": [rx - 0.5, ry - 0.5, 0],
+                    "size": [1.0, 1.0, wall_height * 0.8],
+                    "material": "root_wood",
+                    "role": "landmark_archway",
+                    "feature_name": feat,
+                })
+        elif feat in ("bioluminescent_fungi",):
+            # Scattered glowing fungi clusters
+            count = rng.randint(5, 8)
+            for fi in range(count):
+                fx = rng.uniform(0.5, width - 0.5)
+                fy = rng.uniform(0.5, depth - 0.5)
+                ops.append({
+                    "type": "cylinder",
+                    "position": [fx, fy, 0],
+                    "radius": rng.uniform(0.2, 0.5),
+                    "height": rng.uniform(0.3, 1.2),
+                    "segments": 8,
+                    "material": "bioluminescent",
+                    "role": "landmark_flora",
+                    "feature_name": feat,
+                })
+        elif feat in ("reality_crack",):
+            # Jagged vertical crack through the center
+            ops.append({
+                "type": "box",
+                "position": [width / 2 - 0.1, 0, 0],
+                "size": [0.2, depth, wall_height],
+                "material": "void_energy",
+                "role": "landmark_crack",
+                "feature_name": feat,
+            })
+        elif feat in ("floating_platforms", "inverted_gravity_zone"):
+            # Floating debris platforms at various heights
+            count = rng.randint(4, 7)
+            for pi in range(count):
+                px = rng.uniform(2.0, width - 2.0)
+                py = rng.uniform(2.0, depth - 2.0)
+                pz = rng.uniform(wall_height * 0.3, wall_height * 0.9)
+                ops.append({
+                    "type": "box",
+                    "position": [px - 1.0, py - 1.0, pz],
+                    "size": [
+                        rng.uniform(1.5, 3.0),
+                        rng.uniform(1.5, 3.0),
+                        rng.uniform(0.3, 0.8),
+                    ],
+                    "material": "stone_corrupted",
+                    "role": "landmark_floating",
+                    "feature_name": feat,
+                })
+        elif feat in ("web_canopy",):
+            # Ceiling web layer
+            ops.append({
+                "type": "box",
+                "position": [0, 0, wall_height * 0.85],
+                "size": [width, depth, 0.15],
+                "material": "spider_silk",
+                "role": "landmark_canopy",
+                "feature_name": feat,
+            })
+        elif feat in ("egg_chamber",):
+            # Central bulbous chamber
+            ops.append({
+                "type": "cylinder",
+                "position": [width / 2, depth / 2, 0],
+                "radius": min(width, depth) * 0.25,
+                "height": wall_height * 0.6,
+                "segments": 16,
+                "material": "chitin",
+                "role": "landmark_chamber",
+                "feature_name": feat,
+            })
+        elif feat in ("acid_pools",):
+            # Floor-level pools
+            pool_count = rng.randint(2, 4)
+            for ai in range(pool_count):
+                ax = rng.uniform(2.0, width - 2.0)
+                ay = rng.uniform(2.0, depth - 2.0)
+                ops.append({
+                    "type": "cylinder",
+                    "position": [ax, ay, 0],
+                    "radius": rng.uniform(1.0, 2.5),
+                    "height": 0.05,
+                    "segments": 12,
+                    "material": "acid",
+                    "role": "landmark_hazard",
+                    "feature_name": feat,
+                })
+        else:
+            # Generic fallback: decorative pillar/marker
+            ops.append({
+                "type": "cylinder",
+                "position": [
+                    rng.uniform(1.0, width - 1.0),
+                    rng.uniform(1.0, depth - 1.0),
+                    0,
+                ],
+                "radius": 0.5 * scale,
+                "height": wall_height * 0.5,
+                "segments": 8,
+                "material": "stone_dark",
+                "role": "landmark_feature",
+                "feature_name": feat,
+            })
+
+    return ops
+
+
+def _apply_corruption_tint(
+    corruption_level: float,
+) -> dict:
+    """Compute corruption color tint based on corruption_level (0.0-1.0).
+
+    Returns a dict with base_color RGBA and material metadata.
+    Pure logic -- no bpy calls.
+    """
+    # Lerp from clean stone grey (0.6, 0.58, 0.55) to corrupted dark purple (0.15, 0.05, 0.12)
+    t = max(0.0, min(1.0, corruption_level))
+    r = 0.6 - 0.45 * t
+    g = 0.58 - 0.53 * t
+    b = 0.55 - 0.43 * t
+    a = 1.0
+    return {
+        "base_color": [round(r, 4), round(g, 4), round(b, 4), a],
+        "corruption_level": t,
+        "material_name": "landmark_corrupted" if t > 0.3 else "landmark_clean",
+        "emission_strength": t * 0.5,  # corrupted surfaces glow faintly
+    }
+
+
+def _build_landmark_result(
+    name: str,
+    preset: dict,
+    spec: BuildingSpec | None,
+    unique_feature_ops: list[dict],
+    room_layouts: dict[str, list[dict]],
+    corruption_tint: dict,
+) -> dict:
+    """Build handler return dict for a landmark.
+
+    Pure logic -- no bpy calls. Assembles all landmark metadata into the
+    result dict returned by handle_generate_landmark.
+    """
+    # Count mesh elements from the building spec
+    if spec is not None:
+        mesh_specs = _building_ops_to_mesh_spec(spec)
+        structure_verts = sum(
+            m.get("vertex_count", 0) for m in mesh_specs
+            if m["type"] not in ("opening",)
+        )
+        structure_faces = sum(
+            m.get("face_count", 0) for m in mesh_specs
+            if m["type"] not in ("opening",)
+        )
+    else:
+        structure_verts = 0
+        structure_faces = 0
+
+    # Count unique feature elements
+    feature_count = len(unique_feature_ops)
+    feature_roles = list({op.get("role", "unknown") for op in unique_feature_ops})
+
+    # Count furnished room items
+    total_furniture = sum(len(layout) for layout in room_layouts.values())
+    rooms_furnished = list(room_layouts.keys())
+
+    return {
+        "name": name,
+        "description": preset.get("description", ""),
+        "base_style": preset.get("base_style", "gothic"),
+        "scale": preset.get("scale", 1.0),
+        "floors": preset.get("floors", 1),
+        "footprint": [preset.get("width", 10.0), preset.get("depth", 10.0)],
+        "wall_height": preset.get("wall_height", 5.0),
+        "corruption_level": preset.get("corruption_level", 0.0),
+        "corruption_tint": corruption_tint,
+        "structure_vertex_count": structure_verts,
+        "structure_face_count": structure_faces,
+        "unique_feature_count": feature_count,
+        "unique_feature_roles": feature_roles,
+        "unique_features": preset.get("unique_features", []),
+        "rooms_furnished": rooms_furnished,
+        "total_furniture": total_furniture,
+        "props": preset.get("props", []),
     }
 
 
@@ -1469,3 +1881,208 @@ def handle_add_storytelling_props(params: dict) -> dict:
             "group_name": prop_group_name,
         },
     }
+
+
+def handle_generate_landmark(params: dict) -> dict:
+    """Generate a unique VeilBreakers landmark structure.
+
+    Landmarks are one-of-a-kind structures that serve as world navigation
+    reference points -- things players remember and use to orient themselves.
+
+    Params:
+        landmark_name: key from VB_LANDMARK_PRESETS, or "custom"
+        name: Blender object name (default: landmark_name or "Landmark")
+        seed: random seed (default 0)
+        -- custom-mode overrides (ignored when using a preset) --
+        description: landmark description
+        base_style: architecture style (default "gothic")
+        scale: overall scale multiplier (default 1.0)
+        floors: number of floors (default 1)
+        width: footprint width (default 10.0)
+        depth: footprint depth (default 10.0)
+        wall_height: wall height (default 5.0)
+        unique_features: list of feature names (default [])
+        interior_rooms: list of room type names to furnish (default [])
+        corruption_level: 0.0-1.0 corruption intensity (default 0.0)
+        props: list of prop names (default [])
+    """
+    logger.info("Generating landmark")
+
+    landmark_name = params.get("landmark_name", "custom")
+    seed = params.get("seed", 0)
+
+    # Resolve preset or build custom config
+    if landmark_name != "custom":
+        preset = get_vb_landmark_preset(landmark_name)
+        if preset is None:
+            raise ValueError(
+                f"Unknown VB landmark preset '{landmark_name}'. "
+                f"Valid: {list(VB_LANDMARK_PRESETS.keys())}"
+            )
+        # Allow param overrides on top of preset
+        preset = dict(preset)  # shallow copy to avoid mutation
+    else:
+        preset = {
+            "description": params.get("description", "Custom landmark"),
+            "base_style": params.get("base_style", "gothic"),
+            "scale": params.get("scale", 1.0),
+            "floors": params.get("floors", 1),
+            "width": params.get("width", 10.0),
+            "depth": params.get("depth", 10.0),
+            "wall_height": params.get("wall_height", 5.0),
+            "unique_features": params.get("unique_features", []),
+            "interior_rooms": params.get("interior_rooms", []),
+            "corruption_level": params.get("corruption_level", 0.0),
+            "props": params.get("props", []),
+        }
+
+    name = params.get("name", landmark_name if landmark_name != "custom" else "Landmark")
+    width = preset["width"]
+    depth = preset["depth"]
+    floors = preset["floors"]
+    wall_height = preset["wall_height"]
+    scale = preset["scale"]
+    corruption_level = preset["corruption_level"]
+    unique_features = preset["unique_features"]
+    interior_rooms = preset.get("interior_rooms", [])
+
+    # Resolve base_style -- fall back to "gothic" if style not in STYLE_CONFIGS
+    base_style = preset["base_style"]
+    if base_style not in STYLE_CONFIGS:
+        logger.warning(
+            "Landmark style '%s' not in STYLE_CONFIGS, falling back to 'gothic'",
+            base_style,
+        )
+        base_style = "gothic"
+
+    # 1. Generate building structure (skip for floor-less landmarks like veil_breach)
+    spec = None
+    if floors > 0:
+        spec = evaluate_building_grammar(width, depth, floors, base_style, seed)
+
+    # 2. Generate unique feature geometry operations
+    unique_feature_ops = _generate_landmark_unique_features(
+        unique_features=unique_features,
+        width=width,
+        depth=depth,
+        wall_height=wall_height,
+        scale=scale,
+        seed=seed,
+    )
+
+    # 3. Corruption tint
+    corruption_tint = _apply_corruption_tint(corruption_level)
+
+    # 4. Generate interior room layouts
+    room_layouts: dict[str, list[dict]] = {}
+    for i, room_name in enumerate(interior_rooms):
+        mapped_type = _LANDMARK_ROOM_TYPE_MAP.get(room_name, room_name)
+        room_w = width * 0.4
+        room_d = depth * 0.3
+        layout = generate_interior_layout(
+            mapped_type, room_w, room_d, wall_height, seed=seed + i + 1,
+        )
+        room_key = f"{room_name}_{i}" if interior_rooms.count(room_name) > 1 else room_name
+        room_layouts[room_key] = layout
+
+    # 5. Build pure-logic result (testable without Blender)
+    result = _build_landmark_result(
+        name=name,
+        preset=preset,
+        spec=spec,
+        unique_feature_ops=unique_feature_ops,
+        room_layouts=room_layouts,
+        corruption_tint=corruption_tint,
+    )
+
+    # --- Blender geometry ---
+
+    # Create parent empty
+    parent = bpy.data.objects.new(name, None)
+    parent.empty_display_type = "PLAIN_AXES"
+    parent.empty_display_size = max(width, depth) / 2
+    bpy.context.collection.objects.link(parent)
+
+    # Main structure
+    if spec is not None:
+        bm = _spec_to_bmesh(spec)
+        obj = _create_mesh_object(f"{name}_structure", bm)
+        obj.parent = parent
+        obj.scale = (scale, scale, scale)
+
+    # Unique features as separate meshes in a sub-collection
+    if unique_feature_ops:
+        feat_coll = bpy.data.collections.new(f"{name}_features")
+        bpy.context.scene.collection.children.link(feat_coll)
+        feat_spec = BuildingSpec(
+            footprint=(width, depth),
+            floors=0,
+            style=base_style,
+            operations=unique_feature_ops,
+        )
+        feat_mesh_specs = _building_ops_to_mesh_spec(feat_spec)
+        for fi, fms in enumerate(feat_mesh_specs):
+            feat_name = fms.get("feature_name", f"feature_{fi}")
+            feat_bm = bmesh.new()
+            bm_verts = []
+            for v in fms["vertices"]:
+                bm_verts.append(feat_bm.verts.new(v))
+            feat_bm.verts.ensure_lookup_table()
+            for face_indices in fms["faces"]:
+                try:
+                    fv = [bm_verts[idx] for idx in face_indices]
+                    feat_bm.faces.new(fv)
+                except (ValueError, IndexError):
+                    pass
+            f_mesh = bpy.data.meshes.new(f"{name}_{feat_name}")
+            feat_bm.to_mesh(f_mesh)
+            feat_bm.free()
+            f_obj = bpy.data.objects.new(f"{name}_{feat_name}", f_mesh)
+            f_obj.parent = parent
+            feat_coll.objects.link(f_obj)
+
+    # Corruption material tint
+    if corruption_level > 0:
+        mat = bpy.data.materials.new(f"{name}_corruption")
+        mat.use_nodes = True
+        bsdf = mat.node_tree.nodes.get("Principled BSDF")
+        if bsdf:
+            color = corruption_tint["base_color"]
+            bsdf.inputs["Base Color"].default_value = tuple(color)
+        parent["corruption_level"] = corruption_level
+        parent["corruption_tint"] = str(corruption_tint["base_color"])
+
+    # Furnish interior rooms
+    room_seed_offset = 1000
+    for room_key, layout in room_layouts.items():
+        room_empty = bpy.data.objects.new(f"{name}_room_{room_key}", None)
+        room_empty.empty_display_type = "CUBE"
+        room_empty.empty_display_size = 2.0
+        room_empty.parent = parent
+        bpy.context.collection.objects.link(room_empty)
+
+        for item in layout:
+            item_name = f"{name}_{room_key}_{item['type']}"
+            sx, sy, sz = item["scale"]
+            item_bm = bmesh.new()
+            bmesh.ops.create_cube(item_bm, size=1.0)
+            for v in item_bm.verts:
+                v.co.x *= sx
+                v.co.y *= sy
+                v.co.z *= sz
+                v.co.z += sz / 2
+            item_mesh = bpy.data.meshes.new(item_name)
+            item_bm.to_mesh(item_mesh)
+            item_bm.free()
+            item_obj = bpy.data.objects.new(item_name, item_mesh)
+            item_obj.location = tuple(item["position"])
+            item_obj.rotation_euler = (0, 0, item["rotation"])
+            item_obj.parent = room_empty
+            bpy.context.collection.objects.link(item_obj)
+
+    # Store landmark metadata on parent
+    parent["landmark_name"] = landmark_name
+    parent["landmark_description"] = preset.get("description", "")
+    parent["landmark_props"] = str(preset.get("props", []))
+
+    return {"status": "success", "result": result}
