@@ -106,6 +106,7 @@ def generate_blob_locomotion_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):
@@ -158,6 +159,7 @@ def generate_pseudopod_reach_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     # Direction to axis mapping
@@ -223,6 +225,7 @@ def generate_blob_idle_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):
@@ -266,6 +269,7 @@ def generate_blob_attack_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     antic_end = int(0.2 * frame_count)
@@ -328,6 +332,7 @@ def generate_blob_split_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     wobble_end = int(0.3 * frame_count)

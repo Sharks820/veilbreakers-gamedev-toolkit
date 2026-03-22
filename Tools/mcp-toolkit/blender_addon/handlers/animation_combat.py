@@ -128,6 +128,7 @@ def generate_command_receive_keyframes(
     frame_count: int = 12,
 ) -> list[Keyframe]:
     """Subtle nod/ready stance acknowledging a command. 8-12 frames."""
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):
@@ -157,6 +158,7 @@ def generate_combat_idle_keyframes(
     IRON=heavy wide stance, GRACE=flowing sway, SURGE=twitchy shifts,
     DREAD=unnaturally still.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     style = _BRAND_IDLE_STYLES.get(brand.upper(), _BRAND_IDLE_STYLES["IRON"])
 
@@ -189,6 +191,7 @@ def generate_approach_keyframes(
     frame_count: int = 32,
 ) -> list[Keyframe]:
     """Walk toward target with attack wind-up in last 25%."""
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     windup_start = int(0.75 * frame_count)
 
@@ -234,6 +237,7 @@ def generate_return_to_formation_keyframes(
     frame_count: int = 32,
 ) -> list[Keyframe]:
     """Post-attack walk back, weapon lowered, relaxed posture."""
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):
@@ -262,6 +266,7 @@ def generate_guard_keyframes(
     frame_count: int = 16,
 ) -> list[Keyframe]:
     """Raise guard pose — arms/shield up, damage reduction hint."""
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):
@@ -302,6 +307,7 @@ def generate_flee_keyframes(
     stumble: bool = False,
 ) -> list[Keyframe]:
     """Turn and run animation. Optional stumble at low HP."""
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     # Turn phase (first 25%)
@@ -349,6 +355,7 @@ def generate_target_switch_keyframes(
     frame_count: int = 16,
 ) -> list[Keyframe]:
     """Head turn -> body pivot -> settle into new facing."""
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     head_end = int(0.3 * frame_count)
@@ -383,6 +390,7 @@ def generate_synergy_activation_keyframes(
     frame_count: int = 24,
 ) -> list[Keyframe]:
     """Team synergy flash pose with brand energy pulse."""
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):
@@ -424,6 +432,7 @@ def generate_ultimate_windup_keyframes(
     frame_count: int = 48,
 ) -> list[Keyframe]:
     """Extended anticipation (2-3x normal), energy gathering."""
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):
@@ -459,6 +468,7 @@ def generate_victory_pose_keyframes(
     frame_count: int = 36,
 ) -> list[Keyframe]:
     """Brand-specific celebration pose."""
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):
@@ -503,6 +513,7 @@ def generate_defeat_collapse_keyframes(
     frame_count: int = 36,
 ) -> list[Keyframe]:
     """Brand-specific death/defeat collapse animation."""
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     brand_u = brand.upper()
     style = _BRAND_DEFEAT_STYLES.get(brand_u, "crumble")
