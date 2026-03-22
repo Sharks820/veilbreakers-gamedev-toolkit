@@ -956,3 +956,121 @@ class TestMultiArmGeneration:
                     assert abs(bone["roll"] - 1.5708) < 0.001
                 elif bone["name"].endswith(".R"):
                     assert abs(bone["roll"] - (-1.5708)) < 0.001
+
+
+# ---------------------------------------------------------------------------
+# TestMonsterTemplateMap
+# ---------------------------------------------------------------------------
+
+
+class TestMonsterTemplateMap:
+    """Test MONSTER_TEMPLATE_MAP and VB-specific rigging."""
+
+    def test_all_20_monsters_mapped(self):
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        assert len(MONSTER_TEMPLATE_MAP) == 20
+
+    def test_all_templates_valid(self):
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        from blender_addon.handlers.rigging_templates import TEMPLATE_CATALOG
+        for mid, config in MONSTER_TEMPLATE_MAP.items():
+            assert config["template"] in TEMPLATE_CATALOG, f"{mid} has invalid template"
+
+    def test_skitter_teeth_is_arachnid(self):
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        assert MONSTER_TEMPLATE_MAP["skitter_teeth"]["template"] == "arachnid"
+
+    def test_bosses_have_boss_body(self):
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        bosses = ["the_broodmother", "the_bulwark", "the_congregation", "the_vessel", "the_weeping"]
+        for boss in bosses:
+            assert MONSTER_TEMPLATE_MAP[boss]["body"] == "boss"
+
+    def test_validate_known_monster(self):
+        from blender_addon.handlers.rigging import _validate_monster_rig_config
+        result = _validate_monster_rig_config("skitter_teeth")
+        assert result["valid"] is True
+        assert result["template"] == "arachnid"
+
+    def test_validate_unknown_monster(self):
+        from blender_addon.handlers.rigging import _validate_monster_rig_config
+        result = _validate_monster_rig_config("nonexistent")
+        assert result["valid"] is False
+
+    def test_all_monsters_have_features(self):
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        for mid, config in MONSTER_TEMPLATE_MAP.items():
+            assert isinstance(config["features"], list), f"{mid} features not a list"
+            assert len(config["features"]) >= 1, f"{mid} has no features"
+
+
+# ---------------------------------------------------------------------------
+# TestStatusEffectSockets
+# ---------------------------------------------------------------------------
+
+
+class TestStatusEffectSockets:
+    """Test STATUS_EFFECT_SOCKETS mapping."""
+
+    def test_head_socket_exists_for_all_templates(self):
+        from blender_addon.handlers.rigging import STATUS_EFFECT_SOCKETS
+        assert "head" in STATUS_EFFECT_SOCKETS
+        assert len(STATUS_EFFECT_SOCKETS["head"]) >= 4
+
+    def test_get_socket_returns_bone_name(self):
+        from blender_addon.handlers.rigging import _get_status_effect_socket
+        result = _get_status_effect_socket("humanoid", "head")
+        assert result == "spine.005"
+
+    def test_get_socket_returns_none_for_missing(self):
+        from blender_addon.handlers.rigging import _get_status_effect_socket
+        result = _get_status_effect_socket("serpent", "left_hand")
+        assert result is None
+
+    def test_root_socket_available_for_all(self):
+        from blender_addon.handlers.rigging import STATUS_EFFECT_SOCKETS
+        for template in ("humanoid", "quadruped", "arachnid", "floating", "insect", "dragon"):
+            assert template in STATUS_EFFECT_SOCKETS["root"]
+
+
+# ---------------------------------------------------------------------------
+# TestCorruptionMorph
+# ---------------------------------------------------------------------------
+
+
+class TestCorruptionMorph:
+    """Test CORRUPTION_MORPH_STAGES and helpers."""
+
+    def test_has_4_stages(self):
+        from blender_addon.handlers.rigging import CORRUPTION_MORPH_STAGES
+        assert len(CORRUPTION_MORPH_STAGES) == 4
+
+    def test_stages_ascending_threshold(self):
+        from blender_addon.handlers.rigging import CORRUPTION_MORPH_STAGES
+        thresholds = [s["threshold_pct"] for s in CORRUPTION_MORPH_STAGES]
+        assert thresholds == sorted(thresholds)
+
+    def test_get_stage_at_0_returns_none(self):
+        from blender_addon.handlers.rigging import _get_corruption_stage
+        assert _get_corruption_stage(0.0) is None
+
+    def test_get_stage_at_25(self):
+        from blender_addon.handlers.rigging import _get_corruption_stage
+        result = _get_corruption_stage(25.0)
+        assert result is not None
+        assert result["name"] == "corruption_stage_1"
+
+    def test_get_stage_at_100(self):
+        from blender_addon.handlers.rigging import _get_corruption_stage
+        result = _get_corruption_stage(100.0)
+        assert result["name"] == "corruption_stage_4"
+
+    def test_get_stage_invalid_returns_none(self):
+        from blender_addon.handlers.rigging import _get_corruption_stage
+        assert _get_corruption_stage(-5.0) is None
+        assert _get_corruption_stage(101.0) is None
+
+    def test_stage_intensity_increases(self):
+        from blender_addon.handlers.rigging import CORRUPTION_MORPH_STAGES
+        intensities = [s["morph_intensity"] for s in CORRUPTION_MORPH_STAGES]
+        assert intensities == sorted(intensities)

@@ -216,6 +216,178 @@ def _generate_multi_arm_bones(arm_count: int) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# VeilBreakers-specific rigging data
+# ---------------------------------------------------------------------------
+
+# VeilBreakers monster ID to rig template mapping
+MONSTER_TEMPLATE_MAP: dict[str, dict] = {
+    "bloodshade": {"template": "humanoid", "features": ["corruption_morph"], "body": "medium"},
+    "chainbound": {"template": "humanoid", "features": ["mechanical_joints"], "body": "heavy"},
+    "corrodex": {"template": "amorphous", "features": ["dissolution_morph"], "body": "medium"},
+    "crackling": {"template": "floating", "features": ["energy_tendrils"], "body": "small"},
+    "flicker": {"template": "floating", "features": ["fire_trail"], "body": "small"},
+    "gluttony_polyp": {"template": "amorphous", "features": ["mouth_expand"], "body": "large"},
+    "grimthorn": {"template": "amorphous", "features": ["vine_tendrils", "thorn_protrusions"], "body": "medium"},
+    "hollow": {"template": "humanoid", "features": ["void_distortion", "corruption_morph"], "body": "medium"},
+    "ironjaw": {"template": "humanoid", "features": ["heavy_armor_sockets"], "body": "heavy"},
+    "mawling": {"template": "quadruped", "features": ["jaw_extend"], "body": "medium"},
+    "needlefang": {"template": "insect", "features": ["spike_protrusions"], "body": "small"},
+    "ravener": {"template": "quadruped", "features": ["frenzy_morph"], "body": "large"},
+    "skitter_teeth": {"template": "arachnid", "features": ["mandible_extend"], "body": "medium"},
+    "sporecaller": {"template": "floating", "features": ["spore_emitters"], "body": "medium"},
+    "the_broodmother": {"template": "arachnid", "features": ["egg_sacs", "spawn_points", "mandible_extend"], "body": "boss"},
+    "the_bulwark": {"template": "humanoid", "features": ["heavy_armor_sockets", "shield_mount"], "body": "boss"},
+    "the_congregation": {"template": "multi_armed", "features": ["swarm_detach", "corruption_morph"], "body": "boss"},
+    "the_vessel": {"template": "humanoid", "features": ["corruption_morph", "void_distortion"], "body": "boss"},
+    "the_weeping": {"template": "humanoid", "features": ["cloth_drip", "corruption_morph"], "body": "boss"},
+    "voltgeist": {"template": "floating", "features": ["energy_tendrils", "arc_emitters"], "body": "small"},
+}
+
+# Bone sockets where status effect VFX should attach per body type
+STATUS_EFFECT_SOCKETS: dict[str, dict[str, str]] = {
+    "head": {
+        "humanoid": "spine.005",
+        "quadruped": "spine.004",
+        "arachnid": "spine.002",
+        "floating": "spine.002",
+        "insect": "spine.002",
+        "dragon": "spine.006",
+    },
+    "chest": {
+        "humanoid": "spine.002",
+        "quadruped": "spine.001",
+        "arachnid": "spine.001",
+        "floating": "spine.001",
+        "insect": "spine.001",
+        "dragon": "spine.002",
+    },
+    "root": {
+        "humanoid": "spine",
+        "quadruped": "spine",
+        "arachnid": "spine",
+        "floating": "spine",
+        "insect": "spine",
+        "dragon": "spine",
+    },
+    "left_hand": {
+        "humanoid": "hand.L",
+        "quadruped": "hand.L",
+        "dragon": "hand.L",
+    },
+    "right_hand": {
+        "humanoid": "hand.R",
+        "quadruped": "hand.R",
+        "dragon": "hand.R",
+    },
+    "overhead": {
+        "humanoid": "spine.005",
+        "quadruped": "spine.004",
+        "floating": "spine.002",
+        "dragon": "spine.006",
+    },
+}
+
+
+def _get_status_effect_socket(
+    template_name: str,
+    socket_name: str,
+) -> str | None:
+    """Get the bone name for a status effect VFX attachment point.
+
+    Args:
+        template_name: Creature template (humanoid, quadruped, etc.)
+        socket_name: Socket location (head, chest, root, left_hand, etc.)
+
+    Returns:
+        Bone name string, or None if socket not available for this template.
+    """
+    socket_map = STATUS_EFFECT_SOCKETS.get(socket_name, {})
+    return socket_map.get(template_name)
+
+
+# Corruption progression blend shape stages (0-100%)
+CORRUPTION_MORPH_STAGES: list[dict] = [
+    {
+        "name": "corruption_stage_1",
+        "threshold_pct": 25.0,
+        "description": "Subtle dark veins, slight color desaturation",
+        "affected_regions": ["torso", "arms"],
+        "morph_intensity": 0.3,
+    },
+    {
+        "name": "corruption_stage_2",
+        "threshold_pct": 50.0,
+        "description": "Visible corruption tendrils, skin discoloration",
+        "affected_regions": ["torso", "arms", "legs", "neck"],
+        "morph_intensity": 0.6,
+    },
+    {
+        "name": "corruption_stage_3",
+        "threshold_pct": 75.0,
+        "description": "Heavy mutation, bone protrusions, glowing cracks",
+        "affected_regions": ["full_body"],
+        "morph_intensity": 0.85,
+    },
+    {
+        "name": "corruption_stage_4",
+        "threshold_pct": 100.0,
+        "description": "Full corruption, transformed silhouette, void emanation",
+        "affected_regions": ["full_body"],
+        "morph_intensity": 1.0,
+    },
+]
+
+
+def _get_corruption_stage(corruption_pct: float) -> dict | None:
+    """Get the corruption morph stage for a given corruption percentage.
+
+    Args:
+        corruption_pct: Corruption level 0-100.
+
+    Returns:
+        Stage dict or None if below first threshold.
+    """
+    if corruption_pct < 0 or corruption_pct > 100:
+        return None
+    result = None
+    for stage in CORRUPTION_MORPH_STAGES:
+        if corruption_pct >= stage["threshold_pct"]:
+            result = stage
+    return result
+
+
+def _validate_monster_rig_config(monster_id: str) -> dict:
+    """Validate and return rig configuration for a VeilBreakers monster.
+
+    Args:
+        monster_id: Monster ID from monsters.json.
+
+    Returns:
+        Dict with valid, template, features, body, errors.
+    """
+    errors = []
+    if monster_id not in MONSTER_TEMPLATE_MAP:
+        errors.append(f"Unknown monster_id: '{monster_id}'. Valid: {sorted(MONSTER_TEMPLATE_MAP.keys())}")
+        return {"valid": False, "template": None, "features": [], "body": None, "errors": errors}
+
+    config = MONSTER_TEMPLATE_MAP[monster_id]
+    template = config["template"]
+
+    # Verify template exists
+    from .rigging_templates import TEMPLATE_CATALOG
+    if template not in TEMPLATE_CATALOG:
+        errors.append(f"Template '{template}' not in TEMPLATE_CATALOG")
+
+    return {
+        "valid": len(errors) == 0,
+        "template": template,
+        "features": config["features"],
+        "body": config["body"],
+        "errors": errors,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Blender-dependent handlers
 # ---------------------------------------------------------------------------
 
