@@ -188,9 +188,10 @@ def handle_text_to_mesh(params: dict) -> dict:
             f"Object '{name}' is type '{obj.type}', expected 'FONT'"
         )
 
-    # Select and make active
-    bpy.context.view_layer.objects.active = obj
+    # Select and make active -- isolate selection first
+    bpy.ops.object.select_all(action='DESELECT')
     obj.select_set(True)
+    bpy.context.view_layer.objects.active = obj
 
     # Convert to mesh
     bpy.ops.object.convert(target="MESH")

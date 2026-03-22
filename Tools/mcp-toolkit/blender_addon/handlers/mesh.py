@@ -2022,35 +2022,51 @@ def handle_sculpt_brush(params: dict) -> dict:
 
     with bpy.context.temp_override(**ctx):
         bpy.ops.object.mode_set(mode="SCULPT")
+        try:
+            # Enable dyntopo if requested
+            if use_dyntopo:
+                try:
+                    if not obj.data.use_paint_symmetry_x:
+                        pass  # Just check we're in sculpt context
+                    bpy.ops.sculpt.dynamic_topology_toggle()
+                    bpy.context.scene.tool_settings.sculpt.detail_size = detail_size
+                except RuntimeError:
+                    pass
 
-        # Enable dyntopo if requested
-        if use_dyntopo:
-            try:
-                if not obj.data.use_paint_symmetry_x:
-                    pass  # Just check we're in sculpt context
-                bpy.ops.sculpt.dynamic_topology_toggle()
-                bpy.context.scene.tool_settings.sculpt.detail_size = detail_size
-            except RuntimeError:
-                pass
+            # Set the active brush
+            sculpt = bpy.context.scene.tool_settings.sculpt
+            brush = bpy.data.brushes.get(brush_type)
+            if brush is None:
+                brush = bpy.data.brushes.new(name=brush_type, mode="SCULPT")
+            brush.sculpt_tool = brush_type
+            brush.strength = strength
+            brush.size = int(radius)
+            sculpt.brush = brush
 
-        # Set the active brush
-        sculpt = bpy.context.scene.tool_settings.sculpt
-        brush = bpy.data.brushes.get(brush_type)
-        if brush is None:
-            brush = bpy.data.brushes.new(name=brush_type, mode="SCULPT")
-        brush.sculpt_tool = brush_type
-        brush.strength = strength
-        brush.size = int(radius)
-        sculpt.brush = brush
-
-        # Build stroke data
-        stroke = []
-        if stroke_points:
-            for pt in stroke_points:
+            # Build stroke data
+            stroke = []
+            if stroke_points:
+                for pt in stroke_points:
+                    stroke.append({
+                        "name": "stroke",
+                        "is_start": len(stroke) == 0,
+                        "location": (pt[0], pt[1], pt[2]),
+                        "mouse": (0, 0),
+                        "mouse_event": (0, 0),
+                        "pen_flip": False,
+                        "pressure": 1.0,
+                        "size": int(radius),
+                        "time": 0.0,
+                        "x_tilt": 0.0,
+                        "y_tilt": 0.0,
+                    })
+            else:
+                # Single dab at object center
+                loc = obj.location
                 stroke.append({
                     "name": "stroke",
-                    "is_start": len(stroke) == 0,
-                    "location": (pt[0], pt[1], pt[2]),
+                    "is_start": True,
+                    "location": (loc.x, loc.y, loc.z),
                     "mouse": (0, 0),
                     "mouse_event": (0, 0),
                     "pen_flip": False,
@@ -2060,33 +2076,17 @@ def handle_sculpt_brush(params: dict) -> dict:
                     "x_tilt": 0.0,
                     "y_tilt": 0.0,
                 })
-        else:
-            # Single dab at object center
-            loc = obj.location
-            stroke.append({
-                "name": "stroke",
-                "is_start": True,
-                "location": (loc.x, loc.y, loc.z),
-                "mouse": (0, 0),
-                "mouse_event": (0, 0),
-                "pen_flip": False,
-                "pressure": 1.0,
-                "size": int(radius),
-                "time": 0.0,
-                "x_tilt": 0.0,
-                "y_tilt": 0.0,
-            })
 
-        bpy.ops.sculpt.brush_stroke(stroke=stroke)
+            bpy.ops.sculpt.brush_stroke(stroke=stroke)
 
-        # Disable dyntopo before exiting if we enabled it
-        if use_dyntopo:
-            try:
-                bpy.ops.sculpt.dynamic_topology_toggle()
-            except RuntimeError:
-                pass
-
-        bpy.ops.object.mode_set(mode="OBJECT")
+            # Disable dyntopo before exiting if we enabled it
+            if use_dyntopo:
+                try:
+                    bpy.ops.sculpt.dynamic_topology_toggle()
+                except RuntimeError:
+                    pass
+        finally:
+            bpy.ops.object.mode_set(mode="OBJECT")
 
     return {
         "object_name": name,
