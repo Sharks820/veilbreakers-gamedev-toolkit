@@ -21,19 +21,7 @@ import re
 import uuid
 from typing import Optional
 
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -826,7 +814,7 @@ def generate_character_controller_script(
     Returns:
         Complete C# source string.
     """
-    safe_mode = _sanitize_cs_identifier(mode)
+    safe_mode = sanitize_cs_identifier(mode)
     lines = []
 
     lines.append("using UnityEngine;")
@@ -927,7 +915,7 @@ def generate_character_controller_script(
     lines.append("            moveDir.Normalize();")
     lines.append("")
     lines.append("            float speed = _moveSpeed * (_isSprinting ? _sprintMultiplier : 1f);")
-    lines.append("            _controller.Move(moveDir * speed * Time.deltaTime);")
+    lines.append("            _velocity = new Vector3(moveDir.x * speed, _velocity.y, moveDir.z * speed);")
     lines.append("")
     if mode == "third_person":
         lines.append("            // Rotate character to face movement direction (third-person)")
@@ -972,7 +960,7 @@ def generate_character_controller_script(
     lines.append("                if (slopeAngle > _maxSlopeAngle)")
     lines.append("                {")
     lines.append("                    Vector3 slideDir = Vector3.ProjectOnPlane(Vector3.down, hit.normal).normalized;")
-    lines.append("                    _controller.Move(slideDir * _slideSpeed * Time.deltaTime);")
+    lines.append("                    _velocity = new Vector3(slideDir.x * _slideSpeed, _velocity.y, slideDir.z * _slideSpeed);")
     lines.append("                }")
     lines.append("            }")
     lines.append("        }")
@@ -2075,7 +2063,7 @@ def generate_http_client_script(
     Returns:
         Complete C# source string.
     """
-    safe_base_url = _sanitize_cs_string(base_url)
+    safe_base_url = sanitize_cs_string(base_url)
     lines = []
 
     lines.append("using System;")
