@@ -374,6 +374,13 @@ def _place_buildings(
             if _aabb_overlaps(target_pos, fp, opos, osize, margin=2.0):
                 return None
         rotation = _angle_to(target_pos, center)
+        # Look up floor count from building preset defaults
+        _BUILDING_FLOORS = {
+            "shrine_minor": 1, "shrine_major": 2, "ruined_fortress_tower": 3,
+            "abandoned_house": 1, "forge": 1, "tent": 1, "lean_to": 1,
+            "campfire_area": 1, "cage": 1, "watchtower": 2, "barracks": 1,
+            "supply_tent": 1, "market_stall_cluster": 1,
+        }
         building = {
             "position": (round(target_pos[0], 2), round(target_pos[1], 2)),
             "rotation": round(rotation, 4),
@@ -383,6 +390,7 @@ def _place_buildings(
                 _BUILDING_ROOMS.get(btype, ["storage"])
             ),
             "footprint": fp,
+            "floors": _BUILDING_FLOORS.get(btype, 1),
         }
         occupied.append((target_pos, fp))
         return building

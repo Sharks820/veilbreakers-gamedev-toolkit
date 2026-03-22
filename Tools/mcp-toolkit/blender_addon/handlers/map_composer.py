@@ -163,8 +163,8 @@ def _hash_noise_2d(x: float, y: float, seed: int = 0) -> float:
     h = ((h >> 16) ^ h) * 0x45D9F3B
     h = ((h >> 16) ^ h) * 0x45D9F3B
     h = (h >> 16) ^ h
-    # Map to [-1, 1]
-    return ((h & 0xFFFFFFFF) / 0x7FFFFFFF) - 1.0
+    # Map to [-1, 1] (divide by 0xFFFFFFFF to stay within bounds)
+    return ((h & 0xFFFFFFFF) / 0xFFFFFFFF) * 2.0 - 1.0
 
 
 # ---------------------------------------------------------------------------
