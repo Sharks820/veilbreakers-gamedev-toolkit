@@ -456,7 +456,7 @@ async def blender_uv(
     ],
     object_name: str | None = None,
     texture_size: int = 1024,
-    padding: int = 2,
+    padding: int = 4,
     resolution: int = 1024,
     margin: float = 0.001,
     layer_name: str | None = None,
