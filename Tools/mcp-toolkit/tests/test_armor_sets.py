@@ -77,8 +77,9 @@ class TestArmorSetsConstants:
         for path in VALID_PATHS:
             sets = [d for d in ARMOR_SETS.values() if d["path"] == path]
             tiers = {s["tier"] for s in sets}
-            assert tiers == {"rare", "epic", "legendary"}, (
-                f"Path '{path}' missing tiers: {{'rare', 'epic', 'legendary'} - tiers}"
+            expected_tiers = {"rare", "epic", "legendary"}
+            assert tiers == expected_tiers, (
+                f"Path '{path}' missing tiers: {expected_tiers - tiers}"
             )
 
     def test_set_bonuses_are_dict_with_int_keys(self):
