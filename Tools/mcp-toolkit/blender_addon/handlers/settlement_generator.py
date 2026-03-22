@@ -4,8 +4,9 @@ Generates towns, camps, castles, villages, and outposts with:
 - Unique building placement per seed
 - Road networks connecting all structures
 - Prop decoration (signs, crates, market stalls, etc.)
-- Room function-based interior furnishing
-- Terrain-aware foundation placement
+- Room function-based interior furnishing (multi-floor aware)
+- Interior lighting placement per room type
+- Terrain-aware foundation placement with heightmap support
 
 Pure-logic data structures only -- NO bpy/bmesh imports.
 Fully testable without Blender.
@@ -15,7 +16,7 @@ from __future__ import annotations
 
 import math
 import random
-from typing import Any
+from typing import Any, Callable, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +205,60 @@ _SCATTER_PROPS: list[str] = [
     "rock_small", "rock_medium", "debris_pile", "dead_bush",
     "fallen_log", "mushroom_cluster", "bone_scatter",
 ]
+
+# ---------------------------------------------------------------------------
+# Narrative prop clusters -- thematic groupings placed near matching buildings
+# ---------------------------------------------------------------------------
+
+_NARRATIVE_CLUSTERS: dict[str, dict[str, Any]] = {
+    "merchant_stall": {
+        "anchor": "market_stall",
+        "satellites": ["crate", "sack", "basket", "signpost"],
+        "radius": 3.0,
+        "satellite_count": (2, 4),
+    },
+    "campfire_scene": {
+        "anchor": "campfire",
+        "satellites": ["log_seat", "bedroll", "sack", "lantern"],
+        "radius": 4.0,
+        "satellite_count": (2, 5),
+    },
+    "battle_aftermath": {
+        "anchor": "broken_weapon",
+        "satellites": ["shield_fragment", "bone_pile", "crater", "banner_torn"],
+        "radius": 5.0,
+        "satellite_count": (3, 6),
+    },
+    "tavern_entrance": {
+        "anchor": "barrel",
+        "satellites": ["crate", "barrel", "lantern", "signpost"],
+        "radius": 2.5,
+        "satellite_count": (2, 4),
+    },
+    "shrine_offering": {
+        "anchor": "altar",
+        "satellites": ["candelabra", "offering_bowl", "prayer_mat", "flower"],
+        "radius": 2.0,
+        "satellite_count": (2, 3),
+    },
+}
+
+# Building type -> which narrative clusters can spawn nearby
+_BUILDING_CLUSTER_MAP: dict[str, list[str]] = {
+    "market_stall_cluster": ["merchant_stall"],
+    "campfire_area": ["campfire_scene"],
+    "ruined_fortress_tower": ["battle_aftermath"],
+    "abandoned_house": ["tavern_entrance", "battle_aftermath"],
+    "forge": ["tavern_entrance"],
+    "shrine_minor": ["shrine_offering"],
+    "shrine_major": ["shrine_offering"],
+    "barracks": ["battle_aftermath", "tavern_entrance"],
+    "tent": ["campfire_scene"],
+    "lean_to": ["campfire_scene"],
+    "cage": ["battle_aftermath"],
+    "watchtower": ["battle_aftermath"],
+    "supply_tent": ["merchant_stall"],
+}
 
 # Building footprint sizes (width, depth)
 _BUILDING_FOOTPRINTS: dict[str, tuple[float, float]] = {
@@ -618,27 +673,70 @@ def _scatter_settlement_props(
                     "source": "road",
                 })
 
-    # 2. Building-adjacent props: crates, barrels near doors
-    building_props = ["crate", "barrel", "sack", "firewood_stack"]
+    # 2. Narrative cluster props near matching buildings
+    #    Each building type can trigger thematic clusters (anchor + satellites)
+    #    placed near the building entrance.  Falls back to generic adjacent
+    #    props when no cluster mapping exists.
+    generic_building_props = ["crate", "barrel", "sack", "firewood_stack"]
     for bld in buildings:
         bx, by = bld["position"]
         rot = bld["rotation"]
         fp = bld.get("footprint", (6.0, 6.0))
-        # Place 1-3 props near the door side (front of building)
-        num_adj = rng.randint(1, max(1, int(3 * prop_density + 0.5)))
-        for j in range(num_adj):
-            offset_along = rng.uniform(-fp[0] * 0.3, fp[0] * 0.3)
-            offset_out = fp[1] * 0.5 + rng.uniform(0.5, 2.0)
-            # Place in front of building (rotation direction)
-            px = bx + math.cos(rot) * offset_out + math.sin(rot) * offset_along
-            py = by + math.sin(rot) * offset_out - math.cos(rot) * offset_along
+        btype = bld.get("type", "")
+
+        cluster_names = _BUILDING_CLUSTER_MAP.get(btype)
+        if cluster_names:
+            cluster_key = rng.choice(cluster_names)
+            cluster_def = _NARRATIVE_CLUSTERS[cluster_key]
+
+            # Place anchor prop in front of building
+            anchor_out = fp[1] * 0.5 + rng.uniform(1.0, 2.5)
+            anchor_px = bx + math.cos(rot) * anchor_out
+            anchor_py = by + math.sin(rot) * anchor_out
             props.append({
-                "type": rng.choice(building_props),
-                "position": (round(px, 2), round(py, 2)),
-                "rotation": round(rng.uniform(0, 2 * math.pi), 4),
-                "scale": round(rng.uniform(0.8, 1.2), 2),
-                "source": "building_adjacent",
+                "type": cluster_def["anchor"],
+                "position": (round(anchor_px, 2), round(anchor_py, 2)),
+                "rotation": round(rot + math.pi, 4),
+                "scale": round(rng.uniform(0.9, 1.1), 2),
+                "source": "narrative_cluster",
+                "cluster": cluster_key,
+                "cluster_role": "anchor",
             })
+
+            # Place satellite props around the anchor
+            sat_min, sat_max = cluster_def["satellite_count"]
+            num_satellites = rng.randint(sat_min, sat_max)
+            cluster_radius = cluster_def["radius"]
+            for _s in range(num_satellites):
+                sat_angle = rng.uniform(0, 2 * math.pi)
+                sat_dist = rng.uniform(cluster_radius * 0.3, cluster_radius)
+                sat_px = anchor_px + math.cos(sat_angle) * sat_dist
+                sat_py = anchor_py + math.sin(sat_angle) * sat_dist
+                sat_type = rng.choice(cluster_def["satellites"])
+                props.append({
+                    "type": sat_type,
+                    "position": (round(sat_px, 2), round(sat_py, 2)),
+                    "rotation": round(rng.uniform(0, 2 * math.pi), 4),
+                    "scale": round(rng.uniform(0.8, 1.2), 2),
+                    "source": "narrative_cluster",
+                    "cluster": cluster_key,
+                    "cluster_role": "satellite",
+                })
+        else:
+            # Fallback: generic building-adjacent props
+            num_adj = rng.randint(1, max(1, int(3 * prop_density + 0.5)))
+            for _j in range(num_adj):
+                offset_along = rng.uniform(-fp[0] * 0.3, fp[0] * 0.3)
+                offset_out = fp[1] * 0.5 + rng.uniform(0.5, 2.0)
+                px = bx + math.cos(rot) * offset_out + math.sin(rot) * offset_along
+                py = by + math.sin(rot) * offset_out - math.cos(rot) * offset_along
+                props.append({
+                    "type": rng.choice(generic_building_props),
+                    "position": (round(px, 2), round(py, 2)),
+                    "rotation": round(rng.uniform(0, 2 * math.pi), 4),
+                    "scale": round(rng.uniform(0.8, 1.2), 2),
+                    "source": "building_adjacent",
+                })
 
     # 3. Open-area scatter: random debris/rocks in settlement area
     num_scatter = max(
@@ -786,6 +884,208 @@ def _furnish_interior(
             placed.append(placed_item)
 
     return placed
+
+
+# ---------------------------------------------------------------------------
+# Interior lighting
+# ---------------------------------------------------------------------------
+
+# Room type -> light source definitions
+# Each entry: list of (light_type_name, color_rgb, intensity, range, light_kind)
+_ROOM_LIGHTS: dict[str, list[tuple[str, tuple[float, float, float], float, float, str]]] = {
+    "bedroom": [
+        ("candelabra_light", (1.0, 0.85, 0.6), 0.6, 5.0, "point"),
+    ],
+    "kitchen": [
+        ("fireplace_light", (1.0, 0.6, 0.3), 1.2, 8.0, "point"),
+        ("candle_light", (1.0, 0.9, 0.7), 0.3, 3.0, "point"),
+    ],
+    "smithy": [
+        ("forge_light", (1.0, 0.5, 0.2), 2.0, 10.0, "point"),
+    ],
+    "shrine_room": [
+        ("shrine_candle_1", (1.0, 0.9, 0.7), 0.3, 3.0, "point"),
+        ("shrine_candle_2", (1.0, 0.9, 0.7), 0.3, 3.0, "point"),
+        ("shrine_candle_3", (1.0, 0.85, 0.65), 0.25, 2.5, "point"),
+        ("shrine_candle_4", (1.0, 0.85, 0.65), 0.25, 2.5, "point"),
+    ],
+    "storage": [
+        ("lantern_light", (1.0, 0.9, 0.7), 0.4, 4.0, "point"),
+    ],
+    "tavern": [
+        ("tavern_candelabra_1", (1.0, 0.85, 0.6), 0.8, 6.0, "point"),
+        ("tavern_candelabra_2", (1.0, 0.85, 0.6), 0.8, 6.0, "point"),
+    ],
+    "prison": [
+        ("torch_light", (1.0, 0.55, 0.2), 0.7, 5.0, "point"),
+    ],
+    "throne_room": [
+        ("chandelier_light", (1.0, 0.85, 0.6), 1.5, 10.0, "point"),
+        ("throne_candle_1", (1.0, 0.9, 0.7), 0.4, 4.0, "point"),
+    ],
+    "barracks": [
+        ("barracks_lantern", (1.0, 0.9, 0.7), 0.5, 5.0, "point"),
+    ],
+    "market": [
+        ("market_lantern", (1.0, 0.9, 0.7), 0.6, 6.0, "point"),
+    ],
+    "guard_post": [
+        ("guard_torch", (1.0, 0.55, 0.2), 0.6, 5.0, "point"),
+    ],
+}
+
+
+def _place_interior_lights(
+    rng: random.Random,
+    room_type: str,
+    room_bounds: dict[str, Any],
+    floor_index: int = 0,
+    wall_height: float = 3.0,
+) -> list[dict[str, Any]]:
+    """Place light sources in a room based on its function.
+
+    Each light has position (x, y, z), color, intensity, range, and type.
+
+    Parameters
+    ----------
+    rng : random.Random
+        Seeded RNG.
+    room_type : str
+        Room function key (bedroom, kitchen, smithy, ...).
+    room_bounds : dict
+        ``{"min": (x, y), "max": (x, y)}`` of the room.
+    floor_index : int
+        Floor number (0 = ground). Used to calculate Z height.
+    wall_height : float
+        Height of each floor/storey.
+
+    Returns
+    -------
+    list of dict
+        Light placements with type, position (x, y, z), color, intensity,
+        range, light_type (point/spot).
+    """
+    light_defs = _ROOM_LIGHTS.get(room_type, [])
+    if not light_defs:
+        return []
+
+    rx_min, ry_min = room_bounds["min"]
+    rx_max, ry_max = room_bounds["max"]
+    room_w = rx_max - rx_min
+    room_d = ry_max - ry_min
+
+    if room_w < 1.0 or room_d < 1.0:
+        return []
+
+    lights: list[dict[str, Any]] = []
+    base_z = floor_index * wall_height
+    # Place lights at ~80% of wall height (near ceiling)
+    light_z = base_z + wall_height * 0.8
+
+    cx = (rx_min + rx_max) / 2.0
+    cy = (ry_min + ry_max) / 2.0
+
+    for i, (name, color, intensity, light_range, light_kind) in enumerate(light_defs):
+        # Distribute lights within the room
+        if len(light_defs) == 1:
+            px, py = cx, cy
+        elif len(light_defs) == 2:
+            # Two lights: offset from center along the longer axis
+            offset = min(room_w, room_d) * 0.25
+            px = cx + (offset if i == 0 else -offset)
+            py = cy + (offset if i == 1 else -offset)
+        else:
+            # Multiple lights: distribute in a ring around center
+            angle = (2.0 * math.pi * i) / len(light_defs)
+            radius = min(room_w, room_d) * 0.3
+            px = cx + math.cos(angle) * radius
+            py = cy + math.sin(angle) * radius
+
+        # Add slight randomization
+        px += rng.uniform(-0.3, 0.3)
+        py += rng.uniform(-0.3, 0.3)
+
+        # Clamp to room bounds
+        px = max(rx_min + 0.3, min(px, rx_max - 0.3))
+        py = max(ry_min + 0.3, min(py, ry_max - 0.3))
+
+        lights.append({
+            "type": name,
+            "position": (round(px, 2), round(py, 2), round(light_z, 2)),
+            "color": color,
+            "intensity": round(intensity, 2),
+            "range": round(light_range, 2),
+            "light_type": light_kind,
+            "floor": floor_index,
+        })
+
+    return lights
+
+
+# ---------------------------------------------------------------------------
+# Heightmap sampling
+# ---------------------------------------------------------------------------
+
+def _sample_heightmap(
+    heightmap: Optional[Callable[[float, float], float]],
+    x: float,
+    y: float,
+) -> float:
+    """Sample a heightmap function at (x, y), returning 0.0 if no heightmap.
+
+    Parameters
+    ----------
+    heightmap : callable or None
+        Function (x, y) -> z elevation. None means flat terrain.
+    x, y : float
+        World-space coordinates.
+
+    Returns
+    -------
+    float
+        Elevation at (x, y).
+    """
+    if heightmap is None:
+        return 0.0
+    return heightmap(x, y)
+
+
+def _compute_foundation_height(
+    heightmap: Optional[Callable[[float, float], float]],
+    position: tuple[float, float],
+    footprint: tuple[float, float],
+) -> float:
+    """Compute foundation height needed to level a building on sloped terrain.
+
+    Samples the heightmap at the four corners of the footprint and returns
+    the height difference between the lowest and highest corner.
+
+    Parameters
+    ----------
+    heightmap : callable or None
+        Heightmap function.
+    position : tuple
+        Building center (x, y).
+    footprint : tuple
+        Building (width, depth).
+
+    Returns
+    -------
+    float
+        Foundation height needed (0.0 on flat terrain).
+    """
+    if heightmap is None:
+        return 0.0
+    bx, by = position
+    hw, hd = footprint[0] / 2.0, footprint[1] / 2.0
+    corners = [
+        (bx - hw, by - hd),
+        (bx + hw, by - hd),
+        (bx - hw, by + hd),
+        (bx + hw, by + hd),
+    ]
+    elevations = [heightmap(cx, cy) for cx, cy in corners]
+    return max(elevations) - min(elevations)
 
 
 # ---------------------------------------------------------------------------
@@ -954,12 +1254,14 @@ def generate_settlement(
     seed: int | None = None,
     center: tuple[float, float] = (0.0, 0.0),
     radius: float = 50.0,
+    heightmap: Optional[Callable[[float, float], float]] = None,
+    wall_height: float = 3.0,
 ) -> dict[str, Any]:
     """Generate a complete settlement layout.
 
     Composes building placement, road network, prop scattering,
-    perimeter walls, interior furnishing, and per-building variation
-    into a single data structure.
+    perimeter walls, interior furnishing (multi-floor), interior lighting,
+    and per-building variation into a single data structure.
 
     Parameters
     ----------
@@ -972,6 +1274,12 @@ def generate_settlement(
         World-space (x, y) center of the settlement.
     radius : float
         Approximate radius of the settlement area.
+    heightmap : callable or None
+        Optional function ``(x, y) -> z`` for terrain-aware placement.
+        When provided, each building gets ``elevation`` and
+        ``foundation_height`` fields based on the terrain at its position.
+    wall_height : float
+        Height of a single storey/floor (default 3.0 units).
 
     Returns
     -------
@@ -985,6 +1293,7 @@ def generate_settlement(
         - props: list of decoration placements
         - perimeter: list of wall/gate elements
         - interiors: dict mapping building index to furniture list
+        - lights: list of all interior light placements
         - metadata: summary statistics
 
     Raises
@@ -1007,13 +1316,23 @@ def generate_settlement(
     # 1. Place buildings
     buildings = _place_buildings(rng, config, center, radius)
 
-    # 2. Apply per-building variation
+    # 2. Apply per-building variation + heightmap elevation
     varied_buildings: list[dict[str, Any]] = []
     for bld in buildings:
         variation_rng = random.Random(bld["unique_seed"])
-        varied_buildings.append(
-            _apply_building_variation(variation_rng, bld)
+        varied = _apply_building_variation(variation_rng, bld)
+        # Terrain-aware Z placement
+        bx, by = varied["position"]
+        varied["elevation"] = round(
+            _sample_heightmap(heightmap, bx, by), 3
         )
+        varied["foundation_height"] = round(
+            _compute_foundation_height(
+                heightmap, (bx, by), varied.get("footprint", (6.0, 6.0))
+            ),
+            3,
+        )
+        varied_buildings.append(varied)
 
     # 3. Generate roads
     roads = _generate_roads(varied_buildings, center, config["road_style"])
@@ -1026,27 +1345,63 @@ def generate_settlement(
     # 5. Perimeter walls
     perimeter = _generate_perimeter(rng, config, center, radius)
 
-    # 6. Furnish interiors
+    # 6. Furnish interiors (multi-floor aware) + place lights
     interiors: dict[int, list[dict[str, Any]]] = {}
+    all_lights: list[dict[str, Any]] = []
     for idx, bld in enumerate(varied_buildings):
         rooms = bld.get("room_functions", [])
         if not rooms:
             continue
         bx, by = bld["position"]
         fp = bld.get("footprint", (6.0, 6.0))
-        # Divide building footprint into rooms (stacked vertically)
+        num_floors = bld.get("floors", 1)
+
+        # Divide building footprint into rooms (stacked vertically within footprint)
         room_height = fp[1] / max(len(rooms), 1)
         room_furnishings: list[dict[str, Any]] = []
-        for ri, room_type in enumerate(rooms):
-            room_bounds = {
-                "min": (bx - fp[0] / 2, by - fp[1] / 2 + ri * room_height),
-                "max": (bx + fp[0] / 2, by - fp[1] / 2 + (ri + 1) * room_height),
-            }
-            room_rng = random.Random(bld["unique_seed"] + ri)
-            furnishings = _furnish_interior(room_rng, room_type, room_bounds)
-            room_furnishings.extend(furnishings)
+        building_lights: list[dict[str, Any]] = []
+
+        for floor in range(max(1, num_floors)):
+            for ri, room_type in enumerate(rooms):
+                # Offset room bounds Y by floor * wall_height for
+                # multi-floor buildings (furniture Y remains in footprint
+                # space; floor index is stored for 3D placement)
+                room_bounds = {
+                    "min": (
+                        bx - fp[0] / 2,
+                        by - fp[1] / 2 + ri * room_height,
+                    ),
+                    "max": (
+                        bx + fp[0] / 2,
+                        by - fp[1] / 2 + (ri + 1) * room_height,
+                    ),
+                }
+                room_rng = random.Random(
+                    bld["unique_seed"] + ri + floor * 1000
+                )
+                furnishings = _furnish_interior(
+                    room_rng, room_type, room_bounds
+                )
+                # Tag each furniture item with its floor
+                for item in furnishings:
+                    item["floor"] = floor
+                room_furnishings.extend(furnishings)
+
+                # Place lights for this room on this floor
+                light_rng = random.Random(
+                    bld["unique_seed"] + ri + floor * 2000
+                )
+                room_lights = _place_interior_lights(
+                    light_rng, room_type, room_bounds,
+                    floor_index=floor, wall_height=wall_height,
+                )
+                for lt in room_lights:
+                    lt["building_index"] = idx
+                building_lights.extend(room_lights)
+
         if room_furnishings:
             interiors[idx] = room_furnishings
+        all_lights.extend(building_lights)
 
     # 7. Metadata
     metadata = {
@@ -1058,6 +1413,7 @@ def generate_settlement(
         "total_furniture_pieces": sum(
             len(v) for v in interiors.values()
         ),
+        "light_count": len(all_lights),
         "has_walls": config["has_walls"],
         "layout_pattern": config.get("layout_pattern", "organic"),
     }
@@ -1072,5 +1428,6 @@ def generate_settlement(
         "props": props,
         "perimeter": perimeter,
         "interiors": interiors,
+        "lights": all_lights,
         "metadata": metadata,
     }

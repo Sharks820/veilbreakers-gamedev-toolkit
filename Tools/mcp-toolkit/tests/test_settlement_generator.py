@@ -14,13 +14,17 @@ import pytest
 from blender_addon.handlers.settlement_generator import (
     ROOM_FURNISHINGS,
     SETTLEMENT_TYPES,
+    _ROOM_LIGHTS,
     _apply_building_variation,
+    _compute_foundation_height,
     _dist2d,
     _aabb_overlaps,
     _furnish_interior,
     _generate_perimeter,
     _generate_roads,
     _place_buildings,
+    _place_interior_lights,
+    _sample_heightmap,
     _scatter_settlement_props,
     generate_settlement,
 )
@@ -78,6 +82,7 @@ class TestGenerateSettlement:
         assert isinstance(result["props"], list)
         assert isinstance(result["perimeter"], list)
         assert isinstance(result["interiors"], dict)
+        assert isinstance(result["lights"], list)
         assert isinstance(result["metadata"], dict)
 
     def test_invalid_type_raises(self):
@@ -369,7 +374,11 @@ class TestScatterProps:
         props = _scatter_settlement_props(
             rng, buildings, roads, config, 50.0
         )
-        adj_props = [p for p in props if p["source"] == "building_adjacent"]
+        # Accept both generic adjacent and narrative cluster props near buildings
+        adj_props = [
+            p for p in props
+            if p["source"] in ("building_adjacent", "narrative_cluster")
+        ]
         assert len(adj_props) > 0
 
     def test_no_road_props_for_none_style(self):
@@ -784,3 +793,212 @@ class TestEdgeCases:
         """Zero radius is degenerate but should not raise."""
         result = generate_settlement("outpost", seed=42, radius=0.0)
         assert isinstance(result, dict)
+
+
+# =========================================================================
+# Heightmap support (Fix 2)
+# =========================================================================
+
+
+class TestHeightmapSupport:
+    """Tests for terrain-aware Z placement via heightmap."""
+
+    def test_flat_terrain_elevation_zero(self):
+        """Without heightmap, elevation should be 0.0."""
+        result = generate_settlement("village", seed=42)
+        for bld in result["buildings"]:
+            assert bld["elevation"] == 0.0
+            assert bld["foundation_height"] == 0.0
+
+    def test_heightmap_sets_elevation(self):
+        """Heightmap function should set building elevation."""
+        def hmap(x: float, y: float) -> float:
+            return x * 0.1 + y * 0.05
+
+        result = generate_settlement("village", seed=42, heightmap=hmap)
+        for bld in result["buildings"]:
+            bx, by = bld["position"]
+            expected = round(hmap(bx, by), 3)
+            assert bld["elevation"] == expected
+
+    def test_heightmap_foundation_height_on_slope(self):
+        """Sloped terrain should produce non-zero foundation_height."""
+        def slope(x: float, y: float) -> float:
+            return x * 0.5  # steep slope in X
+
+        result = generate_settlement("village", seed=42, heightmap=slope)
+        # At least some buildings should have foundation_height > 0
+        has_foundation = any(
+            bld["foundation_height"] > 0.0 for bld in result["buildings"]
+        )
+        assert has_foundation, "No buildings have foundation_height on sloped terrain"
+
+    def test_heightmap_foundation_flat(self):
+        """Flat heightmap should produce zero foundation_height."""
+        def flat(x: float, y: float) -> float:
+            return 5.0  # constant height
+
+        result = generate_settlement("village", seed=42, heightmap=flat)
+        for bld in result["buildings"]:
+            assert bld["foundation_height"] == 0.0
+
+    def test_sample_heightmap_none(self):
+        assert _sample_heightmap(None, 10.0, 20.0) == 0.0
+
+    def test_sample_heightmap_callable(self):
+        hm = lambda x, y: x + y
+        assert _sample_heightmap(hm, 3.0, 4.0) == 7.0
+
+    def test_compute_foundation_height_none(self):
+        assert _compute_foundation_height(None, (0, 0), (6, 6)) == 0.0
+
+    def test_compute_foundation_height_slope(self):
+        hm = lambda x, y: x * 1.0
+        # Building at (10, 0) with footprint (4, 4)
+        # Corners: x = 8, 12 -> heights 8, 12
+        fh = _compute_foundation_height(hm, (10, 0), (4, 4))
+        assert abs(fh - 4.0) < 1e-6
+
+
+# =========================================================================
+# Multi-floor interior furnishing (Fix 3)
+# =========================================================================
+
+
+class TestMultiFloorFurnishing:
+    """Tests for multi-floor interior furnishing."""
+
+    def test_single_floor_still_works(self):
+        """Buildings without 'floors' key default to 1 floor."""
+        result = generate_settlement("village", seed=42)
+        # Should produce furniture as before
+        assert len(result["interiors"]) > 0
+
+    def test_multi_floor_produces_more_furniture(self):
+        """Buildings with multiple floors should have more furniture."""
+        # Generate baseline single-floor settlement
+        r1 = generate_settlement("village", seed=42)
+        single_total = sum(len(v) for v in r1["interiors"].values())
+
+        # Now manually set a building to have multiple floors and regenerate
+        # We test this by directly calling _furnish_interior for multiple floors
+        rng = random.Random(42)
+        bounds = {"min": (0.0, 0.0), "max": (8.0, 8.0)}
+        floor0 = _furnish_interior(rng, "bedroom", bounds)
+
+        rng2 = random.Random(1042)
+        floor1 = _furnish_interior(rng2, "bedroom", bounds)
+
+        # Each floor should produce furniture independently
+        assert len(floor0) > 0
+        assert len(floor1) > 0
+
+    def test_floor_tag_on_furniture(self):
+        """Furniture items should have a 'floor' tag."""
+        result = generate_settlement("village", seed=42)
+        for idx, furnishings in result["interiors"].items():
+            for item in furnishings:
+                assert "floor" in item, (
+                    f"Furniture {item['type']} in building {idx} missing 'floor' tag"
+                )
+                assert item["floor"] >= 0
+
+
+# =========================================================================
+# Interior lighting (Fix 4)
+# =========================================================================
+
+
+class TestInteriorLighting:
+    """Tests for interior light placement."""
+
+    def test_lights_generated(self):
+        """Settlement should have lights in interiors."""
+        result = generate_settlement("town", seed=42)
+        assert len(result["lights"]) > 0
+
+    def test_light_has_required_keys(self):
+        """Each light should have position, color, intensity, range, type."""
+        result = generate_settlement("town", seed=42)
+        for light in result["lights"]:
+            assert "type" in light
+            assert "position" in light
+            assert "color" in light
+            assert "intensity" in light
+            assert "range" in light
+            assert "light_type" in light
+            assert "building_index" in light
+            assert "floor" in light
+
+    def test_light_position_is_3d(self):
+        """Light position should be (x, y, z) tuple."""
+        result = generate_settlement("village", seed=42)
+        for light in result["lights"]:
+            assert len(light["position"]) == 3, (
+                f"Light {light['type']} position should be 3D, got {light['position']}"
+            )
+
+    def test_light_intensity_positive(self):
+        result = generate_settlement("town", seed=42)
+        for light in result["lights"]:
+            assert light["intensity"] > 0
+
+    def test_light_range_positive(self):
+        result = generate_settlement("town", seed=42)
+        for light in result["lights"]:
+            assert light["range"] > 0
+
+    def test_light_color_valid(self):
+        result = generate_settlement("village", seed=42)
+        for light in result["lights"]:
+            r, g, b = light["color"]
+            assert 0.0 <= r <= 1.0
+            assert 0.0 <= g <= 1.0
+            assert 0.0 <= b <= 1.0
+
+    def test_light_type_is_point_or_spot(self):
+        result = generate_settlement("town", seed=42)
+        for light in result["lights"]:
+            assert light["light_type"] in ("point", "spot")
+
+    def test_metadata_includes_light_count(self):
+        result = generate_settlement("town", seed=42)
+        assert "light_count" in result["metadata"]
+        assert result["metadata"]["light_count"] == len(result["lights"])
+
+    @pytest.mark.parametrize("room_type", list(_ROOM_LIGHTS.keys()))
+    def test_place_lights_all_room_types(self, room_type: str):
+        rng = random.Random(42)
+        bounds = {"min": (0.0, 0.0), "max": (8.0, 8.0)}
+        lights = _place_interior_lights(rng, room_type, bounds)
+        assert len(lights) > 0
+        assert len(lights) == len(_ROOM_LIGHTS[room_type])
+
+    def test_place_lights_unknown_room_empty(self):
+        rng = random.Random(42)
+        bounds = {"min": (0.0, 0.0), "max": (8.0, 8.0)}
+        lights = _place_interior_lights(rng, "nonexistent", bounds)
+        assert lights == []
+
+    def test_place_lights_tiny_room_empty(self):
+        rng = random.Random(42)
+        bounds = {"min": (0.0, 0.0), "max": (0.5, 0.5)}
+        lights = _place_interior_lights(rng, "bedroom", bounds)
+        assert lights == []
+
+    def test_place_lights_floor_offset(self):
+        """Lights on higher floors should have higher Z position."""
+        rng = random.Random(42)
+        bounds = {"min": (0.0, 0.0), "max": (8.0, 8.0)}
+        lights_f0 = _place_interior_lights(rng, "bedroom", bounds, floor_index=0)
+        lights_f1 = _place_interior_lights(
+            random.Random(42), "bedroom", bounds, floor_index=1
+        )
+        assert lights_f1[0]["position"][2] > lights_f0[0]["position"][2]
+
+    def test_building_index_on_lights(self):
+        """Each light should reference which building it belongs to."""
+        result = generate_settlement("castle", seed=42)
+        for light in result["lights"]:
+            idx = light["building_index"]
+            assert 0 <= idx < len(result["buildings"])

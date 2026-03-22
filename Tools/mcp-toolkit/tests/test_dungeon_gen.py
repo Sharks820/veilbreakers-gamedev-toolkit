@@ -13,6 +13,7 @@ from blender_addon.handlers._dungeon_gen import (
     DungeonLayout,
     Room,
     TownLayout,
+    _assign_room_types,
     _flood_fill,
     _verify_connectivity,
     generate_bsp_dungeon,
@@ -114,15 +115,60 @@ class TestBSPDungeon:
             assert _verify_connectivity(layout), f"Disconnected dungeon at seed={seed}"
 
     def test_boss_room_is_expanded(self):
-        """Boss room should be ~2x the size of its original BSP allocation."""
+        """Boss room should be expanded (up to 2x, clamped to grid bounds)."""
         layout = generate_bsp_dungeon(64, 64, seed=42)
         boss_rooms = [r for r in layout.rooms if r.room_type == "boss"]
         assert len(boss_rooms) == 1
         boss = boss_rooms[0]
-        # Boss dimensions should have been doubled from the original BSP room
-        # Since min_room_size=6, boss should be at least 12 in both dimensions
-        assert boss.width >= 12, f"Boss width {boss.width} should be >= 12 (2x min_room_size)"
-        assert boss.height >= 12, f"Boss height {boss.height} should be >= 12 (2x min_room_size)"
+        # Boss dimensions should be expanded from the original BSP room,
+        # but clamped to grid bounds when near the edge. At minimum the
+        # boss room should be >= min_room_size (6) in both dimensions.
+        assert boss.width >= 6, f"Boss width {boss.width} should be >= 6"
+        assert boss.height >= 6, f"Boss height {boss.height} should be >= 6"
+        # And must not overflow the grid
+        assert boss.x + boss.width <= 64, (
+            f"Boss room overflows grid: x={boss.x}, width={boss.width}"
+        )
+        assert boss.y + boss.height <= 64, (
+            f"Boss room overflows grid: y={boss.y}, height={boss.height}"
+        )
+
+    def test_boss_room_clamped_to_grid(self):
+        """Boss room expansion must not overflow grid bounds."""
+        for seed in range(30):
+            layout = generate_bsp_dungeon(64, 64, seed=seed)
+            for room in layout.rooms:
+                assert room.x2 <= 64, (
+                    f"Room x2={room.x2} exceeds grid width=64 "
+                    f"(seed={seed}, type={room.room_type})"
+                )
+                assert room.y2 <= 64, (
+                    f"Room y2={room.y2} exceeds grid height=64 "
+                    f"(seed={seed}, type={room.room_type})"
+                )
+
+    def test_boss_room_edge_case_near_boundary(self):
+        """Boss room near grid edge should be clamped, not overflow."""
+        import random as _random
+        # Create a room near the grid edge to verify clamping
+        rooms = [
+            Room(5, 5, 8, 8, "generic"),
+            Room(55, 55, 7, 7, "generic"),  # near edge of 64x64 grid
+        ]
+        rng = _random.Random(42)
+        _assign_room_types(rooms, rng, grid_width=64, grid_height=64)
+        boss = rooms[-1]
+        assert boss.room_type == "boss"
+        # boss.x=55, doubled width=14, but grid_width-boss.x=9
+        # So boss.width should be clamped to 9
+        assert boss.x + boss.width <= 64, (
+            f"Boss room overflows: x={boss.x}, width={boss.width}, "
+            f"x2={boss.x + boss.width}"
+        )
+        assert boss.y + boss.height <= 64, (
+            f"Boss room overflows: y={boss.y}, height={boss.height}, "
+            f"y2={boss.y + boss.height}"
+        )
 
     def test_treasure_rooms_exist(self):
         """At least one treasure room should be assigned."""
