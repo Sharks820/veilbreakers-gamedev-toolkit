@@ -806,11 +806,30 @@ def generate_npc_body_mesh(
 
     # Bug 4 fix: weld coincident vertices at primitive junctions
     all_verts, all_faces = _weld_coincident_vertices(all_verts, all_faces)
-    # Face indices are preserved during welding (only vertex indices remap).
-    # Extend regions for any new faces from welding, keep existing assignments.
+    # Rebuild material regions after welding: face count may have changed
+    # (degenerate faces removed). Assign all faces to body_skin as default,
+    # then classify based on vertex positions. Only classify hands/feet as
+    # extremity_skin, keeping body_skin as the majority region.
+    material_regions = {}
     for fi in range(len(all_faces)):
-        if fi not in material_regions:
-            material_regions[fi] = "body_skin"
+        material_regions[fi] = "body_skin"
+    # Re-classify head and extremity faces based on vertex positions
+    for fi, face in enumerate(all_faces):
+        valid_vis = [vi for vi in face if vi < len(all_verts)]
+        if not valid_vis:
+            continue
+        avg_z = sum(all_verts[vi][2] for vi in valid_vis) / len(valid_vis)
+        # Head is above neck
+        if avg_z > neck_top:
+            material_regions[fi] = "head_skin"
+        # Only actual hand/foot areas: well below wrist/ankle
+        elif avg_z < feet_top:
+            material_regions[fi] = "extremity_skin"
+        elif avg_z < wrist_z - 0.03:
+            # Check if at hand position (far from center AND below wrist)
+            avg_x = sum(abs(all_verts[vi][0]) for vi in valid_vis) / len(valid_vis)
+            if avg_x > shoulder_x * 1.0:
+                material_regions[fi] = "extremity_skin"
 
     # Smooth assembled geometry to eliminate primitive junctions
     all_verts = smooth_assembled_mesh(
