@@ -150,6 +150,59 @@ def _validate_custom_rig_config(limb_types: list[str]) -> dict:
     }
 
 
+# Unity Humanoid avatar bone name mapping (Rigify DEF -> Unity Humanoid)
+UNITY_HUMANOID_BONE_MAP: dict[str, str] = {
+    "DEF-spine": "Hips",
+    "DEF-spine.001": "Spine",
+    "DEF-spine.002": "Chest",
+    "DEF-spine.003": "UpperChest",
+    "DEF-spine.004": "Neck",
+    "DEF-spine.005": "Head",
+    "DEF-clavicle.L": "LeftShoulder",
+    "DEF-clavicle.R": "RightShoulder",
+    "DEF-upper_arm.L": "LeftUpperArm",
+    "DEF-upper_arm.R": "RightUpperArm",
+    "DEF-forearm.L": "LeftLowerArm",
+    "DEF-forearm.R": "RightLowerArm",
+    "DEF-hand.L": "LeftHand",
+    "DEF-hand.R": "RightHand",
+    "DEF-thigh.L": "LeftUpperLeg",
+    "DEF-thigh.R": "RightUpperLeg",
+    "DEF-shin.L": "LeftLowerLeg",
+    "DEF-shin.R": "RightLowerLeg",
+    "DEF-foot.L": "LeftFoot",
+    "DEF-foot.R": "RightFoot",
+    "DEF-toe.L": "LeftToes",
+    "DEF-toe.R": "RightToes",
+}
+
+UNITY_REQUIRED_BONES: list[str] = [
+    "Hips", "Spine", "Chest", "Neck", "Head",
+    "LeftUpperArm", "LeftLowerArm", "LeftHand",
+    "RightUpperArm", "RightLowerArm", "RightHand",
+    "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
+    "RightUpperLeg", "RightLowerLeg", "RightFoot",
+]
+
+
+def _validate_unity_humanoid(bone_names: list[str]) -> dict:
+    """Validate rig bones can map to Unity Humanoid avatar."""
+    mapped = {}
+    for def_name, unity_name in UNITY_HUMANOID_BONE_MAP.items():
+        if def_name in bone_names:
+            mapped[def_name] = unity_name
+
+    mapped_unity = set(mapped.values())
+    missing = [r for r in UNITY_REQUIRED_BONES if r not in mapped_unity]
+
+    return {
+        "valid": len(missing) == 0,
+        "mapped_count": len(mapped),
+        "missing_required": missing,
+        "bone_map": mapped,
+    }
+
+
 def _generate_multi_arm_bones(arm_count: int) -> list[dict]:
     """Generate bone definitions for a multi-armed creature.
 

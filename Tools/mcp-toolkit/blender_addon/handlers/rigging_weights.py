@@ -62,6 +62,39 @@ DEFORMATION_POSES: dict[str, dict[str, tuple[float, float, float]]] = {
 
 
 # ---------------------------------------------------------------------------
+# Skinning mode definitions (LBS / DQS / Hybrid)
+# ---------------------------------------------------------------------------
+
+SKINNING_MODES: dict[str, dict] = {
+    "linear": {
+        "description": "Standard linear blend skinning (LBS)",
+        "use_dual_quaternion": False,
+        "best_for": "extremities, simple deformations",
+    },
+    "dual_quaternion": {
+        "description": "Dual quaternion skinning — preserves volume at joints",
+        "use_dual_quaternion": True,
+        "best_for": "shoulders, hips, spine — prevents volume loss",
+    },
+    "hybrid": {
+        "description": "Per-vertex LBS/DQS blend for optimal results",
+        "use_dual_quaternion": True,
+        "best_for": "full characters — DQS at joints, LBS at extremities",
+    },
+}
+
+
+def _validate_skinning_mode(mode: str) -> dict:
+    """Validate skinning mode selection."""
+    if mode not in SKINNING_MODES:
+        return {
+            "valid": False,
+            "errors": [f"Unknown mode: '{mode}'. Valid: {sorted(SKINNING_MODES.keys())}"],
+        }
+    return {"valid": True, "errors": [], "config": SKINNING_MODES[mode]}
+
+
+# ---------------------------------------------------------------------------
 # Pure-logic helpers (testable without Blender)
 # ---------------------------------------------------------------------------
 
