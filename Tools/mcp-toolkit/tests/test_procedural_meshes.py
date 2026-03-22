@@ -21,6 +21,15 @@ from blender_addon.handlers.procedural_meshes import (
     generate_barrel_mesh,
     generate_candelabra_mesh,
     generate_bookshelf_mesh,
+    generate_bed_mesh,
+    generate_wardrobe_mesh,
+    generate_cabinet_mesh,
+    generate_curtain_mesh,
+    generate_mirror_mesh,
+    generate_hay_bale_mesh,
+    generate_wine_rack_mesh,
+    generate_bathtub_mesh,
+    generate_fireplace_mesh,
     # Vegetation
     generate_tree_mesh,
     generate_rock_mesh,
@@ -647,6 +656,148 @@ class TestArchitecture:
 
 
 # ---------------------------------------------------------------------------
+# INTERIOR FURNITURE & PROPS tests
+# ---------------------------------------------------------------------------
+
+
+class TestInteriorFurniture:
+    """Test interior furniture and prop mesh generators."""
+
+    # --- Bed ---
+
+    @pytest.mark.parametrize("style", ["simple", "ornate", "bedroll"])
+    def test_bed_styles(self, style):
+        result = generate_bed_mesh(style=style)
+        validate_mesh_spec(result, f"Bed_{style}", min_verts=20, min_faces=6)
+
+    def test_bed_different_styles_different_geometry(self):
+        r1 = generate_bed_mesh(style="simple")
+        r2 = generate_bed_mesh(style="ornate")
+        r3 = generate_bed_mesh(style="bedroll")
+        # Ornate has extra posts/headboard, so more vertices
+        assert r2["metadata"]["vertex_count"] > r1["metadata"]["vertex_count"]
+        # Bedroll is simpler than framed beds
+        assert r3["metadata"]["vertex_count"] < r1["metadata"]["vertex_count"]
+
+    def test_bed_custom_dimensions(self):
+        result = generate_bed_mesh(width=2.5, depth=1.2, height=0.6)
+        validate_mesh_spec(result, "Bed_custom")
+        dims = result["metadata"]["dimensions"]
+        assert dims["width"] > 1.5
+
+    # --- Wardrobe ---
+
+    @pytest.mark.parametrize("style", ["wooden", "ornate", "armoire"])
+    def test_wardrobe_styles(self, style):
+        result = generate_wardrobe_mesh(style=style)
+        validate_mesh_spec(result, f"Wardrobe_{style}", min_verts=30, min_faces=10)
+
+    def test_wardrobe_different_styles_different_geometry(self):
+        r1 = generate_wardrobe_mesh(style="wooden")
+        r2 = generate_wardrobe_mesh(style="ornate")
+        r3 = generate_wardrobe_mesh(style="armoire")
+        # Ornate and armoire have extra decoration geometry
+        assert r2["metadata"]["vertex_count"] > r1["metadata"]["vertex_count"]
+        assert r3["metadata"]["vertex_count"] > r1["metadata"]["vertex_count"]
+
+    # --- Cabinet ---
+
+    @pytest.mark.parametrize("style", ["simple", "apothecary", "display"])
+    def test_cabinet_styles(self, style):
+        result = generate_cabinet_mesh(style=style)
+        validate_mesh_spec(result, f"Cabinet_{style}", min_verts=20, min_faces=6)
+
+    def test_cabinet_apothecary_more_geometry(self):
+        r_simple = generate_cabinet_mesh(style="simple")
+        r_apoth = generate_cabinet_mesh(style="apothecary")
+        # Apothecary has 20 drawer faces + knobs
+        assert r_apoth["metadata"]["vertex_count"] > r_simple["metadata"]["vertex_count"]
+
+    # --- Curtain ---
+
+    @pytest.mark.parametrize("style", ["hanging", "gathered", "tattered"])
+    def test_curtain_styles(self, style):
+        result = generate_curtain_mesh(style=style)
+        validate_mesh_spec(result, f"Curtain_{style}", min_verts=50, min_faces=20)
+
+    def test_curtain_has_uvs(self):
+        result = generate_curtain_mesh()
+        assert len(result["uvs"]) > 0, "Curtain should have UV coordinates"
+
+    def test_curtain_different_styles_different_geometry(self):
+        r1 = generate_curtain_mesh(style="hanging")
+        r2 = generate_curtain_mesh(style="gathered")
+        assert r1["vertices"] != r2["vertices"]
+
+    # --- Mirror ---
+
+    @pytest.mark.parametrize("style", ["wall", "standing", "hand"])
+    def test_mirror_styles(self, style):
+        result = generate_mirror_mesh(style=style)
+        validate_mesh_spec(result, f"Mirror_{style}", min_verts=10, min_faces=4)
+
+    def test_mirror_standing_taller(self):
+        r_wall = generate_mirror_mesh(style="wall")
+        r_stand = generate_mirror_mesh(style="standing")
+        # Standing mirror has legs and support
+        assert r_stand["metadata"]["vertex_count"] > r_wall["metadata"]["vertex_count"]
+
+    # --- Hay bale ---
+
+    @pytest.mark.parametrize("style", ["rectangular", "round", "scattered"])
+    def test_hay_bale_styles(self, style):
+        result = generate_hay_bale_mesh(style=style)
+        validate_mesh_spec(result, f"HayBale_{style}", min_verts=8, min_faces=4)
+
+    def test_hay_bale_different_styles_different_geometry(self):
+        r1 = generate_hay_bale_mesh(style="rectangular")
+        r2 = generate_hay_bale_mesh(style="round")
+        assert r1["vertices"] != r2["vertices"]
+
+    # --- Wine rack ---
+
+    @pytest.mark.parametrize("style", ["wall", "diamond", "barrel"])
+    def test_wine_rack_styles(self, style):
+        result = generate_wine_rack_mesh(style=style)
+        validate_mesh_spec(result, f"WineRack_{style}", min_verts=20, min_faces=6)
+
+    def test_wine_rack_more_slots_more_geometry(self):
+        r_small = generate_wine_rack_mesh(cols=2, rows=2)
+        r_large = generate_wine_rack_mesh(cols=6, rows=5)
+        assert r_large["metadata"]["vertex_count"] > r_small["metadata"]["vertex_count"]
+
+    # --- Bathtub ---
+
+    @pytest.mark.parametrize("style", ["wooden", "metal"])
+    def test_bathtub_styles(self, style):
+        result = generate_bathtub_mesh(style=style)
+        validate_mesh_spec(result, f"Bathtub_{style}", min_verts=30, min_faces=10)
+
+    def test_bathtub_different_styles_different_geometry(self):
+        r1 = generate_bathtub_mesh(style="wooden")
+        r2 = generate_bathtub_mesh(style="metal")
+        assert r1["vertices"] != r2["vertices"]
+
+    # --- Fireplace ---
+
+    @pytest.mark.parametrize("style", ["stone", "grand", "simple"])
+    def test_fireplace_styles(self, style):
+        result = generate_fireplace_mesh(style=style)
+        validate_mesh_spec(result, f"Fireplace_{style}", min_verts=20, min_faces=6)
+
+    def test_fireplace_grand_more_geometry(self):
+        r_stone = generate_fireplace_mesh(style="stone")
+        r_grand = generate_fireplace_mesh(style="grand")
+        # Grand has columns, capitals, keystone
+        assert r_grand["metadata"]["vertex_count"] > r_stone["metadata"]["vertex_count"]
+
+    def test_fireplace_simple_less_geometry(self):
+        r_simple = generate_fireplace_mesh(style="simple")
+        r_stone = generate_fireplace_mesh(style="stone")
+        assert r_simple["metadata"]["vertex_count"] < r_stone["metadata"]["vertex_count"]
+
+
+# ---------------------------------------------------------------------------
 # REGISTRY tests
 # ---------------------------------------------------------------------------
 
@@ -665,7 +816,7 @@ class TestRegistry:
         assert set(GENERATORS.keys()) == expected
 
     def test_registry_furniture_count(self):
-        assert len(GENERATORS["furniture"]) == 7
+        assert len(GENERATORS["furniture"]) == 16
 
     def test_registry_vegetation_count(self):
         assert len(GENERATORS["vegetation"]) == 5
@@ -688,7 +839,7 @@ class TestRegistry:
 
     def test_total_generator_count(self):
         total = sum(len(g) for g in GENERATORS.values())
-        assert total == 127
+        assert total == 136
 
 
 # ---------------------------------------------------------------------------
