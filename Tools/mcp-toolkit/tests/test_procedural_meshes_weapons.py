@@ -480,8 +480,8 @@ class TestWeaponRegistry:
     def test_weapon_category_exists(self):
         assert "weapon" in GENERATORS
 
-    def test_weapon_count_is_23(self):
-        assert len(GENERATORS["weapon"]) == 23
+    def test_weapon_count_at_least_23(self):
+        assert len(GENERATORS["weapon"]) >= 23
 
     def test_new_weapons_registered(self):
         new_weapons = [

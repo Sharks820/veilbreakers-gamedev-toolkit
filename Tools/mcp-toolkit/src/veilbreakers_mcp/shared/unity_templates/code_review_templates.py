@@ -3616,28 +3616,36 @@ RULES: list[Rule] = [
 
     # ---- STYLE ----
     Rule("PY-STY-01", Severity.LOW, Category.Quality,
-         "os.path usage instead of pathlib.Path",
-         "Use pathlib.Path (Python 3.4+).",
+         "os.path usage — consider pathlib.Path for cleaner path handling",
+         "Replace os.path.join(a, b) with Path(a) / b. pathlib is more readable and handles cross-platform paths.",
          re.compile(r"os\.path\.(join|exists|isfile|isdir|basename|dirname|splitext)\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         confidence=72,
+         finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-STY-02", Severity.LOW, Category.Quality,
-         "Nested function definitions over 3 levels",
-         "Extract inner functions to module level or class methods.",
+         "Deeply nested function (3+ indent levels) — hard to test and maintain",
+         "Extract inner function to module level or class method for better testability.",
          re.compile(r"^\s{12,}def\s+\w+\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE"])),
+         _compile_anti([r"#\s*VB-IGNORE"]),
+         confidence=85,
+         finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-STY-03", Severity.LOW, Category.Quality,
-         "Star import (from X import *) -- namespace pollution",
-         "Import specific names: from X import a, b, c.",
+         "Star import pollutes namespace — imported names are unknown to readers and tools",
+         "Replace with explicit imports: from X import ClassA, func_b, CONST_C.",
          re.compile(r"from\s+\S+\s+import\s+\*"),
-         _compile_anti([r"#\s*VB-IGNORE"])),
+         _compile_anti([r"#\s*VB-IGNORE"]),
+         confidence=92,
+         finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-STY-04", Severity.LOW, Category.Quality,
-         "Global variable mutation",
-         "Pass as parameters or use a class.",
+         "Global variable mutation — makes function behavior depend on hidden state",
+         "Pass the value as a function parameter, or encapsulate in a class with clear ownership.",
          re.compile(r"^\s+global\s+\w+"),
-         _compile_anti([r"#\s*VB-IGNORE"])),
+         _compile_anti([r"#\s*VB-IGNORE"]),
+         confidence=78,
+         finding_type=FindingType.STRENGTHENING),
 
     # PY-STY-05/06/07/08 are AST-only (sentinel patterns)
     Rule("PY-STY-05", Severity.LOW, Category.Quality,
@@ -3711,9 +3719,10 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
             issues.append(Issue(
                 rule_id="PY-STY-07", severity=Severity.LOW.name,
                 category=Category.Quality.name, file=filepath, line=lineno,
-                description=f"Unused import: '{name}'",
-                fix="Remove the unused import.", matched_text=name,
-                finding_type="STRENGTHENING"))
+                description=f"Unused import: '{name}' — not referenced anywhere in this module",
+                fix=f"Remove 'import {name}' or 'from ... import {name}' if truly unused. If re-exported, add to __all__.",
+                matched_text=name,
+                finding_type="STRENGTHENING", confidence=82))
 
     # PY-STY-08: Missing type annotations on public functions (no _ prefix)
     # Only flag functions listed in __all__ or with docstrings if module has __all__
