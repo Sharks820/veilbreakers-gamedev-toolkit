@@ -140,7 +140,87 @@ FACIAL_BONES: dict[str, dict] = {
         "roll": 0.0,
         "parent": "head",
     },
+    # Eye tracking bones
+    "eye.L": {
+        "head": (0.03, -0.06, 1.64),
+        "tail": (0.03, -0.08, 1.64),
+        "roll": 0.0,
+        "parent": "head",
+    },
+    "eye.R": {
+        "head": (-0.03, -0.06, 1.64),
+        "tail": (-0.03, -0.08, 1.64),
+        "roll": 0.0,
+        "parent": "head",
+    },
+    "eye_target": {
+        "head": (0.0, -0.5, 1.64),
+        "tail": (0.0, -0.6, 1.64),
+        "roll": 0.0,
+        "parent": "head",
+    },
 }
+
+
+# ---------------------------------------------------------------------------
+# FACS Action Units (P2-A7)
+# ---------------------------------------------------------------------------
+
+FACS_ACTION_UNITS: dict[str, dict] = {
+    "AU01": {"name": "Inner Brow Raise", "bones": ["brow_inner.L", "brow_inner.R"]},
+    "AU02": {"name": "Outer Brow Raise", "bones": ["brow_outer.L", "brow_outer.R"]},
+    "AU04": {"name": "Brow Lowerer", "bones": ["brow_inner.L", "brow_inner.R", "brow_mid.L", "brow_mid.R"]},
+    "AU05": {"name": "Upper Lid Raise", "bones": ["eyelid_upper.L", "eyelid_upper.R"]},
+    "AU06": {"name": "Cheek Raise", "bones": ["cheek.L", "cheek.R"]},
+    "AU07": {"name": "Lid Tightener", "bones": ["eyelid_lower.L", "eyelid_lower.R"]},
+    "AU09": {"name": "Nose Wrinkler", "bones": ["nose"]},
+    "AU10": {"name": "Upper Lip Raise", "bones": ["lip_upper"]},
+    "AU12": {"name": "Lip Corner Pull", "bones": ["lip_corner.L", "lip_corner.R"]},
+    "AU15": {"name": "Lip Corner Depress", "bones": ["lip_corner.L", "lip_corner.R"]},
+    "AU17": {"name": "Chin Raise", "bones": ["jaw"]},
+    "AU20": {"name": "Lip Stretch", "bones": ["lip_corner.L", "lip_corner.R"]},
+    "AU23": {"name": "Lip Tightener", "bones": ["lip_upper", "lip_lower"]},
+    "AU25": {"name": "Lips Part", "bones": ["lip_upper", "lip_lower", "jaw"]},
+    "AU26": {"name": "Jaw Drop", "bones": ["jaw"]},
+    "AU27": {"name": "Mouth Stretch", "bones": ["jaw"]},
+    "AU45": {"name": "Blink", "bones": ["eyelid_upper.L", "eyelid_upper.R", "eyelid_lower.L", "eyelid_lower.R"]},
+}
+
+
+# ---------------------------------------------------------------------------
+# Viseme Shapes (P2-A7)
+# ---------------------------------------------------------------------------
+
+VISEME_SHAPES: dict[str, dict] = {
+    "sil": {"name": "Silence", "bones": []},
+    "PP": {"name": "P/B/M", "bones": ["lip_upper", "lip_lower"]},
+    "FF": {"name": "F/V", "bones": ["lip_lower"]},
+    "TH": {"name": "Th", "bones": ["lip_upper", "lip_lower", "jaw"]},
+    "DD": {"name": "D/T/N", "bones": ["jaw", "lip_upper"]},
+    "kk": {"name": "K/G", "bones": ["jaw"]},
+    "CH": {"name": "Ch/J/Sh", "bones": ["lip_corner.L", "lip_corner.R", "jaw"]},
+    "SS": {"name": "S/Z", "bones": ["lip_corner.L", "lip_corner.R"]},
+    "nn": {"name": "N/L", "bones": ["jaw", "lip_upper"]},
+    "RR": {"name": "R", "bones": ["lip_corner.L", "lip_corner.R", "lip_upper"]},
+    "aa": {"name": "A/Ah", "bones": ["jaw", "lip_upper", "lip_lower"]},
+    "E": {"name": "E/Eh", "bones": ["lip_corner.L", "lip_corner.R", "jaw"]},
+    "I": {"name": "I/Ee", "bones": ["lip_corner.L", "lip_corner.R"]},
+    "O": {"name": "O/Oh", "bones": ["lip_upper", "lip_lower", "jaw"]},
+    "U": {"name": "U/Oo", "bones": ["lip_upper", "lip_lower"]},
+}
+
+
+# ---------------------------------------------------------------------------
+# Corrective Blend Shape Definitions (P5-Q1)
+# ---------------------------------------------------------------------------
+
+CORRECTIVE_SHAPE_DEFS: list[dict] = [
+    {"joint": "shoulder", "axis": "x", "threshold": 45.0, "strength": 1.0, "name": "shoulder_corrective"},
+    {"joint": "elbow", "axis": "x", "threshold": 90.0, "strength": 0.8, "name": "elbow_corrective"},
+    {"joint": "wrist", "axis": "z", "threshold": 30.0, "strength": 0.6, "name": "wrist_corrective"},
+    {"joint": "hip", "axis": "x", "threshold": 60.0, "strength": 1.0, "name": "hip_corrective"},
+    {"joint": "knee", "axis": "x", "threshold": 90.0, "strength": 0.9, "name": "knee_corrective"},
+]
 
 
 # ---------------------------------------------------------------------------
@@ -612,6 +692,167 @@ def _validate_shape_key_params(name: str, vertex_offsets: dict) -> dict:
         1 for idx in vertex_offsets if isinstance(idx, int) and idx >= 0
     )
     return {"valid": len(errors) == 0, "errors": errors, "vertex_count": vertex_count}
+
+
+def _compute_spring_chain_forces(
+    positions: list[tuple[float, float, float]],
+    velocities: list[tuple[float, float, float]],
+    stiffness: float,
+    damping: float,
+    gravity: float,
+    dt: float = 1.0 / 60.0,
+) -> list[tuple[float, float, float]]:
+    """Compute spring bone simulation forces for a chain of bones.
+
+    Simple spring-mass simulation: the first bone is the root (fixed),
+    subsequent bones are pulled back toward rest position by stiffness and
+    dragged down by gravity.
+
+    Args:
+        positions: Current world-space positions per bone.
+        velocities: Current velocities per bone.
+        stiffness: Spring stiffness [0, 1].
+        damping: Damping factor [0, 1].
+        gravity: Gravity magnitude (applied in -Z).
+        dt: Timestep (default 1/60).
+
+    Returns:
+        New positions list for each bone after one simulation step.
+    """
+    new_positions: list[tuple[float, float, float]] = []
+    for i, (pos, vel) in enumerate(zip(positions, velocities)):
+        if i == 0:
+            # Root bone is fixed
+            new_positions.append(pos)
+            continue
+
+        px, py, pz = pos
+        vx, vy, vz = vel
+
+        # Spring force pulling back toward parent
+        parent = positions[i - 1]
+        spring_fx = stiffness * (parent[0] - px)
+        spring_fy = stiffness * (parent[1] - py)
+        spring_fz = stiffness * (parent[2] - pz)
+
+        # Gravity in -Z
+        grav_fz = -gravity
+
+        # Total acceleration
+        ax = spring_fx - damping * vx
+        ay = spring_fy - damping * vy
+        az = spring_fz + grav_fz - damping * vz
+
+        # Euler integration
+        nvx = vx + ax * dt
+        nvy = vy + ay * dt
+        nvz = vz + az * dt
+
+        npx = px + nvx * dt
+        npy = py + nvy * dt
+        npz = pz + nvz * dt
+
+        new_positions.append((npx, npy, npz))
+
+    return new_positions
+
+
+def _validate_spring_dynamics_params(
+    mass: float,
+    stiffness: float,
+    damping: float,
+) -> dict:
+    """Validate spring dynamics simulation parameters.
+
+    Args:
+        mass: Mass of each bone node (must be > 0).
+        stiffness: Spring stiffness (must be in (0, 100]).
+        damping: Damping factor (must be in [0, 1]).
+
+    Returns:
+        Dict with valid (bool), errors (list[str]).
+    """
+    errors: list[str] = []
+
+    if not isinstance(mass, (int, float)) or mass <= 0:
+        errors.append("mass must be > 0")
+    if not isinstance(stiffness, (int, float)) or stiffness <= 0 or stiffness > 100:
+        errors.append("stiffness must be in (0, 100]")
+    if not isinstance(damping, (int, float)) or damping < 0 or damping > 1:
+        errors.append("damping must be in [0, 1]")
+
+    return {"valid": len(errors) == 0, "errors": errors}
+
+
+def _validate_facial_rig_params(params: dict) -> dict:
+    """Validate facial rig setup parameters.
+
+    Args:
+        params: Dict with optional keys:
+            expressions: list of expression names (must be in MONSTER_EXPRESSIONS)
+            facs_units: list of FACS AU codes (must be in FACS_ACTION_UNITS)
+            visemes: list of viseme codes (must be in VISEME_SHAPES)
+
+    Returns:
+        Dict with valid (bool), errors (list[str]).
+    """
+    errors: list[str] = []
+
+    expressions = params.get("expressions", [])
+    if expressions:
+        for expr in expressions:
+            if expr not in MONSTER_EXPRESSIONS:
+                errors.append(f"Unknown expression: '{expr}'")
+
+    facs_units = params.get("facs_units", [])
+    if facs_units:
+        for au in facs_units:
+            if au not in FACS_ACTION_UNITS:
+                errors.append(f"Unknown FACS unit: '{au}'")
+
+    visemes = params.get("visemes", [])
+    if visemes:
+        for vis in visemes:
+            if vis not in VISEME_SHAPES:
+                errors.append(f"Unknown viseme: '{vis}'")
+
+    return {"valid": len(errors) == 0, "errors": errors}
+
+
+def _validate_corrective_shape_config(config: dict) -> dict:
+    """Validate a corrective blend shape configuration.
+
+    Args:
+        config: Dict with keys: joint, axis, threshold, strength.
+            joint must be one of: shoulder, elbow, wrist, hip, knee.
+            axis must be one of: x, y, z.
+            threshold must be in [0, 180].
+            strength must be in [0, 2].
+
+    Returns:
+        Dict with valid (bool), errors (list[str]).
+    """
+    errors: list[str] = []
+    valid_joints = {"shoulder", "elbow", "wrist", "hip", "knee"}
+    valid_axes = {"x", "y", "z"}
+
+    joint = config.get("joint")
+    if joint not in valid_joints:
+        errors.append(f"joint must be one of {sorted(valid_joints)}, got '{joint}'")
+
+    axis = config.get("axis")
+    if axis not in valid_axes:
+        errors.append(f"axis must be one of {sorted(valid_axes)}, got '{axis}'")
+
+    threshold = config.get("threshold")
+    if not isinstance(threshold, (int, float)) or threshold < 0 or threshold > 180:
+        errors.append("threshold must be in [0, 180]")
+
+    strength = config.get("strength")
+    if not isinstance(strength, (int, float)) or strength < 0 or strength > 2:
+        errors.append("strength must be in [0, 2]")
+
+    return {"valid": len(errors) == 0, "errors": errors}
 
 
 # ---------------------------------------------------------------------------

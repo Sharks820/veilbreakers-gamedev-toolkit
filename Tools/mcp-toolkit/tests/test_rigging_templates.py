@@ -499,3 +499,177 @@ class TestLimbLibrary:
                     f"LIMB_LIBRARY['{limb_name}'], bone '{bone_name}' "
                     f"has invalid rigify_type: '{rt}'"
                 )
+
+
+# ---------------------------------------------------------------------------
+# TestHumanoidCompleteness
+# ---------------------------------------------------------------------------
+
+
+class TestHumanoidCompleteness:
+    """Test humanoid template has clavicles, fingers, and toes."""
+
+    def test_has_clavicles(self):
+        """Humanoid has clavicle.L and clavicle.R."""
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert "clavicle.L" in HUMANOID_BONES
+        assert "clavicle.R" in HUMANOID_BONES
+
+    def test_upper_arm_parents_clavicle(self):
+        """upper_arm.L parent is clavicle.L, upper_arm.R parent is clavicle.R."""
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert HUMANOID_BONES["upper_arm.L"]["parent"] == "clavicle.L"
+        assert HUMANOID_BONES["upper_arm.R"]["parent"] == "clavicle.R"
+
+    def test_has_all_finger_bones(self):
+        """Humanoid has all 30 finger bones."""
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        fingers = ["thumb", "index", "middle", "ring", "pinky"]
+        for finger in fingers:
+            for num in ("01", "02", "03"):
+                for side in ("L", "R"):
+                    bone_name = f"{finger}_{num}.{side}"
+                    assert bone_name in HUMANOID_BONES, f"Missing finger bone: {bone_name}"
+
+    def test_finger_01_parents_hand(self):
+        """First finger bones parent to hand."""
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        for finger in ["thumb", "index", "middle", "ring", "pinky"]:
+            assert HUMANOID_BONES[f"{finger}_01.L"]["parent"] == "hand.L"
+            assert HUMANOID_BONES[f"{finger}_01.R"]["parent"] == "hand.R"
+
+    def test_finger_chain_parents(self):
+        """Finger bones chain: 02 parent is 01, 03 parent is 02."""
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        for finger in ["thumb", "index", "middle", "ring", "pinky"]:
+            for side in ("L", "R"):
+                assert HUMANOID_BONES[f"{finger}_02.{side}"]["parent"] == f"{finger}_01.{side}"
+                assert HUMANOID_BONES[f"{finger}_03.{side}"]["parent"] == f"{finger}_02.{side}"
+
+    def test_has_toe_bones(self):
+        """Humanoid has toe and toe.001 bones."""
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert "toe.L" in HUMANOID_BONES
+        assert "toe.R" in HUMANOID_BONES
+        assert "toe.001.L" in HUMANOID_BONES
+        assert "toe.001.R" in HUMANOID_BONES
+
+    def test_toe_parents(self):
+        """toe parent is foot, toe.001 parent is toe."""
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert HUMANOID_BONES["toe.L"]["parent"] == "foot.L"
+        assert HUMANOID_BONES["toe.R"]["parent"] == "foot.R"
+        assert HUMANOID_BONES["toe.001.L"]["parent"] == "toe.L"
+        assert HUMANOID_BONES["toe.001.R"]["parent"] == "toe.R"
+
+
+# ---------------------------------------------------------------------------
+# TestDragonWingMembrane
+# ---------------------------------------------------------------------------
+
+
+class TestDragonWingMembrane:
+    """Test dragon wing membrane finger bones."""
+
+    def test_has_wing_finger_bones(self):
+        """Dragon has wing_finger_1-5.L/R."""
+        from blender_addon.handlers.rigging_templates import DRAGON_BONES
+        for i in range(1, 6):
+            assert f"wing_finger_{i}.L" in DRAGON_BONES
+            assert f"wing_finger_{i}.R" in DRAGON_BONES
+
+    def test_wing_finger_parents(self):
+        """Wing finger bones parent to wing_tip."""
+        from blender_addon.handlers.rigging_templates import DRAGON_BONES
+        for i in range(1, 6):
+            assert DRAGON_BONES[f"wing_finger_{i}.L"]["parent"] == "wing_tip.L"
+            assert DRAGON_BONES[f"wing_finger_{i}.R"]["parent"] == "wing_tip.R"
+
+    def test_wing_finger_lr_symmetry(self):
+        """Wing finger L/R bones have mirrored X positions."""
+        from blender_addon.handlers.rigging_templates import DRAGON_BONES
+        for i in range(1, 6):
+            l_bone = DRAGON_BONES[f"wing_finger_{i}.L"]
+            r_bone = DRAGON_BONES[f"wing_finger_{i}.R"]
+            assert abs(l_bone["head"][0] + r_bone["head"][0]) < 0.001
+            assert abs(l_bone["tail"][0] + r_bone["tail"][0]) < 0.001
+
+
+# ---------------------------------------------------------------------------
+# TestTwistBones
+# ---------------------------------------------------------------------------
+
+
+class TestTwistBones:
+    """Test twist bones in humanoid, dragon, multi_armed templates."""
+
+    @pytest.mark.parametrize("template_name", ["humanoid", "multi_armed"])
+    def test_has_arm_twist_bones(self, template_name):
+        """Template has upper_arm_twist and forearm_twist L/R."""
+        from blender_addon.handlers.rigging_templates import TEMPLATE_CATALOG
+        bones = TEMPLATE_CATALOG[template_name]
+        for twist in ("upper_arm_twist", "forearm_twist"):
+            assert f"{twist}.L" in bones, f"Missing {twist}.L in {template_name}"
+            assert f"{twist}.R" in bones, f"Missing {twist}.R in {template_name}"
+
+    @pytest.mark.parametrize("template_name", ["humanoid", "multi_armed"])
+    def test_has_leg_twist_bones(self, template_name):
+        """Template has thigh_twist and shin_twist L/R."""
+        from blender_addon.handlers.rigging_templates import TEMPLATE_CATALOG
+        bones = TEMPLATE_CATALOG[template_name]
+        for twist in ("thigh_twist", "shin_twist"):
+            assert f"{twist}.L" in bones, f"Missing {twist}.L in {template_name}"
+            assert f"{twist}.R" in bones, f"Missing {twist}.R in {template_name}"
+
+    def test_twist_bone_parents(self):
+        """Twist bones parent to corresponding limb bone."""
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert HUMANOID_BONES["upper_arm_twist.L"]["parent"] == "upper_arm.L"
+        assert HUMANOID_BONES["upper_arm_twist.R"]["parent"] == "upper_arm.R"
+        assert HUMANOID_BONES["forearm_twist.L"]["parent"] == "forearm.L"
+        assert HUMANOID_BONES["forearm_twist.R"]["parent"] == "forearm.R"
+        assert HUMANOID_BONES["thigh_twist.L"]["parent"] == "thigh.L"
+        assert HUMANOID_BONES["thigh_twist.R"]["parent"] == "thigh.R"
+        assert HUMANOID_BONES["shin_twist.L"]["parent"] == "shin.L"
+        assert HUMANOID_BONES["shin_twist.R"]["parent"] == "shin.R"
+
+    def test_dragon_has_twist_bones(self):
+        """Dragon has twist bones for arms and legs."""
+        from blender_addon.handlers.rigging_templates import DRAGON_BONES
+        for twist in ("upper_arm_twist", "forearm_twist", "thigh_twist", "shin_twist"):
+            assert f"{twist}.L" in DRAGON_BONES, f"Missing {twist}.L in dragon"
+            assert f"{twist}.R" in DRAGON_BONES, f"Missing {twist}.R in dragon"
+
+
+# ---------------------------------------------------------------------------
+# TestBoneRolls
+# ---------------------------------------------------------------------------
+
+
+class TestBoneRolls:
+    """Test forearm bone rolls are 90deg for Unity Humanoid compatibility."""
+
+    def test_humanoid_forearm_rolls(self):
+        """Humanoid forearm.L roll is 1.5708, forearm.R roll is -1.5708."""
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert abs(HUMANOID_BONES["forearm.L"]["roll"] - 1.5708) < 0.001
+        assert abs(HUMANOID_BONES["forearm.R"]["roll"] - (-1.5708)) < 0.001
+
+    def test_forearm_roll_symmetry(self):
+        """All templates with forearm bones have symmetric rolls."""
+        from blender_addon.handlers.rigging_templates import TEMPLATE_CATALOG
+        for name, bones in TEMPLATE_CATALOG.items():
+            if "forearm.L" in bones and "forearm.R" in bones:
+                l_roll = bones["forearm.L"]["roll"]
+                r_roll = bones["forearm.R"]["roll"]
+                assert abs(l_roll + r_roll) < 0.001, (
+                    f"{name}: forearm.L roll ({l_roll}) + forearm.R roll ({r_roll}) != 0"
+                )
+
+    def test_multi_armed_forearm_rolls(self):
+        """Multi-armed forearm and forearm_lower rolls are set."""
+        from blender_addon.handlers.rigging_templates import MULTI_ARMED_BONES
+        assert abs(MULTI_ARMED_BONES["forearm.L"]["roll"] - 1.5708) < 0.001
+        assert abs(MULTI_ARMED_BONES["forearm.R"]["roll"] - (-1.5708)) < 0.001
+        assert abs(MULTI_ARMED_BONES["forearm_lower.L"]["roll"] - 1.5708) < 0.001
+        assert abs(MULTI_ARMED_BONES["forearm_lower.R"]["roll"] - (-1.5708)) < 0.001

@@ -150,6 +150,71 @@ def _validate_custom_rig_config(limb_types: list[str]) -> dict:
     }
 
 
+def _generate_multi_arm_bones(arm_count: int) -> list[dict]:
+    """Generate bone definitions for a multi-armed creature.
+
+    Produces arm_count arm pairs (L/R), each with upper_arm, forearm, and hand,
+    vertically offset down the spine. arm_count must be >= 2 and <= 6, and even.
+
+    Args:
+        arm_count: Total number of arms (must be even, 2-6).
+
+    Returns:
+        List of bone definition dicts, each with keys:
+        name, head, tail, roll, parent, rigify_type.
+
+    Raises:
+        ValueError: If arm_count is invalid (not even, or outside 2-6).
+    """
+    if not isinstance(arm_count, int) or arm_count < 2 or arm_count > 6 or arm_count % 2 != 0:
+        raise ValueError(
+            f"arm_count must be an even integer between 2 and 6, got {arm_count}"
+        )
+
+    pairs = arm_count // 2
+    bones: list[dict] = []
+
+    for pair_idx in range(pairs):
+        z_offset = 1.5 - pair_idx * 0.2
+        y_offset = pair_idx * 0.02
+        suffix = "" if pair_idx == 0 else f"_{pair_idx + 1}"
+
+        for side in ("L", "R"):
+            sign = 1.0 if side == "L" else -1.0
+            parent_spine = "spine.003" if pair_idx == 0 else f"spine.{(3 - pair_idx):03d}" if pair_idx < 3 else "spine"
+
+            ua_name = f"upper_arm{suffix}.{side}"
+            fa_name = f"forearm{suffix}.{side}"
+            ha_name = f"hand{suffix}.{side}"
+
+            bones.append({
+                "name": ua_name,
+                "head": (sign * 0.18, y_offset, z_offset),
+                "tail": (sign * 0.4, y_offset, z_offset),
+                "roll": 0.0,
+                "parent": parent_spine,
+                "rigify_type": "limbs.arm",
+            })
+            bones.append({
+                "name": fa_name,
+                "head": (sign * 0.4, y_offset, z_offset),
+                "tail": (sign * 0.62, y_offset, z_offset),
+                "roll": 1.5708 if side == "L" else -1.5708,
+                "parent": ua_name,
+                "rigify_type": "",
+            })
+            bones.append({
+                "name": ha_name,
+                "head": (sign * 0.62, y_offset, z_offset),
+                "tail": (sign * 0.72, y_offset, z_offset),
+                "roll": 0.0,
+                "parent": fa_name,
+                "rigify_type": "",
+            })
+
+    return bones
+
+
 # ---------------------------------------------------------------------------
 # Blender-dependent handlers
 # ---------------------------------------------------------------------------
