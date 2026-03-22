@@ -10,6 +10,7 @@ Functions:
 
 from __future__ import annotations
 
+import numpy as np
 from PIL import Image, ImageChops, ImageDraw
 
 
@@ -59,13 +60,9 @@ def compare_screenshots(
     total_pixels = width * height
     changed_pixels = 0
 
-    diff_bytes = diff.tobytes()
-    # RGB = 3 bytes per pixel; check if any channel exceeds noise threshold
-    for i in range(0, len(diff_bytes), 3):
-        if (diff_bytes[i] > _NOISE_THRESHOLD
-                or diff_bytes[i + 1] > _NOISE_THRESHOLD
-                or diff_bytes[i + 2] > _NOISE_THRESHOLD):
-            changed_pixels += 1
+    diff_arr = np.array(diff, dtype=np.uint8)  # shape (H, W, 3)
+    # A pixel is "changed" if any channel exceeds the noise threshold
+    changed_pixels = int(np.any(diff_arr > _NOISE_THRESHOLD, axis=2).sum())
 
     diff_percentage = changed_pixels / total_pixels if total_pixels > 0 else 0.0
     match = diff_percentage <= threshold
@@ -134,23 +131,16 @@ def generate_diff_image(
     # Dim the base image
     output = Image.blend(output, Image.new("RGB", output.size, (0, 0, 0)), 0.5)
 
-    # Create red overlay for changed pixels
-    overlay = Image.new("RGBA", ref_img.size, (0, 0, 0, 0))
-    overlay_draw = ImageDraw.Draw(overlay)
+    # Create red overlay for changed pixels using numpy
+    diff_arr = np.array(diff, dtype=np.uint8)  # shape (H, W, 3)
+    changed_mask = np.any(diff_arr > _NOISE_THRESHOLD, axis=2)  # (H, W) bool
 
-    diff_bytes = diff.tobytes()
-    width = ref_img.size[0]
-
-    # RGB = 3 bytes per pixel
-    pixel_idx = 0
-    for i in range(0, len(diff_bytes), 3):
-        if (diff_bytes[i] > _NOISE_THRESHOLD
-                or diff_bytes[i + 1] > _NOISE_THRESHOLD
-                or diff_bytes[i + 2] > _NOISE_THRESHOLD):
-            x = pixel_idx % width
-            y = pixel_idx // width
-            overlay_draw.point((x, y), fill=(255, 0, 0, 180))
-        pixel_idx += 1
+    # Build RGBA overlay: red (255,0,0,180) where changed, transparent elsewhere
+    h, w = changed_mask.shape
+    overlay_arr = np.zeros((h, w, 4), dtype=np.uint8)
+    overlay_arr[changed_mask, 0] = 255   # R
+    overlay_arr[changed_mask, 3] = 180   # A
+    overlay = Image.fromarray(overlay_arr, "RGBA")
 
     # Composite overlay onto dimmed reference
     output = output.convert("RGBA")
