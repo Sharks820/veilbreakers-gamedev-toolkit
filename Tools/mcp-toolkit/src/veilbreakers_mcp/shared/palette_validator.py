@@ -16,15 +16,18 @@ Exports:
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 try:
     import numpy as np
+    _HAS_NUMPY = True
 except ImportError:
-    raise ImportError(
-        "numpy is required for palette_validator.py. "
-        "Install with: pip install numpy"
-    )
+    _HAS_NUMPY = False
+    np = None  # type: ignore
+    logger.warning("numpy not installed; palette validation unavailable")
 
 from PIL import Image
 
@@ -101,6 +104,10 @@ def validate_palette(
             stats: {mean_saturation, mean_value, cool_ratio, warm_ratio,
                     value_below_min_pct, value_above_max_pct, total_sampled}.
     """
+    logger.info("Validating palette for: %s", image_path)
+    if not _HAS_NUMPY:
+        return {"error": "numpy is required for this operation but is not installed"}
+
     active_rules = {**PALETTE_RULES, **(rules or {})}
     sat_cap = active_rules["saturation_cap"]
     val_min, val_max = active_rules["value_range"]
@@ -249,6 +256,10 @@ def validate_roughness_map(
             min_variance: float -- Threshold used.
             severity: str -- "error" if flat, None if passed.
     """
+    logger.info("Validating roughness map: %s", image_path)
+    if not _HAS_NUMPY:
+        return {"error": "numpy is required for this operation but is not installed"}
+
     img = Image.open(image_path).convert("L")
     arr = np.array(img, dtype=np.float32) / 255.0
 

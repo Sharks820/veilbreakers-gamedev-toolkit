@@ -72,7 +72,7 @@ STYLE_CONFIGS: dict[str, dict] = {
         "floor_slab": {"thickness": 0.2, "material": "packed_earth"},
         "roof": {"type": "domed", "overhang": 0.2, "pitch": 0, "material": "living_thatch"},
         "windows": {"style": "round", "width": 0.5, "height": 0.5, "per_wall": 2},
-        "door": {"style": "rounded", "width": 1.0, "height": 1.8},
+        "door": {"style": "rounded", "width": 1.0, "height": 2.2},
         "details": ["vine_growth", "moss_patches", "root_buttress"],
     },
 }

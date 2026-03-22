@@ -220,6 +220,118 @@ class TestBiomeFilterPoints:
         )
         assert len(result) == 0, "All points should be filtered on zero heightmap"
 
+    def test_tilt_filter_rejects_steep_slopes(self):
+        """Points on slopes steeper than max_tilt_angle are rejected."""
+        hmap = np.full((64, 64), 0.5)
+        steep_slope = np.full((64, 64), 50.0)  # 50 degrees
+        rules = [
+            {
+                "vegetation_type": "tree",
+                "min_alt": 0.0,
+                "max_alt": 1.0,
+                "min_slope": 0.0,
+                "max_slope": 90.0,
+                "scale_range": (0.8, 1.2),
+                "density": 1.0,
+            },
+        ]
+        points = [(25.0, 25.0), (50.0, 50.0)]
+        result = biome_filter_points(
+            points, hmap, steep_slope, rules,
+            terrain_size=100.0, max_tilt_angle=45.0,
+        )
+        assert len(result) == 0, "All points on 50-degree slope should be rejected at 45-degree threshold"
+
+    def test_tilt_filter_allows_gentle_slopes(self):
+        """Points on gentle slopes pass the tilt filter."""
+        hmap = np.full((64, 64), 0.5)
+        gentle_slope = np.full((64, 64), 20.0)  # 20 degrees
+        rules = [
+            {
+                "vegetation_type": "tree",
+                "min_alt": 0.0,
+                "max_alt": 1.0,
+                "min_slope": 0.0,
+                "max_slope": 90.0,
+                "scale_range": (0.8, 1.2),
+                "density": 1.0,
+            },
+        ]
+        points = [(25.0, 25.0), (50.0, 50.0)]
+        result = biome_filter_points(
+            points, hmap, gentle_slope, rules,
+            terrain_size=100.0, max_tilt_angle=45.0,
+        )
+        assert len(result) == 2, "Points on 20-degree slope should pass 45-degree threshold"
+
+    def test_moisture_map_rejects_dry_areas(self):
+        """Points in dry areas are rejected when rule requires moisture."""
+        hmap = np.full((64, 64), 0.5)
+        slope = np.full((64, 64), 10.0)
+        moisture = np.full((64, 64), 0.1)  # very dry
+        rules = [
+            {
+                "vegetation_type": "fern",
+                "min_alt": 0.0,
+                "max_alt": 1.0,
+                "density": 1.0,
+                "scale_range": (0.8, 1.2),
+                "min_moisture": 0.5,
+                "max_moisture": 1.0,
+            },
+        ]
+        points = [(25.0, 25.0), (50.0, 50.0)]
+        result = biome_filter_points(
+            points, hmap, slope, rules,
+            terrain_size=100.0, moisture_map=moisture,
+        )
+        assert len(result) == 0, "Dry areas should be rejected for moisture-loving vegetation"
+
+    def test_moisture_map_allows_wet_areas(self):
+        """Points in wet areas pass when rule requires moisture."""
+        hmap = np.full((64, 64), 0.5)
+        slope = np.full((64, 64), 10.0)
+        moisture = np.full((64, 64), 0.8)  # wet
+        rules = [
+            {
+                "vegetation_type": "fern",
+                "min_alt": 0.0,
+                "max_alt": 1.0,
+                "density": 1.0,
+                "scale_range": (0.8, 1.2),
+                "min_moisture": 0.5,
+                "max_moisture": 1.0,
+            },
+        ]
+        points = [(25.0, 25.0), (50.0, 50.0)]
+        result = biome_filter_points(
+            points, hmap, slope, rules,
+            terrain_size=100.0, moisture_map=moisture,
+        )
+        assert len(result) == 2, "Wet areas should pass moisture check"
+
+    def test_moisture_map_none_ignores_moisture_rules(self):
+        """When moisture_map is None, moisture rules are ignored."""
+        hmap = np.full((64, 64), 0.5)
+        slope = np.full((64, 64), 10.0)
+        rules = [
+            {
+                "vegetation_type": "fern",
+                "min_alt": 0.0,
+                "max_alt": 1.0,
+                "density": 1.0,
+                "scale_range": (0.8, 1.2),
+                "min_moisture": 0.5,
+                "max_moisture": 1.0,
+            },
+        ]
+        points = [(25.0, 25.0)]
+        result = biome_filter_points(
+            points, hmap, slope, rules,
+            terrain_size=100.0, moisture_map=None,
+        )
+        assert len(result) == 1, "Without moisture_map, moisture rules should be ignored"
+
 
 # ===================================================================
 # Context-Aware Scatter
