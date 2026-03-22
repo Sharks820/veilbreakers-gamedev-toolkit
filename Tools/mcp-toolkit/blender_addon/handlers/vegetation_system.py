@@ -655,8 +655,8 @@ def handle_scatter_biome_vegetation(params: dict) -> dict:
     try:
         import bpy
         import bmesh
-    except ImportError:
-        raise RuntimeError("handle_scatter_biome_vegetation requires Blender")
+    except ImportError as exc:
+        raise RuntimeError("handle_scatter_biome_vegetation requires Blender") from exc
 
     terrain_name = params.get("terrain_name")
     if not terrain_name:

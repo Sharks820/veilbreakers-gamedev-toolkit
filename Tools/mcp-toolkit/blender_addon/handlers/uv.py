@@ -838,7 +838,7 @@ def handle_export_uv_layout(params: dict) -> dict:
                     size=(size, size),
                     opacity=opacity,
                 )
-            except Exception:
+            except (RuntimeError, TypeError, AttributeError):
                 # UV export operator may fail without UV editor context
                 bpy.ops.object.mode_set(mode="OBJECT")
                 if old_active:
