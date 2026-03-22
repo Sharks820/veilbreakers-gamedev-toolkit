@@ -53,12 +53,13 @@ def _action_new_fcurve(action, data_path, index, armature_obj=None):
     return new_fcurve(action, data_path, index, cb, layered)
 
 
-def _action_remove_fcurve(action, fc):
+def _action_remove_fcurve(action, fc, armature_obj=None):
     """Remove fcurve from action, compatible with Blender 4.x and 5.0+."""
     if hasattr(action, "fcurves"):
         action.fcurves.remove(fc)
     else:
-        remove_fcurve(action, fc)
+        cb, layered = setup_action_for_armature(action, armature_obj) if armature_obj else (None, True)
+        remove_fcurve(action, fc, cb, layered)
 
 
 # ---------------------------------------------------------------------------
@@ -720,7 +721,7 @@ def handle_extract_root_motion(params: dict) -> dict:
     # Remove existing root bone location fcurves if present
     for fc in list(_action_fcurves_list(action)):
         if fc.data_path == root_loc_data_path:
-            _action_remove_fcurve(action, fc)
+            _action_remove_fcurve(action, fc, armature_obj)
 
     fc_root_x = (action.fcurves if hasattr(action, "fcurves") else get_fcurves(action)).new(data_path=root_loc_data_path, index=0) if hasattr(action, "fcurves") else new_fcurve(action, root_loc_data_path, 0)
     fc_root_y = _action_new_fcurve(action, root_loc_data_path, 1, armature_obj)
@@ -767,7 +768,7 @@ def handle_extract_root_motion(params: dict) -> dict:
         # Remove existing root rotation Z fcurve if present
         for fc in list(_action_fcurves_list(action)):
             if fc.data_path == root_rot_data_path and fc.array_index == rot_index:
-                _action_remove_fcurve(action, fc)
+                _action_remove_fcurve(action, fc, armature_obj)
 
         fc_root_rz = _action_new_fcurve(action, root_rot_data_path, rot_index, armature_obj)
         fc_root_rz.keyframe_points.add(count=len(hip_translations))
