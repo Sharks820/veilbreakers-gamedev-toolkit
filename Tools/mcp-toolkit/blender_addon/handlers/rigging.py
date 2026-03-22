@@ -996,3 +996,266 @@ def handle_build_custom_rig(params: dict) -> dict:
         result["def_reparented"] = 0
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# End-to-end pipeline: Modeling -> Rigging -> Animation -> VFX
+# ---------------------------------------------------------------------------
+
+# Pipeline step definitions for agent-driven character/monster creation
+PIPELINE_STEPS: list[dict] = [
+    {
+        "step": 1,
+        "name": "generate_mesh",
+        "tool": "asset_pipeline",
+        "action": "generate_3d",
+        "description": "Generate or import 3D mesh from concept art or prompt",
+        "required_params": ["prompt"],
+        "optional_params": ["image_path"],
+        "output": "mesh_object_name",
+    },
+    {
+        "step": 2,
+        "name": "cleanup_mesh",
+        "tool": "asset_pipeline",
+        "action": "cleanup",
+        "description": "Auto-repair mesh, fix normals, remove doubles, UV unwrap",
+        "required_params": ["object_name"],
+        "output": "cleaned_mesh_name",
+    },
+    {
+        "step": 3,
+        "name": "game_check",
+        "tool": "blender_mesh",
+        "action": "game_check",
+        "description": "Verify mesh is game-ready (poly budget, manifold, UVs)",
+        "required_params": ["object_name"],
+        "optional_params": ["poly_budget", "platform"],
+        "output": "game_check_result",
+    },
+    {
+        "step": 4,
+        "name": "analyze_for_rigging",
+        "tool": "blender_rig",
+        "action": "analyze_mesh",
+        "description": "Analyze mesh proportions, recommend rig template",
+        "required_params": ["object_name"],
+        "output": "template_recommendation",
+    },
+    {
+        "step": 5,
+        "name": "apply_rig",
+        "tool": "blender_rig",
+        "action": "apply_template",
+        "description": "Apply creature rig template to mesh",
+        "required_params": ["object_name", "template"],
+        "optional_params": ["generate"],
+        "output": "rig_name",
+    },
+    {
+        "step": 6,
+        "name": "auto_weight",
+        "tool": "blender_rig",
+        "action": "auto_weight",
+        "description": "Auto-weight mesh to armature with heat diffusion",
+        "required_params": ["mesh_name", "armature_name"],
+        "output": "weight_result",
+    },
+    {
+        "step": 7,
+        "name": "enforce_weight_limit",
+        "tool": "blender_rig",
+        "action": "enforce_weight_limit",
+        "description": "Clamp to 4 bone influences per vertex for game export",
+        "required_params": ["mesh_name"],
+        "optional_params": ["max_influences"],
+        "output": "weight_limit_result",
+    },
+    {
+        "step": 8,
+        "name": "validate_rig",
+        "tool": "blender_rig",
+        "action": "validate",
+        "description": "Grade rig quality A-F (weights, symmetry, rolls)",
+        "required_params": ["mesh_name", "armature_name"],
+        "output": "rig_grade",
+        "gate": "grade must be A or B to proceed",
+    },
+    {
+        "step": 9,
+        "name": "test_deformation",
+        "tool": "blender_rig",
+        "action": "test_deformation",
+        "description": "Pose rig in 8 standard poses, generate contact sheet",
+        "required_params": ["rig_name"],
+        "output": "contact_sheet_image",
+    },
+    {
+        "step": 10,
+        "name": "generate_animations",
+        "tool": "blender_animation",
+        "action": "generate_idle",
+        "description": "Generate idle animation for the rigged character",
+        "required_params": ["armature_name"],
+        "output": "animation_action",
+        "next_animations": ["generate_walk", "generate_attack", "generate_reaction"],
+    },
+    {
+        "step": 11,
+        "name": "setup_facial",
+        "tool": "blender_rig",
+        "action": "setup_facial",
+        "description": "Add facial rig bones for expressions (humanoid only)",
+        "required_params": ["rig_name"],
+        "optional": True,
+        "condition": "template == 'humanoid'",
+        "output": "facial_bones_added",
+    },
+    {
+        "step": 12,
+        "name": "setup_spring_bones",
+        "tool": "blender_rig",
+        "action": "setup_spring_bones",
+        "description": "Add spring bone dynamics for tails/hair/capes/chains",
+        "required_params": ["rig_name", "bone_names"],
+        "optional": True,
+        "condition": "creature has spring bone features",
+        "output": "spring_bones_result",
+    },
+    {
+        "step": 13,
+        "name": "export_fbx",
+        "tool": "blender_export",
+        "action": "export",
+        "description": "Export rigged+animated model as FBX for Unity",
+        "required_params": ["filepath"],
+        "optional_params": ["export_format", "apply_modifiers"],
+        "output": "export_path",
+    },
+    {
+        "step": 14,
+        "name": "unity_import",
+        "tool": "unity_assets",
+        "action": "fbx_import",
+        "description": "Import FBX into Unity with correct settings",
+        "required_params": ["source_path", "destination_folder"],
+        "output": "unity_asset_path",
+    },
+    {
+        "step": 15,
+        "name": "unity_animator",
+        "tool": "unity_scene",
+        "action": "create_animator",
+        "description": "Create Unity Animator Controller with states",
+        "required_params": ["states", "transitions", "parameters"],
+        "output": "animator_controller",
+    },
+    {
+        "step": 16,
+        "name": "unity_vfx",
+        "tool": "unity_vfx",
+        "action": "create_brand_vfx",
+        "description": "Create brand-specific combat VFX for the character",
+        "required_params": ["brand"],
+        "optional": True,
+        "output": "vfx_prefab",
+    },
+]
+
+
+def _get_pipeline_for_monster(monster_id: str) -> dict:
+    """Get the full pipeline configuration for a VeilBreakers monster.
+
+    Returns pipeline steps with monster-specific parameters filled in.
+
+    Args:
+        monster_id: Monster ID from MONSTER_TEMPLATE_MAP.
+
+    Returns:
+        Dict with monster_id, template, features, steps (list of pipeline step dicts),
+        required_animations (list), and optional_steps (list of step names).
+    """
+    if monster_id not in MONSTER_TEMPLATE_MAP:
+        return {"valid": False, "error": f"Unknown monster: {monster_id}"}
+
+    config = MONSTER_TEMPLATE_MAP[monster_id]
+    template = config["template"]
+    features = config["features"]
+    body = config["body"]
+
+    # Determine which optional steps apply
+    optional_steps = []
+    if template == "humanoid":
+        optional_steps.append("setup_facial")
+
+    spring_features = [f for f in features if "spring" in f or f in (
+        "chain_spring_bones", "cloth_spring_bones", "tendril_spring_bones",
+    )]
+    if spring_features:
+        optional_steps.append("setup_spring_bones")
+
+    # Get required animation clips for this template
+    clips = REQUIRED_ANIMATION_CLIPS.get(template, ["idle", "death"])
+
+    # Build the step list
+    steps = []
+    for step in PIPELINE_STEPS:
+        step_copy = dict(step)
+
+        # Fill in monster-specific params
+        if step["name"] == "apply_rig":
+            step_copy["params"] = {"template": template}
+        elif step["name"] == "unity_vfx":
+            brands = [b for b in ("IRON", "SAVAGE", "SURGE", "VENOM", "DREAD",
+                                   "LEECH", "GRACE", "MEND", "RUIN", "VOID")]
+            step_copy["params"] = {"brand": config.get("brand", brands[0])}
+
+        # Skip optional steps that don't apply
+        if step.get("optional") and step["name"] not in optional_steps:
+            step_copy["skip"] = True
+            step_copy["skip_reason"] = f"Not applicable for {template} template"
+
+        steps.append(step_copy)
+
+    return {
+        "valid": True,
+        "monster_id": monster_id,
+        "template": template,
+        "features": features,
+        "body": body,
+        "steps": steps,
+        "required_animations": clips,
+        "optional_steps": optional_steps,
+    }
+
+
+def _validate_pipeline_readiness(
+    has_mesh: bool,
+    has_rig: bool,
+    has_weights: bool,
+    rig_grade: str,
+    has_idle_anim: bool,
+) -> dict:
+    """Validate whether a character is ready for each pipeline stage.
+
+    Returns dict with stage readiness booleans and blockers list.
+    """
+    blockers = []
+
+    if not has_mesh:
+        blockers.append("No mesh — run generate_mesh first")
+    if not has_rig:
+        blockers.append("No rig — run apply_rig first")
+    if not has_weights:
+        blockers.append("No weights — run auto_weight first")
+    if rig_grade not in ("A", "B"):
+        blockers.append(f"Rig grade {rig_grade} too low — must be A or B for export")
+    if not has_idle_anim:
+        blockers.append("No idle animation — run generate_idle first")
+
+    return {
+        "ready_for_export": len(blockers) == 0,
+        "ready_for_animation": has_mesh and has_rig and has_weights,
+        "ready_for_vfx": has_mesh and has_rig,
+        "blockers": blockers,
+    }
