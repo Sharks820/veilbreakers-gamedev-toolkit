@@ -23,19 +23,7 @@ from __future__ import annotations
 
 import re
 
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -214,8 +202,8 @@ def generate_particle_vfx_script(
         color = [1.0, 1.0, 1.0, 1.0]
 
     r, g, b, a = color[0], color[1], color[2], color[3]
-    safe_name = _sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
-    safe_display = _sanitize_cs_string(name)
+    safe_name = sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
+    safe_display = sanitize_cs_string(name)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -476,8 +464,8 @@ def generate_trail_vfx_script(
         color = [1.0, 1.0, 1.0, 1.0]
 
     r, g, b, a = color[0], color[1], color[2], color[3]
-    safe_name = _sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
-    safe_display = _sanitize_cs_string(name)
+    safe_name = sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
+    safe_display = sanitize_cs_string(name)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -579,8 +567,8 @@ def generate_aura_vfx_script(
         color = [1.0, 1.0, 1.0, 1.0]
 
     r, g, b, a = color[0], color[1], color[2], color[3]
-    safe_name = _sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
-    safe_display = _sanitize_cs_string(name)
+    safe_name = sanitize_cs_identifier(name.replace(" ", "_").replace("-", "_"))
+    safe_display = sanitize_cs_string(name)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -995,10 +983,10 @@ def generate_ability_vfx_script(
     Returns:
         Complete C# source string.
     """
-    safe_name = _sanitize_cs_identifier(ability_name.replace(" ", "_").replace("-", "_"))
-    safe_display = _sanitize_cs_string(ability_name)
-    safe_vfx_prefab = _sanitize_cs_string(vfx_prefab)
-    safe_anim_clip = _sanitize_cs_string(anim_clip)
+    safe_name = sanitize_cs_identifier(ability_name.replace(" ", "_").replace("-", "_"))
+    safe_display = sanitize_cs_string(ability_name)
+    safe_vfx_prefab = sanitize_cs_string(vfx_prefab)
+    safe_anim_clip = sanitize_cs_string(anim_clip)
 
     return f'''using UnityEngine;
 using UnityEditor;

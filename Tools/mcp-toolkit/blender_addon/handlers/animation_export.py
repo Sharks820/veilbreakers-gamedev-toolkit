@@ -1168,6 +1168,8 @@ def handle_batch_export(params: dict) -> dict:
                 "axis_up": "Y",
                 "add_leaf_bones": False,
                 "mesh_smooth_type": "FACE",
+                "use_tspace": True,
+                "use_armature_deform_only": True,
             }
 
             if override:

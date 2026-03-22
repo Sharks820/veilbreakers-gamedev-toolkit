@@ -14,7 +14,12 @@ def sanitize_cs_string(value: str) -> str:
 
 
 def sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
+    """Sanitize a value for use as a C# identifier.
+
+    Strips all characters that are not alphanumeric or underscore.
+    Prepends '_' if result starts with a digit. Returns '_unnamed'
+    if nothing remains.
+    """
     result = re.sub(r"[^a-zA-Z0-9_]", "", value)
     if not result:
         return "_unnamed"

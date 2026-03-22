@@ -123,7 +123,7 @@ class GeminiReviewClient:
             '- "summary": brief text summary\n'
         )
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={self.api_key}"
+        url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
         payload = {
             "contents": [
@@ -141,7 +141,8 @@ class GeminiReviewClient:
             ]
         }
 
-        response = httpx.post(url, json=payload, timeout=60.0)
+        headers = {"x-goog-api-key": self.api_key}
+        response = httpx.post(url, json=payload, headers=headers, timeout=60.0)
         response.raise_for_status()
 
         data = response.json()

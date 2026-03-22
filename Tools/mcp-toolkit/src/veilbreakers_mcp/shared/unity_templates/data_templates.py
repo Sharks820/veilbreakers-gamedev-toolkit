@@ -16,9 +16,9 @@ Exports:
     generate_localization_entries_script -- DATA-03: String table entry population
     generate_data_authoring_window     -- DATA-04: IMGUI EditorWindow for batch SO authoring
 
-Helpers:
-    _sanitize_cs_string                -- C# string literal escaping
-    _sanitize_cs_identifier            -- C# identifier sanitization
+Helpers (imported from _cs_sanitize):
+    sanitize_cs_string                 -- C# string literal escaping
+    sanitize_cs_identifier             -- C# identifier sanitization
 """
 
 from __future__ import annotations
@@ -26,28 +26,7 @@ from __future__ import annotations
 import json
 import re
 
-
-# ---------------------------------------------------------------------------
-# Sanitization helpers (each template module has its own copy)
-# ---------------------------------------------------------------------------
-
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal.
-
-    Prevents C# code injection by escaping backslashes, quotes, and
-    newlines.
-    """
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier (class name, method name)."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +101,7 @@ def _resolve_cs_type(type_str: str) -> str:
 
 def _to_camel_case(name: str) -> str:
     """Convert a name to _camelCase for private fields."""
-    clean = _sanitize_cs_identifier(name)
+    clean = sanitize_cs_identifier(name)
     if not clean:
         return "_field"
     if clean.startswith("_"):
@@ -132,7 +111,7 @@ def _to_camel_case(name: str) -> str:
 
 def _to_pascal_case(name: str) -> str:
     """Convert a name to PascalCase for public fields."""
-    clean = _sanitize_cs_identifier(name)
+    clean = sanitize_cs_identifier(name)
     if not clean:
         return "Field"
     return f"{clean[0].upper()}{clean[1:]}"
@@ -170,12 +149,12 @@ def generate_so_definition(
     Returns:
         Complete C# source string.
     """
-    safe_class = _sanitize_cs_identifier(class_name)
+    safe_class = sanitize_cs_identifier(class_name)
     if not safe_class:
         safe_class = "GeneratedConfig"
 
-    safe_menu = _sanitize_cs_string(menu_name or safe_class)
-    safe_file = _sanitize_cs_string(file_name or safe_class)
+    safe_menu = sanitize_cs_string(menu_name or safe_class)
+    safe_file = sanitize_cs_string(file_name or safe_class)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -192,7 +171,7 @@ def generate_so_definition(
     # Summary
     if summary:
         lines.append(f"{indent}/// <summary>")
-        lines.append(f"{indent}/// {_sanitize_cs_string(summary)}")
+        lines.append(f"{indent}/// {sanitize_cs_string(summary)}")
         lines.append(f"{indent}/// </summary>")
 
     # CreateAssetMenu attribute
@@ -216,7 +195,7 @@ def generate_so_definition(
             if isinstance(extra_attrs, str):
                 extra_attrs = [extra_attrs]
 
-            safe_name = _sanitize_cs_identifier(fname)
+            safe_name = sanitize_cs_identifier(fname)
             if not safe_name:
                 continue
 
@@ -225,25 +204,25 @@ def generate_so_definition(
                 if current_header is not None:
                     lines.append("")
                 lines.append(
-                    f'{indent}    [Header("{_sanitize_cs_string(header)}")]'
+                    f'{indent}    [Header("{sanitize_cs_string(header)}")]'
                 )
                 current_header = header
 
             # Tooltip
             if tooltip:
                 lines.append(
-                    f'{indent}    [Tooltip("{_sanitize_cs_string(tooltip)}")]'
+                    f'{indent}    [Tooltip("{sanitize_cs_string(tooltip)}")]'
                 )
 
             # Extra attributes
             for attr in extra_attrs:
-                lines.append(f"{indent}    [{_sanitize_cs_string(attr)}]")
+                lines.append(f"{indent}    [{sanitize_cs_string(attr)}]")
 
             # Field declaration
             default_str = ""
             if default is not None:
                 if ftype == "string":
-                    default_str = f' = "{_sanitize_cs_string(str(default))}"'
+                    default_str = f' = "{sanitize_cs_string(str(default))}"'
                 elif ftype == "bool":
                     default_str = (
                         f" = {str(default).lower()}"
@@ -307,20 +286,20 @@ def generate_asset_creation_script(
     Returns:
         Complete C# editor script source string.
     """
-    safe_class = _sanitize_cs_identifier(so_class_name)
+    safe_class = sanitize_cs_identifier(so_class_name)
     if not safe_class:
         safe_class = "GeneratedConfig"
 
     safe_ns = _safe_namespace(namespace)
-    safe_category = _sanitize_cs_identifier(category) if category else ""
-    safe_folder = _sanitize_cs_string(output_folder)
+    safe_category = sanitize_cs_identifier(category) if category else ""
+    safe_folder = sanitize_cs_string(output_folder)
 
     if safe_category:
         asset_folder = f"{safe_folder}/{safe_category}"
     else:
         asset_folder = safe_folder
 
-    safe_menu = _sanitize_cs_string(
+    safe_menu = sanitize_cs_string(
         menu_path or f"Create {safe_category or safe_class} Configs"
     )
     script_class = f"VeilBreakers_Create{safe_category or safe_class}Configs"
@@ -342,7 +321,7 @@ def generate_asset_creation_script(
     lines.append("    {")
 
     # Ensure output folder exists
-    lines.append(f'        string outputFolder = "{_sanitize_cs_string(asset_folder)}";')
+    lines.append(f'        string outputFolder = "{sanitize_cs_string(asset_folder)}";')
     lines.append("        if (!AssetDatabase.IsValidFolder(outputFolder))")
     lines.append("        {")
     lines.append("            string[] parts = outputFolder.Split('/');")
@@ -373,12 +352,12 @@ def generate_asset_creation_script(
 
             # Set fields
             for field_name, field_value in asset_data.items():
-                safe_field = _sanitize_cs_identifier(field_name)
+                safe_field = sanitize_cs_identifier(field_name)
                 if not safe_field:
                     continue
                 if isinstance(field_value, str):
                     lines.append(
-                        f'        {var_name}.{safe_field} = "{_sanitize_cs_string(field_value)}";'
+                        f'        {var_name}.{safe_field} = "{sanitize_cs_string(field_value)}";'
                     )
                 elif isinstance(field_value, bool):
                     lines.append(
@@ -394,10 +373,10 @@ def generate_asset_creation_script(
                 if isinstance(fv, str):
                     first_str = fv
                     break
-            asset_file = _sanitize_cs_identifier(first_str) if first_str else f"Asset{i}"
+            asset_file = sanitize_cs_identifier(first_str) if first_str else f"Asset{i}"
             asset_path = f"{asset_folder}/{asset_file}.asset"
             lines.append(
-                f'        string path{i} = "{_sanitize_cs_string(asset_path)}";'
+                f'        string path{i} = "{sanitize_cs_string(asset_path)}";'
             )
             lines.append(
                 f"        AssetDatabase.CreateAsset({var_name}, path{i});"
@@ -476,14 +455,14 @@ def generate_json_validator_script(
     Returns:
         Complete C# editor script source string.
     """
-    safe_name = _sanitize_cs_identifier(config_name)
+    safe_name = sanitize_cs_identifier(config_name)
     if not safe_name:
         safe_name = "ConfigData"
 
-    safe_path = _sanitize_cs_string(json_path)
+    safe_path = sanitize_cs_string(json_path)
     # Auto-generate wrapper class name if schema is provided but no wrapper specified
     if wrapper_class:
-        safe_wrapper = _sanitize_cs_identifier(wrapper_class)
+        safe_wrapper = sanitize_cs_identifier(wrapper_class)
     elif schema:
         safe_wrapper = f"{safe_name}Wrapper"
     else:
@@ -527,7 +506,7 @@ def generate_json_validator_script(
         lines.append("{")
         if schema:
             for field_name, rules in schema.items():
-                safe_field = _sanitize_cs_identifier(field_name)
+                safe_field = sanitize_cs_identifier(field_name)
                 ftype = rules.get("type", "string")
                 cs_type = _resolve_cs_type(ftype)
                 lines.append(f"    public {cs_type} {safe_field};")
@@ -536,7 +515,7 @@ def generate_json_validator_script(
 
     lines.append(f"public class {script_class}")
     lines.append("{")
-    lines.append(f'    [MenuItem("VeilBreakers/Data/Validate {_sanitize_cs_string(safe_name)}")]')
+    lines.append(f'    [MenuItem("VeilBreakers/Data/Validate {sanitize_cs_string(safe_name)}")]')
     lines.append("    public static void Execute()")
     lines.append("    {")
     lines.append("        var results = new List<VB_ValidationResult>();")
@@ -578,7 +557,7 @@ def generate_json_validator_script(
             lines.append("        {")
 
             for field_name, rules in schema.items():
-                safe_field = _sanitize_cs_identifier(field_name)
+                safe_field = sanitize_cs_identifier(field_name)
                 ftype = rules.get("type", "string")
                 required = rules.get("required", False)
                 min_val = rules.get("min")
@@ -724,12 +703,12 @@ def generate_json_loader_script(
     Returns:
         Complete C# source string.
     """
-    safe_class = _sanitize_cs_identifier(class_name)
+    safe_class = sanitize_cs_identifier(class_name)
     if not safe_class:
         safe_class = "GameData"
 
     safe_ns = _safe_namespace(namespace)
-    safe_path = _sanitize_cs_string(json_path)
+    safe_path = sanitize_cs_string(json_path)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -749,7 +728,7 @@ def generate_json_loader_script(
 
     if fields:
         for field in fields:
-            fname = _sanitize_cs_identifier(field.get("name", ""))
+            fname = sanitize_cs_identifier(field.get("name", ""))
             ftype = _resolve_cs_type(field.get("type", "string"))
             if fname:
                 lines.append(f"{indent}    public {ftype} {fname};")
@@ -854,9 +833,9 @@ def generate_localization_setup_script(
     Returns:
         Complete C# editor script source string.
     """
-    safe_table = _sanitize_cs_string(table_name)
-    safe_dir = _sanitize_cs_string(output_dir)
-    safe_default = _sanitize_cs_string(default_locale)
+    safe_table = sanitize_cs_string(table_name)
+    safe_dir = sanitize_cs_string(output_dir)
+    safe_default = sanitize_cs_string(default_locale)
 
     all_locales = [default_locale]
     if locales:
@@ -910,7 +889,7 @@ def generate_localization_setup_script(
     # Create locale assets
     lines.append("        var createdLocales = new List<Locale>();")
     for loc in all_locales:
-        safe_loc = _sanitize_cs_string(loc)
+        safe_loc = sanitize_cs_string(loc)
         lines.append(f'        // Create locale: {safe_loc}')
         lines.append("        {")
         lines.append(
@@ -988,8 +967,8 @@ def generate_localization_entries_script(
     Returns:
         Complete C# editor script source string.
     """
-    safe_table = _sanitize_cs_string(table_name)
-    safe_locale = _sanitize_cs_string(locale)
+    safe_table = sanitize_cs_string(table_name)
+    safe_locale = sanitize_cs_string(locale)
 
     lines: list[str] = []
     lines.append("#if UNITY_EDITOR")
@@ -1056,8 +1035,8 @@ def generate_localization_entries_script(
     # Add entries
     if entries:
         for key, value in entries.items():
-            safe_key = _sanitize_cs_string(key)
-            safe_value = _sanitize_cs_string(value)
+            safe_key = sanitize_cs_string(key)
+            safe_value = sanitize_cs_string(value)
             lines.append("        try")
             lines.append("        {")
             lines.append(
@@ -1146,18 +1125,18 @@ def generate_data_authoring_window(
     Returns:
         Complete C# editor script source string.
     """
-    safe_window = _sanitize_cs_identifier(window_name)
+    safe_window = sanitize_cs_identifier(window_name)
     if not safe_window:
         safe_window = "DataEditorWindow"
 
-    safe_so = _sanitize_cs_identifier(so_class_name)
+    safe_so = sanitize_cs_identifier(so_class_name)
     if not safe_so:
         safe_so = "GameConfig"
 
     safe_ns = _safe_namespace(namespace)
-    safe_category = _sanitize_cs_identifier(category) if category else ""
-    safe_folder = _sanitize_cs_string(data_folder)
-    safe_menu = _sanitize_cs_string(menu_path or safe_window)
+    safe_category = sanitize_cs_identifier(category) if category else ""
+    safe_folder = sanitize_cs_string(data_folder)
+    safe_menu = sanitize_cs_string(menu_path or safe_window)
 
     if safe_category:
         asset_folder = f"{safe_folder}/{safe_category}"
@@ -1184,7 +1163,7 @@ def generate_data_authoring_window(
     # New asset fields for creation
     if fields:
         for field in fields:
-            fname = _sanitize_cs_identifier(field.get("name", ""))
+            fname = sanitize_cs_identifier(field.get("name", ""))
             ftype = _resolve_cs_type(field.get("type", "string"))
             if fname:
                 lines.append(f"    private {ftype} _new{_to_pascal_case(fname)};")
@@ -1197,7 +1176,7 @@ def generate_data_authoring_window(
     lines.append(f"    public static void ShowWindow()")
     lines.append("    {")
     lines.append(
-        f'        GetWindow<{safe_window}>("{_sanitize_cs_string(safe_window)}");'
+        f'        GetWindow<{safe_window}>("{sanitize_cs_string(safe_window)}");'
     )
     lines.append("    }")
     lines.append("")
@@ -1232,7 +1211,7 @@ def generate_data_authoring_window(
     lines.append("    private void OnGUI()")
     lines.append("    {")
     lines.append(
-        f'        GUILayout.Label("{_sanitize_cs_string(safe_window)}", EditorStyles.boldLabel);'
+        f'        GUILayout.Label("{sanitize_cs_string(safe_window)}", EditorStyles.boldLabel);'
     )
     lines.append("        EditorGUILayout.Space();")
     lines.append("")
@@ -1245,10 +1224,10 @@ def generate_data_authoring_window(
 
     if fields:
         for field in fields:
-            fname = _sanitize_cs_identifier(field.get("name", ""))
+            fname = sanitize_cs_identifier(field.get("name", ""))
             ftype = _resolve_cs_type(field.get("type", "string"))
             label = field.get("label", fname)
-            safe_label = _sanitize_cs_string(label)
+            safe_label = sanitize_cs_string(label)
             if not fname:
                 continue
 
@@ -1332,7 +1311,7 @@ def generate_data_authoring_window(
 
     if fields:
         for field in fields:
-            fname = _sanitize_cs_identifier(field.get("name", ""))
+            fname = sanitize_cs_identifier(field.get("name", ""))
             if fname:
                 lines.append(
                     f'            EditorGUILayout.PropertyField(so.FindProperty("{fname}"));'
@@ -1384,7 +1363,7 @@ def generate_data_authoring_window(
     lines.append("    private void CreateNewAsset()")
     lines.append("    {")
     lines.append(
-        f'        string folder = "{_sanitize_cs_string(asset_folder)}";'
+        f'        string folder = "{sanitize_cs_string(asset_folder)}";'
     )
     lines.append("        if (!AssetDatabase.IsValidFolder(folder))")
     lines.append("        {")
@@ -1405,7 +1384,7 @@ def generate_data_authoring_window(
 
     if fields:
         for field in fields:
-            fname = _sanitize_cs_identifier(field.get("name", ""))
+            fname = sanitize_cs_identifier(field.get("name", ""))
             if fname:
                 pname = f"_new{_to_pascal_case(fname)}"
                 lines.append(f"        asset.{fname} = {pname};")
@@ -1417,7 +1396,7 @@ def generate_data_authoring_window(
     if fields:
         for field in fields:
             if field.get("type", "") == "string":
-                name_field = _sanitize_cs_identifier(field.get("name", ""))
+                name_field = sanitize_cs_identifier(field.get("name", ""))
                 break
 
     if name_field:
