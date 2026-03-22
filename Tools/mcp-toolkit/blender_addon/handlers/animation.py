@@ -51,6 +51,9 @@ VALID_HIT_DIRECTIONS: frozenset[str] = frozenset({
     "front", "back", "left", "right",
 })
 
+VALID_TANGENT_TYPES: frozenset[str] = frozenset({"AUTO_CLAMPED", "BEZIER", "LINEAR", "CONSTANT"})
+DEFAULT_TANGENT_TYPE: str = "AUTO_CLAMPED"
+
 
 # ---------------------------------------------------------------------------
 # Pure-logic validation helpers (testable without Blender)
@@ -385,6 +388,7 @@ def _apply_keyframes_to_action(
     action_name: str,
     keyframes: list[Keyframe],
     use_cyclic: bool = True,
+    tangent_type: str = "AUTO_CLAMPED",
 ) -> dict:
     """Create a Blender Action from keyframe data and assign to armature.
 
@@ -393,10 +397,16 @@ def _apply_keyframes_to_action(
         action_name: Name for the new Action.
         keyframes: List of Keyframe namedtuples from the engine.
         use_cyclic: If True, add CYCLES modifier to each fcurve for looping.
+        tangent_type: Interpolation tangent type. One of AUTO_CLAMPED, BEZIER,
+            LINEAR, CONSTANT. Defaults to AUTO_CLAMPED.
 
     Returns:
-        Dict with action_name, fcurve_count, frame_range.
+        Dict with action_name, fcurve_count, frame_range, tangent_type.
     """
+    # Validate tangent_type
+    if tangent_type not in VALID_TANGENT_TYPES:
+        tangent_type = DEFAULT_TANGENT_TYPE
+
     # Create action
     action = bpy.data.actions.new(name=action_name)
     action.use_fake_user = True
@@ -411,6 +421,14 @@ def _apply_keyframes_to_action(
     for kf in keyframes:
         key = (kf.bone_name, kf.channel, kf.axis)
         fcurve_map.setdefault(key, []).append((kf.frame, kf.value))
+
+    # Map tangent_type to Blender interpolation
+    if tangent_type in ("AUTO_CLAMPED", "BEZIER"):
+        interpolation = "BEZIER"
+    elif tangent_type == "LINEAR":
+        interpolation = "LINEAR"
+    else:  # CONSTANT
+        interpolation = "CONSTANT"
 
     # Create fcurves and bulk-insert keyframes
     for (bone_name, channel, axis), frames in fcurve_map.items():
@@ -428,7 +446,13 @@ def _apply_keyframes_to_action(
         fc.keyframe_points.add(count=len(frames))
         for i, (frame, value) in enumerate(frames):
             fc.keyframe_points[i].co = (frame, value)
-            fc.keyframe_points[i].interpolation = "BEZIER"
+            fc.keyframe_points[i].interpolation = interpolation
+            if tangent_type == "AUTO_CLAMPED":
+                fc.keyframe_points[i].handle_left_type = "AUTO_CLAMPED"
+                fc.keyframe_points[i].handle_right_type = "AUTO_CLAMPED"
+            elif tangent_type == "BEZIER":
+                fc.keyframe_points[i].handle_left_type = "AUTO"
+                fc.keyframe_points[i].handle_right_type = "AUTO"
 
         # Add cycles modifier for seamless looping
         if use_cyclic:
@@ -439,6 +463,7 @@ def _apply_keyframes_to_action(
         "action_name": action.name,
         "fcurve_count": len(action.fcurves),
         "frame_range": frame_range,
+        "tangent_type": tangent_type,
     }
 
 
@@ -488,9 +513,11 @@ def handle_generate_walk(params: dict) -> dict:
     keyframes = generate_cycle_keyframes(config)
 
     # Apply to Blender Action
+    tangent_type = params.get("tangent_type", DEFAULT_TANGENT_TYPE)
     action_name = f"{object_name}_{gait}_{speed}"
     result = _apply_keyframes_to_action(
         armature_obj, action_name, keyframes, use_cyclic=True,
+        tangent_type=tangent_type,
     )
 
     # Compute contact frames (foot plants at phase extremes)
@@ -564,9 +591,11 @@ def handle_generate_fly(params: dict) -> dict:
 
     keyframes = generate_cycle_keyframes(config)
 
+    tangent_type = params.get("tangent_type", DEFAULT_TANGENT_TYPE)
     action_name = f"{object_name}_fly_hover"
     result = _apply_keyframes_to_action(
         armature_obj, action_name, keyframes, use_cyclic=True,
+        tangent_type=tangent_type,
     )
 
     # Wing beat contacts at top and bottom of stroke
@@ -614,9 +643,11 @@ def handle_generate_idle(params: dict) -> dict:
 
     keyframes = generate_cycle_keyframes(config)
 
+    tangent_type = params.get("tangent_type", DEFAULT_TANGENT_TYPE)
     action_name = f"{object_name}_idle"
     result = _apply_keyframes_to_action(
         armature_obj, action_name, keyframes, use_cyclic=True,
+        tangent_type=tangent_type,
     )
 
     return {
@@ -654,9 +685,11 @@ def handle_generate_attack(params: dict) -> dict:
 
     keyframes = generate_attack_keyframes(attack_type, frame_count, intensity)
 
+    tangent_type = params.get("tangent_type", DEFAULT_TANGENT_TYPE)
     action_name = f"{object_name}_attack_{attack_type}"
     result = _apply_keyframes_to_action(
         armature_obj, action_name, keyframes, use_cyclic=False,
+        tangent_type=tangent_type,
     )
 
     # Compute phase frame ranges from standard percentages
@@ -712,12 +745,14 @@ def handle_generate_reaction(params: dict) -> dict:
         reaction_type, direction=direction, frame_count=frame_count,
     )
 
+    tangent_type = params.get("tangent_type", DEFAULT_TANGENT_TYPE)
     action_name = f"{object_name}_{reaction_type}"
     if reaction_type == "hit":
         action_name = f"{object_name}_hit_{direction}"
 
     result = _apply_keyframes_to_action(
         armature_obj, action_name, keyframes, use_cyclic=False,
+        tangent_type=tangent_type,
     )
 
     # Add contact marker at impact frame for hit reactions (20% mark)
@@ -762,9 +797,11 @@ def handle_generate_custom(params: dict) -> dict:
 
     keyframes = generate_custom_keyframes(description, frame_count)
 
+    tangent_type = params.get("tangent_type", DEFAULT_TANGENT_TYPE)
     action_name = f"{object_name}_custom"
     result = _apply_keyframes_to_action(
         armature_obj, action_name, keyframes, use_cyclic=False,
+        tangent_type=tangent_type,
     )
 
     # Extract parsed actions from the keyframes for reporting
