@@ -224,6 +224,134 @@ CORRECTIVE_SHAPE_DEFS: list[dict] = [
 
 
 # ---------------------------------------------------------------------------
+# Pose-Space Deformation Definitions (AAA multi-bone-driven correctives)
+# ---------------------------------------------------------------------------
+
+POSE_SPACE_DEFORMATIONS: list[dict] = [
+    {
+        "name": "shoulder_raise_forward",
+        "driver_bones": ["upper_arm.L"],
+        "driver_axes": ["Z", "X"],
+        "thresholds": [60.0, 30.0],
+        "description": "Deltoid volume preservation on forward + abduction",
+    },
+    {
+        "name": "elbow_extreme_flex",
+        "driver_bones": ["forearm.L"],
+        "driver_axes": ["X"],
+        "thresholds": [120.0],
+        "description": "Bicep bulge and forearm compression at extreme flexion",
+    },
+    {
+        "name": "knee_deep_squat",
+        "driver_bones": ["thigh.L", "shin.L"],
+        "driver_axes": ["X", "X"],
+        "thresholds": [90.0, 90.0],
+        "description": "Quad/calf volume at deep squat with proper hip fold",
+    },
+    {
+        "name": "wrist_bend",
+        "driver_bones": ["hand.L"],
+        "driver_axes": ["X"],
+        "thresholds": [45.0],
+        "description": "Tendon visibility on wrist extension/flexion",
+    },
+    {
+        "name": "neck_turn",
+        "driver_bones": ["spine.004"],
+        "driver_axes": ["Y"],
+        "thresholds": [45.0],
+        "description": "SCM muscle and trapezius activation on head turn",
+    },
+]
+
+
+def _validate_psd_config(
+    driver_bones: list[str],
+    driver_axes: list[str],
+    thresholds: list[float],
+) -> dict:
+    """Validate pose-space deformation configuration."""
+    errors = []
+    valid_axes = {"X", "Y", "Z"}
+
+    if len(driver_bones) != len(driver_axes):
+        errors.append("driver_bones and driver_axes must have same length")
+    if len(driver_bones) != len(thresholds):
+        errors.append("driver_bones and thresholds must have same length")
+
+    for axis in driver_axes:
+        if axis not in valid_axes:
+            errors.append(f"Invalid axis: '{axis}'")
+
+    for thresh in thresholds:
+        if not isinstance(thresh, (int, float)) or thresh <= 0 or thresh > 180:
+            errors.append(f"Threshold must be in (0, 180], got {thresh}")
+
+    return {"valid": len(errors) == 0, "errors": errors}
+
+
+# ---------------------------------------------------------------------------
+# Apple ARKit 52 Blendshape Mapping (industry standard facial capture)
+# ---------------------------------------------------------------------------
+
+ARKIT_BLENDSHAPE_MAP: dict[str, list[str]] = {
+    "eyeBlinkLeft": ["eyelid_upper.L", "eyelid_lower.L"],
+    "eyeBlinkRight": ["eyelid_upper.R", "eyelid_lower.R"],
+    "eyeWideLeft": ["eyelid_upper.L"],
+    "eyeWideRight": ["eyelid_upper.R"],
+    "eyeSquintLeft": ["eyelid_lower.L", "cheek.L"],
+    "eyeSquintRight": ["eyelid_lower.R", "cheek.R"],
+    "eyeLookUpLeft": ["eye.L"],
+    "eyeLookUpRight": ["eye.R"],
+    "eyeLookDownLeft": ["eye.L"],
+    "eyeLookDownRight": ["eye.R"],
+    "eyeLookInLeft": ["eye.L"],
+    "eyeLookInRight": ["eye.R"],
+    "eyeLookOutLeft": ["eye.L"],
+    "eyeLookOutRight": ["eye.R"],
+    "jawOpen": ["jaw"],
+    "jawForward": ["jaw"],
+    "jawLeft": ["jaw"],
+    "jawRight": ["jaw"],
+    "mouthClose": ["lip_upper", "lip_lower"],
+    "mouthFunnel": ["lip_upper", "lip_lower", "lip_corner.L", "lip_corner.R"],
+    "mouthPucker": ["lip_upper", "lip_lower", "lip_corner.L", "lip_corner.R"],
+    "mouthLeft": ["lip_corner.L"],
+    "mouthRight": ["lip_corner.R"],
+    "mouthSmileLeft": ["lip_corner.L"],
+    "mouthSmileRight": ["lip_corner.R"],
+    "mouthFrownLeft": ["lip_corner.L"],
+    "mouthFrownRight": ["lip_corner.R"],
+    "mouthDimpleLeft": ["lip_corner.L", "cheek.L"],
+    "mouthDimpleRight": ["lip_corner.R", "cheek.R"],
+    "mouthStretchLeft": ["lip_corner.L"],
+    "mouthStretchRight": ["lip_corner.R"],
+    "mouthRollLower": ["lip_lower"],
+    "mouthRollUpper": ["lip_upper"],
+    "mouthShrugLower": ["lip_lower"],
+    "mouthShrugUpper": ["lip_upper"],
+    "mouthPressLeft": ["lip_corner.L"],
+    "mouthPressRight": ["lip_corner.R"],
+    "mouthLowerDownLeft": ["lip_lower"],
+    "mouthLowerDownRight": ["lip_lower"],
+    "mouthUpperUpLeft": ["lip_upper"],
+    "mouthUpperUpRight": ["lip_upper"],
+    "browDownLeft": ["brow_inner.L", "brow_mid.L"],
+    "browDownRight": ["brow_inner.R", "brow_mid.R"],
+    "browInnerUp": ["brow_inner.L", "brow_inner.R"],
+    "browOuterUpLeft": ["brow_outer.L"],
+    "browOuterUpRight": ["brow_outer.R"],
+    "cheekPuff": ["cheek.L", "cheek.R"],
+    "cheekSquintLeft": ["cheek.L"],
+    "cheekSquintRight": ["cheek.R"],
+    "noseSneerLeft": ["nose"],
+    "noseSneerRight": ["nose"],
+    "tongueOut": ["jaw"],
+}
+
+
+# ---------------------------------------------------------------------------
 # Monster expression presets (bone name -> transform dicts)
 # ---------------------------------------------------------------------------
 

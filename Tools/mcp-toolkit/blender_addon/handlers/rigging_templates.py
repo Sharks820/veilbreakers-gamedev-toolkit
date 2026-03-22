@@ -441,7 +441,7 @@ HUMANOID_BONES: dict[str, dict] = {
         "parent": "pinky_02.R",
         "rigify_type": "",
     },
-    # Twist bones
+    # Twist bones (50% of segment)
     "upper_arm_twist.L": {
         "head": (0.29, 0.0, 1.5),
         "tail": (0.35, 0.0, 1.5),
@@ -494,6 +494,63 @@ HUMANOID_BONES: dict[str, dict] = {
     "shin_twist.R": {
         "head": (-0.1, 0.0, 0.29),
         "tail": (-0.1, 0.0, 0.23),
+        "roll": 0.0,
+        "parent": "shin.R",
+        "rigify_type": "basic.super_copy",
+    },
+    # AAA multi-twist bones (25% of segment) for improved volume preservation
+    "upper_arm_twist_025.L": {
+        "head": (0.235, 0.0, 1.5),
+        "tail": (0.265, 0.0, 1.5),
+        "roll": 0.0,
+        "parent": "upper_arm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "upper_arm_twist_025.R": {
+        "head": (-0.235, 0.0, 1.5),
+        "tail": (-0.265, 0.0, 1.5),
+        "roll": 0.0,
+        "parent": "upper_arm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist_025.L": {
+        "head": (0.455, 0.0, 1.5),
+        "tail": (0.485, 0.0, 1.5),
+        "roll": 1.5708,
+        "parent": "forearm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist_025.R": {
+        "head": (-0.455, 0.0, 1.5),
+        "tail": (-0.485, 0.0, 1.5),
+        "roll": -1.5708,
+        "parent": "forearm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist_025.L": {
+        "head": (0.1, 0.0, 0.8375),
+        "tail": (0.1, 0.0, 0.7975),
+        "roll": 0.0,
+        "parent": "thigh.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist_025.R": {
+        "head": (-0.1, 0.0, 0.8375),
+        "tail": (-0.1, 0.0, 0.7975),
+        "roll": 0.0,
+        "parent": "thigh.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist_025.L": {
+        "head": (0.1, 0.0, 0.395),
+        "tail": (0.1, 0.0, 0.355),
+        "roll": 0.0,
+        "parent": "shin.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist_025.R": {
+        "head": (-0.1, 0.0, 0.395),
+        "tail": (-0.1, 0.0, 0.355),
         "roll": 0.0,
         "parent": "shin.R",
         "rigify_type": "basic.super_copy",

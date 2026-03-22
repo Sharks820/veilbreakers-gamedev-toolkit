@@ -1154,3 +1154,56 @@ class TestCorrectiveShapes:
         })
         assert result["valid"] is False
         assert any("strength" in e for e in result["errors"])
+
+
+# ---------------------------------------------------------------------------
+# TestPoseSpaceDeformations
+# ---------------------------------------------------------------------------
+
+
+class TestPoseSpaceDeformations:
+    def test_has_5_psds(self):
+        from blender_addon.handlers.rigging_advanced import POSE_SPACE_DEFORMATIONS
+        assert len(POSE_SPACE_DEFORMATIONS) == 5
+
+    def test_valid_config(self):
+        from blender_addon.handlers.rigging_advanced import _validate_psd_config
+        r = _validate_psd_config(["upper_arm.L"], ["Z"], [60.0])
+        assert r["valid"] is True
+
+    def test_mismatched_lengths(self):
+        from blender_addon.handlers.rigging_advanced import _validate_psd_config
+        r = _validate_psd_config(["a", "b"], ["X"], [60.0])
+        assert r["valid"] is False
+
+    def test_invalid_axis(self):
+        from blender_addon.handlers.rigging_advanced import _validate_psd_config
+        r = _validate_psd_config(["a"], ["W"], [60.0])
+        assert r["valid"] is False
+
+    def test_invalid_threshold(self):
+        from blender_addon.handlers.rigging_advanced import _validate_psd_config
+        r = _validate_psd_config(["a"], ["X"], [0.0])
+        assert r["valid"] is False
+
+    def test_threshold_above_180(self):
+        from blender_addon.handlers.rigging_advanced import _validate_psd_config
+        r = _validate_psd_config(["a"], ["X"], [200.0])
+        assert r["valid"] is False
+
+
+# ---------------------------------------------------------------------------
+# TestARKitMapping
+# ---------------------------------------------------------------------------
+
+
+class TestARKitMapping:
+    def test_has_52_blendshapes(self):
+        from blender_addon.handlers.rigging_advanced import ARKIT_BLENDSHAPE_MAP
+        assert len(ARKIT_BLENDSHAPE_MAP) == 52
+
+    def test_all_bones_in_facial(self):
+        from blender_addon.handlers.rigging_advanced import ARKIT_BLENDSHAPE_MAP, FACIAL_BONES
+        for shape, bones in ARKIT_BLENDSHAPE_MAP.items():
+            for bone in bones:
+                assert bone in FACIAL_BONES, f"ARKit '{shape}' references '{bone}' not in FACIAL_BONES"
