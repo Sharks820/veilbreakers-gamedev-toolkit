@@ -24,7 +24,7 @@ from ._scatter_engine import (
     generate_breakable_variants,
 )
 from ._terrain_noise import compute_slope_map
-from ._mesh_bridge import mesh_from_spec, VEGETATION_GENERATOR_MAP
+from ._mesh_bridge import mesh_from_spec, VEGETATION_GENERATOR_MAP, PROP_GENERATOR_MAP
 
 
 # ---------------------------------------------------------------------------
@@ -276,8 +276,63 @@ def handle_scatter_vegetation(params: dict) -> dict:
 # Handler: scatter_props
 # ---------------------------------------------------------------------------
 
+def _create_prop_template(
+    prop_type: str, collection: bpy.types.Collection
+) -> bpy.types.Object:
+    """Create a template mesh for a prop type.
+
+    Uses procedural mesh generators from PROP_GENERATOR_MAP when
+    available. Falls back to a scaled cube with a warning for unmapped
+    types so that scatter never silently produces featureless geometry.
+    """
+    gen_entry = PROP_GENERATOR_MAP.get(prop_type)
+    if gen_entry is not None:
+        gen_func, gen_kwargs = gen_entry
+        # Use lower detail for scatter templates (instanced many times)
+        scatter_kwargs = dict(gen_kwargs)
+        if prop_type in ("dead_tree",):
+            scatter_kwargs.setdefault("branch_count", 3)
+        elif prop_type in ("rock", "coal_pile"):
+            scatter_kwargs.setdefault("detail", 2)
+        spec = gen_func(**scatter_kwargs)
+        obj = mesh_from_spec(
+            spec,
+            name=f"_template_{prop_type}",
+            collection=collection,
+        )
+        # Assign a basic dark fantasy material
+        if hasattr(obj, "data") and obj.data is not None:
+            mat = bpy.data.materials.new(name=f"mat_prop_{prop_type}")
+            mat.use_nodes = True
+            obj.data.materials.append(mat)
+        return obj
+
+    # Fallback: cube with warning for unmapped prop types
+    print(f"WARNING: No procedural generator for prop type '{prop_type}', "
+          f"using fallback cube. Add an entry to PROP_GENERATOR_MAP.")
+    mesh = bpy.data.meshes.new(f"_template_{prop_type}")
+    bm_fallback = bmesh.new()
+    bmesh.ops.create_cube(bm_fallback, size=0.5)
+    bm_fallback.to_mesh(mesh)
+    bm_fallback.free()
+
+    obj = bpy.data.objects.new(f"_template_{prop_type}", mesh)
+    collection.objects.link(obj)
+
+    # Assign a fallback material
+    mat = bpy.data.materials.new(name=f"mat_prop_{prop_type}_fallback")
+    mat.use_nodes = True
+    mesh.materials.append(mat)
+
+    return obj
+
+
 def handle_scatter_props(params: dict) -> dict:
     """Scatter context-aware props near buildings using collection instances.
+
+    Uses procedural mesh generators from PROP_GENERATOR_MAP for real prop
+    meshes instead of placeholder cubes. Falls back to cubes with a warning
+    for any prop type without a generator mapping.
 
     Params:
         area_name (str, default "PropScatter"): Name for the scatter collection.
@@ -308,7 +363,7 @@ def handle_scatter_props(params: dict) -> dict:
     scatter_coll = bpy.data.collections.new(area_name)
     bpy.context.scene.collection.children.link(scatter_coll)
 
-    # Template collection for prop types
+    # Template collection for prop types (hidden, used for instancing)
     template_coll = _create_template_collection(f"{area_name}_templates")
     templates: dict[str, bpy.types.Object] = {}
 
@@ -318,16 +373,9 @@ def handle_scatter_props(params: dict) -> dict:
         ptype = p["type"]
         prop_counts[ptype] = prop_counts.get(ptype, 0) + 1
 
-        # Create template on first use
+        # Create template on first use via mesh bridge
         if ptype not in templates:
-            tmesh = bpy.data.meshes.new(f"_template_{ptype}")
-            tbm = bmesh.new()
-            bmesh.ops.create_cube(tbm, size=0.5)
-            tbm.to_mesh(tmesh)
-            tbm.free()
-            tobj = bpy.data.objects.new(f"_template_{ptype}", tmesh)
-            template_coll.objects.link(tobj)
-            templates[ptype] = tobj
+            templates[ptype] = _create_prop_template(ptype, template_coll)
 
         template = templates[ptype]
         instance = bpy.data.objects.new(
