@@ -64,15 +64,18 @@ public class VFXPoolManager : MonoBehaviour
     // Singleton
     // -----------------------------------------------------------------------
     private static VFXPoolManager _instance;
+    private static bool _isCreating;
     public static VFXPoolManager Instance
     {{
         get
         {{
-            if (_instance == null)
+            if (_instance == null && !_isCreating)
             {{
+                _isCreating = true;
                 var go = new GameObject("[VFXPoolManager]");
                 _instance = go.AddComponent<VFXPoolManager>();
                 DontDestroyOnLoad(go);
+                _isCreating = false;
             }}
             return _instance;
         }}
@@ -106,7 +109,7 @@ public class VFXPoolManager : MonoBehaviour
         public VFXPriority priority;
         public int maxInstances;
         public Queue<GameObject> available;
-        public List<GameObject> active;
+        public List<(GameObject go, ParticleSystem[] systems)> active;
 
         public PoolEntry(string type, GameObject prefab, int size, VFXPriority prio, int maxInst)
         {{
@@ -116,7 +119,7 @@ public class VFXPoolManager : MonoBehaviour
             priority = prio;
             maxInstances = maxInst;
             available = new Queue<GameObject>(size);
-            active = new List<GameObject>(size);
+            active = new List<(GameObject, ParticleSystem[])>(size);
         }}
     }}
 
@@ -146,6 +149,30 @@ public class VFXPoolManager : MonoBehaviour
         }}
         _instance = this;
         DontDestroyOnLoad(gameObject);
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded += OnSceneLoaded;
+    }}
+
+    private void OnDestroy()
+    {{
+        UnityEngine.SceneManagement.SceneManager.sceneLoaded -= OnSceneLoaded;
+    }}
+
+    private void OnSceneLoaded(UnityEngine.SceneManagement.Scene scene, UnityEngine.SceneManagement.LoadSceneMode mode)
+    {{
+        // Return all active effects to pools on scene change to prevent null refs
+        foreach (var kvp in _pools)
+        {{
+            var entry = kvp.Value;
+            for (int i = entry.active.Count - 1; i >= 0; i--)
+            {{
+                var (go, systems) = entry.active[i];
+                if (go == null) {{ entry.active.RemoveAt(i); continue; }}
+                go.SetActive(false);
+                go.transform.SetParent(transform);
+                entry.available.Enqueue(go);
+                entry.active.RemoveAt(i);
+            }}
+        }}
     }}
 
     private void LateUpdate()
@@ -237,7 +264,6 @@ public class VFXPoolManager : MonoBehaviour
         }}
 
         GameObject go = entry.available.Dequeue();
-        entry.active.Add(go);
 
         go.transform.position = position;
         if (parent != null)
@@ -245,15 +271,16 @@ public class VFXPoolManager : MonoBehaviour
 
         go.SetActive(true);
 
-        // Play all particle systems on the object
+        // Cache ParticleSystem[] at spawn time — never per-frame (C-01 fix)
         var systems = go.GetComponentsInChildren<ParticleSystem>(true);
+        entry.active.Add((go, systems));
+
         foreach (var ps in systems)
         {{
             ps.Clear();
             ps.Play();
         }}
 
-        // Auto-return coroutine
         StartCoroutine(AutoReturnWhenStopped(vfxType, go, systems));
 
         return go;
@@ -273,8 +300,22 @@ public class VFXPoolManager : MonoBehaviour
             return;
         }}
 
-        // Stop all particle systems
-        var systems = go.GetComponentsInChildren<ParticleSystem>(true);
+        // Find cached systems from active list (C-01 fix — use cached arrays)
+        ParticleSystem[] systems = null;
+        for (int i = 0; i < entry.active.Count; i++)
+        {{
+            if (entry.active[i].go == go)
+            {{
+                systems = entry.active[i].systems;
+                entry.active.RemoveAt(i);
+                break;
+            }}
+        }}
+
+        // Fallback if not found in active list
+        if (systems == null)
+            systems = go.GetComponentsInChildren<ParticleSystem>(true);
+
         foreach (var ps in systems)
         {{
             ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
@@ -282,8 +323,6 @@ public class VFXPoolManager : MonoBehaviour
 
         go.SetActive(false);
         go.transform.SetParent(transform.Find($"_Pool_{{vfxType}}"));
-
-        entry.active.Remove(go);
         entry.available.Enqueue(go);
     }}
 
@@ -332,13 +371,14 @@ public class VFXPoolManager : MonoBehaviour
 
             for (int i = entry.active.Count - 1; i >= 0; i--)
             {{
-                if (entry.active[i] == null)
+                var (go, cachedSystems) = entry.active[i];
+                if (go == null)
                 {{
                     entry.active.RemoveAt(i);
                     continue;
                 }}
-                var systems = entry.active[i].GetComponentsInChildren<ParticleSystem>(true);
-                foreach (var ps in systems)
+                // Use CACHED ParticleSystem[] — no per-frame allocation (C-01 fix)
+                foreach (var ps in cachedSystems)
                 {{
                     if (ps != null)
                         TotalActiveParticles += ps.particleCount;
@@ -366,13 +406,12 @@ public class VFXPoolManager : MonoBehaviour
                     if (TotalActiveParticles <= MaxActiveParticlesOverride)
                         return;
 
-                    var go = entry.active[i];
+                    var (go, cachedSystems) = entry.active[i];
                     if (go == null) continue;
 
-                    // Estimate particle count for this effect
+                    // Use CACHED arrays — no per-frame GetComponentsInChildren (C-01 fix)
                     int effectParticles = 0;
-                    var systems = go.GetComponentsInChildren<ParticleSystem>(true);
-                    foreach (var ps in systems)
+                    foreach (var ps in cachedSystems)
                     {{
                         if (ps != null)
                             effectParticles += ps.particleCount;
@@ -1415,13 +1454,28 @@ public class AAAParticleBuilder
     }
 
     // -------------------------------------------------------------------
-    // Material helpers
+    // Material helpers -- cached to prevent memory leaks (C-03 fix)
     // -------------------------------------------------------------------
+    private static Dictionary<int, Material> _materialCache = new Dictionary<int, Material>();
 
-    /// <summary>Create or find an Additive particle material.</summary>
+    private static int MaterialKey(Color color, int blendMode)
+    {
+        return HashCode.Combine(
+            Mathf.RoundToInt(color.r * 255),
+            Mathf.RoundToInt(color.g * 255),
+            Mathf.RoundToInt(color.b * 255),
+            Mathf.RoundToInt(color.a * 255),
+            blendMode
+        );
+    }
+
+    /// <summary>Create or retrieve cached Additive particle material.</summary>
     private static Material GetOrCreateAdditiveParticleMaterial(Color color)
     {
-        // Try URP particle shader first, fall back to built-in
+        int key = MaterialKey(color, 1);
+        if (_materialCache.TryGetValue(key, out Material cached) && cached != null)
+            return cached;
+
         Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
         if (shader == null)
             shader = Shader.Find("Particles/Standard Unlit");
@@ -1431,11 +1485,10 @@ public class AAAParticleBuilder
         Material mat = new Material(shader);
         mat.name = $"VFX_Additive_{ColorToHex(color)}";
 
-        // Set additive blending
         if (mat.HasProperty("_Surface"))
         {
-            mat.SetFloat("_Surface", 1f); // Transparent
-            mat.SetFloat("_Blend", 1f);   // Additive
+            mat.SetFloat("_Surface", 1f);
+            mat.SetFloat("_Blend", 1f);
         }
         mat.SetColor("_BaseColor", color);
         if (mat.HasProperty("_EmissionColor"))
@@ -1444,12 +1497,17 @@ public class AAAParticleBuilder
             mat.SetColor("_EmissionColor", color * 2f);
         }
         mat.renderQueue = 3100;
+        _materialCache[key] = mat;
         return mat;
     }
 
-    /// <summary>Create or find an AlphaBlend particle material (for smoke).</summary>
+    /// <summary>Create or retrieve cached AlphaBlend particle material (for smoke).</summary>
     private static Material GetOrCreateAlphaBlendParticleMaterial(Color color)
     {
+        int key = MaterialKey(color, 0);
+        if (_materialCache.TryGetValue(key, out Material cached) && cached != null)
+            return cached;
+
         Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
         if (shader == null)
             shader = Shader.Find("Particles/Standard Unlit");
@@ -1459,18 +1517,22 @@ public class AAAParticleBuilder
 
         if (mat.HasProperty("_Surface"))
         {
-            mat.SetFloat("_Surface", 1f); // Transparent
-            mat.SetFloat("_Blend", 0f);   // Alpha blend
+            mat.SetFloat("_Surface", 1f);
+            mat.SetFloat("_Blend", 0f);
         }
         mat.SetColor("_BaseColor", color);
-        mat.renderQueue = 3000; // Behind additive layers
+        mat.renderQueue = 3000;
+        _materialCache[key] = mat;
         return mat;
     }
 
-    /// <summary>Create a distortion material. Falls back to unlit if custom shader unavailable.</summary>
+    /// <summary>Create or retrieve cached distortion material.</summary>
     private static Material GetOrCreateDistortionMaterial(float strength)
     {
-        // Try custom distortion shader first, then URP particle unlit as fallback
+        int key = HashCode.Combine(Mathf.RoundToInt(strength * 100), 99);
+        if (_materialCache.TryGetValue(key, out Material cached) && cached != null)
+            return cached;
+
         Shader shader = Shader.Find("VeilBreakers/Distortion");
         if (shader == null)
             shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
@@ -1489,9 +1551,9 @@ public class AAAParticleBuilder
             mat.SetFloat("_Blend", 0f);
         }
 
-        // Semi-transparent to show distortion effect
         mat.SetColor("_BaseColor", new Color(1f, 1f, 1f, 0.01f));
         mat.renderQueue = 3050;
+        _materialCache[key] = mat;
         return mat;
     }
 
