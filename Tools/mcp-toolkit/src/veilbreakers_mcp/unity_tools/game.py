@@ -29,7 +29,7 @@ from veilbreakers_mcp.shared.unity_templates.vb_combat_templates import (
     generate_currency_system_script,
     generate_damage_type_script,
 )
-from veilbreakers_mcp.shared.unity_templates.code_templates import _sanitize_cs_identifier
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 
 
 
@@ -231,7 +231,7 @@ async def _handle_game_character_controller(
     ns_kwargs: dict,
 ) -> str:
     """Create character controller (GAME-06)."""
-    safe_mode = _sanitize_cs_identifier(mode) or "third_person"
+    safe_mode = sanitize_cs_identifier(mode) or "third_person"
     script = generate_character_controller_script(
         mode=safe_mode,
         move_speed=move_speed,
@@ -283,7 +283,7 @@ async def _handle_game_settings_menu(
     categories: list[str] | None, theme: str, ns_kwargs: dict,
 ) -> str:
     """Create settings menu (GAME-08) -- returns tuple (C#, UXML, USS)."""
-    safe_theme = _sanitize_cs_identifier(theme) or "dark_fantasy"
+    safe_theme = sanitize_cs_identifier(theme) or "dark_fantasy"
     cs_content, uxml_content, uss_content = generate_settings_menu_script(
         categories=categories,
         theme=safe_theme,

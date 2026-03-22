@@ -494,11 +494,9 @@ async def _handle_scene_create_additive_layer(
     """Create additive animation layer (ANIM3-04)."""
     script = generate_additive_layer_script(
         controller_name=name,
-        layer_name=layer_name,
-        base_layer_index=base_layer_index,
-        additive_clips=additive_clips,
-        default_weight=default_weight,
-        avatar_mask_path=avatar_mask_path,
+        base_layer_name=layer_name,
+        additive_layers=additive_clips,
+        base_states=None,
     )
     safe_name = name.replace(" ", "_").replace("-", "_")
     rel_path = f"Assets/Editor/Generated/Animation/VeilBreakers_AdditiveLayer_{safe_name}.cs"

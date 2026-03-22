@@ -30,21 +30,9 @@ from __future__ import annotations
 
 import re
 
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
+
 _URP_CORE_INCLUDE = '#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"'
-
-
-# ---------------------------------------------------------------------------
-# Sanitization helpers (local copies per established codebase pattern)
-# ---------------------------------------------------------------------------
-
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
 
 
 def _safe_type(type_str: str) -> str:
@@ -144,6 +132,9 @@ def generate_corruption_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -223,6 +214,21 @@ def generate_corruption_shader(
             }}
             ENDHLSL
         }}
+
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode" = "ShadowCaster" }}
+            ZWrite On
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowPassVertex
+            #pragma fragment ShadowPassFragment
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShadowCasterPass.hlsl"
+            ENDHLSL
+        }}
     }}
 
     FallBack "Universal Render Pipeline/Lit"
@@ -275,6 +281,9 @@ def generate_dissolve_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -336,6 +345,21 @@ def generate_dissolve_shader(
             }}
             ENDHLSL
         }}
+
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode" = "ShadowCaster" }}
+            ZWrite On
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowPassVertex
+            #pragma fragment ShadowPassFragment
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShadowCasterPass.hlsl"
+            ENDHLSL
+        }}
     }}
 
     FallBack "Universal Render Pipeline/Lit"
@@ -391,6 +415,9 @@ def generate_force_field_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
@@ -454,6 +481,21 @@ def generate_force_field_shader(
             }}
             ENDHLSL
         }}
+
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode" = "ShadowCaster" }}
+            ZWrite On
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowPassVertex
+            #pragma fragment ShadowPassFragment
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShadowCasterPass.hlsl"
+            ENDHLSL
+        }}
     }}
 
     FallBack Off
@@ -511,6 +553,9 @@ def generate_water_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -583,6 +628,21 @@ def generate_water_shader(
             }}
             ENDHLSL
         }}
+
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode" = "ShadowCaster" }}
+            ZWrite On
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowPassVertex
+            #pragma fragment ShadowPassFragment
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShadowCasterPass.hlsl"
+            ENDHLSL
+        }}
     }}
 
     FallBack "Universal Render Pipeline/Lit"
@@ -638,6 +698,9 @@ def generate_foliage_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -712,6 +775,21 @@ def generate_foliage_shader(
             }}
             ENDHLSL
         }}
+
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode" = "ShadowCaster" }}
+            ZWrite On
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowPassVertex
+            #pragma fragment ShadowPassFragment
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShadowCasterPass.hlsl"
+            ENDHLSL
+        }}
     }}
 
     FallBack "Universal Render Pipeline/Lit"
@@ -767,6 +845,9 @@ def generate_outline_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
 
@@ -814,6 +895,9 @@ def generate_outline_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -912,6 +996,9 @@ def generate_damage_overlay_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
 
@@ -1162,7 +1249,7 @@ def generate_arbitrary_shader(
     }
     if tags:
         merged_tags.update(tags)
-    tags_str = ' '.join(f'"{_sanitize_cs_string(k)}"="{_sanitize_cs_string(v)}"' for k, v in merged_tags.items())
+    tags_str = ' '.join(f'"{sanitize_cs_string(k)}"="{sanitize_cs_string(v)}"' for k, v in merged_tags.items())
 
     # --- Render state lines ---
     render_state_lines = []
@@ -1236,7 +1323,10 @@ def generate_arbitrary_shader(
 
             HLSLPROGRAM
             #pragma vertex vert
-            #pragma fragment frag{extra_pragmas}
+            #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog{extra_pragmas}
 
             {_URP_CORE_INCLUDE}{extra_includes}
 
@@ -1304,14 +1394,6 @@ def generate_arbitrary_shader(
 # ---------------------------------------------------------------------------
 
 
-def _sanitize_cs_identifier(name: str) -> str:
-    """Sanitize a string into a valid C# identifier."""
-    sanitized = re.sub(r'[^A-Za-z0-9_]', '', name)
-    if sanitized and sanitized[0].isdigit():
-        sanitized = '_' + sanitized
-    return sanitized or 'Unnamed'
-
-
 def _sanitize_cs_attribute(attr: str) -> str:
     """Sanitize a C# attribute expression (e.g. ``Range(0f, 1f)``).
 
@@ -1374,10 +1456,10 @@ def generate_renderer_feature(
     Returns:
         Complete C# source string with required ``using`` directives.
     """
-    safe_name = _sanitize_cs_identifier(feature_name)
+    safe_name = sanitize_cs_identifier(feature_name)
 
     # Sanitize shader_property_name to prevent C# injection
-    shader_property_name = _sanitize_cs_identifier(shader_property_name) or '_shader'
+    shader_property_name = sanitize_cs_identifier(shader_property_name) or '_shader'
 
     # Validate render_pass_event against known enum values
     if render_pass_event not in _VALID_RENDER_PASS_EVENTS:
@@ -1393,8 +1475,8 @@ def generate_renderer_feature(
     for f in fields:
         attr = _sanitize_cs_attribute(f.get('attribute', '')) if f.get('attribute', '') else ''
         ftype = _safe_type(f.get('type', 'float'))
-        fname = _sanitize_cs_identifier(f.get('name', 'value')) or 'value'
-        fdefault = _sanitize_cs_string(str(f.get('default', ''))) if f.get('default', '') else ''
+        fname = sanitize_cs_identifier(f.get('name', 'value')) or 'value'
+        fdefault = sanitize_cs_string(str(f.get('default', ''))) if f.get('default', '') else ''
         attr_line = f'        [{attr}] ' if attr else '        '
         default_part = f' = {fdefault};' if fdefault else ';'
         settings_body_lines.append(f'{attr_line}public {ftype} {fname}{default_part}')
@@ -1404,9 +1486,9 @@ def generate_renderer_feature(
     # --- Material property set calls ---
     mat_prop_calls = []
     for mp in (material_properties or []):
-        mp_name = _sanitize_cs_string(mp.get('name', '_Value'))
+        mp_name = sanitize_cs_string(mp.get('name', '_Value'))
         mp_type = mp.get('type', 'float')
-        mp_value = _sanitize_cs_string(mp.get('value', '0f'))
+        mp_value = sanitize_cs_string(mp.get('value', '0f'))
         setter = 'SetFloat'
         if mp_type == 'int':
             setter = 'SetInt'

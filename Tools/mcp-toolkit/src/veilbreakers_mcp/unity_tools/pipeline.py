@@ -20,7 +20,7 @@ from veilbreakers_mcp.shared.unity_templates.pipeline_templates import (
     generate_sprite_editor_config_script,
     generate_asset_postprocessor_script,
 )
-from veilbreakers_mcp.shared.unity_templates.code_templates import _sanitize_cs_identifier
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 
 
 
@@ -81,7 +81,7 @@ async def unity_pipeline(
                 return json.dumps(
                     {"status": "error", "action": action, "message": "atlas_name is required"}
                 )
-            safe_name = _sanitize_cs_identifier(atlas_name) or "Atlas"
+            safe_name = sanitize_cs_identifier(atlas_name) or "Atlas"
             script = generate_sprite_atlas_script(
                 atlas_name=safe_name,
                 source_folder=source_folder,
@@ -109,7 +109,7 @@ async def unity_pipeline(
                 return json.dumps(
                     {"status": "error", "action": action, "message": "clip_name is required"}
                 )
-            safe_clip = _sanitize_cs_identifier(clip_name) or "SpriteAnim"
+            safe_clip = sanitize_cs_identifier(clip_name) or "SpriteAnim"
             script = generate_sprite_animation_script(
                 clip_name=safe_clip,
                 sprite_folder=sprite_folder,
@@ -158,7 +158,7 @@ async def unity_pipeline(
                 return json.dumps(
                     {"status": "error", "action": action, "message": "processor_name is required"}
                 )
-            safe_name = _sanitize_cs_identifier(processor_name) or "Postprocessor"
+            safe_name = sanitize_cs_identifier(processor_name) or "Postprocessor"
             script = generate_asset_postprocessor_script(
                 processor_name=safe_name,
                 version=version,

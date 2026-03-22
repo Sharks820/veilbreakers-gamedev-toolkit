@@ -9,7 +9,7 @@ Provides:
   - compute_biome_assignments: Per-cell biome index from altitude/slope rules
   - carve_river_path: A* river channel carving on heightmap
   - generate_road_path: Weighted A* road with terrain grading
-  - TERRAIN_PRESETS: Parameter dicts for 6 terrain types
+  - TERRAIN_PRESETS: Parameter dicts for 8 terrain types
   - BIOME_RULES: Default dark-fantasy biome rules
 """
 
@@ -87,6 +87,21 @@ TERRAIN_PRESETS: dict[str, dict[str, Any]] = {
         "amplitude_scale": 0.9,
         "post_process": "step",
         "step_count": 5,
+    },
+    "flat": {
+        "octaves": 3,
+        "persistence": 0.25,
+        "lacunarity": 2.0,
+        "amplitude_scale": 0.15,
+        "post_process": "smooth",
+    },
+    "chaotic": {
+        "octaves": 8,
+        "persistence": 0.6,
+        "lacunarity": 2.3,
+        "amplitude_scale": 1.0,
+        "post_process": "canyon",
+        "ridge_strength": 0.5,
     },
 }
 
@@ -177,22 +192,39 @@ def generate_heightmap(
     lac_ = lacunarity if lacunarity is not None else preset["lacunarity"]
 
     gen = OpenSimplex(seed=seed)
-    hmap = np.zeros((height, width), dtype=np.float64)
 
-    for y in range(height):
-        for x in range(width):
-            amplitude = 1.0
-            frequency = 1.0
-            total = 0.0
-            max_val = 0.0
-            for _ in range(oct_):
-                nx = x / scale * frequency
-                ny = y / scale * frequency
-                total += gen.noise2(nx, ny) * amplitude
-                max_val += amplitude
-                amplitude *= pers_
-                frequency *= lac_
-            hmap[y, x] = total / max_val if max_val > 0 else 0.0
+    # Vectorized fBm: build 1D coordinate arrays and evaluate noise
+    # per-octave using the batch API for 4096+ performance.
+    x_1d = np.arange(width, dtype=np.float64) / scale
+    y_1d = np.arange(height, dtype=np.float64) / scale
+
+    hmap = np.zeros((height, width), dtype=np.float64)
+    amplitude = 1.0
+    frequency = 1.0
+    max_val = 0.0
+
+    # Use noise2array (1D x, 1D y -> 2D result) if available,
+    # otherwise fall back to np.vectorize wrapping the scalar noise2.
+    _noise2_array = getattr(gen, 'noise2array', None)
+
+    for _octave in range(oct_):
+        freq_x = x_1d * frequency
+        freq_y = y_1d * frequency
+        if _noise2_array is not None:
+            # noise2array(x_1d, y_1d) returns shape (len(y), len(x))
+            octave_noise = _noise2_array(freq_x, freq_y)
+        else:
+            # Fallback: build 2D grids and vectorize the scalar noise2
+            yy, xx = np.meshgrid(freq_y, freq_x, indexing='ij')
+            _vfunc = np.vectorize(gen.noise2, otypes=[np.float64])
+            octave_noise = _vfunc(xx, yy)
+        hmap += octave_noise * amplitude
+        max_val += amplitude
+        amplitude *= pers_
+        frequency *= lac_
+
+    if max_val > 0:
+        hmap /= max_val
 
     # Apply terrain preset shaping
     hmap = _apply_terrain_preset(hmap, preset)

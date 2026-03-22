@@ -268,7 +268,7 @@ class TestTool9BlenderTexture:
     # -- pure-logic: power of two --
 
     @pytest.mark.parametrize("n,expected", [
-        (1, True), (2, True), (4, True), (1024, True), (8192, True),
+        (1, True), (2, True), (4, True), (1024, True), (4096, True),
         (0, False), (-1, False), (3, False), (100, False), (1023, False),
     ])
     def test_is_power_of_two(self, n, expected):
@@ -868,8 +868,9 @@ class TestTool13BlenderAnimation:
 
     # -- Mixamo bone mapping --
 
-    def test_mixamo_to_rigify_has_22_entries(self):
-        assert len(MIXAMO_TO_RIGIFY) == 22
+    def test_mixamo_to_rigify_has_52_entries(self):
+        """22 core + 30 finger bones = 52."""
+        assert len(MIXAMO_TO_RIGIFY) == 52
 
     def test_mixamo_mapping_all_keys_have_prefix(self):
         for key in MIXAMO_TO_RIGIFY:
@@ -958,7 +959,7 @@ class TestTool14BlenderEnvironment:
         for key in self.ENV_KEYS:
             assert key in HANDLER_KEYS, f"Missing env handler key: {key}"
 
-    # -- generate_heightmap for all 6 terrain presets --
+    # -- generate_heightmap for all 8 terrain presets --
 
     @pytest.mark.parametrize("terrain_type", list(TERRAIN_PRESETS.keys()))
     def test_generate_heightmap_all_presets(self, terrain_type):
@@ -972,8 +973,8 @@ class TestTool14BlenderEnvironment:
         # Not all zeros
         assert hmap.max() > hmap.min()
 
-    def test_terrain_presets_has_6_types(self):
-        expected = {"mountains", "hills", "plains", "volcanic", "canyon", "cliffs"}
+    def test_terrain_presets_has_8_types(self):
+        expected = {"mountains", "hills", "plains", "volcanic", "canyon", "cliffs", "flat", "chaotic"}
         assert set(TERRAIN_PRESETS.keys()) == expected
 
     # -- apply_hydraulic_erosion --
@@ -1053,7 +1054,7 @@ class TestTool14BlenderEnvironment:
 
     def test_validate_terrain_params_oversized(self):
         with pytest.raises(ValueError, match="exceeds maximum"):
-            _validate_terrain_params({"resolution": 2048})
+            _validate_terrain_params({"resolution": 4097})
 
     def test_validate_terrain_params_bad_erosion(self):
         with pytest.raises(ValueError, match="Unknown erosion"):

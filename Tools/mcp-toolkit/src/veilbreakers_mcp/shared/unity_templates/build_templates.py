@@ -24,23 +24,7 @@ from __future__ import annotations
 
 import re
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 _CS_RESERVED = frozenset({
@@ -224,11 +208,11 @@ def generate_multi_platform_build_script(
 
     # Generate per-platform build blocks
     for plat in plats:
-        safe_name = _sanitize_cs_identifier(plat["name"])
-        safe_target = _sanitize_cs_identifier(plat["target"])
-        safe_group = _sanitize_cs_identifier(plat["group"])
-        safe_backend = _sanitize_cs_identifier(plat["backend"])
-        extension = _sanitize_cs_string(plat.get("extension", ""))
+        safe_name = sanitize_cs_identifier(plat["name"])
+        safe_target = sanitize_cs_identifier(plat["target"])
+        safe_group = sanitize_cs_identifier(plat["group"])
+        safe_backend = sanitize_cs_identifier(plat["backend"])
+        extension = sanitize_cs_string(plat.get("extension", ""))
 
         lines.append(f"        // --- {safe_name} ---")
         lines.append("        try")
@@ -354,7 +338,7 @@ def generate_addressables_config_script(
     ]
 
     for grp in grps:
-        safe_name = _sanitize_cs_string(grp["name"])
+        safe_name = sanitize_cs_string(grp["name"])
         packing = grp.get("packing", "PackSeparately")
         is_local = grp.get("local", True)
 
@@ -475,13 +459,13 @@ def _generate_android_config(
     # Build permission XML lines
     perm_xml_lines = ""
     for perm in perms:
-        safe_perm = _sanitize_cs_string(perm)
+        safe_perm = sanitize_cs_string(perm)
         perm_xml_lines += f'    <uses-permission android:name=\\"{safe_perm}\\" />\\n'
 
     # Build feature XML lines
     feat_xml_lines = ""
     for feat in feats:
-        safe_feat = _sanitize_cs_string(feat)
+        safe_feat = sanitize_cs_string(feat)
         feat_xml_lines += f'    <uses-feature android:name=\\"{safe_feat}\\" android:required=\\"true\\" />\\n'
 
     lines: list[str] = [
@@ -573,8 +557,8 @@ def _generate_ios_config(
     ]
 
     for entry in entries:
-        safe_key = _sanitize_cs_string(entry["key"])
-        safe_value = _sanitize_cs_string(entry["value"])
+        safe_key = sanitize_cs_string(entry["key"])
+        safe_value = sanitize_cs_string(entry["value"])
         entry_type = entry.get("type", "string")
 
         if entry_type == "boolean":
@@ -675,7 +659,7 @@ def generate_shader_stripping_script(
     # Build keyword array initializer
     keyword_entries = []
     for kw in keywords:
-        safe_kw = _sanitize_cs_string(kw)
+        safe_kw = sanitize_cs_string(kw)
         keyword_entries.append(f'        new ShaderKeyword("{safe_kw}")')
 
     keyword_array = ",\n".join(keyword_entries)
@@ -1071,7 +1055,7 @@ def generate_version_management_script(
     Returns:
         Complete C# source string.
     """
-    safe_version = _sanitize_cs_string(version)
+    safe_version = sanitize_cs_string(version)
 
     # Map auto_increment to the array index to bump
     increment_map = {"major": 0, "minor": 1, "patch": 2}
@@ -1177,8 +1161,8 @@ def generate_changelog(
     Returns:
         Complete C# source string.
     """
-    safe_project = _sanitize_cs_string(project_name)
-    safe_version = _sanitize_cs_string(version)
+    safe_project = sanitize_cs_string(project_name)
+    safe_version = sanitize_cs_string(version)
 
     lines: list[str] = [
         "using UnityEditor;",

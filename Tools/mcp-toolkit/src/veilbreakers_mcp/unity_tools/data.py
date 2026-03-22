@@ -20,7 +20,7 @@ from veilbreakers_mcp.shared.unity_templates.data_templates import (
     generate_localization_entries_script,
     generate_data_authoring_window,
 )
-from veilbreakers_mcp.shared.unity_templates.code_templates import _sanitize_cs_identifier
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 
 
 
@@ -77,7 +77,7 @@ async def unity_data(
                 return json.dumps(
                     {"status": "error", "action": action, "message": "class_name is required"}
                 )
-            safe_class = _sanitize_cs_identifier(class_name) or "SODefinition"
+            safe_class = sanitize_cs_identifier(class_name) or "SODefinition"
             script = generate_so_definition(
                 class_name=safe_class,
                 namespace=namespace,
@@ -101,7 +101,7 @@ async def unity_data(
                 return json.dumps(
                     {"status": "error", "action": action, "message": "so_class_name is required"}
                 )
-            safe_class = _sanitize_cs_identifier(so_class_name) or "SOClass"
+            safe_class = sanitize_cs_identifier(so_class_name) or "SOClass"
             script = generate_asset_creation_script(
                 so_class_name=safe_class,
                 namespace=namespace,
@@ -126,7 +126,7 @@ async def unity_data(
                 return json.dumps(
                     {"status": "error", "action": action, "message": "config_name is required"}
                 )
-            safe_config = _sanitize_cs_identifier(config_name) or "Config"
+            safe_config = sanitize_cs_identifier(config_name) or "Config"
             script = generate_json_validator_script(
                 config_name=safe_config,
                 json_path=json_path,
@@ -148,7 +148,7 @@ async def unity_data(
                 return json.dumps(
                     {"status": "error", "action": action, "message": "class_name is required"}
                 )
-            safe_class = _sanitize_cs_identifier(class_name) or "DataLoader"
+            safe_class = sanitize_cs_identifier(class_name) or "DataLoader"
             script = generate_json_loader_script(
                 class_name=safe_class,
                 namespace=namespace,
@@ -173,7 +173,7 @@ async def unity_data(
                 table_name=table_name,
                 output_dir=output_folder,
             )
-            safe_table = _sanitize_cs_identifier(table_name) or "Localization"
+            safe_table = sanitize_cs_identifier(table_name) or "Localization"
             rel_path = f"Assets/Editor/Generated/Data/Setup_{safe_table}_Localization.cs"
             abs_path = _write_to_unity(script, rel_path)
             return json.dumps({
@@ -194,7 +194,7 @@ async def unity_data(
                 entries=entries,
                 locale=locale,
             )
-            safe_table = _sanitize_cs_identifier(table_name) or "Localization"
+            safe_table = sanitize_cs_identifier(table_name) or "Localization"
             rel_path = f"Assets/Editor/Generated/Data/Add_{safe_table}_{locale}_Entries.cs"
             abs_path = _write_to_unity(script, rel_path)
             return json.dumps({
@@ -216,8 +216,8 @@ async def unity_data(
                 return json.dumps(
                     {"status": "error", "action": action, "message": "so_class_name is required"}
                 )
-            safe_window = _sanitize_cs_identifier(window_name) or "DataEditor"
-            safe_so = _sanitize_cs_identifier(so_class_name) or "SOClass"
+            safe_window = sanitize_cs_identifier(window_name) or "DataEditor"
+            safe_so = sanitize_cs_identifier(so_class_name) or "SOClass"
             script = generate_data_authoring_window(
                 window_name=safe_window,
                 so_class_name=safe_so,

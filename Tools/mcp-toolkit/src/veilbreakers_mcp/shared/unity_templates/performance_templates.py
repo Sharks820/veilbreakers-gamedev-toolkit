@@ -25,19 +25,7 @@ from __future__ import annotations
 
 import re
 
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -405,7 +393,7 @@ def generate_lightmap_bake_script(
     Returns:
         Complete C# source string.
     """
-    safe_quality = _sanitize_cs_string(quality)
+    safe_quality = sanitize_cs_string(quality)
 
     return f'''using UnityEngine;
 using UnityEditor;
@@ -513,7 +501,7 @@ def generate_asset_audit_script(
     """
     formats = allowed_audio_formats or ["Vorbis", "AAC"]
     format_checks = " && ".join(
-        f'settings.compressionFormat.ToString() != "{_sanitize_cs_string(f)}"'
+        f'settings.compressionFormat.ToString() != "{sanitize_cs_string(f)}"'
         for f in formats
     )
 
@@ -668,12 +656,12 @@ def generate_build_automation_script(
     Returns:
         Complete C# source string.
     """
-    safe_target = _sanitize_cs_identifier(target)
-    safe_options = _sanitize_cs_identifier(options)
+    safe_target = sanitize_cs_identifier(target)
+    safe_options = sanitize_cs_identifier(options)
 
     if scenes:
         scene_array = ", ".join(
-            f'"{_sanitize_cs_string(s)}"' for s in scenes
+            f'"{sanitize_cs_string(s)}"' for s in scenes
         )
         scenes_code = f'string[] buildScenes = new string[] {{ {scene_array} }};'
     else:

@@ -12,12 +12,54 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from veilbreakers_mcp.shared.config import Settings
 from veilbreakers_mcp.shared.unity_client import UnityConnection, UnityCommandError
-from veilbreakers_mcp.shared.unity_templates.code_templates import _sanitize_cs_identifier
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 
 STANDARD_NEXT_STEPS = [
     "Recompile: unity_editor action=recompile",
     "Then run the generated menu item in Unity Editor",
 ]
+
+
+async def _execute_menu_item(menu_path: str) -> dict | None:
+    """Execute a Unity menu item via the VBBridge TCP connection.
+
+    Returns the result dict on success, or None if bridge unavailable.
+    """
+    try:
+        conn = UnityConnection(timeout=30)
+        return await conn.send_command("execute_menu_item", {"menu_path": menu_path})
+    except Exception:
+        return None
+
+
+async def _bridge_recompile_and_execute(menu_path: str) -> dict | None:
+    """Recompile Unity, wait for completion, then execute a menu item.
+
+    Returns the execution result, or None if bridge unavailable.
+    """
+    try:
+        conn = UnityConnection(timeout=30)
+        # Trigger recompile
+        await conn.send_command("recompile")
+
+        # Wait for compilation to finish (up to 30s)
+        import asyncio
+        for _ in range(60):
+            status = await conn.send_command("check_compile_status")
+            if not status.get("is_compiling", True):
+                break
+            await asyncio.sleep(0.5)
+
+        # Check for errors
+        status = await conn.send_command("check_compile_status")
+        if status.get("has_errors", False):
+            return {"status": "error", "compile_errors": status.get("errors", [])}
+
+        # Execute menu item
+        result = await conn.send_command("execute_menu_item", {"menu_path": menu_path})
+        return result
+    except Exception:
+        return None
 
 logger = logging.getLogger("veilbreakers_mcp.unity")
 
