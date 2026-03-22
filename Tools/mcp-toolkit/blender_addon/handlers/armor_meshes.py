@@ -1297,6 +1297,936 @@ def generate_cape_mesh(style: str = "full") -> MeshSpec:
 
 
 # =========================================================================
+# BELT GENERATORS  (5 styles)
+# =========================================================================
+
+_BELT_STYLES = ["leather", "chain", "rope", "ornate", "utility"]
+
+
+def generate_belt_mesh(style: str = "leather") -> MeshSpec:
+    """Generate a belt mesh in the requested style.
+
+    Styles: leather, chain, rope, ornate, utility.
+    Built around a waist cylinder (radius ~0.15 m).
+    """
+    if style not in _BELT_STYLES:
+        style = "leather"
+
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    waist_r = 0.15
+    belt_h = 0.04
+    segs = 16
+
+    if style == "leather":
+        # Simple leather band with buckle
+        bv, bf = _make_torus_ring(0, 0, 0, waist_r, belt_h * 0.5,
+                                  major_segments=segs, minor_segments=4)
+        parts.append((bv, bf))
+        # Buckle -- rectangular plate at front
+        bkv, bkf = _make_box(0, 0, waist_r + belt_h * 0.3,
+                             belt_h * 0.6, belt_h * 0.5, belt_h * 0.15)
+        parts.append((bkv, bkf))
+        # Buckle prong
+        pv, pf = _make_cylinder(0, -belt_h * 0.3, waist_r + belt_h * 0.25,
+                                belt_h * 0.05, belt_h * 0.6, segments=4)
+        parts.append((pv, pf))
+        # Belt tongue/strap hanging down
+        sv, sf = _make_box(belt_h * 0.8, -belt_h * 0.5, waist_r + belt_h * 0.1,
+                           belt_h * 0.15, belt_h * 1.0, belt_h * 0.05)
+        parts.append((sv, sf))
+
+    elif style == "chain":
+        # Chain links forming a belt
+        link_count = segs
+        for i in range(link_count):
+            angle = 2.0 * math.pi * i / link_count
+            lx = math.cos(angle) * waist_r
+            lz = math.sin(angle) * waist_r
+            lr = belt_h * 0.25
+            lv, lf = _make_torus_ring(lx, 0, lz, lr, lr * 0.3,
+                                      major_segments=6, minor_segments=3)
+            parts.append((lv, lf))
+        # Chain clasp at front
+        cv, cf = _make_sphere(0, 0, waist_r + belt_h * 0.3,
+                              belt_h * 0.4, rings=4, sectors=6)
+        parts.append((cv, cf))
+
+    elif style == "rope":
+        # Twisted rope belt -- two intertwined helices
+        rope_r = belt_h * 0.2
+        rope_segs = 48
+        for strand in range(2):
+            strand_offset = strand * math.pi
+            verts_strand: list[tuple[float, float, float]] = []
+            faces_strand: list[tuple[int, ...]] = []
+            tube_segs = 4
+            for i in range(rope_segs):
+                angle_main = 2.0 * math.pi * i / rope_segs
+                twist = angle_main * 4 + strand_offset
+                cx = math.cos(angle_main) * waist_r
+                cz = math.sin(angle_main) * waist_r
+                cy = math.sin(twist) * rope_r * 0.6
+                for j in range(tube_segs):
+                    t_angle = 2.0 * math.pi * j / tube_segs
+                    # Offset perpendicular to the ring tangent
+                    nx = -math.sin(angle_main)
+                    nz = math.cos(angle_main)
+                    px = cx + (nx * math.cos(t_angle) * rope_r)
+                    py = cy + math.sin(t_angle) * rope_r
+                    pz = cz + (nz * math.cos(t_angle) * rope_r)
+                    verts_strand.append((px, py, pz))
+            for i in range(rope_segs):
+                i2 = (i + 1) % rope_segs
+                for j in range(tube_segs):
+                    j2 = (j + 1) % tube_segs
+                    v0 = i * tube_segs + j
+                    v1 = i * tube_segs + j2
+                    v2 = i2 * tube_segs + j2
+                    v3 = i2 * tube_segs + j
+                    faces_strand.append((v0, v1, v2, v3))
+            parts.append((verts_strand, faces_strand))
+        # Knot at front
+        kv, kf = _make_sphere(0, 0, waist_r + belt_h * 0.15,
+                              belt_h * 0.5, rings=4, sectors=6)
+        parts.append((kv, kf))
+
+    elif style == "ornate":
+        # Decorated metal belt with gem plates
+        bv, bf = _make_torus_ring(0, 0, 0, waist_r, belt_h * 0.6,
+                                  major_segments=segs, minor_segments=5)
+        parts.append((bv, bf))
+        # Decorative plates evenly spaced
+        plate_count = 6
+        for i in range(plate_count):
+            angle = 2.0 * math.pi * i / plate_count
+            px = math.cos(angle) * (waist_r + belt_h * 0.3)
+            pz = math.sin(angle) * (waist_r + belt_h * 0.3)
+            pv, pf = _make_box(px, 0, pz, belt_h * 0.35, belt_h * 0.45, belt_h * 0.08)
+            parts.append((pv, pf))
+            # Gem on each plate
+            gv, gf = _make_sphere(px, 0, pz + belt_h * 0.1,
+                                  belt_h * 0.12, rings=3, sectors=5)
+            parts.append((gv, gf))
+        # Central buckle medallion
+        mv, mf = _make_cylinder(0, -belt_h * 0.5, waist_r + belt_h * 0.4,
+                                belt_h * 0.5, belt_h * 1.0, segments=8)
+        parts.append((mv, mf))
+        # Filigree ring around buckle
+        fv, ff = _make_torus_ring(0, 0, waist_r + belt_h * 0.4,
+                                  belt_h * 0.55, belt_h * 0.06,
+                                  major_segments=8, minor_segments=3)
+        parts.append((fv, ff))
+
+    elif style == "utility":
+        # Leather belt with pouches and tool loops
+        bv, bf = _make_torus_ring(0, 0, 0, waist_r, belt_h * 0.45,
+                                  major_segments=segs, minor_segments=4)
+        parts.append((bv, bf))
+        # Buckle
+        bkv, bkf = _make_box(0, 0, waist_r + belt_h * 0.2,
+                             belt_h * 0.5, belt_h * 0.4, belt_h * 0.1)
+        parts.append((bkv, bkf))
+        # Pouches (3 around the belt)
+        pouch_angles = [math.pi * 0.3, math.pi * 0.7, math.pi * 1.3]
+        for pa in pouch_angles:
+            px = math.cos(pa) * (waist_r + belt_h * 0.8)
+            pz = math.sin(pa) * (waist_r + belt_h * 0.8)
+            # Pouch body
+            pbv, pbf = _make_box(px, -belt_h * 0.3, pz,
+                                 belt_h * 0.4, belt_h * 0.55, belt_h * 0.35)
+            parts.append((pbv, pbf))
+            # Pouch flap
+            pfv, pff = _make_box(px, belt_h * 0.25, pz,
+                                 belt_h * 0.42, belt_h * 0.06, belt_h * 0.38)
+            parts.append((pfv, pff))
+            # Flap button
+            fbv, fbf = _make_sphere(px, belt_h * 0.2, pz + belt_h * 0.35,
+                                    belt_h * 0.06, rings=2, sectors=4)
+            parts.append((fbv, fbf))
+        # Tool loops (2 small rings)
+        for tl in [math.pi * 1.0, math.pi * 1.6]:
+            tx = math.cos(tl) * (waist_r + belt_h * 0.3)
+            tz = math.sin(tl) * (waist_r + belt_h * 0.3)
+            tv, tf = _make_torus_ring(tx, -belt_h * 0.1, tz,
+                                      belt_h * 0.15, belt_h * 0.04,
+                                      major_segments=6, minor_segments=3)
+            parts.append((tv, tf))
+
+    verts_final, faces_final = _merge_meshes(*parts)
+    return _make_result(f"Belt_{style}", verts_final, faces_final,
+                        style=style, slot="belt", category="armor")
+
+
+# =========================================================================
+# BRACER GENERATORS  (5 styles)
+# =========================================================================
+
+_BRACER_STYLES = ["leather", "metal_vambrace", "enchanted", "chain", "bone"]
+
+
+def generate_bracer_mesh(style: str = "leather") -> MeshSpec:
+    """Generate a bracer/wrist guard mesh in the requested style.
+
+    Styles: leather, metal_vambrace, enchanted, chain, bone.
+    Built around a forearm cylinder (radius ~0.04 m, length ~0.15 m).
+    """
+    if style not in _BRACER_STYLES:
+        style = "leather"
+
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    arm_r = 0.04
+    bracer_len = 0.15
+    segs = 12
+
+    if style == "leather":
+        # Wrapped leather with stitching detail and reinforced knuckle guard
+        bv, bf = _make_tapered_cylinder(0, 0, 0, arm_r * 1.15, arm_r * 1.25,
+                                        bracer_len, segments=segs, rings=3)
+        parts.append((bv, bf))
+        # Stitching lines (thin ridges along length)
+        for si in range(3):
+            angle = si * math.pi * 2 / 3
+            sx = math.cos(angle) * (arm_r * 1.28)
+            sz = math.sin(angle) * (arm_r * 1.28)
+            sv, sf = _make_cylinder(sx, 0, sz, arm_r * 0.01, bracer_len * 0.9,
+                                    segments=3, cap_top=True, cap_bottom=True)
+            parts.append((sv, sf))
+        # Wrist strap
+        wv, wf = _make_torus_ring(0, bracer_len * 0.1, 0, arm_r * 1.30, arm_r * 0.05,
+                                  major_segments=segs, minor_segments=3)
+        parts.append((wv, wf))
+
+    elif style == "metal_vambrace":
+        # Articulated metal plates covering forearm
+        plate_count = 4
+        plate_h = bracer_len / plate_count
+        for pi in range(plate_count):
+            py = pi * plate_h
+            r = arm_r * (1.20 + pi * 0.03)
+            pv, pf = _make_tapered_cylinder(0, py, 0, r, r * 0.98,
+                                            plate_h * 0.85, segments=segs, rings=1)
+            parts.append((pv, pf))
+        # Rivets along edges
+        for pi in range(plate_count):
+            for ri in range(4):
+                ra = ri * math.pi * 2 / 4
+                rx = math.cos(ra) * arm_r * 1.32
+                rz = math.sin(ra) * arm_r * 1.32
+                rv, rf = _make_sphere(rx, pi * plate_h + plate_h * 0.5, rz,
+                                      arm_r * 0.03, rings=2, sectors=4)
+                parts.append((rv, rf))
+        # Elbow guard flare
+        ev, ef = _make_cone(0, bracer_len, 0, arm_r * 1.5, bracer_len * 0.15,
+                            segments=segs)
+        parts.append((ev, ef))
+
+    elif style == "enchanted":
+        # Smooth bracer with glowing rune channels
+        bv, bf = _make_tapered_cylinder(0, 0, 0, arm_r * 1.18, arm_r * 1.22,
+                                        bracer_len, segments=segs, rings=4)
+        parts.append((bv, bf))
+        # Rune channel grooves (inset torus rings)
+        for ri in range(3):
+            ry = bracer_len * (0.25 + ri * 0.25)
+            rv, rf = _make_torus_ring(0, ry, 0, arm_r * 1.22, arm_r * 0.03,
+                                      major_segments=segs, minor_segments=3)
+            parts.append((rv, rf))
+        # Central gem mount
+        gv, gf = _make_sphere(0, bracer_len * 0.5, arm_r * 1.25,
+                              arm_r * 0.15, rings=4, sectors=6)
+        parts.append((gv, gf))
+        # Gem socket ring
+        gsv, gsf = _make_torus_ring(0, bracer_len * 0.5, arm_r * 1.25,
+                                    arm_r * 0.18, arm_r * 0.025,
+                                    major_segments=8, minor_segments=3)
+        parts.append((gsv, gsf))
+
+    elif style == "chain":
+        # Chainmail sleeve
+        link_rows = 6
+        link_cols = segs
+        link_r = arm_r * 0.08
+        for row in range(link_rows):
+            ry = row * bracer_len / link_rows
+            for col in range(link_cols):
+                angle = 2.0 * math.pi * col / link_cols
+                # Offset every other row
+                if row % 2 == 1:
+                    angle += math.pi / link_cols
+                lx = math.cos(angle) * arm_r * 1.18
+                lz = math.sin(angle) * arm_r * 1.18
+                lv, lf = _make_torus_ring(lx, ry, lz, link_r, link_r * 0.3,
+                                          major_segments=4, minor_segments=3)
+                parts.append((lv, lf))
+        # Wrist band
+        wv, wf = _make_torus_ring(0, 0, 0, arm_r * 1.22, arm_r * 0.06,
+                                  major_segments=segs, minor_segments=4)
+        parts.append((wv, wf))
+
+    elif style == "bone":
+        # Bone fragments lashed together
+        bone_count = 5
+        for bi in range(bone_count):
+            angle = 2.0 * math.pi * bi / bone_count
+            bx = math.cos(angle) * arm_r * 1.1
+            bz = math.sin(angle) * arm_r * 1.1
+            # Each bone is a tapered cylinder with knobby ends
+            bbv, bbf = _make_tapered_cylinder(bx, 0, bz, arm_r * 0.06, arm_r * 0.04,
+                                              bracer_len * 0.85, segments=5, rings=2)
+            parts.append((bbv, bbf))
+            # Knobs at ends
+            for ky in [0.0, bracer_len * 0.85]:
+                kv, kf = _make_sphere(bx, ky, bz, arm_r * 0.07, rings=3, sectors=4)
+                parts.append((kv, kf))
+        # Lashing cord wraps
+        for li in range(3):
+            ly = bracer_len * (0.2 + li * 0.3)
+            lv, lf = _make_torus_ring(0, ly, 0, arm_r * 1.20, arm_r * 0.02,
+                                      major_segments=segs, minor_segments=3)
+            parts.append((lv, lf))
+
+    verts_final, faces_final = _merge_meshes(*parts)
+    return _make_result(f"Bracer_{style}", verts_final, faces_final,
+                        style=style, slot="bracer", category="armor")
+
+
+# =========================================================================
+# RING GENERATORS  (5 styles)
+# =========================================================================
+
+_RING_STYLES = ["band", "gem_set", "rune_etched", "signet", "twisted"]
+
+
+def generate_ring_mesh(style: str = "band") -> MeshSpec:
+    """Generate a finger ring mesh in the requested style.
+
+    Styles: band, gem_set, rune_etched, signet, twisted.
+    Finger radius ~0.009 m.
+    """
+    if style not in _RING_STYLES:
+        style = "band"
+
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    finger_r = 0.009
+    ring_thick = 0.002
+
+    if style == "band":
+        # Simple polished band
+        rv, rf = _make_torus_ring(0, 0, 0, finger_r, ring_thick,
+                                  major_segments=16, minor_segments=6)
+        parts.append((rv, rf))
+
+    elif style == "gem_set":
+        # Band with raised gem setting
+        rv, rf = _make_torus_ring(0, 0, 0, finger_r, ring_thick,
+                                  major_segments=16, minor_segments=6)
+        parts.append((rv, rf))
+        # Prong setting
+        for pi in range(4):
+            pa = pi * math.pi * 2 / 4 + math.pi / 4
+            px = math.cos(pa) * ring_thick * 0.6
+            pz = math.sin(pa) * ring_thick * 0.6
+            pv, pf = _make_cylinder(px, finger_r + ring_thick, pz,
+                                    ring_thick * 0.15, ring_thick * 1.2,
+                                    segments=3, cap_top=True, cap_bottom=True)
+            parts.append((pv, pf))
+        # Gem (faceted sphere approximation)
+        gv, gf = _make_sphere(0, finger_r + ring_thick * 1.8, 0,
+                              ring_thick * 0.8, rings=4, sectors=6)
+        parts.append((gv, gf))
+
+    elif style == "rune_etched":
+        # Wider band with channel grooves for rune patterns
+        rv, rf = _make_torus_ring(0, 0, 0, finger_r, ring_thick * 1.3,
+                                  major_segments=20, minor_segments=6)
+        parts.append((rv, rf))
+        # Rune groove channels (inner torus rings)
+        for gi in range(3):
+            angle = gi * math.pi * 2 / 3
+            gx = math.cos(angle) * finger_r
+            gz = math.sin(angle) * finger_r
+            gv, gf = _make_torus_ring(gx, ring_thick * 0.8, gz,
+                                      ring_thick * 0.3, ring_thick * 0.08,
+                                      major_segments=5, minor_segments=3)
+            parts.append((gv, gf))
+
+    elif style == "signet":
+        # Band with flat face plate for crest/seal
+        rv, rf = _make_torus_ring(0, 0, 0, finger_r, ring_thick,
+                                  major_segments=16, minor_segments=6)
+        parts.append((rv, rf))
+        # Flat signet face
+        sv, sf = _make_box(0, finger_r + ring_thick * 0.8, 0,
+                           ring_thick * 1.5, ring_thick * 0.3, ring_thick * 1.5)
+        parts.append((sv, sf))
+        # Crest relief (raised octagon)
+        crest_r = ring_thick * 1.0
+        crest_segs = 8
+        crest_verts: list[tuple[float, float, float]] = []
+        cy_crest = finger_r + ring_thick * 1.15
+        for ci in range(crest_segs):
+            ca = 2.0 * math.pi * ci / crest_segs
+            crest_verts.append((math.cos(ca) * crest_r, cy_crest,
+                               math.sin(ca) * crest_r))
+        crest_verts.append((0, cy_crest, 0))
+        crest_faces: list[tuple[int, ...]] = []
+        center_idx = crest_segs
+        for ci in range(crest_segs):
+            ci2 = (ci + 1) % crest_segs
+            crest_faces.append((ci, ci2, center_idx))
+        parts.append((crest_verts, crest_faces))
+
+    elif style == "twisted":
+        # Two intertwined bands
+        twist_segs = 32
+        tube_segs = 4
+        for strand in range(2):
+            strand_phase = strand * math.pi
+            sv: list[tuple[float, float, float]] = []
+            sf: list[tuple[int, ...]] = []
+            for i in range(twist_segs):
+                main_angle = 2.0 * math.pi * i / twist_segs
+                twist_angle = main_angle * 3 + strand_phase
+                # Position on the main ring
+                cx = math.cos(main_angle) * finger_r
+                cz = math.sin(main_angle) * finger_r
+                # Offset for twist
+                off_y = math.sin(twist_angle) * ring_thick * 0.5
+                off_r = math.cos(twist_angle) * ring_thick * 0.5
+                cx2 = cx + math.cos(main_angle) * off_r
+                cz2 = cz + math.sin(main_angle) * off_r
+                for j in range(tube_segs):
+                    ta = 2.0 * math.pi * j / tube_segs
+                    nx = -math.sin(main_angle)
+                    nz = math.cos(main_angle)
+                    tr = ring_thick * 0.35
+                    px = cx2 + nx * math.cos(ta) * tr
+                    py = off_y + math.sin(ta) * tr
+                    pz = cz2 + nz * math.cos(ta) * tr
+                    sv.append((px, py, pz))
+            for i in range(twist_segs):
+                i2 = (i + 1) % twist_segs
+                for j in range(tube_segs):
+                    j2 = (j + 1) % tube_segs
+                    v0 = i * tube_segs + j
+                    v1 = i * tube_segs + j2
+                    v2 = i2 * tube_segs + j2
+                    v3 = i2 * tube_segs + j
+                    sf.append((v0, v1, v2, v3))
+            parts.append((sv, sf))
+
+    verts_final, faces_final = _merge_meshes(*parts)
+    return _make_result(f"Ring_{style}", verts_final, faces_final,
+                        style=style, slot="ring", category="armor")
+
+
+# =========================================================================
+# AMULET GENERATORS  (5 styles)
+# =========================================================================
+
+_AMULET_STYLES = ["pendant", "choker", "torc", "medallion", "holy_symbol"]
+
+
+def generate_amulet_mesh(style: str = "pendant") -> MeshSpec:
+    """Generate an amulet/necklace mesh in the requested style.
+
+    Styles: pendant, choker, torc, medallion, holy_symbol.
+    Neck radius ~0.06 m.
+    """
+    if style not in _AMULET_STYLES:
+        style = "pendant"
+
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    neck_r = 0.06
+    segs = 12
+
+    if style == "pendant":
+        # Chain with hanging pendant gem
+        # Chain (torus around neck)
+        cv, cf = _make_torus_ring(0, 0, 0, neck_r * 1.3, 0.002,
+                                  major_segments=20, minor_segments=3)
+        parts.append((cv, cf))
+        # Pendant drop
+        pv, pf = _make_cone(0, -neck_r * 0.5, neck_r * 1.1,
+                            0.012, 0.025, segments=6)
+        parts.append((pv, pf))
+        # Gem at pendant center
+        gv, gf = _make_sphere(0, -neck_r * 0.45, neck_r * 1.1,
+                              0.008, rings=4, sectors=6)
+        parts.append((gv, gf))
+        # Bail (connector ring)
+        bv, bf = _make_torus_ring(0, -neck_r * 0.25, neck_r * 1.1,
+                                  0.005, 0.001, major_segments=6, minor_segments=3)
+        parts.append((bv, bf))
+
+    elif style == "choker":
+        # Thick band around throat
+        bv, bf = _make_torus_ring(0, 0, 0, neck_r * 1.15, 0.012,
+                                  major_segments=segs, minor_segments=6)
+        parts.append((bv, bf))
+        # Stud decorations
+        for si in range(8):
+            sa = 2.0 * math.pi * si / 8
+            sx = math.cos(sa) * neck_r * 1.15
+            sz = math.sin(sa) * neck_r * 1.15
+            sv, sf = _make_sphere(sx, 0, sz, 0.004, rings=3, sectors=4)
+            parts.append((sv, sf))
+        # Central ornament
+        ov, of = _make_box(0, 0, neck_r * 1.17,
+                           0.015, 0.012, 0.005)
+        parts.append((ov, of))
+
+    elif style == "torc":
+        # Open-ended twisted metal collar
+        torc_segs = 40
+        tube_segs = 6
+        torc_r = neck_r * 1.25
+        wire_r = 0.005
+        # Open torc (270 degrees)
+        sv: list[tuple[float, float, float]] = []
+        sf_list: list[tuple[int, ...]] = []
+        open_fraction = 0.75
+        for i in range(torc_segs):
+            angle = 2.0 * math.pi * open_fraction * i / (torc_segs - 1) + math.pi * 0.25
+            cx = math.cos(angle) * torc_r
+            cz = math.sin(angle) * torc_r
+            for j in range(tube_segs):
+                ta = 2.0 * math.pi * j / tube_segs
+                nx = -math.sin(angle)
+                nz = math.cos(angle)
+                px = cx + nx * math.cos(ta) * wire_r
+                py = math.sin(ta) * wire_r
+                pz = cz + nz * math.cos(ta) * wire_r
+                sv.append((px, py, pz))
+        for i in range(torc_segs - 1):
+            for j in range(tube_segs):
+                j2 = (j + 1) % tube_segs
+                v0 = i * tube_segs + j
+                v1 = i * tube_segs + j2
+                v2 = (i + 1) * tube_segs + j2
+                v3 = (i + 1) * tube_segs + j
+                sf_list.append((v0, v1, v2, v3))
+        parts.append((sv, sf_list))
+        # Terminal knobs (animal heads / spheres at ends)
+        start_angle = math.pi * 0.25
+        end_angle = math.pi * 0.25 + 2.0 * math.pi * open_fraction
+        for ta in [start_angle, end_angle]:
+            tx = math.cos(ta) * torc_r
+            tz = math.sin(ta) * torc_r
+            tv, tf = _make_sphere(tx, 0, tz, wire_r * 2.5, rings=4, sectors=5)
+            parts.append((tv, tf))
+
+    elif style == "medallion":
+        # Chain with large flat disk medallion
+        cv, cf = _make_torus_ring(0, 0, 0, neck_r * 1.3, 0.002,
+                                  major_segments=20, minor_segments=3)
+        parts.append((cv, cf))
+        # Medallion disk
+        mv, mf = _make_cylinder(0, -neck_r * 0.5, neck_r * 1.15,
+                                0.02, 0.004, segments=12, cap_top=True, cap_bottom=True)
+        parts.append((mv, mf))
+        # Medallion border ring
+        mrv, mrf = _make_torus_ring(0, -neck_r * 0.5, neck_r * 1.15,
+                                    0.022, 0.002, major_segments=12, minor_segments=3)
+        parts.append((mrv, mrf))
+        # Relief pattern (cross)
+        for axis_fn in [(1, 0), (0, 1)]:
+            ax, az = axis_fn
+            rv, rf = _make_box(ax * 0.0, -neck_r * 0.5, neck_r * 1.15 + az * 0.0,
+                               0.002 + ax * 0.015, 0.003, 0.002 + az * 0.015)
+            parts.append((rv, rf))
+
+    elif style == "holy_symbol":
+        # Sacred symbol on chain -- star shape
+        cv, cf = _make_torus_ring(0, 0, 0, neck_r * 1.3, 0.002,
+                                  major_segments=20, minor_segments=3)
+        parts.append((cv, cf))
+        # Symbol center
+        sy_y = -neck_r * 0.55
+        sy_z = neck_r * 1.1
+        scv, scf = _make_sphere(0, sy_y, sy_z, 0.006, rings=3, sectors=6)
+        parts.append((scv, scf))
+        # Star points (6 rays)
+        for ri in range(6):
+            ra = ri * math.pi * 2 / 6
+            rx = math.cos(ra) * 0.018
+            rz_off = math.sin(ra) * 0.018
+            rv, rf = _make_box(rx, sy_y, sy_z + rz_off,
+                               0.003, 0.003, 0.002)
+            parts.append((rv, rf))
+        # Bail
+        bv, bf = _make_torus_ring(0, sy_y + 0.015, sy_z,
+                                  0.004, 0.001, major_segments=6, minor_segments=3)
+        parts.append((bv, bf))
+        # Halo ring behind symbol
+        hv, hf = _make_torus_ring(0, sy_y, sy_z - 0.003,
+                                  0.022, 0.001, major_segments=12, minor_segments=3)
+        parts.append((hv, hf))
+
+    verts_final, faces_final = _merge_meshes(*parts)
+    return _make_result(f"Amulet_{style}", verts_final, faces_final,
+                        style=style, slot="amulet", category="armor")
+
+
+# =========================================================================
+# BACK ITEM GENERATORS  (5 styles)
+# =========================================================================
+
+_BACK_ITEM_STYLES = ["backpack", "quiver", "wings", "trophy_mount", "bedroll"]
+
+
+def generate_back_item_mesh(style: str = "backpack") -> MeshSpec:
+    """Generate a back-mounted item mesh in the requested style.
+
+    Styles: backpack, quiver, wings, trophy_mount, bedroll.
+    Positioned relative to upper back center.
+    """
+    if style not in _BACK_ITEM_STYLES:
+        style = "backpack"
+
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    if style == "backpack":
+        # Framed backpack with straps and flap
+        bw, bh, bd = 0.20, 0.30, 0.12
+        # Main body
+        bv, bf = _make_box(0, bh * 0.5, -bd * 0.5, bw * 0.5, bh * 0.5, bd * 0.5)
+        parts.append((bv, bf))
+        # Top flap
+        fv, ff = _make_box(0, bh + 0.01, -bd * 0.3, bw * 0.52, 0.015, bd * 0.4)
+        parts.append((fv, ff))
+        # Shoulder straps (left / right)
+        for sx in [-bw * 0.35, bw * 0.35]:
+            sv, sf = _make_box(sx, bh * 0.5, bd * 0.05,
+                               0.018, bh * 0.45, 0.008)
+            parts.append((sv, sf))
+        # Side pockets
+        for sx in [-bw * 0.55, bw * 0.55]:
+            pv, pf = _make_box(sx, bh * 0.25, -bd * 0.3,
+                               0.03, bh * 0.22, bd * 0.2)
+            parts.append((pv, pf))
+        # Frame (top/bottom bars)
+        for fy in [0.01, bh - 0.01]:
+            frv, frf = _make_cylinder(0, fy, 0, 0.008, bw * 0.9,
+                                      segments=4, cap_top=True, cap_bottom=True)
+            # Rotate to horizontal (X axis) by swapping
+            frv = [(v[2], v[1], v[0]) for v in frv]
+            parts.append((frv, frf))
+        # Bedroll on top
+        brv, brf = _make_cylinder(0, bh + 0.04, -bd * 0.3,
+                                  0.03, bw * 0.7, segments=8)
+        brv = [(v[2], v[1], v[0]) for v in brv]
+        parts.append((brv, brf))
+
+    elif style == "quiver":
+        # Arrow quiver with arrows visible
+        qr = 0.05
+        qh = 0.40
+        # Quiver body (tapered cylinder)
+        qv, qf = _make_tapered_cylinder(0, 0, -0.05, qr, qr * 0.7,
+                                        qh, segments=8, rings=2)
+        parts.append((qv, qf))
+        # Rim at top
+        rv, rf = _make_torus_ring(0, qh, -0.05, qr, qr * 0.08,
+                                  major_segments=8, minor_segments=3)
+        parts.append((rv, rf))
+        # Strap
+        sv, sf = _make_box(qr * 0.5, qh * 0.5, 0.02,
+                           0.012, qh * 0.4, 0.005)
+        parts.append((sv, sf))
+        # Arrow shafts poking out (5 arrows)
+        for ai in range(5):
+            ax = (ai - 2) * qr * 0.3
+            az = -0.05 + (ai % 2) * qr * 0.2
+            av, af = _make_cylinder(ax, qh - 0.02, az, 0.003, 0.12,
+                                    segments=4, cap_top=True, cap_bottom=False)
+            parts.append((av, af))
+            # Fletching
+            fv, ff = _make_box(ax, qh + 0.08, az, 0.008, 0.015, 0.001)
+            parts.append((fv, ff))
+
+    elif style == "wings":
+        # Decorative or angelic wings (folded)
+        wing_span = 0.25
+        wing_h = 0.35
+        for side in [-1.0, 1.0]:
+            # Main wing surface (curved sheet)
+            subdiv_x = 6
+            subdiv_y = 8
+            wv: list[tuple[float, float, float]] = []
+            wf: list[tuple[int, ...]] = []
+            for iy in range(subdiv_y + 1):
+                ty = iy / subdiv_y
+                for ix in range(subdiv_x + 1):
+                    tx = ix / subdiv_x
+                    x = side * tx * wing_span * (1.0 - ty * 0.4)
+                    y = wing_h * (1.0 - ty)
+                    z = -0.02 - tx * 0.08 * math.sin(ty * math.pi)
+                    wv.append((x, y, z))
+            cols = subdiv_x + 1
+            for iy in range(subdiv_y):
+                for ix in range(subdiv_x):
+                    v0 = iy * cols + ix
+                    v1 = v0 + 1
+                    v2 = v0 + cols + 1
+                    v3 = v0 + cols
+                    wf.append((v0, v1, v2, v3))
+            parts.append((wv, wf))
+            # Feather tips at bottom edge
+            for fi in range(4):
+                fx = side * (fi + 1) * wing_span * 0.2
+                fv, ff = _make_box(fx, -0.02, -0.04,
+                                   0.015, 0.03, 0.004)
+                parts.append((fv, ff))
+        # Central spine
+        csv, csf = _make_cylinder(0, 0, -0.03, 0.008, wing_h * 0.8,
+                                  segments=5, cap_top=True, cap_bottom=True)
+        parts.append((csv, csf))
+
+    elif style == "trophy_mount":
+        # Rack with mounted trophies (skulls, horns)
+        # Wooden frame
+        frame_w, frame_h = 0.18, 0.22
+        fv, ff = _make_box(0, frame_h * 0.5, -0.04,
+                           frame_w * 0.5, frame_h * 0.5, 0.015)
+        parts.append((fv, ff))
+        # Cross bar
+        cbv, cbf = _make_cylinder(0, frame_h * 0.7, -0.03,
+                                  0.008, frame_w * 0.8, segments=5)
+        cbv = [(v[2], v[1], v[0]) for v in cbv]
+        parts.append((cbv, cbf))
+        # Trophy skull (simplified)
+        sv, sf = _make_sphere(0, frame_h * 0.8, -0.06,
+                              0.04, rings=5, sectors=7)
+        parts.append((sv, sf))
+        # Horns on skull
+        for hside in [-1.0, 1.0]:
+            hv, hf = _make_cone(hside * 0.04, frame_h * 0.85, -0.07,
+                                0.008, 0.06, segments=5)
+            parts.append((hv, hf))
+        # Hanging chains
+        for ci in range(2):
+            cx = (-0.06 + ci * 0.12)
+            ccv, ccf = _make_cylinder(cx, 0.02, -0.03,
+                                      0.003, frame_h * 0.5, segments=3)
+            parts.append((ccv, ccf))
+        # Strap
+        stv, stf = _make_box(0, frame_h * 0.5, 0.02,
+                             0.015, frame_h * 0.35, 0.005)
+        parts.append((stv, stf))
+
+    elif style == "bedroll":
+        # Simple rolled blanket/sleeping bag
+        roll_r = 0.06
+        roll_w = 0.35
+        rv, rf = _make_cylinder(0, 0, -0.04, roll_r, roll_w,
+                                segments=10, cap_top=True, cap_bottom=True)
+        # Rotate to horizontal
+        rv = [(v[2], v[1], v[0]) for v in rv]
+        parts.append((rv, rf))
+        # Tie straps
+        for tx in [-roll_w * 0.3, 0, roll_w * 0.3]:
+            tv, tf = _make_torus_ring(tx, 0, -0.04, roll_r * 1.1, roll_r * 0.06,
+                                      major_segments=8, minor_segments=3)
+            parts.append((tv, tf))
+        # Exposed blanket edge
+        ev, ef = _make_box(roll_w * 0.45, 0, -0.04,
+                           0.01, roll_r * 0.8, roll_r * 0.8)
+        parts.append((ev, ef))
+
+    verts_final, faces_final = _merge_meshes(*parts)
+    return _make_result(f"BackItem_{style}", verts_final, faces_final,
+                        style=style, slot="back_item", category="armor")
+
+
+# =========================================================================
+# FACE ITEM GENERATORS  (5 styles)
+# =========================================================================
+
+_FACE_ITEM_STYLES = ["mask", "blindfold", "war_paint_frame", "plague_doctor", "domino"]
+
+
+def generate_face_item_mesh(style: str = "mask") -> MeshSpec:
+    """Generate a face-covering item mesh in the requested style.
+
+    Styles: mask, blindfold, war_paint_frame, plague_doctor, domino.
+    Built around a face region (head radius ~0.11 m).
+    """
+    if style not in _FACE_ITEM_STYLES:
+        style = "mask"
+
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    hr = 0.11  # head radius
+    segs = 10
+
+    if style == "mask":
+        # Full-face mask with eye holes and breathing slits
+        # Curved face plate
+        fpv, fpf = _make_half_sphere(0, hr * 0.35, hr * 0.15, hr * 1.08,
+                                     rings=6, sectors=segs, top=True)
+        parts.append((fpv, fpf))
+        # Eye holes (inset spheres for depth)
+        for sx in [-1.0, 1.0]:
+            ev, ef = _make_sphere(sx * hr * 0.28, hr * 0.48, hr * 0.90,
+                                  hr * 0.10, rings=3, sectors=5)
+            parts.append((ev, ef))
+        # Nose ridge
+        nv, nf = _make_box(0, hr * 0.30, hr * 1.05,
+                           hr * 0.04, hr * 0.12, hr * 0.02)
+        parts.append((nv, nf))
+        # Mouth breathing slits (3 horizontal bars)
+        for mi in range(3):
+            mv, mf = _make_box(0, hr * 0.10 + mi * hr * 0.06, hr * 1.00,
+                               hr * 0.18, hr * 0.01, hr * 0.015)
+            parts.append((mv, mf))
+        # Strap anchors (sides)
+        for sx in [-1.0, 1.0]:
+            av, af = _make_box(sx * hr * 0.85, hr * 0.40, hr * 0.50,
+                               hr * 0.05, hr * 0.08, hr * 0.04)
+            parts.append((av, af))
+
+    elif style == "blindfold":
+        # Cloth strip covering eyes
+        bf_w = hr * 1.8
+        bf_h = hr * 0.35
+        bf_d = 0.005
+        # Main strip (curved to follow head)
+        subdiv = 8
+        bv: list[tuple[float, float, float]] = []
+        bfaces: list[tuple[int, ...]] = []
+        for iy in range(3):
+            ty = iy / 2
+            y = hr * 0.35 + ty * bf_h
+            for ix in range(subdiv + 1):
+                tx = ix / subdiv
+                angle = (tx - 0.5) * math.pi * 0.8
+                x = math.sin(angle) * hr * 1.10
+                z = math.cos(angle) * hr * 1.10
+                bv.append((x, y, z))
+        cols = subdiv + 1
+        for iy in range(2):
+            for ix in range(subdiv):
+                v0 = iy * cols + ix
+                v1 = v0 + 1
+                v2 = v0 + cols + 1
+                v3 = v0 + cols
+                bfaces.append((v0, v1, v2, v3))
+        parts.append((bv, bfaces))
+        # Knot at back
+        kv, kf = _make_sphere(0, hr * 0.50, -hr * 1.05,
+                              hr * 0.06, rings=3, sectors=5)
+        parts.append((kv, kf))
+        # Trailing tails
+        for side in [-1.0, 1.0]:
+            tv, tf = _make_box(side * hr * 0.08, hr * 0.35, -hr * 1.10,
+                               hr * 0.03, hr * 0.20, hr * 0.01)
+            parts.append((tv, tf))
+
+    elif style == "war_paint_frame":
+        # Skeletal face frame outlining war paint regions
+        # Brow ridge
+        brv, brf = _make_torus_ring(0, hr * 0.60, hr * 0.65, hr * 0.45, hr * 0.025,
+                                    major_segments=8, minor_segments=3)
+        parts.append((brv, brf))
+        # Cheekbone struts
+        for sx in [-1.0, 1.0]:
+            cv, cf = _make_box(sx * hr * 0.50, hr * 0.30, hr * 0.80,
+                               hr * 0.03, hr * 0.15, hr * 0.02)
+            parts.append((cv, cf))
+        # Nose bridge
+        nv, nf = _make_box(0, hr * 0.38, hr * 1.02,
+                           hr * 0.025, hr * 0.18, hr * 0.015)
+        parts.append((nv, nf))
+        # Jaw outline
+        jv, jf = _make_torus_ring(0, hr * 0.08, hr * 0.60, hr * 0.40, hr * 0.02,
+                                  major_segments=8, minor_segments=3)
+        parts.append((jv, jf))
+        # Temple horns (small)
+        for sx in [-1.0, 1.0]:
+            thv, thf = _make_cone(sx * hr * 0.65, hr * 0.55, hr * 0.55,
+                                  hr * 0.03, hr * 0.08, segments=4)
+            parts.append((thv, thf))
+
+    elif style == "plague_doctor":
+        # Plague doctor beak mask
+        # Face plate (half sphere)
+        fpv, fpf = _make_half_sphere(0, hr * 0.35, hr * 0.15, hr * 1.06,
+                                     rings=5, sectors=segs, top=True)
+        parts.append((fpv, fpf))
+        # Eye lenses (cylindrical goggle rings)
+        for sx in [-1.0, 1.0]:
+            lv, lf = _make_cylinder(sx * hr * 0.28, hr * 0.45, hr * 0.95,
+                                    hr * 0.10, hr * 0.08, segments=8,
+                                    cap_top=True, cap_bottom=True)
+            # Orient forward (swap Y/Z)
+            lv = [(v[0], v[1], v[2]) for v in lv]
+            parts.append((lv, lf))
+            # Lens rim
+            lrv, lrf = _make_torus_ring(sx * hr * 0.28, hr * 0.45, hr * 1.03,
+                                        hr * 0.10, hr * 0.015,
+                                        major_segments=8, minor_segments=3)
+            parts.append((lrv, lrf))
+        # Beak (tapered cone)
+        beak_len = hr * 0.8
+        bkv, bkf = _make_tapered_cylinder(0, hr * 0.20, hr * 1.05,
+                                          hr * 0.10, hr * 0.02,
+                                          beak_len, segments=6, rings=3)
+        # Orient forward (bend beak from face)
+        bkv_r: list[tuple[float, float, float]] = []
+        for v in bkv:
+            fwd = (v[1] - hr * 0.20) / max(beak_len, 0.001)
+            new_y = hr * 0.20 + (v[1] - hr * 0.20) * 0.3
+            new_z = hr * 1.05 + fwd * beak_len * 0.9
+            bkv_r.append((v[0], new_y, new_z))
+        parts.append((bkv_r, bkf))
+        # Strap
+        for sx in [-1.0, 1.0]:
+            sv, sf = _make_box(sx * hr * 0.85, hr * 0.40, hr * 0.40,
+                               hr * 0.04, hr * 0.06, hr * 0.03)
+            parts.append((sv, sf))
+
+    elif style == "domino":
+        # Simple half-mask covering upper face
+        # Curved strip across eyes
+        subdiv_x = 10
+        subdiv_y = 3
+        dv: list[tuple[float, float, float]] = []
+        df: list[tuple[int, ...]] = []
+        for iy in range(subdiv_y + 1):
+            ty = iy / subdiv_y
+            y = hr * 0.35 + ty * hr * 0.35
+            for ix in range(subdiv_x + 1):
+                tx = ix / subdiv_x
+                angle = (tx - 0.5) * math.pi * 0.7
+                x = math.sin(angle) * hr * 1.08
+                z = math.cos(angle) * hr * 1.08
+                dv.append((x, y, z))
+        cols = subdiv_x + 1
+        for iy in range(subdiv_y):
+            for ix in range(subdiv_x):
+                v0 = iy * cols + ix
+                v1 = v0 + 1
+                v2 = v0 + cols + 1
+                v3 = v0 + cols
+                df.append((v0, v1, v2, v3))
+        parts.append((dv, df))
+        # Eye holes (cutout markers)
+        for sx in [-1.0, 1.0]:
+            ev, ef = _make_sphere(sx * hr * 0.25, hr * 0.48, hr * 1.02,
+                                  hr * 0.07, rings=3, sectors=5)
+            parts.append((ev, ef))
+        # Decorative points at outer edges
+        for sx in [-1.0, 1.0]:
+            pv, pf = _make_cone(sx * hr * 0.70, hr * 0.50, hr * 0.80,
+                                hr * 0.03, hr * 0.06, segments=4)
+            parts.append((pv, pf))
+
+    verts_final, faces_final = _merge_meshes(*parts)
+    return _make_result(f"FaceItem_{style}", verts_final, faces_final,
+                        style=style, slot="face_item", category="armor")
+
+
+# =========================================================================
 # ARMOR_GENERATORS registry
 # =========================================================================
 
@@ -1307,4 +2237,10 @@ ARMOR_GENERATORS = {
     "boot": (generate_boot_mesh, {"styles": _BOOT_STYLES}),
     "pauldron": (generate_pauldron_mesh, {"styles": _PAULDRON_STYLES}),
     "cape": (generate_cape_mesh, {"styles": _CAPE_STYLES}),
+    "belt": (generate_belt_mesh, {"styles": _BELT_STYLES}),
+    "bracer": (generate_bracer_mesh, {"styles": _BRACER_STYLES}),
+    "ring": (generate_ring_mesh, {"styles": _RING_STYLES}),
+    "amulet": (generate_amulet_mesh, {"styles": _AMULET_STYLES}),
+    "back_item": (generate_back_item_mesh, {"styles": _BACK_ITEM_STYLES}),
+    "face_item": (generate_face_item_mesh, {"styles": _FACE_ITEM_STYLES}),
 }
