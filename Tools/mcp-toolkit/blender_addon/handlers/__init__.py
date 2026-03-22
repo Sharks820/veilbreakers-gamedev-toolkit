@@ -154,7 +154,22 @@ from .weathering import (
     handle_apply_weathering,
 )
 from .terrain_materials import (
+    handle_setup_terrain_biome,
     handle_create_biome_terrain,
+)
+from .vegetation_system import (
+    handle_scatter_biome_vegetation,
+)
+from .armor_meshes import ARMOR_GENERATORS  # noqa: F401 -- 22-style armor system
+from .npc_characters import (  # noqa: F401 -- NPC body mesh generation
+    generate_npc_body_mesh,
+    NPC_GENERATORS,
+)
+from .monster_bodies import (  # noqa: F401 -- Monster body type system
+    generate_monster_body,
+    ALL_BODY_TYPES,
+    ALL_BRANDS,
+    BRAND_FEATURES,
 )
 
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
@@ -298,5 +313,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     # Weathering operations
     "weathering_apply": handle_apply_weathering,
     # Terrain biome material operations
+    "terrain_setup_biome": handle_setup_terrain_biome,
     "terrain_create_biome_material": handle_create_biome_terrain,
+    # Per-biome vegetation quality system
+    "env_scatter_biome_vegetation": handle_scatter_biome_vegetation,
 }

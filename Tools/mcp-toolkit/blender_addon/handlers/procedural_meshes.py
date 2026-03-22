@@ -8,7 +8,10 @@ Categories:
 - FURNITURE: tables, chairs, shelves, chests, barrels, candelabras, bookshelves
 - VEGETATION: trees, rocks, mushrooms, roots, ivy
 - DUNGEON PROPS: torch sconces, prison doors, sarcophagi, altars, pillars, archways, chains, skull piles
-- WEAPONS: hammers, spears, crossbows, scythes, flails, whips, claws, tomes
+- WEAPONS: hammers, spears, crossbows, scythes, flails, whips, claws, tomes,
+  greatswords, curved swords, hand axes, battle axes, greataxes, clubs, maces,
+  warhammers, halberds, glaives, shortbows, longbows, magic staves, wands,
+  throwing knives (23 total)
 - ARCHITECTURE: gargoyles, fountains, statues, bridges, gates, staircases
 - FENCES & BARRIERS: fences, barricades, railings
 - TRAPS: spike traps, bear traps, pressure plates, dart launchers, swinging blades, falling cages
@@ -31,6 +34,11 @@ Categories:
 - CRAFTING MATERIALS: ore, leather, herbs, gems, bone shards
 - CURRENCY: coins, coin pouches
 - KEY ITEMS: keys, map scrolls, lockpicks
+- FOREST ANIMALS: deer, wolves, foxes, rabbits, owls, crows
+- MOUNTAIN ANIMALS: mountain goats, eagles, bears
+- DOMESTIC ANIMALS: horses, chickens, dogs, cats
+- VERMIN: rats, bats, spiders, beetles
+- SWAMP ANIMALS: frogs, snakes, turtles
 
 All functions are pure Python with math-only dependencies (no bpy/bmesh).
 """

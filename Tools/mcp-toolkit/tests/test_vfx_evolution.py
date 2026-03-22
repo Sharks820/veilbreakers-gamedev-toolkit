@@ -59,12 +59,12 @@ from veilbreakers_mcp.shared.unity_templates.vfx_mastery_templates import (
 # ---------------------------------------------------------------------------
 
 EXPECTED_BRAND_COLORS = {
-    "IRON":   [0.55, 0.59, 0.65, 1.0],
+    "IRON":   [0.55, 0.35, 0.22, 1.0],  # rust-bronze (corrected from gray)
     "SAVAGE": [0.71, 0.18, 0.18, 1.0],
     "SURGE":  [0.24, 0.55, 0.86, 1.0],
     "VENOM":  [0.31, 0.71, 0.24, 1.0],
-    "DREAD":  [0.47, 0.24, 0.63, 1.0],
-    "LEECH":  [0.55, 0.16, 0.31, 1.0],
+    "DREAD":  [0.24, 0.47, 0.27, 1.0],  # fear-green (corrected from purple)
+    "LEECH":  [0.55, 0.53, 0.20, 1.0],  # sickly yellow-green (corrected from red)
     "GRACE":  [0.86, 0.86, 0.94, 1.0],
     "MEND":   [0.78, 0.67, 0.31, 1.0],
     "RUIN":   [0.86, 0.47, 0.16, 1.0],
