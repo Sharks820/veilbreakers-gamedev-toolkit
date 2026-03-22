@@ -712,8 +712,8 @@ def handle_move_to_collection(params: dict) -> dict:
     # Record source collections
     source_collections = [c.name for c in obj.users_collection]
 
-    # Unlink from all current collections
-    for coll in obj.users_collection:
+    # Unlink from all current collections (iterate copy to avoid mutation during loop)
+    for coll in list(obj.users_collection):
         coll.objects.unlink(obj)
 
     # Link to target collection
