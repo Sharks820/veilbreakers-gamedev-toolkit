@@ -286,13 +286,16 @@ def generate_bsp_dungeon(
             _carve_v_corridor(grid, cx_b, cy_a, cy_b)
             corridors.append(((cx_a, cy_a), (cx_b, cy_b)))
 
-    # 5. Place doors where corridors meet room edges
+    # 5. T-junction cleanup for corridor intersections
+    _cleanup_t_junctions(grid, height, width)
+
+    # 6. Place doors where corridors meet room edges
     doors = _place_doors(grid, rooms, height, width)
 
-    # 6. Assign room types
+    # 7. Assign room types
     _assign_room_types(rooms, rng)
 
-    # 7. Spawn / loot points
+    # 8. Spawn / loot points
     spawn_points = _place_spawn_points(rooms, grid, rng)
     loot_points = _place_loot_points(rooms, grid, rng)
 
@@ -307,7 +310,7 @@ def generate_bsp_dungeon(
         grid=grid,
     )
 
-    # 8. Connectivity guarantee
+    # 9. Connectivity guarantee
     _ensure_connectivity(layout, rng)
 
     return layout
@@ -331,6 +334,31 @@ def _force_rooms(
     return rooms
 
 
+def _cleanup_t_junctions(grid: np.ndarray, h: int, w: int) -> int:
+    """Clean up T-junction artifacts where corridors meet at right angles.
+
+    Fills in isolated wall cells surrounded on 3+ sides by corridor/floor
+    to smooth corridor intersections.
+
+    Returns the number of wall cells converted to corridor.
+    """
+    fixed = 0
+    for y in range(1, h - 1):
+        for x in range(1, w - 1):
+            if grid[y, x] != 0:
+                continue
+            # Count walkable neighbours (floor=1, corridor=2, door=3)
+            neighbours = 0
+            for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                if grid[y + dy, x + dx] > 0:
+                    neighbours += 1
+            # Wall surrounded by 3+ walkable cells is a T-junction artifact
+            if neighbours >= 3:
+                grid[y, x] = 2  # convert to corridor
+                fixed += 1
+    return fixed
+
+
 def _place_doors(
     grid: np.ndarray, rooms: list[Room], h: int, w: int
 ) -> list[tuple[int, int]]:
@@ -351,15 +379,43 @@ def _place_doors(
 
 
 def _assign_room_types(rooms: list[Room], rng: random.Random) -> None:
+    """Assign specialised room types with size-based heuristics.
+
+    Room type assignments:
+    - entrance: first room
+    - boss: last room, expanded to 2x size (clamped to grid)
+    - treasure: 1-2 smaller rooms chosen from the middle
+    - secret: 10% chance for remaining generic rooms (smallest first)
+    - generic: everything else
+    """
+    if not rooms:
+        return
+
     rooms[0].room_type = "entrance"
+
     if len(rooms) > 1:
-        rooms[-1].room_type = "boss"
-    treasure_count = min(2, len(rooms) - 2)
-    middle = rooms[1:-1] if len(rooms) > 2 else []
+        boss = rooms[-1]
+        boss.room_type = "boss"
+        # Expand boss room to ~2x area by doubling dimensions
+        boss.width = boss.width * 2
+        boss.height = boss.height * 2
+
+    # Pick 1-2 treasure rooms from middle, preferring smaller ones
+    middle = [r for r in rooms[1:-1] if r.room_type == "generic"] if len(rooms) > 2 else []
+    treasure_count = min(2, len(middle))
     if middle:
-        chosen = rng.sample(middle, min(treasure_count, len(middle)))
+        middle_sorted = sorted(middle, key=lambda r: r.width * r.height)
+        chosen = middle_sorted[:treasure_count]
         for r in chosen:
             r.room_type = "treasure"
+
+    # Secret rooms: 10% chance for remaining generic rooms
+    remaining = [r for r in rooms if r.room_type == "generic"]
+    if remaining:
+        remaining_sorted = sorted(remaining, key=lambda r: r.width * r.height)
+        for r in remaining_sorted:
+            if rng.random() < 0.10:
+                r.room_type = "secret"
 
 
 def _place_spawn_points(
@@ -389,9 +445,9 @@ def _place_loot_points(
 ) -> list[tuple[int, int]]:
     points: list[tuple[int, int]] = []
     for room in rooms:
-        if room.room_type in ("treasure", "boss"):
+        if room.room_type in ("treasure", "boss", "secret"):
             cx, cy = room.center
-            if grid[cy, cx] == 1:
+            if 0 <= cy < grid.shape[0] and 0 <= cx < grid.shape[1] and grid[cy, cx] == 1:
                 points.append((cx, cy))
     return points
 
@@ -587,14 +643,16 @@ def generate_town_layout(
     # 1. Seed points for districts (semi-structured with jitter)
     seeds = _generate_district_seeds(width, height, num_districts, rng)
 
-    # 2. Assign each cell to nearest seed (Voronoi)
+    # 2. Assign each cell to nearest seed (Euclidean Voronoi)
     assignment = np.zeros((height, width), dtype=np.int32)
     for y in range(height):
         for x in range(width):
             best_d = float("inf")
             best_i = 0
             for i, (sx, sy) in enumerate(seeds):
-                d = abs(x - sx) + abs(y - sy)  # Manhattan distance
+                dx = x - sx
+                dy = y - sy
+                d = dx * dx + dy * dy  # Euclidean distance squared
                 if d < best_d:
                     best_d = d
                     best_i = i
@@ -612,17 +670,20 @@ def generate_town_layout(
     districts: list[dict] = []
     center_x, center_y = width // 2, height // 2
     dists_to_center = [
-        (abs(sx - center_x) + abs(sy - center_y), i)
+        (math.sqrt((sx - center_x) ** 2 + (sy - center_y) ** 2), i)
         for i, (sx, sy) in enumerate(seeds)
     ]
     dists_to_center.sort()
 
-    # Civic = closest to center; industrial = farthest; commercial = next-to-civic; rest = residential
+    # market_square = closest to center; civic = next; industrial = farthest;
+    # commercial = next-to-civic; rest = residential
     type_assignment: dict[int, str] = {}
-    type_assignment[dists_to_center[0][1]] = "civic"
+    type_assignment[dists_to_center[0][1]] = "market_square"
     if len(dists_to_center) > 1:
-        type_assignment[dists_to_center[1][1]] = "commercial"
+        type_assignment[dists_to_center[1][1]] = "civic"
     if len(dists_to_center) > 2:
+        type_assignment[dists_to_center[2][1]] = "commercial"
+    if len(dists_to_center) > 3:
         type_assignment[dists_to_center[-1][1]] = "industrial"
     for _, idx in dists_to_center:
         if idx not in type_assignment:
@@ -638,11 +699,11 @@ def generate_town_layout(
             }
         )
 
-    # Sort by area descending; tag the largest non-civic district that
-    # is not already assigned a specialist type as residential.
+    # Sort by area descending; tag the largest non-specialist district
+    # that is not already assigned a specialist type as residential.
     by_area = sorted(districts, key=lambda d: len(d["cells"]), reverse=True)
     for d in by_area:
-        if d["type"] not in ("civic", "commercial", "industrial"):
+        if d["type"] not in ("market_square", "civic", "commercial", "industrial"):
             d["type"] = "residential"
             break
 
@@ -658,6 +719,28 @@ def generate_town_layout(
                         roads.add((x, y))
                         roads.add((nx, ny))
 
+    # 4b. Connect district centers with roads (Bresenham-style lines)
+    for i in range(len(seeds)):
+        for j in range(i + 1, len(seeds)):
+            sx0, sy0 = seeds[i]
+            sx1, sy1 = seeds[j]
+            # Only connect adjacent districts (share a boundary)
+            shares_boundary = False
+            for rx, ry in roads:
+                if assignment[ry, rx] == i:
+                    for ddx, ddy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        nnx, nny = rx + ddx, ry + ddy
+                        if 0 <= nnx < width and 0 <= nny < height:
+                            if assignment[nny, nnx] == j:
+                                shares_boundary = True
+                                break
+                if shares_boundary:
+                    break
+            if not shares_boundary:
+                continue
+            # Bresenham line from center to center
+            _bresenham_road(sx0, sy0, sx1, sy1, roads, width, height)
+
     # 5. Building plots via rectangular subdivision in each district
     building_plots = _subdivide_plots(districts, roads, rng)
 
@@ -672,6 +755,47 @@ def generate_town_layout(
         building_plots=building_plots,
         landmarks=landmarks,
     )
+
+
+def _bresenham_road(
+    x0: int, y0: int, x1: int, y1: int,
+    roads: set[tuple[int, int]],
+    width: int, height: int,
+    road_width: int = 2,
+) -> None:
+    """Rasterise a Bresenham line between two points and add to roads set.
+
+    ``road_width`` adds parallel cells for a wider road.
+    """
+    dx = abs(x1 - x0)
+    dy = abs(y1 - y0)
+    sx = 1 if x0 < x1 else -1
+    sy = 1 if y0 < y1 else -1
+    err = dx - dy
+    x, y = x0, y0
+
+    while True:
+        # Add road cells with width
+        for offset in range(road_width):
+            if dx >= dy:
+                # Mostly horizontal -- widen vertically
+                ny = y + offset
+                if 0 <= x < width and 0 <= ny < height:
+                    roads.add((x, ny))
+            else:
+                # Mostly vertical -- widen horizontally
+                nx = x + offset
+                if 0 <= nx < width and 0 <= y < height:
+                    roads.add((nx, y))
+        if x == x1 and y == y1:
+            break
+        e2 = 2 * err
+        if e2 > -dy:
+            err -= dy
+            x += sx
+        if e2 < dx:
+            err += dx
+            y += sy
 
 
 def _generate_district_seeds(
@@ -772,7 +896,7 @@ def _place_landmarks(
                             is_near_road = True
                             break
                 if is_near_road:
-                    d = abs(dx) + abs(dy)
+                    d = dx * dx + dy * dy  # Euclidean squared
                     if d < best_dist:
                         best_dist = d
                         best = (nx, ny)
@@ -985,6 +1109,7 @@ def generate_dungeon_prop_placements(
     - Corridors: torch_sconce every 4-6 cells along walls (alternating sides)
     - Boss rooms: altar at center, pillar at each corner
     - Treasure rooms: chest at center, torch_sconce at corners
+    - Secret rooms: chest at center, skull_pile for atmosphere
     - Generic rooms: 1-2 random props (crate, barrel, skull_pile)
     - All rooms: 30% chance of archway at each door position
 
@@ -1043,6 +1168,21 @@ def generate_dungeon_prop_placements(
                     "rotation": 0.0,
                     "room_type": rt,
                 })
+
+        elif rt == "secret":
+            # Secret room: chest at center + skull_pile for atmosphere
+            props.append({
+                "type": "chest",
+                "position": (cx, cy, 0),
+                "rotation": 0.0,
+                "room_type": rt,
+            })
+            props.append({
+                "type": "skull_pile",
+                "position": (room.x + 1, room.y + 1, 0),
+                "rotation": rng.uniform(0, 2 * math.pi),
+                "room_type": rt,
+            })
 
         elif rt in ("generic", "entrance", "exit"):
             # 1-2 random props

@@ -42,7 +42,7 @@ from ._terrain_erosion import (
 
 _VALID_TERRAIN_TYPES = frozenset(TERRAIN_PRESETS.keys())
 _VALID_EROSION_MODES = frozenset({"none", "hydraulic", "thermal", "both"})
-_MAX_RESOLUTION = 1024
+_MAX_RESOLUTION = 8192
 
 
 def _validate_terrain_params(params: dict) -> dict:
@@ -88,7 +88,7 @@ def _validate_terrain_params(params: dict) -> dict:
         "persistence": params.get("persistence"),
         "lacunarity": params.get("lacunarity"),
         "erosion": erosion,
-        "erosion_iterations": params.get("erosion_iterations", 500),
+        "erosion_iterations": params.get("erosion_iterations", 5000),
     }
 
 
@@ -147,7 +147,7 @@ def handle_generate_terrain(params: dict) -> dict:
         seed (int, default 0): Random seed.
         octaves, persistence, lacunarity: Override preset values.
         erosion (str, default "none"): none|hydraulic|thermal|both.
-        erosion_iterations (int, default 500): Erosion iteration count.
+        erosion_iterations (int, default 5000): Erosion iteration count.
 
     Returns dict with: name, vertex_count, terrain_type, resolution,
         height_scale, erosion_applied.

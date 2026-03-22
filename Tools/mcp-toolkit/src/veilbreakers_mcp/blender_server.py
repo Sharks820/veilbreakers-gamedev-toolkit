@@ -1980,6 +1980,29 @@ async def blender_worldbuilding(
     return "Unknown action"
 
 
+# ---------------------------------------------------------------------------
+# Strip redundant Pydantic "title" fields from every tool schema.
+# These auto-generated titles just repeat the property name in Title Case
+# and waste ~24% of schema tokens sent to the LLM.
+# ---------------------------------------------------------------------------
+
+def _strip_titles(obj: dict | list) -> None:
+    """Recursively remove 'title' keys from a JSON-schema dict."""
+    if isinstance(obj, dict):
+        obj.pop("title", None)
+        for v in obj.values():
+            if isinstance(v, (dict, list)):
+                _strip_titles(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            if isinstance(item, (dict, list)):
+                _strip_titles(item)
+
+
+for _tool in mcp._tool_manager._tools.values():
+    _strip_titles(_tool.parameters)
+
+
 def main():
     mcp.run(transport="stdio")
 

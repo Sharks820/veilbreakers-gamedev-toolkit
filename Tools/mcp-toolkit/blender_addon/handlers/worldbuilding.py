@@ -54,8 +54,18 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
 
     Returns list of dicts describing vertices, faces, and metadata for each
     primitive. This is a pure-logic function -- no bpy/bmesh calls.
+
+    Openings (windows/doors) are converted to recessed cutout boxes positioned
+    on the correct wall, producing visible indentations in the geometry.
     """
     result: list[dict] = []
+
+    # Collect wall ops indexed by (wall_index, floor) for opening placement
+    wall_ops: dict[tuple[int, int], dict] = {}
+    for op in spec.operations:
+        if op.get("type") == "box" and op.get("role") == "wall":
+            key = (op.get("wall_index", 0), op.get("floor", 0))
+            wall_ops[key] = op
 
     for op in spec.operations:
         op_type = op.get("type")
@@ -138,17 +148,134 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
             })
 
         elif op_type == "opening":
-            # Openings are marked for face construction (no boolean subtract)
-            result.append({
-                "type": "opening",
-                "wall_index": op.get("wall_index", 0),
-                "position": op.get("position", [0, 0]),
-                "size": op.get("size", [1, 1]),
-                "role": op.get("role", "opening"),
-                "face_construction": True,
-            })
+            # Convert opening to a recessed cutout box on the wall surface.
+            # This creates visible window/door indentations in the geometry.
+            opening_spec = _opening_to_cutout_spec(op, wall_ops, spec)
+            if opening_spec is not None:
+                result.append(opening_spec)
+            else:
+                # Fallback: keep as opening marker for metadata
+                result.append({
+                    "type": "opening",
+                    "wall_index": op.get("wall_index", 0),
+                    "position": op.get("position", [0, 0]),
+                    "size": op.get("size", [1, 1]),
+                    "role": op.get("role", "opening"),
+                    "face_construction": True,
+                })
 
     return result
+
+
+def _opening_to_cutout_spec(
+    opening_op: dict,
+    wall_ops: dict[tuple[int, int], dict],
+    spec: BuildingSpec,
+) -> dict | None:
+    """Convert an opening operation into a recessed cutout box spec.
+
+    Returns a mesh spec dict with vertices/faces for the cutout geometry,
+    or None if the parent wall cannot be found.
+
+    The cutout is a rectangular prism that penetrates the wall, creating
+    a visible opening (window or door). Style-aware sizing is already
+    encoded in the opening's size from the grammar.
+    """
+    wall_index = opening_op.get("wall_index", 0)
+    floor_idx = opening_op.get("floor", 0)
+    wall_key = (wall_index, floor_idx)
+    wall = wall_ops.get(wall_key)
+    if wall is None:
+        return None
+
+    wall_pos = wall["position"]
+    wall_size = wall["size"]
+    wall_px, wall_py, wall_pz = wall_pos[0], wall_pos[1], wall_pos[2]
+    wall_sx, wall_sy, wall_sz = wall_size[0], wall_size[1], wall_size[2]
+
+    # Opening position is (offset_along_wall, height_on_wall)
+    open_pos = opening_op.get("position", [0, 0])
+    open_size = opening_op.get("size", [1, 1])
+    open_offset = open_pos[0]  # offset along wall length
+    open_z = open_pos[1]       # height from wall base
+    open_w = open_size[0]      # opening width
+    open_h = open_size[1]      # opening height
+
+    role = opening_op.get("role", "opening")
+    style = opening_op.get("style", "square")
+
+    # Compute the recess depth (slightly deeper than wall thickness)
+    recess_depth = max(wall_sx, wall_sy) * 1.1
+
+    # Determine cutout box position based on wall orientation
+    # wall_index 0 = front (Y=0 face), 1 = back (Y=depth face),
+    # 2 = left (X=0 face), 3 = right (X=width face)
+    if wall_index == 0:
+        # Front wall: extends along X, thin in Y
+        cx = wall_px + open_offset
+        cy = wall_py - 0.05  # slightly outside wall
+        cz = wall_pz + open_z
+        csx = open_w
+        csy = recess_depth
+        csz = open_h
+    elif wall_index == 1:
+        # Back wall: extends along X, thin in Y
+        cx = wall_px + open_offset
+        cy = wall_py - 0.05
+        cz = wall_pz + open_z
+        csx = open_w
+        csy = recess_depth
+        csz = open_h
+    elif wall_index == 2:
+        # Left wall: extends along Y, thin in X
+        cx = wall_px - 0.05
+        cy = wall_py + open_offset
+        cz = wall_pz + open_z
+        csx = recess_depth
+        csy = open_w
+        csz = open_h
+    else:
+        # Right wall: extends along Y, thin in X
+        cx = wall_px - 0.05
+        cy = wall_py + open_offset
+        cz = wall_pz + open_z
+        csx = recess_depth
+        csy = open_w
+        csz = open_h
+
+    # Build cutout box vertices and faces (same as box primitive)
+    verts = [
+        (cx, cy, cz),
+        (cx + csx, cy, cz),
+        (cx + csx, cy + csy, cz),
+        (cx, cy + csy, cz),
+        (cx, cy, cz + csz),
+        (cx + csx, cy, cz + csz),
+        (cx + csx, cy + csy, cz + csz),
+        (cx, cy + csy, cz + csz),
+    ]
+    faces = [
+        (0, 1, 2, 3),  # bottom
+        (4, 7, 6, 5),  # top
+        (0, 4, 5, 1),  # front
+        (2, 6, 7, 3),  # back
+        (0, 3, 7, 4),  # left
+        (1, 5, 6, 2),  # right
+    ]
+
+    return {
+        "type": "opening_cutout",
+        "vertices": verts,
+        "faces": faces,
+        "vertex_count": 8,
+        "face_count": 6,
+        "material": "opening_frame",
+        "role": role,
+        "style": style,
+        "wall_index": wall_index,
+        "floor": floor_idx,
+        "is_cutout": True,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -159,8 +286,15 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
 def _build_building_result(name: str, spec: BuildingSpec) -> dict:
     """Build handler return dict for a building from its spec."""
     mesh_specs = _building_ops_to_mesh_spec(spec)
-    total_verts = sum(m.get("vertex_count", 0) for m in mesh_specs if m["type"] != "opening")
-    total_faces = sum(m.get("face_count", 0) for m in mesh_specs if m["type"] != "opening")
+    total_verts = sum(
+        m.get("vertex_count", 0) for m in mesh_specs
+        if m["type"] not in ("opening",)
+    )
+    total_faces = sum(
+        m.get("face_count", 0) for m in mesh_specs
+        if m["type"] not in ("opening",)
+    )
+    opening_count = sum(1 for m in mesh_specs if m.get("is_cutout"))
     materials = set()
     for m in mesh_specs:
         mat = m.get("material")
@@ -174,6 +308,7 @@ def _build_building_result(name: str, spec: BuildingSpec) -> dict:
         "vertex_count": total_verts,
         "face_count": total_faces,
         "material_count": len(materials),
+        "opening_count": opening_count,
     }
 
 
@@ -241,13 +376,19 @@ def _build_modular_kit_result(
 
 
 def _spec_to_bmesh(spec: BuildingSpec) -> bmesh.types.BMesh:
-    """Convert a BuildingSpec into a single bmesh with all geometry."""
+    """Convert a BuildingSpec into a single bmesh with all geometry.
+
+    Handles box, cylinder, and opening_cutout primitives.  Opening cutouts
+    are added as geometry; boolean subtraction from walls is performed when
+    bmesh boolean is available, otherwise the cutout box is added as-is to
+    create visible recessed openings.
+    """
     bm = bmesh.new()
     mesh_specs = _building_ops_to_mesh_spec(spec)
 
     for ms in mesh_specs:
         if ms["type"] == "opening":
-            continue  # openings handled separately
+            continue  # pure-marker openings (fallback) -- skip
 
         verts = ms["vertices"]
         faces = ms["faces"]
