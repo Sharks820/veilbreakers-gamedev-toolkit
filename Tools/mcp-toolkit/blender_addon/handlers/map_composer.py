@@ -399,8 +399,21 @@ def _generate_world_roads(
     settlements = [p for p in pois if p["type"] in _SETTLEMENT_TYPES]
     non_settlements = [p for p in pois if p["type"] not in _SETTLEMENT_TYPES]
 
+    roads: list[dict[str, Any]] = []
+
     if len(settlements) < 2:
-        return []
+        # Still connect non-settlements to their nearest settlement if one exists
+        if settlements and non_settlements:
+            for ns in non_settlements:
+                nsx, nsy = ns["position"]
+                sx, sy = settlements[0]["position"]
+                dist = math.sqrt((nsx - sx) ** 2 + (nsy - sy) ** 2)
+                if dist < 200.0:
+                    roads.append({
+                        "start": ns["position"], "end": settlements[0]["position"],
+                        "width": 1.0, "style": "trail", "type": "trail",
+                    })
+        return roads
 
     n = len(settlements)
 
