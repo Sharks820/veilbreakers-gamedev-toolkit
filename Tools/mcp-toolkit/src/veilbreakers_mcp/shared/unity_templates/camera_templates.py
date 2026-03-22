@@ -165,6 +165,10 @@ def generate_cinemachine_setup_script(
         lines.append(f"{indent}        // RotationComposer for look-at tracking")
         lines.append(f"{indent}        CinemachineRotationComposer composer = camGo.AddComponent<CinemachineRotationComposer>();")
         lines.append(f"{indent}        composer.Damping = new Vector2({damping[0]}f, {damping[1]}f);")
+        lines.append(f"{indent}        composer.Composition.DeadZone.Width = 0.1f;")
+        lines.append(f"{indent}        composer.Composition.DeadZone.Height = 0.08f;")
+        lines.append(f"{indent}        composer.Composition.SoftZone.Width = 0.8f;")
+        lines.append(f"{indent}        composer.Composition.SoftZone.Height = 0.8f;")
     elif camera_type == "follow":
         lines.append(f"{indent}        // Follow for follow camera")
         lines.append(f"{indent}        CinemachineFollow follow = camGo.AddComponent<CinemachineFollow>();")
@@ -174,6 +178,10 @@ def generate_cinemachine_setup_script(
         lines.append(f"{indent}        // RotationComposer for look-at tracking")
         lines.append(f"{indent}        CinemachineRotationComposer composer = camGo.AddComponent<CinemachineRotationComposer>();")
         lines.append(f"{indent}        composer.Damping = new Vector2({damping[0]}f, {damping[1]}f);")
+        lines.append(f"{indent}        composer.Composition.DeadZone.Width = 0.1f;")
+        lines.append(f"{indent}        composer.Composition.DeadZone.Height = 0.08f;")
+        lines.append(f"{indent}        composer.Composition.SoftZone.Width = 0.8f;")
+        lines.append(f"{indent}        composer.Composition.SoftZone.Height = 0.8f;")
     elif camera_type == "dolly":
         lines.append(f"{indent}        // SplineDolly for dolly camera")
         lines.append(f"{indent}        CinemachineSplineDolly dolly = camGo.AddComponent<CinemachineSplineDolly>();")
@@ -182,6 +190,10 @@ def generate_cinemachine_setup_script(
         lines.append(f"{indent}        // RotationComposer for look-at tracking")
         lines.append(f"{indent}        CinemachineRotationComposer composer = camGo.AddComponent<CinemachineRotationComposer>();")
         lines.append(f"{indent}        composer.Damping = new Vector3({damping[0]}f, {damping[1]}f, {damping[2]}f);")
+        lines.append(f"{indent}        composer.Composition.DeadZone.Width = 0.1f;")
+        lines.append(f"{indent}        composer.Composition.DeadZone.Height = 0.08f;")
+        lines.append(f"{indent}        composer.Composition.SoftZone.Width = 0.8f;")
+        lines.append(f"{indent}        composer.Composition.SoftZone.Height = 0.8f;")
     lines.append("")
 
     lines.append(f"{indent}        Undo.RegisterCreatedObjectUndo(camGo, \"Create Cinemachine Camera\");")
