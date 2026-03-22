@@ -1024,7 +1024,7 @@ def handle_edit_mesh(params: dict) -> dict:
                 bm,
                 vec=mathutils.Vector(scale_factor),
                 verts=selected,
-                space=mathutils.Matrix.Translation(-cent),
+                space=mathutils.Matrix.Translation(cent),
             )
             bm.to_mesh(obj.data)
             obj.data.update()
@@ -1129,7 +1129,7 @@ def handle_edit_mesh(params: dict) -> dict:
                     offset_type="OFFSET",
                     segments=segments,
                     profile=profile,
-                    affect="EDGES",
+                    vertex_only=False,
                     clamp_overlap=clamp_overlap,
                 )
             else:
@@ -1140,7 +1140,7 @@ def handle_edit_mesh(params: dict) -> dict:
                     offset_type="OFFSET",
                     segments=segments,
                     profile=profile,
-                    affect="VERTICES",
+                    vertex_only=True,
                     clamp_overlap=clamp_overlap,
                 )
 
@@ -1343,8 +1343,8 @@ def handle_retopologize(params: dict) -> dict:
             bpy.ops.object.mode_set(mode="OBJECT")
             bpy.ops.object.quadriflow_remesh(
                 target_faces=target_faces,
-                preserve_sharp=preserve_sharp,
-                preserve_boundary=preserve_boundary,
+                use_preserve_sharp=preserve_sharp,
+                use_preserve_boundary=preserve_boundary,
                 smooth_normals=smooth_normals,
                 use_mesh_symmetry=use_symmetry,
                 seed=seed,
