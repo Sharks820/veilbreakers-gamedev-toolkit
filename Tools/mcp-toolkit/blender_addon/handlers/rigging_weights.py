@@ -276,6 +276,36 @@ def _enforce_weight_limit_pure(
     }
 
 
+def _compute_skinning_quality(
+    vertex_weights: list[list[tuple[int, float]]],
+    vertex_positions: list[tuple[float, float, float]],
+) -> dict:
+    """Compute skinning quality metrics for weight paint analysis."""
+    total = len(vertex_weights)
+    if total == 0:
+        return {"quality_score": 1.0, "hard_edges": 0, "unweighted": 0, "over_influenced": 0}
+
+    unweighted = sum(1 for g in vertex_weights if not g or all(w < 0.01 for _, w in g))
+    over_influenced = sum(1 for g in vertex_weights if len(g) > 4)
+
+    # Check for hard weight transitions (adjacent verts with very different weights)
+    hard_edges = 0
+    for i, groups in enumerate(vertex_weights):
+        max_w = max((w for _, w in groups), default=0)
+        if max_w > 0.95:
+            hard_edges += 1
+
+    quality = 1.0 - (unweighted / max(total, 1)) * 0.5 - (over_influenced / max(total, 1)) * 0.3 - (hard_edges / max(total, 1)) * 0.2
+
+    return {
+        "quality_score": round(max(0.0, min(1.0, quality)), 3),
+        "total_vertices": total,
+        "unweighted": unweighted,
+        "over_influenced": over_influenced,
+        "hard_edges": hard_edges,
+    }
+
+
 def _enhanced_rig_validation(
     bone_names: list[str],
     bone_rolls: dict[str, float],

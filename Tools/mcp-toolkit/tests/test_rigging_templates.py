@@ -673,3 +673,38 @@ class TestBoneRolls:
         assert abs(MULTI_ARMED_BONES["forearm.R"]["roll"] - (-1.5708)) < 0.001
         assert abs(MULTI_ARMED_BONES["forearm_lower.L"]["roll"] - 1.5708) < 0.001
         assert abs(MULTI_ARMED_BONES["forearm_lower.R"]["roll"] - (-1.5708)) < 0.001
+
+
+# ---------------------------------------------------------------------------
+# TestMultiTwistBones
+# ---------------------------------------------------------------------------
+
+
+class TestMultiTwistBones:
+    """Test AAA multi-twist bone distribution (25% + 50% per segment)."""
+
+    def test_humanoid_has_025_twist(self):
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert "upper_arm_twist_025.L" in HUMANOID_BONES
+        assert "forearm_twist_025.L" in HUMANOID_BONES
+        assert "thigh_twist_025.L" in HUMANOID_BONES
+        assert "shin_twist_025.L" in HUMANOID_BONES
+
+    def test_humanoid_has_025_twist_right(self):
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert "upper_arm_twist_025.R" in HUMANOID_BONES
+        assert "forearm_twist_025.R" in HUMANOID_BONES
+        assert "thigh_twist_025.R" in HUMANOID_BONES
+        assert "shin_twist_025.R" in HUMANOID_BONES
+
+    def test_025_twist_parents(self):
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert HUMANOID_BONES["upper_arm_twist_025.L"]["parent"] == "upper_arm.L"
+        assert HUMANOID_BONES["forearm_twist_025.L"]["parent"] == "forearm.L"
+        assert HUMANOID_BONES["thigh_twist_025.L"]["parent"] == "thigh.L"
+        assert HUMANOID_BONES["shin_twist_025.L"]["parent"] == "shin.L"
+
+    def test_025_twist_rigify_type(self):
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert HUMANOID_BONES["upper_arm_twist_025.L"]["rigify_type"] == "basic.super_copy"
+        assert HUMANOID_BONES["forearm_twist_025.R"]["rigify_type"] == "basic.super_copy"

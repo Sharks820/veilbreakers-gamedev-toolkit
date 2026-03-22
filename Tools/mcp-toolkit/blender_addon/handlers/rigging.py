@@ -540,6 +540,145 @@ def _get_corruption_stage(corruption_pct: float) -> dict | None:
     return result
 
 
+# ---------------------------------------------------------------------------
+# Bone LOD tiers (strip prefixes per LOD level for runtime performance)
+# ---------------------------------------------------------------------------
+
+BONE_LOD_TIERS: dict[str, list[str]] = {
+    "LOD0_full": [],  # All bones (default)
+    "LOD1_no_fingers": [
+        "thumb_01", "thumb_02", "thumb_03",
+        "index_01", "index_02", "index_03",
+        "middle_01", "middle_02", "middle_03",
+        "ring_01", "ring_02", "ring_03",
+        "pinky_01", "pinky_02", "pinky_03",
+    ],
+    "LOD2_no_twist": [
+        "upper_arm_twist", "forearm_twist",
+        "thigh_twist", "shin_twist",
+        "upper_arm_twist_025", "forearm_twist_025",
+        "thigh_twist_025", "shin_twist_025",
+    ],
+    "LOD3_minimal": [
+        # Everything from LOD1 + LOD2 plus toes and clavicles
+        "thumb_01", "thumb_02", "thumb_03",
+        "index_01", "index_02", "index_03",
+        "middle_01", "middle_02", "middle_03",
+        "ring_01", "ring_02", "ring_03",
+        "pinky_01", "pinky_02", "pinky_03",
+        "upper_arm_twist", "forearm_twist",
+        "thigh_twist", "shin_twist",
+        "upper_arm_twist_025", "forearm_twist_025",
+        "thigh_twist_025", "shin_twist_025",
+        "toe", "toe.001", "clavicle",
+    ],
+}
+
+
+def _get_bones_for_lod(template_bones: dict[str, dict], lod_tier: str) -> dict[str, dict]:
+    """Filter template bones by LOD tier, removing bones matching strip prefixes."""
+    if lod_tier not in BONE_LOD_TIERS:
+        return template_bones
+    strip_prefixes = BONE_LOD_TIERS[lod_tier]
+    if not strip_prefixes:
+        return template_bones
+    result = {}
+    for name, bone_def in template_bones.items():
+        base = name.rsplit(".", 1)[0] if name.endswith((".L", ".R")) else name
+        if not any(base.startswith(p) for p in strip_prefixes):
+            result[name] = bone_def
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Hero template map (VeilBreakers hero characters)
+# ---------------------------------------------------------------------------
+
+HERO_TEMPLATE_MAP: dict[str, dict] = {
+    "vex": {
+        "template": "humanoid", "body": "medium",
+        "features": ["full_fingers", "cloth_spring_bones", "weapon_socket"],
+        "class": "WARDEN", "brand": "IRON",
+        "notes": "Primary hero. Red/crimson armored warrior with weapon hold.",
+    },
+    "seraphina": {
+        "template": "humanoid", "body": "medium",
+        "features": ["full_fingers", "cloth_spring_bones", "staff_socket"],
+        "class": "PLAGUEWALKER", "brand": "VENOM",
+        "notes": "Plague healer with flowing robes and staff.",
+    },
+    "orion": {
+        "template": "humanoid", "body": "medium",
+        "features": ["full_fingers", "weapon_socket", "cape_spring_bones"],
+        "class": "ARCANESURGE", "brand": "SURGE",
+        "notes": "Arcane ranged DPS with cape and energy effects.",
+    },
+    "nyx": {
+        "template": "humanoid", "body": "medium",
+        "features": ["full_fingers", "cloth_spring_bones", "hover_offset"],
+        "class": "VOIDWALKER", "brand": "VOID",
+        "notes": "Void mage with dark flowing garments, slight hover.",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# FBX export validation checklist
+# ---------------------------------------------------------------------------
+
+FBX_EXPORT_CHECKLIST: list[dict] = [
+    {"check": "bone_count_under_256", "description": "Total bones < 256 (mobile GPU limit)", "severity": "critical"},
+    {"check": "max_4_influences", "description": "No vertex exceeds 4 bone influences", "severity": "critical"},
+    {"check": "no_zero_length_bones", "description": "All bones have non-zero length", "severity": "high"},
+    {"check": "root_at_origin", "description": "Root bone is at world origin", "severity": "high"},
+    {"check": "consistent_scale", "description": "No bones with negative or zero scale", "severity": "high"},
+    {"check": "forward_axis_negative_z", "description": "Character faces -Z for Unity", "severity": "medium"},
+    {"check": "no_leaf_bones", "description": "Leaf bones stripped for game export", "severity": "medium"},
+    {"check": "naming_convention", "description": "All bones follow naming convention", "severity": "low"},
+]
+
+
+def _validate_export_readiness(
+    bone_count: int,
+    max_influences: int,
+    has_zero_length: bool,
+    root_at_origin: bool,
+) -> dict:
+    """Validate rig is ready for FBX game export."""
+    issues = []
+    if bone_count >= 256:
+        issues.append(f"Bone count {bone_count} exceeds 256 mobile limit")
+    if max_influences > 4:
+        issues.append(f"Max influences {max_influences} exceeds 4")
+    if has_zero_length:
+        issues.append("Zero-length bones detected")
+    if not root_at_origin:
+        issues.append("Root bone not at origin")
+    return {
+        "export_ready": len(issues) == 0,
+        "bone_count": bone_count,
+        "issues": issues,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Required animation clips per template type
+# ---------------------------------------------------------------------------
+
+REQUIRED_ANIMATION_CLIPS: dict[str, list[str]] = {
+    "humanoid": ["idle", "idle_variant", "attack_basic", "attack_heavy", "hit_react", "death", "spawn", "victory"],
+    "quadruped": ["idle", "idle_variant", "attack_bite", "attack_claw", "hit_react", "death", "spawn"],
+    "insect": ["idle", "idle_variant", "attack_mandible", "attack_sting", "hit_react", "death", "spawn"],
+    "floating": ["idle", "idle_variant", "attack_ranged", "hit_react", "death", "spawn"],
+    "serpent": ["idle", "idle_variant", "attack_strike", "attack_coil", "hit_react", "death", "spawn"],
+    "amorphous": ["idle", "idle_variant", "attack_lash", "hit_react", "death", "spawn"],
+    "arachnid": ["idle", "idle_variant", "attack_bite", "attack_web", "hit_react", "death", "spawn"],
+    "dragon": ["idle", "idle_variant", "attack_bite", "attack_breath", "attack_wing", "hit_react", "death", "spawn"],
+    "multi_armed": ["idle", "idle_variant", "attack_slam", "attack_grab", "hit_react", "death", "spawn"],
+    "bird": ["idle", "idle_variant", "attack_peck", "attack_dive", "hit_react", "death", "spawn"],
+}
+
+
 def _validate_monster_rig_config(monster_id: str) -> dict:
     """Validate and return rig configuration for a VeilBreakers monster.
 

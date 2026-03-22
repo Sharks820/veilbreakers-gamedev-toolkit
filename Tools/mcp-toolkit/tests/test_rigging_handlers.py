@@ -1134,3 +1134,123 @@ class TestCorruptionMorph:
         from blender_addon.handlers.rigging import CORRUPTION_MORPH_STAGES
         intensities = [s["morph_intensity"] for s in CORRUPTION_MORPH_STAGES]
         assert intensities == sorted(intensities)
+
+
+# ---------------------------------------------------------------------------
+# TestBoneLOD
+# ---------------------------------------------------------------------------
+
+
+class TestBoneLOD:
+    def test_lod0_returns_all(self):
+        from blender_addon.handlers.rigging import _get_bones_for_lod, BONE_LOD_TIERS
+        bones = {"spine": {}, "upper_arm.L": {}, "thumb_01.L": {}, "upper_arm_twist.L": {}}
+        result = _get_bones_for_lod(bones, "LOD0_full")
+        assert len(result) == 4
+
+    def test_lod1_strips_fingers(self):
+        from blender_addon.handlers.rigging import _get_bones_for_lod
+        bones = {"spine": {}, "upper_arm.L": {}, "thumb_01.L": {}, "index_02.R": {}}
+        result = _get_bones_for_lod(bones, "LOD1_no_fingers")
+        assert "spine" in result
+        assert "thumb_01.L" not in result
+        assert "index_02.R" not in result
+
+    def test_lod2_strips_twist(self):
+        from blender_addon.handlers.rigging import _get_bones_for_lod
+        bones = {"spine": {}, "forearm.L": {}, "forearm_twist.L": {}}
+        result = _get_bones_for_lod(bones, "LOD2_no_twist")
+        assert "forearm.L" in result
+        assert "forearm_twist.L" not in result
+
+    def test_invalid_lod_returns_all(self):
+        from blender_addon.handlers.rigging import _get_bones_for_lod
+        bones = {"a": {}, "b": {}}
+        assert _get_bones_for_lod(bones, "INVALID") == bones
+
+
+# ---------------------------------------------------------------------------
+# TestHeroTemplateMap
+# ---------------------------------------------------------------------------
+
+
+class TestHeroTemplateMap:
+    def test_has_4_heroes(self):
+        from blender_addon.handlers.rigging import HERO_TEMPLATE_MAP
+        assert len(HERO_TEMPLATE_MAP) == 4
+
+    def test_all_humanoid(self):
+        from blender_addon.handlers.rigging import HERO_TEMPLATE_MAP
+        for hid, config in HERO_TEMPLATE_MAP.items():
+            assert config["template"] == "humanoid"
+
+    def test_vex_is_warden(self):
+        from blender_addon.handlers.rigging import HERO_TEMPLATE_MAP
+        assert HERO_TEMPLATE_MAP["vex"]["class"] == "WARDEN"
+
+
+# ---------------------------------------------------------------------------
+# TestExportValidation
+# ---------------------------------------------------------------------------
+
+
+class TestExportValidation:
+    def test_clean_export(self):
+        from blender_addon.handlers.rigging import _validate_export_readiness
+        r = _validate_export_readiness(100, 4, False, True)
+        assert r["export_ready"] is True
+
+    def test_too_many_bones(self):
+        from blender_addon.handlers.rigging import _validate_export_readiness
+        r = _validate_export_readiness(300, 4, False, True)
+        assert r["export_ready"] is False
+
+    def test_over_influenced(self):
+        from blender_addon.handlers.rigging import _validate_export_readiness
+        r = _validate_export_readiness(100, 6, False, True)
+        assert r["export_ready"] is False
+
+
+# ---------------------------------------------------------------------------
+# TestAnimationClipRequirements
+# ---------------------------------------------------------------------------
+
+
+class TestAnimationClipRequirements:
+    def test_all_templates_have_clips(self):
+        from blender_addon.handlers.rigging import REQUIRED_ANIMATION_CLIPS
+        from blender_addon.handlers.rigging_templates import TEMPLATE_CATALOG
+        for tname in TEMPLATE_CATALOG:
+            assert tname in REQUIRED_ANIMATION_CLIPS, f"Missing clips for {tname}"
+
+    def test_all_have_idle_and_death(self):
+        from blender_addon.handlers.rigging import REQUIRED_ANIMATION_CLIPS
+        for tname, clips in REQUIRED_ANIMATION_CLIPS.items():
+            assert "idle" in clips
+            assert "death" in clips
+
+
+# ---------------------------------------------------------------------------
+# TestSkinningQuality
+# ---------------------------------------------------------------------------
+
+
+class TestSkinningQuality:
+    def test_perfect_quality(self):
+        from blender_addon.handlers.rigging_weights import _compute_skinning_quality
+        weights = [[(0, 0.5), (1, 0.5)], [(0, 0.7), (1, 0.3)]]
+        positions = [(0, 0, 0), (1, 0, 0)]
+        r = _compute_skinning_quality(weights, positions)
+        assert r["quality_score"] > 0.8
+
+    def test_all_unweighted(self):
+        from blender_addon.handlers.rigging_weights import _compute_skinning_quality
+        weights = [[], []]
+        positions = [(0, 0, 0), (1, 0, 0)]
+        r = _compute_skinning_quality(weights, positions)
+        assert r["quality_score"] < 0.6
+
+    def test_empty_input(self):
+        from blender_addon.handlers.rigging_weights import _compute_skinning_quality
+        r = _compute_skinning_quality([], [])
+        assert r["quality_score"] == 1.0
