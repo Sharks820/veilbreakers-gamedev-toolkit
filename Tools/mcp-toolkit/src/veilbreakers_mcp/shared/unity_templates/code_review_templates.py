@@ -1916,7 +1916,8 @@ namespace VeilBreakers.Editor.CodeReview
                 "open() without context manager -- file may not close",
                 "Use 'with open(...) as f:'.",
                 @"(?<!\bwith\s)\bopen\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"\bwith\b" }),
+                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"\bwith\b",
+                    @"Image\.open", @"BytesIO", @"PIL" }),
 
             new ReviewRule("PY-COR-05", Severity.LOW, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
@@ -1925,7 +1926,7 @@ namespace VeilBreakers.Editor.CodeReview
                 @"datetime\.now\s*\(\s*\)",
                 antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
 
-            // PY-COR-06 FP fix: only flag if result is actually mutated
+            // PY-COR-06 FP fix: only flag if result is actually mutated, not just read
             new ReviewRule("PY-COR-06", Severity.MEDIUM, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "dict.get() with mutable default -- mutated result is shared",
@@ -1933,6 +1934,22 @@ namespace VeilBreakers.Editor.CodeReview
                 @"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))",
                 antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" },
                 guard: (line, all, i, ctx) => {
+                    // If the .get() result is consumed read-only on the same line, skip
+                    if (Regex.IsMatch(line, @"\blen\s*\(.*\.get\s*\(") ||
+                        Regex.IsMatch(line, @"\bfor\s+.*\.get\s*\(") ||
+                        Regex.IsMatch(line, @"\bif\s+.*\.get\s*\(") ||
+                        Regex.IsMatch(line, @"\breturn\s+.*\.get\s*\(") ||
+                        Regex.IsMatch(line, @"\bprint\s*\(.*\.get\s*\(") ||
+                        Regex.IsMatch(line, @"\bnot\s+.*\.get\s*\(") ||
+                        Regex.IsMatch(line, @"\bor\s+.*\.get\s*\(") ||
+                        Regex.IsMatch(line, @"\band\s+.*\.get\s*\("))
+                        return false;
+                    // Check next lines for read-only usage (.items, .keys, .values, for..in, len)
+                    for (int j = i + 1; j < Math.Min(all.Length, i + 8); j++)
+                    {
+                        if (Regex.IsMatch(all[j], @"\.(items|keys|values)\s*\(|for\s+\w+\s+(in|,)"))
+                            return false;
+                    }
                     // Only flag if result is mutated nearby (.append, .extend, []=, .add)
                     for (int j = i; j < Math.Min(all.Length, i + 3); j++)
                     {
@@ -1961,7 +1978,9 @@ namespace VeilBreakers.Editor.CodeReview
                 "json.loads without error handling",
                 "Wrap in try/except json.JSONDecodeError.",
                 @"json\.loads?\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"except.*JSON" }),
+                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"except.*JSON",
+                    @"\btry\s*:", @"\bexcept\b" },
+                antiRadius: 10),
 
             new ReviewRule("PY-COR-10", Severity.LOW, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
@@ -1987,7 +2006,20 @@ namespace VeilBreakers.Editor.CodeReview
                 "Exception type too broad -- catches bugs with expected errors",
                 "Catch specific exceptions.",
                 @"except\s+Exception\s*(?:as|\s*:)",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"# broad catch intentional" }),
+                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"# broad catch intentional",
+                    @"logger\.exception", @"mcp\.tool", @"return\s+json\.dumps" },
+                antiRadius: 10,
+                guard: (line, all, i, ctx) => {
+                    // In MCP handlers, broad catch is correct -- check if except block
+                    // contains logger.exception or returns JSON error response
+                    for (int j = i + 1; j < Math.Min(all.Length, i + 10); j++)
+                    {
+                        if (Regex.IsMatch(all[j], @"logger\.(exception|error)\s*\(")) return false;
+                        if (Regex.IsMatch(all[j], @"return\s+(json\.dumps|""?\{)")) return false;
+                        if (Regex.IsMatch(all[j], @"^\s*(except|def |class )\b")) break;
+                    }
+                    return true;
+                }),
 
             // PY-COR-13 FP fix: only flag magic numbers in control flow, not data dicts/assignments
             new ReviewRule("PY-COR-13", Severity.LOW, Category.Bug, Language.Python,
@@ -3224,6 +3256,19 @@ class Issue:
     confidence: int = 75
     priority: int = 50
 
+    # Aliases so callers can use .message or .name
+    @property
+    def message(self) -> str:
+        return self.description
+
+    @property
+    def name(self) -> str:
+        return self.rule_id
+
+    @property
+    def severity_value(self) -> int:
+        return {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}.get(self.severity, 3)
+
     @property
     def confidence_label(self) -> str:
         if self.confidence >= 90: return "CERTAIN"
@@ -3390,7 +3435,8 @@ RULES: list[Rule] = [
          "open() without context manager -- file may not close",
          "Use 'with open(...) as f:'.",
          re.compile(r"(?<!\bwith\s)\bopen\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"\bwith\b"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"\bwith\b",
+                        r"Image\.open", r"BytesIO", r"PIL"])),
 
     Rule("PY-COR-05", Severity.LOW, Category.Bug,
          "datetime.now() without timezone -- ambiguous",
@@ -3398,15 +3444,21 @@ RULES: list[Rule] = [
          re.compile(r"datetime\.now\s*\(\s*\)"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
 
-    # PY-COR-06: only flag if result is mutated
+    # PY-COR-06: only flag if result is mutated, not just read
     Rule("PY-COR-06", Severity.MEDIUM, Category.Bug,
          "dict.get() with mutable default -- mutated result is shared",
          "Use dict.get(key) with None check, then create mutable separately.",
          re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
-         guard=lambda line, a, i: any(
-             re.search(r"\.(append|extend|add|update|insert)\s*\(|(\[.+\]\s*=)", a[j])
-             for j in range(i, min(len(a), i + 3)))),
+         guard=lambda line, a, i: (
+             # Skip if result is consumed read-only on the same line
+             not re.search(r"\b(len|for|if|return|print|not|or|and)\s*[\s(].*\.get\s*\(", line)
+             # Skip if next lines show read-only usage (.items, .keys, .values, for..in)
+             and not any(re.search(r"\.(items|keys|values)\s*\(|for\s+\w+\s+(in|,)", a[j])
+                         for j in range(i + 1, min(len(a), i + 8)))
+             and any(
+                 re.search(r"\.(append|extend|add|update|insert)\s*\(|(\[.+\]\s*=)", a[j])
+                 for j in range(i, min(len(a), i + 3))))),
 
     Rule("PY-COR-07", Severity.MEDIUM, Category.Bug,
          "Class with __del__ -- unpredictable GC, prevents ref cycle collection",
@@ -3424,7 +3476,9 @@ RULES: list[Rule] = [
          "json.loads without error handling",
          "Wrap in try/except json.JSONDecodeError.",
          re.compile(r"json\.loads?\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"except.*JSON"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"except.*JSON",
+                        r"\btry\s*:", r"\bexcept\b"]),
+         anti_radius=10),
 
     Rule("PY-COR-10", Severity.LOW, Category.Bug,
          "Float equality comparison -- use math.isclose",
@@ -3443,7 +3497,14 @@ RULES: list[Rule] = [
          "Exception type too broad -- catches bugs with expected errors",
          "Catch specific exceptions.",
          re.compile(r"except\s+Exception\s*(?:as|\s*:)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"# broad catch intentional"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"# broad catch intentional",
+                        r"logger\.exception", r"mcp\.tool", r"return\s+json\.dumps"]),
+         anti_radius=10,
+         guard=lambda line, a, i: not any(
+             re.search(r"logger\.(exception|error)\s*\(", a[j]) or
+             re.search(r"return\s+(json\.dumps|\"?\{)", a[j])
+             for j in range(i + 1, min(len(a), i + 10))
+             if not re.search(r"^\s*(except|def |class )\b", a[j]))),
 
     # PY-COR-13: magic numbers -- only in control flow, not data dicts
     Rule("PY-COR-13", Severity.LOW, Category.Bug,

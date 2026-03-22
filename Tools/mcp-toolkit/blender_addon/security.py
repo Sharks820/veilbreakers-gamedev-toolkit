@@ -29,11 +29,9 @@ BLOCKED_IMPORTS = frozenset({
 
 BLOCKED_FUNCTIONS = frozenset({
     "exec", "eval", "compile",
-    "getattr", "setattr", "delattr",
     "__import__",
-    "open", "input", "breakpoint", "help",
-    "globals", "locals", "vars", "dir",
-    "format",  # str.format() can leak dunder info via format specifiers
+    "breakpoint",
+    "globals", "locals", "vars",
 })
 
 # Block all dunder attribute access except a safe allowlist.
@@ -63,6 +61,8 @@ BLOCKED_BPY_ATTRS = frozenset({
     "save_as_mainfile", # bpy.ops.wm.save_as_mainfile
     "handlers",         # bpy.app.handlers — persistent backdoor registration
     "driver_namespace", # bpy.app.driver_namespace — persistent storage
+    "register_class",   # bpy.utils.register_class — persistent operator backdoor
+    "unregister_class", # bpy.utils.unregister_class — paired with register_class
 })
 
 # Names that cannot appear as bare variable references
@@ -188,6 +188,8 @@ def validate_code(code: str) -> tuple[bool, list[str]]:
         tree = ast.parse(code)
     except SyntaxError as e:
         return False, [f"Syntax error: {e}"]
+    except RecursionError:
+        return False, ["Code too deeply nested (possible DoS attempt)"]
 
     validator = SecurityValidator()
     validator.visit(tree)

@@ -99,6 +99,19 @@ class Issue:
     confidence: int = 75
     priority: int = 50
 
+    # Aliases so callers can use .message or .name
+    @property
+    def message(self) -> str:
+        return self.description
+
+    @property
+    def name(self) -> str:
+        return self.rule_id
+
+    @property
+    def severity_value(self) -> int:
+        return {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}.get(self.severity, 3)
+
     @property
     def confidence_label(self) -> str:
         if self.confidence >= 90: return "CERTAIN"
@@ -265,7 +278,8 @@ RULES: list[Rule] = [
          "open() without context manager -- file may not close",
          "Use 'with open(...) as f:'.",
          re.compile(r"(?<!\bwith\s)\bopen\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"\bwith\b"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"\bwith\b",
+                        r"Image\.open", r"BytesIO", r"PIL"])),
 
     Rule("PY-COR-05", Severity.LOW, Category.Bug,
          "datetime.now() without timezone -- ambiguous",
@@ -273,15 +287,21 @@ RULES: list[Rule] = [
          re.compile(r"datetime\.now\s*\(\s*\)"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
 
-    # PY-COR-06: only flag if result is mutated
+    # PY-COR-06: only flag if result is mutated, not just read
     Rule("PY-COR-06", Severity.MEDIUM, Category.Bug,
          "dict.get() with mutable default -- mutated result is shared",
          "Use dict.get(key) with None check, then create mutable separately.",
          re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
-         guard=lambda line, a, i: any(
-             re.search(r"\.(append|extend|add|update|insert)\s*\(|(\[.+\]\s*=)", a[j])
-             for j in range(i, min(len(a), i + 3)))),
+         guard=lambda line, a, i: (
+             # Skip if result is consumed read-only on the same line
+             not re.search(r"\b(len|for|if|return|print|not|or|and)\s*[\s(].*\.get\s*\(", line)
+             # Skip if next lines show read-only usage (.items, .keys, .values, for..in)
+             and not any(re.search(r"\.(items|keys|values)\s*\(|for\s+\w+\s+(in|,)", a[j])
+                         for j in range(i + 1, min(len(a), i + 8)))
+             and any(
+                 re.search(r"\.(append|extend|add|update|insert)\s*\(|(\[.+\]\s*=)", a[j])
+                 for j in range(i, min(len(a), i + 3))))),
 
     Rule("PY-COR-07", Severity.MEDIUM, Category.Bug,
          "Class with __del__ -- unpredictable GC, prevents ref cycle collection",
@@ -299,7 +319,9 @@ RULES: list[Rule] = [
          "json.loads without error handling",
          "Wrap in try/except json.JSONDecodeError.",
          re.compile(r"json\.loads?\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"except.*JSON"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"except.*JSON",
+                        r"\btry\s*:", r"\bexcept\b"]),
+         anti_radius=10),
 
     Rule("PY-COR-10", Severity.LOW, Category.Bug,
          "Float equality comparison -- use math.isclose",
@@ -318,7 +340,14 @@ RULES: list[Rule] = [
          "Exception type too broad -- catches bugs with expected errors",
          "Catch specific exceptions.",
          re.compile(r"except\s+Exception\s*(?:as|\s*:)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"# broad catch intentional"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"# broad catch intentional",
+                        r"logger\.exception", r"mcp\.tool", r"return\s+json\.dumps"]),
+         anti_radius=10,
+         guard=lambda line, a, i: not any(
+             re.search(r"logger\.(exception|error)\s*\(", a[j]) or
+             re.search(r"return\s+(json\.dumps|\"?\{)", a[j])
+             for j in range(i + 1, min(len(a), i + 10))
+             if not re.search(r"^\s*(except|def |class )\b", a[j]))),
 
     # PY-COR-13: magic numbers -- only in control flow, not data dicts
     Rule("PY-COR-13", Severity.LOW, Category.Bug,
