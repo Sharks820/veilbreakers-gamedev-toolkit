@@ -220,6 +220,7 @@ def generate_brand_basic_attack(
 
     Each brand has a distinct attack feel based on _BRAND_ATTACK_PROFILES.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     profile = _BRAND_ATTACK_PROFILES.get(brand.upper(), _BRAND_ATTACK_PROFILES["IRON"])
     basic = profile["basic"]
@@ -293,6 +294,7 @@ def generate_brand_defend(
     intensity: float = 1.0,
 ) -> list[Keyframe]:
     """Generate brand-styled defend/guard animation."""
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     profile = _BRAND_ATTACK_PROFILES.get(brand.upper(), _BRAND_ATTACK_PROFILES["IRON"])
     defend = profile["defend"]
@@ -341,6 +343,7 @@ def generate_brand_skill(
 
     skill_slot 1-3 maps to increasingly powerful/dramatic animations.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     profile = _BRAND_ATTACK_PROFILES.get(brand.upper(), _BRAND_ATTACK_PROFILES["IRON"])
     skill_slot = max(1, min(3, skill_slot))
@@ -411,6 +414,7 @@ def generate_brand_ultimate(
 
     Extended sequence (60+ frames): long charge → dramatic release → aftermath.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     charge_end = int(0.5 * frame_count)
@@ -499,6 +503,7 @@ def generate_status_effect_keyframes(
     These are subtle persistent animations applied on top of the
     creature's base animation while a status effect is active.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):
@@ -624,6 +629,7 @@ def generate_combo_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     hit_count = max(1, min(6, hit_count))
     frames_per_hit = frame_count // hit_count
@@ -675,6 +681,7 @@ def generate_creature_combat_idle(
 
     Adapts the idle animation to the creature's body type.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):

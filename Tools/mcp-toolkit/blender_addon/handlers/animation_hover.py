@@ -97,6 +97,7 @@ def generate_hover_idle_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):
@@ -149,6 +150,7 @@ def generate_hover_move_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for frame in range(frame_count + 1):
@@ -196,6 +198,7 @@ def generate_wing_flap_keyframes(
     Returns:
         List of Keyframe namedtuples for wing bones.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     wing_bones = [
@@ -253,6 +256,7 @@ def generate_tentacle_float_keyframes(
     Returns:
         List of Keyframe namedtuples.
     """
+    frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     segments_per_tentacle = 3
 
