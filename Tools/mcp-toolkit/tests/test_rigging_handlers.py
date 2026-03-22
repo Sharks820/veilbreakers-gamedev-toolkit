@@ -1309,3 +1309,75 @@ class TestSkinningModes:
         from blender_addon.handlers.rigging_weights import SKINNING_MODES
         assert SKINNING_MODES["dual_quaternion"]["use_dual_quaternion"] is True
         assert SKINNING_MODES["linear"]["use_dual_quaternion"] is False
+
+
+# ---------------------------------------------------------------------------
+# TestPipelineIntegration
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineIntegration:
+    """Test end-to-end pipeline data and validation."""
+
+    def test_pipeline_has_16_steps(self):
+        from blender_addon.handlers.rigging import PIPELINE_STEPS
+        assert len(PIPELINE_STEPS) == 16
+
+    def test_all_steps_have_required_fields(self):
+        from blender_addon.handlers.rigging import PIPELINE_STEPS
+        for step in PIPELINE_STEPS:
+            assert "step" in step
+            assert "name" in step
+            assert "tool" in step
+            assert "description" in step
+
+    def test_steps_in_order(self):
+        from blender_addon.handlers.rigging import PIPELINE_STEPS
+        numbers = [s["step"] for s in PIPELINE_STEPS]
+        assert numbers == list(range(1, 17))
+
+    def test_get_pipeline_for_known_monster(self):
+        from blender_addon.handlers.rigging import _get_pipeline_for_monster
+        result = _get_pipeline_for_monster("skitter_teeth")
+        assert result["valid"] is True
+        assert result["template"] == "humanoid"
+        assert len(result["steps"]) == 16
+        assert len(result["required_animations"]) >= 4
+
+    def test_get_pipeline_for_unknown_monster(self):
+        from blender_addon.handlers.rigging import _get_pipeline_for_monster
+        result = _get_pipeline_for_monster("nonexistent")
+        assert result["valid"] is False
+
+    def test_humanoid_monster_gets_facial_step(self):
+        from blender_addon.handlers.rigging import _get_pipeline_for_monster
+        result = _get_pipeline_for_monster("voltgeist")
+        assert "setup_facial" in result["optional_steps"]
+
+    def test_non_humanoid_skips_facial(self):
+        from blender_addon.handlers.rigging import _get_pipeline_for_monster
+        result = _get_pipeline_for_monster("sporecaller")
+        assert "setup_facial" not in result["optional_steps"]
+
+    def test_spring_bone_monsters_get_spring_step(self):
+        from blender_addon.handlers.rigging import _get_pipeline_for_monster
+        result = _get_pipeline_for_monster("chainbound")
+        assert "setup_spring_bones" in result["optional_steps"]
+
+    def test_validate_pipeline_all_ready(self):
+        from blender_addon.handlers.rigging import _validate_pipeline_readiness
+        result = _validate_pipeline_readiness(True, True, True, "A", True)
+        assert result["ready_for_export"] is True
+        assert result["blockers"] == []
+
+    def test_validate_pipeline_not_ready(self):
+        from blender_addon.handlers.rigging import _validate_pipeline_readiness
+        result = _validate_pipeline_readiness(False, False, False, "F", False)
+        assert result["ready_for_export"] is False
+        assert len(result["blockers"]) == 5
+
+    def test_validate_pipeline_partial(self):
+        from blender_addon.handlers.rigging import _validate_pipeline_readiness
+        result = _validate_pipeline_readiness(True, True, True, "C", False)
+        assert result["ready_for_animation"] is True
+        assert result["ready_for_export"] is False
