@@ -1481,6 +1481,9 @@ def generate_crafting_system_script(
     craft_lines.append("        private bool _isAtStation;")
     craft_lines.append("")
     craft_lines.append("        public event Action<VB_Recipe> OnItemCrafted;")
+    craft_lines.append("        public event Action<CraftingStationType> OnCraftingStationOpened;")
+    craft_lines.append("        public event Action OnCraftingStationClosed;")
+    craft_lines.append("        public event Action<string> OnRecipeUnlocked;")
     craft_lines.append("")
 
     # Awake
