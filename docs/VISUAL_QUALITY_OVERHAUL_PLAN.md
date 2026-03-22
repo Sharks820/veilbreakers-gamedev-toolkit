@@ -236,6 +236,218 @@ A generated character should:
 
 ---
 
+---
+
+## Phase 6: MISSING ASSET CATEGORIES (Week 3-4)
+
+### 6A. NPCs / Human Characters
+- Player heroes (Vex, Seraphina, Orion, Nyx) need full character meshes
+- Body proportions per hero (Vex=heavy tank, Seraphina=lithe assassin, Orion=robed mage, Nyx=shadowy hybrid)
+- Face geometry: nose, mouth, eyes, ears — not a smooth sphere
+- Hair: card-based hair strips with alpha transparency
+- Clothing as separate meshes layered over body (for equipment swapping)
+- Each hero needs 3-4 outfit variants matching their Path
+
+### 6B. Animals / Wildlife (non-monster)
+- Deer, wolves, birds, rats, snakes for ambient world life
+- Simple topology (2-5K tris) — background creatures, not hero assets
+- Walk/idle animations needed
+- Biome-appropriate (forest animals vs mountain vs swamp)
+
+### 6C. Furniture & Interior Props (DETAILED)
+Current generators make 80-vert placeholders. Need:
+- Tables: 500+ tris with plank detail, worn edges, nail heads
+- Chairs: proper joint detail, cushion if applicable
+- Beds: frame + mattress + pillow + blanket as separate geometry
+- Bookshelves: individual book spines visible
+- Fireplaces: stone surround, mantel, fire cradle, ash
+- Chandeliers: arms, candle holders, chains
+- Rugs: flat mesh with fringe edge detail and pattern UV
+- Curtains: cloth-sim-ready geometry with rings
+
+### 6D. Shields
+- Separate from armor system
+- Round, kite, tower variants
+- Boss/emblem geometry on face
+- Strap/handle geometry on back
+- Edge damage/dent deformation
+- Brand-specific decorations (IRON=riveted steel, SAVAGE=bone/hide, etc.)
+
+### 6E. Crafting Stations
+- Forge: anvil + bellows + furnace + chimney + tool rack
+- Alchemy table: mortar/pestle + bottles + bubbling cauldron
+- Workbench: wood surface + vice + tools + blueprints
+- Enchanting altar: runic circle + crystal focus + candles
+- Each station is a composed scene, not a single mesh
+
+### 6F. Interactive Objects
+- Doors that swing (hinge point defined, animation-ready)
+- Chests that open (lid as separate piece with pivot)
+- Levers/switches (handle geometry with rotation axis)
+- Breakable crates/barrels (pre-fractured pieces)
+- Lootable containers (glow highlight material)
+
+### 6G. Flags / Banners / Cloth
+- Cloth-sim-ready flat meshes with proper vertex density
+- Brand-specific heraldry UV mapped
+- Attachment points (rope/chain/pole mount)
+- Torn/damaged variants with edge alpha
+
+### 6H. Signs / Waymarkers
+- Wooden signpost with carved text (text-to-mesh)
+- Stone waymarker with runic inscriptions
+- Warning signs (skull icon, danger markers)
+- Direction arrows
+
+### 6I. Lighting Fixtures (3D objects)
+- Wall torches with bracket geometry + flame particle emitter point
+- Standing braziers with coal bed
+- Hanging lanterns with chain + glass housing
+- Campfire with log arrangement + stone ring
+- Crystal light sources (for shrines/magic areas)
+- Each fixture defines: light position, light color, light range, flicker speed
+
+### 6J. Bridges / Gates / Fortifications
+- Drawbridge with chain mechanism
+- Stone bridge with arch support + railing
+- Rope bridge with plank + rope geometry
+- Portcullis (iron grid that raises/lowers)
+- Palisade wall sections (pointed logs)
+- Watchtower (multi-level with ladder access)
+
+### 6K. Mounts (Future)
+- Horse base mesh with saddle/bridle equipment slots
+- Monster mounts (rideable creatures from capture system)
+- Mount armor as separate mesh layer
+
+---
+
+## Phase 7: TECHNICAL PIPELINE QUALITY (Ongoing)
+
+### 7A. Texture Baking Pipeline
+- Sculpt high-poly detail → bake normal map to game mesh
+- AO bake from mesh concavities
+- Curvature map for edge wear masking
+- Thickness map for subsurface scattering
+- All bakes to 2K or 4K resolution
+
+### 7B. UV Quality
+- Smart UV project as baseline
+- Manual seam correction for visible assets
+- Texel density equalization (no stretching)
+- UV2 for lightmaps (Unity requirement)
+- Padding ≥4px for mipmap safety
+
+### 7C. LOD Pipeline
+- LOD0: full detail (hero distance)
+- LOD1: 50% tris (medium distance)
+- LOD2: 25% tris (far distance)
+- LOD3: 12% tris or billboard (background)
+- Silhouette-preserving decimation (not uniform)
+- Auto-LOD generation after mesh finalization
+
+### 7D. Collision Meshes
+- Simplified convex hull for physics
+- Walkable floor detection
+- Door/window pass-through zones
+- Stairs as ramp collider
+
+### 7E. Vertex Color Data
+- Channel R: AO (ambient occlusion)
+- Channel G: Curvature (edge wear mask)
+- Channel B: Height gradient (moss/dirt at base)
+- Channel A: Wetness/damage mask
+- Painted automatically after mesh generation
+
+### 7F. Edge Wear / Weathering Pipeline
+- Analyze mesh curvature (pointiness)
+- Worn edges = higher roughness + slightly lighter color
+- Crevices = darker + lower roughness (moisture/dirt)
+- Base-to-top gradient for moss/dirt accumulation
+- Rain staining on vertical surfaces (top-down streaks)
+- Random vertex displacement for structural settling
+
+### 7G. Art Style Consistency Rules
+- Same biome = same material palette (max 7 textures per district, Witcher 3 approach)
+- Color temperature: warm for safe areas, cold for dangerous
+- Saturation: lower in corrupted areas, higher in pure/ascended
+- Corruption level affects: darkness, purple tint, vein overlay intensity
+- VB brand colors from BrandSystem.cs must be used consistently
+
+---
+
+## COMPLETE ASSET CHECKLIST FOR VEILBREAKERS RPG
+
+### Architecture (25+ modular pieces per style × 5 styles)
+- [ ] Gothic (shrines, cathedrals)
+- [ ] Medieval (houses, taverns, shops)
+- [ ] Fortress (walls, towers, barracks)
+- [ ] Organic (tree-homes, root structures, mushroom houses)
+- [ ] Ruined (damaged variants of all above)
+
+### Characters (mesh + rig + texture each)
+- [ ] Vex (IRONBOUND tank)
+- [ ] Seraphina (FANGBORN assassin)
+- [ ] Orion (VOIDTOUCHED mage)
+- [ ] Nyx (UNCHAINED hybrid)
+- [ ] Generic NPCs (merchant, guard, villager, priest)
+
+### Monsters (20 unique meshes)
+- [ ] All 20 from vb_game_data.py with brand-specific features
+- [ ] 3 size variants each (young/adult/elder)
+- [ ] Corruption visual variants (5 tiers)
+
+### Weapons (per type × brand variants)
+- [ ] Swords (straight, curved, greatsword)
+- [ ] Axes (hand axe, battle axe, greataxe)
+- [ ] Maces/hammers (club, mace, warhammer)
+- [ ] Spears/polearms
+- [ ] Daggers/knives
+- [ ] Staves/wands (magic weapons)
+- [ ] Bows/crossbows
+- [ ] Shields (round, kite, tower)
+
+### Armor (per slot × style variants)
+- [ ] Helmets (open face, full helm, hood, crown)
+- [ ] Chest (plate, leather, robes, chain)
+- [ ] Gauntlets (plate, leather, wraps)
+- [ ] Boots/greaves (plate, leather, sandals)
+- [ ] Shoulders/pauldrons
+- [ ] Capes/cloaks (cloth-sim ready)
+
+### Items
+- [ ] Potions (health, mana, antidote, buff)
+- [ ] Capture devices (per-brand visual)
+- [ ] Keys/lockpicks
+- [ ] Books/scrolls/maps
+- [ ] Food/cooking ingredients
+- [ ] Crafting materials (ore, leather, herbs, gems)
+- [ ] Currency (gold coins, brand tokens)
+
+### Environment
+- [ ] Trees (3+ species per biome)
+- [ ] Rocks (boulder, standing stone, rubble)
+- [ ] Grass/flowers (billboard cards)
+- [ ] Bushes/shrubs
+- [ ] Mushrooms (normal + giant for Thornwood)
+- [ ] Fallen logs/stumps
+- [ ] Vines/ivy (surface-following curves)
+
+### Dungeon Props
+- [ ] Torch sconces (with light point)
+- [ ] Prison doors/gates
+- [ ] Chains/shackles
+- [ ] Coffins/sarcophagi
+- [ ] Altars (per-brand variant)
+- [ ] Traps (spike, pressure plate, dart, swinging blade)
+- [ ] Skull piles/bone decorations
+- [ ] Corruption crystals (per-brand color)
+
+### Vehicles/Transport
+- [ ] Wagons/carts
+- [ ] Boats (rowboat, ferry)
+- [ ] Horse saddle/equipment
+
 ## Reference Games for Quality Bar
 - **Elden Ring**: Dark fantasy architecture, creature design, atmospheric lighting
 - **Skyrim**: Modular building kits, diverse biome assets, settlement composition
