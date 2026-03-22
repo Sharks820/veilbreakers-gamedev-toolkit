@@ -20,7 +20,7 @@ import math
 import re
 
 import bpy
-from mathutils import Vector
+from mathutils import Euler, Vector
 
 from ._context import get_3d_context_override
 
@@ -140,6 +140,214 @@ FACIAL_BONES: dict[str, dict] = {
         "roll": 0.0,
         "parent": "head",
     },
+    # Eye tracking bones
+    "eye.L": {
+        "head": (0.03, -0.06, 1.64),
+        "tail": (0.03, -0.08, 1.64),
+        "roll": 0.0,
+        "parent": "head",
+    },
+    "eye.R": {
+        "head": (-0.03, -0.06, 1.64),
+        "tail": (-0.03, -0.08, 1.64),
+        "roll": 0.0,
+        "parent": "head",
+    },
+    "eye_target": {
+        "head": (0.0, -0.5, 1.64),
+        "tail": (0.0, -0.6, 1.64),
+        "roll": 0.0,
+        "parent": "head",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# FACS Action Units (P2-A7)
+# ---------------------------------------------------------------------------
+
+FACS_ACTION_UNITS: dict[str, dict] = {
+    "AU01": {"name": "Inner Brow Raise", "bones": ["brow_inner.L", "brow_inner.R"]},
+    "AU02": {"name": "Outer Brow Raise", "bones": ["brow_outer.L", "brow_outer.R"]},
+    "AU04": {"name": "Brow Lowerer", "bones": ["brow_inner.L", "brow_inner.R", "brow_mid.L", "brow_mid.R"]},
+    "AU05": {"name": "Upper Lid Raise", "bones": ["eyelid_upper.L", "eyelid_upper.R"]},
+    "AU06": {"name": "Cheek Raise", "bones": ["cheek.L", "cheek.R"]},
+    "AU07": {"name": "Lid Tightener", "bones": ["eyelid_lower.L", "eyelid_lower.R"]},
+    "AU09": {"name": "Nose Wrinkler", "bones": ["nose"]},
+    "AU10": {"name": "Upper Lip Raise", "bones": ["lip_upper"]},
+    "AU12": {"name": "Lip Corner Pull", "bones": ["lip_corner.L", "lip_corner.R"]},
+    "AU15": {"name": "Lip Corner Depress", "bones": ["lip_corner.L", "lip_corner.R"]},
+    "AU17": {"name": "Chin Raise", "bones": ["jaw"]},
+    "AU20": {"name": "Lip Stretch", "bones": ["lip_corner.L", "lip_corner.R"]},
+    "AU23": {"name": "Lip Tightener", "bones": ["lip_upper", "lip_lower"]},
+    "AU25": {"name": "Lips Part", "bones": ["lip_upper", "lip_lower", "jaw"]},
+    "AU26": {"name": "Jaw Drop", "bones": ["jaw"]},
+    "AU27": {"name": "Mouth Stretch", "bones": ["jaw"]},
+    "AU45": {"name": "Blink", "bones": ["eyelid_upper.L", "eyelid_upper.R", "eyelid_lower.L", "eyelid_lower.R"]},
+}
+
+
+# ---------------------------------------------------------------------------
+# Viseme Shapes (P2-A7)
+# ---------------------------------------------------------------------------
+
+VISEME_SHAPES: dict[str, dict] = {
+    "sil": {"name": "Silence", "bones": []},
+    "PP": {"name": "P/B/M", "bones": ["lip_upper", "lip_lower"]},
+    "FF": {"name": "F/V", "bones": ["lip_lower"]},
+    "TH": {"name": "Th", "bones": ["lip_upper", "lip_lower", "jaw"]},
+    "DD": {"name": "D/T/N", "bones": ["jaw", "lip_upper"]},
+    "kk": {"name": "K/G", "bones": ["jaw"]},
+    "CH": {"name": "Ch/J/Sh", "bones": ["lip_corner.L", "lip_corner.R", "jaw"]},
+    "SS": {"name": "S/Z", "bones": ["lip_corner.L", "lip_corner.R"]},
+    "nn": {"name": "N/L", "bones": ["jaw", "lip_upper"]},
+    "RR": {"name": "R", "bones": ["lip_corner.L", "lip_corner.R", "lip_upper"]},
+    "aa": {"name": "A/Ah", "bones": ["jaw", "lip_upper", "lip_lower"]},
+    "E": {"name": "E/Eh", "bones": ["lip_corner.L", "lip_corner.R", "jaw"]},
+    "I": {"name": "I/Ee", "bones": ["lip_corner.L", "lip_corner.R"]},
+    "O": {"name": "O/Oh", "bones": ["lip_upper", "lip_lower", "jaw"]},
+    "U": {"name": "U/Oo", "bones": ["lip_upper", "lip_lower"]},
+}
+
+
+# ---------------------------------------------------------------------------
+# Corrective Blend Shape Definitions (P5-Q1)
+# ---------------------------------------------------------------------------
+
+CORRECTIVE_SHAPE_DEFS: list[dict] = [
+    {"joint": "shoulder", "axis": "x", "threshold": 45.0, "strength": 1.0, "name": "shoulder_corrective"},
+    {"joint": "elbow", "axis": "x", "threshold": 90.0, "strength": 0.8, "name": "elbow_corrective"},
+    {"joint": "wrist", "axis": "z", "threshold": 30.0, "strength": 0.6, "name": "wrist_corrective"},
+    {"joint": "hip", "axis": "x", "threshold": 60.0, "strength": 1.0, "name": "hip_corrective"},
+    {"joint": "knee", "axis": "x", "threshold": 90.0, "strength": 0.9, "name": "knee_corrective"},
+]
+
+
+# ---------------------------------------------------------------------------
+# Pose-Space Deformation Definitions (AAA multi-bone-driven correctives)
+# ---------------------------------------------------------------------------
+
+POSE_SPACE_DEFORMATIONS: list[dict] = [
+    {
+        "name": "shoulder_raise_forward",
+        "driver_bones": ["upper_arm.L", "upper_arm.L"],
+        "driver_axes": ["Z", "X"],
+        "thresholds": [60.0, 30.0],
+        "description": "Deltoid volume preservation on forward + abduction",
+    },
+    {
+        "name": "elbow_extreme_flex",
+        "driver_bones": ["forearm.L"],
+        "driver_axes": ["X"],
+        "thresholds": [120.0],
+        "description": "Bicep bulge and forearm compression at extreme flexion",
+    },
+    {
+        "name": "knee_deep_squat",
+        "driver_bones": ["thigh.L", "shin.L"],
+        "driver_axes": ["X", "X"],
+        "thresholds": [90.0, 90.0],
+        "description": "Quad/calf volume at deep squat with proper hip fold",
+    },
+    {
+        "name": "wrist_bend",
+        "driver_bones": ["hand.L"],
+        "driver_axes": ["X"],
+        "thresholds": [45.0],
+        "description": "Tendon visibility on wrist extension/flexion",
+    },
+    {
+        "name": "neck_turn",
+        "driver_bones": ["spine.004"],
+        "driver_axes": ["Y"],
+        "thresholds": [45.0],
+        "description": "SCM muscle and trapezius activation on head turn",
+    },
+]
+
+
+def _validate_psd_config(
+    driver_bones: list[str],
+    driver_axes: list[str],
+    thresholds: list[float],
+) -> dict:
+    """Validate pose-space deformation configuration."""
+    errors = []
+    valid_axes = {"X", "Y", "Z"}
+
+    if len(driver_bones) != len(driver_axes):
+        errors.append("driver_bones and driver_axes must have same length")
+    if len(driver_bones) != len(thresholds):
+        errors.append("driver_bones and thresholds must have same length")
+
+    for axis in driver_axes:
+        if axis not in valid_axes:
+            errors.append(f"Invalid axis: '{axis}'")
+
+    for thresh in thresholds:
+        if not isinstance(thresh, (int, float)) or thresh <= 0 or thresh > 180:
+            errors.append(f"Threshold must be in (0, 180], got {thresh}")
+
+    return {"valid": len(errors) == 0, "errors": errors}
+
+
+# ---------------------------------------------------------------------------
+# Apple ARKit 52 Blendshape Mapping (industry standard facial capture)
+# ---------------------------------------------------------------------------
+
+ARKIT_BLENDSHAPE_MAP: dict[str, list[str]] = {
+    "eyeBlinkLeft": ["eyelid_upper.L", "eyelid_lower.L"],
+    "eyeBlinkRight": ["eyelid_upper.R", "eyelid_lower.R"],
+    "eyeWideLeft": ["eyelid_upper.L"],
+    "eyeWideRight": ["eyelid_upper.R"],
+    "eyeSquintLeft": ["eyelid_lower.L", "cheek.L"],
+    "eyeSquintRight": ["eyelid_lower.R", "cheek.R"],
+    "eyeLookUpLeft": ["eye.L"],
+    "eyeLookUpRight": ["eye.R"],
+    "eyeLookDownLeft": ["eye.L"],
+    "eyeLookDownRight": ["eye.R"],
+    "eyeLookInLeft": ["eye.L"],
+    "eyeLookInRight": ["eye.R"],
+    "eyeLookOutLeft": ["eye.L"],
+    "eyeLookOutRight": ["eye.R"],
+    "jawOpen": ["jaw"],
+    "jawForward": ["jaw"],
+    "jawLeft": ["jaw"],
+    "jawRight": ["jaw"],
+    "mouthClose": ["lip_upper", "lip_lower"],
+    "mouthFunnel": ["lip_upper", "lip_lower", "lip_corner.L", "lip_corner.R"],
+    "mouthPucker": ["lip_upper", "lip_lower", "lip_corner.L", "lip_corner.R"],
+    "mouthLeft": ["lip_corner.L"],
+    "mouthRight": ["lip_corner.R"],
+    "mouthSmileLeft": ["lip_corner.L"],
+    "mouthSmileRight": ["lip_corner.R"],
+    "mouthFrownLeft": ["lip_corner.L"],
+    "mouthFrownRight": ["lip_corner.R"],
+    "mouthDimpleLeft": ["lip_corner.L", "cheek.L"],
+    "mouthDimpleRight": ["lip_corner.R", "cheek.R"],
+    "mouthStretchLeft": ["lip_corner.L"],
+    "mouthStretchRight": ["lip_corner.R"],
+    "mouthRollLower": ["lip_lower"],
+    "mouthRollUpper": ["lip_upper"],
+    "mouthShrugLower": ["lip_lower"],
+    "mouthShrugUpper": ["lip_upper"],
+    "mouthPressLeft": ["lip_corner.L"],
+    "mouthPressRight": ["lip_corner.R"],
+    "mouthLowerDownLeft": ["lip_lower"],
+    "mouthLowerDownRight": ["lip_lower"],
+    "mouthUpperUpLeft": ["lip_upper"],
+    "mouthUpperUpRight": ["lip_upper"],
+    "browDownLeft": ["brow_inner.L", "brow_mid.L"],
+    "browDownRight": ["brow_inner.R", "brow_mid.R"],
+    "browInnerUp": ["brow_inner.L", "brow_inner.R"],
+    "browOuterUpLeft": ["brow_outer.L"],
+    "browOuterUpRight": ["brow_outer.R"],
+    "cheekPuff": ["cheek.L", "cheek.R"],
+    "cheekSquintLeft": ["cheek.L"],
+    "cheekSquintRight": ["cheek.R"],
+    "noseSneerLeft": ["nose"],
+    "noseSneerRight": ["nose"],
+    "tongueOut": ["jaw"],
 }
 
 
@@ -516,15 +724,18 @@ def _validate_retarget_mapping(
         unmapped_source (list), unmapped_target (list).
     """
     errors: list[str] = []
+    warnings: list[str] = []
 
     if not isinstance(mapping, dict) or len(mapping) == 0:
         errors.append("mapping must be a non-empty dict")
         return {
             "valid": False,
             "errors": errors,
+            "warnings": warnings,
             "mapped_count": 0,
             "unmapped_source": list(source_bones) if isinstance(source_bones, list) else [],
             "unmapped_target": list(target_bones) if isinstance(target_bones, list) else [],
+            "duplicate_targets": [],
         }
 
     source_set = set(source_bones) if isinstance(source_bones, list) else set()
@@ -540,6 +751,17 @@ def _validate_retarget_mapping(
         if tgt_bone not in target_set:
             errors.append(f"target bone '{tgt_bone}' not found in target rig")
 
+    # Check for duplicate targets
+    target_counts: dict[str, int] = {}
+    for tgt in mapping.values():
+        target_counts[tgt] = target_counts.get(tgt, 0) + 1
+    duplicate_targets = [t for t, c in target_counts.items() if c > 1]
+    if duplicate_targets:
+        for dt in duplicate_targets:
+            warnings.append(
+                f"Warning: target bone '{dt}' mapped from {target_counts[dt]} sources"
+            )
+
     # Compute unmapped bones
     mapped_sources = set(mapping.keys())
     mapped_targets = set(mapping.values())
@@ -549,9 +771,11 @@ def _validate_retarget_mapping(
     return {
         "valid": len(errors) == 0,
         "errors": errors,
+        "warnings": warnings,
         "mapped_count": len(mapping),
         "unmapped_source": unmapped_source,
         "unmapped_target": unmapped_target,
+        "duplicate_targets": duplicate_targets,
     }
 
 
@@ -612,6 +836,183 @@ def _validate_shape_key_params(name: str, vertex_offsets: dict) -> dict:
         1 for idx in vertex_offsets if isinstance(idx, int) and idx >= 0
     )
     return {"valid": len(errors) == 0, "errors": errors, "vertex_count": vertex_count}
+
+
+def _compute_spring_chain_forces(
+    positions: list[tuple[float, float, float]],
+    velocities: list[tuple[float, float, float]],
+    stiffness: float,
+    damping: float,
+    gravity: float,
+    dt: float = 1.0 / 60.0,
+) -> list[tuple[float, float, float]]:
+    """Compute spring bone simulation forces for a chain of bones.
+
+    Simple spring-mass simulation: the first bone is the root (fixed),
+    subsequent bones are pulled back toward rest position by stiffness and
+    dragged down by gravity.
+
+    Args:
+        positions: Current world-space positions per bone.
+        velocities: Current velocities per bone.
+        stiffness: Spring stiffness [0, 1].
+        damping: Damping factor [0, 1].
+        gravity: Gravity magnitude (applied in -Z).
+        dt: Timestep (default 1/60).
+
+    Returns:
+        New positions list for each bone after one simulation step.
+    """
+    # Compute rest offsets from initial positions so the spring force
+    # maintains the bone's rest distance from its parent instead of
+    # collapsing all bones onto the parent position.
+    rest_offsets: list[tuple[float, float, float]] = [(0.0, 0.0, 0.0)]
+    for i in range(1, len(positions)):
+        rest_offsets.append((
+            positions[i][0] - positions[i - 1][0],
+            positions[i][1] - positions[i - 1][1],
+            positions[i][2] - positions[i - 1][2],
+        ))
+
+    new_positions: list[tuple[float, float, float]] = []
+    for i, (pos, vel) in enumerate(zip(positions, velocities)):
+        if i == 0:
+            # Root bone is fixed
+            new_positions.append(pos)
+            continue
+
+        px, py, pz = pos
+        vx, vy, vz = vel
+
+        # Rest position = parent position + rest offset
+        parent = positions[i - 1]
+        rest_x = parent[0] + rest_offsets[i][0]
+        rest_y = parent[1] + rest_offsets[i][1]
+        rest_z = parent[2] + rest_offsets[i][2]
+
+        # Spring force pulling back toward rest position (not parent)
+        spring_fx = stiffness * (rest_x - px)
+        spring_fy = stiffness * (rest_y - py)
+        spring_fz = stiffness * (rest_z - pz)
+
+        # Gravity in -Z
+        grav_fz = -gravity
+
+        # Total acceleration
+        ax = spring_fx - damping * vx
+        ay = spring_fy - damping * vy
+        az = spring_fz + grav_fz - damping * vz
+
+        # Euler integration
+        nvx = vx + ax * dt
+        nvy = vy + ay * dt
+        nvz = vz + az * dt
+
+        npx = px + nvx * dt
+        npy = py + nvy * dt
+        npz = pz + nvz * dt
+
+        new_positions.append((npx, npy, npz))
+
+    return new_positions
+
+
+def _validate_spring_dynamics_params(
+    mass: float,
+    stiffness: float,
+    damping: float,
+) -> dict:
+    """Validate spring dynamics simulation parameters.
+
+    Args:
+        mass: Mass of each bone node (must be > 0).
+        stiffness: Spring stiffness (must be in (0, 100]).
+        damping: Damping factor (must be in [0, 1]).
+
+    Returns:
+        Dict with valid (bool), errors (list[str]).
+    """
+    errors: list[str] = []
+
+    if not isinstance(mass, (int, float)) or mass <= 0:
+        errors.append("mass must be > 0")
+    if not isinstance(stiffness, (int, float)) or stiffness <= 0 or stiffness > 100:
+        errors.append("stiffness must be in (0, 100]")
+    if not isinstance(damping, (int, float)) or damping < 0 or damping > 1:
+        errors.append("damping must be in [0, 1]")
+
+    return {"valid": len(errors) == 0, "errors": errors}
+
+
+def _validate_facial_rig_params(params: dict) -> dict:
+    """Validate facial rig setup parameters.
+
+    Args:
+        params: Dict with optional keys:
+            expressions: list of expression names (must be in MONSTER_EXPRESSIONS)
+            facs_units: list of FACS AU codes (must be in FACS_ACTION_UNITS)
+            visemes: list of viseme codes (must be in VISEME_SHAPES)
+
+    Returns:
+        Dict with valid (bool), errors (list[str]).
+    """
+    errors: list[str] = []
+
+    expressions = params.get("expressions", [])
+    if expressions:
+        for expr in expressions:
+            if expr not in MONSTER_EXPRESSIONS:
+                errors.append(f"Unknown expression: '{expr}'")
+
+    facs_units = params.get("facs_units", [])
+    if facs_units:
+        for au in facs_units:
+            if au not in FACS_ACTION_UNITS:
+                errors.append(f"Unknown FACS unit: '{au}'")
+
+    visemes = params.get("visemes", [])
+    if visemes:
+        for vis in visemes:
+            if vis not in VISEME_SHAPES:
+                errors.append(f"Unknown viseme: '{vis}'")
+
+    return {"valid": len(errors) == 0, "errors": errors}
+
+
+def _validate_corrective_shape_config(config: dict) -> dict:
+    """Validate a corrective blend shape configuration.
+
+    Args:
+        config: Dict with keys: joint, axis, threshold, strength.
+            joint must be one of: shoulder, elbow, wrist, hip, knee.
+            axis must be one of: x, y, z.
+            threshold must be in [0, 180].
+            strength must be in [0, 2].
+
+    Returns:
+        Dict with valid (bool), errors (list[str]).
+    """
+    errors: list[str] = []
+    valid_joints = {"shoulder", "elbow", "wrist", "hip", "knee"}
+    valid_axes = {"x", "y", "z"}
+
+    joint = config.get("joint")
+    if joint not in valid_joints:
+        errors.append(f"joint must be one of {sorted(valid_joints)}, got '{joint}'")
+
+    axis = config.get("axis")
+    if axis not in valid_axes:
+        errors.append(f"axis must be one of {sorted(valid_axes)}, got '{axis}'")
+
+    threshold = config.get("threshold")
+    if not isinstance(threshold, (int, float)) or threshold < 0 or threshold > 180:
+        errors.append("threshold must be in [0, 180]")
+
+    strength = config.get("strength")
+    if not isinstance(strength, (int, float)) or strength < 0 or strength > 2:
+        errors.append("strength must be in [0, 2]")
+
+    return {"valid": len(errors) == 0, "errors": errors}
 
 
 # ---------------------------------------------------------------------------
@@ -679,7 +1080,8 @@ def handle_setup_facial(params: dict) -> dict:
                 if "location" in transform:
                     pbone.location = Vector(transform["location"])
                 if "rotation" in transform:
-                    pbone.rotation_euler = Vector(transform["rotation"])
+                    pbone.rotation_mode = "XYZ"
+                    pbone.rotation_euler = Euler(transform["rotation"])
 
             # Store as a pose marker (custom property for retrieval)
             rig_obj[f"expression_{expr_name}"] = True
@@ -688,7 +1090,7 @@ def handle_setup_facial(params: dict) -> dict:
             # Reset pose for next expression
             for pbone in rig_obj.pose.bones:
                 pbone.location = Vector((0, 0, 0))
-                pbone.rotation_euler = Vector((0, 0, 0))
+                pbone.rotation_euler = Euler((0, 0, 0))
 
         bpy.ops.object.mode_set(mode="OBJECT")
 
@@ -861,11 +1263,6 @@ def handle_setup_spring_bones(params: dict) -> dict:
         if not pbone:
             continue
 
-        # Add DAMPED_TRACK constraint for spring stiffness effect
-        dt_con = pbone.constraints.new("DAMPED_TRACK")
-        dt_con.influence = stiffness
-        dt_con.name = f"spring_stiffness_{bone_name}"
-
         # Add COPY_ROTATION from parent with decaying influence for damping
         if pbone.parent:
             cr_con = pbone.constraints.new("COPY_ROTATION")
@@ -938,9 +1335,22 @@ def handle_setup_ragdoll(params: dict) -> dict:
 
     colliders: list[str] = []
     joint_count = 0
-    prev_collider = None
+    # Map bone names to their collider objects for parent-based joint chaining
+    bone_collider_lookup: dict[str, object] = {}
 
-    for bone_name, spec in bone_collider_map.items():
+    # Sort bones by hierarchy depth (parent bones first) for correct joint chaining
+    def _bone_depth(bone_name):
+        depth = 0
+        b = rig_obj.data.bones.get(bone_name)
+        while b and b.parent:
+            depth += 1
+            b = b.parent
+        return depth
+
+    sorted_bones = sorted(bone_collider_map.keys(), key=_bone_depth)
+
+    for bone_name in sorted_bones:
+        spec = bone_collider_map[bone_name]
         # Check bone exists in rig
         bone = rig_obj.data.bones.get(bone_name)
         if not bone:
@@ -986,16 +1396,21 @@ def handle_setup_ragdoll(params: dict) -> dict:
         collider.parent_type = "BONE"
 
         colliders.append(collider.name)
+        bone_collider_lookup[bone_name] = collider
 
-        # Create rigid body constraint between adjacent colliders
-        if prev_collider:
+        # Create rigid body constraint to PARENT bone's collider (not linear chain)
+        parent_bone = bone.parent
+        parent_collider = None
+        if parent_bone:
+            parent_collider = bone_collider_lookup.get(parent_bone.name)
+        if parent_collider:
             bpy.ops.object.empty_add(location=collider.location)
             joint_obj = bpy.context.object
             joint_obj.name = f"ragdoll_joint_{bone_name}"
 
             bpy.ops.rigidbody.constraint_add(type="GENERIC")
             rbc = joint_obj.rigid_body_constraint
-            rbc.object1 = prev_collider
+            rbc.object1 = parent_collider
             rbc.object2 = collider
 
             # Apply joint angle limits
@@ -1010,8 +1425,6 @@ def handle_setup_ragdoll(params: dict) -> dict:
             rbc.limit_ang_z_upper = spec.get("ang_z_max", 0.3)
 
             joint_count += 1
-
-        prev_collider = collider
 
     return {
         "colliders": colliders,
@@ -1177,9 +1590,11 @@ def handle_add_shape_keys(params: dict) -> dict:
         vertex_count = len(obj.data.vertices)
 
         # Damage: random-ish displacement scaled by convexity
+        import hashlib
         import random
 
-        seed = hash(shape_key_name) % (2**31)
+        # Use deterministic seed instead of Python's salted hash
+        seed = int(hashlib.md5(shape_key_name.encode()).hexdigest()[:8], 16)
         rng = random.Random(seed)
 
         for vi, vert in enumerate(obj.data.vertices):
