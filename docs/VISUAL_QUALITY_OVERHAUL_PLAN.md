@@ -267,83 +267,378 @@ Per-vertex color painting after generation:
 
 ---
 
-## Phase 2: CHARACTERS/MONSTERS (Week 2)
+## Phase 2: CHARACTERS/MONSTERS — STUDIO-GRADE
 
-### 2A. Topology-Correct Base Meshes
-Instead of stacking cylinders, use subdivision surface modeling:
-- Start with low-poly cage (500-800 verts) with proper edge loops
-- Subdivision surface modifier (level 2-3) for smooth result
-- Edge loops at: shoulders, elbows, wrists, hips, knees, ankles, neck
-- Quad-dominant topology for deformation
-- Mirror modifier for symmetry
+### 2A. Character Base Mesh System
+NOT stacking cylinders. Proper subdivision surface modeling:
 
-### 2B. Monster Body Type Templates
-For each of the 20 VB monsters, create body templates:
-- **Humanoid** (Chainbound, Corrodex, Crackling, Hollow, The Bulwark, Voltgeist, Bloodshade, The Vessel):
-  - Base mesh: 2,000-5,000 verts with edge loops
-  - Variants via shape keys (bulk, height, limb length)
+**Construction Method:**
+1. Build low-poly cage (500-800 verts) with bmesh — ALL QUADS
+2. Edge loops placed at EVERY joint: shoulder (3 loops), elbow (3 loops), wrist (2), hip (3), knee (3), ankle (2), neck (3), spine (5+ along torso)
+3. Mirror modifier for perfect symmetry during modeling
+4. Subdivision surface modifier level 2 for viewport, level 3 for render
+5. Final LOD0: 20,000-50,000 tris for common monsters, 80,000-150,000 for heroes
 
-- **Quadruped** (Grimthorn, Ironjaw, Mawling, Ravener, Sporecaller):
-  - 4-leg topology with spine flexibility
-  - Tail as separate chain
+**Face Topology Rules:**
+- Concentric loops around eyes (3 rings minimum)
+- Elliptical loops around mouth connecting to nasolabial fold
+- Pole vertices (5+ edges) ONLY in non-deforming areas (top of head, back of torso)
+- Edge flow follows muscle lines (deltoid wrap around shoulder, pectoral flow, quad/hamstring split at knee)
+- NO triangles except at termination points (fingertips, ear tips, horn tips)
 
-- **Amorphous** (Gluttony Polyp, The Congregation, The Weeping):
-  - Metaball-based generation → convert to mesh
-  - Smooth subdivision for organic look
+**Rigging Compatibility:**
+- Vertex groups pre-defined matching rig template bone names
+- Max 4 influences per vertex (GPU skinning compatible)
+- Shape keys for: jaw open, blink L/R, brow raise L/R, smile L/R (minimum 12 blend shapes)
+- Armature modifier last in stack
 
-- **Arachnid** (Skitter-Teeth, The Broodmother):
-  - Segmented body with 8-leg topology
-  - Proper joint deformation points
+### 2B. Monster Body Type Templates — FULL SPECIFICATION
 
-- **Serpent** (Needlefang):
-  - Spine chain with scale pattern
-  - Hood geometry for cobra-like display
+**HUMANOID BASE (8 monsters use this)**
+Chainbound, Corrodex, Crackling, Hollow, The Bulwark, Voltgeist, Bloodshade, The Vessel
 
-- **Insect** (Flicker):
-  - Wing membrane as separate thin mesh
-  - Compound eye detail via spherical projection
+Construction:
+- Torso: 8-segment cross-section extruded 6 times (spine segments)
+- Arms: 8-segment ring extruded 5 times (upper arm, elbow×3, forearm, wrist, hand)
+- Legs: 8-segment ring extruded 5 times (thigh, knee×3, shin, ankle, foot)
+- Head: sphere (12×8 segments) with face topology cuts (eye sockets, mouth, nose ridge)
+- Fingers: 4 per hand (5-segment cylinders), thumb opposing
+- Scale variants via shape keys driven by vb_game_data.py scale values
 
-### 2C. Brand-Specific Visual Features
-Each monster's key_features from vb_game_data.py become actual geometry:
-- Chains (IRON): torus-chain generator along bones
-- Vines/thorns (SAVAGE): curve-based vine growth along surface
-- Lightning veins (SURGE): edge-detected emission pattern
-- Shadow tendrils (VOID): extruded dark geometry
+Per-monster differentiation:
+- **Chainbound**: heavy/wide torso (scale 1.2,1.5,1.2), thick limbs, hunched posture via shape key
+- **Corrodex**: knight proportions (1.0,1.7,1.0), upright posture, armor attachment points on torso/shoulders
+- **Crackling**: child-scale (0.5,0.7,0.5), large head ratio, thin limbs
+- **Hollow**: elongated (0.8,1.6,0.6), sunken chest cavity (inverted shape key), wispy edges
+- **The Bulwark**: massive (2.0,2.5,1.5), extra shoulder width, golem proportions, shield-merged arm
+- **Voltgeist**: ghostly (1.0,1.5,0.8), tattered lower body fading to wisps, ribcage visible
+- **Bloodshade**: wraith (1.0,1.8,0.8), flowing cape geometry, elongated fingers, hollow face
+- **The Vessel**: delicate (0.8,1.5,0.8), floating posture, robes as cloth-sim-ready mesh, porcelain face mask as separate object
 
-### 2D. Per-Monster Textures
-Use the blender_texture bake pipeline:
-- Sculpt detail on high-poly → bake normal map to game mesh
-- Curvature → edge wear mask
-- AO bake for depth
-- Brand color as base, variations via noise
+**QUADRUPED BASE (5 monsters)**
+Grimthorn, Ironjaw, Mawling, Ravener, Sporecaller
+
+Construction:
+- Spine: 10-segment chain from skull to tail root, 8 verts per cross-section
+- Rib cage: wider cross-sections at thorax, narrowing at waist
+- 4 legs: each with shoulder/hip ball joint topology, upper leg, knee (3 loops), lower leg, paw/hoof
+- Tail: 6-segment tapered chain with 6-vert cross-section
+- Head: box-modeled skull → subdivision, jaw as separate hinged piece
+- Tongue: flat tapered mesh inside mouth
+
+Per-monster differentiation:
+- **Grimthorn**: deer-like legs (elongated shin), vine growths extruded from spine (curve-based), mushroom antlers (metaball→mesh), barbed tail
+- **Ironjaw**: bear proportions (heavy front, wide jaw), metal plate geometry on torso, chain tail (torus-linked), jaw trap mechanism (hinged separate mesh with teeth)
+- **Mawling**: wolf proportions (lean, long muzzle), oversized jaw with exposed teeth row, matted fur texture, glowing eye emission
+- **Ravener**: raptor build (forward lean, powerful hind legs), armored crest on skull (extruded ridge), razor claw geometry on feet, muscular forearms
+- **Sporecaller**: deer frame with fungal overgrowth, mushroom cluster antlers (sphere compositions), spore sac bulges on back (inflated shape key), mossy hide texture
+
+**AMORPHOUS BASE (3 monsters)**
+Gluttony Polyp, The Congregation, The Weeping
+
+Construction:
+- Start with metaball composition (5-20 elements)
+- Convert to mesh → voxel remesh (size 0.08) for clean topology
+- Smooth subdivision level 1
+- Shape keys for: pulsing (scale oscillation), pseudopod extension, splitting
+
+Per-monster:
+- **Gluttony Polyp**: central digestive sac (large translucent sphere), feeding tentacles (4-6 curve-based appendages), consumed matter visible through membrane material
+- **The Congregation**: BOSS — massive writhing mass, face shapes pressing against surface (sculpt-pushed shape keys), central eye (separate sphere with iris texture), soul tendrils (particle hair system), scale 3.0×4.0×3.0
+- **The Weeping**: floating eye cluster connected by tendons (curve-based sinew between sphere eyes), dark ichor drip (particle emitter), distortion aura (shader effect)
+
+**ARACHNID BASE (2 monsters)**
+Skitter-Teeth, The Broodmother
+
+Construction:
+- Cephalothorax: elongated sphere, 12-segment cross-section
+- Abdomen: large sphere (egg sac for Broodmother)
+- 8 legs: each with 4 segments (coxa, femur, patella+tibia, tarsus), 6-vert cross-section per segment
+- Pedipalps: 2 shorter appendages near mouth
+- Mandibles/fangs: sculpted geometry
+- Spinnerets (optional): 3 nozzle-shapes at abdomen rear
+
+Per-monster:
+- **Skitter-Teeth**: ribcage as body instead of carapace (bone texture), teeth lining the open cavity (individual tooth geometry), bone-textured legs, undead/skeletal aesthetic
+- **The Broodmother**: massive scale (2.5,1.5,3.0), egg sac abdomen (translucent membrane with egg shapes inside), wasp wings (membrane mesh with vein normal map), armored carapace (layered plate geometry), venomous mandibles with drip particle
+
+**SERPENT (Needlefang)**
+- 20+ segment spine chain, 8-vert cross-section tapering from body to tail
+- Scale pattern via Voronoi texture on UV
+- Hood geometry: flared neck section with eye-spot pattern UV
+- Needle fangs: elongated cone geometry, hinged jaw
+- Iridescent scale material (thin-film shader effect)
+
+**INSECT (Flicker)**
+- Thorax: 3-segment body, narrow waist
+- Wings: 4 membrane meshes (dragonfly double-wing), alpha-transparent with vein normal map
+- Compound eyes: sphere with faceted normal map
+- 6 legs: thin segmented cylinders
+- Antennae: 2 curve-based filaments
+- Afterimage effect: slightly scaled transparent duplicate offset behind
+
+### 2C. Brand-Specific Visual Features — FULL DETAIL
+Every monster has key_features in vb_game_data.py. Each becomes REAL geometry or material:
+
+| Brand | Geometry Features | Material Effects |
+|-------|------------------|------------------|
+| **IRON** | Chains (torus-link generator along bone paths), padlocks (box+cylinder composite), broken shackles (open torus), metal plates (extruded surface patches) | Steel gray metallic + rust noise, chain link normal map |
+| **SAVAGE** | Thorns (cone extrusions along surface normals), vines (curve-based growth following edge flow), bone spurs (tapered cylinders from joints), claw marks (groove geometry) | Blood red veins in skin, thorn bark texture, organic roughness |
+| **SURGE** | Lightning veins (edge-detected emission pattern via shader), spark particles (emitter points), translucent skin (subsurface + emission), crystal growths (faceted geometry) | Electric blue emission, translucent skin shader, crackling energy animated |
+| **VENOM** | Poison barbs (spine geometry), acid drip (particle system), toxic pools (flat alpha mesh), pustules (inflated sphere shape keys) | Toxic green subsurface, bubbling surface animation, acid erosion pitting |
+| **DREAD** | Shadow tendrils (extruded dark geometry from limb ends), fear runes (UV-projected emission), floating fragments (separate meshes with slight offset) | Deep purple darkness, shadow shader (light absorption), fear glow |
+| **LEECH** | Parasitic tendrils (curve-based suction tubes), pulsing veins (animated normal map), proboscis (tapered tube with rings) | Dark crimson pulsing, wet/glossy skin, parasitic growth patterns |
+| **GRACE** | Light robes (cloth-sim-ready mesh), healing glow particles, porcelain mask (smooth separate mesh), feather details (card-based like hair) | Holy silver emission, radiant fresnel glow, clean smooth surface |
+| **MEND** | Regeneration particles, crystal formations (faceted geometry), growth patterns (vine-like emission on surface), shield geometry (translucent sphere) | Healing gold emission, cellular pattern in subsurface, warm pulse |
+| **RUIN** | Fracture lines (mesh edge splits with emission), floating debris (separate rigid body chunks), explosion marks (cavity geometry) | Flame orange cracks with emission, charred surface, heat distortion |
+| **VOID** | Reality cracks (plane meshes with warp shader), dimensional rift particles, unstable scale (animated scale oscillation) | Void dark with reality-warp shader, dimensional tear emission |
+
+### 2D. Per-Monster Texture Pipeline — COMPLETE
+For EACH of the 20 monsters:
+1. **Sculpt pass**: Add surface detail on high-poly duplicate (skin pores, scales, scars, muscle definition, wrinkles)
+2. **Bake normal map**: High-poly → low-poly tangent-space normal map (2048 for common, 4096 for bosses)
+3. **Bake AO**: Mesh concavities → AO map
+4. **Curvature map**: Edge detection → wear/highlight mask
+5. **Albedo creation**: Brand base color + noise variation + curvature-driven highlights/shadows
+6. **Roughness map**: Smooth on convex surfaces, rough in crevices, wet=low roughness, dry=high
+7. **Metallic map**: Only for metallic parts (IRON brand armor plates, chain links)
+8. **Emission map**: Brand glow patterns, eye glow, magical effects
+9. **Opacity map**: For membrane wings, translucent tentacles, ghostly bodies
+
+### 2E. Monster Scaling & Variation System
+Every monster must support on-the-fly variation without regenerating:
+- **Size**: 3 variants per monster (young 0.7x, adult 1.0x, elder 1.3x) via scale
+- **Corruption visual**: 5 tiers from Ascended to Abyssal (shader-driven, not mesh change)
+- **Color variation**: Object Info > Random seeds material hue shift ±10%
+- **Scar/damage**: Shape keys for battle damage (torn ear, missing horn, cracked shell)
+- **Evolution**: Shape key morph between evolution stages + brand VFX overlay
+
+### 2F. New Monster Generation Pipeline
+For adding NEW monsters over time (not just the initial 20):
+1. Define in vb_game_data.py: body_type, scale, brand, key_features, description
+2. Select closest base template (humanoid/quadruped/amorphous/arachnid/serpent/insect)
+3. Apply scale and proportion shape keys
+4. Generate brand-specific features from the feature library
+5. Auto-assign materials from the 45-material library based on surface type
+6. Sculpt pass for unique detail
+7. Bake texture maps
+8. Rig with matching template
+9. Screenshot → evaluate → refine loop
+10. Export with LOD chain
 
 ---
 
-## Phase 3: WEAPONS/ITEMS (Week 2-3)
+## Phase 3: WEAPONS/ITEMS/ARMOR — STUDIO-GRADE
 
-### 3A. Weapon Detail
-Current weapons are ~90 verts. Need 2,000-5,000 for close-up:
-- Blade: proper edge bevel (not flat face), fuller groove, blood channel
-- Guard: cross-guard geometry, decorative elements
-- Grip: wrapped leather/cord pattern (cylindrical UV + texture)
-- Pommel: geometric ornament
+### 3A. Weapon System — FULL SPECIFICATION
 
-### 3B. Equipment/Armor
-- Plate segments with overlap
-- Rivet/stud detail (small cylinders)
-- Trim/edging as separate geometry
-- Cloth/leather parts with thickness
-- Straps and buckles
+**Every weapon has these components (separate meshes for modularity):**
+- Blade/Head: the business end
+- Guard/Cross-guard: hand protection
+- Grip/Handle: wrapped holding area
+- Pommel: counterweight at bottom
+- Decorative elements: runes, gems, brand insignia
 
-### 3C. Small Items
-- Potions: glass bottle with liquid (inner surface)
-- Keys: teeth pattern
-- Books: page edges, cover detail
-- Scrolls: rolled cylinder with ribbon
+**Sword Types (5 variants):**
+| Type | Blade Tris | Total Tris | Blade Detail |
+|------|-----------|------------|--------------|
+| Shortsword | 800 | 2,500 | Single edge, slight curve, fuller groove |
+| Longsword | 1,200 | 4,000 | Double edge, blood channel, crossguard detail |
+| Greatsword | 2,000 | 6,000 | Wide blade, ricasso, elaborate guard, two-hand grip |
+| Curved sword | 1,000 | 3,500 | Scimitar curve, single edge, wave pattern |
+| Dagger | 500 | 1,500 | Short tapered blade, simple guard, ring pommel |
+
+**Axe Types (3 variants):**
+- Hand axe: 2,000 tris — single head, short haft, leather wrap
+- Battle axe: 3,500 tris — double-headed or crescent, medium haft
+- Greataxe: 5,000 tris — massive head, long haft, counterweight
+
+**Blunt Weapons (3 variants):**
+- Mace: 2,500 tris — flanged head (6-8 flanges as geometry), short handle
+- Warhammer: 3,000 tris — flat striking face + pick back, long handle
+- Club: 1,500 tris — rough wood with nail/spike extrusions
+
+**Polearms (3 variants):**
+- Spear: 2,000 tris — diamond-section blade, long shaft, buttcap
+- Halberd: 4,000 tris — axe head + spike + hook on pole
+- Glaive: 3,000 tris — curved blade on pole, tassel wrap
+
+**Ranged (3 variants):**
+- Shortbow: 2,000 tris — curved limbs (bezier profile), string (thin cylinder), grip
+- Longbow: 2,500 tris — recurve limbs, arrow rest notch, leather grip
+- Crossbow: 4,000 tris — mechanism detail, prod, stock, trigger, stirrup
+
+**Staves/Wands (3 variants):**
+- Staff: 2,000 tris — gnarled wood (curve-based), crystal head, rune wrappings
+- Wand: 1,000 tris — straight shaft with ornate tip (sphere/crystal/flame)
+- Tome: 3,000 tris — open book with page geometry, floating, brand-glow
+
+**Brand Weapon Variants:**
+Every weapon type gets visual treatment per brand:
+- IRON: riveted metal, chain-wrapped grip, heavy construction
+- SAVAGE: bone/antler parts, leather wrapping, primal aesthetic
+- SURGE: crystalline blade, lightning engravings, energy core pommel
+- VENOM: green-tinged blade, dripping acid VFX point, corroded edges
+- DREAD: shadow-dark metal, fear rune engravings, eye motif
+- LEECH: organic handle (tendon wrapping), blood groove channels, barbed edges
+- GRACE: silver/white blade, feather guard detail, radiant gem
+- MEND: golden staff, crystal focus, healing glow points
+- RUIN: cracked blade with ember glow, destruction patterns, unstable energy
+- VOID: reality-distorted blade (warp shader on edge), void crystal pommel
+
+### 3B. Armor System — PER-SLOT DETAIL
+
+**Helmet (5 variants, 2,000-8,000 tris each):**
+- Open-face helm: cheek guards, nose guard, forehead plate, chin strap
+- Full helm: visor (hinged separate mesh), breathing holes, crest mount point
+- Hood: cloth mesh with face shadow, drawstring detail
+- Crown/circlet: thin metallic band, gem sockets, branch/antler ornaments
+- Skull mask: bone-textured face plate, jaw piece, eye socket geometry
+
+**Chest Armor (5 variants, 5,000-15,000 tris each):**
+- Plate mail: overlapping plates on torso, articulated waist section, back plate
+- Chain mail: ring pattern normal map over base mesh, leather trim
+- Leather armor: panels with stitching seams, buckle closures, tooling pattern
+- Robes: flowing cloth-sim-ready mesh, layered fabric, belt/sash
+- Bare/light: minimal chest wrap, tattoo UV region, muscle definition visible
+
+**Gauntlets (3 variants, 1,500-4,000 tris each):**
+- Plate gauntlets: articulated fingers (3 segments each), wrist guard, knuckle plates
+- Leather gloves: stitched seams, reinforced palms, finger wraps
+- Wraps/bracers: wrapped cloth/leather, forearm guard, ring attachments
+
+**Boots/Greaves (3 variants, 2,000-5,000 tris each):**
+- Plate greaves: shin guard, knee cop, sabatons with articulated toe
+- Leather boots: tall shaft, buckle straps, sole detail, worn edges
+- Sandals/wraps: minimal coverage, sole + strap geometry
+
+**Shoulders/Pauldrons (3 variants, 1,500-4,000 tris each):**
+- Plate pauldrons: layered plates, arm attachment, spike/horn mounts
+- Fur mantle: draped fur mesh with hair card detail
+- Bone shoulder: monster bone/trophy mounted on leather base
+
+**Capes/Cloaks (cloth-sim ready, 2,000-5,000 tris):**
+- Full cloak: shoulder-to-heel drape, hood attachment, clasp geometry
+- Half cape: one-shoulder, wind-ready cloth sim mesh
+- Tattered cape: pre-damaged edge with alpha, torn strips
+
+### 3C. Item System — COMPREHENSIVE
+
+**Consumables (500-1,500 tris each):**
+- Health potion: glass bottle with cork, red liquid inner surface, label UV region
+- Mana potion: blue liquid, ornate bottle shape, crystal stopper
+- Antidote: green vial, narrow neck, wax seal
+- Buff tonic: wide flask, colored liquid, brand-specific bottle shape
+- Food items: bread (sculpted crust), cheese (wedge), meat (drumstick)
+- Phoenix Down: feather bundle with golden glow emission
+
+**Capture Devices (1,000-3,000 tris, per-brand visual):**
+- IRON: chain-cage sphere with padlock mechanism
+- SAVAGE: bone-cage with leather bindings
+- SURGE: crystal containment sphere with arc conductors
+- VENOM: sealed containment vial with toxic glow
+- VOID: dimensional pocket orb with void energy
+
+**Key Items (500-2,000 tris each):**
+- Keys: skeleton key with ornate bow, dungeon key with simple teeth, master key with rune engraving
+- Maps: rolled parchment with wax seal, visible edge wear
+- Lockpicks: thin metal tools in leather roll case
+- Brand tokens: per-brand shaped coin/medallion
+- Quest items: unique shapes matching quest (e.g., "corroded padlock" from Chainbound drops)
+
+**Crafting Materials (200-800 tris each):**
+- Ores: rough angular chunks with metallic faces + rock matrix
+- Leather: folded hide with stitching marks
+- Herbs: leaf/stem/flower geometry with alpha cards
+- Gems: faceted crystal geometry (12-20 faces) with refraction material
+- Monster parts: from vb_game_data drop tables (e.g., "lightning shard" = crystal, "living seed" = organic pod)
+
+**Currency:**
+- Gold coins: disc with embossed face detail (normal map), stack variation
+- Brand tokens: per-brand 3D shape (pentagon for 5 brands, hexagon for 6, etc.)
 
 ---
 
 ## Phase 4: TERRAIN/MAP VISUAL QUALITY (Week 3)
+
+### 4A. Terrain Materials — PER-BIOME
+Each biome has its own terrain material palette:
+
+**Thornwood Forest:**
+- Ground: dark leaf litter + exposed roots + soil
+- Slopes: moss-covered rock + fern patches
+- Cliffs: gray stone with vine growth
+- Water edges: mud + reeds
+
+**Corrupted Swamp:**
+- Ground: black mud + toxic pools (emission)
+- Slopes: slick dark rock + slime trails
+- Cliffs: corroded stone with purple corruption veins
+- Water: murky green with surface particles
+
+**Mountain Pass:**
+- Ground: gravel + sparse grass + snow patches
+- Slopes: exposed rock + ice
+- Cliffs: layered sedimentary rock with cracks
+- Peaks: pure snow + ice crystals
+
+**Ruined Fortress:**
+- Ground: broken cobblestone + dirt + rubble
+- Slopes: crumbling wall foundation + moss
+- Structures: damaged stone (corruption overlay)
+
+**Abandoned Village:**
+- Ground: dirt paths + overgrown grass
+- Structures: rotten wood + broken stone
+- Garden areas: dead/wilted vegetation
+
+**Veil Crack Zone:**
+- Ground: fractured earth with glowing cracks (emission)
+- Floating: crystal surfaces, void-touched stone
+- Air: particle-dense atmosphere
+
+**Cemetery:**
+- Ground: dark soil + dead grass + fog
+- Paths: worn stone walkways
+- Decoration: fallen leaves, scattered petals
+
+**Battlefield:**
+- Ground: churned mud + blood-stained earth
+- Debris: broken weapons, shield fragments
+- Atmosphere: smoke/haze particles
+
+### 4A-extended. Terrain Material Blending
+- Vertex color splatmap with 4 channels (R=grass, G=rock, B=dirt, A=snow/special)
+- Slope-based auto-assignment: flat=grass, 30°+=rock, vertical=cliff
+- Height-based: low=dirt/water, mid=grass, high=rock/snow
+- Noise variation prevents uniform bands
+- Biome overlay: corruption tint on all surfaces in corrupted zones
+
+### 4B. Vegetation Quality — PER-BIOME
+
+**Thornwood Forest:**
+- Dead/twisted oaks: full branch structure, 8-15K tris LOD0
+- Giant mushrooms: dome cap + stem, 3-5K tris
+- Ferns: alpha card billboards, 500 tris
+- Thorny bushes: branch mesh + thorn extrusions, 2K tris
+- Hanging moss/vines: curve-based draped geometry
+
+**Corrupted Swamp:**
+- Dead trees: bare branches, tilted, 5K tris
+- Spore pods: metaball-generated clusters
+- Toxic flowers: petal geometry with emission
+- Reeds/cattails: billboard grass cards
+
+**Mountain Pass:**
+- Pine trees: proper conifer branch cards, 10K tris
+- Alpine grass: short billboard strips
+- Boulders: sculpted rocky noise, 3K tris
+- Snow-laden branches: white caps on geometry
+
+**Cemetery:**
+- Willow trees: drooping branch curves
+- Dead flowers: wilted petal geometry
+- Iron fencing: modular posts + bars
 
 ### 4A. Terrain Materials
 - Multi-material blending via vertex painting
