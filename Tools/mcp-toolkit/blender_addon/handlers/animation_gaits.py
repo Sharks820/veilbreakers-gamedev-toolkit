@@ -136,12 +136,67 @@ BIPED_RUN_CONFIG: dict = {
 }
 
 
-# Quadruped: diagonal pairs (FL+RR vs FR+RL) -- phases: 0, pi, pi/2, 3pi/2
+# Quadruped walk: 4-beat lateral sequence (each leg independent phase)
+# Phase offsets: LH=0, LF=0.25*2pi, RH=0.5*2pi, RF=0.75*2pi
+# At least 3 legs on ground at any time
 QUADRUPED_WALK_CONFIG: dict = {
     "name": "quadruped_walk",
+    "frame_count": 32,
+    "bones": {
+        # Left hind (LH) -- phase 0
+        "DEF-thigh.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.4, "phase": 0.0,
+        },
+        "DEF-shin.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.25, "phase": 0.5,
+        },
+        # Left front (LF) -- phase 0.25*2pi
+        "DEF-upper_arm.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.4, "phase": 0.25 * 2 * math.pi,
+        },
+        "DEF-forearm.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.25, "phase": 0.25 * 2 * math.pi + 0.5,
+        },
+        # Right hind (RH) -- phase 0.5*2pi
+        "DEF-thigh.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.4, "phase": 0.5 * 2 * math.pi,
+        },
+        "DEF-shin.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.25, "phase": 0.5 * 2 * math.pi + 0.5,
+        },
+        # Right front (RF) -- phase 0.75*2pi
+        "DEF-upper_arm.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.4, "phase": 0.75 * 2 * math.pi,
+        },
+        "DEF-forearm.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.25, "phase": 0.75 * 2 * math.pi + 0.5,
+        },
+        # Spine undulation
+        "DEF-spine.001": {
+            "channel": "rotation_euler", "axis": 1,
+            "amplitude": 0.04, "phase": 0.0,
+        },
+        "DEF-spine.002": {
+            "channel": "rotation_euler", "axis": 1,
+            "amplitude": 0.04, "phase": math.pi / 2,
+        },
+    },
+}
+
+# Quadruped trot: 2-beat diagonal pairs (FL+RR vs FR+RL)
+QUADRUPED_TROT_CONFIG: dict = {
+    "name": "quadruped_trot",
     "frame_count": 24,
     "bones": {
-        # Front-left / Rear-right in phase
+        # Front-left / Rear-right in phase (diagonal pair 1)
         "DEF-upper_arm.L": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.5, "phase": 0.0,
@@ -158,7 +213,7 @@ QUADRUPED_WALK_CONFIG: dict = {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.3, "phase": 0.5,
         },
-        # Front-right / Rear-left in opposite phase
+        # Front-right / Rear-left in opposite phase (diagonal pair 2)
         "DEF-upper_arm.R": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.5, "phase": math.pi,
@@ -178,59 +233,119 @@ QUADRUPED_WALK_CONFIG: dict = {
         # Spine undulation
         "DEF-spine.001": {
             "channel": "rotation_euler", "axis": 1,
-            "amplitude": 0.04, "phase": 0.0,
+            "amplitude": 0.05, "phase": 0.0,
         },
         "DEF-spine.002": {
             "channel": "rotation_euler", "axis": 1,
-            "amplitude": 0.04, "phase": math.pi / 2,
+            "amplitude": 0.05, "phase": math.pi / 2,
         },
     },
 }
 
-QUADRUPED_RUN_CONFIG: dict = {
-    "name": "quadruped_run",
-    "frame_count": 16,
+# Quadruped canter: 3-beat asymmetric gait
+# One hind -> diagonal pair -> one fore (right lead by default)
+# Asymmetric timing: RH=0, LH+RF=0.33*2pi, LF=0.66*2pi
+QUADRUPED_CANTER_CONFIG: dict = {
+    "name": "quadruped_canter",
+    "frame_count": 20,
     "bones": {
-        # Gallop: front pair together, rear pair together
-        "DEF-upper_arm.L": {
-            "channel": "rotation_euler", "axis": 0,
-            "amplitude": 0.8, "phase": 0.0,
-        },
-        "DEF-forearm.L": {
-            "channel": "rotation_euler", "axis": 0,
-            "amplitude": 0.5, "phase": 0.5,
-        },
-        "DEF-upper_arm.R": {
-            "channel": "rotation_euler", "axis": 0,
-            "amplitude": 0.8, "phase": 0.0,
-        },
-        "DEF-forearm.R": {
-            "channel": "rotation_euler", "axis": 0,
-            "amplitude": 0.5, "phase": 0.5,
-        },
-        "DEF-thigh.L": {
-            "channel": "rotation_euler", "axis": 0,
-            "amplitude": 0.8, "phase": math.pi,
-        },
-        "DEF-shin.L": {
-            "channel": "rotation_euler", "axis": 0,
-            "amplitude": 0.5, "phase": math.pi + 0.5,
-        },
+        # Right hind (initiating leg) -- phase 0
         "DEF-thigh.R": {
             "channel": "rotation_euler", "axis": 0,
-            "amplitude": 0.8, "phase": math.pi,
+            "amplitude": 0.6, "phase": 0.0,
         },
         "DEF-shin.R": {
             "channel": "rotation_euler", "axis": 0,
-            "amplitude": 0.5, "phase": math.pi + 0.5,
+            "amplitude": 0.4, "phase": 0.5,
         },
+        # Diagonal pair: left hind + right front -- phase 0.33*2pi
+        "DEF-thigh.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.6, "phase": 0.33 * 2 * math.pi,
+        },
+        "DEF-shin.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.4, "phase": 0.33 * 2 * math.pi + 0.5,
+        },
+        "DEF-upper_arm.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.6, "phase": 0.33 * 2 * math.pi,
+        },
+        "DEF-forearm.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.4, "phase": 0.33 * 2 * math.pi + 0.5,
+        },
+        # Left front (lead leg) -- phase 0.66*2pi
+        "DEF-upper_arm.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.6, "phase": 0.66 * 2 * math.pi,
+        },
+        "DEF-forearm.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.4, "phase": 0.66 * 2 * math.pi + 0.5,
+        },
+        # Spine flexion/extension cycle
         "DEF-spine.001": {
-            "channel": "rotation_euler", "axis": 1,
-            "amplitude": 0.07, "phase": 0.0,
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.06, "phase": 0.0,
         },
         "DEF-spine.002": {
-            "channel": "rotation_euler", "axis": 1,
-            "amplitude": 0.07, "phase": math.pi / 2,
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.06, "phase": math.pi / 2,
+        },
+    },
+}
+
+# Quadruped gallop: 4-beat with suspension phase
+# RH -> LH -> RF -> LF, distinct lead leg, spine flexion/extension
+QUADRUPED_GALLOP_CONFIG: dict = {
+    "name": "quadruped_gallop",
+    "frame_count": 16,
+    "bones": {
+        # Right hind -- phase 0
+        "DEF-thigh.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.9, "phase": 0.0,
+        },
+        "DEF-shin.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.6, "phase": 0.5,
+        },
+        # Left hind -- phase 0.25*2pi
+        "DEF-thigh.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.9, "phase": 0.25 * 2 * math.pi,
+        },
+        "DEF-shin.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.6, "phase": 0.25 * 2 * math.pi + 0.5,
+        },
+        # Right front -- phase 0.5*2pi
+        "DEF-upper_arm.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.9, "phase": 0.5 * 2 * math.pi,
+        },
+        "DEF-forearm.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.6, "phase": 0.5 * 2 * math.pi + 0.5,
+        },
+        # Left front (lead) -- phase 0.75*2pi
+        "DEF-upper_arm.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.9, "phase": 0.75 * 2 * math.pi,
+        },
+        "DEF-forearm.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.6, "phase": 0.75 * 2 * math.pi + 0.5,
+        },
+        # Spine flexion/extension cycle (larger amplitude for gallop)
+        "DEF-spine.001": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.1, "phase": 0.0,
+        },
+        "DEF-spine.002": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.1, "phase": math.pi / 2,
         },
     },
 }
@@ -370,7 +485,7 @@ ARACHNID_WALK_CONFIG: dict = {
     "bones": {
         # Group A (phase 0)
         "DEF-leg_1.L": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.4, "phase": 0.0,
         },
         "DEF-leg_1_lower.L": {
@@ -378,7 +493,7 @@ ARACHNID_WALK_CONFIG: dict = {
             "amplitude": 0.25, "phase": 0.5,
         },
         "DEF-leg_2.R": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.4, "phase": 0.0,
         },
         "DEF-leg_2_lower.R": {
@@ -386,7 +501,7 @@ ARACHNID_WALK_CONFIG: dict = {
             "amplitude": 0.25, "phase": 0.5,
         },
         "DEF-leg_3.L": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.4, "phase": 0.0,
         },
         "DEF-leg_3_lower.L": {
@@ -394,7 +509,7 @@ ARACHNID_WALK_CONFIG: dict = {
             "amplitude": 0.25, "phase": 0.5,
         },
         "DEF-leg_4.R": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.4, "phase": 0.0,
         },
         "DEF-leg_4_lower.R": {
@@ -403,7 +518,7 @@ ARACHNID_WALK_CONFIG: dict = {
         },
         # Group B (phase pi)
         "DEF-leg_1.R": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.4, "phase": math.pi,
         },
         "DEF-leg_1_lower.R": {
@@ -411,7 +526,7 @@ ARACHNID_WALK_CONFIG: dict = {
             "amplitude": 0.25, "phase": math.pi + 0.5,
         },
         "DEF-leg_2.L": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.4, "phase": math.pi,
         },
         "DEF-leg_2_lower.L": {
@@ -419,7 +534,7 @@ ARACHNID_WALK_CONFIG: dict = {
             "amplitude": 0.25, "phase": math.pi + 0.5,
         },
         "DEF-leg_3.R": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.4, "phase": math.pi,
         },
         "DEF-leg_3_lower.R": {
@@ -427,7 +542,7 @@ ARACHNID_WALK_CONFIG: dict = {
             "amplitude": 0.25, "phase": math.pi + 0.5,
         },
         "DEF-leg_4.L": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.4, "phase": math.pi,
         },
         "DEF-leg_4_lower.L": {
@@ -447,7 +562,7 @@ ARACHNID_RUN_CONFIG: dict = {
     "frame_count": 16,
     "bones": {
         "DEF-leg_1.L": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.65, "phase": 0.0,
         },
         "DEF-leg_1_lower.L": {
@@ -455,7 +570,7 @@ ARACHNID_RUN_CONFIG: dict = {
             "amplitude": 0.4, "phase": 0.5,
         },
         "DEF-leg_2.R": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.65, "phase": 0.0,
         },
         "DEF-leg_2_lower.R": {
@@ -463,7 +578,7 @@ ARACHNID_RUN_CONFIG: dict = {
             "amplitude": 0.4, "phase": 0.5,
         },
         "DEF-leg_3.L": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.65, "phase": 0.0,
         },
         "DEF-leg_3_lower.L": {
@@ -471,7 +586,7 @@ ARACHNID_RUN_CONFIG: dict = {
             "amplitude": 0.4, "phase": 0.5,
         },
         "DEF-leg_4.R": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.65, "phase": 0.0,
         },
         "DEF-leg_4_lower.R": {
@@ -479,7 +594,7 @@ ARACHNID_RUN_CONFIG: dict = {
             "amplitude": 0.4, "phase": 0.5,
         },
         "DEF-leg_1.R": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.65, "phase": math.pi,
         },
         "DEF-leg_1_lower.R": {
@@ -487,7 +602,7 @@ ARACHNID_RUN_CONFIG: dict = {
             "amplitude": 0.4, "phase": math.pi + 0.5,
         },
         "DEF-leg_2.L": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.65, "phase": math.pi,
         },
         "DEF-leg_2_lower.L": {
@@ -495,7 +610,7 @@ ARACHNID_RUN_CONFIG: dict = {
             "amplitude": 0.4, "phase": math.pi + 0.5,
         },
         "DEF-leg_3.R": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.65, "phase": math.pi,
         },
         "DEF-leg_3_lower.R": {
@@ -503,7 +618,7 @@ ARACHNID_RUN_CONFIG: dict = {
             "amplitude": 0.4, "phase": math.pi + 0.5,
         },
         "DEF-leg_4.L": {
-            "channel": "rotation_euler", "axis": 0,
+            "channel": "rotation_euler", "axis": 2,
             "amplitude": 0.65, "phase": math.pi,
         },
         "DEF-leg_4_lower.L": {
@@ -667,7 +782,13 @@ IDLE_CONFIG: dict = {
 
 _GAIT_REGISTRY: dict[str, dict[str, dict]] = {
     "biped": {"walk": BIPED_WALK_CONFIG, "run": BIPED_RUN_CONFIG},
-    "quadruped": {"walk": QUADRUPED_WALK_CONFIG, "run": QUADRUPED_RUN_CONFIG},
+    "quadruped": {
+        "walk": QUADRUPED_WALK_CONFIG,
+        "trot": QUADRUPED_TROT_CONFIG,
+        "canter": QUADRUPED_CANTER_CONFIG,
+        "gallop": QUADRUPED_GALLOP_CONFIG,
+        "run": QUADRUPED_GALLOP_CONFIG,  # backward compat
+    },
     "hexapod": {"walk": HEXAPOD_WALK_CONFIG, "run": HEXAPOD_RUN_CONFIG},
     "arachnid": {"walk": ARACHNID_WALK_CONFIG, "run": ARACHNID_RUN_CONFIG},
     "serpent": {"walk": SERPENT_WALK_CONFIG, "run": SERPENT_RUN_CONFIG},
