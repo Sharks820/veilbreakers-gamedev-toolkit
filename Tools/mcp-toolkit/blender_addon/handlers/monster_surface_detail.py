@@ -186,7 +186,7 @@ def generate_scale_pattern(
     coverage = max(0.0, min(1.0, coverage))
     scale_size = max(0.001, scale_size)
 
-    if coverage == 0.0:
+    if coverage < 1e-9:
         return {
             "vertices": [],
             "faces": [],

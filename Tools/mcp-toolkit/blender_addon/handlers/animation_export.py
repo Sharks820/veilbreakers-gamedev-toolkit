@@ -1162,7 +1162,7 @@ def handle_generate_ai_motion(params: dict) -> dict:
         "subtle": 0.6,
     }.get(style, 1.0)
 
-    if style_scale != 1.0:
+    if abs(style_scale - 1.0) > 1e-9:
         from .animation_gaits import Keyframe as KF
         keyframes = [
             KF(kf.bone_name, kf.channel, kf.axis, kf.frame, kf.value * style_scale)

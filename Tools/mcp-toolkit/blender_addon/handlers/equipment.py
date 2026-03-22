@@ -1749,7 +1749,7 @@ def handle_equipment_render_icon(params: dict) -> dict:
     scene.camera = cam_obj
     scene.render.resolution_x = resolution
     scene.render.resolution_y = resolution
-    scene.render.film_transparent = (background_alpha == 0.0)
+    scene.render.film_transparent = (background_alpha < 1e-9)
     scene.render.filepath = output_path
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_mode = "RGBA"
