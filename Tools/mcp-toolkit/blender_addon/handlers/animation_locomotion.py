@@ -33,6 +33,12 @@ VALID_LOCOMOTION_TYPES: frozenset[str] = frozenset({
     "dodge_roll", "backstep",
     "stagger", "knockback", "knockdown", "getup",
     "weapon_draw", "weapon_sheathe",
+    # AAA completeness additions
+    "swim", "climb", "slide", "crouch_walk", "ladder_climb",
+    "parry_body", "riposte", "plunge_attack",
+    "projectile_throw", "beam_aim", "summon_ritual",
+    "mount", "dismount",
+    "pickup", "push", "pull", "ledge_climb",
 })
 
 
@@ -415,6 +421,303 @@ def generate_weapon_sheathe_keyframes(frame_count: int = 16, intensity: float = 
 
 
 # ---------------------------------------------------------------------------
+# AAA completeness — remaining locomotion/combat/interaction generators
+# ---------------------------------------------------------------------------
+
+def _simple_cycle(bones_cfg: dict, frame_count: int, intensity: float) -> list[Keyframe]:
+    """Helper: generate a simple sine cycle from {bone: (channel, axis, amp, phase)}."""
+    frame_count = max(1, frame_count)
+    kfs: list[Keyframe] = []
+    for frame in range(frame_count + 1):
+        t = frame / frame_count
+        a = t * 2 * math.pi
+        for bone, (ch, ax, amp, phase) in bones_cfg.items():
+            kfs.append(Keyframe(bone, ch, ax, frame, amp * intensity * math.sin(a + phase)))
+    return kfs
+
+
+def generate_swim_keyframes(fc: int = 32, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    return _simple_cycle({
+        "DEF-upper_arm.L": ("rotation_euler", 0, 0.6, 0.0),
+        "DEF-upper_arm.R": ("rotation_euler", 0, 0.6, math.pi),
+        "DEF-thigh.L": ("rotation_euler", 0, 0.4, math.pi),
+        "DEF-thigh.R": ("rotation_euler", 0, 0.4, 0.0),
+        "DEF-spine.001": ("rotation_euler", 0, 0.08, 0.0),
+        "DEF-spine": ("location", 2, 0.03, math.pi / 2),
+    }, fc, i)
+
+
+def generate_climb_keyframes(fc: int = 24, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    return _simple_cycle({
+        "DEF-upper_arm.L": ("rotation_euler", 0, -0.8, 0.0),
+        "DEF-upper_arm.R": ("rotation_euler", 0, -0.8, math.pi),
+        "DEF-thigh.L": ("rotation_euler", 0, 0.6, math.pi),
+        "DEF-thigh.R": ("rotation_euler", 0, 0.6, 0.0),
+        "DEF-spine.001": ("rotation_euler", 0, -0.1, 0.0),
+        "DEF-spine": ("location", 2, 0.05, 0.0),
+    }, fc, i)
+
+
+def generate_slide_keyframes(fc: int = 16, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    for frame in range(fc + 1):
+        t = frame / fc
+        kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, -0.2 * i))
+        kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, -0.3 * i))
+        kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.5 * i))
+        kfs.append(Keyframe("DEF-shin.R", "rotation_euler", 0, frame, -0.7 * i))
+        kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.3 * i))
+        kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 0.2 * i))
+    return kfs
+
+
+def generate_crouch_walk_keyframes(fc: int = 28, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    for frame in range(fc + 1):
+        t = frame / fc
+        a = t * 2 * math.pi
+        kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * i + 0.25 * math.sin(a) * i))
+        kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.3 * i + 0.25 * math.sin(a + math.pi) * i))
+        kfs.append(Keyframe("DEF-shin.L", "rotation_euler", 0, frame, -0.5 * i))
+        kfs.append(Keyframe("DEF-shin.R", "rotation_euler", 0, frame, -0.5 * i))
+        kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.2 * i))
+        kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, 0.1 * math.sin(a + math.pi) * i))
+        kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 0.1 * math.sin(a) * i))
+    return kfs
+
+
+def generate_ladder_climb_keyframes(fc: int = 24, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    return _simple_cycle({
+        "DEF-upper_arm.L": ("rotation_euler", 0, -1.0, 0.0),
+        "DEF-upper_arm.R": ("rotation_euler", 0, -1.0, math.pi),
+        "DEF-forearm.L": ("rotation_euler", 0, -0.5, 0.3),
+        "DEF-forearm.R": ("rotation_euler", 0, -0.5, math.pi + 0.3),
+        "DEF-thigh.L": ("rotation_euler", 0, 0.5, math.pi),
+        "DEF-thigh.R": ("rotation_euler", 0, 0.5, 0.0),
+        "DEF-shin.L": ("rotation_euler", 0, -0.3, math.pi + 0.5),
+        "DEF-shin.R": ("rotation_euler", 0, -0.3, 0.5),
+    }, fc, i)
+
+
+def generate_parry_body_keyframes(fc: int = 14, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    deflect = int(0.25 * fc)
+    for frame in range(fc + 1):
+        if frame <= deflect:
+            t = frame / deflect if deflect > 0 else 1.0
+            kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.7 * t * i))
+            kfs.append(Keyframe("DEF-forearm.L", "rotation_euler", 0, frame, -0.4 * t * i))
+            kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 1, frame, 0.15 * t * i))
+        else:
+            r = (frame - deflect) / (fc - deflect) if fc > deflect else 1.0
+            kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.7 * (1 - r) * i))
+            kfs.append(Keyframe("DEF-forearm.L", "rotation_euler", 0, frame, -0.4 * (1 - r) * i))
+            kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 1, frame, 0.15 * (1 - r) * i))
+    return kfs
+
+
+def generate_riposte_keyframes(fc: int = 20, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    antic = int(0.3 * fc)
+    strike = int(0.5 * fc)
+    for frame in range(fc + 1):
+        if frame <= antic:
+            t = frame / antic if antic > 0 else 1.0
+            kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -0.6 * t * i))
+            kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 1, frame, -0.2 * t * i))
+        elif frame <= strike:
+            t = (frame - antic) / (strike - antic) if strike > antic else 1.0
+            kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, (-0.6 + 1.8 * t) * i))
+            kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 1, frame, (-0.2 + 0.4 * t) * i))
+        else:
+            t = (frame - strike) / (fc - strike) if fc > strike else 1.0
+            kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 1.2 * (1 - t) * i))
+            kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 1, frame, 0.2 * (1 - t) * i))
+    return kfs
+
+
+def generate_plunge_attack_keyframes(fc: int = 16, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    for frame in range(fc + 1):
+        t = frame / fc
+        ease = t * t * t
+        kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -1.2 * ease * i))
+        kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -1.2 * ease * i))
+        kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.4 * ease * i))
+        kfs.append(Keyframe("DEF-spine", "location", 2, frame, -0.5 * ease * i))
+        kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * ease * i))
+        kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.3 * ease * i))
+    return kfs
+
+
+def generate_projectile_throw_keyframes(fc: int = 20, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    wind = int(0.4 * fc)
+    release = int(0.55 * fc)
+    for frame in range(fc + 1):
+        if frame <= wind:
+            t = frame / wind if wind > 0 else 1.0
+            kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -0.8 * t * i))
+            kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 1, frame, -0.2 * t * i))
+        elif frame <= release:
+            t = (frame - wind) / (release - wind) if release > wind else 1.0
+            kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, (-0.8 + 2.0 * t) * i))
+            kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 1, frame, (-0.2 + 0.4 * t) * i))
+        else:
+            t = (frame - release) / (fc - release) if fc > release else 1.0
+            kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 1.2 * (1 - t) * i))
+            kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 1, frame, 0.2 * (1 - t) * i))
+    return kfs
+
+
+def generate_beam_aim_keyframes(fc: int = 36, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    for frame in range(fc + 1):
+        t = frame / fc
+        hold = min(1.0, t * 3)
+        kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -0.7 * hold * i))
+        kfs.append(Keyframe("DEF-forearm.R", "rotation_euler", 0, frame, -0.3 * hold * i))
+        kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.4 * hold * i))
+        kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, -0.05 * hold * i))
+        tremor = 0.01 * i * math.sin(t * 10 * math.pi) * hold
+        kfs.append(Keyframe("DEF-hand.R", "rotation_euler", 0, frame, tremor))
+    return kfs
+
+
+def generate_summon_ritual_keyframes(fc: int = 48, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    for frame in range(fc + 1):
+        t = frame / fc
+        a = t * 2 * math.pi
+        raise_t = min(1.0, t * 2)
+        kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 1, frame, -0.6 * raise_t * i))
+        kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 1, frame, 0.6 * raise_t * i))
+        kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.5 * raise_t * i))
+        kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -0.5 * raise_t * i))
+        pulse = 0.04 * i * math.sin(a * 3) * raise_t
+        kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, -0.1 * raise_t * i + pulse))
+        kfs.append(Keyframe("DEF-spine.002", "rotation_euler", 0, frame, pulse * 0.5))
+    return kfs
+
+
+def generate_mount_keyframes(fc: int = 24, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    swing = int(0.5 * fc)
+    for frame in range(fc + 1):
+        if frame <= swing:
+            t = frame / swing if swing > 0 else 1.0
+            kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 1, frame, 0.8 * t * i))
+            kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.2 * t * i))
+            kfs.append(Keyframe("DEF-spine", "location", 2, frame, 0.3 * t * i))
+            kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.3 * t * i))
+        else:
+            t = (frame - swing) / (fc - swing) if fc > swing else 1.0
+            ease = t * t * (3 - 2 * t)
+            kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 1, frame, 0.8 * (1 - ease) * i))
+            kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.5 * ease * i))
+            kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.5 * ease * i))
+            kfs.append(Keyframe("DEF-spine", "location", 2, frame, 0.3 * (1 - 0.5 * ease) * i))
+    return kfs
+
+
+def generate_dismount_keyframes(fc: int = 20, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    for frame in range(fc + 1):
+        t = frame / fc
+        ease = t * t * (3 - 2 * t)
+        kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.5 * (1 - ease) * i))
+        kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.5 * (1 - ease) * i))
+        kfs.append(Keyframe("DEF-spine", "location", 2, frame, 0.15 * math.sin(t * math.pi) * i))
+        kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 1, frame, 0.6 * (1 - ease) * i))
+    return kfs
+
+
+def generate_pickup_keyframes(fc: int = 20, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    bend = int(0.5 * fc)
+    for frame in range(fc + 1):
+        if frame <= bend:
+            t = frame / bend if bend > 0 else 1.0
+            kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.5 * t * i))
+            kfs.append(Keyframe("DEF-spine.002", "rotation_euler", 0, frame, 0.3 * t * i))
+            kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * t * i))
+            kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.3 * t * i))
+            kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 0.6 * t * i))
+        else:
+            t = (frame - bend) / (fc - bend) if fc > bend else 1.0
+            ease = t * t * (3 - 2 * t)
+            kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.5 * (1 - ease) * i))
+            kfs.append(Keyframe("DEF-spine.002", "rotation_euler", 0, frame, 0.3 * (1 - ease) * i))
+            kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * (1 - ease) * i))
+            kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.3 * (1 - ease) * i))
+            kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, (0.6 - 0.9 * ease) * i))
+    return kfs
+
+
+def generate_push_keyframes(fc: int = 20, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    for frame in range(fc + 1):
+        t = frame / fc
+        push = math.sin(t * math.pi)
+        kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.5 * push * i))
+        kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -0.5 * push * i))
+        kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.15 * push * i))
+        kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.2 * push * i))
+        kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.1 * push * i))
+    return kfs
+
+
+def generate_pull_keyframes(fc: int = 20, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    for frame in range(fc + 1):
+        t = frame / fc
+        pull = math.sin(t * math.pi)
+        kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, 0.4 * pull * i))
+        kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 0.4 * pull * i))
+        kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, -0.15 * pull * i))
+        kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, -0.15 * pull * i))
+        kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.1 * pull * i))
+    return kfs
+
+
+def generate_ledge_climb_keyframes(fc: int = 24, i: float = 1.0) -> list[Keyframe]:
+    fc = max(1, fc)
+    kfs: list[Keyframe] = []
+    pull_end = int(0.5 * fc)
+    for frame in range(fc + 1):
+        if frame <= pull_end:
+            t = frame / pull_end if pull_end > 0 else 1.0
+            kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -1.0 * t * i))
+            kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -1.0 * t * i))
+            kfs.append(Keyframe("DEF-spine", "location", 2, frame, 0.5 * t * i))
+            kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.6 * t * i))
+        else:
+            t = (frame - pull_end) / (fc - pull_end) if fc > pull_end else 1.0
+            ease = t * t * (3 - 2 * t)
+            kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -1.0 * (1 - ease) * i))
+            kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -1.0 * (1 - ease) * i))
+            kfs.append(Keyframe("DEF-spine", "location", 2, frame, 0.5 * i))
+            kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, (0.6 - 0.6 * ease) * i))
+    return kfs
+
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
 
@@ -435,6 +738,23 @@ _LOCO_GENERATORS = {
     "getup": lambda p: generate_getup_keyframes(p["frame_count"], p["intensity"]),
     "weapon_draw": lambda p: generate_weapon_draw_keyframes(p["frame_count"], p["intensity"]),
     "weapon_sheathe": lambda p: generate_weapon_sheathe_keyframes(p["frame_count"], p["intensity"]),
+    "swim": lambda p: generate_swim_keyframes(p["frame_count"], p["intensity"]),
+    "climb": lambda p: generate_climb_keyframes(p["frame_count"], p["intensity"]),
+    "slide": lambda p: generate_slide_keyframes(p["frame_count"], p["intensity"]),
+    "crouch_walk": lambda p: generate_crouch_walk_keyframes(p["frame_count"], p["intensity"]),
+    "ladder_climb": lambda p: generate_ladder_climb_keyframes(p["frame_count"], p["intensity"]),
+    "parry_body": lambda p: generate_parry_body_keyframes(p["frame_count"], p["intensity"]),
+    "riposte": lambda p: generate_riposte_keyframes(p["frame_count"], p["intensity"]),
+    "plunge_attack": lambda p: generate_plunge_attack_keyframes(p["frame_count"], p["intensity"]),
+    "projectile_throw": lambda p: generate_projectile_throw_keyframes(p["frame_count"], p["intensity"]),
+    "beam_aim": lambda p: generate_beam_aim_keyframes(p["frame_count"], p["intensity"]),
+    "summon_ritual": lambda p: generate_summon_ritual_keyframes(p["frame_count"], p["intensity"]),
+    "mount": lambda p: generate_mount_keyframes(p["frame_count"], p["intensity"]),
+    "dismount": lambda p: generate_dismount_keyframes(p["frame_count"], p["intensity"]),
+    "pickup": lambda p: generate_pickup_keyframes(p["frame_count"], p["intensity"]),
+    "push": lambda p: generate_push_keyframes(p["frame_count"], p["intensity"]),
+    "pull": lambda p: generate_pull_keyframes(p["frame_count"], p["intensity"]),
+    "ledge_climb": lambda p: generate_ledge_climb_keyframes(p["frame_count"], p["intensity"]),
 }
 
 

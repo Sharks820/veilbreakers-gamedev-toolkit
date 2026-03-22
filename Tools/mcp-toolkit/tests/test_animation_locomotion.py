@@ -14,7 +14,7 @@ class TestValidation:
 
     def test_invalid(self):
         with pytest.raises(ValueError):
-            validate_locomotion_params({"object_name": "X", "loco_type": "swim"})
+            validate_locomotion_params({"object_name": "X", "loco_type": "teleport"})
 
 
 class TestDispatch:
@@ -33,4 +33,4 @@ class TestDispatch:
 
 class TestConstants:
     def test_count(self):
-        assert len(VALID_LOCOMOTION_TYPES) == 16
+        assert len(VALID_LOCOMOTION_TYPES) == 33
