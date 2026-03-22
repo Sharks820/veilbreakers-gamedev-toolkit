@@ -1254,3 +1254,58 @@ class TestSkinningQuality:
         from blender_addon.handlers.rigging_weights import _compute_skinning_quality
         r = _compute_skinning_quality([], [])
         assert r["quality_score"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# TestUnityHumanoidMapping
+# ---------------------------------------------------------------------------
+
+
+class TestUnityHumanoidMapping:
+    def test_map_has_required_bones(self):
+        from blender_addon.handlers.rigging import UNITY_HUMANOID_BONE_MAP, UNITY_REQUIRED_BONES
+        mapped_unity = set(UNITY_HUMANOID_BONE_MAP.values())
+        for req in UNITY_REQUIRED_BONES:
+            assert req in mapped_unity, f"Required bone '{req}' not in map"
+
+    def test_validate_complete_rig(self):
+        from blender_addon.handlers.rigging import _validate_unity_humanoid, UNITY_HUMANOID_BONE_MAP
+        bones = list(UNITY_HUMANOID_BONE_MAP.keys())
+        result = _validate_unity_humanoid(bones)
+        assert result["valid"] is True
+        assert result["missing_required"] == []
+
+    def test_validate_incomplete_rig(self):
+        from blender_addon.handlers.rigging import _validate_unity_humanoid
+        result = _validate_unity_humanoid(["DEF-spine", "DEF-spine.001"])
+        assert result["valid"] is False
+        assert len(result["missing_required"]) > 0
+
+    def test_validate_empty_rig(self):
+        from blender_addon.handlers.rigging import _validate_unity_humanoid, UNITY_REQUIRED_BONES
+        result = _validate_unity_humanoid([])
+        assert result["valid"] is False
+        assert len(result["missing_required"]) == len(UNITY_REQUIRED_BONES)
+
+
+# ---------------------------------------------------------------------------
+# TestSkinningModes
+# ---------------------------------------------------------------------------
+
+
+class TestSkinningModes:
+    def test_valid_modes(self):
+        from blender_addon.handlers.rigging_weights import _validate_skinning_mode
+        for mode in ("linear", "dual_quaternion", "hybrid"):
+            result = _validate_skinning_mode(mode)
+            assert result["valid"] is True
+
+    def test_invalid_mode(self):
+        from blender_addon.handlers.rigging_weights import _validate_skinning_mode
+        result = _validate_skinning_mode("invalid")
+        assert result["valid"] is False
+
+    def test_dqs_mode_has_flag(self):
+        from blender_addon.handlers.rigging_weights import SKINNING_MODES
+        assert SKINNING_MODES["dual_quaternion"]["use_dual_quaternion"] is True
+        assert SKINNING_MODES["linear"]["use_dual_quaternion"] is False

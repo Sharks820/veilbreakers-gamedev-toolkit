@@ -53,12 +53,20 @@ VALID_RIGIFY_TYPES: frozenset[str] = frozenset({
 
 
 HUMANOID_BONES: dict[str, dict] = {
+    # Root motion bone
+    "root": {
+        "head": (0.0, 0.0, 0.0),
+        "tail": (0.0, 0.0, 0.1),
+        "roll": 0.0,
+        "parent": None,
+        "rigify_type": "",
+    },
     # Spine chain (4 bones)
     "spine": {
         "head": (0.0, 0.0, 0.95),
         "tail": (0.0, 0.0, 1.1),
         "roll": 0.0,
-        "parent": None,
+        "parent": "root",
         "rigify_type": "spines.super_spine",
     },
     "spine.001": {
@@ -559,12 +567,20 @@ HUMANOID_BONES: dict[str, dict] = {
 
 
 QUADRUPED_BONES: dict[str, dict] = {
+    # Root motion bone
+    "root": {
+        "head": (0.0, 0.0, 0.0),
+        "tail": (0.0, 0.0, 0.1),
+        "roll": 0.0,
+        "parent": None,
+        "rigify_type": "",
+    },
     # Spine chain (3 bones)
     "spine": {
         "head": (0.0, 0.0, 0.8),
         "tail": (0.0, -0.2, 0.85),
         "roll": 0.0,
-        "parent": None,
+        "parent": "root",
         "rigify_type": "spines.super_spine",
     },
     "spine.001": {
@@ -1725,12 +1741,20 @@ DRAGON_BONES: dict[str, dict] = {
 
 
 MULTI_ARMED_BONES: dict[str, dict] = {
+    # Root motion bone
+    "root": {
+        "head": (0.0, 0.0, 0.0),
+        "tail": (0.0, 0.0, 0.1),
+        "roll": 0.0,
+        "parent": None,
+        "rigify_type": "",
+    },
     # Humanoid spine (4 bones)
     "spine": {
         "head": (0.0, 0.0, 0.95),
         "tail": (0.0, 0.0, 1.1),
         "roll": 0.0,
-        "parent": None,
+        "parent": "root",
         "rigify_type": "spines.super_spine",
     },
     "spine.001": {

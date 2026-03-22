@@ -708,3 +708,29 @@ class TestMultiTwistBones:
         from blender_addon.handlers.rigging_templates import HUMANOID_BONES
         assert HUMANOID_BONES["upper_arm_twist_025.L"]["rigify_type"] == "basic.super_copy"
         assert HUMANOID_BONES["forearm_twist_025.R"]["rigify_type"] == "basic.super_copy"
+
+
+# ---------------------------------------------------------------------------
+# TestRootMotionBone
+# ---------------------------------------------------------------------------
+
+
+class TestRootMotionBone:
+    def test_humanoid_has_root_bone(self):
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert "root" in HUMANOID_BONES
+        assert HUMANOID_BONES["root"]["parent"] is None
+
+    def test_spine_parents_root(self):
+        from blender_addon.handlers.rigging_templates import HUMANOID_BONES
+        assert HUMANOID_BONES["spine"]["parent"] == "root"
+
+    def test_quadruped_has_root(self):
+        from blender_addon.handlers.rigging_templates import QUADRUPED_BONES
+        assert "root" in QUADRUPED_BONES
+        assert QUADRUPED_BONES["spine"]["parent"] == "root"
+
+    def test_multi_armed_has_root(self):
+        from blender_addon.handlers.rigging_templates import MULTI_ARMED_BONES
+        assert "root" in MULTI_ARMED_BONES
+        assert MULTI_ARMED_BONES["spine"]["parent"] == "root"
