@@ -153,11 +153,25 @@ def apply_brand_timing(timing_config: dict[str, Any], brand: str) -> dict[str, A
     result = copy.deepcopy(timing_config)
     frames = result["frames"]
 
-    frames["anticipation"] = max(1, round(frames["anticipation"] * mods["anticipation_scale"]))
-    frames["active"] = max(0, round(frames["active"] * mods["active_scale"])) if frames["active"] > 0 else 0
+    # Store original phase boundaries for event frame scaling
+    orig_antic = frames["anticipation"]
+    orig_active = frames["active"]
+    orig_total = frames["total"]
+
+    frames["anticipation"] = max(1, round(orig_antic * mods["anticipation_scale"]))
+    frames["active"] = max(0, round(orig_active * mods["active_scale"])) if orig_active > 0 else 0
     frames["recovery"] = max(1, round(frames["recovery"] * mods["recovery_scale"]))
     total = frames["anticipation"] + frames["active"] + frames["recovery"]
     frames["total"] = total
+
+    # Scale event frames proportionally to maintain sync
+    if orig_total > 0:
+        scale_ratio = total / orig_total
+        for event_key in ("vfx_frame", "sound_frame", "camera_shake_frame"):
+            if event_key in frames and frames[event_key] >= 0:
+                frames[event_key] = max(0, round(frames[event_key] * scale_ratio))
+        if "hitstop_frames" in frames:
+            frames["hitstop_frames"] = max(0, round(frames["hitstop_frames"] * mods["active_scale"]))
 
     if frames["hit_frame"] >= 0 and frames["active"] > 0:
         frames["hit_frame"] = max(frames["anticipation"], min(frames["hit_frame"], frames["anticipation"] + frames["active"] - 1))
