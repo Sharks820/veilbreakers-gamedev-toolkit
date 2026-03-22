@@ -541,8 +541,104 @@ def generate_defeat_collapse_keyframes(
                 keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.6))
                 keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.6))
 
+        elif style == "violent":
+            # Thrashing then fall (SAVAGE)
+            if t <= 0.4:
+                thrash = 0.4 * math.sin(t * 15 * math.pi) * (1 - t / 0.4)
+                keyframes.append(Keyframe("DEF-spine", "rotation_euler", 1, frame, thrash))
+                keyframes.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.5 * math.sin(t * 10)))
+                keyframes.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 0.5 * math.sin(t * 10)))
+            else:
+                fall_t = (t - 0.4) / 0.6
+                keyframes.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, 0.8 * fall_t * fall_t))
+                keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.6 * fall_t))
+            keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * t))
+            keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.3 * t))
+
+        elif style == "spasm":
+            # Electric spasm then drop (SURGE)
+            spasm = 0.15 * math.sin(t * 20 * math.pi) * max(0, 1 - t * 1.5)
+            keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, spasm + 0.5 * t * t))
+            keyframes.append(Keyframe("DEF-spine", "rotation_euler", 1, frame, spasm * 0.7))
+            keyframes.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, spasm * 2))
+            keyframes.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -spasm * 2))
+            keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * t * t))
+            keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.3 * t * t))
+
+        elif style == "dissolve":
+            # Slow melt downward (VENOM)
+            melt = t * t * t  # cubic ease-in = very slow start
+            keyframes.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, 0.6 * melt))
+            keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.5 * melt))
+            keyframes.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, 0.4 * melt))
+            keyframes.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 0.4 * melt))
+            keyframes.append(Keyframe("DEF-shin.L", "rotation_euler", 0, frame, -0.4 * melt))
+            keyframes.append(Keyframe("DEF-shin.R", "rotation_euler", 0, frame, -0.4 * melt))
+
+        elif style == "frozen":
+            # Stiffen then topple (DREAD)
+            if t <= 0.6:
+                # Stiffen phase — barely move
+                keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.02 * t))
+            else:
+                topple_t = (t - 0.6) / 0.4
+                keyframes.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, 0.9 * topple_t))
+                keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.5 * topple_t))
+            keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.2 * t))
+            keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.2 * t))
+
+        elif style == "wither":
+            # Shrink inward (LEECH)
+            shrink = t * t
+            keyframes.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, 0.5 * shrink))
+            keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.4 * shrink))
+            keyframes.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, 0.6 * shrink))
+            keyframes.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 0.6 * shrink))
+            keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.5 * shrink))
+            keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.5 * shrink))
+
+        elif style == "graceful":
+            # Elegant slow fall (GRACE)
+            grace = math.sin(t * math.pi / 2)  # smooth ease-out
+            keyframes.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, 0.4 * grace))
+            keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.3 * grace))
+            keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * grace))
+            keyframes.append(Keyframe("DEF-shin.L", "rotation_euler", 0, frame, -0.4 * grace))
+            # One arm across body
+            keyframes.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 0.3 * grace))
+
+        elif style == "peaceful":
+            # Gentle kneel then rest (MEND)
+            if t <= 0.5:
+                kneel = t / 0.5
+                keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.6 * kneel))
+                keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.6 * kneel))
+                keyframes.append(Keyframe("DEF-shin.L", "rotation_euler", 0, frame, -0.8 * kneel))
+                keyframes.append(Keyframe("DEF-shin.R", "rotation_euler", 0, frame, -0.8 * kneel))
+            else:
+                rest_t = (t - 0.5) / 0.5
+                keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.4 * rest_t))
+                keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.6))
+                keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.6))
+
+        elif style == "explosive":
+            # Jerk backward violently (RUIN)
+            if t <= 0.2:
+                jerk = t / 0.2
+                keyframes.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, -0.5 * jerk))
+                keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, -0.4 * jerk))
+            else:
+                fall_t = (t - 0.2) / 0.8
+                ease = fall_t * fall_t
+                keyframes.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, -0.5 + 1.3 * ease))
+                keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, -0.4 + 1.0 * ease))
+            keyframes.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.3 * (1 - t)))
+            keyframes.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -0.3 * (1 - t)))
+            keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * t))
+            keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.3 * t))
+
         else:
-            # Default collapse (works for all other styles)
+            # Fallback generic collapse
             ease_t = t * t
             keyframes.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, 0.7 * ease_t))
             keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.5 * ease_t))
