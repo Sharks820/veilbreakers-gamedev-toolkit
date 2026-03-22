@@ -1,12 +1,27 @@
-"""Rigging handlers for mesh analysis, template application, and custom rig building.
+"""Rigging handlers for mesh analysis, template application, custom rig building,
+bone editing, and bone listing.
 
-Provides three command handlers:
+Provides five command handlers:
   - handle_analyze_for_rigging: Mesh proportion analysis and rig template recommendation (RIG-01)
   - handle_apply_rig_template: Apply a Rigify creature rig template to a mesh (RIG-02)
   - handle_build_custom_rig: Mix limb types from LIMB_LIBRARY into a custom rig (RIG-03)
+  - handle_edit_bone: Edit individual bone properties (position, roll, parent) (P2-A5)
+  - handle_list_bones: List all bones in an armature with hierarchy info (P2-A5)
 
-Pure-logic functions (_analyze_proportions, _validate_custom_rig_config) are
-separated for testability without Blender.
+Pure-logic functions:
+  - _analyze_proportions: Mesh proportion analysis for template recommendation
+  - _validate_custom_rig_config: Validate custom rig limb type configuration
+  - _validate_unity_humanoid: Validate bone mapping to Unity Humanoid avatar
+  - _generate_multi_arm_bones: Generate bone definitions for multi-armed creatures
+  - _get_status_effect_socket: Look up VFX socket bone for a body type
+  - _get_corruption_stage: Get corruption stage config from percentage
+  - _get_bones_for_lod: Filter template bones by LOD tier
+  - _validate_export_readiness: Validate rig is ready for FBX export
+  - _validate_monster_rig_config: Validate monster ID against template map
+  - _get_environment_rig_config: Get rigging requirements for environment objects
+  - _get_riggable_environment_objects: List environment objects that need rigs
+  - _get_pipeline_for_monster: Get full pipeline config for a VB monster
+  - _validate_pipeline_readiness: Validate character readiness for pipeline stages
 """
 
 from __future__ import annotations
@@ -150,6 +165,618 @@ def _validate_custom_rig_config(limb_types: list[str]) -> dict:
     }
 
 
+# Unity Humanoid avatar bone name mapping (Rigify DEF -> Unity Humanoid)
+UNITY_HUMANOID_BONE_MAP: dict[str, str] = {
+    "DEF-spine": "Hips",
+    "DEF-spine.001": "Spine",
+    "DEF-spine.002": "Chest",
+    "DEF-spine.003": "UpperChest",
+    "DEF-spine.004": "Neck",
+    "DEF-spine.005": "Head",
+    "DEF-shoulder.L": "LeftShoulder",
+    "DEF-shoulder.R": "RightShoulder",
+    "DEF-upper_arm.L": "LeftUpperArm",
+    "DEF-upper_arm.R": "RightUpperArm",
+    "DEF-forearm.L": "LeftLowerArm",
+    "DEF-forearm.R": "RightLowerArm",
+    "DEF-hand.L": "LeftHand",
+    "DEF-hand.R": "RightHand",
+    "DEF-thigh.L": "LeftUpperLeg",
+    "DEF-thigh.R": "RightUpperLeg",
+    "DEF-shin.L": "LeftLowerLeg",
+    "DEF-shin.R": "RightLowerLeg",
+    "DEF-foot.L": "LeftFoot",
+    "DEF-foot.R": "RightFoot",
+    "DEF-toe.L": "LeftToes",
+    "DEF-toe.R": "RightToes",
+}
+
+UNITY_REQUIRED_BONES: list[str] = [
+    "Hips", "Spine", "Head",
+    "LeftUpperArm", "LeftLowerArm", "LeftHand",
+    "RightUpperArm", "RightLowerArm", "RightHand",
+    "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",
+    "RightUpperLeg", "RightLowerLeg", "RightFoot",
+]
+
+
+def _validate_unity_humanoid(bone_names: list[str]) -> dict:
+    """Validate rig bones can map to Unity Humanoid avatar."""
+    mapped = {}
+    for def_name, unity_name in UNITY_HUMANOID_BONE_MAP.items():
+        if def_name in bone_names:
+            mapped[def_name] = unity_name
+
+    mapped_unity = set(mapped.values())
+    missing = [r for r in UNITY_REQUIRED_BONES if r not in mapped_unity]
+
+    return {
+        "valid": len(missing) == 0,
+        "mapped_count": len(mapped),
+        "missing_required": missing,
+        "bone_map": mapped,
+    }
+
+
+def _generate_multi_arm_bones(arm_count: int) -> list[dict]:
+    """Generate bone definitions for a multi-armed creature.
+
+    Produces arm_count arm pairs (L/R), each with upper_arm, forearm, and hand,
+    vertically offset down the spine. arm_count must be >= 2 and <= 6, and even.
+
+    Args:
+        arm_count: Total number of arms (must be even, 2-6).
+
+    Returns:
+        List of bone definition dicts, each with keys:
+        name, head, tail, roll, parent, rigify_type.
+
+    Raises:
+        ValueError: If arm_count is invalid (not even, or outside 2-6).
+    """
+    if not isinstance(arm_count, int) or arm_count < 2 or arm_count > 6 or arm_count % 2 != 0:
+        raise ValueError(
+            f"arm_count must be an even integer between 2 and 6, got {arm_count}"
+        )
+
+    pairs = arm_count // 2
+    bones: list[dict] = []
+
+    for pair_idx in range(pairs):
+        z_offset = 1.5 - pair_idx * 0.2
+        y_offset = pair_idx * 0.02
+        suffix = "" if pair_idx == 0 else f"_{pair_idx + 1}"
+
+        for side in ("L", "R"):
+            sign = 1.0 if side == "L" else -1.0
+            parent_spine = "spine.003" if pair_idx == 0 else f"spine.{(3 - pair_idx):03d}" if pair_idx < 3 else "spine"
+
+            ua_name = f"upper_arm{suffix}.{side}"
+            fa_name = f"forearm{suffix}.{side}"
+            ha_name = f"hand{suffix}.{side}"
+
+            bones.append({
+                "name": ua_name,
+                "head": (sign * 0.18, y_offset, z_offset),
+                "tail": (sign * 0.4, y_offset, z_offset),
+                "roll": 0.0,
+                "parent": parent_spine,
+                "rigify_type": "limbs.arm",
+            })
+            bones.append({
+                "name": fa_name,
+                "head": (sign * 0.4, y_offset, z_offset),
+                "tail": (sign * 0.62, y_offset, z_offset),
+                "roll": 1.5708 if side == "L" else -1.5708,
+                "parent": ua_name,
+                "rigify_type": "",
+            })
+            bones.append({
+                "name": ha_name,
+                "head": (sign * 0.62, y_offset, z_offset),
+                "tail": (sign * 0.72, y_offset, z_offset),
+                "roll": 0.0,
+                "parent": fa_name,
+                "rigify_type": "",
+            })
+
+    return bones
+
+
+# ---------------------------------------------------------------------------
+# VeilBreakers-specific rigging data
+# ---------------------------------------------------------------------------
+
+# VeilBreakers monster ID to rig template mapping
+# Monster-to-template mapping derived from VISUAL ANALYSIS of actual VB concept art.
+# Each monster was visually inspected to determine correct body topology.
+MONSTER_TEMPLATE_MAP: dict[str, dict] = {
+    # --- Humanoid bipedal monsters ---
+    "skitter_teeth": {
+        "template": "humanoid", "body": "heavy",
+        "features": ["oversized_hands", "spine_plates", "hunched_posture"],
+        "notes": "Hunched bipedal with massive armored claw-arms, skull face, bone armor",
+    },
+    "chainbound": {
+        "template": "humanoid", "body": "heavy",
+        "features": ["chain_spring_bones", "glowing_core", "mechanical_joints"],
+        "notes": "Armored humanoid wrapped in chains, glowing ember core in chest",
+    },
+    "corrodex": {
+        "template": "humanoid", "body": "medium",
+        "features": ["acid_drip_emitters", "corroded_armor"],
+        "notes": "Armored humanoid knight leaking green acid from joints and hands",
+    },
+    "crackling": {
+        "template": "humanoid", "body": "small",
+        "features": ["electric_hair_spring", "scale_0.6"],
+        "notes": "Small child-like humanoid with electric blue hair, scaled-down rig",
+    },
+    "ironjaw": {
+        "template": "humanoid", "body": "heavy",
+        "features": ["hunched_posture", "jaw_extend", "weapon_socket", "spine_plates"],
+        "notes": "Bear-like beast-man, bipedal, skull face, holds spiked mace",
+    },
+    "ravener": {
+        "template": "humanoid", "body": "large",
+        "features": ["hunched_posture", "digitigrade_legs", "frenzy_morph", "spine_spikes"],
+        "notes": "Werewolf beast, bipedal hunched in art (JSON says quadrupedal — rigged as bipedal per concept art, use digitigrade_legs)",
+    },
+    "voltgeist": {
+        "template": "humanoid", "body": "medium",
+        "features": ["energy_trail_emitters", "electric_arc_bones"],
+        "notes": "Sleek humanoid with lightning coursing through cracked body",
+    },
+    "the_bulwark": {
+        "template": "humanoid", "body": "boss",
+        "features": ["hunched_posture", "heavy_armor_sockets", "chain_spring_bones", "thorn_protrusions"],
+        "notes": "BOSS: Hulking zombie in thorny armor with chains, hunched shambling gait",
+    },
+    "the_vessel": {
+        "template": "humanoid", "body": "boss",
+        "features": ["cloth_spring_bones", "halo_bone", "hover_offset", "corruption_morph"],
+        "notes": "BOSS: Hooded robed figure with halo, floating/hovering, hands outstretched",
+    },
+    # --- Humanoid upper body + tentacle/amorphous lower (wraith type) ---
+    "bloodshade": {
+        "template": "humanoid", "body": "medium",
+        "features": ["no_legs_tentacle_base", "tendril_spring_bones", "corruption_morph"],
+        "notes": "Dark wraith — humanoid torso with arms, lower body is dark flowing tendrils (no legs)",
+    },
+    "hollow": {
+        "template": "humanoid", "body": "large",
+        "features": ["no_legs_tentacle_base", "glowing_core", "void_distortion", "corruption_morph"],
+        "notes": "Massive dark humanoid upper body, lower dissolves into writhing tentacle mass",
+    },
+    # --- Serpent body WITH arms ---
+    "grimthorn": {
+        "template": "serpent", "body": "medium",
+        "features": ["arm_pair_addon", "spike_protrusions", "glowing_eyes"],
+        "notes": "Serpentine body with 2 clawed arms, covered in spikes, green glow",
+    },
+    "needlefang": {
+        "template": "serpent", "body": "medium",
+        "features": ["arm_pair_addon", "spike_protrusions", "glowing_eyes"],
+        "notes": "Serpentine with arms and spike protrusions (similar topology to grimthorn)",
+    },
+    # --- Quadruped ---
+    "sporecaller": {
+        "template": "quadruped", "body": "medium",
+        "features": ["antler_bones", "growth_sockets", "mushroom_protrusions"],
+        "notes": "Corrupted deer/elk quadruped with antlers and mushrooms growing from body",
+    },
+    # --- Insect (with wings) ---
+    "flicker": {
+        "template": "insect", "body": "small",
+        "features": ["wing_pair_addon", "electric_trail"],
+        "notes": "Flying insect-spider hybrid with 4 translucent wings and 6+ legs",
+    },
+    "the_broodmother": {
+        "template": "insect", "body": "boss",
+        "features": ["wing_pair_addon", "egg_sac_distension", "spawn_points", "mandible_extend"],
+        "notes": "BOSS: Giant insect with wings, translucent egg sac abdomen with larvae, 6 legs",
+    },
+    # --- Floating/amorphous ---
+    "mawling": {
+        "template": "floating", "body": "small",
+        "features": ["oversized_jaw", "drip_emitters"],
+        "notes": "Small floating dark blob with enormous toothy mouth, no limbs",
+    },
+    "gluttony_polyp": {
+        "template": "humanoid", "body": "large",
+        "features": ["belly_distension_morph", "transparent_belly"],
+        "notes": "Large hunched humanoid with transparent belly (art shows arms/legs; JSON desc says floating sac — rigged as humanoid per concept art)",
+    },
+    # --- Multi-armed ---
+    "the_congregation": {
+        "template": "multi_armed", "body": "boss",
+        "features": ["arm_count_6", "tentacle_base", "swarm_detach", "corruption_morph"],
+        "notes": "BOSS: 6-armed humanoid upper fused into mass of writhing bodies/tentacles",
+    },
+    # --- Pure amorphous ---
+    "the_weeping": {
+        "template": "amorphous", "body": "boss",
+        "features": ["multi_eye_array", "tendril_spring_bones"],
+        "notes": "BOSS: Organic mass covered in 15+ eyeballs and dark tendrils, no humanoid features",
+    },
+}
+
+
+# Rig feature flags that indicate special bone/morph requirements
+# beyond what the base template provides
+RIG_FEATURE_DEFINITIONS: dict[str, dict] = {
+    "no_legs_tentacle_base": {
+        "description": "Replace leg bones with tentacle chain (wraith-type lower body)",
+        "removes": ["thigh.L", "thigh.R", "shin.L", "shin.R", "foot.L", "foot.R"],
+        "adds": ["tentacle_base", "tentacle_base.001", "tentacle_base.002"],
+    },
+    "arm_pair_addon": {
+        "description": "Add humanoid arm pair to a non-humanoid template (e.g. serpent)",
+        "adds": ["upper_arm.L", "forearm.L", "hand.L", "upper_arm.R", "forearm.R", "hand.R"],
+    },
+    "wing_pair_addon": {
+        "description": "Add wing bones to insect template for flying creatures",
+        "adds": ["wing_upper.L", "wing_lower.L", "wing_upper.R", "wing_lower.R"],
+    },
+    "oversized_jaw": {
+        "description": "Add jaw bone to floating template for mouth creatures",
+        "adds": ["jaw", "jaw.001"],
+    },
+    "antler_bones": {
+        "description": "Add antler/horn bone chains for deer/elk/horned creatures",
+        "adds": ["antler.L", "antler.L.001", "antler.R", "antler.R.001"],
+    },
+    "weapon_socket": {
+        "description": "Add weapon hold bone in hand for weapon-wielding creatures",
+        "adds": ["weapon_hold.R"],
+    },
+    "multi_eye_array": {
+        "description": "Multiple independent eye bones for eye-covered creatures",
+        "adds": [f"eye_{i}" for i in range(8)],
+    },
+    "hunched_posture": {
+        "description": "Modify spine curve for hunched/beast-man stance",
+        "modifies": ["spine.002", "spine.003"],
+    },
+    "digitigrade_legs": {
+        "description": "Extra joint in leg chain for digitigrade (toe-walking) stance",
+        "adds": ["metatarsal.L", "metatarsal.R"],
+    },
+    "chain_spring_bones": {
+        "description": "Spring bone chains for dangling chains/accessories",
+        "adds": ["chain_1", "chain_1.001", "chain_2", "chain_2.001"],
+    },
+    "cloth_spring_bones": {
+        "description": "Spring bone mesh for robes/capes/cloth simulation",
+        "adds": ["cloth_front", "cloth_front.001", "cloth_back", "cloth_back.001"],
+    },
+    "belly_distension_morph": {
+        "description": "Blend shape for belly expansion (gluttony/egg sac)",
+        "morph_target": "belly_expand",
+    },
+    "egg_sac_distension": {
+        "description": "Pulsing/expanding egg sac with larva movement",
+        "morph_target": "egg_sac_pulse",
+        "adds": ["egg_sac", "egg_sac.001"],
+    },
+    "corruption_morph": {
+        "description": "4-stage corruption blend shapes (25/50/75/100%)",
+        "morph_targets": ["corruption_stage_1", "corruption_stage_2",
+                          "corruption_stage_3", "corruption_stage_4"],
+    },
+    "halo_bone": {
+        "description": "Floating halo/crown bone above head",
+        "adds": ["halo"],
+    },
+    "hover_offset": {
+        "description": "Root bone offset for floating/hovering creatures",
+        "modifies": ["spine"],
+    },
+    "spine_plates": {
+        "description": "Armor plate bones along spine for armored creatures",
+        "adds": ["plate_1", "plate_2", "plate_3"],
+    },
+    "growth_sockets": {
+        "description": "Attachment points for organic growths (mushrooms, barnacles)",
+        "adds": ["growth_socket_1", "growth_socket_2", "growth_socket_3", "growth_socket_4"],
+    },
+}
+
+# Bone sockets where status effect VFX should attach per body type
+STATUS_EFFECT_SOCKETS: dict[str, dict[str, str]] = {
+    "head": {
+        "humanoid": "spine.005",
+        "quadruped": "spine.004",
+        "arachnid": "spine.002",
+        "floating": "spine.002",
+        "insect": "spine.002",
+        "dragon": "spine.006",
+        "serpent": "spine.008",
+        "multi_armed": "spine.005",
+        "amorphous": "spine.003",
+    },
+    "chest": {
+        "humanoid": "spine.002",
+        "quadruped": "spine.001",
+        "arachnid": "spine.001",
+        "floating": "spine.001",
+        "insect": "spine.001",
+        "dragon": "spine.002",
+        "serpent": "spine.004",
+        "multi_armed": "spine.002",
+        "amorphous": "spine.001",
+    },
+    "root": {
+        "humanoid": "spine",
+        "quadruped": "spine",
+        "arachnid": "spine",
+        "floating": "spine",
+        "insect": "spine",
+        "dragon": "spine",
+        "serpent": "spine",
+        "multi_armed": "spine",
+        "amorphous": "spine",
+    },
+    "left_hand": {
+        "humanoid": "hand.L",
+        "quadruped": "hand.L",
+        "dragon": "hand.L",
+        "multi_armed": "hand.L",
+    },
+    "right_hand": {
+        "humanoid": "hand.R",
+        "quadruped": "hand.R",
+        "dragon": "hand.R",
+        "multi_armed": "hand.R",
+    },
+    "overhead": {
+        "humanoid": "spine.005",
+        "quadruped": "spine.004",
+        "floating": "spine.002",
+        "dragon": "spine.006",
+        "serpent": "spine.008",
+        "multi_armed": "spine.005",
+    },
+}
+
+
+def _get_status_effect_socket(
+    template_name: str,
+    socket_name: str,
+) -> str | None:
+    """Get the bone name for a status effect VFX attachment point.
+
+    Args:
+        template_name: Creature template (humanoid, quadruped, etc.)
+        socket_name: Socket location (head, chest, root, left_hand, etc.)
+
+    Returns:
+        Bone name string, or None if socket not available for this template.
+    """
+    socket_map = STATUS_EFFECT_SOCKETS.get(socket_name, {})
+    return socket_map.get(template_name)
+
+
+# Corruption progression blend shape stages (0-100%)
+CORRUPTION_MORPH_STAGES: list[dict] = [
+    {
+        "name": "corruption_stage_1",
+        "threshold_pct": 25.0,
+        "description": "Subtle dark veins, slight color desaturation",
+        "affected_regions": ["torso", "arms"],
+        "morph_intensity": 0.3,
+    },
+    {
+        "name": "corruption_stage_2",
+        "threshold_pct": 50.0,
+        "description": "Visible corruption tendrils, skin discoloration",
+        "affected_regions": ["torso", "arms", "legs", "neck"],
+        "morph_intensity": 0.6,
+    },
+    {
+        "name": "corruption_stage_3",
+        "threshold_pct": 75.0,
+        "description": "Heavy mutation, bone protrusions, glowing cracks",
+        "affected_regions": ["full_body"],
+        "morph_intensity": 0.85,
+    },
+    {
+        "name": "corruption_stage_4",
+        "threshold_pct": 100.0,
+        "description": "Full corruption, transformed silhouette, void emanation",
+        "affected_regions": ["full_body"],
+        "morph_intensity": 1.0,
+    },
+]
+
+
+def _get_corruption_stage(corruption_pct: float) -> dict | None:
+    """Get the corruption morph stage for a given corruption percentage.
+
+    Args:
+        corruption_pct: Corruption level 0-100.
+
+    Returns:
+        Stage dict or None if below first threshold.
+    """
+    if corruption_pct < 0 or corruption_pct > 100:
+        return None
+    result = None
+    for stage in CORRUPTION_MORPH_STAGES:
+        if corruption_pct >= stage["threshold_pct"]:
+            result = stage
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Bone LOD tiers (strip prefixes per LOD level for runtime performance)
+# ---------------------------------------------------------------------------
+
+BONE_LOD_TIERS: dict[str, list[str]] = {
+    "LOD0_full": [],  # All bones (default)
+    "LOD1_no_fingers": [
+        "thumb.01", "thumb.02", "thumb.03",
+        "f_index.01", "f_index.02", "f_index.03",
+        "f_middle.01", "f_middle.02", "f_middle.03",
+        "f_ring.01", "f_ring.02", "f_ring.03",
+        "f_pinky.01", "f_pinky.02", "f_pinky.03",
+    ],
+    "LOD2_no_twist": [
+        "upper_arm_twist", "forearm_twist",
+        "thigh_twist", "shin_twist",
+        "upper_arm_twist_025", "forearm_twist_025",
+        "thigh_twist_025", "shin_twist_025",
+    ],
+    "LOD3_minimal": [
+        # Everything from LOD1 + LOD2 plus toes and shoulders
+        "thumb.01", "thumb.02", "thumb.03",
+        "f_index.01", "f_index.02", "f_index.03",
+        "f_middle.01", "f_middle.02", "f_middle.03",
+        "f_ring.01", "f_ring.02", "f_ring.03",
+        "f_pinky.01", "f_pinky.02", "f_pinky.03",
+        "upper_arm_twist", "forearm_twist",
+        "thigh_twist", "shin_twist",
+        "upper_arm_twist_025", "forearm_twist_025",
+        "thigh_twist_025", "shin_twist_025",
+        "toe", "toe.001", "shoulder",
+    ],
+}
+
+
+def _get_bones_for_lod(template_bones: dict[str, dict], lod_tier: str) -> dict[str, dict]:
+    """Filter template bones by LOD tier, removing bones matching strip prefixes."""
+    if lod_tier not in BONE_LOD_TIERS:
+        return template_bones
+    strip_prefixes = BONE_LOD_TIERS[lod_tier]
+    if not strip_prefixes:
+        return template_bones
+    result = {}
+    for name, bone_def in template_bones.items():
+        base = name.rsplit(".", 1)[0] if name.endswith((".L", ".R")) else name
+        if not any(base.startswith(p) for p in strip_prefixes):
+            result[name] = bone_def
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Hero template map (VeilBreakers hero characters)
+# ---------------------------------------------------------------------------
+
+HERO_TEMPLATE_MAP: dict[str, dict] = {
+    "vex": {
+        "template": "humanoid", "body": "medium",
+        "features": ["full_fingers", "cloth_spring_bones", "weapon_socket"],
+        "class": "WARDEN", "brand": "IRON",
+        "notes": "Primary hero. Red/crimson armored warrior with weapon hold.",
+    },
+    "seraphina": {
+        "template": "humanoid", "body": "medium",
+        "features": ["full_fingers", "cloth_spring_bones", "staff_socket"],
+        "class": "PLAGUEWALKER", "brand": "VENOM",
+        "notes": "Plague healer with flowing robes and staff.",
+    },
+    "orion": {
+        "template": "humanoid", "body": "medium",
+        "features": ["full_fingers", "weapon_socket", "cape_spring_bones"],
+        "class": "ARCANESURGE", "brand": "SURGE",
+        "notes": "Arcane ranged DPS with cape and energy effects.",
+    },
+    "nyx": {
+        "template": "humanoid", "body": "medium",
+        "features": ["full_fingers", "cloth_spring_bones", "hover_offset"],
+        "class": "VOIDWALKER", "brand": "VOID",
+        "notes": "Void mage with dark flowing garments, slight hover.",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# FBX export validation checklist
+# ---------------------------------------------------------------------------
+
+FBX_EXPORT_CHECKLIST: list[dict] = [
+    {"check": "bone_count_under_256", "description": "Total bones < 256 (mobile GPU limit)", "severity": "critical"},
+    {"check": "max_4_influences", "description": "No vertex exceeds 4 bone influences", "severity": "critical"},
+    {"check": "no_zero_length_bones", "description": "All bones have non-zero length", "severity": "high"},
+    {"check": "root_at_origin", "description": "Root bone is at world origin", "severity": "high"},
+    {"check": "consistent_scale", "description": "No bones with negative or zero scale", "severity": "high"},
+    {"check": "forward_axis_negative_z", "description": "Character faces -Z for Unity", "severity": "medium"},
+    {"check": "no_leaf_bones", "description": "Leaf bones stripped for game export", "severity": "medium"},
+    {"check": "naming_convention", "description": "All bones follow naming convention", "severity": "low"},
+]
+
+
+def _validate_export_readiness(
+    bone_count: int,
+    max_influences: int,
+    has_zero_length: bool,
+    root_at_origin: bool,
+) -> dict:
+    """Validate rig is ready for FBX game export."""
+    issues = []
+    if bone_count >= 256:
+        issues.append(f"Bone count {bone_count} exceeds 256 mobile limit")
+    if max_influences > 4:
+        issues.append(f"Max influences {max_influences} exceeds 4")
+    if has_zero_length:
+        issues.append("Zero-length bones detected")
+    if not root_at_origin:
+        issues.append("Root bone not at origin")
+    return {
+        "export_ready": len(issues) == 0,
+        "bone_count": bone_count,
+        "issues": issues,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Required animation clips per template type
+# ---------------------------------------------------------------------------
+
+REQUIRED_ANIMATION_CLIPS: dict[str, list[str]] = {
+    "humanoid": ["idle", "idle_variant", "attack_basic", "attack_heavy", "hit_react", "death", "spawn", "victory"],
+    "quadruped": ["idle", "idle_variant", "attack_bite", "attack_claw", "hit_react", "death", "spawn"],
+    "insect": ["idle", "idle_variant", "attack_mandible", "attack_sting", "hit_react", "death", "spawn"],
+    "floating": ["idle", "idle_variant", "attack_ranged", "hit_react", "death", "spawn"],
+    "serpent": ["idle", "idle_variant", "attack_strike", "attack_coil", "hit_react", "death", "spawn"],
+    "amorphous": ["idle", "idle_variant", "attack_lash", "hit_react", "death", "spawn"],
+    "arachnid": ["idle", "idle_variant", "attack_bite", "attack_web", "hit_react", "death", "spawn"],
+    "dragon": ["idle", "idle_variant", "attack_bite", "attack_breath", "attack_wing", "hit_react", "death", "spawn"],
+    "multi_armed": ["idle", "idle_variant", "attack_slam", "attack_grab", "hit_react", "death", "spawn"],
+    "bird": ["idle", "idle_variant", "attack_peck", "attack_dive", "hit_react", "death", "spawn"],
+}
+
+
+def _validate_monster_rig_config(monster_id: str) -> dict:
+    """Validate and return rig configuration for a VeilBreakers monster.
+
+    Args:
+        monster_id: Monster ID from monsters.json.
+
+    Returns:
+        Dict with valid, template, features, body, errors.
+    """
+    errors = []
+    if monster_id not in MONSTER_TEMPLATE_MAP:
+        errors.append(f"Unknown monster_id: '{monster_id}'. Valid: {sorted(MONSTER_TEMPLATE_MAP.keys())}")
+        return {"valid": False, "template": None, "features": [], "body": None, "errors": errors}
+
+    config = MONSTER_TEMPLATE_MAP[monster_id]
+    template = config["template"]
+
+    # Verify template exists
+    if template not in TEMPLATE_CATALOG:
+        errors.append(f"Template '{template}' not in TEMPLATE_CATALOG")
+
+    return {
+        "valid": len(errors) == 0,
+        "template": template,
+        "features": config["features"],
+        "body": config["body"],
+        "errors": errors,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Blender-dependent handlers
 # ---------------------------------------------------------------------------
@@ -184,9 +811,12 @@ def handle_analyze_for_rigging(params: dict) -> dict:
             bbox_dims = (0.0, 0.0, 0.0)
             has_symmetry = False
         else:
-            xs = [v.co.x for v in bm.verts]
-            ys = [v.co.y for v in bm.verts]
-            zs = [v.co.z for v in bm.verts]
+            # Transform vertices to world space via matrix_world
+            mw = obj.matrix_world
+            world_coords = [(mw @ v.co) for v in bm.verts]
+            xs = [co.x for co in world_coords]
+            ys = [co.y for co in world_coords]
+            zs = [co.z for co in world_coords]
             bbox_dims = (
                 max(xs) - min(xs),  # width (X)
                 max(ys) - min(ys),  # depth (Y)
@@ -196,13 +826,13 @@ def handle_analyze_for_rigging(params: dict) -> dict:
             # Check X-axis symmetry: compare mirrored vertex positions
             tolerance = max(bbox_dims) * 0.02  # 2% of largest dim
             sym_matches = 0
-            for v in bm.verts:
-                mirror_x = -v.co.x
-                for v2 in bm.verts:
+            for co in world_coords:
+                mirror_x = -co.x
+                for co2 in world_coords:
                     if (
-                        abs(v2.co.x - mirror_x) < tolerance
-                        and abs(v2.co.y - v.co.y) < tolerance
-                        and abs(v2.co.z - v.co.z) < tolerance
+                        abs(co2.x - mirror_x) < tolerance
+                        and abs(co2.y - co.y) < tolerance
+                        and abs(co2.z - co.z) < tolerance
                     ):
                         sym_matches += 1
                         break
@@ -257,8 +887,8 @@ def handle_apply_rig_template(params: dict) -> dict:
     bpy.context.collection.objects.link(arm_obj)
     arm_obj.location = obj.location
 
-    # Apply template bones
-    _create_template_bones(arm_obj, template_bones)
+    # Apply template bones (auto-scaled to fit mesh bounding box)
+    _create_template_bones(arm_obj, template_bones, mesh_obj=obj)
     bone_count = len(arm_data.bones)
 
     result = {
@@ -384,3 +1014,725 @@ def handle_build_custom_rig(params: dict) -> dict:
         result["def_reparented"] = 0
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Interactive bone editing handlers (AI-driven rig adjustment)
+# ---------------------------------------------------------------------------
+
+
+def handle_edit_bone(params: dict) -> dict:
+    """Select, move, scale, or rotate a bone in an armature (RIG-14).
+
+    Provides AI-driven interactive bone editing — select a bone by name,
+    move/scale/rotate it, and get a viewport screenshot to verify the result.
+
+    Params:
+        object_name: Name of the armature object.
+        bone_name: Name of the bone to edit.
+        operation: One of "move", "scale", "rotate", "select", "inspect".
+        value: For move: [x,y,z] offset. For scale: [x,y,z] scale.
+               For rotate: [x,y,z] euler radians. For select/inspect: ignored.
+        mode: "edit" (edit bone positions) or "pose" (pose bone transforms).
+              Default "edit".
+
+    Returns dict with bone_name, operation, new_head, new_tail, screenshot.
+    """
+    arm_name = params.get("object_name")
+    bone_name = params.get("bone_name")
+    operation = params.get("operation", "inspect")
+    value = params.get("value", [0, 0, 0])
+    mode = params.get("mode", "edit")
+
+    if not arm_name:
+        raise ValueError("'object_name' is required")
+    if not bone_name:
+        raise ValueError("'bone_name' is required")
+
+    arm_obj = bpy.data.objects.get(arm_name)
+    if not arm_obj or arm_obj.type != "ARMATURE":
+        raise ValueError(f"Armature not found: {arm_name}")
+
+    from ._context import get_3d_context_override
+
+    bpy.context.view_layer.objects.active = arm_obj
+    bpy.ops.object.select_all(action="DESELECT")
+    arm_obj.select_set(True)
+
+    valid_operations = {"move", "scale", "rotate", "select", "inspect"}
+    if operation not in valid_operations:
+        raise ValueError(f"Unknown operation: '{operation}'. Valid: {sorted(valid_operations)}")
+
+    valid_modes = {"edit", "pose"}
+    if mode not in valid_modes:
+        raise ValueError(f"Unknown mode: '{mode}'. Valid: {sorted(valid_modes)}")
+
+    result = {"bone_name": bone_name, "operation": operation}
+
+    if mode == "edit":
+        bpy.ops.object.mode_set(mode="EDIT")
+        try:
+            ebone = arm_obj.data.edit_bones.get(bone_name)
+            if not ebone:
+                raise ValueError(
+                    f"Bone '{bone_name}' not found. "
+                    f"Available: {[b.name for b in arm_obj.data.edit_bones]}"
+                )
+
+            if operation == "move":
+                from mathutils import Vector
+                offset = Vector(value)
+                ebone.head += offset
+                ebone.tail += offset
+                result["new_head"] = tuple(ebone.head)
+                result["new_tail"] = tuple(ebone.tail)
+
+            elif operation == "scale":
+                scale_factor = value[0] if isinstance(value, (list, tuple)) else value
+                center = (ebone.head + ebone.tail) / 2
+                head_off = ebone.head - center
+                tail_off = ebone.tail - center
+                ebone.head = center + head_off * scale_factor
+                ebone.tail = center + tail_off * scale_factor
+                result["new_head"] = tuple(ebone.head)
+                result["new_tail"] = tuple(ebone.tail)
+
+            elif operation == "rotate":
+                from mathutils import Euler
+                rot = Euler(value)
+                center = ebone.head.copy()
+                mat = rot.to_matrix().to_4x4()
+                tail_offset = ebone.tail - ebone.head
+                new_tail = center + mat @ tail_offset
+                ebone.tail = new_tail
+                result["new_head"] = tuple(ebone.head)
+                result["new_tail"] = tuple(ebone.tail)
+
+            elif operation == "select":
+                ebone.select = True
+                ebone.select_head = True
+                ebone.select_tail = True
+
+            elif operation == "inspect":
+                result["head"] = tuple(ebone.head)
+                result["tail"] = tuple(ebone.tail)
+                result["roll"] = ebone.roll
+                result["length"] = ebone.length
+                result["parent"] = ebone.parent.name if ebone.parent else None
+                result["children"] = [c.name for c in ebone.children]
+                result["connected"] = ebone.use_connect
+        finally:
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+    elif mode == "pose":
+        bpy.ops.object.mode_set(mode="POSE")
+        try:
+            pbone = arm_obj.pose.bones.get(bone_name)
+            if not pbone:
+                raise ValueError(f"Pose bone '{bone_name}' not found")
+
+            from mathutils import Vector, Euler
+
+            if operation == "move":
+                pbone.location = Vector(value)
+                result["location"] = tuple(pbone.location)
+
+            elif operation == "rotate":
+                pbone.rotation_mode = "XYZ"
+                pbone.rotation_euler = Euler(value)
+                result["rotation"] = tuple(pbone.rotation_euler)
+
+            elif operation == "scale":
+                pbone.scale = Vector(value)
+                result["scale"] = tuple(pbone.scale)
+
+            elif operation == "inspect":
+                result["location"] = tuple(pbone.location)
+                result["rotation"] = tuple(pbone.rotation_euler)
+                result["scale"] = tuple(pbone.scale)
+                result["constraints"] = [c.name for c in pbone.constraints]
+
+            bpy.context.view_layer.update()
+        finally:
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+    return result
+
+
+def handle_list_bones(params: dict) -> dict:
+    """List all bones in an armature with positions and hierarchy (RIG-15).
+
+    Params:
+        object_name: Name of the armature object.
+        filter_prefix: Optional prefix to filter bones (e.g. "DEF-", "ORG-").
+
+    Returns dict with bone list including names, positions, parents.
+    """
+    arm_name = params.get("object_name")
+    filter_prefix = params.get("filter_prefix", "")
+
+    if not arm_name:
+        raise ValueError("'object_name' is required")
+
+    arm_obj = bpy.data.objects.get(arm_name)
+    if not arm_obj or arm_obj.type != "ARMATURE":
+        raise ValueError(f"Armature not found: {arm_name}")
+
+    bones = []
+    for bone in arm_obj.data.bones:
+        if filter_prefix and not bone.name.startswith(filter_prefix):
+            continue
+        bones.append({
+            "name": bone.name,
+            "head": tuple(bone.head_local),
+            "tail": tuple(bone.tail_local),
+            "parent": bone.parent.name if bone.parent else None,
+            "length": bone.length,
+            "children": [c.name for c in bone.children],
+        })
+
+    return {
+        "armature": arm_name,
+        "bone_count": len(bones),
+        "filter": filter_prefix or "none",
+        "bones": bones,
+    }
+
+
+# ---------------------------------------------------------------------------
+# End-to-end pipeline: Modeling -> Rigging -> Animation -> VFX
+# ---------------------------------------------------------------------------
+
+# Pipeline step definitions for agent-driven character/monster creation
+PIPELINE_STEPS: list[dict] = [
+    {
+        "step": 1,
+        "name": "generate_mesh",
+        "tool": "asset_pipeline",
+        "action": "generate_3d",
+        "description": "Generate or import 3D mesh from concept art or prompt",
+        "required_params": ["prompt"],
+        "optional_params": ["image_path"],
+        "output": "mesh_object_name",
+    },
+    {
+        "step": 2,
+        "name": "cleanup_mesh",
+        "tool": "asset_pipeline",
+        "action": "cleanup",
+        "description": "Auto-repair mesh, fix normals, remove doubles, UV unwrap",
+        "required_params": ["object_name"],
+        "output": "cleaned_mesh_name",
+    },
+    {
+        "step": 3,
+        "name": "game_check",
+        "tool": "blender_mesh",
+        "action": "game_check",
+        "description": "Verify mesh is game-ready (poly budget, manifold, UVs)",
+        "required_params": ["object_name"],
+        "optional_params": ["poly_budget", "platform"],
+        "output": "game_check_result",
+    },
+    {
+        "step": 4,
+        "name": "create_textures",
+        "tool": "blender_texture",
+        "action": "create_pbr",
+        "description": "Create PBR texture setup (albedo, normal, roughness, metallic)",
+        "required_params": ["name", "texture_dir"],
+        "optional_params": ["texture_size"],
+        "output": "material_name",
+    },
+    {
+        "step": 5,
+        "name": "analyze_for_rigging",
+        "tool": "blender_rig",
+        "action": "analyze_mesh",
+        "description": "Analyze mesh proportions, recommend rig template",
+        "required_params": ["object_name"],
+        "output": "template_recommendation",
+    },
+    {
+        "step": 6,
+        "name": "apply_rig",
+        "tool": "blender_rig",
+        "action": "apply_template",
+        "description": "Apply creature rig template to mesh",
+        "required_params": ["object_name", "template"],
+        "optional_params": ["generate"],
+        "output": "rig_name",
+    },
+    {
+        "step": 7,
+        "name": "auto_weight",
+        "tool": "blender_rig",
+        "action": "auto_weight",
+        "description": "Auto-weight mesh to armature with heat diffusion",
+        "required_params": ["mesh_name", "armature_name"],
+        "output": "weight_result",
+    },
+    {
+        "step": 8,
+        "name": "enforce_weight_limit",
+        "tool": "blender_rig",
+        "action": "enforce_weight_limit",
+        "description": "Clamp to 4 bone influences per vertex for game export",
+        "required_params": ["mesh_name"],
+        "optional_params": ["max_influences"],
+        "output": "weight_limit_result",
+    },
+    {
+        "step": 9,
+        "name": "validate_rig",
+        "tool": "blender_rig",
+        "action": "validate",
+        "description": "Grade rig quality A-F (weights, symmetry, rolls)",
+        "required_params": ["mesh_name", "armature_name"],
+        "output": "rig_grade",
+        "gate": "grade must be A or B to proceed",
+    },
+    {
+        "step": 10,
+        "name": "test_deformation",
+        "tool": "blender_rig",
+        "action": "test_deformation",
+        "description": "Pose rig in 8 standard poses, generate contact sheet",
+        "required_params": ["rig_name"],
+        "output": "contact_sheet_image",
+    },
+    {
+        "step": 11,
+        "name": "generate_animations",
+        "tool": "blender_animation",
+        "action": "generate_idle",
+        "description": "Generate idle animation for the rigged character",
+        "required_params": ["rig_name"],
+        "output": "animation_action",
+        "next_animations": ["generate_walk", "generate_attack", "generate_reaction"],
+    },
+    {
+        "step": 12,
+        "name": "setup_facial",
+        "tool": "blender_rig",
+        "action": "setup_facial",
+        "description": "Add facial rig bones for expressions (humanoid only)",
+        "required_params": ["rig_name"],
+        "optional": True,
+        "condition": "template == 'humanoid'",
+        "output": "facial_bones_added",
+    },
+    {
+        "step": 13,
+        "name": "setup_spring_bones",
+        "tool": "blender_rig",
+        "action": "setup_spring_bones",
+        "description": "Add spring bone dynamics for tails/hair/capes/chains",
+        "required_params": ["rig_name", "bone_names"],
+        "optional": True,
+        "condition": "creature has spring bone features",
+        "output": "spring_bones_result",
+    },
+    {
+        "step": 14,
+        "name": "final_game_check",
+        "tool": "blender_mesh",
+        "action": "game_check",
+        "description": "Final game readiness check before export (poly budget, UVs)",
+        "required_params": ["object_name"],
+        "optional_params": ["poly_budget", "platform"],
+        "output": "final_check_result",
+        "gate": "must pass before export",
+    },
+    {
+        "step": 15,
+        "name": "export_fbx",
+        "tool": "blender_export",
+        "action": "export",
+        "description": "Export rigged+animated model as FBX for Unity",
+        "required_params": ["filepath"],
+        "optional_params": ["export_format", "apply_modifiers"],
+        "output": "export_path",
+    },
+    {
+        "step": 16,
+        "name": "unity_import",
+        "tool": "unity_assets",
+        "action": "fbx_import",
+        "description": "Import FBX into Unity with correct settings",
+        "required_params": ["source_path", "destination_folder"],
+        "output": "unity_asset_path",
+    },
+    {
+        "step": 17,
+        "name": "unity_recompile_import",
+        "tool": "unity_editor",
+        "action": "recompile",
+        "description": "Recompile Unity scripts after import/generation",
+        "required_params": [],
+        "output": "compile_status",
+    },
+    {
+        "step": 18,
+        "name": "unity_animator",
+        "tool": "unity_scene",
+        "action": "create_animator",
+        "description": "Create Unity Animator Controller with states",
+        "required_params": ["states", "transitions", "parameters"],
+        "output": "animator_controller",
+    },
+    {
+        "step": 19,
+        "name": "unity_recompile_animator",
+        "tool": "unity_editor",
+        "action": "recompile",
+        "description": "Recompile Unity scripts after animator generation",
+        "required_params": [],
+        "output": "compile_status",
+    },
+    {
+        "step": 20,
+        "name": "unity_vfx",
+        "tool": "unity_vfx",
+        "action": "create_brand_vfx",
+        "description": "Create brand-specific combat VFX for the character",
+        "required_params": ["brand"],
+        "optional": True,
+        "output": "vfx_prefab",
+    },
+    {
+        "step": 21,
+        "name": "unity_recompile_vfx",
+        "tool": "unity_editor",
+        "action": "recompile",
+        "description": "Recompile Unity scripts after VFX generation",
+        "required_params": [],
+        "output": "compile_status",
+    },
+]
+
+# ---------------------------------------------------------------------------
+# Environment object rigging requirements
+# ---------------------------------------------------------------------------
+
+# Environment objects that need rigging for animation
+# Each entry: needs_rig (bool), rig_type, bones needed, spring bones, notes
+ENVIRONMENT_RIG_REQUIREMENTS: dict[str, dict] = {
+    # --- Objects needing rigs ---
+    "door_wooden": {
+        "needs_rig": True,
+        "rig_type": "single_hinge",
+        "bones": ["door_pivot"],
+        "spring_bones": [],
+        "notes": "Single pivot bone at hinge side for open/close rotation",
+    },
+    "door_double": {
+        "needs_rig": True,
+        "rig_type": "double_hinge",
+        "bones": ["door_pivot.L", "door_pivot.R"],
+        "spring_bones": [],
+        "notes": "Two pivot bones for double door, L/R swing independently",
+    },
+    "gate_portcullis": {
+        "needs_rig": True,
+        "rig_type": "slide",
+        "bones": ["gate_slide"],
+        "spring_bones": [],
+        "notes": "Single bone for vertical slide up/down",
+    },
+    "gate_drawbridge": {
+        "needs_rig": True,
+        "rig_type": "single_hinge",
+        "bones": ["bridge_pivot", "chain.L", "chain.L.001", "chain.R", "chain.R.001"],
+        "spring_bones": ["chain.L", "chain.L.001", "chain.R", "chain.R.001"],
+        "notes": "Pivot at top + chain spring bones for drawbridge chains",
+    },
+    "chain_hanging": {
+        "needs_rig": True,
+        "rig_type": "spring_chain",
+        "bones": ["chain_root", "chain.001", "chain.002", "chain.003", "chain.004"],
+        "spring_bones": ["chain.001", "chain.002", "chain.003", "chain.004"],
+        "notes": "5-bone chain with spring dynamics, sways with wind/interaction",
+    },
+    "chain_bridge": {
+        "needs_rig": True,
+        "rig_type": "spring_chain",
+        "bones": ["chain_anchor.L", "chain.L.001", "chain.L.002", "chain.L.003",
+                  "chain_anchor.R", "chain.R.001", "chain.R.002", "chain.R.003"],
+        "spring_bones": ["chain.L.001", "chain.L.002", "chain.L.003",
+                        "chain.R.001", "chain.R.002", "chain.R.003"],
+        "notes": "Dual chain bridge with spring physics on each side",
+    },
+    "cloth_banner": {
+        "needs_rig": True,
+        "rig_type": "cloth_grid",
+        "bones": ["banner_top", "banner_mid.L", "banner_mid", "banner_mid.R",
+                  "banner_bot.L", "banner_bot", "banner_bot.R"],
+        "spring_bones": ["banner_mid.L", "banner_mid", "banner_mid.R",
+                        "banner_bot.L", "banner_bot", "banner_bot.R"],
+        "notes": "2x3 bone grid for cloth simulation, top row fixed",
+    },
+    "cloth_curtain": {
+        "needs_rig": True,
+        "rig_type": "cloth_grid",
+        "bones": ["curtain_top.L", "curtain_top.R",
+                  "curtain_mid.L", "curtain_mid.R",
+                  "curtain_bot.L", "curtain_bot.R"],
+        "spring_bones": ["curtain_mid.L", "curtain_mid.R",
+                        "curtain_bot.L", "curtain_bot.R"],
+        "notes": "Vertical cloth strip with spring bones, top row fixed to rod",
+    },
+    "flag_pole": {
+        "needs_rig": True,
+        "rig_type": "cloth_strip",
+        "bones": ["flag_attach", "flag.001", "flag.002", "flag.003", "flag.004"],
+        "spring_bones": ["flag.001", "flag.002", "flag.003", "flag.004"],
+        "notes": "Flag strip attached to pole, 4-bone chain with wind dynamics",
+    },
+    "rope_hanging": {
+        "needs_rig": True,
+        "rig_type": "spring_chain",
+        "bones": ["rope_top", "rope.001", "rope.002", "rope.003", "rope.004", "rope.005"],
+        "spring_bones": ["rope.001", "rope.002", "rope.003", "rope.004", "rope.005"],
+        "notes": "6-bone rope with spring physics, top fixed",
+    },
+    "trap_spike": {
+        "needs_rig": True,
+        "rig_type": "piston",
+        "bones": ["spike_base", "spike_extend"],
+        "spring_bones": [],
+        "notes": "2-bone piston for spike trap extend/retract",
+    },
+    "trap_swinging_blade": {
+        "needs_rig": True,
+        "rig_type": "pendulum",
+        "bones": ["blade_pivot", "blade_arm", "blade_tip"],
+        "spring_bones": [],
+        "notes": "3-bone pendulum for swinging blade trap",
+    },
+    "trap_floor_collapse": {
+        "needs_rig": True,
+        "rig_type": "multi_hinge",
+        "bones": ["floor_hinge.L", "floor_hinge.R"],
+        "spring_bones": [],
+        "notes": "Two floor panels that hinge open when triggered",
+    },
+    "torch_wall": {
+        "needs_rig": True,
+        "rig_type": "flicker",
+        "bones": ["torch_base", "flame_bone"],
+        "spring_bones": ["flame_bone"],
+        "notes": "Torch with flickering flame bone for fire VFX attachment",
+    },
+    "chandelier": {
+        "needs_rig": True,
+        "rig_type": "pendulum",
+        "bones": ["chain_mount", "chandelier_body"],
+        "spring_bones": ["chandelier_body"],
+        "notes": "Hanging chandelier with sway physics",
+    },
+    "cage_hanging": {
+        "needs_rig": True,
+        "rig_type": "pendulum",
+        "bones": ["cage_chain", "cage_body"],
+        "spring_bones": ["cage_body"],
+        "notes": "Hanging cage with swing physics",
+    },
+    "lever": {
+        "needs_rig": True,
+        "rig_type": "single_hinge",
+        "bones": ["lever_pivot"],
+        "spring_bones": [],
+        "notes": "Single pivot bone for lever pull animation",
+    },
+    "windmill": {
+        "needs_rig": True,
+        "rig_type": "continuous_rotation",
+        "bones": ["windmill_axle", "blade_1", "blade_2", "blade_3", "blade_4"],
+        "spring_bones": [],
+        "notes": "Central axle with 4 blades, continuous Z rotation",
+    },
+    # --- Objects that DON'T need rigs (VFX/shader only) ---
+    "fire_campfire": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Particle VFX only — no bones needed",
+    },
+    "water_stream": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Shader-based flow animation — no bones needed",
+    },
+    "water_pool": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Shader-based surface ripple — no bones needed",
+    },
+    "fog_volume": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Volumetric shader — no bones needed",
+    },
+    "crystal_glow": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Emission shader pulse — no bones needed",
+    },
+    "mushroom_glow": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Emission shader — no bones needed",
+    },
+    "cobweb": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Static mesh — no animation needed",
+    },
+    "rubble_pile": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Static mesh — no animation needed",
+    },
+    "blood_pool": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Decal/shader — no bones needed",
+    },
+    "barrel": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Rigid body physics — no bones, use Unity Rigidbody",
+    },
+}
+
+
+def _get_environment_rig_config(object_type: str) -> dict:
+    """Get rigging requirements for an environment object type.
+
+    Returns dict with needs_rig, rig_type, bones, spring_bones, notes.
+    Returns None if object_type is unknown.
+    """
+    return ENVIRONMENT_RIG_REQUIREMENTS.get(object_type)
+
+
+def _get_riggable_environment_objects() -> list[str]:
+    """Get list of all environment object types that need rigs."""
+    return [k for k, v in ENVIRONMENT_RIG_REQUIREMENTS.items() if v["needs_rig"]]
+
+
+def _get_pipeline_for_monster(monster_id: str) -> dict:
+    """Get the full pipeline configuration for a VeilBreakers monster.
+
+    Returns pipeline steps with monster-specific parameters filled in.
+
+    Args:
+        monster_id: Monster ID from MONSTER_TEMPLATE_MAP.
+
+    Returns:
+        Dict with monster_id, template, features, steps (list of pipeline step dicts),
+        required_animations (list), and optional_steps (list of step names).
+    """
+    if monster_id not in MONSTER_TEMPLATE_MAP:
+        return {"valid": False, "error": f"Unknown monster: {monster_id}"}
+
+    config = MONSTER_TEMPLATE_MAP[monster_id]
+    template = config["template"]
+    features = config["features"]
+    body = config["body"]
+
+    # Determine which optional steps apply
+    optional_steps = []
+    if template == "humanoid":
+        optional_steps.append("setup_facial")
+
+    spring_features = [f for f in features if "spring" in f or f in (
+        "chain_spring_bones", "cloth_spring_bones", "tendril_spring_bones",
+    )]
+    if spring_features:
+        optional_steps.append("setup_spring_bones")
+
+    # Get required animation clips for this template
+    clips = REQUIRED_ANIMATION_CLIPS.get(template, ["idle", "death"])
+
+    # Build the step list
+    steps = []
+    for step in PIPELINE_STEPS:
+        step_copy = dict(step)
+
+        # Fill in monster-specific params
+        if step["name"] == "apply_rig":
+            step_copy["params"] = {"template": template}
+        elif step["name"] == "unity_vfx":
+            brands = [b for b in ("IRON", "SAVAGE", "SURGE", "VENOM", "DREAD",
+                                   "LEECH", "GRACE", "MEND", "RUIN", "VOID")]
+            step_copy["params"] = {"brand": config.get("brand", brands[0])}
+
+        # Skip optional steps that don't apply
+        if step.get("optional") and step["name"] not in optional_steps:
+            step_copy["skip"] = True
+            step_copy["skip_reason"] = f"Not applicable for {template} template"
+
+        steps.append(step_copy)
+
+    return {
+        "valid": True,
+        "monster_id": monster_id,
+        "template": template,
+        "features": features,
+        "body": body,
+        "steps": steps,
+        "required_animations": clips,
+        "optional_steps": optional_steps,
+    }
+
+
+def _validate_pipeline_readiness(
+    has_mesh: bool,
+    has_rig: bool,
+    has_weights: bool,
+    rig_grade: str,
+    has_idle_anim: bool,
+) -> dict:
+    """Validate whether a character is ready for each pipeline stage.
+
+    Returns dict with stage readiness booleans and blockers list.
+    """
+    blockers = []
+
+    if not has_mesh:
+        blockers.append("No mesh — run generate_mesh first")
+    if not has_rig:
+        blockers.append("No rig — run apply_rig first")
+    if not has_weights:
+        blockers.append("No weights — run auto_weight first")
+    if rig_grade not in ("A", "B"):
+        blockers.append(f"Rig grade {rig_grade} too low — must be A or B for export")
+    if not has_idle_anim:
+        blockers.append("No idle animation — run generate_idle first")
+
+    return {
+        "ready_for_export": len(blockers) == 0,
+        "ready_for_animation": has_mesh and has_rig and has_weights,
+        "ready_for_vfx": has_mesh and has_rig,
+        "blockers": blockers,
+    }
