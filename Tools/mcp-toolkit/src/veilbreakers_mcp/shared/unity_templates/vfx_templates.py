@@ -42,16 +42,12 @@ def _sanitize_cs_identifier(value: str) -> str:
 # Brand VFX config dictionaries
 # ---------------------------------------------------------------------------
 
-BRAND_PRIMARY_COLORS: dict[str, list[float]] = {"IRON":[0.55,0.59,0.65,1.0],"SAVAGE":[0.71,0.18,0.18,1.0],"SURGE":[0.24,0.55,0.86,1.0],"VENOM":[0.31,0.71,0.24,1.0],"DREAD":[0.47,0.24,0.63,1.0],"LEECH":[0.55,0.16,0.31,1.0],"GRACE":[0.86,0.86,0.94,1.0],"MEND":[0.78,0.67,0.31,1.0],"RUIN":[0.86,0.47,0.16,1.0],"VOID":[0.16,0.08,0.24,1.0]}
-BRAND_GLOW_COLORS: dict[str, list[float]] = {"IRON":[0.71,0.75,0.80,1.0],"SAVAGE":[0.86,0.27,0.27,1.0],"SURGE":[0.39,0.71,1.00,1.0],"VENOM":[0.47,0.86,0.39,1.0],"DREAD":[0.63,0.39,0.78,1.0],"LEECH":[0.71,0.24,0.43,1.0],"GRACE":[1.00,1.00,1.00,1.0],"MEND":[0.94,0.82,0.47,1.0],"RUIN":[1.00,0.63,0.31,1.0],"VOID":[0.39,0.24,0.55,1.0]}
-BRAND_DARK_COLORS: dict[str, list[float]] = {"IRON":[0.31,0.35,0.39,1.0],"SAVAGE":[0.47,0.10,0.10,1.0],"SURGE":[0.12,0.31,0.55,1.0],"VENOM":[0.16,0.39,0.12,1.0],"DREAD":[0.27,0.12,0.39,1.0],"LEECH":[0.35,0.08,0.20,1.0],"GRACE":[0.63,0.63,0.71,1.0],"MEND":[0.55,0.43,0.16,1.0],"RUIN":[0.63,0.27,0.08,1.0],"VOID":[0.06,0.02,0.10,1.0]}
-
 BRAND_VFX_CONFIGS: dict[str, dict] = {
     "IRON": {
         "rate": 200,
         "lifetime": 0.5,
         "size": 0.1,
-        "color": [0.55, 0.59, 0.65, 1.0],
+        "color": [1.0, 0.6, 0.2, 1.0],
         "shape": "cone",
         "desc": "metallic sparks",
     },
@@ -59,7 +55,7 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "rate": 30,
         "lifetime": 3.0,
         "size": 0.3,
-        "color": [0.31, 0.71, 0.24, 1.0],
+        "color": [0.2, 0.9, 0.1, 0.8],
         "shape": "sphere",
         "desc": "acid drip",
     },
@@ -67,7 +63,7 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "rate": 500,
         "lifetime": 0.2,
         "size": 0.05,
-        "color": [0.24, 0.55, 0.86, 1.0],
+        "color": [0.3, 0.5, 1.0, 1.0],
         "shape": "edge",
         "desc": "electric crackle",
     },
@@ -75,7 +71,7 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "rate": 20,
         "lifetime": 5.0,
         "size": 0.8,
-        "color": [0.47, 0.24, 0.63, 1.0],
+        "color": [0.3, 0.1, 0.5, 0.6],
         "shape": "sphere",
         "desc": "shadow wisps",
     },
@@ -83,7 +79,7 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "rate": 250,
         "lifetime": 0.6,
         "size": 0.35,
-        "color": [0.71, 0.18, 0.18, 1.0],
+        "color": [0.9, 0.3, 0.1, 1.0],
         "shape": "cone",
         "desc": "beast claw slash marks",
     },
@@ -91,7 +87,7 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "rate": 40,
         "lifetime": 2.5,
         "size": 0.25,
-        "color": [0.55, 0.16, 0.31, 1.0],
+        "color": [0.2, 0.5, 0.15, 0.7],
         "shape": "sphere",
         "desc": "dark drain tendrils",
     },
@@ -99,7 +95,7 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "rate": 60,
         "lifetime": 2.0,
         "size": 0.2,
-        "color": [0.86, 0.86, 0.94, 1.0],
+        "color": [1.0, 0.95, 0.7, 0.9],
         "shape": "sphere",
         "desc": "holy light sparkles",
     },
@@ -107,7 +103,7 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "rate": 50,
         "lifetime": 2.5,
         "size": 0.2,
-        "color": [0.78, 0.67, 0.31, 1.0],
+        "color": [0.3, 0.9, 0.6, 0.8],
         "shape": "sphere",
         "desc": "restoration nature particles",
     },
@@ -115,7 +111,7 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "rate": 80,
         "lifetime": 1.5,
         "size": 0.5,
-        "color": [0.86, 0.47, 0.16, 1.0],
+        "color": [0.4, 0.3, 0.2, 0.9],
         "shape": "box",
         "desc": "earth-cracking decay particles",
     },
@@ -123,7 +119,7 @@ BRAND_VFX_CONFIGS: dict[str, dict] = {
         "rate": 25,
         "lifetime": 4.0,
         "size": 0.6,
-        "color": [0.16, 0.08, 0.24, 1.0],
+        "color": [0.3, 0.1, 0.5, 0.7],
         "shape": "sphere",
         "desc": "void rift distortion",
     },

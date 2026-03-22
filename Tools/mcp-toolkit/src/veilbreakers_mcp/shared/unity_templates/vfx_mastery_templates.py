@@ -27,16 +27,66 @@ from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 # ---------------------------------------------------------------------------
 
 BRAND_COLORS: dict[str, dict[str, Any]] = {
-    "IRON":{"rgba":[0.55,0.59,0.65,1.0],"glow":[0.71,0.75,0.80,1.0],"dark":[0.31,0.35,0.39,1.0],"desc":"steel gray"},
-    "SAVAGE":{"rgba":[0.71,0.18,0.18,1.0],"glow":[0.86,0.27,0.27,1.0],"dark":[0.47,0.10,0.10,1.0],"desc":"blood red"},
-    "SURGE":{"rgba":[0.24,0.55,0.86,1.0],"glow":[0.39,0.71,1.00,1.0],"dark":[0.12,0.31,0.55,1.0],"desc":"electric blue"},
-    "VENOM":{"rgba":[0.31,0.71,0.24,1.0],"glow":[0.47,0.86,0.39,1.0],"dark":[0.16,0.39,0.12,1.0],"desc":"toxic green"},
-    "DREAD":{"rgba":[0.47,0.24,0.63,1.0],"glow":[0.63,0.39,0.78,1.0],"dark":[0.27,0.12,0.39,1.0],"desc":"shadow purple"},
-    "LEECH":{"rgba":[0.55,0.16,0.31,1.0],"glow":[0.71,0.24,0.43,1.0],"dark":[0.35,0.08,0.20,1.0],"desc":"dark crimson"},
-    "GRACE":{"rgba":[0.86,0.86,0.94,1.0],"glow":[1.00,1.00,1.00,1.0],"dark":[0.63,0.63,0.71,1.0],"desc":"holy silver"},
-    "MEND":{"rgba":[0.78,0.67,0.31,1.0],"glow":[0.94,0.82,0.47,1.0],"dark":[0.55,0.43,0.16,1.0],"desc":"healing gold"},
-    "RUIN":{"rgba":[0.86,0.47,0.16,1.0],"glow":[1.00,0.63,0.31,1.0],"dark":[0.63,0.27,0.08,1.0],"desc":"flame orange"},
-    "VOID":{"rgba":[0.16,0.08,0.24,1.0],"glow":[0.39,0.24,0.55,1.0],"dark":[0.06,0.02,0.10,1.0],"desc":"void dark"},
+    "IRON": {
+        "hex": "#6B7B8D",
+        "rgba": [0.42, 0.48, 0.55, 1.0],
+        "glow": [0.6, 0.7, 0.85, 1.0],
+        "desc": "metallic sparks, steel blue, grinding particles",
+    },
+    "SAVAGE": {
+        "hex": "#8B0000",
+        "rgba": [0.545, 0.0, 0.0, 1.0],
+        "glow": [1.0, 0.15, 0.1, 1.0],
+        "desc": "blood red, feral slash marks, bone fragments",
+    },
+    "SURGE": {
+        "hex": "#00BFFF",
+        "rgba": [0.0, 0.75, 1.0, 1.0],
+        "glow": [0.3, 0.85, 1.0, 1.0],
+        "desc": "electric blue, lightning arcs, static discharge",
+    },
+    "VENOM": {
+        "hex": "#32CD32",
+        "rgba": [0.196, 0.804, 0.196, 1.0],
+        "glow": [0.3, 1.0, 0.2, 1.0],
+        "desc": "toxic green, dripping acid, poison clouds",
+    },
+    "DREAD": {
+        "hex": "#4B0082",
+        "rgba": [0.294, 0.0, 0.51, 1.0],
+        "glow": [0.5, 0.1, 0.8, 1.0],
+        "desc": "shadow purple, dark mist, fear tendrils",
+    },
+    "LEECH": {
+        "hex": "#DC143C",
+        "rgba": [0.863, 0.078, 0.235, 1.0],
+        "glow": [1.0, 0.2, 0.35, 1.0],
+        "desc": "crimson, blood orbs, siphon streams",
+    },
+    "GRACE": {
+        "hex": "#FFD700",
+        "rgba": [1.0, 0.843, 0.0, 1.0],
+        "glow": [1.0, 0.95, 0.6, 1.0],
+        "desc": "holy gold, divine rays, healing aura",
+    },
+    "MEND": {
+        "hex": "#90EE90",
+        "rgba": [0.565, 0.933, 0.565, 1.0],
+        "glow": [0.6, 1.0, 0.7, 1.0],
+        "desc": "healing green, regeneration particles, restoration glow",
+    },
+    "RUIN": {
+        "hex": "#FF4500",
+        "rgba": [1.0, 0.271, 0.0, 1.0],
+        "glow": [1.0, 0.5, 0.15, 1.0],
+        "desc": "destruction orange, explosion debris, shattered fragments",
+    },
+    "VOID": {
+        "hex": "#1A1A2E",
+        "rgba": [0.102, 0.102, 0.18, 1.0],
+        "glow": [0.3, 0.15, 0.6, 1.0],
+        "desc": "void black, dimensional tears, null energy",
+    },
 }
 
 ALL_BRANDS = list(BRAND_COLORS.keys())
