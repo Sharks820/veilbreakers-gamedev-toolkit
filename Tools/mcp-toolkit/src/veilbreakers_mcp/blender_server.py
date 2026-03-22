@@ -2,6 +2,7 @@ import atexit
 import json
 import logging
 import os
+import threading
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP, Image
@@ -40,29 +41,35 @@ mcp = FastMCP(
 )
 
 _connection: BlenderConnection | None = None
+_connection_lock = threading.Lock()
 
 
 def get_blender_connection() -> BlenderConnection:
     global _connection
-    if _connection is None:
-        logger.info("Connecting to Blender at %s:%s", settings.blender_host, settings.blender_port)
-        _connection = BlenderConnection(
-            host=settings.blender_host,
-            port=settings.blender_port,
-            timeout=settings.blender_timeout,
-        )
-        # No eager connect() -- the server uses connection-per-command,
-        # so _sync_send() calls reconnect() before each command.
-        # An eager connect() would open a socket that the server handles
-        # as a real client connection, wasting a server thread.
+    if _connection is not None:
+        return _connection
+    with _connection_lock:
+        # Double-checked locking: re-test inside the lock.
+        if _connection is None:
+            logger.info("Connecting to Blender at %s:%s", settings.blender_host, settings.blender_port)
+            _connection = BlenderConnection(
+                host=settings.blender_host,
+                port=settings.blender_port,
+                timeout=settings.blender_timeout,
+            )
+            # No eager connect() -- the server uses connection-per-command,
+            # so _sync_send() calls reconnect() before each command.
+            # An eager connect() would open a socket that the server handles
+            # as a real client connection, wasting a server thread.
     return _connection
 
 
 def _cleanup_connection():
     global _connection
-    if _connection is not None:
-        _connection.disconnect()
-        _connection = None
+    with _connection_lock:
+        if _connection is not None:
+            _connection.disconnect()
+            _connection = None
 
 
 atexit.register(_cleanup_connection)

@@ -6,11 +6,14 @@ Provides 5 handler functions registered in COMMAND_HANDLERS.
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any
 
 import bpy
 import bmesh
+
+logger = logging.getLogger(__name__)
 
 from ._building_grammar import (
     evaluate_building_grammar,
@@ -406,7 +409,7 @@ def _spec_to_bmesh(spec: BuildingSpec) -> bmesh.types.BMesh:
                 face_verts = [bm_verts[i] for i in face_indices]
                 bm.faces.new(face_verts)
             except (ValueError, IndexError):
-                pass  # skip degenerate faces
+                logger.warning("Skipping degenerate face in spec-to-bmesh conversion")
 
     return bm
 
@@ -437,6 +440,7 @@ def handle_generate_building(params: dict) -> dict:
         style: style preset name (default "medieval")
         seed: random seed (default 0)
     """
+    logger.info("Generating building")
     name = params.get("name", "Building")
     width = params.get("width", 10)
     depth = params.get("depth", 8)
@@ -468,6 +472,7 @@ def handle_generate_castle(params: dict) -> dict:
         style: style for the keep (default "fortress")
         seed: random seed (default 0)
     """
+    logger.info("Generating castle")
     name = params.get("name", "Castle")
     outer_size = params.get("outer_size", 40)
     keep_size = params.get("keep_size", 12)
@@ -575,6 +580,7 @@ def handle_generate_ruins(params: dict) -> dict:
         damage_level: 0.0-1.0 destruction intensity (default 0.5)
         seed: random seed (default 0)
     """
+    logger.info("Generating ruins")
     name = params.get("name", "Ruins")
     width = params.get("width", 10)
     depth = params.get("depth", 8)
@@ -608,6 +614,7 @@ def handle_generate_interior(params: dict) -> dict:
         height: room height (default 3.0)
         seed: random seed (default 0)
     """
+    logger.info("Generating interior layout")
     name = params.get("name", "Interior")
     room_type = params.get("room_type", "tavern")
     width = params.get("width", 8)
@@ -673,6 +680,7 @@ def handle_generate_modular_kit(params: dict) -> dict:
         cell_size: grid cell size in meters (default 2.0)
         pieces: list of piece names or null for all (default None)
     """
+    logger.info("Generating modular kit")
     name_prefix = params.get("name_prefix", "ModKit")
     cell_size = params.get("cell_size", 2.0)
     piece_names = params.get("pieces", None)
@@ -726,6 +734,7 @@ def handle_generate_location(params: dict) -> dict:
         poi_count: number of points of interest (default 2)
         seed: random seed (default 0)
     """
+    logger.info("Generating location")
     name = params.get("name", "Location")
     location_type = params.get("location_type", "village")
     building_count = params.get("building_count", 5)

@@ -11,6 +11,7 @@ Provides 6 command handlers:
 
 from __future__ import annotations
 
+import logging
 import math
 import struct
 from pathlib import Path
@@ -20,6 +21,8 @@ import numpy as np
 
 import bpy
 import bmesh
+
+logger = logging.getLogger(__name__)
 
 from ._terrain_noise import (
     generate_heightmap,
@@ -152,6 +155,7 @@ def handle_generate_terrain(params: dict) -> dict:
     Returns dict with: name, vertex_count, terrain_type, resolution,
         height_scale, erosion_applied.
     """
+    logger.info("Generating terrain (type=%s)", params.get("terrain_type", "mountains"))
     validated = _validate_terrain_params(params)
 
     name = validated["name"]
@@ -245,6 +249,7 @@ def handle_paint_terrain(params: dict) -> dict:
 
     Returns dict with: name, material_count, biome_rules_applied.
     """
+    logger.info("Painting terrain biomes")
     name = params.get("name")
     if not name:
         raise ValueError("'name' is required")
@@ -322,6 +327,7 @@ def handle_carve_river(params: dict) -> dict:
 
     Returns dict with: name, path_length, depth.
     """
+    logger.info("Carving river on terrain")
     terrain_name = params.get("terrain_name")
     if not terrain_name:
         raise ValueError("'terrain_name' is required")
@@ -389,6 +395,7 @@ def handle_generate_road(params: dict) -> dict:
 
     Returns dict with: name, path_length, width.
     """
+    logger.info("Generating road on terrain")
     terrain_name = params.get("terrain_name")
     if not terrain_name:
         raise ValueError("'terrain_name' is required")
@@ -451,6 +458,7 @@ def handle_create_water(params: dict) -> dict:
 
     Returns dict with: name, water_level, area.
     """
+    logger.info("Creating water body")
     name = params.get("name", "Water")
     water_level = params.get("water_level", 0.3)
     terrain_name = params.get("terrain_name")
@@ -532,6 +540,7 @@ def handle_export_heightmap(params: dict) -> dict:
 
     Returns dict with: filepath, width, height, bit_depth, byte_order.
     """
+    logger.info("Exporting heightmap")
     terrain_name = params.get("terrain_name")
     if not terrain_name:
         raise ValueError("'terrain_name' is required")

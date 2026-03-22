@@ -18,10 +18,13 @@ from __future__ import annotations
 import base64
 import colorsys
 import io
+import logging
 import math
 from typing import Sequence
 
 from PIL import Image, ImageDraw, ImageFilter
+
+logger = logging.getLogger(__name__)
 
 try:
     import fal_client as _fal  # type: ignore[import-untyped]
@@ -29,6 +32,7 @@ try:
     _FAL_AVAILABLE = True
 except ImportError:
     _FAL_AVAILABLE = False
+    logging.getLogger(__name__).warning("fal-client not installed; AI inpainting unavailable")
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +155,7 @@ def apply_hsv_adjustment(
     Returns:
         PNG bytes of the adjusted image.
     """
+    logger.info("Applying HSV adjustment (hue_shift=%.2f, sat=%.2f, val=%.2f)", hue_shift, saturation_scale, value_scale)
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     mask = Image.open(io.BytesIO(mask_bytes)).convert("L")
 
@@ -164,7 +169,7 @@ def apply_hsv_adjustment(
         import numpy as np
         return _hsv_adjust_numpy(img, mask, hue_shift, saturation_scale, value_scale)
     except ImportError:
-        pass
+        logger.warning("numpy not available, falling back to pixel-by-pixel HSV adjustment")
 
     # Pixel-by-pixel fallback
     result = img.copy()
@@ -339,6 +344,7 @@ def blend_seams(
     Returns:
         PNG bytes of the blended image.
     """
+    logger.info("Blending seams for %d seam pixels (radius=%d)", len(seam_pixels), blend_radius)
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     width, height = img.size
 
@@ -400,12 +406,14 @@ def make_tileable(
     Returns:
         PNG bytes of the tileable image.
     """
+    logger.info("Making texture tileable (overlap_pct=%.2f)", overlap_pct)
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     width, height = img.size
 
     try:
         import numpy as np
     except ImportError:
+        logger.warning("numpy not available, returning untiled image")
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         return buf.getvalue()
@@ -494,6 +502,7 @@ def render_wear_map(
     Returns:
         PNG bytes of L-mode (grayscale) wear map.
     """
+    logger.info("Rendering wear map (texture_size=%d, vertices=%d)", texture_size, len(curvature_data))
     if not curvature_data:
         # Empty curvature: return mid-gray
         img = Image.new("L", (texture_size, texture_size), 128)
@@ -727,6 +736,7 @@ def inpaint_texture(
             width: (on success) Result image width
             height: (on success) Result image height
     """
+    logger.info("Inpainting texture via fal.ai (prompt=%r, strength=%.2f)", prompt, strength)
     # Validate inputs exist
     if not image_bytes:
         return {"status": "error", "message": "No image data provided"}
@@ -736,6 +746,7 @@ def inpaint_texture(
         return {"status": "error", "message": "No prompt provided"}
 
     if not fal_key:
+        logger.warning("fal.ai API key not configured; inpainting unavailable")
         return {
             "status": "unavailable",
             "message": "fal.ai API key not configured. Set FAL_KEY environment variable to enable AI inpainting.",
@@ -826,6 +837,7 @@ def inpaint_texture(
         }
 
     except Exception as exc:
+        logger.error("fal.ai inpainting failed: %s", exc)
         return {
             "status": "error",
             "message": f"fal.ai inpainting failed: {exc}",

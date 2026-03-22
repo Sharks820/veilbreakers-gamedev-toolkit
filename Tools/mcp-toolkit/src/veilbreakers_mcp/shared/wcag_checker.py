@@ -12,8 +12,11 @@ Functions:
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -249,6 +252,7 @@ def validate_uxml_contrast(
     import defusedxml.ElementTree as ET
     from xml.etree.ElementTree import Element
 
+    logger.info("Validating UXML contrast against WCAG AA thresholds")
     violations: list[dict[str, Any]] = []
 
     # Parse USS rules
@@ -258,6 +262,7 @@ def validate_uxml_contrast(
     try:
         root = ET.fromstring(uxml_string)
     except ET.ParseError:
+        logger.warning("Failed to parse UXML string, returning empty violations")
         return violations
 
     # Build a class -> colors mapping from USS
