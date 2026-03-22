@@ -28,10 +28,12 @@ VB_BIOMES = [
     "corrupted_swamp",
     "mountain_pass",
     "ruined_fortress",
-    "sacred_shrine",
+    "abandoned_village",
     "veil_crack_zone",
-    "battlefield",
     "underground_dungeon",
+    "sacred_shrine",
+    "battlefield",
+    "cemetery",
 ]
 
 # ---------------------------------------------------------------------------
@@ -149,9 +151,18 @@ def _get_biome_at(
 
 
 def _hash_noise_2d(x: float, y: float, seed: int = 0) -> float:
-    """Deterministic pseudo-noise via integer hashing.  Returns [-1, 1]."""
-    # Use Python's built-in hash for speed; mix in seed
-    h = hash((round(x, 6), round(y, 6), seed))
+    """Deterministic pseudo-noise via integer hashing.  Returns [-1, 1].
+
+    Uses a custom integer hash instead of Python's hash() which is
+    non-deterministic across processes (PYTHONHASHSEED randomization).
+    """
+    # Custom deterministic hash — Robert Jenkins' 32-bit integer hash
+    ix = int(round(x, 4) * 10000) & 0xFFFFFFFF
+    iy = int(round(y, 4) * 10000) & 0xFFFFFFFF
+    h = (ix * 73856093) ^ (iy * 19349669) ^ (seed * 83492791)
+    h = ((h >> 16) ^ h) * 0x45D9F3B
+    h = ((h >> 16) ^ h) * 0x45D9F3B
+    h = (h >> 16) ^ h
     # Map to [-1, 1]
     return ((h & 0xFFFFFFFF) / 0x7FFFFFFF) - 1.0
 
@@ -267,6 +278,7 @@ def _find_valid_position(
     height: float,
     heightmap: list[list[float]] | None,
     rules: dict[str, Any],
+    world_seed: int = 0,
 ) -> tuple[float, float] | None:
     """Find a valid placement position for a POI via rejection sampling.
 
@@ -317,7 +329,7 @@ def _find_valid_position(
             continue
 
         # --- Biome check ---
-        biome = _get_biome_at(x, y, width, height, seed=rng.randint(0, 2**31))
+        biome = _get_biome_at(x, y, width, height, seed=world_seed)
         if biome not in preferred_biomes:
             # Allow placement with reduced probability even outside preferred biomes
             # This prevents impossible placement when biome zones don't cover enough area
@@ -674,6 +686,7 @@ def compose_world_map(
         for i in range(count):
             pos = _find_valid_position(
                 rng, poi_type, placed_pois, width, height, heightmap, rules,
+                world_seed=seed if seed is not None else 0,
             )
             if pos is None:
                 placement_failures.append({

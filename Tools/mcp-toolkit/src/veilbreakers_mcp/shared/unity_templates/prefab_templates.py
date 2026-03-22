@@ -152,7 +152,7 @@ def _resolve_selector_snippet(selector: dict | str) -> str:
             }}'''
 
     elif mode == "regex":
-        safe_val = sanitize_cs_string(value)
+        safe_val = value  # already sanitized on line 99
         return f'''            GameObject target = null;
             var regexPattern = new System.Text.RegularExpressions.Regex(@"{safe_val}", System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
             foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
