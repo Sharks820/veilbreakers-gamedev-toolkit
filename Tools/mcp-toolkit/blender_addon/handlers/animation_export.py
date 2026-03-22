@@ -59,6 +59,38 @@ MIXAMO_TO_RIGIFY: dict[str, str] = {
     "mixamorig:RightLeg": "DEF-shin.R",
     "mixamorig:RightFoot": "DEF-foot.R",
     "mixamorig:RightToeBase": "DEF-toe.R",
+    # Left hand fingers (15 bones) - G13
+    "mixamorig:LeftHandThumb1": "DEF-thumb.01.L",
+    "mixamorig:LeftHandThumb2": "DEF-thumb.02.L",
+    "mixamorig:LeftHandThumb3": "DEF-thumb.03.L",
+    "mixamorig:LeftHandIndex1": "DEF-f_index.01.L",
+    "mixamorig:LeftHandIndex2": "DEF-f_index.02.L",
+    "mixamorig:LeftHandIndex3": "DEF-f_index.03.L",
+    "mixamorig:LeftHandMiddle1": "DEF-f_middle.01.L",
+    "mixamorig:LeftHandMiddle2": "DEF-f_middle.02.L",
+    "mixamorig:LeftHandMiddle3": "DEF-f_middle.03.L",
+    "mixamorig:LeftHandRing1": "DEF-f_ring.01.L",
+    "mixamorig:LeftHandRing2": "DEF-f_ring.02.L",
+    "mixamorig:LeftHandRing3": "DEF-f_ring.03.L",
+    "mixamorig:LeftHandPinky1": "DEF-f_pinky.01.L",
+    "mixamorig:LeftHandPinky2": "DEF-f_pinky.02.L",
+    "mixamorig:LeftHandPinky3": "DEF-f_pinky.03.L",
+    # Right hand fingers (15 bones) - G13
+    "mixamorig:RightHandThumb1": "DEF-thumb.01.R",
+    "mixamorig:RightHandThumb2": "DEF-thumb.02.R",
+    "mixamorig:RightHandThumb3": "DEF-thumb.03.R",
+    "mixamorig:RightHandIndex1": "DEF-f_index.01.R",
+    "mixamorig:RightHandIndex2": "DEF-f_index.02.R",
+    "mixamorig:RightHandIndex3": "DEF-f_index.03.R",
+    "mixamorig:RightHandMiddle1": "DEF-f_middle.01.R",
+    "mixamorig:RightHandMiddle2": "DEF-f_middle.02.R",
+    "mixamorig:RightHandMiddle3": "DEF-f_middle.03.R",
+    "mixamorig:RightHandRing1": "DEF-f_ring.01.R",
+    "mixamorig:RightHandRing2": "DEF-f_ring.02.R",
+    "mixamorig:RightHandRing3": "DEF-f_ring.03.R",
+    "mixamorig:RightHandPinky1": "DEF-f_pinky.01.R",
+    "mixamorig:RightHandPinky2": "DEF-f_pinky.02.R",
+    "mixamorig:RightHandPinky3": "DEF-f_pinky.03.R",
 }
 
 
@@ -774,6 +806,17 @@ def handle_retarget_mixamo(params: dict) -> dict:
         cr_con.target = source_obj
         cr_con.subtarget = src_bone
         cr_con.name = f"mixamo_rot_{src_bone}"
+
+    # G13: Add COPY_LOCATION for hip bone (root motion transfer)
+    hip_mixamo = "mixamorig:Hips"
+    hip_rigify = mapped.get(hip_mixamo)
+    if hip_rigify:
+        hip_tgt_pbone = target_obj.pose.bones.get(hip_rigify)
+        if hip_tgt_pbone:
+            cl_con = hip_tgt_pbone.constraints.new("COPY_LOCATION")
+            cl_con.target = source_obj
+            cl_con.subtarget = hip_mixamo
+            cl_con.name = f"mixamo_loc_{hip_mixamo}"
 
     # Get frame range from source action
     src_action = None

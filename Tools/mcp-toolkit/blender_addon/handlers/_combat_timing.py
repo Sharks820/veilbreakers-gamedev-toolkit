@@ -124,6 +124,61 @@ _BRAND_VFX_PARAMS: dict[str, dict[str, str]] = {
     "VOID":    {"vfx_color": "black",   "impact_type": "distortion", "trail": "void_tears"},
 }
 
+# ---------------------------------------------------------------------------
+# ANIM3-06: Per-brand animation timing profiles
+# ---------------------------------------------------------------------------
+
+BRAND_TIMING_MODIFIERS: dict[str, dict[str, float | str]] = {
+    "IRON":   {"anticipation_scale": 1.5, "active_scale": 1.0, "recovery_scale": 1.3, "easing": "ease_in_out_cubic"},
+    "SAVAGE": {"anticipation_scale": 0.8, "active_scale": 0.9, "recovery_scale": 0.5, "easing": "ease_in_quad"},
+    "SURGE":  {"anticipation_scale": 0.5, "active_scale": 0.7, "recovery_scale": 0.6, "easing": "ease_out_expo"},
+    "VENOM":  {"anticipation_scale": 1.2, "active_scale": 0.4, "recovery_scale": 1.5, "easing": "ease_in_expo"},
+    "DREAD":  {"anticipation_scale": 1.3, "active_scale": 0.8, "recovery_scale": 1.0, "easing": "linear_with_pauses"},
+    "LEECH":  {"anticipation_scale": 1.1, "active_scale": 1.0, "recovery_scale": 1.4, "easing": "ease_in_sticky"},
+    "GRACE":  {"anticipation_scale": 0.9, "active_scale": 1.1, "recovery_scale": 0.9, "easing": "ease_in_out_sine"},
+    "MEND":   {"anticipation_scale": 1.0, "active_scale": 1.2, "recovery_scale": 0.8, "easing": "ease_in_out_sine"},
+    "RUIN":   {"anticipation_scale": 0.7, "active_scale": 0.6, "recovery_scale": 0.7, "easing": "chaotic_random"},
+    "VOID":   {"anticipation_scale": 1.0, "active_scale": 1.0, "recovery_scale": 1.0, "easing": "time_warp"},
+}
+
+
+def apply_brand_timing(timing_config: dict[str, Any], brand: str) -> dict[str, Any]:
+    """Apply brand-specific timing modifiers to a combat timing config."""
+    brand_upper = brand.upper()
+    if brand_upper not in BRAND_TIMING_MODIFIERS:
+        raise ValueError(f"Unknown brand: {brand!r}. Valid: {sorted(BRAND_TIMING_MODIFIERS.keys())}")
+
+    mods = BRAND_TIMING_MODIFIERS[brand_upper]
+    import copy
+    result = copy.deepcopy(timing_config)
+    frames = result["frames"]
+
+    frames["anticipation"] = max(1, round(frames["anticipation"] * mods["anticipation_scale"]))
+    frames["active"] = max(0, round(frames["active"] * mods["active_scale"])) if frames["active"] > 0 else 0
+    frames["recovery"] = max(1, round(frames["recovery"] * mods["recovery_scale"]))
+    total = frames["anticipation"] + frames["active"] + frames["recovery"]
+    frames["total"] = total
+
+    if frames["hit_frame"] >= 0 and frames["active"] > 0:
+        frames["hit_frame"] = max(frames["anticipation"], min(frames["hit_frame"], frames["anticipation"] + frames["active"] - 1))
+    elif frames["hit_frame"] >= 0 and frames["active"] == 0:
+        frames["hit_frame"] = -1
+
+    total_f = float(total) if total > 0 else 1.0
+    antic = frames["anticipation"]
+    active = frames["active"]
+    result["times"] = {
+        "anticipation_start": 0.0, "anticipation_end": antic / total_f,
+        "active_start": antic / total_f, "active_end": (antic + active) / total_f,
+        "recovery_start": (antic + active) / total_f, "recovery_end": 1.0,
+        "hit_time": frames["hit_frame"] / total_f if frames["hit_frame"] >= 0 else -1.0,
+    }
+    result["total_frames"] = total
+    result["total_duration_seconds"] = total / float(result["fps"])
+    result["brand"] = brand_upper
+    result["easing"] = mods["easing"]
+    return result
+
 
 # ---------------------------------------------------------------------------
 # ANIM3-01: Configure combat timing
@@ -464,6 +519,12 @@ def generate_combat_animation_data(
         metadata (attack_type, brand, fps).
     """
     timing = configure_combat_timing(attack_type, fps=fps, custom_timing=custom_timing)
+
+    # Apply brand-specific timing modifiers
+    brand_upper = brand.upper() if brand else "IRON"
+    if brand_upper in BRAND_TIMING_MODIFIERS:
+        timing = apply_brand_timing(timing, brand_upper)
+
     events = generate_animation_events(timing, brand=brand)
 
     result: dict[str, Any] = {
