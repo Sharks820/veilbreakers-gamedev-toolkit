@@ -79,23 +79,54 @@ Your combo VFX system should check for `vfx_frames` first, fall back to `[vfx_fr
 - Import sanitization: `from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier`
 - Use Cinemachine 3.x API: `CinemachineCamera`, `CinemachineFollow`, `CinemachineRotationComposer` (NOT legacy CM2)
 - Use PrimeTween (NOT DOTween): `Tween.Alpha()`, `Tween.Scale()`, `Tween.Position()`
-- Use typed events: `EventBus<EventType>.Raise(new EventType { ... })` (NOT string-based Publish)
+- Use C# events: `OnEventName?.Invoke(args)` (NOT `EventBus.Publish("string")` or `EventBus<T>.Raise()`)
+- The game's EventBus uses static methods for core events: `EventBus.DamageDealt(source, target, amount, isCrit)` — but for new generated systems, use C# event delegates (`public event Action<T> OnEventName`)
 - Use `Path` enum (NOT `HeroPath`) in `VeilBreakers.Data` namespace
-- Use 4-arg DamageCalculator: `DamageCalculator.Calculate(attacker, target, brand, ability)`
+- Use game's DamageCalculator signature: `DamageCalculator.Calculate(Combatant attacker, Combatant defender, int basePower, DamageType damageType)`
+- Cinemachine is NOT in the game project yet — generated scripts that use Cinemachine should include a note that `com.unity.cinemachine` package must be installed
 
-### Brand Color Palette (use these EXACT values)
+### Brand Color Palette (from VeilBreakers3DCurrent/BrandSystem.cs — use EXACT values)
 ```python
+# Primary colors (what VFX particles, auras, and effects use)
 BRAND_COLORS = {
-    "IRON":    (0.72, 0.45, 0.20, 1.0),  # Rust-bronze #B87333
-    "SAVAGE":  (0.80, 0.20, 0.10, 1.0),  # Blood red
-    "SURGE":   (0.20, 0.60, 1.00, 1.0),  # Electric blue
-    "VENOM":   (0.30, 0.80, 0.20, 1.0),  # Toxic green
-    "DREAD":   (0.13, 0.55, 0.13, 0.9),  # Fear green (dark) #228B22
-    "LEECH":   (0.60, 0.80, 0.20, 1.0),  # Sickly yellow-green #9ACD32
-    "GRACE":   (1.00, 0.84, 0.00, 1.0),  # Golden
-    "MEND":    (0.20, 0.90, 0.50, 1.0),  # Healing green
-    "RUIN":    (0.60, 0.10, 0.60, 1.0),  # Dark magenta
-    "VOID":    (0.30, 0.00, 0.50, 1.0),  # Deep purple
+    "IRON":    (0.55, 0.59, 0.65, 1.0),  # Steel gray
+    "SAVAGE":  (0.71, 0.18, 0.18, 1.0),  # Blood red
+    "SURGE":   (0.24, 0.55, 0.86, 1.0),  # Electric blue
+    "VENOM":   (0.31, 0.71, 0.24, 1.0),  # Toxic green
+    "DREAD":   (0.47, 0.24, 0.63, 1.0),  # Deep purple
+    "LEECH":   (0.55, 0.16, 0.31, 1.0),  # Dark crimson
+    "GRACE":   (0.86, 0.86, 0.94, 1.0),  # Holy silver
+    "MEND":    (0.78, 0.67, 0.31, 1.0),  # Healing gold
+    "RUIN":    (0.86, 0.47, 0.16, 1.0),  # Flame orange
+    "VOID":    (0.16, 0.08, 0.24, 1.0),  # Void dark
+}
+
+# Glow variants (for emission, bloom, energy effects)
+BRAND_GLOW = {
+    "IRON":    (0.71, 0.75, 0.80, 1.0),
+    "SAVAGE":  (0.86, 0.27, 0.27, 1.0),
+    "SURGE":   (0.39, 0.71, 1.00, 1.0),
+    "VENOM":   (0.47, 0.86, 0.39, 1.0),
+    "DREAD":   (0.63, 0.39, 0.78, 1.0),
+    "LEECH":   (0.71, 0.24, 0.43, 1.0),
+    "GRACE":   (1.00, 1.00, 1.00, 1.0),
+    "MEND":    (0.94, 0.82, 0.47, 1.0),
+    "RUIN":    (1.00, 0.63, 0.31, 1.0),
+    "VOID":    (0.39, 0.24, 0.55, 1.0),
+}
+
+# Dark variants (for shadows, corruption, dark effects)
+BRAND_DARK = {
+    "IRON":    (0.31, 0.35, 0.39, 1.0),
+    "SAVAGE":  (0.47, 0.10, 0.10, 1.0),
+    "SURGE":   (0.12, 0.31, 0.55, 1.0),
+    "VENOM":   (0.16, 0.39, 0.12, 1.0),
+    "DREAD":   (0.27, 0.12, 0.39, 1.0),
+    "LEECH":   (0.35, 0.08, 0.20, 1.0),
+    "GRACE":   (0.63, 0.63, 0.71, 1.0),
+    "MEND":    (0.55, 0.43, 0.16, 1.0),
+    "RUIN":    (0.63, 0.27, 0.08, 1.0),
+    "VOID":    (0.06, 0.02, 0.10, 1.0),
 }
 ```
 
@@ -181,12 +212,29 @@ Idle per brand (blended additively):
 - etc. (each brand gets a 3-5 line idle behavior description)
 
 ### P4-I8: Fix Brand VFX Colors (2h)
-**In `vfx_templates.py` and `vfx_mastery_templates.py`:**
-- Find all brand color definitions and replace with the correct values from the Interface Contract above
-- IRON: gray → rust-bronze (0.72, 0.45, 0.20)
-- LEECH: red → sickly yellow-green (0.60, 0.80, 0.20)
-- DREAD: dark purple → fear-green (0.13, 0.55, 0.13)
-- Ensure VOID and DREAD have DIFFERENT colors (VOID=deep purple, DREAD=fear green)
+**In BOTH `vfx_templates.py` AND `vfx_mastery_templates.py`:**
+
+The two files have CONFLICTING brand colors — they must be unified to the Interface Contract palette.
+
+**Current values in vfx_templates.py → Correct values (from BrandSystem.cs):**
+- IRON: `[1.0,0.6,0.2]` (orange) → `[0.55,0.59,0.65,1.0]` (steel gray)
+- SAVAGE: `[0.2,0.9,0.1]` (toxic green) → `[0.71,0.18,0.18,1.0]` (blood red)
+- VENOM: `[0.9,0.3,0.1]` (red) → `[0.31,0.71,0.24,1.0]` (toxic green)
+- LEECH: `[0.2,0.5,0.15]` (dark green) → `[0.55,0.16,0.31,1.0]` (dark crimson)
+- GRACE: `[1.0,0.95,0.7]` (pale) → `[0.86,0.86,0.94,1.0]` (holy silver)
+- MEND: `[0.3,0.9,0.6]` (cyan) → `[0.78,0.67,0.31,1.0]` (healing gold)
+- RUIN: `[0.4,0.3,0.2]` (brown) → `[0.86,0.47,0.16,1.0]` (flame orange)
+- VOID: `[0.3,0.1,0.5]` (IDENTICAL to DREAD!) → `[0.16,0.08,0.24,1.0]` (void dark)
+- DREAD: `[0.3,0.1,0.5]` (same as VOID) → `[0.47,0.24,0.63,1.0]` (deep purple)
+
+**Current values in vfx_mastery_templates.py → ALSO fix (CONFLICTING with vfx_templates!):**
+- IRON: `[1.0,0.5,0.1]` → `[0.55,0.59,0.65,1.0]` (steel gray)
+- DREAD: `[1.0,1.0,1.0]` (white!) → `[0.47,0.24,0.63,1.0]` (deep purple)
+- LEECH: `[1.0,0.8,0.3]` (golden!) → `[0.55,0.16,0.31,1.0]` (dark crimson)
+- VOID: `[0.5,0.02,0.02]` (deep red!) → `[0.16,0.08,0.24,1.0]` (void dark)
+
+**Both files must use the EXACT values from the Interface Contract palette (BrandSystem.cs).**
+**Also add BRAND_GLOW and BRAND_DARK variants from the palette for emission and shadow effects.**
 
 ### P5-Q3: Multi-Hit Combo VFX Chains (20h)
 **Generate `ComboVFXController.cs`:**
@@ -205,15 +253,18 @@ Idle per brand (blended additively):
 
 ### P5-Q5: Cinematic Camera for Action Sequences (20h)
 **Extend `cinematic_templates.py`:**
-- Current: only "talking heads" (static camera, dialogue). Keep this working.
-- Add `generate_action_cinematic_script()`:
-  - Camera dolly tracks (move along spline)
-  - Camera crane shots (vertical arc)
-  - Impact zoom (quick zoom on hit frame, pull back)
-  - Multi-shot sequences with hard cuts and crossfades
-  - VFX reaction (camera shake on explosion, slow-mo on critical hit)
-- Use `CinemachineSequencerCamera` for shot list management
-- Use `CinemachineCameraOffset` for impact shake
+- Current system already has: multi-shot sequences, transitions (cut/crossfade/push/fade), character staging (idle/walk/run/talk/fight/kneel), signal tracks, audio tracks, PlayableDirector binding. This is NOT a from-scratch build.
+- **What's MISSING is camera MOVEMENT during shots.** Currently cameras are placed at fixed positions per shot. Add:
+  - `generate_action_cinematic_script()` with:
+    - Camera dolly tracks (CinemachineSmoothPath + CinemachineTrackedDolly)
+    - Camera crane shots (vertical arc via animated CinemachineCameraOffset)
+    - Impact zoom (quick zoom on hit frame via FOV animation, pull back)
+    - Slow-motion integration (`Time.timeScale` curves on Timeline)
+    - VFX reaction (Cinemachine impulse source triggered by Timeline signals)
+  - Extend existing shot types beyond the current 5 defaults (Establishing, CloseUp, Reaction, TwoShot, Closing)
+  - Add: OrbitalShot, TrackingShot, WhipPan, CrashZoom, PullBack shot types
+- Use `CinemachineSequencerCamera` for shot list management (already partially in place)
+- Use `CinemachineImpulseSource` for impact shake (NOT CinemachineCameraOffset)
 
 ### P5-Q8: Animation Layer System (16h)
 **Extend `animation_templates.py`:**
@@ -311,7 +362,7 @@ composer.Composition.SoftZone.Height = 0.8f;
 - Follow cameras have dead zones for smooth tracking
 - Cinemachine impulse has both source and listener
 - Multi-hit animations generate multiple AnimationEvents
-- No `EventBus.Publish("string")` — use typed `EventBus<T>.Raise()`
+- No `EventBus.Publish("string")` or `EventBus<T>.Raise()` — use C# events `OnEvent?.Invoke(args)`
 - No `HeroPath` — use `Path`
 - No local `_sanitize` — import from `_cs_sanitize`
 - No DOTween — use PrimeTween

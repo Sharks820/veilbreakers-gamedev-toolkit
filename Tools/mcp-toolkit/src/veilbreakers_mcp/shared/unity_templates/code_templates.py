@@ -57,7 +57,7 @@ def _safe_identifier(name: str) -> str:
         ValueError: If the sanitized result is empty.
     """
     result = sanitize_cs_identifier(name)
-    if not result:
+    if not result or result == "_unnamed":
         raise ValueError(f"Identifier is empty after sanitization: {name!r}")
     if result[0].isdigit():
         result = f"_{result}"

@@ -66,14 +66,24 @@ When you create new handler functions:
 ## Interface Contract (READ THIS)
 
 ### You CONSUME from Terminal 1 (Rigging)
-T1 is adding twist bones and changing rig templates. You must reference bones by the EXISTING naming convention. T1 has committed to preserving these names:
+T1 is adding twist bones and changing rig templates. You must reference bones by the ACTUAL CURRENT naming convention:
 ```
-spine, spine.001, spine.002, spine.003
-shoulder.L/R, upper_arm.L/R, forearm.L/R, hand.L/R
-thigh.L/R, shin.L/R, foot.L/R, toe.L/R
-head, neck
+# CURRENT (these exist NOW — safe to always use):
+spine, spine.001, spine.002, spine.003, spine.004, spine.005  (.005 = head)
+upper_arm.L/R, forearm.L/R, hand.L/R
+thigh.L/R, shin.L/R, foot.L/R
+tail, tail.001, tail.002  (quadruped/dragon)
+wing_upper.L/R, wing_fore.L/R, wing_tip.L/R  (dragon/bird)
 ```
-New twist bones from T1 will be named `upper_arm_twist.L/R`, `forearm_twist.L/R`, etc. Your animation generators should work whether twist bones exist or not (check for bone existence before keying).
+NOTE: There is NO separate `shoulder.L/R`, `head`, `neck`, or `toe.L/R` bone yet. `spine.005` IS the head. T1 will add `clavicle.L/R` and finger/toe bones as upgrades.
+
+**New twist bones from T1** (check existence before keying):
+`upper_arm_twist.L/R`, `forearm_twist.L/R`, `thigh_twist.L/R`, `shin_twist.L/R`
+
+**New bones T1 may add** (always check `armature.data.bones.get("name")` before keying):
+`clavicle.L/R`, finger bones (`thumb_01-03`, etc.), `toe.L/R`
+
+Your generators MUST work with or without these new bones (graceful fallback).
 
 ### You EXPOSE to Terminal 3 (Unity VFX)
 T3 generates Unity C# AnimatorControllers that consume the animations you create. Your animations must:
