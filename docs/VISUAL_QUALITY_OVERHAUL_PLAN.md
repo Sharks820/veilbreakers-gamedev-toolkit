@@ -929,15 +929,61 @@ AAA open worlds ship 3,000-5,000 unique meshes. Our Phase 1 target is 1,200+ to 
 - [ ] Soldier — uniform plate, rank insignia, formation gear
 - [ ] Cultist — dark robes, brand mask (per-brand variant ×10)
 
-**NPC Facial Variation System:**
+**NPC Full-Body Variation System (EVERY axis of variation):**
+
+**Body Shape (shape keys on base mesh, blend 0-1):**
+- Muscular ↔ Thin (muscle mass slider)
+- Tall ↔ Short (height scale + proportional limb adjustment)
+- Wide ↔ Narrow (shoulder/hip width)
+- Heavy ↔ Lean (belly/chest/thigh volume)
+- Young ↔ Old (posture hunch, skin sag, joint stiffness)
+- 5 preset body builds: Athletic, Heavy, Slim, Average, Elder
+
+**Height Variation:**
+- 5 height tiers: Very Short (0.85x), Short (0.92x), Average (1.0x), Tall (1.08x), Very Tall (1.15x)
+- NOT just uniform scale — legs/torso/head proportions shift with height
+
+**Gender:**
+- Male and Female base meshes (separate topology for chest/hip/shoulder differences)
+- All 15 outfit sets work on BOTH genders (re-fitted per body type)
+- Non-binary/androgynous body shape achievable via shape key blending
+
+**Skin Tone (material parameter, 8+ options):**
+- Pale, Fair, Light, Medium, Olive, Tan, Brown, Dark, Ash-gray (corrupted), Ghostly-pale (Veil-touched)
+
+**Face (shape keys + separate pieces):**
 - 5 face shapes (round, square, oval, angular, gaunt)
 - 4 nose types (straight, broad, aquiline, button)
 - 3 eye shapes (wide, narrow, deep-set)
-- 6 hairstyles per gender (short, medium, long, braided, shaved, bald)
-- 4 facial hair for males (clean, stubble, beard, full beard)
-- Scar/marking variants (3 per face region)
+- 3 jaw shapes (strong, narrow, round)
+- 3 cheekbone heights (high, medium, flat)
+- Scar/marking shape keys (3 per face region: forehead, cheek, chin)
 - Age wrinkle shape keys (smooth → young → middle → elder)
-- **Combinations: 5×4×3×6×4×3 = 4,320 unique face combinations**
+- Tattoo/warpaint UV regions (brand-specific patterns)
+
+**Hair (separate mesh, swappable):**
+- Male: short crop, medium swept, long flowing, braided, mohawk, shaved, bald, ponytail, wild/unkempt, dreads (10)
+- Female: short bob, medium wavy, long straight, long braided, twin braids, updo, wild/loose, shaved sides, ponytail, dreads (10)
+- Hair COLORS: black, brown, dark brown, auburn, red, blonde, white/silver, gray, blue-tinted, green-tinted (10)
+- All via hair card meshes with alpha transparency
+
+**Facial Hair (male, separate mesh):**
+- Clean-shaven, stubble, short beard, full beard, long beard, braided beard, mustache, goatee (8)
+
+**Body Markings (texture layer):**
+- Scars (slash, burn, puncture — 6 types, placeable on any limb/torso/face)
+- Tattoos (brand-specific patterns ×10, tribal, runic)
+- Corruption veins (shader-driven based on corruption level)
+- Dirt/grime (vertex color overlay, adjustable intensity)
+
+**Total Unique NPC Combinations:**
+- Body: 5 shapes × 5 heights × 2 genders × 10 skin tones = 500 body variants
+- Face: 5 × 4 × 3 × 3 × 3 = 540 face variants
+- Hair: 10 styles × 10 colors = 100 hair variants
+- Outfit: 15 outfit sets × 4 quality tiers = 60 outfit variants
+- Accessories: 30 mix-and-match pieces
+- **Theoretical maximum: 500 × 540 × 100 × 60 = 1.6 BILLION unique NPCs**
+- **Practical distinct looks: 50,000+ easily achievable without repeats**
 
 **NPC Accessories (separate meshes, mix-and-match):**
 - [ ] Backpacks (3 sizes)
