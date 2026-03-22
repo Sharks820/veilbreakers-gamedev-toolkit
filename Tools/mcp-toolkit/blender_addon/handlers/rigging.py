@@ -192,7 +192,7 @@ UNITY_HUMANOID_BONE_MAP: dict[str, str] = {
 }
 
 UNITY_REQUIRED_BONES: list[str] = [
-    "Hips", "Spine", "Chest", "Neck", "Head",
+    "Hips", "Spine", "Head",
     "LeftUpperArm", "LeftLowerArm", "LeftHand",
     "RightUpperArm", "RightLowerArm", "RightHand",
     "LeftUpperLeg", "LeftLowerLeg", "LeftFoot",

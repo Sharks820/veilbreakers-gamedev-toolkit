@@ -1067,19 +1067,19 @@ class TestSpringDynamics:
     def test_valid_params(self):
         """Valid spring dynamics params pass."""
         from blender_addon.handlers.rigging_advanced import _validate_spring_dynamics_params
-        result = _validate_spring_dynamics_params(mass=1.0, stiffness=10.0, damping=0.5)
+        result = _validate_spring_dynamics_params(mass=1.0, stiffness=0.5, damping=0.5)
         assert result["valid"] is True
         assert result["errors"] == []
 
     def test_invalid_mass(self):
         """Mass <= 0 fails."""
         from blender_addon.handlers.rigging_advanced import _validate_spring_dynamics_params
-        result = _validate_spring_dynamics_params(mass=0.0, stiffness=10.0, damping=0.5)
+        result = _validate_spring_dynamics_params(mass=0.0, stiffness=0.5, damping=0.5)
         assert result["valid"] is False
         assert any("mass" in e for e in result["errors"])
 
     def test_invalid_stiffness(self):
-        """Stiffness <= 0 or > 100 fails."""
+        """Stiffness <= 0 or > 1 fails."""
         from blender_addon.handlers.rigging_advanced import _validate_spring_dynamics_params
         result = _validate_spring_dynamics_params(mass=1.0, stiffness=0.0, damping=0.5)
         assert result["valid"] is False
