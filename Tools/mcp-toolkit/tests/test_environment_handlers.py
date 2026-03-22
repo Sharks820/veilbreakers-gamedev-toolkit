@@ -78,10 +78,10 @@ class TestValidateTerrainParams:
         assert result["erosion_iterations"] == 5000
 
     def test_all_terrain_types_valid(self):
-        """All 6 terrain types pass validation."""
+        """All 8 terrain types pass validation."""
         from blender_addon.handlers.environment import _validate_terrain_params
 
-        for ttype in ["mountains", "hills", "plains", "volcanic", "canyon", "cliffs"]:
+        for ttype in ["mountains", "hills", "plains", "volcanic", "canyon", "cliffs", "flat", "chaotic"]:
             result = _validate_terrain_params({"terrain_type": ttype})
             assert result["terrain_type"] == ttype
 
@@ -317,3 +317,161 @@ class TestNearestPotPlus1:
         from blender_addon.handlers.environment import _nearest_pot_plus_1
 
         assert _nearest_pot_plus_1(50) == 65
+
+
+# ---------------------------------------------------------------------------
+# VB biome preset tests
+# ---------------------------------------------------------------------------
+
+
+class TestVBBiomePresets:
+    """Test VeilBreakers biome preset lookup and structure."""
+
+    VB_BIOME_NAMES = [
+        "thornwood_forest",
+        "corrupted_swamp",
+        "mountain_pass",
+        "ruined_fortress",
+        "abandoned_village",
+        "veil_crack_zone",
+        "underground_dungeon",
+        "sacred_shrine",
+        "battlefield",
+        "cemetery",
+    ]
+
+    def test_has_ten_biome_presets(self):
+        """VB_BIOME_PRESETS contains exactly 10 biomes."""
+        from blender_addon.handlers.environment import VB_BIOME_PRESETS
+
+        assert len(VB_BIOME_PRESETS) == 10
+
+    def test_all_biome_names_present(self):
+        """All expected VeilBreakers biome names are present."""
+        from blender_addon.handlers.environment import VB_BIOME_PRESETS
+
+        for name in self.VB_BIOME_NAMES:
+            assert name in VB_BIOME_PRESETS, f"Missing biome: {name}"
+
+    def test_all_biomes_have_required_keys(self):
+        """Every biome preset has terrain_type, resolution, height_scale, erosion, scatter_rules."""
+        from blender_addon.handlers.environment import VB_BIOME_PRESETS
+
+        required_keys = {"terrain_type", "resolution", "height_scale", "erosion", "scatter_rules"}
+        for name, preset in VB_BIOME_PRESETS.items():
+            for key in required_keys:
+                assert key in preset, f"Biome '{name}' missing key '{key}'"
+
+    def test_all_biome_terrain_types_are_valid(self):
+        """Every biome's terrain_type maps to a valid TERRAIN_PRESETS entry."""
+        from blender_addon.handlers.environment import VB_BIOME_PRESETS
+        from blender_addon.handlers._terrain_noise import TERRAIN_PRESETS
+
+        for name, preset in VB_BIOME_PRESETS.items():
+            assert preset["terrain_type"] in TERRAIN_PRESETS, (
+                f"Biome '{name}' terrain_type '{preset['terrain_type']}' "
+                f"not in TERRAIN_PRESETS"
+            )
+
+    def test_scatter_rules_have_required_keys(self):
+        """Every scatter rule has asset, density, min_distance, scale_range."""
+        from blender_addon.handlers.environment import VB_BIOME_PRESETS
+
+        rule_keys = {"asset", "density", "min_distance", "scale_range"}
+        for name, preset in VB_BIOME_PRESETS.items():
+            for i, rule in enumerate(preset["scatter_rules"]):
+                for key in rule_keys:
+                    assert key in rule, (
+                        f"Biome '{name}' scatter_rule[{i}] missing key '{key}'"
+                    )
+
+    def test_scatter_rules_scale_range_is_two_element_list(self):
+        """scale_range is a list of exactly 2 floats [min, max]."""
+        from blender_addon.handlers.environment import VB_BIOME_PRESETS
+
+        for name, preset in VB_BIOME_PRESETS.items():
+            for i, rule in enumerate(preset["scatter_rules"]):
+                sr = rule["scale_range"]
+                assert len(sr) == 2, (
+                    f"Biome '{name}' rule[{i}] scale_range has {len(sr)} elements"
+                )
+                assert sr[0] <= sr[1], (
+                    f"Biome '{name}' rule[{i}] scale_range min > max"
+                )
+
+    def test_get_vb_biome_preset_returns_copy(self):
+        """get_vb_biome_preset returns an independent copy."""
+        from blender_addon.handlers.environment import get_vb_biome_preset, VB_BIOME_PRESETS
+
+        preset = get_vb_biome_preset("thornwood_forest")
+        assert preset is not None
+        # Mutate the copy and verify original is unchanged
+        preset["resolution"] = 9999
+        assert VB_BIOME_PRESETS["thornwood_forest"]["resolution"] != 9999
+
+    def test_get_vb_biome_preset_returns_none_for_unknown(self):
+        """get_vb_biome_preset returns None for unknown biome name."""
+        from blender_addon.handlers.environment import get_vb_biome_preset
+
+        assert get_vb_biome_preset("nonexistent_biome") is None
+        assert get_vb_biome_preset("") is None
+
+    def test_get_vb_biome_preset_all_biomes(self):
+        """get_vb_biome_preset returns a dict for every known biome."""
+        from blender_addon.handlers.environment import get_vb_biome_preset
+
+        for name in self.VB_BIOME_NAMES:
+            preset = get_vb_biome_preset(name)
+            assert isinstance(preset, dict), f"get_vb_biome_preset('{name}') returned {type(preset)}"
+
+    def test_biome_preset_resolves_in_validate(self):
+        """A biome name resolves to valid terrain params via _validate_terrain_params.
+
+        The handler builds effective params from the preset before validation,
+        so here we simulate that resolution.
+        """
+        from blender_addon.handlers.environment import (
+            get_vb_biome_preset,
+            _validate_terrain_params,
+        )
+
+        for name in self.VB_BIOME_NAMES:
+            preset = get_vb_biome_preset(name)
+            # Build the effective params dict as the handler would
+            effective = {
+                "terrain_type": preset["terrain_type"],
+                "resolution": preset["resolution"],
+                "height_scale": preset["height_scale"],
+            }
+            if preset.get("erosion"):
+                effective["erosion"] = "hydraulic"
+                effective["erosion_iterations"] = preset.get("erosion_iterations", 5000)
+            else:
+                effective["erosion"] = "none"
+            result = _validate_terrain_params(effective)
+            assert result["terrain_type"] == preset["terrain_type"]
+            assert result["resolution"] == preset["resolution"]
+            assert result["height_scale"] == preset["height_scale"]
+
+    def test_biome_explicit_override(self):
+        """Explicit params override biome preset defaults.
+
+        Simulates the handler's param merge logic.
+        """
+        from blender_addon.handlers.environment import (
+            get_vb_biome_preset,
+            _validate_terrain_params,
+        )
+
+        preset = get_vb_biome_preset("cemetery")
+        assert preset is not None
+        # Override resolution and height_scale
+        effective = {
+            "terrain_type": preset["terrain_type"],
+            "resolution": 1024,
+            "height_scale": 50.0,
+            "erosion": "none",
+        }
+        result = _validate_terrain_params(effective)
+        assert result["resolution"] == 1024
+        assert result["height_scale"] == 50.0

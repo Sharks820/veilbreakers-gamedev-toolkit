@@ -170,17 +170,17 @@ class TestGenerateHeightmap:
 class TestTerrainPresets:
     """Test TERRAIN_PRESETS configuration dict."""
 
-    def test_has_six_terrain_types(self):
-        """TERRAIN_PRESETS has exactly 6 terrain types."""
+    def test_has_eight_terrain_types(self):
+        """TERRAIN_PRESETS has exactly 8 terrain types."""
         from blender_addon.handlers._terrain_noise import TERRAIN_PRESETS
 
-        assert len(TERRAIN_PRESETS) == 6
+        assert len(TERRAIN_PRESETS) == 8
 
     def test_required_terrain_types_present(self):
-        """All 6 required terrain types are present."""
+        """All 8 required terrain types are present."""
         from blender_addon.handlers._terrain_noise import TERRAIN_PRESETS
 
-        required = {"mountains", "hills", "plains", "volcanic", "canyon", "cliffs"}
+        required = {"mountains", "hills", "plains", "volcanic", "canyon", "cliffs", "flat", "chaotic"}
         assert required == set(TERRAIN_PRESETS.keys())
 
     def test_each_preset_has_octaves(self):

@@ -958,7 +958,7 @@ class TestTool14BlenderEnvironment:
         for key in self.ENV_KEYS:
             assert key in HANDLER_KEYS, f"Missing env handler key: {key}"
 
-    # -- generate_heightmap for all 6 terrain presets --
+    # -- generate_heightmap for all 8 terrain presets --
 
     @pytest.mark.parametrize("terrain_type", list(TERRAIN_PRESETS.keys()))
     def test_generate_heightmap_all_presets(self, terrain_type):
@@ -972,8 +972,8 @@ class TestTool14BlenderEnvironment:
         # Not all zeros
         assert hmap.max() > hmap.min()
 
-    def test_terrain_presets_has_6_types(self):
-        expected = {"mountains", "hills", "plains", "volcanic", "canyon", "cliffs"}
+    def test_terrain_presets_has_8_types(self):
+        expected = {"mountains", "hills", "plains", "volcanic", "canyon", "cliffs", "flat", "chaotic"}
         assert set(TERRAIN_PRESETS.keys()) == expected
 
     # -- apply_hydraulic_erosion --
