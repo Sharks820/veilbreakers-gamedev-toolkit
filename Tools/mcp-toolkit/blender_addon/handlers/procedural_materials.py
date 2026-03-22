@@ -730,9 +730,13 @@ def build_stone_material(mat: Any, params: dict[str, Any]) -> None:
     mix_base.blend_type = "MULTIPLY"
     mix_base.inputs["Fac"].default_value = 1.0
     bc = params["base_color"]
-    # Scale the base color to be brighter for multiply blending
-    mix_base.inputs["Color1"].default_value = (bc[0] * 5.0, bc[1] * 5.0,
-                                                bc[2] * 5.0, 1.0)
+    # Scale the base color for multiply blending -- clamped to avoid clipping
+    mix_base.inputs["Color1"].default_value = (
+        min(1.0, bc[0] * 2.5),
+        min(1.0, bc[1] * 2.5),
+        min(1.0, bc[2] * 2.5),
+        1.0,
+    )
     links.new(mix_color.outputs["Color"], mix_base.inputs["Color2"])
     links.new(mix_base.outputs["Color"], bsdf.inputs["Base Color"])
 
@@ -1198,11 +1202,18 @@ def build_terrain_material(mat: Any, params: dict[str, Any]) -> None:
     links.new(separate.outputs["Z"], ramp_slope.inputs["Fac"])
 
     # -- Apply base color tint to noise mix --
+    # Bug 11 fix: use min(1.0, ...) clamping instead of raw * 4.0 which clips
+    # any base_color component > 0.25 to white. Use * 2.0 with clamping for
+    # proper range without blowing out terrain colors.
     mix_base = _add_node(tree, "ShaderNodeMixRGB", -300, 100, "Base Tint")
     mix_base.blend_type = "MULTIPLY"
     mix_base.inputs["Fac"].default_value = 1.0
-    mix_base.inputs["Color1"].default_value = (bc[0] * 4.0, bc[1] * 4.0,
-                                                bc[2] * 4.0, 1.0)
+    mix_base.inputs["Color1"].default_value = (
+        min(1.0, bc[0] * 2.0),
+        min(1.0, bc[1] * 2.0),
+        min(1.0, bc[2] * 2.0),
+        1.0,
+    )
     links.new(mix_all.outputs["Color"], mix_base.inputs["Color2"])
     links.new(mix_base.outputs["Color"], bsdf.inputs["Base Color"])
 
@@ -1359,8 +1370,17 @@ def create_procedural_material(name: str, material_key: str) -> Any:
             f"Available: {sorted(MATERIAL_LIBRARY.keys())}"
         )
 
-    entry = MATERIAL_LIBRARY[material_key]
+    entry = dict(MATERIAL_LIBRARY[material_key])  # copy to avoid mutating library
     recipe = entry["node_recipe"]
+
+    # Bug 10 fix: ensure base_color has at least 4 elements (RGBA)
+    bc_raw = entry.get("base_color", (0.15, 0.13, 0.11, 1.0))
+    if not bc_raw or not hasattr(bc_raw, '__len__'):
+        bc_raw = (0.15, 0.13, 0.11, 1.0)
+    bc_list = list(bc_raw)
+    while len(bc_list) < 4:
+        bc_list.append(1.0 if len(bc_list) == 3 else 0.0)
+    entry["base_color"] = tuple(bc_list[:4])
 
     builder = GENERATORS.get(recipe)
     if builder is None:
