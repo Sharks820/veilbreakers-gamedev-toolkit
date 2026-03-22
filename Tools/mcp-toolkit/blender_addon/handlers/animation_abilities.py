@@ -413,8 +413,10 @@ def generate_brand_ultimate(
     """Generate brand-specific ultimate ability animation.
 
     Extended sequence (60+ frames): long charge → dramatic release → aftermath.
+    Intensity clamped to 1.5 to prevent deformation beyond safe rotation limits.
     """
     frame_count = max(1, frame_count)
+    intensity = min(intensity, 1.5)  # Clamp to prevent > 1.5 rad rotations
     keyframes: list[Keyframe] = []
 
     charge_end = int(0.5 * frame_count)

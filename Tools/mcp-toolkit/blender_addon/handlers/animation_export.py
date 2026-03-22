@@ -34,7 +34,7 @@ from ._context import get_3d_context_override
 def _action_frame_range(action) -> list[int]:
     """Get action frame range, compatible with Blender 4.x and 5.0+."""
     if hasattr(action, "frame_range"):
-        return [_action_frame_range(action)[0], _action_frame_range(action)[1]]
+        return [int(action.frame_range[0]), int(action.frame_range[1])]
     return get_frame_range(action)
 
 
@@ -56,7 +56,7 @@ def _action_new_fcurve(action, data_path, index, armature_obj=None):
 def _action_remove_fcurve(action, fc):
     """Remove fcurve from action, compatible with Blender 4.x and 5.0+."""
     if hasattr(action, "fcurves"):
-        _action_remove_fcurve(action, fc)
+        action.fcurves.remove(fc)
     else:
         remove_fcurve(action, fc)
 
