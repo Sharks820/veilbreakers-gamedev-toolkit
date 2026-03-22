@@ -87,7 +87,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+#if PRIME_TWEEN
 using PrimeTween;
+#endif
 
 namespace VeilBreakers.VFX
 {
