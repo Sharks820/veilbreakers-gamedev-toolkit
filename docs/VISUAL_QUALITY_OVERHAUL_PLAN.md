@@ -854,77 +854,372 @@ Current generators make 80-vert placeholders. Need:
 
 ---
 
-## COMPLETE ASSET CHECKLIST FOR VEILBREAKERS RPG
+## COMPLETE MESH LIBRARY — TARGET 1,200+ UNIQUE MESHES
 
-### Architecture (25+ modular pieces per style × 5 styles)
-- [ ] Gothic (shrines, cathedrals)
-- [ ] Medieval (houses, taverns, shops)
-- [ ] Fortress (walls, towers, barracks)
-- [ ] Organic (tree-homes, root structures, mushroom houses)
-- [ ] Ruined (damaged variants of all above)
+AAA open worlds ship 3,000-5,000 unique meshes. Our Phase 1 target is 1,200+ to fill a compelling world. Everything must be HIGHEST QUALITY with proper materials, normals, and LODs.
 
-### Characters (mesh + rig + texture each)
-- [ ] Vex (IRONBOUND tank)
-- [ ] Seraphina (FANGBORN assassin)
-- [ ] Orion (VOIDTOUCHED mage)
-- [ ] Nyx (UNCHAINED hybrid)
-- [ ] Generic NPCs (merchant, guard, villager, priest)
+### ARCHITECTURE — 175+ modular pieces (5 styles × 35 pieces)
 
-### Monsters (20 unique meshes)
-- [ ] All 20 from vb_game_data.py with brand-specific features
-- [ ] 3 size variants each (young/adult/elder)
-- [ ] Corruption visual variants (5 tiers)
+**Per Style Kit (35 pieces each):**
+- Walls: straight, corner-in, corner-out, window, door, half-height, damaged, T-junction, end-cap (9)
+- Floors: stone slab, wooden plank, dirt, damaged (4)
+- Ceilings: flat, vaulted, open-beam (3)
+- Roofs: slope, peak, flat, gutter, dormer, chimney (6)
+- Stairs: straight, spiral, ramp, ladder (4)
+- Doors: single, double, arched, gate, trapdoor (5)
+- Windows: small, large, pointed, round, broken (5)
+- Trim: cornice, sill, lintel, baseboard (4)
 
-### Weapons (per type × brand variants)
-- [ ] Swords (straight, curved, greatsword)
-- [ ] Axes (hand axe, battle axe, greataxe)
-- [ ] Maces/hammers (club, mace, warhammer)
-- [ ] Spears/polearms
-- [ ] Daggers/knives
-- [ ] Staves/wands (magic weapons)
-- [ ] Bows/crossbows
-- [ ] Shields (round, kite, tower)
+**5 Styles: (175 total modular pieces)**
+- [ ] Gothic: pointed arches, buttresses, rose windows, spires — for shrines, cathedrals
+- [ ] Medieval: half-timber, plaster infill, thatched roofs — for houses, taverns, shops
+- [ ] Fortress: thick stone, arrow slits, battlements, portcullis — for castles, walls, barracks
+- [ ] Organic: living wood, root arches, mushroom domes, vine walls — for Thornwood structures
+- [ ] Ruined: crumbling variants of ALL above — broken walls, collapsed roofs, rubble piles
 
-### Armor (per slot × style variants)
-- [ ] Helmets (open face, full helm, hood, crown)
-- [ ] Chest (plate, leather, robes, chain)
-- [ ] Gauntlets (plate, leather, wraps)
-- [ ] Boots/greaves (plate, leather, sandals)
-- [ ] Shoulders/pauldrons
-- [ ] Capes/cloaks (cloth-sim ready)
+**Building Compositions (assembled from kit pieces):**
+- [ ] Cottage (1 floor, 4 walls, door, 2 windows)
+- [ ] Two-story house (8 walls, stairs, 4 windows)
+- [ ] Tavern/inn (large footprint, bar area, upper rooms)
+- [ ] Shop (counter, display shelving, storage back)
+- [ ] Blacksmith (forge area, open front)
+- [ ] Shrine (small, altar room, offering area)
+- [ ] Temple/cathedral (large, nave, transept, apse)
+- [ ] Guard tower (3 floors, spiral stairs, lookout top)
+- [ ] Barracks (bunk room, armory, mess hall)
+- [ ] Prison (cells, guard post, interrogation)
+- [ ] Warehouse (large open interior, crates)
+- [ ] Stable (stalls, hay loft, trough)
+- [ ] Bridge house (built over water/gap)
+- [ ] Watchtower ruin
+- [ ] Collapsed building shell
 
-### Items
-- [ ] Potions (health, mana, antidote, buff)
-- [ ] Capture devices (per-brand visual)
-- [ ] Keys/lockpicks
-- [ ] Books/scrolls/maps
-- [ ] Food/cooking ingredients
-- [ ] Crafting materials (ore, leather, herbs, gems)
-- [ ] Currency (gold coins, brand tokens)
+### CHARACTERS & NPCs — 60+ unique character meshes
 
-### Environment
-- [ ] Trees (3+ species per biome)
-- [ ] Rocks (boulder, standing stone, rubble)
-- [ ] Grass/flowers (billboard cards)
-- [ ] Bushes/shrubs
-- [ ] Mushrooms (normal + giant for Thornwood)
-- [ ] Fallen logs/stumps
-- [ ] Vines/ivy (surface-following curves)
+**4 Playable Heroes (full detail, 80-150K tris each):**
+- [ ] Vex — heavy build, prison-worn armor, chain motifs, stern face, scarred
+- [ ] Seraphina — lithe build, thorn-decorated leather, wild hair, predatory eyes
+- [ ] Orion — robed scholar build, conductor's gloves, crackling energy staff, intense gaze
+- [ ] Nyx — androgynous build, shadow-touched skin, mismatched eyes, shifting form edges
 
-### Dungeon Props
-- [ ] Torch sconces (with light point)
-- [ ] Prison doors/gates
-- [ ] Chains/shackles
-- [ ] Coffins/sarcophagi
-- [ ] Altars (per-brand variant)
-- [ ] Traps (spike, pressure plate, dart, swinging blade)
-- [ ] Skull piles/bone decorations
-- [ ] Corruption crystals (per-brand color)
+**NPC Body Types (base meshes, 20-40K tris each, 8 types):**
+- [ ] Male heavy (guards, blacksmiths, warriors)
+- [ ] Male average (merchants, scholars, travelers)
+- [ ] Male slim (thieves, mages, youths)
+- [ ] Male elder (sages, priests, beggars)
+- [ ] Female heavy (innkeepers, warriors, matrons)
+- [ ] Female average (merchants, healers, travelers)
+- [ ] Female slim (scouts, mages, nobles)
+- [ ] Female elder (herbalists, oracles, shrine keepers)
 
-### Vehicles/Transport
-- [ ] Wagons/carts
-- [ ] Boats (rowboat, ferry)
-- [ ] Horse saddle/equipment
+**NPC Outfit Sets (layered over body types, 15 sets):**
+- [ ] Town guard — plate helm, chainmail, sword belt, cape
+- [ ] Merchant — fine tunic, apron, belt pouch, hat
+- [ ] Farmer/villager — rough tunic, boots, straw hat, tool belt
+- [ ] Priest/shrine keeper — robes, holy symbol, hood, sandals
+- [ ] Noble — ornate clothing, jewelry, embroidered cloak
+- [ ] Beggar — tattered rags, bare feet, bowl
+- [ ] Blacksmith — leather apron, thick gloves, soot-stained
+- [ ] Hunter — leather armor, quiver, fur-trimmed hood
+- [ ] Mage/scholar — robes, book satchel, staff holster
+- [ ] Tavern keeper — vest, rolled sleeves, serving towel
+- [ ] Traveling merchant — pack-laden, exotic clothing
+- [ ] Healer — white robes, herb pouch, gentle face
+- [ ] Bandit — mismatched armor, face mask, stolen weapons
+- [ ] Soldier — uniform plate, rank insignia, formation gear
+- [ ] Cultist — dark robes, brand mask (per-brand variant ×10)
+
+**NPC Facial Variation System:**
+- 5 face shapes (round, square, oval, angular, gaunt)
+- 4 nose types (straight, broad, aquiline, button)
+- 3 eye shapes (wide, narrow, deep-set)
+- 6 hairstyles per gender (short, medium, long, braided, shaved, bald)
+- 4 facial hair for males (clean, stubble, beard, full beard)
+- Scar/marking variants (3 per face region)
+- Age wrinkle shape keys (smooth → young → middle → elder)
+- **Combinations: 5×4×3×6×4×3 = 4,320 unique face combinations**
+
+**NPC Accessories (separate meshes, mix-and-match):**
+- [ ] Backpacks (3 sizes)
+- [ ] Belt pouches (4 types)
+- [ ] Jewelry (rings, necklaces, earrings — 6 pieces)
+- [ ] Hats/headwear (8 types)
+- [ ] Bags/satchels (3 types)
+- [ ] Tool belts (blacksmith, herbalist, hunter)
+- [ ] Cloaks/scarves (4 types)
+
+### MONSTERS — 20 base + 60 variants = 80+ monster meshes
+
+**20 Base Monsters (from vb_game_data.py):**
+- [ ] Bloodshade, Chainbound, Corrodex, Crackling, Flicker
+- [ ] Gluttony Polyp, Grimthorn, Hollow, Ironjaw, Mawling
+- [ ] Needlefang, Ravener, Skitter-Teeth, Sporecaller
+- [ ] The Broodmother, The Bulwark, The Congregation (BOSS)
+- [ ] The Vessel, The Weeping, Voltgeist
+
+**Per-Monster Variants (3 each = 60 additional):**
+- Young (0.7x scale, simpler features, fewer scars)
+- Adult (1.0x scale, full features, standard)
+- Elder/Alpha (1.3x scale, extra growths/scars/armor, boss-like presence)
+
+**Corruption Visual Variants (shader-driven, not separate meshes):**
+- ASCENDED → PURIFIED → UNSTABLE → CORRUPTED → ABYSSAL
+- Applied via material parameters, not new meshes
+
+**Future Monster Slots (designed for expansion):**
+- Framework supports adding unlimited new monsters via vb_game_data.py
+- 6 body type templates (humanoid, quadruped, amorphous, arachnid, serpent, insect) cover most forms
+- New body types can be added: avian, aquatic, multi-armed, centaur, floating
+
+### WEAPONS — 22 base types × 10 brands = 220+ weapon meshes
+
+**22 Base Weapon Types:**
+- Shortsword, Longsword, Greatsword, Curved sword, Dagger (5 blades)
+- Hand axe, Battle axe, Greataxe (3 axes)
+- Club, Mace, Warhammer (3 blunt)
+- Spear, Halberd, Glaive (3 polearms)
+- Shortbow, Longbow, Crossbow (3 ranged)
+- Staff, Wand, Tome (3 magic)
+- Throwing knife (1 throwable)
+
+**Per-Brand Visual Treatment (×10 brands = 220 variants):**
+Each weapon type gets 10 brand variants via material/geometry swaps:
+- IRON: riveted, heavy, chain-wrapped
+- SAVAGE: bone/claw parts, primal leather
+- SURGE: crystal blade, lightning engravings
+- etc. (all 10 brands)
+
+**Weapon Accessories (8 separate meshes):**
+- [ ] Scabbard/sheath (sword, dagger)
+- [ ] Quiver (arrows)
+- [ ] Weapon belt hook
+- [ ] Bow limb cover
+- [ ] Staff crystal caps (per-brand)
+- [ ] Weapon wrappings/charms
+- [ ] Poison vials (attached)
+- [ ] Glow runes (emission overlay)
+
+### ARMOR — 22 base pieces × 4 material tiers = 88+ armor meshes
+
+**22 Base Armor Pieces:**
+- Helmets: open-face, full helm, hood, crown, skull mask (5)
+- Chest: plate, chain, leather, robes, bare (5)
+- Gauntlets: plate, leather, wraps (3)
+- Boots: plate, leather, sandals (3)
+- Shoulders: plate, fur, bone (3)
+- Capes: full, half, tattered (3)
+
+**4 Material/Quality Tiers:**
+- Common (simple, minimal detail)
+- Uncommon (some ornamentation, better materials)
+- Rare (elaborate detail, magical elements)
+- Legendary (maximum detail, brand-specific effects, glowing elements)
+
+**Armor brand treatments (per-brand material swap ×10):**
+880 potential combinations (22 × 4 tiers × 10 brands) — achieved via material/texture swap, not separate meshes
+
+### SHIELDS — 15 shield meshes
+
+- [ ] Round shield: wood, iron-bossed, large
+- [ ] Kite shield: standard, decorated, tower
+- [ ] Tower shield: full-body, arrow-slit, siege
+- [ ] Buckler: small, metal, quick-use
+- [ ] Magical barrier: translucent, brand-colored energy
+- Per-brand boss/emblem variants (×10 via material swap)
+
+### ITEMS & CONSUMABLES — 80+ item meshes
+
+**Potions (12 variants):**
+- [ ] Health: small, medium, large (3 sizes × red liquid)
+- [ ] Mana: small, medium, large (3 sizes × blue liquid)
+- [ ] Elixir, Ether, Hi-Ether (3 special)
+- [ ] Antidote, Remedy, Smelling Salts (3 status cure)
+
+**Capture Devices (10 — one per brand):**
+- [ ] IRON cage-sphere, SAVAGE bone-cage, SURGE crystal-sphere
+- [ ] VENOM containment vial, DREAD shadow-orb, LEECH tendril-pod
+- [ ] GRACE light-sphere, MEND growth-pod, RUIN fragment-cage, VOID void-pocket
+
+**Food & Cooking (12 items):**
+- [ ] Bread loaf, cheese wheel, meat drumstick, fish, apple, mushroom
+- [ ] Cooking pot (with ladle), cutting board, spice jars, flour sack, honey jar, dried herbs bundle
+
+**Crafting Materials (20 items):**
+- [ ] Iron ore, copper ore, silver ore, gold ore, dark crystal
+- [ ] Leather strip, tanned hide, thick hide, monster hide
+- [ ] Green herb, red herb, blue herb, rare flower, mushroom cluster
+- [ ] Gem (ruby, sapphire, emerald, amethyst, diamond)
+- [ ] Bone shard
+
+**Key Items & Quest Objects (15 items):**
+- [ ] Skeleton key, dungeon key, master key, lockpick set
+- [ ] Map scroll, letter/note, ancient tome, journal
+- [ ] Brand tokens (×10 — one per brand, coin/medallion shape)
+- [ ] Purification crystal
+
+**Currency (5 items):**
+- [ ] Copper coin, silver coin, gold coin, coin pouch, treasure chest (small)
+
+### FURNITURE & INTERIOR PROPS — 80+ meshes
+
+**Seating (8):**
+- [ ] Wooden chair, bench, stool, throne, cushioned chair, bar stool, log seat, stone seat
+
+**Tables (6):**
+- [ ] Tavern table (round), dining table (long), desk, workbench, counter, side table
+
+**Storage (10):**
+- [ ] Chest (wood, iron, ornate), barrel, crate, sack, basket, shelf, wardrobe, weapon rack
+
+**Sleeping (5):**
+- [ ] Bed frame (single, double), bedroll, hammock, hay pile
+
+**Lighting (8):**
+- [ ] Candelabra (floor, table), wall torch, hanging lantern, standing brazier, campfire, chandelier, crystal lamp, candle (single)
+
+**Kitchen/Dining (10):**
+- [ ] Plates, cups, bowls, pitcher, cauldron, cooking pot, cutting board, mortar/pestle, spice rack, barrel tap
+
+**Decoration (12):**
+- [ ] Banner (×10 brand + neutral), wall shield, mounted head/trophy, painting frame, rug (×3 sizes), tapestry, flower vase, mirror, clock, globe
+
+**Religious/Shrine (6):**
+- [ ] Altar (stone, wood), offering bowl, prayer mat, holy symbol, incense burner, relic display
+
+**Crafting Stations (5):**
+- [ ] Forge (anvil+bellows+furnace), alchemy table, workbench, enchanting altar, tanning rack
+
+### ENVIRONMENT — 100+ meshes per biome × 8 biomes
+
+**Trees (25 variants across biomes):**
+- [ ] Dead oak, twisted oak, giant oak, birch, pine, spruce, willow, dead willow
+- [ ] Mushroom tree (giant), root tree (Thornwood), corrupted tree, crystal tree (Veil zone)
+- [ ] Young sapling (×5 species), stump (×3), fallen log (×4)
+
+**Rocks (15 variants):**
+- [ ] Boulder (small, medium, large), standing stone, rubble pile
+- [ ] Cliff face section, cave entrance rock, crystal cluster
+- [ ] Mossy rock, ice-covered rock, corrupted rock, floating rock (Veil)
+- [ ] Pebbles (scatter mesh), slate stack, volcanic rock
+
+**Grass & Ground Cover (12 variants):**
+- [ ] Short grass (billboard), tall grass (billboard), dead grass
+- [ ] Wildflowers (×3 colors), fern, clover patch
+- [ ] Mushroom cluster (small), moss patch, leaf litter pile, snow patch
+
+**Bushes & Shrubs (8 variants):**
+- [ ] Berry bush, thorny bush, flowering bush, dead bush
+- [ ] Hedge section, juniper, corrupted bush, crystal bush
+
+**Water Features (6):**
+- [ ] Stream bed rocks, waterfall splash zone, lily pad cluster
+- [ ] Ice chunk, toxic pool edge, shore debris
+
+**Atmospheric (8):**
+- [ ] Fog emitter volume, dust mote emitter, firefly emitter
+- [ ] Rain splash zone, snow drift, ash pile, spore cloud, void energy wisp
+
+### DUNGEON PROPS — 60+ meshes
+
+**Structural (12):**
+- [ ] Pillar (stone, wood, broken), archway, collapsed ceiling debris
+- [ ] Portcullis, iron gate, wooden door (intact, broken), secret passage lever
+- [ ] Staircase section, bridge plank, trapdoor (closed, open)
+
+**Imprisonment (8):**
+- [ ] Shackles (wall, floor), chain (hanging, draped), iron maiden
+- [ ] Cage (hanging, floor), stocks, prisoner skeleton
+
+**Ritual/Dark (10):**
+- [ ] Altar (blood-stained), sacrificial circle (floor marking), dark obelisk
+- [ ] Soul cage, blood fountain, bone throne, corruption crystal (×10 brand colors)
+- [ ] Summoning circle, ritual candles, occult symbols (floor decal meshes)
+
+**Traps (8):**
+- [ ] Spike trap (floor), pressure plate, dart launcher
+- [ ] Swinging blade, falling cage, tripwire (thin cylinder)
+- [ ] Poison gas vent, collapsing floor section
+
+**Loot & Discovery (8):**
+- [ ] Treasure chest (locked, open, trapped), gem pile, gold pile
+- [ ] Hidden alcove, secret door, lore tablet, ancient mechanism
+
+**Ambiance (14):**
+- [ ] Cobwebs (×3 sizes), spider egg sac, bone pile (scattered, stacked)
+- [ ] Skull pile, hanging skeleton, dripping water stalactite
+- [ ] Toxic mushroom, glowing moss patch, bat roost (hanging mesh)
+- [ ] Rat nest, insect swarm volume, rotting barrel, ancient rubble
+
+### OUTDOOR STRUCTURES — 30+ meshes
+
+**Fortification (10):**
+- [ ] Wall section (stone, palisade), gate (wood, iron, drawbridge)
+- [ ] Watchtower, corner tower, battlement section
+- [ ] Moat edge, rampart walkway, murder hole ceiling
+
+**Infrastructure (10):**
+- [ ] Well (stone), water wheel, windmill, bridge (stone, rope, drawbridge)
+- [ ] Dock/pier, market stall (×3 types), signpost, milestone marker
+
+**Camp/Settlement (10):**
+- [ ] Tent (small, large, command), campfire with log seats
+- [ ] Hitching post, feeding trough, cart (intact, broken)
+- [ ] Lookout post, barricade (wood, sandbag), spike fence
+
+### ANIMALS & WILDLIFE — 20+ meshes
+
+**Forest Animals (6):**
+- [ ] Deer, wolf, fox, rabbit, owl, crow
+
+**Mountain Animals (4):**
+- [ ] Mountain goat, eagle, bear, snow hare
+
+**Swamp/Water (4):**
+- [ ] Frog, snake (non-monster), fish, turtle
+
+**Domestic (4):**
+- [ ] Horse, chicken, dog, cat
+
+**Vermin (4):**
+- [ ] Rat, bat, spider (small), beetle
+
+### VEHICLES & MOUNTS — 10+ meshes
+
+- [ ] Wagon (merchant, military), handcart
+- [ ] Rowboat, raft, ferry
+- [ ] Horse saddle (light, heavy, war), bridle
+- [ ] Monster mount saddle (generic, adjustable)
+
+---
+
+## TOTAL MESH COUNT: 1,200+ unique meshes
+
+| Category | Count |
+|----------|-------|
+| Architecture (5 styles × 35 pieces) | 175 |
+| Building compositions | 15 |
+| Character heroes | 4 |
+| NPC body types | 8 |
+| NPC outfit sets | 15 |
+| NPC accessories | 30 |
+| Monster bases | 20 |
+| Monster variants (young/elder) | 40 |
+| Weapons | 22 |
+| Weapon brand variants (material) | 220 |
+| Weapon accessories | 8 |
+| Armor pieces | 22 |
+| Armor tier variants | 88 |
+| Shields | 15 |
+| Items & consumables | 80 |
+| Furniture & interior | 80 |
+| Environment (trees/rocks/grass/etc) | 100+ |
+| Dungeon props | 60 |
+| Outdoor structures | 30 |
+| Animals & wildlife | 22 |
+| Vehicles & mounts | 10 |
+| **TOTAL** | **~1,200+** |
+
+The system is EXTENSIBLE — adding new monsters, weapons, building styles, or biome vegetation follows the same pipeline. Quality maintained through the autonomous generate → screenshot → evaluate → refine loop.
 
 ## Reference Games for Quality Bar
 - **Elden Ring**: Dark fantasy architecture, creature design, atmospheric lighting
