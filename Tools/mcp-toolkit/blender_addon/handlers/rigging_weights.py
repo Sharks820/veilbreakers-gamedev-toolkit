@@ -1,13 +1,21 @@
-"""Weight painting, deformation testing, rig validation, and weight fix handlers.
+"""Weight painting, deformation testing, rig validation, weight fix, and weight
+limit enforcement handlers.
 
-Provides four command handlers:
+Provides five command handlers:
   - handle_auto_weight: Parent mesh to armature with heat diffusion weight painting (RIG-07)
   - handle_test_deformation: Pose rig at 8 standard poses and generate contact sheet (RIG-08)
   - handle_validate_rig: Grade rig A-F based on weight/symmetry/roll analysis (RIG-09)
   - handle_fix_weights: Normalize, clean zeros, smooth, and mirror weights (RIG-10)
+  - handle_enforce_weight_limit: Clamp per-vertex bone influences to a maximum (P2-A6)
 
-Pure-logic functions (_compute_rig_grade, _validate_rig_report,
-_validate_weight_fix_params) are separated for testability without Blender.
+Pure-logic functions:
+  - _validate_skinning_mode: Validate skinning mode selection (LBS/DQS/Hybrid)
+  - _compute_rig_grade: Compute rig quality grade A-F from numeric thresholds
+  - _validate_rig_report: Build rig validation report from mesh/armature data
+  - _validate_weight_fix_params: Validate weight fix operation type and parameters
+  - _enforce_weight_limit_pure: Clamp per-vertex bone influences (pure logic)
+  - _compute_skinning_quality: Compute skinning quality metrics for weight paint analysis
+  - _enhanced_rig_validation: Enhanced rig validation with additional checks
 """
 
 from __future__ import annotations

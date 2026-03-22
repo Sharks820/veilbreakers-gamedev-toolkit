@@ -1040,25 +1040,29 @@ class TestSpringDynamics:
         from blender_addon.handlers.rigging_advanced import _compute_spring_chain_forces
         positions = [(0, 0, 1), (0, 0, 0.8), (0, 0, 0.6)]
         velocities = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
-        result = _compute_spring_chain_forces(positions, velocities, 0.5, 0.3, 1.0)
-        assert result[0] == (0, 0, 1)
+        new_pos, new_vel = _compute_spring_chain_forces(positions, velocities, 0.5, 0.3, 1.0)
+        assert new_pos[0] == (0, 0, 1)
+        assert len(new_vel) == len(positions)
 
     def test_gravity_pulls_down(self):
         """Non-root bones move downward under gravity."""
         from blender_addon.handlers.rigging_advanced import _compute_spring_chain_forces
         positions = [(0, 0, 1), (0, 0, 0.8)]
         velocities = [(0, 0, 0), (0, 0, 0)]
-        result = _compute_spring_chain_forces(positions, velocities, 0.0, 0.0, 9.8)
+        new_pos, new_vel = _compute_spring_chain_forces(positions, velocities, 0.0, 0.0, 9.8)
         # With gravity and no stiffness, z should decrease
-        assert result[1][2] < 0.8
+        assert new_pos[1][2] < 0.8
+        # Velocity should be negative in z (falling)
+        assert new_vel[1][2] < 0
 
     def test_correct_count(self):
         """Output has same count as input."""
         from blender_addon.handlers.rigging_advanced import _compute_spring_chain_forces
         positions = [(0, 0, 1), (0, 0, 0.8), (0, 0, 0.6), (0, 0, 0.4)]
         velocities = [(0, 0, 0)] * 4
-        result = _compute_spring_chain_forces(positions, velocities, 0.5, 0.3, 1.0)
-        assert len(result) == 4
+        new_pos, new_vel = _compute_spring_chain_forces(positions, velocities, 0.5, 0.3, 1.0)
+        assert len(new_pos) == 4
+        assert len(new_vel) == 4
 
     def test_valid_params(self):
         """Valid spring dynamics params pass."""
