@@ -1979,8 +1979,8 @@ namespace VeilBreakers.Editor.CodeReview
                 "Wrap in try/except json.JSONDecodeError.",
                 @"json\.loads?\s*\(",
                 antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"except.*JSON",
-                    @"\btry\s*:", @"\bexcept\b" },
-                antiRadius: 10),
+                    @"\btry\s*:", @"\bexcept\b", @"JSONDecodeError" },
+                antiRadius: 30),
 
             new ReviewRule("PY-COR-10", Severity.LOW, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
@@ -2092,7 +2092,8 @@ namespace VeilBreakers.Editor.CodeReview
                 "Large file .read() without chunking -- may exhaust memory",
                 "Use chunked reading: for line in file, or file.read(chunk_size).",
                 @"\.read\s*\(\s*\)",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
+                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"""rb""", @"BytesIO", @"img_bytes", @"image_data",
+                    @"base64", @"encoding=""utf-8""", @"\.read_text\s*\(" }),
 
             // ---- STYLE ----
             new ReviewRule("PY-STY-01", Severity.LOW, Category.Quality, Language.Python,
@@ -3342,6 +3343,30 @@ def _match_is_in_string(line: str, match_pos: int) -> bool:
     return False
 
 
+def _check_mutable_get(line: str, all_lines: list[str], idx: int) -> bool:
+    """Return True only if the .get() result variable is actually mutated nearby."""
+    # Skip if consumed read-only on the same line
+    if re.search(r"\b(len|for|if|return|print|not|or|and)\s*[\s(].*\.get\s*\(", line):
+        return False
+    # Skip if next lines show read-only usage
+    for j in range(idx + 1, min(len(all_lines), idx + 8)):
+        if re.search(r"\.(items|keys|values)\s*\(|for\s+\w+\s+(in|,)", all_lines[j]):
+            return False
+    # Extract the variable name that receives the .get() result
+    m = re.match(r"\s*(\w+)\s*=\s*\w+\.get\s*\(", line)
+    if m:
+        var_name = m.group(1)
+        # Only flag if THIS variable is mutated (.append, .extend, [key]=)
+        for j in range(idx + 1, min(len(all_lines), idx + 5)):
+            if re.search(rf"\b{re.escape(var_name)}\b\.(append|extend|add|update|insert)\s*\(", all_lines[j]):
+                return True
+            if re.search(rf"\b{re.escape(var_name)}\b\[.+\]\s*=", all_lines[j]):
+                return True
+        return False
+    # Inline .get() (not assigned) — check for mutation on same line
+    return bool(re.search(r"\.(append|extend|add|update|insert)\s*\(", line))
+
+
 def _check_late_binding(line: str, all_lines: list[str], idx: int) -> bool:
     """Return True if a for-loop has a lambda using the loop var without default capture."""
     m = re.search(r"for\s+(\w+)\s+in\b", line)
@@ -3450,15 +3475,7 @@ RULES: list[Rule] = [
          "Use dict.get(key) with None check, then create mutable separately.",
          re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
          _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
-         guard=lambda line, a, i: (
-             # Skip if result is consumed read-only on the same line
-             not re.search(r"\b(len|for|if|return|print|not|or|and)\s*[\s(].*\.get\s*\(", line)
-             # Skip if next lines show read-only usage (.items, .keys, .values, for..in)
-             and not any(re.search(r"\.(items|keys|values)\s*\(|for\s+\w+\s+(in|,)", a[j])
-                         for j in range(i + 1, min(len(a), i + 8)))
-             and any(
-                 re.search(r"\.(append|extend|add|update|insert)\s*\(|(\[.+\]\s*=)", a[j])
-                 for j in range(i, min(len(a), i + 3))))),
+         guard=_check_mutable_get),
 
     Rule("PY-COR-07", Severity.MEDIUM, Category.Bug,
          "Class with __del__ -- unpredictable GC, prevents ref cycle collection",
@@ -3551,7 +3568,9 @@ RULES: list[Rule] = [
          "Large file .read() without chunking -- may exhaust memory",
          "Use chunked reading: for line in file, or file.read(chunk_size).",
          re.compile(r"\.read\s*\(\s*\)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r'"rb"', r"BytesIO",
+                        r"img_bytes", r"image_data", r"base64",
+                        r'encoding="utf-8"', r"\.read_text\s*\("])),
 
     # ---- STYLE ----
     Rule("PY-STY-01", Severity.LOW, Category.Quality,
@@ -3632,6 +3651,8 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
                 name = alias.asname if alias.asname else alias.name.split(".")[0]
                 imported_names[name] = node.lineno
         elif isinstance(node, ast.ImportFrom):
+            if node.module == "__future__":
+                continue  # __future__ imports are compiler directives, not runtime
             if node.names[0].name == "*":
                 continue
             for alias in node.names:

@@ -246,7 +246,7 @@ def validate_uxml_contrast(
             required (float): Required minimum ratio.
             passes (bool): Whether it meets WCAG AA.
     """
-    import xml.etree.ElementTree as ET
+    import defusedxml.ElementTree as ET
 
     violations: list[dict[str, Any]] = []
 

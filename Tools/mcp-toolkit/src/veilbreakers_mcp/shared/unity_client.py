@@ -152,7 +152,12 @@ class UnityConnection:
                     )
 
                 response_bytes = self._receive_exactly(length)
-                response_data = json.loads(response_bytes)
+                try:
+                    response_data = json.loads(response_bytes)
+                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    raise ConnectionError(
+                        f"Unity returned invalid JSON ({len(response_bytes)} bytes): {exc}"
+                    ) from exc
                 response = UnityResponse(**response_data)
 
                 if response.status == "error":

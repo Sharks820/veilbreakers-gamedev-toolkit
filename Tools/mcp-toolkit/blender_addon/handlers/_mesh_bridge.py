@@ -348,7 +348,7 @@ try:
     import bmesh
 
     _HAS_BPY = True
-except Exception:
+except ImportError:
     pass
 
 

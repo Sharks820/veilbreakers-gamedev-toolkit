@@ -150,7 +150,12 @@ class BlenderConnection:
                         f"Response too large: {length} bytes (max {MAX_MESSAGE_SIZE})"
                     )
                 response_bytes = self._receive_exactly(length)
-                response_data = json.loads(response_bytes)
+                try:
+                    response_data = json.loads(response_bytes)
+                except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+                    raise ConnectionError(
+                        f"Blender returned invalid JSON ({len(response_bytes)} bytes): {exc}"
+                    ) from exc
                 response = BlenderResponse(**response_data)
                 if response.status == "error":
                     raise BlenderCommandError(response)
