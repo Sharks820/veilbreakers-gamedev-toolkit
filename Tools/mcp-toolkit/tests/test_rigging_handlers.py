@@ -1381,3 +1381,61 @@ class TestPipelineIntegration:
         result = _validate_pipeline_readiness(True, True, True, "C", False)
         assert result["ready_for_animation"] is True
         assert result["ready_for_export"] is False
+
+
+class TestEnvironmentRigging:
+    """Test environment object rigging requirements."""
+
+    def test_has_27_environment_types(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        assert len(ENVIRONMENT_RIG_REQUIREMENTS) == 28
+
+    def test_riggable_objects_have_bones(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        for name, config in ENVIRONMENT_RIG_REQUIREMENTS.items():
+            if config["needs_rig"]:
+                assert len(config["bones"]) >= 1, f"{name} needs rig but has no bones"
+
+    def test_non_riggable_have_no_bones(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        for name, config in ENVIRONMENT_RIG_REQUIREMENTS.items():
+            if not config["needs_rig"]:
+                assert len(config["bones"]) == 0, f"{name} doesn't need rig but has bones"
+
+    def test_spring_bones_subset_of_bones(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        for name, config in ENVIRONMENT_RIG_REQUIREMENTS.items():
+            for sb in config["spring_bones"]:
+                assert sb in config["bones"], f"{name}: spring bone '{sb}' not in bones list"
+
+    def test_get_riggable_count(self):
+        from blender_addon.handlers.rigging import _get_riggable_environment_objects
+        riggable = _get_riggable_environment_objects()
+        assert len(riggable) >= 15  # At least 15 need rigs
+
+    def test_get_config_known(self):
+        from blender_addon.handlers.rigging import _get_environment_rig_config
+        config = _get_environment_rig_config("chain_hanging")
+        assert config is not None
+        assert config["needs_rig"] is True
+        assert len(config["spring_bones"]) >= 3
+
+    def test_get_config_unknown(self):
+        from blender_addon.handlers.rigging import _get_environment_rig_config
+        assert _get_environment_rig_config("nonexistent") is None
+
+    def test_cloth_types_have_spring_bones(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        cloth_types = ["cloth_banner", "cloth_curtain", "flag_pole"]
+        for ct in cloth_types:
+            assert len(ENVIRONMENT_RIG_REQUIREMENTS[ct]["spring_bones"]) >= 3
+
+    def test_chain_types_have_spring_bones(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        assert len(ENVIRONMENT_RIG_REQUIREMENTS["chain_hanging"]["spring_bones"]) >= 4
+        assert len(ENVIRONMENT_RIG_REQUIREMENTS["chain_bridge"]["spring_bones"]) >= 4
+
+    def test_all_have_notes(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        for name, config in ENVIRONMENT_RIG_REQUIREMENTS.items():
+            assert len(config["notes"]) > 5, f"{name} missing notes"
