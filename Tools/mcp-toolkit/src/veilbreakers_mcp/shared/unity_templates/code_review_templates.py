@@ -313,8 +313,10 @@ namespace VeilBreakers.Editor.CodeReview
                 var calls = new HashSet<string>();
                 for (int i = kvp.Value.start; i <= kvp.Value.end && i < lines.Length; i++)
                 {
+                    if (ctx[i] == LineContext.Comment) continue;
                     foreach (Match cm in Regex.Matches(lines[i], @"\b(\w+)\s*\("))
                     {
+                        if (IsMatchInString(lines[i], cm.Index)) continue;
                         string callee = cm.Groups[1].Value;
                         if (methods.ContainsKey(callee) && callee != kvp.Key)
                             calls.Add(callee);
@@ -399,6 +401,23 @@ namespace VeilBreakers.Editor.CodeReview
                 if (!inStr && ch == c) n++;
             }
             return n;
+        }
+
+        // Check if a regex match position falls inside a quoted string on the line
+        public static bool IsMatchInString(string line, int matchPos)
+        {
+            bool inSingle = false, inDouble = false;
+            bool escaped = false;
+            for (int k = 0; k < line.Length && k <= matchPos; k++)
+            {
+                if (escaped) { escaped = false; continue; }
+                char c = line[k];
+                if (c == '\\') { escaped = true; continue; }
+                if (c == '\'' && !inDouble) inSingle = !inSingle;
+                else if (c == '"' && !inSingle) inDouble = !inDouble;
+                if (k == matchPos) return inSingle || inDouble;
+            }
+            return false;
         }
     }
 
@@ -2876,28 +2895,39 @@ namespace VeilBreakers.Editor.CodeReview
             for (int i = start; i <= end && i < lines.Length; i++)
             {
                 string trimmed = lines[i].TrimStart();
-                if (trimmed.StartsWith("//")) continue;
+                // Skip full-line comments and doc-comment continuations
+                if (trimmed.StartsWith("//") || trimmed.StartsWith("*") || trimmed.StartsWith("/*")) continue;
+
+                // Strip leading '} ' so patterns like '} else if' and '} while' are matched
+                string scoreLine = trimmed.TrimStart('}', ' ');
 
                 // Increment operators: +1 + nesting_level
-                if (Regex.IsMatch(trimmed, @"^(if|else\s+if|switch)\s*\("))
+                if (Regex.IsMatch(scoreLine, @"^(if|else\s+if|switch)\s*\("))
                 { score += 1 + nesting; }
-                else if (Regex.IsMatch(trimmed, @"^else\b"))
+                else if (Regex.IsMatch(scoreLine, @"^else\b"))
                 { score += 1; } // else gets +1 but NOT +nesting (SonarQube spec)
-                else if (Regex.IsMatch(trimmed, @"^(for|foreach|while|do)\s*[\({]"))
+                else if (Regex.IsMatch(scoreLine, @"^(for|foreach|while|do)\s*[\({]"))
                 { score += 1 + nesting; }
-                else if (trimmed.StartsWith("catch"))
+                else if (scoreLine.StartsWith("catch"))
                 { score += 1 + nesting; }
-                // Ternary operator
-                else if (trimmed.Contains("?") && trimmed.Contains(":") && !trimmed.StartsWith("case") && !trimmed.StartsWith("//"))
-                { score += 1 + nesting; }
+                // Ternary operator -- only if ? and : are not inside a string literal
+                else if (scoreLine.Contains("?") && scoreLine.Contains(":") && !scoreLine.StartsWith("case"))
+                {
+                    // Verify ? is not inside a quoted string on this line
+                    int qPos = trimmed.IndexOf('?');
+                    if (qPos >= 0 && !IsMatchInString(trimmed, qPos))
+                        score += 1 + nesting;
+                }
 
                 // Boolean operator sequences: +1 per kind change (&&, ||)
+                // Skip operators inside string literals
                 var boolOps = Regex.Matches(trimmed, @"(&&|\|\|)");
                 if (boolOps.Count > 0)
                 {
                     string lastOp = null;
                     foreach (Match bm in boolOps)
                     {
+                        if (IsMatchInString(trimmed, bm.Index)) continue;
                         if (lastOp == null || bm.Value != lastOp)
                         { score += 1; lastOp = bm.Value; }
                     }
@@ -3610,7 +3640,7 @@ namespace VeilBreakers.Editor.CodeReview
                 {
                     if (contexts[mi] == LineContext.Comment) { _methodSigForLine[mi] = curSig; continue; }
                     var mSigMatch = Regex.Match(lines[mi].TrimStart(),
-                        @"^(?:(?:private|protected|public|internal|static|override|virtual|abstract|async|sealed|new|partial)\s+)*(void|Task|int|float|bool|string|IEnumerator|\w+(?:<[\w<>,\s]+>)?)\s+(\w+)\s*\([^)]*\)");
+                        @"^(?:(?:private|protected|public|internal|static|override|virtual|abstract|async|unsafe|extern|sealed|new|partial|ref|readonly)\s+)*(?:[\w<>\[\],\.\?\s]+)\s+(\w+)\s*\(");
                     if (mSigMatch.Success && !lines[mi].TrimStart().StartsWith("//"))
                     {
                         if (curSig != null && mStart >= 0 && mDepth > 0)
