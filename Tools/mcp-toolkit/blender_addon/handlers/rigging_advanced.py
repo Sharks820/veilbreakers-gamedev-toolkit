@@ -939,7 +939,7 @@ def _validate_spring_dynamics_params(
 
     Args:
         mass: Mass of each bone node (must be > 0).
-        stiffness: Spring stiffness (must be in (0, 1]).
+        stiffness: Spring stiffness (must be in (0, 100]).
         damping: Damping factor (must be in [0, 1]).
 
     Returns:
@@ -949,8 +949,8 @@ def _validate_spring_dynamics_params(
 
     if not isinstance(mass, (int, float)) or mass <= 0:
         errors.append("mass must be > 0")
-    if not isinstance(stiffness, (int, float)) or stiffness <= 0 or stiffness > 1:
-        errors.append("stiffness must be in (0, 1]")
+    if not isinstance(stiffness, (int, float)) or stiffness <= 0 or stiffness > 100:
+        errors.append("stiffness must be in (0, 100]")
     if not isinstance(damping, (int, float)) or damping < 0 or damping > 1:
         errors.append("damping must be in [0, 1]")
 

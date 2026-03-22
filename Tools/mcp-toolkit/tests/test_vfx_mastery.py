@@ -93,13 +93,13 @@ class TestModuleConstants:
 
     def test_brand_color_structure(self):
         for brand, data in BRAND_COLORS.items():
-            assert "hex" in data, f"{brand} missing hex"
             assert "rgba" in data, f"{brand} missing rgba"
             assert "glow" in data, f"{brand} missing glow"
             assert "desc" in data, f"{brand} missing desc"
             assert len(data["rgba"]) == 4, f"{brand} rgba must have 4 values"
             assert len(data["glow"]) == 4, f"{brand} glow must have 4 values"
-            assert data["hex"].startswith("#"), f"{brand} hex must start with #"
+            assert "dark" in data, f"{brand} missing dark"
+            assert len(data["dark"]) == 4, f"{brand} dark must have 4 values"
 
     def test_brand_rgba_values_valid(self):
         for brand, data in BRAND_COLORS.items():
