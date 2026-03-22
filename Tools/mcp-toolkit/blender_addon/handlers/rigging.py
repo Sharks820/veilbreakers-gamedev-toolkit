@@ -1162,6 +1162,234 @@ PIPELINE_STEPS: list[dict] = [
     },
 ]
 
+# ---------------------------------------------------------------------------
+# Environment object rigging requirements
+# ---------------------------------------------------------------------------
+
+# Environment objects that need rigging for animation
+# Each entry: needs_rig (bool), rig_type, bones needed, spring bones, notes
+ENVIRONMENT_RIG_REQUIREMENTS: dict[str, dict] = {
+    # --- Objects needing rigs ---
+    "door_wooden": {
+        "needs_rig": True,
+        "rig_type": "single_hinge",
+        "bones": ["door_pivot"],
+        "spring_bones": [],
+        "notes": "Single pivot bone at hinge side for open/close rotation",
+    },
+    "door_double": {
+        "needs_rig": True,
+        "rig_type": "double_hinge",
+        "bones": ["door_pivot.L", "door_pivot.R"],
+        "spring_bones": [],
+        "notes": "Two pivot bones for double door, L/R swing independently",
+    },
+    "gate_portcullis": {
+        "needs_rig": True,
+        "rig_type": "slide",
+        "bones": ["gate_slide"],
+        "spring_bones": [],
+        "notes": "Single bone for vertical slide up/down",
+    },
+    "gate_drawbridge": {
+        "needs_rig": True,
+        "rig_type": "single_hinge",
+        "bones": ["bridge_pivot", "chain.L", "chain.L.001", "chain.R", "chain.R.001"],
+        "spring_bones": ["chain.L", "chain.L.001", "chain.R", "chain.R.001"],
+        "notes": "Pivot at top + chain spring bones for drawbridge chains",
+    },
+    "chain_hanging": {
+        "needs_rig": True,
+        "rig_type": "spring_chain",
+        "bones": ["chain_root", "chain.001", "chain.002", "chain.003", "chain.004"],
+        "spring_bones": ["chain.001", "chain.002", "chain.003", "chain.004"],
+        "notes": "5-bone chain with spring dynamics, sways with wind/interaction",
+    },
+    "chain_bridge": {
+        "needs_rig": True,
+        "rig_type": "spring_chain",
+        "bones": ["chain_anchor.L", "chain.L.001", "chain.L.002", "chain.L.003",
+                  "chain_anchor.R", "chain.R.001", "chain.R.002", "chain.R.003"],
+        "spring_bones": ["chain.L.001", "chain.L.002", "chain.L.003",
+                        "chain.R.001", "chain.R.002", "chain.R.003"],
+        "notes": "Dual chain bridge with spring physics on each side",
+    },
+    "cloth_banner": {
+        "needs_rig": True,
+        "rig_type": "cloth_grid",
+        "bones": ["banner_top", "banner_mid.L", "banner_mid", "banner_mid.R",
+                  "banner_bot.L", "banner_bot", "banner_bot.R"],
+        "spring_bones": ["banner_mid.L", "banner_mid", "banner_mid.R",
+                        "banner_bot.L", "banner_bot", "banner_bot.R"],
+        "notes": "2x3 bone grid for cloth simulation, top row fixed",
+    },
+    "cloth_curtain": {
+        "needs_rig": True,
+        "rig_type": "cloth_grid",
+        "bones": ["curtain_top.L", "curtain_top.R",
+                  "curtain_mid.L", "curtain_mid.R",
+                  "curtain_bot.L", "curtain_bot.R"],
+        "spring_bones": ["curtain_mid.L", "curtain_mid.R",
+                        "curtain_bot.L", "curtain_bot.R"],
+        "notes": "Vertical cloth strip with spring bones, top row fixed to rod",
+    },
+    "flag_pole": {
+        "needs_rig": True,
+        "rig_type": "cloth_strip",
+        "bones": ["flag_attach", "flag.001", "flag.002", "flag.003", "flag.004"],
+        "spring_bones": ["flag.001", "flag.002", "flag.003", "flag.004"],
+        "notes": "Flag strip attached to pole, 4-bone chain with wind dynamics",
+    },
+    "rope_hanging": {
+        "needs_rig": True,
+        "rig_type": "spring_chain",
+        "bones": ["rope_top", "rope.001", "rope.002", "rope.003", "rope.004", "rope.005"],
+        "spring_bones": ["rope.001", "rope.002", "rope.003", "rope.004", "rope.005"],
+        "notes": "6-bone rope with spring physics, top fixed",
+    },
+    "trap_spike": {
+        "needs_rig": True,
+        "rig_type": "piston",
+        "bones": ["spike_base", "spike_extend"],
+        "spring_bones": [],
+        "notes": "2-bone piston for spike trap extend/retract",
+    },
+    "trap_swinging_blade": {
+        "needs_rig": True,
+        "rig_type": "pendulum",
+        "bones": ["blade_pivot", "blade_arm", "blade_tip"],
+        "spring_bones": [],
+        "notes": "3-bone pendulum for swinging blade trap",
+    },
+    "trap_floor_collapse": {
+        "needs_rig": True,
+        "rig_type": "multi_hinge",
+        "bones": ["floor_hinge.L", "floor_hinge.R"],
+        "spring_bones": [],
+        "notes": "Two floor panels that hinge open when triggered",
+    },
+    "torch_wall": {
+        "needs_rig": True,
+        "rig_type": "flicker",
+        "bones": ["torch_base", "flame_bone"],
+        "spring_bones": ["flame_bone"],
+        "notes": "Torch with flickering flame bone for fire VFX attachment",
+    },
+    "chandelier": {
+        "needs_rig": True,
+        "rig_type": "pendulum",
+        "bones": ["chain_mount", "chandelier_body"],
+        "spring_bones": ["chandelier_body"],
+        "notes": "Hanging chandelier with sway physics",
+    },
+    "cage_hanging": {
+        "needs_rig": True,
+        "rig_type": "pendulum",
+        "bones": ["cage_chain", "cage_body"],
+        "spring_bones": ["cage_body"],
+        "notes": "Hanging cage with swing physics",
+    },
+    "lever": {
+        "needs_rig": True,
+        "rig_type": "single_hinge",
+        "bones": ["lever_pivot"],
+        "spring_bones": [],
+        "notes": "Single pivot bone for lever pull animation",
+    },
+    "windmill": {
+        "needs_rig": True,
+        "rig_type": "continuous_rotation",
+        "bones": ["windmill_axle", "blade_1", "blade_2", "blade_3", "blade_4"],
+        "spring_bones": [],
+        "notes": "Central axle with 4 blades, continuous Z rotation",
+    },
+    # --- Objects that DON'T need rigs (VFX/shader only) ---
+    "fire_campfire": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Particle VFX only — no bones needed",
+    },
+    "water_stream": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Shader-based flow animation — no bones needed",
+    },
+    "water_pool": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Shader-based surface ripple — no bones needed",
+    },
+    "fog_volume": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Volumetric shader — no bones needed",
+    },
+    "crystal_glow": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Emission shader pulse — no bones needed",
+    },
+    "mushroom_glow": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Emission shader — no bones needed",
+    },
+    "cobweb": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Static mesh — no animation needed",
+    },
+    "rubble_pile": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Static mesh — no animation needed",
+    },
+    "blood_pool": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Decal/shader — no bones needed",
+    },
+    "barrel": {
+        "needs_rig": False,
+        "rig_type": None,
+        "bones": [],
+        "spring_bones": [],
+        "notes": "Rigid body physics — no bones, use Unity Rigidbody",
+    },
+}
+
+
+def _get_environment_rig_config(object_type: str) -> dict:
+    """Get rigging requirements for an environment object type.
+
+    Returns dict with needs_rig, rig_type, bones, spring_bones, notes.
+    Returns None if object_type is unknown.
+    """
+    return ENVIRONMENT_RIG_REQUIREMENTS.get(object_type)
+
+
+def _get_riggable_environment_objects() -> list[str]:
+    """Get list of all environment object types that need rigs."""
+    return [k for k, v in ENVIRONMENT_RIG_REQUIREMENTS.items() if v["needs_rig"]]
+
 
 def _get_pipeline_for_monster(monster_id: str) -> dict:
     """Get the full pipeline configuration for a VeilBreakers monster.
