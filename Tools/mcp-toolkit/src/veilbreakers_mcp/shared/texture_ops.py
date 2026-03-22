@@ -518,7 +518,7 @@ def render_wear_map(
         # Render curvature into UV space using face polygons
         try:
             import numpy as np
-            _render_wear_numpy(img, curvature_data, uv_data, texture_size, _curv_to_brightness)
+            _render_wear_numpy(img, curvature_data, uv_data, texture_size, _curv_to_brightness, min_c, c_range)
         except ImportError:
             _render_wear_pil(img, curvature_data, uv_data, texture_size, _curv_to_brightness)
     else:
@@ -580,6 +580,8 @@ def _render_wear_numpy(
     uv_data: list,
     texture_size: int,
     curv_to_brightness,
+    min_c: float = 0.0,
+    c_range: float = 1.0,
 ) -> None:
     """Render wear map with per-vertex interpolation using numpy.
 
@@ -621,27 +623,37 @@ def _render_wear_numpy(
         ImageDraw.Draw(poly_mask).polygon(offset_verts, fill=255)
         mask_arr = np.array(poly_mask)
 
-        # For each pixel inside the polygon, compute distance-weighted curvature
-        for y in range(bbox_h):
-            for x in range(bbox_w):
-                if mask_arr[y, x] == 0:
-                    continue
+        # Vectorized distance-weighted interpolation for all masked pixels
+        # Build coordinate grids for the bounding box
+        yy, xx = np.mgrid[0:bbox_h, 0:bbox_w]  # local coords
+        # Filter to only masked pixels
+        masked = mask_arr > 0
+        if not np.any(masked):
+            continue
 
-                ax = x + x_min
-                ay = y + y_min
+        # Absolute pixel coordinates for masked pixels
+        ax = xx[masked] + x_min  # 1-D array of x coords
+        ay = yy[masked] + y_min  # 1-D array of y coords
 
-                # Distance-weighted interpolation
-                total_weight = 0.0
-                weighted_curv = 0.0
-                for (vx, vy), cv in zip(verts, curv_vals):
-                    dist = math.sqrt((ax - vx) ** 2 + (ay - vy) ** 2) + 1e-6
-                    w = 1.0 / dist
-                    total_weight += w
-                    weighted_curv += w * cv
+        # Vertex positions and curvature as arrays
+        verts_arr = np.array(verts, dtype=np.float64)  # (N_verts, 2)
+        curv_arr = np.array(curv_vals, dtype=np.float64)  # (N_verts,)
 
-                if total_weight > 0:
-                    interp_curv = weighted_curv / total_weight
-                    arr[ay, ax] = curv_to_brightness(interp_curv)
+        # Distance from each masked pixel to each vertex
+        # ax/ay shape: (N_pixels,), verts_arr shape: (N_verts, 2)
+        dx = ax[:, np.newaxis] - verts_arr[np.newaxis, :, 0]  # (N_pixels, N_verts)
+        dy = ay[:, np.newaxis] - verts_arr[np.newaxis, :, 1]
+        dists = np.sqrt(dx * dx + dy * dy) + 1e-6
+
+        weights = 1.0 / dists  # (N_pixels, N_verts)
+        total_weight = weights.sum(axis=1)  # (N_pixels,)
+        weighted_curv = (weights * curv_arr[np.newaxis, :]).sum(axis=1)
+
+        interp_curv = weighted_curv / total_weight
+        # Vectorized brightness: normalize and scale to 0-255
+        brightness = np.clip(np.round(((interp_curv - min_c) / c_range) * 255), 0, 255)
+
+        arr[ay, ax] = brightness
 
     result = np.clip(arr, 0, 255).astype(np.uint8)
     img.paste(Image.fromarray(result, "L"))
