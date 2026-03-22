@@ -339,7 +339,13 @@ All saved in `.planning/research/`:
 - Face needs skull-sphere base, not grid deformation
 - Minimum 200 face verts for expression, 400 for medium, 800 for hero
 
-**MAP_BUILDING_TECHNIQUES.md** — (being written, will be committed when ready)
+**MAP_BUILDING_TECHNIQUES.md** — How Unreal/Houdini/Gaea/Bethesda build maps:
+- Height-based texture blending (per-pixel heightmap comparison, not linear lerp)
+- Multi-scale erosion chaining (large→fine for realistic terrain)
+- Flow map computation (D8/MFD algorithms for rivers/vegetation/erosion)
+- Modular kit connection validation (Bethesda's strict footprint system)
+- GPU instancing + octahedral impostors (19x performance gain)
+- 12 specific gaps identified with effort estimates
 
 ### Key Techniques from Research (implement these):
 - **SDF + Marching Cubes** → pure numpy, replaces primitive assembly for organic meshes
