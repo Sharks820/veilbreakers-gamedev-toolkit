@@ -298,9 +298,14 @@ def generate_face_mesh(detail_level: str = "medium") -> MeshSpec:
     mouth_vert_count = len(all_verts) - mouth_base
 
     # ----- Nasolabial folds (connecting nose to mouth corners) -----
+    # Bug 1 fix: generate connecting quad faces between nasolabial fold vertices
+    # and adjacent face topology. Each side gets a strip of quads connecting
+    # consecutive fold vertices via paired inner/outer vertices.
     naso_pairs = min(nose_detail + 1, 3)
     naso_base = len(all_verts)
-    for side_sign in [-1.0, 1.0]:
+    for side_idx, side_sign in enumerate([-1.0, 1.0]):
+        side_start = len(all_verts)
+        # Generate paired inner/outer vertices for each fold point
         for i in range(naso_pairs):
             t = (i + 1) / (naso_pairs + 1)
             x = fc_x + side_sign * mouth_rx * 1.2 * (1.0 - t * 0.3)
@@ -308,7 +313,20 @@ def generate_face_mesh(detail_level: str = "medium") -> MeshSpec:
             z_end = mouth_cz + mouth_ry * 1.5
             z = z_start + t * (z_end - z_start)
             y = fc_y + face_depth * 0.44 - t * 0.005
+            # Outer fold vertex (crease)
             all_verts.append((x, y, z))
+            # Inner fold vertex (slightly inward toward nose/mouth center)
+            inner_x = x - side_sign * 0.003
+            inner_y = y + 0.002  # slightly forward
+            all_verts.append((inner_x, inner_y, z))
+
+        # Connect consecutive nasolabial fold vertex pairs with quads
+        for i in range(naso_pairs - 1):
+            v_outer_0 = side_start + i * 2
+            v_inner_0 = side_start + i * 2 + 1
+            v_outer_1 = side_start + (i + 1) * 2
+            v_inner_1 = side_start + (i + 1) * 2 + 1
+            all_faces.append((v_outer_0, v_inner_0, v_inner_1, v_outer_1))
 
     # ----- Nostril loops -----
     nostril_z = fc_z + face_height * 0.05
@@ -793,15 +811,14 @@ def generate_hand_mesh(
                     all_verts.append((rx, seg_y, rz))
 
                 # Connect to previous ring
+                # Bug 2 fix: at joint transitions (si == 0, ji > 0), the previous
+                # joint's last ring IS the current ring_base - segments. We must
+                # generate connecting faces here instead of skipping with `pass`.
                 if si > 0 or ji > 0:
                     prev_ring = ring_base - segments
-                    if si == 0 and ji > 0:
-                        # Reuse the last ring from previous joint
-                        pass
-                    else:
-                        all_faces.extend(
-                            _connect_rings_quad(prev_ring, ring_base, segments)
-                        )
+                    all_faces.extend(
+                        _connect_rings_quad(prev_ring, ring_base, segments)
+                    )
 
             # Nail geometry (high detail only, on distal segment)
             if detail == "high" and ji == len(joint_lengths) - 1:
@@ -1079,6 +1096,11 @@ def generate_foot_mesh(
 
     toe_base_y = foot_length - toe_length
 
+    # Bug 3 fix: record the foot's front edge vertex indices for connecting toes
+    # The front edge of the foot body is the last row (sec = foot_sections)
+    foot_front_top = foot_base + foot_sections * grid_cols
+    foot_front_bottom = foot_bottom_base + foot_sections * grid_cols
+
     for t_name, t_width, t_x_frac, t_len_extra in toe_specs:
         toe_cx = mirror * (-foot_width * 0.35 + t_x_frac * foot_width * 0.7)
         toe_base_z = 0.008
@@ -1087,6 +1109,7 @@ def generate_foot_mesh(
 
         toe_start = len(all_verts)
 
+        n_ring = 4  # cross section points per ring
         for si in range(toe_segs + 1):
             t = si / toe_segs
             ty = toe_base_y + t * actual_toe_len
@@ -1095,7 +1118,6 @@ def generate_foot_mesh(
             th = 0.008 * (1.0 - t * 0.3)
 
             # 4-point cross section (simplified)
-            n_ring = 4
             for ri in range(n_ring):
                 angle = 2.0 * math.pi * ri / n_ring
                 tx = toe_cx + math.cos(angle) * tw * 0.5
@@ -1106,6 +1128,30 @@ def generate_foot_mesh(
                 prev = toe_start + (si - 1) * n_ring
                 curr = toe_start + si * n_ring
                 all_faces.extend(_connect_rings_quad(prev, curr, n_ring))
+
+        # Bug 3 fix: connect toe base ring to foot body with bridge faces.
+        # Add 4 triangles connecting the toe base ring to the nearest foot
+        # body vertices (top and bottom surfaces).
+        # Find the nearest top-surface vertex on the foot's front edge
+        best_col = 0
+        best_dist = float('inf')
+        for col in range(grid_cols):
+            foot_vi = foot_front_top + col
+            if foot_vi < len(all_verts):
+                fv = all_verts[foot_vi]
+                d = (fv[0] - toe_cx) ** 2
+                if d < best_dist:
+                    best_dist = d
+                    best_col = col
+
+        # Create bridge triangles from toe base ring to foot front edge
+        foot_top_v = foot_front_top + best_col
+        foot_top_v2 = foot_front_top + min(best_col + 1, grid_cols)
+        if foot_top_v < len(all_verts) and foot_top_v2 < len(all_verts):
+            # Top bridge: connect toe ring top vertices to foot top edge
+            all_faces.append((toe_start, toe_start + 1, foot_top_v2, foot_top_v))
+            # Side bridges
+            all_faces.append((toe_start + 2, toe_start + 3, foot_top_v))
 
         joint_positions[f"{t_name}_base"] = (toe_cx, toe_base_y, toe_base_z)
         joint_positions[f"{t_name}_tip"] = (toe_cx, toe_base_y + actual_toe_len, toe_base_z)

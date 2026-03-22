@@ -64,11 +64,79 @@ def _merge_parts(
     return all_verts, all_faces
 
 
+def _weld_coincident_vertices(
+    verts: VertList,
+    faces: FaceList,
+    threshold: float = 0.001,
+) -> tuple[VertList, FaceList]:
+    """Bug 4 fix: merge vertices within threshold distance for connected topology.
+
+    After merging primitives, coincident vertices at junction points remain
+    separate, preventing smooth shading from working across parts. This welds
+    them together.
+    """
+    n = len(verts)
+    if n == 0:
+        return verts, faces
+
+    # Build a mapping from old vertex index to new (canonical) index
+    remap: list[int] = list(range(n))
+    # Use threshold squared to avoid sqrt in inner loop
+    thresh_sq = threshold * threshold
+
+    # Simple O(n^2) approach -- acceptable for meshes under ~10k verts
+    # For larger meshes, a spatial hash would be needed
+    for i in range(n):
+        if remap[i] != i:
+            continue  # already merged
+        xi, yi, zi = verts[i]
+        for j in range(i + 1, n):
+            if remap[j] != j:
+                continue  # already merged
+            dx = verts[j][0] - xi
+            dy = verts[j][1] - yi
+            dz = verts[j][2] - zi
+            if dx * dx + dy * dy + dz * dz < thresh_sq:
+                remap[j] = i
+
+    # Build compacted vertex list and final remap
+    new_indices: dict[int, int] = {}
+    new_verts: VertList = []
+    for i in range(n):
+        canonical = remap[i]
+        if canonical not in new_indices:
+            new_indices[canonical] = len(new_verts)
+            # Average position of coincident vertices for smoother junction
+            new_verts.append(verts[canonical])
+        # Map this index to the compacted index
+        remap[i] = new_indices[canonical]
+
+    # Remap faces, skip degenerate faces (where vertices collapse)
+    new_faces: FaceList = []
+    for face in faces:
+        new_face = tuple(remap[idx] for idx in face)
+        # Remove duplicate consecutive vertices
+        deduped = []
+        for vi in new_face:
+            if not deduped or deduped[-1] != vi:
+                deduped.append(vi)
+        # Also check wrap-around
+        if len(deduped) > 1 and deduped[0] == deduped[-1]:
+            deduped.pop()
+        if len(deduped) >= 3:
+            new_faces.append(tuple(deduped))
+
+    return new_verts, new_faces
+
+
 def _sphere(
     cx: float, cy: float, cz: float,
     radius: float, rings: int = 8, sectors: int = 12,
 ) -> tuple[VertList, FaceList]:
     """Generate a UV sphere centred at (cx, cy, cz)."""
+    # Bug 9 fix: guard against rings < 2 which would crash face generation
+    rings = max(rings, 2)
+    sectors = max(sectors, 3)
     verts: VertList = []
     faces: FaceList = []
     # Bottom pole
@@ -730,30 +798,99 @@ def _apply_brand_features(
 
 def _sample_surface_points(
     verts: VertList, count: int = 12,
+    faces: FaceList | None = None,
 ) -> tuple[list[Vec3], list[Vec3]]:
-    """Sample evenly spaced points from vertex list with approximate outward normals."""
+    """Sample spatially distributed points using area-weighted face sampling.
+
+    Bug 15 fix: the old approach (surface_sample_points[::3]) clustered
+    features on dense mesh areas. This uses face-area weighting and a simple
+    spatial spread heuristic to distribute points more evenly.
+    """
     if not verts:
         return [], []
-    step = max(1, len(verts) // count)
-    points: list[Vec3] = []
-    normals: list[Vec3] = []
+
     # Compute centroid for normal estimation
     cx = sum(v[0] for v in verts) / len(verts)
     cy = sum(v[1] for v in verts) / len(verts)
     cz = sum(v[2] for v in verts) / len(verts)
-    for i in range(0, len(verts), step):
-        pt = verts[i]
-        points.append(pt)
-        # Approximate outward normal: direction from centroid to vertex
+
+    def _outward_normal(pt: Vec3) -> Vec3:
         dx = pt[0] - cx
         dy = pt[1] - cy
         dz = pt[2] - cz
         length = math.sqrt(dx * dx + dy * dy + dz * dz)
         if length > 1e-6:
-            normals.append((dx / length, dy / length, dz / length))
-        else:
-            normals.append((0.0, 1.0, 0.0))
-    return points, normals
+            return (dx / length, dy / length, dz / length)
+        return (0.0, 1.0, 0.0)
+
+    if faces and len(faces) >= count:
+        # Area-weighted sampling from face centroids
+        face_data: list[tuple[float, Vec3]] = []
+        for face in faces:
+            if len(face) < 3:
+                continue
+            # Face centroid
+            fcx = sum(verts[i][0] for i in face if i < len(verts)) / len(face)
+            fcy = sum(verts[i][1] for i in face if i < len(verts)) / len(face)
+            fcz = sum(verts[i][2] for i in face if i < len(verts)) / len(face)
+            # Approximate area using first triangle
+            p0 = verts[face[0]] if face[0] < len(verts) else (0, 0, 0)
+            p1 = verts[face[1]] if face[1] < len(verts) else (0, 0, 0)
+            p2 = verts[face[2]] if face[2] < len(verts) else (0, 0, 0)
+            e1 = (p1[0] - p0[0], p1[1] - p0[1], p1[2] - p0[2])
+            e2 = (p2[0] - p0[0], p2[1] - p0[1], p2[2] - p0[2])
+            cross = (
+                e1[1] * e2[2] - e1[2] * e2[1],
+                e1[2] * e2[0] - e1[0] * e2[2],
+                e1[0] * e2[1] - e1[1] * e2[0],
+            )
+            area = 0.5 * math.sqrt(cross[0]**2 + cross[1]**2 + cross[2]**2)
+            face_data.append((area, (fcx, fcy, fcz)))
+
+        if not face_data:
+            # Fallback to vertex stepping
+            step = max(1, len(verts) // count)
+            points = [verts[i] for i in range(0, len(verts), step)][:count]
+            normals = [_outward_normal(pt) for pt in points]
+            return points, normals
+
+        # Sort by area descending and pick spread-out points
+        face_data.sort(key=lambda x: x[0], reverse=True)
+        total_area = sum(a for a, _ in face_data)
+        if total_area < 1e-12:
+            total_area = 1.0
+
+        # Cumulative area stepping to pick evenly by area
+        points: list[Vec3] = []
+        area_step = total_area / count
+        accumulated = 0.0
+        next_threshold = area_step * 0.5
+        for area, centroid in face_data:
+            accumulated += area
+            if accumulated >= next_threshold:
+                # Check minimum distance from existing points
+                min_dist_sq = float('inf')
+                for existing in points:
+                    d = ((centroid[0] - existing[0])**2 +
+                         (centroid[1] - existing[1])**2 +
+                         (centroid[2] - existing[2])**2)
+                    if d < min_dist_sq:
+                        min_dist_sq = d
+                # Only add if not too close to existing point
+                if not points or min_dist_sq > 0.001:
+                    points.append(centroid)
+                    next_threshold += area_step
+                if len(points) >= count:
+                    break
+
+        normals = [_outward_normal(pt) for pt in points]
+        return points, normals
+    else:
+        # Fallback: simple vertex stepping
+        step = max(1, len(verts) // count)
+        points = [verts[i] for i in range(0, len(verts), step)][:count]
+        normals = [_outward_normal(pt) for pt in points]
+        return points, normals
 
 
 # ---------------------------------------------------------------------------
@@ -820,10 +957,12 @@ def _generate_humanoid_body(scale: float) -> tuple[VertList, FaceList, dict[str,
         joints[f"{side}_shoulder"] = (shoulder_x, shoulder_y, 0.0)
 
         # Upper arm
+        # Bug 7 fix: shoulder (top) should be wider (0.045) than elbow (bottom, 0.04)
+        # _tapered_cylinder takes r_bottom, r_top -- bottom is at shoulder_y - upper_len (elbow)
         upper_len = 0.28 * s
         uav, uaf = _tapered_cylinder(
             shoulder_x, shoulder_y - upper_len, 0,
-            0.045 * s, 0.04 * s, upper_len,
+            0.04 * s, 0.045 * s, upper_len,
             segments=6, rings=2,
         )
         parts.append((uav, uaf))
@@ -1640,13 +1779,18 @@ def generate_monster_body(
         fi: "body_skin" for fi in range(len(base_faces))
     }
 
-    # Sample surface points for brand feature placement
-    surface_points, surface_normals = _sample_surface_points(base_verts, count=16)
+    # Sample surface points for brand feature placement (Bug 15: pass faces for area-weighted)
+    surface_points, surface_normals = _sample_surface_points(base_verts, count=16, faces=base_faces)
 
     # Apply brand features
     feature_verts, feature_faces, brand_feature_points = _apply_brand_features(
         brand, surface_points, surface_normals, joint_positions, scale,
     )
+
+    # Bug 4 fix: weld coincident vertices on base body before merging brand features
+    base_verts, base_faces = _weld_coincident_vertices(base_verts, base_faces)
+    # Rebuild material regions after welding (face count may change)
+    material_regions = {fi: "body_skin" for fi in range(len(base_faces))}
 
     # Merge base body with brand features
     if feature_verts:

@@ -73,6 +73,8 @@ namespace VeilBreakers.Editor.CodeReview
         public Func<string, string[], int, LineContext[], bool> ContextGuard; // optional extra guard
         public string Reasoning; // explains thought process for low-confidence findings
         public string FastCheck; // literal substring for fast pre-filtering before regex
+        public Regex InsidePattern;    // only fire if inside a method whose signature matches this
+        public Regex NotInsidePattern; // suppress if inside a method whose signature matches this
 
         public ReviewRule(string id, Severity sev, Category cat, Language lang,
                           RuleScope scope, FileFilter filter,
@@ -82,7 +84,8 @@ namespace VeilBreakers.Editor.CodeReview
                           Func<string, string[], int, LineContext[], bool> guard = null,
                           FindingType type = FindingType.Bug,
                           int confidence = -1, int priority = -1,
-                          string reasoning = null)
+                          string reasoning = null,
+                          string insidePattern = null, string notInsidePattern = null)
         {
             Id = id; Severity = sev; Category = cat; Lang = lang;
             Scope = scope; Filter = filter;
@@ -98,6 +101,8 @@ namespace VeilBreakers.Editor.CodeReview
             if (type == FindingType.Bug && cat == Category.Quality) Type = FindingType.Strengthening;
             if (cat == Category.Security) Type = FindingType.Error;
             Reasoning = reasoning;
+            if (insidePattern != null) InsidePattern = new Regex(insidePattern, RegexOptions.Compiled);
+            if (notInsidePattern != null) NotInsidePattern = new Regex(notInsidePattern, RegexOptions.Compiled);
             Pattern = new Regex(pattern, opts | RegexOptions.Compiled);
             AntiPatternRadius = antiRadius;
             ContextGuard = guard;
@@ -263,6 +268,93 @@ namespace VeilBreakers.Editor.CodeReview
                     ctx[i] = LineContext.Cold;
                 }
             }
+
+            // Phase 2: Transitive hot-path propagation (Rider-inspired)
+            // If Update() calls DoMovement(), and DoMovement() calls CheckCollisions(),
+            // then CheckCollisions() lines should also be marked HotPath.
+            var methods = new Dictionary<string, (int start, int end, bool isHot)>();
+            string currentMethod = null;
+            int methodStart = -1, methodDepth = 0;
+            bool methodIsHot = false;
+
+            for (int i = 0; i < lines.Length; i++)
+            {
+                if (ctx[i] == LineContext.Comment) continue;
+                string trimmed = lines[i].TrimStart();
+                if (trimmed.StartsWith("//")) continue;
+                var methodMatch = Regex.Match(trimmed,
+                    @"^(?:(?:private|protected|public|internal|static|override|virtual|abstract|async|sealed|new|partial)\s+)*(void|Task|int|float|bool|string|IEnumerator|\w+)\s+(\w+)\s*\(");
+                if (methodMatch.Success)
+                {
+                    string mName = methodMatch.Groups[2].Value;
+                    if (currentMethod != null && methodStart >= 0)
+                        methods[currentMethod] = (methodStart, i - 1, methodIsHot);
+                    currentMethod = mName;
+                    methodStart = i;
+                    methodIsHot = ctx[i] == LineContext.HotPath;
+                    methodDepth = 0;
+                }
+                if (currentMethod != null)
+                {
+                    methodDepth += CountChar(lines[i], '{') - CountChar(lines[i], '}');
+                    if (methodDepth <= 0 && i > methodStart && lines[i].Contains("}"))
+                    {
+                        methods[currentMethod] = (methodStart, i, methodIsHot);
+                        currentMethod = null;
+                    }
+                }
+            }
+            if (currentMethod != null && methodStart >= 0)
+                methods[currentMethod] = (methodStart, lines.Length - 1, methodIsHot);
+
+            // Build call graph: method -> set of called methods (intra-file only)
+            var callGraph = new Dictionary<string, HashSet<string>>();
+            foreach (var kvp in methods)
+            {
+                var calls = new HashSet<string>();
+                for (int i = kvp.Value.start; i <= kvp.Value.end && i < lines.Length; i++)
+                {
+                    foreach (Match cm in Regex.Matches(lines[i], @"\b(\w+)\s*\("))
+                    {
+                        string callee = cm.Groups[1].Value;
+                        if (methods.ContainsKey(callee) && callee != kvp.Key)
+                            calls.Add(callee);
+                    }
+                }
+                callGraph[kvp.Key] = calls;
+            }
+
+            // BFS from known hot methods to find transitively-reachable methods
+            var hotMethods = new HashSet<string>(
+                methods.Where(m => m.Value.isHot).Select(m => m.Key));
+            var queue = new Queue<string>(hotMethods);
+            while (queue.Count > 0)
+            {
+                string method = queue.Dequeue();
+                if (!callGraph.ContainsKey(method)) continue;
+                foreach (string callee in callGraph[method])
+                {
+                    if (!hotMethods.Contains(callee))
+                    {
+                        hotMethods.Add(callee);
+                        queue.Enqueue(callee);
+                    }
+                }
+            }
+
+            // Re-classify transitively hot methods
+            foreach (string hotMethod in hotMethods)
+            {
+                if (!methods.ContainsKey(hotMethod)) continue;
+                var (start, end, wasHot) = methods[hotMethod];
+                if (wasHot) continue; // Already classified
+                for (int i = start; i <= end && i < ctx.Length; i++)
+                {
+                    if (ctx[i] == LineContext.Cold)
+                        ctx[i] = LineContext.HotPath;
+                }
+            }
+
             return ctx;
         }
 
@@ -351,7 +443,7 @@ namespace VeilBreakers.Editor.CodeReview
 
         // =====================================================================
         //  C# RULES (105 rules: BUG 1-33, PERF 1-22, SEC 1-10,
-        //            UNITY 1-17, QUAL 1-23, DEEP 1-5)
+        //            UNITY 1-17, QUAL 1-23, DEEP 1-6)
         // =====================================================================
 
         public static readonly ReviewRule[] CSharpRules = new ReviewRule[]
@@ -2555,6 +2647,33 @@ namespace VeilBreakers.Editor.CodeReview
 
                 // ---- DEEP-05: Coroutine lifecycle analysis ----
                 CheckCoroutineLifecycle(cls, filePath, issues);
+
+                // ---- DEEP-06: Cognitive complexity (SonarQube-inspired) ----
+                foreach (var method in cls.Methods)
+                {
+                    int complexity = ComputeCognitiveComplexity(lines, method.StartLine, method.EndLine);
+                    if (complexity > 15) // SonarQube default threshold
+                    {
+                        issues.Add(new ReviewIssue
+                        {
+                            RuleId = "DEEP-06",
+                            Severity = complexity > 30 ? Severity.HIGH : Severity.MEDIUM,
+                            Category = Category.Quality,
+                            Lang = Language.CSharp,
+                            Type = FindingType.Strengthening,
+                            Confidence = 90, // Deterministic calculation
+                            Priority = complexity > 30 ? 70 : 45,
+                            FilePath = filePath,
+                            Line = method.StartLine + 1,
+                            Description = $"Method '{method.Name}' has cognitive complexity {complexity} (threshold: 15) -- deeply nested logic is hard to understand",
+                            Fix = "Extract nested branches into well-named helper methods. Use guard clauses (early returns) to reduce nesting depth.",
+                            MatchedText = method.Name,
+                            Reasoning = complexity > 30
+                                ? "Very high complexity -- this method likely has 4+ levels of nesting with conditionals inside loops. Strongly recommend refactoring."
+                                : "Moderate complexity -- consider extracting the deepest nested block into a helper method."
+                        });
+                    }
+                }
             }
             return issues;
         }
@@ -2744,6 +2863,54 @@ namespace VeilBreakers.Editor.CodeReview
                         Reasoning = "StartCoroutine result is not assigned to a variable and the class has no StopAllCoroutines call. If the coroutine needs to be cancelled (e.g. on disable, scene change, or state transition), there is no way to stop it individually. Fire-and-forget coroutines are sometimes intentional, hence moderate confidence." });
                 }
             }
+        }
+
+        // =================================================================
+        //  DEEP-06: Cognitive complexity scoring (SonarQube-inspired)
+        //  Penalizes NESTING: if at depth 0 = +1, but if inside for inside if = +1+nesting
+        // =================================================================
+
+        static int ComputeCognitiveComplexity(string[] lines, int start, int end)
+        {
+            int score = 0;
+            int nesting = 0;
+            for (int i = start; i <= end && i < lines.Length; i++)
+            {
+                string trimmed = lines[i].TrimStart();
+                if (trimmed.StartsWith("//")) continue;
+
+                // Increment operators: +1 + nesting_level
+                if (Regex.IsMatch(trimmed, @"^(if|else\s+if|switch)\s*\("))
+                { score += 1 + nesting; }
+                else if (Regex.IsMatch(trimmed, @"^else\b"))
+                { score += 1; } // else gets +1 but NOT +nesting (SonarQube spec)
+                else if (Regex.IsMatch(trimmed, @"^(for|foreach|while|do)\s*[\({]"))
+                { score += 1 + nesting; }
+                else if (trimmed.StartsWith("catch"))
+                { score += 1 + nesting; }
+                // Ternary operator
+                else if (trimmed.Contains("?") && trimmed.Contains(":") && !trimmed.StartsWith("case") && !trimmed.StartsWith("//"))
+                { score += 1 + nesting; }
+
+                // Boolean operator sequences: +1 per kind change (&&, ||)
+                var boolOps = Regex.Matches(trimmed, @"(&&|\|\|)");
+                if (boolOps.Count > 0)
+                {
+                    string lastOp = null;
+                    foreach (Match bm in boolOps)
+                    {
+                        if (lastOp == null || bm.Value != lastOp)
+                        { score += 1; lastOp = bm.Value; }
+                    }
+                }
+
+                // Nesting tracking (after scoring, so opening brace on same line
+                // doesn't count for THIS line's increment)
+                nesting += LineClassifier.CountChar(lines[i], '{');
+                nesting -= LineClassifier.CountChar(lines[i], '}');
+                if (nesting < 0) nesting = 0;
+            }
+            return score;
         }
 
         // =================================================================
@@ -3433,6 +3600,46 @@ namespace VeilBreakers.Editor.CodeReview
             string relativePath = "Assets" + fullPath.Substring(Application.dataPath.Length).Replace('\\', '/');
             bool isEditorFile = relativePath.Contains("/Editor/");
 
+            // Build method signature index for Pattern-Inside / Pattern-Not-Inside checks
+            // Maps line index -> enclosing method's signature line (null if not inside a method)
+            string[] _methodSigForLine = new string[lines.Length];
+            {
+                string curSig = null;
+                int mDepth = 0;
+                int mStart = -1;
+                for (int mi = 0; mi < lines.Length; mi++)
+                {
+                    if (contexts[mi] == LineContext.Comment) { _methodSigForLine[mi] = curSig; continue; }
+                    var mSigMatch = Regex.Match(lines[mi].TrimStart(),
+                        @"^(?:(?:private|protected|public|internal|static|override|virtual|abstract|async|sealed|new|partial)\s+)*(void|Task|int|float|bool|string|IEnumerator|\w+(?:<[\w<>,\s]+>)?)\s+(\w+)\s*\([^)]*\)");
+                    if (mSigMatch.Success && !lines[mi].TrimStart().StartsWith("//"))
+                    {
+                        if (curSig != null && mStart >= 0 && mDepth > 0)
+                        {
+                            // Previous method ended implicitly -- fill remaining lines
+                        }
+                        curSig = lines[mi];
+                        mStart = mi;
+                        mDepth = 0;
+                    }
+                    if (curSig != null)
+                    {
+                        mDepth += LineClassifier.CountChar(lines[mi], '{') - LineClassifier.CountChar(lines[mi], '}');
+                        _methodSigForLine[mi] = curSig;
+                        if (mDepth <= 0 && mi > mStart && lines[mi].Contains("}"))
+                        {
+                            _methodSigForLine[mi] = curSig; // closing brace is still inside
+                            curSig = null;
+                            mStart = -1;
+                        }
+                    }
+                    else
+                    {
+                        _methodSigForLine[mi] = null;
+                    }
+                }
+            }
+
             // Pass 1: Pattern matching with pre-classified contexts
             foreach (var rule in ReviewRules.CSharpRules)
             {
@@ -3484,6 +3691,16 @@ namespace VeilBreakers.Editor.CodeReview
                             }
                         }
                         if (suppressed) continue;
+                    }
+
+                    // Pattern-Inside / Pattern-Not-Inside check (Semgrep-inspired scoping)
+                    if (rule.InsidePattern != null || rule.NotInsidePattern != null)
+                    {
+                        string methodSig = _methodSigForLine[i];
+                        if (rule.InsidePattern != null && (methodSig == null || !rule.InsidePattern.IsMatch(methodSig)))
+                            continue;
+                        if (rule.NotInsidePattern != null && methodSig != null && rule.NotInsidePattern.IsMatch(methodSig))
+                            continue;
                     }
 
                     // Context guard
@@ -3737,7 +3954,7 @@ namespace VeilBreakers.Editor.CodeReview
         "next_steps": [
             "Run unity_editor action=recompile",
             "Open: VeilBreakers > Code Review > Open Reviewer",
-            "Click 'Scan Project' — 200 rules, C# + Python, confidence/priority scoring",
+            "Click 'Scan Project' — 200+ rules, C# + Python, cognitive complexity, transitive hot-path, confidence/priority scoring",
         ],
     }
 

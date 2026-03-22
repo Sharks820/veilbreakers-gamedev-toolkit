@@ -36,6 +36,7 @@ def _build_adjacency(
     """Build per-vertex adjacency sets from the face list.
 
     Two vertices are adjacent if they share an edge in any face.
+    Out-of-bounds vertex indices are silently skipped to avoid IndexError.
     """
     adj: list[set[int]] = [set() for _ in range(num_verts)]
     for face in faces:
@@ -43,6 +44,9 @@ def _build_adjacency(
         for i in range(n):
             a = face[i]
             b = face[(i + 1) % n]
+            # Bug 8 fix: bounds check on face indices
+            if a < 0 or a >= num_verts or b < 0 or b >= num_verts:
+                continue
             adj[a].add(b)
             adj[b].add(a)
     return adj
@@ -89,17 +93,23 @@ def smooth_assembled_mesh(
     num_verts = len(vertices)
     adj = _build_adjacency(num_verts, faces)
 
-    # Work with mutable lists of [x, y, z]
-    current = [[v[0], v[1], v[2]] for v in vertices]
+    # Bug 18 fix: use double-buffering with in-place update instead of
+    # full array copy on every iteration
+    buf_a = [[v[0], v[1], v[2]] for v in vertices]
+    buf_b = [[v[0], v[1], v[2]] for v in vertices]
+
+    current = buf_a
+    target = buf_b
 
     for _iteration in range(smooth_iterations):
-        new_pos = [list(v) for v in current]
-
         for vi in range(num_verts):
             neighbors = adj[vi]
             num_neighbors = len(neighbors)
 
             if num_neighbors == 0:
+                target[vi][0] = current[vi][0]
+                target[vi][1] = current[vi][1]
+                target[vi][2] = current[vi][2]
                 continue
 
             # Compute average of neighbor positions
@@ -124,11 +134,12 @@ def smooth_assembled_mesh(
                 effective_blend *= 0.4
 
             # Laplacian blend: move vertex toward neighbor average
-            new_pos[vi][0] = current[vi][0] + effective_blend * (avg_x - current[vi][0])
-            new_pos[vi][1] = current[vi][1] + effective_blend * (avg_y - current[vi][1])
-            new_pos[vi][2] = current[vi][2] + effective_blend * (avg_z - current[vi][2])
+            target[vi][0] = current[vi][0] + effective_blend * (avg_x - current[vi][0])
+            target[vi][1] = current[vi][1] + effective_blend * (avg_y - current[vi][1])
+            target[vi][2] = current[vi][2] + effective_blend * (avg_z - current[vi][2])
 
-        current = new_pos
+        # Swap buffers
+        current, target = target, current
 
     return [(v[0], v[1], v[2]) for v in current]
 
@@ -163,17 +174,53 @@ def _estimate_vertex_normal(
     vi: int,
     vertices: VertList,
     adj: list[set[int]],
+    face_vert_map: dict[int, list[tuple[int, ...]]] | None = None,
 ) -> tuple[float, float, float]:
-    """Estimate a vertex normal from its neighbors (centroid-based).
+    """Estimate a vertex normal using face-normal averaging.
 
-    Points outward from the local surface by computing the vector from
-    the neighbor centroid to the vertex, then normalizing.
+    Computes the cross-product normal for each face containing this vertex,
+    then averages them. This works correctly for both convex and concave
+    surfaces, unlike the old centroid-direction approach which inverted
+    normals in concave crevices.
     """
+    if face_vert_map is not None and vi in face_vert_map:
+        # Average face normals for all faces containing this vertex
+        nx, ny, nz = 0.0, 0.0, 0.0
+        count = 0
+        for face in face_vert_map[vi]:
+            if len(face) < 3:
+                continue
+            # Pick first 3 valid vertices for cross product
+            p0 = vertices[face[0]]
+            p1 = vertices[face[1]]
+            p2 = vertices[face[2]]
+            # Edge vectors
+            e1x = p1[0] - p0[0]
+            e1y = p1[1] - p0[1]
+            e1z = p1[2] - p0[2]
+            e2x = p2[0] - p0[0]
+            e2y = p2[1] - p0[1]
+            e2z = p2[2] - p0[2]
+            # Cross product
+            cx = e1y * e2z - e1z * e2y
+            cy = e1z * e2x - e1x * e2z
+            cz = e1x * e2y - e1y * e2x
+            length = math.sqrt(cx * cx + cy * cy + cz * cz)
+            if length > 1e-10:
+                nx += cx / length
+                ny += cy / length
+                nz += cz / length
+                count += 1
+        if count > 0:
+            length = math.sqrt(nx * nx + ny * ny + nz * nz)
+            if length > 1e-10:
+                return (nx / length, ny / length, nz / length)
+
+    # Fallback: centroid-based (for when no face map provided)
     neighbors = adj[vi]
     if not neighbors:
         return (0.0, 1.0, 0.0)  # Default up
 
-    # Centroid of neighbors
     cx, cy, cz = 0.0, 0.0, 0.0
     for ni in neighbors:
         cx += vertices[ni][0]
@@ -184,7 +231,6 @@ def _estimate_vertex_normal(
     cy /= n
     cz /= n
 
-    # Vector from centroid to vertex (outward direction)
     dx = vertices[vi][0] - cx
     dy = vertices[vi][1] - cy
     dz = vertices[vi][2] - cz
@@ -249,8 +295,17 @@ def add_organic_noise(
 
     # Build adjacency if faces provided (for normal estimation)
     adj: list[set[int]] | None = None
+    face_vert_map: dict[int, list[tuple[int, ...]]] | None = None
     if faces:
         adj = _build_adjacency(num_verts, faces)
+        # Bug 5 fix: build face-vertex map for face-normal averaging
+        face_vert_map = {}
+        for face in faces:
+            for vi_f in face:
+                if 0 <= vi_f < num_verts:
+                    if vi_f not in face_vert_map:
+                        face_vert_map[vi_f] = []
+                    face_vert_map[vi_f].append(face)
 
     result: VertList = []
     for vi in range(num_verts):
@@ -270,15 +325,16 @@ def add_organic_noise(
         effective_strength = strength * dist_factor
 
         if adj is not None:
-            # Displace along estimated surface normal
-            nx, ny, nz = _estimate_vertex_normal(vi, vertices, adj)
+            # Displace along estimated surface normal (Bug 5: uses face-normal averaging)
+            nx, ny, nz = _estimate_vertex_normal(vi, vertices, adj, face_vert_map)
             # Use primary noise channel for magnitude, add tangential scatter
             mag = n1 * effective_strength
             # Small tangential component for variety
             tang = effective_strength * 0.3
             new_x = vx + nx * mag + n2 * tang * (1.0 - abs(nx))
             new_y = vy + ny * mag + n3 * tang * (1.0 - abs(ny))
-            new_z = vz + nz * mag + n1 * tang * (1.0 - abs(nz)) * 0.5
+            # Bug 6 fix: use n3 instead of n1 for Z-axis tangential displacement
+            new_z = vz + nz * mag + n3 * tang * (1.0 - abs(nz)) * 0.5
         else:
             # No faces: displace in randomized direction
             new_x = vx + n1 * effective_strength
