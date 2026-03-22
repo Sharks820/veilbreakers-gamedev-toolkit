@@ -1,31 +1,15 @@
 """Code review C# and Python template generators.
 
-Implements a two-pass code review system for Unity C# projects and a standalone
-Python reviewer script:
+Two-pass review system: regex Pass 1 + AST-aware Pass 2.
+- VBCodeReviewer.cs: 100 rules, EditorWindow with filters and JSON export
+- vb_python_reviewer.py: 30 rules, standalone CLI with JSON output
 
-1. **VBCodeReviewer.cs** -- EditorWindow with 100 regex-based rules across 5
-   categories (Bug, Performance, Security, Unity-Specific, Code Quality).
-   Pass 1 uses compiled regex for sub-second scanning; Pass 2 performs
-   AST-aware multi-line analysis for cross-reference patterns.  Results are
-   displayed in a filterable, sortable tree view with double-click-to-open,
-   severity color coding, and JSON export for CI integration.
-
-2. **vb_python_reviewer.py** -- Standalone Python script with 30 rules for
-   security, correctness, and style.  Outputs a JSON report.
-
-Exports:
-    generate_code_reviewer_script       -- VBCodeReviewer.cs generator
-    generate_python_reviewer_script     -- vb_python_reviewer.py generator
+Exports: generate_code_reviewer_script, generate_python_reviewer_script
 """
 
 from __future__ import annotations
 
 from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
-
-
-# ---------------------------------------------------------------------------
-# Code Review: C# Unity EditorWindow Generator
-# ---------------------------------------------------------------------------
 
 
 def generate_code_reviewer_script() -> dict:
@@ -50,10 +34,7 @@ using UnityEngine;
 
 namespace VeilBreakers.Editor.CodeReview
 {
-    // ======================================================================
-    // Data structures
-    // ======================================================================
-
+    // --- Data structures ---
     public enum Severity { CRITICAL, HIGH, MEDIUM, LOW }
     public enum Category { Bug, Performance, Security, Unity, Quality }
 
@@ -95,10 +76,7 @@ namespace VeilBreakers.Editor.CodeReview
         public string MatchedText;
     }
 
-    // ======================================================================
-    // Rule definitions -- 100 rules
-    // ======================================================================
-
+    // --- Rule definitions (100 rules) ---
     public static class ReviewRules
     {
         // Helper: returns true if line index is inside Update/LateUpdate/FixedUpdate body
@@ -111,7 +89,7 @@ namespace VeilBreakers.Editor.CodeReview
                 string l = allLines[i].TrimStart();
                 braceDepth += CountChar(allLines[i], '}') - CountChar(allLines[i], '{');
                 if (braceDepth < 0) braceDepth = 0; // clamped walk
-                if (Regex.IsMatch(l, @"^\s*(void|private\s+void|protected\s+void|public\s+void)\s+(Update|LateUpdate|FixedUpdate)\s*\("))
+                if (Regex.IsMatch(l, @"^\s*(void|private\s+void|protected\s+void|public\s+void)\s+(Update|LateUpdate|FixedUpdate|OnGUI|OnAnimatorMove|OnAnimatorIK)\s*\("))
                     return true;
                 // If we hit another method signature first, stop
                 if (i < idx && Regex.IsMatch(l, @"^\s*(void|private|protected|public|internal|static|override|virtual|abstract)\s+\S+\s+\w+\s*\("))
@@ -164,11 +142,9 @@ namespace VeilBreakers.Editor.CodeReview
             return true;
         }
 
-        // ------- BUG DETECTION (1-30) -------
-
         public static readonly ReviewRule[] AllRules = new ReviewRule[]
         {
-            // ---- BUG DETECTION ----
+            // ---- BUG DETECTION (1-30) ----
             new ReviewRule("BUG-01", Severity.CRITICAL, Category.Bug,
                 "GetComponent<T>() called in Update/LateUpdate/FixedUpdate -- cache in Awake/Start",
                 "Cache the component reference in a field during Awake() or Start().",
@@ -654,6 +630,58 @@ namespace VeilBreakers.Editor.CodeReview
                     return NotInComment(line, all, i);
                 }),
 
+            // ---- GEMINI REVIEW ADDITIONS (101-108) ----
+
+            new ReviewRule("BUG-31", Severity.CRITICAL, Category.Bug,
+                "Null-conditional ?. or ?? on UnityEngine.Object bypasses destroyed check (UNT0007)",
+                "Use explicit == null check: Unity overloads == to detect destroyed objects. ?. and ?? use System.Object null check which misses destroyed state.",
+                @"\b\w+\s*\?\.", guard: (line, all, i) => {
+                    // Only flag if variable is likely a Unity type
+                    return NotInComment(line, all, i) && Regex.IsMatch(line, @"(Component|GameObject|Transform|Renderer|Collider|Rigidbody|Camera|Light|MonoBehaviour)\s");
+                }),
+
+            new ReviewRule("PERF-21", Severity.HIGH, Category.Performance,
+                "Use NonAlloc physics API to avoid array allocation every frame",
+                "Replace RaycastAll with RaycastNonAlloc, OverlapSphere with OverlapSphereNonAlloc, etc.",
+                @"Physics\.(RaycastAll|SphereCastAll|CapsuleCastAll|BoxCastAll|OverlapSphere|OverlapBox|OverlapCapsule)\s*\(", guard: InHotPath),
+
+            new ReviewRule("BUG-32", Severity.CRITICAL, Category.Bug,
+                "GetComponentInChildren/InParent in Update -- even heavier than GetComponent, cache it",
+                "Cache in Awake/Start. GetComponentInChildren traverses the entire child hierarchy.",
+                @"GetComponent(InChildren|InParent)\s*[<(]", guard: InHotPath),
+
+            new ReviewRule("BUG-33", Severity.CRITICAL, Category.Bug,
+                "FindWithTag/FindGameObjectsWithTag in Update -- O(n) scene scan",
+                "Cache the result in Start() or use a registry pattern.",
+                @"(FindWithTag|FindGameObjectsWithTag)\s*\(", guard: InHotPath),
+
+            new ReviewRule("PERF-22", Severity.MEDIUM, Category.Performance,
+                "Setting material properties in Update creates Material instances -- use MaterialPropertyBlock",
+                "Use renderer.GetPropertyBlock()/SetPropertyBlock() for per-instance values without creating material clones.",
+                @"\.\s*material\s*\.\s*Set(Color|Float|Int|Vector|Texture|Matrix)", guard: InHotPath),
+
+            new ReviewRule("UNITY-16", Severity.HIGH, Category.Unity,
+                "GetComponent/Destroy call in OnValidate -- fails during prefab import",
+                "OnValidate runs during serialization. Wrap unsafe calls in #if UNITY_EDITOR and use EditorApplication.delayCall.",
+                @"(GetComponent|Destroy|DestroyImmediate)\s*[<(]",
+                guard: (line, all, i) => {
+                    for (int j = i; j >= 0; j--) {
+                        if (Regex.IsMatch(all[j], @"void\s+OnValidate\s*\(")) return NotInComment(line, all, i);
+                        if (j < i && Regex.IsMatch(all[j], @"(void|private|public)\s+\w+\s*\(")) return false;
+                    }
+                    return false;
+                }),
+
+            new ReviewRule("UNITY-17", Severity.MEDIUM, Category.Unity,
+                "OnGUI called every frame with layout/repaint -- consider IMGUI alternatives or UI Toolkit",
+                "OnGUI is called multiple times per frame. For runtime UI prefer UI Toolkit or Canvas.",
+                @"void\s+OnGUI\s*\(\s*\)"),
+
+            new ReviewRule("BUG-34", Severity.HIGH, Category.Bug,
+                "CompareTag() not used -- string == tag allocates GC",
+                "Use gameObject.CompareTag(\"tag\") instead of gameObject.tag == \"tag\" to avoid string allocation.",
+                @"\.tag\s*==\s*"""),
+
             // ---- CODE QUALITY (76-100) ----
 
             new ReviewRule("QUAL-01", Severity.LOW, Category.Quality,
@@ -823,12 +851,12 @@ namespace VeilBreakers.Editor.CodeReview
                 @"\.Equals\s*\(\s*""",
                 guard: (line, all, i) => !line.Contains("StringComparison") && NotInComment(line, all, i)),
 
-            new ReviewRule("QUAL-23", Severity.MEDIUM, Category.Quality,
+            new ReviewRule("QUAL-22", Severity.MEDIUM, Category.Quality,
                 "Nested ternary operator -- hard to read, use if/else",
                 "Replace nested ternaries with if/else or switch expressions.",
                 @"\?[^;:]*\?[^;]*:", guard: NotInComment),
 
-            new ReviewRule("QUAL-24", Severity.LOW, Category.Quality,
+            new ReviewRule("QUAL-23", Severity.LOW, Category.Quality,
                 "Parameter count exceeds 5 -- consider parameter object or builder pattern",
                 "Group related parameters into a struct/class, or use a builder.",
                 @"(void|int|float|bool|string|Task|IEnumerator|\w+)\s+\w+\s*\(",
@@ -843,10 +871,7 @@ namespace VeilBreakers.Editor.CodeReview
         };
     }
 
-    // ======================================================================
-    // Pass 2: AST-aware deep analysis
-    // ======================================================================
-
+    // --- Pass 2: AST-aware deep analysis ---
     public static class DeepAnalyzer
     {
         // Tracks class-level info for cross-method analysis
@@ -1028,10 +1053,7 @@ namespace VeilBreakers.Editor.CodeReview
         }
     }
 
-    // ======================================================================
-    // Main EditorWindow
-    // ======================================================================
-
+    // --- Main EditorWindow ---
     public sealed class VBCodeReviewer : EditorWindow
     {
         [MenuItem("VeilBreakers/Code Review/Open Reviewer")]
@@ -1475,11 +1497,6 @@ namespace VeilBreakers.Editor.CodeReview
     }
 
 
-# ---------------------------------------------------------------------------
-# Python Reviewer Script Generator
-# ---------------------------------------------------------------------------
-
-
 def generate_python_reviewer_script() -> dict:
     """Generate vb_python_reviewer.py -- standalone Python code reviewer.
 
@@ -1558,10 +1575,7 @@ class Issue:
     matched_text: str = ""
 
 
-# ---------------------------------------------------------------------------
 # Guard helpers
-# ---------------------------------------------------------------------------
-
 def _not_in_comment(line: str, _all: list[str], _idx: int) -> bool:
     stripped = line.lstrip()
     return not stripped.startswith("#")
@@ -1576,10 +1590,7 @@ def _active_code(line: str, all_lines: list[str], idx: int) -> bool:
     return _not_in_comment(line, all_lines, idx) and _not_in_string(line, all_lines, idx)
 
 
-# ---------------------------------------------------------------------------
-# Rule definitions -- 30 rules
-# ---------------------------------------------------------------------------
-
+# Rule definitions (30 rules)
 RULES: list[Rule] = [
     # ---- SECURITY ----
     Rule("PY-SEC-01", Severity.CRITICAL, Category.Security,
@@ -1755,10 +1766,7 @@ RULES: list[Rule] = [
 ]
 
 
-# ---------------------------------------------------------------------------
 # Pass 2: AST-aware analysis
-# ---------------------------------------------------------------------------
-
 def _ast_analyze(filepath: str, source: str) -> list[Issue]:
     """AST-based analysis for patterns that regex cannot reliably detect."""
     issues: list[Issue] = []
@@ -1894,10 +1902,7 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
     return issues
 
 
-# ---------------------------------------------------------------------------
 # Scanner
-# ---------------------------------------------------------------------------
-
 def scan_file(filepath: str) -> list[Issue]:
     """Scan a single Python file with both passes."""
     issues: list[Issue] = []
