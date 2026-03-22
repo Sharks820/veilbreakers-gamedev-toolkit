@@ -186,6 +186,14 @@ def generate_scale_pattern(
     coverage = max(0.0, min(1.0, coverage))
     scale_size = max(0.001, scale_size)
 
+    if coverage == 0.0:
+        return {
+            "vertices": [],
+            "faces": [],
+            "scale_count": 0,
+            "coverage_actual": 0.0,
+        }
+
     if normals is None:
         normals = compute_vertex_normals(vertices, faces)
 
