@@ -41,7 +41,7 @@ VALID_GAITS: frozenset[str] = frozenset({
     "biped", "quadruped", "hexapod", "arachnid", "serpent",
 })
 
-VALID_SPEEDS: frozenset[str] = frozenset({"walk", "run"})
+VALID_SPEEDS: frozenset[str] = frozenset({"walk", "run", "trot", "canter", "gallop"})
 
 VALID_ATTACK_TYPES: frozenset[str] = frozenset(ATTACK_CONFIGS.keys())
 

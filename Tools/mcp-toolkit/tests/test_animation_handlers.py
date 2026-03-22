@@ -42,7 +42,8 @@ class TestConstants:
         assert VALID_GAITS == expected
 
     def test_valid_speeds(self):
-        assert VALID_SPEEDS == {"walk", "run"}
+        assert VALID_SPEEDS == {"walk", "run", "trot", "canter", "gallop"}
+        assert len(VALID_SPEEDS) == 5
 
     def test_valid_attack_types_count(self):
         assert len(VALID_ATTACK_TYPES) == 8
