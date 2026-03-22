@@ -125,7 +125,7 @@ namespace VeilBreakers.Editor.CodeReview
             return InUpdateMethod(line, allLines, idx) && NotInComment(line, allLines, idx);
         }
 
-        static int CountChar(string s, char c)
+        public static int CountChar(string s, char c)
         {
             int count = 0;
             for (int i = 0; i < s.Length; i++) { if (s[i] == c) count++; }
@@ -176,8 +176,19 @@ namespace VeilBreakers.Editor.CodeReview
                 RegexOptions.Singleline),
             new ReviewRule("BUG-08", Severity.HIGH, Category.Bug,
                 "Accessing member after Destroy(gameObject) -- object is destroyed",
-                "Ensure no code runs after Destroy() on the same object within the same scope.",
-                @"Destroy\s*\(\s*gameObject\s*\)"),
+                "Add 'return;' after Destroy(gameObject) or ensure no member access follows.",
+                @"Destroy\s*\(\s*gameObject\s*\)",
+                guard: (line, all, i) => {
+                    if (!NotInComment(line, all, i)) return false;
+                    // Only flag if next non-empty line accesses something (not return/break/})
+                    for (int j = i + 1; j < Math.Min(i + 4, all.Length); j++) {
+                        string next = all[j].Trim();
+                        if (next == "" || next.StartsWith("//")) continue;
+                        if (next.StartsWith("return") || next == "}" || next.StartsWith("break")) return false;
+                        return true; // code continues after Destroy — flag it
+                    }
+                    return false;
+                }),
             new ReviewRule("BUG-09", Severity.HIGH, Category.Bug,
                 "Missing null check after GetComponent -- may return null",
                 "Always null-check the result of GetComponent before use.",
@@ -933,7 +944,7 @@ namespace VeilBreakers.Editor.CodeReview
                 }
                 if (Regex.IsMatch(string.Join("\n", lines, cls.StartLine,
                     Math.Min(cls.EndLine - cls.StartLine + 1, lines.Length - cls.StartLine)),
-                    @"void\s+OnDis(able|able)\s*\(")) cls.HasOnDisable = true;
+                    @"void\s+On(Disable|Destroy)\s*\(")) cls.HasOnDisable = true;
                 if (Regex.IsMatch(string.Join("\n", lines, cls.StartLine,
                     Math.Min(cls.EndLine - cls.StartLine + 1, lines.Length - cls.StartLine)),
                     @"void\s+OnDestroy\s*\(")) cls.HasOnDestroy = true;
@@ -944,7 +955,7 @@ namespace VeilBreakers.Editor.CodeReview
         }
 
         // Make CountChar accessible
-        static int CountChar(string s, char c)
+        public static int CountChar(string s, char c)
         {
             return ReviewRules.CountChar(s, c);
         }
