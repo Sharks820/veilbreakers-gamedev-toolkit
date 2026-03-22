@@ -255,6 +255,53 @@ All saved in `.planning/research/`:
 27. **MASTERPLAN.md** — Original architecture (rigging, animation, contact sheets)
 28. **MASTERPLAN_V2.md** — Production-scale 200+ capabilities, compound action pattern, 34 external tools
 
+### NEW GAPS FOUND BY CROSS-VERIFICATION (Gemini + Codex independent review):
+
+**Sculpting/Modeling (from ZBrush comparison):**
+34. Dynamic Topology (Dyntopo) — add/remove geometry during sculpt (Blender API supports this)
+35. Multi-Resolution sculpting — sculpt on high-subdiv, project to low (Blender Multires modifier)
+36. Voxel Remeshing action — automated voxel remesh for boolean cleanup (`bpy.ops.mesh.voxel_remesh`)
+37. Alpha stamp brushes — stamp custom patterns (scales, scars, rivets) onto surfaces
+38. Insert Mesh — place pre-made detail meshes at surface points (ZBrush IMM equivalent)
+39. Symmetry/mirror editing — left-right mirrored editing updates
+40. Loop/ring selection + selection grow/shrink
+41. Bridge edges, fill hole, close gap topology repair tools
+42. Non-destructive modifier stack (Blender modifiers exposed via MCP)
+43. Face Sets — region-based sculpting isolation
+
+**Terrain (from Unreal/Gaea comparison):**
+44. Spline-based terrain deformation — roads/rivers that deform terrain non-destructively
+45. Non-destructive landscape layers — layered terrain editing like Photoshop
+46. Real-time brush-based erosion painting
+47. Drainage-basin and sediment-flow generation
+48. Thermal erosion passes (distinct from hydraulic)
+
+**Texturing (from Substance comparison):**
+49. Non-destructive layer-based material stack with masks and blend modes
+50. Smart Material system — auto dirt/wear/moss from mesh data (curvature+AO+height)
+51. Multi-channel texture painting (color+roughness+metallic+normal in one stroke)
+52. Projection/stencil painting for broad texture authoring
+53. Richer bake map types: thickness, position, bent-normal, world-normal
+
+**Vegetation (from SpeedTree comparison):**
+54. Node-based botanical branching (L-system with proper growth rules)
+55. Automated wind vertex color baking for shader-based wind animation
+56. Billboard impostor generation for ultra-low LOD trees
+
+**Characters (from MetaHuman/CC4 comparison):**
+57. DNA/mesh blending — morph between character archetypes for unique faces
+58. Automated cloth collision proxy volumes for real-time physics
+59. Strand-based hair grooming (curves → cards baking)
+60. Full facial articulation: eyelids, teeth, tongue, mouth interior, eye mechanics
+61. Body morph/proportion controls at production scale (100+ blend shapes)
+
+**Animation (from Cascadeur/MotionBuilder comparison):**
+62. FK/IK switching on rigs
+63. Motion retargeting and mocap import/cleanup
+64. Pose libraries and animation layers
+65. Graph/dope-sheet editing for curve timing and polish
+66. Contact solving — foot locking and hand-contact stabilization
+
 ### Key Techniques from Research (implement these):
 - **ZBrush DynaMesh** → `bpy.ops.mesh.voxel_remesh()` (free in Blender)
 - **ZBrush ZRemesher** → `bpy.ops.mesh.quadriflow_remesh()` (free in Blender)
