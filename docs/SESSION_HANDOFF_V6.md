@@ -323,7 +323,26 @@ All saved in `.planning/research/`:
 
 **TOTAL REMAINING GAPS: 80** (33 original + 33 Gemini/Codex + 14 Opus verification)
 
+### BREAKTHROUGH DEEP-DIVE RESEARCH (3 new docs):
+
+**AI_MESH_GENERATION_TECHNIQUES.md** — How Tripo/Meshy/Hunyuan3D work internally:
+- SDF-based mesh generation via marching cubes = REPLACES primitive assembly
+- Smooth boolean unions (smooth_min on SDF fields) = organic junctions
+- Multi-view texture projection (render 8-12 views, project onto UVs)
+- CHORD (Ubisoft, open source) = PBR estimation from single albedo image
+- Implementable in pure Python+numpy, no ML models needed
+
+**CHARACTER_MESH_QUALITY_TECHNIQUES.md** — Why our characters look primitive:
+- Primitives create discrete boundaries; SDFs create continuous fields
+- Recommended path: Metaball composition → mesh → voxel remesh → smooth
+- Anatomical proportions: 7.5 heads (realistic), 8 heads (heroic)
+- Face needs skull-sphere base, not grid deformation
+- Minimum 200 face verts for expression, 400 for medium, 800 for hero
+
+**MAP_BUILDING_TECHNIQUES.md** — (being written, will be committed when ready)
+
 ### Key Techniques from Research (implement these):
+- **SDF + Marching Cubes** → pure numpy, replaces primitive assembly for organic meshes
 - **ZBrush DynaMesh** → `bpy.ops.mesh.voxel_remesh()` (free in Blender)
 - **ZBrush ZRemesher** → `bpy.ops.mesh.quadriflow_remesh()` (free in Blender)
 - **SpeedTree branching** → L-system / space colonization algorithm (pure Python)
