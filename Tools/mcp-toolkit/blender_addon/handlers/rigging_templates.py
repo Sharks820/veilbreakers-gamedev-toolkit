@@ -53,12 +53,20 @@ VALID_RIGIFY_TYPES: frozenset[str] = frozenset({
 
 
 HUMANOID_BONES: dict[str, dict] = {
+    # Root motion bone
+    "root": {
+        "head": (0.0, 0.0, 0.0),
+        "tail": (0.0, 0.0, 0.1),
+        "roll": 0.0,
+        "parent": None,
+        "rigify_type": "",
+    },
     # Spine chain (4 bones)
     "spine": {
         "head": (0.0, 0.0, 0.95),
         "tail": (0.0, 0.0, 1.1),
         "roll": 0.0,
-        "parent": None,
+        "parent": "root",
         "rigify_type": "spines.super_spine",
     },
     "spine.001": {
@@ -82,33 +90,48 @@ HUMANOID_BONES: dict[str, dict] = {
         "parent": "spine.002",
         "rigify_type": "",
     },
-    # Neck and head
+    # Neck and head (spaced for Rigify minimum neck length)
     "spine.004": {
         "head": (0.0, 0.0, 1.55),
-        "tail": (0.0, 0.0, 1.65),
+        "tail": (0.0, 0.0, 1.73),
         "roll": 0.0,
         "parent": "spine.003",
         "rigify_type": "",
     },
     "spine.005": {
-        "head": (0.0, 0.0, 1.65),
-        "tail": (0.0, 0.0, 1.8),
+        "head": (0.0, 0.0, 1.73),
+        "tail": (0.0, 0.0, 1.95),
         "roll": 0.0,
         "parent": "spine.004",
         "rigify_type": "",
+    },
+    # Shoulders (Rigify convention: shoulder.L/R)
+    "shoulder.L": {
+        "head": (0.02, 0.0, 1.5),
+        "tail": (0.18, 0.0, 1.5),
+        "roll": 0.0,
+        "parent": "spine.003",
+        "rigify_type": "basic.super_copy",
+    },
+    "shoulder.R": {
+        "head": (-0.02, 0.0, 1.5),
+        "tail": (-0.18, 0.0, 1.5),
+        "roll": 0.0,
+        "parent": "spine.003",
+        "rigify_type": "basic.super_copy",
     },
     # Left arm
     "upper_arm.L": {
         "head": (0.18, 0.0, 1.5),
         "tail": (0.4, 0.0, 1.5),
         "roll": 0.0,
-        "parent": "spine.003",
+        "parent": "shoulder.L",
         "rigify_type": "limbs.arm",
     },
     "forearm.L": {
         "head": (0.4, 0.0, 1.5),
         "tail": (0.62, 0.0, 1.5),
-        "roll": 0.0,
+        "roll": 1.5708,
         "parent": "upper_arm.L",
         "rigify_type": "",
     },
@@ -124,13 +147,13 @@ HUMANOID_BONES: dict[str, dict] = {
         "head": (-0.18, 0.0, 1.5),
         "tail": (-0.4, 0.0, 1.5),
         "roll": 0.0,
-        "parent": "spine.003",
+        "parent": "shoulder.R",
         "rigify_type": "limbs.arm",
     },
     "forearm.R": {
         "head": (-0.4, 0.0, 1.5),
         "tail": (-0.62, 0.0, 1.5),
-        "roll": 0.0,
+        "roll": -1.5708,
         "parent": "upper_arm.R",
         "rigify_type": "",
     },
@@ -185,16 +208,379 @@ HUMANOID_BONES: dict[str, dict] = {
         "parent": "shin.R",
         "rigify_type": "",
     },
+    # Toes
+    "toe.L": {
+        "head": (0.1, -0.1, 0.0),
+        "tail": (0.1, -0.15, 0.0),
+        "roll": 0.0,
+        "parent": "foot.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "toe.001.L": {
+        "head": (0.1, -0.15, 0.0),
+        "tail": (0.1, -0.19, 0.0),
+        "roll": 0.0,
+        "parent": "toe.L",
+        "rigify_type": "",
+    },
+    "toe.R": {
+        "head": (-0.1, -0.1, 0.0),
+        "tail": (-0.1, -0.15, 0.0),
+        "roll": 0.0,
+        "parent": "foot.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "toe.001.R": {
+        "head": (-0.1, -0.15, 0.0),
+        "tail": (-0.1, -0.19, 0.0),
+        "roll": 0.0,
+        "parent": "toe.R",
+        "rigify_type": "",
+    },
+    # Finger bones -- Left hand (Rigify convention: thumb.XX, f_finger.XX)
+    "thumb.01.L": {
+        "head": (0.64, -0.02, 1.49),
+        "tail": (0.66, -0.03, 1.48),
+        "roll": 0.0,
+        "parent": "hand.L",
+        "rigify_type": "limbs.super_finger",
+    },
+    "thumb.02.L": {
+        "head": (0.66, -0.03, 1.48),
+        "tail": (0.68, -0.04, 1.47),
+        "roll": 0.0,
+        "parent": "thumb.01.L",
+        "rigify_type": "",
+    },
+    "thumb.03.L": {
+        "head": (0.68, -0.04, 1.47),
+        "tail": (0.70, -0.05, 1.46),
+        "roll": 0.0,
+        "parent": "thumb.02.L",
+        "rigify_type": "",
+    },
+    "f_index.01.L": {
+        "head": (0.72, -0.01, 1.50),
+        "tail": (0.75, -0.01, 1.50),
+        "roll": 0.0,
+        "parent": "hand.L",
+        "rigify_type": "limbs.super_finger",
+    },
+    "f_index.02.L": {
+        "head": (0.75, -0.01, 1.50),
+        "tail": (0.78, -0.01, 1.50),
+        "roll": 0.0,
+        "parent": "f_index.01.L",
+        "rigify_type": "",
+    },
+    "f_index.03.L": {
+        "head": (0.78, -0.01, 1.50),
+        "tail": (0.81, -0.01, 1.50),
+        "roll": 0.0,
+        "parent": "f_index.02.L",
+        "rigify_type": "",
+    },
+    "f_middle.01.L": {
+        "head": (0.72, 0.0, 1.50),
+        "tail": (0.75, 0.0, 1.50),
+        "roll": 0.0,
+        "parent": "hand.L",
+        "rigify_type": "limbs.super_finger",
+    },
+    "f_middle.02.L": {
+        "head": (0.75, 0.0, 1.50),
+        "tail": (0.78, 0.0, 1.50),
+        "roll": 0.0,
+        "parent": "f_middle.01.L",
+        "rigify_type": "",
+    },
+    "f_middle.03.L": {
+        "head": (0.78, 0.0, 1.50),
+        "tail": (0.81, 0.0, 1.50),
+        "roll": 0.0,
+        "parent": "f_middle.02.L",
+        "rigify_type": "",
+    },
+    "f_ring.01.L": {
+        "head": (0.72, 0.01, 1.50),
+        "tail": (0.75, 0.01, 1.50),
+        "roll": 0.0,
+        "parent": "hand.L",
+        "rigify_type": "limbs.super_finger",
+    },
+    "f_ring.02.L": {
+        "head": (0.75, 0.01, 1.50),
+        "tail": (0.78, 0.01, 1.50),
+        "roll": 0.0,
+        "parent": "f_ring.01.L",
+        "rigify_type": "",
+    },
+    "f_ring.03.L": {
+        "head": (0.78, 0.01, 1.50),
+        "tail": (0.81, 0.01, 1.50),
+        "roll": 0.0,
+        "parent": "f_ring.02.L",
+        "rigify_type": "",
+    },
+    "f_pinky.01.L": {
+        "head": (0.72, 0.02, 1.50),
+        "tail": (0.74, 0.02, 1.50),
+        "roll": 0.0,
+        "parent": "hand.L",
+        "rigify_type": "limbs.super_finger",
+    },
+    "f_pinky.02.L": {
+        "head": (0.74, 0.02, 1.50),
+        "tail": (0.76, 0.02, 1.50),
+        "roll": 0.0,
+        "parent": "f_pinky.01.L",
+        "rigify_type": "",
+    },
+    "f_pinky.03.L": {
+        "head": (0.76, 0.02, 1.50),
+        "tail": (0.78, 0.02, 1.50),
+        "roll": 0.0,
+        "parent": "f_pinky.02.L",
+        "rigify_type": "",
+    },
+    # Finger bones -- Right hand (Rigify convention: thumb.XX, f_finger.XX)
+    "thumb.01.R": {
+        "head": (-0.64, -0.02, 1.49),
+        "tail": (-0.66, -0.03, 1.48),
+        "roll": 0.0,
+        "parent": "hand.R",
+        "rigify_type": "limbs.super_finger",
+    },
+    "thumb.02.R": {
+        "head": (-0.66, -0.03, 1.48),
+        "tail": (-0.68, -0.04, 1.47),
+        "roll": 0.0,
+        "parent": "thumb.01.R",
+        "rigify_type": "",
+    },
+    "thumb.03.R": {
+        "head": (-0.68, -0.04, 1.47),
+        "tail": (-0.70, -0.05, 1.46),
+        "roll": 0.0,
+        "parent": "thumb.02.R",
+        "rigify_type": "",
+    },
+    "f_index.01.R": {
+        "head": (-0.72, -0.01, 1.50),
+        "tail": (-0.75, -0.01, 1.50),
+        "roll": 0.0,
+        "parent": "hand.R",
+        "rigify_type": "limbs.super_finger",
+    },
+    "f_index.02.R": {
+        "head": (-0.75, -0.01, 1.50),
+        "tail": (-0.78, -0.01, 1.50),
+        "roll": 0.0,
+        "parent": "f_index.01.R",
+        "rigify_type": "",
+    },
+    "f_index.03.R": {
+        "head": (-0.78, -0.01, 1.50),
+        "tail": (-0.81, -0.01, 1.50),
+        "roll": 0.0,
+        "parent": "f_index.02.R",
+        "rigify_type": "",
+    },
+    "f_middle.01.R": {
+        "head": (-0.72, 0.0, 1.50),
+        "tail": (-0.75, 0.0, 1.50),
+        "roll": 0.0,
+        "parent": "hand.R",
+        "rigify_type": "limbs.super_finger",
+    },
+    "f_middle.02.R": {
+        "head": (-0.75, 0.0, 1.50),
+        "tail": (-0.78, 0.0, 1.50),
+        "roll": 0.0,
+        "parent": "f_middle.01.R",
+        "rigify_type": "",
+    },
+    "f_middle.03.R": {
+        "head": (-0.78, 0.0, 1.50),
+        "tail": (-0.81, 0.0, 1.50),
+        "roll": 0.0,
+        "parent": "f_middle.02.R",
+        "rigify_type": "",
+    },
+    "f_ring.01.R": {
+        "head": (-0.72, 0.01, 1.50),
+        "tail": (-0.75, 0.01, 1.50),
+        "roll": 0.0,
+        "parent": "hand.R",
+        "rigify_type": "limbs.super_finger",
+    },
+    "f_ring.02.R": {
+        "head": (-0.75, 0.01, 1.50),
+        "tail": (-0.78, 0.01, 1.50),
+        "roll": 0.0,
+        "parent": "f_ring.01.R",
+        "rigify_type": "",
+    },
+    "f_ring.03.R": {
+        "head": (-0.78, 0.01, 1.50),
+        "tail": (-0.81, 0.01, 1.50),
+        "roll": 0.0,
+        "parent": "f_ring.02.R",
+        "rigify_type": "",
+    },
+    "f_pinky.01.R": {
+        "head": (-0.72, 0.02, 1.50),
+        "tail": (-0.74, 0.02, 1.50),
+        "roll": 0.0,
+        "parent": "hand.R",
+        "rigify_type": "limbs.super_finger",
+    },
+    "f_pinky.02.R": {
+        "head": (-0.74, 0.02, 1.50),
+        "tail": (-0.76, 0.02, 1.50),
+        "roll": 0.0,
+        "parent": "f_pinky.01.R",
+        "rigify_type": "",
+    },
+    "f_pinky.03.R": {
+        "head": (-0.76, 0.02, 1.50),
+        "tail": (-0.78, 0.02, 1.50),
+        "roll": 0.0,
+        "parent": "f_pinky.02.R",
+        "rigify_type": "",
+    },
+    # Twist bones (50% of segment)
+    "upper_arm_twist.L": {
+        "head": (0.29, 0.0, 1.5),
+        "tail": (0.35, 0.0, 1.5),
+        "roll": 0.0,
+        "parent": "upper_arm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "upper_arm_twist.R": {
+        "head": (-0.29, 0.0, 1.5),
+        "tail": (-0.35, 0.0, 1.5),
+        "roll": 0.0,
+        "parent": "upper_arm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.L": {
+        "head": (0.51, 0.0, 1.5),
+        "tail": (0.57, 0.0, 1.5),
+        "roll": 1.5708,
+        "parent": "forearm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.R": {
+        "head": (-0.51, 0.0, 1.5),
+        "tail": (-0.57, 0.0, 1.5),
+        "roll": -1.5708,
+        "parent": "forearm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.L": {
+        "head": (0.1, 0.0, 0.73),
+        "tail": (0.1, 0.0, 0.67),
+        "roll": 0.0,
+        "parent": "thigh.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.R": {
+        "head": (-0.1, 0.0, 0.73),
+        "tail": (-0.1, 0.0, 0.67),
+        "roll": 0.0,
+        "parent": "thigh.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.L": {
+        "head": (0.1, 0.0, 0.29),
+        "tail": (0.1, 0.0, 0.23),
+        "roll": 0.0,
+        "parent": "shin.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.R": {
+        "head": (-0.1, 0.0, 0.29),
+        "tail": (-0.1, 0.0, 0.23),
+        "roll": 0.0,
+        "parent": "shin.R",
+        "rigify_type": "basic.super_copy",
+    },
+    # AAA multi-twist bones (25% of segment) for improved volume preservation
+    "upper_arm_twist_025.L": {
+        "head": (0.235, 0.0, 1.5),
+        "tail": (0.265, 0.0, 1.5),
+        "roll": 0.0,
+        "parent": "upper_arm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "upper_arm_twist_025.R": {
+        "head": (-0.235, 0.0, 1.5),
+        "tail": (-0.265, 0.0, 1.5),
+        "roll": 0.0,
+        "parent": "upper_arm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist_025.L": {
+        "head": (0.455, 0.0, 1.5),
+        "tail": (0.485, 0.0, 1.5),
+        "roll": 1.5708,
+        "parent": "forearm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist_025.R": {
+        "head": (-0.455, 0.0, 1.5),
+        "tail": (-0.485, 0.0, 1.5),
+        "roll": -1.5708,
+        "parent": "forearm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist_025.L": {
+        "head": (0.1, 0.0, 0.8375),
+        "tail": (0.1, 0.0, 0.7975),
+        "roll": 0.0,
+        "parent": "thigh.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist_025.R": {
+        "head": (-0.1, 0.0, 0.8375),
+        "tail": (-0.1, 0.0, 0.7975),
+        "roll": 0.0,
+        "parent": "thigh.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist_025.L": {
+        "head": (0.1, 0.0, 0.395),
+        "tail": (0.1, 0.0, 0.355),
+        "roll": 0.0,
+        "parent": "shin.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist_025.R": {
+        "head": (-0.1, 0.0, 0.395),
+        "tail": (-0.1, 0.0, 0.355),
+        "roll": 0.0,
+        "parent": "shin.R",
+        "rigify_type": "basic.super_copy",
+    },
 }
 
 
 QUADRUPED_BONES: dict[str, dict] = {
+    # Root motion bone
+    "root": {
+        "head": (0.0, 0.0, 0.0),
+        "tail": (0.0, 0.0, 0.1),
+        "roll": 0.0,
+        "parent": None,
+        "rigify_type": "",
+    },
     # Spine chain (3 bones)
     "spine": {
         "head": (0.0, 0.0, 0.8),
         "tail": (0.0, -0.2, 0.85),
         "roll": 0.0,
-        "parent": None,
+        "parent": "root",
         "rigify_type": "spines.super_spine",
     },
     "spine.001": {
@@ -237,7 +623,7 @@ QUADRUPED_BONES: dict[str, dict] = {
     "forearm.L": {
         "head": (0.15, -0.43, 0.4),
         "tail": (0.15, -0.42, 0.1),
-        "roll": 0.0,
+        "roll": 1.5708,
         "parent": "upper_arm.L",
         "rigify_type": "",
     },
@@ -259,7 +645,7 @@ QUADRUPED_BONES: dict[str, dict] = {
     "forearm.R": {
         "head": (-0.15, -0.43, 0.4),
         "tail": (-0.15, -0.42, 0.1),
-        "roll": 0.0,
+        "roll": -1.5708,
         "parent": "upper_arm.R",
         "rigify_type": "",
     },
@@ -336,6 +722,63 @@ QUADRUPED_BONES: dict[str, dict] = {
         "parent": "tail.001",
         "rigify_type": "",
     },
+    # Twist bones
+    "upper_arm_twist.L": {
+        "head": (0.15, -0.44, 0.55),
+        "tail": (0.15, -0.435, 0.48),
+        "roll": 0.0,
+        "parent": "upper_arm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "upper_arm_twist.R": {
+        "head": (-0.15, -0.44, 0.55),
+        "tail": (-0.15, -0.435, 0.48),
+        "roll": 0.0,
+        "parent": "upper_arm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.L": {
+        "head": (0.15, -0.425, 0.25),
+        "tail": (0.15, -0.42, 0.18),
+        "roll": 1.5708,
+        "parent": "forearm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.R": {
+        "head": (-0.15, -0.425, 0.25),
+        "tail": (-0.15, -0.42, 0.18),
+        "roll": -1.5708,
+        "parent": "forearm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.L": {
+        "head": (0.12, 0.06, 0.575),
+        "tail": (0.12, 0.065, 0.49),
+        "roll": 0.0,
+        "parent": "thigh.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.R": {
+        "head": (-0.12, 0.06, 0.575),
+        "tail": (-0.12, 0.065, 0.49),
+        "roll": 0.0,
+        "parent": "thigh.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.L": {
+        "head": (0.12, 0.06, 0.25),
+        "tail": (0.12, 0.055, 0.18),
+        "roll": 0.0,
+        "parent": "shin.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.R": {
+        "head": (-0.12, 0.06, 0.25),
+        "tail": (-0.12, 0.055, 0.18),
+        "roll": 0.0,
+        "parent": "shin.R",
+        "rigify_type": "basic.super_copy",
+    },
 }
 
 
@@ -396,7 +839,7 @@ BIRD_BONES: dict[str, dict] = {
     "forearm.L": {
         "head": (0.35, -0.12, 0.55),
         "tail": (0.6, -0.1, 0.52),
-        "roll": 0.0,
+        "roll": 1.5708,
         "parent": "upper_arm.L",
         "rigify_type": "",
     },
@@ -418,7 +861,7 @@ BIRD_BONES: dict[str, dict] = {
     "forearm.R": {
         "head": (-0.35, -0.12, 0.55),
         "tail": (-0.6, -0.1, 0.52),
-        "roll": 0.0,
+        "roll": -1.5708,
         "parent": "upper_arm.R",
         "rigify_type": "",
     },
@@ -487,6 +930,63 @@ BIRD_BONES: dict[str, dict] = {
         "roll": 0.0,
         "parent": "tail",
         "rigify_type": "",
+    },
+    # Twist bones
+    "upper_arm_twist.L": {
+        "head": (0.215, -0.135, 0.565),
+        "tail": (0.28, -0.128, 0.558),
+        "roll": 0.0,
+        "parent": "upper_arm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "upper_arm_twist.R": {
+        "head": (-0.215, -0.135, 0.565),
+        "tail": (-0.28, -0.128, 0.558),
+        "roll": 0.0,
+        "parent": "upper_arm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.L": {
+        "head": (0.475, -0.11, 0.535),
+        "tail": (0.538, -0.105, 0.528),
+        "roll": 1.5708,
+        "parent": "forearm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.R": {
+        "head": (-0.475, -0.11, 0.535),
+        "tail": (-0.538, -0.105, 0.528),
+        "roll": -1.5708,
+        "parent": "forearm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.L": {
+        "head": (0.06, 0.03, 0.35),
+        "tail": (0.06, 0.035, 0.3),
+        "roll": 0.0,
+        "parent": "thigh.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.R": {
+        "head": (-0.06, 0.03, 0.35),
+        "tail": (-0.06, 0.035, 0.3),
+        "roll": 0.0,
+        "parent": "thigh.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.L": {
+        "head": (0.06, 0.03, 0.155),
+        "tail": (0.06, 0.025, 0.11),
+        "roll": 0.0,
+        "parent": "shin.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.R": {
+        "head": (-0.06, 0.03, 0.155),
+        "tail": (-0.06, 0.025, 0.11),
+        "roll": 0.0,
+        "parent": "shin.R",
+        "rigify_type": "basic.super_copy",
     },
 }
 
@@ -959,7 +1459,7 @@ DRAGON_BONES: dict[str, dict] = {
     "forearm.L": {
         "head": (0.2, -0.52, 0.55),
         "tail": (0.2, -0.5, 0.15),
-        "roll": 0.0,
+        "roll": 1.5708,
         "parent": "upper_arm.L",
         "rigify_type": "",
     },
@@ -981,7 +1481,7 @@ DRAGON_BONES: dict[str, dict] = {
     "forearm.R": {
         "head": (-0.2, -0.52, 0.55),
         "tail": (-0.2, -0.5, 0.15),
-        "roll": 0.0,
+        "roll": -1.5708,
         "parent": "upper_arm.R",
         "rigify_type": "",
     },
@@ -1080,6 +1580,134 @@ DRAGON_BONES: dict[str, dict] = {
         "parent": "wing_fore.R",
         "rigify_type": "",
     },
+    # Wing membrane finger bones
+    "wing_finger_1.L": {
+        "head": (1.3, -0.2, 1.15),
+        "tail": (1.5, -0.18, 1.0),
+        "roll": 0.0,
+        "parent": "wing_tip.L",
+        "rigify_type": "basic.copy_chain",
+    },
+    "wing_finger_2.L": {
+        "head": (1.3, -0.2, 1.15),
+        "tail": (1.55, -0.19, 1.05),
+        "roll": 0.0,
+        "parent": "wing_tip.L",
+        "rigify_type": "basic.copy_chain",
+    },
+    "wing_finger_3.L": {
+        "head": (1.3, -0.2, 1.15),
+        "tail": (1.6, -0.2, 1.1),
+        "roll": 0.0,
+        "parent": "wing_tip.L",
+        "rigify_type": "basic.copy_chain",
+    },
+    "wing_finger_4.L": {
+        "head": (1.3, -0.2, 1.15),
+        "tail": (1.55, -0.21, 1.15),
+        "roll": 0.0,
+        "parent": "wing_tip.L",
+        "rigify_type": "basic.copy_chain",
+    },
+    "wing_finger_5.L": {
+        "head": (1.3, -0.2, 1.15),
+        "tail": (1.5, -0.22, 1.2),
+        "roll": 0.0,
+        "parent": "wing_tip.L",
+        "rigify_type": "basic.copy_chain",
+    },
+    "wing_finger_1.R": {
+        "head": (-1.3, -0.2, 1.15),
+        "tail": (-1.5, -0.18, 1.0),
+        "roll": 0.0,
+        "parent": "wing_tip.R",
+        "rigify_type": "basic.copy_chain",
+    },
+    "wing_finger_2.R": {
+        "head": (-1.3, -0.2, 1.15),
+        "tail": (-1.55, -0.19, 1.05),
+        "roll": 0.0,
+        "parent": "wing_tip.R",
+        "rigify_type": "basic.copy_chain",
+    },
+    "wing_finger_3.R": {
+        "head": (-1.3, -0.2, 1.15),
+        "tail": (-1.6, -0.2, 1.1),
+        "roll": 0.0,
+        "parent": "wing_tip.R",
+        "rigify_type": "basic.copy_chain",
+    },
+    "wing_finger_4.R": {
+        "head": (-1.3, -0.2, 1.15),
+        "tail": (-1.55, -0.21, 1.15),
+        "roll": 0.0,
+        "parent": "wing_tip.R",
+        "rigify_type": "basic.copy_chain",
+    },
+    "wing_finger_5.R": {
+        "head": (-1.3, -0.2, 1.15),
+        "tail": (-1.5, -0.22, 1.2),
+        "roll": 0.0,
+        "parent": "wing_tip.R",
+        "rigify_type": "basic.copy_chain",
+    },
+    # Twist bones
+    "upper_arm_twist.L": {
+        "head": (0.2, -0.535, 0.725),
+        "tail": (0.2, -0.525, 0.6),
+        "roll": 0.0,
+        "parent": "upper_arm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "upper_arm_twist.R": {
+        "head": (-0.2, -0.535, 0.725),
+        "tail": (-0.2, -0.525, 0.6),
+        "roll": 0.0,
+        "parent": "upper_arm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.L": {
+        "head": (0.2, -0.51, 0.35),
+        "tail": (0.2, -0.505, 0.25),
+        "roll": 1.5708,
+        "parent": "forearm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.R": {
+        "head": (-0.2, -0.51, 0.35),
+        "tail": (-0.2, -0.505, 0.25),
+        "roll": -1.5708,
+        "parent": "forearm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.L": {
+        "head": (0.18, 0.065, 0.7),
+        "tail": (0.18, 0.07, 0.6),
+        "roll": 0.0,
+        "parent": "thigh.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.R": {
+        "head": (-0.18, 0.065, 0.7),
+        "tail": (-0.18, 0.07, 0.6),
+        "roll": 0.0,
+        "parent": "thigh.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.L": {
+        "head": (0.18, 0.07, 0.31),
+        "tail": (0.18, 0.065, 0.21),
+        "roll": 0.0,
+        "parent": "shin.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.R": {
+        "head": (-0.18, 0.07, 0.31),
+        "tail": (-0.18, 0.065, 0.21),
+        "roll": 0.0,
+        "parent": "shin.R",
+        "rigify_type": "basic.super_copy",
+    },
     # Tail chain (4 bones)
     "tail": {
         "head": (0.0, 0.15, 0.98),
@@ -1113,12 +1741,20 @@ DRAGON_BONES: dict[str, dict] = {
 
 
 MULTI_ARMED_BONES: dict[str, dict] = {
+    # Root motion bone
+    "root": {
+        "head": (0.0, 0.0, 0.0),
+        "tail": (0.0, 0.0, 0.1),
+        "roll": 0.0,
+        "parent": None,
+        "rigify_type": "",
+    },
     # Humanoid spine (4 bones)
     "spine": {
         "head": (0.0, 0.0, 0.95),
         "tail": (0.0, 0.0, 1.1),
         "roll": 0.0,
-        "parent": None,
+        "parent": "root",
         "rigify_type": "spines.super_spine",
     },
     "spine.001": {
@@ -1168,7 +1804,7 @@ MULTI_ARMED_BONES: dict[str, dict] = {
     "forearm.L": {
         "head": (0.4, 0.0, 1.5),
         "tail": (0.62, 0.0, 1.5),
-        "roll": 0.0,
+        "roll": 1.5708,
         "parent": "upper_arm.L",
         "rigify_type": "",
     },
@@ -1189,7 +1825,7 @@ MULTI_ARMED_BONES: dict[str, dict] = {
     "forearm.R": {
         "head": (-0.4, 0.0, 1.5),
         "tail": (-0.62, 0.0, 1.5),
-        "roll": 0.0,
+        "roll": -1.5708,
         "parent": "upper_arm.R",
         "rigify_type": "",
     },
@@ -1211,7 +1847,7 @@ MULTI_ARMED_BONES: dict[str, dict] = {
     "forearm_lower.L": {
         "head": (0.38, 0.02, 1.3),
         "tail": (0.58, 0.04, 1.3),
-        "roll": 0.0,
+        "roll": 1.5708,
         "parent": "upper_arm_lower.L",
         "rigify_type": "",
     },
@@ -1232,7 +1868,7 @@ MULTI_ARMED_BONES: dict[str, dict] = {
     "forearm_lower.R": {
         "head": (-0.38, 0.02, 1.3),
         "tail": (-0.58, 0.04, 1.3),
-        "roll": 0.0,
+        "roll": -1.5708,
         "parent": "upper_arm_lower.R",
         "rigify_type": "",
     },
@@ -1285,6 +1921,63 @@ MULTI_ARMED_BONES: dict[str, dict] = {
         "roll": 0.0,
         "parent": "shin.R",
         "rigify_type": "",
+    },
+    # Twist bones
+    "upper_arm_twist.L": {
+        "head": (0.29, 0.0, 1.5),
+        "tail": (0.35, 0.0, 1.5),
+        "roll": 0.0,
+        "parent": "upper_arm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "upper_arm_twist.R": {
+        "head": (-0.29, 0.0, 1.5),
+        "tail": (-0.35, 0.0, 1.5),
+        "roll": 0.0,
+        "parent": "upper_arm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.L": {
+        "head": (0.51, 0.0, 1.5),
+        "tail": (0.57, 0.0, 1.5),
+        "roll": 1.5708,
+        "parent": "forearm.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "forearm_twist.R": {
+        "head": (-0.51, 0.0, 1.5),
+        "tail": (-0.57, 0.0, 1.5),
+        "roll": -1.5708,
+        "parent": "forearm.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.L": {
+        "head": (0.1, 0.0, 0.73),
+        "tail": (0.1, 0.0, 0.67),
+        "roll": 0.0,
+        "parent": "thigh.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "thigh_twist.R": {
+        "head": (-0.1, 0.0, 0.73),
+        "tail": (-0.1, 0.0, 0.67),
+        "roll": 0.0,
+        "parent": "thigh.R",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.L": {
+        "head": (0.1, 0.0, 0.29),
+        "tail": (0.1, 0.0, 0.23),
+        "roll": 0.0,
+        "parent": "shin.L",
+        "rigify_type": "basic.super_copy",
+    },
+    "shin_twist.R": {
+        "head": (-0.1, 0.0, 0.29),
+        "tail": (-0.1, 0.0, 0.23),
+        "roll": 0.0,
+        "parent": "shin.R",
+        "rigify_type": "basic.super_copy",
     },
 }
 
@@ -1641,7 +2334,7 @@ def _arm_pair_bones() -> dict[str, dict]:
         },
         "forearm.L": {
             "head": (0.4, 0.0, 1.5), "tail": (0.62, 0.0, 1.5),
-            "roll": 0.0, "parent": "upper_arm.L", "rigify_type": "",
+            "roll": 1.5708, "parent": "upper_arm.L", "rigify_type": "",
         },
         "hand.L": {
             "head": (0.62, 0.0, 1.5), "tail": (0.72, 0.0, 1.5),
@@ -1653,7 +2346,7 @@ def _arm_pair_bones() -> dict[str, dict]:
         },
         "forearm.R": {
             "head": (-0.4, 0.0, 1.5), "tail": (-0.62, 0.0, 1.5),
-            "roll": 0.0, "parent": "upper_arm.R", "rigify_type": "",
+            "roll": -1.5708, "parent": "upper_arm.R", "rigify_type": "",
         },
         "hand.R": {
             "head": (-0.62, 0.0, 1.5), "tail": (-0.72, 0.0, 1.5),
@@ -1703,7 +2396,7 @@ def _paw_leg_pair_bones(side: str = "front") -> dict[str, dict]:
             },
             "forearm.L": {
                 "head": (0.15, -0.43, 0.4), "tail": (0.15, -0.42, 0.1),
-                "roll": 0.0, "parent": "upper_arm.L", "rigify_type": "",
+                "roll": 1.5708, "parent": "upper_arm.L", "rigify_type": "",
             },
             "hand.L": {
                 "head": (0.15, -0.42, 0.1), "tail": (0.15, -0.42, 0.0),
@@ -1715,7 +2408,7 @@ def _paw_leg_pair_bones(side: str = "front") -> dict[str, dict]:
             },
             "forearm.R": {
                 "head": (-0.15, -0.43, 0.4), "tail": (-0.15, -0.42, 0.1),
-                "roll": 0.0, "parent": "upper_arm.R", "rigify_type": "",
+                "roll": -1.5708, "parent": "upper_arm.R", "rigify_type": "",
             },
             "hand.R": {
                 "head": (-0.15, -0.42, 0.1), "tail": (-0.15, -0.42, 0.0),
@@ -1904,13 +2597,75 @@ LIMB_LIBRARY: dict[str, callable] = {
 # Blender-dependent helper functions
 # ---------------------------------------------------------------------------
 
-def _create_template_bones(arm_obj, bone_defs: dict[str, dict]) -> None:
+def _compute_bone_scale_offset(
+    bone_defs: dict[str, dict],
+    mesh_obj,
+) -> tuple:
+    """Compute scale and offset to fit template bones inside a target mesh.
+
+    Calculates the bounding box of both the template bones and the mesh,
+    then returns (scale_factor, offset_vector) to map bones into mesh space.
+
+    Returns:
+        (scale: float, offset: tuple[float,float,float])
+    """
+    # Template bone bounding box
+    all_positions = []
+    for props in bone_defs.values():
+        all_positions.append(props["head"])
+        all_positions.append(props["tail"])
+
+    if not all_positions:
+        return (1.0, (0.0, 0.0, 0.0))
+
+    t_min_x = min(p[0] for p in all_positions)
+    t_max_x = max(p[0] for p in all_positions)
+    t_min_z = min(p[2] for p in all_positions)
+    t_max_z = max(p[2] for p in all_positions)
+    t_height = t_max_z - t_min_z
+    t_center_x = (t_min_x + t_max_x) / 2.0
+
+    # Mesh bounding box in world space (handles rotation/scale)
+    from mathutils import Vector
+    world_corners = [mesh_obj.matrix_world @ Vector(v) for v in mesh_obj.bound_box]
+    m_min_z = min(c.z for c in world_corners)
+    m_max_z = max(c.z for c in world_corners)
+    m_min_x = min(c.x for c in world_corners)
+    m_max_x = max(c.x for c in world_corners)
+    m_height = m_max_z - m_min_z
+    m_center_x = (m_min_x + m_max_x) / 2.0
+
+    if t_height < 0.001:
+        scale = 1.0
+    else:
+        scale = m_height / t_height
+
+    offset_x = m_center_x - t_center_x * scale
+    offset_z = m_min_z - t_min_z * scale
+
+    return (scale, (offset_x, 0.0, offset_z))
+
+
+def _create_template_bones(
+    arm_obj,
+    bone_defs: dict[str, dict],
+    mesh_obj=None,
+) -> None:
     """Create metarig bones from a template definition dict.
 
     Two-pass bone creation (create all bones, then set parents).
     Assigns rigify_types in object mode after bone creation.
     Never stores EditBone references across mode switches.
+
+    If mesh_obj is provided, bones are auto-scaled and positioned to
+    fit inside the mesh bounding box.
     """
+    # Compute scale/offset if a target mesh is provided
+    scale = 1.0
+    offset = (0.0, 0.0, 0.0)
+    if mesh_obj is not None:
+        scale, offset = _compute_bone_scale_offset(bone_defs, mesh_obj)
+
     ctx = get_3d_context_override()
     bpy.context.view_layer.objects.active = arm_obj
 
@@ -1922,11 +2677,17 @@ def _create_template_bones(arm_obj, bone_defs: dict[str, dict]) -> None:
 
     arm = arm_obj.data
 
-    # First pass: create all bones with positions
+    # First pass: create all bones with positions (scaled + offset)
     for name, props in bone_defs.items():
         bone = arm.edit_bones.new(name)
-        bone.head = props["head"]
-        bone.tail = props["tail"]
+        h = props["head"]
+        t = props["tail"]
+        bone.head = (h[0] * scale + offset[0],
+                     h[1] * scale + offset[1],
+                     h[2] * scale + offset[2])
+        bone.tail = (t[0] * scale + offset[0],
+                     t[1] * scale + offset[1],
+                     t[2] * scale + offset[2])
         bone.roll = props["roll"]
 
     # Second pass: set parents (all bones exist now)

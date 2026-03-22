@@ -15,19 +15,7 @@ from __future__ import annotations
 
 import re
 
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 _CS_RESERVED = frozenset({
@@ -87,8 +75,8 @@ def generate_encounter_system_script(
     Returns:
         Tuple of (wave_definition_so, encounter_manager) C# source strings.
     """
-    safe_name = _sanitize_cs_identifier(name)
-    safe_str = _sanitize_cs_string(name)
+    safe_name = sanitize_cs_identifier(name)
+    safe_str = sanitize_cs_string(name)
 
     ns = _safe_namespace(namespace) if namespace else ""
     ns_open = f"namespace {ns}\n{{" if ns else ""
@@ -424,8 +412,8 @@ def generate_ai_director_script(
     Returns:
         Complete C# source string.
     """
-    safe_name = _sanitize_cs_identifier(name)
-    safe_str = _sanitize_cs_string(name)
+    safe_name = sanitize_cs_identifier(name)
+    safe_str = sanitize_cs_string(name)
 
     ns = _safe_namespace(namespace) if namespace else ""
     ns_open = f"namespace {ns}\n{{" if ns else ""
@@ -600,7 +588,7 @@ def generate_encounter_simulator_script(
     Returns:
         Complete C# source string.
     """
-    safe_name = _sanitize_cs_identifier(name)
+    safe_name = sanitize_cs_identifier(name)
 
     ns = _safe_namespace(namespace) if namespace else ""
     ns_open = f"namespace {ns}\n{{" if ns else ""
@@ -945,8 +933,8 @@ def generate_boss_ai_script(
     Returns:
         Complete C# source string.
     """
-    safe_name = _sanitize_cs_identifier(name)
-    safe_str = _sanitize_cs_string(name)
+    safe_name = sanitize_cs_identifier(name)
+    safe_str = sanitize_cs_string(name)
     phase_count = max(2, min(5, phase_count))
 
     ns = _safe_namespace(namespace) if namespace else ""

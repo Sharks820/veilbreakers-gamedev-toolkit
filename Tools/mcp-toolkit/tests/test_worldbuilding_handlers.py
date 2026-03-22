@@ -293,3 +293,275 @@ class TestMeshSpecGeometry:
         spec = evaluate_building_grammar(width=10, depth=8, floors=2, style="medieval", seed=0)
         result = _building_ops_to_mesh_spec(spec)
         assert len(result) > 1
+
+
+# ---------------------------------------------------------------------------
+# VB Building Preset tests
+# ---------------------------------------------------------------------------
+
+
+class TestVBBuildingPresets:
+    """Test VeilBreakers building preset data and lookup helpers."""
+
+    def test_presets_dict_has_five_entries(self):
+        """VB_BUILDING_PRESETS must have exactly 5 presets."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        assert len(VB_BUILDING_PRESETS) == 5
+
+    def test_preset_names(self):
+        """All expected VB building preset names are present."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        expected = {
+            "shrine_minor", "shrine_major", "ruined_fortress_tower",
+            "abandoned_house", "forge",
+        }
+        assert set(VB_BUILDING_PRESETS.keys()) == expected
+
+    def test_each_preset_has_required_keys(self):
+        """Every VB building preset must have style, floors, width, depth."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        required = {"style", "floors", "width", "depth"}
+        for name, preset in VB_BUILDING_PRESETS.items():
+            missing = required - set(preset.keys())
+            assert not missing, f"Preset '{name}' missing keys: {missing}"
+
+    def test_each_preset_has_valid_style(self):
+        """Every VB building preset style must exist in STYLE_CONFIGS."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+        from blender_addon.handlers._building_grammar import STYLE_CONFIGS
+
+        for name, preset in VB_BUILDING_PRESETS.items():
+            assert preset["style"] in STYLE_CONFIGS, (
+                f"Preset '{name}' has invalid style '{preset['style']}'"
+            )
+
+    def test_each_preset_has_props_list(self):
+        """Every VB building preset must have a non-empty props list."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        for name, preset in VB_BUILDING_PRESETS.items():
+            assert isinstance(preset.get("props"), list), f"Preset '{name}' missing props"
+            assert len(preset["props"]) > 0, f"Preset '{name}' has empty props"
+
+    def test_each_preset_has_openings_list(self):
+        """Every VB building preset must have a non-empty openings list."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        for name, preset in VB_BUILDING_PRESETS.items():
+            assert isinstance(preset.get("openings"), list), f"Preset '{name}' missing openings"
+            assert len(preset["openings"]) > 0, f"Preset '{name}' has empty openings"
+
+    def test_shrine_minor_is_gothic_one_floor(self):
+        """shrine_minor preset is gothic, 1 floor, 4x4."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        p = VB_BUILDING_PRESETS["shrine_minor"]
+        assert p["style"] == "gothic"
+        assert p["floors"] == 1
+        assert p["width"] == 4.0
+        assert p["depth"] == 4.0
+
+    def test_shrine_major_is_gothic_two_floors(self):
+        """shrine_major preset is gothic, 2 floors, 8x10."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        p = VB_BUILDING_PRESETS["shrine_major"]
+        assert p["style"] == "gothic"
+        assert p["floors"] == 2
+        assert p["width"] == 8.0
+        assert p["depth"] == 10.0
+
+    def test_ruined_fortress_tower_no_roof(self):
+        """ruined_fortress_tower preset has no roof (ruined)."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        p = VB_BUILDING_PRESETS["ruined_fortress_tower"]
+        assert p["has_roof"] is False
+        assert p["floors"] == 3
+
+    def test_forge_uses_fortress_style(self):
+        """Forge preset uses fortress style (closest to industrial)."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        p = VB_BUILDING_PRESETS["forge"]
+        assert p["style"] == "fortress"
+        assert "anvil" in p["props"]
+
+    def test_get_vb_building_preset_returns_dict(self):
+        """get_vb_building_preset returns dict for valid name."""
+        from blender_addon.handlers.worldbuilding import get_vb_building_preset
+
+        result = get_vb_building_preset("shrine_minor")
+        assert isinstance(result, dict)
+        assert result["style"] == "gothic"
+
+    def test_get_vb_building_preset_returns_none_for_unknown(self):
+        """get_vb_building_preset returns None for unknown name."""
+        from blender_addon.handlers.worldbuilding import get_vb_building_preset
+
+        assert get_vb_building_preset("nonexistent_building") is None
+
+    def test_preset_produces_valid_building_spec(self):
+        """A VB building preset produces a valid BuildingSpec when evaluated."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+        from blender_addon.handlers._building_grammar import evaluate_building_grammar, BuildingSpec
+
+        for name, preset in VB_BUILDING_PRESETS.items():
+            spec = evaluate_building_grammar(
+                width=preset["width"],
+                depth=preset["depth"],
+                floors=preset["floors"],
+                style=preset["style"],
+                seed=42,
+            )
+            assert isinstance(spec, BuildingSpec), f"Preset '{name}' failed spec generation"
+            assert len(spec.operations) > 0, f"Preset '{name}' produced empty operations"
+
+    def test_preset_mesh_spec_has_geometry(self):
+        """A VB building preset produces mesh specs with geometry."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS, _building_ops_to_mesh_spec
+        from blender_addon.handlers._building_grammar import evaluate_building_grammar
+
+        for name, preset in VB_BUILDING_PRESETS.items():
+            spec = evaluate_building_grammar(
+                width=preset["width"],
+                depth=preset["depth"],
+                floors=preset["floors"],
+                style=preset["style"],
+                seed=42,
+            )
+            mesh_specs = _building_ops_to_mesh_spec(spec)
+            assert len(mesh_specs) > 0, f"Preset '{name}' produced empty mesh specs"
+
+    def test_opening_styles_in_presets(self):
+        """Each opening in a preset has required keys: type, wall, floor, style."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        required_keys = {"type", "wall", "floor", "style"}
+        for name, preset in VB_BUILDING_PRESETS.items():
+            for i, opening in enumerate(preset["openings"]):
+                missing = required_keys - set(opening.keys())
+                assert not missing, (
+                    f"Preset '{name}' opening {i} missing keys: {missing}"
+                )
+
+
+# ---------------------------------------------------------------------------
+# VB Dungeon Preset tests
+# ---------------------------------------------------------------------------
+
+
+class TestVBDungeonPresets:
+    """Test VeilBreakers dungeon preset data and lookup helpers."""
+
+    def test_presets_dict_has_four_entries(self):
+        """VB_DUNGEON_PRESETS must have exactly 4 presets."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        assert len(VB_DUNGEON_PRESETS) == 4
+
+    def test_preset_names(self):
+        """All expected VB dungeon preset names are present."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        expected = {
+            "abandoned_prison", "corrupted_cave", "storm_peak", "veil_tear_dungeon",
+        }
+        assert set(VB_DUNGEON_PRESETS.keys()) == expected
+
+    def test_each_preset_has_required_keys(self):
+        """Every VB dungeon preset must have width, height, min_room_size, max_depth, cell_size, wall_height."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        required = {"width", "height", "min_room_size", "max_depth", "cell_size", "wall_height"}
+        for name, preset in VB_DUNGEON_PRESETS.items():
+            missing = required - set(preset.keys())
+            assert not missing, f"Preset '{name}' missing keys: {missing}"
+
+    def test_each_preset_has_monster_table(self):
+        """Every VB dungeon preset must have a non-empty monster_table list."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        for name, preset in VB_DUNGEON_PRESETS.items():
+            assert isinstance(preset.get("monster_table"), list), f"Preset '{name}' missing monster_table"
+            assert len(preset["monster_table"]) > 0, f"Preset '{name}' has empty monster_table"
+
+    def test_each_preset_has_props_list(self):
+        """Every VB dungeon preset must have a non-empty props list."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        for name, preset in VB_DUNGEON_PRESETS.items():
+            assert isinstance(preset.get("props"), list), f"Preset '{name}' missing props"
+            assert len(preset["props"]) > 0, f"Preset '{name}' has empty props"
+
+    def test_each_preset_has_room_types(self):
+        """Every VB dungeon preset must have a room_types dict."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        for name, preset in VB_DUNGEON_PRESETS.items():
+            assert isinstance(preset.get("room_types"), dict), f"Preset '{name}' missing room_types"
+            assert "entrance" in preset["room_types"], f"Preset '{name}' room_types lacks entrance"
+            assert "boss" in preset["room_types"], f"Preset '{name}' room_types lacks boss"
+
+    def test_abandoned_prison_values(self):
+        """abandoned_prison preset has expected dimensions."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        p = VB_DUNGEON_PRESETS["abandoned_prison"]
+        assert p["width"] == 40
+        assert p["height"] == 40
+        assert p["wall_height"] == 3.0
+        assert "chainbound" in p["monster_table"]
+
+    def test_veil_tear_dungeon_largest(self):
+        """veil_tear_dungeon is the largest with deepest BSP."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        p = VB_DUNGEON_PRESETS["veil_tear_dungeon"]
+        assert p["width"] == 45
+        assert p["max_depth"] == 7
+        assert p["wall_height"] == 6.0
+        assert "void_crystal" in p["props"]
+
+    def test_corrupted_cave_larger_cells(self):
+        """corrupted_cave has larger cell_size for organic feel."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        p = VB_DUNGEON_PRESETS["corrupted_cave"]
+        assert p["cell_size"] == 2.5
+
+    def test_get_vb_dungeon_preset_returns_dict(self):
+        """get_vb_dungeon_preset returns dict for valid name."""
+        from blender_addon.handlers.worldbuilding import get_vb_dungeon_preset
+
+        result = get_vb_dungeon_preset("storm_peak")
+        assert isinstance(result, dict)
+        assert result["width"] == 35
+
+    def test_get_vb_dungeon_preset_returns_none_for_unknown(self):
+        """get_vb_dungeon_preset returns None for unknown name."""
+        from blender_addon.handlers.worldbuilding import get_vb_dungeon_preset
+
+        assert get_vb_dungeon_preset("nonexistent_dungeon") is None
+
+    def test_preset_generates_valid_dungeon(self):
+        """A VB dungeon preset can produce a valid multi-floor dungeon."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+        from blender_addon.handlers._dungeon_gen import generate_multi_floor_dungeon
+
+        for name, preset in VB_DUNGEON_PRESETS.items():
+            dungeon = generate_multi_floor_dungeon(
+                width=preset["width"],
+                height=preset["height"],
+                num_floors=2,
+                min_room_size=preset["min_room_size"],
+                max_depth=preset["max_depth"],
+                cell_size=preset["cell_size"],
+                wall_height=preset["wall_height"],
+                seed=42,
+            )
+            assert dungeon.num_floors == 2, f"Preset '{name}' failed dungeon generation"
+            assert dungeon.total_rooms > 0, f"Preset '{name}' produced dungeon with no rooms"

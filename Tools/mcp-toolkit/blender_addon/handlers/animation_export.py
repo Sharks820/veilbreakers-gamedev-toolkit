@@ -16,13 +16,53 @@ _generate_unity_filename) are separated for testability without Blender.
 
 from __future__ import annotations
 
+import json as _json
 import math
 import os
 
 import bpy
 from mathutils import Vector
 
+from ._action_compat import (
+    get_fcurves, get_frame_range, get_fcurve_count,
+    is_layered_action, new_fcurve, remove_fcurve,
+    setup_action_for_armature,
+)
 from ._context import get_3d_context_override
+
+
+def _action_frame_range(action, armature_obj=None) -> list[int]:
+    """Get action frame range, compatible with Blender 4.x and 5.0+."""
+    if hasattr(action, "frame_range"):
+        return [int(action.frame_range[0]), int(action.frame_range[1])]
+    # Blender 5.0+: need channelbag context to read frame range
+    cb, layered = setup_action_for_armature(action, armature_obj) if armature_obj else (None, True)
+    return get_frame_range(action, cb, layered)
+
+
+def _action_fcurves_list(action, armature_obj=None):
+    """Get action fcurves as a list, compatible with Blender 4.x and 5.0+."""
+    if hasattr(action, "fcurves"):
+        return action.fcurves
+    cb, layered = setup_action_for_armature(action, armature_obj) if armature_obj else (None, True)
+    return get_fcurves(action, cb, layered)
+
+
+def _action_new_fcurve(action, data_path, index, armature_obj=None):
+    """Create new fcurve on action, compatible with Blender 4.x and 5.0+."""
+    if hasattr(action, "fcurves"):
+        return action.fcurves.new(data_path=data_path, index=index)
+    cb, layered = setup_action_for_armature(action, armature_obj) if armature_obj else (None, True)
+    return new_fcurve(action, data_path, index, cb, layered)
+
+
+def _action_remove_fcurve(action, fc, armature_obj=None):
+    """Remove fcurve from action, compatible with Blender 4.x and 5.0+."""
+    if hasattr(action, "fcurves"):
+        action.fcurves.remove(fc)
+    else:
+        cb, layered = setup_action_for_armature(action, armature_obj) if armature_obj else (None, True)
+        remove_fcurve(action, fc, cb, layered)
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +99,88 @@ MIXAMO_TO_RIGIFY: dict[str, str] = {
     "mixamorig:RightLeg": "DEF-shin.R",
     "mixamorig:RightFoot": "DEF-foot.R",
     "mixamorig:RightToeBase": "DEF-toe.R",
+    # Left hand fingers (15 bones) - G13
+    "mixamorig:LeftHandThumb1": "DEF-thumb.01.L",
+    "mixamorig:LeftHandThumb2": "DEF-thumb.02.L",
+    "mixamorig:LeftHandThumb3": "DEF-thumb.03.L",
+    "mixamorig:LeftHandIndex1": "DEF-f_index.01.L",
+    "mixamorig:LeftHandIndex2": "DEF-f_index.02.L",
+    "mixamorig:LeftHandIndex3": "DEF-f_index.03.L",
+    "mixamorig:LeftHandMiddle1": "DEF-f_middle.01.L",
+    "mixamorig:LeftHandMiddle2": "DEF-f_middle.02.L",
+    "mixamorig:LeftHandMiddle3": "DEF-f_middle.03.L",
+    "mixamorig:LeftHandRing1": "DEF-f_ring.01.L",
+    "mixamorig:LeftHandRing2": "DEF-f_ring.02.L",
+    "mixamorig:LeftHandRing3": "DEF-f_ring.03.L",
+    "mixamorig:LeftHandPinky1": "DEF-f_pinky.01.L",
+    "mixamorig:LeftHandPinky2": "DEF-f_pinky.02.L",
+    "mixamorig:LeftHandPinky3": "DEF-f_pinky.03.L",
+    # Right hand fingers (15 bones) - G13
+    "mixamorig:RightHandThumb1": "DEF-thumb.01.R",
+    "mixamorig:RightHandThumb2": "DEF-thumb.02.R",
+    "mixamorig:RightHandThumb3": "DEF-thumb.03.R",
+    "mixamorig:RightHandIndex1": "DEF-f_index.01.R",
+    "mixamorig:RightHandIndex2": "DEF-f_index.02.R",
+    "mixamorig:RightHandIndex3": "DEF-f_index.03.R",
+    "mixamorig:RightHandMiddle1": "DEF-f_middle.01.R",
+    "mixamorig:RightHandMiddle2": "DEF-f_middle.02.R",
+    "mixamorig:RightHandMiddle3": "DEF-f_middle.03.R",
+    "mixamorig:RightHandRing1": "DEF-f_ring.01.R",
+    "mixamorig:RightHandRing2": "DEF-f_ring.02.R",
+    "mixamorig:RightHandRing3": "DEF-f_ring.03.R",
+    "mixamorig:RightHandPinky1": "DEF-f_pinky.01.R",
+    "mixamorig:RightHandPinky2": "DEF-f_pinky.02.R",
+    "mixamorig:RightHandPinky3": "DEF-f_pinky.03.R",
 }
+
+
+# ---------------------------------------------------------------------------
+# G15: Timing JSON sidecar for FBX export
+# ---------------------------------------------------------------------------
+
+
+def _generate_timing_sidecar(
+    action_name: str,
+    output_dir: str,
+    naming: str,
+    object_name: str,
+) -> str | None:
+    """Generate .timing.json sidecar for a combat animation FBX export.
+
+    Checks if the action name matches a combat timing preset and writes
+    the timing data as JSON alongside the exported FBX file.
+
+    Returns the sidecar file path, or None if no timing data applies.
+    """
+    from ._combat_timing import COMBAT_TIMING_PRESETS
+
+    matched = None
+    action_lower = action_name.lower()
+    for preset in COMBAT_TIMING_PRESETS:
+        if preset in action_lower:
+            matched = preset
+            break
+    if not matched:
+        for kw, preset in [("attack", "light_attack"), ("dodge", "dodge_roll"),
+                           ("parry", "parry"), ("block", "block"),
+                           ("combo", "combo_finisher"), ("charged", "charged_attack")]:
+            if kw in action_lower:
+                matched = preset
+                break
+    if not matched:
+        return None
+
+    fbx_name = _generate_unity_filename(object_name, action_name, naming)
+    sidecar_name = fbx_name.replace(".fbx", ".timing.json")
+    sidecar_path = os.path.join(output_dir, sidecar_name)
+
+    data = dict(COMBAT_TIMING_PRESETS[matched])
+    data["source_action"] = action_name
+    data["preset"] = matched
+
+    with open(sidecar_path, "w") as f:
+        _json.dump(data, f, indent=2)
+    return sidecar_path
 
 
 # ---------------------------------------------------------------------------
@@ -312,13 +433,13 @@ def _push_action_to_nla(armature_obj, action, strip_name=None):
     track = anim_data.nla_tracks.new()
     track.name = strip_name or action.name
 
-    start_frame = int(action.frame_range[0])
+    start_frame = int(_action_frame_range(action)[0])
     strip = track.strips.new(
         name=strip_name or action.name,
         start=start_frame,
         action=action,
     )
-    strip.frame_end = int(action.frame_range[1])
+    strip.frame_end = int(_action_frame_range(action)[1])
     return strip
 
 
@@ -411,8 +532,8 @@ def handle_preview_animation(params: dict) -> dict:
         action = armature_obj.animation_data.action
 
     # Calculate frames to render
-    frame_start = int(action.frame_range[0])
-    frame_end = int(action.frame_range[1])
+    frame_start = int(_action_frame_range(action)[0])
+    frame_end = int(_action_frame_range(action)[1])
     frames = list(range(frame_start, frame_end + 1, frame_step))
 
     # Resolve angle pairs
@@ -491,8 +612,9 @@ def handle_add_secondary_motion(params: dict) -> dict:
     armature_obj.animation_data.action = action
 
     # Determine frame range
-    frame_start = int(params.get("frame_start", action.frame_range[0]))
-    frame_end = int(params.get("frame_end", action.frame_range[1]))
+    _fr = _action_frame_range(action)
+    frame_start = int(params.get("frame_start", _fr[0]))
+    frame_end = int(params.get("frame_end", _fr[1]))
 
     # Enter pose mode and select spring bones
     bpy.context.view_layer.objects.active = armature_obj
@@ -586,8 +708,8 @@ def handle_extract_root_motion(params: dict) -> dict:
     if not root_pbone:
         raise ValueError(f"Root bone not found: {root_bone_name}")
 
-    frame_start = int(action.frame_range[0])
-    frame_end = int(action.frame_range[1])
+    frame_start = int(_action_frame_range(action)[0])
+    frame_end = int(_action_frame_range(action)[1])
 
     # Step 1: Read hip XY translation per frame (world space)
     hip_translations = []
@@ -600,12 +722,12 @@ def handle_extract_root_motion(params: dict) -> dict:
     root_loc_data_path = f'pose.bones["{root_bone_name}"].location'
 
     # Remove existing root bone location fcurves if present
-    for fc in list(action.fcurves):
+    for fc in list(_action_fcurves_list(action)):
         if fc.data_path == root_loc_data_path:
-            action.fcurves.remove(fc)
+            _action_remove_fcurve(action, fc, armature_obj)
 
-    fc_root_x = action.fcurves.new(data_path=root_loc_data_path, index=0)
-    fc_root_y = action.fcurves.new(data_path=root_loc_data_path, index=1)
+    fc_root_x = _action_new_fcurve(action, root_loc_data_path, 0, armature_obj)
+    fc_root_y = _action_new_fcurve(action, root_loc_data_path, 1, armature_obj)
 
     fc_root_x.keyframe_points.add(count=len(hip_translations))
     fc_root_y.keyframe_points.add(count=len(hip_translations))
@@ -630,7 +752,7 @@ def handle_extract_root_motion(params: dict) -> dict:
     # Step 4: Subtract extracted XY from hip bone's local fcurves
     # Keep Z (vertical bob) intact
     hip_loc_data_path = f'pose.bones["{hip_bone_name}"].location'
-    for fc in action.fcurves:
+    for fc in _action_fcurves_list(action):
         if fc.data_path == hip_loc_data_path and fc.array_index in (0, 1):
             # Zero out X and Y on hip bone (motion moved to root)
             for kp in fc.keyframe_points:
@@ -647,13 +769,11 @@ def handle_extract_root_motion(params: dict) -> dict:
             rot_index = 2  # Z axis
 
         # Remove existing root rotation Z fcurve if present
-        for fc in list(action.fcurves):
+        for fc in list(_action_fcurves_list(action)):
             if fc.data_path == root_rot_data_path and fc.array_index == rot_index:
-                action.fcurves.remove(fc)
+                _action_remove_fcurve(action, fc, armature_obj)
 
-        fc_root_rz = action.fcurves.new(
-            data_path=root_rot_data_path, index=rot_index
-        )
+        fc_root_rz = _action_new_fcurve(action, root_rot_data_path, rot_index, armature_obj)
         fc_root_rz.keyframe_points.add(count=len(hip_translations))
 
         for i, (frame, hx, hy, hz) in enumerate(hip_translations):
@@ -775,14 +895,25 @@ def handle_retarget_mixamo(params: dict) -> dict:
         cr_con.subtarget = src_bone
         cr_con.name = f"mixamo_rot_{src_bone}"
 
+    # G13: Add COPY_LOCATION for hip bone (root motion transfer)
+    hip_mixamo = "mixamorig:Hips"
+    hip_rigify = mapped.get(hip_mixamo)
+    if hip_rigify:
+        hip_tgt_pbone = target_obj.pose.bones.get(hip_rigify)
+        if hip_tgt_pbone:
+            cl_con = hip_tgt_pbone.constraints.new("COPY_LOCATION")
+            cl_con.target = source_obj
+            cl_con.subtarget = hip_mixamo
+            cl_con.name = f"mixamo_loc_{hip_mixamo}"
+
     # Get frame range from source action
     src_action = None
     if source_obj.animation_data and source_obj.animation_data.action:
         src_action = source_obj.animation_data.action
 
     if src_action:
-        frame_start = int(src_action.frame_range[0])
-        frame_end = int(src_action.frame_range[1])
+        frame_start = int(_action_frame_range(src_action)[0])
+        frame_end = int(_action_frame_range(src_action)[1])
     else:
         frame_start = int(bpy.context.scene.frame_start)
         frame_end = int(bpy.context.scene.frame_end)
@@ -1055,13 +1186,13 @@ def handle_generate_ai_motion(params: dict) -> dict:
 
     for (bone_name, channel, axis), frames in fcurve_map.items():
         data_path = f'pose.bones["{bone_name}"].{channel}'
-        fc = action.fcurves.new(data_path=data_path, index=axis)
+        fc = _action_new_fcurve(action, data_path, axis, armature_obj)
         fc.keyframe_points.add(count=len(frames))
         for i, (frame, value) in enumerate(frames):
             fc.keyframe_points[i].co = (frame, value)
             fc.keyframe_points[i].interpolation = "BEZIER"
 
-    frame_range = [int(action.frame_range[0]), int(action.frame_range[1])]
+    frame_range = [int(_action_frame_range(action)[0]), int(_action_frame_range(action)[1])]
 
     return {
         "status": "success",
@@ -1072,7 +1203,7 @@ def handle_generate_ai_motion(params: dict) -> dict:
         "style": style,
         "frame_count": frame_count,
         "keyframe_count": len(keyframes),
-        "fcurve_count": len(action.fcurves),
+        "fcurve_count": get_fcurve_count(action),
         "frame_range": frame_range,
     }
 
@@ -1168,6 +1299,8 @@ def handle_batch_export(params: dict) -> dict:
                 "axis_up": "Y",
                 "add_leaf_bones": False,
                 "mesh_smooth_type": "FACE",
+                "use_tspace": True,
+                "use_armature_deform_only": True,
             }
 
             if override:

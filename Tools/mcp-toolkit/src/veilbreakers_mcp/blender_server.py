@@ -2,6 +2,7 @@ import atexit
 import json
 import logging
 import os
+import threading
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP, Image
@@ -40,29 +41,35 @@ mcp = FastMCP(
 )
 
 _connection: BlenderConnection | None = None
+_connection_lock = threading.Lock()
 
 
 def get_blender_connection() -> BlenderConnection:
     global _connection
-    if _connection is None:
-        logger.info("Connecting to Blender at %s:%s", settings.blender_host, settings.blender_port)
-        _connection = BlenderConnection(
-            host=settings.blender_host,
-            port=settings.blender_port,
-            timeout=settings.blender_timeout,
-        )
-        # No eager connect() -- the server uses connection-per-command,
-        # so _sync_send() calls reconnect() before each command.
-        # An eager connect() would open a socket that the server handles
-        # as a real client connection, wasting a server thread.
+    if _connection is not None:
+        return _connection
+    with _connection_lock:
+        # Double-checked locking: re-test inside the lock.
+        if _connection is None:
+            logger.info("Connecting to Blender at %s:%s", settings.blender_host, settings.blender_port)
+            _connection = BlenderConnection(
+                host=settings.blender_host,
+                port=settings.blender_port,
+                timeout=settings.blender_timeout,
+            )
+            # No eager connect() -- the server uses connection-per-command,
+            # so _sync_send() calls reconnect() before each command.
+            # An eager connect() would open a socket that the server handles
+            # as a real client connection, wasting a server thread.
     return _connection
 
 
 def _cleanup_connection():
     global _connection
-    if _connection is not None:
-        _connection.disconnect()
-        _connection = None
+    with _connection_lock:
+        if _connection is not None:
+            _connection.disconnect()
+            _connection = None
 
 
 atexit.register(_cleanup_connection)
@@ -456,7 +463,7 @@ async def blender_uv(
     ],
     object_name: str | None = None,
     texture_size: int = 1024,
-    padding: int = 2,
+    padding: int = 4,
     resolution: int = 1024,
     margin: float = 0.001,
     layer_name: str | None = None,
@@ -1978,6 +1985,29 @@ async def blender_worldbuilding(
         return await _with_screenshot(blender, result, capture_viewport)
 
     return "Unknown action"
+
+
+# ---------------------------------------------------------------------------
+# Strip redundant Pydantic "title" fields from every tool schema.
+# These auto-generated titles just repeat the property name in Title Case
+# and waste ~24% of schema tokens sent to the LLM.
+# ---------------------------------------------------------------------------
+
+def _strip_titles(obj: dict | list) -> None:
+    """Recursively remove 'title' keys from a JSON-schema dict."""
+    if isinstance(obj, dict):
+        obj.pop("title", None)
+        for v in obj.values():
+            if isinstance(v, (dict, list)):
+                _strip_titles(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            if isinstance(item, (dict, list)):
+                _strip_titles(item)
+
+
+for _tool in mcp._tool_manager._tools.values():
+    _strip_titles(_tool.parameters)
 
 
 def main():

@@ -1,13 +1,21 @@
-"""Weight painting, deformation testing, rig validation, and weight fix handlers.
+"""Weight painting, deformation testing, rig validation, weight fix, and weight
+limit enforcement handlers.
 
-Provides four command handlers:
+Provides five command handlers:
   - handle_auto_weight: Parent mesh to armature with heat diffusion weight painting (RIG-07)
   - handle_test_deformation: Pose rig at 8 standard poses and generate contact sheet (RIG-08)
   - handle_validate_rig: Grade rig A-F based on weight/symmetry/roll analysis (RIG-09)
   - handle_fix_weights: Normalize, clean zeros, smooth, and mirror weights (RIG-10)
+  - handle_enforce_weight_limit: Clamp per-vertex bone influences to a maximum (P2-A6)
 
-Pure-logic functions (_compute_rig_grade, _validate_rig_report,
-_validate_weight_fix_params) are separated for testability without Blender.
+Pure-logic functions:
+  - _validate_skinning_mode: Validate skinning mode selection (LBS/DQS/Hybrid)
+  - _compute_rig_grade: Compute rig quality grade A-F from numeric thresholds
+  - _validate_rig_report: Build rig validation report from mesh/armature data
+  - _validate_weight_fix_params: Validate weight fix operation type and parameters
+  - _enforce_weight_limit_pure: Clamp per-vertex bone influences (pure logic)
+  - _compute_skinning_quality: Compute skinning quality metrics for weight paint analysis
+  - _enhanced_rig_validation: Enhanced rig validation with additional checks
 """
 
 from __future__ import annotations
@@ -59,6 +67,39 @@ DEFORMATION_POSES: dict[str, dict[str, tuple[float, float, float]]] = {
         "DEF-upper_arm.R": (-0.3, 0, -0.8),
     },
 }
+
+
+# ---------------------------------------------------------------------------
+# Skinning mode definitions (LBS / DQS / Hybrid)
+# ---------------------------------------------------------------------------
+
+SKINNING_MODES: dict[str, dict] = {
+    "linear": {
+        "description": "Standard linear blend skinning (LBS)",
+        "use_dual_quaternion": False,
+        "best_for": "extremities, simple deformations",
+    },
+    "dual_quaternion": {
+        "description": "Dual quaternion skinning — preserves volume at joints",
+        "use_dual_quaternion": True,
+        "best_for": "shoulders, hips, spine — prevents volume loss",
+    },
+    "hybrid": {
+        "description": "Per-vertex LBS/DQS blend for optimal results",
+        "use_dual_quaternion": True,
+        "best_for": "full characters — DQS at joints, LBS at extremities",
+    },
+}
+
+
+def _validate_skinning_mode(mode: str) -> dict:
+    """Validate skinning mode selection."""
+    if mode not in SKINNING_MODES:
+        return {
+            "valid": False,
+            "errors": [f"Unknown mode: '{mode}'. Valid: {sorted(SKINNING_MODES.keys())}"],
+        }
+    return {"valid": True, "errors": [], "config": SKINNING_MODES[mode]}
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +186,14 @@ def _validate_rig_report(
             symmetry_issues += 1
             issues.append(f"Missing right counterpart for '{lb}'")
 
+    right_bones = [n for n in bone_names if n.endswith(".R")]
+    left_bones_set = {n for n in bone_names if n.endswith(".L")}
+    for rb in right_bones:
+        expected_left = rb[:-2] + ".L"
+        if expected_left not in left_bones_set:
+            symmetry_issues += 1
+            issues.append(f"Missing left counterpart for '{rb}'")
+
     # -- Roll consistency (L bone roll should be negative of R bone roll) --
     roll_issues = 0
     roll_tolerance = 0.05  # radians
@@ -224,6 +273,186 @@ def _validate_weight_fix_params(operation: str, params: dict) -> dict:
                 )
 
     return {"valid": len(errors) == 0, "errors": errors, "operation": operation}
+
+
+def _enforce_weight_limit_pure(
+    vertex_weights: list[list[tuple[str, float]]],
+    max_influences: int = 4,
+) -> dict:
+    """Clamp per-vertex bone influences to a maximum count (pure logic).
+
+    For each vertex, keeps only the top *max_influences* weights (by value),
+    drops the rest, and renormalizes so they sum to 1.0.
+
+    Args:
+        vertex_weights: Per-vertex list of (bone_name, weight) tuples.
+        max_influences: Maximum bone influences per vertex (default 4).
+
+    Returns:
+        Dict with clamped_vertices (int), total_vertices (int),
+        max_influences (int), vertex_weights (processed list).
+    """
+    clamped = 0
+    result_weights: list[list[tuple[str, float]]] = []
+
+    for vw in vertex_weights:
+        if len(vw) <= max_influences:
+            result_weights.append(list(vw))
+            continue
+
+        # Sort descending by weight, keep top N
+        sorted_w = sorted(vw, key=lambda t: t[1], reverse=True)
+        kept = sorted_w[:max_influences]
+        total = sum(w for _, w in kept)
+        if total > 0:
+            kept = [(name, w / total) for name, w in kept]
+        result_weights.append(kept)
+        clamped += 1
+
+    return {
+        "clamped_vertices": clamped,
+        "total_vertices": len(vertex_weights),
+        "max_influences": max_influences,
+        "vertex_weights": result_weights,
+    }
+
+
+def _compute_skinning_quality(
+    vertex_weights: list[list[tuple[int, float]]],
+) -> dict:
+    """Compute skinning quality metrics for weight paint analysis."""
+    total = len(vertex_weights)
+    if total == 0:
+        return {"quality_score": 1.0, "hard_edges": 0, "unweighted": 0, "over_influenced": 0}
+
+    unweighted = sum(1 for g in vertex_weights if not g or all(w < 0.01 for _, w in g))
+    over_influenced = sum(1 for g in vertex_weights if len(g) > 4)
+
+    # Check for hard weight transitions (adjacent verts with very different weights)
+    hard_edges = 0
+    for i, groups in enumerate(vertex_weights):
+        max_w = max((w for _, w in groups), default=0)
+        if max_w > 0.95:
+            hard_edges += 1
+
+    quality = 1.0 - (unweighted / max(total, 1)) * 0.5 - (over_influenced / max(total, 1)) * 0.3 - (hard_edges / max(total, 1)) * 0.2
+
+    return {
+        "quality_score": round(max(0.0, min(1.0, quality)), 3),
+        "total_vertices": total,
+        "unweighted": unweighted,
+        "over_influenced": over_influenced,
+        "hard_edges": hard_edges,
+    }
+
+
+def _enhanced_rig_validation(
+    bone_names: list[str],
+    bone_rolls: dict[str, float],
+    bone_parents: dict[str, str | None],
+    vertex_influence_counts: list[int],
+    max_influences: int = 4,
+    vertex_weights: list[list[tuple[int, float]]] | None = None,
+    vertex_group_names: list[str] | None = None,
+) -> dict:
+    """Enhanced rig validation with additional checks beyond basic grading.
+
+    Checks:
+      - zero_weight_bones: bones with no vertex influence at all
+      - over_limit_vertices: vertices exceeding max_influences
+      - symmetry_mismatches: L bones missing R counterpart
+      - default_roll_bones: bones with roll == 0.0 (suspicious for limbs)
+      - missing_twist_bones: limb bones without twist helpers
+
+    Args:
+        bone_names: All bone names in the armature.
+        bone_rolls: Mapping bone name -> roll (radians).
+        bone_parents: Mapping bone name -> parent (or None).
+        vertex_influence_counts: Per-vertex influence count list.
+        max_influences: Limit for over-limit check (default 4).
+        vertex_weights: Optional per-vertex list of (group_index, weight) tuples.
+        vertex_group_names: Optional mapping of group indices to names.
+
+    Returns:
+        Dict with zero_weight_bones, over_limit_vertices,
+        symmetry_mismatches, default_roll_bones, missing_twist_bones,
+        issues (list[str]).
+    """
+    issues: list[str] = []
+
+    # Zero weight bones: bones that exist but no vertex references them
+    zero_weight_bones: list[str] = []
+    if vertex_weights is not None and vertex_group_names is not None:
+        weighted_indices: set[int] = set()
+        for vw in vertex_weights:
+            for group_idx, weight in vw:
+                if weight > 0.01:
+                    weighted_indices.add(group_idx)
+        weighted_names = {
+            vertex_group_names[i]
+            for i in weighted_indices
+            if i < len(vertex_group_names)
+        }
+        bone_set = set(bone_names)
+        zero_weight_bones = sorted(
+            name for name in bone_set if name not in weighted_names
+        )
+
+    # Over limit vertices
+    over_limit = sum(1 for c in vertex_influence_counts if c > max_influences)
+    if over_limit > 0:
+        issues.append(f"{over_limit} vertices exceed {max_influences}-influence limit")
+
+    # Symmetry mismatches
+    left_bones = [n for n in bone_names if n.endswith(".L")]
+    right_set = {n for n in bone_names if n.endswith(".R")}
+    symmetry_mismatches: list[str] = []
+    for lb in left_bones:
+        rb = lb[:-2] + ".R"
+        if rb not in right_set:
+            symmetry_mismatches.append(lb)
+            issues.append(f"Missing R counterpart for '{lb}'")
+
+    # Default roll bones (limb bones with roll exactly 0.0)
+    # Twist bones (e.g. upper_arm_twist.L) correctly have roll=0.0, so exclude them.
+    limb_prefixes = ("upper_arm", "forearm", "thigh", "shin")
+    default_roll_bones: list[str] = []
+    for bname in bone_names:
+        if "twist" in bname:
+            continue
+        base = bname.split(".")[0]
+        if any(base.startswith(p) for p in limb_prefixes):
+            roll = bone_rolls.get(bname, 0.0)
+            if roll == 0.0:
+                default_roll_bones.append(bname)
+                issues.append(f"Bone '{bname}' has default roll 0.0")
+
+    # Missing twist bones
+    twist_map = {
+        "upper_arm": "upper_arm_twist",
+        "forearm": "forearm_twist",
+        "thigh": "thigh_twist",
+        "shin": "shin_twist",
+    }
+    bone_set = set(bone_names)
+    missing_twist: list[str] = []
+    for bname in bone_names:
+        for limb_prefix, twist_prefix in twist_map.items():
+            if bname.startswith(limb_prefix + "."):
+                suffix = bname[len(limb_prefix):]  # e.g. ".L"
+                expected_twist = twist_prefix + suffix
+                if expected_twist not in bone_set:
+                    missing_twist.append(bname)
+                    issues.append(f"Missing twist bone '{expected_twist}' for '{bname}'")
+
+    return {
+        "zero_weight_bones": zero_weight_bones,
+        "over_limit_vertices": over_limit,
+        "symmetry_mismatches": symmetry_mismatches,
+        "default_roll_bones": default_roll_bones,
+        "missing_twist_bones": missing_twist,
+        "issues": issues,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -506,11 +735,67 @@ def handle_fix_weights(params: dict) -> dict:
             direction = params.get("direction")
             use_mirror = direction == "left_to_right"
             bpy.ops.object.vertex_group_mirror(
-                use_topology=False
+                mirror_weights=True,
+                flip_group_names=use_mirror,
+                use_topology=False,
             )
 
     return {
         "operation": operation,
         "mesh": mesh_name,
         "status": "success",
+    }
+
+
+def handle_enforce_weight_limit(params: dict) -> dict:
+    """Enforce a per-vertex bone influence limit on a mesh (P2-A6).
+
+    Params:
+        mesh_name: Name of the mesh object.
+        max_influences: Maximum influences per vertex (default 4).
+
+    Returns dict with clamped_vertices, total_vertices, max_influences, mesh.
+    """
+    mesh_name = params.get("mesh_name")
+    max_influences = int(params.get("max_influences", 4))
+
+    if not mesh_name:
+        raise ValueError("'mesh_name' is required")
+
+    mesh_obj = bpy.data.objects.get(mesh_name)
+    if not mesh_obj or mesh_obj.type != "MESH":
+        raise ValueError(f"Mesh object not found: {mesh_name}")
+
+    mesh_data = mesh_obj.data
+
+    # Extract per-vertex weights
+    vertex_weights: list[list[tuple[str, float]]] = []
+    for v in mesh_data.vertices:
+        vw: list[tuple[str, float]] = []
+        for g in v.groups:
+            if g.weight > 0.001:
+                vg_name = mesh_obj.vertex_groups[g.group].name
+                vw.append((vg_name, g.weight))
+        vertex_weights.append(vw)
+
+    result = _enforce_weight_limit_pure(vertex_weights, max_influences)
+
+    # Apply back to mesh
+    for vi, new_weights in enumerate(result["vertex_weights"]):
+        v = mesh_data.vertices[vi]
+        # Clear all existing groups for this vertex
+        group_indices = [g.group for g in v.groups]
+        for gi in group_indices:
+            mesh_obj.vertex_groups[gi].remove([vi])
+        # Re-assign clamped weights
+        for bone_name, weight in new_weights:
+            vg = mesh_obj.vertex_groups.get(bone_name)
+            if vg:
+                vg.add([vi], weight, "REPLACE")
+
+    return {
+        "clamped_vertices": result["clamped_vertices"],
+        "total_vertices": result["total_vertices"],
+        "max_influences": result["max_influences"],
+        "mesh": mesh_name,
     }

@@ -131,6 +131,8 @@ def biome_filter_points(
     rules: list[dict[str, Any]],
     terrain_size: float = 100.0,
     seed: int = 0,
+    max_tilt_angle: float = 90.0,
+    moisture_map: Any | None = None,  # optional np.ndarray
 ) -> list[dict[str, Any]]:
     """Filter scatter points through biome altitude/slope rules.
 
@@ -145,10 +147,19 @@ def biome_filter_points(
     rules : list of dict
         Each rule has: vegetation_type, min_alt, max_alt, min_slope, max_slope,
         scale_range (tuple), density (0-1 probability of keeping).
+        Optional per-rule keys: min_moisture, max_moisture (0-1).
     terrain_size : float
         World-space size of terrain for coordinate mapping.
     seed : int
         Random seed for density and scale/rotation randomization.
+    max_tilt_angle : float
+        Global maximum terrain normal angle in degrees (default 90.0).
+        Points where the slope exceeds this angle are rejected outright.
+        Set to 45.0 to reject steep cliff faces.
+    moisture_map : np.ndarray or None
+        Optional 2D array of moisture values in [0, 1], same shape as
+        heightmap. When provided, rules can specify min_moisture/max_moisture
+        to restrict vegetation to wet or dry areas.
 
     Returns
     -------
@@ -171,6 +182,15 @@ def biome_filter_points(
         altitude = float(heightmap[row_idx, col_idx])
         slope = float(slope_map[row_idx, col_idx])
 
+        # Global tilt filtering: reject points on terrain steeper than threshold
+        if slope > max_tilt_angle:
+            continue
+
+        # Sample moisture if map is provided
+        moisture = None
+        if moisture_map is not None:
+            moisture = float(moisture_map[row_idx, col_idx])
+
         # Find first matching rule
         for rule in rules:
             min_alt = rule.get("min_alt", 0.0)
@@ -180,22 +200,31 @@ def biome_filter_points(
             density = rule.get("density", 1.0)
             scale_range = rule.get("scale_range", (0.8, 1.2))
 
-            if (min_alt <= altitude <= max_alt
+            if not (min_alt <= altitude <= max_alt
                     and min_slope <= slope <= max_slope):
-                # Density check
-                if rng.random() > density:
-                    break  # Skip this point entirely
+                continue
 
-                scale = rng.uniform(scale_range[0], scale_range[1])
-                rotation = rng.uniform(0, 360)
+            # Moisture filtering (if moisture_map provided and rule has bounds)
+            if moisture is not None:
+                rule_min_moisture = rule.get("min_moisture", 0.0)
+                rule_max_moisture = rule.get("max_moisture", 1.0)
+                if not (rule_min_moisture <= moisture <= rule_max_moisture):
+                    continue
 
-                placements.append({
-                    "position": (x, y),
-                    "vegetation_type": rule["vegetation_type"],
-                    "scale": scale,
-                    "rotation": rotation,
-                })
-                break  # First matching rule wins
+            # Density check
+            if rng.random() > density:
+                break  # Skip this point entirely
+
+            scale = rng.uniform(scale_range[0], scale_range[1])
+            rotation = rng.uniform(0, 360)
+
+            placements.append({
+                "position": (x, y),
+                "vegetation_type": rule["vegetation_type"],
+                "scale": scale,
+                "rotation": rotation,
+            })
+            break  # First matching rule wins
 
     return placements
 

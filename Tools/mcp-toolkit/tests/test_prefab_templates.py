@@ -29,8 +29,10 @@ from veilbreakers_mcp.shared.unity_templates.prefab_templates import (
     generate_job_script,
     _resolve_selector_snippet,
     _load_auto_wire_profile,
-    _sanitize_cs_string,
-    _sanitize_cs_identifier,
+)
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import (
+    sanitize_cs_string,
+    sanitize_cs_identifier,
 )
 
 
@@ -40,35 +42,35 @@ from veilbreakers_mcp.shared.unity_templates.prefab_templates import (
 
 
 class TestSanitizeCsString:
-    """Tests for _sanitize_cs_string()."""
+    """Tests for sanitize_cs_string()."""
 
     def test_escapes_backslash(self):
-        assert "\\\\" in _sanitize_cs_string("path\\file")
+        assert "\\\\" in sanitize_cs_string("path\\file")
 
     def test_escapes_double_quotes(self):
-        assert '\\"' in _sanitize_cs_string('say "hello"')
+        assert '\\"' in sanitize_cs_string('say "hello"')
 
     def test_escapes_newlines(self):
-        assert "\\n" in _sanitize_cs_string("line1\nline2")
+        assert "\\n" in sanitize_cs_string("line1\nline2")
 
     def test_escapes_carriage_return(self):
-        assert "\\r" in _sanitize_cs_string("line1\rline2")
+        assert "\\r" in sanitize_cs_string("line1\rline2")
 
     def test_plain_string_unchanged(self):
-        assert _sanitize_cs_string("hello") == "hello"
+        assert sanitize_cs_string("hello") == "hello"
 
 
 class TestSanitizeCsIdentifier:
-    """Tests for _sanitize_cs_identifier()."""
+    """Tests for sanitize_cs_identifier()."""
 
     def test_strips_special_characters(self):
-        assert _sanitize_cs_identifier("My-Object!@#") == "MyObject"
+        assert sanitize_cs_identifier("My-Object!@#") == "MyObject"
 
     def test_preserves_underscores(self):
-        assert _sanitize_cs_identifier("my_object") == "my_object"
+        assert sanitize_cs_identifier("my_object") == "my_object"
 
     def test_preserves_alphanumeric(self):
-        assert _sanitize_cs_identifier("Object123") == "Object123"
+        assert sanitize_cs_identifier("Object123") == "Object123"
 
 
 # ---------------------------------------------------------------------------
@@ -170,7 +172,8 @@ class TestResolveSelectorSnippet:
 
     def test_regex_selector(self):
         snippet = _resolve_selector_snippet({"by": "regex", "value": "Enemy_\\d+"})
-        assert "Regex.IsMatch" in snippet
+        assert "regexPattern.IsMatch" in snippet
+        assert "TimeSpan.FromSeconds" in snippet
         assert "SceneManager" in snippet or "FindObjectsOfType" in snippet
 
     def test_string_shorthand(self):
@@ -363,7 +366,7 @@ class TestGenerateAddComponentScript:
 
     def test_regex_selector(self):
         result = generate_add_component_script({"by": "regex", "value": "Monster_.*"}, "Rigidbody")
-        assert "Regex.IsMatch" in result
+        assert "regexPattern.IsMatch" in result
 
     def test_contains_menu_item(self):
         result = generate_add_component_script({"by": "name", "value": "TargetObject"}, "Rigidbody")

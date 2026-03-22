@@ -28,7 +28,7 @@ from veilbreakers_mcp.shared.unity_templates.character_templates import (
     generate_parallax_eye_shader,
     generate_micro_detail_normal_script,
 )
-from veilbreakers_mcp.shared.unity_templates.code_templates import _sanitize_cs_identifier
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 
 
 
@@ -111,7 +111,7 @@ async def unity_shader(
                 second_pass_vertex=second_pass_vertex,
                 second_pass_fragment=second_pass_fragment,
             )
-            safe_shader_name = _sanitize_cs_identifier(shader_name) or "Shader"
+            safe_shader_name = sanitize_cs_identifier(shader_name) or "Shader"
             rel_path = f"{output_dir}/{safe_shader_name}.shader"
             abs_path = _write_to_unity(shader_source, rel_path)
             return json.dumps({
@@ -136,7 +136,7 @@ async def unity_shader(
                 material_properties=material_properties,
                 pass_code=pass_code,
             )
-            safe_feature = _sanitize_cs_identifier(feature_name) or "Feature"
+            safe_feature = sanitize_cs_identifier(feature_name) or "Feature"
             rel_path = f"Assets/Scripts/Rendering/{safe_feature}Feature.cs"
             abs_path = _write_to_unity(script, rel_path)
             return json.dumps({

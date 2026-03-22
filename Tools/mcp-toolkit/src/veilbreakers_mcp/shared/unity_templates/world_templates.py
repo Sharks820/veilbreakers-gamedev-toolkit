@@ -36,23 +36,7 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-
-# ---------------------------------------------------------------------------
-# Sanitisation helpers (local copies -- avoids circular imports)
-# ---------------------------------------------------------------------------
-
-def _sanitize_cs_string(value: str) -> str:
-    """Escape a value for safe embedding inside a C# string literal."""
-    value = value.replace("\\", "\\\\")
-    value = value.replace('"', '\\"')
-    value = value.replace("\n", "\\n")
-    value = value.replace("\r", "\\r")
-    return value
-
-
-def _sanitize_cs_identifier(value: str) -> str:
-    """Sanitize a value for use as a C# identifier."""
-    return re.sub(r"[^a-zA-Z0-9_]", "", value)
+from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -200,9 +184,9 @@ def generate_scene_creation_script(
     Returns:
         Complete C# editor source string.
     """
-    safe_name = _sanitize_cs_string(scene_name)
-    safe_id = _sanitize_cs_identifier(scene_name)
-    safe_ns = _sanitize_cs_identifier(namespace.replace(".", "_"))
+    safe_name = sanitize_cs_string(scene_name)
+    safe_id = sanitize_cs_identifier(scene_name)
+    safe_ns = sanitize_cs_identifier(namespace.replace(".", "_"))
 
     setup_enum = "NewSceneSetup.DefaultGameObjects"
     if scene_setup == "EmptyScene":
@@ -293,7 +277,7 @@ def generate_scene_transition_script(
     Returns:
         Tuple of ``(editor_cs, runtime_cs)``.
     """
-    safe_ns = _sanitize_cs_identifier(namespace.replace(".", "_"))
+    safe_ns = sanitize_cs_identifier(namespace.replace(".", "_"))
 
     # ---- Runtime MonoBehaviour ----
     rt: list[str] = []
@@ -692,7 +676,7 @@ def generate_environment_setup_script(
     Returns:
         Complete C# editor source string.
     """
-    safe_shader = _sanitize_cs_string(skybox_shader)
+    safe_shader = sanitize_cs_string(skybox_shader)
 
     ambient_enum = "AmbientMode.Skybox"
     if ambient_mode == "Trilight":
@@ -827,11 +811,11 @@ def generate_terrain_detail_script(
         lines.append(f"            protos[{i}].dryColor = new Color({color[0] * 0.7}f, {color[1] * 0.7}f, {color[2] * 0.7}f);")
 
         if ptype == "grass_texture":
-            tex_path = _sanitize_cs_string(proto.get("texture_path", ""))
+            tex_path = sanitize_cs_string(proto.get("texture_path", ""))
             lines.append(f'            protos[{i}].prototypeTexture = AssetDatabase.LoadAssetAtPath<Texture2D>("{tex_path}");')
             lines.append(f"            protos[{i}].renderMode = DetailRenderMode.GrassBillboard;")
         else:
-            prefab_path = _sanitize_cs_string(proto.get("prefab_path", ""))
+            prefab_path = sanitize_cs_string(proto.get("prefab_path", ""))
             lines.append(f'            protos[{i}].prototype = AssetDatabase.LoadAssetAtPath<GameObject>("{prefab_path}");')
             lines.append(f"            protos[{i}].renderMode = DetailRenderMode.VertexLit;")
             lines.append(f"            protos[{i}].usePrototypeMesh = true;")
@@ -928,15 +912,15 @@ def generate_tilemap_setup_script(
         for entry in tile_entries:
             tx = entry.get("x", 0)
             ty = entry.get("y", 0)
-            tile_path = _sanitize_cs_string(entry.get("tile_asset_path", ""))
+            tile_path = sanitize_cs_string(entry.get("tile_asset_path", ""))
             lines.append(f'            var tile_{tx}_{ty} = AssetDatabase.LoadAssetAtPath<TileBase>("{tile_path}");')
             lines.append(f"            tilemap.SetTile(new Vector3Int({tx}, {ty}, 0), tile_{tx}_{ty});")
         lines.append("")
 
     # Optional RuleTile creation
     if rule_tile_name:
-        safe_rt_name = _sanitize_cs_string(rule_tile_name)
-        safe_rt_id = _sanitize_cs_identifier(rule_tile_name)
+        safe_rt_name = sanitize_cs_string(rule_tile_name)
+        safe_rt_id = sanitize_cs_identifier(rule_tile_name)
         lines.append("            // Create RuleTile")
         lines.append("            var ruleTile = ScriptableObject.CreateInstance<RuleTile>();")
         lines.append(f'            ruleTile.name = "{safe_rt_name}";')
@@ -1147,7 +1131,7 @@ def generate_time_of_day_preset_script(
     fog_c = preset["fog_color"]
     fog_d = preset["fog_density"]
 
-    safe_preset = _sanitize_cs_string(preset_name)
+    safe_preset = sanitize_cs_string(preset_name)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -1242,7 +1226,7 @@ def generate_fast_travel_script(
         (editor_cs, runtime_cs) tuple.
     """
     ns = _safe_namespace(namespace)
-    safe_key = _sanitize_cs_string(save_key)
+    safe_key = sanitize_cs_string(save_key)
 
     # ----- Runtime: VB_WaypointManager -----
     rt: list[str] = []
@@ -1927,7 +1911,7 @@ def generate_weather_system_script(
     rt.append("    public enum WeatherState")
     rt.append("    {")
     for i, state in enumerate(weather_states):
-        safe_state = _sanitize_cs_identifier(state)
+        safe_state = sanitize_cs_identifier(state)
         comma = "," if i < len(weather_states) - 1 else ""
         rt.append("        " + safe_state + comma)
     rt.append("    }")
@@ -1943,10 +1927,10 @@ def generate_weather_system_script(
     rt.append("        public static VB_WeatherManager Instance { get; private set; }")
     rt.append("        [Header(\"Weather Configuration\")]")
     rt.append("        [SerializeField] private float _transitionDuration = " + str(transition_duration) + "f;")
-    rt.append("        [SerializeField] private WeatherState _defaultState = WeatherState." + _sanitize_cs_identifier(default_state) + ";")
+    rt.append("        [SerializeField] private WeatherState _defaultState = WeatherState." + sanitize_cs_identifier(default_state) + ";")
     rt.append("        [Header(\"Particle Systems\")]")
     for state in weather_states:
-        safe = _sanitize_cs_identifier(state)
+        safe = sanitize_cs_identifier(state)
         if safe != "Clear":
             rt.append("        [SerializeField] private ParticleSystem _" + safe.lower() + "Particles;")
     rt.append("        [Header(\"Fog Settings\")]")
@@ -2018,7 +2002,7 @@ def generate_weather_system_script(
     rt.append("            switch (state)")
     rt.append("            {")
     for state_name in weather_states:
-        safe = _sanitize_cs_identifier(state_name)
+        safe = sanitize_cs_identifier(state_name)
         if safe == "Clear":
             rt.append("                case WeatherState.Clear: return null;")
         else:
@@ -2264,7 +2248,7 @@ def generate_npc_placement_script(
     so.append("    public enum NPCRole")
     so.append("    {")
     for i, role in enumerate(npc_roles):
-        safe_role = _sanitize_cs_identifier(role)
+        safe_role = sanitize_cs_identifier(role)
         pascal = "".join(w.capitalize() for w in safe_role.split("_"))
         comma = "," if i < len(npc_roles) - 1 else ""
         so.append("        " + pascal + comma)
