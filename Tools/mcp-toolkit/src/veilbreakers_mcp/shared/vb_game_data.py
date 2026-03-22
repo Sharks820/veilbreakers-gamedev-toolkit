@@ -278,3 +278,176 @@ ABILITY_SLOTS = [
     "SKILL_1", "SKILL_2", "SKILL_3",
     "ULTIMATE",
 ]
+
+# ---------------------------------------------------------------------------
+# Monster Body Type Presets (for 3D mesh generation)
+# ---------------------------------------------------------------------------
+
+MONSTER_BODY_TYPES = {
+    "bloodshade": {
+        "rig_template": "humanoid",
+        "body_type": "wraith",
+        "scale": (1.0, 1.8, 0.8),
+        "description": "Shadow entity with elongated limbs, semi-transparent body, dripping darkness",
+        "key_features": ["flowing_cape", "glowing_eyes", "shadow_tendrils"],
+        "brand": "VOID",
+    },
+    "chainbound": {
+        "rig_template": "humanoid",
+        "body_type": "heavy",
+        "scale": (1.2, 1.5, 1.2),
+        "description": "Humanoid bound in chains, heavy iron padlocks, armored torso",
+        "key_features": ["chains", "padlocks", "broken_shackles"],
+        "brand": "IRON",
+    },
+    "corrodex": {
+        "rig_template": "humanoid",
+        "body_type": "knight",
+        "scale": (1.0, 1.7, 1.0),
+        "description": "Corroded knight in acid-eaten armor, green acid dripping from joints",
+        "key_features": ["corroded_armor", "acid_drip", "rusty_sword"],
+        "brand": "GRACE",
+    },
+    "crackling": {
+        "rig_template": "humanoid",
+        "body_type": "small_child",
+        "scale": (0.5, 0.7, 0.5),
+        "description": "Small electrical child-like creature, sparking constantly, translucent skin showing lightning veins",
+        "key_features": ["lightning_veins", "sparks", "translucent_skin"],
+        "brand": "SURGE",
+    },
+    "flicker": {
+        "rig_template": "insect",
+        "body_type": "dragonfly",
+        "scale": (0.4, 0.3, 0.6),
+        "description": "Insectoid blur creature, iridescent wings, compound eyes, extremely fast",
+        "key_features": ["iridescent_wings", "compound_eyes", "blurred_afterimage"],
+        "brand": "SURGE",
+    },
+    "gluttony_polyp": {
+        "rig_template": "amorphous",
+        "body_type": "blob",
+        "scale": (1.5, 0.8, 1.5),
+        "description": "Digestive sac creature, translucent membrane showing consumed matter, tentacle feeders",
+        "key_features": ["translucent_membrane", "digestive_sac", "feeding_tentacles"],
+        "brand": "DREAD",
+    },
+    "grimthorn": {
+        "rig_template": "quadruped",
+        "body_type": "vine_beast",
+        "scale": (1.2, 1.0, 1.8),
+        "description": "Vine-covered quadruped, thorny body, poison barbs, flower-like head with fangs",
+        "key_features": ["thorns", "vines", "poison_barbs", "flower_head"],
+        "brand": "SAVAGE",
+    },
+    "hollow": {
+        "rig_template": "humanoid",
+        "body_type": "ethereal",
+        "scale": (0.8, 1.6, 0.6),
+        "description": "Shadow entity, hollow chest cavity, empty eye sockets emitting dark mist",
+        "key_features": ["hollow_chest", "dark_mist_eyes", "fading_edges"],
+        "brand": "VENOM",
+    },
+    "ironjaw": {
+        "rig_template": "quadruped",
+        "body_type": "bear_trap",
+        "scale": (1.5, 1.0, 2.0),
+        "description": "Metal bear with iron jaw trap for a mouth, rusted metal plating, chain tail",
+        "key_features": ["iron_jaw_trap", "metal_plating", "chain_tail"],
+        "brand": "LEECH",
+    },
+    "mawling": {
+        "rig_template": "quadruped",
+        "body_type": "wolf",
+        "scale": (0.8, 0.7, 1.2),
+        "description": "Feral wolf-like predator with oversized jaw, matted fur, glowing eyes",
+        "key_features": ["oversized_jaw", "matted_fur", "glowing_eyes"],
+        "brand": "SAVAGE",
+    },
+    "needlefang": {
+        "rig_template": "serpent",
+        "body_type": "snake",
+        "scale": (0.3, 0.3, 3.0),
+        "description": "Venomous needle serpent, needle-like fangs, iridescent scales, hood with eye markings",
+        "key_features": ["needle_fangs", "iridescent_scales", "cobra_hood"],
+        "brand": "MEND",
+    },
+    "ravener": {
+        "rig_template": "quadruped",
+        "body_type": "raptor",
+        "scale": (1.0, 1.2, 1.5),
+        "description": "Raptor-like predator, muscular build, razor claws, armored head crest",
+        "key_features": ["razor_claws", "armored_crest", "predator_stance"],
+        "brand": "SAVAGE",
+    },
+    "skitter_teeth": {
+        "rig_template": "arachnid",
+        "body_type": "ribcage_spider",
+        "scale": (0.8, 0.5, 1.0),
+        "description": "Crawling ribcage with spider legs, teeth lining the open cavity, bone structure",
+        "key_features": ["ribcage_body", "bone_legs", "teeth_lining"],
+        "brand": "IRON",
+    },
+    "sporecaller": {
+        "rig_template": "quadruped",
+        "body_type": "deer",
+        "scale": (1.0, 1.2, 1.3),
+        "description": "Fungal deer, antlers replaced with mushroom clusters, spore-releasing back, mossy hide",
+        "key_features": ["mushroom_antlers", "spore_sacs", "mossy_hide"],
+        "brand": "SAVAGE",
+    },
+    "the_broodmother": {
+        "rig_template": "arachnid",
+        "body_type": "giant_spider",
+        "scale": (2.5, 1.5, 3.0),
+        "description": "Massive spider-wasp hybrid, egg sac abdomen, venomous mandibles, armored carapace",
+        "key_features": ["egg_sac", "mandibles", "armored_carapace", "wasp_wings"],
+        "brand": "SAVAGE",
+    },
+    "the_bulwark": {
+        "rig_template": "humanoid",
+        "body_type": "golem",
+        "scale": (2.0, 2.5, 1.5),
+        "description": "Fused armor guardian, multiple shields melded into body, glowing rune core",
+        "key_features": ["fused_shields", "rune_core", "massive_frame"],
+        "brand": "IRON",
+    },
+    "the_congregation": {
+        "rig_template": "amorphous",
+        "body_type": "mass_of_souls",
+        "scale": (3.0, 4.0, 3.0),
+        "description": "BOSS — mass of absorbed souls, writhing faces in darkness, central eye, reality-warping presence",
+        "key_features": ["writhing_faces", "central_eye", "soul_tendrils", "darkness_aura"],
+        "brand": "DREAD",
+    },
+    "the_vessel": {
+        "rig_template": "humanoid",
+        "body_type": "spirit_healer",
+        "scale": (0.8, 1.5, 0.8),
+        "description": "Floating healer entity, porcelain mask, gentle glow, trailing robes of light",
+        "key_features": ["porcelain_mask", "healing_glow", "light_robes"],
+        "brand": "DREAD",
+    },
+    "the_weeping": {
+        "rig_template": "amorphous",
+        "body_type": "floating_eyes",
+        "scale": (1.0, 1.2, 1.0),
+        "description": "Mass of floating eyes connected by tendons, weeping dark ichor, vision distortion aura",
+        "key_features": ["floating_eyes", "dark_ichor", "tendon_connections"],
+        "brand": "VENOM",
+    },
+    "voltgeist": {
+        "rig_template": "humanoid",
+        "body_type": "ghost",
+        "scale": (1.0, 1.5, 0.8),
+        "description": "Lightning ghost, electrical skeleton visible through translucent body, constant discharge",
+        "key_features": ["electrical_skeleton", "translucent_body", "lightning_discharge"],
+        "brand": "RUIN",
+    },
+}
+
+# Map rig templates to body descriptions for Blender mesh generation prompts
+MONSTER_MESH_PROMPTS = {
+    name: f"{data['description']}, dark fantasy style, game-ready topology"
+    for name, data in MONSTER_BODY_TYPES.items()
+}

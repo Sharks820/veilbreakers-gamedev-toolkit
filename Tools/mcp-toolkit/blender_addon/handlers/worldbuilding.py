@@ -2,6 +2,9 @@
 
 Converts pure-logic BuildingSpec operations into Blender mesh geometry.
 Provides 5 handler functions registered in COMMAND_HANDLERS.
+
+Includes VeilBreakers-specific building and dungeon presets for shrines,
+ruined fortresses, abandoned villages, forges, and themed dungeons.
 """
 
 from __future__ import annotations
@@ -14,6 +17,138 @@ import bpy
 import bmesh
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# VeilBreakers Building Presets
+# ---------------------------------------------------------------------------
+
+VB_BUILDING_PRESETS: dict[str, dict] = {
+    "shrine_minor": {
+        "style": "gothic",
+        "floors": 1,
+        "width": 4.0, "depth": 4.0,
+        "wall_height": 5.0,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "pointed_arch"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "pointed_arch"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "pointed_arch"},
+        ],
+        "props": ["altar", "candelabra", "prayer_mat"],
+    },
+    "shrine_major": {
+        "style": "gothic",
+        "floors": 2,
+        "width": 8.0, "depth": 10.0,
+        "wall_height": 6.0,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "pointed_arch"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "pointed_arch"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "pointed_arch"},
+            {"type": "window", "wall": "left", "floor": 1, "style": "rose_window"},
+            {"type": "window", "wall": "right", "floor": 1, "style": "rose_window"},
+            {"type": "window", "wall": "back", "floor": 1, "style": "pointed_arch"},
+        ],
+        "props": ["altar_grand", "candelabra", "prayer_mat", "offering_bowl", "holy_symbol"],
+    },
+    "ruined_fortress_tower": {
+        "style": "medieval",
+        "floors": 3,
+        "width": 6.0, "depth": 6.0,
+        "wall_height": 4.0,
+        "has_roof": False,  # ruined = no roof
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "left", "floor": 1, "style": "arrow_slit"},
+            {"type": "window", "wall": "right", "floor": 1, "style": "arrow_slit"},
+            {"type": "window", "wall": "front", "floor": 2, "style": "arrow_slit"},
+            {"type": "window", "wall": "back", "floor": 2, "style": "arrow_slit"},
+        ],
+        "props": ["weapon_rack_broken", "barrel", "crate"],
+    },
+    "abandoned_house": {
+        "style": "medieval",
+        "floors": 1,
+        "width": 5.0, "depth": 6.0,
+        "wall_height": 3.5,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "square"},
+        ],
+        "props": ["table_broken", "chair", "bed_frame", "cobweb"],
+    },
+    "forge": {
+        "style": "fortress",
+        "floors": 1,
+        "width": 7.0, "depth": 8.0,
+        "wall_height": 5.0,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "large_arch"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "large_rectangular"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "large_rectangular"},
+        ],
+        "props": ["anvil", "forge_fire", "bellows", "weapon_rack", "quench_trough"],
+    },
+}
+
+# ---------------------------------------------------------------------------
+# VeilBreakers Dungeon Presets
+# ---------------------------------------------------------------------------
+
+VB_DUNGEON_PRESETS: dict[str, dict] = {
+    "abandoned_prison": {
+        "width": 40, "height": 40,
+        "min_room_size": 4, "max_depth": 5,
+        "cell_size": 2.0, "wall_height": 3.0,
+        "room_types": {"entrance": 1, "boss": 1, "treasure": 2, "secret": 1, "normal": -1},
+        "monster_table": ["chainbound", "hollow", "mawling"],
+        "props": ["shackle", "chain", "iron_maiden", "cell_door_broken"],
+    },
+    "corrupted_cave": {
+        "width": 50, "height": 50,
+        "min_room_size": 5, "max_depth": 6,
+        "cell_size": 2.5, "wall_height": 4.0,
+        "room_types": {"entrance": 1, "boss": 1, "treasure": 1, "secret": 2, "normal": -1},
+        "monster_table": ["sporecaller", "grimthorn", "the_broodmother"],
+        "props": ["stalactite", "mushroom_giant", "spider_web", "egg_cluster"],
+    },
+    "storm_peak": {
+        "width": 35, "height": 35,
+        "min_room_size": 4, "max_depth": 4,
+        "cell_size": 2.0, "wall_height": 5.0,
+        "room_types": {"entrance": 1, "boss": 1, "treasure": 1, "normal": -1},
+        "monster_table": ["crackling", "voltgeist", "ironjaw"],
+        "props": ["lightning_rod", "scorched_ground", "crystal_cluster"],
+    },
+    "veil_tear_dungeon": {
+        "width": 45, "height": 45,
+        "min_room_size": 5, "max_depth": 7,
+        "cell_size": 2.0, "wall_height": 6.0,
+        "room_types": {"entrance": 1, "boss": 1, "treasure": 3, "secret": 3, "normal": -1},
+        "monster_table": ["bloodshade", "the_weeping", "flicker", "needlefang"],
+        "props": ["void_crystal", "reality_crack", "floating_debris", "corruption_pool"],
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# Preset lookup helpers
+# ---------------------------------------------------------------------------
+
+
+def get_vb_building_preset(name: str) -> dict | None:
+    """Return a VeilBreakers building preset by name, or None if not found."""
+    return VB_BUILDING_PRESETS.get(name)
+
+
+def get_vb_dungeon_preset(name: str) -> dict | None:
+    """Return a VeilBreakers dungeon preset by name, or None if not found."""
+    return VB_DUNGEON_PRESETS.get(name)
 
 from ._building_grammar import (
     evaluate_building_grammar,
@@ -434,6 +569,7 @@ def handle_generate_building(params: dict) -> dict:
 
     Params:
         name: object name (default "Building")
+        preset: VB building preset name (optional, overrides defaults)
         width: building width (default 10)
         depth: building depth (default 8)
         floors: number of floors (default 2)
@@ -441,11 +577,21 @@ def handle_generate_building(params: dict) -> dict:
         seed: random seed (default 0)
     """
     logger.info("Generating building")
-    name = params.get("name", "Building")
-    width = params.get("width", 10)
-    depth = params.get("depth", 8)
-    floors = params.get("floors", 2)
-    style = params.get("style", "medieval")
+
+    # Apply VB preset defaults if specified
+    preset_name = params.get("preset")
+    preset = get_vb_building_preset(preset_name) if preset_name else None
+    if preset_name and preset is None:
+        raise ValueError(
+            f"Unknown VB building preset '{preset_name}'. "
+            f"Valid: {list(VB_BUILDING_PRESETS.keys())}"
+        )
+
+    name = params.get("name", (preset_name or "Building"))
+    width = params.get("width", preset["width"] if preset else 10)
+    depth = params.get("depth", preset["depth"] if preset else 8)
+    floors = params.get("floors", preset["floors"] if preset else 2)
+    style = params.get("style", preset["style"] if preset else "medieval")
     seed = params.get("seed", 0)
 
     if style not in STYLE_CONFIGS:
@@ -458,6 +604,11 @@ def handle_generate_building(params: dict) -> dict:
     obj = _create_mesh_object(name, bm)
 
     result = _build_building_result(name, spec)
+    if preset:
+        result["preset"] = preset_name
+        result["preset_props"] = preset.get("props", [])
+        result["preset_openings"] = preset.get("openings", [])
+        result["preset_has_roof"] = preset.get("has_roof", True)
     return {"status": "success", "result": result}
 
 
@@ -1017,6 +1168,7 @@ def handle_generate_multi_floor_dungeon(params: dict) -> dict:
 
     Params:
         name: dungeon name (default "MultiFloorDungeon")
+        preset: VB dungeon preset name (optional, overrides defaults)
         width, height: grid dimensions (default 64)
         num_floors: number of floors (default 3)
         min_room_size: minimum room size (default 6)
@@ -1028,14 +1180,23 @@ def handle_generate_multi_floor_dungeon(params: dict) -> dict:
     """
     from .worldbuilding_layout import _dungeon_to_geometry_ops
 
-    name = params.get("name", "MultiFloorDungeon")
-    width = params.get("width", 64)
-    height = params.get("height", 64)
+    # Apply VB preset defaults if specified
+    preset_name = params.get("preset")
+    preset = get_vb_dungeon_preset(preset_name) if preset_name else None
+    if preset_name and preset is None:
+        raise ValueError(
+            f"Unknown VB dungeon preset '{preset_name}'. "
+            f"Valid: {list(VB_DUNGEON_PRESETS.keys())}"
+        )
+
+    name = params.get("name", (preset_name or "MultiFloorDungeon"))
+    width = params.get("width", preset["width"] if preset else 64)
+    height = params.get("height", preset["height"] if preset else 64)
     num_floors = params.get("num_floors", 3)
-    min_room_size = params.get("min_room_size", 6)
-    max_depth = params.get("max_depth", 5)
-    cell_size = params.get("cell_size", 2.0)
-    wall_height = params.get("wall_height", 3.0)
+    min_room_size = params.get("min_room_size", preset["min_room_size"] if preset else 6)
+    max_depth = params.get("max_depth", preset["max_depth"] if preset else 5)
+    cell_size = params.get("cell_size", preset["cell_size"] if preset else 2.0)
+    wall_height = params.get("wall_height", preset["wall_height"] if preset else 3.0)
     connection_types = params.get("connection_types", ["staircase"])
     seed = params.get("seed", 0)
 
@@ -1110,23 +1271,26 @@ def handle_generate_multi_floor_dungeon(params: dict) -> dict:
         c_obj.parent = parent
         bpy.context.collection.objects.link(c_obj)
 
-    return {
-        "status": "success",
-        "result": {
-            "name": name,
-            "num_floors": dungeon.num_floors,
-            "total_rooms": dungeon.total_rooms,
-            "procedural_mesh_count": total_prop_count,
-            "connections": [
-                {
-                    "from_floor": c["from_floor"],
-                    "to_floor": c["to_floor"],
-                    "type": c["type"],
-                }
-                for c in dungeon.connections
-            ],
-        },
+    result = {
+        "name": name,
+        "num_floors": dungeon.num_floors,
+        "total_rooms": dungeon.total_rooms,
+        "procedural_mesh_count": total_prop_count,
+        "connections": [
+            {
+                "from_floor": c["from_floor"],
+                "to_floor": c["to_floor"],
+                "type": c["type"],
+            }
+            for c in dungeon.connections
+        ],
     }
+    if preset:
+        result["preset"] = preset_name
+        result["preset_monster_table"] = preset.get("monster_table", [])
+        result["preset_props"] = preset.get("props", [])
+        result["preset_room_types"] = preset.get("room_types", {})
+    return {"status": "success", "result": result}
 
 
 def handle_generate_overrun_variant(params: dict) -> dict:

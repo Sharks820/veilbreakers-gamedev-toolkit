@@ -47,6 +47,174 @@ _VALID_TERRAIN_TYPES = frozenset(TERRAIN_PRESETS.keys())
 _VALID_EROSION_MODES = frozenset({"none", "hydraulic", "thermal", "both"})
 _MAX_RESOLUTION = 8192
 
+# ---------------------------------------------------------------------------
+# VeilBreakers biome presets
+# ---------------------------------------------------------------------------
+
+VB_BIOME_PRESETS: dict[str, dict] = {
+    "thornwood_forest": {
+        "terrain_type": "hills",
+        "resolution": 512,
+        "height_scale": 15.0,
+        "erosion": True,
+        "erosion_iterations": 2000,
+        "seed": None,  # random
+        "scatter_rules": [
+            {"asset": "tree_dead", "density": 0.4, "min_distance": 3.0, "scale_range": [0.8, 1.5]},
+            {"asset": "tree_twisted", "density": 0.3, "min_distance": 4.0, "scale_range": [1.0, 2.0]},
+            {"asset": "mushroom_cluster", "density": 0.2, "min_distance": 1.5, "scale_range": [0.5, 1.0]},
+            {"asset": "rock_mossy", "density": 0.15, "min_distance": 2.0, "scale_range": [0.6, 1.2]},
+            {"asset": "fallen_log", "density": 0.05, "min_distance": 5.0, "scale_range": [0.8, 1.2]},
+        ],
+    },
+    "corrupted_swamp": {
+        "terrain_type": "flat",
+        "resolution": 512,
+        "height_scale": 5.0,
+        "erosion": True,
+        "erosion_iterations": 3000,
+        "seed": None,
+        "scatter_rules": [
+            {"asset": "dead_tree", "density": 0.2, "min_distance": 4.0, "scale_range": [0.6, 1.0]},
+            {"asset": "poison_pool", "density": 0.1, "min_distance": 8.0, "scale_range": [1.0, 2.0]},
+            {"asset": "vine_cluster", "density": 0.3, "min_distance": 2.0, "scale_range": [0.5, 1.5]},
+            {"asset": "spore_pod", "density": 0.15, "min_distance": 3.0, "scale_range": [0.3, 0.8]},
+        ],
+    },
+    "mountain_pass": {
+        "terrain_type": "mountains",
+        "resolution": 512,
+        "height_scale": 40.0,
+        "erosion": True,
+        "erosion_iterations": 5000,
+        "seed": None,
+        "scatter_rules": [
+            {"asset": "boulder", "density": 0.3, "min_distance": 3.0, "scale_range": [0.5, 2.5]},
+            {"asset": "pine_tree", "density": 0.1, "min_distance": 5.0, "scale_range": [0.8, 1.2]},
+            {"asset": "snow_patch", "density": 0.2, "min_distance": 4.0, "scale_range": [1.0, 3.0]},
+        ],
+    },
+    "ruined_fortress": {
+        "terrain_type": "hills",
+        "resolution": 256,
+        "height_scale": 12.0,
+        "erosion": True,
+        "erosion_iterations": 1500,
+        "seed": None,
+        "scatter_rules": [
+            {"asset": "rubble_pile", "density": 0.35, "min_distance": 2.0, "scale_range": [0.5, 1.5]},
+            {"asset": "broken_pillar", "density": 0.1, "min_distance": 5.0, "scale_range": [0.8, 1.5]},
+            {"asset": "wall_fragment", "density": 0.15, "min_distance": 4.0, "scale_range": [0.6, 1.2]},
+            {"asset": "dead_tree", "density": 0.08, "min_distance": 6.0, "scale_range": [0.8, 1.2]},
+            {"asset": "iron_fence", "density": 0.05, "min_distance": 7.0, "scale_range": [1.0, 1.0]},
+        ],
+    },
+    "abandoned_village": {
+        "terrain_type": "plains",
+        "resolution": 256,
+        "height_scale": 6.0,
+        "erosion": False,
+        "erosion_iterations": 0,
+        "seed": None,
+        "scatter_rules": [
+            {"asset": "collapsed_roof", "density": 0.15, "min_distance": 6.0, "scale_range": [0.8, 1.2]},
+            {"asset": "broken_cart", "density": 0.08, "min_distance": 8.0, "scale_range": [0.8, 1.0]},
+            {"asset": "barrel", "density": 0.2, "min_distance": 3.0, "scale_range": [0.6, 1.0]},
+            {"asset": "crate", "density": 0.2, "min_distance": 3.0, "scale_range": [0.5, 0.9]},
+            {"asset": "weed_patch", "density": 0.3, "min_distance": 2.0, "scale_range": [0.4, 1.0]},
+        ],
+    },
+    "veil_crack_zone": {
+        "terrain_type": "chaotic",
+        "resolution": 256,
+        "height_scale": 20.0,
+        "erosion": False,
+        "erosion_iterations": 0,
+        "seed": None,
+        "scatter_rules": [
+            {"asset": "crystal_shard", "density": 0.3, "min_distance": 2.0, "scale_range": [0.3, 2.0]},
+            {"asset": "void_tendril", "density": 0.1, "min_distance": 5.0, "scale_range": [0.5, 1.5]},
+            {"asset": "floating_rock", "density": 0.15, "min_distance": 4.0, "scale_range": [0.5, 3.0]},
+            {"asset": "corruption_pool", "density": 0.08, "min_distance": 8.0, "scale_range": [1.0, 2.0]},
+        ],
+    },
+    "underground_dungeon": {
+        "terrain_type": "flat",
+        "resolution": 128,
+        "height_scale": 2.0,
+        "erosion": False,
+        "erosion_iterations": 0,
+        "seed": None,
+        "scatter_rules": [
+            {"asset": "stalagmite", "density": 0.15, "min_distance": 3.0, "scale_range": [0.5, 1.5]},
+            {"asset": "bone_pile", "density": 0.1, "min_distance": 4.0, "scale_range": [0.3, 0.8]},
+            {"asset": "cobweb", "density": 0.2, "min_distance": 2.0, "scale_range": [0.5, 1.0]},
+            {"asset": "torch_sconce", "density": 0.05, "min_distance": 8.0, "scale_range": [1.0, 1.0]},
+        ],
+    },
+    "sacred_shrine": {
+        "terrain_type": "plains",
+        "resolution": 256,
+        "height_scale": 4.0,
+        "erosion": False,
+        "erosion_iterations": 0,
+        "seed": None,
+        "scatter_rules": [
+            {"asset": "stone_lantern", "density": 0.1, "min_distance": 5.0, "scale_range": [0.8, 1.2]},
+            {"asset": "offering_bowl", "density": 0.08, "min_distance": 6.0, "scale_range": [0.6, 1.0]},
+            {"asset": "prayer_flag", "density": 0.12, "min_distance": 4.0, "scale_range": [0.8, 1.0]},
+            {"asset": "moss_patch", "density": 0.25, "min_distance": 2.0, "scale_range": [0.5, 1.5]},
+            {"asset": "cherry_blossom", "density": 0.06, "min_distance": 7.0, "scale_range": [1.0, 1.8]},
+        ],
+    },
+    "battlefield": {
+        "terrain_type": "hills",
+        "resolution": 256,
+        "height_scale": 8.0,
+        "erosion": False,
+        "erosion_iterations": 0,
+        "seed": None,
+        "scatter_rules": [
+            {"asset": "broken_weapon", "density": 0.3, "min_distance": 2.0, "scale_range": [0.5, 1.0]},
+            {"asset": "shield_fragment", "density": 0.2, "min_distance": 2.5, "scale_range": [0.4, 0.8]},
+            {"asset": "bone_pile", "density": 0.15, "min_distance": 3.0, "scale_range": [0.5, 1.2]},
+            {"asset": "banner_torn", "density": 0.05, "min_distance": 8.0, "scale_range": [1.0, 1.5]},
+            {"asset": "crater", "density": 0.08, "min_distance": 6.0, "scale_range": [1.0, 2.0]},
+        ],
+    },
+    "cemetery": {
+        "terrain_type": "flat",
+        "resolution": 256,
+        "height_scale": 3.0,
+        "erosion": False,
+        "erosion_iterations": 0,
+        "seed": None,
+        "scatter_rules": [
+            {"asset": "gravestone", "density": 0.5, "min_distance": 2.0, "scale_range": [0.8, 1.2]},
+            {"asset": "dead_tree", "density": 0.08, "min_distance": 8.0, "scale_range": [1.0, 2.0]},
+            {"asset": "iron_fence", "density": 0.1, "min_distance": 3.0, "scale_range": [1.0, 1.0]},
+            {"asset": "fog_emitter", "density": 0.05, "min_distance": 10.0, "scale_range": [1.0, 1.0]},
+        ],
+    },
+}
+
+
+def get_vb_biome_preset(biome_name: str) -> dict | None:
+    """Return a copy of the VB biome preset for *biome_name*, or None.
+
+    The returned dict contains terrain generation parameters (terrain_type,
+    resolution, height_scale, erosion, erosion_iterations, seed) and
+    scatter_rules for post-terrain vegetation/prop placement.
+
+    Pure logic -- no bpy dependency.
+    """
+    preset = VB_BIOME_PRESETS.get(biome_name)
+    if preset is None:
+        return None
+    # Return a deep-ish copy so callers can mutate without affecting the preset
+    import copy
+    return copy.deepcopy(preset)
+
 
 def _validate_terrain_params(params: dict) -> dict:
     """Validate and normalize terrain generation parameters.
@@ -144,7 +312,10 @@ def handle_generate_terrain(params: dict) -> dict:
     Params:
         name (str, default "Terrain"): Object name.
         resolution (int, default 129): Grid resolution (vertices per side).
-        terrain_type (str, default "mountains"): One of 6 terrain presets.
+        terrain_type (str, default "mountains"): One of 8 terrain presets,
+            or a VeilBreakers biome name (e.g. "thornwood_forest").
+            When a biome name is given, its preset parameters are applied
+            as defaults, overrideable by explicit params.
         scale (float, default 100.0): Noise sampling scale.
         height_scale (float, default 20.0): Vertical scale multiplier.
         seed (int, default 0): Random seed.
@@ -153,8 +324,36 @@ def handle_generate_terrain(params: dict) -> dict:
         erosion_iterations (int, default 5000): Erosion iteration count.
 
     Returns dict with: name, vertex_count, terrain_type, resolution,
-        height_scale, erosion_applied.
+        height_scale, erosion_applied, and optionally biome_preset
+        and scatter_rules when a VB biome preset was used.
     """
+    # Check if terrain_type is a VB biome preset name
+    biome_preset = get_vb_biome_preset(params.get("terrain_type", ""))
+    if biome_preset is not None:
+        biome_name = params["terrain_type"]
+        # Build effective params: preset defaults, overridden by explicit params
+        effective = {}
+        effective["terrain_type"] = biome_preset["terrain_type"]
+        effective["resolution"] = biome_preset["resolution"]
+        effective["height_scale"] = biome_preset["height_scale"]
+        if biome_preset.get("erosion"):
+            effective["erosion"] = "hydraulic"
+            effective["erosion_iterations"] = biome_preset.get("erosion_iterations", 5000)
+        else:
+            effective["erosion"] = "none"
+        if biome_preset.get("seed") is not None:
+            effective["seed"] = biome_preset["seed"]
+        # Explicit params override preset defaults (except terrain_type which
+        # was the biome name -- we already resolved the real terrain_type)
+        for key in ("name", "resolution", "height_scale", "scale", "seed",
+                     "octaves", "persistence", "lacunarity", "erosion",
+                     "erosion_iterations"):
+            if key in params and key != "terrain_type":
+                effective[key] = params[key]
+        # Keep the original terrain_type param out so validation uses the
+        # resolved terrain_type from the biome preset
+        params = effective
+
     logger.info("Generating terrain (type=%s)", params.get("terrain_type", "mountains"))
     validated = _validate_terrain_params(params)
 
@@ -224,7 +423,7 @@ def handle_generate_terrain(params: dict) -> dict:
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(obj)
 
-    return {
+    result = {
         "name": obj.name,
         "vertex_count": vertex_count,
         "terrain_type": terrain_type,
@@ -232,6 +431,10 @@ def handle_generate_terrain(params: dict) -> dict:
         "height_scale": height_scale,
         "erosion_applied": erosion_applied,
     }
+    if biome_preset is not None:
+        result["biome_preset"] = biome_name
+        result["scatter_rules"] = biome_preset.get("scatter_rules", [])
+    return result
 
 
 # ---------------------------------------------------------------------------

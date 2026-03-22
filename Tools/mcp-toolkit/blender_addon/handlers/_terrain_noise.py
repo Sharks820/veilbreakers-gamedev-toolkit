@@ -9,7 +9,7 @@ Provides:
   - compute_biome_assignments: Per-cell biome index from altitude/slope rules
   - carve_river_path: A* river channel carving on heightmap
   - generate_road_path: Weighted A* road with terrain grading
-  - TERRAIN_PRESETS: Parameter dicts for 6 terrain types
+  - TERRAIN_PRESETS: Parameter dicts for 8 terrain types
   - BIOME_RULES: Default dark-fantasy biome rules
 """
 
@@ -87,6 +87,21 @@ TERRAIN_PRESETS: dict[str, dict[str, Any]] = {
         "amplitude_scale": 0.9,
         "post_process": "step",
         "step_count": 5,
+    },
+    "flat": {
+        "octaves": 3,
+        "persistence": 0.25,
+        "lacunarity": 2.0,
+        "amplitude_scale": 0.15,
+        "post_process": "smooth",
+    },
+    "chaotic": {
+        "octaves": 8,
+        "persistence": 0.6,
+        "lacunarity": 2.3,
+        "amplitude_scale": 1.0,
+        "post_process": "canyon",
+        "ridge_strength": 0.5,
     },
 }
 
