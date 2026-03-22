@@ -1086,7 +1086,7 @@ def generate_corruption_gameplay_script(
     lines.append("")
     lines.append("        [Header(\"Visual Feedback\")]")
     lines.append("        public Renderer characterRenderer;")
-    lines.append("        private static readonly int CorruptionLevelProp = Shader.PropertyToID(\"_CorruptionLevel\");")
+    lines.append("        private static readonly int CorruptionLevelProp = Shader.PropertyToID(\"_CorruptionAmount\");")
     lines.append("")
     lines.append("        // Cached components")
     lines.append("        private Combatant _combatant;")
