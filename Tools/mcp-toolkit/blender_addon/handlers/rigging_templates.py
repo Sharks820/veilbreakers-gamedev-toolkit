@@ -90,17 +90,17 @@ HUMANOID_BONES: dict[str, dict] = {
         "parent": "spine.002",
         "rigify_type": "",
     },
-    # Neck and head
+    # Neck and head (spaced for Rigify minimum neck length)
     "spine.004": {
         "head": (0.0, 0.0, 1.55),
-        "tail": (0.0, 0.0, 1.65),
+        "tail": (0.0, 0.0, 1.73),
         "roll": 0.0,
         "parent": "spine.003",
         "rigify_type": "",
     },
     "spine.005": {
-        "head": (0.0, 0.0, 1.65),
-        "tail": (0.0, 0.0, 1.8),
+        "head": (0.0, 0.0, 1.73),
+        "tail": (0.0, 0.0, 1.95),
         "roll": 0.0,
         "parent": "spine.004",
         "rigify_type": "",
