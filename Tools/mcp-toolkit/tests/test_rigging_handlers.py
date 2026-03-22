@@ -731,3 +731,228 @@ class TestWeightFixParams:
         result = _validate_weight_fix_params("normalize", {})
         required_keys = {"valid", "errors", "operation"}
         assert required_keys.issubset(set(result.keys()))
+
+
+# ---------------------------------------------------------------------------
+# TestWeightLimitPure
+# ---------------------------------------------------------------------------
+
+
+class TestWeightLimitPure:
+    """Test _enforce_weight_limit_pure logic."""
+
+    def test_under_limit_unchanged(self):
+        """Vertices under the limit are not modified."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        vw = [[("a", 0.5), ("b", 0.3), ("c", 0.2)]]
+        result = _enforce_weight_limit_pure(vw, max_influences=4)
+        assert result["clamped_vertices"] == 0
+        assert len(result["vertex_weights"][0]) == 3
+
+    def test_over_limit_clamped(self):
+        """Vertices over the limit are clamped to max_influences."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        vw = [[("a", 0.3), ("b", 0.25), ("c", 0.2), ("d", 0.15), ("e", 0.1)]]
+        result = _enforce_weight_limit_pure(vw, max_influences=4)
+        assert result["clamped_vertices"] == 1
+        assert len(result["vertex_weights"][0]) == 4
+
+    def test_empty_input(self):
+        """Empty input produces empty output."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        result = _enforce_weight_limit_pure([], max_influences=4)
+        assert result["total_vertices"] == 0
+        assert result["clamped_vertices"] == 0
+        assert result["vertex_weights"] == []
+
+    def test_custom_max_influences(self):
+        """Custom max_influences of 2 clamps correctly."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        vw = [[("a", 0.5), ("b", 0.3), ("c", 0.2)]]
+        result = _enforce_weight_limit_pure(vw, max_influences=2)
+        assert result["clamped_vertices"] == 1
+        assert len(result["vertex_weights"][0]) == 2
+
+    def test_exactly_at_limit_not_clamped(self):
+        """Vertices exactly at the limit are not clamped."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        vw = [[("a", 0.4), ("b", 0.3), ("c", 0.2), ("d", 0.1)]]
+        result = _enforce_weight_limit_pure(vw, max_influences=4)
+        assert result["clamped_vertices"] == 0
+
+    def test_returns_required_keys(self):
+        """Result has clamped_vertices, total_vertices, max_influences, vertex_weights."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        result = _enforce_weight_limit_pure([], max_influences=4)
+        required = {"clamped_vertices", "total_vertices", "max_influences", "vertex_weights"}
+        assert required.issubset(set(result.keys()))
+
+
+# ---------------------------------------------------------------------------
+# TestEnhancedValidation
+# ---------------------------------------------------------------------------
+
+
+class TestEnhancedValidation:
+    """Test _enhanced_rig_validation function."""
+
+    def _make_validation(self, **overrides):
+        from blender_addon.handlers.rigging_weights import _enhanced_rig_validation
+        defaults = {
+            "bone_names": [
+                "upper_arm.L", "upper_arm.R", "forearm.L", "forearm.R",
+                "thigh.L", "thigh.R", "shin.L", "shin.R",
+                "upper_arm_twist.L", "upper_arm_twist.R",
+                "forearm_twist.L", "forearm_twist.R",
+                "thigh_twist.L", "thigh_twist.R",
+                "shin_twist.L", "shin_twist.R",
+            ],
+            "bone_rolls": {
+                "upper_arm.L": 0.1, "upper_arm.R": -0.1,
+                "forearm.L": 1.5708, "forearm.R": -1.5708,
+                "thigh.L": 0.1, "thigh.R": -0.1,
+                "shin.L": 0.1, "shin.R": -0.1,
+            },
+            "bone_parents": {},
+            "vertex_influence_counts": [4, 3, 4, 2],
+            "max_influences": 4,
+        }
+        defaults.update(overrides)
+        return _enhanced_rig_validation(**defaults)
+
+    def test_detects_zero_weight_bones(self):
+        """zero_weight_bones key exists in result."""
+        result = self._make_validation()
+        assert "zero_weight_bones" in result
+
+    def test_detects_over_limit_vertices(self):
+        """Vertices exceeding max_influences are counted."""
+        result = self._make_validation(
+            vertex_influence_counts=[5, 6, 4, 3],
+            max_influences=4,
+        )
+        assert result["over_limit_vertices"] == 2
+
+    def test_symmetry_mismatch(self):
+        """Missing R counterpart is detected."""
+        result = self._make_validation(
+            bone_names=["upper_arm.L", "forearm.L", "forearm.R",
+                       "upper_arm_twist.L", "forearm_twist.L", "forearm_twist.R"],
+            bone_rolls={"upper_arm.L": 0.1, "forearm.L": 1.5708, "forearm.R": -1.5708},
+        )
+        assert "upper_arm.L" in result["symmetry_mismatches"]
+
+    def test_default_roll_flagged(self):
+        """Limb bones with roll 0.0 are flagged."""
+        result = self._make_validation(
+            bone_rolls={
+                "upper_arm.L": 0.0, "upper_arm.R": 0.0,
+                "forearm.L": 0.0, "forearm.R": 0.0,
+                "thigh.L": 0.0, "thigh.R": 0.0,
+                "shin.L": 0.0, "shin.R": 0.0,
+            },
+        )
+        assert len(result["default_roll_bones"]) >= 8
+
+    def test_missing_twist(self):
+        """Missing twist bones are detected."""
+        result = self._make_validation(
+            bone_names=["upper_arm.L", "upper_arm.R", "forearm.L", "forearm.R",
+                       "thigh.L", "thigh.R", "shin.L", "shin.R"],
+            bone_rolls={
+                "upper_arm.L": 0.1, "upper_arm.R": -0.1,
+                "forearm.L": 1.5708, "forearm.R": -1.5708,
+                "thigh.L": 0.1, "thigh.R": -0.1,
+                "shin.L": 0.1, "shin.R": -0.1,
+            },
+        )
+        assert len(result["missing_twist_bones"]) == 8
+
+    def test_clean_rig(self):
+        """A rig with twist bones, proper rolls, and within limit passes clean."""
+        result = self._make_validation()
+        assert result["over_limit_vertices"] == 0
+        assert result["symmetry_mismatches"] == []
+        assert result["missing_twist_bones"] == []
+
+    def test_returns_required_keys(self):
+        """Result has all required keys."""
+        result = self._make_validation()
+        required = {
+            "zero_weight_bones", "over_limit_vertices",
+            "symmetry_mismatches", "default_roll_bones",
+            "missing_twist_bones", "issues",
+        }
+        assert required.issubset(set(result.keys()))
+
+
+# ---------------------------------------------------------------------------
+# TestMultiArmGeneration
+# ---------------------------------------------------------------------------
+
+
+class TestMultiArmGeneration:
+    """Test _generate_multi_arm_bones pure-logic function."""
+
+    def test_2_arms_6_bones(self):
+        """2 arms produce 6 bones (1 pair x 3 bones x 2 sides)."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(2)
+        assert len(bones) == 6
+
+    def test_4_arms_12_bones(self):
+        """4 arms produce 12 bones (2 pairs x 3 bones x 2 sides)."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(4)
+        assert len(bones) == 12
+
+    def test_6_arms_18_bones(self):
+        """6 arms produce 18 bones (3 pairs x 3 bones x 2 sides)."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(6)
+        assert len(bones) == 18
+
+    def test_invalid_count_raises(self):
+        """Odd or out-of-range arm count raises ValueError."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        with pytest.raises(ValueError):
+            _generate_multi_arm_bones(3)
+        with pytest.raises(ValueError):
+            _generate_multi_arm_bones(0)
+        with pytest.raises(ValueError):
+            _generate_multi_arm_bones(8)
+
+    def test_bone_defs_required_keys(self):
+        """Each bone dict has name, head, tail, roll, parent, rigify_type."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(4)
+        required = {"name", "head", "tail", "roll", "parent", "rigify_type"}
+        for bone in bones:
+            assert required.issubset(set(bone.keys())), f"Bone {bone.get('name')} missing keys"
+
+    def test_lr_symmetry(self):
+        """Each pair has matching L and R bones."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(4)
+        l_names = {b["name"] for b in bones if b["name"].endswith(".L")}
+        r_names = {b["name"] for b in bones if b["name"].endswith(".R")}
+        for ln in l_names:
+            rn = ln[:-2] + ".R"
+            assert rn in r_names, f"Missing R counterpart for {ln}"
+
+    def test_forearm_rolls_set(self):
+        """Forearm bones have roll 1.5708 (L) and -1.5708 (R)."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(4)
+        for bone in bones:
+            if "forearm" in bone["name"]:
+                if bone["name"].endswith(".L"):
+                    assert abs(bone["roll"] - 1.5708) < 0.001
+                elif bone["name"].endswith(".R"):
+                    assert abs(bone["roll"] - (-1.5708)) < 0.001

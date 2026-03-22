@@ -891,3 +891,266 @@ class TestShapeKeyParams:
         assert "valid" in result
         assert "errors" in result
         assert "vertex_count" in result
+
+
+# ---------------------------------------------------------------------------
+# TestFACSActionUnits
+# ---------------------------------------------------------------------------
+
+
+class TestFACSActionUnits:
+    """Test FACS_ACTION_UNITS data structure."""
+
+    def test_has_17_units(self):
+        """FACS_ACTION_UNITS has exactly 17 entries."""
+        from blender_addon.handlers.rigging_advanced import FACS_ACTION_UNITS
+        assert len(FACS_ACTION_UNITS) == 17
+
+    def test_all_bones_in_facial(self):
+        """All bones referenced in FACS units exist in FACIAL_BONES."""
+        from blender_addon.handlers.rigging_advanced import FACS_ACTION_UNITS, FACIAL_BONES
+        for au_code, au_def in FACS_ACTION_UNITS.items():
+            for bone in au_def["bones"]:
+                assert bone in FACIAL_BONES, (
+                    f"FACS {au_code} references bone '{bone}' not in FACIAL_BONES"
+                )
+
+    def test_valid_format(self):
+        """Each entry has 'name' (str) and 'bones' (list)."""
+        from blender_addon.handlers.rigging_advanced import FACS_ACTION_UNITS
+        for au_code, au_def in FACS_ACTION_UNITS.items():
+            assert isinstance(au_def["name"], str), f"{au_code} name not str"
+            assert isinstance(au_def["bones"], list), f"{au_code} bones not list"
+
+
+# ---------------------------------------------------------------------------
+# TestVisemeShapes
+# ---------------------------------------------------------------------------
+
+
+class TestVisemeShapes:
+    """Test VISEME_SHAPES data structure."""
+
+    def test_has_15_visemes(self):
+        """VISEME_SHAPES has exactly 15 entries."""
+        from blender_addon.handlers.rigging_advanced import VISEME_SHAPES
+        assert len(VISEME_SHAPES) == 15
+
+    def test_expected_names(self):
+        """VISEME_SHAPES contains expected phoneme codes."""
+        from blender_addon.handlers.rigging_advanced import VISEME_SHAPES
+        expected = {"sil", "PP", "FF", "TH", "DD", "kk", "CH", "SS", "nn", "RR", "aa", "E", "I", "O", "U"}
+        assert set(VISEME_SHAPES.keys()) == expected
+
+    def test_sil_empty(self):
+        """Silence viseme has empty bones list."""
+        from blender_addon.handlers.rigging_advanced import VISEME_SHAPES
+        assert VISEME_SHAPES["sil"]["bones"] == []
+
+
+# ---------------------------------------------------------------------------
+# TestEyeTracking
+# ---------------------------------------------------------------------------
+
+
+class TestEyeTracking:
+    """Test eye tracking bones in FACIAL_BONES."""
+
+    def test_has_eye_bones(self):
+        """FACIAL_BONES has eye.L and eye.R."""
+        from blender_addon.handlers.rigging_advanced import FACIAL_BONES
+        assert "eye.L" in FACIAL_BONES
+        assert "eye.R" in FACIAL_BONES
+
+    def test_has_eye_target(self):
+        """FACIAL_BONES has eye_target bone."""
+        from blender_addon.handlers.rigging_advanced import FACIAL_BONES
+        assert "eye_target" in FACIAL_BONES
+
+    def test_eye_target_parent(self):
+        """eye_target parent is head."""
+        from blender_addon.handlers.rigging_advanced import FACIAL_BONES
+        assert FACIAL_BONES["eye_target"]["parent"] == "head"
+
+
+# ---------------------------------------------------------------------------
+# TestFacialRigValidation
+# ---------------------------------------------------------------------------
+
+
+class TestFacialRigValidation:
+    """Test _validate_facial_rig_params."""
+
+    def test_valid_params(self):
+        """Valid expressions, FACS units, and visemes pass."""
+        from blender_addon.handlers.rigging_advanced import _validate_facial_rig_params
+        result = _validate_facial_rig_params({
+            "expressions": ["roar", "snarl"],
+            "facs_units": ["AU01", "AU26"],
+            "visemes": ["aa", "O"],
+        })
+        assert result["valid"] is True
+        assert result["errors"] == []
+
+    def test_invalid_expression(self):
+        """Unknown expression name fails."""
+        from blender_addon.handlers.rigging_advanced import _validate_facial_rig_params
+        result = _validate_facial_rig_params({
+            "expressions": ["nonexistent_expr"],
+        })
+        assert result["valid"] is False
+        assert any("nonexistent_expr" in e for e in result["errors"])
+
+    def test_invalid_facs(self):
+        """Unknown FACS unit fails."""
+        from blender_addon.handlers.rigging_advanced import _validate_facial_rig_params
+        result = _validate_facial_rig_params({
+            "facs_units": ["AU99"],
+        })
+        assert result["valid"] is False
+        assert any("AU99" in e for e in result["errors"])
+
+    def test_invalid_viseme(self):
+        """Unknown viseme fails."""
+        from blender_addon.handlers.rigging_advanced import _validate_facial_rig_params
+        result = _validate_facial_rig_params({
+            "visemes": ["ZZ"],
+        })
+        assert result["valid"] is False
+        assert any("ZZ" in e for e in result["errors"])
+
+    def test_returns_keys(self):
+        """Result has valid and errors keys."""
+        from blender_addon.handlers.rigging_advanced import _validate_facial_rig_params
+        result = _validate_facial_rig_params({})
+        assert "valid" in result
+        assert "errors" in result
+
+
+# ---------------------------------------------------------------------------
+# TestSpringDynamics
+# ---------------------------------------------------------------------------
+
+
+class TestSpringDynamics:
+    """Test _compute_spring_chain_forces and _validate_spring_dynamics_params."""
+
+    def test_root_unchanged(self):
+        """Root bone position is never modified."""
+        from blender_addon.handlers.rigging_advanced import _compute_spring_chain_forces
+        positions = [(0, 0, 1), (0, 0, 0.8), (0, 0, 0.6)]
+        velocities = [(0, 0, 0), (0, 0, 0), (0, 0, 0)]
+        result = _compute_spring_chain_forces(positions, velocities, 0.5, 0.3, 1.0)
+        assert result[0] == (0, 0, 1)
+
+    def test_gravity_pulls_down(self):
+        """Non-root bones move downward under gravity."""
+        from blender_addon.handlers.rigging_advanced import _compute_spring_chain_forces
+        positions = [(0, 0, 1), (0, 0, 0.8)]
+        velocities = [(0, 0, 0), (0, 0, 0)]
+        result = _compute_spring_chain_forces(positions, velocities, 0.0, 0.0, 9.8)
+        # With gravity and no stiffness, z should decrease
+        assert result[1][2] < 0.8
+
+    def test_correct_count(self):
+        """Output has same count as input."""
+        from blender_addon.handlers.rigging_advanced import _compute_spring_chain_forces
+        positions = [(0, 0, 1), (0, 0, 0.8), (0, 0, 0.6), (0, 0, 0.4)]
+        velocities = [(0, 0, 0)] * 4
+        result = _compute_spring_chain_forces(positions, velocities, 0.5, 0.3, 1.0)
+        assert len(result) == 4
+
+    def test_valid_params(self):
+        """Valid spring dynamics params pass."""
+        from blender_addon.handlers.rigging_advanced import _validate_spring_dynamics_params
+        result = _validate_spring_dynamics_params(mass=1.0, stiffness=10.0, damping=0.5)
+        assert result["valid"] is True
+        assert result["errors"] == []
+
+    def test_invalid_mass(self):
+        """Mass <= 0 fails."""
+        from blender_addon.handlers.rigging_advanced import _validate_spring_dynamics_params
+        result = _validate_spring_dynamics_params(mass=0.0, stiffness=10.0, damping=0.5)
+        assert result["valid"] is False
+        assert any("mass" in e for e in result["errors"])
+
+    def test_invalid_stiffness(self):
+        """Stiffness <= 0 or > 100 fails."""
+        from blender_addon.handlers.rigging_advanced import _validate_spring_dynamics_params
+        result = _validate_spring_dynamics_params(mass=1.0, stiffness=0.0, damping=0.5)
+        assert result["valid"] is False
+        assert any("stiffness" in e for e in result["errors"])
+
+
+# ---------------------------------------------------------------------------
+# TestCorrectiveShapes
+# ---------------------------------------------------------------------------
+
+
+class TestCorrectiveShapes:
+    """Test CORRECTIVE_SHAPE_DEFS and _validate_corrective_shape_config."""
+
+    def test_has_5_defs(self):
+        """CORRECTIVE_SHAPE_DEFS has 5 entries."""
+        from blender_addon.handlers.rigging_advanced import CORRECTIVE_SHAPE_DEFS
+        assert len(CORRECTIVE_SHAPE_DEFS) == 5
+
+    def test_valid_config(self):
+        """Valid corrective shape config passes."""
+        from blender_addon.handlers.rigging_advanced import _validate_corrective_shape_config
+        result = _validate_corrective_shape_config({
+            "joint": "shoulder",
+            "axis": "x",
+            "threshold": 45.0,
+            "strength": 1.0,
+        })
+        assert result["valid"] is True
+        assert result["errors"] == []
+
+    def test_invalid_joint(self):
+        """Unknown joint fails."""
+        from blender_addon.handlers.rigging_advanced import _validate_corrective_shape_config
+        result = _validate_corrective_shape_config({
+            "joint": "ankle",
+            "axis": "x",
+            "threshold": 45.0,
+            "strength": 1.0,
+        })
+        assert result["valid"] is False
+        assert any("joint" in e for e in result["errors"])
+
+    def test_invalid_axis(self):
+        """Unknown axis fails."""
+        from blender_addon.handlers.rigging_advanced import _validate_corrective_shape_config
+        result = _validate_corrective_shape_config({
+            "joint": "shoulder",
+            "axis": "w",
+            "threshold": 45.0,
+            "strength": 1.0,
+        })
+        assert result["valid"] is False
+        assert any("axis" in e for e in result["errors"])
+
+    def test_invalid_threshold(self):
+        """Threshold outside [0, 180] fails."""
+        from blender_addon.handlers.rigging_advanced import _validate_corrective_shape_config
+        result = _validate_corrective_shape_config({
+            "joint": "shoulder",
+            "axis": "x",
+            "threshold": 200.0,
+            "strength": 1.0,
+        })
+        assert result["valid"] is False
+        assert any("threshold" in e for e in result["errors"])
+
+    def test_invalid_strength(self):
+        """Strength outside [0, 2] fails."""
+        from blender_addon.handlers.rigging_advanced import _validate_corrective_shape_config
+        result = _validate_corrective_shape_config({
+            "joint": "shoulder",
+            "axis": "x",
+            "threshold": 45.0,
+            "strength": 3.0,
+        })
+        assert result["valid"] is False
+        assert any("strength" in e for e in result["errors"])
