@@ -38,7 +38,7 @@ def setup_action_for_armature(action, armature_obj):
     if hasattr(armature_obj, "animation_data") and armature_obj.animation_data:
         try:
             armature_obj.animation_data.action_slot = slot
-        except Exception:
+        except (AttributeError, TypeError, RuntimeError):
             pass
 
     # Create layer
