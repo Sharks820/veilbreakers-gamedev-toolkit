@@ -432,7 +432,8 @@ class TestGenerateCombatAnimationData:
             "light_attack",
             custom_timing={"anticipation": 20},
         )
-        assert result["timing"]["frames"]["anticipation"] == 20
+        # IRON brand (default) scales anticipation by 1.5x: 20 * 1.5 = 30
+        assert result["timing"]["frames"]["anticipation"] == 30
 
     def test_root_motion_forward_lunge_in_active(self):
         """Default root motion should have forward movement during active phase."""
@@ -445,3 +446,61 @@ class TestGenerateCombatAnimationData:
         active_z = [kf["z"] for kf in rm if active_start_frame <= kf["frame"] < active_end_frame]
         if active_z:
             assert max(active_z) > 0, "Should have forward movement during active phase"
+
+
+class TestBrandTimingModifiers:
+    def test_all_brands_have_modifiers(self):
+        from blender_addon.handlers._combat_timing import BRAND_TIMING_MODIFIERS, VALID_BRANDS
+        for brand in VALID_BRANDS:
+            assert brand in BRAND_TIMING_MODIFIERS
+
+    def test_modifier_keys_complete(self):
+        from blender_addon.handlers._combat_timing import BRAND_TIMING_MODIFIERS
+        required = {"anticipation_scale", "active_scale", "recovery_scale", "easing"}
+        for brand, mods in BRAND_TIMING_MODIFIERS.items():
+            for key in required:
+                assert key in mods, f"{brand} missing {key}"
+
+    def test_iron_slower_anticipation(self):
+        from blender_addon.handlers._combat_timing import BRAND_TIMING_MODIFIERS
+        assert BRAND_TIMING_MODIFIERS["IRON"]["anticipation_scale"] > 1.0
+
+    def test_surge_faster(self):
+        from blender_addon.handlers._combat_timing import BRAND_TIMING_MODIFIERS
+        surge = BRAND_TIMING_MODIFIERS["SURGE"]
+        assert surge["anticipation_scale"] < 1.0
+        assert surge["active_scale"] < 1.0
+
+
+class TestApplyBrandTiming:
+    def _base(self):
+        return configure_combat_timing("light_attack")
+
+    def test_iron_increases_anticipation(self):
+        from blender_addon.handlers._combat_timing import apply_brand_timing
+        base = self._base()
+        result = apply_brand_timing(base, "IRON")
+        assert result["frames"]["anticipation"] > base["frames"]["anticipation"]
+
+    def test_surge_decreases_frames(self):
+        from blender_addon.handlers._combat_timing import apply_brand_timing
+        base = self._base()
+        result = apply_brand_timing(base, "SURGE")
+        assert result["frames"]["total"] < base["frames"]["total"]
+
+    def test_invalid_brand_raises(self):
+        from blender_addon.handlers._combat_timing import apply_brand_timing
+        with pytest.raises(ValueError):
+            apply_brand_timing(self._base(), "FIRE")
+
+    def test_original_not_mutated(self):
+        from blender_addon.handlers._combat_timing import apply_brand_timing
+        base = self._base()
+        orig = base["frames"]["anticipation"]
+        apply_brand_timing(base, "IRON")
+        assert base["frames"]["anticipation"] == orig
+
+    def test_easing_added(self):
+        from blender_addon.handlers._combat_timing import apply_brand_timing
+        result = apply_brand_timing(self._base(), "GRACE")
+        assert result["easing"] == "ease_in_out_sine"

@@ -327,8 +327,9 @@ class TestValidateBatchExportParams:
 class TestMixamoBoneMapping:
     """Test MIXAMO_TO_RIGIFY mapping and _map_mixamo_bones function."""
 
-    def test_mapping_has_at_least_22_entries(self):
-        assert len(MIXAMO_TO_RIGIFY) >= 22
+    def test_mapping_has_at_least_52_entries(self):
+        """22 core + 30 finger bones = 52 minimum."""
+        assert len(MIXAMO_TO_RIGIFY) >= 52
 
     def test_hips_mapping(self):
         assert MIXAMO_TO_RIGIFY["mixamorig:Hips"] == "DEF-spine"
@@ -573,3 +574,30 @@ class TestBatchExportFBXSettings:
         clips = ["Walk", "Run", "Idle", "Attack"]
         filenames = [_generate_unity_filename("Char", c, "unity") for c in clips]
         assert len(filenames) == len(set(filenames)), "Duplicate filenames"
+
+
+class TestFingerBoneMapping:
+    """Test G13 finger bone mappings."""
+
+    def test_all_30_fingers_present(self):
+        finger_names = ["Thumb", "Index", "Middle", "Ring", "Pinky"]
+        count = sum(1 for k in MIXAMO_TO_RIGIFY if any(fn in k for fn in finger_names))
+        assert count == 30
+
+    def test_left_right_symmetry(self):
+        finger_names = ["Thumb", "Index", "Middle", "Ring", "Pinky"]
+        for finger in finger_names:
+            for i in range(1, 4):
+                lk = f"mixamorig:LeftHand{finger}{i}"
+                rk = f"mixamorig:RightHand{finger}{i}"
+                assert lk in MIXAMO_TO_RIGIFY, f"Missing {lk}"
+                assert rk in MIXAMO_TO_RIGIFY, f"Missing {rk}"
+                lv = MIXAMO_TO_RIGIFY[lk]
+                rv = MIXAMO_TO_RIGIFY[rk]
+                assert lv.replace(".L", ".R") == rv
+
+    def test_all_def_prefixed(self):
+        finger_names = ["Thumb", "Index", "Middle", "Ring", "Pinky"]
+        for k, v in MIXAMO_TO_RIGIFY.items():
+            if any(fn in k for fn in finger_names):
+                assert v.startswith("DEF-"), f"{v} missing DEF-"
