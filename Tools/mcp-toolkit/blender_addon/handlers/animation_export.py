@@ -16,6 +16,7 @@ _generate_unity_filename) are separated for testability without Blender.
 
 from __future__ import annotations
 
+import json as _json
 import math
 import os
 
@@ -92,6 +93,55 @@ MIXAMO_TO_RIGIFY: dict[str, str] = {
     "mixamorig:RightHandPinky2": "DEF-f_pinky.02.R",
     "mixamorig:RightHandPinky3": "DEF-f_pinky.03.R",
 }
+
+
+# ---------------------------------------------------------------------------
+# G15: Timing JSON sidecar for FBX export
+# ---------------------------------------------------------------------------
+
+
+def _generate_timing_sidecar(
+    action_name: str,
+    output_dir: str,
+    naming: str,
+    object_name: str,
+) -> str | None:
+    """Generate .timing.json sidecar for a combat animation FBX export.
+
+    Checks if the action name matches a combat timing preset and writes
+    the timing data as JSON alongside the exported FBX file.
+
+    Returns the sidecar file path, or None if no timing data applies.
+    """
+    from ._combat_timing import COMBAT_TIMING_PRESETS
+
+    matched = None
+    action_lower = action_name.lower()
+    for preset in COMBAT_TIMING_PRESETS:
+        if preset in action_lower:
+            matched = preset
+            break
+    if not matched:
+        for kw, preset in [("attack", "light_attack"), ("dodge", "dodge_roll"),
+                           ("parry", "parry"), ("block", "block"),
+                           ("combo", "combo_finisher"), ("charged", "charged_attack")]:
+            if kw in action_lower:
+                matched = preset
+                break
+    if not matched:
+        return None
+
+    fbx_name = _generate_unity_filename(object_name, action_name, naming)
+    sidecar_name = fbx_name.replace(".fbx", ".timing.json")
+    sidecar_path = os.path.join(output_dir, sidecar_name)
+
+    data = dict(COMBAT_TIMING_PRESETS[matched])
+    data["source_action"] = action_name
+    data["preset"] = matched
+
+    with open(sidecar_path, "w") as f:
+        _json.dump(data, f, indent=2)
+    return sidecar_path
 
 
 # ---------------------------------------------------------------------------
