@@ -976,9 +976,10 @@ class TestMonsterTemplateMap:
         for mid, config in MONSTER_TEMPLATE_MAP.items():
             assert config["template"] in TEMPLATE_CATALOG, f"{mid} has invalid template"
 
-    def test_skitter_teeth_is_arachnid(self):
+    def test_skitter_teeth_is_humanoid(self):
+        """SkitterTeeth is a hunched bipedal (confirmed from concept art)."""
         from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
-        assert MONSTER_TEMPLATE_MAP["skitter_teeth"]["template"] == "arachnid"
+        assert MONSTER_TEMPLATE_MAP["skitter_teeth"]["template"] == "humanoid"
 
     def test_bosses_have_boss_body(self):
         from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
@@ -990,7 +991,7 @@ class TestMonsterTemplateMap:
         from blender_addon.handlers.rigging import _validate_monster_rig_config
         result = _validate_monster_rig_config("skitter_teeth")
         assert result["valid"] is True
-        assert result["template"] == "arachnid"
+        assert result["template"] == "humanoid"
 
     def test_validate_unknown_monster(self):
         from blender_addon.handlers.rigging import _validate_monster_rig_config
@@ -1002,6 +1003,59 @@ class TestMonsterTemplateMap:
         for mid, config in MONSTER_TEMPLATE_MAP.items():
             assert isinstance(config["features"], list), f"{mid} features not a list"
             assert len(config["features"]) >= 1, f"{mid} has no features"
+
+    def test_all_monsters_have_notes(self):
+        """Every monster has visual description notes from concept art analysis."""
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        for mid, config in MONSTER_TEMPLATE_MAP.items():
+            assert "notes" in config, f"{mid} missing notes"
+            assert len(config["notes"]) > 10, f"{mid} notes too short"
+
+    def test_wraith_monsters_have_tentacle_base(self):
+        """Bloodshade and hollow need no_legs_tentacle_base (from art: no legs)."""
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        for mid in ("bloodshade", "hollow"):
+            assert "no_legs_tentacle_base" in MONSTER_TEMPLATE_MAP[mid]["features"]
+
+    def test_serpent_monsters_have_arm_addon(self):
+        """Grimthorn and needlefang are serpents WITH arms (from art)."""
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        for mid in ("grimthorn", "needlefang"):
+            assert MONSTER_TEMPLATE_MAP[mid]["template"] == "serpent"
+            assert "arm_pair_addon" in MONSTER_TEMPLATE_MAP[mid]["features"]
+
+    def test_flying_insects_have_wings(self):
+        """Flicker and broodmother need wing_pair_addon (from art: visible wings)."""
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        for mid in ("flicker", "the_broodmother"):
+            assert "wing_pair_addon" in MONSTER_TEMPLATE_MAP[mid]["features"]
+
+    def test_congregation_has_6_arms(self):
+        """The Congregation has 6 arms (from art: 3 pairs visible)."""
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        assert MONSTER_TEMPLATE_MAP["the_congregation"]["template"] == "multi_armed"
+        assert "arm_count_6" in MONSTER_TEMPLATE_MAP["the_congregation"]["features"]
+
+
+class TestRigFeatureDefinitions:
+    """Test RIG_FEATURE_DEFINITIONS data."""
+
+    def test_feature_defs_exist(self):
+        from blender_addon.handlers.rigging import RIG_FEATURE_DEFINITIONS
+        assert isinstance(RIG_FEATURE_DEFINITIONS, dict)
+        assert len(RIG_FEATURE_DEFINITIONS) >= 10
+
+    def test_structural_features_have_definitions(self):
+        """Features that modify bone structure have definitions with adds/removes."""
+        from blender_addon.handlers.rigging import RIG_FEATURE_DEFINITIONS
+        structural = [k for k, v in RIG_FEATURE_DEFINITIONS.items()
+                      if "adds" in v or "removes" in v]
+        assert len(structural) >= 5, "Need at least 5 structural feature definitions"
+
+    def test_feature_defs_have_description(self):
+        from blender_addon.handlers.rigging import RIG_FEATURE_DEFINITIONS
+        for name, defn in RIG_FEATURE_DEFINITIONS.items():
+            assert "description" in defn, f"Feature '{name}' missing description"
 
 
 # ---------------------------------------------------------------------------
