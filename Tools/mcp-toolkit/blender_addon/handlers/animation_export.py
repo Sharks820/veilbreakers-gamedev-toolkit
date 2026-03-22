@@ -31,18 +31,21 @@ from ._action_compat import (
 from ._context import get_3d_context_override
 
 
-def _action_frame_range(action) -> list[int]:
+def _action_frame_range(action, armature_obj=None) -> list[int]:
     """Get action frame range, compatible with Blender 4.x and 5.0+."""
     if hasattr(action, "frame_range"):
         return [int(action.frame_range[0]), int(action.frame_range[1])]
-    return get_frame_range(action)
+    # Blender 5.0+: need channelbag context to read frame range
+    cb, layered = setup_action_for_armature(action, armature_obj) if armature_obj else (None, True)
+    return get_frame_range(action, cb, layered)
 
 
-def _action_fcurves_list(action):
+def _action_fcurves_list(action, armature_obj=None):
     """Get action fcurves as a list, compatible with Blender 4.x and 5.0+."""
     if hasattr(action, "fcurves"):
         return action.fcurves
-    return get_fcurves(action)
+    cb, layered = setup_action_for_armature(action, armature_obj) if armature_obj else (None, True)
+    return get_fcurves(action, cb, layered)
 
 
 def _action_new_fcurve(action, data_path, index, armature_obj=None):
