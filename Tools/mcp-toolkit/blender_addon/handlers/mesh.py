@@ -9,6 +9,10 @@ Provides:
 - handle_boolean_op: Boolean operations -- union, difference, intersect (MESH-05)
 - handle_retopologize: Retopology via quadriflow with target face count (MESH-07)
 - handle_sculpt: Sculpt operations -- smooth, inflate, flatten, crease (MESH-04)
+- handle_loop_cut: Add loop cuts to a mesh edge (MESH-09)
+- handle_bevel_edges: Bevel edges with configurable selection modes (MESH-10)
+- handle_knife_project: Bisect or loop-cut a mesh with a cutting plane (MESH-11)
+- handle_proportional_edit: Move vertices with proportional falloff (MESH-12)
 
 Analysis uses bmesh for direct geometry access. Editing uses bmesh where possible,
 falls back to bpy.ops with temp_override for boolean, retopology, and sculpt filters.
@@ -139,6 +143,17 @@ _SCULPT_OPERATIONS = {
 
 _AXIS_MAP = {"X": 0, "Y": 1, "Z": 2}
 
+# Valid bevel selection modes for handle_bevel_edges.
+_BEVEL_SELECTION_MODES = frozenset({"all", "sharp", "boundary", "angle"})
+
+# Valid proportional edit falloff types.
+_PROPORTIONAL_FALLOFF_TYPES = frozenset({
+    "SMOOTH", "SPHERE", "ROOT", "SHARP", "LINEAR",
+})
+
+# Valid knife/bisect cut types.
+_KNIFE_CUT_TYPES = frozenset({"bisect", "loop"})
+
 
 def _parse_selection_criteria(params: dict) -> dict:
     """Extract selection criteria from params, ignoring non-criteria keys.
@@ -186,6 +201,139 @@ def _sculpt_operation_to_filter_type(operation: str) -> str | None:
             f"Valid: {sorted(_SCULPT_OPERATIONS)}"
         )
     return _SCULPT_OPERATIONS[operation]
+
+
+def _validate_loop_cut_params(params: dict) -> dict:
+    """Validate and normalise loop cut parameters.
+
+    Returns dict with validated ``name``, ``cuts``, ``edge_index``, ``offset``.
+    Raises ``ValueError`` for invalid values.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("name is required for loop_cut")
+    cuts = params.get("cuts", 1)
+    if not isinstance(cuts, int) or cuts < 1:
+        raise ValueError(f"cuts must be a positive integer, got {cuts!r}")
+    edge_index = params.get("edge_index")
+    if edge_index is not None and (not isinstance(edge_index, int) or edge_index < 0):
+        raise ValueError(f"edge_index must be a non-negative integer, got {edge_index!r}")
+    offset = params.get("offset", 0.0)
+    if not isinstance(offset, (int, float)):
+        raise ValueError(f"offset must be a number, got {type(offset).__name__}")
+    if offset < -1.0 or offset > 1.0:
+        raise ValueError(f"offset must be between -1 and 1, got {offset}")
+    return {"name": name, "cuts": cuts, "edge_index": edge_index, "offset": float(offset)}
+
+
+def _validate_bevel_params(params: dict) -> dict:
+    """Validate and normalise bevel edge parameters.
+
+    Returns dict with validated ``name``, ``width``, ``segments``,
+    ``selection_mode``, ``angle_threshold``.
+    Raises ``ValueError`` for invalid values.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("name is required for bevel_edges")
+    width = params.get("width")
+    if width is None:
+        raise ValueError("width is required for bevel_edges")
+    if not isinstance(width, (int, float)) or width <= 0:
+        raise ValueError(f"width must be a positive number, got {width!r}")
+    segments = params.get("segments", 1)
+    if not isinstance(segments, int) or segments < 1:
+        raise ValueError(f"segments must be a positive integer, got {segments!r}")
+    selection_mode = params.get("selection_mode", "sharp")
+    if selection_mode not in _BEVEL_SELECTION_MODES:
+        raise ValueError(
+            f"Unknown selection_mode: {selection_mode!r}. "
+            f"Valid: {sorted(_BEVEL_SELECTION_MODES)}"
+        )
+    angle_threshold = params.get("angle_threshold", 30.0)
+    if not isinstance(angle_threshold, (int, float)):
+        raise ValueError(f"angle_threshold must be a number, got {type(angle_threshold).__name__}")
+    if angle_threshold < 0 or angle_threshold > 180:
+        raise ValueError(f"angle_threshold must be between 0 and 180, got {angle_threshold}")
+    return {
+        "name": name,
+        "width": float(width),
+        "segments": segments,
+        "selection_mode": selection_mode,
+        "angle_threshold": float(angle_threshold),
+    }
+
+
+def _validate_knife_params(params: dict) -> dict:
+    """Validate and normalise knife project parameters.
+
+    Returns dict with validated ``name``, ``cut_type``, ``plane_point``,
+    ``plane_normal``.
+    Raises ``ValueError`` for invalid values.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("name is required for knife_project")
+    cut_type = params.get("cut_type", "bisect")
+    if cut_type not in _KNIFE_CUT_TYPES:
+        raise ValueError(
+            f"Unknown cut_type: {cut_type!r}. Valid: {sorted(_KNIFE_CUT_TYPES)}"
+        )
+    plane_point = params.get("plane_point", [0.0, 0.0, 0.0])
+    plane_normal = params.get("plane_normal", [0.0, 0.0, 1.0])
+    if not isinstance(plane_point, (list, tuple)) or len(plane_point) != 3:
+        raise ValueError(f"plane_point must be a 3-element list, got {plane_point!r}")
+    if not isinstance(plane_normal, (list, tuple)) or len(plane_normal) != 3:
+        raise ValueError(f"plane_normal must be a 3-element list, got {plane_normal!r}")
+    # Check normal is not zero-length
+    mag_sq = sum(c * c for c in plane_normal)
+    if mag_sq < 1e-10:
+        raise ValueError("plane_normal must not be a zero vector")
+    return {
+        "name": name,
+        "cut_type": cut_type,
+        "plane_point": [float(c) for c in plane_point],
+        "plane_normal": [float(c) for c in plane_normal],
+    }
+
+
+def _validate_proportional_edit_params(params: dict) -> dict:
+    """Validate and normalise proportional edit parameters.
+
+    Returns dict with validated ``name``, ``vertex_indices``, ``offset``,
+    ``radius``, ``falloff_type``.
+    Raises ``ValueError`` for invalid values.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("name is required for proportional_edit")
+    vertex_indices = params.get("vertex_indices")
+    if not vertex_indices or not isinstance(vertex_indices, (list, tuple)):
+        raise ValueError("vertex_indices must be a non-empty list of integers")
+    for idx in vertex_indices:
+        if not isinstance(idx, int) or idx < 0:
+            raise ValueError(f"vertex_indices must contain non-negative integers, got {idx!r}")
+    offset = params.get("offset")
+    if not isinstance(offset, (list, tuple)) or len(offset) != 3:
+        raise ValueError(f"offset must be a 3-element list, got {offset!r}")
+    radius = params.get("radius")
+    if radius is None:
+        raise ValueError("radius is required for proportional_edit")
+    if not isinstance(radius, (int, float)) or radius <= 0:
+        raise ValueError(f"radius must be a positive number, got {radius!r}")
+    falloff_type = params.get("falloff_type", "SMOOTH")
+    if falloff_type not in _PROPORTIONAL_FALLOFF_TYPES:
+        raise ValueError(
+            f"Unknown falloff_type: {falloff_type!r}. "
+            f"Valid: {sorted(_PROPORTIONAL_FALLOFF_TYPES)}"
+        )
+    return {
+        "name": name,
+        "vertex_indices": list(vertex_indices),
+        "offset": [float(c) for c in offset],
+        "radius": float(radius),
+        "falloff_type": falloff_type,
+    }
 
 
 def _evaluate_game_readiness(
@@ -976,4 +1124,585 @@ def handle_sculpt(params: dict) -> dict:
         "operation": operation,
         "strength": strength,
         "iterations": iterations,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Modifier stack operations
+# ---------------------------------------------------------------------------
+
+# Supported modifier types and their default settings.
+MODIFIER_DEFAULTS: dict[str, dict] = {
+    "SUBSURF": {"levels": 2, "render_levels": 3, "quality": 3},
+    "BEVEL": {"width": 0.02, "segments": 3, "limit_method": "ANGLE", "angle_limit": 0.524},
+    "MIRROR": {"use_axis": [True, False, False], "use_bisect_axis": [False, False, False]},
+    "ARRAY": {"count": 3, "relative_offset_displace": [1.0, 0.0, 0.0]},
+    "SOLIDIFY": {"thickness": 0.1, "offset": -1.0},
+    "DECIMATE": {"ratio": 0.5, "decimate_type": "COLLAPSE"},
+    "REMESH": {"mode": "VOXEL", "voxel_size": 0.1},
+    "SMOOTH": {"factor": 0.5, "iterations": 5},
+    "BOOLEAN": {"operation": "DIFFERENCE", "object": ""},
+    "WIREFRAME": {"thickness": 0.02},
+    "SKIN": {},
+    "LATTICE": {},
+    "SHRINKWRAP": {},
+}
+
+VALID_MODIFIER_TYPES: frozenset[str] = frozenset(MODIFIER_DEFAULTS.keys())
+
+
+def _validate_modifier_params(params: dict) -> list[str]:
+    """Validate modifier params. Returns list of error strings (empty = valid).
+
+    Checks:
+    - ``modifier_type`` is present and in ``VALID_MODIFIER_TYPES``.
+    - If ``settings`` is provided, all keys are valid for the modifier type.
+    """
+    errors: list[str] = []
+
+    modifier_type = params.get("modifier_type")
+    if modifier_type is None:
+        errors.append("modifier_type is required")
+        return errors
+
+    if modifier_type not in VALID_MODIFIER_TYPES:
+        errors.append(
+            f"Invalid modifier_type: {modifier_type!r}. "
+            f"Valid: {sorted(VALID_MODIFIER_TYPES)}"
+        )
+        return errors
+
+    settings = params.get("settings")
+    if settings:
+        allowed_keys = set(MODIFIER_DEFAULTS.get(modifier_type, {}).keys())
+        bad_keys = set(settings.keys()) - allowed_keys
+        if bad_keys:
+            errors.append(
+                f"Invalid settings keys for {modifier_type}: {sorted(bad_keys)}. "
+                f"Allowed: {sorted(allowed_keys)}"
+            )
+
+    return errors
+
+
+def _apply_modifier_settings(mod: object, settings: dict, modifier_type: str) -> None:
+    """Apply settings dict to a Blender modifier object.
+
+    Handles special cases like ``use_axis`` (list -> per-axis booleans) and
+    ``relative_offset_displace`` (list -> Vector assignment).
+    """
+    for key, value in settings.items():
+        if key == "use_axis" and isinstance(value, list):
+            for i, v in enumerate(value[:3]):
+                mod.use_axis[i] = v
+        elif key == "use_bisect_axis" and isinstance(value, list):
+            for i, v in enumerate(value[:3]):
+                mod.use_bisect_axis[i] = v
+        elif key == "relative_offset_displace" and isinstance(value, list):
+            for i, v in enumerate(value[:3]):
+                mod.relative_offset_displace[i] = v
+        elif key == "object" and modifier_type == "BOOLEAN":
+            # Resolve object reference by name
+            obj_ref = bpy.data.objects.get(value) if value else None
+            mod.object = obj_ref
+        else:
+            setattr(mod, key, value)
+
+
+def handle_add_modifier(params: dict) -> dict:
+    """Add a modifier to an object.
+
+    Params:
+        name: Object name (required).
+        modifier_type: Modifier type string (required).
+        modifier_name: Display name for the modifier (optional, auto-generated).
+        settings: Dict of modifier-specific settings (optional).
+
+    Returns dict with object name, modifier name, type, and applied settings.
+    """
+    obj_name = params.get("name")
+    obj = _get_mesh_object(obj_name)
+
+    modifier_type = params.get("modifier_type")
+    errors = _validate_modifier_params(params)
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    modifier_name = params.get("modifier_name") or modifier_type.title()
+
+    # Merge defaults with user settings
+    defaults = dict(MODIFIER_DEFAULTS.get(modifier_type, {}))
+    user_settings = params.get("settings") or {}
+    merged = {**defaults, **user_settings}
+
+    mod = obj.modifiers.new(name=modifier_name, type=modifier_type)
+    _apply_modifier_settings(mod, merged, modifier_type)
+
+    return {
+        "object_name": obj_name,
+        "modifier_name": mod.name,
+        "modifier_type": modifier_type,
+        "settings_applied": merged,
+    }
+
+
+def handle_apply_modifier(params: dict) -> dict:
+    """Apply (bake) a modifier on an object.
+
+    Params:
+        name: Object name (required).
+        modifier_name: Name of modifier to apply, or ``"ALL"`` to apply all.
+
+    Returns dict with object name and list of applied modifier names.
+    """
+    obj_name = params.get("name")
+    obj = _get_mesh_object(obj_name)
+    modifier_name = params.get("modifier_name")
+    if not modifier_name:
+        raise ValueError("modifier_name is required")
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for modifier apply")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    applied: list[str] = []
+
+    if modifier_name == "ALL":
+        # Apply all modifiers in stack order (top-down)
+        while obj.modifiers:
+            mod_name = obj.modifiers[0].name
+            with bpy.context.temp_override(**ctx):
+                bpy.ops.object.modifier_apply(modifier=mod_name)
+            applied.append(mod_name)
+    else:
+        if modifier_name not in [m.name for m in obj.modifiers]:
+            raise ValueError(
+                f"Modifier '{modifier_name}' not found on '{obj_name}'. "
+                f"Existing: {[m.name for m in obj.modifiers]}"
+            )
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.modifier_apply(modifier=modifier_name)
+        applied.append(modifier_name)
+
+    return {
+        "object_name": obj_name,
+        "applied": applied,
+        "remaining_modifiers": [m.name for m in obj.modifiers],
+        "vertex_count": len(obj.data.vertices),
+        "face_count": len(obj.data.polygons),
+    }
+
+
+def handle_remove_modifier(params: dict) -> dict:
+    """Remove a modifier without applying it.
+
+    Params:
+        name: Object name (required).
+        modifier_name: Name of modifier to remove (required).
+
+    Returns dict with object name and remaining modifier names.
+    """
+    obj_name = params.get("name")
+    obj = _get_mesh_object(obj_name)
+    modifier_name = params.get("modifier_name")
+    if not modifier_name:
+        raise ValueError("modifier_name is required")
+
+    mod = obj.modifiers.get(modifier_name)
+    if mod is None:
+        raise ValueError(
+            f"Modifier '{modifier_name}' not found on '{obj_name}'. "
+            f"Existing: {[m.name for m in obj.modifiers]}"
+        )
+
+    obj.modifiers.remove(mod)
+
+    return {
+        "object_name": obj_name,
+        "removed": modifier_name,
+        "remaining_modifiers": [m.name for m in obj.modifiers],
+    }
+
+
+def handle_list_modifiers(params: dict) -> dict:
+    """List all modifiers on an object with their settings.
+
+    Params:
+        name: Object name (required).
+
+    Returns dict with object name and list of modifier info dicts.
+    """
+    obj_name = params.get("name")
+    obj = _get_mesh_object(obj_name)
+
+    modifiers: list[dict] = []
+    for mod in obj.modifiers:
+        mod_info: dict = {
+            "name": mod.name,
+            "type": mod.type,
+            "show_viewport": mod.show_viewport,
+            "show_render": mod.show_render,
+        }
+
+        # Extract known settings for recognised modifier types
+        defaults = MODIFIER_DEFAULTS.get(mod.type, {})
+        if defaults:
+            settings: dict = {}
+            for key in defaults:
+                if key == "use_axis":
+                    settings[key] = [mod.use_axis[i] for i in range(3)]
+                elif key == "use_bisect_axis":
+                    settings[key] = [mod.use_bisect_axis[i] for i in range(3)]
+                elif key == "relative_offset_displace":
+                    settings[key] = [
+                        mod.relative_offset_displace[i] for i in range(3)
+                    ]
+                elif key == "object" and mod.type == "BOOLEAN":
+                    settings[key] = mod.object.name if mod.object else ""
+                else:
+                    settings[key] = getattr(mod, key, None)
+            mod_info["settings"] = settings
+
+        modifiers.append(mod_info)
+
+    return {
+        "object_name": obj_name,
+        "modifier_count": len(modifiers),
+        "modifiers": modifiers,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Topology editing handlers (MESH-09 through MESH-12)
+# ---------------------------------------------------------------------------
+
+
+def handle_loop_cut(params: dict) -> dict:
+    """Add loop cuts to a mesh edge (MESH-09).
+
+    Params:
+        name: Object name (required).
+        cuts: Number of loop cuts (default 1).
+        edge_index: Edge index to cut along (optional; if omitted, uses
+                    the first edge).
+        offset: Slide offset from -1 to 1 (default 0.0).
+
+    Returns dict with object name, cuts added, and post-op vertex/face counts.
+    """
+    validated = _validate_loop_cut_params(params)
+    name = validated["name"]
+    cuts = validated["cuts"]
+    edge_index = validated["edge_index"]
+    offset = validated["offset"]
+
+    obj = _get_mesh_object(name)
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for loop cut operation")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    # Determine edge index -- default to 0 if not provided
+    if edge_index is None:
+        if len(obj.data.edges) == 0:
+            raise ValueError(f"Object '{name}' has no edges for loop cut")
+        edge_index = 0
+    elif edge_index >= len(obj.data.edges):
+        raise ValueError(
+            f"edge_index {edge_index} out of range "
+            f"(object has {len(obj.data.edges)} edges)"
+        )
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.loopcut_slide(
+            MESH_OT_loopcut={
+                "number_cuts": cuts,
+                "smoothness": 0.0,
+                "falloff": "INVERSE_SQUARE",
+                "object_index": 0,
+                "edge_index": edge_index,
+            },
+            TRANSFORM_OT_edge_slide={
+                "value": offset,
+            },
+        )
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    return {
+        "object_name": name,
+        "cuts": cuts,
+        "edge_index": edge_index,
+        "offset": offset,
+        "vertex_count": len(obj.data.vertices),
+        "face_count": len(obj.data.polygons),
+    }
+
+
+def handle_bevel_edges(params: dict) -> dict:
+    """Bevel edges with configurable selection modes (MESH-10).
+
+    Params:
+        name: Object name (required).
+        width: Bevel width (required, positive float).
+        segments: Smoothness / segment count (default 1).
+        selection_mode: Edge selection strategy -- "all", "sharp",
+                        "boundary", or "angle" (default "sharp").
+        angle_threshold: For angle mode, max angle in degrees between
+                         adjacent faces (default 30).
+
+    Returns dict with object name, bevel settings, and post-op counts.
+    """
+    validated = _validate_bevel_params(params)
+    name = validated["name"]
+    width = validated["width"]
+    segments = validated["segments"]
+    selection_mode = validated["selection_mode"]
+    angle_threshold = validated["angle_threshold"]
+
+    obj = _get_mesh_object(name)
+
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        bm.edges.ensure_lookup_table()
+        bm.verts.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+
+        # Select edges based on selection_mode
+        if selection_mode == "all":
+            target_edges = bm.edges[:]
+        elif selection_mode == "sharp":
+            target_edges = [e for e in bm.edges if not e.smooth]
+        elif selection_mode == "boundary":
+            target_edges = [e for e in bm.edges if e.is_boundary]
+        elif selection_mode == "angle":
+            angle_rad = math.radians(angle_threshold)
+            target_edges = []
+            for e in bm.edges:
+                if len(e.link_faces) == 2:
+                    face_angle = e.link_faces[0].normal.angle(e.link_faces[1].normal)
+                    if face_angle >= angle_rad:
+                        target_edges.append(e)
+        else:
+            target_edges = []
+
+        if not target_edges:
+            bm.free()
+            return {
+                "object_name": name,
+                "beveled_edges": 0,
+                "selection_mode": selection_mode,
+                "vertex_count": len(obj.data.vertices),
+                "face_count": len(obj.data.polygons),
+            }
+
+        bmesh.ops.bevel(
+            bm,
+            geom=target_edges,
+            offset=width,
+            offset_type="OFFSET",
+            segments=segments,
+            affect="EDGES",
+        )
+
+        bm.to_mesh(obj.data)
+        obj.data.update()
+        vert_count = len(bm.verts)
+        face_count = len(bm.faces)
+        edge_count = len(target_edges)
+    finally:
+        bm.free()
+
+    return {
+        "object_name": name,
+        "beveled_edges": edge_count,
+        "width": width,
+        "segments": segments,
+        "selection_mode": selection_mode,
+        "vertex_count": vert_count,
+        "face_count": face_count,
+    }
+
+
+def handle_knife_project(params: dict) -> dict:
+    """Bisect or loop-cut a mesh with a cutting plane (MESH-11).
+
+    Params:
+        name: Object name (required).
+        cut_type: "bisect" (plane cut) or "loop" (edge loop) (default "bisect").
+        plane_point: [x, y, z] point on the cutting plane (default [0,0,0]).
+        plane_normal: [x, y, z] normal of the cutting plane (default [0,0,1]).
+
+    For bisect: uses bmesh.ops.bisect_plane to slice the mesh.
+    For loop: selects edges intersecting the plane and subdivides them.
+
+    Returns dict with object name, cut type, and post-op counts.
+    """
+    validated = _validate_knife_params(params)
+    name = validated["name"]
+    cut_type = validated["cut_type"]
+    plane_point = validated["plane_point"]
+    plane_normal = validated["plane_normal"]
+
+    obj = _get_mesh_object(name)
+
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        bm.verts.ensure_lookup_table()
+        bm.edges.ensure_lookup_table()
+        bm.faces.ensure_lookup_table()
+
+        if cut_type == "bisect":
+            all_geom = bm.verts[:] + bm.edges[:] + bm.faces[:]
+            result = bmesh.ops.bisect_plane(
+                bm,
+                geom=all_geom,
+                plane_co=mathutils.Vector(plane_point),
+                plane_no=mathutils.Vector(plane_normal),
+                clear_inner=False,
+                clear_outer=False,
+            )
+            new_geom_count = len(result.get("geom_cut", []))
+        elif cut_type == "loop":
+            # Find edges that cross the plane and subdivide them
+            plane_co = mathutils.Vector(plane_point)
+            plane_no = mathutils.Vector(plane_normal).normalized()
+            crossing_edges = []
+            for e in bm.edges:
+                v0 = e.verts[0].co
+                v1 = e.verts[1].co
+                d0 = (v0 - plane_co).dot(plane_no)
+                d1 = (v1 - plane_co).dot(plane_no)
+                if d0 * d1 < 0:  # opposite sides of the plane
+                    crossing_edges.append(e)
+
+            if crossing_edges:
+                bmesh.ops.subdivide_edges(
+                    bm,
+                    edges=crossing_edges,
+                    cuts=1,
+                )
+            new_geom_count = len(crossing_edges)
+        else:
+            new_geom_count = 0
+
+        bm.to_mesh(obj.data)
+        obj.data.update()
+        vert_count = len(bm.verts)
+        face_count = len(bm.faces)
+    finally:
+        bm.free()
+
+    return {
+        "object_name": name,
+        "cut_type": cut_type,
+        "new_geometry_count": new_geom_count,
+        "vertex_count": vert_count,
+        "face_count": face_count,
+    }
+
+
+def handle_proportional_edit(params: dict) -> dict:
+    """Move vertices with proportional falloff (MESH-12).
+
+    Params:
+        name: Object name (required).
+        vertex_indices: List of vertex indices to move (required).
+        offset: [x, y, z] movement vector (required).
+        radius: Falloff radius (required, positive float).
+        falloff_type: Falloff curve -- "SMOOTH", "SPHERE", "ROOT",
+                      "SHARP", "LINEAR" (default "SMOOTH").
+
+    Selected vertices get full offset. Nearby vertices within *radius*
+    get proportional offset based on the falloff function.
+
+    Returns dict with object name, vertices affected, and post-op counts.
+    """
+    validated = _validate_proportional_edit_params(params)
+    name = validated["name"]
+    vertex_indices = validated["vertex_indices"]
+    offset_vec = validated["offset"]
+    radius = validated["radius"]
+    falloff_type = validated["falloff_type"]
+
+    obj = _get_mesh_object(name)
+
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        bm.verts.ensure_lookup_table()
+
+        total_verts = len(bm.verts)
+        # Validate indices are in range
+        for idx in vertex_indices:
+            if idx >= total_verts:
+                raise ValueError(
+                    f"vertex index {idx} out of range "
+                    f"(mesh has {total_verts} vertices)"
+                )
+
+        # Collect the selected vertex positions for distance calculations
+        selected_positions = [
+            mathutils.Vector(bm.verts[i].co) for i in vertex_indices
+        ]
+        offset_v = mathutils.Vector(offset_vec)
+
+        # Apply full offset to selected vertices
+        for idx in vertex_indices:
+            bm.verts[idx].co += offset_v
+
+        # Apply proportional falloff to nearby vertices
+        affected_count = len(vertex_indices)
+        index_set = set(vertex_indices)
+        for v in bm.verts:
+            if v.index in index_set:
+                continue
+            # Find minimum distance to any selected vertex (from original pos)
+            min_dist = min(
+                (v.co - pos).length for pos in selected_positions
+            )
+            if min_dist >= radius:
+                continue
+            # Compute falloff factor
+            t = min_dist / radius  # 0 at vertex, 1 at radius edge
+            if falloff_type == "SMOOTH":
+                factor = (1.0 - t * t) ** 2  # smooth hermite-like
+            elif falloff_type == "SPHERE":
+                factor = math.sqrt(max(1.0 - t * t, 0.0))
+            elif falloff_type == "ROOT":
+                factor = math.sqrt(max(1.0 - t, 0.0))
+            elif falloff_type == "SHARP":
+                factor = (1.0 - t) ** 2
+            elif falloff_type == "LINEAR":
+                factor = 1.0 - t
+            else:
+                factor = 0.0
+
+            if factor > 0.0:
+                v.co += offset_v * factor
+                affected_count += 1
+
+        bm.to_mesh(obj.data)
+        obj.data.update()
+        vert_count = len(bm.verts)
+        face_count = len(bm.faces)
+    finally:
+        bm.free()
+
+    return {
+        "object_name": name,
+        "vertices_selected": len(vertex_indices),
+        "vertices_affected": affected_count,
+        "offset": offset_vec,
+        "radius": radius,
+        "falloff_type": falloff_type,
+        "vertex_count": vert_count,
+        "face_count": face_count,
     }
