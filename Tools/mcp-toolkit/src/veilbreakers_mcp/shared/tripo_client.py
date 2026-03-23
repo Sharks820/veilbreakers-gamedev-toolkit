@@ -72,7 +72,7 @@ class TripoGenerator:
         output_dir: str,
         texture: bool = True,
         pbr: bool = True,
-        model_version: str = "v2.5-20250123",
+        model_version: str = "v3.1-20260211",
         timeout: int = 300,
         polling_interval: float = 3.0,
     ) -> dict:
@@ -164,7 +164,7 @@ class TripoGenerator:
         output_dir: str,
         texture: bool = True,
         pbr: bool = True,
-        model_version: str = "v2.5-20250123",
+        model_version: str = "v3.1-20260211",
         timeout: int = 300,
         polling_interval: float = 3.0,
     ) -> dict:

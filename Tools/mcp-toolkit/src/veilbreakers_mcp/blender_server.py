@@ -903,6 +903,8 @@ async def asset_pipeline(
         "generate_weapon", "split_character", "fit_armor", "render_equipment_icon",
         # Full production pipeline
         "full_pipeline", "generate_and_process",
+        # Import local model files (GLB/FBX/OBJ) -- use with Tripo Studio downloads
+        "import_model", "import_and_process",
     ],
     # Common params
     object_name: str | None = None,
@@ -947,24 +949,108 @@ async def asset_pipeline(
     export_dir: str | None = None,
     capture_viewport: bool = True
 ):
-    """Asset pipeline management -- 3D generation, processing, LODs, catalog, equipment, full pipeline."""
+    """Asset pipeline management -- 3D generation, processing, LODs, catalog, equipment, full pipeline. Use import_model/import_and_process for local GLB/FBX files (e.g. Tripo Studio downloads)."""
     blender = get_blender_connection()
 
     if action == "generate_3d":
         if not prompt and not image_path:
             return "ERROR: 'prompt' or 'image_path' is required for generate_3d"
+
+        # Route output to VB3DCurrent asset folder when asset_type is set
+        _vb3d = settings.unity_project_path
+        _asset_dirs = {
+            "character": "Assets/Art/3D_Models/Characters",
+            "monster": "Assets/Art/3D_Models/Monsters",
+            "creature": "Assets/Art/3D_Models/Monsters",
+            "prop": "Assets/Art/3D_Models/Props",
+            "weapon": "Assets/Art/3D_Models/Weapons",
+            "building": "Assets/Art/3D_Models/Props",
+            "vegetation": "Assets/Art/3D_Models/Props",
+        }
+        if _vb3d and asset_type and asset_type in _asset_dirs:
+            resolved_dir = str(
+                __import__("pathlib").Path(_vb3d) / _asset_dirs[asset_type]
+            )
+            # Use name subfolder if provided
+            if name:
+                resolved_dir = str(
+                    __import__("pathlib").Path(resolved_dir) / name
+                )
+            output_dir = resolved_dir
+
+        # Prefer studio (uses subscription credits), fall back to API key
+        studio_cookie = settings.tripo_session_cookie
+        studio_token = settings.tripo_studio_token
         api_key = settings.tripo_api_key
-        if not api_key:
+
+        if studio_cookie or studio_token:
+            from veilbreakers_mcp.shared.tripo_studio_client import TripoStudioClient
+            gen = TripoStudioClient(
+                session_cookie=studio_cookie,
+                session_token=studio_token,
+            )
+            try:
+                if image_path:
+                    result = await gen.generate_from_image(image_path, output_dir)
+                else:
+                    result = await gen.generate_from_text(prompt, output_dir)
+                result["output_dir"] = output_dir
+
+                # Auto-import all downloaded variants into Blender in a grid
+                models = result.get("models", [])
+                verified = [m for m in models if m.get("verified")]
+                if verified:
+                    spacing = 3.0
+                    positions = [
+                        (0, 0), (-spacing, 0),
+                        (spacing, 0), (0, spacing),
+                    ]
+                    imported_names = []
+                    for i, m in enumerate(verified):
+                        px, py = positions[i % len(positions)]
+                        safe = m["path"].replace("\\", "/")
+                        code = (
+                            f'import bpy\n'
+                            f'bpy.ops.object.select_all(action="DESELECT")\n'
+                            f'existing = set(bpy.data.objects[:])\n'
+                            f'bpy.ops.import_scene.gltf(filepath="{safe}", merge_vertices=True)\n'
+                            f'new_objs = set(bpy.data.objects[:]) - existing\n'
+                            f'for obj in new_objs:\n'
+                            f'    obj.location.x += {px}\n'
+                            f'    obj.location.y += {py}\n'
+                            f'names = [o.name for o in new_objs if o.type == "MESH"]\n'
+                            f'names'
+                        )
+                        try:
+                            import_result = await blender.send_command(
+                                "execute_code", {"code": code}
+                            )
+                            imported_names.append(f"variant_{i+1}")
+                        except Exception:
+                            pass
+                    result["imported_to_blender"] = len(imported_names)
+                    result["next_steps"] = [
+                        "All variants imported to Blender in a grid layout.",
+                        "Pick the best variant, then run: asset_pipeline action=cleanup object_name=<name>",
+                        "Or full pipeline: asset_pipeline action=full_pipeline object_name=<name>",
+                        "The AAA pipeline will: repair -> retopo -> UV -> PBR materials -> weathering -> quality gate.",
+                    ]
+
+                return json.dumps(result, indent=2, default=str)
+            finally:
+                await gen.close()
+        elif api_key:
+            gen = TripoGenerator(api_key=api_key)
+            if image_path:
+                result = await gen.generate_from_image(image_path, output_dir)
+            else:
+                result = await gen.generate_from_text(prompt, output_dir)
+            return json.dumps(result, indent=2, default=str)
+        else:
             return json.dumps({
                 "status": "unavailable",
-                "error": "TRIPO_API_KEY not configured",
+                "error": "Neither TRIPO_SESSION_COOKIE, TRIPO_STUDIO_TOKEN, nor TRIPO_API_KEY configured",
             })
-        gen = TripoGenerator(api_key=api_key)
-        if image_path:
-            result = await gen.generate_from_image(image_path, output_dir)
-        else:
-            result = await gen.generate_from_text(prompt, output_dir)
-        return json.dumps(result, indent=2, default=str)
 
     elif action == "cleanup":
         if not object_name:
@@ -1079,6 +1165,58 @@ async def asset_pipeline(
             params["output_path"] = output_path
         result = await blender.send_command("equipment_render_icon", params)
         return json.dumps(result, indent=2, default=str)
+
+    # --- Import local model files (Tripo Studio downloads, etc.) ---
+
+    elif action == "import_model":
+        if not filepath:
+            return "ERROR: 'filepath' is required for import_model (path to .glb/.fbx/.obj file)"
+        from pathlib import Path as _Path
+        ext = _Path(filepath).suffix.lower()
+        supported = {".glb", ".gltf", ".fbx", ".obj"}
+        if ext not in supported:
+            return f"ERROR: Unsupported file format '{ext}'. Supported: {sorted(supported)}"
+        import_ops = {
+            ".glb": "import_scene.gltf",
+            ".gltf": "import_scene.gltf",
+            ".fbx": "import_scene.fbx",
+            ".obj": "import_scene.obj",
+        }
+        op = import_ops[ext]
+        safe_path = filepath.replace("\\", "/")
+        import_code = f'bpy.ops.{op}(filepath="{safe_path}")'
+        import_result = await blender.send_command("execute_code", {"code": import_code})
+        imported_name = _Path(filepath).stem
+        result = {
+            "status": "success",
+            "object_name": imported_name,
+            "filepath": filepath,
+            "format": ext.lstrip("."),
+            "import_result": import_result,
+            "next_steps": [
+                f"Object '{imported_name}' imported. Run cleanup with: asset_pipeline action=cleanup object_name={imported_name}",
+                f"Or run full pipeline: asset_pipeline action=import_and_process filepath={filepath}",
+            ],
+        }
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "import_and_process":
+        if not filepath:
+            return "ERROR: 'filepath' is required for import_and_process (path to .glb/.fbx/.obj file)"
+        runner = PipelineRunner(blender, settings)
+        result = await runner.full_asset_pipeline(
+            object_name=filepath,
+            asset_type=asset_type or "prop",
+            poly_budget=poly_budget,
+            material_preset=material_preset,
+            weathering_preset=weathering_preset,
+            rig_template=rig_template,
+            animations=animations,
+            lod_count=lod_count,
+            export_format=export_format,
+            export_dir=export_dir or output_dir,
+        )
+        return await _with_screenshot(blender, result, capture_viewport)
 
     # --- Full production pipeline ---
 

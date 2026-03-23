@@ -79,8 +79,10 @@ Actions: `create_pbr` | `mask_region` | `inpaint` | `hsv_adjust` | `blend_seams`
 - validate_palette: Validate dark fantasy palette rules on albedo texture (AAA-03)
 
 ### asset_pipeline
-Actions: `generate_3d` | `cleanup` | `generate_lods` | `validate_export` | `tag_metadata` | `batch_process` | `catalog_query` | `catalog_add` | `generate_weapon` | `split_character` | `fit_armor` | `render_equipment_icon`
-- generate_3d: Tripo3D from `prompt` or `image_path`
+Actions: `generate_3d` | `cleanup` | `generate_lods` | `validate_export` | `tag_metadata` | `batch_process` | `catalog_query` | `catalog_add` | `generate_weapon` | `split_character` | `fit_armor` | `render_equipment_icon` | `import_model` | `import_and_process`
+- generate_3d: Tripo3D from `prompt` or `image_path` (requires API credits)
+- import_model: Import local GLB/FBX/OBJ file into Blender (use for Tripo Studio downloads)
+- import_and_process: Import local file + run full cleanup/material/rig/LOD/export pipeline
 - cleanup: auto repair + UV + PBR on AI model
 - generate_lods: LOD chain with `ratios`
 - batch_process: `object_names`, `steps`
