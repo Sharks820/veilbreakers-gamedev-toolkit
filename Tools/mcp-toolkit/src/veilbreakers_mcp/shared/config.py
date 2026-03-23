@@ -12,6 +12,10 @@ class Settings(BaseSettings):
 
     # Tripo3D AI 3D generation
     tripo_api_key: str = ""
+    # Tripo Studio session token (JWT, expires in 2h)
+    tripo_studio_token: str = ""
+    # Tripo Studio session cookie (ory_kratos_session, auto-refreshes JWTs, lasts ~25 days)
+    tripo_session_cookie: str = ""
     # fal.ai for concept art / image generation
     fal_key: str = ""
     # Real-ESRGAN binary path for texture upscaling
