@@ -138,10 +138,11 @@ class BlenderConnection:
         """
         if self._socket is not None:
             # Quick liveness check via zero-length peek
+            sock = self._socket
             try:
-                self._socket.setblocking(False)
+                sock.setblocking(False)
                 try:
-                    data = self._socket.recv(1, socket.MSG_PEEK)
+                    data = sock.recv(1, socket.MSG_PEEK)
                     # If recv returns empty bytes the server closed
                     if data == b"":
                         self.disconnect()
@@ -149,7 +150,7 @@ class BlenderConnection:
                 except BlockingIOError:
                     pass  # No data waiting -- socket is likely still good
                 finally:
-                    self._socket.settimeout(self.timeout)
+                    sock.settimeout(self.timeout)
                 return True
             except OSError:
                 self.disconnect()

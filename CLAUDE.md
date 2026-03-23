@@ -139,13 +139,14 @@ Actions: `generate_dungeon` | `generate_cave` | `generate_town` | `generate_buil
 2. Typically: call `unity_editor` action=`recompile`, then open Unity Editor and run the menu item from the menu bar
 
 ### unity_editor
-Actions: `recompile` | `enter_play_mode` | `exit_play_mode` | `screenshot` | `console_logs` | `gemini_review`
+Actions: `recompile` | `enter_play_mode` | `exit_play_mode` | `screenshot` | `console_logs` | `gemini_review` | `run_tests`
 - screenshot: `screenshot_path`, `supersize` (1-4)
 - console_logs: `log_filter` (all/error/warning/log), `log_count`
 - gemini_review: `gemini_prompt`, `gemini_criteria`
+- run_tests: `test_mode` (EditMode/PlayMode), `assembly_filter`, `category_filter`
 
 ### unity_vfx
-Actions: `create_particle_vfx` | `create_brand_vfx` | `create_environmental_vfx` | `create_trail_vfx` | `create_aura_vfx` | `create_corruption_shader` | `create_shader` | `setup_post_processing` | `create_screen_effect` | `create_ability_vfx` | `create_flipbook` | `compose_vfx_graph` | `create_projectile_chain` | `create_aoe_vfx` | `create_status_effect_vfx` | `create_deep_environmental_vfx` | `create_directional_hit_vfx` | `create_boss_transition_vfx`
+Actions: `create_particle_vfx` | `create_brand_vfx` | `create_environmental_vfx` | `create_trail_vfx` | `create_aura_vfx` | `create_corruption_shader` | `create_shader` | `setup_post_processing` | `create_screen_effect` | `create_ability_vfx` | `create_flipbook` | `compose_vfx_graph` | `create_projectile_chain` | `create_aoe_vfx` | `create_status_effect_vfx` | `create_deep_environmental_vfx` | `create_directional_hit_vfx` | `create_boss_transition_vfx` | `create_decal_system`
 - create_particle_vfx: `name`, `rate`, `lifetime`, `size`, `color` [r,g,b,a], `shape`
 - create_brand_vfx: `brand` (IRON/SAVAGE/SURGE/VENOM/DREAD/LEECH/GRACE/MEND/RUIN/VOID)
 - create_shader: `shader_type` (dissolve/force_field/water/foliage/outline/damage_overlay)
@@ -158,9 +159,10 @@ Actions: `create_particle_vfx` | `create_brand_vfx` | `create_environmental_vfx`
 - create_deep_environmental_vfx: Volumetric fog, god rays, heat distortion, caustics (VFX3-06), `deep_vfx_type`
 - create_directional_hit_vfx: Directional combat hit VFX with screen effects (VFX3-07), `hit_magnitude`
 - create_boss_transition_vfx: Boss phase transition VFX (VFX3-08), `transition_type`
+- create_decal_system: URP decal projector pool manager (VFX-11)
 
 ### unity_audio
-Actions: `generate_sfx` | `generate_music_loop` | `generate_voice_line` | `generate_ambient` | `setup_footstep_system` | `setup_adaptive_music` | `setup_audio_zones` | `setup_audio_mixer` | `setup_audio_pool_manager` | `assign_animation_sfx` | `setup_spatial_audio` | `setup_layered_sound` | `setup_audio_event_chain` | `setup_dynamic_music` | `setup_portal_audio` | `setup_audio_lod` | `setup_vo_pipeline` | `setup_procedural_foley`
+Actions: `generate_sfx` | `generate_music_loop` | `generate_voice_line` | `generate_ambient` | `setup_footstep_system` | `setup_adaptive_music` | `setup_audio_zones` | `setup_audio_mixer` | `setup_audio_pool_manager` | `assign_animation_sfx` | `setup_spatial_audio` | `setup_layered_sound` | `setup_audio_event_chain` | `setup_dynamic_music` | `setup_portal_audio` | `setup_audio_lod` | `setup_vo_pipeline` | `setup_procedural_foley` | `setup_ui_sound_system` | `setup_material_impact_audio`
 - generate_sfx: ElevenLabs AI, `description`, `duration_seconds`
 - generate_music_loop: `theme` (combat/exploration/boss/town)
 - generate_ambient: `biome` (forest/cave/etc.), `layers`
@@ -174,9 +176,11 @@ Actions: `generate_sfx` | `generate_music_loop` | `generate_voice_line` | `gener
 - setup_audio_lod: Distance-based audio quality tiers (AUDM-06), `lod_distances`
 - setup_vo_pipeline: Dialogue/VO playback with subtitles and lip sync (AUDM-07), `vo_entries`
 - setup_procedural_foley: Movement-based procedural foley (AUDM-08), `armor_type`, `terrain_type`
+- setup_ui_sound_system: Runtime UI sound infrastructure (AU-01)
+- setup_material_impact_audio: Physics material-aware impact sounds (AU-02)
 
 ### unity_ui
-Actions: `generate_ui_screen` | `validate_layout` | `test_responsive` | `check_contrast` | `compare_screenshots` | `create_procedural_frame` | `create_icon_pipeline` | `create_cursor_system` | `create_tooltip_system` | `create_radial_menu` | `create_notification_system` | `create_loading_screen` | `create_ui_shaders`
+Actions: `generate_ui_screen` | `validate_layout` | `test_responsive` | `check_contrast` | `compare_screenshots` | `create_procedural_frame` | `create_icon_pipeline` | `create_cursor_system` | `create_tooltip_system` | `create_radial_menu` | `create_notification_system` | `create_loading_screen` | `create_ui_shaders` | `create_combat_hud`
 - generate_ui_screen: `screen_spec` dict, `theme` (default dark_fantasy), `screen_name`
 - check_contrast: WCAG AA validation, needs UXML + USS content
 - compare_screenshots: `reference_path`, `current_path`, `diff_threshold`
@@ -188,6 +192,7 @@ Actions: `generate_ui_screen` | `validate_layout` | `test_responsive` | `check_c
 - create_notification_system: Toast notification system with priority queue (UIPOL-06), `max_visible`, `toast_types`
 - create_loading_screen: Loading screen with tips, lore, and concept art (UIPOL-07), `show_tips`, `tip_interval`
 - create_ui_shaders: Material-based UI effect shaders (gold-leaf, blood stain, etc.) (UIPOL-08), `ui_shader_name`
+- create_combat_hud: Complete dark fantasy combat HUD (UI-08)
 
 ### unity_scene
 Actions: `setup_terrain` | `scatter_objects` | `setup_lighting` | `bake_navmesh` | `create_animator` | `configure_avatar` | `setup_animation_rigging` | `create_blend_tree` | `create_additive_layer`
@@ -199,10 +204,14 @@ Actions: `setup_terrain` | `scatter_objects` | `setup_lighting` | `bake_navmesh`
 - create_additive_layer: Additive animation layers for hit reactions/breathing (ANIM3-04), `layer_name`, `base_clips`
 
 ### unity_gameplay
-Actions: `create_mob_controller` | `create_aggro_system` | `create_patrol_route` | `create_spawn_system` | `create_behavior_tree` | `create_combat_ability` | `create_projectile_system`
+Actions: `create_mob_controller` | `create_aggro_system` | `create_patrol_route` | `create_spawn_system` | `create_behavior_tree` | `create_combat_ability` | `create_projectile_system` | `create_encounter_system` | `create_ai_director` | `simulate_encounters` | `create_boss_ai`
 - create_mob_controller: FSM with `detection_range`, `attack_range`, `leash_distance`, `patrol_speed`, `chase_speed`, `flee_health_pct`
 - create_spawn_system: `max_count`, `respawn_timer`, `spawn_radius`, `wave_cooldown`, `wave_count`
 - create_projectile_system: `velocity`, `trajectory` (straight/arc/homing), `trail_width`, `impact_vfx`
+- create_encounter_system: Wave ScriptableObject + encounter manager (AID-01)
+- create_ai_director: AnimationCurve-based difficulty scaling (AID-02)
+- simulate_encounters: Monte Carlo encounter simulator (AID-03)
+- create_boss_ai: Multi-phase boss FSM (VB-10)
 
 ### unity_performance
 Actions: `profile_scene` | `setup_lod_groups` | `bake_lightmaps` | `audit_assets` | `automate_build`
@@ -212,19 +221,19 @@ Actions: `profile_scene` | `setup_lod_groups` | `bake_lightmaps` | `audit_assets
 - automate_build: `build_target` (e.g. StandaloneWindows64), `scenes`, `build_options`
 
 ### unity_prefab (v2.0)
-Actions: `create` | `modify` | `delete` | `variant` | `scaffold` | `variant_matrix` | `add_component` | `remove_component` | `configure` | `reflect_component` | `batch_configure` | `hierarchy` | `joint_setup` | `navmesh_setup` | `bone_socket` | `validate_project` | `batch_job` | `cloth_setup`
+Actions: `create` | `create_variant` | `modify` | `delete` | `create_scaffold` | `add_component` | `remove_component` | `configure` | `reflect_component` | `batch_configure` | `hierarchy` | `generate_variants` | `batch_job` | `setup_joints` | `setup_navmesh` | `setup_bone_sockets` | `validate_project` | `cloth_setup`
 - create: auto-wire components based on prefab type (monster/hero/prop/ui profiles)
-- variant_matrix: corruption tier x brand x archetype from one base prefab
+- generate_variants: corruption tier x brand x archetype from one base prefab
 - batch_job: multiple operations in one compilation cycle
 - cloth_setup: Configure Unity Cloth component with presets (CHAR-07), `cloth_type` (cape/skirt/banner/hair/chain)
 
 ### unity_settings (v2.0)
-Actions: `player_settings` | `build_settings` | `quality_settings` | `physics_settings` | `physics_material` | `package_install` | `package_remove` | `tag_layer` | `tag_layer_sync` | `time_settings` | `graphics_settings`
-- tag_layer_sync: auto-sync tags/layers from Constants.cs
-- package_install: UPM, OpenUPM, git URL sources
+Actions: `configure_physics` | `create_physics_material` | `configure_player` | `configure_build` | `configure_quality` | `install_package` | `remove_package` | `manage_tags_layers` | `sync_tags_layers` | `configure_time` | `configure_graphics`
+- sync_tags_layers: auto-sync tags/layers from Constants.cs
+- install_package: UPM, OpenUPM, git URL sources
 
 ### unity_assets (v2.0)
-Actions: `move` | `rename` | `delete` | `duplicate` | `create_folder` | `fbx_import` | `texture_import` | `material_remap` | `material_auto_generate` | `asmdef` | `preset_create` | `preset_apply` | `reference_scan` | `atomic_import`
+Actions: `move` | `rename` | `delete` | `duplicate` | `create_folder` | `configure_fbx` | `configure_texture` | `remap_materials` | `auto_materials` | `create_asmdef` | `create_preset` | `apply_preset` | `scan_references` | `atomic_import`
 
 ### unity_code (v2.0)
 Actions: `generate_class` | `modify_script` | `editor_window` | `property_drawer` | `inspector_drawer` | `scene_overlay` | `generate_test` | `service_locator` | `object_pool` | `singleton` | `state_machine` | `event_channel`
@@ -253,24 +262,30 @@ Actions: `save_system` | `health_system` | `character_controller` | `input_confi
 Actions: `inventory` | `dialogue` | `quest` | `loot_table` | `crafting` | `skill_tree` | `dps_calculator` | `encounter_simulator` | `stat_curve_editor` | `shop` | `journal` | `equipment_attachment`
 
 ### unity_camera (v2.0)
-Actions: `virtual_camera` | `state_driven` | `camera_shake` | `camera_blend` | `timeline` | `cutscene` | `animation_clip` | `animator_modify` | `avatar_mask` | `video_player` | `cinematic_sequence`
+Actions: `create_virtual_camera` | `create_state_driven_camera` | `create_camera_shake` | `configure_blend` | `create_timeline` | `create_cutscene` | `edit_animation_clip` | `modify_animator` | `create_avatar_mask` | `setup_video_player` | `cinematic_sequence` | `create_lock_on_camera`
 - cinematic_sequence: Timeline-based cinematic with shots and character staging (ANIM3-07), `shots`
+- create_lock_on_camera: Souls-like lock-on targeting camera (CAM-05)
 
 ### unity_world (v2.0)
-Actions: `create_scene` | `scene_transitions` | `reflection_probes` | `occlusion_culling` | `environment` | `terrain_detail` | `tilemap` | `physics_2d` | `time_of_day` | `fast_travel` | `environmental_puzzle` | `dungeon_trap` | `spatial_loot` | `weather` | `day_night_cycle` | `npc_placement` | `dungeon_lighting` | `terrain_blend`
+Actions: `create_scene` | `create_transition_system` | `setup_probes` | `setup_occlusion` | `setup_environment` | `paint_terrain_detail` | `create_tilemap` | `setup_2d_physics` | `apply_time_of_day` | `create_fast_travel` | `create_puzzle` | `create_trap` | `create_spatial_loot` | `create_weather` | `create_day_night` | `create_npc_placement` | `create_dungeon_lighting` | `create_terrain_blend` | `create_wfc_dungeon` | `create_interior_streaming` | `create_door_system`
+- create_wfc_dungeon: WFC tile-based dungeon generation (WORLD-11)
+- create_interior_streaming: Seamless interior/exterior streaming (WORLD-12)
+- create_door_system: Door/gate/lock and lever system (WORLD-13)
 
 ### unity_ux (v2.0)
 Actions: `minimap` | `damage_numbers` | `interaction_prompt` | `primetween_sequence` | `tmp_font` | `tmp_component` | `tutorial` | `accessibility` | `character_select` | `world_map` | `rarity_vfx` | `corruption_vfx`
 
 ### unity_qa (v2.0)
-Actions: `test_runner` | `play_session` | `profiler` | `memory_leak` | `static_analysis` | `crash_reporting` | `analytics` | `live_inspector` | `check_compile_status` | `compile_recovery` | `detect_conflicts` | `orchestrate_pipeline` | `list_pipeline_steps` | `validate_art_style` | `build_smoke_test`
+Actions: `setup_bridge` | `run_tests` | `run_play_session` | `profile_scene` | `detect_memory_leaks` | `analyze_code` | `setup_crash_reporting` | `setup_analytics` | `inspect_live_state` | `check_compile_status` | `compile_recovery` | `detect_conflicts` | `orchestrate_pipeline` | `list_pipeline_steps` | `validate_art_style` | `build_smoke_test` | `code_review`
+- setup_bridge: Deploy VBBridge TCP server for direct Unity Editor communication (QA-00)
 - check_compile_status: detect Unity compilation errors via TCP bridge
-- compile_recovery: Compile error auto-detection and recovery (PROD-01), `auto_fix_enabled`, `max_attempts`
+- compile_recovery: Compile error auto-detection and recovery (PROD-01), `auto_fix_enabled`, `max_retries`
 - detect_conflicts: Pre-write asset/class name conflict scanning (PROD-02), `scan_paths`, `namespace_prefix`
-- orchestrate_pipeline: Multi-step pipeline orchestration with status tracking (PROD-03), `pipeline_name`, `steps`, `on_failure`
+- orchestrate_pipeline: Multi-step pipeline orchestration with status tracking (PROD-03), `pipeline_name`, `pipeline_steps`, `on_failure`
 - list_pipeline_steps: List available built-in pipeline step definitions (PROD-03b)
 - validate_art_style: Art style consistency validation (PROD-04), `palette_colors`, `naming_pattern`
-- build_smoke_test: Post-build smoke test verification (PROD-05), `build_path`, `test_scenes`
+- build_smoke_test: Post-build smoke test verification (PROD-05), `build_path`, `scene_to_load`
+- code_review: Deploy unified C#/Python code reviewer (PROD-06)
 
 ### unity_build (v2.0)
 Actions: `build_multi_platform` | `configure_addressables` | `generate_ci_pipeline` | `manage_version` | `configure_platform` | `setup_shader_stripping` | `generate_store_metadata`

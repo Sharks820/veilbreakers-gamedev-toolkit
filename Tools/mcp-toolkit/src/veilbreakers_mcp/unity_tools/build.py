@@ -149,6 +149,12 @@ async def unity_build(
                 })
 
             # CI/CD files go at project root, not under Assets/
+            if not settings.unity_project_path:
+                return json.dumps({
+                    "status": "error",
+                    "action": "generate_ci_pipeline",
+                    "message": "unity_project_path is not configured",
+                })
             project_root = Path(settings.unity_project_path).resolve()
             target = (project_root / output_path).resolve()
             try:
@@ -290,6 +296,12 @@ async def unity_build(
             )
 
             # Store metadata goes at project root, not under Assets/
+            if not settings.unity_project_path:
+                return json.dumps({
+                    "status": "error",
+                    "action": "generate_store_metadata",
+                    "message": "unity_project_path is not configured",
+                })
             project_root = Path(settings.unity_project_path).resolve()
             target = (project_root / "StoreMetadata" / "STORE_LISTING.md").resolve()
             try:

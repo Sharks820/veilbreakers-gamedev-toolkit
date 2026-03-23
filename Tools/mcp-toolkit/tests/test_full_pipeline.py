@@ -80,6 +80,8 @@ def _make_runner(command_responses=None, tripo_api_key="test-key"):
 
     settings = MagicMock()
     settings.tripo_api_key = tripo_api_key
+    settings.tripo_session_cookie = ""
+    settings.tripo_studio_token = ""
     return PipelineRunner(blender, settings)
 
 

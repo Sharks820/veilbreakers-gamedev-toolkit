@@ -451,36 +451,3 @@ async def _handle_ux_corruption_vfx(name: str, ns_kwargs: dict) -> str:
         "script_path": abs_path,
         "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)
-
-
-async def _handle_check_compile_status(bridge_port: int = 9877) -> str:
-    """Query the Unity bridge for compile error status.
-
-    Sends a ``check_compile_status`` command to the VBBridge TCP server
-    running inside Unity Editor.  Returns JSON with ``is_compiling``,
-    ``has_errors``, ``error_count``, and ``errors`` fields.
-
-    This should be called after writing C# scripts to verify that
-    compilation succeeded before attempting further Unity operations.
-    """
-    try:
-        conn = UnityConnection(port=bridge_port)
-        result = await conn.send_command("check_compile_status", {})
-        return json.dumps({
-            "status": "success",
-            "action": "check_compile_status",
-            "is_compiling": result.get("is_compiling", False) if isinstance(result, dict) else False,
-            "has_errors": result.get("has_errors", False) if isinstance(result, dict) else False,
-            "error_count": result.get("error_count", 0) if isinstance(result, dict) else 0,
-            "errors": result.get("errors", []) if isinstance(result, dict) else [],
-        }, indent=2)
-    except (ConnectionError, UnityCommandError) as exc:
-        return json.dumps({
-            "status": "error",
-            "action": "check_compile_status",
-            "message": (
-                f"Cannot reach Unity bridge on port {bridge_port}. "
-                f"Ensure Unity is running with VBBridge addon loaded. "
-                f"Detail: {exc}"
-            ),
-        }, indent=2)

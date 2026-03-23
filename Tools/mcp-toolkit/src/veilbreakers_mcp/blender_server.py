@@ -932,6 +932,10 @@ async def asset_pipeline(
     status: str | None = None,
     # equipment params (Phase 13 -- EQUIP-01/03/04/05)
     weapon_type: str | None = None,
+    weapon_style: str | None = None,    # style variant for generate_weapon
+    weapon_length: float | None = None, # blade/shaft length for generate_weapon
+    blade_width: float | None = None,   # blade/head width for generate_weapon
+    material_name: str | None = None,   # material to assign for generate_weapon
     parts: list[str] | None = None,
     armor_object_name: str | None = None,
     character_object_name: str | None = None,
@@ -1128,6 +1132,14 @@ async def asset_pipeline(
         params = {"weapon_type": weapon_type}
         if object_name:
             params["object_name"] = object_name
+        if weapon_style is not None:
+            params["style"] = weapon_style
+        if weapon_length is not None:
+            params["length"] = weapon_length
+        if blade_width is not None:
+            params["blade_width"] = blade_width
+        if material_name is not None:
+            params["material_name"] = material_name
         result = await blender.send_command("equipment_generate_weapon", params)
         return await _with_screenshot(blender, result, capture_viewport)
 
@@ -1180,7 +1192,7 @@ async def asset_pipeline(
             ".glb": "import_scene.gltf",
             ".gltf": "import_scene.gltf",
             ".fbx": "import_scene.fbx",
-            ".obj": "import_scene.obj",
+            ".obj": "wm.obj_import",
         }
         op = import_ops[ext]
         safe_path = filepath.replace("\\", "/")
@@ -1591,6 +1603,8 @@ async def blender_animation(
     # AI motion params
     prompt: str | None = None,
     model: str | None = None,
+    style: str | None = None,       # Motion style: realistic/stylized/exaggerated/subtle
+    duration: float | None = None,  # Duration in seconds (overrides frame_count)
     # Batch export params
     output_dir: str | None = None,
     naming: str | None = None,
@@ -1717,6 +1731,10 @@ async def blender_animation(
             params["model"] = model
         if frame_count is not None:
             params["frame_count"] = frame_count
+        if style is not None:
+            params["style"] = style
+        if duration is not None:
+            params["duration"] = duration
         result = await blender.send_command("anim_generate_ai_motion", params)
         return json.dumps(result, indent=2, default=str)
 
