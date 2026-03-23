@@ -915,11 +915,44 @@ def handle_render_contact_sheet(params: dict) -> dict:
     # Apply beauty setup unless explicitly skipped
     viewport_state = None
     eevee_state = None
+    temp_lights = []
+    old_world_strength = None
+    old_world_color = None
     if not skip_beauty:
         viewport_state = _save_viewport_state()
         eevee_state = _save_eevee_state()
         _apply_viewport_shading()
         _configure_eevee()
+
+        # Auto-create temporary 3-point lighting rig for the render.
+        # EEVEE renders need much higher energy than viewport preview,
+        # so we scale the beauty presets up for render-quality output.
+        _RENDER_ENERGY_SCALE = 80.0  # multiplier for EEVEE render
+        _center = tuple(target.location)
+        _dims = tuple(target.dimensions)
+        _base_dist = max(
+            math.sqrt(_dims[0] ** 2 + _dims[1] ** 2 + _dims[2] ** 2) / 2.0,
+            1.0,
+        )
+        for preset in (BEAUTY_KEY_LIGHT, BEAUTY_FILL_LIGHT, BEAUTY_RIM_LIGHT):
+            boosted = dict(preset)
+            boosted["energy"] = preset["energy"] * _RENDER_ENERGY_SCALE
+            light_obj = _create_area_light(boosted, _center, _base_dist)
+            light_obj.name = f"_CS_Temp_{preset['name']}"
+            temp_lights.append(light_obj)
+
+        # Set dark ambient world for the render
+        world = bpy.context.scene.world
+        if world is None:
+            world = bpy.data.worlds.new("_CS_Temp_World")
+            bpy.context.scene.world = world
+        if world.use_nodes and world.node_tree:
+            bg_node = world.node_tree.nodes.get("Background")
+            if bg_node:
+                old_world_strength = bg_node.inputs["Strength"].default_value
+                old_world_color = tuple(bg_node.inputs["Color"].default_value)
+                bg_node.inputs["Strength"].default_value = 0.05
+                bg_node.inputs["Color"].default_value = (0.01, 0.01, 0.02, 1.0)
 
     cam = bpy.data.objects.get("ContactSheet_Camera")
     if not cam:
@@ -973,6 +1006,19 @@ def handle_render_contact_sheet(params: dict) -> dict:
         scene.render.resolution_y = old_y
         scene.render.filepath = old_filepath
         scene.render.image_settings.file_format = old_format
+
+        # Clean up temporary contact sheet lights
+        for light_obj in temp_lights:
+            bpy.data.objects.remove(light_obj, do_unlink=True)
+
+        # Restore world settings
+        if old_world_strength is not None:
+            world = bpy.context.scene.world
+            if world and world.use_nodes and world.node_tree:
+                bg_node = world.node_tree.nodes.get("Background")
+                if bg_node:
+                    bg_node.inputs["Strength"].default_value = old_world_strength
+                    bg_node.inputs["Color"].default_value = old_world_color
 
         # Restore viewport/eevee state if we changed it
         if viewport_state is not None:
