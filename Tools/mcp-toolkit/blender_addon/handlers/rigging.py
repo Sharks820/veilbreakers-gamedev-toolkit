@@ -1,12 +1,27 @@
-"""Rigging handlers for mesh analysis, template application, and custom rig building.
+"""Rigging handlers for mesh analysis, template application, custom rig building,
+bone editing, and bone listing.
 
-Provides three command handlers:
+Provides five command handlers:
   - handle_analyze_for_rigging: Mesh proportion analysis and rig template recommendation (RIG-01)
   - handle_apply_rig_template: Apply a Rigify creature rig template to a mesh (RIG-02)
   - handle_build_custom_rig: Mix limb types from LIMB_LIBRARY into a custom rig (RIG-03)
+  - handle_edit_bone: Edit individual bone properties (position, roll, parent) (P2-A5)
+  - handle_list_bones: List all bones in an armature with hierarchy info (P2-A5)
 
-Pure-logic functions (_analyze_proportions, _validate_custom_rig_config) are
-separated for testability without Blender.
+Pure-logic functions:
+  - _analyze_proportions: Mesh proportion analysis for template recommendation
+  - _validate_custom_rig_config: Validate custom rig limb type configuration
+  - _validate_unity_humanoid: Validate bone mapping to Unity Humanoid avatar
+  - _generate_multi_arm_bones: Generate bone definitions for multi-armed creatures
+  - _get_status_effect_socket: Look up VFX socket bone for a body type
+  - _get_corruption_stage: Get corruption stage config from percentage
+  - _get_bones_for_lod: Filter template bones by LOD tier
+  - _validate_export_readiness: Validate rig is ready for FBX export
+  - _validate_monster_rig_config: Validate monster ID against template map
+  - _get_environment_rig_config: Get rigging requirements for environment objects
+  - _get_riggable_environment_objects: List environment objects that need rigs
+  - _get_pipeline_for_monster: Get full pipeline config for a VB monster
+  - _validate_pipeline_readiness: Validate character readiness for pipeline stages
 """
 
 from __future__ import annotations
@@ -1221,6 +1236,16 @@ PIPELINE_STEPS: list[dict] = [
     },
     {
         "step": 4,
+        "name": "create_textures",
+        "tool": "blender_texture",
+        "action": "create_pbr",
+        "description": "Create PBR texture setup (albedo, normal, roughness, metallic)",
+        "required_params": ["name", "texture_dir"],
+        "optional_params": ["texture_size"],
+        "output": "material_name",
+    },
+    {
+        "step": 5,
         "name": "analyze_for_rigging",
         "tool": "blender_rig",
         "action": "analyze_mesh",
@@ -1229,7 +1254,7 @@ PIPELINE_STEPS: list[dict] = [
         "output": "template_recommendation",
     },
     {
-        "step": 5,
+        "step": 6,
         "name": "apply_rig",
         "tool": "blender_rig",
         "action": "apply_template",
@@ -1239,7 +1264,7 @@ PIPELINE_STEPS: list[dict] = [
         "output": "rig_name",
     },
     {
-        "step": 6,
+        "step": 7,
         "name": "auto_weight",
         "tool": "blender_rig",
         "action": "auto_weight",
@@ -1248,7 +1273,7 @@ PIPELINE_STEPS: list[dict] = [
         "output": "weight_result",
     },
     {
-        "step": 7,
+        "step": 8,
         "name": "enforce_weight_limit",
         "tool": "blender_rig",
         "action": "enforce_weight_limit",
@@ -1258,7 +1283,7 @@ PIPELINE_STEPS: list[dict] = [
         "output": "weight_limit_result",
     },
     {
-        "step": 8,
+        "step": 9,
         "name": "validate_rig",
         "tool": "blender_rig",
         "action": "validate",
@@ -1268,7 +1293,7 @@ PIPELINE_STEPS: list[dict] = [
         "gate": "grade must be A or B to proceed",
     },
     {
-        "step": 9,
+        "step": 10,
         "name": "test_deformation",
         "tool": "blender_rig",
         "action": "test_deformation",
@@ -1277,7 +1302,7 @@ PIPELINE_STEPS: list[dict] = [
         "output": "contact_sheet_image",
     },
     {
-        "step": 10,
+        "step": 11,
         "name": "generate_animations",
         "tool": "blender_animation",
         "action": "generate_idle",
@@ -1287,7 +1312,7 @@ PIPELINE_STEPS: list[dict] = [
         "next_animations": ["generate_walk", "generate_attack", "generate_reaction"],
     },
     {
-        "step": 11,
+        "step": 12,
         "name": "setup_facial",
         "tool": "blender_rig",
         "action": "setup_facial",
@@ -1298,7 +1323,7 @@ PIPELINE_STEPS: list[dict] = [
         "output": "facial_bones_added",
     },
     {
-        "step": 12,
+        "step": 13,
         "name": "setup_spring_bones",
         "tool": "blender_rig",
         "action": "setup_spring_bones",
@@ -1309,7 +1334,18 @@ PIPELINE_STEPS: list[dict] = [
         "output": "spring_bones_result",
     },
     {
-        "step": 13,
+        "step": 14,
+        "name": "final_game_check",
+        "tool": "blender_mesh",
+        "action": "game_check",
+        "description": "Final game readiness check before export (poly budget, UVs)",
+        "required_params": ["object_name"],
+        "optional_params": ["poly_budget", "platform"],
+        "output": "final_check_result",
+        "gate": "must pass before export",
+    },
+    {
+        "step": 15,
         "name": "export_fbx",
         "tool": "blender_export",
         "action": "export",
@@ -1319,7 +1355,7 @@ PIPELINE_STEPS: list[dict] = [
         "output": "export_path",
     },
     {
-        "step": 14,
+        "step": 16,
         "name": "unity_import",
         "tool": "unity_assets",
         "action": "fbx_import",
@@ -1328,7 +1364,16 @@ PIPELINE_STEPS: list[dict] = [
         "output": "unity_asset_path",
     },
     {
-        "step": 15,
+        "step": 17,
+        "name": "unity_recompile_import",
+        "tool": "unity_editor",
+        "action": "recompile",
+        "description": "Recompile Unity scripts after import/generation",
+        "required_params": [],
+        "output": "compile_status",
+    },
+    {
+        "step": 18,
         "name": "unity_animator",
         "tool": "unity_scene",
         "action": "create_animator",
@@ -1337,7 +1382,16 @@ PIPELINE_STEPS: list[dict] = [
         "output": "animator_controller",
     },
     {
-        "step": 16,
+        "step": 19,
+        "name": "unity_recompile_animator",
+        "tool": "unity_editor",
+        "action": "recompile",
+        "description": "Recompile Unity scripts after animator generation",
+        "required_params": [],
+        "output": "compile_status",
+    },
+    {
+        "step": 20,
         "name": "unity_vfx",
         "tool": "unity_vfx",
         "action": "create_brand_vfx",
@@ -1345,6 +1399,15 @@ PIPELINE_STEPS: list[dict] = [
         "required_params": ["brand"],
         "optional": True,
         "output": "vfx_prefab",
+    },
+    {
+        "step": 21,
+        "name": "unity_recompile_vfx",
+        "tool": "unity_editor",
+        "action": "recompile",
+        "description": "Recompile Unity scripts after VFX generation",
+        "required_params": [],
+        "output": "compile_status",
     },
 ]
 

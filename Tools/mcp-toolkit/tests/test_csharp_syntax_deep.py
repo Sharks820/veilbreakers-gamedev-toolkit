@@ -1068,13 +1068,21 @@ class TestCSharpTemplateSyntax:
                     )
 
     def test_try_catch_structure(self, name: str, generator, lang: str) -> None:
-        """Every 'try' block should have a matching 'catch' block."""
-        if lang != "cs":
-            pytest.skip("try/catch check only applies to C# templates")
+        """Every 'try' block should have a matching 'catch' block (C#).
+        For HLSL shader files, every HLSLPROGRAM block must have a matching ENDHLSL.
+        """
         output = generator()
-        # Only count 'try' as a keyword when it appears at the start of a
-        # line (possibly after whitespace), NOT inside comments or strings.
-        # The pattern "try\n...{" or "try {" is the actual C# keyword usage.
+        if lang == "shader":
+            # HLSL does not have try/catch; verify HLSLPROGRAM/ENDHLSL pairs balance.
+            opens = output.count("HLSLPROGRAM")
+            closes = output.count("ENDHLSL")
+            if opens != closes:
+                pytest.fail(
+                    f"[{name}] HLSLPROGRAM/ENDHLSL mismatch: "
+                    f"HLSLPROGRAM={opens}, ENDHLSL={closes}"
+                )
+            return
+        # C# try/catch check: count try and catch keywords, ignoring comments.
         lines = output.split("\n")
         try_count = 0
         catch_count = 0
@@ -1095,13 +1103,18 @@ class TestCSharpTemplateSyntax:
 
     def test_semicolons_after_statements(self, name: str, generator, lang: str) -> None:
         """C# variable declarations and method calls should end with semicolons.
-
-        We check that lines with common patterns (assignments, method calls)
-        end with a semicolon. This is a heuristic -- not exhaustive.
+        HLSL shaders must contain semicolons in their property and cbuffer blocks.
         """
-        if lang != "cs":
-            pytest.skip("Semicolon check only applies to C# templates")
         output = generator()
+        if lang == "shader":
+            # Every HLSL shader must have semicolons: variable declarations,
+            # cbuffer fields, and struct members all require them.
+            sc = output.count(";")
+            assert sc >= 5, (
+                f"[{name}] Shader output has only {sc} semicolon(s); "
+                "expected at least 5 from HLSL declarations"
+            )
+            return
         lines = output.split("\n")
         # Patterns that should end with ; in C#
         # - Lines containing '=' that are not control flow, not comments, not class decl
@@ -1146,22 +1159,28 @@ class TestCSharpTemplateSyntax:
 
 
 # ===================================================================
-# Non-C# template tests (UXML, USS)
+# Non-C# template tests (UXML, USS) — split by format so every test
+# runs a real assertion with no pytest.skip() guards.
 # ===================================================================
+
+UXML_ONLY_GENERATORS: list[tuple[str, callable, str]] = [
+    (n, g, l) for n, g, l in NON_CS_GENERATORS if l == "uxml"
+]
+USS_ONLY_GENERATORS: list[tuple[str, callable, str]] = [
+    (n, g, l) for n, g, l in NON_CS_GENERATORS if l == "uss"
+]
 
 
 @pytest.mark.parametrize(
     "name,generator,lang",
-    NON_CS_GENERATORS,
-    ids=[g[0] for g in NON_CS_GENERATORS],
+    UXML_ONLY_GENERATORS,
+    ids=[g[0] for g in UXML_ONLY_GENERATORS],
 )
-class TestNonCSharpTemplates:
-    """Verify UXML and USS template outputs."""
+class TestUXMLTemplates:
+    """Verify UXML template outputs — all tests apply to every entry."""
 
     def test_uxml_is_valid_xml(self, name: str, generator, lang: str) -> None:
         """UXML output should be parseable as XML."""
-        if lang != "uxml":
-            pytest.skip("Only for UXML")
         import xml.etree.ElementTree as ET
         output = generator()
         try:
@@ -1169,24 +1188,45 @@ class TestNonCSharpTemplates:
         except ET.ParseError as exc:
             pytest.fail(f"[{name}] Invalid XML: {exc}")
 
-    def test_uss_has_css_rules(self, name: str, generator, lang: str) -> None:
-        """USS output should contain CSS-like rules."""
-        if lang != "uss":
-            pytest.skip("Only for USS")
-        output = generator()
-        assert "{" in output and "}" in output, f"[{name}] No CSS rules found"
-        assert "background-color:" in output or "color:" in output, \
-            f"[{name}] No color properties found"
-
-    def test_brace_balance_noncsharp(self, name: str, generator, lang: str) -> None:
-        """Braces should be balanced even in non-C# templates."""
+    def test_brace_balance(self, name: str, generator, lang: str) -> None:
+        """Braces should be balanced in UXML templates."""
         output = generator()
         balanced = check_brace_balance(output)
         if not balanced:
             location = find_unmatched_brace_location(output)
             pytest.fail(f"[{name}] Unbalanced braces: {location}")
 
-    def test_output_nonempty_noncsharp(self, name: str, generator, lang: str) -> None:
+    def test_output_nonempty(self, name: str, generator, lang: str) -> None:
+        """Generator should produce non-empty output."""
+        output = generator()
+        assert isinstance(output, str)
+        assert len(output) > 50
+
+
+@pytest.mark.parametrize(
+    "name,generator,lang",
+    USS_ONLY_GENERATORS,
+    ids=[g[0] for g in USS_ONLY_GENERATORS],
+)
+class TestUSSTemplates:
+    """Verify USS stylesheet template outputs — all tests apply to every entry."""
+
+    def test_uss_has_css_rules(self, name: str, generator, lang: str) -> None:
+        """USS output should contain CSS-like rules with selectors and color properties."""
+        output = generator()
+        assert "{" in output and "}" in output, f"[{name}] No CSS rules found"
+        assert "background-color:" in output or "color:" in output, \
+            f"[{name}] No color properties found"
+
+    def test_brace_balance(self, name: str, generator, lang: str) -> None:
+        """Braces should be balanced in USS stylesheets."""
+        output = generator()
+        balanced = check_brace_balance(output)
+        if not balanced:
+            location = find_unmatched_brace_location(output)
+            pytest.fail(f"[{name}] Unbalanced braces: {location}")
+
+    def test_output_nonempty(self, name: str, generator, lang: str) -> None:
         """Generator should produce non-empty output."""
         output = generator()
         assert isinstance(output, str)

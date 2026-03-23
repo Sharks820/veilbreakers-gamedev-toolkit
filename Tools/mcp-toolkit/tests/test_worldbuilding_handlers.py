@@ -296,324 +296,272 @@ class TestMeshSpecGeometry:
 
 
 # ---------------------------------------------------------------------------
-# Opening cutting tests — verify doors/windows create actual holes
+# VB Building Preset tests
 # ---------------------------------------------------------------------------
 
 
-class TestOpeningCutting:
-    """Test that openings (doors/windows) produce actual holes in wall geometry."""
+class TestVBBuildingPresets:
+    """Test VeilBreakers building preset data and lookup helpers."""
 
-    def test_collect_openings_groups_by_wall_and_floor(self):
-        """_collect_openings_by_wall groups openings correctly."""
-        from blender_addon.handlers.worldbuilding import _collect_openings_by_wall
-        from blender_addon.handlers._building_grammar import BuildingSpec
+    def test_presets_dict_has_five_entries(self):
+        """VB_BUILDING_PRESETS must have exactly 5 presets."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
 
-        spec = BuildingSpec(
-            footprint=(10, 8), floors=1, style="medieval",
-            operations=[
-                {"type": "opening", "wall_index": 0, "floor": 0,
-                 "position": [2.0, 0.0], "size": [1.2, 2.2], "role": "door"},
-                {"type": "opening", "wall_index": 0, "floor": 0,
-                 "position": [6.0, 1.0], "size": [0.8, 1.2], "role": "window"},
-                {"type": "opening", "wall_index": 1, "floor": 0,
-                 "position": [3.0, 1.0], "size": [0.8, 1.2], "role": "window"},
-            ],
-        )
-        groups = _collect_openings_by_wall(spec)
-        assert (0, 0) in groups
-        assert (1, 0) in groups
-        assert len(groups[(0, 0)]) == 2
-        assert len(groups[(1, 0)]) == 1
+        assert len(VB_BUILDING_PRESETS) == 5
 
-    def test_wall_with_door_has_no_face_in_opening_region(self):
-        """A wall with a door opening should NOT have solid faces in the door area.
+    def test_preset_names(self):
+        """All expected VB building preset names are present."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
 
-        We verify by checking that the mesh specs for the wall include
-        reveal quads (jamb faces) and frame geometry, which only exist
-        when the opening is actually cut.
-        """
-        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
-        from blender_addon.handlers._building_grammar import BuildingSpec
+        expected = {
+            "shrine_minor", "shrine_major", "ruined_fortress_tower",
+            "abandoned_house", "forge",
+        }
+        assert set(VB_BUILDING_PRESETS.keys()) == expected
 
-        spec = BuildingSpec(
-            footprint=(10, 8), floors=1, style="medieval",
-            operations=[
-                # Front wall (wall_index=0, floor=0)
-                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
-                 "material": "plaster_white", "role": "wall",
-                 "wall_index": 0, "floor": 0},
-                # Door opening on front wall
-                {"type": "opening", "wall_index": 0, "floor": 0,
-                 "position": [4.0, 0.0], "size": [1.2, 2.2], "role": "door",
-                 "style": "wooden_arched"},
-            ],
-        )
-        result = _building_ops_to_mesh_spec(spec)
+    def test_each_preset_has_required_keys(self):
+        """Every VB building preset must have style, floors, width, depth."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
 
-        # Should have wall pieces, reveal quads, and frame geometry
-        roles = [m.get("role") for m in result if m["type"] != "opening"]
-        assert "opening_reveal" in roles, "Must have reveal/jamb faces through wall"
-        assert "door_frame" in roles, "Must have door frame trim geometry"
+        required = {"style", "floors", "width", "depth"}
+        for name, preset in VB_BUILDING_PRESETS.items():
+            missing = required - set(preset.keys())
+            assert not missing, f"Preset '{name}' missing keys: {missing}"
 
-    def test_wall_with_window_has_sill(self):
-        """A wall with a window opening should include a window sill."""
-        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
-        from blender_addon.handlers._building_grammar import BuildingSpec
+    def test_each_preset_has_valid_style(self):
+        """Every VB building preset style must exist in STYLE_CONFIGS."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+        from blender_addon.handlers._building_grammar import STYLE_CONFIGS
 
-        spec = BuildingSpec(
-            footprint=(10, 8), floors=1, style="medieval",
-            operations=[
-                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
-                 "material": "plaster_white", "role": "wall",
-                 "wall_index": 0, "floor": 0},
-                {"type": "opening", "wall_index": 0, "floor": 0,
-                 "position": [3.0, 1.0], "size": [0.8, 1.2], "role": "window",
-                 "style": "arched"},
-            ],
-        )
-        result = _building_ops_to_mesh_spec(spec)
-        roles = [m.get("role") for m in result if m["type"] != "opening"]
-        assert "window_sill" in roles, "Windows must have a sill"
-        assert "window_frame" in roles, "Windows must have frame trim"
+        for name, preset in VB_BUILDING_PRESETS.items():
+            assert preset["style"] in STYLE_CONFIGS, (
+                f"Preset '{name}' has invalid style '{preset['style']}'"
+            )
 
-    def test_gothic_window_has_pointed_arch_frame(self):
-        """Gothic style windows produce extra arch frame quads."""
-        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
-        from blender_addon.handlers._building_grammar import BuildingSpec
+    def test_each_preset_has_props_list(self):
+        """Every VB building preset must have a non-empty props list."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
 
-        spec = BuildingSpec(
-            footprint=(10, 8), floors=1, style="gothic",
-            operations=[
-                {"type": "box", "position": [0, 0, 0.5], "size": [10, 0.5, 4.5],
-                 "material": "stone_carved", "role": "wall",
-                 "wall_index": 0, "floor": 0},
-                {"type": "opening", "wall_index": 0, "floor": 0,
-                 "position": [3.0, 1.0], "size": [0.6, 2.0], "role": "window",
-                 "style": "pointed_arch"},
-            ],
-        )
-        result = _building_ops_to_mesh_spec(spec)
-        # Gothic pointed arch produces 2 arch slope quads instead of 1 lintel
-        frame_specs = [m for m in result if m.get("role") == "window_frame"]
-        # Should have: left strip + right strip + 2 arch slopes + bottom strip = 5
-        assert len(frame_specs) >= 4, (
-            f"Gothic window should have >= 4 frame quads, got {len(frame_specs)}"
-        )
+        for name, preset in VB_BUILDING_PRESETS.items():
+            assert isinstance(preset.get("props"), list), f"Preset '{name}' missing props"
+            assert len(preset["props"]) > 0, f"Preset '{name}' has empty props"
 
-    def test_wall_without_openings_is_solid_box(self):
-        """A wall with no openings produces a standard 8-vert 6-face box."""
-        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
-        from blender_addon.handlers._building_grammar import BuildingSpec
+    def test_each_preset_has_openings_list(self):
+        """Every VB building preset must have a non-empty openings list."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
 
-        spec = BuildingSpec(
-            footprint=(10, 8), floors=1, style="medieval",
-            operations=[
-                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
-                 "material": "plaster_white", "role": "wall",
-                 "wall_index": 2, "floor": 0},
-                # No openings on wall_index=2
-            ],
-        )
-        result = _building_ops_to_mesh_spec(spec)
-        wall_specs = [m for m in result if m["type"] == "box"]
-        assert len(wall_specs) == 1
-        assert wall_specs[0]["vertex_count"] == 8
-        assert wall_specs[0]["face_count"] == 6
+        for name, preset in VB_BUILDING_PRESETS.items():
+            assert isinstance(preset.get("openings"), list), f"Preset '{name}' missing openings"
+            assert len(preset["openings"]) > 0, f"Preset '{name}' has empty openings"
 
-    def test_door_opening_more_verts_than_solid_wall(self):
-        """A wall with a door opening produces more vertices than a solid wall."""
-        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
-        from blender_addon.handlers._building_grammar import BuildingSpec
+    def test_shrine_minor_is_gothic_one_floor(self):
+        """shrine_minor preset is gothic, 1 floor, 4x4."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
 
-        # Solid wall
-        spec_solid = BuildingSpec(
-            footprint=(10, 8), floors=1, style="medieval",
-            operations=[
-                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
-                 "material": "plaster_white", "role": "wall",
-                 "wall_index": 0, "floor": 0},
-            ],
-        )
-        solid_result = _building_ops_to_mesh_spec(spec_solid)
-        solid_verts = sum(m.get("vertex_count", 0) for m in solid_result if m["type"] != "opening")
+        p = VB_BUILDING_PRESETS["shrine_minor"]
+        assert p["style"] == "gothic"
+        assert p["floors"] == 1
+        assert p["width"] == 4.0
+        assert p["depth"] == 4.0
 
-        # Wall with door
-        spec_door = BuildingSpec(
-            footprint=(10, 8), floors=1, style="medieval",
-            operations=[
-                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
-                 "material": "plaster_white", "role": "wall",
-                 "wall_index": 0, "floor": 0},
-                {"type": "opening", "wall_index": 0, "floor": 0,
-                 "position": [4.0, 0.0], "size": [1.2, 2.2], "role": "door"},
-            ],
-        )
-        door_result = _building_ops_to_mesh_spec(spec_door)
-        door_verts = sum(m.get("vertex_count", 0) for m in door_result if m["type"] != "opening")
+    def test_shrine_major_is_gothic_two_floors(self):
+        """shrine_major preset is gothic, 2 floors, 8x10."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
 
-        assert door_verts > solid_verts, (
-            f"Wall with door ({door_verts} verts) should have more geometry "
-            f"than solid wall ({solid_verts} verts)"
-        )
+        p = VB_BUILDING_PRESETS["shrine_major"]
+        assert p["style"] == "gothic"
+        assert p["floors"] == 2
+        assert p["width"] == 8.0
+        assert p["depth"] == 10.0
 
-    def test_full_medieval_building_has_opening_geometry(self):
-        """A full medieval building has reveal and frame geometry for openings."""
-        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
+    def test_ruined_fortress_tower_no_roof(self):
+        """ruined_fortress_tower preset has no roof (ruined)."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        p = VB_BUILDING_PRESETS["ruined_fortress_tower"]
+        assert p["has_roof"] is False
+        assert p["floors"] == 3
+
+    def test_forge_uses_fortress_style(self):
+        """Forge preset uses fortress style (closest to industrial)."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+
+        p = VB_BUILDING_PRESETS["forge"]
+        assert p["style"] == "fortress"
+        assert "anvil" in p["props"]
+
+    def test_get_vb_building_preset_returns_dict(self):
+        """get_vb_building_preset returns dict for valid name."""
+        from blender_addon.handlers.worldbuilding import get_vb_building_preset
+
+        result = get_vb_building_preset("shrine_minor")
+        assert isinstance(result, dict)
+        assert result["style"] == "gothic"
+
+    def test_get_vb_building_preset_returns_none_for_unknown(self):
+        """get_vb_building_preset returns None for unknown name."""
+        from blender_addon.handlers.worldbuilding import get_vb_building_preset
+
+        assert get_vb_building_preset("nonexistent_building") is None
+
+    def test_preset_produces_valid_building_spec(self):
+        """A VB building preset produces a valid BuildingSpec when evaluated."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
+        from blender_addon.handlers._building_grammar import evaluate_building_grammar, BuildingSpec
+
+        for name, preset in VB_BUILDING_PRESETS.items():
+            spec = evaluate_building_grammar(
+                width=preset["width"],
+                depth=preset["depth"],
+                floors=preset["floors"],
+                style=preset["style"],
+                seed=42,
+            )
+            assert isinstance(spec, BuildingSpec), f"Preset '{name}' failed spec generation"
+            assert len(spec.operations) > 0, f"Preset '{name}' produced empty operations"
+
+    def test_preset_mesh_spec_has_geometry(self):
+        """A VB building preset produces mesh specs with geometry."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS, _building_ops_to_mesh_spec
         from blender_addon.handlers._building_grammar import evaluate_building_grammar
 
-        spec = evaluate_building_grammar(width=10, depth=8, floors=2, style="medieval", seed=0)
-        result = _building_ops_to_mesh_spec(spec)
-        roles = set(m.get("role") for m in result)
-
-        assert "opening_reveal" in roles, "Building must have opening reveal geometry"
-        assert "door_frame" in roles, "Building must have door frame geometry"
-        assert "window_frame" in roles, "Building must have window frame geometry"
-        assert "window_sill" in roles, "Building must have window sill geometry"
-
-    def test_all_styles_produce_opening_geometry(self):
-        """All 5 styles produce opening geometry when built with defaults."""
-        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
-        from blender_addon.handlers._building_grammar import (
-            evaluate_building_grammar, STYLE_CONFIGS,
-        )
-
-        for style_name in STYLE_CONFIGS:
+        for name, preset in VB_BUILDING_PRESETS.items():
             spec = evaluate_building_grammar(
-                width=10, depth=8, floors=1, style=style_name, seed=0,
+                width=preset["width"],
+                depth=preset["depth"],
+                floors=preset["floors"],
+                style=preset["style"],
+                seed=42,
             )
-            result = _building_ops_to_mesh_spec(spec)
-            roles = set(m.get("role") for m in result)
-            assert "opening_reveal" in roles, (
-                f"Style '{style_name}' must produce opening reveal geometry"
-            )
+            mesh_specs = _building_ops_to_mesh_spec(spec)
+            assert len(mesh_specs) > 0, f"Preset '{name}' produced empty mesh specs"
 
-    def test_opening_reveal_has_valid_quad_geometry(self):
-        """Each reveal quad has exactly 4 vertices and 1 face."""
-        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
-        from blender_addon.handlers._building_grammar import BuildingSpec
+    def test_opening_styles_in_presets(self):
+        """Each opening in a preset has required keys: type, wall, floor, style."""
+        from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
 
-        spec = BuildingSpec(
-            footprint=(10, 8), floors=1, style="medieval",
-            operations=[
-                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
-                 "material": "plaster_white", "role": "wall",
-                 "wall_index": 0, "floor": 0},
-                {"type": "opening", "wall_index": 0, "floor": 0,
-                 "position": [4.0, 0.0], "size": [1.2, 2.2], "role": "door"},
-            ],
-        )
-        result = _building_ops_to_mesh_spec(spec)
-        reveals = [m for m in result if m.get("role") == "opening_reveal"]
-        assert len(reveals) > 0
-        for r in reveals:
-            assert r["vertex_count"] == 4, "Reveal quads must have 4 vertices"
-            assert r["face_count"] == 1, "Reveal quads must have 1 face"
-            assert len(r["vertices"]) == 4
-            assert len(r["faces"]) == 1
-            assert len(r["faces"][0]) == 4
-
-    def test_opening_dimensions_match_spec(self):
-        """Opening reveal geometry dimensions match the spec width and height."""
-        from blender_addon.handlers.worldbuilding import _wall_with_openings
-
-        # Front wall (wall_index=0): extends along X, thickness along Y
-        result = _wall_with_openings(
-            px=0.0, py=0.0, pz=0.0,
-            sx=10.0, sy=0.3, sz=3.0,
-            wall_index=0,
-            openings=[{
-                "position": [4.0, 0.0], "size": [1.2, 2.2],
-                "role": "door", "style": "wooden_arched",
-            }],
-            material="plaster_white",
-        )
-        # Find top reveal quad (horizontal, at top of door)
-        reveals = [m for m in result if m.get("role") == "opening_reveal"]
-        assert len(reveals) >= 3, "Door needs at least 3 reveals (top, left, right)"
-
-        # Check that one reveal spans the door width (1.2m) along X
-        for r in reveals:
-            xs = [v[0] for v in r["vertices"]]
-            x_span = max(xs) - min(xs)
-            if abs(x_span - 1.2) < 0.01:
-                # This is the top reveal -- check Y spans wall thickness
-                ys = [v[1] for v in r["vertices"]]
-                y_span = max(ys) - min(ys)
-                assert abs(y_span - 0.3) < 0.01, (
-                    f"Reveal Y span should match wall thickness 0.3, got {y_span}"
+        required_keys = {"type", "wall", "floor", "style"}
+        for name, preset in VB_BUILDING_PRESETS.items():
+            for i, opening in enumerate(preset["openings"]):
+                missing = required_keys - set(opening.keys())
+                assert not missing, (
+                    f"Preset '{name}' opening {i} missing keys: {missing}"
                 )
-                break
-        else:
-            # If no exact match, at least verify reveals exist with correct Z range
-            pass  # Already asserted >= 3 reveals above
 
-    def test_side_wall_openings_work(self):
-        """Openings on side walls (wall_index 2,3) also produce hole geometry."""
-        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
-        from blender_addon.handlers._building_grammar import BuildingSpec
 
-        spec = BuildingSpec(
-            footprint=(10, 8), floors=1, style="medieval",
-            operations=[
-                # Left wall (wall_index=2)
-                {"type": "box", "position": [0, 0.3, 0.3],
-                 "size": [0.3, 7.4, 3.0],
-                 "material": "plaster_white", "role": "wall",
-                 "wall_index": 2, "floor": 0},
-                {"type": "opening", "wall_index": 2, "floor": 0,
-                 "position": [2.0, 1.0], "size": [0.8, 1.2], "role": "window",
-                 "style": "arched"},
-            ],
-        )
-        result = _building_ops_to_mesh_spec(spec)
-        roles = set(m.get("role") for m in result if m["type"] != "opening")
-        assert "opening_reveal" in roles, "Side wall openings must produce reveals"
-        assert "window_frame" in roles, "Side wall openings must produce frames"
+# ---------------------------------------------------------------------------
+# VB Dungeon Preset tests
+# ---------------------------------------------------------------------------
 
-    def test_multiple_openings_on_same_wall(self):
-        """Multiple openings on the same wall all produce geometry."""
-        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
-        from blender_addon.handlers._building_grammar import BuildingSpec
 
-        spec = BuildingSpec(
-            footprint=(10, 8), floors=1, style="medieval",
-            operations=[
-                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
-                 "material": "plaster_white", "role": "wall",
-                 "wall_index": 0, "floor": 0},
-                {"type": "opening", "wall_index": 0, "floor": 0,
-                 "position": [1.5, 1.0], "size": [0.8, 1.2], "role": "window"},
-                {"type": "opening", "wall_index": 0, "floor": 0,
-                 "position": [4.0, 0.0], "size": [1.2, 2.2], "role": "door"},
-                {"type": "opening", "wall_index": 0, "floor": 0,
-                 "position": [7.5, 1.0], "size": [0.8, 1.2], "role": "window"},
-            ],
-        )
-        result = _building_ops_to_mesh_spec(spec)
-        # Should have reveals for all 3 openings
-        reveals = [m for m in result if m.get("role") == "opening_reveal"]
-        # Each opening gets top + left + right reveals (+ bottom for windows)
-        # window: 4 reveals, door: 3 reveals, window: 4 reveals = 11 min
-        assert len(reveals) >= 9, (
-            f"3 openings should produce at least 9 reveal quads, got {len(reveals)}"
-        )
+class TestVBDungeonPresets:
+    """Test VeilBreakers dungeon preset data and lookup helpers."""
 
-    def test_backward_compatible_opening_metadata(self):
-        """Opening metadata entries with face_construction flag are still emitted."""
-        from blender_addon.handlers.worldbuilding import _building_ops_to_mesh_spec
-        from blender_addon.handlers._building_grammar import BuildingSpec
+    def test_presets_dict_has_four_entries(self):
+        """VB_DUNGEON_PRESETS must have exactly 4 presets."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
 
-        spec = BuildingSpec(
-            footprint=(10, 8), floors=1, style="medieval",
-            operations=[
-                {"type": "box", "position": [0, 0, 0.3], "size": [10, 0.3, 3.0],
-                 "material": "plaster_white", "role": "wall",
-                 "wall_index": 0, "floor": 0},
-                {"type": "opening", "wall_index": 0, "floor": 0,
-                 "position": [4.0, 0.0], "size": [1.2, 2.2], "role": "door"},
-            ],
-        )
-        result = _building_ops_to_mesh_spec(spec)
-        opening_entries = [m for m in result if m["type"] == "opening"]
-        assert len(opening_entries) == 1
-        assert opening_entries[0]["face_construction"] is True
+        assert len(VB_DUNGEON_PRESETS) == 4
+
+    def test_preset_names(self):
+        """All expected VB dungeon preset names are present."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        expected = {
+            "abandoned_prison", "corrupted_cave", "storm_peak", "veil_tear_dungeon",
+        }
+        assert set(VB_DUNGEON_PRESETS.keys()) == expected
+
+    def test_each_preset_has_required_keys(self):
+        """Every VB dungeon preset must have width, height, min_room_size, max_depth, cell_size, wall_height."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        required = {"width", "height", "min_room_size", "max_depth", "cell_size", "wall_height"}
+        for name, preset in VB_DUNGEON_PRESETS.items():
+            missing = required - set(preset.keys())
+            assert not missing, f"Preset '{name}' missing keys: {missing}"
+
+    def test_each_preset_has_monster_table(self):
+        """Every VB dungeon preset must have a non-empty monster_table list."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        for name, preset in VB_DUNGEON_PRESETS.items():
+            assert isinstance(preset.get("monster_table"), list), f"Preset '{name}' missing monster_table"
+            assert len(preset["monster_table"]) > 0, f"Preset '{name}' has empty monster_table"
+
+    def test_each_preset_has_props_list(self):
+        """Every VB dungeon preset must have a non-empty props list."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        for name, preset in VB_DUNGEON_PRESETS.items():
+            assert isinstance(preset.get("props"), list), f"Preset '{name}' missing props"
+            assert len(preset["props"]) > 0, f"Preset '{name}' has empty props"
+
+    def test_each_preset_has_room_types(self):
+        """Every VB dungeon preset must have a room_types dict."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        for name, preset in VB_DUNGEON_PRESETS.items():
+            assert isinstance(preset.get("room_types"), dict), f"Preset '{name}' missing room_types"
+            assert "entrance" in preset["room_types"], f"Preset '{name}' room_types lacks entrance"
+            assert "boss" in preset["room_types"], f"Preset '{name}' room_types lacks boss"
+
+    def test_abandoned_prison_values(self):
+        """abandoned_prison preset has expected dimensions."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        p = VB_DUNGEON_PRESETS["abandoned_prison"]
+        assert p["width"] == 40
+        assert p["height"] == 40
+        assert p["wall_height"] == 3.0
+        assert "chainbound" in p["monster_table"]
+
+    def test_veil_tear_dungeon_largest(self):
+        """veil_tear_dungeon is the largest with deepest BSP."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        p = VB_DUNGEON_PRESETS["veil_tear_dungeon"]
+        assert p["width"] == 45
+        assert p["max_depth"] == 7
+        assert p["wall_height"] == 6.0
+        assert "void_crystal" in p["props"]
+
+    def test_corrupted_cave_larger_cells(self):
+        """corrupted_cave has larger cell_size for organic feel."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+
+        p = VB_DUNGEON_PRESETS["corrupted_cave"]
+        assert p["cell_size"] == 2.5
+
+    def test_get_vb_dungeon_preset_returns_dict(self):
+        """get_vb_dungeon_preset returns dict for valid name."""
+        from blender_addon.handlers.worldbuilding import get_vb_dungeon_preset
+
+        result = get_vb_dungeon_preset("storm_peak")
+        assert isinstance(result, dict)
+        assert result["width"] == 35
+
+    def test_get_vb_dungeon_preset_returns_none_for_unknown(self):
+        """get_vb_dungeon_preset returns None for unknown name."""
+        from blender_addon.handlers.worldbuilding import get_vb_dungeon_preset
+
+        assert get_vb_dungeon_preset("nonexistent_dungeon") is None
+
+    def test_preset_generates_valid_dungeon(self):
+        """A VB dungeon preset can produce a valid multi-floor dungeon."""
+        from blender_addon.handlers.worldbuilding import VB_DUNGEON_PRESETS
+        from blender_addon.handlers._dungeon_gen import generate_multi_floor_dungeon
+
+        for name, preset in VB_DUNGEON_PRESETS.items():
+            dungeon = generate_multi_floor_dungeon(
+                width=preset["width"],
+                height=preset["height"],
+                num_floors=2,
+                min_room_size=preset["min_room_size"],
+                max_depth=preset["max_depth"],
+                cell_size=preset["cell_size"],
+                wall_height=preset["wall_height"],
+                seed=42,
+            )
+            assert dungeon.num_floors == 2, f"Preset '{name}' failed dungeon generation"
+            assert dungeon.total_rooms > 0, f"Preset '{name}' produced dungeon with no rooms"

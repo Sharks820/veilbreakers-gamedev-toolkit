@@ -18,10 +18,13 @@ from __future__ import annotations
 import base64
 import colorsys
 import io
+import logging
 import math
 from typing import Sequence
 
 from PIL import Image, ImageDraw, ImageFilter
+
+logger = logging.getLogger(__name__)
 
 try:
     import fal_client as _fal  # type: ignore[import-untyped]
@@ -29,6 +32,7 @@ try:
     _FAL_AVAILABLE = True
 except ImportError:
     _FAL_AVAILABLE = False
+    logging.getLogger(__name__).warning("fal-client not installed; AI inpainting unavailable")
 
 
 # ---------------------------------------------------------------------------
@@ -151,6 +155,7 @@ def apply_hsv_adjustment(
     Returns:
         PNG bytes of the adjusted image.
     """
+    logger.info("Applying HSV adjustment (hue_shift=%.2f, sat=%.2f, val=%.2f)", hue_shift, saturation_scale, value_scale)
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     mask = Image.open(io.BytesIO(mask_bytes)).convert("L")
 
@@ -164,7 +169,7 @@ def apply_hsv_adjustment(
         import numpy as np
         return _hsv_adjust_numpy(img, mask, hue_shift, saturation_scale, value_scale)
     except ImportError:
-        pass
+        logger.warning("numpy not available, falling back to pixel-by-pixel HSV adjustment")
 
     # Pixel-by-pixel fallback
     result = img.copy()
@@ -339,6 +344,7 @@ def blend_seams(
     Returns:
         PNG bytes of the blended image.
     """
+    logger.info("Blending seams for %d seam pixels (radius=%d)", len(seam_pixels), blend_radius)
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     width, height = img.size
 
@@ -400,12 +406,14 @@ def make_tileable(
     Returns:
         PNG bytes of the tileable image.
     """
+    logger.info("Making texture tileable (overlap_pct=%.2f)", overlap_pct)
     img = Image.open(io.BytesIO(image_bytes)).convert("RGB")
     width, height = img.size
 
     try:
         import numpy as np
     except ImportError:
+        logger.warning("numpy not available, returning untiled image")
         buf = io.BytesIO()
         img.save(buf, format="PNG")
         return buf.getvalue()
@@ -494,6 +502,7 @@ def render_wear_map(
     Returns:
         PNG bytes of L-mode (grayscale) wear map.
     """
+    logger.info("Rendering wear map (texture_size=%d, vertices=%d)", texture_size, len(curvature_data))
     if not curvature_data:
         # Empty curvature: return mid-gray
         img = Image.new("L", (texture_size, texture_size), 128)
@@ -518,7 +527,7 @@ def render_wear_map(
         # Render curvature into UV space using face polygons
         try:
             import numpy as np
-            _render_wear_numpy(img, curvature_data, uv_data, texture_size, _curv_to_brightness)
+            _render_wear_numpy(img, curvature_data, uv_data, texture_size, _curv_to_brightness, min_c, c_range)
         except ImportError:
             _render_wear_pil(img, curvature_data, uv_data, texture_size, _curv_to_brightness)
     else:
@@ -580,6 +589,8 @@ def _render_wear_numpy(
     uv_data: list,
     texture_size: int,
     curv_to_brightness,
+    min_c: float = 0.0,
+    c_range: float = 1.0,
 ) -> None:
     """Render wear map with per-vertex interpolation using numpy.
 
@@ -621,27 +632,37 @@ def _render_wear_numpy(
         ImageDraw.Draw(poly_mask).polygon(offset_verts, fill=255)
         mask_arr = np.array(poly_mask)
 
-        # For each pixel inside the polygon, compute distance-weighted curvature
-        for y in range(bbox_h):
-            for x in range(bbox_w):
-                if mask_arr[y, x] == 0:
-                    continue
+        # Vectorized distance-weighted interpolation for all masked pixels
+        # Build coordinate grids for the bounding box
+        yy, xx = np.mgrid[0:bbox_h, 0:bbox_w]  # local coords
+        # Filter to only masked pixels
+        masked = mask_arr > 0
+        if not np.any(masked):
+            continue
 
-                ax = x + x_min
-                ay = y + y_min
+        # Absolute pixel coordinates for masked pixels
+        ax = xx[masked] + x_min  # 1-D array of x coords
+        ay = yy[masked] + y_min  # 1-D array of y coords
 
-                # Distance-weighted interpolation
-                total_weight = 0.0
-                weighted_curv = 0.0
-                for (vx, vy), cv in zip(verts, curv_vals):
-                    dist = math.sqrt((ax - vx) ** 2 + (ay - vy) ** 2) + 1e-6
-                    w = 1.0 / dist
-                    total_weight += w
-                    weighted_curv += w * cv
+        # Vertex positions and curvature as arrays
+        verts_arr = np.array(verts, dtype=np.float64)  # (N_verts, 2)
+        curv_arr = np.array(curv_vals, dtype=np.float64)  # (N_verts,)
 
-                if total_weight > 0:
-                    interp_curv = weighted_curv / total_weight
-                    arr[ay, ax] = curv_to_brightness(interp_curv)
+        # Distance from each masked pixel to each vertex
+        # ax/ay shape: (N_pixels,), verts_arr shape: (N_verts, 2)
+        dx = ax[:, np.newaxis] - verts_arr[np.newaxis, :, 0]  # (N_pixels, N_verts)
+        dy = ay[:, np.newaxis] - verts_arr[np.newaxis, :, 1]
+        dists = np.sqrt(dx * dx + dy * dy) + 1e-6
+
+        weights = 1.0 / dists  # (N_pixels, N_verts)
+        total_weight = weights.sum(axis=1)  # (N_pixels,)
+        weighted_curv = (weights * curv_arr[np.newaxis, :]).sum(axis=1)
+
+        interp_curv = weighted_curv / total_weight
+        # Vectorized brightness: normalize and scale to 0-255
+        brightness = np.clip(np.round(((interp_curv - min_c) / c_range) * 255), 0, 255)
+
+        arr[ay, ax] = brightness
 
     result = np.clip(arr, 0, 255).astype(np.uint8)
     img.paste(Image.fromarray(result, "L"))
@@ -715,6 +736,7 @@ def inpaint_texture(
             width: (on success) Result image width
             height: (on success) Result image height
     """
+    logger.info("Inpainting texture via fal.ai (prompt=%r, strength=%.2f)", prompt, strength)
     # Validate inputs exist
     if not image_bytes:
         return {"status": "error", "message": "No image data provided"}
@@ -724,6 +746,7 @@ def inpaint_texture(
         return {"status": "error", "message": "No prompt provided"}
 
     if not fal_key:
+        logger.warning("fal.ai API key not configured; inpainting unavailable")
         return {
             "status": "unavailable",
             "message": "fal.ai API key not configured. Set FAL_KEY environment variable to enable AI inpainting.",
@@ -814,6 +837,7 @@ def inpaint_texture(
         }
 
     except Exception as exc:
+        logger.error("fal.ai inpainting failed: %s", exc)
         return {
             "status": "error",
             "message": f"fal.ai inpainting failed: {exc}",

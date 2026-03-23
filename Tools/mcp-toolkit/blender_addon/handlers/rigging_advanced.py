@@ -9,9 +9,17 @@ Provides six command handlers:
   - handle_retarget_rig: Constraint-based bone mapping between rigs (RIG-12)
   - handle_add_shape_keys: Expression and damage state mesh deformations (RIG-13)
 
-Pure-logic validation functions (_validate_ik_params, _validate_spring_params,
-_validate_ragdoll_spec, _validate_retarget_mapping, _validate_shape_key_params)
-are separated for testability without Blender.
+Pure-logic validation functions:
+  - _validate_psd_config: Validate pose-space deformation configuration
+  - _validate_ik_params: Validate IK chain setup parameters
+  - _validate_spring_params: Validate spring bone dynamics parameters
+  - _validate_ragdoll_spec: Validate ragdoll collider/joint specification
+  - _validate_retarget_mapping: Validate bone retarget mapping between rigs
+  - _validate_shape_key_params: Validate shape key name and vertex offsets
+  - _compute_spring_chain_forces: Spring-mass chain simulation (returns positions + velocities)
+  - _validate_spring_dynamics_params: Validate spring dynamics mass/stiffness/damping
+  - _validate_facial_rig_params: Validate facial rig setup parameters
+  - _validate_corrective_shape_config: Validate corrective blend shape configuration
 """
 
 from __future__ import annotations
@@ -845,7 +853,7 @@ def _compute_spring_chain_forces(
     damping: float,
     gravity: float,
     dt: float = 1.0 / 60.0,
-) -> list[tuple[float, float, float]]:
+) -> tuple[list[tuple[float, float, float]], list[tuple[float, float, float]]]:
     """Compute spring bone simulation forces for a chain of bones.
 
     Simple spring-mass simulation: the first bone is the root (fixed),
@@ -861,7 +869,9 @@ def _compute_spring_chain_forces(
         dt: Timestep (default 1/60).
 
     Returns:
-        New positions list for each bone after one simulation step.
+        Tuple of (new_positions, new_velocities) — each a list of (x, y, z)
+        tuples per bone after one simulation step. Returning velocities
+        enables multi-frame simulation by feeding them back as input.
     """
     # Compute rest offsets from initial positions so the spring force
     # maintains the bone's rest distance from its parent instead of
@@ -875,17 +885,19 @@ def _compute_spring_chain_forces(
         ))
 
     new_positions: list[tuple[float, float, float]] = []
+    new_velocities: list[tuple[float, float, float]] = []
     for i, (pos, vel) in enumerate(zip(positions, velocities)):
         if i == 0:
             # Root bone is fixed
             new_positions.append(pos)
+            new_velocities.append(vel)
             continue
 
         px, py, pz = pos
         vx, vy, vz = vel
 
         # Rest position = parent position + rest offset
-        parent = positions[i - 1]
+        parent = new_positions[i - 1]
         rest_x = parent[0] + rest_offsets[i][0]
         rest_y = parent[1] + rest_offsets[i][1]
         rest_z = parent[2] + rest_offsets[i][2]
@@ -913,8 +925,9 @@ def _compute_spring_chain_forces(
         npz = pz + nvz * dt
 
         new_positions.append((npx, npy, npz))
+        new_velocities.append((nvx, nvy, nvz))
 
-    return new_positions
+    return (new_positions, new_velocities)
 
 
 def _validate_spring_dynamics_params(

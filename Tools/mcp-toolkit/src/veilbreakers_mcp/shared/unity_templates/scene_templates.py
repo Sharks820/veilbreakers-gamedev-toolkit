@@ -549,15 +549,15 @@ public static class VeilBreakers_NavMeshBake
             if (surface == null)
                 surface = navTarget.AddComponent<NavMeshSurface>();
 
-            // Configure agent settings
-            surface.agentTypeID = NavMesh.GetSettingsByIndex(0).agentTypeID;
-
-            // Set bake settings through NavMeshBuildSettings
-            var settings = NavMesh.GetSettingsByID(surface.agentTypeID);
+            // Create custom agent settings (NavMeshBuildSettings is a struct;
+            // GetSettingsByID returns a copy, so we must create a new entry
+            // and assign its agentTypeID back to the surface).
+            var settings = NavMesh.CreateSettings();
             settings.agentRadius = {agent_radius}f;
             settings.agentHeight = {agent_height}f;
             settings.agentSlope = {max_slope}f;
             settings.agentClimb = {step_height}f;
+            surface.agentTypeID = settings.agentTypeID;
 
             // Build NavMesh
             surface.BuildNavMesh();
