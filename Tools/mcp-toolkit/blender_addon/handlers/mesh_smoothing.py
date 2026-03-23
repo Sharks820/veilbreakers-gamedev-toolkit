@@ -296,11 +296,12 @@ def add_organic_noise(
         # Bug 5 fix: build face-vertex map for face-normal averaging
         face_vert_map = {}
         for face in faces:
+            if any(vi_f < 0 or vi_f >= num_verts for vi_f in face):
+                continue
             for vi_f in face:
-                if 0 <= vi_f < num_verts:
-                    if vi_f not in face_vert_map:
-                        face_vert_map[vi_f] = []
-                    face_vert_map[vi_f].append(face)
+                if vi_f not in face_vert_map:
+                    face_vert_map[vi_f] = []
+                face_vert_map[vi_f].append(face)
 
     result: VertList = []
     for vi in range(num_verts):

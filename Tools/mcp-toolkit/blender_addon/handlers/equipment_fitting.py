@@ -374,6 +374,11 @@ def compute_vertex_normals(
         if len(face) < 3:
             continue
 
+        # Validate seed-triangle indices are within bounds
+        n_verts = len(vertices)
+        if not (0 <= face[0] < n_verts and 0 <= face[1] < n_verts and 0 <= face[2] < n_verts):
+            continue
+
         # Compute face normal from first triangle
         v0 = vertices[face[0]]
         v1 = vertices[face[1]]
