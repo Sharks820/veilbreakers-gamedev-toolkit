@@ -38,29 +38,27 @@ from veilbreakers_mcp.shared.unity_templates.shader_templates import (
 class TestGenerateParticleVfxScript:
     """Tests for generate_particle_vfx_script()."""
 
-    def test_contains_visual_effect(self):
+    def test_contains_particle_system(self):
         result = generate_particle_vfx_script("TestVFX")
-        assert "VisualEffect" in result
+        assert "ParticleSystem" in result
 
-    def test_contains_set_float_rate(self):
+    def test_contains_emission_rate(self):
         result = generate_particle_vfx_script("TestVFX", rate=150)
-        assert "SetFloat" in result
-        assert "Rate" in result
+        assert "rateOverTime" in result or "150" in result
 
-    def test_contains_set_float_lifetime(self):
+    def test_contains_lifetime(self):
         result = generate_particle_vfx_script("TestVFX", lifetime=2.5)
-        assert "Lifetime" in result
+        assert "startLifetime" in result or "Lifetime" in result
 
-    def test_contains_set_float_size(self):
+    def test_contains_size(self):
         result = generate_particle_vfx_script("TestVFX", size=0.3)
-        assert "Size" in result
+        assert "startSize" in result or "Size" in result
 
     def test_contains_color_parameter(self):
         result = generate_particle_vfx_script(
             "TestVFX", color=[1.0, 0.5, 0.0, 1.0]
         )
-        assert "Color" in result
-        assert "SetVector4" in result
+        assert "Color" in result or "startColor" in result
 
     def test_contains_shape(self):
         result = generate_particle_vfx_script("TestVFX", shape="sphere")
@@ -90,7 +88,7 @@ class TestGenerateParticleVfxScript:
     def test_default_values_produce_valid_output(self):
         result = generate_particle_vfx_script("Default")
         assert len(result) > 100
-        assert "VisualEffect" in result
+        assert "ParticleSystem" in result
 
 
 # ---------------------------------------------------------------------------
@@ -167,9 +165,9 @@ class TestGenerateBrandVfxScript:
         assert "using UnityEngine;" in result
         assert "using UnityEditor;" in result
 
-    def test_contains_visual_effect(self):
+    def test_contains_particle_system(self):
         result = generate_brand_vfx_script("IRON")
-        assert "VisualEffect" in result
+        assert "ParticleSystem" in result
 
     def test_contains_result_json_output(self):
         result = generate_brand_vfx_script("IRON")

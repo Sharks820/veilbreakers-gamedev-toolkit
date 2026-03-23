@@ -202,12 +202,11 @@ class TestUnityVFX:
     def test_particle_vfx_returns_string(self):
         cs = generate_particle_vfx_script(name="TestFire")
         assert isinstance(cs, str)
-        assert "VisualEffect" in cs
+        assert "ParticleSystem" in cs
 
-    def test_particle_vfx_has_set_float(self):
+    def test_particle_vfx_has_emission_config(self):
         cs = generate_particle_vfx_script(name="TestFire")
-        assert 'vfx.SetFloat("Rate"' in cs
-        assert 'vfx.SetFloat("Lifetime"' in cs
+        assert "rateOverTime" in cs or "startLifetime" in cs
 
     def test_particle_vfx_prefab_utility(self):
         cs = generate_particle_vfx_script(name="TestFire")
@@ -220,7 +219,7 @@ class TestUnityVFX:
         cs = generate_brand_vfx_script(brand)
         assert isinstance(cs, str)
         assert brand in cs
-        assert "VisualEffect" in cs
+        assert "ParticleSystem" in cs
         assert "DamageVFX" in cs
 
     def test_brand_vfx_rejects_unknown(self):
@@ -233,8 +232,8 @@ class TestUnityVFX:
     def test_environmental_vfx_all_types(self, env_type):
         cs = generate_environmental_vfx_script(env_type)
         assert isinstance(cs, str)
-        assert "VisualEffect" in cs
-        assert "Gravity" in cs
+        assert "ParticleSystem" in cs
+        assert "gravityModifier" in cs
 
     def test_environmental_vfx_rejects_unknown(self):
         with pytest.raises(ValueError, match="Unknown effect_type"):

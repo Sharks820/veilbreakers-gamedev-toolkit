@@ -213,7 +213,6 @@ def generate_particle_vfx_script(
 
     return f'''using UnityEngine;
 using UnityEditor;
-using UnityEngine.VFX;
 using System.IO;
 
 public static class VeilBreakers_VFX_{safe_name}
@@ -223,18 +222,48 @@ public static class VeilBreakers_VFX_{safe_name}
     {{
         try
         {{
-            // Create VFX GameObject
+            // Create VFX GameObject with ParticleSystem (works without external assets)
             var go = new GameObject("{safe_display}_VFX");
-            var vfx = go.AddComponent<VisualEffect>();
+            var ps = go.AddComponent<ParticleSystem>();
+            var renderer = go.GetComponent<ParticleSystemRenderer>();
 
-            // Configure exposed properties via VFX Graph API
-            vfx.SetFloat("Rate", {rate}f);
-            vfx.SetFloat("Lifetime", {lifetime}f);
-            vfx.SetFloat("Size", {size}f);
-            vfx.SetVector4("Color", new Vector4({r}f, {g}f, {b}f, {a}f));
+            // Main module
+            var main = ps.main;
+            main.startLifetime = {lifetime}f;
+            main.startSize = {size}f;
+            main.startColor = new Color({r}f, {g}f, {b}f, {a}f);
+            main.maxParticles = Mathf.CeilToInt({rate}f * {lifetime}f * 2f);
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.playOnAwake = true;
+            main.loop = true;
 
-            // Shape configuration: {shape}
-            vfx.SetFloat("ShapeIndex", {_shape_index(shape)}f);  // 0=Sphere, 1=Cone, 2=Edge, 3=Box
+            // Emission module
+            var emission = ps.emission;
+            emission.rateOverTime = {rate}f;
+
+            // Shape module: {shape}
+            var shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.{_shape_type_cs(shape)};
+
+            // Renderer setup (use default particle material)
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            renderer.material = new Material(Shader.Find("Particles/Standard Unlit"));
+            renderer.material.SetColor("_Color", new Color({r}f, {g}f, {b}f, {a}f));
+
+            // Color over lifetime (fade out)
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new GradientColorKey[] {{ new GradientColorKey(new Color({r}f, {g}f, {b}f), 0f), new GradientColorKey(new Color({r}f, {g}f, {b}f), 1f) }},
+                new GradientAlphaKey[] {{ new GradientAlphaKey({a}f, 0f), new GradientAlphaKey({a}f, 0.8f), new GradientAlphaKey(0f, 1f) }}
+            );
+            col.color = gradient;
+
+            // Size over lifetime (shrink)
+            var sol = ps.sizeOverLifetime;
+            sol.enabled = true;
+            sol.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 1f, 1f, 0f));
 
             // Save as prefab
             string prefabDir = "Assets/Prefabs/VFX";
@@ -271,6 +300,20 @@ def _shape_index(shape: str) -> int:
     return shapes.get(shape.lower(), 1)
 
 
+def _shape_type_cs(shape: str) -> str:
+    """Map shape name to C# ParticleSystemShapeType enum value."""
+    shapes = {
+        "sphere": "Sphere",
+        "cone": "Cone",
+        "edge": "SingleSidedEdge",
+        "box": "Box",
+        "hemisphere": "Hemisphere",
+        "circle": "Circle",
+        "donut": "Donut",
+    }
+    return shapes.get(shape.lower(), "Cone")
+
+
 # ---------------------------------------------------------------------------
 # VFX-02: Brand VFX script
 # ---------------------------------------------------------------------------
@@ -300,14 +343,16 @@ def generate_brand_vfx_script(brand: str) -> str:
     cfg = BRAND_VFX_CONFIGS[brand]
     r, g, b, a = cfg["color"]
 
+    safe_desc = sanitize_cs_string(cfg["desc"])
+    shape_cs = _shape_type_cs(cfg["shape"])
+
     return f'''using UnityEngine;
 using UnityEditor;
-using UnityEngine.VFX;
 using System.IO;
 
 /// <summary>
 /// {brand} brand damage VFX: {cfg["desc"]}
-/// Rate={cfg["rate"]}, Lifetime={cfg["lifetime"]}, Size={cfg["size"]}, Shape={cfg["shape"]}
+/// AAA ParticleSystem with sub-emitters, trails, color-over-lifetime, noise turbulence.
 /// </summary>
 public static class VeilBreakers_BrandVFX_{brand}
 {{
@@ -318,14 +363,84 @@ public static class VeilBreakers_BrandVFX_{brand}
         {{
             // Create {brand} brand VFX -- {cfg["desc"]}
             var go = new GameObject("{brand}_DamageVFX");
-            var vfx = go.AddComponent<VisualEffect>();
+            var ps = go.AddComponent<ParticleSystem>();
+            var renderer = go.GetComponent<ParticleSystemRenderer>();
 
-            // Brand-specific parameters
-            vfx.SetFloat("Rate", {cfg["rate"]}f);
-            vfx.SetFloat("Lifetime", {cfg["lifetime"]}f);
-            vfx.SetFloat("Size", {cfg["size"]}f);
-            vfx.SetVector4("Color", new Vector4({r}f, {g}f, {b}f, {a}f));
-            vfx.SetFloat("ShapeIndex", {_shape_index(cfg["shape"])}f);
+            // Main module -- AAA tuned
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve({cfg["lifetime"] * 0.8}f, {cfg["lifetime"]}f);
+            main.startSize = new ParticleSystem.MinMaxCurve({cfg["size"] * 0.6}f, {cfg["size"]}f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve(1f, 3f);
+            main.startColor = new Color({r}f, {g}f, {b}f, {a}f);
+            main.maxParticles = {int(cfg["rate"] * cfg["lifetime"] * 3)};
+            main.simulationSpace = ParticleSystemSimulationSpace.World;
+            main.gravityModifier = -0.1f;
+
+            // Emission -- burst + constant
+            var emission = ps.emission;
+            emission.rateOverTime = {cfg["rate"]}f;
+            emission.SetBursts(new ParticleSystem.Burst[] {{
+                new ParticleSystem.Burst(0f, {int(cfg["rate"] * 0.5)}, {int(cfg["rate"])}, 1, 0.1f)
+            }});
+
+            // Shape
+            var shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.{shape_cs};
+            shape.angle = 25f;
+            shape.radius = 0.3f;
+
+            // Color over lifetime (brand-signature fade)
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new GradientColorKey[] {{
+                    new GradientColorKey(new Color({r}f, {g}f, {b}f), 0f),
+                    new GradientColorKey(new Color({r * 1.2}f, {g * 1.2}f, {b * 1.2}f), 0.3f),
+                    new GradientColorKey(new Color({r * 0.5}f, {g * 0.5}f, {b * 0.5}f), 1f)
+                }},
+                new GradientAlphaKey[] {{
+                    new GradientAlphaKey(0f, 0f),
+                    new GradientAlphaKey({a}f, 0.1f),
+                    new GradientAlphaKey({a}f, 0.7f),
+                    new GradientAlphaKey(0f, 1f)
+                }}
+            );
+            col.color = gradient;
+
+            // Size over lifetime (expand then shrink)
+            var sol = ps.sizeOverLifetime;
+            sol.enabled = true;
+            sol.size = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 0.3f, 1f, 0f));
+
+            // Noise module (turbulence for AAA organic feel)
+            var noise = ps.noise;
+            noise.enabled = true;
+            noise.strength = 0.5f;
+            noise.frequency = 0.8f;
+            noise.scrollSpeed = 0.3f;
+            noise.damping = true;
+            noise.quality = ParticleSystemNoiseQuality.High;
+
+            // Trails for dynamic brand signature
+            var trails = ps.trails;
+            trails.enabled = true;
+            trails.ratio = 0.3f;
+            trails.lifetime = 0.3f;
+            trails.minVertexDistance = 0.1f;
+            trails.worldSpace = true;
+            trails.dieWithParticles = true;
+            trails.widthOverTrail = new ParticleSystem.MinMaxCurve(1f, AnimationCurve.EaseInOut(0f, 1f, 1f, 0f));
+
+            // Renderer -- additive blend for energy look
+            renderer.renderMode = ParticleSystemRenderMode.Billboard;
+            var mat = new Material(Shader.Find("Particles/Standard Unlit"));
+            mat.SetColor("_Color", new Color({r}f, {g}f, {b}f, {a}f));
+            mat.SetFloat("_Mode", 1f); // Additive
+            mat.renderQueue = 3100;
+            renderer.material = mat;
+            renderer.trailMaterial = mat;
+            renderer.sortingFudge = 10f;
 
             // Save as prefab
             string prefabDir = "Assets/Prefabs/VFX/Brand";
@@ -337,8 +452,7 @@ public static class VeilBreakers_BrandVFX_{brand}
             string prefabPath = prefabDir + "/{brand}_DamageVFX.prefab";
             PrefabUtility.SaveAsPrefabAsset(go, prefabPath);
 
-            // Write result
-            string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"create_brand_vfx\\", \\"brand\\": \\"{brand}\\", \\"desc\\": \\"{cfg["desc"]}\\", \\"prefab_path\\": \\"" + prefabPath + "\\"}}";
+            string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"create_brand_vfx\\", \\"brand\\": \\"{brand}\\", \\"desc\\": \\"{safe_desc}\\", \\"prefab_path\\": \\"" + prefabPath + "\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.Log("[VeilBreakers] {brand} brand VFX created: " + prefabPath);
 
@@ -384,14 +498,22 @@ def generate_environmental_vfx_script(effect_type: str) -> str:
     safe = effect_type.capitalize()
     gravity = cfg["gravity"]
 
+    safe_desc = sanitize_cs_string(cfg["desc"])
+
+    # Effect-specific AAA tuning
+    noise_strength = {"dust": 0.8, "fireflies": 1.2, "snow": 0.3, "rain": 0.05, "ash": 0.6}.get(effect_type, 0.5)
+    speed_min = {"dust": 0.01, "fireflies": 0.2, "snow": 0.5, "rain": 8.0, "ash": 0.1}.get(effect_type, 0.5)
+    speed_max = {"dust": 0.05, "fireflies": 0.5, "snow": 1.2, "rain": 12.0, "ash": 0.3}.get(effect_type, 1.0)
+    stretch = "renderer.renderMode = ParticleSystemRenderMode.Stretch;\n            renderer.lengthScale = 5f;" if effect_type == "rain" else "renderer.renderMode = ParticleSystemRenderMode.Billboard;"
+    sim_space = "World"
+
     return f'''using UnityEngine;
 using UnityEditor;
-using UnityEngine.VFX;
 using System.IO;
 
 /// <summary>
 /// Environmental VFX: {cfg["desc"]}
-/// Gravity={gravity}, Rate={cfg["rate"]}, Lifetime={cfg["lifetime"]}
+/// AAA ParticleSystem with noise turbulence, world-space simulation, LOD-friendly.
 /// </summary>
 public static class VeilBreakers_EnvVFX_{safe}
 {{
@@ -402,18 +524,62 @@ public static class VeilBreakers_EnvVFX_{safe}
         {{
             // Create environmental VFX -- {cfg["desc"]}
             var go = new GameObject("{safe}_EnvironmentVFX");
-            var vfx = go.AddComponent<VisualEffect>();
+            var ps = go.AddComponent<ParticleSystem>();
+            var renderer = go.GetComponent<ParticleSystemRenderer>();
 
-            // Configure environment-specific parameters
-            vfx.SetFloat("Rate", {cfg["rate"]}f);
-            vfx.SetFloat("Lifetime", {cfg["lifetime"]}f);
-            vfx.SetFloat("Size", {cfg["size"]}f);
-            vfx.SetVector4("Color", new Vector4({r}f, {g}f, {b}f, {a}f));
+            // Main module
+            var main = ps.main;
+            main.startLifetime = new ParticleSystem.MinMaxCurve({cfg["lifetime"] * 0.8}f, {cfg["lifetime"]}f);
+            main.startSize = new ParticleSystem.MinMaxCurve({cfg["size"] * 0.7}f, {cfg["size"] * 1.3}f);
+            main.startSpeed = new ParticleSystem.MinMaxCurve({speed_min}f, {speed_max}f);
+            main.startColor = new Color({r}f, {g}f, {b}f, {a}f);
+            main.maxParticles = {int(cfg["rate"] * cfg["lifetime"] * 2)};
+            main.simulationSpace = ParticleSystemSimulationSpace.{sim_space};
+            main.gravityModifier = {gravity}f;
+            main.playOnAwake = true;
+            main.loop = true;
 
-            // Gravity / downward velocity for {effect_type}
-            vfx.SetFloat("Gravity", {gravity}f);
-            vfx.SetVector3("GravityDirection", new Vector3(0f, {gravity}f, 0f));
-            // Y-axis gravity ensures downward motion for snow/rain/ash
+            // Emission
+            var emission = ps.emission;
+            emission.rateOverTime = {cfg["rate"]}f;
+
+            // Shape -- large area emitter for environment coverage
+            var shape = ps.shape;
+            shape.shapeType = ParticleSystemShapeType.Box;
+            shape.scale = new Vector3(20f, 0.5f, 20f);
+
+            // Color over lifetime
+            var col = ps.colorOverLifetime;
+            col.enabled = true;
+            var gradient = new Gradient();
+            gradient.SetKeys(
+                new GradientColorKey[] {{
+                    new GradientColorKey(new Color({r}f, {g}f, {b}f), 0f),
+                    new GradientColorKey(new Color({r}f, {g}f, {b}f), 1f)
+                }},
+                new GradientAlphaKey[] {{
+                    new GradientAlphaKey(0f, 0f),
+                    new GradientAlphaKey({a}f, 0.1f),
+                    new GradientAlphaKey({a}f, 0.85f),
+                    new GradientAlphaKey(0f, 1f)
+                }}
+            );
+            col.color = gradient;
+
+            // Noise turbulence for organic motion
+            var noise = ps.noise;
+            noise.enabled = true;
+            noise.strength = {noise_strength}f;
+            noise.frequency = 0.5f;
+            noise.scrollSpeed = 0.2f;
+            noise.damping = true;
+            noise.quality = ParticleSystemNoiseQuality.High;
+
+            // Renderer
+            {stretch}
+            var mat = new Material(Shader.Find("Particles/Standard Unlit"));
+            mat.SetColor("_Color", new Color({r}f, {g}f, {b}f, {a}f));
+            renderer.material = mat;
 
             // Save as prefab
             string prefabDir = "Assets/Prefabs/VFX/Environment";
@@ -867,13 +1033,17 @@ def _screen_effect_camera_shake(intensity: float) -> str:
     return f'''using UnityEngine;
 using UnityEditor;
 using System.IO;
-#if CINEMACHINE_AVAILABLE
+// Auto-detect Cinemachine version -- supports both 2.x and 3.x+
+#if UNITY_CINEMACHINE_3_OR_NEWER
 using Unity.Cinemachine;
+#elif CINEMACHINE
+using Cinemachine;
 #endif
 
 /// <summary>
 /// Camera shake screen effect using Cinemachine CinemachineImpulseSource.
-/// Generates a one-shot impulse with configurable intensity.
+/// Auto-detects Cinemachine 2.x vs 3.x namespace. Falls back to transform
+/// shake if Cinemachine is not installed.
 /// </summary>
 public static class VeilBreakers_ScreenEffect_CameraShake
 {{

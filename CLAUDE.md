@@ -139,11 +139,13 @@ Actions: `generate_dungeon` | `generate_cave` | `generate_town` | `generate_buil
 2. Typically: call `unity_editor` action=`recompile`, then open Unity Editor and run the menu item from the menu bar
 
 ### unity_editor
-Actions: `recompile` | `enter_play_mode` | `exit_play_mode` | `screenshot` | `console_logs` | `gemini_review` | `run_tests`
+Actions: `recompile` | `enter_play_mode` | `exit_play_mode` | `screenshot` | `console_logs` | `gemini_review` | `run_tests` | `clean_generated` | `load_scene`
 - screenshot: `screenshot_path`, `supersize` (1-4)
 - console_logs: `log_filter` (all/error/warning/log), `log_count`
 - gemini_review: `gemini_prompt`, `gemini_criteria`
 - run_tests: `test_mode` (EditMode/PlayMode), `assembly_filter`, `category_filter`
+- clean_generated: Remove accumulated editor scripts, `older_than_hours` (0=all)
+- load_scene: Open scene in editor, `scene_path` required
 
 ### unity_vfx
 Actions: `create_particle_vfx` | `create_brand_vfx` | `create_environmental_vfx` | `create_trail_vfx` | `create_aura_vfx` | `create_corruption_shader` | `create_shader` | `setup_post_processing` | `create_screen_effect` | `create_ability_vfx` | `create_flipbook` | `compose_vfx_graph` | `create_projectile_chain` | `create_aoe_vfx` | `create_status_effect_vfx` | `create_deep_environmental_vfx` | `create_directional_hit_vfx` | `create_boss_transition_vfx` | `create_decal_system`

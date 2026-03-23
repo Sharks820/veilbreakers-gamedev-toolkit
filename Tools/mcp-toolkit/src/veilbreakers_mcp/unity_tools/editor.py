@@ -32,19 +32,38 @@ from veilbreakers_mcp.shared.unity_client import UnityConnection, UnityCommandEr
 # TCP Bridge helpers -- direct communication with Unity Editor
 # ---------------------------------------------------------------------------
 
-async def _try_bridge(command: str, params: dict | None = None) -> dict | None:
+async def _try_bridge(command: str, params: dict | None = None, retries: int = 2) -> dict | None:
     """Try to execute a command via the VBBridge TCP connection.
 
     Returns the result dict on success, or None if the bridge is not
-    available (falls back to script generation).
+    available (falls back to script generation).  Retries on transient
+    connection failures (e.g., bridge momentarily busy after play mode).
     """
-    try:
-        conn = UnityConnection(timeout=30)
-        result = await conn.send_command(command, params or {})
-        return result
-    except (ConnectionError, UnityCommandError, OSError, Exception) as exc:
-        logger.debug("VBBridge not available for '%s': %s", command, exc)
-        return None
+    import asyncio
+
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            conn = UnityConnection(timeout=30)
+            result = await conn.send_command(command, params or {})
+            return result
+        except UnityCommandError:
+            # Command-level error (not transient) -- don't retry
+            raise
+        except (ConnectionError, OSError, TimeoutError) as exc:
+            last_exc = exc
+            logger.debug(
+                "VBBridge attempt %d/%d for '%s' failed: %s",
+                attempt + 1, retries, command, exc,
+            )
+            if attempt < retries - 1:
+                await asyncio.sleep(0.5)
+        except Exception as exc:
+            logger.debug("VBBridge unexpected error for '%s': %s", command, exc)
+            return None
+
+    logger.debug("VBBridge unavailable for '%s' after %d attempts: %s", command, retries, last_exc)
+    return None
 
 
 
@@ -59,6 +78,8 @@ async def unity_editor(
         "console_logs",
         "gemini_review",
         "run_tests",
+        "clean_generated",
+        "load_scene",
     ],
     screenshot_path: str = "Screenshots/vb_capture.png",
     supersize: int = 1,
@@ -68,9 +89,22 @@ async def unity_editor(
     gemini_criteria: list[str] | None = None,
     test_mode: str = "EditMode",
     assembly_filter: str = "",
-    category_filter: str = ""
+    category_filter: str = "",
+    scene_path: str = "",
+    older_than_hours: int = 0,
 ) -> str:
-    """Unity Editor automation -- generate C# scripts and trigger actions."""
+    """Unity Editor automation -- generate C# scripts and trigger actions.
+
+    Actions:
+        recompile: Trigger Unity recompile via bridge or generated script.
+        enter_play_mode / exit_play_mode: Toggle play mode.
+        screenshot: Capture game view screenshot.
+        console_logs: Read Unity console output.
+        gemini_review: AI visual quality review of screenshot.
+        run_tests: Execute EditMode/PlayMode tests.
+        clean_generated: Remove accumulated editor scripts from Assets/Editor/Generated/.
+        load_scene: Open a scene by path in the editor.
+    """
     if gemini_criteria is None:
         gemini_criteria = ["lighting", "composition", "visual_quality"]
 
@@ -93,6 +127,10 @@ async def unity_editor(
             return await _handle_run_tests(
                 test_mode, assembly_filter, category_filter
             )
+        elif action == "clean_generated":
+            return await _handle_clean_generated(older_than_hours)
+        elif action == "load_scene":
+            return await _handle_load_scene(scene_path)
         else:
             return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
     except Exception as exc:
@@ -254,3 +292,112 @@ async def _handle_gemini_review(
         },
         indent=2,
     )
+
+
+async def _handle_clean_generated(older_than_hours: int) -> str:
+    """Remove accumulated generated editor scripts from Assets/Editor/Generated/.
+
+    Args:
+        older_than_hours: If > 0, only remove files older than this many hours.
+                          If 0, remove all generated scripts.
+    """
+    if not settings.unity_project_path:
+        return json.dumps({
+            "status": "error",
+            "action": "clean_generated",
+            "message": "unity_project_path not configured",
+        })
+
+    import time
+
+    gen_dir = Path(settings.unity_project_path) / "Assets" / "Editor" / "Generated"
+    if not gen_dir.exists():
+        return json.dumps({
+            "status": "success",
+            "action": "clean_generated",
+            "removed_count": 0,
+            "message": "No generated scripts directory found.",
+        })
+
+    removed = []
+    now = time.time()
+    cutoff = now - (older_than_hours * 3600) if older_than_hours > 0 else float("inf")
+
+    for cs_file in gen_dir.rglob("*.cs"):
+        if older_than_hours > 0 and cs_file.stat().st_mtime > cutoff:
+            continue
+        removed.append(str(cs_file.relative_to(Path(settings.unity_project_path))))
+        cs_file.unlink()
+        # Also remove .meta file if present
+        meta = cs_file.with_suffix(".cs.meta")
+        if meta.exists():
+            meta.unlink()
+
+    # Clean up empty directories
+    for dirpath in sorted(gen_dir.rglob("*"), reverse=True):
+        if dirpath.is_dir() and not any(dirpath.iterdir()):
+            dirpath.rmdir()
+
+    return json.dumps({
+        "status": "success",
+        "action": "clean_generated",
+        "removed_count": len(removed),
+        "removed_files": removed[:50],  # Cap output
+        "message": f"Removed {len(removed)} generated script(s).",
+    }, indent=2)
+
+
+async def _handle_load_scene(scene_path: str) -> str:
+    """Load a scene in the Unity Editor via bridge, fallback to script."""
+    if not scene_path:
+        return json.dumps({
+            "status": "error",
+            "action": "load_scene",
+            "message": "scene_path is required (e.g., 'Assets/Scenes/MainMenu.unity')",
+        })
+
+    # Try bridge first
+    result = await _try_bridge("load_scene", {"scene_path": scene_path})
+    if result is not None:
+        return json.dumps({
+            "status": "success",
+            "action": "load_scene",
+            "bridge": True,
+            "scene_path": scene_path,
+            **result,
+        })
+
+    # Fallback: generate a C# script that opens the scene
+    safe_name = scene_path.rsplit("/", 1)[-1].replace(".unity", "").replace(" ", "_")
+    script = f'''using UnityEditor;
+using UnityEditor.SceneManagement;
+
+public static class VeilBreakers_LoadScene_{safe_name}
+{{
+    [MenuItem("VeilBreakers/Load Scene/{safe_name}")]
+    public static void Execute()
+    {{
+        if (EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo())
+        {{
+            EditorSceneManager.OpenScene("{scene_path}");
+            UnityEngine.Debug.Log("[VB] Loaded scene: {scene_path}");
+        }}
+    }}
+}}
+'''
+    script_rel = f"Assets/Editor/Generated/Scene/VeilBreakers_LoadScene_{safe_name}.cs"
+    try:
+        abs_path = _write_to_unity(script, script_rel)
+    except ValueError as exc:
+        return json.dumps({
+            "status": "error", "action": "load_scene", "message": str(exc),
+        })
+
+    return json.dumps({
+        "status": "success",
+        "action": "load_scene",
+        "bridge": False,
+        "scene_path": scene_path,
+        "script_path": abs_path,
+        "next_steps": STANDARD_NEXT_STEPS,
+    }, indent=2)

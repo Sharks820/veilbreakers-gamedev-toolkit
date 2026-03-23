@@ -981,6 +981,24 @@ async def asset_pipeline(
                     __import__("pathlib").Path(resolved_dir) / name
                 )
             output_dir = resolved_dir
+        elif output_dir == "." and _vb3d:
+            # Fallback: use a known location inside the Unity project
+            # so models don't get lost in the MCP server's CWD
+            output_dir = str(
+                __import__("pathlib").Path(_vb3d) / "Assets/Art/3D_Models/Tripo_Downloads"
+            )
+            if name:
+                output_dir = str(
+                    __import__("pathlib").Path(output_dir) / name
+                )
+        elif output_dir == ".":
+            # Last resort: use temp dir with timestamp so models are findable
+            import tempfile
+            import time
+            ts = time.strftime("%Y%m%d_%H%M%S")
+            output_dir = str(
+                __import__("pathlib").Path(tempfile.gettempdir()) / f"tripo_models_{ts}"
+            )
 
         # Prefer studio (uses subscription credits), fall back to API key
         studio_cookie = settings.tripo_session_cookie
@@ -1049,6 +1067,7 @@ async def asset_pipeline(
                 result = await gen.generate_from_image(image_path, output_dir)
             else:
                 result = await gen.generate_from_text(prompt, output_dir)
+            result["output_dir"] = output_dir
             return json.dumps(result, indent=2, default=str)
         else:
             return json.dumps({
@@ -1184,6 +1203,8 @@ async def asset_pipeline(
         if not filepath:
             return "ERROR: 'filepath' is required for import_model (path to .glb/.fbx/.obj file)"
         from pathlib import Path as _Path
+        if not _Path(filepath).exists():
+            return f"ERROR: File not found: '{filepath}'. Check the path and try again."
         ext = _Path(filepath).suffix.lower()
         supported = {".glb", ".gltf", ".fbx", ".obj"}
         if ext not in supported:
@@ -1196,18 +1217,36 @@ async def asset_pipeline(
         }
         op = import_ops[ext]
         safe_path = filepath.replace("\\", "/")
-        import_code = f'bpy.ops.{op}(filepath="{safe_path}")'
+        # Track new objects by comparing before/after
+        import_code = (
+            f'import bpy\n'
+            f'existing = set(o.name for o in bpy.data.objects)\n'
+            f'bpy.ops.{op}(filepath="{safe_path}")\n'
+            f'new_names = [o.name for o in bpy.data.objects if o.name not in existing]\n'
+            f'mesh_names = [o.name for o in bpy.data.objects if o.name not in existing and o.type == "MESH"]\n'
+            f'{{"new_objects": new_names, "mesh_objects": mesh_names}}'
+        )
         import_result = await blender.send_command("execute_code", {"code": import_code})
-        imported_name = _Path(filepath).stem
+
+        # Extract actual imported names from Blender response
+        new_objects = []
+        mesh_objects = []
+        if isinstance(import_result, dict):
+            new_objects = import_result.get("new_objects", [])
+            mesh_objects = import_result.get("mesh_objects", [])
+        imported_name = mesh_objects[0] if mesh_objects else (new_objects[0] if new_objects else _Path(filepath).stem)
+
         result = {
             "status": "success",
             "object_name": imported_name,
+            "all_imported_objects": new_objects,
+            "mesh_objects": mesh_objects,
             "filepath": filepath,
             "format": ext.lstrip("."),
-            "import_result": import_result,
             "next_steps": [
-                f"Object '{imported_name}' imported. Run cleanup with: asset_pipeline action=cleanup object_name={imported_name}",
-                f"Or run full pipeline: asset_pipeline action=import_and_process filepath={filepath}",
+                f"Imported {len(new_objects)} objects ({len(mesh_objects)} meshes). Primary: '{imported_name}'",
+                f"Run cleanup: asset_pipeline action=cleanup object_name={imported_name}",
+                f"Or full pipeline: asset_pipeline action=full_pipeline object_name={imported_name}",
             ],
         }
         return await _with_screenshot(blender, result, capture_viewport)
@@ -1215,9 +1254,35 @@ async def asset_pipeline(
     elif action == "import_and_process":
         if not filepath:
             return "ERROR: 'filepath' is required for import_and_process (path to .glb/.fbx/.obj file)"
+        from pathlib import Path as _Path
+        if not _Path(filepath).exists():
+            return f"ERROR: File not found: '{filepath}'. Check the path and try again."
+
+        # Step 1: Import into Blender and get actual object name
+        ext = _Path(filepath).suffix.lower()
+        import_ops = {".glb": "import_scene.gltf", ".gltf": "import_scene.gltf",
+                      ".fbx": "import_scene.fbx", ".obj": "wm.obj_import"}
+        op = import_ops.get(ext)
+        if not op:
+            return f"ERROR: Unsupported format '{ext}'. Supported: .glb, .gltf, .fbx, .obj"
+        safe_path = filepath.replace("\\", "/")
+        import_code = (
+            f'import bpy\n'
+            f'existing = set(o.name for o in bpy.data.objects)\n'
+            f'bpy.ops.{op}(filepath="{safe_path}")\n'
+            f'mesh_names = [o.name for o in bpy.data.objects if o.name not in existing and o.type == "MESH"]\n'
+            f'mesh_names'
+        )
+        import_result = await blender.send_command("execute_code", {"code": import_code})
+        if isinstance(import_result, list) and import_result:
+            obj_name = import_result[0]
+        else:
+            obj_name = _Path(filepath).stem
+
+        # Step 2: Run full pipeline on the imported object
         runner = PipelineRunner(blender, settings)
         result = await runner.full_asset_pipeline(
-            object_name=filepath,
+            object_name=obj_name,
             asset_type=asset_type or "prop",
             poly_budget=poly_budget,
             material_preset=material_preset,
@@ -1228,6 +1293,8 @@ async def asset_pipeline(
             export_format=export_format,
             export_dir=export_dir or output_dir,
         )
+        result["imported_from"] = filepath
+        result["blender_object"] = obj_name
         return await _with_screenshot(blender, result, capture_viewport)
 
     # --- Full production pipeline ---
