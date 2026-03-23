@@ -172,7 +172,8 @@ class TestResolveSelectorSnippet:
 
     def test_regex_selector(self):
         snippet = _resolve_selector_snippet({"by": "regex", "value": "Enemy_\\d+"})
-        assert "Regex.IsMatch" in snippet
+        assert "regexPattern.IsMatch" in snippet
+        assert "TimeSpan.FromSeconds" in snippet
         assert "SceneManager" in snippet or "FindObjectsOfType" in snippet
 
     def test_string_shorthand(self):
@@ -365,7 +366,7 @@ class TestGenerateAddComponentScript:
 
     def test_regex_selector(self):
         result = generate_add_component_script({"by": "regex", "value": "Monster_.*"}, "Rigidbody")
-        assert "Regex.IsMatch" in result
+        assert "regexPattern.IsMatch" in result
 
     def test_contains_menu_item(self):
         result = generate_add_component_script({"by": "name", "value": "TargetObject"}, "Rigidbody")

@@ -152,11 +152,12 @@ def _resolve_selector_snippet(selector: dict | str) -> str:
             }}'''
 
     elif mode == "regex":
+        safe_val = value  # already sanitized on line 99
         return f'''            GameObject target = null;
-            var regexPattern = new System.Text.RegularExpressions.Regex("{value}");
+            var regexPattern = new System.Text.RegularExpressions.Regex(@"{safe_val}", System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
             foreach (var root in UnityEngine.SceneManagement.SceneManager.GetActiveScene().GetRootGameObjects())
             {{
-                if (System.Text.RegularExpressions.Regex.IsMatch(root.name, "{value}"))
+                if (regexPattern.IsMatch(root.name))
                 {{
                     target = root;
                     break;
@@ -164,7 +165,7 @@ def _resolve_selector_snippet(selector: dict | str) -> str:
                 // Recurse children
                 foreach (var child in root.GetComponentsInChildren<Transform>(true))
                 {{
-                    if (System.Text.RegularExpressions.Regex.IsMatch(child.name, "{value}"))
+                    if (regexPattern.IsMatch(child.name))
                     {{
                         target = child.gameObject;
                         break;
@@ -1324,7 +1325,7 @@ def generate_batch_configure_script(
     elif mode == "name_pattern":
         find_code = f'''            var allObjects = Object.FindObjectsOfType<GameObject>();
             var objectsList = new System.Collections.Generic.List<GameObject>();
-            var pattern = new System.Text.RegularExpressions.Regex("{value}");
+            var pattern = new System.Text.RegularExpressions.Regex(@"{value}", System.Text.RegularExpressions.RegexOptions.None, System.TimeSpan.FromSeconds(1));
             foreach (var obj in allObjects)
             {{
                 if (pattern.IsMatch(obj.name)) objectsList.Add(obj);

@@ -336,6 +336,21 @@ def generate_corruption_shader(
             }}
             ENDHLSL
         }}
+
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode" = "ShadowCaster" }}
+            ZWrite On
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowPassVertex
+            #pragma fragment ShadowPassFragment
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShadowCasterPass.hlsl"
+            ENDHLSL
+        }}
     }}
 
     FallBack "Universal Render Pipeline/Lit"
@@ -545,6 +560,21 @@ def generate_dissolve_shader(
             }}
             ENDHLSL
         }}
+
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode" = "ShadowCaster" }}
+            ZWrite On
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowPassVertex
+            #pragma fragment ShadowPassFragment
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShadowCasterPass.hlsl"
+            ENDHLSL
+        }}
     }}
 
     FallBack "Universal Render Pipeline/Lit"
@@ -600,6 +630,9 @@ def generate_force_field_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
@@ -663,6 +696,21 @@ def generate_force_field_shader(
             }}
             ENDHLSL
         }}
+
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode" = "ShadowCaster" }}
+            ZWrite On
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowPassVertex
+            #pragma fragment ShadowPassFragment
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShadowCasterPass.hlsl"
+            ENDHLSL
+        }}
     }}
 
     FallBack Off
@@ -720,6 +768,9 @@ def generate_water_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -805,6 +856,21 @@ def generate_water_shader(
 
                 return col;
             }}
+            ENDHLSL
+        }}
+
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode" = "ShadowCaster" }}
+            ZWrite On
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowPassVertex
+            #pragma fragment ShadowPassFragment
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShadowCasterPass.hlsl"
             ENDHLSL
         }}
     }}
@@ -1093,6 +1159,9 @@ def generate_outline_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
 
@@ -1321,6 +1390,9 @@ def generate_damage_overlay_shader(
             HLSLPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog
 
             {_URP_CORE_INCLUDE}
 
@@ -1645,7 +1717,10 @@ def generate_arbitrary_shader(
 
             HLSLPROGRAM
             #pragma vertex vert
-            #pragma fragment frag{extra_pragmas}
+            #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fog{extra_pragmas}
 
             {_URP_CORE_INCLUDE}{extra_includes}
 

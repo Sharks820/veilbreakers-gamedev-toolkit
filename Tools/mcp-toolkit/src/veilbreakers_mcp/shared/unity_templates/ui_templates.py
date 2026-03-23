@@ -13,8 +13,8 @@ Functions:
 from __future__ import annotations
 
 import re
-import xml.etree.ElementTree as ET
-import defusedxml.ElementTree as _safe_ET  # safe parsing only
+from xml.etree.ElementTree import Element, SubElement, indent, tostring
+from defusedxml.ElementTree import fromstring, ParseError
 from typing import Any
 
 from ._cs_sanitize import sanitize_cs_identifier
@@ -59,7 +59,7 @@ DEFAULT_RESOLUTIONS: list[tuple[int, int]] = [
 # ---------------------------------------------------------------------------
 
 
-def _build_element(parent: ET.Element, spec: dict[str, Any]) -> None:
+def _build_element(parent: Element, spec: dict[str, Any]) -> None:
     """Recursively build a UXML element from a spec dict.
 
     Args:
@@ -92,7 +92,7 @@ def _build_element(parent: ET.Element, spec: dict[str, Any]) -> None:
     if style:
         attribs["style"] = style
 
-    child_elem = ET.SubElement(parent, tag, attribs)
+    child_elem = SubElement(parent, tag, attribs)
 
     # Recurse into children
     for child_spec in spec.get("children", []):
@@ -116,17 +116,17 @@ def generate_uxml_screen(spec: dict[str, Any]) -> str:
     Returns:
         Complete UXML XML string with xmlns declaration.
     """
-    root = ET.Element("ui:UXML")
+    root = Element("ui:UXML")
     root.set("xmlns:ui", "UnityEngine.UIElements")
     root.set("xmlns:uie", "UnityEditor.UIElements")
 
     # Screen root container
-    screen_root = ET.SubElement(root, "ui:VisualElement", {"class": "screen-root"})
+    screen_root = SubElement(root, "ui:VisualElement", {"class": "screen-root"})
 
     # Title element
     title = spec.get("title", "")
     if title:
-        ET.SubElement(screen_root, "ui:Label", {
+        SubElement(screen_root, "ui:Label", {
             "text": title,
             "class": "vb-title",
             "name": "screen-title",
@@ -137,8 +137,8 @@ def generate_uxml_screen(spec: dict[str, Any]) -> str:
         _build_element(screen_root, elem_spec)
 
     # Serialize to string with XML declaration
-    ET.indent(root, space="    ")
-    xml_bytes = ET.tostring(root, encoding="unicode", xml_declaration=False)
+    indent(root, space="    ")
+    xml_bytes = tostring(root, encoding="unicode", xml_declaration=False)
 
     # Prepend proper XML header
     return f'<?xml version="1.0" encoding="utf-8"?>\n{xml_bytes}\n'
@@ -477,8 +477,8 @@ def validate_uxml_layout(uxml_string: str) -> dict[str, Any]:
     issues: list[dict[str, str]] = []
 
     try:
-        root = _safe_ET.fromstring(uxml_string)
-    except ET.ParseError as exc:
+        root = fromstring(uxml_string)
+    except ParseError as exc:
         return {
             "valid": False,
             "issues": [
@@ -493,7 +493,7 @@ def validate_uxml_layout(uxml_string: str) -> dict[str, Any]:
     # Track names for duplicate detection
     seen_names: dict[str, int] = {}
 
-    def _walk(elem: ET.Element, parent_sizes: dict[str, float] | None = None) -> None:
+    def _walk(elem: Element, parent_sizes: dict[str, float] | None = None) -> None:
         # Check name duplicates
         name = elem.get("name", "")
         if name:
