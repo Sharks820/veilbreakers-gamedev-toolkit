@@ -508,6 +508,16 @@ from .geometry_nodes import (  # noqa: F401 -- Geometry Nodes management, scatte
     VALID_GN_NODE_TYPES,
     VALID_GN_PRESETS,
 )
+from .facial_topology import (  # noqa: F401 -- Facial/extremity mesh generation
+    generate_face_mesh,
+    generate_blend_shape_targets,
+    generate_hand_mesh,
+    generate_foot_mesh,
+    generate_claw_hand_mesh,
+    generate_hoof_mesh,
+    generate_paw_mesh,
+    generate_corrective_shapes,
+)
 from .clothing_system import (  # noqa: F401 -- Clothing mesh generation
     generate_clothing,
     generate_tunic,
@@ -590,13 +600,27 @@ def _build_quality_object(spec: dict, position: tuple | None = None) -> dict:
     points, assigns vertex groups, and returns a JSON-serializable summary.
     """
     import bpy
+    import math
 
     loc = tuple(position) if position else (0.0, 0.0, 0.0)
-    obj = mesh_from_spec(spec, location=loc)
+
+    # Detect if this is a weapon/vertically-oriented asset (blade along Y)
+    # and rotate so blade points UP (Z axis) for game-ready orientation
+    category = spec.get("metadata", {}).get("category", "")
+    is_weapon = category == "weapon" or any(
+        k in spec.get("vertex_groups", {}) for k in ("blade", "shaft", "limb")
+    )
+    rot = (-math.pi / 2, 0.0, 0.0) if is_weapon else (0.0, 0.0, 0.0)
+
+    obj = mesh_from_spec(spec, location=loc, rotation=rot)
 
     # Non-Blender fallback (testing)
     if isinstance(obj, dict):
         return spec
+
+    # Apply smooth shading
+    for poly in obj.data.polygons:
+        poly.use_smooth = True
 
     obj_name = obj.name
 
@@ -1384,13 +1408,53 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         scale=params.get("scale", 0.1),
         noise_scale=params.get("noise_scale", 5.0),
     ),
-    # Clothing system (pure logic -- returns mesh specs)
-    "clothing_generate": lambda params: generate_clothing(
+    # Clothing system — build Blender objects from MeshSpec
+    "clothing_generate": lambda params: _build_quality_object(generate_clothing(
         clothing_type=params.get("clothing_type", "tunic"),
         body_verts=[tuple(v) for v in params.get("body_verts", [])] if params.get("body_verts") else None,
         size=params.get("size", 1.0),
         style=params.get("style", "default"),
+    )),
+    # Facial topology / extremity mesh generators — build Blender objects
+    "facial_generate_face": lambda params: _build_quality_object(generate_face_mesh(
+        detail_level=params.get("detail_level", "medium"),
+    )),
+    "facial_generate_hand": lambda params: _build_quality_object(generate_hand_mesh(
+        detail=params.get("detail", "medium"),
+        side=params.get("side", "right"),
+        finger_count=params.get("finger_count", 5),
+    )),
+    "facial_generate_foot": lambda params: _build_quality_object(generate_foot_mesh(
+        detail=params.get("detail", "medium"),
+        side=params.get("side", "right"),
+        toe_count=params.get("toe_count", 5),
+    )),
+    "facial_generate_claw_hand": lambda params: _build_quality_object(generate_claw_hand_mesh(
+        claw_count=params.get("claw_count", 3),
+        style=params.get("style", "sharp"),
+        side=params.get("side", "right"),
+    )),
+    "facial_generate_hoof": lambda params: _build_quality_object(generate_hoof_mesh(
+        style=params.get("style", "horse"),
+        side=params.get("side", "right"),
+        detail=params.get("detail", "medium"),
+    )),
+    "facial_generate_paw": lambda params: _build_quality_object(generate_paw_mesh(
+        toe_count=params.get("toe_count", 4),
+        has_claws=params.get("has_claws", True),
+        side=params.get("side", "right"),
+    )),
+    # Legendary weapons — build Blender objects
+    "legendary_weapon_generate": lambda params: _build_quality_object(
+        generate_legendary_weapon_mesh(
+            weapon_name=params.get("weapon_name", "shadowfang"),
+        )
     ),
+    # NPC body generation — build Blender objects
+    "npc_generate_body": lambda params: _build_quality_object(generate_npc_body_mesh(
+        gender=params.get("gender", "male"),
+        build=params.get("build", "average"),
+    )),
     # Texture painting operations
     "texture_multi_channel_paint": handle_multi_channel_paint,
     "texture_paint_stroke": handle_paint_stroke,
