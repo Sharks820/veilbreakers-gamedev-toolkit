@@ -5,7 +5,13 @@ from .scene import (
     handle_clear_scene,
     handle_configure_scene,
     handle_list_objects,
+    handle_setup_world,
+    handle_add_light,
+    handle_add_camera,
+    handle_configure_render,
     handle_create_collection,
+    handle_move_to_collection,
+    handle_set_visibility,
     handle_organize_by_type,
     handle_toggle_collection_visibility,
     handle_list_collections,
@@ -47,6 +53,16 @@ from .mesh import (
     handle_boolean_op,
     handle_retopologize,
     handle_sculpt,
+    handle_loop_cut,
+    handle_bevel_edges,
+    handle_knife_project,
+    handle_proportional_edit,
+    handle_enter_sculpt_mode,
+    handle_exit_sculpt_mode,
+    handle_vertex_color,
+    handle_custom_normals,
+    handle_edge_data,
+    handle_shape_key,
     # Advanced sculpt handlers (MESH-04b..f)
     handle_sculpt_brush,
     handle_dyntopo,
@@ -57,6 +73,19 @@ from .mesh import (
     _select_by_box,
     _select_by_sphere,
     _select_by_plane,
+)
+from .text_objects import (
+    handle_create_text,
+    handle_text_to_mesh,
+)
+from .drivers import (
+    handle_add_driver,
+    handle_remove_driver,
+)
+from .curves import (
+    handle_create_curve,
+    handle_curve_to_mesh,
+    handle_extrude_along_curve,
 )
 from .uv import (  # noqa: F401, E402
     handle_analyze_uv,
@@ -163,6 +192,17 @@ from .equipment import (
 )
 from .procedural_materials import (
     handle_create_procedural_material,
+)
+from .particles import (
+    handle_add_particle_system,
+    handle_configure_particle_physics,
+    handle_hair_grooming,
+)
+from .physics import (
+    handle_add_rigid_body,
+    handle_add_cloth,
+    handle_add_soft_body,
+    handle_bake_physics,
 )
 from .vertex_colors import (
     handle_auto_paint_vertex_colors,
@@ -542,8 +582,15 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "clear_scene": handle_clear_scene,
     "configure_scene": handle_configure_scene,
     "list_objects": handle_list_objects,
-    # Collections (SC-02)
+    # Scene/World settings
+    "setup_world": handle_setup_world,
+    "add_light": handle_add_light,
+    "add_camera": handle_add_camera,
+    "configure_render": handle_configure_render,
+    # Collection operations (SC-02)
     "create_collection": handle_create_collection,
+    "move_to_collection": handle_move_to_collection,
+    "set_visibility": handle_set_visibility,
     "organize_by_type": handle_organize_by_type,
     "toggle_collection_visibility": handle_toggle_collection_visibility,
     "list_collections": handle_list_collections,
@@ -583,6 +630,14 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "mesh_boolean": handle_boolean_op,
     "mesh_retopologize": handle_retopologize,
     "mesh_sculpt": handle_sculpt,
+    "mesh_loop_cut": handle_loop_cut,
+    "mesh_bevel_edges": handle_bevel_edges,
+    "mesh_knife_project": handle_knife_project,
+    "mesh_proportional_edit": handle_proportional_edit,
+    # Curve operations
+    "curve_create": handle_create_curve,
+    "curve_to_mesh": handle_curve_to_mesh,
+    "curve_extrude_along": handle_extrude_along_curve,
     # Advanced sculpt operations (MESH-04b..f)
     "mesh_sculpt_brush": handle_sculpt_brush,
     "mesh_dyntopo": handle_dyntopo,
@@ -684,6 +739,31 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "equipment_split_character": handle_equipment_split_character,
     "equipment_fit_armor": handle_equipment_fit_armor,
     "equipment_render_icon": handle_equipment_render_icon,
+    # Sculpt mode operations
+    "sculpt_brush": handle_sculpt_brush,
+    "sculpt_enter": handle_enter_sculpt_mode,
+    "sculpt_exit": handle_exit_sculpt_mode,
+    # Vertex colors and custom data operations
+    "mesh_vertex_color": handle_vertex_color,
+    "mesh_custom_normals": handle_custom_normals,
+    "mesh_edge_data": handle_edge_data,
+    # Particle system operations
+    "particle_add_system": handle_add_particle_system,
+    "particle_configure_physics": handle_configure_particle_physics,
+    "particle_hair_groom": handle_hair_grooming,
+    # Physics simulation operations
+    "physics_add_rigid_body": handle_add_rigid_body,
+    "physics_add_cloth": handle_add_cloth,
+    "physics_add_soft_body": handle_add_soft_body,
+    "physics_bake": handle_bake_physics,
+    # Text object operations
+    "text_create": handle_create_text,
+    "text_to_mesh": handle_text_to_mesh,
+    # Shape key workflow operations
+    "mesh_shape_key": handle_shape_key,
+    # Driver operations
+    "driver_add": handle_add_driver,
+    "driver_remove": handle_remove_driver,
     # Procedural material operations
     "material_create_procedural": handle_create_procedural_material,
     # Vertex color operations

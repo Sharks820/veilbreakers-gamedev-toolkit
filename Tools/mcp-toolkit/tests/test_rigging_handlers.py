@@ -731,3 +731,709 @@ class TestWeightFixParams:
         result = _validate_weight_fix_params("normalize", {})
         required_keys = {"valid", "errors", "operation"}
         assert required_keys.issubset(set(result.keys()))
+
+
+# ---------------------------------------------------------------------------
+# TestWeightLimitPure
+# ---------------------------------------------------------------------------
+
+
+class TestWeightLimitPure:
+    """Test _enforce_weight_limit_pure logic."""
+
+    def test_under_limit_unchanged(self):
+        """Vertices under the limit are not modified."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        vw = [[("a", 0.5), ("b", 0.3), ("c", 0.2)]]
+        result = _enforce_weight_limit_pure(vw, max_influences=4)
+        assert result["clamped_vertices"] == 0
+        assert len(result["vertex_weights"][0]) == 3
+
+    def test_over_limit_clamped(self):
+        """Vertices over the limit are clamped to max_influences."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        vw = [[("a", 0.3), ("b", 0.25), ("c", 0.2), ("d", 0.15), ("e", 0.1)]]
+        result = _enforce_weight_limit_pure(vw, max_influences=4)
+        assert result["clamped_vertices"] == 1
+        assert len(result["vertex_weights"][0]) == 4
+
+    def test_empty_input(self):
+        """Empty input produces empty output."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        result = _enforce_weight_limit_pure([], max_influences=4)
+        assert result["total_vertices"] == 0
+        assert result["clamped_vertices"] == 0
+        assert result["vertex_weights"] == []
+
+    def test_custom_max_influences(self):
+        """Custom max_influences of 2 clamps correctly."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        vw = [[("a", 0.5), ("b", 0.3), ("c", 0.2)]]
+        result = _enforce_weight_limit_pure(vw, max_influences=2)
+        assert result["clamped_vertices"] == 1
+        assert len(result["vertex_weights"][0]) == 2
+
+    def test_exactly_at_limit_not_clamped(self):
+        """Vertices exactly at the limit are not clamped."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        vw = [[("a", 0.4), ("b", 0.3), ("c", 0.2), ("d", 0.1)]]
+        result = _enforce_weight_limit_pure(vw, max_influences=4)
+        assert result["clamped_vertices"] == 0
+
+    def test_returns_required_keys(self):
+        """Result has clamped_vertices, total_vertices, max_influences, vertex_weights."""
+        from blender_addon.handlers.rigging_weights import _enforce_weight_limit_pure
+
+        result = _enforce_weight_limit_pure([], max_influences=4)
+        required = {"clamped_vertices", "total_vertices", "max_influences", "vertex_weights"}
+        assert required.issubset(set(result.keys()))
+
+
+# ---------------------------------------------------------------------------
+# TestEnhancedValidation
+# ---------------------------------------------------------------------------
+
+
+class TestEnhancedValidation:
+    """Test _enhanced_rig_validation function."""
+
+    def _make_validation(self, **overrides):
+        from blender_addon.handlers.rigging_weights import _enhanced_rig_validation
+        defaults = {
+            "bone_names": [
+                "upper_arm.L", "upper_arm.R", "forearm.L", "forearm.R",
+                "thigh.L", "thigh.R", "shin.L", "shin.R",
+                "upper_arm_twist.L", "upper_arm_twist.R",
+                "forearm_twist.L", "forearm_twist.R",
+                "thigh_twist.L", "thigh_twist.R",
+                "shin_twist.L", "shin_twist.R",
+            ],
+            "bone_rolls": {
+                "upper_arm.L": 0.1, "upper_arm.R": -0.1,
+                "forearm.L": 1.5708, "forearm.R": -1.5708,
+                "thigh.L": 0.1, "thigh.R": -0.1,
+                "shin.L": 0.1, "shin.R": -0.1,
+            },
+            "bone_parents": {},
+            "vertex_influence_counts": [4, 3, 4, 2],
+            "max_influences": 4,
+        }
+        defaults.update(overrides)
+        return _enhanced_rig_validation(**defaults)
+
+    def test_detects_zero_weight_bones(self):
+        """zero_weight_bones key exists in result."""
+        result = self._make_validation()
+        assert "zero_weight_bones" in result
+
+    def test_detects_over_limit_vertices(self):
+        """Vertices exceeding max_influences are counted."""
+        result = self._make_validation(
+            vertex_influence_counts=[5, 6, 4, 3],
+            max_influences=4,
+        )
+        assert result["over_limit_vertices"] == 2
+
+    def test_symmetry_mismatch(self):
+        """Missing R counterpart is detected."""
+        result = self._make_validation(
+            bone_names=["upper_arm.L", "forearm.L", "forearm.R",
+                       "upper_arm_twist.L", "forearm_twist.L", "forearm_twist.R"],
+            bone_rolls={"upper_arm.L": 0.1, "forearm.L": 1.5708, "forearm.R": -1.5708},
+        )
+        assert "upper_arm.L" in result["symmetry_mismatches"]
+
+    def test_default_roll_flagged(self):
+        """Limb bones with roll 0.0 are flagged."""
+        result = self._make_validation(
+            bone_rolls={
+                "upper_arm.L": 0.0, "upper_arm.R": 0.0,
+                "forearm.L": 0.0, "forearm.R": 0.0,
+                "thigh.L": 0.0, "thigh.R": 0.0,
+                "shin.L": 0.0, "shin.R": 0.0,
+            },
+        )
+        assert len(result["default_roll_bones"]) >= 8
+
+    def test_missing_twist(self):
+        """Missing twist bones are detected."""
+        result = self._make_validation(
+            bone_names=["upper_arm.L", "upper_arm.R", "forearm.L", "forearm.R",
+                       "thigh.L", "thigh.R", "shin.L", "shin.R"],
+            bone_rolls={
+                "upper_arm.L": 0.1, "upper_arm.R": -0.1,
+                "forearm.L": 1.5708, "forearm.R": -1.5708,
+                "thigh.L": 0.1, "thigh.R": -0.1,
+                "shin.L": 0.1, "shin.R": -0.1,
+            },
+        )
+        assert len(result["missing_twist_bones"]) == 8
+
+    def test_clean_rig(self):
+        """A rig with twist bones, proper rolls, and within limit passes clean."""
+        result = self._make_validation()
+        assert result["over_limit_vertices"] == 0
+        assert result["symmetry_mismatches"] == []
+        assert result["missing_twist_bones"] == []
+
+    def test_returns_required_keys(self):
+        """Result has all required keys."""
+        result = self._make_validation()
+        required = {
+            "zero_weight_bones", "over_limit_vertices",
+            "symmetry_mismatches", "default_roll_bones",
+            "missing_twist_bones", "issues",
+        }
+        assert required.issubset(set(result.keys()))
+
+
+# ---------------------------------------------------------------------------
+# TestMultiArmGeneration
+# ---------------------------------------------------------------------------
+
+
+class TestMultiArmGeneration:
+    """Test _generate_multi_arm_bones pure-logic function."""
+
+    def test_2_arms_6_bones(self):
+        """2 arms produce 6 bones (1 pair x 3 bones x 2 sides)."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(2)
+        assert len(bones) == 6
+
+    def test_4_arms_12_bones(self):
+        """4 arms produce 12 bones (2 pairs x 3 bones x 2 sides)."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(4)
+        assert len(bones) == 12
+
+    def test_6_arms_18_bones(self):
+        """6 arms produce 18 bones (3 pairs x 3 bones x 2 sides)."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(6)
+        assert len(bones) == 18
+
+    def test_invalid_count_raises(self):
+        """Odd or out-of-range arm count raises ValueError."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        with pytest.raises(ValueError):
+            _generate_multi_arm_bones(3)
+        with pytest.raises(ValueError):
+            _generate_multi_arm_bones(0)
+        with pytest.raises(ValueError):
+            _generate_multi_arm_bones(8)
+
+    def test_bone_defs_required_keys(self):
+        """Each bone dict has name, head, tail, roll, parent, rigify_type."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(4)
+        required = {"name", "head", "tail", "roll", "parent", "rigify_type"}
+        for bone in bones:
+            assert required.issubset(set(bone.keys())), f"Bone {bone.get('name')} missing keys"
+
+    def test_lr_symmetry(self):
+        """Each pair has matching L and R bones."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(4)
+        l_names = {b["name"] for b in bones if b["name"].endswith(".L")}
+        r_names = {b["name"] for b in bones if b["name"].endswith(".R")}
+        for ln in l_names:
+            rn = ln[:-2] + ".R"
+            assert rn in r_names, f"Missing R counterpart for {ln}"
+
+    def test_forearm_rolls_set(self):
+        """Forearm bones have roll 1.5708 (L) and -1.5708 (R)."""
+        from blender_addon.handlers.rigging import _generate_multi_arm_bones
+        bones = _generate_multi_arm_bones(4)
+        for bone in bones:
+            if "forearm" in bone["name"]:
+                if bone["name"].endswith(".L"):
+                    assert abs(bone["roll"] - 1.5708) < 0.001
+                elif bone["name"].endswith(".R"):
+                    assert abs(bone["roll"] - (-1.5708)) < 0.001
+
+
+# ---------------------------------------------------------------------------
+# TestMonsterTemplateMap
+# ---------------------------------------------------------------------------
+
+
+class TestMonsterTemplateMap:
+    """Test MONSTER_TEMPLATE_MAP and VB-specific rigging."""
+
+    def test_all_20_monsters_mapped(self):
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        assert len(MONSTER_TEMPLATE_MAP) == 20
+
+    def test_all_templates_valid(self):
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        from blender_addon.handlers.rigging_templates import TEMPLATE_CATALOG
+        for mid, config in MONSTER_TEMPLATE_MAP.items():
+            assert config["template"] in TEMPLATE_CATALOG, f"{mid} has invalid template"
+
+    def test_skitter_teeth_is_humanoid(self):
+        """SkitterTeeth is a hunched bipedal (confirmed from concept art)."""
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        assert MONSTER_TEMPLATE_MAP["skitter_teeth"]["template"] == "humanoid"
+
+    def test_bosses_have_boss_body(self):
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        bosses = ["the_broodmother", "the_bulwark", "the_congregation", "the_vessel", "the_weeping"]
+        for boss in bosses:
+            assert MONSTER_TEMPLATE_MAP[boss]["body"] == "boss"
+
+    def test_validate_known_monster(self):
+        from blender_addon.handlers.rigging import _validate_monster_rig_config
+        result = _validate_monster_rig_config("skitter_teeth")
+        assert result["valid"] is True
+        assert result["template"] == "humanoid"
+
+    def test_validate_unknown_monster(self):
+        from blender_addon.handlers.rigging import _validate_monster_rig_config
+        result = _validate_monster_rig_config("nonexistent")
+        assert result["valid"] is False
+
+    def test_all_monsters_have_features(self):
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        for mid, config in MONSTER_TEMPLATE_MAP.items():
+            assert isinstance(config["features"], list), f"{mid} features not a list"
+            assert len(config["features"]) >= 1, f"{mid} has no features"
+
+    def test_all_monsters_have_notes(self):
+        """Every monster has visual description notes from concept art analysis."""
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        for mid, config in MONSTER_TEMPLATE_MAP.items():
+            assert "notes" in config, f"{mid} missing notes"
+            assert len(config["notes"]) > 10, f"{mid} notes too short"
+
+    def test_wraith_monsters_have_tentacle_base(self):
+        """Bloodshade and hollow need no_legs_tentacle_base (from art: no legs)."""
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        for mid in ("bloodshade", "hollow"):
+            assert "no_legs_tentacle_base" in MONSTER_TEMPLATE_MAP[mid]["features"]
+
+    def test_serpent_monsters_have_arm_addon(self):
+        """Grimthorn and needlefang are serpents WITH arms (from art)."""
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        for mid in ("grimthorn", "needlefang"):
+            assert MONSTER_TEMPLATE_MAP[mid]["template"] == "serpent"
+            assert "arm_pair_addon" in MONSTER_TEMPLATE_MAP[mid]["features"]
+
+    def test_flying_insects_have_wings(self):
+        """Flicker and broodmother need wing_pair_addon (from art: visible wings)."""
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        for mid in ("flicker", "the_broodmother"):
+            assert "wing_pair_addon" in MONSTER_TEMPLATE_MAP[mid]["features"]
+
+    def test_congregation_has_6_arms(self):
+        """The Congregation has 6 arms (from art: 3 pairs visible)."""
+        from blender_addon.handlers.rigging import MONSTER_TEMPLATE_MAP
+        assert MONSTER_TEMPLATE_MAP["the_congregation"]["template"] == "multi_armed"
+        assert "arm_count_6" in MONSTER_TEMPLATE_MAP["the_congregation"]["features"]
+
+
+class TestRigFeatureDefinitions:
+    """Test RIG_FEATURE_DEFINITIONS data."""
+
+    def test_feature_defs_exist(self):
+        from blender_addon.handlers.rigging import RIG_FEATURE_DEFINITIONS
+        assert isinstance(RIG_FEATURE_DEFINITIONS, dict)
+        assert len(RIG_FEATURE_DEFINITIONS) >= 10
+
+    def test_structural_features_have_definitions(self):
+        """Features that modify bone structure have definitions with adds/removes."""
+        from blender_addon.handlers.rigging import RIG_FEATURE_DEFINITIONS
+        structural = [k for k, v in RIG_FEATURE_DEFINITIONS.items()
+                      if "adds" in v or "removes" in v]
+        assert len(structural) >= 5, "Need at least 5 structural feature definitions"
+
+    def test_feature_defs_have_description(self):
+        from blender_addon.handlers.rigging import RIG_FEATURE_DEFINITIONS
+        for name, defn in RIG_FEATURE_DEFINITIONS.items():
+            assert "description" in defn, f"Feature '{name}' missing description"
+
+
+# ---------------------------------------------------------------------------
+# TestStatusEffectSockets
+# ---------------------------------------------------------------------------
+
+
+class TestStatusEffectSockets:
+    """Test STATUS_EFFECT_SOCKETS mapping."""
+
+    def test_head_socket_exists_for_all_templates(self):
+        from blender_addon.handlers.rigging import STATUS_EFFECT_SOCKETS
+        assert "head" in STATUS_EFFECT_SOCKETS
+        assert len(STATUS_EFFECT_SOCKETS["head"]) >= 7
+
+    def test_get_socket_returns_bone_name(self):
+        from blender_addon.handlers.rigging import _get_status_effect_socket
+        result = _get_status_effect_socket("humanoid", "head")
+        assert result == "spine.005"
+
+    def test_get_socket_returns_none_for_missing(self):
+        from blender_addon.handlers.rigging import _get_status_effect_socket
+        result = _get_status_effect_socket("serpent", "left_hand")
+        assert result is None
+
+    def test_root_socket_available_for_all(self):
+        from blender_addon.handlers.rigging import STATUS_EFFECT_SOCKETS
+        for template in ("humanoid", "quadruped", "arachnid", "floating", "insect", "dragon"):
+            assert template in STATUS_EFFECT_SOCKETS["root"]
+
+    def test_serpent_and_multi_armed_have_sockets(self):
+        from blender_addon.handlers.rigging import STATUS_EFFECT_SOCKETS
+        assert "serpent" in STATUS_EFFECT_SOCKETS["root"]
+        assert "multi_armed" in STATUS_EFFECT_SOCKETS["root"]
+        assert "amorphous" in STATUS_EFFECT_SOCKETS["root"]
+
+
+# ---------------------------------------------------------------------------
+# TestCorruptionMorph
+# ---------------------------------------------------------------------------
+
+
+class TestCorruptionMorph:
+    """Test CORRUPTION_MORPH_STAGES and helpers."""
+
+    def test_has_4_stages(self):
+        from blender_addon.handlers.rigging import CORRUPTION_MORPH_STAGES
+        assert len(CORRUPTION_MORPH_STAGES) == 4
+
+    def test_stages_ascending_threshold(self):
+        from blender_addon.handlers.rigging import CORRUPTION_MORPH_STAGES
+        thresholds = [s["threshold_pct"] for s in CORRUPTION_MORPH_STAGES]
+        assert thresholds == sorted(thresholds)
+
+    def test_get_stage_at_0_returns_none(self):
+        from blender_addon.handlers.rigging import _get_corruption_stage
+        assert _get_corruption_stage(0.0) is None
+
+    def test_get_stage_at_25(self):
+        from blender_addon.handlers.rigging import _get_corruption_stage
+        result = _get_corruption_stage(25.0)
+        assert result is not None
+        assert result["name"] == "corruption_stage_1"
+
+    def test_get_stage_at_100(self):
+        from blender_addon.handlers.rigging import _get_corruption_stage
+        result = _get_corruption_stage(100.0)
+        assert result["name"] == "corruption_stage_4"
+
+    def test_get_stage_invalid_returns_none(self):
+        from blender_addon.handlers.rigging import _get_corruption_stage
+        assert _get_corruption_stage(-5.0) is None
+        assert _get_corruption_stage(101.0) is None
+
+    def test_stage_intensity_increases(self):
+        from blender_addon.handlers.rigging import CORRUPTION_MORPH_STAGES
+        intensities = [s["morph_intensity"] for s in CORRUPTION_MORPH_STAGES]
+        assert intensities == sorted(intensities)
+
+
+# ---------------------------------------------------------------------------
+# TestBoneLOD
+# ---------------------------------------------------------------------------
+
+
+class TestBoneLOD:
+    def test_lod0_returns_all(self):
+        from blender_addon.handlers.rigging import _get_bones_for_lod, BONE_LOD_TIERS
+        bones = {"spine": {}, "upper_arm.L": {}, "thumb.01.L": {}, "upper_arm_twist.L": {}}
+        result = _get_bones_for_lod(bones, "LOD0_full")
+        assert len(result) == 4
+
+    def test_lod1_strips_fingers(self):
+        from blender_addon.handlers.rigging import _get_bones_for_lod
+        bones = {"spine": {}, "upper_arm.L": {}, "thumb.01.L": {}, "f_index.02.R": {}}
+        result = _get_bones_for_lod(bones, "LOD1_no_fingers")
+        assert "spine" in result
+        assert "thumb.01.L" not in result
+        assert "f_index.02.R" not in result
+
+    def test_lod2_strips_twist(self):
+        from blender_addon.handlers.rigging import _get_bones_for_lod
+        bones = {"spine": {}, "forearm.L": {}, "forearm_twist.L": {}}
+        result = _get_bones_for_lod(bones, "LOD2_no_twist")
+        assert "forearm.L" in result
+        assert "forearm_twist.L" not in result
+
+    def test_invalid_lod_returns_all(self):
+        from blender_addon.handlers.rigging import _get_bones_for_lod
+        bones = {"a": {}, "b": {}}
+        assert _get_bones_for_lod(bones, "INVALID") == bones
+
+
+# ---------------------------------------------------------------------------
+# TestHeroTemplateMap
+# ---------------------------------------------------------------------------
+
+
+class TestHeroTemplateMap:
+    def test_has_4_heroes(self):
+        from blender_addon.handlers.rigging import HERO_TEMPLATE_MAP
+        assert len(HERO_TEMPLATE_MAP) == 4
+
+    def test_all_humanoid(self):
+        from blender_addon.handlers.rigging import HERO_TEMPLATE_MAP
+        for hid, config in HERO_TEMPLATE_MAP.items():
+            assert config["template"] == "humanoid"
+
+    def test_vex_is_warden(self):
+        from blender_addon.handlers.rigging import HERO_TEMPLATE_MAP
+        assert HERO_TEMPLATE_MAP["vex"]["class"] == "WARDEN"
+
+
+# ---------------------------------------------------------------------------
+# TestExportValidation
+# ---------------------------------------------------------------------------
+
+
+class TestExportValidation:
+    def test_clean_export(self):
+        from blender_addon.handlers.rigging import _validate_export_readiness
+        r = _validate_export_readiness(100, 4, False, True)
+        assert r["export_ready"] is True
+
+    def test_too_many_bones(self):
+        from blender_addon.handlers.rigging import _validate_export_readiness
+        r = _validate_export_readiness(300, 4, False, True)
+        assert r["export_ready"] is False
+
+    def test_over_influenced(self):
+        from blender_addon.handlers.rigging import _validate_export_readiness
+        r = _validate_export_readiness(100, 6, False, True)
+        assert r["export_ready"] is False
+
+
+# ---------------------------------------------------------------------------
+# TestAnimationClipRequirements
+# ---------------------------------------------------------------------------
+
+
+class TestAnimationClipRequirements:
+    def test_all_templates_have_clips(self):
+        from blender_addon.handlers.rigging import REQUIRED_ANIMATION_CLIPS
+        from blender_addon.handlers.rigging_templates import TEMPLATE_CATALOG
+        for tname in TEMPLATE_CATALOG:
+            assert tname in REQUIRED_ANIMATION_CLIPS, f"Missing clips for {tname}"
+
+    def test_all_have_idle_and_death(self):
+        from blender_addon.handlers.rigging import REQUIRED_ANIMATION_CLIPS
+        for tname, clips in REQUIRED_ANIMATION_CLIPS.items():
+            assert "idle" in clips
+            assert "death" in clips
+
+
+# ---------------------------------------------------------------------------
+# TestSkinningQuality
+# ---------------------------------------------------------------------------
+
+
+class TestSkinningQuality:
+    def test_perfect_quality(self):
+        from blender_addon.handlers.rigging_weights import _compute_skinning_quality
+        weights = [[(0, 0.5), (1, 0.5)], [(0, 0.7), (1, 0.3)]]
+        r = _compute_skinning_quality(weights)
+        assert r["quality_score"] > 0.8
+
+    def test_all_unweighted(self):
+        from blender_addon.handlers.rigging_weights import _compute_skinning_quality
+        weights = [[], []]
+        r = _compute_skinning_quality(weights)
+        assert r["quality_score"] < 0.6
+
+    def test_empty_input(self):
+        from blender_addon.handlers.rigging_weights import _compute_skinning_quality
+        r = _compute_skinning_quality([])
+        assert r["quality_score"] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# TestUnityHumanoidMapping
+# ---------------------------------------------------------------------------
+
+
+class TestUnityHumanoidMapping:
+    def test_map_has_required_bones(self):
+        from blender_addon.handlers.rigging import UNITY_HUMANOID_BONE_MAP, UNITY_REQUIRED_BONES
+        mapped_unity = set(UNITY_HUMANOID_BONE_MAP.values())
+        for req in UNITY_REQUIRED_BONES:
+            assert req in mapped_unity, f"Required bone '{req}' not in map"
+
+    def test_validate_complete_rig(self):
+        from blender_addon.handlers.rigging import _validate_unity_humanoid, UNITY_HUMANOID_BONE_MAP
+        bones = list(UNITY_HUMANOID_BONE_MAP.keys())
+        result = _validate_unity_humanoid(bones)
+        assert result["valid"] is True
+        assert result["missing_required"] == []
+
+    def test_validate_incomplete_rig(self):
+        from blender_addon.handlers.rigging import _validate_unity_humanoid
+        result = _validate_unity_humanoid(["DEF-spine", "DEF-spine.001"])
+        assert result["valid"] is False
+        assert len(result["missing_required"]) > 0
+
+    def test_validate_empty_rig(self):
+        from blender_addon.handlers.rigging import _validate_unity_humanoid, UNITY_REQUIRED_BONES
+        result = _validate_unity_humanoid([])
+        assert result["valid"] is False
+        assert len(result["missing_required"]) == len(UNITY_REQUIRED_BONES)
+
+
+# ---------------------------------------------------------------------------
+# TestSkinningModes
+# ---------------------------------------------------------------------------
+
+
+class TestSkinningModes:
+    def test_valid_modes(self):
+        from blender_addon.handlers.rigging_weights import _validate_skinning_mode
+        for mode in ("linear", "dual_quaternion", "hybrid"):
+            result = _validate_skinning_mode(mode)
+            assert result["valid"] is True
+
+    def test_invalid_mode(self):
+        from blender_addon.handlers.rigging_weights import _validate_skinning_mode
+        result = _validate_skinning_mode("invalid")
+        assert result["valid"] is False
+
+    def test_dqs_mode_has_flag(self):
+        from blender_addon.handlers.rigging_weights import SKINNING_MODES
+        assert SKINNING_MODES["dual_quaternion"]["use_dual_quaternion"] is True
+        assert SKINNING_MODES["linear"]["use_dual_quaternion"] is False
+
+
+# ---------------------------------------------------------------------------
+# TestPipelineIntegration
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineIntegration:
+    """Test end-to-end pipeline data and validation."""
+
+    def test_pipeline_has_21_steps(self):
+        from blender_addon.handlers.rigging import PIPELINE_STEPS
+        assert len(PIPELINE_STEPS) == 21
+
+    def test_all_steps_have_required_fields(self):
+        from blender_addon.handlers.rigging import PIPELINE_STEPS
+        for step in PIPELINE_STEPS:
+            assert "step" in step
+            assert "name" in step
+            assert "tool" in step
+            assert "description" in step
+
+    def test_steps_in_order(self):
+        from blender_addon.handlers.rigging import PIPELINE_STEPS
+        numbers = [s["step"] for s in PIPELINE_STEPS]
+        assert numbers == list(range(1, 22))
+
+    def test_get_pipeline_for_known_monster(self):
+        from blender_addon.handlers.rigging import _get_pipeline_for_monster
+        result = _get_pipeline_for_monster("skitter_teeth")
+        assert result["valid"] is True
+        assert result["template"] == "humanoid"
+        assert len(result["steps"]) == 21
+        assert len(result["required_animations"]) >= 4
+
+    def test_get_pipeline_for_unknown_monster(self):
+        from blender_addon.handlers.rigging import _get_pipeline_for_monster
+        result = _get_pipeline_for_monster("nonexistent")
+        assert result["valid"] is False
+
+    def test_humanoid_monster_gets_facial_step(self):
+        from blender_addon.handlers.rigging import _get_pipeline_for_monster
+        result = _get_pipeline_for_monster("voltgeist")
+        assert "setup_facial" in result["optional_steps"]
+
+    def test_non_humanoid_skips_facial(self):
+        from blender_addon.handlers.rigging import _get_pipeline_for_monster
+        result = _get_pipeline_for_monster("sporecaller")
+        assert "setup_facial" not in result["optional_steps"]
+
+    def test_spring_bone_monsters_get_spring_step(self):
+        from blender_addon.handlers.rigging import _get_pipeline_for_monster
+        result = _get_pipeline_for_monster("chainbound")
+        assert "setup_spring_bones" in result["optional_steps"]
+
+    def test_validate_pipeline_all_ready(self):
+        from blender_addon.handlers.rigging import _validate_pipeline_readiness
+        result = _validate_pipeline_readiness(True, True, True, "A", True)
+        assert result["ready_for_export"] is True
+        assert result["blockers"] == []
+
+    def test_validate_pipeline_not_ready(self):
+        from blender_addon.handlers.rigging import _validate_pipeline_readiness
+        result = _validate_pipeline_readiness(False, False, False, "F", False)
+        assert result["ready_for_export"] is False
+        assert len(result["blockers"]) == 5
+
+    def test_validate_pipeline_partial(self):
+        from blender_addon.handlers.rigging import _validate_pipeline_readiness
+        result = _validate_pipeline_readiness(True, True, True, "C", False)
+        assert result["ready_for_animation"] is True
+        assert result["ready_for_export"] is False
+
+
+class TestEnvironmentRigging:
+    """Test environment object rigging requirements."""
+
+    def test_has_27_environment_types(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        assert len(ENVIRONMENT_RIG_REQUIREMENTS) == 28
+
+    def test_riggable_objects_have_bones(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        for name, config in ENVIRONMENT_RIG_REQUIREMENTS.items():
+            if config["needs_rig"]:
+                assert len(config["bones"]) >= 1, f"{name} needs rig but has no bones"
+
+    def test_non_riggable_have_no_bones(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        for name, config in ENVIRONMENT_RIG_REQUIREMENTS.items():
+            if not config["needs_rig"]:
+                assert len(config["bones"]) == 0, f"{name} doesn't need rig but has bones"
+
+    def test_spring_bones_subset_of_bones(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        for name, config in ENVIRONMENT_RIG_REQUIREMENTS.items():
+            for sb in config["spring_bones"]:
+                assert sb in config["bones"], f"{name}: spring bone '{sb}' not in bones list"
+
+    def test_get_riggable_count(self):
+        from blender_addon.handlers.rigging import _get_riggable_environment_objects
+        riggable = _get_riggable_environment_objects()
+        assert len(riggable) >= 15  # At least 15 need rigs
+
+    def test_get_config_known(self):
+        from blender_addon.handlers.rigging import _get_environment_rig_config
+        config = _get_environment_rig_config("chain_hanging")
+        assert config is not None
+        assert config["needs_rig"] is True
+        assert len(config["spring_bones"]) >= 3
+
+    def test_get_config_unknown(self):
+        from blender_addon.handlers.rigging import _get_environment_rig_config
+        assert _get_environment_rig_config("nonexistent") is None
+
+    def test_cloth_types_have_spring_bones(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        cloth_types = ["cloth_banner", "cloth_curtain", "flag_pole"]
+        for ct in cloth_types:
+            assert len(ENVIRONMENT_RIG_REQUIREMENTS[ct]["spring_bones"]) >= 3
+
+    def test_chain_types_have_spring_bones(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        assert len(ENVIRONMENT_RIG_REQUIREMENTS["chain_hanging"]["spring_bones"]) >= 4
+        assert len(ENVIRONMENT_RIG_REQUIREMENTS["chain_bridge"]["spring_bones"]) >= 4
+
+    def test_all_have_notes(self):
+        from blender_addon.handlers.rigging import ENVIRONMENT_RIG_REQUIREMENTS
+        for name, config in ENVIRONMENT_RIG_REQUIREMENTS.items():
+            assert len(config["notes"]) > 5, f"{name} missing notes"
