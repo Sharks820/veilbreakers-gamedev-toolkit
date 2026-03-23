@@ -1834,6 +1834,9 @@ def generate_paw_mesh(
 
         joint_positions[f"{toe_name}_bean"] = (toe_x, bean_y_pos, -pad_depth * 0.5)
 
+        # Remember the toe-tip ring start for claw stitching
+        toe_tip_ring = toe_start + toe_segs * n_ring
+
         # Claw
         claw_generated = False
         if has_claws:
@@ -1859,7 +1862,7 @@ def generate_paw_mesh(
                         cy,
                         cz + math.sin(angle) * hd,
                     ))
-                prev = rb - n_ring
+                prev = toe_tip_ring if si == 0 else rb - n_ring
                 all_faces.extend(_connect_rings_quad(prev, rb, n_ring))
 
             claw_tip = (toe_x, claw_base_y + claw_len,

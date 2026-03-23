@@ -1,18 +1,18 @@
 # Local 3D AI Generation on 8GB VRAM -- Research Report
 
 **Date**: 2026-03-22
-**Target Hardware**: RTX 4060 Ti (8GB VRAM), Ryzen 7 5700, 32GB RAM
+**Target Hardware**: 8GB VRAM GPU (mid-range), 32GB system RAM
 **Goal**: Find 3D AI models that run locally for dark fantasy RPG asset generation
 
 ---
 
 ## EXECUTIVE SUMMARY
 
-**Your 8GB VRAM is workable but constraining.** Three models can definitely run on your hardware. The best option is **Hunyuan3D 2.0 via the GP (GPU Poor) fork**, which produces the highest quality output with full PBR textures while fitting in 6GB VRAM through model offloading to your 32GB system RAM. The trade-off is speed -- expect 2-5 minutes per asset instead of seconds.
+**8GB VRAM is workable but constraining.** Three models can definitely run on this class of hardware. The best option is **Hunyuan3D 2.0 via the GP (GPU Poor) fork**, which produces the highest quality output with full PBR textures while fitting in 6GB VRAM through model offloading to 32GB system RAM. The trade-off is speed -- expect 2-5 minutes per asset instead of seconds.
 
 ### Quick Rankings (for 8GB VRAM)
 
-| Rank | Model | Fits 8GB? | PBR Textures? | Quality | Speed (est. RTX 4060 Ti) | Best For |
+| Rank | Model | Fits 8GB? | PBR Textures? | Quality | Speed (est. 8GB GPU) | Best For |
 |------|-------|-----------|---------------|---------|--------------------------|----------|
 | 1 | **Hunyuan3D 2.0 GP** | YES (profile 4/5) | YES (albedo, normal, roughness, metallic) | A | 2-5 min (with offloading) | Production assets |
 | 2 | **Hunyuan3D 2.1 GP** | YES (3GB geo, 6GB tex) | YES (full Disney BRDF PBR) | A+ | 3-8 min (with offloading) | Highest quality PBR |

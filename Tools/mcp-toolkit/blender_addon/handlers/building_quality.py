@@ -259,13 +259,11 @@ def _arch_curve(
     pts: list[tuple[float, float]] = []
 
     if style == "roman_round" or style == "round_arch":
-        # Semicircle
-        radius = hw
-        actual_h = radius
+        # Elliptical arc: half-width horizontally, full height vertically
         for i in range(num_points + 1):
             t = math.pi * i / num_points
-            x = -math.cos(t) * radius
-            z = math.sin(t) * radius
+            x = -math.cos(t) * hw
+            z = math.sin(t) * height
             pts.append((x, z))
 
     elif style == "gothic_pointed" or style == "pointed_arch":
@@ -300,11 +298,12 @@ def _arch_curve(
 
     elif style == "horseshoe":
         # More than semicircle, extends below spring line
-        radius = hw * 1.1
+        # Scale horizontally by hw*1.1, vertically by height
+        rx = hw * 1.1
         for i in range(num_points + 1):
             t = -0.15 * math.pi + (1.3 * math.pi) * i / num_points
-            x = -math.cos(t) * radius
-            z = math.sin(t) * radius
+            x = -math.cos(t) * rx
+            z = math.sin(t) * height
             pts.append((x, max(0.0, z)))
 
     elif style == "ogee":
@@ -1639,7 +1638,8 @@ def generate_staircase(
             components.append(f"step_{half_steps + si}")
 
         if railing:
-            components.append("railing")
+            _add_l_shaped_railing(parts, components, step_count, step_width,
+                                  step_height, step_depth, nosing, rng)
 
     elif style == "u_shaped":
         half_steps = step_count // 2
@@ -1669,7 +1669,8 @@ def generate_staircase(
             components.append(f"step_{half_steps + si}")
 
         if railing:
-            components.append("railing")
+            _add_u_shaped_railing(parts, components, step_count, step_width,
+                                  step_height, step_depth, nosing, rng)
 
     elif style == "ladder":
         # Side rails
@@ -1752,6 +1753,123 @@ def _add_straight_railing(
     components.extend(["newel_posts", "balusters", "handrail"])
 
 
+def _add_l_shaped_railing(
+    parts: list, components: list,
+    step_count: int, step_width: float,
+    step_height: float, step_depth: float,
+    nosing: float, rng: random.Random,
+) -> None:
+    """Add railing to L-shaped staircase: posts and handrail along outer edge."""
+    railing_h = 0.9
+    post_w = 0.06
+    baluster_w = 0.025
+    handrail_w = 0.05
+    handrail_h = 0.04
+
+    half_steps = step_count // 2
+
+    # --- First run (along +Y, outer edge at x = step_width + nosing) ---
+    side_x = step_width + nosing
+    # Newel at bottom
+    nv, nf = _box(side_x, -nosing, 0.0, post_w, post_w, railing_h + step_height)
+    parts.append((nv, nf))
+    for si in range(half_steps):
+        sz = si * step_height + step_height
+        sy = si * step_depth + step_depth * 0.5
+        bv, bf = _box(side_x, sy, sz, baluster_w, baluster_w, railing_h)
+        parts.append((bv, bf))
+        hv, hf = _box(side_x, si * step_depth, sz - step_height + railing_h,
+                       handrail_w, step_depth, handrail_h)
+        parts.append((hv, hf))
+
+    # --- Landing corner newel ---
+    landing_z = half_steps * step_height
+    landing_y = half_steps * step_depth
+    nv, nf = _box(side_x, landing_y, landing_z, post_w, post_w,
+                   railing_h + step_height)
+    parts.append((nv, nf))
+
+    # --- Second run (along +X, outer edge at y = landing_y + step_depth + nosing) ---
+    side_y = landing_y + step_depth * 2 + nosing  # outer side of second run
+    for si in range(step_count - half_steps):
+        sz = landing_z + (si + 1) * step_height
+        sx = step_width + si * step_depth + step_depth * 0.5
+        bv, bf = _box(sx, side_y, sz, baluster_w, baluster_w, railing_h)
+        parts.append((bv, bf))
+        hv, hf = _box(step_width + si * step_depth, side_y, sz - step_height + railing_h,
+                       step_depth, handrail_w, handrail_h)
+        parts.append((hv, hf))
+
+    # Newel at top of second run
+    final_x = step_width + (step_count - half_steps) * step_depth
+    final_z = step_count * step_height
+    nv, nf = _box(final_x, side_y, final_z, post_w, post_w,
+                   railing_h + step_height)
+    parts.append((nv, nf))
+
+    components.extend(["newel_posts", "balusters", "handrail"])
+
+
+def _add_u_shaped_railing(
+    parts: list, components: list,
+    step_count: int, step_width: float,
+    step_height: float, step_depth: float,
+    nosing: float, rng: random.Random,
+) -> None:
+    """Add railing to U-shaped staircase: posts and handrail along outer edges."""
+    railing_h = 0.9
+    post_w = 0.06
+    baluster_w = 0.025
+    handrail_w = 0.05
+    handrail_h = 0.04
+
+    half_steps = step_count // 2
+
+    # --- First run (along +Y, outer edge at x = step_width + nosing) ---
+    side_x = step_width + nosing
+    nv, nf = _box(side_x, -nosing, 0.0, post_w, post_w, railing_h + step_height)
+    parts.append((nv, nf))
+    for si in range(half_steps):
+        sz = si * step_height + step_height
+        sy = si * step_depth + step_depth * 0.5
+        bv, bf = _box(side_x, sy, sz, baluster_w, baluster_w, railing_h)
+        parts.append((bv, bf))
+        hv, hf = _box(side_x, si * step_depth, sz - step_height + railing_h,
+                       handrail_w, step_depth, handrail_h)
+        parts.append((hv, hf))
+
+    # --- Landing newel ---
+    landing_z = half_steps * step_height
+    landing_y = half_steps * step_depth
+    nv, nf = _box(side_x, landing_y + step_depth * 2, landing_z, post_w, post_w,
+                   railing_h + step_height)
+    parts.append((nv, nf))
+
+    # --- Second run (along -Y, outer edge at x = -step_width - nosing) ---
+    side_x2 = -step_width - nosing - post_w
+    nv, nf = _box(side_x2, landing_y + step_depth * 2, landing_z, post_w, post_w,
+                   railing_h + step_height)
+    parts.append((nv, nf))
+    for si in range(step_count - half_steps):
+        sz = landing_z + (si + 1) * step_height
+        sy = landing_y + step_depth * 2 - (si + 1) * step_depth + step_depth * 0.5
+        bv, bf = _box(side_x2, sy, sz, baluster_w, baluster_w, railing_h)
+        parts.append((bv, bf))
+        sy_h = landing_y + step_depth * 2 - (si + 1) * step_depth
+        hv, hf = _box(side_x2, sy_h, sz - step_height + railing_h,
+                       handrail_w, step_depth, handrail_h)
+        parts.append((hv, hf))
+
+    # Newel at top of second run
+    final_z = step_count * step_height
+    final_y = landing_y + step_depth * 2 - (step_count - half_steps) * step_depth
+    nv, nf = _box(side_x2, final_y, final_z, post_w, post_w,
+                   railing_h + step_height)
+    parts.append((nv, nf))
+
+    components.extend(["newel_posts", "balusters", "handrail"])
+
+
 # ===================================================================
 # GENERATOR 6: Archway/Doorframe
 # ===================================================================
@@ -1815,6 +1933,40 @@ def generate_archway(
     if av:
         parts.append((av, af))
         components.append("voussoirs")
+
+    # 3b. Keystone -- trapezoidal wedge at the apex of the arch
+    if has_keystone and arch_pts_3d:
+        # Find the apex (highest point on the arch curve)
+        apex_idx = max(range(len(arch_pts_3d)), key=lambda i: arch_pts_3d[i][1])
+        apex_x, apex_z = arch_pts_3d[apex_idx]
+        ks_w_top = 0.08  # width at the top (wider)
+        ks_w_bot = 0.05  # width at the bottom (narrower, gives taper)
+        ks_h = 0.12      # keystone height (extends above arch)
+        ks_d = depth + 0.02  # slightly proud of the arch
+        ks_y0 = -0.01    # slight projection forward
+        # Trapezoidal prism: 8 verts (wider at top, narrower at bottom)
+        kv = [
+            # Bottom face (narrower)
+            (apex_x - ks_w_bot / 2, ks_y0, apex_z),
+            (apex_x + ks_w_bot / 2, ks_y0, apex_z),
+            (apex_x + ks_w_bot / 2, ks_y0 + ks_d, apex_z),
+            (apex_x - ks_w_bot / 2, ks_y0 + ks_d, apex_z),
+            # Top face (wider)
+            (apex_x - ks_w_top / 2, ks_y0, apex_z + ks_h),
+            (apex_x + ks_w_top / 2, ks_y0, apex_z + ks_h),
+            (apex_x + ks_w_top / 2, ks_y0 + ks_d, apex_z + ks_h),
+            (apex_x - ks_w_top / 2, ks_y0 + ks_d, apex_z + ks_h),
+        ]
+        kf = [
+            (0, 1, 2, 3),  # bottom
+            (4, 7, 6, 5),  # top
+            (0, 4, 5, 1),  # front
+            (2, 6, 7, 3),  # back
+            (0, 3, 7, 4),  # left
+            (1, 5, 6, 2),  # right
+        ]
+        parts.append((kv, kf))
+        components.append("keystone")
 
     # 4. Spandrel fill (wall above arch, between arch extrados and rectangular frame)
     spandrel_top = height
