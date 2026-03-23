@@ -28,7 +28,7 @@ import math
 import re
 
 import bpy
-from mathutils import Matrix, Quaternion, Vector
+from mathutils import Euler, Matrix, Quaternion, Vector
 
 from ._action_compat import (
     get_fcurve_count,
@@ -1224,8 +1224,10 @@ def handle_pose_library(params: dict) -> dict:
                 nd["rotation"] = data["rotation"]
             elif "rotation_euler" in data:
                 # Convert euler to quat for lerp
-                # Approximation: just store as-is for the lerp
-                nd["rotation"] = [1, 0, 0, 0]
+                order = data.get("rotation_mode", "XYZ")
+                e = Euler(data["rotation_euler"], order)
+                q = e.to_quaternion()
+                nd["rotation"] = [q.w, q.x, q.y, q.z]
             else:
                 nd["rotation"] = [1, 0, 0, 0]
             nd["scale"] = data.get("scale", [1, 1, 1])
@@ -1238,7 +1240,10 @@ def handle_pose_library(params: dict) -> dict:
             if "rotation" in data:
                 nd2["rotation"] = data["rotation"]
             elif "rotation_euler" in data:
-                nd2["rotation"] = [1, 0, 0, 0]
+                order = data.get("rotation_mode", "XYZ")
+                e = Euler(data["rotation_euler"], order)
+                q = e.to_quaternion()
+                nd2["rotation"] = [q.w, q.x, q.y, q.z]
             else:
                 nd2["rotation"] = [1, 0, 0, 0]
             nd2["scale"] = data.get("scale", [1, 1, 1])
@@ -1629,7 +1634,7 @@ def handle_contact_solver(params: dict) -> dict:
             lock_pos.z = ground_height
 
             if p["lock_rotation"]:
-                lock_rot = pb.matrix.to_quaternion().copy()
+                lock_rot = pb.rotation_quaternion.copy()
 
             for frame in range(phase_start, phase_end + 1):
                 bpy.context.scene.frame_set(frame)
@@ -1667,6 +1672,8 @@ def handle_contact_solver(params: dict) -> dict:
                 total_corrections += 1
 
                 if p["lock_rotation"]:
+                    current_rot = pb.rotation_quaternion.copy()
+                    pb.rotation_quaternion = current_rot.slerp(lock_rot, blend)
                     pb.keyframe_insert(data_path="rotation_quaternion", frame=frame)
 
     return {

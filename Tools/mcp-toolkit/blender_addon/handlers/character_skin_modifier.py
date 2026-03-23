@@ -348,18 +348,22 @@ def generate_skin_body_code(
     subdiv = max(1, min(3, subdivision_level))
     render_subdiv = min(subdiv + 1, 4)
 
+    name_literal = repr(name)
+    gender_literal = repr(gender)
+    build_literal = repr(build)
+
     code = f'''import bpy
 import bmesh
 import math
 
 # ---- Create skeleton mesh ----
-mesh_data = bpy.data.meshes.new("{name}_skeleton")
+mesh_data = bpy.data.meshes.new({name_literal} + "_skeleton")
 verts = {verts_str}
 edges = {edges_str}
 mesh_data.from_pydata(verts, edges, [])
 mesh_data.update()
 
-obj = bpy.data.objects.new("{name}", mesh_data)
+obj = bpy.data.objects.new({name_literal}, mesh_data)
 bpy.context.collection.objects.link(obj)
 bpy.context.view_layer.objects.active = obj
 obj.select_set(True)
@@ -435,15 +439,15 @@ quad_count = sum(1 for p in obj.data.polygons if len(p.vertices) == 4)
 tri_count = sum(1 for p in obj.data.polygons if len(p.vertices) == 3)
 
 result = {{
-    "object_name": "{name}",
+    "object_name": {name_literal},
     "vertex_count": vert_count,
     "edge_count": edge_count,
     "polygon_count": poly_count,
     "quad_count": quad_count,
     "tri_count": tri_count,
     "quad_ratio": quad_count / max(poly_count, 1),
-    "gender": "{gender}",
-    "build": "{build}",
+    "gender": {gender_literal},
+    "build": {build_literal},
     "vertex_group_count": len(obj.vertex_groups),
 }}
 print("SKIN_BODY_RESULT:" + str(result))
@@ -830,6 +834,10 @@ def generate_skin_monster_code(
     subdiv = max(1, min(3, subdivision_level))
     render_subdiv = min(subdiv + 1, 4)
 
+    name_literal = repr(name)
+    monster_type_literal = repr(monster_type)
+    brand_literal = repr(brand or 'none')
+
     # Determine if mirror should be used based on type
     use_mirror = MONSTER_SKELETONS[monster_type]["mirror_prefix"] is not None
 
@@ -861,13 +869,13 @@ import bmesh
 import math
 
 # ---- Create skeleton mesh ----
-mesh_data = bpy.data.meshes.new("{name}_skeleton")
+mesh_data = bpy.data.meshes.new({name_literal} + "_skeleton")
 verts = {verts_str}
 edges = {edges_str}
 mesh_data.from_pydata(verts, edges, [])
 mesh_data.update()
 
-obj = bpy.data.objects.new("{name}", mesh_data)
+obj = bpy.data.objects.new({name_literal}, mesh_data)
 bpy.context.collection.objects.link(obj)
 bpy.context.view_layer.objects.active = obj
 obj.select_set(True)
@@ -931,9 +939,9 @@ quad_count = sum(1 for p in obj.data.polygons if len(p.vertices) == 4)
 tri_count = sum(1 for p in obj.data.polygons if len(p.vertices) == 3)
 
 result = {{
-    "object_name": "{name}",
-    "monster_type": "{monster_type}",
-    "brand": "{brand or 'none'}",
+    "object_name": {name_literal},
+    "monster_type": {monster_type_literal},
+    "brand": {brand_literal},
     "scale": {scale},
     "vertex_count": vert_count,
     "polygon_count": poly_count,
