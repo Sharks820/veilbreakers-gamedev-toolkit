@@ -24,6 +24,7 @@ from veilbreakers_mcp.shared.unity_templates.asset_templates import (
     generate_preset_apply_script,
     generate_reference_scan_script,
     generate_atomic_import_script,
+    generate_blender_to_unity_bridge_script,
 )
 
 
@@ -648,6 +649,229 @@ class TestGenerateAtomicImportScript:
 
 
 # ---------------------------------------------------------------------------
+# Blender-to-Unity Bridge
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateBlenderToUnityBridgeScript:
+    """Tests for generate_blender_to_unity_bridge_script()."""
+
+    def test_contains_menu_item(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert '[MenuItem("VeilBreakers/Assets/Blender To Unity Bridge")]' in result
+
+    def test_contains_using_unity_editor(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "using UnityEditor;" in result
+
+    def test_contains_vb_result_json(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "vb_result.json" in result
+
+    def test_contains_validation_status(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "validation_status" in result
+
+    def test_contains_fbx_path(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "Assets/Models/hero.fbx" in result
+
+    def test_contains_model_importer(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "ModelImporter" in result
+
+    def test_contains_texture_scan(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "FindAssets" in result
+
+    def test_contains_material_creation(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "new Material" in result
+
+    def test_contains_normal_map_fix(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "FixNormalMapImport" in result
+        assert "NormalMap" in result
+
+    def test_contains_prefab_creation(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/hero.fbx", create_prefab=True
+        )
+        assert "SaveAsPrefabAsset" in result
+
+    def test_contains_lod_setup(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/hero.fbx", setup_lod=True
+        )
+        assert "_LOD" in result
+
+    def test_contains_poly_budget_validation(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/hero.fbx", validate_budget=True
+        )
+        assert "polyBudget" in result
+
+    def test_hero_preset_uses_humanoid(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/hero.fbx", asset_type="hero"
+        )
+        assert "Humanoid" in result
+
+    def test_weapon_preset_uses_none_animation(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/sword.fbx", asset_type="weapon"
+        )
+        assert "ModelImporterAnimationType.None" in result
+
+    def test_custom_shader_name(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/hero.fbx",
+            shader_name="Shader Graphs/CustomLit",
+        )
+        assert "Shader Graphs/CustomLit" in result
+
+    def test_custom_texture_dir(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/hero.fbx",
+            texture_dir="Assets/Textures/Hero",
+        )
+        assert "Assets/Textures/Hero" in result
+
+    def test_contains_all_pipeline_steps(self):
+        """Bridge must contain all 10 pipeline steps."""
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "scan_fbx" in result
+        assert "configure_import" in result
+        assert "fix_normals" in result
+        assert "auto_materials" in result
+        assert "setup_lod" in result
+        assert "configure_avatar" in result
+        assert "create_prefab" in result
+        assert "validate_budget" in result
+
+    def test_step_ordering_scan_before_configure(self):
+        """Scan must come before configure in the generated script."""
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        scan_idx = result.index("Step 1: Scan FBX")
+        config_idx = result.index("Step 2: Configure Import")
+        assert scan_idx < config_idx
+
+    def test_step_ordering_materials_before_prefab(self):
+        """Materials must be created before prefab."""
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        mat_idx = result.index("Step 4")
+        prefab_idx = result.index("Step 8")
+        assert mat_idx < prefab_idx
+
+    def test_contains_bridge_report_class(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "BridgeReport" in result
+
+    def test_contains_step_result_tracking(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "PassStep" in result
+        assert "FailStep" in result
+        assert "SkipStep" in result
+
+    def test_contains_pbr_texture_assignments(self):
+        """Must assign all PBR map types."""
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "_BaseMap" in result       # albedo
+        assert "_BumpMap" in result        # normal
+        assert "_MetallicGlossMap" in result  # metallic
+        assert "_OcclusionMap" in result   # AO
+        assert "_EmissionMap" in result    # emission
+        assert "_ParallaxMap" in result    # height
+
+    def test_contains_ensure_folder(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "EnsureFolder" in result
+
+    def test_contains_asset_database_save(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "AssetDatabase.SaveAssets()" in result
+
+    def test_contains_changed_assets_in_report(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "changed_assets" in result
+
+    def test_hero_poly_budget_is_65000(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/hero.fbx", asset_type="hero"
+        )
+        assert "65000" in result
+
+    def test_weapon_poly_budget_is_15000(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/sword.fbx", asset_type="weapon"
+        )
+        assert "15000" in result
+
+    def test_environment_poly_budget_is_100000(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/terrain.fbx", asset_type="environment"
+        )
+        assert "100000" in result
+
+    def test_prefab_folder_hero(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/hero.fbx", asset_type="hero"
+        )
+        assert "Characters/Heroes" in result
+
+    def test_prefab_folder_weapon(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/sword.fbx", asset_type="weapon"
+        )
+        assert "Equipment/Weapons" in result
+
+    def test_no_file_move(self):
+        """Bridge must never use File.Move for asset operations."""
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "File.Move" not in result
+        assert "File.Copy" not in result
+        assert "File.Delete" not in result
+
+    def test_contains_tangent_import_mode(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "CalculateMikk" in result
+
+    def test_auto_detect_texture_dir_when_empty(self):
+        result = generate_blender_to_unity_bridge_script(
+            "Assets/Models/hero.fbx", texture_dir=""
+        )
+        assert "GetDirectoryName" in result
+
+    def test_action_is_blender_to_unity_bridge(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "blender_to_unity_bridge" in result
+
+    def test_handles_missing_shader_gracefully(self):
+        """Must handle missing shader with warning, not crash."""
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "Shader not found" in result
+        assert "Standard" in result  # fallback shader
+
+    def test_mesh_count_tracked(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "meshCount" in result
+        assert "MeshFilter" in result
+
+    def test_skinned_mesh_tracked(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "SkinnedMeshRenderer" in result
+
+    def test_animation_clips_tracked(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "AnimationClip" in result
+        assert "animationClipCount" in result
+
+    def test_bone_count_tracked(self):
+        result = generate_blender_to_unity_bridge_script("Assets/Models/hero.fbx")
+        assert "boneCount" in result
+
+
+# ---------------------------------------------------------------------------
 # Cross-cutting: all generators use Unity APIs and never File.Move
 # ---------------------------------------------------------------------------
 
@@ -685,6 +909,7 @@ class TestAllGeneratorsCrossCutting:
             generate_preset_apply_script("Assets/p.preset", "Assets/a.fbx"),
             generate_reference_scan_script("Assets/a.fbx"),
             generate_atomic_import_script(["Assets/t.png"], "Mat", "Assets/a.fbx"),
+            generate_blender_to_unity_bridge_script("Assets/a.fbx"),
         ]
         for script in generators:
             assert "using UnityEditor;" in script
@@ -705,6 +930,7 @@ class TestAllGeneratorsCrossCutting:
             generate_preset_apply_script("Assets/p.preset", "Assets/a.fbx"),
             generate_reference_scan_script("Assets/a.fbx"),
             generate_atomic_import_script(["Assets/t.png"], "Mat", "Assets/a.fbx"),
+            generate_blender_to_unity_bridge_script("Assets/a.fbx"),
         ]
         for script in generators:
             assert "[MenuItem(" in script
@@ -725,6 +951,7 @@ class TestAllGeneratorsCrossCutting:
             generate_preset_apply_script("Assets/p.preset", "Assets/a.fbx"),
             generate_reference_scan_script("Assets/a.fbx"),
             generate_atomic_import_script(["Assets/t.png"], "Mat", "Assets/a.fbx"),
+            generate_blender_to_unity_bridge_script("Assets/a.fbx"),
         ]
         for script in generators:
             assert "vb_result.json" in script
@@ -745,6 +972,7 @@ class TestAllGeneratorsCrossCutting:
             generate_preset_apply_script("Assets/p.preset", "Assets/a.fbx"),
             generate_reference_scan_script("Assets/a.fbx"),
             generate_atomic_import_script(["Assets/t.png"], "Mat", "Assets/a.fbx"),
+            generate_blender_to_unity_bridge_script("Assets/a.fbx"),
         ]
         for script in generators:
             assert "validation_status" in script

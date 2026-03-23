@@ -18,6 +18,8 @@ from veilbreakers_mcp.shared.unity_templates.audio_templates import (
     generate_audio_mixer_setup_script,
     generate_audio_pool_manager_script,
     generate_animation_event_sfx_script,
+    generate_ui_sound_system_script,
+    generate_material_impact_audio_script,
 )
 from veilbreakers_mcp.shared.unity_templates.audio_middleware_templates import (
     generate_spatial_audio_script,
@@ -56,6 +58,8 @@ async def unity_audio(
         "setup_audio_lod",          # AUDM-06: distance-based audio quality tiers
         "setup_vo_pipeline",        # AUDM-07: dialogue/VO playback pipeline
         "setup_procedural_foley",   # AUDM-08: movement-based procedural foley
+        "setup_ui_sound_system",    # AU-01: runtime UI sound infrastructure
+        "setup_material_impact_audio",  # AU-02: physics material-aware impact sounds
     ],
     # Common
     name: str = "default",
@@ -112,7 +116,11 @@ async def unity_audio(
     vo_entries: list[dict] | None = None,
     # Procedural foley params (AUDM-08)
     armor_type: str = "plate",
-    surface_materials: list[str] | None = None
+    surface_materials: list[str] | None = None,
+    # Material impact audio params (AU-02)
+    impact_materials: list[str] | None = None,
+    impact_pool_size: int = 8,
+    impact_cooldown: float = 0.05
 ) -> str:
     """Unity Audio system -- AI audio generation, C# audio infrastructure, and middleware-level audio architecture."""
     try:
@@ -191,6 +199,12 @@ async def unity_audio(
                     character_name=name, armor_type=armor_type,
                     surface_materials=surface_materials,
                 ),
+            )
+        elif action == "setup_ui_sound_system":
+            return await _handle_audio_setup_ui_sound_system()
+        elif action == "setup_material_impact_audio":
+            return await _handle_audio_material_impact(
+                impact_materials, impact_pool_size, impact_cooldown,
             )
         else:
             return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
@@ -513,6 +527,71 @@ async def _handle_audio_assign_animation_sfx(
             "status": "success",
             "action": "assign_animation_sfx",
             "script_path": abs_path,
+            "next_steps": STANDARD_NEXT_STEPS,
+        },
+        indent=2,
+    )
+
+
+async def _handle_audio_setup_ui_sound_system() -> str:
+    """Generate runtime UI sound manager C# script (AU-01)."""
+    script = generate_ui_sound_system_script()
+    script_path = "Assets/Scripts/Runtime/Audio/VB_UISoundManager.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "setup_ui_sound_system", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "setup_ui_sound_system",
+            "script_path": abs_path,
+            "sound_types": [
+                "ButtonHover", "ButtonClick", "ButtonBack", "TabSwitch",
+                "SliderChange", "ToggleOn", "ToggleOff", "InventoryOpen",
+                "InventoryClose", "ItemPickup", "ItemDrop", "ItemEquip",
+                "ItemUnequip", "ItemSell", "ItemBuy", "SkillUnlock",
+                "QuestAccept", "QuestComplete", "NotificationPopup",
+                "MenuOpen", "MenuClose", "MapOpen", "MapClose",
+                "LevelUp", "Error", "Confirm", "Cancel",
+            ],
+            "next_steps": STANDARD_NEXT_STEPS,
+        },
+        indent=2,
+    )
+
+
+async def _handle_audio_material_impact(
+    materials: list[str] | None, pool_size: int, cooldown: float,
+) -> str:
+    """Generate physics material-aware impact sound system (AU-02)."""
+    script = generate_material_impact_audio_script(
+        materials=materials, pool_size=pool_size, cooldown=cooldown,
+    )
+    script_path = "Assets/Scripts/Runtime/Audio/VB_MaterialImpactAudio.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "setup_material_impact_audio", "message": str(exc)}
+        )
+
+    effective_materials = materials or [
+        "Stone", "Wood", "Metal", "Flesh", "Dirt", "Water", "Bone", "Crystal",
+    ]
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "setup_material_impact_audio",
+            "script_path": abs_path,
+            "materials": effective_materials,
+            "pool_size": pool_size,
             "next_steps": STANDARD_NEXT_STEPS,
         },
         indent=2,

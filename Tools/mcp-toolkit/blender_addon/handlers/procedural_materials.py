@@ -45,9 +45,12 @@ _BLOOD_RED = (0.25, 0.03, 0.02, 1.0)
 _CORRUPTION_PURPLE = (0.12, 0.04, 0.14, 1.0)
 _EMBER_ORANGE = (0.6, 0.15, 0.02, 1.0)
 _ICE_BLUE = (0.35, 0.45, 0.55, 1.0)
-_GOLD_METAL = (0.45, 0.36, 0.20, 1.0)
-_SILVER_METAL = (0.40, 0.40, 0.40, 1.0)
-_BRONZE_METAL = (0.30, 0.22, 0.14, 1.0)
+_GOLD_METAL = (1.0, 0.86, 0.57, 1.0)       # Physically-based gold reflectance
+_SILVER_METAL = (0.95, 0.93, 0.88, 1.0)    # Physically-based silver reflectance
+_BRONZE_METAL = (0.73, 0.55, 0.36, 1.0)    # Physically-based bronze reflectance
+_IRON_METAL = (0.56, 0.57, 0.58, 1.0)      # Physically-based iron reflectance
+_COPPER_METAL = (0.97, 0.74, 0.62, 1.0)    # Physically-based copper reflectance
+_STEEL_METAL = (0.63, 0.62, 0.64, 1.0)     # Physically-based steel reflectance
 
 
 # ---------------------------------------------------------------------------
@@ -67,6 +70,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 8.0,
         "wear_intensity": 0.3,
         "node_recipe": "stone",
+        "micro_normal_strength": 0.2,
+        "meso_normal_strength": 0.6,
+        "macro_normal_strength": 1.0,
     },
     "smooth_stone": {
         "base_color": (0.18, 0.17, 0.15, 1.0),
@@ -77,6 +83,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 12.0,
         "wear_intensity": 0.1,
         "node_recipe": "stone",
+        "micro_normal_strength": 0.2,
+        "meso_normal_strength": 0.6,
+        "macro_normal_strength": 1.0,
     },
     "cobblestone_floor": {
         "base_color": (0.15, 0.13, 0.11, 1.0),
@@ -87,6 +96,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 6.0,
         "wear_intensity": 0.4,
         "node_recipe": "stone",
+        "micro_normal_strength": 0.2,
+        "meso_normal_strength": 0.6,
+        "macro_normal_strength": 1.0,
     },
     "brick_wall": {
         "base_color": (0.18, 0.12, 0.10, 1.0),
@@ -97,6 +109,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 5.0,
         "wear_intensity": 0.25,
         "node_recipe": "stone",
+        "micro_normal_strength": 0.2,
+        "meso_normal_strength": 0.6,
+        "macro_normal_strength": 1.0,
     },
     "crumbling_stone": {
         "base_color": (0.16, 0.14, 0.12, 1.0),
@@ -107,6 +122,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 7.0,
         "wear_intensity": 0.7,
         "node_recipe": "stone",
+        "micro_normal_strength": 0.2,
+        "meso_normal_strength": 0.6,
+        "macro_normal_strength": 1.0,
     },
     "mossy_stone": {
         "base_color": (0.12, 0.13, 0.09, 1.0),
@@ -117,6 +135,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 8.0,
         "wear_intensity": 0.35,
         "node_recipe": "stone",
+        "micro_normal_strength": 0.2,
+        "meso_normal_strength": 0.6,
+        "macro_normal_strength": 1.0,
     },
     "marble": {
         "base_color": (0.30, 0.28, 0.26, 1.0),
@@ -127,6 +148,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 4.0,
         "wear_intensity": 0.05,
         "node_recipe": "stone",
+        "micro_normal_strength": 0.2,
+        "meso_normal_strength": 0.6,
+        "macro_normal_strength": 1.0,
     },
 
     # =======================================================================
@@ -141,6 +165,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 3.0,
         "wear_intensity": 0.4,
         "node_recipe": "wood",
+        "micro_normal_strength": 0.4,
+        "meso_normal_strength": 0.8,
+        "macro_normal_strength": 0.6,
     },
     "polished_wood": {
         "base_color": (0.18, 0.13, 0.09, 1.0),
@@ -152,6 +179,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "wear_intensity": 0.05,
         "node_recipe": "wood",
         "coat_weight": 0.3,
+        "micro_normal_strength": 0.4,
+        "meso_normal_strength": 0.8,
+        "macro_normal_strength": 0.6,
     },
     "rotten_wood": {
         "base_color": (0.10, 0.08, 0.05, 1.0),
@@ -162,6 +192,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 5.0,
         "wear_intensity": 0.8,
         "node_recipe": "wood",
+        "micro_normal_strength": 0.4,
+        "meso_normal_strength": 0.8,
+        "macro_normal_strength": 0.6,
     },
     "charred_wood": {
         "base_color": (0.04, 0.03, 0.03, 1.0),
@@ -172,6 +205,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 6.0,
         "wear_intensity": 0.6,
         "node_recipe": "wood",
+        "micro_normal_strength": 0.4,
+        "meso_normal_strength": 0.8,
+        "macro_normal_strength": 0.6,
     },
     "plank_floor": {
         "base_color": _AGED_WOOD_LIGHT,
@@ -182,6 +218,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 2.5,
         "wear_intensity": 0.3,
         "node_recipe": "wood",
+        "micro_normal_strength": 0.4,
+        "meso_normal_strength": 0.8,
+        "macro_normal_strength": 0.6,
     },
 
     # =======================================================================
@@ -196,6 +235,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 6.0,
         "wear_intensity": 0.2,
         "node_recipe": "stone",
+        "micro_normal_strength": 0.2,
+        "meso_normal_strength": 0.6,
+        "macro_normal_strength": 1.0,
     },
     "thatch_roof": {
         "base_color": (0.20, 0.16, 0.11, 1.0),
@@ -206,6 +248,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 10.0,
         "wear_intensity": 0.3,
         "node_recipe": "fabric",
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
     "wooden_shingles": {
         "base_color": (0.16, 0.12, 0.08, 1.0),
@@ -216,13 +261,16 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 5.0,
         "wear_intensity": 0.35,
         "node_recipe": "wood",
+        "micro_normal_strength": 0.4,
+        "meso_normal_strength": 0.8,
+        "macro_normal_strength": 0.6,
     },
 
     # =======================================================================
     # Metals (5)
     # =======================================================================
     "rusted_iron": {
-        "base_color": _RUSTED_IRON_BASE,
+        "base_color": _IRON_METAL,
         "roughness": 0.65,
         "roughness_variation": 0.25,
         "metallic": 0.85,
@@ -230,10 +278,13 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 10.0,
         "wear_intensity": 0.6,
         "node_recipe": "metal",
+        "micro_normal_strength": 0.7,
+        "meso_normal_strength": 0.3,
+        "macro_normal_strength": 0.3,
     },
     "polished_steel": {
-        "base_color": _SILVER_METAL,
-        "roughness": 0.15,
+        "base_color": _STEEL_METAL,
+        "roughness": 0.20,
         "roughness_variation": 0.05,
         "metallic": 1.0,
         "normal_strength": 0.3,
@@ -241,6 +292,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "wear_intensity": 0.05,
         "node_recipe": "metal",
         "anisotropic": 0.5,
+        "micro_normal_strength": 0.7,
+        "meso_normal_strength": 0.3,
+        "macro_normal_strength": 0.3,
     },
     "tarnished_bronze": {
         "base_color": _BRONZE_METAL,
@@ -251,9 +305,12 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 12.0,
         "wear_intensity": 0.4,
         "node_recipe": "metal",
+        "micro_normal_strength": 0.7,
+        "meso_normal_strength": 0.3,
+        "macro_normal_strength": 0.3,
     },
     "chain_metal": {
-        "base_color": (0.15, 0.14, 0.13, 1.0),
+        "base_color": _IRON_METAL,
         "roughness": 0.55,
         "roughness_variation": 0.10,
         "metallic": 0.95,
@@ -262,6 +319,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "wear_intensity": 0.3,
         "node_recipe": "metal",
         "anisotropic": 0.3,
+        "micro_normal_strength": 0.7,
+        "meso_normal_strength": 0.3,
+        "macro_normal_strength": 0.3,
     },
     "gold_ornament": {
         "base_color": _GOLD_METAL,
@@ -273,6 +333,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "wear_intensity": 0.1,
         "node_recipe": "metal",
         "coat_weight": 0.5,
+        "micro_normal_strength": 0.7,
+        "meso_normal_strength": 0.3,
+        "macro_normal_strength": 0.3,
     },
 
     # =======================================================================
@@ -287,9 +350,14 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 12.0,
         "wear_intensity": 0.2,
         "node_recipe": "organic",
-        "subsurface": 0.2,
+        "subsurface": 1.0,
+        "subsurface_scale": 0.005,
+        "subsurface_radius": [1.0, 0.2, 0.1],
         "sss_color": (0.8, 0.3, 0.2, 1.0),
         "rim_color": (0.05, 0.05, 0.08, 1.0),
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
     "scales": {
         "base_color": (0.10, 0.12, 0.08, 1.0),
@@ -300,7 +368,12 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 15.0,
         "wear_intensity": 0.15,
         "node_recipe": "organic",
-        "subsurface": 0.05,
+        "subsurface": 1.0,
+        "subsurface_scale": 0.005,
+        "subsurface_radius": [1.0, 0.2, 0.1],
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
     "chitin_carapace": {
         "base_color": (0.08, 0.06, 0.04, 1.0),
@@ -311,7 +384,13 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 10.0,
         "wear_intensity": 0.2,
         "node_recipe": "organic",
+        "subsurface": 1.0,
+        "subsurface_scale": 0.002,
+        "subsurface_radius": [0.8, 0.3, 0.15],
         "coat_weight": 0.7,
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
     "fur_base": {
         "base_color": (0.15, 0.11, 0.08, 1.0),
@@ -322,7 +401,13 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 20.0,
         "wear_intensity": 0.1,
         "node_recipe": "organic",
+        "subsurface": 1.0,
+        "subsurface_scale": 0.005,
+        "subsurface_radius": [1.0, 0.2, 0.1],
         "anisotropic": 0.7,
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
     "bone": {
         "base_color": _BONE_WHITE,
@@ -333,8 +418,13 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 8.0,
         "wear_intensity": 0.15,
         "node_recipe": "organic",
-        "subsurface": 0.05,
+        "subsurface": 1.0,
+        "subsurface_scale": 0.005,
+        "subsurface_radius": [1.0, 0.2, 0.1],
         "sss_color": (0.9, 0.8, 0.7, 1.0),
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
     "membrane": {
         "base_color": (0.18, 0.10, 0.08, 1.0),
@@ -345,8 +435,13 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 6.0,
         "wear_intensity": 0.1,
         "node_recipe": "organic",
-        "subsurface": 0.4,
+        "subsurface": 1.0,
+        "subsurface_scale": 0.005,
+        "subsurface_radius": [1.0, 0.2, 0.1],
         "transmission": 0.4,
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
 
     # =======================================================================
@@ -361,6 +456,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 5.0,
         "wear_intensity": 0.3,
         "node_recipe": "wood",
+        "micro_normal_strength": 0.4,
+        "meso_normal_strength": 0.8,
+        "macro_normal_strength": 0.6,
     },
     "leaf": {
         "base_color": (0.06, 0.10, 0.04, 1.0),
@@ -371,7 +469,13 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 15.0,
         "wear_intensity": 0.05,
         "node_recipe": "organic",
+        "subsurface": 1.0,
+        "subsurface_scale": 0.003,
+        "subsurface_radius": [0.5, 0.4, 0.35],
         "transmission": 0.3,
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
     "moss": {
         "base_color": _MOSS_GREEN,
@@ -382,6 +486,12 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 18.0,
         "wear_intensity": 0.05,
         "node_recipe": "organic",
+        "subsurface": 1.0,
+        "subsurface_scale": 0.003,
+        "subsurface_radius": [0.5, 0.4, 0.35],
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
     "mushroom_cap": {
         "base_color": (0.18, 0.13, 0.09, 1.0),
@@ -392,9 +502,14 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 10.0,
         "wear_intensity": 0.1,
         "node_recipe": "organic",
-        "subsurface": 0.15,
+        "subsurface": 1.0,
+        "subsurface_scale": 0.005,
+        "subsurface_radius": [1.0, 0.2, 0.1],
         "sss_color": (0.6, 0.5, 0.3, 1.0),
         "transmission": 0.1,
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
 
     # =======================================================================
@@ -409,6 +524,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 12.0,
         "wear_intensity": 0.05,
         "node_recipe": "terrain",
+        "micro_normal_strength": 0.15,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 1.2,
     },
     "dirt": {
         "base_color": (0.12, 0.09, 0.06, 1.0),
@@ -419,6 +537,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 8.0,
         "wear_intensity": 0.2,
         "node_recipe": "terrain",
+        "micro_normal_strength": 0.15,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 1.2,
     },
     "mud": {
         "base_color": (0.10, 0.07, 0.04, 1.0),
@@ -429,6 +550,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 6.0,
         "wear_intensity": 0.3,
         "node_recipe": "terrain",
+        "micro_normal_strength": 0.15,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 1.2,
     },
     "snow": {
         "base_color": (0.45, 0.45, 0.48, 1.0),
@@ -439,6 +563,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 10.0,
         "wear_intensity": 0.02,
         "node_recipe": "terrain",
+        "micro_normal_strength": 0.15,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 1.2,
     },
     "sand": {
         "base_color": (0.28, 0.24, 0.16, 1.0),
@@ -449,6 +576,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 15.0,
         "wear_intensity": 0.05,
         "node_recipe": "terrain",
+        "micro_normal_strength": 0.15,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 1.2,
     },
     "cliff_rock": {
         "base_color": (0.14, 0.13, 0.11, 1.0),
@@ -459,6 +589,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 4.0,
         "wear_intensity": 0.4,
         "node_recipe": "terrain",
+        "micro_normal_strength": 0.15,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 1.2,
     },
 
     # =======================================================================
@@ -473,6 +606,12 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 20.0,
         "wear_intensity": 0.2,
         "node_recipe": "fabric",
+        "subsurface": 1.0,
+        "subsurface_scale": 0.003,
+        "subsurface_radius": [0.5, 0.4, 0.35],
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
     "leather": {
         "base_color": (0.14, 0.10, 0.07, 1.0),
@@ -483,6 +622,12 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 12.0,
         "wear_intensity": 0.25,
         "node_recipe": "fabric",
+        "subsurface": 1.0,
+        "subsurface_scale": 0.002,
+        "subsurface_radius": [0.8, 0.3, 0.15],
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
     "silk": {
         "base_color": (0.22, 0.18, 0.20, 1.0),
@@ -493,6 +638,12 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 25.0,
         "wear_intensity": 0.05,
         "node_recipe": "fabric",
+        "subsurface": 1.0,
+        "subsurface_scale": 0.003,
+        "subsurface_radius": [0.5, 0.4, 0.35],
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
 
     # =======================================================================
@@ -507,8 +658,14 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 6.0,
         "wear_intensity": 0.5,
         "node_recipe": "organic",
+        "subsurface": 1.0,
+        "subsurface_scale": 0.005,
+        "subsurface_radius": [1.0, 0.2, 0.1],
         "emission_color": (0.12, 0.04, 0.14, 1.0),
         "emission_strength": 0.3,
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
     "lava_ember": {
         "base_color": _EMBER_ORANGE,
@@ -521,6 +678,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "node_recipe": "terrain",
         "emission_color": (1.0, 0.4, 0.1, 1.0),
         "emission_strength": 2.0,
+        "micro_normal_strength": 0.15,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 1.2,
     },
     "ice_crystal": {
         "base_color": (0.32, 0.40, 0.50, 1.0),
@@ -533,6 +693,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "node_recipe": "stone",
         "emission_color": (0.6, 0.8, 1.0, 1.0),
         "emission_strength": 0.1,
+        "micro_normal_strength": 0.2,
+        "meso_normal_strength": 0.6,
+        "macro_normal_strength": 1.0,
     },
     "glass": {
         "base_color": (0.40, 0.42, 0.44, 1.0),
@@ -543,6 +706,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 20.0,
         "wear_intensity": 0.01,
         "node_recipe": "stone",
+        "micro_normal_strength": 0.2,
+        "meso_normal_strength": 0.6,
+        "macro_normal_strength": 1.0,
     },
     "water_surface": {
         "base_color": (0.05, 0.08, 0.12, 1.0),
@@ -553,6 +719,9 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 3.0,
         "wear_intensity": 0.0,
         "node_recipe": "terrain",
+        "micro_normal_strength": 0.15,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 1.2,
     },
     "blood_splatter": {
         "base_color": _BLOOD_RED,
@@ -563,6 +732,12 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 5.0,
         "wear_intensity": 0.1,
         "node_recipe": "organic",
+        "subsurface": 1.0,
+        "subsurface_scale": 0.005,
+        "subsurface_radius": [1.0, 0.2, 0.1],
+        "micro_normal_strength": 0.5,
+        "meso_normal_strength": 0.5,
+        "macro_normal_strength": 0.5,
     },
 }
 
@@ -628,6 +803,88 @@ def _get_bsdf_input(bsdf: Any, name: str) -> Any:
             return sock
     # Last resort: return the original name lookup (will be None)
     return bsdf.inputs.get(name)
+
+
+# ---------------------------------------------------------------------------
+# 3-Layer Micro-Normal Chain Builder (AAA quality)
+# ---------------------------------------------------------------------------
+
+def _build_normal_chain(
+    nodes: Any,
+    links: Any,
+    tree: Any,
+    bsdf: Any,
+    mapping_output: Any,
+    params: dict[str, Any],
+) -> None:
+    """Build a 3-layer micro/meso/macro normal chain for AAA surface detail.
+
+    Creates three cascading Bump nodes:
+      - Micro layer: Noise (scale 40-80) for fine pores/scratches
+      - Meso layer: Voronoi (scale 10-20) for mid-frequency detail
+      - Macro layer: Noise (scale 2-5) for large-scale surface undulation
+
+    Each layer's Bump Normal output feeds into the next layer's Normal input,
+    producing a cascaded normal chain that the BSDF reads from the final
+    (macro) layer.
+
+    Args:
+        nodes: Node tree nodes collection.
+        links: Node tree links collection.
+        tree: The node tree (for _add_node).
+        bsdf: Principled BSDF node (final normal connects here).
+        mapping_output: The mapping node Vector output socket.
+        params: Material params dict with optional micro/meso/macro_normal_strength.
+    """
+    detail_scale = params.get("detail_scale", 8.0)
+
+    # -- Micro layer: fine-grain detail (pores, scratches, grain) --
+    noise_micro = _add_node(tree, "ShaderNodeTexNoise", -900, -800, "Micro Noise")
+    noise_micro.inputs["Scale"].default_value = max(40.0, detail_scale * 6.0)
+    noise_micro.inputs["Detail"].default_value = 12.0
+    noise_micro.inputs["Roughness"].default_value = 0.7
+    links.new(mapping_output, noise_micro.inputs["Vector"])
+
+    bump_micro = _add_node(tree, "ShaderNodeBump", -700, -800, "Micro Bump")
+    bump_micro.inputs["Strength"].default_value = params.get(
+        "micro_normal_strength", 0.3
+    )
+    bump_micro.inputs["Distance"].default_value = 0.002
+    links.new(noise_micro.outputs["Fac"], bump_micro.inputs["Height"])
+
+    # -- Meso layer: mid-frequency detail (cracks, veins, cell patterns) --
+    voronoi_meso = _add_node(tree, "ShaderNodeTexVoronoi", -900, -1000, "Meso Voronoi")
+    voronoi_meso.inputs["Scale"].default_value = max(10.0, detail_scale * 1.5)
+    voronoi_meso.voronoi_dimensions = "3D"
+    links.new(mapping_output, voronoi_meso.inputs["Vector"])
+
+    bump_meso = _add_node(tree, "ShaderNodeBump", -700, -1000, "Meso Bump")
+    bump_meso.inputs["Strength"].default_value = params.get(
+        "meso_normal_strength", 0.5
+    )
+    bump_meso.inputs["Distance"].default_value = 0.005
+    links.new(voronoi_meso.outputs["Distance"], bump_meso.inputs["Height"])
+    # Chain: micro -> meso
+    links.new(bump_micro.outputs["Normal"], bump_meso.inputs["Normal"])
+
+    # -- Macro layer: large-scale undulation (worn edges, warping) --
+    noise_macro = _add_node(tree, "ShaderNodeTexNoise", -900, -1200, "Macro Noise")
+    noise_macro.inputs["Scale"].default_value = max(2.0, detail_scale * 0.3)
+    noise_macro.inputs["Detail"].default_value = 4.0
+    noise_macro.inputs["Roughness"].default_value = 0.5
+    links.new(mapping_output, noise_macro.inputs["Vector"])
+
+    bump_macro = _add_node(tree, "ShaderNodeBump", -700, -1200, "Macro Bump")
+    bump_macro.inputs["Strength"].default_value = params.get(
+        "macro_normal_strength", 0.8
+    )
+    bump_macro.inputs["Distance"].default_value = 0.02
+    links.new(noise_macro.outputs["Fac"], bump_macro.inputs["Height"])
+    # Chain: meso -> macro
+    links.new(bump_meso.outputs["Normal"], bump_macro.inputs["Normal"])
+
+    # Connect final macro normal output -> BSDF Normal
+    links.new(bump_macro.outputs["Normal"], bsdf.inputs["Normal"])
 
 
 # ---------------------------------------------------------------------------
@@ -754,12 +1011,9 @@ def build_stone_material(mat: Any, params: dict[str, Any]) -> None:
     links.new(noise_rough.outputs["Fac"], math_rough.inputs[0])
     links.new(math_rough.outputs["Value"], bsdf.inputs["Roughness"])
 
-    # -- Bump Node: Combined height from voronoi + noise --
-    bump = _add_node(tree, "ShaderNodeBump", -100, -200, "Surface Bump")
-    bump.inputs["Strength"].default_value = params.get("normal_strength", 1.0)
-    bump.inputs["Distance"].default_value = 0.02
-    links.new(ramp_blocks.outputs["Color"], bump.inputs["Height"])
-    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    # -- 3-Layer Normal Chain (AAA quality) --
+    _build_normal_chain(nodes, links, tree, bsdf,
+                        mapping.outputs["Vector"], params)
 
 
 # ---------------------------------------------------------------------------
@@ -854,12 +1108,9 @@ def build_wood_material(mat: Any, params: dict[str, Any]) -> None:
     links.new(noise_rough.outputs["Fac"], math_rough.inputs[0])
     links.new(math_rough.outputs["Value"], bsdf.inputs["Roughness"])
 
-    # -- Bump from wave grain pattern --
-    bump = _add_node(tree, "ShaderNodeBump", -100, -200, "Grain Bump")
-    bump.inputs["Strength"].default_value = params.get("normal_strength", 0.8)
-    bump.inputs["Distance"].default_value = 0.01
-    links.new(wave.outputs["Fac"], bump.inputs["Height"])
-    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    # -- 3-Layer Normal Chain (AAA quality) --
+    _build_normal_chain(nodes, links, tree, bsdf,
+                        mapping.outputs["Vector"], params)
 
 
 # ---------------------------------------------------------------------------
@@ -942,21 +1193,18 @@ def build_metal_material(mat: Any, params: dict[str, Any]) -> None:
     links.new(bsdf_rust.outputs["BSDF"], mix_shader.inputs[2])
     links.new(mix_shader.outputs["Shader"], output.inputs["Surface"])
 
-    # -- Fine scratch noise --
-    noise_scratch = _add_node(tree, "ShaderNodeTexNoise", -800, -300,
-                              "Scratch Detail")
-    noise_scratch.inputs["Scale"].default_value = detail_scale * 4.0
-    noise_scratch.inputs["Detail"].default_value = 12.0
-    noise_scratch.inputs["Roughness"].default_value = 0.9
-    links.new(mapping.outputs["Vector"], noise_scratch.inputs["Vector"])
-
-    # -- Bump from scratches --
-    bump = _add_node(tree, "ShaderNodeBump", -100, -400, "Scratch Bump")
-    bump.inputs["Strength"].default_value = params.get("normal_strength", 0.5) * 0.5
-    bump.inputs["Distance"].default_value = 0.005
-    links.new(noise_scratch.outputs["Fac"], bump.inputs["Height"])
-    links.new(bump.outputs["Normal"], bsdf_clean.inputs["Normal"])
-    links.new(bump.outputs["Normal"], bsdf_rust.inputs["Normal"])
+    # -- 3-Layer Normal Chain (AAA quality) --
+    # Build chain connected to clean BSDF, also link to rust BSDF
+    _build_normal_chain(nodes, links, tree, bsdf_clean,
+                        mapping.outputs["Vector"], params)
+    # Find the Macro Bump node (last in chain) to also feed rust BSDF
+    macro_bump = None
+    for node in nodes:
+        if hasattr(node, 'label') and node.label == "Macro Bump":
+            macro_bump = node
+            break
+    if macro_bump is not None:
+        links.new(macro_bump.outputs["Normal"], bsdf_rust.inputs["Normal"])
 
 
 # ---------------------------------------------------------------------------
@@ -985,9 +1233,19 @@ def build_organic_material(mat: Any, params: dict[str, Any]) -> None:
     bsdf.inputs["Metallic"].default_value = params["metallic"]
 
     # Subsurface scattering for organic look (parameterized per-material)
+    # Weight=1.0 enables SSS; actual scatter distance controlled by Scale
     sss_input = _get_bsdf_input(bsdf, "Subsurface Weight")
     if sss_input is not None:
-        sss_input.default_value = params.get("subsurface", 0.15)
+        sss_input.default_value = params.get("subsurface", 1.0)
+    # Subsurface Scale controls scatter distance (physically-based)
+    sss_scale_input = bsdf.inputs.get("Subsurface Scale")
+    if sss_scale_input is not None:
+        sss_scale_input.default_value = params.get("subsurface_scale", 0.005)
+    # Subsurface Radius for chromatic SSS (R, G, B scatter distances)
+    sss_radius_input = bsdf.inputs.get("Subsurface Radius")
+    if sss_radius_input is not None:
+        radius = params.get("subsurface_radius", [1.0, 0.2, 0.1])
+        sss_radius_input.default_value = radius
     # Subsurface color -- per-material or derived from base color
     sss_color_input = bsdf.inputs.get("Subsurface Color")
     if sss_color_input is not None:
@@ -1068,18 +1326,9 @@ def build_organic_material(mat: Any, params: dict[str, Any]) -> None:
     links.new(noise_rough.outputs["Fac"], math_rough.inputs[0])
     links.new(math_rough.outputs["Value"], bsdf.inputs["Roughness"])
 
-    # -- Bump: Combined pore + skin detail --
-    # Mix the voronoi distance and noise for bump
-    math_bump_mix = _add_node(tree, "ShaderNodeMath", -400, -500, "Bump Mix")
-    math_bump_mix.operation = "ADD"
-    links.new(voronoi.outputs["Distance"], math_bump_mix.inputs[0])
-    links.new(noise_skin.outputs["Fac"], math_bump_mix.inputs[1])
-
-    bump = _add_node(tree, "ShaderNodeBump", -100, -200, "Surface Bump")
-    bump.inputs["Strength"].default_value = params.get("normal_strength", 0.8)
-    bump.inputs["Distance"].default_value = 0.01
-    links.new(math_bump_mix.outputs["Value"], bump.inputs["Height"])
-    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    # -- 3-Layer Normal Chain (AAA quality) --
+    _build_normal_chain(nodes, links, tree, bsdf,
+                        mapping.outputs["Vector"], params)
 
     # -- Fresnel / rim lighting for creature silhouette readability --
     rim_color = params.get("rim_color")
@@ -1225,17 +1474,9 @@ def build_terrain_material(mat: Any, params: dict[str, Any]) -> None:
     links.new(ramp_slope.outputs["Color"], math_rough.inputs[0])
     links.new(math_rough.outputs["Value"], bsdf.inputs["Roughness"])
 
-    # -- Bump from combined noise --
-    math_bump = _add_node(tree, "ShaderNodeMath", -300, -600, "Bump Height")
-    math_bump.operation = "ADD"
-    links.new(noise_med.outputs["Fac"], math_bump.inputs[0])
-    links.new(noise_fine.outputs["Fac"], math_bump.inputs[1])
-
-    bump = _add_node(tree, "ShaderNodeBump", -100, -200, "Terrain Bump")
-    bump.inputs["Strength"].default_value = params.get("normal_strength", 0.6)
-    bump.inputs["Distance"].default_value = 0.02
-    links.new(math_bump.outputs["Value"], bump.inputs["Height"])
-    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    # -- 3-Layer Normal Chain (AAA quality) --
+    _build_normal_chain(nodes, links, tree, bsdf,
+                        mapping.outputs["Vector"], params)
 
 
 # ---------------------------------------------------------------------------
@@ -1267,6 +1508,21 @@ def build_fabric_material(mat: Any, params: dict[str, Any]) -> None:
     sheen_input = _get_bsdf_input(bsdf, "Sheen Weight")
     if sheen_input is not None:
         sheen_input.default_value = 0.3
+
+    # Subsurface scattering for leather/cloth (soft light penetration)
+    sss_val = params.get("subsurface", 0.0)
+    if sss_val > 0.0:
+        sss_input = _get_bsdf_input(bsdf, "Subsurface Weight")
+        if sss_input is not None:
+            sss_input.default_value = sss_val
+        sss_scale_input = bsdf.inputs.get("Subsurface Scale")
+        if sss_scale_input is not None:
+            sss_scale_input.default_value = params.get("subsurface_scale", 0.003)
+        sss_radius_input = bsdf.inputs.get("Subsurface Radius")
+        if sss_radius_input is not None:
+            sss_radius_input.default_value = params.get(
+                "subsurface_radius", [0.5, 0.4, 0.35]
+            )
 
     links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
 
@@ -1317,12 +1573,9 @@ def build_fabric_material(mat: Any, params: dict[str, Any]) -> None:
     links.new(noise_var.outputs["Fac"], math_rough.inputs[0])
     links.new(math_rough.outputs["Value"], bsdf.inputs["Roughness"])
 
-    # -- Bump from weave pattern --
-    bump = _add_node(tree, "ShaderNodeBump", -100, -200, "Weave Bump")
-    bump.inputs["Strength"].default_value = params.get("normal_strength", 0.5)
-    bump.inputs["Distance"].default_value = 0.005
-    links.new(brick.outputs["Fac"], bump.inputs["Height"])
-    links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    # -- 3-Layer Normal Chain (AAA quality) --
+    _build_normal_chain(nodes, links, tree, bsdf,
+                        mapping.outputs["Vector"], params)
 
 
 # ---------------------------------------------------------------------------

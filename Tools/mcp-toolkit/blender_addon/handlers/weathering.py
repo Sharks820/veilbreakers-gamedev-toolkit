@@ -529,6 +529,10 @@ def apply_structural_settling(
     vertices: list[tuple[float, float, float]],
     strength: float = 0.01,
     seed: int = 42,
+    *,
+    _cached_bbox: tuple[
+        tuple[float, float, float], tuple[float, float, float]
+    ] | None = None,
 ) -> list[tuple[float, float, float]]:
     """Apply small random vertex displacements simulating structural settling.
 
@@ -539,6 +543,8 @@ def apply_structural_settling(
         vertices: List of (x, y, z) vertex positions.
         strength: Maximum displacement distance.
         seed: Random seed for reproducibility.
+        _cached_bbox: Optional pre-computed (min_corner, max_corner) to
+            avoid redundant bounding box computation.
 
     Returns:
         New list of displaced vertex positions.
@@ -546,7 +552,10 @@ def apply_structural_settling(
     if not vertices:
         return []
 
-    bbox_min, bbox_max = _compute_bounding_box(vertices)
+    if _cached_bbox is not None:
+        bbox_min, bbox_max = _cached_bbox
+    else:
+        bbox_min, bbox_max = _compute_bounding_box(vertices)
     rng = random.Random(seed)
 
     result: list[tuple[float, float, float]] = []
@@ -894,6 +903,7 @@ def handle_apply_weathering(params: dict[str, Any]) -> dict[str, Any]:
                 mesh_data["vertices"],
                 strength=settling_strength,
                 seed=seed,
+                _cached_bbox=mesh_data.get("_cached_bbox"),
             )
             # Write displaced vertices back to mesh
             for vi, v in enumerate(new_verts):

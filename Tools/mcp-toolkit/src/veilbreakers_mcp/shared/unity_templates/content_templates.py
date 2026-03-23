@@ -31,6 +31,8 @@ Exports:
     generate_stat_curve_editor_script    -- GAME-12: EditorWindow curve editor (EDITOR)
     generate_shop_system_script          -- GAME-11: Merchant + shop UI
     generate_journal_system_script       -- RPG-05: Codex with Lore/Bestiary/Items
+    generate_legendary_affix_system_script -- LOOT-01: Diablo 4-style procedural affixes
+    generate_equipment_variant_matrix_script -- LOOT-02: Brand x rarity variant matrix (EDITOR)
 """
 
 from __future__ import annotations
@@ -2702,3 +2704,712 @@ def generate_journal_system_script(
     journal_uss = "\n".join(uss_lines)
 
     return (journal_data_cs, journal_system_cs, journal_uxml, journal_uss)
+
+
+# ---------------------------------------------------------------------------
+# LOOT-01: Legendary Affix System (Diablo 4-style procedural affixes)
+# ---------------------------------------------------------------------------
+
+
+def generate_legendary_affix_system_script(
+    namespace: str = "VeilBreakers.Content",
+) -> tuple[str, str, str]:
+    """Generate C# for a Diablo 4-style procedural legendary item affix system.
+
+    Produces three runtime scripts:
+      - AffixPool ScriptableObject (affix definitions + categories)
+      - AffixRoller static class (rolling logic with brand affinity + corruption)
+      - AffixVisualizer MonoBehaviour (VFX + material + tooltip per affix)
+
+    Returns:
+        (affix_pool_cs, affix_roller_cs, affix_visualizer_cs) tuple.
+    """
+    ns = _safe_namespace(namespace)
+
+    # ----- AffixPool ScriptableObject -----
+    ap_lines: list[str] = []
+    ap_lines.append("using System;")
+    ap_lines.append("using System.Collections.Generic;")
+    ap_lines.append("using UnityEngine;")
+    ap_lines.append("")
+    ap_lines.append("namespace " + ns)
+    ap_lines.append("{")
+
+    # StatType enum
+    ap_lines.append("    /// <summary>Stat types that affixes can modify.</summary>")
+    ap_lines.append("    public enum StatType")
+    ap_lines.append("    {")
+    ap_lines.append("        PhysicalDamage,")
+    ap_lines.append("        FireDamage,")
+    ap_lines.append("        IceDamage,")
+    ap_lines.append("        LightningDamage,")
+    ap_lines.append("        PoisonDamage,")
+    ap_lines.append("        VoidDamage,")
+    ap_lines.append("        Armor,")
+    ap_lines.append("        MaxHealth,")
+    ap_lines.append("        HealthRegen,")
+    ap_lines.append("        LifeSteal,")
+    ap_lines.append("        CritChance,")
+    ap_lines.append("        CritDamage,")
+    ap_lines.append("        AttackSpeed,")
+    ap_lines.append("        MoveSpeed,")
+    ap_lines.append("        CooldownReduction,")
+    ap_lines.append("        DodgeChance")
+    ap_lines.append("    }")
+    ap_lines.append("")
+
+    # AffixCategory enum
+    ap_lines.append("    /// <summary>Affix category determines slot on the item.</summary>")
+    ap_lines.append("    public enum AffixCategory")
+    ap_lines.append("    {")
+    ap_lines.append("        PREFIX,   // Damage-related affixes")
+    ap_lines.append("        SUFFIX,   // Defensive affixes")
+    ap_lines.append("        LEGENDARY // Unique legendary effects")
+    ap_lines.append("    }")
+    ap_lines.append("")
+
+    # RarityTier enum
+    ap_lines.append("    /// <summary>Item rarity tier for affix rolling.</summary>")
+    ap_lines.append("    public enum RarityTier")
+    ap_lines.append("    {")
+    ap_lines.append("        Common = 0,")
+    ap_lines.append("        Uncommon = 1,")
+    ap_lines.append("        Rare = 2,")
+    ap_lines.append("        Epic = 3,")
+    ap_lines.append("        Legendary = 4")
+    ap_lines.append("    }")
+    ap_lines.append("")
+
+    # StatModifier serializable
+    ap_lines.append("    /// <summary>A single stat modifier entry for an affix.</summary>")
+    ap_lines.append("    [Serializable]")
+    ap_lines.append("    public class StatModifier")
+    ap_lines.append("    {")
+    ap_lines.append("        public StatType statType;")
+    ap_lines.append("        public float value;")
+    ap_lines.append("    }")
+    ap_lines.append("")
+
+    # Affix definition
+    ap_lines.append("    /// <summary>")
+    ap_lines.append("    /// Definition of a single affix that can be rolled onto equipment.")
+    ap_lines.append("    /// Contains stat modifiers, rarity weight, level gate, and optional brand affinity.")
+    ap_lines.append("    /// </summary>")
+    ap_lines.append("    [Serializable]")
+    ap_lines.append("    public class AffixDefinition")
+    ap_lines.append("    {")
+    ap_lines.append("        public string affixName;")
+    ap_lines.append("        [TextArea] public string description;")
+    ap_lines.append("        public AffixCategory category;")
+    ap_lines.append("        public List<StatModifier> statModifiers = new List<StatModifier>();")
+    ap_lines.append("        public float rarityWeight = 1f;")
+    ap_lines.append("        public int minimumItemLevel = 1;")
+    ap_lines.append("        public string brandAffinity; // Optional: brand name for affinity bonus")
+    ap_lines.append("        public GameObject vfxPrefab;")
+    ap_lines.append("        public bool isCursed; // Powerful but with downside")
+    ap_lines.append("        [TextArea] public string curseDescription;")
+    ap_lines.append("    }")
+    ap_lines.append("")
+
+    # AffixPool SO
+    ap_lines.append("    /// <summary>")
+    ap_lines.append("    /// ScriptableObject containing a pool of affix definitions.")
+    ap_lines.append("    /// Used by AffixRoller to select affixes for generated equipment.")
+    ap_lines.append("    /// Generated by VeilBreakers MCP toolkit.")
+    ap_lines.append("    /// </summary>")
+    ap_lines.append('    [CreateAssetMenu(fileName = "NewAffixPool", menuName = "VeilBreakers/Affix Pool")]')
+    ap_lines.append("    public class VB_AffixPool : ScriptableObject")
+    ap_lines.append("    {")
+    ap_lines.append("        [SerializeField] private List<AffixDefinition> _prefixes = new List<AffixDefinition>();")
+    ap_lines.append("        [SerializeField] private List<AffixDefinition> _suffixes = new List<AffixDefinition>();")
+    ap_lines.append("        [SerializeField] private List<AffixDefinition> _legendaries = new List<AffixDefinition>();")
+    ap_lines.append("")
+    ap_lines.append("        /// <summary>Get all affixes of a given category.</summary>")
+    ap_lines.append("        public List<AffixDefinition> GetAffixes(AffixCategory category)")
+    ap_lines.append("        {")
+    ap_lines.append("            switch (category)")
+    ap_lines.append("            {")
+    ap_lines.append("                case AffixCategory.PREFIX: return _prefixes;")
+    ap_lines.append("                case AffixCategory.SUFFIX: return _suffixes;")
+    ap_lines.append("                case AffixCategory.LEGENDARY: return _legendaries;")
+    ap_lines.append("                default: return new List<AffixDefinition>();")
+    ap_lines.append("            }")
+    ap_lines.append("        }")
+    ap_lines.append("")
+    ap_lines.append("        /// <summary>Get all affix definitions across all categories.</summary>")
+    ap_lines.append("        public List<AffixDefinition> GetAllAffixes()")
+    ap_lines.append("        {")
+    ap_lines.append("            var all = new List<AffixDefinition>();")
+    ap_lines.append("            all.AddRange(_prefixes);")
+    ap_lines.append("            all.AddRange(_suffixes);")
+    ap_lines.append("            all.AddRange(_legendaries);")
+    ap_lines.append("            return all;")
+    ap_lines.append("        }")
+    ap_lines.append("    }")
+    ap_lines.append("}")
+    affix_pool_cs = "\n".join(ap_lines)
+
+    # ----- AffixRoller Static Class -----
+    ar_lines: list[str] = []
+    ar_lines.append("using System;")
+    ar_lines.append("using System.Collections.Generic;")
+    ar_lines.append("using System.Linq;")
+    ar_lines.append("using UnityEngine;")
+    ar_lines.append("using VeilBreakers.Core;")
+    ar_lines.append("")
+    ar_lines.append("namespace " + ns)
+    ar_lines.append("{")
+
+    ar_lines.append("    /// <summary>")
+    ar_lines.append("    /// Static class for rolling affixes onto equipment.")
+    ar_lines.append("    /// Diablo 4-style: rarity determines affix count, brand affinity boosts weight,")
+    ar_lines.append("    /// item level gates powerful affixes, corruption enables cursed affixes.")
+    ar_lines.append("    /// Generated by VeilBreakers MCP toolkit.")
+    ar_lines.append("    /// </summary>")
+    ar_lines.append("    public static class AffixRoller")
+    ar_lines.append("    {")
+    ar_lines.append("        private const float BRAND_AFFINITY_BONUS = 1.5f; // +50% weight for matching brand")
+    ar_lines.append("")
+
+    # RollAffixes
+    ar_lines.append("        /// <summary>")
+    ar_lines.append("        /// Roll affixes for an item based on level, rarity, and brand.")
+    ar_lines.append("        /// Common: 0, Uncommon: 1 prefix, Rare: 1 prefix + 1 suffix,")
+    ar_lines.append("        /// Epic: 2 prefix + 1 suffix, Legendary: 2 prefix + 1 suffix + 1 legendary.")
+    ar_lines.append("        /// </summary>")
+    ar_lines.append("        /// <param name=\"pool\">The affix pool to roll from.</param>")
+    ar_lines.append("        /// <param name=\"itemLevel\">Item level gates available affixes.</param>")
+    ar_lines.append("        /// <param name=\"rarity\">Rarity tier determines affix count.</param>")
+    ar_lines.append("        /// <param name=\"brand\">Brand for affinity weight bonus.</param>")
+    ar_lines.append("        /// <param name=\"corruptionLevel\">Corruption 0-1, enables cursed affixes at high values.</param>")
+    ar_lines.append("        public static List<AffixDefinition> RollAffixes(VB_AffixPool pool, int itemLevel, RarityTier rarity, string brand, float corruptionLevel = 0f)")
+    ar_lines.append("        {")
+    ar_lines.append("            var result = new List<AffixDefinition>();")
+    ar_lines.append("            if (pool == null) return result;")
+    ar_lines.append("")
+    ar_lines.append("            int prefixCount = 0;")
+    ar_lines.append("            int suffixCount = 0;")
+    ar_lines.append("            int legendaryCount = 0;")
+    ar_lines.append("")
+    ar_lines.append("            switch (rarity)")
+    ar_lines.append("            {")
+    ar_lines.append("                case RarityTier.Common:")
+    ar_lines.append("                    break; // 0 affixes")
+    ar_lines.append("                case RarityTier.Uncommon:")
+    ar_lines.append("                    prefixCount = 1;")
+    ar_lines.append("                    break;")
+    ar_lines.append("                case RarityTier.Rare:")
+    ar_lines.append("                    prefixCount = 1;")
+    ar_lines.append("                    suffixCount = 1;")
+    ar_lines.append("                    break;")
+    ar_lines.append("                case RarityTier.Epic:")
+    ar_lines.append("                    prefixCount = 2;")
+    ar_lines.append("                    suffixCount = 1;")
+    ar_lines.append("                    break;")
+    ar_lines.append("                case RarityTier.Legendary:")
+    ar_lines.append("                    prefixCount = 2;")
+    ar_lines.append("                    suffixCount = 1;")
+    ar_lines.append("                    legendaryCount = 1;")
+    ar_lines.append("                    break;")
+    ar_lines.append("            }")
+    ar_lines.append("")
+    ar_lines.append("            // Roll each category")
+    ar_lines.append("            RollCategory(pool, AffixCategory.PREFIX, prefixCount, itemLevel, brand, corruptionLevel, result);")
+    ar_lines.append("            RollCategory(pool, AffixCategory.SUFFIX, suffixCount, itemLevel, brand, corruptionLevel, result);")
+    ar_lines.append("            RollCategory(pool, AffixCategory.LEGENDARY, legendaryCount, itemLevel, brand, corruptionLevel, result);")
+    ar_lines.append("")
+    ar_lines.append("            return result;")
+    ar_lines.append("        }")
+    ar_lines.append("")
+
+    # RollCategory
+    ar_lines.append("        /// <summary>Roll a number of affixes from a specific category.</summary>")
+    ar_lines.append("        private static void RollCategory(VB_AffixPool pool, AffixCategory category, int count, int itemLevel, string brand, float corruptionLevel, List<AffixDefinition> result)")
+    ar_lines.append("        {")
+    ar_lines.append("            if (count <= 0) return;")
+    ar_lines.append("")
+    ar_lines.append("            var candidates = pool.GetAffixes(category)")
+    ar_lines.append("                .Where(a => a.minimumItemLevel <= itemLevel)")
+    ar_lines.append("                .Where(a => !a.isCursed || corruptionLevel > 0.5f) // Cursed affixes only at high corruption")
+    ar_lines.append("                .Where(a => !result.Any(r => r.affixName == a.affixName)) // No duplicates")
+    ar_lines.append("                .ToList();")
+    ar_lines.append("")
+    ar_lines.append("            for (int i = 0; i < count && candidates.Count > 0; i++)")
+    ar_lines.append("            {")
+    ar_lines.append("                var selected = WeightedSelect(candidates, brand);")
+    ar_lines.append("                if (selected != null)")
+    ar_lines.append("                {")
+    ar_lines.append("                    result.Add(selected);")
+    ar_lines.append("                    candidates.Remove(selected);")
+    ar_lines.append("                }")
+    ar_lines.append("            }")
+    ar_lines.append("        }")
+    ar_lines.append("")
+
+    # WeightedSelect
+    ar_lines.append("        /// <summary>Weight-based selection with brand affinity bonus.</summary>")
+    ar_lines.append("        private static AffixDefinition WeightedSelect(List<AffixDefinition> candidates, string brand)")
+    ar_lines.append("        {")
+    ar_lines.append("            if (candidates.Count == 0) return null;")
+    ar_lines.append("")
+    ar_lines.append("            float totalWeight = 0f;")
+    ar_lines.append("            var weights = new float[candidates.Count];")
+    ar_lines.append("")
+    ar_lines.append("            for (int i = 0; i < candidates.Count; i++)")
+    ar_lines.append("            {")
+    ar_lines.append("                float w = candidates[i].rarityWeight;")
+    ar_lines.append("")
+    ar_lines.append("                // Brand affinity: +50% weight for matching brand")
+    ar_lines.append("                if (!string.IsNullOrEmpty(brand) && !string.IsNullOrEmpty(candidates[i].brandAffinity)")
+    ar_lines.append('                    && string.Equals(brand, candidates[i].brandAffinity, StringComparison.OrdinalIgnoreCase))')
+    ar_lines.append("                {")
+    ar_lines.append("                    w *= BRAND_AFFINITY_BONUS;")
+    ar_lines.append("                }")
+    ar_lines.append("")
+    ar_lines.append("                weights[i] = w;")
+    ar_lines.append("                totalWeight += w;")
+    ar_lines.append("            }")
+    ar_lines.append("")
+    ar_lines.append("            float rand = UnityEngine.Random.Range(0f, totalWeight);")
+    ar_lines.append("            float cumulative = 0f;")
+    ar_lines.append("            for (int i = 0; i < candidates.Count; i++)")
+    ar_lines.append("            {")
+    ar_lines.append("                cumulative += weights[i];")
+    ar_lines.append("                if (rand <= cumulative)")
+    ar_lines.append("                    return candidates[i];")
+    ar_lines.append("            }")
+    ar_lines.append("")
+    ar_lines.append("            return candidates[candidates.Count - 1]; // Fallback")
+    ar_lines.append("        }")
+    ar_lines.append("    }")
+    ar_lines.append("}")
+    affix_roller_cs = "\n".join(ar_lines)
+
+    # ----- AffixVisualizer MonoBehaviour -----
+    av_lines: list[str] = []
+    av_lines.append("using System.Collections.Generic;")
+    av_lines.append("using System.Text;")
+    av_lines.append("using UnityEngine;")
+    av_lines.append("")
+    av_lines.append("namespace " + ns)
+    av_lines.append("{")
+
+    av_lines.append("    /// <summary>")
+    av_lines.append("    /// Attaches to equipment GameObjects to visualize active affixes.")
+    av_lines.append("    /// Manages material property changes (glow color, emission) and")
+    av_lines.append("    /// per-affix particle effects. Generates tooltip text from affix list.")
+    av_lines.append("    /// Generated by VeilBreakers MCP toolkit.")
+    av_lines.append("    /// </summary>")
+    av_lines.append("    public class VB_AffixVisualizer : MonoBehaviour")
+    av_lines.append("    {")
+    av_lines.append("        [SerializeField] private List<AffixDefinition> _activeAffixes = new List<AffixDefinition>();")
+    av_lines.append("        [SerializeField] private Renderer _targetRenderer;")
+    av_lines.append("        [SerializeField] private float _baseEmissionIntensity = 1f;")
+    av_lines.append("")
+    av_lines.append("        private MaterialPropertyBlock _propBlock;")
+    av_lines.append("        private readonly List<ParticleSystem> _affixParticles = new List<ParticleSystem>();")
+    av_lines.append("")
+
+    # Color mapping
+    av_lines.append("        /// <summary>Maps affix categories to glow colors.</summary>")
+    av_lines.append("        private static readonly Dictionary<AffixCategory, Color> CATEGORY_COLORS = new Dictionary<AffixCategory, Color>")
+    av_lines.append("        {")
+    av_lines.append("            { AffixCategory.PREFIX, new Color(1f, 0.6f, 0.2f) },   // Warm orange for damage")
+    av_lines.append("            { AffixCategory.SUFFIX, new Color(0.3f, 0.6f, 1f) },   // Cool blue for defense")
+    av_lines.append("            { AffixCategory.LEGENDARY, new Color(1f, 0.85f, 0f) }  // Gold for legendary")
+    av_lines.append("        };")
+    av_lines.append("")
+
+    # Awake
+    av_lines.append("        private void Awake()")
+    av_lines.append("        {")
+    av_lines.append("            _propBlock = new MaterialPropertyBlock();")
+    av_lines.append("            if (_targetRenderer == null)")
+    av_lines.append("                _targetRenderer = GetComponentInChildren<Renderer>();")
+    av_lines.append("        }")
+    av_lines.append("")
+
+    # SetAffixes
+    av_lines.append("        /// <summary>Set the active affixes and update visuals.</summary>")
+    av_lines.append("        public void SetAffixes(List<AffixDefinition> affixes)")
+    av_lines.append("        {")
+    av_lines.append("            _activeAffixes = affixes ?? new List<AffixDefinition>();")
+    av_lines.append("            ClearParticles();")
+    av_lines.append("            UpdateMaterial();")
+    av_lines.append("            SpawnParticles();")
+    av_lines.append("        }")
+    av_lines.append("")
+
+    # UpdateMaterial
+    av_lines.append("        /// <summary>Update material properties based on active affixes.</summary>")
+    av_lines.append("        private void UpdateMaterial()")
+    av_lines.append("        {")
+    av_lines.append("            if (_targetRenderer == null || _activeAffixes.Count == 0) return;")
+    av_lines.append("")
+    av_lines.append("            // Blend glow color from all active affix categories")
+    av_lines.append("            Color blendedColor = Color.black;")
+    av_lines.append("            foreach (var affix in _activeAffixes)")
+    av_lines.append("            {")
+    av_lines.append("                if (CATEGORY_COLORS.TryGetValue(affix.category, out Color catColor))")
+    av_lines.append("                    blendedColor += catColor;")
+    av_lines.append("            }")
+    av_lines.append("            blendedColor /= Mathf.Max(1, _activeAffixes.Count);")
+    av_lines.append("")
+    av_lines.append("            // Emission intensity scales with affix count")
+    av_lines.append("            float emission = _baseEmissionIntensity * (1f + _activeAffixes.Count * 0.3f);")
+    av_lines.append("")
+    av_lines.append("            _targetRenderer.GetPropertyBlock(_propBlock);")
+    av_lines.append('            _propBlock.SetColor("_EmissionColor", blendedColor * emission);')
+    av_lines.append("            _targetRenderer.SetPropertyBlock(_propBlock);")
+    av_lines.append("        }")
+    av_lines.append("")
+
+    # SpawnParticles
+    av_lines.append("        /// <summary>Spawn particle effects for each affix with a VFX prefab.</summary>")
+    av_lines.append("        private void SpawnParticles()")
+    av_lines.append("        {")
+    av_lines.append("            foreach (var affix in _activeAffixes)")
+    av_lines.append("            {")
+    av_lines.append("                if (affix.vfxPrefab == null) continue;")
+    av_lines.append("                var vfxObj = Instantiate(affix.vfxPrefab, transform);")
+    av_lines.append("                var ps = vfxObj.GetComponent<ParticleSystem>();")
+    av_lines.append("                if (ps != null) _affixParticles.Add(ps);")
+    av_lines.append("            }")
+    av_lines.append("        }")
+    av_lines.append("")
+
+    # ClearParticles
+    av_lines.append("        /// <summary>Destroy all spawned affix particle systems.</summary>")
+    av_lines.append("        private void ClearParticles()")
+    av_lines.append("        {")
+    av_lines.append("            foreach (var ps in _affixParticles)")
+    av_lines.append("            {")
+    av_lines.append("                if (ps != null) Destroy(ps.gameObject);")
+    av_lines.append("            }")
+    av_lines.append("            _affixParticles.Clear();")
+    av_lines.append("        }")
+    av_lines.append("")
+
+    # GenerateTooltipText
+    av_lines.append("        /// <summary>Generate rich tooltip text from active affixes.</summary>")
+    av_lines.append("        public string GenerateTooltipText()")
+    av_lines.append("        {")
+    av_lines.append("            if (_activeAffixes.Count == 0) return string.Empty;")
+    av_lines.append("")
+    av_lines.append("            var sb = new StringBuilder();")
+    av_lines.append("            foreach (var affix in _activeAffixes)")
+    av_lines.append("            {")
+    av_lines.append('                string colorHex = ColorUtility.ToHtmlStringRGB(')
+    av_lines.append("                    CATEGORY_COLORS.TryGetValue(affix.category, out Color c) ? c : Color.white);")
+    av_lines.append('                sb.AppendLine("<color=#" + colorHex + ">" + affix.affixName + "</color>");')
+    av_lines.append('                sb.AppendLine("  " + affix.description);')
+    av_lines.append("")
+    av_lines.append("                foreach (var mod in affix.statModifiers)")
+    av_lines.append("                {")
+    av_lines.append('                    string sign = mod.value >= 0 ? "+" : "";')
+    av_lines.append('                    sb.AppendLine("  " + sign + mod.value.ToString("F1") + " " + mod.statType.ToString());')
+    av_lines.append("                }")
+    av_lines.append("")
+    av_lines.append("                if (affix.isCursed)")
+    av_lines.append("                {")
+    av_lines.append('                    sb.AppendLine("<color=#FF3333>CURSED: " + affix.curseDescription + "</color>");')
+    av_lines.append("                }")
+    av_lines.append("                sb.AppendLine();")
+    av_lines.append("            }")
+    av_lines.append("            return sb.ToString().TrimEnd();")
+    av_lines.append("        }")
+    av_lines.append("")
+
+    # OnDestroy
+    av_lines.append("        private void OnDestroy()")
+    av_lines.append("        {")
+    av_lines.append("            ClearParticles();")
+    av_lines.append("        }")
+    av_lines.append("    }")
+    av_lines.append("}")
+    affix_visualizer_cs = "\n".join(av_lines)
+
+    return (affix_pool_cs, affix_roller_cs, affix_visualizer_cs)
+
+
+# ---------------------------------------------------------------------------
+# LOOT-02: Equipment Variant Matrix Generator (EDITOR ONLY)
+# ---------------------------------------------------------------------------
+
+
+def generate_equipment_variant_matrix_script(
+    brands: Optional[list[str]] = None,
+    namespace: str = "VeilBreakers.Editor",
+) -> dict:
+    """Generate C# EditorWindow for auto-generating equipment prefab variants.
+
+    Creates all brand x rarity x archetype combinations from a base prefab.
+    10 brands x 5 rarity tiers = 50 variants per item with brand-tinted
+    materials, rarity-scaled emission, VFX references, and VariantData SOs.
+
+    EDITOR ONLY -- uses ``using UnityEditor;``.
+
+    Returns:
+        dict with script_path, script_content, next_steps.
+    """
+    if brands is None:
+        brands = [
+            "IRON", "SAVAGE", "SURGE", "VENOM", "DREAD",
+            "LEECH", "GRACE", "MEND", "RUIN", "VOID",
+        ]
+    ns = _safe_namespace(namespace)
+    runtime_ns = _safe_namespace("VeilBreakers.Content")
+
+    lines: list[str] = []
+    lines.append("using System;")
+    lines.append("using System.Collections.Generic;")
+    lines.append("using System.IO;")
+    lines.append("using UnityEngine;")
+    lines.append("using UnityEditor;")
+    lines.append("using " + runtime_ns + ";")
+    lines.append("")
+    lines.append("namespace " + ns)
+    lines.append("{")
+
+    # VariantData SO (runtime, but defined here alongside editor tool)
+    lines.append("    /// <summary>")
+    lines.append("    /// ScriptableObject storing variant-specific data for a brand x rarity combination.")
+    lines.append("    /// Generated by VeilBreakers MCP toolkit.")
+    lines.append("    /// </summary>")
+    lines.append('    [CreateAssetMenu(fileName = "NewVariantData", menuName = "VeilBreakers/Variant Data")]')
+    lines.append("    public class VB_VariantData : ScriptableObject")
+    lines.append("    {")
+    lines.append("        public string brand;")
+    lines.append("        public RarityTier rarity;")
+    lines.append("        public float baseDamageMultiplier = 1f;")
+    lines.append("        public float baseDefenseMultiplier = 1f;")
+    lines.append("        public Color materialTintColor = Color.white;")
+    lines.append("        public float emissionIntensity = 1f;")
+    lines.append("        public string vfxPrefabPath;")
+    lines.append("    }")
+    lines.append("")
+
+    # BRAND_COLORS dictionary
+    lines.append("    /// <summary>")
+    lines.append("    /// Editor tool that generates brand x rarity equipment prefab variants.")
+    lines.append("    /// Creates 50 variants per base item (10 brands x 5 rarity tiers).")
+    lines.append("    /// Generated by VeilBreakers MCP toolkit.")
+    lines.append("    /// </summary>")
+    lines.append("    public class VB_VariantMatrixGenerator : EditorWindow")
+    lines.append("    {")
+    lines.append("        private GameObject _basePrefab;")
+    lines.append("        private DefaultAsset _batchFolder;")
+    lines.append("        private Vector2 _scrollPos;")
+    lines.append("        private string _statusMessage = string.Empty;")
+    lines.append("        private int _generatedCount;")
+    lines.append("")
+
+    # Brand colors
+    lines.append("        private static readonly Dictionary<string, Color> BRAND_COLORS = new Dictionary<string, Color>")
+    lines.append("        {")
+    brand_colors = {
+        "IRON": "new Color(0.6f, 0.6f, 0.65f)",
+        "SAVAGE": "new Color(0.8f, 0.2f, 0.1f)",
+        "SURGE": "new Color(0.2f, 0.5f, 1f)",
+        "VENOM": "new Color(0.3f, 0.8f, 0.2f)",
+        "DREAD": "new Color(0.4f, 0.1f, 0.5f)",
+        "LEECH": "new Color(0.6f, 0f, 0.3f)",
+        "GRACE": "new Color(1f, 0.9f, 0.5f)",
+        "MEND": "new Color(0.3f, 0.9f, 0.7f)",
+        "RUIN": "new Color(0.2f, 0.2f, 0.2f)",
+        "VOID": "new Color(0.1f, 0f, 0.2f)",
+    }
+    for i, brand_name in enumerate(brands):
+        safe_brand = sanitize_cs_string(brand_name)
+        color_val = brand_colors.get(brand_name, "new Color(0.5f, 0.5f, 0.5f)")
+        comma = "," if i < len(brands) - 1 else ""
+        lines.append('            { "' + safe_brand + '", ' + color_val + " }" + comma)
+    lines.append("        };")
+    lines.append("")
+
+    # Rarity emission multipliers
+    lines.append("        private static readonly float[] RARITY_EMISSION = { 0f, 0.5f, 1f, 2f, 4f };")
+    lines.append("        private static readonly float[] RARITY_DAMAGE_MULT = { 1f, 1.1f, 1.25f, 1.5f, 2f };")
+    lines.append("        private static readonly float[] RARITY_DEFENSE_MULT = { 1f, 1.1f, 1.25f, 1.5f, 2f };")
+    lines.append("")
+
+    # Brand names array
+    lines.append("        private static readonly string[] BRAND_NAMES = new string[]")
+    lines.append("        {")
+    for i, brand_name in enumerate(brands):
+        safe = sanitize_cs_string(brand_name)
+        comma = "," if i < len(brands) - 1 else ""
+        lines.append('            "' + safe + '"' + comma)
+    lines.append("        };")
+    lines.append("")
+
+    # MenuItem
+    lines.append('        [MenuItem("VeilBreakers/Equipment/Variant Matrix Generator")]')
+    lines.append("        public static void ShowWindow()")
+    lines.append("        {")
+    lines.append('            GetWindow<VB_VariantMatrixGenerator>("Variant Matrix Generator");')
+    lines.append("        }")
+    lines.append("")
+
+    # OnGUI
+    lines.append("        private void OnGUI()")
+    lines.append("        {")
+    lines.append('            GUILayout.Label("Equipment Variant Matrix Generator", EditorStyles.boldLabel);')
+    lines.append("            EditorGUILayout.Space();")
+    lines.append("")
+    lines.append('            GUILayout.Label("Single Item", EditorStyles.miniBoldLabel);')
+    lines.append('            _basePrefab = (GameObject)EditorGUILayout.ObjectField("Base Prefab", _basePrefab, typeof(GameObject), false);')
+    lines.append("")
+    lines.append('            if (GUILayout.Button("Generate Variants (Single)") && _basePrefab != null)')
+    lines.append("            {")
+    lines.append("                _generatedCount = 0;")
+    lines.append("                GenerateVariantsForPrefab(_basePrefab);")
+    lines.append('                _statusMessage = "Generated " + _generatedCount + " variants for " + _basePrefab.name;')
+    lines.append("            }")
+    lines.append("")
+    lines.append("            EditorGUILayout.Space();")
+    lines.append('            GUILayout.Label("Batch Processing", EditorStyles.miniBoldLabel);')
+    lines.append('            _batchFolder = (DefaultAsset)EditorGUILayout.ObjectField("Equipment Folder", _batchFolder, typeof(DefaultAsset), false);')
+    lines.append("")
+    lines.append('            if (GUILayout.Button("Generate Variants (Batch)") && _batchFolder != null)')
+    lines.append("            {")
+    lines.append("                _generatedCount = 0;")
+    lines.append("                BatchProcess();")
+    lines.append('                _statusMessage = "Batch complete: " + _generatedCount + " total variants generated.";')
+    lines.append("            }")
+    lines.append("")
+    lines.append("            EditorGUILayout.Space();")
+    lines.append("            if (!string.IsNullOrEmpty(_statusMessage))")
+    lines.append("            {")
+    lines.append("                EditorGUILayout.HelpBox(_statusMessage, MessageType.Info);")
+    lines.append("            }")
+    lines.append("        }")
+    lines.append("")
+
+    # BatchProcess
+    lines.append("        /// <summary>Process all prefabs in the selected folder.</summary>")
+    lines.append("        private void BatchProcess()")
+    lines.append("        {")
+    lines.append("            string folderPath = AssetDatabase.GetAssetPath(_batchFolder);")
+    lines.append('            string[] guids = AssetDatabase.FindAssets("t:GameObject", new[] { folderPath });')
+    lines.append("")
+    lines.append("            for (int i = 0; i < guids.Length; i++)")
+    lines.append("            {")
+    lines.append("                string assetPath = AssetDatabase.GUIDToAssetPath(guids[i]);")
+    lines.append("                var prefab = AssetDatabase.LoadAssetAtPath<GameObject>(assetPath);")
+    lines.append("                if (prefab != null)")
+    lines.append("                {")
+    lines.append('                    EditorUtility.DisplayProgressBar("Generating Variants", prefab.name, (float)i / guids.Length);')
+    lines.append("                    GenerateVariantsForPrefab(prefab);")
+    lines.append("                }")
+    lines.append("            }")
+    lines.append("            EditorUtility.ClearProgressBar();")
+    lines.append("            AssetDatabase.Refresh();")
+    lines.append("        }")
+    lines.append("")
+
+    # GenerateVariantsForPrefab
+    lines.append("        /// <summary>Generate all brand x rarity variants for a single base prefab.</summary>")
+    lines.append("        private void GenerateVariantsForPrefab(GameObject basePrefab)")
+    lines.append("        {")
+    lines.append("            string itemName = basePrefab.name;")
+    lines.append("")
+    lines.append("            foreach (string brandName in BRAND_NAMES)")
+    lines.append("            {")
+    lines.append("                for (int r = 0; r < 5; r++)")
+    lines.append("                {")
+    lines.append("                    RarityTier rarity = (RarityTier)r;")
+    lines.append('                    string variantDir = "Assets/Prefabs/Equipment/" + itemName + "/" + brandName + "/" + rarity.ToString() + "/";')
+    lines.append("")
+    lines.append("                    // Ensure directory exists")
+    lines.append("                    if (!AssetDatabase.IsValidFolder(variantDir.TrimEnd('/')))")
+    lines.append("                    {")
+    lines.append("                        CreateFolderRecursive(variantDir.TrimEnd('/'));")
+    lines.append("                    }")
+    lines.append("")
+    lines.append("                    // Create variant data SO")
+    lines.append("                    var variantData = ScriptableObject.CreateInstance<VB_VariantData>();")
+    lines.append("                    variantData.brand = brandName;")
+    lines.append("                    variantData.rarity = rarity;")
+    lines.append("                    variantData.baseDamageMultiplier = RARITY_DAMAGE_MULT[r];")
+    lines.append("                    variantData.baseDefenseMultiplier = RARITY_DEFENSE_MULT[r];")
+    lines.append("                    variantData.emissionIntensity = RARITY_EMISSION[r];")
+    lines.append("")
+    lines.append("                    Color brandColor = BRAND_COLORS.ContainsKey(brandName) ? BRAND_COLORS[brandName] : Color.gray;")
+    lines.append("                    variantData.materialTintColor = brandColor;")
+    lines.append('                    variantData.vfxPrefabPath = "Assets/VFX/Brands/" + brandName + "/" + rarity.ToString() + "_vfx.prefab";')
+    lines.append("")
+    lines.append('                    string soPath = variantDir + itemName + "_" + brandName + "_" + rarity.ToString() + "_data.asset";')
+    lines.append("                    AssetDatabase.CreateAsset(variantData, soPath);")
+    lines.append("")
+    lines.append("                    // Create prefab variant")
+    lines.append('                    string variantPath = variantDir + itemName + "_" + brandName + "_" + rarity.ToString() + ".prefab";')
+    lines.append("                    GameObject variantInstance = (GameObject)PrefabUtility.InstantiatePrefab(basePrefab);")
+    lines.append("                    variantInstance.name = itemName + \"_\" + brandName + \"_\" + rarity.ToString();")
+    lines.append("")
+    lines.append("                    // Apply brand tint to materials")
+    lines.append("                    ApplyBrandTint(variantInstance, brandColor, RARITY_EMISSION[r]);")
+    lines.append("")
+    lines.append("                    PrefabUtility.SaveAsPrefabAsset(variantInstance, variantPath);")
+    lines.append("                    DestroyImmediate(variantInstance);")
+    lines.append("")
+    lines.append("                    _generatedCount++;")
+    lines.append("                }")
+    lines.append("            }")
+    lines.append("            AssetDatabase.SaveAssets();")
+    lines.append("        }")
+    lines.append("")
+
+    # ApplyBrandTint
+    lines.append("        /// <summary>Apply brand color tint and emission to all renderers on the variant.</summary>")
+    lines.append("        private static void ApplyBrandTint(GameObject obj, Color brandColor, float emission)")
+    lines.append("        {")
+    lines.append("            var renderers = obj.GetComponentsInChildren<Renderer>();")
+    lines.append("            foreach (var renderer in renderers)")
+    lines.append("            {")
+    lines.append("                foreach (var mat in renderer.sharedMaterials)")
+    lines.append("                {")
+    lines.append("                    if (mat == null) continue;")
+    lines.append("                    var newMat = new Material(mat);")
+    lines.append('                    if (newMat.HasProperty("_Color"))')
+    lines.append('                        newMat.SetColor("_Color", brandColor);')
+    lines.append('                    if (newMat.HasProperty("_EmissionColor") && emission > 0f)')
+    lines.append("                    {")
+    lines.append("                        newMat.EnableKeyword(\"_EMISSION\");")
+    lines.append('                        newMat.SetColor("_EmissionColor", brandColor * emission);')
+    lines.append("                    }")
+    lines.append("                    renderer.sharedMaterial = newMat;")
+    lines.append("                }")
+    lines.append("            }")
+    lines.append("        }")
+    lines.append("")
+
+    # CreateFolderRecursive
+    lines.append("        /// <summary>Recursively create folders in AssetDatabase.</summary>")
+    lines.append("        private static void CreateFolderRecursive(string path)")
+    lines.append("        {")
+    lines.append('            string[] parts = path.Split(\'/\');')
+    lines.append('            string current = parts[0]; // "Assets"')
+    lines.append("            for (int i = 1; i < parts.Length; i++)")
+    lines.append("            {")
+    lines.append('                string next = current + "/" + parts[i];')
+    lines.append("                if (!AssetDatabase.IsValidFolder(next))")
+    lines.append("                    AssetDatabase.CreateFolder(current, parts[i]);")
+    lines.append("                current = next;")
+    lines.append("            }")
+    lines.append("        }")
+    lines.append("    }")
+    lines.append("}")
+
+    script_content = "\n".join(lines)
+
+    return {
+        "script_path": "Assets/Editor/Equipment/VB_VariantMatrixGenerator.cs",
+        "script_content": script_content,
+        "next_steps": [
+            "Recompile: unity_editor action=recompile",
+            "Open Unity Editor: VeilBreakers > Equipment > Variant Matrix Generator",
+            "Assign a base equipment prefab and click Generate Variants",
+            "For batch processing, assign a folder and click Generate Variants (Batch)",
+        ],
+    }

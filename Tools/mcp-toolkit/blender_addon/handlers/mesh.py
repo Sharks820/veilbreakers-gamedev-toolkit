@@ -1,4 +1,4 @@
-"""Mesh topology analysis, auto-repair, game-readiness, and editing handlers.
+"""Mesh topology analysis, auto-repair, game-readiness, editing, and sculpting handlers.
 
 Provides:
 - handle_analyze_topology: Full topology analysis with A-F grading (MESH-01)
@@ -8,7 +8,12 @@ Provides:
 - handle_edit_mesh: Surgical edits -- extrude, inset, mirror, separate, join (MESH-06)
 - handle_boolean_op: Boolean operations -- union, difference, intersect (MESH-05)
 - handle_retopologize: Retopology via quadriflow with target face count (MESH-07)
-- handle_sculpt: Sculpt operations -- smooth, inflate, flatten, crease (MESH-04)
+- handle_sculpt: 11 mesh filter sculpt operations (MESH-04)
+- handle_sculpt_brush: 32 sculpt brush types with stroke support (MESH-04b)
+- handle_dyntopo: Dynamic topology enable/disable/status (MESH-04c)
+- handle_voxel_remesh: Voxel-based remesh for uniform topology (MESH-04d)
+- handle_face_sets: Face set creation and management (MESH-04e)
+- handle_multires: Multiresolution modifier management (MESH-04f)
 
 Analysis uses bmesh for direct geometry access. Editing uses bmesh where possible,
 falls back to bpy.ops with temp_override for boolean, retopology, and sculpt filters.
@@ -138,13 +143,54 @@ _EDIT_OPERATIONS = frozenset({
     "merge_vertices", "dissolve_edges", "dissolve_faces",
 })
 
-# Valid sculpt operations for handle_sculpt.
+# Valid sculpt operations for handle_sculpt (mesh_filter types).
+# None means "handled via bmesh, not sculpt mode".
 _SCULPT_OPERATIONS = {
-    "smooth": None,           # uses bmesh, no sculpt filter
-    "inflate": "INFLATE",
-    "flatten": "SURFACE_SMOOTH",
-    "crease": "SHARPEN",
+    "smooth": None,                     # bmesh smooth_vert
+    "inflate": "INFLATE",               # inflate/deflate vertices
+    "flatten": "SURFACE_SMOOTH",        # smooth while preserving volume
+    "crease": "SHARPEN",                # sharpen edges/creases
+    "relax": "RELAX",                   # relax mesh topology
+    "enhance_details": "ENHANCE_DETAILS",  # sharpen fine detail
+    "random": "RANDOM",                 # randomize vertex positions
+    "scale": "SCALE",                   # scale from center
+    "sphere": "SPHERE",                 # push vertices toward sphere
+    "surface_smooth": "SURFACE_SMOOTH", # explicit alias
+    "sharpen": "SHARPEN",              # explicit alias
 }
+
+# Valid sculpt brush types (bpy.types.Brush.sculpt_tool enumeration).
+# These are used by handle_sculpt_brush for direct brush stroke operations.
+_SCULPT_BRUSH_TYPES = frozenset({
+    "DRAW", "DRAW_SHARP", "CLAY", "CLAY_STRIPS", "CLAY_THUMB",
+    "LAYER", "INFLATE", "BLOB", "CREASE", "SMOOTH", "FLATTEN",
+    "FILL", "SCRAPE", "MULTIPLANE_SCRAPE", "PINCH", "GRAB",
+    "ELASTIC_DEFORM", "SNAKE_HOOK", "THUMB", "POSE", "NUDGE",
+    "ROTATE", "TOPOLOGY", "BOUNDARY", "CLOTH", "SIMPLIFY",
+    "MASK", "DRAW_FACE_SETS", "DISPLACEMENT_ERASER",
+    "DISPLACEMENT_SMEAR", "PAINT", "SMEAR",
+})
+
+# Valid dynamic topology detail modes.
+_DYNTOPO_DETAIL_MODES = frozenset({
+    "RELATIVE_DETAIL", "CONSTANT_DETAIL", "BRUSH_DETAIL", "MANUAL_DETAIL",
+})
+
+# Valid dynamic topology actions.
+_DYNTOPO_ACTIONS = frozenset({"enable", "disable", "status"})
+
+# Valid face set actions.
+_FACE_SET_ACTIONS = frozenset({
+    "create_from_visible", "create_from_loose_parts",
+    "create_from_materials", "create_from_normals",
+    "randomize", "init",
+})
+
+# Valid multires actions.
+_MULTIRES_ACTIONS = frozenset({
+    "add", "subdivide", "reshape", "delete_higher", "delete_lower",
+    "apply_base",
+})
 
 _AXIS_MAP = {"X": 0, "Y": 1, "Z": 2}
 
@@ -195,6 +241,129 @@ def _sculpt_operation_to_filter_type(operation: str) -> str | None:
             f"Valid: {sorted(_SCULPT_OPERATIONS)}"
         )
     return _SCULPT_OPERATIONS[operation]
+
+
+def _validate_brush_type(brush_type: str) -> str:
+    """Validate and normalize a sculpt brush type string.
+
+    Accepts case-insensitive input, returns upper-cased canonical name.
+    Raises ``ValueError`` for unknown brush types.
+    """
+    normalized = brush_type.upper()
+    if normalized not in _SCULPT_BRUSH_TYPES:
+        raise ValueError(
+            f"Unknown sculpt brush type: {brush_type!r}. "
+            f"Valid: {sorted(_SCULPT_BRUSH_TYPES)}"
+        )
+    return normalized
+
+
+def _validate_brush_direction(direction: str) -> str:
+    """Validate sculpt brush direction (ADD or SUBTRACT).
+
+    Returns normalized upper-case direction string.
+    """
+    normalized = direction.upper()
+    if normalized not in ("ADD", "SUBTRACT"):
+        raise ValueError(
+            f"Invalid brush direction: {direction!r}. Valid: 'ADD', 'SUBTRACT'"
+        )
+    return normalized
+
+
+def _validate_dyntopo_action(action: str) -> str:
+    """Validate dynamic topology action.
+
+    Raises ``ValueError`` for unknown actions.
+    """
+    if action not in _DYNTOPO_ACTIONS:
+        raise ValueError(
+            f"Unknown dyntopo action: {action!r}. "
+            f"Valid: {sorted(_DYNTOPO_ACTIONS)}"
+        )
+    return action
+
+
+def _validate_dyntopo_detail_mode(mode: str) -> str:
+    """Validate dynamic topology detail mode.
+
+    Raises ``ValueError`` for unknown modes.
+    """
+    if mode not in _DYNTOPO_DETAIL_MODES:
+        raise ValueError(
+            f"Unknown dyntopo detail mode: {mode!r}. "
+            f"Valid: {sorted(_DYNTOPO_DETAIL_MODES)}"
+        )
+    return mode
+
+
+def _validate_voxel_remesh_params(voxel_size: float, adaptivity: float) -> None:
+    """Validate voxel remesh parameters.
+
+    Raises ``ValueError`` for out-of-range values.
+    """
+    if voxel_size <= 0:
+        raise ValueError(
+            f"voxel_size must be > 0, got {voxel_size}"
+        )
+    if not (0.0 <= adaptivity <= 1.0):
+        raise ValueError(
+            f"adaptivity must be in [0.0, 1.0], got {adaptivity}"
+        )
+
+
+def _validate_face_set_action(action: str) -> str:
+    """Validate face set action.
+
+    Raises ``ValueError`` for unknown actions.
+    """
+    if action not in _FACE_SET_ACTIONS:
+        raise ValueError(
+            f"Unknown face set action: {action!r}. "
+            f"Valid: {sorted(_FACE_SET_ACTIONS)}"
+        )
+    return action
+
+
+def _validate_multires_action(action: str) -> str:
+    """Validate multires modifier action.
+
+    Raises ``ValueError`` for unknown actions.
+    """
+    if action not in _MULTIRES_ACTIONS:
+        raise ValueError(
+            f"Unknown multires action: {action!r}. "
+            f"Valid: {sorted(_MULTIRES_ACTIONS)}"
+        )
+    return action
+
+
+def _validate_multires_subdivisions(subdivisions: int) -> None:
+    """Validate multires subdivision count.
+
+    Raises ``ValueError`` for out-of-range values.
+    """
+    if subdivisions < 1:
+        raise ValueError(
+            f"subdivisions must be >= 1, got {subdivisions}"
+        )
+    if subdivisions > 10:
+        raise ValueError(
+            f"subdivisions must be <= 10, got {subdivisions} "
+            "(higher values risk memory exhaustion)"
+        )
+
+
+def _validate_brush_strength(strength: float) -> float:
+    """Validate and clamp brush strength to [0.0, 1.0]."""
+    return max(0.0, min(1.0, float(strength)))
+
+
+def _validate_brush_radius(radius: float) -> float:
+    """Validate brush radius (must be positive)."""
+    if radius <= 0:
+        raise ValueError(f"Brush radius must be > 0, got {radius}")
+    return float(radius)
 
 
 # ---------------------------------------------------------------------------
@@ -1372,16 +1541,17 @@ def handle_retopologize(params: dict) -> dict:
 
 
 def handle_sculpt(params: dict) -> dict:
-    """Sculpt operations: smooth, inflate, flatten, crease (MESH-04).
+    """Sculpt mesh filter operations (MESH-04).
 
     Params:
         object_name: Name of the mesh object to sculpt.
-        operation: One of "smooth", "inflate", "flatten", "crease".
+        operation: One of: smooth, inflate, flatten, crease, relax,
+            enhance_details, random, scale, sphere, surface_smooth, sharpen.
         strength: Operation strength (default 0.5).
         iterations: Number of iterations (default 3).
 
-    Smooth uses bmesh (no mode switch). Inflate/flatten/crease use sculpt
-    mode mesh_filter operators.
+    Smooth uses bmesh (no mode switch). All others use sculpt mode mesh_filter
+    operators via bpy.ops.sculpt.mesh_filter().
 
     Returns dict with operation details.
     """
@@ -1449,4 +1619,381 @@ def handle_sculpt(params: dict) -> dict:
         "operation": operation,
         "strength": strength,
         "iterations": iterations,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Sculpt brush stroke handler (MESH-04b)
+# ---------------------------------------------------------------------------
+
+
+def handle_sculpt_brush(params: dict) -> dict:
+    """Apply a sculpt brush stroke on a mesh object.
+
+    Switches to sculpt mode, configures the active brush, and optionally
+    applies brush strokes at specified screen-space coordinates.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        brush_type: Sculpt brush tool enum (required). One of DRAW, DRAW_SHARP,
+            CLAY, CLAY_STRIPS, CLAY_THUMB, LAYER, INFLATE, BLOB, CREASE,
+            SMOOTH, FLATTEN, FILL, SCRAPE, MULTIPLANE_SCRAPE, PINCH, GRAB,
+            ELASTIC_DEFORM, SNAKE_HOOK, THUMB, POSE, NUDGE, ROTATE, TOPOLOGY,
+            BOUNDARY, CLOTH, SIMPLIFY, MASK, DRAW_FACE_SETS,
+            DISPLACEMENT_ERASER, DISPLACEMENT_SMEAR, PAINT, SMEAR.
+        strength: Brush strength 0.0-1.0 (default 0.5).
+        radius: Brush radius in pixels (default 50).
+        stroke_points: List of [x, y, pressure] screen-space coords (optional).
+            If omitted, configures the brush but does not apply a stroke.
+        use_front_faces_only: Only affect front-facing geometry (default False).
+        direction: "ADD" or "SUBTRACT" (default "ADD").
+
+    Returns dict with brush configuration applied.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+
+    brush_type = _validate_brush_type(params.get("brush_type", "DRAW"))
+    strength = _validate_brush_strength(params.get("strength", 0.5))
+    radius = _validate_brush_radius(params.get("radius", 50))
+    stroke_points = params.get("stroke_points")
+    use_front_faces_only = bool(params.get("use_front_faces_only", False))
+    direction = _validate_brush_direction(params.get("direction", "ADD"))
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for sculpt brush operation")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="SCULPT")
+
+        # Configure brush
+        brush = bpy.context.tool_settings.sculpt.brush
+        brush.sculpt_tool = brush_type
+        brush.strength = strength
+        brush.use_front_faces_only = use_front_faces_only
+
+        # Set brush direction via unified paint settings
+        scene = bpy.context.scene
+        scene.tool_settings.unified_paint_settings.size = int(radius)
+
+        # Set brush direction
+        if direction == "SUBTRACT":
+            brush.direction = "SUBTRACT"
+        else:
+            brush.direction = "ADD"
+
+        stroke_applied = False
+        if stroke_points:
+            # Build stroke data from screen-space coords
+            stroke = []
+            for pt in stroke_points:
+                x = float(pt[0]) if len(pt) > 0 else 0.0
+                y = float(pt[1]) if len(pt) > 1 else 0.0
+                pressure = float(pt[2]) if len(pt) > 2 else 1.0
+                stroke.append({
+                    "name": "",
+                    "mouse": (x, y),
+                    "mouse_event": (x, y),
+                    "pen_flip": False,
+                    "is_start": len(stroke) == 0,
+                    "location": (0, 0, 0),
+                    "pressure": pressure,
+                    "size": int(radius),
+                    "time": 0.0,
+                    "x_tilt": 0.0,
+                    "y_tilt": 0.0,
+                })
+            bpy.ops.sculpt.brush_stroke(stroke=stroke)
+            stroke_applied = True
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    return {
+        "object_name": name,
+        "brush_type": brush_type,
+        "strength": strength,
+        "radius": radius,
+        "direction": direction,
+        "use_front_faces_only": use_front_faces_only,
+        "stroke_applied": stroke_applied,
+        "stroke_points_count": len(stroke_points) if stroke_points else 0,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Dynamic topology toggle handler (MESH-04c)
+# ---------------------------------------------------------------------------
+
+
+def handle_dyntopo(params: dict) -> dict:
+    """Enable, disable, or query dynamic topology (dyntopo) for sculpting.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        action: "enable" | "disable" | "status" (required).
+        detail_size: Voxel detail size in screen pixels (default 12.0).
+        detail_mode: Detail mode -- RELATIVE_DETAIL, CONSTANT_DETAIL,
+            BRUSH_DETAIL, or MANUAL_DETAIL (default RELATIVE_DETAIL).
+
+    Returns dict with dyntopo state after the operation.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    action = _validate_dyntopo_action(params.get("action", "status"))
+    detail_size = float(params.get("detail_size", 12.0))
+    detail_mode = _validate_dyntopo_detail_mode(
+        params.get("detail_mode", "RELATIVE_DETAIL")
+    )
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for dyntopo operation")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="SCULPT")
+
+        sculpt = bpy.context.sculpt_object
+        is_enabled = sculpt and sculpt.use_dynamic_topology_sculpting if hasattr(
+            sculpt, "use_dynamic_topology_sculpting"
+        ) else False
+
+        if action == "enable" and not is_enabled:
+            bpy.ops.sculpt.dynamic_topology_toggle()
+            is_enabled = True
+        elif action == "disable" and is_enabled:
+            bpy.ops.sculpt.dynamic_topology_toggle()
+            is_enabled = False
+
+        # Configure detail settings when enabled
+        if is_enabled:
+            scene = bpy.context.scene
+            scene.tool_settings.sculpt.detail_size = detail_size
+            scene.tool_settings.sculpt.detail_type_method = detail_mode
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    return {
+        "object_name": name,
+        "action": action,
+        "enabled": is_enabled,
+        "detail_size": detail_size,
+        "detail_mode": detail_mode,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Voxel remesh handler (MESH-04d)
+# ---------------------------------------------------------------------------
+
+
+def handle_voxel_remesh(params: dict) -> dict:
+    """Apply voxel remesh to a mesh object for uniform topology.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        voxel_size: Voxel size -- smaller = more detail (default 0.05).
+        adaptivity: Adaptivity 0.0-1.0 -- higher = fewer polys in flat
+            areas (default 0.0).
+
+    Returns dict with before/after vertex and face counts.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    voxel_size = float(params.get("voxel_size", 0.05))
+    adaptivity = float(params.get("adaptivity", 0.0))
+
+    _validate_voxel_remesh_params(voxel_size, adaptivity)
+
+    before_verts = len(obj.data.vertices)
+    before_faces = len(obj.data.polygons)
+
+    # Set remesh properties on the mesh data
+    obj.data.remesh_voxel_size = voxel_size
+    obj.data.remesh_voxel_adaptivity = adaptivity
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for voxel remesh")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.voxel_remesh()
+
+    after_verts = len(obj.data.vertices)
+    after_faces = len(obj.data.polygons)
+
+    return {
+        "object_name": name,
+        "voxel_size": voxel_size,
+        "adaptivity": adaptivity,
+        "before": {"vertices": before_verts, "faces": before_faces},
+        "after": {"vertices": after_verts, "faces": after_faces},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Face sets handler (MESH-04e)
+# ---------------------------------------------------------------------------
+
+
+def handle_face_sets(params: dict) -> dict:
+    """Create or manipulate face sets on a sculpt mesh.
+
+    Face sets partition mesh faces into groups for isolated sculpting.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        action: One of: create_from_visible, create_from_loose_parts,
+            create_from_materials, create_from_normals, randomize, init.
+
+    Returns dict with action result.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    action = _validate_face_set_action(params.get("action", "init"))
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for face set operation")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="SCULPT")
+
+        if action == "init":
+            bpy.ops.sculpt.face_sets_init(mode="NONE")
+        elif action == "create_from_visible":
+            bpy.ops.sculpt.face_set_change_visibility(mode="TOGGLE")
+        elif action == "create_from_loose_parts":
+            bpy.ops.sculpt.face_sets_init(mode="LOOSE_PARTS")
+        elif action == "create_from_materials":
+            bpy.ops.sculpt.face_sets_init(mode="MATERIALS")
+        elif action == "create_from_normals":
+            bpy.ops.sculpt.face_sets_init(mode="NORMALS")
+        elif action == "randomize":
+            bpy.ops.sculpt.face_sets_randomize_colors()
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    return {
+        "object_name": name,
+        "action": action,
+        "face_count": len(obj.data.polygons),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Multires modifier handler (MESH-04f)
+# ---------------------------------------------------------------------------
+
+
+def handle_multires(params: dict) -> dict:
+    """Manage a Multiresolution modifier for multi-level sculpting.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        action: One of: add, subdivide, reshape, delete_higher,
+            delete_lower, apply_base.
+        subdivisions: Number of subdivision levels for 'subdivide' (default 1).
+
+    Returns dict with action result and current modifier state.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    action = _validate_multires_action(params.get("action", "add"))
+    subdivisions = int(params.get("subdivisions", 1))
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for multires operation")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    # Find existing multires modifier
+    multires_mod = None
+    for mod in obj.modifiers:
+        if mod.type == "MULTIRES":
+            multires_mod = mod
+            break
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+        if action == "add":
+            if multires_mod is None:
+                bpy.ops.object.modifier_add(type="MULTIRES")
+                multires_mod = obj.modifiers[-1]
+
+        elif action == "subdivide":
+            if multires_mod is None:
+                bpy.ops.object.modifier_add(type="MULTIRES")
+                multires_mod = obj.modifiers[-1]
+            _validate_multires_subdivisions(subdivisions)
+            for _ in range(subdivisions):
+                bpy.ops.object.multires_subdivide(
+                    modifier=multires_mod.name, mode="CATMULL_CLARK"
+                )
+
+        elif action == "reshape":
+            if multires_mod is None:
+                raise RuntimeError(
+                    f"No Multires modifier found on '{name}'"
+                )
+            bpy.ops.object.multires_reshape(modifier=multires_mod.name)
+
+        elif action == "delete_higher":
+            if multires_mod is None:
+                raise RuntimeError(
+                    f"No Multires modifier found on '{name}'"
+                )
+            bpy.ops.object.multires_higher_levels_delete(
+                modifier=multires_mod.name
+            )
+
+        elif action == "delete_lower":
+            if multires_mod is None:
+                raise RuntimeError(
+                    f"No Multires modifier found on '{name}'"
+                )
+            bpy.ops.object.multires_lower_levels_delete(
+                modifier=multires_mod.name
+            )
+
+        elif action == "apply_base":
+            if multires_mod is None:
+                raise RuntimeError(
+                    f"No Multires modifier found on '{name}'"
+                )
+            bpy.ops.object.multires_base_apply(modifier=multires_mod.name)
+
+    # Gather current state
+    mod_info = {}
+    if multires_mod is not None:
+        mod_info = {
+            "modifier_name": multires_mod.name,
+            "total_levels": multires_mod.total_levels,
+            "sculpt_levels": multires_mod.sculpt_levels,
+            "render_levels": multires_mod.render_levels,
+            "levels": multires_mod.levels,
+        }
+
+    return {
+        "object_name": name,
+        "action": action,
+        "modifier": mod_info,
+        "vertex_count": len(obj.data.vertices),
+        "face_count": len(obj.data.polygons),
     }

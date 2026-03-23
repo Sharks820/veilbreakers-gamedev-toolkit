@@ -39,29 +39,29 @@ _REQUIRED_KEYS = {"base_color", "roughness", "description"}
 
 METAL_TIERS: dict[str, dict[str, Any]] = {
     "iron": {
-        "base_color": (0.35, 0.33, 0.30),
+        "base_color": (0.56, 0.57, 0.58),
         "metallic": 0.85,
-        "roughness": 0.65,
+        "roughness": 0.60,
         "roughness_variation": 0.20,
         "rust_amount": 0.3,
         "description": "Common forged iron, prone to rust",
     },
     "steel": {
-        "base_color": (0.55, 0.55, 0.55),
+        "base_color": (0.63, 0.62, 0.64),
         "metallic": 0.90,
-        "roughness": 0.45,
+        "roughness": 0.25,
         "roughness_variation": 0.15,
         "description": "Refined steel, cleaner finish",
     },
     "silver": {
-        "base_color": (0.75, 0.75, 0.78),
+        "base_color": (0.95, 0.93, 0.88),
         "metallic": 0.95,
-        "roughness": 0.25,
+        "roughness": 0.20,
         "emission": 0.02,
         "description": "Bright silver, slight holy glow",
     },
     "gold": {
-        "base_color": (0.83, 0.68, 0.22),
+        "base_color": (1.0, 0.86, 0.57),
         "metallic": 0.95,
         "roughness": 0.20,
         "coat_weight": 0.3,
@@ -96,7 +96,7 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
         "description": "Ancient dragon bone, blue-white marbling",
     },
     "orichalcum": {
-        "base_color": (0.70, 0.45, 0.20),
+        "base_color": (0.73, 0.55, 0.36),
         "metallic": 0.92,
         "roughness": 0.35,
         "description": "Ancient bronze-red alloy",

@@ -662,9 +662,16 @@ class TestPaletteCompliance:
             )
 
     def test_environment_value_within_bounds(self):
-        """Non-exempt environment materials should have value 5-55%."""
+        """Non-exempt environment materials should have value 5-55%.
+
+        Metals use physically-based reflectance values that can exceed
+        55% (real iron ~57%, steel ~64%, gold ~100%) per PBR reference.
+        """
         for key, entry in MATERIAL_LIBRARY.items():
-            if key in self.MAGIC_EXEMPT:
+            if key in self.MAGIC_EXEMPT or key in self.METAL_EXEMPT:
+                continue
+            # Physically-based metals require high reflectance
+            if entry.get("node_recipe") == "metal":
                 continue
             bc = entry["base_color"]
             _, _, v = _rgb_to_hsv(bc[0], bc[1], bc[2])
@@ -709,7 +716,7 @@ class TestAdvancedMaterialProperties:
 
     def test_monster_skin_has_subsurface(self):
         entry = MATERIAL_LIBRARY["monster_skin"]
-        assert entry["subsurface"] == 0.2
+        assert entry["subsurface"] == 1.0  # v6: SSS Weight=1.0, scattering via Scale
 
     def test_monster_skin_has_sss_color(self):
         entry = MATERIAL_LIBRARY["monster_skin"]
@@ -717,15 +724,15 @@ class TestAdvancedMaterialProperties:
 
     def test_scales_has_subsurface(self):
         entry = MATERIAL_LIBRARY["scales"]
-        assert entry["subsurface"] == 0.05
+        assert entry["subsurface"] == 1.0  # v6: SSS Weight=1.0
 
     def test_membrane_has_subsurface(self):
         entry = MATERIAL_LIBRARY["membrane"]
-        assert entry["subsurface"] == 0.4
+        assert entry["subsurface"] == 1.0  # v6: SSS Weight=1.0
 
     def test_mushroom_cap_has_subsurface(self):
         entry = MATERIAL_LIBRARY["mushroom_cap"]
-        assert entry["subsurface"] == 0.15
+        assert entry["subsurface"] == 1.0  # v6: SSS Weight=1.0
 
     def test_mushroom_cap_has_sss_color(self):
         entry = MATERIAL_LIBRARY["mushroom_cap"]
@@ -733,7 +740,7 @@ class TestAdvancedMaterialProperties:
 
     def test_bone_has_subsurface(self):
         entry = MATERIAL_LIBRARY["bone"]
-        assert entry["subsurface"] == 0.05
+        assert entry["subsurface"] == 1.0  # v6: SSS Weight=1.0
 
     def test_bone_has_sss_color(self):
         entry = MATERIAL_LIBRARY["bone"]

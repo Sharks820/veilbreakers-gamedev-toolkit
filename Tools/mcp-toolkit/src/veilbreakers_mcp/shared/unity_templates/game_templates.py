@@ -84,6 +84,7 @@ def generate_save_system_script(
     use_encryption: bool = True,
     use_compression: bool = True,
     auto_save: bool = True,
+    auto_save_interval: float = 300.0,
     namespace: str = "VeilBreakers.GameSystems",
 ) -> str:
     """Generate C# runtime MonoBehaviour for a save/load system.
@@ -97,6 +98,7 @@ def generate_save_system_script(
         use_encryption: Whether to include AES-CBC encryption.
         use_compression: Whether to include GZip compression.
         auto_save: Whether to include auto-save slot.
+        auto_save_interval: Seconds between auto-saves (default 300 = 5 minutes).
         namespace: C# namespace for generated code.
 
     Returns:
@@ -167,7 +169,7 @@ def generate_save_system_script(
     lines.append("        public int slotCount = " + str(slot_count) + ";")
     if auto_save:
         lines.append("        public bool autoSaveEnabled = true;")
-        lines.append("        public float autoSaveInterval = 300f;")
+        lines.append("        public float autoSaveInterval = " + str(auto_save_interval) + "f;")
     lines.append("")
     lines.append("        private GameSystemsSaveData _currentData;")
     lines.append("        private int _activeSlot = -1;")
@@ -537,6 +539,9 @@ def generate_health_system_script(
     use_damage_numbers: bool = True,
     use_respawn: bool = True,
     respawn_delay: float = 3.0,
+    damage_number_offset: float = 2.0,
+    damage_number_lifetime: float = 1.5,
+    i_frame_duration: float = 0.5,
     namespace: str = "VeilBreakers.GameSystems",
 ) -> str:
     """Generate C# runtime MonoBehaviour for a health/damage component.
@@ -550,6 +555,9 @@ def generate_health_system_script(
         use_damage_numbers: Whether to include floating damage number support.
         use_respawn: Whether to include respawn logic.
         respawn_delay: Delay in seconds before respawn.
+        damage_number_offset: Y-offset above entity for floating damage numbers.
+        damage_number_lifetime: Seconds before damage number is destroyed.
+        i_frame_duration: Duration of invincibility frames in seconds.
         namespace: C# namespace for generated code.
 
     Returns:
@@ -579,7 +587,7 @@ def generate_health_system_script(
     lines.append("        [SerializeField] private float _currentHP;")
     lines.append("")
     lines.append("        [Header(\"Invincibility\")]")
-    lines.append("        [SerializeField] private float _iFrameDuration = 0.5f;")
+    lines.append("        [SerializeField] private float _iFrameDuration = " + str(i_frame_duration) + "f;")
     lines.append("        private float _iFrameTimer;")
     lines.append("        private bool _isInvincible;")
     lines.append("")
@@ -594,7 +602,7 @@ def generate_health_system_script(
     if use_damage_numbers:
         lines.append("        [Header(\"Damage Numbers\")]")
         lines.append("        [SerializeField] private GameObject _damageNumberPrefab;")
-        lines.append("        [SerializeField] private float _damageNumberOffset = 2f;")
+        lines.append("        [SerializeField] private float _damageNumberOffset = " + str(damage_number_offset) + "f;")
         lines.append("")
 
     lines.append("        [Header(\"Events\")]")
@@ -757,7 +765,7 @@ def generate_health_system_script(
         lines.append("                tmp.color = isCritical ? Color.yellow : Color.white;")
         lines.append("                tmp.fontSize = isCritical ? 8f : 6f;")
         lines.append("            }")
-        lines.append("            Destroy(go, 1.5f);")
+        lines.append("            Destroy(go, " + str(damage_number_lifetime) + "f);")
         lines.append("        }")
         lines.append("")
 
@@ -2718,6 +2726,298 @@ def generate_interactable_script(
     lines.append("        public bool HasInteractablesInRange => _inRange.Count > 0;")
 
     lines.append("    }")  # end VB_InteractionManager
+    lines.append("}")  # end namespace
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# AAA-POLISH: Input Haptics Router
+# ---------------------------------------------------------------------------
+
+
+def generate_haptics_router_script(
+    namespace: str = "VeilBreakers.GameSystems",
+) -> str:
+    """Generate controller rumble/haptics system MonoBehaviour.
+
+    Creates ``VB_HapticsRouter`` with predefined rumble profiles for
+    DualSense / Xbox quality haptic feedback. Each profile defines
+    low/high frequency motor intensities, duration, and an
+    AnimationCurve-based fade envelope. Supports stacking (stronger
+    haptic overrides weaker) and an accessibility disable toggle.
+
+    Args:
+        namespace: C# namespace for generated code.
+
+    Returns:
+        Complete C# source string.
+    """
+    lines: list[str] = []
+
+    lines.append("using UnityEngine;")
+    lines.append("using System.Collections;")
+    lines.append("using System.Collections.Generic;")
+    lines.append("")
+    lines.append("namespace " + _safe_namespace(namespace))
+    lines.append("{")
+
+    # HapticProfile enum
+    lines.append("    /// <summary>Predefined haptic feedback profiles.</summary>")
+    lines.append("    public enum HapticProfile")
+    lines.append("    {")
+    lines.append("        LightHit,")
+    lines.append("        HeavyHit,")
+    lines.append("        Parry,")
+    lines.append("        DodgeRoll,")
+    lines.append("        EnvironmentRumble,")
+    lines.append("        UIConfirm,")
+    lines.append("        Death,")
+    lines.append("        HealPulse")
+    lines.append("    }")
+    lines.append("")
+
+    # HapticData class
+    lines.append("    /// <summary>Runtime data for a single haptic profile.</summary>")
+    lines.append("    [System.Serializable]")
+    lines.append("    public class HapticData")
+    lines.append("    {")
+    lines.append("        public HapticProfile profile;")
+    lines.append("        [Range(0f, 1f)] public float lowFrequency = 0.3f;")
+    lines.append("        [Range(0f, 1f)] public float highFrequency = 0.1f;")
+    lines.append("        public float duration = 0.2f;")
+    lines.append("        public AnimationCurve fadeCurve = AnimationCurve.Linear(0f, 1f, 1f, 0f);")
+    lines.append("        /// <summary>Priority for stacking -- higher overrides lower.</summary>")
+    lines.append("        [Range(0f, 1f)] public float priority = 0.5f;")
+    lines.append("    }")
+    lines.append("")
+
+    # VB_HapticsRouter MonoBehaviour
+    lines.append("    /// <summary>")
+    lines.append("    /// Controller rumble/haptics router with predefined profiles.")
+    lines.append("    /// Uses Unity InputSystem Gamepad for motor control.")
+    lines.append("    /// Supports stacking (stronger overrides weaker) and accessibility toggle.")
+    lines.append("    /// Generated by VeilBreakers MCP toolkit.")
+    lines.append("    /// </summary>")
+    lines.append("    public class VB_HapticsRouter : MonoBehaviour")
+    lines.append("    {")
+    lines.append("        [Header(\"Configuration\")]")
+    lines.append("        [SerializeField] private bool _hapticsEnabled = true;")
+    lines.append("        [SerializeField] private float _globalIntensity = 1f;")
+    lines.append("")
+    lines.append("        [Header(\"Profiles\")]")
+    lines.append("        [SerializeField] private List<HapticData> _profiles = new List<HapticData>();")
+    lines.append("")
+    lines.append("        private Coroutine _activeRumble;")
+    lines.append("        private float _activePriority = -1f;")
+    lines.append("        private Dictionary<HapticProfile, HapticData> _profileLookup;")
+    lines.append("")
+    lines.append("        private static VB_HapticsRouter _instance;")
+    lines.append("        /// <summary>Singleton accessor.</summary>")
+    lines.append("        public static VB_HapticsRouter Instance => _instance;")
+    lines.append("")
+    lines.append("        /// <summary>Enable or disable haptics at runtime (accessibility).</summary>")
+    lines.append("        public bool HapticsEnabled")
+    lines.append("        {")
+    lines.append("            get => _hapticsEnabled;")
+    lines.append("            set")
+    lines.append("            {")
+    lines.append("                _hapticsEnabled = value;")
+    lines.append("                if (!value) StopHaptics();")
+    lines.append("            }")
+    lines.append("        }")
+    lines.append("")
+
+    # Awake
+    lines.append("        private void Awake()")
+    lines.append("        {")
+    lines.append("            if (_instance != null && _instance != this)")
+    lines.append("            {")
+    lines.append("                Destroy(gameObject);")
+    lines.append("                return;")
+    lines.append("            }")
+    lines.append("            _instance = this;")
+    lines.append("            DontDestroyOnLoad(gameObject);")
+    lines.append("")
+    lines.append("            InitializeDefaults();")
+    lines.append("            BuildLookup();")
+    lines.append("        }")
+    lines.append("")
+
+    # InitializeDefaults
+    lines.append("        private void InitializeDefaults()")
+    lines.append("        {")
+    lines.append("            if (_profiles.Count > 0) return;")
+    lines.append("")
+    lines.append("            // LightHit: quick tap")
+    lines.append("            _profiles.Add(new HapticData { profile = HapticProfile.LightHit,")
+    lines.append("                lowFrequency = 0.2f, highFrequency = 0.4f, duration = 0.1f, priority = 0.3f,")
+    lines.append("                fadeCurve = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f) });")
+    lines.append("")
+    lines.append("            // HeavyHit: strong slam")
+    lines.append("            _profiles.Add(new HapticData { profile = HapticProfile.HeavyHit,")
+    lines.append("                lowFrequency = 0.8f, highFrequency = 0.6f, duration = 0.3f, priority = 0.7f,")
+    lines.append("                fadeCurve = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f) });")
+    lines.append("")
+    lines.append("            // Parry: sharp spike")
+    lines.append("            _profiles.Add(new HapticData { profile = HapticProfile.Parry,")
+    lines.append("                lowFrequency = 0.9f, highFrequency = 0.9f, duration = 0.15f, priority = 0.8f,")
+    lines.append("                fadeCurve = new AnimationCurve(new Keyframe(0f, 1f), new Keyframe(0.3f, 1f), new Keyframe(1f, 0f)) });")
+    lines.append("")
+    lines.append("            // DodgeRoll: low rumble sweep")
+    lines.append("            _profiles.Add(new HapticData { profile = HapticProfile.DodgeRoll,")
+    lines.append("                lowFrequency = 0.4f, highFrequency = 0.1f, duration = 0.35f, priority = 0.4f,")
+    lines.append("                fadeCurve = AnimationCurve.Linear(0f, 0.5f, 1f, 0f) });")
+    lines.append("")
+    lines.append("            // EnvironmentRumble: subtle sustained")
+    lines.append("            _profiles.Add(new HapticData { profile = HapticProfile.EnvironmentRumble,")
+    lines.append("                lowFrequency = 0.15f, highFrequency = 0.05f, duration = 0.8f, priority = 0.1f,")
+    lines.append("                fadeCurve = AnimationCurve.Linear(0f, 1f, 1f, 1f) });")
+    lines.append("")
+    lines.append("            // UIConfirm: tiny click")
+    lines.append("            _profiles.Add(new HapticData { profile = HapticProfile.UIConfirm,")
+    lines.append("                lowFrequency = 0.05f, highFrequency = 0.15f, duration = 0.05f, priority = 0.2f,")
+    lines.append("                fadeCurve = AnimationCurve.Linear(0f, 1f, 1f, 0f) });")
+    lines.append("")
+    lines.append("            // Death: heavy sustained fade")
+    lines.append("            _profiles.Add(new HapticData { profile = HapticProfile.Death,")
+    lines.append("                lowFrequency = 1f, highFrequency = 0.7f, duration = 0.8f, priority = 0.95f,")
+    lines.append("                fadeCurve = AnimationCurve.EaseInOut(0f, 1f, 1f, 0f) });")
+    lines.append("")
+    lines.append("            // HealPulse: gentle wave")
+    lines.append("            _profiles.Add(new HapticData { profile = HapticProfile.HealPulse,")
+    lines.append("                lowFrequency = 0.1f, highFrequency = 0.3f, duration = 0.5f, priority = 0.35f,")
+    lines.append("                fadeCurve = new AnimationCurve(new Keyframe(0f, 0f), new Keyframe(0.3f, 1f), new Keyframe(0.7f, 1f), new Keyframe(1f, 0f)) });")
+    lines.append("        }")
+    lines.append("")
+
+    # BuildLookup
+    lines.append("        private void BuildLookup()")
+    lines.append("        {")
+    lines.append("            _profileLookup = new Dictionary<HapticProfile, HapticData>();")
+    lines.append("            foreach (var data in _profiles)")
+    lines.append("            {")
+    lines.append("                _profileLookup[data.profile] = data;")
+    lines.append("            }")
+    lines.append("        }")
+    lines.append("")
+
+    # TriggerHaptic
+    lines.append("        /// <summary>")
+    lines.append("        /// Trigger haptic feedback using a predefined profile.")
+    lines.append("        /// Stronger haptics override weaker ones (stacking).")
+    lines.append("        /// </summary>")
+    lines.append("        public void TriggerHaptic(HapticProfile profile)")
+    lines.append("        {")
+    lines.append("            if (!_hapticsEnabled) return;")
+    lines.append("")
+    lines.append("#if ENABLE_INPUT_SYSTEM")
+    lines.append("            if (UnityEngine.InputSystem.Gamepad.current == null) return;")
+    lines.append("#else")
+    lines.append("            return; // Legacy input has no gamepad rumble API")
+    lines.append("#endif")
+    lines.append("")
+    lines.append("            if (!_profileLookup.TryGetValue(profile, out HapticData data)) return;")
+    lines.append("")
+    lines.append("            // Stacking: stronger haptic overrides weaker one")
+    lines.append("            if (_activeRumble != null && data.priority <= _activePriority)")
+    lines.append("                return;")
+    lines.append("")
+    lines.append("            if (_activeRumble != null)")
+    lines.append("                StopCoroutine(_activeRumble);")
+    lines.append("")
+    lines.append("            _activePriority = data.priority;")
+    lines.append("            _activeRumble = StartCoroutine(RumbleRoutine(data));")
+    lines.append("        }")
+    lines.append("")
+
+    # TriggerHaptic with custom intensity
+    lines.append("        /// <summary>")
+    lines.append("        /// Trigger haptic with intensity multiplier override.")
+    lines.append("        /// </summary>")
+    lines.append("        public void TriggerHaptic(HapticProfile profile, float intensityMultiplier)")
+    lines.append("        {")
+    lines.append("            if (!_hapticsEnabled) return;")
+    lines.append("")
+    lines.append("#if ENABLE_INPUT_SYSTEM")
+    lines.append("            if (UnityEngine.InputSystem.Gamepad.current == null) return;")
+    lines.append("#else")
+    lines.append("            return;")
+    lines.append("#endif")
+    lines.append("")
+    lines.append("            if (!_profileLookup.TryGetValue(profile, out HapticData data)) return;")
+    lines.append("            if (_activeRumble != null && data.priority <= _activePriority) return;")
+    lines.append("            if (_activeRumble != null) StopCoroutine(_activeRumble);")
+    lines.append("")
+    lines.append("            _activePriority = data.priority;")
+    lines.append("            _activeRumble = StartCoroutine(RumbleRoutine(data, intensityMultiplier));")
+    lines.append("        }")
+    lines.append("")
+
+    # RumbleRoutine
+    lines.append("        private IEnumerator RumbleRoutine(HapticData data, float intensityMul = 1f)")
+    lines.append("        {")
+    lines.append("            float elapsed = 0f;")
+    lines.append("")
+    lines.append("            while (elapsed < data.duration)")
+    lines.append("            {")
+    lines.append("                elapsed += Time.unscaledDeltaTime;")
+    lines.append("                float t = Mathf.Clamp01(elapsed / data.duration);")
+    lines.append("                float curveVal = data.fadeCurve.Evaluate(t);")
+    lines.append("")
+    lines.append("                float low = data.lowFrequency * curveVal * _globalIntensity * intensityMul;")
+    lines.append("                float high = data.highFrequency * curveVal * _globalIntensity * intensityMul;")
+    lines.append("")
+    lines.append("#if ENABLE_INPUT_SYSTEM")
+    lines.append("                UnityEngine.InputSystem.Gamepad.current?.SetMotorSpeeds(")
+    lines.append("                    Mathf.Clamp01(low), Mathf.Clamp01(high));")
+    lines.append("#endif")
+    lines.append("")
+    lines.append("                yield return null;")
+    lines.append("            }")
+    lines.append("")
+    lines.append("            StopMotors();")
+    lines.append("            _activePriority = -1f;")
+    lines.append("            _activeRumble = null;")
+    lines.append("        }")
+    lines.append("")
+
+    # StopHaptics
+    lines.append("        /// <summary>Immediately stop all haptic feedback.</summary>")
+    lines.append("        public void StopHaptics()")
+    lines.append("        {")
+    lines.append("            if (_activeRumble != null)")
+    lines.append("            {")
+    lines.append("                StopCoroutine(_activeRumble);")
+    lines.append("                _activeRumble = null;")
+    lines.append("            }")
+    lines.append("            _activePriority = -1f;")
+    lines.append("            StopMotors();")
+    lines.append("        }")
+    lines.append("")
+
+    # StopMotors
+    lines.append("        private void StopMotors()")
+    lines.append("        {")
+    lines.append("#if ENABLE_INPUT_SYSTEM")
+    lines.append("            UnityEngine.InputSystem.Gamepad.current?.SetMotorSpeeds(0f, 0f);")
+    lines.append("#endif")
+    lines.append("        }")
+    lines.append("")
+
+    # OnDisable / OnDestroy
+    lines.append("        private void OnDisable()")
+    lines.append("        {")
+    lines.append("            StopHaptics();")
+    lines.append("        }")
+    lines.append("")
+    lines.append("        private void OnDestroy()")
+    lines.append("        {")
+    lines.append("            StopHaptics();")
+    lines.append("            if (_instance == this) _instance = null;")
+    lines.append("        }")
+
+    lines.append("    }")  # end VB_HapticsRouter
     lines.append("}")  # end namespace
 
     return "\n".join(lines)

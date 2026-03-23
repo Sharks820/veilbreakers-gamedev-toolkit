@@ -397,12 +397,8 @@ def generate_lighting_setup_script(
     return f'''using UnityEngine;
 using UnityEditor;
 using UnityEngine.Rendering;
-using System.IO;
-#if USING_URP
 using UnityEngine.Rendering.Universal;
-#elif USING_HDRP
-using UnityEngine.Rendering.HighDefinition;
-#endif
+using System.IO;
 
 public static class VeilBreakers_LightingSetup
 {{

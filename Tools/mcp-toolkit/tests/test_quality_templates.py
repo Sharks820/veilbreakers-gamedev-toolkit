@@ -45,16 +45,16 @@ class TestPolyBudget:
     """Tests for polygon budget check C# script generation."""
 
     def test_poly_budget_hero(self):
-        """Hero type includes 30000-50000 budget range."""
+        """Hero type includes 40000-60000 budget range (AAA research values)."""
         script = generate_poly_budget_check_script("hero")
-        assert "30000" in script
-        assert "50000" in script
+        assert "40000" in script
+        assert "60000" in script
 
     def test_poly_budget_mob(self):
-        """Mob type includes 8000-15000 budget range."""
+        """Mob type includes 15000-35000 budget range (AAA research values)."""
         script = generate_poly_budget_check_script("mob")
-        assert "8000" in script
         assert "15000" in script
+        assert "35000" in script
 
     def test_poly_budget_weapon(self):
         """Weapon type includes 3000-8000 budget range."""
@@ -63,10 +63,10 @@ class TestPolyBudget:
         assert "8000" in script
 
     def test_poly_budget_prop(self):
-        """Prop type includes 500-6000 budget range."""
+        """Prop type includes 500-5000 budget range (AAA research values)."""
         script = generate_poly_budget_check_script("prop")
         assert "500" in script
-        assert "6000" in script
+        assert "5000" in script
 
     def test_poly_budget_building(self):
         """Building type includes 5000-15000 budget range."""
@@ -313,6 +313,6 @@ class TestAAAValidation:
         assert "Assets/Art" in script
 
     def test_aaa_validation_budget_values(self):
-        """Budget values match the specified asset type."""
+        """Budget values match the specified asset type (AAA research values)."""
         script = generate_aaa_validation_script(asset_type="hero")
-        assert "30000" in script or "50000" in script
+        assert "40000" in script or "60000" in script
