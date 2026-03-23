@@ -232,19 +232,49 @@ def _check_mutable_get(line: str, all_lines: list[str], idx: int) -> bool:
 
 
 def _check_late_binding(line: str, all_lines: list[str], idx: int) -> bool:
-    """Return True if a for-loop has a lambda using the loop var without default capture."""
+    """Return True if a for-loop has a lambda using the loop var without default capture.
+
+    Skips ``for`` that is part of a list/dict/set comprehension or generator
+    expression -- those create their own scope and are not late-binding bugs.
+    """
     m = re.search(r"for\s+(\w+)\s+in\b", line)
     if not m:
         return False
     loop_var = m.group(1)
+
+    # If the ``for`` lives inside a comprehension [...], {...}, or (...) it
+    # is NOT a loop-level variable capture -- skip.
+    match_pos = m.start()
+    before = line[:match_pos]
+    after = line[match_pos:]
+    # Count unmatched opening brackets before the ``for``
+    open_sq = before.count("[") - before.count("]")
+    open_cr = before.count("{") - before.count("}")
+    # Also look for generator expression: ``(... for x in ...)``
+    open_paren = before.count("(") - before.count(")")
+    if open_sq > 0 or open_cr > 0:
+        # for is inside [...] or {...} -- comprehension, not a real loop
+        return False
+    # Generator expression: at least one unmatched ``(`` and the ``for`` is
+    # followed by ``in`` (already guaranteed by the main pattern).
+    if open_paren > 0 and re.search(r"\bfor\s+\w+\s+in\b", after):
+        # Check there is a closing ``)`` after -- generator expr, not real loop
+        if ")" in after:
+            return False
+
     for j in range(idx + 1, min(len(all_lines), idx + 8)):
         # Check for lambda that uses loop_var but doesn't capture it as default arg
         lam = re.search(r"lambda\b([^:]*?):", all_lines[j])
-        if lam and loop_var in all_lines[j]:
-            # Safe if loop_var appears in default args: lambda x, i=i
-            if re.search(rf"\b{loop_var}\s*=\s*{loop_var}\b", lam.group(1)):
-                continue
-            return True
+        if not lam:
+            continue
+        # Use word-boundary match -- avoids false positives from short var names
+        # like 'v' matching inside 'vertices', 'var', etc.
+        if not re.search(rf"\b{re.escape(loop_var)}\b", all_lines[j]):
+            continue
+        # Safe if loop_var appears in default args: lambda x, i=i
+        if re.search(rf"\b{re.escape(loop_var)}\s*=\s*{re.escape(loop_var)}\b", lam.group(1)):
+            continue
+        return True
     return False
 
 
@@ -421,6 +451,8 @@ RULES: list[Rule] = [
          confidence=72),
 
     # PY-COR-15: Late binding closure in loop
+    # Anti-patterns suppress only VB-IGNORE / comments; comprehension detection
+    # lives in the guard (_check_late_binding) to avoid radius-based over-suppression.
     Rule("PY-COR-15", Severity.HIGH, Category.Bug,
          "Lambda in loop captures loop variable by reference -- late binding bug",
          "Capture with default arg: lambda x, i=i: ... or use functools.partial.",

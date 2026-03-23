@@ -21,6 +21,13 @@ import math
 from typing import Any
 
 from .mesh_smoothing import smooth_assembled_mesh, add_organic_noise
+from .facial_topology import (
+    generate_hand_mesh,
+    generate_foot_mesh,
+    generate_claw_hand_mesh,
+    generate_hoof_mesh,
+    generate_paw_mesh,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +155,56 @@ def _cap_ring(base: int, segments: int, flip: bool = False) -> tuple[int, ...]:
     return tuple(base + i for i in range(segments))
 
 
+def _weld_coincident_vertices(
+    verts: list[tuple[float, float, float]],
+    faces: list[tuple[int, ...]],
+    threshold: float = 0.001,
+) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]:
+    """Bug 4 fix: merge vertices within threshold distance for connected topology."""
+    n = len(verts)
+    if n == 0:
+        return verts, faces
+
+    remap: list[int] = list(range(n))
+    thresh_sq = threshold * threshold
+
+    for i in range(n):
+        if remap[i] != i:
+            continue
+        xi, yi, zi = verts[i]
+        for j in range(i + 1, n):
+            if remap[j] != j:
+                continue
+            dx = verts[j][0] - xi
+            dy = verts[j][1] - yi
+            dz = verts[j][2] - zi
+            if dx * dx + dy * dy + dz * dz < thresh_sq:
+                remap[j] = i
+
+    new_indices: dict[int, int] = {}
+    new_verts: list[tuple[float, float, float]] = []
+    for i in range(n):
+        canonical = remap[i]
+        if canonical not in new_indices:
+            new_indices[canonical] = len(new_verts)
+            new_verts.append(verts[canonical])
+        remap[i] = new_indices[canonical]
+
+    new_faces: list[tuple[int, ...]] = []
+    for face in faces:
+        new_face = tuple(remap[idx] for idx in face)
+        deduped = []
+        for vi in new_face:
+            if not deduped or deduped[-1] != vi:
+                deduped.append(vi)
+        if len(deduped) > 1 and deduped[0] == deduped[-1]:
+            deduped.pop()
+        if len(deduped) >= 3:
+            new_faces.append(tuple(deduped))
+
+    return new_verts, new_faces
+
+
 def _tapered_cylinder(
     cx: float,
     cy: float,
@@ -204,6 +261,9 @@ def _sphere(
 
     Returns (vertices, faces) with quad topology.
     """
+    # Bug 9 fix: guard against rings < 2 which would crash face generation
+    rings = max(rings, 2)
+    segments = max(segments, 3)
     verts: list[tuple[float, float, float]] = []
     faces: list[tuple[int, ...]] = []
 
@@ -694,16 +754,17 @@ def generate_npc_body_mesh(
         )
         _add(la_verts, la_faces, "body_skin")
 
-        # Hand
+        # Hand -- Bug 14 fix: use anatomical hand mesh from facial_topology
         hand_cx = arm_x + side * 0.25
         hand_z = wrist_z - 0.08
-        hand_verts, hand_faces = _subdivided_box(
-            cx=hand_cx, cy=0.0, cz=hand_z,
-            sx=0.03 * limb_mult, sy=0.04 * limb_mult, sz=0.015 * limb_mult,
-            divs_x=4,  # 4 finger divisions
-            divs_z=2,
-            base_idx=len(all_verts),
-        )
+        hand_side = "left" if side == -1 else "right"
+        hand_spec = generate_hand_mesh(detail="low", side=hand_side)
+        hand_raw_verts = hand_spec["vertices"]
+        hand_raw_faces = hand_spec["faces"]
+        # Offset hand vertices to correct position; hand mesh is at origin
+        base_idx = len(all_verts)
+        hand_verts = [(v[0] + hand_cx, v[1] + hand_z, v[2]) for v in hand_raw_verts]
+        hand_faces = [tuple(idx + base_idx for idx in f) for f in hand_raw_faces]
         _add(hand_verts, hand_faces, "extremity_skin")
 
     # --- Legs (both sides) ---
@@ -736,17 +797,45 @@ def generate_npc_body_mesh(
         )
         _add(sh_verts, sh_faces, "body_skin")
 
-        # Foot: box with toe section
+        # Foot -- Bug 14 fix: use anatomical foot mesh from facial_topology
         foot_cx = leg_x
         foot_z = feet_top * 0.5
-        foot_verts, foot_faces = _subdivided_box(
-            cx=foot_cx, cy=-0.04, cz=foot_z,
-            sx=0.04 * limb_mult, sy=0.10, sz=feet_top * 0.5,
-            divs_x=2,  # toe divisions
-            divs_z=1,
-            base_idx=len(all_verts),
-        )
+        foot_side = "left" if side == -1 else "right"
+        foot_spec = generate_foot_mesh(detail="low", side=foot_side)
+        foot_raw_verts = foot_spec["vertices"]
+        foot_raw_faces = foot_spec["faces"]
+        # Offset foot vertices to correct position; foot mesh is at origin
+        base_idx_foot = len(all_verts)
+        foot_verts = [(v[0] + foot_cx, v[1] - 0.04, v[2] + foot_z) for v in foot_raw_verts]
+        foot_faces = [tuple(idx + base_idx_foot for idx in f) for f in foot_raw_faces]
         _add(foot_verts, foot_faces, "extremity_skin")
+
+    # Bug 4 fix: weld coincident vertices at primitive junctions
+    all_verts, all_faces = _weld_coincident_vertices(all_verts, all_faces)
+    # Rebuild material regions after welding: face count may have changed
+    # (degenerate faces removed). Assign all faces to body_skin as default,
+    # then classify based on vertex positions. Only classify hands/feet as
+    # extremity_skin, keeping body_skin as the majority region.
+    material_regions = {}
+    for fi in range(len(all_faces)):
+        material_regions[fi] = "body_skin"
+    # Re-classify head and extremity faces based on vertex positions
+    for fi, face in enumerate(all_faces):
+        valid_vis = [vi for vi in face if vi < len(all_verts)]
+        if not valid_vis:
+            continue
+        avg_z = sum(all_verts[vi][2] for vi in valid_vis) / len(valid_vis)
+        # Head is above neck
+        if avg_z > neck_top:
+            material_regions[fi] = "head_skin"
+        # Only actual hand/foot areas: well below wrist/ankle
+        elif avg_z < feet_top:
+            material_regions[fi] = "extremity_skin"
+        elif avg_z < wrist_z - 0.03:
+            # Check if at hand position (far from center AND below wrist)
+            avg_x = sum(abs(all_verts[vi][0]) for vi in valid_vis) / len(valid_vis)
+            if avg_x > shoulder_x * 1.0:
+                material_regions[fi] = "extremity_skin"
 
     # Smooth assembled geometry to eliminate primitive junctions
     all_verts = smooth_assembled_mesh(

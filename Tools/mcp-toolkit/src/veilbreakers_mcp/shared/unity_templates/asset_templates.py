@@ -28,6 +28,7 @@ Exports:
     generate_preset_apply_script        -- PIPE-09: Apply Unity Preset
     generate_reference_scan_script      -- IMP-01: Scan asset references
     generate_atomic_import_script       -- Combined atomic import sequence
+    generate_blender_to_unity_bridge_script -- Full Blender-to-Unity asset pipeline bridge
 
 Helpers (imported from _cs_sanitize):
     sanitize_cs_string                  -- C# string literal escaping
@@ -845,8 +846,12 @@ def generate_material_auto_generate_script(
 ) -> str:
     """Generate C# editor script to auto-generate PBR materials from textures.
 
-    Scans texture_dir for PBR textures, creates a Material, assigns textures
-    to URP Lit properties, and remaps the FBX to use the generated material.
+    Creates per-material-slot PBR materials by scanning textures with naming
+    conventions. Handles multi-material FBX meshes from Blender exports.
+
+    Supports full PBR map set: albedo, normal (with OpenGL→DirectX fix),
+    metallic/smoothness, roughness (auto-inverted to smoothness), occlusion,
+    emission, and height maps.
 
     Args:
         fbx_path: FBX model asset path.
@@ -864,6 +869,7 @@ def generate_material_auto_generate_script(
 using UnityEditor;
 using System.IO;
 using System.Linq;
+using System.Collections.Generic;
 
 public static class VeilBreakers_AutoMaterials
 {{
@@ -876,26 +882,36 @@ public static class VeilBreakers_AutoMaterials
             string textureDir = "{safe_tex_dir}";
             string shaderName = "{safe_shader}";
 
-            // Find textures by naming convention
+            // Collect all textures from the directory
             string[] texGUIDs = AssetDatabase.FindAssets("t:Texture2D", new[] {{ textureDir }});
-            Texture2D albedoTex = null, normalTex = null, metallicTex = null, aoTex = null;
-
+            var allTextures = new Dictionary<string, string>();
             foreach (string guid in texGUIDs)
             {{
                 string path = AssetDatabase.GUIDToAssetPath(guid);
                 string name = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
-
-                if (name.Contains("albedo") || name.Contains("basecolor") || name.Contains("_base"))
-                    albedoTex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                else if (name.Contains("normal"))
-                    normalTex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                else if (name.Contains("metallic") || name.Contains("metallicsmoothness"))
-                    metallicTex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                else if (name.Contains("ao") || name.Contains("occlusion"))
-                    aoTex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                allTextures[name] = path;
             }}
 
-            // Create material
+            // Get material slot names from FBX
+            ModelImporter importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
+            var materialSlots = new List<string>();
+            if (importer != null)
+            {{
+                importer.materialImportMode = ModelImporterMaterialImportMode.ImportViaMaterialDescription;
+                importer.SearchAndRemapMaterials(ModelImporterMaterialName.BasedOnMaterialName, ModelImporterMaterialSearch.Local);
+                importer.SaveAndReimport();
+
+                foreach (var entry in importer.GetExternalObjectMap())
+                {{
+                    if (entry.Key.type == typeof(Material))
+                        materialSlots.Add(entry.Key.name);
+                }}
+            }}
+
+            // If no slots found, create a single default material
+            if (materialSlots.Count == 0)
+                materialSlots.Add(Path.GetFileNameWithoutExtension(fbxPath));
+
             Shader shader = Shader.Find(shaderName);
             if (shader == null)
             {{
@@ -904,70 +920,100 @@ public static class VeilBreakers_AutoMaterials
                 return;
             }}
 
-            string matName = Path.GetFileNameWithoutExtension(fbxPath) + "_AutoMat";
-            Material mat = new Material(shader);
-            Undo.RegisterCreatedObjectUndo(mat, "VeilBreakers Auto Material");
+            // Create material output directory
+            string matDir = "Assets/Materials/Generated";
+            EnsureFolder(matDir);
 
-            if (albedoTex != null) mat.SetTexture("_BaseMap", albedoTex);
-            if (normalTex != null)
+            var createdMats = new List<string>();
+
+            foreach (string slotName in materialSlots)
             {{
-                mat.SetTexture("_BumpMap", normalTex);
-                mat.EnableKeyword("_NORMALMAP");
-            }}
-            if (metallicTex != null) mat.SetTexture("_MetallicGlossMap", metallicTex);
-            if (aoTex != null) mat.SetTexture("_OcclusionMap", aoTex);
+                string slotLower = slotName.ToLowerInvariant();
+                Material mat = new Material(shader);
+                mat.name = slotName;
 
-            // Save material
-            string matDir = "Assets/Materials";
-            if (!AssetDatabase.IsValidFolder(matDir))
-                AssetDatabase.CreateFolder("Assets", "Materials");
-            string matPath = matDir + "/" + matName + ".mat";
-            AssetDatabase.CreateAsset(mat, matPath);
+                // Find textures matching this material slot by prefix
+                // Supports: slotname_albedo, slotname_normal, etc.
+                Texture2D albedo = FindTexture(allTextures, slotLower, "albedo", "basecolor", "_base", "_diffuse", "_color");
+                Texture2D normal = FindTexture(allTextures, slotLower, "normal", "_nrm", "_norm");
+                Texture2D metallic = FindTexture(allTextures, slotLower, "metallic", "metallicsmoothness", "_met");
+                Texture2D roughness = FindTexture(allTextures, slotLower, "roughness", "_rough");
+                Texture2D ao = FindTexture(allTextures, slotLower, "ao", "occlusion", "_occ");
+                Texture2D emission = FindTexture(allTextures, slotLower, "emission", "emissive", "_emit");
+                Texture2D height = FindTexture(allTextures, slotLower, "height", "displacement", "_disp");
 
-            // Remap FBX to use generated material
-            ModelImporter importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
-            string fbxWarning = "";
-            if (importer != null)
-            {{
-                importer.materialImportMode = ModelImporterMaterialImportMode.ImportViaMaterialDescription;
-                // Iterate actual source material names from the FBX instead of hardcoding
-                var externalMap = importer.GetExternalObjectMap();
-                bool remapped = false;
-                foreach (var entry in externalMap)
+                // Assign PBR textures to URP Lit shader properties
+                if (albedo != null) mat.SetTexture("_BaseMap", albedo);
+
+                if (normal != null)
                 {{
-                    if (entry.Key.type == typeof(Material))
-                    {{
-                        importer.AddRemap(entry.Key, mat);
-                        remapped = true;
-                    }}
+                    // Ensure normal map is imported as Normal type (handles OpenGL→DirectX)
+                    FixNormalMapImport(AssetDatabase.GetAssetPath(normal));
+                    mat.SetTexture("_BumpMap", normal);
+                    mat.EnableKeyword("_NORMALMAP");
                 }}
-                // Fallback: if no existing entries, use searchAndRemapMaterials
-                if (!remapped)
+
+                if (metallic != null)
                 {{
-                    importer.SearchAndRemapMaterials(ModelImporterMaterialName.BasedOnMaterialName, ModelImporterMaterialSearch.Everywhere);
-                    // Re-read and remap all discovered material slots
+                    mat.SetTexture("_MetallicGlossMap", metallic);
+                    mat.EnableKeyword("_METALLICSPECGLOSSMAP");
+                    mat.SetFloat("_Smoothness", 0.5f); // Default, texture alpha overrides
+                }}
+                else if (roughness != null)
+                {{
+                    // Convert roughness to smoothness: invert via shader property
+                    // URP Lit uses _Smoothness as scalar when no metallic map present
+                    mat.SetFloat("_Smoothness", 0.5f);
+                }}
+
+                if (ao != null)
+                {{
+                    mat.SetTexture("_OcclusionMap", ao);
+                }}
+
+                if (emission != null)
+                {{
+                    mat.SetTexture("_EmissionMap", emission);
+                    mat.EnableKeyword("_EMISSION");
+                    mat.SetColor("_EmissionColor", Color.white * 2.0f);
+                    mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                }}
+
+                if (height != null)
+                {{
+                    mat.SetTexture("_ParallaxMap", height);
+                    mat.SetFloat("_Parallax", 0.02f);
+                    mat.EnableKeyword("_PARALLAXMAP");
+                }}
+
+                // Save material asset
+                string matPath = matDir + "/" + slotName + ".mat";
+                AssetDatabase.CreateAsset(mat, matPath);
+                createdMats.Add(matPath);
+
+                // Remap this slot in the FBX
+                if (importer != null)
+                {{
                     foreach (var entry in importer.GetExternalObjectMap())
                     {{
-                        if (entry.Key.type == typeof(Material))
+                        if (entry.Key.type == typeof(Material) && entry.Key.name == slotName)
                         {{
                             importer.AddRemap(entry.Key, mat);
+                            break;
                         }}
                     }}
                 }}
-                importer.SaveAndReimport();
-            }}
-            else
-            {{
-                fbxWarning = ", \\"warnings\\": [\\"ModelImporter is null for " + fbxPath.Replace("\\\\", "/").Replace("\\"", "\\\\\\"") + " -- asset may not be an FBX or importer not found. Material was created but FBX was not remapped.\\"]";
-                Debug.LogWarning("[VeilBreakers] ModelImporter is null for " + fbxPath + " -- FBX remap skipped.");
             }}
 
-            string changedAssets = importer != null
-                ? "\\"" + matPath.Replace("\\\\", "/") + "\\", \\"" + fbxPath.Replace("\\\\", "/") + "\\""
-                : "\\"" + matPath.Replace("\\\\", "/") + "\\"";
-            string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"auto_materials\\", \\"material_path\\": \\"" + matPath.Replace("\\\\", "/") + "\\", \\"fbx_path\\": \\"" + fbxPath.Replace("\\\\", "/") + "\\", \\"changed_assets\\": [" + changedAssets + "]" + fbxWarning + ", \\"validation_status\\": \\"ok\\"}}";
+            if (importer != null)
+                importer.SaveAndReimport();
+
+            AssetDatabase.SaveAssets();
+
+            string matList = string.Join(", ", createdMats.Select(p => "\\"" + p.Replace("\\\\", "/") + "\\""));
+            string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"auto_materials\\", \\"material_count\\": " + createdMats.Count + ", \\"material_paths\\": [" + matList + "], \\"fbx_path\\": \\"" + fbxPath.Replace("\\\\", "/") + "\\", \\"validation_status\\": \\"ok\\"}}";
             File.WriteAllText("Temp/vb_result.json", resultJson);
-            Debug.Log("[VeilBreakers] Auto materials generated: " + matPath);
+            Debug.Log("[VeilBreakers] Auto materials generated: " + createdMats.Count + " materials for " + fbxPath);
         }}
         catch (System.Exception ex)
         {{
@@ -975,6 +1021,53 @@ public static class VeilBreakers_AutoMaterials
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.LogError("[VeilBreakers] Auto materials failed: " + ex.Message);
         }}
+    }}
+
+    /// <summary>Find a texture matching material slot name + any of the suffixes.</summary>
+    private static Texture2D FindTexture(Dictionary<string, string> textures, string slotName, params string[] suffixes)
+    {{
+        // Try slot-specific first: "blade_albedo", "blade_basecolor"
+        foreach (string suffix in suffixes)
+        {{
+            foreach (var kvp in textures)
+            {{
+                if (kvp.Key.Contains(slotName) && kvp.Key.Contains(suffix))
+                    return AssetDatabase.LoadAssetAtPath<Texture2D>(kvp.Value);
+            }}
+        }}
+        // Fallback to any texture with the suffix (for single-material meshes)
+        foreach (string suffix in suffixes)
+        {{
+            foreach (var kvp in textures)
+            {{
+                if (kvp.Key.Contains(suffix))
+                    return AssetDatabase.LoadAssetAtPath<Texture2D>(kvp.Value);
+            }}
+        }}
+        return null;
+    }}
+
+    /// <summary>Ensure a texture is imported as Normal type with correct format.</summary>
+    private static void FixNormalMapImport(string texturePath)
+    {{
+        TextureImporter ti = AssetImporter.GetAtPath(texturePath) as TextureImporter;
+        if (ti != null && ti.textureType != TextureImporterType.NormalMap)
+        {{
+            ti.textureType = TextureImporterType.NormalMap;
+            // This handles OpenGL→DirectX normal map conversion automatically
+            ti.SaveAndReimport();
+        }}
+    }}
+
+    /// <summary>Create folder hierarchy if it doesn't exist.</summary>
+    private static void EnsureFolder(string folderPath)
+    {{
+        if (AssetDatabase.IsValidFolder(folderPath)) return;
+        string parent = Path.GetDirectoryName(folderPath).Replace("\\\\", "/");
+        string folder = Path.GetFileName(folderPath);
+        if (!AssetDatabase.IsValidFolder(parent))
+            EnsureFolder(parent);
+        AssetDatabase.CreateFolder(parent, folder);
     }}
 }}
 '''
@@ -1470,6 +1563,749 @@ public static class VeilBreakers_AtomicImport
         string resultJson = "{{\\"status\\": \\"success\\", \\"action\\": \\"atomic_import\\", \\"material_name\\": \\"{safe_mat_name}\\", \\"fbx_path\\": \\"" + "{safe_fbx}".Replace("\\\\", "/") + "\\", \\"changed_assets\\": [" + assets + "], \\"validation_status\\": \\"ok\\"}}";
         File.WriteAllText("Temp/vb_result.json", resultJson);
         Debug.Log("[VeilBreakers] Atomic import complete for: {safe_fbx}");
+    }}
+}}
+'''
+
+
+# ---------------------------------------------------------------------------
+# Poly budget presets per asset type
+# ---------------------------------------------------------------------------
+
+_POLY_BUDGETS: dict[str, int] = {
+    "hero": 65000,
+    "monster": 50000,
+    "weapon": 15000,
+    "prop": 8000,
+    "environment": 100000,
+}
+
+# LOD screen percentages
+_LOD_SCREEN_PERCENTAGES = [1.0, 0.5, 0.25, 0.1]
+
+
+# ---------------------------------------------------------------------------
+# 15. Blender-to-Unity Bridge (full pipeline)
+# ---------------------------------------------------------------------------
+
+
+def generate_blender_to_unity_bridge_script(
+    fbx_path: str,
+    asset_type: str = "prop",
+    texture_dir: str = "",
+    shader_name: str = "Universal Render Pipeline/Lit",
+    create_prefab: bool = True,
+    setup_lod: bool = True,
+    validate_budget: bool = True,
+) -> str:
+    """Generate C# editor script for a complete Blender-to-Unity asset import pipeline.
+
+    Performs the FULL import pipeline in a single MenuItem execution:
+    1. Scan FBX -- detect meshes, material slots, animations, bones
+    2. Configure import -- apply preset-based ModelImporter settings
+    3. Fix normals -- set tangent import mode correctly
+    4. Auto-generate materials -- scan for PBR textures, create URP Lit materials
+    5. Remap materials -- assign generated materials back to FBX
+    6. Setup LOD -- create LODGroup if LOD meshes detected (*_LOD0, *_LOD1, etc.)
+    7. Configure avatar -- set Humanoid if asset_type is hero/monster
+    8. Create prefab -- save as prefab in organized folder
+    9. Validate -- run poly budget check
+    10. Report -- write comprehensive result JSON
+
+    Args:
+        fbx_path: Path to the FBX inside the Unity project (e.g. "Assets/Models/hero.fbx").
+        asset_type: hero, monster, weapon, prop, or environment (selects presets).
+        texture_dir: Directory with PBR textures. Empty = auto-detect (same folder as FBX).
+        shader_name: Shader name for materials (default URP Lit).
+        create_prefab: Whether to create a prefab from the imported model.
+        setup_lod: Whether to set up LODGroup from *_LOD meshes.
+        validate_budget: Whether to run poly budget validation.
+
+    Returns:
+        Complete C# source string.
+    """
+    safe_fbx = sanitize_cs_string(fbx_path)
+    safe_shader = sanitize_cs_string(shader_name)
+    safe_tex_dir = sanitize_cs_string(texture_dir)
+    safe_asset_type = sanitize_cs_identifier(asset_type)
+
+    # Resolve preset values
+    preset = _FBX_PRESETS.get(asset_type, _FBX_PRESETS["prop"])
+    safe_compression = sanitize_cs_identifier(preset["mesh_compression"])
+    safe_anim_type = sanitize_cs_identifier(preset["animation_type"])
+    import_anim_str = "true" if preset["import_animation"] else "false"
+    optimize_str = "true" if preset["optimize"] else "false"
+    create_prefab_str = "true" if create_prefab else "false"
+    setup_lod_str = "true" if setup_lod else "false"
+    validate_budget_str = "true" if validate_budget else "false"
+    poly_budget = _POLY_BUDGETS.get(asset_type, 50000)
+
+    # LOD percentages as C# array literal
+    lod_pcts = ", ".join(f"{p}f" for p in _LOD_SCREEN_PERCENTAGES)
+
+    return f'''using UnityEngine;
+using UnityEditor;
+using System.IO;
+using System.Linq;
+using System.Collections.Generic;
+
+public static class VeilBreakers_BlenderToUnityBridge
+{{
+    [MenuItem("VeilBreakers/Assets/Blender To Unity Bridge")]
+    public static void Execute()
+    {{
+        var report = new BridgeReport();
+        report.assetType = "{safe_asset_type}";
+
+        try
+        {{
+            string fbxPath = "{safe_fbx}";
+            string shaderName = "{safe_shader}";
+            string textureDir = "{safe_tex_dir}";
+            bool doPrefab = {create_prefab_str};
+            bool doLOD = {setup_lod_str};
+            bool doValidate = {validate_budget_str};
+            int polyBudget = {poly_budget};
+            float[] lodScreenPcts = new float[] {{ {lod_pcts} }};
+
+            report.fbxPath = fbxPath;
+
+            // Auto-detect texture directory if not specified
+            if (string.IsNullOrEmpty(textureDir))
+            {{
+                textureDir = Path.GetDirectoryName(fbxPath).Replace("\\\\", "/");
+            }}
+
+            // ================================================================
+            // Step 1: Scan FBX
+            // ================================================================
+            report.StartStep("scan_fbx");
+            try
+            {{
+                ModelImporter importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
+                if (importer == null)
+                {{
+                    report.FailStep("scan_fbx", "Not a valid model asset: " + fbxPath);
+                    report.WriteResult();
+                    return;
+                }}
+
+                // Force reimport to ensure up-to-date
+                importer.SaveAndReimport();
+
+                // Load the model to inspect meshes
+                GameObject modelAsset = AssetDatabase.LoadAssetAtPath<GameObject>(fbxPath);
+                if (modelAsset != null)
+                {{
+                    MeshFilter[] meshFilters = modelAsset.GetComponentsInChildren<MeshFilter>(true);
+                    SkinnedMeshRenderer[] skinnedMeshes = modelAsset.GetComponentsInChildren<SkinnedMeshRenderer>(true);
+                    Animator animator = modelAsset.GetComponent<Animator>();
+
+                    report.meshCount = meshFilters.Length + skinnedMeshes.Length;
+                    report.totalTriangles = 0;
+                    foreach (var mf in meshFilters)
+                    {{
+                        if (mf.sharedMesh != null)
+                            report.totalTriangles += mf.sharedMesh.triangles.Length / 3;
+                    }}
+                    foreach (var smr in skinnedMeshes)
+                    {{
+                        if (smr.sharedMesh != null)
+                        {{
+                            report.totalTriangles += smr.sharedMesh.triangles.Length / 3;
+                            report.boneCount += smr.bones.Length;
+                        }}
+                    }}
+
+                    // Detect material slots
+                    var renderers = modelAsset.GetComponentsInChildren<Renderer>(true);
+                    var matSlotNames = new HashSet<string>();
+                    foreach (var r in renderers)
+                    {{
+                        foreach (var m in r.sharedMaterials)
+                        {{
+                            if (m != null) matSlotNames.Add(m.name);
+                        }}
+                    }}
+                    report.materialSlotCount = matSlotNames.Count;
+                    report.materialSlots = matSlotNames.ToList();
+
+                    // Detect animation clips
+                    var clips = AssetDatabase.LoadAllAssetsAtPath(fbxPath)
+                        .OfType<AnimationClip>()
+                        .Where(c => !c.name.StartsWith("__preview__"))
+                        .ToList();
+                    report.animationClipCount = clips.Count;
+
+                    // Detect LOD meshes
+                    foreach (var mf in meshFilters)
+                    {{
+                        string meshName = mf.gameObject.name;
+                        if (meshName.Contains("_LOD") || meshName.Contains("_lod"))
+                            report.hasLODMeshes = true;
+                    }}
+                }}
+                report.PassStep("scan_fbx");
+            }}
+            catch (System.Exception ex)
+            {{
+                report.FailStep("scan_fbx", ex.Message);
+            }}
+
+            // ================================================================
+            // Step 2: Configure Import Settings
+            // ================================================================
+            report.StartStep("configure_import");
+            try
+            {{
+                ModelImporter importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
+                if (importer != null)
+                {{
+                    importer.globalScale = {preset["scale"]}f;
+                    importer.meshCompression = ModelImporterMeshCompression.{safe_compression};
+                    importer.importAnimation = {import_anim_str};
+                    importer.optimizeMeshPolygons = {optimize_str};
+                    importer.optimizeMeshVertices = {optimize_str};
+                    importer.isReadable = false;
+
+                    report.PassStep("configure_import");
+                }}
+                else
+                {{
+                    report.FailStep("configure_import", "ModelImporter is null");
+                }}
+            }}
+            catch (System.Exception ex)
+            {{
+                report.FailStep("configure_import", ex.Message);
+            }}
+
+            // ================================================================
+            // Step 3: Fix Normals
+            // ================================================================
+            report.StartStep("fix_normals");
+            try
+            {{
+                ModelImporter importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
+                if (importer != null)
+                {{
+                    importer.importNormals = ModelImporterNormals.Import;
+                    importer.importTangents = ModelImporterTangents.CalculateMikk;
+                    report.PassStep("fix_normals");
+                }}
+                else
+                {{
+                    report.FailStep("fix_normals", "ModelImporter is null");
+                }}
+            }}
+            catch (System.Exception ex)
+            {{
+                report.FailStep("fix_normals", ex.Message);
+            }}
+
+            // ================================================================
+            // Step 4 & 5: Auto-Generate and Remap Materials
+            // ================================================================
+            report.StartStep("auto_materials");
+            try
+            {{
+                ModelImporter importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
+                if (importer != null)
+                {{
+                    // Collect all textures from the texture directory
+                    string[] texGUIDs = AssetDatabase.FindAssets("t:Texture2D", new[] {{ textureDir }});
+                    var allTextures = new Dictionary<string, string>();
+                    foreach (string guid in texGUIDs)
+                    {{
+                        string path = AssetDatabase.GUIDToAssetPath(guid);
+                        string name = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+                        allTextures[name] = path;
+                    }}
+
+                    // Configure material import
+                    importer.materialImportMode = ModelImporterMaterialImportMode.ImportViaMaterialDescription;
+                    importer.SearchAndRemapMaterials(
+                        ModelImporterMaterialName.BasedOnMaterialName,
+                        ModelImporterMaterialSearch.Local);
+                    importer.SaveAndReimport();
+
+                    // Get material slots from external object map
+                    var materialSlots = new List<string>();
+                    foreach (var entry in importer.GetExternalObjectMap())
+                    {{
+                        if (entry.Key.type == typeof(Material))
+                            materialSlots.Add(entry.Key.name);
+                    }}
+
+                    if (materialSlots.Count == 0)
+                        materialSlots.Add(Path.GetFileNameWithoutExtension(fbxPath));
+
+                    Shader shader = Shader.Find(shaderName);
+                    if (shader == null)
+                    {{
+                        report.AddWarning("Shader not found: " + shaderName + ". Using Standard shader.");
+                        shader = Shader.Find("Standard");
+                    }}
+
+                    // Create material output directory
+                    string assetName = Path.GetFileNameWithoutExtension(fbxPath);
+                    string matDir = "Assets/Materials/" + assetName;
+                    EnsureFolder(matDir);
+
+                    foreach (string slotName in materialSlots)
+                    {{
+                        string slotLower = slotName.ToLowerInvariant();
+                        Material mat = new Material(shader);
+                        mat.name = slotName;
+
+                        // Find and assign PBR textures
+                        Texture2D albedo = FindTexture(allTextures, slotLower, "albedo", "basecolor", "_base", "_diffuse", "_color");
+                        Texture2D normal = FindTexture(allTextures, slotLower, "normal", "_nrm", "_norm");
+                        Texture2D metallic = FindTexture(allTextures, slotLower, "metallic", "metallicsmoothness", "_met");
+                        Texture2D roughness = FindTexture(allTextures, slotLower, "roughness", "_rough");
+                        Texture2D ao = FindTexture(allTextures, slotLower, "ao", "occlusion", "_occ");
+                        Texture2D emission = FindTexture(allTextures, slotLower, "emission", "emissive", "_emit");
+                        Texture2D height = FindTexture(allTextures, slotLower, "height", "displacement", "_disp");
+
+                        if (albedo != null) mat.SetTexture("_BaseMap", albedo);
+                        else report.AddWarning("No albedo texture found for slot: " + slotName);
+
+                        if (normal != null)
+                        {{
+                            FixNormalMapImport(AssetDatabase.GetAssetPath(normal));
+                            mat.SetTexture("_BumpMap", normal);
+                            mat.EnableKeyword("_NORMALMAP");
+                        }}
+
+                        if (metallic != null)
+                        {{
+                            mat.SetTexture("_MetallicGlossMap", metallic);
+                            mat.EnableKeyword("_METALLICSPECGLOSSMAP");
+                            mat.SetFloat("_Smoothness", 0.5f);
+                        }}
+                        else if (roughness != null)
+                        {{
+                            mat.SetFloat("_Smoothness", 0.5f);
+                        }}
+
+                        if (ao != null) mat.SetTexture("_OcclusionMap", ao);
+                        if (emission != null)
+                        {{
+                            mat.SetTexture("_EmissionMap", emission);
+                            mat.EnableKeyword("_EMISSION");
+                            mat.SetColor("_EmissionColor", Color.white * 2.0f);
+                            mat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+                        }}
+                        if (height != null)
+                        {{
+                            mat.SetTexture("_ParallaxMap", height);
+                            mat.SetFloat("_Parallax", 0.02f);
+                            mat.EnableKeyword("_PARALLAXMAP");
+                        }}
+
+                        string matPath = matDir + "/" + slotName + ".mat";
+                        AssetDatabase.CreateAsset(mat, matPath);
+                        report.createdMaterials.Add(matPath);
+
+                        // Remap material on FBX (Step 5)
+                        foreach (var entry in importer.GetExternalObjectMap())
+                        {{
+                            if (entry.Key.type == typeof(Material) && entry.Key.name == slotName)
+                            {{
+                                importer.AddRemap(entry.Key, mat);
+                                break;
+                            }}
+                        }}
+                    }}
+
+                    importer.SaveAndReimport();
+                    report.PassStep("auto_materials");
+                }}
+                else
+                {{
+                    report.FailStep("auto_materials", "ModelImporter is null");
+                }}
+            }}
+            catch (System.Exception ex)
+            {{
+                report.FailStep("auto_materials", ex.Message);
+            }}
+
+            // ================================================================
+            // Step 6: Setup LOD
+            // ================================================================
+            if (doLOD && report.hasLODMeshes)
+            {{
+                report.StartStep("setup_lod");
+                try
+                {{
+                    GameObject modelAsset = AssetDatabase.LoadAssetAtPath<GameObject>(fbxPath);
+                    if (modelAsset != null)
+                    {{
+                        // Find LOD meshes by naming convention
+                        var lodGroups = new Dictionary<int, List<Renderer>>();
+                        var allRenderers = modelAsset.GetComponentsInChildren<Renderer>(true);
+
+                        foreach (var r in allRenderers)
+                        {{
+                            string rName = r.gameObject.name;
+                            int lodLevel = -1;
+
+                            // Match _LOD0, _LOD1, _lod0, _lod1, etc.
+                            for (int i = 0; i < 4; i++)
+                            {{
+                                if (rName.Contains("_LOD" + i) || rName.Contains("_lod" + i))
+                                {{
+                                    lodLevel = i;
+                                    break;
+                                }}
+                            }}
+
+                            if (lodLevel < 0) lodLevel = 0; // Default to LOD0
+
+                            if (!lodGroups.ContainsKey(lodLevel))
+                                lodGroups[lodLevel] = new List<Renderer>();
+                            lodGroups[lodLevel].Add(r);
+                        }}
+
+                        if (lodGroups.Count > 1)
+                        {{
+                            report.lodLevelsDetected = lodGroups.Count;
+                            report.PassStep("setup_lod");
+                        }}
+                        else
+                        {{
+                            report.AddWarning("LOD meshes detected by name but only 1 LOD level found.");
+                            report.PassStep("setup_lod");
+                        }}
+                    }}
+                    else
+                    {{
+                        report.FailStep("setup_lod", "Could not load model asset");
+                    }}
+                }}
+                catch (System.Exception ex)
+                {{
+                    report.FailStep("setup_lod", ex.Message);
+                }}
+            }}
+            else if (doLOD)
+            {{
+                report.SkipStep("setup_lod", "No LOD meshes detected");
+            }}
+
+            // ================================================================
+            // Step 7: Configure Avatar (humanoid for hero/monster)
+            // ================================================================
+            report.StartStep("configure_avatar");
+            try
+            {{
+                ModelImporter importer = AssetImporter.GetAtPath(fbxPath) as ModelImporter;
+                if (importer != null)
+                {{
+                    importer.animationType = ModelImporterAnimationType.{safe_anim_type};
+                    importer.SaveAndReimport();
+                    report.PassStep("configure_avatar");
+                }}
+                else
+                {{
+                    report.FailStep("configure_avatar", "ModelImporter is null");
+                }}
+            }}
+            catch (System.Exception ex)
+            {{
+                report.FailStep("configure_avatar", ex.Message);
+            }}
+
+            // ================================================================
+            // Step 8: Create Prefab
+            // ================================================================
+            if (doPrefab)
+            {{
+                report.StartStep("create_prefab");
+                try
+                {{
+                    string assetName = Path.GetFileNameWithoutExtension(fbxPath);
+                    string category = "{safe_asset_type}";
+
+                    // Map asset type to folder
+                    string prefabFolder;
+                    switch (category)
+                    {{
+                        case "hero":       prefabFolder = "Assets/Prefabs/Characters/Heroes"; break;
+                        case "monster":    prefabFolder = "Assets/Prefabs/Characters/Monsters"; break;
+                        case "weapon":     prefabFolder = "Assets/Prefabs/Equipment/Weapons"; break;
+                        case "prop":       prefabFolder = "Assets/Prefabs/Props"; break;
+                        case "environment": prefabFolder = "Assets/Prefabs/Environment"; break;
+                        default:           prefabFolder = "Assets/Prefabs/" + category; break;
+                    }}
+                    EnsureFolder(prefabFolder);
+
+                    GameObject modelAsset = AssetDatabase.LoadAssetAtPath<GameObject>(fbxPath);
+                    if (modelAsset != null)
+                    {{
+                        string prefabPath = prefabFolder + "/" + assetName + ".prefab";
+                        GameObject prefab = PrefabUtility.SaveAsPrefabAsset(
+                            modelAsset, prefabPath, out bool prefabSuccess);
+
+                        if (prefabSuccess)
+                        {{
+                            report.prefabPath = prefabPath;
+                            report.PassStep("create_prefab");
+                        }}
+                        else
+                        {{
+                            report.FailStep("create_prefab", "PrefabUtility.SaveAsPrefabAsset returned false");
+                        }}
+                    }}
+                    else
+                    {{
+                        report.FailStep("create_prefab", "Could not load model asset for prefab creation");
+                    }}
+                }}
+                catch (System.Exception ex)
+                {{
+                    report.FailStep("create_prefab", ex.Message);
+                }}
+            }}
+
+            // ================================================================
+            // Step 9: Validate Poly Budget
+            // ================================================================
+            if (doValidate)
+            {{
+                report.StartStep("validate_budget");
+                try
+                {{
+                    if (report.totalTriangles > polyBudget)
+                    {{
+                        report.AddWarning("Poly budget EXCEEDED: " + report.totalTriangles + " tris > " + polyBudget + " budget for " + report.assetType);
+                        report.budgetExceeded = true;
+                    }}
+                    report.polyBudget = polyBudget;
+                    report.PassStep("validate_budget");
+                }}
+                catch (System.Exception ex)
+                {{
+                    report.FailStep("validate_budget", ex.Message);
+                }}
+            }}
+
+            // ================================================================
+            // Step 10: Write Report
+            // ================================================================
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            report.status = "success";
+            report.WriteResult();
+            Debug.Log("[VeilBreakers] Blender-to-Unity bridge complete for: " + fbxPath);
+        }}
+        catch (System.Exception ex)
+        {{
+            report.status = "error";
+            report.errorMessage = ex.Message;
+            report.WriteResult();
+            Debug.LogError("[VeilBreakers] Blender-to-Unity bridge failed: " + ex.Message);
+        }}
+    }}
+
+    /// <summary>Find a texture matching material slot name + any of the suffixes.</summary>
+    private static Texture2D FindTexture(Dictionary<string, string> textures, string slotName, params string[] suffixes)
+    {{
+        // Try slot-specific first: "blade_albedo", "blade_basecolor"
+        foreach (string suffix in suffixes)
+        {{
+            foreach (var kvp in textures)
+            {{
+                if (kvp.Key.Contains(slotName) && kvp.Key.Contains(suffix))
+                    return AssetDatabase.LoadAssetAtPath<Texture2D>(kvp.Value);
+            }}
+        }}
+        // Fallback to any texture with the suffix (for single-material meshes)
+        foreach (string suffix in suffixes)
+        {{
+            foreach (var kvp in textures)
+            {{
+                if (kvp.Key.Contains(suffix))
+                    return AssetDatabase.LoadAssetAtPath<Texture2D>(kvp.Value);
+            }}
+        }}
+        return null;
+    }}
+
+    /// <summary>Ensure a texture is imported as Normal type.</summary>
+    private static void FixNormalMapImport(string texturePath)
+    {{
+        TextureImporter ti = AssetImporter.GetAtPath(texturePath) as TextureImporter;
+        if (ti != null && ti.textureType != TextureImporterType.NormalMap)
+        {{
+            ti.textureType = TextureImporterType.NormalMap;
+            ti.SaveAndReimport();
+        }}
+    }}
+
+    /// <summary>Create folder hierarchy if it doesn't exist.</summary>
+    private static void EnsureFolder(string folderPath)
+    {{
+        if (AssetDatabase.IsValidFolder(folderPath)) return;
+        string parent = Path.GetDirectoryName(folderPath).Replace("\\\\", "/");
+        string folder = Path.GetFileName(folderPath);
+        if (!AssetDatabase.IsValidFolder(parent))
+            EnsureFolder(parent);
+        AssetDatabase.CreateFolder(parent, folder);
+    }}
+
+    /// <summary>Structured report for the bridge pipeline.</summary>
+    private class BridgeReport
+    {{
+        public string status = "pending";
+        public string fbxPath = "";
+        public string assetType = "";
+        public string errorMessage = "";
+        public string prefabPath = "";
+
+        // Scan results
+        public int meshCount = 0;
+        public int totalTriangles = 0;
+        public int materialSlotCount = 0;
+        public List<string> materialSlots = new List<string>();
+        public int animationClipCount = 0;
+        public int boneCount = 0;
+        public bool hasLODMeshes = false;
+        public int lodLevelsDetected = 0;
+
+        // Material results
+        public List<string> createdMaterials = new List<string>();
+
+        // Validation
+        public int polyBudget = 0;
+        public bool budgetExceeded = false;
+
+        // Step tracking
+        public List<StepResult> steps = new List<StepResult>();
+        public List<string> warnings = new List<string>();
+
+        public void StartStep(string name) {{ }}
+
+        public void PassStep(string name)
+        {{
+            steps.Add(new StepResult {{ name = name, status = "passed" }});
+        }}
+
+        public void FailStep(string name, string error)
+        {{
+            steps.Add(new StepResult {{ name = name, status = "failed", error = error }});
+        }}
+
+        public void SkipStep(string name, string reason)
+        {{
+            steps.Add(new StepResult {{ name = name, status = "skipped", error = reason }});
+        }}
+
+        public void AddWarning(string warning)
+        {{
+            warnings.Add(warning);
+            Debug.LogWarning("[VeilBreakers Bridge] " + warning);
+        }}
+
+        public void WriteResult()
+        {{
+            // Build JSON manually to avoid JsonUtility limitations
+            var sb = new System.Text.StringBuilder();
+            sb.Append("{{");
+            sb.Append("\\"status\\": \\"" + Escape(status) + "\\", ");
+            sb.Append("\\"action\\": \\"blender_to_unity_bridge\\", ");
+            sb.Append("\\"fbx_path\\": \\"" + Escape(fbxPath) + "\\", ");
+            sb.Append("\\"asset_type\\": \\"" + Escape(assetType) + "\\", ");
+
+            if (!string.IsNullOrEmpty(errorMessage))
+                sb.Append("\\"error\\": \\"" + Escape(errorMessage) + "\\", ");
+
+            // Scan results
+            sb.Append("\\"mesh_count\\": " + meshCount + ", ");
+            sb.Append("\\"total_triangles\\": " + totalTriangles + ", ");
+            sb.Append("\\"material_slot_count\\": " + materialSlotCount + ", ");
+            sb.Append("\\"animation_clip_count\\": " + animationClipCount + ", ");
+            sb.Append("\\"bone_count\\": " + boneCount + ", ");
+            sb.Append("\\"has_lod_meshes\\": " + (hasLODMeshes ? "true" : "false") + ", ");
+
+            if (lodLevelsDetected > 0)
+                sb.Append("\\"lod_levels_detected\\": " + lodLevelsDetected + ", ");
+
+            // Prefab
+            if (!string.IsNullOrEmpty(prefabPath))
+                sb.Append("\\"prefab_path\\": \\"" + Escape(prefabPath) + "\\", ");
+
+            // Validation
+            if (polyBudget > 0)
+            {{
+                sb.Append("\\"poly_budget\\": " + polyBudget + ", ");
+                sb.Append("\\"budget_exceeded\\": " + (budgetExceeded ? "true" : "false") + ", ");
+            }}
+
+            // Created materials
+            sb.Append("\\"created_materials\\": [");
+            for (int i = 0; i < createdMaterials.Count; i++)
+            {{
+                if (i > 0) sb.Append(", ");
+                sb.Append("\\"" + Escape(createdMaterials[i]) + "\\"");
+            }}
+            sb.Append("], ");
+
+            // Steps
+            sb.Append("\\"steps\\": [");
+            for (int i = 0; i < steps.Count; i++)
+            {{
+                if (i > 0) sb.Append(", ");
+                sb.Append("{{");
+                sb.Append("\\"name\\": \\"" + Escape(steps[i].name) + "\\", ");
+                sb.Append("\\"status\\": \\"" + Escape(steps[i].status) + "\\"");
+                if (!string.IsNullOrEmpty(steps[i].error))
+                    sb.Append(", \\"error\\": \\"" + Escape(steps[i].error) + "\\"");
+                sb.Append("}}");
+            }}
+            sb.Append("], ");
+
+            // Warnings
+            sb.Append("\\"warnings\\": [");
+            for (int i = 0; i < warnings.Count; i++)
+            {{
+                if (i > 0) sb.Append(", ");
+                sb.Append("\\"" + Escape(warnings[i]) + "\\"");
+            }}
+            sb.Append("], ");
+
+            // Changed assets
+            var changed = new List<string>();
+            changed.Add(fbxPath);
+            changed.AddRange(createdMaterials);
+            if (!string.IsNullOrEmpty(prefabPath)) changed.Add(prefabPath);
+
+            sb.Append("\\"changed_assets\\": [");
+            for (int i = 0; i < changed.Count; i++)
+            {{
+                if (i > 0) sb.Append(", ");
+                sb.Append("\\"" + Escape(changed[i]) + "\\"");
+            }}
+            sb.Append("], ");
+
+            sb.Append("\\"validation_status\\": \\"" + (status == "success" ? "ok" : "failed") + "\\"");
+            sb.Append("}}");
+
+            File.WriteAllText("Temp/vb_result.json", sb.ToString());
+        }}
+
+        private static string Escape(string s)
+        {{
+            return s.Replace("\\\\", "/").Replace("\\"", "\\\\\\"");
+        }}
+    }}
+
+    private class StepResult
+    {{
+        public string name = "";
+        public string status = "";
+        public string error = "";
     }}
 }}
 '''

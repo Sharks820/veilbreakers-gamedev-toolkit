@@ -75,6 +75,14 @@ ERROR_CLASSIFICATIONS: dict[str, dict[str, Any]] = {
         "auto_fixable": False,
         "fix_strategy": "manual_cast_or_refactor",
     },
+    "member_hiding": {
+        "patterns": [
+            r"error CS0108",  # member hides inherited member, missing 'new'
+        ],
+        "description": "Member hides inherited member (missing 'new' keyword)",
+        "auto_fixable": True,
+        "fix_strategy": "add_new_keyword",
+    },
 }
 
 ALL_ERROR_TYPES = list(ERROR_CLASSIFICATIONS.keys())
@@ -317,6 +325,12 @@ public class VB_CompileRecovery : EditorWindow
             Description = "Type mismatch or conversion error",
             AutoFixable = false,
             FixStrategy = "manual_cast_or_refactor"
+        }} }},
+        {{ "member_hiding", new ErrorClassification {{
+            Patterns = new[] {{ @"error CS0108" }},
+            Description = "Member hides inherited member (missing 'new' keyword)",
+            AutoFixable = true,
+            FixStrategy = "add_new_keyword"
         }} }},
     }};
 
@@ -1110,6 +1124,8 @@ def generate_pipeline_orchestrator_script(
     pipeline_name: str = "custom",
     steps: list[dict[str, Any]] | None = None,
     on_failure: str = "stop",
+    default_step_timeout: int = 30,
+    max_step_retries: int = 2,
 ) -> dict[str, Any]:
     """Generate C# EditorWindow for multi-step pipeline orchestration.
 
@@ -1119,11 +1135,14 @@ def generate_pipeline_orchestrator_script(
     - Supports error handling: stop-on-failure, continue-with-warnings, retry
     - Reports progress with ETA estimation
     - Includes built-in pipelines: create_character, create_level, create_item, full_build
+    - Retries transient failures up to *max_step_retries* times per step
 
     Args:
         pipeline_name: Name of the pipeline to generate (or 'custom').
         steps: List of step dicts (for custom pipelines) with name, tool, action, timeout.
         on_failure: Failure strategy -- 'stop', 'continue', or 'retry'.
+        default_step_timeout: Default timeout in seconds for steps that omit one.
+        max_step_retries: Maximum retries per step on transient failure.
 
     Returns:
         Dict with script_path, script_content, next_steps.
@@ -1138,7 +1157,7 @@ def generate_pipeline_orchestrator_script(
             steps = PIPELINE_DEFINITIONS[pipeline_name]["steps"]
         else:
             steps = [
-                {"name": "step_1", "tool": "unity_editor", "action": "recompile", "timeout": 30},
+                {"name": "step_1", "tool": "unity_editor", "action": "recompile", "timeout": default_step_timeout},
             ]
 
     step_entries = []
@@ -1146,7 +1165,7 @@ def generate_pipeline_orchestrator_script(
         s_name = sanitize_cs_string(step.get("name", f"step_{i}"))
         s_tool = sanitize_cs_string(step.get("tool", "unknown"))
         s_action = sanitize_cs_string(step.get("action", "unknown"))
-        s_timeout = step.get("timeout", 30)
+        s_timeout = step.get("timeout", default_step_timeout)
         step_entries.append(
             f'            new PipelineStep {{ Name = "{s_name}", Tool = "{s_tool}", '
             f'Action = "{s_action}", Timeout = {s_timeout}, '
@@ -1233,6 +1252,7 @@ public class VB_PipelineOrchestrator : EditorWindow
     // --- Configuration ---
     private string currentPipelineName = "{safe_name}";
     private FailureMode failureMode = FailureMode.{on_failure.capitalize()};
+    private const int MaxStepRetries = {max_step_retries};
     private List<PipelineStep> currentSteps = new List<PipelineStep>
     {{
 {steps_init}
@@ -1358,12 +1378,13 @@ public class VB_PipelineOrchestrator : EditorWindow
                     return;
 
                 case FailureMode.Retry:
-                    // Retry once only (track via RetryCount)
-                    if (step.RetryCount < 1)
+                    // Retry transient failures up to MaxStepRetries
+                    if (step.RetryCount < MaxStepRetries)
                     {{
                         step.RetryCount++;
                         step.Status = StepStatus.Pending;
                         step.ErrorMessage = null;
+                        UnityEngine.Debug.Log($"[VB Pipeline] Retrying step '{{step.Name}}' (attempt {{step.RetryCount}}/{{MaxStepRetries}})");
                         ExecuteCurrentStep();
                         return;
                     }}

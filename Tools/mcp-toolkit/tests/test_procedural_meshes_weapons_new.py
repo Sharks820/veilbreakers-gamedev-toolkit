@@ -11,13 +11,15 @@ Validates all 18 new weapon generators across 54 style variants:
 from __future__ import annotations
 
 import importlib.util
+from pathlib import Path
 
 import pytest
 
 # Load procedural_meshes without triggering blender_addon __init__ (needs bpy)
+_HANDLERS_DIR = Path(__file__).resolve().parent.parent / "blender_addon" / "handlers"
 _spec = importlib.util.spec_from_file_location(
     "procedural_meshes",
-    "blender_addon/handlers/procedural_meshes.py",
+    str(_HANDLERS_DIR / "procedural_meshes.py"),
 )
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)

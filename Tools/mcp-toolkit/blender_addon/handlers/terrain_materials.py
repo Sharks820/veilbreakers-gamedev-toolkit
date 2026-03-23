@@ -1474,6 +1474,164 @@ def compute_biome_transition(
 
 
 # ---------------------------------------------------------------------------
+# Height-Based Terrain Texture Blending (AAA quality)
+# ---------------------------------------------------------------------------
+
+def height_blend(
+    height_a: float,
+    height_b: float,
+    mask: float,
+    blend_contrast: float = 0.5,
+    height_offset: float = 0.0,
+) -> float:
+    """Compute height-based terrain texture blend weight.
+
+    Instead of simple linear interpolation, this function uses per-texel
+    height data to create physically-motivated blending: grass fills cracks
+    in rock, snow sits on peaks, dirt accumulates in valleys.
+
+    Pure-logic function -- no bpy dependency.
+
+    Args:
+        height_a: Height value for layer A (e.g. from height map).
+        height_b: Height value for layer B.
+        mask: Blend mask (0.0 = layer A, 1.0 = layer B).
+        blend_contrast: Controls sharpness of height transition (0.0-1.0).
+            Higher values = sharper, more physical blending. Default 0.5.
+        height_offset: Bias toward one layer. Positive favors A, negative
+            favors B. Default 0.0.
+
+    Returns:
+        Blend factor in [0.0, 1.0]. 0.0 = use layer A, 1.0 = use layer B.
+    """
+    # Scale contrast to useful range (0.0-1.0 maps to 1x-20x multiplier)
+    contrast = 1.0 + max(0.0, min(1.0, blend_contrast)) * 19.0
+
+    # Height difference drives blend direction
+    height_diff = (height_a - height_b + height_offset) * contrast + 0.5
+
+    # Apply mask influence
+    result = height_diff * mask
+
+    # Clamp to valid range
+    return max(0.0, min(1.0, result))
+
+
+def _create_height_blend_group(name: str = "HeightBlend") -> Any:
+    """Create a Blender node group implementing height-based texture blending.
+
+    Creates a reusable node group with:
+        Inputs:
+          - Height_A (float): Height value from texture A
+          - Height_B (float): Height value from texture B
+          - Mask (float): Blend mask (0=A, 1=B)
+          - Blend_Contrast (float): Transition sharpness
+        Outputs:
+          - Result (float): Blended weight
+
+    Logic: result = clamp((Height_A - Height_B) * Blend_Contrast + 0.5) * Mask
+
+    This makes grass fill cracks in rock, snow sit on peaks, dirt in valleys.
+
+    Args:
+        name: Name for the node group. Default "HeightBlend".
+
+    Returns:
+        The created bpy.types.NodeGroup.
+
+    Raises:
+        RuntimeError: If bpy is not available.
+    """
+    if bpy is None:
+        raise RuntimeError("_create_height_blend_group requires bpy.")
+
+    # Reuse if already exists
+    existing = bpy.data.node_groups.get(name)
+    if existing is not None:
+        return existing
+
+    group = bpy.data.node_groups.new(name, "ShaderNodeTree")
+
+    # -- Group Inputs --
+    group_in = group.nodes.new("NodeGroupInput")
+    group_in.location = (-600, 0)
+
+    # Create input sockets
+    group.inputs.new("NodeSocketFloat", "Height_A")
+    group.inputs.new("NodeSocketFloat", "Height_B")
+    group.inputs.new("NodeSocketFloat", "Mask")
+    group.inputs.new("NodeSocketFloat", "Blend_Contrast")
+
+    # Set defaults
+    group.inputs["Height_A"].default_value = 0.5
+    group.inputs["Height_B"].default_value = 0.5
+    group.inputs["Mask"].default_value = 0.5
+    group.inputs["Blend_Contrast"].default_value = 0.5
+    group.inputs["Mask"].min_value = 0.0
+    group.inputs["Mask"].max_value = 1.0
+    group.inputs["Blend_Contrast"].min_value = 0.0
+    group.inputs["Blend_Contrast"].max_value = 1.0
+
+    # -- Group Outputs --
+    group_out = group.nodes.new("NodeGroupOutput")
+    group_out.location = (400, 0)
+    group.outputs.new("NodeSocketFloat", "Result")
+
+    # -- Math: Height_A - Height_B --
+    subtract = group.nodes.new("ShaderNodeMath")
+    subtract.operation = "SUBTRACT"
+    subtract.location = (-400, 100)
+    subtract.label = "Height Diff"
+    group.links.new(group_in.outputs["Height_A"], subtract.inputs[0])
+    group.links.new(group_in.outputs["Height_B"], subtract.inputs[1])
+
+    # -- Math: * Blend_Contrast (scaled to 1-20 range via multiply_add) --
+    # First scale contrast: contrast * 19 + 1
+    scale_contrast = group.nodes.new("ShaderNodeMath")
+    scale_contrast.operation = "MULTIPLY_ADD"
+    scale_contrast.location = (-400, -100)
+    scale_contrast.label = "Scale Contrast"
+    scale_contrast.inputs[1].default_value = 19.0  # multiplier
+    scale_contrast.inputs[2].default_value = 1.0   # offset
+    group.links.new(group_in.outputs["Blend_Contrast"], scale_contrast.inputs[0])
+
+    # -- Math: diff * scaled_contrast --
+    multiply = group.nodes.new("ShaderNodeMath")
+    multiply.operation = "MULTIPLY"
+    multiply.location = (-200, 50)
+    multiply.label = "Contrast Apply"
+    group.links.new(subtract.outputs["Value"], multiply.inputs[0])
+    group.links.new(scale_contrast.outputs["Value"], multiply.inputs[1])
+
+    # -- Math: + 0.5 (center the blend) --
+    add_half = group.nodes.new("ShaderNodeMath")
+    add_half.operation = "ADD"
+    add_half.location = (0, 50)
+    add_half.label = "Center Blend"
+    add_half.inputs[1].default_value = 0.5
+    group.links.new(multiply.outputs["Value"], add_half.inputs[0])
+
+    # -- Clamp (0..1) --
+    clamp_node = group.nodes.new("ShaderNodeClamp")
+    clamp_node.location = (100, 50)
+    clamp_node.label = "Clamp 0-1"
+    group.links.new(add_half.outputs["Value"], clamp_node.inputs["Value"])
+
+    # -- Math: * Mask --
+    mask_mult = group.nodes.new("ShaderNodeMath")
+    mask_mult.operation = "MULTIPLY"
+    mask_mult.location = (200, 0)
+    mask_mult.label = "Apply Mask"
+    group.links.new(clamp_node.outputs["Result"], mask_mult.inputs[0])
+    group.links.new(group_in.outputs["Mask"], mask_mult.inputs[1])
+
+    # Connect to output
+    group.links.new(mask_mult.outputs["Value"], group_out.inputs["Result"])
+
+    return group
+
+
+# ---------------------------------------------------------------------------
 # Blender handler: handle_setup_terrain_biome
 # ---------------------------------------------------------------------------
 

@@ -36,6 +36,7 @@ def generate_spatial_audio_script(
     rolloff_mode: str = "Logarithmic",
     doppler_level: float = 0.5,
     spread_angle: float = 60.0,
+    occlusion_factor_per_hit: float = 0.35,
 ) -> dict[str, Any]:
     """Generate C# MonoBehaviour for 3D spatial audio with occlusion.
 
@@ -52,6 +53,7 @@ def generate_spatial_audio_script(
         rolloff_mode: Rolloff mode -- Logarithmic, Linear, or Custom.
         doppler_level: Doppler effect intensity (0-5).
         spread_angle: 3D sound spread angle in degrees.
+        occlusion_factor_per_hit: Occlusion amount per wall hit (0-1, clamped).
 
     Returns:
         Dict with script_path, script_content, next_steps.
@@ -116,15 +118,17 @@ def generate_spatial_audio_script(
             }}
         }}
 
-        // Each wall hit adds occlusion
-        _targetOcclusionFactor = Mathf.Clamp01(hitCount * 0.35f);
+        // Each wall hit adds occlusion (factor per hit is configurable)
+        _targetOcclusionFactor = Mathf.Clamp01(hitCount * {occlusion_factor_per_hit}f);
     }}
 
     private void ApplyOcclusion()
     {{
+        // Guard against zero/negative damping to avoid division issues
+        float safeDamping = Mathf.Max(occlusionDamping, 0.001f);
         _currentOcclusionFactor = Mathf.Lerp(
             _currentOcclusionFactor, _targetOcclusionFactor,
-            Time.deltaTime / Mathf.Max(occlusionDamping, 0.01f));
+            Time.deltaTime / safeDamping);
 
         // Reduce volume based on occlusion
         _audioSource.volume = _baseVolume * (1f - _currentOcclusionFactor * 0.7f);
@@ -2423,3 +2427,824 @@ public class VeilBreakers_VOPlayer : MonoBehaviour
             "Add localized clips for multi-language support",
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# Adaptive Music System (AAA-grade)
+# ---------------------------------------------------------------------------
+
+
+def generate_adaptive_music_system_script(
+    crossfade_duration: float = 1.5,
+    beat_sync_bpm: float = 120.0,
+    stinger_duck_volume: float = 0.3,
+    stinger_duck_duration: float = 0.8,
+) -> tuple[str, str]:
+    """Generate AAA-grade adaptive music system with two C# scripts.
+
+    Creates a comprehensive adaptive music system inspired by God of War,
+    Elden Ring, and Horizon, featuring:
+
+    **Horizontal Re-sequencing** -- music defined as sections (Intro,
+    Explore_A, Explore_B, Tension, Combat_Intro, Combat_Loop,
+    Combat_Climax, Victory, Outro) with stem variants.  Sections branch
+    on game-state transitions with smooth crossfade and optional
+    beat-synced transition points.
+
+    **Vertical Layering** -- five simultaneous layers (Base, Rhythm,
+    Melody, Combat, Boss) with independent volume lerp controlled by a
+    single ``combatIntensity`` float (0-1).
+
+    **Stinger System** -- one-shot clips (Discovery, Danger, Victory,
+    Death, BossPhaseTransition) that duck the music volume briefly.
+
+    **Runtime API**:
+        - ``SetMusicState(MusicState)`` -- horizontal transition
+        - ``SetCombatIntensity(float 0-1)`` -- vertical layer mix
+        - ``PlayStinger(StingerType)`` -- one-shot stinger with ducking
+        - ``CrossfadeTo(string sectionName, float duration)`` -- manual
+
+    Args:
+        crossfade_duration: Default crossfade time in seconds (0.5-3).
+        beat_sync_bpm: BPM for beat-synced transitions.
+        stinger_duck_volume: Volume to duck music to during stingers (0-1).
+        stinger_duck_duration: Duration of the stinger duck in seconds.
+
+    Returns:
+        Tuple of (music_manager_cs, music_data_so_cs) -- the manager
+        MonoBehaviour source and a ScriptableObject for music
+        configuration data.
+    """
+    crossfade_duration = max(0.5, min(3.0, crossfade_duration))
+    stinger_duck_volume = max(0.0, min(1.0, stinger_duck_volume))
+    stinger_duck_duration = max(0.1, min(3.0, stinger_duck_duration))
+    beat_sync_bpm = max(30.0, min(300.0, beat_sync_bpm))
+
+    beat_interval = 60.0 / beat_sync_bpm
+
+    # ------------------------------------------------------------------
+    # Script 1: ScriptableObject -- music configuration data
+    # ------------------------------------------------------------------
+    music_data_so_cs = f'''// VeilBreakers Auto-Generated: Adaptive Music Configuration Data
+// ScriptableObject holding section, layer, and stinger definitions
+using UnityEngine;
+using System;
+
+namespace VeilBreakers.Audio
+{{
+    // ------------------------------------------------------------------
+    // Enums
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// High-level game music state driving horizontal re-sequencing.
+    /// </summary>
+    public enum MusicState
+    {{
+        Silent,
+        Exploration,
+        Tension,
+        Combat,
+        BossFight,
+        Victory,
+        Defeat,
+        Cutscene
+    }}
+
+    /// <summary>
+    /// Individual music sections for horizontal re-sequencing.
+    /// Each section maps to an AudioClip with optional variants.
+    /// </summary>
+    public enum MusicSectionType
+    {{
+        Intro,
+        Explore_A,
+        Explore_B,
+        Tension,
+        Combat_Intro,
+        Combat_Loop,
+        Combat_Climax,
+        Victory,
+        Outro
+    }}
+
+    /// <summary>
+    /// Vertical audio layers that fade in/out based on intensity.
+    /// </summary>
+    public enum MusicLayerType
+    {{
+        Base,       // ambient pad -- always playing
+        Rhythm,     // percussion -- fades in during tension
+        Melody,     // main theme -- during exploration
+        Combat,     // aggressive stems -- during combat
+        Boss        // unique boss theme -- overrides everything
+    }}
+
+    /// <summary>
+    /// One-shot stinger types triggered by game events.
+    /// </summary>
+    public enum StingerType
+    {{
+        Discovery,
+        Danger,
+        Victory,
+        Death,
+        BossPhaseTransition
+    }}
+
+    // ------------------------------------------------------------------
+    // Data classes
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// A single horizontal music section with optional stem variants.
+    /// </summary>
+    [Serializable]
+    public class AdaptiveMusicSection
+    {{
+        public MusicSectionType sectionType;
+
+        [Tooltip("Primary AudioClip for this section")]
+        public AudioClip clip;
+
+        [Tooltip("Variant clips for variety (randomly selected)")]
+        public AudioClip[] variants;
+
+        [Tooltip("BPM of this section for beat-synced transitions")]
+        public float bpm = {beat_sync_bpm}f;
+
+        [Tooltip("Allowed transitions from this section")]
+        public MusicSectionType[] allowedTransitions;
+
+        [Tooltip("Crossfade duration override (-1 = use default)")]
+        public float crossfadeOverride = -1f;
+    }}
+
+    /// <summary>
+    /// Defines a vertical audio layer with its clip and intensity range.
+    /// </summary>
+    [Serializable]
+    public class AdaptiveMusicLayer
+    {{
+        public MusicLayerType layerType;
+
+        [Tooltip("AudioClip for this layer (loops)")]
+        public AudioClip clip;
+
+        [Range(0f, 1f)]
+        [Tooltip("Combat intensity threshold to begin fading in")]
+        public float fadeInThreshold = 0f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Combat intensity at which this layer is full volume")]
+        public float fullVolumeThreshold = 1f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Maximum volume for this layer")]
+        public float maxVolume = 1f;
+    }}
+
+    /// <summary>
+    /// Mapping from MusicState to which MusicSectionType should play.
+    /// </summary>
+    [Serializable]
+    public class MusicStateMapping
+    {{
+        public MusicState state;
+        public MusicSectionType targetSection;
+        [Tooltip("Crossfade duration for this state change (-1 = default)")]
+        public float crossfadeDuration = -1f;
+        [Tooltip("Wait for next beat boundary before transitioning")]
+        public bool beatSynced = false;
+    }}
+
+    /// <summary>
+    /// A one-shot stinger clip.
+    /// </summary>
+    [Serializable]
+    public class AdaptiveStinger
+    {{
+        public StingerType stingerType;
+
+        [Tooltip("AudioClip to play")]
+        public AudioClip clip;
+
+        [Range(0f, 1f)]
+        [Tooltip("Playback volume")]
+        public float volume = 1f;
+
+        [Tooltip("Duration to duck music during stinger")]
+        public float duckDuration = {stinger_duck_duration}f;
+
+        [Range(0f, 1f)]
+        [Tooltip("Volume to duck music to during stinger")]
+        public float duckVolume = {stinger_duck_volume}f;
+    }}
+
+    // ------------------------------------------------------------------
+    // ScriptableObject asset
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// ScriptableObject holding all adaptive music configuration.
+    /// Create via Assets > Create > VeilBreakers > Audio > Adaptive Music Data.
+    /// </summary>
+    [CreateAssetMenu(
+        fileName = "AdaptiveMusicData",
+        menuName = "VeilBreakers/Audio/Adaptive Music Data")]
+    public class VeilBreakers_AdaptiveMusicData : ScriptableObject
+    {{
+        [Header("Horizontal Re-sequencing")]
+        [Tooltip("All music sections with clips and transition rules")]
+        public AdaptiveMusicSection[] sections;
+
+        [Header("Vertical Layering")]
+        [Tooltip("Audio layers controlled by combat intensity")]
+        public AdaptiveMusicLayer[] layers;
+
+        [Header("State Mappings")]
+        [Tooltip("Maps game states to target sections")]
+        public MusicStateMapping[] stateMappings;
+
+        [Header("Stingers")]
+        [Tooltip("One-shot stinger clips for game events")]
+        public AdaptiveStinger[] stingers;
+
+        [Header("Defaults")]
+        [Tooltip("Default crossfade duration in seconds")]
+        public float defaultCrossfadeDuration = {crossfade_duration}f;
+
+        [Tooltip("BPM for beat-synced transitions")]
+        public float defaultBPM = {beat_sync_bpm}f;
+
+        [Tooltip("Volume to duck music to during stingers")]
+        public float stingerDuckVolume = {stinger_duck_volume}f;
+
+        [Tooltip("Duration of stinger duck in seconds")]
+        public float stingerDuckDuration = {stinger_duck_duration}f;
+    }}
+}}
+'''
+
+    # ------------------------------------------------------------------
+    # Script 2: MonoBehaviour -- adaptive music manager
+    # ------------------------------------------------------------------
+    music_manager_cs = f'''// VeilBreakers Auto-Generated: Adaptive Music Manager
+// AAA-grade adaptive music: horizontal re-sequencing, vertical layering,
+// beat-synced transitions, stinger system with ducking
+using UnityEngine;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+
+namespace VeilBreakers.Audio
+{{
+    /// <summary>
+    /// AAA adaptive music manager inspired by God of War / Elden Ring /
+    /// Horizon.  Singleton MonoBehaviour that persists across scenes.
+    ///
+    /// <para><b>Horizontal Re-sequencing:</b> Sections (Intro, Explore_A,
+    /// Explore_B, Tension, Combat_Intro, Combat_Loop, Combat_Climax,
+    /// Victory, Outro) crossfade with optional beat-sync.</para>
+    ///
+    /// <para><b>Vertical Layering:</b> Five simultaneous layers (Base,
+    /// Rhythm, Melody, Combat, Boss) fade in/out based on combat
+    /// intensity (0-1).</para>
+    ///
+    /// <para><b>Stingers:</b> One-shot clips (Discovery, Danger, Victory,
+    /// Death, BossPhaseTransition) that briefly duck the music.</para>
+    /// </summary>
+    public class VeilBreakers_AdaptiveMusicManager : MonoBehaviour
+    {{
+        // --------------------------------------------------------------
+        // Inspector fields
+        // --------------------------------------------------------------
+
+        [Header("Music Data")]
+        [Tooltip("ScriptableObject holding all music configuration")]
+        [SerializeField] private VeilBreakers_AdaptiveMusicData musicData;
+
+        [Header("Settings")]
+        [Tooltip("Master music volume")]
+        [Range(0f, 1f)]
+        [SerializeField] private float masterVolume = 1f;
+
+        [Tooltip("Layer volume lerp speed (higher = snappier)")]
+        [SerializeField] private float layerLerpSpeed = 2f;
+
+        [Header("Debug")]
+        [SerializeField] private MusicState currentMusicState = MusicState.Silent;
+        [SerializeField] private MusicSectionType currentSectionType;
+        [SerializeField] private float currentCombatIntensity;
+
+        // --------------------------------------------------------------
+        // Singleton
+        // --------------------------------------------------------------
+
+        private static VeilBreakers_AdaptiveMusicManager _instance;
+
+        /// <summary>Global singleton accessor.</summary>
+        public static VeilBreakers_AdaptiveMusicManager Instance => _instance;
+
+        // --------------------------------------------------------------
+        // Internal state
+        // --------------------------------------------------------------
+
+        // Horizontal re-sequencing (A/B crossfade)
+        private AudioSource _sectionSourceA;
+        private AudioSource _sectionSourceB;
+        private bool _useSourceA = true;
+        private Coroutine _crossfadeCoroutine;
+        private Coroutine _beatSyncCoroutine;
+
+        // Vertical layering
+        private const int LAYER_COUNT = 5;
+        private AudioSource[] _layerSources;
+        private float[] _layerTargetVolumes;
+        private float[] _layerCurrentVolumes;
+
+        // Stingers
+        private AudioSource _stingerSource;
+        private Coroutine _duckCoroutine;
+        private float _duckMultiplier = 1f;
+
+        // Section lookup
+        private Dictionary<MusicSectionType, AdaptiveMusicSection> _sectionLookup;
+        private Dictionary<StingerType, AdaptiveStinger> _stingerLookup;
+        private Dictionary<MusicState, MusicStateMapping> _stateMappingLookup;
+
+        // Beat tracking
+        private float _beatInterval = {beat_interval}f;
+        private double _nextBeatTime;
+
+        // --------------------------------------------------------------
+        // Lifecycle
+        // --------------------------------------------------------------
+
+        private void Awake()
+        {{
+            if (_instance != null && _instance != this)
+            {{
+                Destroy(gameObject);
+                return;
+            }}
+            _instance = this;
+            DontDestroyOnLoad(gameObject);
+
+            InitAudioSources();
+            BuildLookups();
+        }}
+
+        private void OnDestroy()
+        {{
+            if (_instance == this)
+                _instance = null;
+        }}
+
+        private void Update()
+        {{
+            UpdateLayerVolumes();
+            UpdateBeatTracking();
+        }}
+
+        // --------------------------------------------------------------
+        // Initialization helpers
+        // --------------------------------------------------------------
+
+        private void InitAudioSources()
+        {{
+            // Section sources (A/B for crossfade)
+            _sectionSourceA = CreateAudioSource("VB_SectionA", true);
+            _sectionSourceB = CreateAudioSource("VB_SectionB", true);
+            _sectionSourceB.volume = 0f;
+
+            // Layer sources
+            _layerSources = new AudioSource[LAYER_COUNT];
+            _layerTargetVolumes = new float[LAYER_COUNT];
+            _layerCurrentVolumes = new float[LAYER_COUNT];
+            for (int i = 0; i < LAYER_COUNT; i++)
+            {{
+                string layerName = ((MusicLayerType)i).ToString();
+                _layerSources[i] = CreateAudioSource("VB_Layer_" + layerName, true);
+                _layerSources[i].volume = 0f;
+                _layerTargetVolumes[i] = 0f;
+                _layerCurrentVolumes[i] = 0f;
+            }}
+
+            // Stinger source (one-shot, no loop)
+            _stingerSource = CreateAudioSource("VB_Stinger", false);
+        }}
+
+        private AudioSource CreateAudioSource(string childName, bool loop)
+        {{
+            GameObject child = new GameObject(childName);
+            child.transform.SetParent(transform);
+            AudioSource src = child.AddComponent<AudioSource>();
+            src.playOnAwake = false;
+            src.spatialBlend = 0f; // 2D music
+            src.loop = loop;
+            return src;
+        }}
+
+        private void BuildLookups()
+        {{
+            _sectionLookup = new Dictionary<MusicSectionType, AdaptiveMusicSection>();
+            _stingerLookup = new Dictionary<StingerType, AdaptiveStinger>();
+            _stateMappingLookup = new Dictionary<MusicState, MusicStateMapping>();
+
+            if (musicData == null) return;
+
+            if (musicData.sections != null)
+            {{
+                foreach (var s in musicData.sections)
+                    _sectionLookup[s.sectionType] = s;
+            }}
+            if (musicData.stingers != null)
+            {{
+                foreach (var st in musicData.stingers)
+                    _stingerLookup[st.stingerType] = st;
+            }}
+            if (musicData.stateMappings != null)
+            {{
+                foreach (var sm in musicData.stateMappings)
+                    _stateMappingLookup[sm.state] = sm;
+            }}
+
+            // Default beat interval from data
+            if (musicData.defaultBPM > 0f)
+                _beatInterval = 60f / musicData.defaultBPM;
+        }}
+
+        // --------------------------------------------------------------
+        // PUBLIC API: Horizontal Re-sequencing
+        // --------------------------------------------------------------
+
+        /// <summary>
+        /// Transition to a new game music state.  Resolves the target
+        /// section from the state mapping and crossfades accordingly.
+        /// </summary>
+        public void SetMusicState(MusicState state)
+        {{
+            if (state == currentMusicState) return;
+            currentMusicState = state;
+
+            if (state == MusicState.Silent)
+            {{
+                FadeOutAll({crossfade_duration}f);
+                return;
+            }}
+
+            if (_stateMappingLookup.TryGetValue(state, out MusicStateMapping mapping))
+            {{
+                float duration = mapping.crossfadeDuration >= 0f
+                    ? mapping.crossfadeDuration
+                    : GetDefaultCrossfade();
+
+                if (mapping.beatSynced)
+                    ScheduleBeatSyncedTransition(mapping.targetSection, duration);
+                else
+                    TransitionToSection(mapping.targetSection, duration);
+            }}
+        }}
+
+        /// <summary>
+        /// Crossfade to a named section with explicit duration.
+        /// </summary>
+        public void CrossfadeTo(string sectionName, float duration)
+        {{
+            if (Enum.TryParse<MusicSectionType>(sectionName, true, out var sectionType))
+            {{
+                TransitionToSection(sectionType, duration);
+            }}
+            else
+            {{
+                Debug.LogWarning(
+                    "[VeilBreakers] Unknown music section: " + sectionName);
+            }}
+        }}
+
+        // --------------------------------------------------------------
+        // PUBLIC API: Vertical Layering
+        // --------------------------------------------------------------
+
+        /// <summary>
+        /// Set combat intensity (0-1) controlling vertical layer mix.
+        /// 0 = exploration (Base + Melody), 1 = full combat (all layers).
+        /// </summary>
+        public void SetCombatIntensity(float intensity)
+        {{
+            currentCombatIntensity = Mathf.Clamp01(intensity);
+            RecalculateLayerTargets();
+        }}
+
+        // --------------------------------------------------------------
+        // PUBLIC API: Stingers
+        // --------------------------------------------------------------
+
+        /// <summary>
+        /// Play a one-shot stinger clip.  Briefly ducks the music volume.
+        /// </summary>
+        public void PlayStinger(StingerType type)
+        {{
+            if (!_stingerLookup.TryGetValue(type, out AdaptiveStinger stinger))
+                return;
+            if (stinger.clip == null) return;
+
+            _stingerSource.PlayOneShot(stinger.clip,
+                stinger.volume * masterVolume);
+
+            // Duck the music
+            float duckVol = stinger.duckVolume;
+            float duckDur = stinger.duckDuration;
+            if (duckDur <= 0f && musicData != null)
+                duckDur = musicData.stingerDuckDuration;
+
+            if (_duckCoroutine != null)
+                StopCoroutine(_duckCoroutine);
+            _duckCoroutine = StartCoroutine(DuckMusicRoutine(duckVol, duckDur));
+        }}
+
+        // --------------------------------------------------------------
+        // PUBLIC API: Utility
+        // --------------------------------------------------------------
+
+        /// <summary>Get the current game music state.</summary>
+        public MusicState GetCurrentState() => currentMusicState;
+
+        /// <summary>Get the currently playing section type.</summary>
+        public MusicSectionType GetCurrentSection() => currentSectionType;
+
+        /// <summary>Get the current combat intensity value.</summary>
+        public float GetCombatIntensity() => currentCombatIntensity;
+
+        /// <summary>Set master music volume (0-1).</summary>
+        public void SetMasterVolume(float volume)
+        {{
+            masterVolume = Mathf.Clamp01(volume);
+        }}
+
+        // --------------------------------------------------------------
+        // Horizontal transition internals
+        // --------------------------------------------------------------
+
+        private void TransitionToSection(MusicSectionType sectionType,
+            float duration)
+        {{
+            if (sectionType == currentSectionType) return;
+
+            if (!_sectionLookup.TryGetValue(sectionType,
+                out AdaptiveMusicSection section))
+                return;
+
+            // Pick clip (primary or random variant)
+            AudioClip clip = PickSectionClip(section);
+            if (clip == null) return;
+
+            // Update beat interval from section BPM
+            if (section.bpm > 0f)
+                _beatInterval = 60f / section.bpm;
+
+            // Use section-specific crossfade override if set
+            float fadeDuration = section.crossfadeOverride >= 0f
+                ? section.crossfadeOverride
+                : duration;
+
+            currentSectionType = sectionType;
+
+            if (_crossfadeCoroutine != null)
+                StopCoroutine(_crossfadeCoroutine);
+            _crossfadeCoroutine = StartCoroutine(
+                CrossfadeSectionRoutine(clip, fadeDuration));
+        }}
+
+        private AudioClip PickSectionClip(AdaptiveMusicSection section)
+        {{
+            if (section.variants != null && section.variants.Length > 0
+                && UnityEngine.Random.value > 0.5f)
+            {{
+                return section.variants[
+                    UnityEngine.Random.Range(0, section.variants.Length)];
+            }}
+            return section.clip;
+        }}
+
+        private IEnumerator CrossfadeSectionRoutine(AudioClip newClip,
+            float duration)
+        {{
+            AudioSource incoming = _useSourceA ? _sectionSourceA : _sectionSourceB;
+            AudioSource outgoing = _useSourceA ? _sectionSourceB : _sectionSourceA;
+            _useSourceA = !_useSourceA;
+
+            incoming.clip = newClip;
+            incoming.volume = 0f;
+            incoming.Play();
+
+            float elapsed = 0f;
+            float outStartVol = outgoing.volume;
+
+            while (elapsed < duration)
+            {{
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+                // Smoothstep for musical crossfade
+                float smooth = t * t * (3f - 2f * t);
+
+                outgoing.volume = Mathf.Lerp(outStartVol, 0f, smooth)
+                    * masterVolume * _duckMultiplier;
+                incoming.volume = Mathf.Lerp(0f, 1f, smooth)
+                    * masterVolume * _duckMultiplier;
+
+                yield return null;
+            }}
+
+            outgoing.volume = 0f;
+            outgoing.Stop();
+            incoming.volume = masterVolume * _duckMultiplier;
+        }}
+
+        // Beat-synced transitions
+        private void ScheduleBeatSyncedTransition(MusicSectionType section,
+            float duration)
+        {{
+            if (_beatSyncCoroutine != null)
+                StopCoroutine(_beatSyncCoroutine);
+            _beatSyncCoroutine = StartCoroutine(
+                WaitForBeatThenTransition(section, duration));
+        }}
+
+        private IEnumerator WaitForBeatThenTransition(
+            MusicSectionType section, float duration)
+        {{
+            // Wait until next beat boundary
+            while (AudioSettings.dspTime < _nextBeatTime)
+                yield return null;
+
+            TransitionToSection(section, duration);
+        }}
+
+        private void UpdateBeatTracking()
+        {{
+            double dspTime = AudioSettings.dspTime;
+            if (dspTime >= _nextBeatTime)
+            {{
+                _nextBeatTime = dspTime + _beatInterval;
+            }}
+        }}
+
+        // Fade out everything
+        private void FadeOutAll(float duration)
+        {{
+            if (_crossfadeCoroutine != null)
+                StopCoroutine(_crossfadeCoroutine);
+            _crossfadeCoroutine = StartCoroutine(FadeOutAllRoutine(duration));
+        }}
+
+        private IEnumerator FadeOutAllRoutine(float duration)
+        {{
+            float elapsed = 0f;
+            float sectionAVol = _sectionSourceA.volume;
+            float sectionBVol = _sectionSourceB.volume;
+            float[] layerVols = new float[LAYER_COUNT];
+            for (int i = 0; i < LAYER_COUNT; i++)
+                layerVols[i] = _layerSources[i].volume;
+
+            while (elapsed < duration)
+            {{
+                elapsed += Time.unscaledDeltaTime;
+                float t = Mathf.Clamp01(elapsed / duration);
+
+                _sectionSourceA.volume = Mathf.Lerp(sectionAVol, 0f, t);
+                _sectionSourceB.volume = Mathf.Lerp(sectionBVol, 0f, t);
+
+                for (int i = 0; i < LAYER_COUNT; i++)
+                    _layerSources[i].volume = Mathf.Lerp(layerVols[i], 0f, t);
+
+                yield return null;
+            }}
+
+            _sectionSourceA.Stop();
+            _sectionSourceB.Stop();
+            for (int i = 0; i < LAYER_COUNT; i++)
+                _layerSources[i].Stop();
+        }}
+
+        // --------------------------------------------------------------
+        // Vertical layering internals
+        // --------------------------------------------------------------
+
+        private void RecalculateLayerTargets()
+        {{
+            if (musicData == null || musicData.layers == null) return;
+
+            foreach (var layerDef in musicData.layers)
+            {{
+                int idx = (int)layerDef.layerType;
+                if (idx < 0 || idx >= LAYER_COUNT) continue;
+
+                float intensity = currentCombatIntensity;
+                float range = layerDef.fullVolumeThreshold
+                    - layerDef.fadeInThreshold;
+
+                float target;
+                if (range <= 0f)
+                {{
+                    target = intensity >= layerDef.fadeInThreshold
+                        ? layerDef.maxVolume : 0f;
+                }}
+                else
+                {{
+                    float normalized = Mathf.Clamp01(
+                        (intensity - layerDef.fadeInThreshold) / range);
+                    target = normalized * layerDef.maxVolume;
+                }}
+
+                _layerTargetVolumes[idx] = target;
+            }}
+        }}
+
+        private void UpdateLayerVolumes()
+        {{
+            for (int i = 0; i < LAYER_COUNT; i++)
+            {{
+                if (_layerSources[i] == null) continue;
+
+                _layerCurrentVolumes[i] = Mathf.MoveTowards(
+                    _layerCurrentVolumes[i],
+                    _layerTargetVolumes[i],
+                    layerLerpSpeed * Time.unscaledDeltaTime);
+
+                _layerSources[i].volume = _layerCurrentVolumes[i]
+                    * masterVolume * _duckMultiplier;
+            }}
+        }}
+
+        /// <summary>
+        /// Start all layer AudioSources (call once when music begins).
+        /// Layers with null clips are skipped.
+        /// </summary>
+        public void StartLayers()
+        {{
+            if (musicData == null || musicData.layers == null) return;
+
+            foreach (var layerDef in musicData.layers)
+            {{
+                int idx = (int)layerDef.layerType;
+                if (idx < 0 || idx >= LAYER_COUNT) continue;
+                if (layerDef.clip == null) continue;
+
+                _layerSources[idx].clip = layerDef.clip;
+                _layerSources[idx].volume = 0f;
+                _layerSources[idx].Play();
+            }}
+
+            RecalculateLayerTargets();
+        }}
+
+        // --------------------------------------------------------------
+        // Stinger ducking internals
+        // --------------------------------------------------------------
+
+        private IEnumerator DuckMusicRoutine(float duckVolume, float duration)
+        {{
+            // Ramp down
+            float halfDur = duration * 0.5f;
+            float elapsed = 0f;
+            while (elapsed < halfDur)
+            {{
+                elapsed += Time.unscaledDeltaTime;
+                _duckMultiplier = Mathf.Lerp(1f, duckVolume,
+                    Mathf.Clamp01(elapsed / Mathf.Max(halfDur, 0.01f)));
+                yield return null;
+            }}
+            _duckMultiplier = duckVolume;
+
+            // Hold at duck level briefly
+            yield return new WaitForSecondsRealtime(0.1f);
+
+            // Ramp back up
+            elapsed = 0f;
+            while (elapsed < halfDur)
+            {{
+                elapsed += Time.unscaledDeltaTime;
+                _duckMultiplier = Mathf.Lerp(duckVolume, 1f,
+                    Mathf.Clamp01(elapsed / Mathf.Max(halfDur, 0.01f)));
+                yield return null;
+            }}
+            _duckMultiplier = 1f;
+        }}
+
+        // --------------------------------------------------------------
+        // Helpers
+        // --------------------------------------------------------------
+
+        private float GetDefaultCrossfade()
+        {{
+            if (musicData != null && musicData.defaultCrossfadeDuration > 0f)
+                return musicData.defaultCrossfadeDuration;
+            return {crossfade_duration}f;
+        }}
+    }}
+}}
+'''
+
+    return (music_manager_cs, music_data_so_cs)
