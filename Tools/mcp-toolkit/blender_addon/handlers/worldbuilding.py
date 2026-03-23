@@ -259,6 +259,12 @@ from ._building_grammar import (
     STYLE_CONFIGS,
 )
 from ._dungeon_gen import generate_multi_floor_dungeon, generate_dungeon_prop_placements
+from .building_quality import (
+    generate_stone_wall,
+    generate_gothic_window,
+    generate_roof,
+    generate_archway,
+)
 from ._mesh_bridge import (
     mesh_from_spec,
     FURNITURE_GENERATOR_MAP,
@@ -1468,21 +1474,22 @@ def _apply_weathering(
 
 
 def handle_generate_building(params: dict) -> dict:
-    """Generate a building from grammar rules.
+    """Generate a building from AAA quality components.
+
+    Composes stone walls, gothic windows, doorways, and a pitched roof
+    into a complete building using the quality generators.
 
     Params:
         name: object name (default "Building")
-        preset: VB building preset name (optional, overrides defaults)
         width: building width (default 10)
         depth: building depth (default 8)
         floors: number of floors (default 2)
         style: style preset name (default "medieval")
         seed: random seed (default 0)
-        weathering_level: 0.0-1.0, controls cracks/edge wear/roof sag/debris (default 0.0)
+        wall_height: height per floor (default 4.0)
     """
-    logger.info("Generating building")
+    logger.info("Generating AAA quality building")
 
-    # Apply VB preset defaults if specified
     preset_name = params.get("preset")
     preset = get_vb_building_preset(preset_name) if preset_name else None
     if preset_name and preset is None:
@@ -1493,32 +1500,159 @@ def handle_generate_building(params: dict) -> dict:
 
     name = params.get("name", (preset_name or "Building"))
     width = params.get("width", preset["width"] if preset else 10)
-    depth = params.get("depth", preset["depth"] if preset else 8)
+    depth_val = params.get("depth", preset["depth"] if preset else 8)
     floors = params.get("floors", preset["floors"] if preset else 2)
     style = params.get("style", preset["style"] if preset else "medieval")
     seed = params.get("seed", 0)
+    wall_height = params.get("wall_height", 4.0)
     weathering_level = params.get("weathering_level", 0.0)
 
-    if style not in STYLE_CONFIGS:
-        raise ValueError(f"Unknown style '{style}'. Valid: {list(STYLE_CONFIGS.keys())}")
+    rng = random.Random(seed)
+    total_height = wall_height * floors
 
-    spec = evaluate_building_grammar(width, depth, floors, style, seed)
+    # Create parent empty to hold all building parts
+    parent = bpy.data.objects.new(name, None)
+    parent.empty_display_type = "CUBE"
+    parent.empty_display_size = 0.5
+    bpy.context.collection.objects.link(parent)
 
-    # Apply weathering deformation after base generation
-    if weathering_level > 0.0:
-        spec = _apply_weathering(spec, weathering_level, seed)
+    component_count = 0
+    total_verts = 0
+    total_faces = 0
 
-    # Create Blender geometry
-    bm = _spec_to_bmesh(spec)
-    obj = _create_mesh_object(name, bm)
+    # Wall thickness for stone walls
+    wall_thick = 0.4
 
-    result = _build_building_result(name, spec)
-    result["weathering_level"] = weathering_level
+    # === WALLS (4 sides, each a stone wall) ===
+    wall_configs = [
+        # (position_x, position_y, position_z, wall_width, rotation_z, label)
+        (0, 0, 0, width, 0, "front"),           # front (along X)
+        (0, depth_val, 0, width, 0, "back"),     # back (along X)
+        (0, 0, 0, depth_val, math.pi / 2, "left"),   # left (along Y)
+        (width, 0, 0, depth_val, math.pi / 2, "right"),  # right (along Y)
+    ]
+
+    block_style = "ashlar" if style in ("gothic", "fortress") else "rubble"
+
+    for wx, wy, wz, ww, wrot, label in wall_configs:
+        wall_spec = generate_stone_wall(
+            width=ww,
+            height=total_height,
+            thickness=wall_thick,
+            block_style=block_style,
+            mortar_depth=0.008,
+            block_variation=rng.uniform(0.2, 0.4),
+            seed=rng.randint(0, 99999),
+        )
+        wall_obj = mesh_from_spec(wall_spec, name=f"{name}_Wall_{label}")
+        if not isinstance(wall_obj, dict):
+            wall_obj.location = (wx, wy, wz)
+            wall_obj.rotation_euler = (0, 0, wrot)
+            wall_obj.parent = parent
+            for poly in wall_obj.data.polygons:
+                poly.use_smooth = True
+            component_count += 1
+            total_verts += len(wall_spec.get("vertices", []))
+            total_faces += len(wall_spec.get("faces", []))
+
+    # === WINDOWS (placed on front and back walls) ===
+    is_gothic = style in ("gothic", "fortress")
+    window_style = "pointed_arch" if is_gothic else "round_arch"
+    win_width = 0.8
+    win_height = 1.5
+    windows_per_wall = max(1, int(width / 3.0))
+    window_count = 0
+
+    for floor_idx in range(floors):
+        floor_z = floor_idx * wall_height + wall_height * 0.35
+        for wi in range(windows_per_wall):
+            wx = (wi + 1) * width / (windows_per_wall + 1)
+            win_spec = generate_gothic_window(
+                width=win_width,
+                height=win_height,
+                style=window_style,
+                tracery=is_gothic and floor_idx == floors - 1,
+                has_sill=True,
+                frame_depth=0.15,
+                seed=rng.randint(0, 99999),
+            )
+            # Place on front wall
+            win_obj = mesh_from_spec(win_spec, name=f"{name}_Window_F{floor_idx}_{wi}")
+            if not isinstance(win_obj, dict):
+                win_obj.location = (wx, -0.05, floor_z)
+                win_obj.parent = parent
+                for poly in win_obj.data.polygons:
+                    poly.use_smooth = True
+                window_count += 1
+                component_count += 1
+                total_verts += len(win_spec.get("vertices", []))
+                total_faces += len(win_spec.get("faces", []))
+
+            # Place on back wall
+            win_obj2 = mesh_from_spec(win_spec, name=f"{name}_Window_B{floor_idx}_{wi}")
+            if not isinstance(win_obj2, dict):
+                win_obj2.location = (wx, depth_val + 0.05, floor_z)
+                win_obj2.rotation_euler = (0, 0, math.pi)
+                win_obj2.parent = parent
+                window_count += 1
+                component_count += 1
+
+    # === DOOR (front center, ground floor) ===
+    door_spec = generate_archway(
+        width=1.2,
+        height=2.5,
+        depth=wall_thick + 0.1,
+        arch_style="gothic_pointed" if is_gothic else "round",
+        has_keystone=True,
+        seed=rng.randint(0, 99999),
+    )
+    door_obj = mesh_from_spec(door_spec, name=f"{name}_Door")
+    if not isinstance(door_obj, dict):
+        door_obj.location = (width / 2.0, -0.05, 0)
+        door_obj.parent = parent
+        for poly in door_obj.data.polygons:
+            poly.use_smooth = True
+        component_count += 1
+        total_verts += len(door_spec.get("vertices", []))
+        total_faces += len(door_spec.get("faces", []))
+
+    # === ROOF ===
+    roof_style = "gable" if style != "fortress" else "flat"
+    roof_spec = generate_roof(
+        width=width + 0.6,
+        depth=depth_val + 0.6,
+        pitch=50.0 if is_gothic else 40.0,
+        style=roof_style,
+        material="tile" if style != "fortress" else "stone",
+        overhang=0.3,
+        seed=rng.randint(0, 99999),
+    )
+    roof_obj = mesh_from_spec(roof_spec, name=f"{name}_Roof")
+    if not isinstance(roof_obj, dict):
+        roof_obj.location = (-0.3, -0.3, total_height)
+        roof_obj.parent = parent
+        for poly in roof_obj.data.polygons:
+            poly.use_smooth = True
+        component_count += 1
+        total_verts += len(roof_spec.get("vertices", []))
+        total_faces += len(roof_spec.get("faces", []))
+
+    result = {
+        "name": name,
+        "style": style,
+        "floors": floors,
+        "footprint": [width, depth_val],
+        "wall_height": wall_height,
+        "vertex_count": total_verts,
+        "face_count": total_faces,
+        "component_count": component_count,
+        "window_count": window_count,
+        "block_style": block_style,
+        "roof_style": roof_style,
+        "weathering_level": weathering_level,
+    }
     if preset:
         result["preset"] = preset_name
-        result["preset_props"] = preset.get("props", [])
-        result["preset_openings"] = preset.get("openings", [])
-        result["preset_has_roof"] = preset.get("has_roof", True)
     return {"status": "success", "result": result}
 
 
