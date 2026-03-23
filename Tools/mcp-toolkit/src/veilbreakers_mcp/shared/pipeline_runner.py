@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import struct
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -269,10 +270,10 @@ class PipelineRunner:
                     "materials": materials,
                 }
 
-                result["checks"]["materials"] = {
-                    "passed": materials > 0,
-                    "count": materials,
-                }
+                mat_check: dict = {"passed": True, "count": materials}
+                if materials == 0:
+                    mat_check["warning"] = "no materials"
+                result["checks"]["materials"] = mat_check
 
         except (OSError, json.JSONDecodeError, ValueError, KeyError, struct.error) as exc:
             result["checks"]["parse_error"] = {
@@ -351,7 +352,7 @@ class PipelineRunner:
             ),
             "export": (
                 "export_gltf",
-                lambda name: {"filepath": f"{name}.glb", "selected_only": True},
+                lambda name: {"filepath": str(Path(tempfile.gettempdir()) / f"{name}.glb"), "selected_only": True},
             ),
         }
 
@@ -757,12 +758,17 @@ class PipelineRunner:
                     ".glb": "import_scene.gltf",
                     ".gltf": "import_scene.gltf",
                     ".fbx": "import_scene.fbx",
-                    ".obj": "import_scene.obj",
+                    ".obj": "wm.obj_import",
                 }
                 op = import_ops.get(ext, "import_scene.gltf")
                 # Normalise path separators for Blender (always forward slashes)
                 safe_path = object_name.replace("\\", "/")
-                import_code = f'bpy.ops.{op}(filepath="{safe_path}")'
+                import_code = (
+                    f'_pre = set(o.name for o in bpy.data.objects)\n'
+                    f'bpy.ops.{op}(filepath="{safe_path}")\n'
+                    f'_new = [o.name for o in bpy.data.objects if o.name not in _pre and o.type == "MESH"]\n'
+                    f'_new[0] if _new else (bpy.context.active_object.name if bpy.context.active_object else "")'
+                )
                 import_result = await self._run_step(
                     "import", "execute_code", {"code": import_code},
                     results, steps_completed,
@@ -771,8 +777,12 @@ class PipelineRunner:
                     results["status"] = "failed"
                     results["error"] = "Import failed -- cannot continue"
                     return results
-                # After import the active object name is the stem of the file
-                name = Path(object_name).stem
+                _imported_name = ""
+                if isinstance(import_result, dict):
+                    _imported_name = str(import_result.get("result", "")).strip("'\" ")
+                if not _imported_name:
+                    _imported_name = Path(object_name).stem
+                name = _imported_name
                 results["object_name"] = name
 
             # ----- Step 2: Cleanup (repair -> game check -> retopo -> UV -> PBR) -----
@@ -949,28 +959,37 @@ class PipelineRunner:
         Returns:
             Dict with ``generation`` and ``pipeline`` sub-dicts.
         """
-        from veilbreakers_mcp.shared.tripo_client import TripoGenerator
-
         result: dict = {
             "generation": {},
             "pipeline": {},
             "status": "pending",
         }
 
-        # --- Generate via Tripo ---
-        api_key = self.settings.tripo_api_key if hasattr(self.settings, "tripo_api_key") else ""
-        if not api_key:
-            result["status"] = "failed"
-            result["error"] = "TRIPO_API_KEY not configured"
-            return result
-
         if not prompt and not image_path:
             result["status"] = "failed"
             result["error"] = "'prompt' or 'image_path' is required"
             return result
 
+        # --- Generate via Tripo ---
+        studio_cookie = getattr(self.settings, "tripo_session_cookie", "")
+        studio_token = getattr(self.settings, "tripo_studio_token", "")
+        api_key = getattr(self.settings, "tripo_api_key", "")
+
+        if not studio_cookie and not studio_token and not api_key:
+            result["status"] = "failed"
+            result["error"] = "No Tripo credentials configured (TRIPO_API_KEY, TRIPO_SESSION_COOKIE, or TRIPO_STUDIO_TOKEN)"
+            return result
+
         try:
-            gen = TripoGenerator(api_key=api_key)
+            if studio_cookie or studio_token:
+                from veilbreakers_mcp.shared.tripo_studio_client import TripoStudioClient
+                gen = TripoStudioClient(
+                    session_cookie=studio_cookie,
+                    session_token=studio_token,
+                )
+            else:
+                from veilbreakers_mcp.shared.tripo_client import TripoGenerator
+                gen = TripoGenerator(api_key=api_key)
             if image_path:
                 gen_result = await gen.generate_from_image(image_path, output_dir)
             else:

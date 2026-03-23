@@ -58,7 +58,6 @@ from .mesh import (
     handle_loop_cut,
     handle_bevel_edges,
     handle_knife_project,
-    handle_proportional_edit,
     handle_enter_sculpt_mode,
     handle_exit_sculpt_mode,
     handle_vertex_color,

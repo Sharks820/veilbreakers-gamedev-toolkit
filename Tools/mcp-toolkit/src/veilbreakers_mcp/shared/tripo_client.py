@@ -154,7 +154,9 @@ class TripoGenerator:
             }
         finally:
             try:
-                client.close()
+                coro = client.close()
+                if asyncio.iscoroutine(coro):
+                    await coro
             except (OSError, RuntimeError):
                 pass
 
@@ -250,6 +252,8 @@ class TripoGenerator:
             }
         finally:
             try:
-                client.close()
+                coro = client.close()
+                if asyncio.iscoroutine(coro):
+                    await coro
             except (OSError, ConnectionError):
                 pass

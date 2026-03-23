@@ -459,7 +459,8 @@ def _create_area_light(
     light_data.color = preset["color"][:3]
     if hasattr(light_data, "size"):
         light_data.size = preset["size"]
-    light_data.use_shadow = preset.get("use_shadow", True)
+    if hasattr(light_data, "use_shadow"):
+        light_data.use_shadow = preset.get("use_shadow", True)
 
     light_obj = bpy.data.objects.new(name=name, object_data=light_data)
     bpy.context.scene.collection.objects.link(light_obj)
@@ -918,6 +919,8 @@ def handle_render_contact_sheet(params: dict) -> dict:
     temp_lights = []
     old_world_strength = None
     old_world_color = None
+    old_world = None
+    world = None
     if not skip_beauty:
         viewport_state = _save_viewport_state()
         eevee_state = _save_eevee_state()
@@ -942,7 +945,8 @@ def handle_render_contact_sheet(params: dict) -> dict:
             temp_lights.append(light_obj)
 
         # Set dark ambient world for the render
-        world = bpy.context.scene.world
+        old_world = bpy.context.scene.world
+        world = old_world
         if world is None:
             world = bpy.data.worlds.new("_CS_Temp_World")
             bpy.context.scene.world = world
@@ -1009,16 +1013,24 @@ def handle_render_contact_sheet(params: dict) -> dict:
 
         # Clean up temporary contact sheet lights
         for light_obj in temp_lights:
+            light_data_ref = light_obj.data
             bpy.data.objects.remove(light_obj, do_unlink=True)
+            if light_data_ref is not None:
+                bpy.data.lights.remove(light_data_ref)
 
         # Restore world settings
         if old_world_strength is not None:
-            world = bpy.context.scene.world
-            if world and world.use_nodes and world.node_tree:
-                bg_node = world.node_tree.nodes.get("Background")
+            cur_world = bpy.context.scene.world
+            if cur_world and cur_world.use_nodes and cur_world.node_tree:
+                bg_node = cur_world.node_tree.nodes.get("Background")
                 if bg_node:
                     bg_node.inputs["Strength"].default_value = old_world_strength
                     bg_node.inputs["Color"].default_value = old_world_color
+
+        temp_world = world
+        bpy.context.scene.world = old_world
+        if old_world is None and temp_world is not None and temp_world.name == "_CS_Temp_World":
+            bpy.data.worlds.remove(temp_world)
 
         # Restore viewport/eevee state if we changed it
         if viewport_state is not None:

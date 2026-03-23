@@ -150,7 +150,7 @@ async def unity_game(
             return await _handle_game_player_combat(
                 light_combo_count, heavy_combo_count, dodge_iframe_duration,
                 dodge_distance, block_stamina_drain, stamina_max, stamina_regen_rate,
-                ns_kwargs,
+                ns_kwargs=ns_kwargs,
             )
         elif action == "create_ability_system":
             return await _handle_game_ability_system(

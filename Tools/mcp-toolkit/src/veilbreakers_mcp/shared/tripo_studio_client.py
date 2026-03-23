@@ -61,6 +61,7 @@ class TripoStudioClient:
         self._jwt_exp: float = 0.0  # Unix timestamp when JWT expires
         self._session_cookie: str = session_cookie
         self._session: aiohttp.ClientSession | None = None
+        self._session_jwt: str = ""  # JWT the current session was created with
 
         # If we have a JWT, parse its expiry
         if self._jwt:
@@ -135,11 +136,7 @@ class TripoStudioClient:
 
     async def _ensure_session(self) -> aiohttp.ClientSession:
         jwt = await self._get_valid_jwt()
-        if self._session and not self._session.closed:
-            # Update auth header with potentially refreshed JWT
-            self._session._default_headers.update(
-                {"Authorization": f"Bearer {jwt}"}
-            )
+        if self._session and not self._session.closed and self._session_jwt == jwt:
             return self._session
         if self._session and not self._session.closed:
             await self._session.close()
@@ -150,6 +147,7 @@ class TripoStudioClient:
                 "x-tripo-region": "rg1",
             }
         )
+        self._session_jwt = jwt
         return self._session
 
     async def close(self) -> None:
@@ -366,9 +364,11 @@ class TripoStudioClient:
                         }
                     image_token = upload_data["data"]["image_token"]
 
+            _ext = Path(image_path).suffix.lower()
+            _img_type = "png" if _ext == ".png" else "jpg"
             task_data = {
                 "type": "image_to_model",
-                "file": {"type": "jpg", "file_token": image_token},
+                "file": {"type": _img_type, "file_token": image_token},
                 "model_version": model_version,
                 "texture": texture,
                 "pbr": pbr,
