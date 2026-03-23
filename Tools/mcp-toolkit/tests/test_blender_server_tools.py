@@ -22,11 +22,11 @@ class TestBlenderServerModuleImports:
 class TestMCPToolCount:
     """Test that the correct number of tools are registered."""
 
-    def test_tool_count_is_15(self):
-        """MCP server should have exactly 15 tools registered."""
+    def test_tool_count(self):
+        """MCP server should have exactly 16 tools registered (15 original + blender_quality)."""
         tool_count = len(mcp._tool_manager._tools)
-        assert tool_count == 15, (
-            f"Expected 15 tools, got {tool_count}. "
+        assert tool_count == 16, (
+            f"Expected 16 tools, got {tool_count}. "
             f"Registered tools: {sorted(mcp._tool_manager._tools.keys())}"
         )
 

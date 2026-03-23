@@ -2180,6 +2180,356 @@ async def blender_worldbuilding(
 
 
 # ---------------------------------------------------------------------------
+# Compound tool: blender_quality  (AAA quality generators -- v6.0)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def blender_quality(
+    action: Literal[
+        "quality_sword", "quality_axe", "quality_mace", "quality_bow",
+        "quality_shield", "quality_staff", "quality_pauldron",
+        "quality_chestplate", "quality_gauntlet",
+        "stone_wall", "timber_frame", "gothic_window", "roof",
+        "staircase", "archway", "chimney", "interior_trim", "battlements",
+        "creature_mouth", "creature_eyelid", "creature_paw",
+        "creature_wing", "creature_serpent", "creature_quadruped",
+        "creature_fantasy",
+        "riggable_door", "riggable_chain", "riggable_flag",
+        "riggable_chest", "riggable_chandelier", "riggable_drawbridge",
+        "riggable_rope_bridge", "riggable_hanging_sign",
+        "riggable_windmill", "riggable_cage",
+        "clothing_generate",
+        "vegetation_tree", "vegetation_leaf_cards",
+        "smart_material", "trim_sheet", "macro_variation",
+    ],
+    style: str = "default",
+    seed: int = 42,
+    size: float = 1.0,
+    width: float | None = None,
+    height: float | None = None,
+    depth: float | None = None,
+    thickness: float | None = None,
+    edge_bevel: float = 0.003,
+    ornament_level: int = 2,
+    object_name: str | None = None,
+    position: list[float] | None = None,
+    capture_viewport: bool = True,
+    # Weapon
+    blade_length: float = 0.9,
+    fuller: bool = True,
+    guard_style: str = "cross",
+    grip_wrap: str = "leather_spiral",
+    pommel_style: str = "disk",
+    shaft_length: float = 0.8,
+    head_radius: float = 0.04,
+    num_flanges: int = 7,
+    bow_length: float = 1.2,
+    num_layers: int = 3,
+    side: str = "left",
+    length: float = 3.0,
+    # Building
+    block_style: str = "ashlar",
+    mortar_depth: float = 0.005,
+    arch_style: str = "gothic_pointed",
+    has_keystone: bool = True,
+    pitch: float = 45.0,
+    material: str = "tile",
+    step_count: int = 12,
+    railing: bool = True,
+    tracery: bool = True,
+    merlon_style: str = "squared",
+    # Creature
+    tooth_count: int = 20,
+    tooth_style: str = "carnivore",
+    include_tongue: bool = True,
+    eye_radius: float = 0.015,
+    paw_type: str = "canine",
+    wing_type: str = "bat",
+    wingspan: float = 2.0,
+    species: str = "wolf",
+    base_type: str = "chimera",
+    brand: str | None = None,
+    # Riggable
+    link_count: int = 8,
+    candle_count: int = 8,
+    chain_length: float = 1.5,
+    plank_count: int = 12,
+    sag: float = 0.5,
+    blade_count: int = 4,
+    # Clothing/vegetation
+    clothing_type: str = "tunic",
+    leaf_type: str = "broadleaf",
+    density: float = 0.8,
+    # Texture quality
+    material_type: str = "aged_stone",
+    age: float = 0.5,
+    wear_intensity: float = 0.5,
+    dirt_intensity: float = 0.5,
+):
+    """AAA quality generators for weapons, armor, buildings, creatures, riggable props, clothing, vegetation, and textures."""
+    blender = get_blender_connection()
+    pos = tuple(position) if position else (0.0, 0.0, 0.0)
+    _style = None if style == "default" else style
+
+    # --- Weapons & Armor ---
+    if action == "quality_sword":
+        result = await blender.send_command("weapon_quality_sword", {
+            "style": _style or "longsword", "blade_length": blade_length,
+            "fuller": fuller, "guard_style": guard_style, "grip_wrap": grip_wrap,
+            "pommel_style": pommel_style, "edge_bevel": edge_bevel,
+            "ornament_level": ornament_level,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "quality_axe":
+        result = await blender.send_command("weapon_quality_axe", {
+            "style": _style or "battle_axe", "shaft_length": shaft_length,
+            "edge_bevel": edge_bevel, "grip_wrap": grip_wrap,
+            "pommel_style": pommel_style, "ornament_level": ornament_level,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "quality_mace":
+        result = await blender.send_command("weapon_quality_mace", {
+            "style": _style or "flanged", "shaft_length": shaft_length,
+            "head_radius": head_radius, "num_flanges": num_flanges,
+            "edge_bevel": edge_bevel, "ornament_level": ornament_level,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "quality_bow":
+        result = await blender.send_command("weapon_quality_bow", {
+            "style": _style or "longbow", "bow_length": bow_length,
+            "edge_bevel": edge_bevel, "ornament_level": ornament_level,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "quality_shield":
+        result = await blender.send_command("weapon_quality_shield", {
+            "style": _style or "kite", "size": size,
+            "edge_bevel": edge_bevel, "ornament_level": ornament_level,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "quality_staff":
+        result = await blender.send_command("weapon_quality_staff", {
+            "style": _style or "gnarled", "length": length,
+            "edge_bevel": edge_bevel, "ornament_level": ornament_level,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "quality_pauldron":
+        result = await blender.send_command("weapon_quality_pauldron", {
+            "style": _style or "plate", "size": size, "num_layers": num_layers,
+            "edge_bevel": edge_bevel, "ornament_level": ornament_level, "side": side,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "quality_chestplate":
+        result = await blender.send_command("weapon_quality_chestplate", {
+            "style": _style or "plate", "size": size,
+            "edge_bevel": edge_bevel, "ornament_level": ornament_level,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "quality_gauntlet":
+        result = await blender.send_command("weapon_quality_gauntlet", {
+            "style": _style or "plate", "size": size, "side": side,
+            "edge_bevel": edge_bevel, "ornament_level": ornament_level,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    # --- Buildings & Architecture ---
+    elif action == "stone_wall":
+        result = await blender.send_command("building_stone_wall", {
+            "width": width or 4.0, "height": height or 3.0,
+            "thickness": thickness or 0.4, "block_style": block_style,
+            "mortar_depth": mortar_depth, "seed": seed,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "timber_frame":
+        result = await blender.send_command("building_timber_frame", {
+            "width": width or 5.0, "height": height or 3.0,
+            "depth": depth or 4.0, "seed": seed,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "gothic_window":
+        params = {"width": width or 0.8, "height": height or 1.5,
+                  "tracery": tracery, "seed": seed}
+        if _style:
+            params["style"] = _style
+        result = await blender.send_command("building_gothic_window", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "roof":
+        params = {"width": width or 6.0, "depth": depth or 5.0,
+                  "pitch": pitch, "material": material, "seed": seed}
+        if _style:
+            params["style"] = _style
+        result = await blender.send_command("building_roof", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "staircase":
+        params = {"step_count": step_count, "railing": railing, "seed": seed}
+        if _style:
+            params["style"] = _style
+        result = await blender.send_command("building_staircase", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "archway":
+        result = await blender.send_command("building_archway", {
+            "width": width or 1.2, "height": height or 2.5,
+            "depth": depth or 0.5, "arch_style": arch_style,
+            "has_keystone": has_keystone, "seed": seed,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "chimney":
+        result = await blender.send_command("building_chimney", {
+            "height": height or 2.0, "style": _style or "stone", "seed": seed,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "interior_trim":
+        result = await blender.send_command("building_interior_trim", {
+            "room_width": width or 4.0, "room_depth": depth or 5.0,
+            "room_height": height or 3.0, "style": _style or "medieval", "seed": seed,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "battlements":
+        result = await blender.send_command("building_battlements", {
+            "wall_length": width or 10.0, "wall_height": height or 6.0,
+            "wall_thickness": thickness or 1.5, "merlon_style": merlon_style, "seed": seed,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    # --- Creature Anatomy ---
+    elif action == "creature_mouth":
+        result = await blender.send_command("creature_mouth_interior", {
+            "tooth_count": tooth_count, "tooth_style": tooth_style,
+            "include_tongue": include_tongue, "position": list(pos),
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "creature_eyelid":
+        result = await blender.send_command("creature_eyelid_topology", {
+            "eye_radius": eye_radius, "eye_position": list(pos),
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "creature_paw":
+        result = await blender.send_command("creature_paw", {
+            "paw_type": paw_type, "size": size, "position": list(pos),
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "creature_wing":
+        result = await blender.send_command("creature_wing", {
+            "wing_type": wing_type, "wingspan": wingspan, "position": list(pos),
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "creature_serpent":
+        result = await blender.send_command("creature_serpent_body", {
+            "length": length, "size": size, "species": species, "position": list(pos),
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "creature_quadruped":
+        result = await blender.send_command("creature_quadruped", {
+            "species": species, "size": size, "position": list(pos),
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "creature_fantasy":
+        params = {"base_type": base_type, "size": size}
+        if brand:
+            params["brand"] = brand
+        result = await blender.send_command("creature_fantasy", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    # --- Riggable Props ---
+    elif action == "riggable_door":
+        result = await blender.send_command("riggable_generate_door", {
+            "style": _style or "wooden_plank", "width": width or 1.0,
+            "height": height or 2.0, "thickness": thickness or 0.06,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "riggable_chain":
+        result = await blender.send_command("riggable_generate_chain", {
+            "link_count": link_count, "style": _style or "iron",
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "riggable_flag":
+        result = await blender.send_command("riggable_generate_flag", {
+            "width": width or 1.5, "height": height or 1.0,
+            "style": _style or "banner",
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "riggable_chest":
+        result = await blender.send_command("riggable_generate_chest", {
+            "style": _style or "wooden", "width": width or 0.6,
+            "height": height or 0.4, "depth": depth or 0.4,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "riggable_chandelier":
+        result = await blender.send_command("riggable_generate_chandelier", {
+            "style": _style or "iron_ring", "candle_count": candle_count,
+            "chain_length": chain_length,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "riggable_drawbridge":
+        result = await blender.send_command("riggable_generate_drawbridge", {
+            "width": width or 4.0, "length": length, "plank_count": plank_count,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "riggable_rope_bridge":
+        result = await blender.send_command("riggable_generate_rope_bridge", {
+            "length": length, "width": width or 1.2,
+            "plank_count": plank_count, "sag": sag,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "riggable_hanging_sign":
+        result = await blender.send_command("riggable_generate_hanging_sign", {
+            "width": width or 0.8, "height": height or 0.5,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "riggable_windmill":
+        result = await blender.send_command("riggable_generate_windmill", {
+            "blade_count": blade_count,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "riggable_cage":
+        result = await blender.send_command("riggable_generate_cage", {
+            "style": _style or "hanging_cage",
+            "width": width or 1.0, "height": height or 1.5,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    # --- Clothing ---
+    elif action == "clothing_generate":
+        result = await blender.send_command("clothing_generate", {
+            "clothing_type": clothing_type, "size": size,
+            "style": _style or "default",
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    # --- Vegetation ---
+    elif action == "vegetation_tree":
+        result = await blender.send_command("vegetation_lsystem_tree", {
+            "style": _style or "oak", "seed": seed, "size": size,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+    elif action == "vegetation_leaf_cards":
+        result = await blender.send_command("vegetation_leaf_cards", {
+            "leaf_type": leaf_type, "density": density, "seed": seed,
+        })
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    # --- Texture Quality ---
+    elif action == "smart_material":
+        result = await blender.send_command("texture_smart_material_code", {
+            "material_type": material_type, "object_name": object_name or "target",
+            "wear_intensity": wear_intensity, "dirt_intensity": dirt_intensity,
+            "age": age,
+        })
+        return json.dumps(result, indent=2, default=str)
+    elif action == "trim_sheet":
+        result = await blender.send_command("texture_trim_sheet_code", {
+            "sheet_name": _style or "medieval_trim",
+        })
+        return json.dumps(result, indent=2, default=str)
+    elif action == "macro_variation":
+        result = await blender.send_command("texture_macro_variation_code", {
+            "object_name": object_name or "target",
+        })
+        return json.dumps(result, indent=2, default=str)
+
+    return "Unknown action"
+
+
+# ---------------------------------------------------------------------------
 # Strip redundant Pydantic "title" fields from every tool schema.
 # These auto-generated titles just repeat the property name in Title Case
 # and waste ~24% of schema tokens sent to the LLM.

@@ -75,7 +75,7 @@ class TestTool1BlenderScene:
     def test_registered_in_mcp(self):
         assert "blender_scene" in mcp._tool_manager._tools
 
-    def test_action_literal_has_4_values(self):
+    def test_action_literal_values(self):
         values = _get_literal_values(blender_scene, "action")
         assert values == self.EXPECTED_ACTIONS
 
@@ -218,7 +218,7 @@ class TestTool4BlenderViewport:
     def test_registered_in_mcp(self):
         assert "blender_viewport" in mcp._tool_manager._tools
 
-    def test_action_literal_has_4_values(self):
+    def test_action_literal_values(self):
         values = _get_literal_values(blender_viewport, "action")
         assert values == self.EXPECTED_ACTIONS
 
