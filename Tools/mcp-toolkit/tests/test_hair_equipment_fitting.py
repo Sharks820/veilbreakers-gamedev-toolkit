@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import importlib.util
 import math
+from pathlib import Path
 
 import pytest
 
@@ -24,9 +25,11 @@ import pytest
 # Load modules without triggering bpy imports
 # ---------------------------------------------------------------------------
 
+_HANDLERS_DIR = Path(__file__).resolve().parent.parent / "blender_addon" / "handlers"
+
 _hair_spec = importlib.util.spec_from_file_location(
     "hair_system",
-    "blender_addon/handlers/hair_system.py",
+    str(_HANDLERS_DIR / "hair_system.py"),
 )
 _hair_mod = importlib.util.module_from_spec(_hair_spec)
 _hair_spec.loader.exec_module(_hair_mod)
@@ -43,7 +46,7 @@ _outward_direction = _hair_mod._outward_direction
 
 _equip_spec = importlib.util.spec_from_file_location(
     "equipment_fitting",
-    "blender_addon/handlers/equipment_fitting.py",
+    str(_HANDLERS_DIR / "equipment_fitting.py"),
 )
 _equip_mod = importlib.util.module_from_spec(_equip_spec)
 _equip_spec.loader.exec_module(_equip_mod)

@@ -300,7 +300,8 @@ async def blender_export(
 async def blender_mesh(
     action: Literal[
         "analyze", "repair", "game_check",
-        "select", "edit", "boolean", "retopo", "sculpt"
+        "select", "edit", "boolean", "retopo", "sculpt",
+        "sculpt_brush", "dyntopo", "voxel_remesh", "face_sets", "multires"
     ],
     object_name: str,
     # Existing params (analyze/repair/game_check)
@@ -354,12 +355,28 @@ async def blender_mesh(
     # Sculpt params
     strength: float = 0.5,
     iterations: int = 3,
+    # Sculpt brush params (sculpt_brush action)
+    brush_type: str | None = None,
+    radius: float = 50,
+    stroke_points: list[list[float]] | None = None,
+    use_front_faces_only: bool = False,
+    direction: str = "ADD",
+    # Dyntopo params (dyntopo action)
+    detail_size: float = 12.0,
+    detail_mode: str = "RELATIVE_DETAIL",
+    # Voxel remesh params (voxel_remesh action)
+    voxel_size: float = 0.05,
+    adaptivity: float = 0.0,
+    # Multires params (multires action)
+    subdivisions: int = 1,
     capture_viewport: bool = True
 ):
     """Mesh topology analysis, repair, editing, booleans, retopology, and sculpting.
 
     Extended with position-based selection (GAP-01), transform operations (GAP-02),
-    loop cuts (GAP-03), bevel (GAP-04), and merge/dissolve (GAP-05).
+    loop cuts (GAP-03), bevel (GAP-04), merge/dissolve (GAP-05), and advanced
+    sculpt operations: sculpt_brush (32 brush types), dyntopo (dynamic topology),
+    voxel_remesh, face_sets, and multires (multiresolution modifier).
     """
     blender = get_blender_connection()
 
@@ -481,6 +498,60 @@ async def blender_mesh(
         if operation is not None:
             params["operation"] = operation
         result = await blender.send_command("mesh_sculpt", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "sculpt_brush":
+        params = {
+            "object_name": object_name,
+            "strength": strength,
+            "radius": radius,
+            "use_front_faces_only": use_front_faces_only,
+            "direction": direction,
+        }
+        if brush_type is not None:
+            params["brush_type"] = brush_type
+        if stroke_points is not None:
+            params["stroke_points"] = stroke_points
+        result = await blender.send_command("mesh_sculpt_brush", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "dyntopo":
+        params = {
+            "object_name": object_name,
+            "detail_size": detail_size,
+            "detail_mode": detail_mode,
+        }
+        if operation is not None:
+            params["action"] = operation
+        result = await blender.send_command("mesh_dyntopo", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "voxel_remesh":
+        result = await blender.send_command(
+            "mesh_voxel_remesh",
+            {
+                "object_name": object_name,
+                "voxel_size": voxel_size,
+                "adaptivity": adaptivity,
+            },
+        )
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "face_sets":
+        params = {"object_name": object_name}
+        if operation is not None:
+            params["action"] = operation
+        result = await blender.send_command("mesh_face_sets", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "multires":
+        params = {
+            "object_name": object_name,
+            "subdivisions": subdivisions,
+        }
+        if operation is not None:
+            params["action"] = operation
+        result = await blender.send_command("mesh_multires", params)
         return await _with_screenshot(blender, result, capture_viewport)
 
     return ["Unknown action"]
@@ -823,6 +894,8 @@ async def asset_pipeline(
         "tag_metadata", "batch_process", "catalog_query", "catalog_add",
         # Equipment operations (Phase 13 -- EQUIP-01/03/04/05)
         "generate_weapon", "split_character", "fit_armor", "render_equipment_icon",
+        # Full production pipeline
+        "full_pipeline", "generate_and_process",
     ],
     # Common params
     object_name: str | None = None,
@@ -857,9 +930,17 @@ async def asset_pipeline(
     camera_distance: float = 2.0,
     camera_angle: str = "front",
     body_types: list[str] | None = None,
+    # full_pipeline / generate_and_process params
+    material_preset: str = "auto",
+    weathering_preset: str = "medium",
+    rig_template: str = "auto",
+    animations: list[str] | None = None,
+    lod_count: int = 3,
+    export_format: str = "fbx",
+    export_dir: str | None = None,
     capture_viewport: bool = True
 ):
-    """Asset pipeline management -- 3D generation, processing, LODs, catalog, equipment."""
+    """Asset pipeline management -- 3D generation, processing, LODs, catalog, equipment, full pipeline."""
     blender = get_blender_connection()
 
     if action == "generate_3d":
@@ -990,6 +1071,45 @@ async def asset_pipeline(
         if output_path:
             params["output_path"] = output_path
         result = await blender.send_command("equipment_render_icon", params)
+        return json.dumps(result, indent=2, default=str)
+
+    # --- Full production pipeline ---
+
+    elif action == "full_pipeline":
+        if not object_name:
+            return "ERROR: 'object_name' is required for full_pipeline"
+        runner = PipelineRunner(blender, settings)
+        result = await runner.full_asset_pipeline(
+            object_name=object_name,
+            asset_type=asset_type or "prop",
+            poly_budget=poly_budget,
+            material_preset=material_preset,
+            weathering_preset=weathering_preset,
+            rig_template=rig_template,
+            animations=animations,
+            lod_count=lod_count,
+            export_format=export_format,
+            export_dir=export_dir or output_dir,
+        )
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_and_process":
+        if not prompt and not image_path:
+            return "ERROR: 'prompt' or 'image_path' is required for generate_and_process"
+        runner = PipelineRunner(blender, settings)
+        result = await runner.generate_and_process(
+            prompt=prompt,
+            image_path=image_path,
+            asset_type=asset_type or "prop",
+            output_dir=export_dir or output_dir,
+            poly_budget=poly_budget,
+            material_preset=material_preset,
+            weathering_preset=weathering_preset,
+            rig_template=rig_template,
+            animations=animations,
+            lod_count=lod_count,
+            export_format=export_format,
+        )
         return json.dumps(result, indent=2, default=str)
 
     return "Unknown action"

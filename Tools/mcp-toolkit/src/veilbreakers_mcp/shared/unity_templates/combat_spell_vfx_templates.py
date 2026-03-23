@@ -23,16 +23,16 @@ from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 # Defined inline because vfx_templates only exports BRAND_VFX_CONFIGS (not
 # separate primary/glow dicts).  Matches the values used in vfx_mastery_templates.
 BRAND_PRIMARY_COLORS: dict[str, list[float]] = {
-    "IRON": [0.55, 0.59, 0.65, 1.0], "SAVAGE": [0.71, 0.18, 0.18, 1.0],
+    "IRON": [0.55, 0.35, 0.22, 1.0], "SAVAGE": [0.71, 0.18, 0.18, 1.0],
     "SURGE": [0.24, 0.55, 0.86, 1.0], "VENOM": [0.31, 0.71, 0.24, 1.0],
-    "DREAD": [0.47, 0.24, 0.63, 1.0], "LEECH": [0.55, 0.16, 0.31, 1.0],
+    "DREAD": [0.24, 0.47, 0.27, 1.0], "LEECH": [0.55, 0.53, 0.20, 1.0],
     "GRACE": [0.86, 0.86, 0.94, 1.0], "MEND": [0.78, 0.67, 0.31, 1.0],
     "RUIN": [0.86, 0.47, 0.16, 1.0], "VOID": [0.16, 0.08, 0.24, 1.0],
 }
 BRAND_GLOW_COLORS: dict[str, list[float]] = {
-    "IRON": [0.71, 0.75, 0.80, 1.0], "SAVAGE": [0.86, 0.27, 0.27, 1.0],
+    "IRON": [0.80, 0.55, 0.30, 1.0], "SAVAGE": [0.86, 0.27, 0.27, 1.0],
     "SURGE": [0.39, 0.71, 1.00, 1.0], "VENOM": [0.47, 0.86, 0.39, 1.0],
-    "DREAD": [0.63, 0.39, 0.78, 1.0], "LEECH": [0.71, 0.24, 0.43, 1.0],
+    "DREAD": [0.35, 0.70, 0.40, 1.0], "LEECH": [0.70, 0.65, 0.25, 1.0],
     "GRACE": [1.00, 1.00, 1.00, 1.0], "MEND": [0.94, 0.82, 0.47, 1.0],
     "RUIN": [1.00, 0.63, 0.31, 1.0], "VOID": [0.39, 0.24, 0.55, 1.0],
 }

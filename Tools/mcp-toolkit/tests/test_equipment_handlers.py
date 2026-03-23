@@ -5,7 +5,7 @@ Tests cover:
 - Character split parameter validation (_validate_split_params)
 - Armor fitting parameter validation (_validate_armor_params)
 - Icon rendering parameter validation (_validate_icon_params)
-- Weapon type constants (VALID_WEAPON_TYPES -- 29 types)
+- Weapon type constants (VALID_WEAPON_TYPES -- 47 types)
 - Body part/type defaults (DEFAULT_BODY_PARTS, DEFAULT_BODY_TYPES)
 - Weapon empty position computation (_compute_grip_point, _compute_trail_attach_*)
 - Weapon mesh generators (bmesh-based, tested via vertex/face counts on stub bmesh)
@@ -37,6 +37,10 @@ from blender_addon.handlers.equipment import (
     _RANGED_TYPES,
     _MAGIC_TYPES,
     _CHAIN_TYPES,
+    _DUAL_WIELD_TYPES,
+    _FIST_TYPES,
+    _THRUST_TYPES,
+    _FOCUS_TYPES,
     _THROWN_TYPES,
 )
 
@@ -49,8 +53,8 @@ from blender_addon.handlers.equipment import (
 class TestConstants:
     """Test that equipment constants are correct."""
 
-    def test_valid_weapon_types_has_29(self):
-        assert len(VALID_WEAPON_TYPES) == 29
+    def test_valid_weapon_types_has_47(self):
+        assert len(VALID_WEAPON_TYPES) == 47
 
     def test_valid_weapon_types_original_seven(self):
         original = {"sword", "axe", "mace", "staff", "bow", "dagger", "shield"}
@@ -63,6 +67,16 @@ class TestConstants:
         "battle_axe", "greataxe", "club", "warhammer", "halberd",
         "glaive", "shortbow", "longbow", "staff_magic", "wand",
         "throwing_knife",
+        # Dual-wield paired weapons
+        "paired_daggers", "twin_swords", "dual_axes", "dual_claws",
+        # Fist / gauntlet weapons
+        "brass_knuckles", "cestus", "bladed_gauntlet", "iron_fist",
+        # Rapiers / thrusting swords
+        "rapier", "estoc",
+        # Throwing weapons
+        "javelin", "throwing_axe", "shuriken", "bola",
+        # Off-hand focus items
+        "orb_focus", "skull_fetish", "holy_symbol", "totem",
     }
 
     @pytest.mark.parametrize("wtype", sorted(EXPECTED_ALL_TYPES))
@@ -77,7 +91,8 @@ class TestConstants:
         or are handled in the original/other categories."""
         classified = (
             _POLEARM_TYPES | _TWO_HANDED_TYPES | _RANGED_TYPES
-            | _MAGIC_TYPES | _CHAIN_TYPES | _THROWN_TYPES
+            | _MAGIC_TYPES | _CHAIN_TYPES | _DUAL_WIELD_TYPES
+            | _FIST_TYPES | _THRUST_TYPES | _FOCUS_TYPES | _THROWN_TYPES
         )
         # Remaining types are handled by specific if-branches (sword, dagger, etc.)
         remaining = VALID_WEAPON_TYPES - classified
@@ -92,7 +107,8 @@ class TestConstants:
     def test_classification_sets_no_overlap(self):
         """Classification sets should not overlap."""
         sets = [_POLEARM_TYPES, _TWO_HANDED_TYPES, _RANGED_TYPES,
-                _MAGIC_TYPES, _CHAIN_TYPES, _THROWN_TYPES]
+                _MAGIC_TYPES, _CHAIN_TYPES, _DUAL_WIELD_TYPES,
+                _FIST_TYPES, _THRUST_TYPES, _FOCUS_TYPES, _THROWN_TYPES]
         for i, s1 in enumerate(sets):
             for s2 in sets[i + 1:]:
                 assert not (s1 & s2), f"Overlap: {s1 & s2}"

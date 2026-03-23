@@ -9,12 +9,19 @@ Usage:
 
     verts = smooth_assembled_mesh(verts, faces, smooth_iterations=3)
     verts = add_organic_noise(verts, strength=0.003)
+
+Performance notes (2026-03):
+  - Laplacian smoothing uses numpy double-buffered arrays with pointer
+    swap instead of Python list copies per iteration, reducing memory
+    allocations and improving cache locality.
 """
 
 from __future__ import annotations
 
 import math
 from typing import Any
+
+import numpy as np
 
 # ---------------------------------------------------------------------------
 # Type aliases
@@ -93,13 +100,22 @@ def smooth_assembled_mesh(
     num_verts = len(vertices)
     adj = _build_adjacency(num_verts, faces)
 
-    # Bug 18 fix: use double-buffering with in-place update instead of
-    # full array copy on every iteration
-    buf_a = [[v[0], v[1], v[2]] for v in vertices]
-    buf_b = [[v[0], v[1], v[2]] for v in vertices]
+    # Pre-compute per-vertex effective blend factors (accounts for
+    # boundary/extremity preservation) so the inner loop is pure arithmetic.
+    blend_factors = np.empty(num_verts, dtype=np.float64)
+    for vi in range(num_verts):
+        n_neighbors = len(adj[vi])
+        eb = blend_factor
+        if preserve_boundary and n_neighbors <= 2:
+            eb *= 0.15
+        elif preserve_boundary and n_neighbors <= 3:
+            eb *= 0.4
+        blend_factors[vi] = eb
 
-    current = buf_a
-    target = buf_b
+    # Double-buffered numpy arrays -- swap pointers each iteration,
+    # never copy the entire array.
+    buf_read = np.array(vertices, dtype=np.float64)   # shape (N, 3)
+    buf_write = np.empty_like(buf_read)
 
     for _iteration in range(smooth_iterations):
         for vi in range(num_verts):
@@ -107,41 +123,20 @@ def smooth_assembled_mesh(
             num_neighbors = len(neighbors)
 
             if num_neighbors == 0:
-                target[vi][0] = current[vi][0]
-                target[vi][1] = current[vi][1]
-                target[vi][2] = current[vi][2]
+                buf_write[vi] = buf_read[vi]
                 continue
 
-            # Compute average of neighbor positions
-            avg_x = 0.0
-            avg_y = 0.0
-            avg_z = 0.0
-            for ni in neighbors:
-                avg_x += current[ni][0]
-                avg_y += current[ni][1]
-                avg_z += current[ni][2]
-            avg_x /= num_neighbors
-            avg_y /= num_neighbors
-            avg_z /= num_neighbors
+            # Vectorized neighbor average using numpy fancy indexing
+            neighbor_idx = np.fromiter(neighbors, dtype=np.intp, count=num_neighbors)
+            avg = buf_read[neighbor_idx].mean(axis=0)
 
-            # Determine effective blend: reduce for extremities
-            effective_blend = blend_factor
-            if preserve_boundary and num_neighbors <= 2:
-                # Tips of horns, fingers, tails -- preserve shape
-                effective_blend *= 0.15
-            elif preserve_boundary and num_neighbors <= 3:
-                # Near-boundary vertices -- reduce smoothing
-                effective_blend *= 0.4
+            eb = blend_factors[vi]
+            buf_write[vi] = buf_read[vi] + eb * (avg - buf_read[vi])
 
-            # Laplacian blend: move vertex toward neighbor average
-            target[vi][0] = current[vi][0] + effective_blend * (avg_x - current[vi][0])
-            target[vi][1] = current[vi][1] + effective_blend * (avg_y - current[vi][1])
-            target[vi][2] = current[vi][2] + effective_blend * (avg_z - current[vi][2])
+        # Swap buffers -- no array copy, just pointer swap
+        buf_read, buf_write = buf_write, buf_read
 
-        # Swap buffers
-        current, target = target, current
-
-    return [(v[0], v[1], v[2]) for v in current]
+    return [(float(v[0]), float(v[1]), float(v[2])) for v in buf_read]
 
 
 # ---------------------------------------------------------------------------
