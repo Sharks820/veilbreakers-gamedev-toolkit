@@ -36,7 +36,7 @@ For a Dark Souls-style game at 60fps with multiple enemies on screen, target:
 #### Bone Socket System (FromSoftware / Blizzard approach)
 Weapons and shields attach to predefined bone sockets on the skeleton:
 
-```
+```text
 Standard Socket Bones:
 - weapon_r          (right hand weapon mount)
 - weapon_l          (left hand / shield mount)
@@ -105,7 +105,7 @@ When armor covers body parts, hide the underlying body mesh sections:
 
 ### 1.4 LOD Strategy for Equipped Characters
 
-```
+```text
 LOD0 (>30% screen): Full detail, all equipment separate meshes, 4-bone skinning
 LOD1 (15-30%):      Simplified equipment, 2-bone skinning, no cloth sim
 LOD2 (5-15%):       Merged equipment, simplified skeleton, 1-bone skinning
@@ -131,7 +131,7 @@ From Unity documentation:
 
 #### Grid and Snap Standards (AAA consensus)
 
-```
+```text
 Primary Grid:    1m (100cm) -- walls, floors, basic modules
 Secondary Grid:  0.5m (50cm) -- half-walls, trim pieces, detail alignment
 Fine Grid:       0.25m (25cm) -- props, small detail placement
@@ -145,7 +145,7 @@ Door Height:     2.4m (standard), 3m (grand), 4m+ (boss door)
 
 #### Module Piece Categories (per kit, 25-40 pieces minimum)
 
-```
+```text
 Structural (10-15 pieces):
   - wall_straight_1m, wall_straight_2m, wall_straight_4m
   - wall_corner_inner, wall_corner_outer
@@ -200,7 +200,7 @@ All modular pieces: pivot at **bottom-left-back corner** (or bottom-center for s
 - Cost-effective, artist-controllable, no extra textures needed
 
 #### Procedural Placement Rules
-```
+```text
 Rock placement:  Cluster in groups of 3-7, vary scale 0.8-1.3x, random rotation
                  Partially embed in terrain (sink 10-30% below surface)
 Trees:           Poisson disk sampling, min distance 2-5m between trunks
@@ -212,7 +212,7 @@ Grass/Foliage:   Density falloff from paths, higher near walls/rocks
 ### 2.3 Vegetation Rendering
 
 #### LOD Chain for Trees
-```
+```text
 LOD0 (>15% screen): Full 3D mesh, 2,000-8,000 tris
 LOD1 (8-15%):       Simplified mesh, 800-3,000 tris
 LOD2 (3-8%):        Card-based (6-12 intersecting planes), 100-500 tris
@@ -236,7 +236,7 @@ LOD3/Billboard (<3%): Single billboard quad, 2 tris
 
 #### BSP (Binary Space Partitioning)
 Best for rectangular room layouts:
-```
+```text
 Parameters:
   - min_room_size: 5-8 cells (prevents tiny rooms)
   - max_depth: 4-6 splits (controls room count)
@@ -300,7 +300,7 @@ Post-processing for quality:
 ### 2.7 Environmental Storytelling
 
 Prop placement rules for narrative:
-```
+```text
 Battle aftermath:  Scattered weapons, broken shields, arrow clusters in walls
                    Blood decals, overturned furniture, damaged walls
 Abandoned room:    Cobwebs in corners, dust particles, toppled chairs
@@ -325,7 +325,7 @@ Boss approach:     Increasing corpses, warning messages, blood trails
 **Recommendation:** Forward+ for dark fantasy action RPG. Supports dozens of point/spot lights for torches, braziers, magic effects without hitting per-object limits.
 
 #### URP Asset Settings for Dark Fantasy
-```
+```text
 Main Light:              Per Pixel (directional sun/moon)
 Additional Lights:       Per Pixel, limit 8-16 per object (Forward) or unlimited (Forward+)
 Shadow Cascades:         4 cascades
@@ -340,7 +340,7 @@ SRP Batcher:             Enabled (essential for batching)
 
 ### 3.2 Light Probe Placement Strategy
 
-```
+```text
 Placement Rules:
 1. Place at every significant lighting transition (shadow edge, color change)
 2. Grid spacing: 2-3m in gameplay areas, 4-6m in corridors, 8-10m outdoors
@@ -359,7 +359,7 @@ Density by area type:
 ### 3.3 Reflection Probe Configuration
 
 #### Interior Probes
-```
+```text
 Type:             Baked (performance) or Realtime at low frequency
 Resolution:       256x256 (small rooms), 512x512 (large halls)
 Box Projection:   Enabled (critical for interiors -- prevents infinite parallax)
@@ -370,7 +370,7 @@ Time Slicing:     Individual Faces (14 frames) for realtime
 ```
 
 #### Exterior Probes
-```
+```text
 Type:             Baked with skybox fallback
 Resolution:       128x128 (adequate for outdoor)
 Box Projection:   Disabled (outdoor reflections are essentially at infinity)
@@ -395,7 +395,7 @@ URP does not natively support volumetric lighting. Approaches:
 
 ### 3.5 Time-of-Day System
 
-```
+```text
 Key time points with lighting values:
   Dawn (6:00):    Sun angle 5-15 deg, warm orange (1.0, 0.6, 0.3), intensity 0.3-0.5
                   Fog: thick, warm tint, density 0.02-0.05
@@ -427,7 +427,7 @@ Ambient: Gradient skybox with time-varying colors.
 
 ### 4.1 Procedural Mesh Topology Rules
 
-```
+```text
 Golden Rules:
 1. Quads over triangles -- maintain quad-dominant topology for clean subdivision
 2. Edge loops at deformation zones -- every joint needs 3+ edge loops
@@ -450,7 +450,7 @@ Deformation Zone Edge Loops:
 ### 4.2 Weapon Mesh Generation (AAA Quality)
 
 #### Triangle Budgets for Weapons
-```
+```text
 Melee weapons:    3,000-8,000 tris (LOD0), 1,000-3,000 (LOD1), 300-800 (LOD2)
 Ranged weapons:   5,000-15,000 tris (LOD0), 2,000-6,000 (LOD1), 500-1,500 (LOD2)
 Shields:          2,000-6,000 tris (LOD0), 800-2,000 (LOD1), 200-500 (LOD2)
@@ -460,7 +460,7 @@ For dark fantasy melee focus: 5,000-8,000 is the sweet spot
 ```
 
 #### Proportional Guidelines (Sword)
-```
+```text
 Total length:    0.9-1.2m (one-handed), 1.3-1.8m (two-handed)
 Blade:           60-70% of total length
 Guard:           10-15% of total length width
@@ -475,7 +475,7 @@ Wrapping:        Grip wrap geometry or normal map detail
 ```
 
 #### Proportional Guidelines (Axe)
-```
+```text
 Total length:    0.6-0.9m (one-handed), 1.0-1.5m (two-handed)
 Head:            25-35% of total length, width 20-40cm
 Shaft:           65-75% of total length
@@ -492,7 +492,7 @@ Beard (hook):    Optional downward extension for Nordic style
 - **Unique UVs:** Only for trim, ornamental details, and damage decals (UV2 channel)
 
 #### Doorways and Windows
-```
+```text
 Door opening:    1.2m x 2.4m (standard), 2.0m x 3.0m (grand)
 Window opening:  0.8m x 1.2m (standard), 1.5m x 2.0m (gothic arch)
 Wall thickness:  0.3-0.5m (stone), 0.15-0.25m (wood)
@@ -502,7 +502,7 @@ Arch geometry:   8-16 segments for curved arch top
 
 ### 4.4 LOD Ratios and Screen Percentages
 
-```
+```text
 Standard LOD Configuration:
   LOD0:  100% tris, screen threshold >60% (with LOD Bias 2: >30%)
   LOD1:  50% tris,  screen threshold >30% (with LOD Bias 2: >15%)
@@ -534,7 +534,7 @@ From Google Filament PBR reference:
 
 Specific material base colors (sRGB, from physicallybased.info + Filament):
 
-```
+```text
 METALS (metallic = 1.0):
   Iron:         (135, 131, 126)    roughness: 0.5-0.8 (raw), 0.2-0.4 (polished)
   Steel:        (155, 155, 155)    roughness: 0.3-0.6
@@ -580,7 +580,7 @@ From Filament: clamp roughness minimum to 0.089 to avoid half-precision floating
 
 ### 5.2 Texture Resolution Standards
 
-```
+```text
 Asset Type              Albedo    Normal    ORM (AO/Rough/Metal)
 Hero Character          2048      2048      2048
 Major NPC               2048      2048      1024
@@ -611,7 +611,7 @@ Mipmap: Always enabled for 3D assets. Streaming enabled.
 ### 5.4 Material Layering
 
 For dark fantasy weathering:
-```
+```text
 Layer Stack (bottom to top):
   1. Base material (stone, metal, wood)
   2. Wear/edge damage (height-based, curvature-based)
@@ -629,7 +629,7 @@ Curvature-based wear:
 
 ### 5.5 Weathering and Aging
 
-```
+```text
 Weathering Techniques:
 1. Edge Wear:
    - Use curvature map or baked AO to identify edges
@@ -666,7 +666,7 @@ Weathering Techniques:
 ### 6.1 State Machine Architecture (Combat-Heavy)
 
 #### Layer Structure
-```
+```text
 Layer 0 - Base/Locomotion (weight 1.0, Override):
   States: Idle, Walk, Run, Sprint, Crouch, CrouchWalk
   Blend Trees: 8-directional locomotion (speed x direction)
@@ -689,7 +689,7 @@ Layer 4 - Facial/Emotes (weight 0-1, Additive, Avatar Mask = head):
 ```
 
 #### Animator Parameters (typical set)
-```
+```text
 Float:   Speed, Direction, AimAngle, VerticalSpeed, AttackSpeed
 Bool:    IsGrounded, IsCrouching, IsBlocking, IsDead, IsStaggered, InCombat
 Trigger: Attack, HeavyAttack, Dodge, Jump, TakeHit, Die, Interact, CastSpell
@@ -713,7 +713,7 @@ Int:     ComboIndex, WeaponType, EquipmentState, HitDirection
 - `Animator.applyRootMotion = false` during locomotion
 
 #### Hybrid Approach (Dark Souls pattern)
-```
+```text
 Locomotion:  In-place, script-driven movement
 Combat:      Root motion for attacks, dodges, staggers
 Transitions: Root motion for special transitions (climb, vault, sit)
@@ -723,7 +723,7 @@ Boss moves:  Root motion for lunges, charges, area attacks
 ### 6.3 Animation Layers for Equipment
 
 #### Weapon IK Layer
-```
+```text
 Two-Bone IK on weapon hand:
   - Target: weapon grip socket
   - Hint/Pole: elbow direction bone
@@ -736,7 +736,7 @@ Shield positioning:
 ```
 
 #### Avatar Masks
-```
+```text
 Upper Body mask:   Spine1 and above (arms, hands, head, upper spine)
 Lower Body mask:   Hips and below (legs, feet)
 Right Arm mask:    Right shoulder, arm, hand
@@ -748,7 +748,7 @@ Full Body:         All bones (for reactions, deaths, transitions)
 ### 6.4 Blend Tree Configurations
 
 #### 8-Directional Locomotion
-```
+```text
 Type: 2D Freeform Directional
 Parameters: Speed (0-6), Direction (-180 to 180)
 
@@ -767,7 +767,7 @@ Motion clips at positions:
 ```
 
 #### Attack Combo Blend
-```
+```text
 Type: 1D
 Parameter: ComboIndex (0-3)
 
@@ -783,7 +783,7 @@ Cancel window: start of attack (first 0.1s) for dodge cancel
 
 ### 6.5 Procedural Animation
 
-```
+```text
 Chains/Pendulums:
   - Spring-damper simulation: F = -kx - bv
   - Stiffness (k): 20-80 for chains, 5-20 for cloth
@@ -809,7 +809,7 @@ Vegetation Wind:
 
 ### 7.1 Draw Call Budgets
 
-```
+```text
 Platform              Target FPS    Draw Call Budget    SetPass Budget
 High-End PC (RTX)     60            3,000-5,000         500-1,000
 Mid-Range PC          60            1,500-3,000         300-600
@@ -824,7 +824,7 @@ Star Wars Battlefront: ~2,000 draw calls for large outdoor scenes
 
 ### 7.2 Triangle Budgets (Per Frame)
 
-```
+```text
 Platform              Total Triangles/Frame    Characters    Environment
 High-End PC           5-10 million             30-40%        50-60%
 Mid-Range PC          2-5 million              25-35%        55-65%
@@ -847,7 +847,7 @@ Reference data:
 
 ### 7.3 Texture Memory Budgets
 
-```
+```text
 Platform          Total VRAM Available    Texture Budget    Streaming Pool
 High-End PC       8-12 GB                2-4 GB            1-2 GB
 Mid-Range PC      4-6 GB                 1-2 GB            512 MB-1 GB
@@ -867,7 +867,7 @@ Mipmap streaming: load only mip levels needed for current view distance.
 
 ### 7.4 Occlusion Culling Strategy
 
-```
+```text
 Static Occlusion (baked):
   - Mark large opaque objects as Occluder Static (walls, floors, terrain)
   - Mark all renderable objects as Occludee Static
@@ -889,7 +889,7 @@ Frustum Culling (automatic):
 
 ### 7.5 LOD Group Configurations (AAA Standard)
 
-```
+```text
 Characters:
   LOD0: 100% (>25% screen)
   LOD1: 50%  (>12% screen) - reduce face detail, fingers merge
@@ -918,7 +918,7 @@ Buildings:
 
 ### 7.6 Batching & Instancing Strategy
 
-```
+```text
 SRP Batcher (primary strategy for URP):
   - Enable in URP Asset settings
   - All objects using same shader variant batch together
@@ -946,7 +946,7 @@ Batching Priority:
 
 ### 8.1 Particle System Budgets
 
-```
+```text
 VFX Budget Guidelines (PC, 60fps):
   Max active particle systems per scene:     50-100
   Max particles per system (combat effect):  50-200
@@ -967,7 +967,7 @@ Per-Effect Budgets:
 
 ### 8.2 Shader VFX vs Particle VFX
 
-```
+```text
 Use SHADER-BASED VFX for:
   - Screen-space effects (damage vignette, screen shake, chromatic aberration)
   - Material effects (dissolve, hologram, force field, damage overlay)
@@ -993,7 +993,7 @@ HYBRID approach (most effects):
 
 ### 8.3 Screen-Space Combat Feedback
 
-```
+```text
 Hit Confirmation Stack (applied in 1-3 frames):
   1. Screen shake:     Amplitude 0.05-0.2m, duration 0.1-0.3s, frequency 15-25Hz
                        Reduce amplitude by 50% each frame (exponential decay)
@@ -1013,7 +1013,7 @@ Damage Taken Stack:
 
 ### 8.4 Environmental VFX Layering
 
-```
+```text
 Atmosphere Stack (layer from bottom to top):
   1. Ground fog:       Low-lying particle fog, height 0-1m, soft particles
                        50-100 billboard particles, slow drift, alpha 0.1-0.3
@@ -1039,7 +1039,7 @@ Dark Fantasy Specific Effects:
 ## APPENDIX A: DARK FANTASY SPECIFIC GUIDELINES
 
 ### Color Palette
-```
+```text
 Primary Palette (dark, desaturated):
   Dark stone:     (45, 42, 38)      -- walls, floors
   Aged wood:      (65, 50, 35)      -- furniture, doors
@@ -1063,7 +1063,7 @@ Lighting Palette:
 ```
 
 ### Post-Processing Profile (Dark Fantasy URP)
-```
+```text
 Tonemapping:     ACES
 Bloom:           Threshold 0.9, Intensity 0.3-0.5, Scatter 0.7
                  Tint: warm (1.0, 0.95, 0.9)
@@ -1189,7 +1189,7 @@ public static class PBRValues
 
 From Adrian Courreges' DOOM 2016 graphics study -- a useful reference for dark atmosphere rendering:
 
-```
+```text
 Frame Statistics:
   Total Draw Calls:           1,331
   Textures Used:              132
@@ -1226,7 +1226,7 @@ Particles:
 
 Budget for a typical dark fantasy dungeon room (60fps, PC):
 
-```
+```text
 Asset                        Count    Tris Each    Total Tris    Draw Calls
 Player character (equipped)  1        55,000       55,000        7
 Enemy (common)               3        20,000       60,000        12

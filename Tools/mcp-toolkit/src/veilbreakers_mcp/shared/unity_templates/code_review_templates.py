@@ -2915,7 +2915,7 @@ namespace VeilBreakers.Editor.CodeReview
                 {
                     // Verify ? is not inside a quoted string on this line
                     int qPos = trimmed.IndexOf('?');
-                    if (qPos >= 0 && !IsMatchInString(trimmed, qPos))
+                    if (qPos >= 0 && !LineClassifier.IsMatchInString(trimmed, qPos))
                         score += 1 + nesting;
                 }
 
@@ -2927,7 +2927,7 @@ namespace VeilBreakers.Editor.CodeReview
                     string lastOp = null;
                     foreach (Match bm in boolOps)
                     {
-                        if (IsMatchInString(trimmed, bm.Index)) continue;
+                        if (LineClassifier.IsMatchInString(trimmed, bm.Index)) continue;
                         if (lastOp == null || bm.Value != lastOp)
                         { score += 1; lastOp = bm.Value; }
                     }
@@ -3411,8 +3411,8 @@ namespace VeilBreakers.Editor.CodeReview
             int errCount = filtered.Count(i => i.Type == FindingType.Error || i.Type == FindingType.Bug);
             int optCount = filtered.Count(i => i.Type == FindingType.Optimization);
             int strCount = filtered.Count(i => i.Type == FindingType.Strengthening);
-            float avgPri = filtered.Count > 0 ? filtered.Average(i => i.Priority) : 0;
-            float avgConf = filtered.Count > 0 ? filtered.Average(i => i.Confidence) : 0;
+            float avgPri = filtered.Count > 0 ? (float)filtered.Average(i => i.Priority) : 0f;
+            float avgConf = filtered.Count > 0 ? (float)filtered.Average(i => i.Confidence) : 0f;
             EditorGUILayout.LabelField(
                 $"Showing {filtered.Count}/{_issues.Count} | Errors/Bugs: {errCount} | Optimizations: {optCount} | Strengthening: {strCount} | Avg Priority: {avgPri:F0} | Avg Confidence: {avgConf:F0}%");
         }

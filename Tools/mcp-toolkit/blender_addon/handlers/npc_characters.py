@@ -763,7 +763,7 @@ def generate_npc_body_mesh(
         hand_raw_faces = hand_spec["faces"]
         # Offset hand vertices to correct position; hand mesh is at origin
         base_idx = len(all_verts)
-        hand_verts = [(v[0] + hand_cx, v[1] + hand_z, v[2]) for v in hand_raw_verts]
+        hand_verts = [(v[0] + hand_cx, v[1], v[2] + hand_z) for v in hand_raw_verts]
         hand_faces = [tuple(idx + base_idx for idx in f) for f in hand_raw_faces]
         _add(hand_verts, hand_faces, "extremity_skin")
 
