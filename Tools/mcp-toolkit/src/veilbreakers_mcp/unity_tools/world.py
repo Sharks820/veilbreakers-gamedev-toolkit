@@ -145,6 +145,19 @@ async def unity_world(
     decal_material_path: str = "",
     depression_depth: float = 0.1,
     vertex_color_falloff: float = 1.5,
+    # WFC dungeon params (WORLD-11)
+    wfc_grid_width: int = 20,
+    wfc_grid_height: int = 20,
+    wfc_seed: int = -1,
+    tile_set_path: str = "Assets/Prefabs/DungeonTiles",
+    # Interior streaming params (WORLD-12)
+    max_loaded_cells: int = 3,
+    preload_distance: float = 15.0,
+    lighting_transition_time: float = 1.5,
+    audio_crossfade_time: float = 2.0,
+    # Door system params (WORLD-13)
+    default_open_speed: float = 2.0,
+    default_auto_close_delay: float = 5.0,
     # common
     namespace: str = ""
 ) -> str:
@@ -231,6 +244,20 @@ async def unity_world(
             return await _handle_world_terrain_blend(
                 name, blend_radius, decal_material_path, depression_depth,
                 vertex_color_falloff, ns_kwargs,
+            )
+        elif action == "create_wfc_dungeon":
+            return await _handle_world_wfc_dungeon(
+                name, wfc_grid_width, wfc_grid_height, wfc_seed,
+                tile_set_path, namespace,
+            )
+        elif action == "create_interior_streaming":
+            return await _handle_world_interior_streaming(
+                name, max_loaded_cells, preload_distance,
+                lighting_transition_time, audio_crossfade_time, namespace,
+            )
+        elif action == "create_door_system":
+            return await _handle_world_door_system(
+                name, default_open_speed, default_auto_close_delay, namespace,
             )
         else:
             return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
@@ -668,5 +695,73 @@ async def _handle_world_terrain_blend(
         "status": "success",
         "action": "create_terrain_blend",
         "paths": [editor_path, runtime_path],
+        "next_steps": STANDARD_NEXT_STEPS,
+    }, indent=2)
+
+
+async def _handle_world_wfc_dungeon(
+    name: str, grid_width: int, grid_height: int, seed: int,
+    tile_set_path: str, namespace: str,
+) -> str:
+    """Create WFC tile-based dungeon generation script (WORLD-11)."""
+    ns = namespace or "VeilBreakers.WorldSystems"
+    result = generate_wfc_dungeon_script(
+        grid_width=grid_width, grid_height=grid_height, seed=seed,
+        tile_set_path=tile_set_path, namespace=ns,
+    )
+    return await _handle_dict_template("create_wfc_dungeon", result)
+
+
+async def _handle_world_interior_streaming(
+    name: str, max_loaded_cells: int, preload_distance: float,
+    lighting_transition_time: float, audio_crossfade_time: float,
+    namespace: str,
+) -> str:
+    """Create seamless interior/exterior streaming scripts (WORLD-12)."""
+    ns = namespace or "VeilBreakers.WorldSystems"
+    manager_cs, trigger_cs = generate_interior_streaming_script(
+        max_loaded_cells=max_loaded_cells,
+        preload_distance=preload_distance,
+        lighting_transition_time=lighting_transition_time,
+        audio_crossfade_time=audio_crossfade_time,
+        namespace=ns,
+    )
+    safe_name = name.replace(" ", "_")
+    manager_path = _write_to_unity(
+        manager_cs, f"Assets/Scripts/Runtime/WorldSystems/{safe_name}_InteriorStreamingManager.cs",
+    )
+    trigger_path = _write_to_unity(
+        trigger_cs, f"Assets/Scripts/Runtime/WorldSystems/{safe_name}_InteriorStreamingTrigger.cs",
+    )
+    return json.dumps({
+        "status": "success",
+        "action": "create_interior_streaming",
+        "paths": [manager_path, trigger_path],
+        "next_steps": STANDARD_NEXT_STEPS,
+    }, indent=2)
+
+
+async def _handle_world_door_system(
+    name: str, default_open_speed: float, default_auto_close_delay: float,
+    namespace: str,
+) -> str:
+    """Create door/gate/lock and lever system (WORLD-13)."""
+    ns = namespace or "VeilBreakers.WorldSystems"
+    door_cs, lever_cs = generate_door_system_script(
+        default_open_speed=default_open_speed,
+        default_auto_close_delay=default_auto_close_delay,
+        namespace=ns,
+    )
+    safe_name = name.replace(" ", "_")
+    door_path = _write_to_unity(
+        door_cs, f"Assets/Scripts/Runtime/WorldSystems/{safe_name}_Door.cs",
+    )
+    lever_path = _write_to_unity(
+        lever_cs, f"Assets/Scripts/Runtime/WorldSystems/{safe_name}_Lever.cs",
+    )
+    return json.dumps({
+        "status": "success",
+        "action": "create_door_system",
+        "paths": [door_path, lever_path],
         "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)

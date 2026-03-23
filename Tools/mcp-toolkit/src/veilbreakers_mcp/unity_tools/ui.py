@@ -16,6 +16,7 @@ from veilbreakers_mcp.shared.unity_templates.ui_templates import (
     generate_uss_stylesheet,
     generate_responsive_test_script,
     validate_uxml_layout,
+    generate_combat_hud_script,
 )
 from veilbreakers_mcp.shared.wcag_checker import validate_uxml_contrast
 from veilbreakers_mcp.shared.screenshot_diff import (
@@ -57,6 +58,7 @@ async def unity_ui(
         "create_notification_system", # UIPOL-06: toast notification system
         "create_loading_screen",     # UIPOL-07: loading screen with tips/lore
         "create_ui_shaders",         # UIPOL-08: material-based UI effect shaders
+        "create_combat_hud",         # UI-08: complete dark fantasy combat HUD
     ],
     # Screen generation params
     screen_spec: dict | None = None,
@@ -114,7 +116,12 @@ async def unity_ui(
     tip_interval: float = 5.0,
     # UI shader params (UIPOL-08)
     ui_shader_name: str = "VB_UIEffects",
-    ui_effects: list[str] | None = None
+    ui_effects: list[str] | None = None,
+    # Combat HUD params (UI-08)
+    ability_count: int = 4,
+    show_minimap: bool = True,
+    show_combo_counter: bool = True,
+    show_boss_bar: bool = True
 ) -> str:
     """Unity UI system -- UXML/USS generation, layout validation, WCAG contrast, responsive testing, visual regression, and dark fantasy UI polish."""
     try:
@@ -197,6 +204,15 @@ async def unity_ui(
                 "create_ui_shaders",
                 generate_ui_material_shaders(
                     shader_name=ui_shader_name, effects=ui_effects,
+                ),
+            )
+        elif action == "create_combat_hud":
+            return await _handle_dict_template(
+                "create_combat_hud",
+                generate_combat_hud_script(
+                    screen_name=screen_name, ability_count=ability_count,
+                    show_minimap=show_minimap, show_combo_counter=show_combo_counter,
+                    show_boss_bar=show_boss_bar,
                 ),
             )
         else:
