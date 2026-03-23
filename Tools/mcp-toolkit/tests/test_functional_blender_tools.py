@@ -367,6 +367,8 @@ class TestTool7BlenderMesh:
     EXPECTED_ACTIONS = {
         "analyze", "repair", "game_check",
         "select", "edit", "boolean", "retopo", "sculpt",
+        # v6: expanded sculpt/modeling operations
+        "sculpt_brush", "dyntopo", "voxel_remesh", "face_sets", "multires",
     }
 
     def test_function_exists_and_is_async(self):
@@ -375,10 +377,10 @@ class TestTool7BlenderMesh:
     def test_registered_in_mcp(self):
         assert "blender_mesh" in mcp._tool_manager._tools
 
-    def test_action_literal_has_8_values(self):
+    def test_action_literal_has_expected_values(self):
         values = _get_literal_values(blender_mesh, "action")
         assert values == self.EXPECTED_ACTIONS
-        assert len(values) == 8
+        assert len(values) == 13  # 8 original + 5 v6 sculpt expansions
 
     def test_no_unreachable_actions(self):
         source = _get_source(blender_mesh)

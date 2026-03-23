@@ -32,6 +32,16 @@ VALID_WEAPON_TYPES = frozenset({
     "battle_axe", "greataxe", "club", "warhammer", "halberd",
     "glaive", "shortbow", "longbow", "staff_magic", "wand",
     "throwing_knife",
+    # Dual-wield paired weapons
+    "paired_daggers", "twin_swords", "dual_axes", "dual_claws",
+    # Fist / gauntlet weapons
+    "brass_knuckles", "cestus", "bladed_gauntlet", "iron_fist",
+    # Rapiers / thrusting swords
+    "rapier", "estoc",
+    # Throwing weapons
+    "javelin", "throwing_axe", "shuriken", "bola",
+    # Off-hand focus items
+    "orb_focus", "skull_fetish", "holy_symbol", "totem",
 })
 
 # Weapon classification by grip/trail behaviour
@@ -50,8 +60,20 @@ _MAGIC_TYPES = frozenset({
 _CHAIN_TYPES = frozenset({
     "flail", "whip",
 })
+_DUAL_WIELD_TYPES = frozenset({
+    "paired_daggers", "twin_swords", "dual_axes", "dual_claws",
+})
+_FIST_TYPES = frozenset({
+    "brass_knuckles", "cestus", "bladed_gauntlet", "iron_fist",
+})
+_THRUST_TYPES = frozenset({
+    "rapier", "estoc",
+})
+_FOCUS_TYPES = frozenset({
+    "orb_focus", "skull_fetish", "holy_symbol", "totem",
+})
 _THROWN_TYPES = frozenset({
-    "throwing_knife",
+    "throwing_knife", "javelin", "throwing_axe", "shuriken", "bola",
 })
 
 DEFAULT_BODY_PARTS = [
@@ -1149,6 +1171,355 @@ def _make_sphere_head(bm: bmesh.types.BMesh, center_y: float, radius: float,
                       bm.verts[last_r + j]))
 
 
+# ---------------------------------------------------------------------------
+# Extended weapon generators: dual-wield, fist, thrust, focus, thrown
+# ---------------------------------------------------------------------------
+
+
+def _create_paired_daggers_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create paired daggers: two short blades side by side."""
+    for offset_x in (-width * 0.3, width * 0.3):
+        segs = 5
+        base_idx = len(bm.verts)
+        for i in range(segs + 1):
+            t = i / segs
+            y = t * length * 0.35
+            hw = width * 0.08 * (1.0 - t * 0.8)
+            depth = width * 0.015
+            bm.verts.new((offset_x - hw, y, depth))
+            bm.verts.new((offset_x + hw, y, depth))
+            bm.verts.new((offset_x + hw, y, -depth))
+            bm.verts.new((offset_x - hw, y, -depth))
+        bm.verts.ensure_lookup_table()
+        for i in range(segs):
+            b = base_idx + i * 4
+            for j in range(4):
+                bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % 4],
+                              bm.verts[b + 4 + (j + 1) % 4], bm.verts[b + 4 + j]))
+
+
+def _create_twin_swords_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create twin swords: two identical blades mirrored."""
+    for offset_x in (-width * 0.4, width * 0.4):
+        segs = 6
+        base_idx = len(bm.verts)
+        for i in range(segs + 1):
+            t = i / segs
+            y = t * length * 0.6
+            hw = width * 0.1 * (1.0 - t * 0.6)
+            depth = width * 0.02
+            bm.verts.new((offset_x - hw, y, depth))
+            bm.verts.new((offset_x + hw, y, depth))
+            bm.verts.new((offset_x + hw, y, -depth))
+            bm.verts.new((offset_x - hw, y, -depth))
+        bm.verts.ensure_lookup_table()
+        for i in range(segs):
+            b = base_idx + i * 4
+            for j in range(4):
+                bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % 4],
+                              bm.verts[b + 4 + (j + 1) % 4], bm.verts[b + 4 + j]))
+
+
+def _create_dual_axes_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create dual axes: two small axes with handles and heads."""
+    for offset_x in (-width * 0.35, width * 0.35):
+        _make_handle(bm, length * 0.4, width * 0.04, sides=6)
+        # Offset the last generated handle verts
+        bm.verts.ensure_lookup_table()
+        for v in bm.verts[-((max(4, int(length * 0.4 / 0.15)) + 1) * 6):]:
+            v.co.x += offset_x
+        # Axe head
+        base_idx = len(bm.verts)
+        head_y = length * 0.35
+        bm.verts.new((offset_x - width * 0.15, head_y - width * 0.08, 0))
+        bm.verts.new((offset_x + width * 0.15, head_y - width * 0.08, 0))
+        bm.verts.new((offset_x + width * 0.15, head_y + width * 0.08, 0))
+        bm.verts.new((offset_x - width * 0.15, head_y + width * 0.08, 0))
+        bm.verts.ensure_lookup_table()
+        bm.faces.new((bm.verts[base_idx], bm.verts[base_idx + 1],
+                      bm.verts[base_idx + 2], bm.verts[base_idx + 3]))
+
+
+def _create_dual_claws_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create dual claws: finger-mounted curved blades."""
+    for offset_x in (-width * 0.25, width * 0.25):
+        for claw_i in range(3):
+            claw_off = (claw_i - 1) * width * 0.12
+            segs = 4
+            base_idx = len(bm.verts)
+            for i in range(segs + 1):
+                t = i / segs
+                y = t * length * 0.2
+                curve = t * t * width * 0.05
+                hw = width * 0.03 * (1.0 - t * 0.7)
+                bm.verts.new((offset_x + claw_off - hw, y, curve))
+                bm.verts.new((offset_x + claw_off + hw, y, curve))
+            bm.verts.ensure_lookup_table()
+            for i in range(segs):
+                b = base_idx + i * 2
+                bm.faces.new((bm.verts[b], bm.verts[b + 1],
+                              bm.verts[b + 3], bm.verts[b + 2]))
+
+
+def _create_brass_knuckles_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create brass knuckles: four-finger ring plate."""
+    # Main bar
+    base_idx = len(bm.verts)
+    bar_w = width * 0.4
+    bar_h = width * 0.12
+    bar_d = width * 0.04
+    for x in (-bar_w, bar_w):
+        for y in (-bar_h, bar_h):
+            for z in (-bar_d, bar_d):
+                bm.verts.new((x, y, z))
+    bm.verts.ensure_lookup_table()
+    # Top/bottom faces of the bar
+    bm.faces.new((bm.verts[base_idx], bm.verts[base_idx + 1],
+                  bm.verts[base_idx + 3], bm.verts[base_idx + 2]))
+    bm.faces.new((bm.verts[base_idx + 4], bm.verts[base_idx + 5],
+                  bm.verts[base_idx + 7], bm.verts[base_idx + 6]))
+    # Finger holes
+    for ring_i in range(4):
+        cx = -bar_w + (ring_i + 0.5) * bar_w * 0.5
+        _make_sphere_head(bm, 0.0, width * 0.04, rings=3, sectors=6)
+        bm.verts.ensure_lookup_table()
+        for v in bm.verts[-((3 - 1) * 6 + 2):]:
+            v.co.x += cx
+
+
+def _create_cestus_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create cestus: armored fighting glove."""
+    # Glove body (box-like)
+    base_idx = len(bm.verts)
+    hw = width * 0.12
+    hh = width * 0.15
+    hd = width * 0.08
+    for x in (-hw, hw):
+        for y in (0, hh):
+            for z in (-hd, hd):
+                bm.verts.new((x, y, z))
+    bm.verts.ensure_lookup_table()
+    # Simple box faces
+    idx = [base_idx + i for i in range(8)]
+    bm.faces.new((bm.verts[idx[0]], bm.verts[idx[1]], bm.verts[idx[3]], bm.verts[idx[2]]))
+    bm.faces.new((bm.verts[idx[4]], bm.verts[idx[5]], bm.verts[idx[7]], bm.verts[idx[6]]))
+    bm.faces.new((bm.verts[idx[0]], bm.verts[idx[1]], bm.verts[idx[5]], bm.verts[idx[4]]))
+    bm.faces.new((bm.verts[idx[2]], bm.verts[idx[3]], bm.verts[idx[7]], bm.verts[idx[6]]))
+
+
+def _create_bladed_gauntlet_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create bladed gauntlet: armored glove with wrist-mounted blade."""
+    _create_cestus_mesh(bm, length, width)
+    # Add blade extending from wrist
+    segs = 4
+    base_idx = len(bm.verts)
+    for i in range(segs + 1):
+        t = i / segs
+        y = width * 0.15 + t * length * 0.3
+        hw = width * 0.06 * (1.0 - t * 0.7)
+        depth = width * 0.01
+        bm.verts.new((-hw, y, depth))
+        bm.verts.new((hw, y, depth))
+        bm.verts.new((hw, y, -depth))
+        bm.verts.new((-hw, y, -depth))
+    bm.verts.ensure_lookup_table()
+    for i in range(segs):
+        b = base_idx + i * 4
+        for j in range(4):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % 4],
+                          bm.verts[b + 4 + (j + 1) % 4], bm.verts[b + 4 + j]))
+
+
+def _create_iron_fist_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create iron fist: heavy metal gauntlet for punching."""
+    _create_cestus_mesh(bm, length, width)
+    # Add reinforced knuckle plate
+    base_idx = len(bm.verts)
+    plate_y = width * 0.12
+    hw = width * 0.14
+    hd = width * 0.03
+    bm.verts.new((-hw, plate_y - hd, width * 0.08))
+    bm.verts.new((hw, plate_y - hd, width * 0.08))
+    bm.verts.new((hw, plate_y + hd, width * 0.08))
+    bm.verts.new((-hw, plate_y + hd, width * 0.08))
+    bm.verts.ensure_lookup_table()
+    bm.faces.new((bm.verts[base_idx], bm.verts[base_idx + 1],
+                  bm.verts[base_idx + 2], bm.verts[base_idx + 3]))
+
+
+def _create_rapier_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create rapier: long thin thrusting blade with basket hilt."""
+    # Thin blade
+    segs = 8
+    base_idx = len(bm.verts)
+    for i in range(segs + 1):
+        t = i / segs
+        y = t * length * 0.75
+        hw = width * 0.04 * (1.0 - t * 0.7)
+        depth = width * 0.01
+        bm.verts.new((-hw, y, depth))
+        bm.verts.new((hw, y, depth))
+        bm.verts.new((hw, y, -depth))
+        bm.verts.new((-hw, y, -depth))
+    bm.verts.ensure_lookup_table()
+    for i in range(segs):
+        b = base_idx + i * 4
+        for j in range(4):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % 4],
+                          bm.verts[b + 4 + (j + 1) % 4], bm.verts[b + 4 + j]))
+    # Basket guard
+    _make_sphere_head(bm, 0.0, width * 0.12, rings=3, sectors=8)
+
+
+def _create_estoc_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create estoc: stiff thrusting sword with diamond cross-section."""
+    segs = 7
+    base_idx = len(bm.verts)
+    for i in range(segs + 1):
+        t = i / segs
+        y = t * length * 0.7
+        hw = width * 0.06 * (1.0 - t * 0.6)
+        depth = width * 0.04 * (1.0 - t * 0.6)
+        bm.verts.new((0, y, depth))
+        bm.verts.new((hw, y, 0))
+        bm.verts.new((0, y, -depth))
+        bm.verts.new((-hw, y, 0))
+    bm.verts.ensure_lookup_table()
+    for i in range(segs):
+        b = base_idx + i * 4
+        for j in range(4):
+            bm.faces.new((bm.verts[b + j], bm.verts[b + (j + 1) % 4],
+                          bm.verts[b + 4 + (j + 1) % 4], bm.verts[b + 4 + j]))
+
+
+def _create_javelin_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create javelin: light throwing spear."""
+    _make_handle(bm, length * 0.7, width * 0.03, sides=6)
+    # Javelin head (elongated triangular tip)
+    base_idx = len(bm.verts)
+    tip_base_y = length * 0.7
+    tip_top_y = tip_base_y + length * 0.15
+    hw = width * 0.05
+    bm.verts.new((-hw, tip_base_y, 0))
+    bm.verts.new((hw, tip_base_y, 0))
+    bm.verts.new((0, tip_base_y, hw))
+    bm.verts.new((0, tip_top_y, 0))
+    bm.verts.ensure_lookup_table()
+    bm.faces.new((bm.verts[base_idx], bm.verts[base_idx + 1], bm.verts[base_idx + 3]))
+    bm.faces.new((bm.verts[base_idx + 1], bm.verts[base_idx + 2], bm.verts[base_idx + 3]))
+    bm.faces.new((bm.verts[base_idx + 2], bm.verts[base_idx], bm.verts[base_idx + 3]))
+
+
+def _create_throwing_axe_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create throwing axe: compact hatchet optimized for throwing."""
+    _make_handle(bm, length * 0.35, width * 0.04, sides=6)
+    # Axe head
+    base_idx = len(bm.verts)
+    head_y = length * 0.3
+    hw = width * 0.18
+    hh = width * 0.1
+    depth = width * 0.02
+    bm.verts.new((-hw, head_y - hh, depth))
+    bm.verts.new((hw, head_y - hh, depth))
+    bm.verts.new((hw, head_y + hh, depth))
+    bm.verts.new((-hw, head_y + hh, depth))
+    bm.verts.new((-hw, head_y - hh, -depth))
+    bm.verts.new((hw, head_y - hh, -depth))
+    bm.verts.new((hw, head_y + hh, -depth))
+    bm.verts.new((-hw, head_y + hh, -depth))
+    bm.verts.ensure_lookup_table()
+    bm.faces.new((bm.verts[base_idx], bm.verts[base_idx + 1],
+                  bm.verts[base_idx + 2], bm.verts[base_idx + 3]))
+    bm.faces.new((bm.verts[base_idx + 4], bm.verts[base_idx + 5],
+                  bm.verts[base_idx + 6], bm.verts[base_idx + 7]))
+
+
+def _create_shuriken_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create shuriken: four-pointed throwing star."""
+    base_idx = len(bm.verts)
+    depth = width * 0.01
+    r_inner = width * 0.06
+    r_outer = width * 0.2
+    # Center
+    bm.verts.new((0, 0, depth))
+    bm.verts.new((0, 0, -depth))
+    for i in range(4):
+        angle = i * math.pi * 0.5
+        mid_angle = angle + math.pi * 0.25
+        # Outer point
+        bm.verts.new((math.cos(angle) * r_outer, math.sin(angle) * r_outer, depth))
+        bm.verts.new((math.cos(angle) * r_outer, math.sin(angle) * r_outer, -depth))
+        # Inner edge
+        bm.verts.new((math.cos(mid_angle) * r_inner, math.sin(mid_angle) * r_inner, depth))
+        bm.verts.new((math.cos(mid_angle) * r_inner, math.sin(mid_angle) * r_inner, -depth))
+    bm.verts.ensure_lookup_table()
+    # Create triangular faces for each blade
+    center_top = bm.verts[base_idx]
+    center_bot = bm.verts[base_idx + 1]
+    for i in range(4):
+        outer_idx = base_idx + 2 + i * 4
+        inner_idx = outer_idx + 2
+        next_inner = base_idx + 2 + ((i + 3) % 4) * 4 + 2
+        bm.faces.new((center_top, bm.verts[next_inner], bm.verts[outer_idx], bm.verts[inner_idx]))
+
+
+def _create_bola_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create bola: three weighted balls connected by cords."""
+    for angle in (0, 2 * math.pi / 3, 4 * math.pi / 3):
+        cx = math.cos(angle) * width * 0.2
+        cz = math.sin(angle) * width * 0.2
+        _make_sphere_head(bm, 0.0, width * 0.06, rings=3, sectors=6)
+        bm.verts.ensure_lookup_table()
+        for v in bm.verts[-((3 - 1) * 6 + 2):]:
+            v.co.x += cx
+            v.co.z += cz
+
+
+def _create_orb_focus_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create orb focus: glowing magical orb held in off-hand."""
+    _make_sphere_head(bm, 0.0, width * 0.15, rings=5, sectors=8)
+
+
+def _create_skull_fetish_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create skull fetish: shrunken skull on a stick, dark magic focus."""
+    _make_handle(bm, length * 0.3, width * 0.03, sides=6)
+    _make_sphere_head(bm, length * 0.35, width * 0.1, rings=4, sectors=6)
+
+
+def _create_holy_symbol_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create holy symbol: ornate pendant/icon held aloft for divine magic."""
+    # Flat cross shape
+    base_idx = len(bm.verts)
+    depth = width * 0.01
+    arm = width * 0.15
+    hw = width * 0.05
+    # Vertical beam
+    for x in (-hw, hw):
+        for y in (-arm, arm):
+            bm.verts.new((x, y, depth))
+            bm.verts.new((x, y, -depth))
+    # Horizontal beam
+    for x in (-arm, arm):
+        for y in (-hw, hw):
+            bm.verts.new((x, y, depth))
+            bm.verts.new((x, y, -depth))
+    bm.verts.ensure_lookup_table()
+    # Faces for vertical beam
+    bm.faces.new((bm.verts[base_idx], bm.verts[base_idx + 2],
+                  bm.verts[base_idx + 6], bm.verts[base_idx + 4]))
+    # Faces for horizontal beam
+    b2 = base_idx + 8
+    bm.faces.new((bm.verts[b2], bm.verts[b2 + 2],
+                  bm.verts[b2 + 6], bm.verts[b2 + 4]))
+
+
+def _create_totem_mesh(bm: bmesh.types.BMesh, length: float, width: float) -> None:
+    """Create totem: carved wooden spirit pole, off-hand focus."""
+    _make_handle(bm, length * 0.4, width * 0.06, sides=6)
+    # Totem head (wider carved section)
+    _make_sphere_head(bm, length * 0.42, width * 0.12, rings=4, sectors=6)
+
+
 # Dispatch table for weapon mesh generators
 _WEAPON_GENERATORS = {
     # Original 7
@@ -1182,6 +1553,29 @@ _WEAPON_GENERATORS = {
     "staff_magic": _create_staff_magic_mesh,
     "wand": _create_wand_mesh,
     "throwing_knife": _create_throwing_knife_mesh,
+    # Dual-wield paired weapons
+    "paired_daggers": _create_paired_daggers_mesh,
+    "twin_swords": _create_twin_swords_mesh,
+    "dual_axes": _create_dual_axes_mesh,
+    "dual_claws": _create_dual_claws_mesh,
+    # Fist / gauntlet weapons
+    "brass_knuckles": _create_brass_knuckles_mesh,
+    "cestus": _create_cestus_mesh,
+    "bladed_gauntlet": _create_bladed_gauntlet_mesh,
+    "iron_fist": _create_iron_fist_mesh,
+    # Rapiers / thrusting swords
+    "rapier": _create_rapier_mesh,
+    "estoc": _create_estoc_mesh,
+    # Throwing weapons
+    "javelin": _create_javelin_mesh,
+    "throwing_axe": _create_throwing_axe_mesh,
+    "shuriken": _create_shuriken_mesh,
+    "bola": _create_bola_mesh,
+    # Off-hand focus items
+    "orb_focus": _create_orb_focus_mesh,
+    "skull_fetish": _create_skull_fetish_mesh,
+    "holy_symbol": _create_holy_symbol_mesh,
+    "totem": _create_totem_mesh,
 }
 
 
@@ -1222,6 +1616,18 @@ def _compute_grip_point(weapon_type: str, length: float) -> tuple[float, float, 
         return (0.0, length * 0.2, 0.0)
     elif weapon_type in _CHAIN_TYPES:
         return (0.0, length * 0.1, 0.0)
+    elif weapon_type in _DUAL_WIELD_TYPES:
+        # Grip at hilt of primary weapon
+        return (0.0, length * 0.12, 0.0)
+    elif weapon_type in _FIST_TYPES:
+        # Grip at center of knuckle/fist
+        return (0.0, 0.0, 0.0)
+    elif weapon_type in _THRUST_TYPES:
+        # Grip at hilt (rapier/estoc)
+        return (0.0, length * 0.1, 0.0)
+    elif weapon_type in _FOCUS_TYPES:
+        # Held in palm or dangling from hand
+        return (0.0, 0.0, 0.0)
     elif weapon_type in _THROWN_TYPES:
         return (0.0, length * 0.2, 0.0)
     elif weapon_type == "shield":
@@ -1749,7 +2155,7 @@ def handle_equipment_render_icon(params: dict) -> dict:
     scene.camera = cam_obj
     scene.render.resolution_x = resolution
     scene.render.resolution_y = resolution
-    scene.render.film_transparent = (background_alpha == 0.0)
+    scene.render.film_transparent = (background_alpha < 1e-9)
     scene.render.filepath = output_path
     scene.render.image_settings.file_format = "PNG"
     scene.render.image_settings.color_mode = "RGBA"

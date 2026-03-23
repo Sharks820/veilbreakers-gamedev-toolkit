@@ -88,7 +88,7 @@ class TestModuleConstants:
 
     def test_error_classifications_present(self):
         expected = {"missing_reference", "duplicate_type", "syntax_error",
-                    "missing_using", "type_mismatch"}
+                    "missing_using", "type_mismatch", "member_hiding"}
         assert set(ERROR_CLASSIFICATIONS.keys()) == expected
 
     def test_error_classification_structure(self):
@@ -101,7 +101,7 @@ class TestModuleConstants:
             assert len(data["patterns"]) > 0, f"{etype} must have at least one pattern"
 
     def test_all_error_types_list(self):
-        assert len(ALL_ERROR_TYPES) == 5
+        assert len(ALL_ERROR_TYPES) == 6
         assert set(ALL_ERROR_TYPES) == set(ERROR_CLASSIFICATIONS.keys())
 
     def test_auto_fixable_errors(self):

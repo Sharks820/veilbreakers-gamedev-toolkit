@@ -17,6 +17,7 @@ Exports:
     generate_post_processing_script -- VFX-08: bloom/color grading/vignette/AO/DOF
     generate_screen_effect_script   -- VFX-09: camera shake/damage vignette/etc
     generate_ability_vfx_script     -- VFX-10: ability VFX + animation integration
+    generate_decal_system_script    -- VX-01: URP DecalProjector pool + auto-fade
 """
 
 from __future__ import annotations
@@ -675,17 +676,21 @@ def generate_post_processing_script(
     color_temperature: float = 0.0,
     color_saturation: float = 0.0,
 ) -> str:
-    """Generate C# editor script that creates a post-processing Volume.
+    """Generate C# editor script that creates an AAA post-processing Volume.
 
-    Creates a Volume GameObject with VolumeProfile containing Bloom,
-    ColorAdjustments, Vignette, ScreenSpaceAmbientOcclusion, and
-    DepthOfField overrides.
+    Creates a Volume with a comprehensive dark fantasy post-processing chain:
+    Tonemapping (ACES), Bloom, ColorAdjustments, ShadowsMidtonesHighlights,
+    Vignette, DepthOfField, ChromaticAberration, FilmGrain, MotionBlur,
+    LensDistortion, and WhiteBalance.
+
+    Tuned for VeilBreakers dark fantasy aesthetic: desaturated highlights,
+    warm shadows, cool midtones, dramatic vignette, subtle grain.
 
     Args:
         bloom_intensity: Bloom intensity value.
         bloom_threshold: Bloom threshold value.
         vignette_intensity: Vignette intensity value.
-        ao_intensity: Ambient occlusion intensity value.
+        ao_intensity: Ambient occlusion intensity value (for SSAO note).
         dof_focus_distance: Depth of field focus distance.
         color_temperature: Color grading temperature offset.
         color_saturation: Color grading saturation offset.
@@ -715,34 +720,84 @@ public static class VeilBreakers_PostProcessing
             // Create VolumeProfile asset
             var profile = ScriptableObject.CreateInstance<VolumeProfile>();
 
-            // Bloom
+            // === TONEMAPPING (AAA standard: ACES filmic curve) ===
+            var tonemapping = profile.Add<Tonemapping>();
+            tonemapping.mode.Override(TonemappingMode.ACES);
+
+            // === BLOOM (brand-glow emphasizer) ===
             var bloom = profile.Add<Bloom>();
             bloom.intensity.Override({bloom_intensity}f);
             bloom.threshold.Override({bloom_threshold}f);
             bloom.scatter.Override(0.7f);
+            bloom.tint.Override(new Color(1.0f, 0.95f, 0.9f, 1.0f));
+            bloom.highQualityFiltering.Override(true);
 
-            // ColorAdjustments (color grading)
+            // === COLOR ADJUSTMENTS (dark fantasy base grade) ===
             var colorAdj = profile.Add<ColorAdjustments>();
-            colorAdj.colorFilter.Override(Color.white);
-            colorAdj.saturation.Override({color_saturation}f);
-            colorAdj.postExposure.Override(0f);
+            colorAdj.colorFilter.Override(new Color(0.95f, 0.93f, 0.98f, 1.0f));
+            colorAdj.saturation.Override({color_saturation}f - 12f);
+            colorAdj.contrast.Override(18f);
+            colorAdj.postExposure.Override(0.15f);
+            colorAdj.hueShift.Override(0f);
 
-            // Vignette
+            // === WHITE BALANCE (cool moonlit tint for dark fantasy) ===
+            var whiteBalance = profile.Add<WhiteBalance>();
+            whiteBalance.temperature.Override({color_temperature}f - 8f);
+            whiteBalance.tint.Override(3f);
+
+            // === SHADOWS, MIDTONES, HIGHLIGHTS (cinematic color grading) ===
+            var smh = profile.Add<ShadowsMidtonesHighlights>();
+            // Warm shadows (amber/rust tones in dark areas)
+            smh.shadows.Override(new Vector4(1.05f, 0.95f, 0.85f, 0f));
+            // Cool midtones (slight blue-grey)
+            smh.midtones.Override(new Vector4(0.95f, 0.97f, 1.05f, 0f));
+            // Desaturated highlights (pale, washed-out peaks)
+            smh.highlights.Override(new Vector4(1.0f, 0.98f, 1.02f, -0.05f));
+            smh.shadowsStart.Override(0f);
+            smh.shadowsEnd.Override(0.25f);
+            smh.highlightsStart.Override(0.55f);
+            smh.highlightsEnd.Override(1f);
+
+            // === VIGNETTE (dramatic framing) ===
             var vignette = profile.Add<Vignette>();
             vignette.intensity.Override({vignette_intensity}f);
-            vignette.smoothness.Override(0.3f);
+            vignette.smoothness.Override(0.35f);
+            vignette.roundness.Override(1f);
+            vignette.color.Override(new Color(0.05f, 0.02f, 0.08f, 1f));
 
-            // NOTE: SSAO in URP is a Renderer Feature, not a Volume Override.
-            // Configure SSAO on the Universal Renderer Data asset instead:
-            //   UniversalRendererData > Add Renderer Feature > Screen Space Ambient Occlusion
-            //   Set intensity to {ao_intensity}
-
-            // DepthOfField
+            // === DEPTH OF FIELD (cinematic focus) ===
             var dof = profile.Add<DepthOfField>();
             dof.mode.Override(DepthOfFieldMode.Bokeh);
             dof.focusDistance.Override({dof_focus_distance}f);
             dof.focalLength.Override(50f);
             dof.aperture.Override(5.6f);
+            dof.bladeCount.Override(6);
+
+            // === CHROMATIC ABERRATION (subtle edge distortion) ===
+            var chromAb = profile.Add<ChromaticAberration>();
+            chromAb.intensity.Override(0.08f);
+
+            // === FILM GRAIN (dark fantasy grit) ===
+            var filmGrain = profile.Add<FilmGrain>();
+            filmGrain.type.Override(FilmGrainLookup.Medium3);
+            filmGrain.intensity.Override(0.15f);
+            filmGrain.response.Override(0.8f);
+
+            // === MOTION BLUR (combat impact) ===
+            var motionBlur = profile.Add<MotionBlur>();
+            motionBlur.intensity.Override(0.15f);
+            motionBlur.quality.Override(MotionBlurQuality.High);
+
+            // === LENS DISTORTION (subtle dark fantasy warping) ===
+            var lensDist = profile.Add<LensDistortion>();
+            lensDist.intensity.Override(-0.08f);
+            lensDist.scale.Override(1.01f);
+
+            // NOTE: SSAO in URP is a Renderer Feature, not a Volume Override.
+            // Configure SSAO on the Universal Renderer Data asset:
+            //   UniversalRendererData > Add Renderer Feature > Screen Space Ambient Occlusion
+            //   Recommended: Intensity={ao_intensity}, Radius=0.3, Sample Count=Medium
+            //   Enable "After Opaque" for best quality.
 
             // Assign profile to volume
             volume.profile = profile;
@@ -758,9 +813,9 @@ public static class VeilBreakers_PostProcessing
             AssetDatabase.CreateAsset(profile, profilePath);
             AssetDatabase.SaveAssets();
 
-            string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"setup_post_processing\\", \\"profile_path\\": \\"" + profilePath + "\\", \\"bloom\\": {bloom_intensity}, \\"vignette\\": {vignette_intensity}, \\"ao\\": {ao_intensity}, \\"dof_focus\\": {dof_focus_distance}}}";
+            string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"setup_post_processing\\", \\"profile_path\\": \\"" + profilePath + "\\", \\"bloom\\": {bloom_intensity}, \\"vignette\\": {vignette_intensity}, \\"ao\\": {ao_intensity}, \\"dof_focus\\": {dof_focus_distance}, \\"tonemapping\\": \\"ACES\\", \\"film_grain\\": 0.15, \\"chromatic_aberration\\": 0.08, \\"motion_blur\\": 0.15}}";
             File.WriteAllText("Temp/vb_result.json", json);
-            Debug.Log("[VeilBreakers] Post-processing volume created with profile: " + profilePath);
+            Debug.Log("[VeilBreakers] AAA post-processing chain created: " + profilePath);
         }}
         catch (System.Exception ex)
         {{
@@ -1087,6 +1142,318 @@ public class AbilityVFX_{safe_name} : MonoBehaviour
             File.WriteAllText("Temp/vb_result.json", json);
             Debug.LogError("[VeilBreakers] Ability VFX creation failed: " + ex.Message);
         }}
+    }}
+}}
+'''
+
+
+# ---------------------------------------------------------------------------
+# VX-01: URP Decal System
+# ---------------------------------------------------------------------------
+
+
+DECAL_TYPES: list[str] = [
+    "BloodSplatter",
+    "ScorchMark",
+    "Footprint",
+    "CorruptionSpread",
+    "IceFreeze",
+    "AcidPool",
+    "HolyMark",
+    "SlashMark",
+    "ImpactCrater",
+    "ArrowHit",
+]
+
+
+def generate_decal_system_script(
+    max_active: int = 50,
+    default_fade_pct: float = 0.2,
+) -> str:
+    """Generate a runtime URP DecalProjector pool manager for dark fantasy combat.
+
+    Creates a MonoBehaviour (VB_DecalManager) that manages an object pool of
+    URP DecalProjector instances. Supports 10 decal types with per-type
+    configuration, auto-fade over the last portion of lifetime, surface normal
+    alignment via raycast, random rotation for variety, and size randomization.
+
+    This is a **runtime** script -- it does NOT use UnityEditor.
+
+    Args:
+        max_active: Maximum active decals before oldest are recycled (default 50).
+        default_fade_pct: Fraction of lifetime over which alpha fades (default 0.2).
+
+    Returns:
+        Complete C# source string for Assets/Scripts/Runtime/VFX/.
+    """
+    if max_active < 1:
+        raise ValueError(f"max_active must be >= 1, got {max_active}")
+    if not (0.0 < default_fade_pct <= 1.0):
+        raise ValueError(
+            f"default_fade_pct must be in (0.0, 1.0], got {default_fade_pct}"
+        )
+
+    # Build enum members string
+    enum_members = ",\n        ".join(DECAL_TYPES)
+
+    # Build per-type config initializer
+    config_entries = []
+    for dt in DECAL_TYPES:
+        config_entries.append(
+            f'            {{DecalType.{dt}, new DecalTypeConfig {{ defaultMinSize = 0.8f, defaultMaxSize = 1.2f, fadeDuration = 2.0f, maxInstances = {max_active} }}}}'
+        )
+    config_init = ",\n".join(config_entries)
+
+    return f'''using UnityEngine;
+using UnityEngine.Rendering.Universal;
+using System.Collections.Generic;
+
+/// <summary>
+/// VX-01: Runtime URP Decal Manager for dark fantasy combat feedback.
+/// Object-pooled DecalProjector instances with auto-fade, surface alignment,
+/// random rotation, and size variation. Max {max_active} active decals.
+/// </summary>
+public class VB_DecalManager : MonoBehaviour
+{{
+    // -----------------------------------------------------------------------
+    // Decal type enum
+    // -----------------------------------------------------------------------
+
+    public enum DecalType
+    {{
+        {enum_members}
+    }}
+
+    // -----------------------------------------------------------------------
+    // Per-type configuration
+    // -----------------------------------------------------------------------
+
+    [System.Serializable]
+    public class DecalTypeConfig
+    {{
+        public Material material;
+        public float defaultMinSize = 0.8f;
+        public float defaultMaxSize = 1.2f;
+        public float fadeDuration = 2.0f;
+        public int maxInstances = {max_active};
+    }}
+
+    // -----------------------------------------------------------------------
+    // Active decal tracking
+    // -----------------------------------------------------------------------
+
+    private class ActiveDecal
+    {{
+        public DecalProjector projector;
+        public float spawnTime;
+        public float lifetime;
+        public float originalFadeFactor;
+        public DecalType type;
+    }}
+
+    // -----------------------------------------------------------------------
+    // Singleton access
+    // -----------------------------------------------------------------------
+
+    public static VB_DecalManager Instance {{ get; private set; }}
+
+    // -----------------------------------------------------------------------
+    // Inspector fields
+    // -----------------------------------------------------------------------
+
+    [Header("Global Settings")]
+    [SerializeField] private int maxActiveDecals = {max_active};
+    [SerializeField] [Range(0.01f, 1.0f)] private float fadePercent = {default_fade_pct}f;
+
+    [Header("Per-Type Materials (assign in Inspector)")]
+    [SerializeField] private DecalTypeConfig[] typeConfigs;
+
+    // -----------------------------------------------------------------------
+    // Internal state
+    // -----------------------------------------------------------------------
+
+    private readonly Dictionary<DecalType, DecalTypeConfig> _configMap = new Dictionary<DecalType, DecalTypeConfig>();
+    private readonly LinkedList<ActiveDecal> _activeDecals = new LinkedList<ActiveDecal>();
+    private readonly Queue<DecalProjector> _pool = new Queue<DecalProjector>();
+    private Transform _poolParent;
+
+    // -----------------------------------------------------------------------
+    // Lifecycle
+    // -----------------------------------------------------------------------
+
+    private void Awake()
+    {{
+        if (Instance != null && Instance != this)
+        {{
+            Destroy(gameObject);
+            return;
+        }}
+        Instance = this;
+
+        _poolParent = new GameObject("DecalPool").transform;
+        _poolParent.SetParent(transform);
+
+        InitializeDefaultConfigs();
+
+        // Override with Inspector-assigned configs
+        if (typeConfigs != null)
+        {{
+            for (int i = 0; i < typeConfigs.Length && i < System.Enum.GetValues(typeof(DecalType)).Length; i++)
+            {{
+                DecalType dt = (DecalType)i;
+                if (typeConfigs[i] != null && typeConfigs[i].material != null)
+                {{
+                    _configMap[dt] = typeConfigs[i];
+                }}
+            }}
+        }}
+    }}
+
+    private void InitializeDefaultConfigs()
+    {{
+        _configMap.Clear();
+        var defaults = new Dictionary<DecalType, DecalTypeConfig>
+        {{
+{config_init}
+        }};
+        foreach (var kvp in defaults)
+        {{
+            _configMap[kvp.Key] = kvp.Value;
+        }}
+    }}
+
+    private void Update()
+    {{
+        float time = Time.time;
+        var node = _activeDecals.First;
+        while (node != null)
+        {{
+            var next = node.Next;
+            var ad = node.Value;
+            float elapsed = time - ad.spawnTime;
+
+            if (elapsed >= ad.lifetime)
+            {{
+                ReturnToPool(ad.projector);
+                _activeDecals.Remove(node);
+            }}
+            else
+            {{
+                // Auto-fade over last fadePercent of lifetime
+                float fadeStart = ad.lifetime * (1.0f - fadePercent);
+                if (elapsed > fadeStart)
+                {{
+                    float fadeProgress = (elapsed - fadeStart) / (ad.lifetime * fadePercent);
+                    float alpha = Mathf.Lerp(ad.originalFadeFactor, 0f, fadeProgress);
+                    ad.projector.fadeFactor = alpha;
+                }}
+            }}
+
+            node = next;
+        }}
+    }}
+
+    private void OnDestroy()
+    {{
+        if (Instance == this) Instance = null;
+    }}
+
+    // -----------------------------------------------------------------------
+    // Public API
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Spawn a decal at the given position, aligned to surface normal.
+    /// </summary>
+    public DecalProjector SpawnDecal(DecalType type, Vector3 position, Quaternion rotation, float size = 1.0f, float lifetime = 5.0f)
+    {{
+        // Enforce max active cap -- recycle oldest
+        while (_activeDecals.Count >= maxActiveDecals)
+        {{
+            var oldest = _activeDecals.First;
+            if (oldest != null)
+            {{
+                ReturnToPool(oldest.Value.projector);
+                _activeDecals.RemoveFirst();
+            }}
+        }}
+
+        DecalProjector proj = GetFromPool();
+
+        // Surface normal alignment via raycast
+        if (Physics.Raycast(position + Vector3.up * 0.5f, Vector3.down, out RaycastHit hit, 2.0f))
+        {{
+            // Align decal to surface normal with random rotation around it
+            float randomAngle = Random.Range(0f, 360f);
+            Quaternion surfaceAlign = Quaternion.LookRotation(-hit.normal) * Quaternion.Euler(0, 0, randomAngle);
+            proj.transform.position = hit.point + hit.normal * 0.01f;
+            proj.transform.rotation = surfaceAlign;
+        }}
+        else
+        {{
+            // Fallback: use provided position/rotation with random Y twist
+            float randomAngle = Random.Range(0f, 360f);
+            proj.transform.position = position;
+            proj.transform.rotation = rotation * Quaternion.Euler(0, randomAngle, 0);
+        }}
+
+        // Size variation: 0.8x to 1.2x randomization
+        float sizeVariation = Random.Range(0.8f, 1.2f);
+        float finalSize = size * sizeVariation;
+        proj.size = new Vector3(finalSize, finalSize, 0.5f);
+
+        // Apply per-type material
+        if (_configMap.TryGetValue(type, out DecalTypeConfig cfg) && cfg.material != null)
+        {{
+            proj.material = cfg.material;
+        }}
+
+        proj.fadeFactor = 1.0f;
+        proj.gameObject.SetActive(true);
+
+        var active = new ActiveDecal
+        {{
+            projector = proj,
+            spawnTime = Time.time,
+            lifetime = lifetime,
+            originalFadeFactor = 1.0f,
+            type = type,
+        }};
+        _activeDecals.AddLast(active);
+
+        return proj;
+    }}
+
+    /// <summary>
+    /// Get the current count of active (visible) decals.
+    /// </summary>
+    public int ActiveCount => _activeDecals.Count;
+
+    // -----------------------------------------------------------------------
+    // Object pool
+    // -----------------------------------------------------------------------
+
+    private DecalProjector GetFromPool()
+    {{
+        if (_pool.Count > 0)
+        {{
+            var proj = _pool.Dequeue();
+            proj.gameObject.SetActive(true);
+            return proj;
+        }}
+
+        var go = new GameObject("Decal");
+        go.transform.SetParent(_poolParent);
+        var dp = go.AddComponent<DecalProjector>();
+        dp.scaleMode = DecalScaleMode.InheritFromHierarchy;
+        return dp;
+    }}
+
+    private void ReturnToPool(DecalProjector proj)
+    {{
+        proj.gameObject.SetActive(false);
+        proj.fadeFactor = 1.0f;
+        _pool.Enqueue(proj);
     }}
 }}
 '''

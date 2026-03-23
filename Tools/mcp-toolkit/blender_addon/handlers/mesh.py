@@ -1,4 +1,4 @@
-"""Mesh topology analysis, auto-repair, game-readiness, and editing handlers.
+"""Mesh topology analysis, auto-repair, game-readiness, editing, and sculpting handlers.
 
 Provides:
 - handle_analyze_topology: Full topology analysis with A-F grading (MESH-01)
@@ -8,11 +8,12 @@ Provides:
 - handle_edit_mesh: Surgical edits -- extrude, inset, mirror, separate, join (MESH-06)
 - handle_boolean_op: Boolean operations -- union, difference, intersect (MESH-05)
 - handle_retopologize: Retopology via quadriflow with target face count (MESH-07)
-- handle_sculpt: Sculpt operations -- smooth, inflate, flatten, crease (MESH-04)
-- handle_loop_cut: Add loop cuts to a mesh edge (MESH-09)
-- handle_bevel_edges: Bevel edges with configurable selection modes (MESH-10)
-- handle_knife_project: Bisect or loop-cut a mesh with a cutting plane (MESH-11)
-- handle_proportional_edit: Move vertices with proportional falloff (MESH-12)
+- handle_sculpt: 11 mesh filter sculpt operations (MESH-04)
+- handle_sculpt_brush: 32 sculpt brush types with stroke support (MESH-04b)
+- handle_dyntopo: Dynamic topology enable/disable/status (MESH-04c)
+- handle_voxel_remesh: Voxel-based remesh for uniform topology (MESH-04d)
+- handle_face_sets: Face set creation and management (MESH-04e)
+- handle_multires: Multiresolution modifier management (MESH-04f)
 
 Analysis uses bmesh for direct geometry access. Editing uses bmesh where possible,
 falls back to bpy.ops with temp_override for boolean, retopology, and sculpt filters.
@@ -128,73 +129,68 @@ _SELECTION_KEYS = frozenset({
     "face_normal_direction",
     "normal_threshold",
     "loose_parts",
+    "position_box",
+    "position_sphere",
+    "position_plane",
 })
 
 # Valid edit operations for handle_edit_mesh.
-_EDIT_OPERATIONS = frozenset({"extrude", "inset", "mirror", "separate", "join"})
-
-# Valid sculpt operations for handle_sculpt.
-_SCULPT_OPERATIONS = {
-    "smooth": None,           # uses bmesh, no sculpt filter
-    "inflate": "INFLATE",
-    "flatten": "SURFACE_SMOOTH",
-    "crease": "SHARPEN",
-}
-
-# Valid brush types for real sculpt mode (handle_sculpt_brush).
-_SCULPT_BRUSH_TYPES = frozenset({
-    "DRAW", "CLAY_STRIPS", "CREASE", "GRAB", "INFLATE", "SMOOTH",
-    "FLATTEN", "PINCH", "SNAKE_HOOK", "LAYER", "BLOB", "SCRAPE",
+_EDIT_OPERATIONS = frozenset({
+    "extrude", "inset", "mirror", "separate", "join",
+    "move", "rotate", "scale",
+    "loop_cut",
+    "bevel",
+    "merge_vertices", "dissolve_edges", "dissolve_faces",
 })
 
+# Valid sculpt operations for handle_sculpt (mesh_filter types).
+# None means "handled via bmesh, not sculpt mode".
+_SCULPT_OPERATIONS = {
+    "smooth": None,                     # bmesh smooth_vert
+    "inflate": "INFLATE",               # inflate/deflate vertices
+    "flatten": "SURFACE_SMOOTH",        # smooth while preserving volume
+    "crease": "SHARPEN",                # sharpen edges/creases
+    "relax": "RELAX",                   # relax mesh topology
+    "enhance_details": "ENHANCE_DETAILS",  # sharpen fine detail
+    "random": "RANDOM",                 # randomize vertex positions
+    "scale": "SCALE",                   # scale from center
+    "sphere": "SPHERE",                 # push vertices toward sphere
+    "surface_smooth": "SURFACE_SMOOTH", # explicit alias
+    "sharpen": "SHARPEN",              # explicit alias
+}
 
-def _validate_sculpt_brush_params(params: dict) -> list[str]:
-    """Validate sculpt brush parameters. Returns list of errors (empty = valid)."""
-    errors: list[str] = []
+# Valid sculpt brush types (bpy.types.Brush.sculpt_tool enumeration).
+# These are used by handle_sculpt_brush for direct brush stroke operations.
+_SCULPT_BRUSH_TYPES = frozenset({
+    "DRAW", "DRAW_SHARP", "CLAY", "CLAY_STRIPS", "CLAY_THUMB",
+    "LAYER", "INFLATE", "BLOB", "CREASE", "SMOOTH", "FLATTEN",
+    "FILL", "SCRAPE", "MULTIPLANE_SCRAPE", "PINCH", "GRAB",
+    "ELASTIC_DEFORM", "SNAKE_HOOK", "THUMB", "POSE", "NUDGE",
+    "ROTATE", "TOPOLOGY", "BOUNDARY", "CLOTH", "SIMPLIFY",
+    "MASK", "DRAW_FACE_SETS", "DISPLACEMENT_ERASER",
+    "DISPLACEMENT_SMEAR", "PAINT", "SMEAR",
+})
 
-    name = params.get("name")
-    if not name or not isinstance(name, str):
-        errors.append("name is required and must be a non-empty string")
+# Valid dynamic topology detail modes.
+_DYNTOPO_DETAIL_MODES = frozenset({
+    "RELATIVE_DETAIL", "CONSTANT_DETAIL", "BRUSH_DETAIL", "MANUAL_DETAIL",
+})
 
-    brush_type = params.get("brush_type")
-    if not brush_type:
-        errors.append("brush_type is required")
-    elif brush_type not in _SCULPT_BRUSH_TYPES:
-        errors.append(
-            f"Invalid brush_type: {brush_type!r}. "
-            f"Valid: {sorted(_SCULPT_BRUSH_TYPES)}"
-        )
+# Valid dynamic topology actions.
+_DYNTOPO_ACTIONS = frozenset({"enable", "disable", "status"})
 
-    strength = params.get("strength", 0.5)
-    if not isinstance(strength, (int, float)) or strength < 0 or strength > 1:
-        errors.append(f"strength must be a float between 0 and 1, got {strength!r}")
+# Valid face set actions.
+_FACE_SET_ACTIONS = frozenset({
+    "create_from_visible", "create_from_loose_parts",
+    "create_from_materials", "create_from_normals",
+    "randomize", "init",
+})
 
-    radius = params.get("radius", 50.0)
-    if not isinstance(radius, (int, float)) or radius <= 0:
-        errors.append(f"radius must be a positive number, got {radius!r}")
-
-    stroke_points = params.get("stroke_points")
-    if stroke_points is not None:
-        if not isinstance(stroke_points, list):
-            errors.append("stroke_points must be a list of [x,y,z] coordinates")
-        else:
-            for i, pt in enumerate(stroke_points):
-                if not isinstance(pt, (list, tuple)) or len(pt) != 3:
-                    errors.append(
-                        f"stroke_points[{i}] must be [x,y,z], got {pt!r}"
-                    )
-                    break
-                if not all(isinstance(c, (int, float)) for c in pt):
-                    errors.append(
-                        f"stroke_points[{i}] coordinates must be numeric"
-                    )
-                    break
-
-    detail_size = params.get("detail_size", 12.0)
-    if not isinstance(detail_size, (int, float)) or detail_size <= 0:
-        errors.append(f"detail_size must be a positive number, got {detail_size!r}")
-
-    return errors
+# Valid multires actions.
+_MULTIRES_ACTIONS = frozenset({
+    "add", "subdivide", "reshape", "delete_higher", "delete_lower",
+    "apply_base",
+})
 
 _AXIS_MAP = {"X": 0, "Y": 1, "Z": 2}
 
@@ -270,265 +266,218 @@ def _sculpt_operation_to_filter_type(operation: str) -> str | None:
     return _SCULPT_OPERATIONS[operation]
 
 
-def _validate_loop_cut_params(params: dict) -> dict:
-    """Validate and normalise loop cut parameters.
+def _validate_brush_type(brush_type: str) -> str:
+    """Validate and normalize a sculpt brush type string.
 
-    Returns dict with validated ``name``, ``cuts``, ``edge_index``, ``offset``.
-    Raises ``ValueError`` for invalid values.
+    Accepts case-insensitive input, returns upper-cased canonical name.
+    Raises ``ValueError`` for unknown brush types.
     """
-    name = params.get("name")
-    if not name:
-        raise ValueError("name is required for loop_cut")
-    cuts = params.get("cuts", 1)
-    if not isinstance(cuts, int) or cuts < 1:
-        raise ValueError(f"cuts must be a positive integer, got {cuts!r}")
-    edge_index = params.get("edge_index")
-    if edge_index is not None and (not isinstance(edge_index, int) or edge_index < 0):
-        raise ValueError(f"edge_index must be a non-negative integer, got {edge_index!r}")
-    offset = params.get("offset", 0.0)
-    if not isinstance(offset, (int, float)):
-        raise ValueError(f"offset must be a number, got {type(offset).__name__}")
-    if offset < -1.0 or offset > 1.0:
-        raise ValueError(f"offset must be between -1 and 1, got {offset}")
-    return {"name": name, "cuts": cuts, "edge_index": edge_index, "offset": float(offset)}
-
-
-def _validate_bevel_params(params: dict) -> dict:
-    """Validate and normalise bevel edge parameters.
-
-    Returns dict with validated ``name``, ``width``, ``segments``,
-    ``selection_mode``, ``angle_threshold``.
-    Raises ``ValueError`` for invalid values.
-    """
-    name = params.get("name")
-    if not name:
-        raise ValueError("name is required for bevel_edges")
-    width = params.get("width")
-    if width is None:
-        raise ValueError("width is required for bevel_edges")
-    if not isinstance(width, (int, float)) or width <= 0:
-        raise ValueError(f"width must be a positive number, got {width!r}")
-    segments = params.get("segments", 1)
-    if not isinstance(segments, int) or segments < 1:
-        raise ValueError(f"segments must be a positive integer, got {segments!r}")
-    selection_mode = params.get("selection_mode", "sharp")
-    if selection_mode not in _BEVEL_SELECTION_MODES:
+    normalized = brush_type.upper()
+    if normalized not in _SCULPT_BRUSH_TYPES:
         raise ValueError(
-            f"Unknown selection_mode: {selection_mode!r}. "
-            f"Valid: {sorted(_BEVEL_SELECTION_MODES)}"
+            f"Unknown sculpt brush type: {brush_type!r}. "
+            f"Valid: {sorted(_SCULPT_BRUSH_TYPES)}"
         )
-    angle_threshold = params.get("angle_threshold", 30.0)
-    if not isinstance(angle_threshold, (int, float)):
-        raise ValueError(f"angle_threshold must be a number, got {type(angle_threshold).__name__}")
-    if angle_threshold < 0 or angle_threshold > 180:
-        raise ValueError(f"angle_threshold must be between 0 and 180, got {angle_threshold}")
-    return {
-        "name": name,
-        "width": float(width),
-        "segments": segments,
-        "selection_mode": selection_mode,
-        "angle_threshold": float(angle_threshold),
-    }
+    return normalized
 
 
-def _validate_knife_params(params: dict) -> dict:
-    """Validate and normalise knife project parameters.
+def _validate_brush_direction(direction: str) -> str:
+    """Validate sculpt brush direction (ADD or SUBTRACT).
 
-    Returns dict with validated ``name``, ``cut_type``, ``plane_point``,
-    ``plane_normal``.
-    Raises ``ValueError`` for invalid values.
+    Returns normalized upper-case direction string.
     """
-    name = params.get("name")
-    if not name:
-        raise ValueError("name is required for knife_project")
-    cut_type = params.get("cut_type", "bisect")
-    if cut_type not in _KNIFE_CUT_TYPES:
+    normalized = direction.upper()
+    if normalized not in ("ADD", "SUBTRACT"):
         raise ValueError(
-            f"Unknown cut_type: {cut_type!r}. Valid: {sorted(_KNIFE_CUT_TYPES)}"
+            f"Invalid brush direction: {direction!r}. Valid: 'ADD', 'SUBTRACT'"
         )
-    plane_point = params.get("plane_point", [0.0, 0.0, 0.0])
-    plane_normal = params.get("plane_normal", [0.0, 0.0, 1.0])
-    if not isinstance(plane_point, (list, tuple)) or len(plane_point) != 3:
-        raise ValueError(f"plane_point must be a 3-element list, got {plane_point!r}")
-    if not isinstance(plane_normal, (list, tuple)) or len(plane_normal) != 3:
-        raise ValueError(f"plane_normal must be a 3-element list, got {plane_normal!r}")
-    # Check normal is not zero-length
-    mag_sq = sum(c * c for c in plane_normal)
-    if mag_sq < 1e-10:
-        raise ValueError("plane_normal must not be a zero vector")
-    return {
-        "name": name,
-        "cut_type": cut_type,
-        "plane_point": [float(c) for c in plane_point],
-        "plane_normal": [float(c) for c in plane_normal],
-    }
+    return normalized
 
 
-def _validate_proportional_edit_params(params: dict) -> dict:
-    """Validate and normalise proportional edit parameters.
+def _validate_dyntopo_action(action: str) -> str:
+    """Validate dynamic topology action.
 
-    Returns dict with validated ``name``, ``vertex_indices``, ``offset``,
-    ``radius``, ``falloff_type``.
-    Raises ``ValueError`` for invalid values.
+    Raises ``ValueError`` for unknown actions.
     """
-    name = params.get("name")
-    if not name:
-        raise ValueError("name is required for proportional_edit")
-    vertex_indices = params.get("vertex_indices")
-    if not vertex_indices or not isinstance(vertex_indices, (list, tuple)):
-        raise ValueError("vertex_indices must be a non-empty list of integers")
-    for idx in vertex_indices:
-        if not isinstance(idx, int) or idx < 0:
-            raise ValueError(f"vertex_indices must contain non-negative integers, got {idx!r}")
-    offset = params.get("offset")
-    if not isinstance(offset, (list, tuple)) or len(offset) != 3:
-        raise ValueError(f"offset must be a 3-element list, got {offset!r}")
-    radius = params.get("radius")
-    if radius is None:
-        raise ValueError("radius is required for proportional_edit")
-    if not isinstance(radius, (int, float)) or radius <= 0:
-        raise ValueError(f"radius must be a positive number, got {radius!r}")
-    falloff_type = params.get("falloff_type", "SMOOTH")
-    if falloff_type not in _PROPORTIONAL_FALLOFF_TYPES:
+    if action not in _DYNTOPO_ACTIONS:
         raise ValueError(
-            f"Unknown falloff_type: {falloff_type!r}. "
-            f"Valid: {sorted(_PROPORTIONAL_FALLOFF_TYPES)}"
+            f"Unknown dyntopo action: {action!r}. "
+            f"Valid: {sorted(_DYNTOPO_ACTIONS)}"
         )
-    return {
-        "name": name,
-        "vertex_indices": list(vertex_indices),
-        "offset": [float(c) for c in offset],
-        "radius": float(radius),
-        "falloff_type": falloff_type,
-    }
+    return action
 
 
-def _validate_vertex_color_params(params: dict) -> dict:
-    """Validate and normalise vertex color parameters.
+def _validate_dyntopo_detail_mode(mode: str) -> str:
+    """Validate dynamic topology detail mode.
 
-    Returns dict with validated ``name``, ``operation``, ``layer_name``,
-    ``color``, ``vertex_indices``.
-    Raises ``ValueError`` for invalid values.
+    Raises ``ValueError`` for unknown modes.
     """
-    name = params.get("name")
-    if not name or not isinstance(name, str):
-        raise ValueError("name is required and must be a non-empty string")
-
-    operation = params.get("operation", "CREATE_LAYER")
-    if operation not in _VERTEX_COLOR_OPERATIONS:
+    if mode not in _DYNTOPO_DETAIL_MODES:
         raise ValueError(
-            f"Invalid operation: {operation!r}. "
-            f"Valid: {sorted(_VERTEX_COLOR_OPERATIONS)}"
+            f"Unknown dyntopo detail mode: {mode!r}. "
+            f"Valid: {sorted(_DYNTOPO_DETAIL_MODES)}"
+        )
+    return mode
+
+
+def _validate_voxel_remesh_params(voxel_size: float, adaptivity: float) -> None:
+    """Validate voxel remesh parameters.
+
+    Raises ``ValueError`` for out-of-range values.
+    """
+    if voxel_size <= 0:
+        raise ValueError(
+            f"voxel_size must be > 0, got {voxel_size}"
+        )
+    if not (0.0 <= adaptivity <= 1.0):
+        raise ValueError(
+            f"adaptivity must be in [0.0, 1.0], got {adaptivity}"
         )
 
-    layer_name = params.get("layer_name", "Col")
-    if not isinstance(layer_name, str) or not layer_name:
-        raise ValueError(f"layer_name must be a non-empty string, got {layer_name!r}")
 
-    color = params.get("color", [1.0, 1.0, 1.0, 1.0])
-    if not isinstance(color, (list, tuple)) or len(color) != 4:
-        raise ValueError(f"color must be a 4-element [r,g,b,a] list, got {color!r}")
-    for i, c in enumerate(color):
-        if not isinstance(c, (int, float)):
-            raise ValueError(f"color[{i}] must be numeric, got {type(c).__name__}")
-        if c < 0.0 or c > 1.0:
-            raise ValueError(f"color[{i}] must be between 0 and 1, got {c}")
+def _validate_face_set_action(action: str) -> str:
+    """Validate face set action.
 
-    vertex_indices = params.get("vertex_indices")
-    if vertex_indices is not None:
-        if not isinstance(vertex_indices, (list, tuple)):
-            raise ValueError("vertex_indices must be a list of integers")
-        for idx in vertex_indices:
-            if not isinstance(idx, int) or idx < 0:
-                raise ValueError(
-                    f"vertex_indices must contain non-negative integers, got {idx!r}"
-                )
-
-    return {
-        "name": name,
-        "operation": operation,
-        "layer_name": layer_name,
-        "color": [float(c) for c in color],
-        "vertex_indices": list(vertex_indices) if vertex_indices is not None else None,
-    }
-
-
-def _validate_custom_normals_params(params: dict) -> dict:
-    """Validate and normalise custom normals parameters.
-
-    Returns dict with validated ``name``, ``operation``, ``source_object``,
-    ``split_angle``.
-    Raises ``ValueError`` for invalid values.
+    Raises ``ValueError`` for unknown actions.
     """
-    name = params.get("name")
-    if not name or not isinstance(name, str):
-        raise ValueError("name is required and must be a non-empty string")
-
-    operation = params.get("operation", "CALCULATE")
-    if operation not in _CUSTOM_NORMAL_OPERATIONS:
+    if action not in _FACE_SET_ACTIONS:
         raise ValueError(
-            f"Invalid operation: {operation!r}. "
-            f"Valid: {sorted(_CUSTOM_NORMAL_OPERATIONS)}"
+            f"Unknown face set action: {action!r}. "
+            f"Valid: {sorted(_FACE_SET_ACTIONS)}"
+        )
+    return action
+
+
+def _validate_multires_action(action: str) -> str:
+    """Validate multires modifier action.
+
+    Raises ``ValueError`` for unknown actions.
+    """
+    if action not in _MULTIRES_ACTIONS:
+        raise ValueError(
+            f"Unknown multires action: {action!r}. "
+            f"Valid: {sorted(_MULTIRES_ACTIONS)}"
+        )
+    return action
+
+
+def _validate_multires_subdivisions(subdivisions: int) -> None:
+    """Validate multires subdivision count.
+
+    Raises ``ValueError`` for out-of-range values.
+    """
+    if subdivisions < 1:
+        raise ValueError(
+            f"subdivisions must be >= 1, got {subdivisions}"
+        )
+    if subdivisions > 10:
+        raise ValueError(
+            f"subdivisions must be <= 10, got {subdivisions} "
+            "(higher values risk memory exhaustion)"
         )
 
-    source_object = params.get("source_object")
-    if operation == "TRANSFER" and (not source_object or not isinstance(source_object, str)):
-        raise ValueError("source_object is required for TRANSFER operation")
 
-    split_angle = params.get("split_angle", 30.0)
-    if not isinstance(split_angle, (int, float)):
-        raise ValueError(f"split_angle must be a number, got {type(split_angle).__name__}")
-    if split_angle < 0.0 or split_angle > 180.0:
-        raise ValueError(f"split_angle must be between 0 and 180, got {split_angle}")
-
-    return {
-        "name": name,
-        "operation": operation,
-        "source_object": source_object,
-        "split_angle": float(split_angle),
-    }
+def _validate_brush_strength(strength: float) -> float:
+    """Validate and clamp brush strength to [0.0, 1.0]."""
+    return max(0.0, min(1.0, float(strength)))
 
 
-def _validate_edge_data_params(params: dict) -> dict:
-    """Validate and normalise edge data parameters.
+def _validate_brush_radius(radius: float) -> float:
+    """Validate brush radius (must be positive)."""
+    if radius <= 0:
+        raise ValueError(f"Brush radius must be > 0, got {radius}")
+    return float(radius)
 
-    Returns dict with validated ``name``, ``operation``, ``edge_indices``,
-    ``value``.
-    Raises ``ValueError`` for invalid values.
+
+# ---------------------------------------------------------------------------
+# Pure-logic helpers for position-based selection (testable without Blender)
+# ---------------------------------------------------------------------------
+
+
+def _select_by_box(verts_coords: list[tuple[float, float, float]],
+                   box_min: tuple[float, float, float],
+                   box_max: tuple[float, float, float]) -> list[int]:
+    """Return indices of vertices inside an axis-aligned bounding box.
+
+    Args:
+        verts_coords: List of (x, y, z) tuples for each vertex.
+        box_min: (min_x, min_y, min_z) corner.
+        box_max: (max_x, max_y, max_z) corner.
+
+    Returns:
+        List of vertex indices inside the box.
     """
-    name = params.get("name")
-    if not name or not isinstance(name, str):
-        raise ValueError("name is required and must be a non-empty string")
+    selected: list[int] = []
+    for i, co in enumerate(verts_coords):
+        if (box_min[0] <= co[0] <= box_max[0]
+                and box_min[1] <= co[1] <= box_max[1]
+                and box_min[2] <= co[2] <= box_max[2]):
+            selected.append(i)
+    return selected
 
-    operation = params.get("operation", "SET_CREASE")
-    if operation not in _EDGE_DATA_OPERATIONS:
-        raise ValueError(
-            f"Invalid operation: {operation!r}. "
-            f"Valid: {sorted(_EDGE_DATA_OPERATIONS)}"
-        )
 
-    edge_indices = params.get("edge_indices")
-    if edge_indices is not None:
-        if not isinstance(edge_indices, (list, tuple)):
-            raise ValueError("edge_indices must be a list of integers")
-        for idx in edge_indices:
-            if not isinstance(idx, int) or idx < 0:
-                raise ValueError(
-                    f"edge_indices must contain non-negative integers, got {idx!r}"
-                )
+def _select_by_sphere(verts_coords: list[tuple[float, float, float]],
+                      center: tuple[float, float, float],
+                      radius: float) -> list[int]:
+    """Return indices of vertices within a sphere.
 
-    value = params.get("value", 1.0)
-    if not isinstance(value, (int, float)):
-        raise ValueError(f"value must be a number, got {type(value).__name__}")
-    if value < 0.0 or value > 1.0:
-        raise ValueError(f"value must be between 0 and 1, got {value}")
+    Args:
+        verts_coords: List of (x, y, z) tuples for each vertex.
+        center: (cx, cy, cz) sphere center.
+        radius: Sphere radius.
 
-    return {
-        "name": name,
-        "operation": operation,
-        "edge_indices": list(edge_indices) if edge_indices is not None else None,
-        "value": float(value),
-    }
+    Returns:
+        List of vertex indices within the sphere.
+    """
+    r_sq = radius * radius
+    selected: list[int] = []
+    for i, co in enumerate(verts_coords):
+        dx = co[0] - center[0]
+        dy = co[1] - center[1]
+        dz = co[2] - center[2]
+        if dx * dx + dy * dy + dz * dz <= r_sq:
+            selected.append(i)
+    return selected
+
+
+def _select_by_plane(verts_coords: list[tuple[float, float, float]],
+                     plane_point: tuple[float, float, float],
+                     plane_normal: tuple[float, float, float],
+                     side: str = "above") -> list[int]:
+    """Return indices of vertices on one side of a plane.
+
+    The plane is defined by a point and a normal vector. "above" means
+    vertices on the side the normal points to (dot product >= 0).
+
+    Args:
+        verts_coords: List of (x, y, z) tuples for each vertex.
+        plane_point: A point on the plane.
+        plane_normal: The plane normal direction (does not need to be normalized).
+        side: "above" (default) or "below".
+
+    Returns:
+        List of vertex indices on the specified side.
+    """
+    # Normalize the normal
+    nx, ny, nz = plane_normal
+    length = math.sqrt(nx * nx + ny * ny + nz * nz)
+    if length < 1e-10:
+        return []
+    nx /= length
+    ny /= length
+    nz /= length
+
+    selected: list[int] = []
+    for i, co in enumerate(verts_coords):
+        # Signed distance from plane
+        dist = ((co[0] - plane_point[0]) * nx
+                + (co[1] - plane_point[1]) * ny
+                + (co[2] - plane_point[2]) * nz)
+        if side == "above" and dist >= 0:
+            selected.append(i)
+        elif side == "below" and dist < 0:
+            selected.append(i)
+    return selected
 
 
 def _evaluate_game_readiness(
@@ -854,7 +803,7 @@ def _get_mesh_object(name: str | None) -> object:
 
 
 def handle_select_geometry(params: dict) -> dict:
-    """Select geometry by material, vertex group, face normal, or loose parts (MESH-03).
+    """Select geometry by material, vertex group, face normal, position, or loose parts (MESH-03, GAP-01).
 
     Params:
         object_name: Name of the Blender mesh object.
@@ -864,6 +813,9 @@ def handle_select_geometry(params: dict) -> dict:
         face_normal_direction: [x, y, z] direction vector for face normal selection.
         normal_threshold: Dot-product threshold for normal selection (default 0.7).
         loose_parts: If True, select vertices with no linked faces.
+        position_box: {"min": [x,y,z], "max": [x,y,z]} -- select verts in bounding box.
+        position_sphere: {"center": [x,y,z], "radius": r} -- select verts in sphere.
+        position_plane: {"point": [x,y,z], "normal": [x,y,z], "side": "above"|"below"}.
 
     Returns dict with selection counts and criteria used.
     """
@@ -941,6 +893,53 @@ def handle_select_geometry(params: dict) -> dict:
                 if len(v.link_faces) == 0:
                     v.select = True
 
+        # --- Position-based selection: bounding box ---
+        pos_box = criteria.get("position_box")
+        if pos_box is not None:
+            box_min = tuple(pos_box["min"])
+            box_max = tuple(pos_box["max"])
+            coords = [(v.co.x, v.co.y, v.co.z) for v in bm.verts]
+            for idx in _select_by_box(coords, box_min, box_max):
+                bm.verts[idx].select = True
+            # Select edges/faces where all verts are selected
+            for e in bm.edges:
+                if all(v.select for v in e.verts):
+                    e.select = True
+            for f in bm.faces:
+                if all(v.select for v in f.verts):
+                    f.select = True
+
+        # --- Position-based selection: sphere ---
+        pos_sphere = criteria.get("position_sphere")
+        if pos_sphere is not None:
+            center = tuple(pos_sphere["center"])
+            radius = float(pos_sphere["radius"])
+            coords = [(v.co.x, v.co.y, v.co.z) for v in bm.verts]
+            for idx in _select_by_sphere(coords, center, radius):
+                bm.verts[idx].select = True
+            for e in bm.edges:
+                if all(v.select for v in e.verts):
+                    e.select = True
+            for f in bm.faces:
+                if all(v.select for v in f.verts):
+                    f.select = True
+
+        # --- Position-based selection: plane ---
+        pos_plane = criteria.get("position_plane")
+        if pos_plane is not None:
+            plane_point = tuple(pos_plane["point"])
+            plane_normal = tuple(pos_plane["normal"])
+            side = pos_plane.get("side", "above")
+            coords = [(v.co.x, v.co.y, v.co.z) for v in bm.verts]
+            for idx in _select_by_plane(coords, plane_point, plane_normal, side):
+                bm.verts[idx].select = True
+            for e in bm.edges:
+                if all(v.select for v in e.verts):
+                    e.select = True
+            for f in bm.faces:
+                if all(v.select for v in f.verts):
+                    f.select = True
+
         # Count selections
         selected_verts = sum(1 for v in bm.verts if v.select)
         selected_edges = sum(1 for e in bm.edges if e.select)
@@ -962,17 +961,28 @@ def handle_select_geometry(params: dict) -> dict:
 
 
 def handle_edit_mesh(params: dict) -> dict:
-    """Surgical mesh editing: extrude, inset, mirror, separate, join (MESH-06).
+    """Surgical mesh editing with extended operations (MESH-06, GAP-02/03/04/05).
 
     Params:
         object_name: Name of the Blender mesh object.
-        operation: One of "extrude", "inset", "mirror", "separate", "join".
-        offset: [x, y, z] translation for extrude (default [0, 0, 0.5]).
+        operation: One of "extrude", "inset", "mirror", "separate", "join",
+            "move", "rotate", "scale", "loop_cut", "bevel",
+            "merge_vertices", "dissolve_edges", "dissolve_faces".
+        offset: [x, y, z] for extrude or move.
         thickness: Inset thickness (default 0.1).
         depth: Inset depth (default 0.0).
-        axis: Mirror axis -- "X", "Y", or "Z" (default "X").
+        axis: Mirror/rotate axis -- "X", "Y", or "Z" (default "X").
         separate_type: "SELECTED", "MATERIAL", or "LOOSE" (default "SELECTED").
         object_names: List of object names to join into the target.
+        angle: Rotation angle in degrees (for rotate).
+        center: [x,y,z] rotation/scale center (default: selection center).
+        factor: Scale factor -- float or [x,y,z] (for scale).
+        edge_index: Edge index for loop_cut (optional).
+        cuts: Number of cuts for loop_cut (default 1).
+        width: Bevel width (default 0.1).
+        segments: Bevel segments 1-10 (default 1).
+        profile: Bevel profile 0.0-1.0 (default 0.5).
+        merge_type: "CENTER", "FIRST", "LAST", "COLLAPSE" (for merge_vertices).
 
     Returns dict with post-operation vertex/face counts.
     """
@@ -1109,6 +1119,318 @@ def handle_edit_mesh(params: dict) -> dict:
         vert_count = len(obj.data.vertices)
         face_count = len(obj.data.polygons)
 
+    # --- GAP-02: Transform selected geometry ---
+
+    elif operation == "move":
+        move_offset = params.get("offset", [0, 0, 0])
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            selected = [v for v in bm.verts if v.select]
+            if not selected:
+                raise ValueError("No vertices selected for move. Run 'select' first.")
+            bmesh.ops.translate(bm, verts=selected, vec=mathutils.Vector(move_offset))
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    elif operation == "rotate":
+        angle_deg = params.get("angle", 0.0)
+        rot_axis = params.get("axis", "Z")
+        center = params.get("center")
+        angle_rad = math.radians(angle_deg)
+
+        # Build rotation matrix around the specified axis
+        axis_vectors = {
+            "X": mathutils.Vector((1, 0, 0)),
+            "Y": mathutils.Vector((0, 1, 0)),
+            "Z": mathutils.Vector((0, 0, 1)),
+        }
+        rot_vec = axis_vectors.get(rot_axis.upper())
+        if rot_vec is None:
+            raise ValueError(f"Invalid axis: {rot_axis!r}. Valid: X, Y, Z")
+
+        rot_matrix = mathutils.Matrix.Rotation(angle_rad, 4, rot_vec)
+
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            selected = [v for v in bm.verts if v.select]
+            if not selected:
+                raise ValueError("No vertices selected for rotate. Run 'select' first.")
+
+            # Determine rotation center
+            if center is not None:
+                cent = mathutils.Vector(center)
+            else:
+                # Average position of selected verts
+                cent = mathutils.Vector((0, 0, 0))
+                for v in selected:
+                    cent += v.co
+                cent /= len(selected)
+
+            bmesh.ops.rotate(
+                bm,
+                verts=selected,
+                cent=cent,
+                matrix=rot_matrix,
+            )
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    elif operation == "scale":
+        scale_factor = params.get("factor", [1, 1, 1])
+        center = params.get("center")
+        if isinstance(scale_factor, (int, float)):
+            scale_factor = [scale_factor, scale_factor, scale_factor]
+
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            selected = [v for v in bm.verts if v.select]
+            if not selected:
+                raise ValueError("No vertices selected for scale. Run 'select' first.")
+
+            # Determine scale center
+            if center is not None:
+                cent = mathutils.Vector(center)
+            else:
+                cent = mathutils.Vector((0, 0, 0))
+                for v in selected:
+                    cent += v.co
+                cent /= len(selected)
+
+            # bmesh.ops.scale expects vec= and space= matrix
+            # We translate to origin, scale, translate back
+            bmesh.ops.scale(
+                bm,
+                vec=mathutils.Vector(scale_factor),
+                verts=selected,
+                space=mathutils.Matrix.Translation(cent),
+            )
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    # --- GAP-03: Edge Loop Insertion ---
+
+    elif operation == "loop_cut":
+        cuts = params.get("cuts", 1)
+        edge_index = params.get("edge_index")
+        loop_axis = params.get("axis", "X").upper()
+
+        ctx = get_3d_context_override()
+        if ctx is None:
+            raise RuntimeError("No 3D Viewport available for loop_cut operation")
+
+        bpy.context.view_layer.objects.active = obj
+        obj.select_set(True)
+
+        if edge_index is not None:
+            # Use operator with specific edge
+            with bpy.context.temp_override(**ctx):
+                bpy.ops.object.mode_set(mode="EDIT")
+                bpy.ops.mesh.loopcut_slide(
+                    MESH_OT_loopcut={
+                        "number_cuts": cuts,
+                        "edge_index": edge_index,
+                    },
+                    TRANSFORM_OT_edge_slide={"value": 0.0},
+                )
+                bpy.ops.object.mode_set(mode="OBJECT")
+        else:
+            # Fallback: subdivide selected edges
+            bm = bmesh.new()
+            try:
+                bm.from_mesh(obj.data)
+                bm.edges.ensure_lookup_table()
+                selected_edges = [e for e in bm.edges if e.select]
+                if not selected_edges:
+                    # Select edges aligned with the given axis
+                    axis_idx = _axis_to_index(loop_axis)
+                    for e in bm.edges:
+                        v0 = e.verts[0].co
+                        v1 = e.verts[1].co
+                        diff = [abs(v1[i] - v0[i]) for i in range(3)]
+                        # Edge is primarily along this axis
+                        if diff[axis_idx] > max(
+                            d for i, d in enumerate(diff) if i != axis_idx
+                        ) * 0.5:
+                            selected_edges.append(e)
+                if selected_edges:
+                    bmesh.ops.subdivide_edges(
+                        bm, edges=selected_edges, cuts=cuts,
+                    )
+                bm.to_mesh(obj.data)
+                obj.data.update()
+                vert_count = len(bm.verts)
+                face_count = len(bm.faces)
+            finally:
+                bm.free()
+            return {
+                "object_name": name,
+                "operation": operation,
+                "vertex_count": vert_count,
+                "face_count": face_count,
+            }
+
+        vert_count = len(obj.data.vertices)
+        face_count = len(obj.data.polygons)
+
+    # --- GAP-04: Bevel ---
+
+    elif operation == "bevel":
+        width = params.get("width", 0.1)
+        segments = max(1, min(params.get("segments", 1), 10))
+        profile = max(0.0, min(params.get("profile", 0.5), 1.0))
+        clamp_overlap = params.get("clamp_overlap", True)
+
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            bm.edges.ensure_lookup_table()
+
+            selected_verts = [v for v in bm.verts if v.select]
+            selected_edges = [e for e in bm.edges if e.select]
+
+            if not selected_verts and not selected_edges:
+                raise ValueError(
+                    "No geometry selected for bevel. Run 'select' first."
+                )
+
+            # Prefer edge bevel, fall back to vertex bevel
+            if selected_edges:
+                bmesh.ops.bevel(
+                    bm,
+                    geom=selected_edges,
+                    offset=width,
+                    offset_type="OFFSET",
+                    segments=segments,
+                    profile=profile,
+                    vertex_only=False,
+                    clamp_overlap=clamp_overlap,
+                )
+            else:
+                bmesh.ops.bevel(
+                    bm,
+                    geom=selected_verts,
+                    offset=width,
+                    offset_type="OFFSET",
+                    segments=segments,
+                    profile=profile,
+                    vertex_only=True,
+                    clamp_overlap=clamp_overlap,
+                )
+
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    # --- GAP-05: Vertex Merge / Edge Dissolve / Face Dissolve ---
+
+    elif operation == "merge_vertices":
+        merge_type = params.get("merge_type", "CENTER").upper()
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.verts.ensure_lookup_table()
+            selected = [v for v in bm.verts if v.select]
+            if len(selected) < 2:
+                raise ValueError(
+                    "Need at least 2 selected vertices for merge."
+                )
+
+            if merge_type == "CENTER":
+                # Calculate center
+                center = mathutils.Vector((0, 0, 0))
+                for v in selected:
+                    center += v.co
+                center /= len(selected)
+                # Move all to center, then remove doubles
+                for v in selected:
+                    v.co = center
+                bmesh.ops.remove_doubles(bm, verts=selected, dist=0.0001)
+            elif merge_type == "FIRST":
+                target_co = selected[0].co.copy()
+                for v in selected[1:]:
+                    v.co = target_co
+                bmesh.ops.remove_doubles(bm, verts=selected, dist=0.0001)
+            elif merge_type == "LAST":
+                target_co = selected[-1].co.copy()
+                for v in selected[:-1]:
+                    v.co = target_co
+                bmesh.ops.remove_doubles(bm, verts=selected, dist=0.0001)
+            elif merge_type == "COLLAPSE":
+                bmesh.ops.collapse(bm, edges=[
+                    e for e in bm.edges
+                    if e.verts[0].select and e.verts[1].select
+                ])
+            else:
+                raise ValueError(
+                    f"Unknown merge_type: {merge_type!r}. "
+                    "Valid: CENTER, FIRST, LAST, COLLAPSE"
+                )
+
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    elif operation == "dissolve_edges":
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.edges.ensure_lookup_table()
+            selected_edges = [e for e in bm.edges if e.select]
+            if not selected_edges:
+                raise ValueError(
+                    "No edges selected for dissolve. Run 'select' first."
+                )
+            bmesh.ops.dissolve_edges(bm, edges=selected_edges)
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
+    elif operation == "dissolve_faces":
+        bm = bmesh.new()
+        try:
+            bm.from_mesh(obj.data)
+            bm.faces.ensure_lookup_table()
+            selected_faces = [f for f in bm.faces if f.select]
+            if not selected_faces:
+                raise ValueError(
+                    "No faces selected for dissolve. Run 'select' first."
+                )
+            bmesh.ops.dissolve_faces(bm, faces=selected_faces)
+            bm.to_mesh(obj.data)
+            obj.data.update()
+            vert_count = len(bm.verts)
+            face_count = len(bm.faces)
+        finally:
+            bm.free()
+
     else:
         raise ValueError(f"Unhandled operation: {operation}")
 
@@ -1213,8 +1535,8 @@ def handle_retopologize(params: dict) -> dict:
             bpy.ops.object.mode_set(mode="OBJECT")
             bpy.ops.object.quadriflow_remesh(
                 target_faces=target_faces,
-                preserve_sharp=preserve_sharp,
-                preserve_boundary=preserve_boundary,
+                use_preserve_sharp=preserve_sharp,
+                use_preserve_boundary=preserve_boundary,
                 smooth_normals=smooth_normals,
                 use_mesh_symmetry=use_symmetry,
                 seed=seed,
@@ -1242,16 +1564,17 @@ def handle_retopologize(params: dict) -> dict:
 
 
 def handle_sculpt(params: dict) -> dict:
-    """Sculpt operations: smooth, inflate, flatten, crease (MESH-04).
+    """Sculpt mesh filter operations (MESH-04).
 
     Params:
         object_name: Name of the mesh object to sculpt.
-        operation: One of "smooth", "inflate", "flatten", "crease".
+        operation: One of: smooth, inflate, flatten, crease, relax,
+            enhance_details, random, scale, sphere, surface_smooth, sharpen.
         strength: Operation strength (default 0.5).
         iterations: Number of iterations (default 3).
 
-    Smooth uses bmesh (no mode switch). Inflate/flatten/crease use sculpt
-    mode mesh_filter operators.
+    Smooth uses bmesh (no mode switch). All others use sculpt mode mesh_filter
+    operators via bpy.ops.sculpt.mesh_filter().
 
     Returns dict with operation details.
     """
@@ -1323,10 +1646,386 @@ def handle_sculpt(params: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Modifier stack operations
+# Sculpt brush stroke handler (MESH-04b)
 # ---------------------------------------------------------------------------
 
-# Supported modifier types and their default settings.
+
+def handle_sculpt_brush(params: dict) -> dict:
+    """Apply a sculpt brush stroke on a mesh object.
+
+    Switches to sculpt mode, configures the active brush, and optionally
+    applies brush strokes at specified screen-space coordinates.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        brush_type: Sculpt brush tool enum (required). One of DRAW, DRAW_SHARP,
+            CLAY, CLAY_STRIPS, CLAY_THUMB, LAYER, INFLATE, BLOB, CREASE,
+            SMOOTH, FLATTEN, FILL, SCRAPE, MULTIPLANE_SCRAPE, PINCH, GRAB,
+            ELASTIC_DEFORM, SNAKE_HOOK, THUMB, POSE, NUDGE, ROTATE, TOPOLOGY,
+            BOUNDARY, CLOTH, SIMPLIFY, MASK, DRAW_FACE_SETS,
+            DISPLACEMENT_ERASER, DISPLACEMENT_SMEAR, PAINT, SMEAR.
+        strength: Brush strength 0.0-1.0 (default 0.5).
+        radius: Brush radius in pixels (default 50).
+        stroke_points: List of [x, y, pressure] screen-space coords (optional).
+            If omitted, configures the brush but does not apply a stroke.
+        use_front_faces_only: Only affect front-facing geometry (default False).
+        direction: "ADD" or "SUBTRACT" (default "ADD").
+
+    Returns dict with brush configuration applied.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+
+    brush_type = _validate_brush_type(params.get("brush_type", "DRAW"))
+    strength = _validate_brush_strength(params.get("strength", 0.5))
+    radius = _validate_brush_radius(params.get("radius", 50))
+    stroke_points = params.get("stroke_points")
+    use_front_faces_only = bool(params.get("use_front_faces_only", False))
+    direction = _validate_brush_direction(params.get("direction", "ADD"))
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for sculpt brush operation")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="SCULPT")
+
+        # Configure brush
+        brush = bpy.context.tool_settings.sculpt.brush
+        brush.sculpt_tool = brush_type
+        brush.strength = strength
+        brush.use_front_faces_only = use_front_faces_only
+
+        # Set brush direction via unified paint settings
+        scene = bpy.context.scene
+        scene.tool_settings.unified_paint_settings.size = int(radius)
+
+        # Set brush direction
+        if direction == "SUBTRACT":
+            brush.direction = "SUBTRACT"
+        else:
+            brush.direction = "ADD"
+
+        stroke_applied = False
+        if stroke_points:
+            # Build stroke data from screen-space coords
+            stroke = []
+            for pt in stroke_points:
+                x = float(pt[0]) if len(pt) > 0 else 0.0
+                y = float(pt[1]) if len(pt) > 1 else 0.0
+                pressure = float(pt[2]) if len(pt) > 2 else 1.0
+                stroke.append({
+                    "name": "",
+                    "mouse": (x, y),
+                    "mouse_event": (x, y),
+                    "pen_flip": False,
+                    "is_start": len(stroke) == 0,
+                    "location": (0, 0, 0),
+                    "pressure": pressure,
+                    "size": int(radius),
+                    "time": 0.0,
+                    "x_tilt": 0.0,
+                    "y_tilt": 0.0,
+                })
+            bpy.ops.sculpt.brush_stroke(stroke=stroke)
+            stroke_applied = True
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    return {
+        "object_name": name,
+        "brush_type": brush_type,
+        "strength": strength,
+        "radius": radius,
+        "direction": direction,
+        "use_front_faces_only": use_front_faces_only,
+        "stroke_applied": stroke_applied,
+        "stroke_points_count": len(stroke_points) if stroke_points else 0,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Dynamic topology toggle handler (MESH-04c)
+# ---------------------------------------------------------------------------
+
+
+def handle_dyntopo(params: dict) -> dict:
+    """Enable, disable, or query dynamic topology (dyntopo) for sculpting.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        action: "enable" | "disable" | "status" (required).
+        detail_size: Voxel detail size in screen pixels (default 12.0).
+        detail_mode: Detail mode -- RELATIVE_DETAIL, CONSTANT_DETAIL,
+            BRUSH_DETAIL, or MANUAL_DETAIL (default RELATIVE_DETAIL).
+
+    Returns dict with dyntopo state after the operation.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    action = _validate_dyntopo_action(params.get("action", "status"))
+    detail_size = float(params.get("detail_size", 12.0))
+    detail_mode = _validate_dyntopo_detail_mode(
+        params.get("detail_mode", "RELATIVE_DETAIL")
+    )
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for dyntopo operation")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="SCULPT")
+
+        sculpt = bpy.context.sculpt_object
+        is_enabled = sculpt and sculpt.use_dynamic_topology_sculpting if hasattr(
+            sculpt, "use_dynamic_topology_sculpting"
+        ) else False
+
+        if action == "enable" and not is_enabled:
+            bpy.ops.sculpt.dynamic_topology_toggle()
+            is_enabled = True
+        elif action == "disable" and is_enabled:
+            bpy.ops.sculpt.dynamic_topology_toggle()
+            is_enabled = False
+
+        # Configure detail settings when enabled
+        if is_enabled:
+            scene = bpy.context.scene
+            scene.tool_settings.sculpt.detail_size = detail_size
+            scene.tool_settings.sculpt.detail_type_method = detail_mode
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    return {
+        "object_name": name,
+        "action": action,
+        "enabled": is_enabled,
+        "detail_size": detail_size,
+        "detail_mode": detail_mode,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Voxel remesh handler (MESH-04d)
+# ---------------------------------------------------------------------------
+
+
+def handle_voxel_remesh(params: dict) -> dict:
+    """Apply voxel remesh to a mesh object for uniform topology.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        voxel_size: Voxel size -- smaller = more detail (default 0.05).
+        adaptivity: Adaptivity 0.0-1.0 -- higher = fewer polys in flat
+            areas (default 0.0).
+
+    Returns dict with before/after vertex and face counts.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    voxel_size = float(params.get("voxel_size", 0.05))
+    adaptivity = float(params.get("adaptivity", 0.0))
+
+    _validate_voxel_remesh_params(voxel_size, adaptivity)
+
+    before_verts = len(obj.data.vertices)
+    before_faces = len(obj.data.polygons)
+
+    # Set remesh properties on the mesh data
+    obj.data.remesh_voxel_size = voxel_size
+    obj.data.remesh_voxel_adaptivity = adaptivity
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for voxel remesh")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.voxel_remesh()
+
+    after_verts = len(obj.data.vertices)
+    after_faces = len(obj.data.polygons)
+
+    return {
+        "object_name": name,
+        "voxel_size": voxel_size,
+        "adaptivity": adaptivity,
+        "before": {"vertices": before_verts, "faces": before_faces},
+        "after": {"vertices": after_verts, "faces": after_faces},
+    }
+
+
+# ---------------------------------------------------------------------------
+# Face sets handler (MESH-04e)
+# ---------------------------------------------------------------------------
+
+
+def handle_face_sets(params: dict) -> dict:
+    """Create or manipulate face sets on a sculpt mesh.
+
+    Face sets partition mesh faces into groups for isolated sculpting.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        action: One of: create_from_visible, create_from_loose_parts,
+            create_from_materials, create_from_normals, randomize, init.
+
+    Returns dict with action result.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    action = _validate_face_set_action(params.get("action", "init"))
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for face set operation")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="SCULPT")
+
+        if action == "init":
+            bpy.ops.sculpt.face_sets_init(mode="NONE")
+        elif action == "create_from_visible":
+            bpy.ops.sculpt.face_set_change_visibility(mode="TOGGLE")
+        elif action == "create_from_loose_parts":
+            bpy.ops.sculpt.face_sets_init(mode="LOOSE_PARTS")
+        elif action == "create_from_materials":
+            bpy.ops.sculpt.face_sets_init(mode="MATERIALS")
+        elif action == "create_from_normals":
+            bpy.ops.sculpt.face_sets_init(mode="NORMALS")
+        elif action == "randomize":
+            bpy.ops.sculpt.face_sets_randomize_colors()
+
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+    return {
+        "object_name": name,
+        "action": action,
+        "face_count": len(obj.data.polygons),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Multires modifier handler (MESH-04f)
+# ---------------------------------------------------------------------------
+
+
+def handle_multires(params: dict) -> dict:
+    """Manage a Multiresolution modifier for multi-level sculpting.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        action: One of: add, subdivide, reshape, delete_higher,
+            delete_lower, apply_base.
+        subdivisions: Number of subdivision levels for 'subdivide' (default 1).
+
+    Returns dict with action result and current modifier state.
+    """
+    name = params.get("object_name")
+    obj = _get_mesh_object(name)
+    action = _validate_multires_action(params.get("action", "add"))
+    subdivisions = int(params.get("subdivisions", 1))
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available for multires operation")
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    # Find existing multires modifier
+    multires_mod = None
+    for mod in obj.modifiers:
+        if mod.type == "MULTIRES":
+            multires_mod = mod
+            break
+
+    with bpy.context.temp_override(**ctx):
+        bpy.ops.object.mode_set(mode="OBJECT")
+
+        if action == "add":
+            if multires_mod is None:
+                bpy.ops.object.modifier_add(type="MULTIRES")
+                multires_mod = obj.modifiers[-1]
+
+        elif action == "subdivide":
+            if multires_mod is None:
+                bpy.ops.object.modifier_add(type="MULTIRES")
+                multires_mod = obj.modifiers[-1]
+            _validate_multires_subdivisions(subdivisions)
+            for _ in range(subdivisions):
+                bpy.ops.object.multires_subdivide(
+                    modifier=multires_mod.name, mode="CATMULL_CLARK"
+                )
+
+        elif action == "reshape":
+            if multires_mod is None:
+                raise RuntimeError(
+                    f"No Multires modifier found on '{name}'"
+                )
+            bpy.ops.object.multires_reshape(modifier=multires_mod.name)
+
+        elif action == "delete_higher":
+            if multires_mod is None:
+                raise RuntimeError(
+                    f"No Multires modifier found on '{name}'"
+                )
+            bpy.ops.object.multires_higher_levels_delete(
+                modifier=multires_mod.name
+            )
+
+        elif action == "delete_lower":
+            if multires_mod is None:
+                raise RuntimeError(
+                    f"No Multires modifier found on '{name}'"
+                )
+            bpy.ops.object.multires_lower_levels_delete(
+                modifier=multires_mod.name
+            )
+
+        elif action == "apply_base":
+            if multires_mod is None:
+                raise RuntimeError(
+                    f"No Multires modifier found on '{name}'"
+                )
+            bpy.ops.object.multires_base_apply(modifier=multires_mod.name)
+
+    # Gather current state
+    mod_info = {}
+    if multires_mod is not None:
+        mod_info = {
+            "modifier_name": multires_mod.name,
+            "total_levels": multires_mod.total_levels,
+            "sculpt_levels": multires_mod.sculpt_levels,
+            "render_levels": multires_mod.render_levels,
+            "levels": multires_mod.levels,
+        }
+
+    return {
+        "object_name": name,
+        "action": action,
+        "modifier": mod_info,
+        "vertex_count": len(obj.data.vertices),
+        "face_count": len(obj.data.polygons),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Modifier stack operations (from master)
+# ---------------------------------------------------------------------------
+
 MODIFIER_DEFAULTS: dict[str, dict] = {
     "SUBSURF": {"levels": 2, "render_levels": 3, "quality": 3},
     "BEVEL": {"width": 0.02, "segments": 3, "limit_method": "ANGLE", "angle_limit": 0.524},
@@ -1983,125 +2682,9 @@ def handle_exit_sculpt_mode(params: dict) -> dict:
     }
 
 
-def handle_sculpt_brush(params: dict) -> dict:
-    """Apply a sculpt brush stroke along a path of 3D points.
-
-    Params:
-        name: Object name (required).
-        brush_type: Brush type string (required). One of DRAW, CLAY_STRIPS,
-            CREASE, GRAB, INFLATE, SMOOTH, FLATTEN, PINCH, SNAKE_HOOK,
-            LAYER, BLOB, SCRAPE.
-        strength: Brush strength 0-1 (default 0.5).
-        radius: Brush radius in pixels (default 50.0).
-        stroke_points: List of [x,y,z] coordinates defining the stroke path.
-            If not provided, applies a single dab at object origin.
-        use_dyntopo: Enable dynamic topology (default False).
-        detail_size: Dyntopo detail size (default 12.0).
-
-    Returns dict with operation details.
-    """
-    errors = _validate_sculpt_brush_params(params)
-    if errors:
-        raise ValueError("; ".join(errors))
-
-    name = params["name"]
-    obj = _get_mesh_object(name)
-    brush_type = params["brush_type"]
-    strength = params.get("strength", 0.5)
-    radius = params.get("radius", 50.0)
-    stroke_points = params.get("stroke_points")
-    use_dyntopo = params.get("use_dyntopo", False)
-    detail_size = params.get("detail_size", 12.0)
-
-    ctx = get_3d_context_override()
-    if ctx is None:
-        raise RuntimeError("No 3D Viewport available for sculpt brush")
-
-    bpy.context.view_layer.objects.active = obj
-    obj.select_set(True)
-
-    with bpy.context.temp_override(**ctx):
-        bpy.ops.object.mode_set(mode="SCULPT")
-        try:
-            # Enable dyntopo if requested
-            if use_dyntopo:
-                try:
-                    if not obj.data.use_paint_symmetry_x:
-                        pass  # Just check we're in sculpt context
-                    bpy.ops.sculpt.dynamic_topology_toggle()
-                    bpy.context.scene.tool_settings.sculpt.detail_size = detail_size
-                except RuntimeError:
-                    pass
-
-            # Set the active brush
-            sculpt = bpy.context.scene.tool_settings.sculpt
-            brush = bpy.data.brushes.get(brush_type)
-            if brush is None:
-                brush = bpy.data.brushes.new(name=brush_type, mode="SCULPT")
-            brush.sculpt_tool = brush_type
-            brush.strength = strength
-            brush.size = int(radius)
-            sculpt.brush = brush
-
-            # Build stroke data
-            stroke = []
-            if stroke_points:
-                for pt in stroke_points:
-                    stroke.append({
-                        "name": "stroke",
-                        "is_start": len(stroke) == 0,
-                        "location": (pt[0], pt[1], pt[2]),
-                        "mouse": (0, 0),
-                        "mouse_event": (0, 0),
-                        "pen_flip": False,
-                        "pressure": 1.0,
-                        "size": int(radius),
-                        "time": 0.0,
-                        "x_tilt": 0.0,
-                        "y_tilt": 0.0,
-                    })
-            else:
-                # Single dab at object center
-                loc = obj.location
-                stroke.append({
-                    "name": "stroke",
-                    "is_start": True,
-                    "location": (loc.x, loc.y, loc.z),
-                    "mouse": (0, 0),
-                    "mouse_event": (0, 0),
-                    "pen_flip": False,
-                    "pressure": 1.0,
-                    "size": int(radius),
-                    "time": 0.0,
-                    "x_tilt": 0.0,
-                    "y_tilt": 0.0,
-                })
-
-            bpy.ops.sculpt.brush_stroke(stroke=stroke)
-
-            # Disable dyntopo before exiting if we enabled it
-            if use_dyntopo:
-                try:
-                    bpy.ops.sculpt.dynamic_topology_toggle()
-                except RuntimeError:
-                    pass
-        finally:
-            bpy.ops.object.mode_set(mode="OBJECT")
-
-    return {
-        "object_name": name,
-        "brush_type": brush_type,
-        "strength": strength,
-        "radius": radius,
-        "stroke_points_count": len(stroke_points) if stroke_points else 1,
-        "use_dyntopo": use_dyntopo,
-    }
-
-
 # ---------------------------------------------------------------------------
-# Vertex colors, custom normals, and edge data handlers
+# Vertex colors, custom normals, edge data, shape keys
 # ---------------------------------------------------------------------------
-
 
 def handle_vertex_color(params: dict) -> dict:
     """Vertex color operations: create layer, paint, fill.

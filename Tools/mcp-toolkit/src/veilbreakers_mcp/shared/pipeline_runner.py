@@ -2,11 +2,16 @@
 
 Orchestrates repair, UV unwrap, texture, LOD generation, and export
 validation in sequence for game assets via the Blender TCP connection.
+
+Also provides ``full_asset_pipeline()`` for end-to-end production:
+import -> cleanup -> smart material -> weathering -> quality gate ->
+rig -> animate -> LOD -> export -> validate.
 """
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import struct
 from pathlib import Path
@@ -18,6 +23,46 @@ if TYPE_CHECKING:
     from veilbreakers_mcp.shared.asset_catalog import AssetCatalog
     from veilbreakers_mcp.shared.blender_client import BlenderConnection
     from veilbreakers_mcp.shared.config import Settings
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+#: Default smart material presets per asset type.
+MATERIAL_PRESETS: dict[str, str] = {
+    "prop": "old_wood",
+    "character": "worn_leather",
+    "creature": "chitin",
+    "weapon": "rusted_armor",
+    "building": "dungeon_stone",
+    "vegetation": "bark",
+}
+
+#: Auto-detected rig template per asset type.
+RIG_TEMPLATES: dict[str, str] = {
+    "character": "humanoid",
+    "creature": "quadruped",
+}
+
+#: Recognised animation names and the Blender command + extra params for each.
+ANIMATION_COMMANDS: dict[str, tuple[str, dict]] = {
+    "walk": ("anim_generate_walk", {"speed": "walk"}),
+    "run": ("anim_generate_walk", {"speed": "run"}),
+    "idle": ("anim_generate_idle", {}),
+    "attack": ("anim_generate_attack", {}),
+    "fly": ("anim_generate_fly", {}),
+    "death": ("anim_generate_reaction", {"reaction_type": "death"}),
+    "hit": ("anim_generate_reaction", {"reaction_type": "hit"}),
+    "spawn": ("anim_generate_reaction", {"reaction_type": "spawn"}),
+}
+
+#: Asset types that require rigging before animation.
+RIGGABLE_TYPES: frozenset[str] = frozenset({"character", "creature"})
+
+#: File extensions recognised as importable 3D files.
+IMPORT_EXTENSIONS: frozenset[str] = frozenset({".glb", ".gltf", ".fbx", ".obj"})
 
 
 class PipelineRunner:
@@ -345,6 +390,156 @@ class PipelineRunner:
             "results": results,
         }
 
+    async def blender_to_unity_pipeline(
+        self,
+        object_name: str,
+        asset_type: str = "prop",
+        export_format: str = "fbx",
+        unity_project_path: str = "",
+    ) -> dict:
+        """Orchestrate the full Blender-side export pipeline for Unity import.
+
+        Chains existing Blender operations to prepare an asset for Unity:
+        1. Game-readiness check (mesh analysis + poly budget)
+        2. Auto-repair if needed (fix non-manifold, remove doubles)
+        3. UV analysis + unwrap if needed
+        4. Export FBX to Unity project Assets folder
+
+        This is a Python helper that chains existing MCP tool calls -- NOT a new
+        MCP tool itself. It returns a dict suitable for passing to the Unity-side
+        bridge script.
+
+        Args:
+            object_name: Name of the Blender object to process.
+            asset_type: hero, monster, weapon, prop, or environment.
+            export_format: Export format (fbx or gltf). Default fbx.
+            unity_project_path: Absolute path to Unity project root.
+                If empty, exports to a temp directory.
+
+        Returns:
+            Dict with fbx_path, mesh_grade, poly_count, uv_coverage, warnings,
+            and per-step results.
+        """
+        poly_budgets = {
+            "hero": 65000,
+            "monster": 50000,
+            "weapon": 15000,
+            "prop": 8000,
+            "environment": 100000,
+        }
+        poly_budget = poly_budgets.get(asset_type, 50000)
+
+        result: dict = {
+            "object_name": object_name,
+            "asset_type": asset_type,
+            "fbx_path": "",
+            "mesh_grade": "",
+            "poly_count": 0,
+            "uv_coverage": 0.0,
+            "warnings": [],
+            "steps": {},
+            "status": "pending",
+        }
+
+        try:
+            # ----- Step 1: Game-readiness check -----
+            game_check = await self.blender.send_command(
+                "mesh_check_game_ready",
+                {"object_name": object_name, "poly_budget": poly_budget},
+            )
+            result["steps"]["game_check"] = game_check
+            result["mesh_grade"] = game_check.get("grade", "")
+            checks = game_check.get("checks", {})
+            poly_info = checks.get("poly_budget", {})
+            result["poly_count"] = poly_info.get("value", 0)
+
+            # ----- Step 2: Auto-repair if needed -----
+            needs_repair = not game_check.get("game_ready", True)
+            if needs_repair:
+                repair_result = await self.blender.send_command(
+                    "mesh_auto_repair", {"object_name": object_name}
+                )
+                result["steps"]["repair"] = repair_result
+                result["warnings"].append(
+                    "Mesh required auto-repair before export"
+                )
+
+                # Re-check after repair if poly budget was exceeded
+                if not poly_info.get("passed", True):
+                    retopo_result = await self.blender.send_command(
+                        "mesh_retopologize",
+                        {
+                            "object_name": object_name,
+                            "target_faces": poly_budget,
+                        },
+                    )
+                    result["steps"]["retopologize"] = retopo_result
+                    result["warnings"].append(
+                        f"Retopologized to meet {poly_budget} poly budget"
+                    )
+
+            # ----- Step 3: UV analysis + unwrap -----
+            uv_analysis = await self.blender.send_command(
+                "uv_analyze", {"object_name": object_name}
+            )
+            result["steps"]["uv_analyze"] = uv_analysis
+            result["uv_coverage"] = uv_analysis.get("coverage", 0.0)
+
+            # Unwrap if coverage is poor or no UVs exist
+            needs_unwrap = (
+                uv_analysis.get("coverage", 0.0) < 0.1
+                or uv_analysis.get("uv_layers", 0) == 0
+            )
+            if needs_unwrap:
+                unwrap_result = await self.blender.send_command(
+                    "uv_unwrap_xatlas", {"object_name": object_name}
+                )
+                result["steps"]["uv_unwrap"] = unwrap_result
+                result["warnings"].append("UV unwrap was required")
+                # Update coverage
+                result["uv_coverage"] = unwrap_result.get("coverage", 0.0)
+
+            # ----- Step 4: Export -----
+            if unity_project_path:
+                export_dir = (
+                    Path(unity_project_path) / "Assets" / "Models"
+                )
+                export_dir.mkdir(parents=True, exist_ok=True)
+            else:
+                export_dir = Path(".")
+
+            ext = "fbx" if export_format == "fbx" else "glb"
+            export_path = str(export_dir / f"{object_name}.{ext}")
+
+            export_cmd = (
+                "export_fbx" if export_format == "fbx" else "export_gltf"
+            )
+            export_result = await self.blender.send_command(
+                export_cmd,
+                {
+                    "filepath": export_path,
+                    "selected_only": False,
+                    "apply_modifiers": True,
+                },
+            )
+            result["steps"]["export"] = export_result
+            result["fbx_path"] = export_path
+            result["status"] = "success"
+
+        except (
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            ValueError,
+            RuntimeError,
+            BlenderCommandError,
+        ) as exc:
+            result["status"] = "failed"
+            result["error"] = str(exc)
+            result["warnings"].append(f"Pipeline failed: {exc}")
+
+        return result
+
     async def tag_metadata(
         self,
         asset_id: str,
@@ -362,3 +557,454 @@ class PipelineRunner:
             Dict from catalog.export_metadata().
         """
         return catalog.export_metadata(asset_id, output_path)
+
+    # ------------------------------------------------------------------
+    # Full production pipeline
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _detect_asset_type(object_name: str, mesh_stats: dict) -> str:
+        """Auto-detect asset type from mesh characteristics.
+
+        Heuristics (evaluated in order):
+        - High vertex count + bounding box roughly humanoid proportions
+          -> ``'character'``
+        - Bounding box height >> width AND width/depth small
+          -> ``'weapon'``
+        - Large footprint (X*Y) + many faces + openings (non-manifold edges)
+          -> ``'building'``
+        - Very high vertex count + non-humanoid proportions
+          -> ``'creature'``
+        - Low vertex count (< 2000) and small bounding box
+          -> ``'vegetation'`` if name hints, else ``'prop'``
+        - Default fallback -> ``'prop'``
+
+        Args:
+            object_name: The Blender object name (used for keyword hints).
+            mesh_stats: Dict with ``vertex_count``, ``face_count``, and
+                optionally ``dimensions`` ``[x, y, z]`` and
+                ``non_manifold_edges``.
+
+        Returns:
+            One of: ``'character'``, ``'creature'``, ``'weapon'``,
+            ``'building'``, ``'vegetation'``, or ``'prop'``.
+        """
+        verts = mesh_stats.get("vertex_count", 0)
+        dims = mesh_stats.get("dimensions", [1.0, 1.0, 1.0])
+        if len(dims) < 3:
+            dims = [1.0, 1.0, 1.0]
+        dx, dy, dz = float(dims[0]), float(dims[1]), float(dims[2])
+        non_manifold = mesh_stats.get("non_manifold_edges", 0)
+        name_lower = object_name.lower()
+
+        # Compute height (longest axis) and width (shortest axis)
+        sorted_dims = sorted([dx, dy, dz])
+        height = sorted_dims[2]  # largest
+        width = sorted_dims[0]   # smallest
+        aspect = height / max(width, 0.001)
+
+        # --- Keyword-based detection (high priority) ---
+
+        # Vegetation keywords (check early -- vegetation can be any shape)
+        veg_keywords = ("tree", "bush", "grass", "plant", "leaf", "vine",
+                        "flower", "fern", "shrub", "moss")
+        if any(kw in name_lower for kw in veg_keywords):
+            return "vegetation"
+
+        # Character keywords (high-vert bipeds)
+        char_keywords = ("character", "human", "hero", "npc", "player",
+                         "warrior", "mage", "knight")
+        if verts > 5000 and any(kw in name_lower for kw in char_keywords):
+            return "character"
+
+        # Creature keywords
+        creature_keywords = ("creature", "monster", "beast", "demon",
+                             "dragon", "spider", "wolf", "skeleton")
+        if verts > 5000 and any(kw in name_lower for kw in creature_keywords):
+            return "creature"
+
+        # --- Geometry-based detection ---
+
+        # Building: large footprint with many non-manifold edges (openings)
+        footprint = sorted_dims[1] * sorted_dims[2]  # two largest dims
+        if footprint > 25.0 and verts > 5000 and non_manifold > 10:
+            return "building"
+
+        # Weapon: elongated and thin
+        if aspect > 4.0 and verts < 15000:
+            return "weapon"
+
+        # Character: humanoid proportions (tall, narrow, high verts)
+        # Use height / median_dim for a more forgiving aspect ratio
+        median_dim = sorted_dims[1]
+        humanoid_aspect = height / max(median_dim, 0.001)
+        if 1.4 < humanoid_aspect < 5.0 and verts > 8000:
+            # Ambiguous high-vert humanoid -> character
+            if verts > 20000:
+                return "character"
+
+        # Creature: non-humanoid high vert count
+        if verts > 10000 and (aspect > 3.5 or aspect < 1.0):
+            return "creature"
+
+        return "prop"
+
+    async def _run_step(
+        self,
+        step_name: str,
+        command: str,
+        params: dict,
+        results: dict,
+        steps_completed: list[str],
+    ) -> dict:
+        """Execute a single pipeline step with error capture.
+
+        Returns the command result on success, or ``None`` on failure
+        (with the error recorded in *results*).
+        """
+        try:
+            step_result = await self.blender.send_command(command, params)
+            results["steps"][step_name] = step_result
+            steps_completed.append(step_name)
+            return step_result
+        except (
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            ValueError,
+            RuntimeError,
+            BlenderCommandError,
+        ) as exc:
+            results["steps"][step_name] = {"status": "failed", "error": str(exc)}
+            results["warnings"].append(f"Step '{step_name}' failed: {exc}")
+            logger.warning("Pipeline step '%s' failed: %s", step_name, exc)
+            return None
+
+    async def full_asset_pipeline(
+        self,
+        object_name: str,
+        asset_type: str = "prop",
+        poly_budget: int = 50000,
+        material_preset: str = "auto",
+        weathering_preset: str = "medium",
+        rig_template: str = "auto",
+        animations: list[str] | None = None,
+        lod_count: int = 3,
+        export_format: str = "fbx",
+        export_dir: str = ".",
+    ) -> dict:
+        """Run the complete production pipeline on a Blender object.
+
+        Steps executed in order:
+        1. **Import** -- if *object_name* is a file path (.glb/.fbx/.obj),
+           import it into Blender first.
+        2. **Cleanup** -- repair, game check, retopo, UV, PBR via
+           :meth:`cleanup_ai_model`.
+        3. **Smart material** -- apply a type-appropriate procedural material.
+        4. **Weathering** -- apply the selected weathering preset.
+        5. **Quality gate** -- autonomous refine loop (max 3 iterations).
+        6. **Rig** -- apply rig template + auto-weight (character/creature only).
+        7. **Animate** -- generate requested animation clips.
+        8. **LODs** -- generate LOD chain.
+        9. **Export** -- write FBX or glTF to *export_dir*.
+        10. **Validate** -- run export validation on the output file.
+
+        Each step records its result.  If a non-critical step fails the
+        pipeline continues with a warning; critical failures (import,
+        cleanup) abort early.
+
+        Args:
+            object_name: Blender object name **or** file path to import.
+            asset_type: ``prop``, ``character``, ``creature``, ``weapon``,
+                ``building``, or ``vegetation``.
+            poly_budget: Maximum triangle count for quality gate.
+            material_preset: Smart material name or ``'auto'`` to pick by
+                asset_type.
+            weathering_preset: ``none``, ``light``, ``medium``, ``heavy``,
+                or ``ancient``.
+            rig_template: Rig template name or ``'auto'`` for type-based
+                default.
+            animations: List of animation names to generate (e.g.
+                ``['idle', 'walk', 'attack']``).
+            lod_count: Number of LOD levels to generate.
+            export_format: ``'fbx'`` or ``'gltf'``.
+            export_dir: Directory for the exported file.
+
+        Returns:
+            Dict with ``status``, ``object_name``, ``export_path``,
+            ``steps_completed``, ``steps`` (per-step results), and
+            ``warnings``.
+        """
+        steps_completed: list[str] = []
+        results: dict = {
+            "object_name": object_name,
+            "asset_type": asset_type,
+            "export_path": "",
+            "steps": {},
+            "steps_completed": steps_completed,
+            "warnings": [],
+            "status": "pending",
+        }
+
+        # Resolve the working object name (may change after import)
+        name = object_name
+
+        try:
+            # ----- Step 1: Import (if file path) -----
+            ext = Path(object_name).suffix.lower()
+            if ext in IMPORT_EXTENSIONS:
+                import_ops = {
+                    ".glb": "import_scene.gltf",
+                    ".gltf": "import_scene.gltf",
+                    ".fbx": "import_scene.fbx",
+                    ".obj": "import_scene.obj",
+                }
+                op = import_ops.get(ext, "import_scene.gltf")
+                # Normalise path separators for Blender (always forward slashes)
+                safe_path = object_name.replace("\\", "/")
+                import_code = f'bpy.ops.{op}(filepath="{safe_path}")'
+                import_result = await self._run_step(
+                    "import", "execute_code", {"code": import_code},
+                    results, steps_completed,
+                )
+                if import_result is None:
+                    results["status"] = "failed"
+                    results["error"] = "Import failed -- cannot continue"
+                    return results
+                # After import the active object name is the stem of the file
+                name = Path(object_name).stem
+                results["object_name"] = name
+
+            # ----- Step 2: Cleanup (repair -> game check -> retopo -> UV -> PBR) -----
+            cleanup_result = await self.cleanup_ai_model(name, poly_budget)
+            results["steps"]["cleanup"] = cleanup_result
+            if cleanup_result.get("status") == "failed":
+                results["status"] = "failed"
+                results["error"] = (
+                    f"Cleanup failed: {cleanup_result.get('error', 'unknown')}"
+                )
+                results["steps_completed"] = steps_completed
+                return results
+            steps_completed.append("cleanup")
+
+            # ----- Step 3: Smart material -----
+            mat_name = material_preset
+            if mat_name == "auto":
+                mat_name = MATERIAL_PRESETS.get(asset_type, "old_wood")
+            await self._run_step(
+                "smart_material",
+                "material_create_procedural",
+                {"object_name": name, "preset": mat_name},
+                results,
+                steps_completed,
+            )
+
+            # ----- Step 4: Weathering -----
+            if weathering_preset != "none":
+                await self._run_step(
+                    "weathering",
+                    "weathering_apply",
+                    {"object_name": name, "preset": weathering_preset},
+                    results,
+                    steps_completed,
+                )
+
+            # ----- Step 5: Quality gate -----
+            await self._run_step(
+                "quality_gate",
+                "autonomous_refine",
+                {
+                    "object_name": name,
+                    "max_iterations": 3,
+                    "quality_targets": {
+                        "max_poly_count": poly_budget,
+                        "no_non_manifold": True,
+                    },
+                },
+                results,
+                steps_completed,
+            )
+
+            # ----- Step 6: Rig (character / creature only) -----
+            if asset_type in RIGGABLE_TYPES:
+                template = rig_template
+                if template == "auto":
+                    template = RIG_TEMPLATES.get(asset_type, "humanoid")
+                rig_result = await self._run_step(
+                    "rig_template",
+                    "rig_apply_template",
+                    {"object_name": name, "template": template},
+                    results,
+                    steps_completed,
+                )
+                if rig_result is not None:
+                    await self._run_step(
+                        "rig_auto_weight",
+                        "rig_auto_weight",
+                        {"object_name": name},
+                        results,
+                        steps_completed,
+                    )
+
+            # ----- Step 7: Animate -----
+            if animations:
+                anim_results: dict = {}
+                for anim_name in animations:
+                    cmd_info = ANIMATION_COMMANDS.get(anim_name)
+                    if cmd_info is None:
+                        results["warnings"].append(
+                            f"Unknown animation '{anim_name}' -- skipped"
+                        )
+                        continue
+                    cmd, extra_params = cmd_info
+                    params = {"object_name": name, **extra_params}
+                    anim_step = await self._run_step(
+                        f"anim_{anim_name}",
+                        cmd,
+                        params,
+                        results,
+                        steps_completed,
+                    )
+                    anim_results[anim_name] = anim_step
+                results["steps"]["animations"] = anim_results
+
+            # ----- Step 8: LODs -----
+            await self._run_step(
+                "lod_generation",
+                "pipeline_generate_lods",
+                {"object_name": name, "lod_count": lod_count},
+                results,
+                steps_completed,
+            )
+
+            # ----- Step 9: Export -----
+            ext_out = "fbx" if export_format == "fbx" else "glb"
+            export_path = str(Path(export_dir) / f"{name}.{ext_out}")
+            export_cmd = "export_fbx" if export_format == "fbx" else "export_gltf"
+            export_result = await self._run_step(
+                "export",
+                export_cmd,
+                {
+                    "filepath": export_path,
+                    "selected_only": True,
+                    "apply_modifiers": True,
+                },
+                results,
+                steps_completed,
+            )
+            if export_result is not None:
+                results["export_path"] = export_path
+
+            # ----- Step 10: Validate export -----
+            if results["export_path"]:
+                validate_result = await self.validate_export(results["export_path"])
+                results["steps"]["validate_export"] = validate_result
+                steps_completed.append("validate_export")
+                if not validate_result.get("valid", False):
+                    results["warnings"].append(
+                        "Export validation failed -- check validate_export step"
+                    )
+
+            results["status"] = "success"
+            results["steps_completed"] = steps_completed
+
+        except (
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            ValueError,
+            RuntimeError,
+            BlenderCommandError,
+        ) as exc:
+            results["status"] = "failed"
+            results["error"] = str(exc)
+            results["steps_completed"] = steps_completed
+
+        return results
+
+    async def generate_and_process(
+        self,
+        prompt: str | None = None,
+        image_path: str | None = None,
+        asset_type: str = "prop",
+        output_dir: str = ".",
+        **pipeline_kwargs,
+    ) -> dict:
+        """One-call: Generate 3D model via Tripo -> import -> full pipeline -> export.
+
+        This is the ultimate convenience method: provide a text prompt or
+        reference image and get a fully processed, rigged (if applicable),
+        animated, LOD-ed, and exported game asset.
+
+        Args:
+            prompt: Text description for Tripo3D generation.
+            image_path: Reference image path for Tripo3D generation.
+            asset_type: See :meth:`full_asset_pipeline`.
+            output_dir: Directory for Tripo download AND final export.
+            **pipeline_kwargs: Forwarded to :meth:`full_asset_pipeline`
+                (``poly_budget``, ``material_preset``, ``weathering_preset``,
+                ``rig_template``, ``animations``, ``lod_count``,
+                ``export_format``).
+
+        Returns:
+            Dict with ``generation`` and ``pipeline`` sub-dicts.
+        """
+        from veilbreakers_mcp.shared.tripo_client import TripoGenerator
+
+        result: dict = {
+            "generation": {},
+            "pipeline": {},
+            "status": "pending",
+        }
+
+        # --- Generate via Tripo ---
+        api_key = self.settings.tripo_api_key if hasattr(self.settings, "tripo_api_key") else ""
+        if not api_key:
+            result["status"] = "failed"
+            result["error"] = "TRIPO_API_KEY not configured"
+            return result
+
+        if not prompt and not image_path:
+            result["status"] = "failed"
+            result["error"] = "'prompt' or 'image_path' is required"
+            return result
+
+        try:
+            gen = TripoGenerator(api_key=api_key)
+            if image_path:
+                gen_result = await gen.generate_from_image(image_path, output_dir)
+            else:
+                gen_result = await gen.generate_from_text(prompt, output_dir)
+            result["generation"] = gen_result
+
+            if gen_result.get("status") != "success":
+                result["status"] = "failed"
+                result["error"] = (
+                    f"Tripo generation failed: {gen_result.get('error', 'unknown')}"
+                )
+                return result
+        except (ConnectionError, TimeoutError, OSError, ValueError) as exc:
+            result["status"] = "failed"
+            result["error"] = f"Tripo generation error: {exc}"
+            return result
+
+        # Prefer PBR model if available, fall back to standard model
+        model_path = gen_result.get("pbr_model_path") or gen_result.get("model_path", "")
+        if not model_path:
+            result["status"] = "failed"
+            result["error"] = "Tripo returned no model file"
+            return result
+
+        # --- Run full pipeline on the downloaded model ---
+        pipeline_result = await self.full_asset_pipeline(
+            object_name=model_path,
+            asset_type=asset_type,
+            export_dir=pipeline_kwargs.pop("export_dir", output_dir),
+            **pipeline_kwargs,
+        )
+        result["pipeline"] = pipeline_result
+        result["status"] = pipeline_result.get("status", "failed")
+        if pipeline_result.get("export_path"):
+            result["export_path"] = pipeline_result["export_path"]
+
+        return result

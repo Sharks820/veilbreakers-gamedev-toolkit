@@ -1,12 +1,15 @@
 """Blender animation handlers that bridge pure-logic keyframes to Blender Actions.
 
-Provides 6 command handlers:
+Provides 9 command handlers:
   - handle_generate_walk: Walk/run cycle for any of 5 gait types (ANIM-01)
   - handle_generate_fly: Fly/hover with wing oscillation (ANIM-02)
   - handle_generate_idle: Breathing, weight shift, secondary motion (ANIM-03)
   - handle_generate_attack: 8 attack types with anticipation-strike-recovery (ANIM-04)
   - handle_generate_reaction: Death, directional hit, spawn (ANIM-05)
   - handle_generate_custom: Text-to-keyframe via verb/body-part parser (ANIM-06)
+  - handle_add_animation_events: Add named event markers to action frames (AN-05)
+  - handle_list_animation_events: List all event markers on an action (AN-05)
+  - handle_remove_animation_event: Remove event marker by frame + type (AN-05)
 
 Each handler validates inputs, calls the keyframe engine in animation_gaits.py,
 applies results to a Blender Action with fcurves and optional CYCLES modifier,
@@ -53,6 +56,18 @@ VALID_HIT_DIRECTIONS: frozenset[str] = frozenset({
 
 VALID_TANGENT_TYPES: frozenset[str] = frozenset({"AUTO_CLAMPED", "BEZIER", "LINEAR", "CONSTANT"})
 DEFAULT_TANGENT_TYPE: str = "AUTO_CLAMPED"
+
+VALID_EVENT_TYPES: frozenset[str] = frozenset({
+    "SFX_footstep",
+    "SFX_impact",
+    "VFX_impact",
+    "VFX_trail_start",
+    "VFX_trail_end",
+    "Hitbox_start",
+    "Hitbox_end",
+    "Camera_shake",
+    "Sound_whoosh",
+})
 
 
 # ---------------------------------------------------------------------------
@@ -826,4 +841,311 @@ def handle_generate_custom(params: dict) -> dict:
         "frame_count": frame_count,
         "fcurve_count": result["fcurve_count"],
         "parsed_actions": sorted(parsed_bones),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Pure-logic validation: Animation Events (AN-05)
+# ---------------------------------------------------------------------------
+
+
+def _validate_event_entry(entry: dict, index: int) -> dict:
+    """Validate a single animation event entry.
+
+    Args:
+        entry: Dict with frame, event_type, event_name, data.
+        index: Position in events list (for error messages).
+
+    Returns:
+        Normalized dict.
+
+    Raises:
+        ValueError: On missing/invalid fields.
+    """
+    if not isinstance(entry, dict):
+        raise ValueError(f"events[{index}] must be a dict, got {type(entry).__name__}")
+
+    frame = entry.get("frame")
+    if frame is None:
+        raise ValueError(f"events[{index}].frame is required")
+    frame = int(frame)
+    if frame < 0:
+        raise ValueError(f"events[{index}].frame must be >= 0, got {frame}")
+
+    event_type = entry.get("event_type")
+    if not event_type:
+        raise ValueError(f"events[{index}].event_type is required")
+    if event_type not in VALID_EVENT_TYPES:
+        raise ValueError(
+            f"events[{index}].event_type {event_type!r} invalid. "
+            f"Valid types: {sorted(VALID_EVENT_TYPES)}"
+        )
+
+    event_name = entry.get("event_name", "")
+    data = entry.get("data", "")
+
+    return {
+        "frame": frame,
+        "event_type": event_type,
+        "event_name": str(event_name),
+        "data": str(data),
+    }
+
+
+def _validate_add_events_params(params: dict) -> dict:
+    """Validate parameters for handle_add_animation_events.
+
+    Args:
+        params: Handler params dict.
+
+    Returns:
+        Normalized dict with object_name, action_name, events.
+
+    Raises:
+        ValueError: On missing/invalid parameters.
+    """
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("object_name is required")
+
+    action_name = params.get("action_name")
+    if not action_name:
+        raise ValueError("action_name is required")
+
+    events = params.get("events")
+    if not events or not isinstance(events, list):
+        raise ValueError("events must be a non-empty list")
+
+    validated_events = [
+        _validate_event_entry(e, i) for i, e in enumerate(events)
+    ]
+
+    return {
+        "object_name": object_name,
+        "action_name": action_name,
+        "events": validated_events,
+    }
+
+
+def _validate_list_events_params(params: dict) -> dict:
+    """Validate parameters for handle_list_animation_events.
+
+    Args:
+        params: Handler params dict.
+
+    Returns:
+        Normalized dict with object_name, action_name.
+
+    Raises:
+        ValueError: On missing parameters.
+    """
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("object_name is required")
+
+    action_name = params.get("action_name")
+    if not action_name:
+        raise ValueError("action_name is required")
+
+    return {
+        "object_name": object_name,
+        "action_name": action_name,
+    }
+
+
+def _validate_remove_event_params(params: dict) -> dict:
+    """Validate parameters for handle_remove_animation_event.
+
+    Args:
+        params: Handler params dict.
+
+    Returns:
+        Normalized dict with object_name, action_name, frame, event_type.
+
+    Raises:
+        ValueError: On missing/invalid parameters.
+    """
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("object_name is required")
+
+    action_name = params.get("action_name")
+    if not action_name:
+        raise ValueError("action_name is required")
+
+    frame = params.get("frame")
+    if frame is None:
+        raise ValueError("frame is required")
+    frame = int(frame)
+    if frame < 0:
+        raise ValueError(f"frame must be >= 0, got {frame}")
+
+    event_type = params.get("event_type")
+    if not event_type:
+        raise ValueError("event_type is required")
+    if event_type not in VALID_EVENT_TYPES:
+        raise ValueError(
+            f"event_type {event_type!r} invalid. "
+            f"Valid types: {sorted(VALID_EVENT_TYPES)}"
+        )
+
+    return {
+        "object_name": object_name,
+        "action_name": action_name,
+        "frame": frame,
+        "event_type": event_type,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: Add Animation Events (AN-05)
+# ---------------------------------------------------------------------------
+
+
+def handle_add_animation_events(params: dict) -> dict:
+    """Add named event markers to animation frames for SFX/VFX/hitbox timing.
+
+    Stores events as pose_markers on the action. Each marker's name is set
+    to the event_type, and event_name/data are stored as custom properties
+    on the action keyed by ``event_{frame}_{event_type}``.
+
+    Params:
+        object_name: Target armature name.
+        action_name: Animation action to mark.
+        events: List of dicts with {frame, event_type, event_name, data}.
+
+    Returns:
+        Dict with action_name, added_events list.
+    """
+    validated = _validate_add_events_params(params)
+    _validate_animation_params(validated)  # ensure armature exists
+
+    action_name = validated["action_name"]
+    action = bpy.data.actions.get(action_name)
+    if action is None:
+        raise ValueError(f"Action not found: {action_name!r}")
+
+    added: list[dict] = []
+    for evt in validated["events"]:
+        marker = action.pose_markers.new(evt["event_type"])
+        marker.frame = evt["frame"]
+
+        # Store event_name and data as custom properties on the action
+        prop_key = f"event_{evt['frame']}_{evt['event_type']}"
+        action[prop_key] = f"{evt['event_name']}|{evt['data']}"
+
+        added.append({
+            "frame": evt["frame"],
+            "event_type": evt["event_type"],
+            "event_name": evt["event_name"],
+            "data": evt["data"],
+        })
+
+    return {
+        "action_name": action_name,
+        "added_events": added,
+        "total_markers": len(action.pose_markers),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: List Animation Events (AN-05)
+# ---------------------------------------------------------------------------
+
+
+def handle_list_animation_events(params: dict) -> dict:
+    """List all event markers on an animation action.
+
+    Params:
+        object_name: Target armature name.
+        action_name: Animation action to query.
+
+    Returns:
+        Dict with action_name and events list.
+    """
+    validated = _validate_list_events_params(params)
+    _validate_animation_params(validated)  # ensure armature exists
+
+    action_name = validated["action_name"]
+    action = bpy.data.actions.get(action_name)
+    if action is None:
+        raise ValueError(f"Action not found: {action_name!r}")
+
+    events: list[dict] = []
+    for marker in action.pose_markers:
+        event_type = marker.name
+        frame = marker.frame
+
+        # Retrieve custom property data if stored
+        prop_key = f"event_{frame}_{event_type}"
+        event_name = ""
+        data = ""
+        if prop_key in action:
+            stored = str(action[prop_key])
+            parts = stored.split("|", 1)
+            event_name = parts[0]
+            data = parts[1] if len(parts) > 1 else ""
+
+        events.append({
+            "frame": frame,
+            "event_type": event_type,
+            "event_name": event_name,
+            "data": data,
+        })
+
+    # Sort by frame
+    events.sort(key=lambda e: e["frame"])
+
+    return {
+        "action_name": action_name,
+        "events": events,
+        "total_markers": len(action.pose_markers),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: Remove Animation Event (AN-05)
+# ---------------------------------------------------------------------------
+
+
+def handle_remove_animation_event(params: dict) -> dict:
+    """Remove an event marker by frame and event_type.
+
+    Params:
+        object_name: Target armature name.
+        action_name: Animation action to modify.
+        frame: Frame number of the event to remove.
+        event_type: Event type string to match.
+
+    Returns:
+        Dict with action_name, removed flag, frame, event_type.
+    """
+    validated = _validate_remove_event_params(params)
+    _validate_animation_params(validated)  # ensure armature exists
+
+    action_name = validated["action_name"]
+    action = bpy.data.actions.get(action_name)
+    if action is None:
+        raise ValueError(f"Action not found: {action_name!r}")
+
+    target_frame = validated["frame"]
+    target_type = validated["event_type"]
+
+    removed = False
+    for i, marker in enumerate(action.pose_markers):
+        if marker.frame == target_frame and marker.name == target_type:
+            action.pose_markers.remove(marker)
+            # Also clean up custom property
+            prop_key = f"event_{target_frame}_{target_type}"
+            if prop_key in action:
+                del action[prop_key]
+            removed = True
+            break
+
+    return {
+        "action_name": action_name,
+        "removed": removed,
+        "frame": target_frame,
+        "event_type": target_type,
+        "remaining_markers": len(action.pose_markers),
     }

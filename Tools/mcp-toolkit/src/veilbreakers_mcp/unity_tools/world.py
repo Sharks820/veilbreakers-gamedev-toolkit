@@ -30,6 +30,9 @@ from veilbreakers_mcp.shared.unity_templates.world_templates import (
     generate_npc_placement_script,
     generate_dungeon_lighting_script,
     generate_terrain_building_blend_script,
+    generate_wfc_dungeon_script,
+    generate_interior_streaming_script,
+    generate_door_system_script,
 )
 
 
@@ -61,6 +64,9 @@ async def unity_world(
         "create_npc_placement",       # RPG-11
         "create_dungeon_lighting",    # RPG-12
         "create_terrain_blend",       # RPG-13
+        "create_wfc_dungeon",         # WORLD-11: WFC tile-based dungeon generation
+        "create_interior_streaming",  # WORLD-12: seamless interior/exterior streaming
+        "create_door_system",         # WORLD-13: door/gate/lock and lever system
     ],
     name: str = "default",
     # scene params

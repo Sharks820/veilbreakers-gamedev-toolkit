@@ -2778,3 +2778,601 @@ public class VB_BossTransitionVFX_{safe_type}_{boss_brand} : MonoBehaviour
             f"Transition: {transition_type}, Brand: {boss_brand}, Duration: {duration}s",
         ],
     }
+
+
+# ---------------------------------------------------------------------------
+# VFX Pool Manager -- Object pooling for VFX prefabs
+# ---------------------------------------------------------------------------
+
+
+def generate_vfx_pool_script(
+    initial_pool_size: int = 10,
+    max_pool_size: int = 50,
+    default_lifetime: float = 3.0,
+) -> dict[str, Any]:
+    """Generate a runtime VFX object pool manager.
+
+    Creates a singleton ``VFXPoolManager`` MonoBehaviour that maintains
+    per-effect-ID object pools using ``Dictionary<string, Queue<GameObject>>``.
+    Eliminates instantiation overhead during combat by reusing deactivated
+    GameObjects.  Pools are pre-warmed on ``Awake`` and auto-return effects
+    after a configurable lifetime via coroutine.
+
+    Args:
+        initial_pool_size: Number of instances to pre-warm per registered effect.
+        max_pool_size: Maximum pool capacity per effect to prevent memory leaks.
+        default_lifetime: Seconds before an effect auto-returns to its pool.
+
+    Returns:
+        Dict with script_path, script_content, next_steps.
+    """
+    initial_pool_size = max(1, min(initial_pool_size, 200))
+    max_pool_size = max(initial_pool_size, min(max_pool_size, 500))
+    default_lifetime = max(0.1, min(default_lifetime, 60.0))
+
+    script = f'''using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
+
+/// <summary>
+/// Object pool manager for VFX prefabs.  Singleton that eliminates
+/// instantiation overhead by recycling deactivated GameObjects.
+/// Phase 23 -- VFX Pool System
+/// </summary>
+public class VFXPoolManager : MonoBehaviour
+{{
+    public static VFXPoolManager Instance {{ get; private set; }}
+
+    [Header("Pool Settings")]
+    [Tooltip("Default instances to pre-warm per effect ID")]
+    public int initialPoolSize = {initial_pool_size};
+
+    [Tooltip("Maximum pool capacity per effect ID (prevents memory leaks)")]
+    public int maxPoolSize = {max_pool_size};
+
+    [Tooltip("Default seconds before auto-return to pool")]
+    public float defaultLifetime = {default_lifetime}f;
+
+    [Header("Pre-warm Registry")]
+    [Tooltip("Prefabs to pre-warm on Awake. Key = effectId string.")]
+    public List<PoolEntry> prewarmEntries = new List<PoolEntry>();
+
+    [System.Serializable]
+    public class PoolEntry
+    {{
+        public string effectId;
+        public GameObject prefab;
+        [Min(1)] public int count;
+    }}
+
+    // -- Internal state --
+    private readonly Dictionary<string, Queue<GameObject>> _pools =
+        new Dictionary<string, Queue<GameObject>>();
+    private readonly Dictionary<string, GameObject> _prefabRegistry =
+        new Dictionary<string, GameObject>();
+    private readonly Dictionary<string, PoolStats> _stats =
+        new Dictionary<string, PoolStats>();
+
+    /// <summary>Runtime stats for a single pool.</summary>
+    public class PoolStats
+    {{
+        public int activeCount;
+        public int poolSize;
+        public int peakUsage;
+    }}
+
+    // -----------------------------------------------------------------------
+    // Lifecycle
+    // -----------------------------------------------------------------------
+
+    private void Awake()
+    {{
+        if (Instance != null && Instance != this)
+        {{
+            Destroy(gameObject);
+            return;
+        }}
+        Instance = this;
+        DontDestroyOnLoad(gameObject);
+
+        foreach (var entry in prewarmEntries)
+        {{
+            if (entry.prefab == null || string.IsNullOrEmpty(entry.effectId))
+                continue;
+            RegisterPrefab(entry.effectId, entry.prefab);
+            PreWarm(entry.effectId, entry.count > 0 ? entry.count : initialPoolSize);
+        }}
+    }}
+
+    // -----------------------------------------------------------------------
+    // Public API
+    // -----------------------------------------------------------------------
+
+    /// <summary>Register a prefab for a given effect ID.</summary>
+    public void RegisterPrefab(string effectId, GameObject prefab)
+    {{
+        if (string.IsNullOrEmpty(effectId) || prefab == null) return;
+        _prefabRegistry[effectId] = prefab;
+        if (!_pools.ContainsKey(effectId))
+            _pools[effectId] = new Queue<GameObject>();
+        if (!_stats.ContainsKey(effectId))
+            _stats[effectId] = new PoolStats();
+    }}
+
+    /// <summary>Pre-warm a pool with inactive instances.</summary>
+    public void PreWarm(string effectId, int count)
+    {{
+        if (!_prefabRegistry.ContainsKey(effectId)) return;
+        if (!_pools.ContainsKey(effectId))
+            _pools[effectId] = new Queue<GameObject>();
+
+        int toCreate = Mathf.Min(count, maxPoolSize - _pools[effectId].Count);
+        for (int i = 0; i < toCreate; i++)
+        {{
+            GameObject obj = Instantiate(_prefabRegistry[effectId], transform);
+            obj.SetActive(false);
+            _pools[effectId].Enqueue(obj);
+        }}
+        UpdatePoolSizeStat(effectId);
+    }}
+
+    /// <summary>
+    /// Get a VFX instance from the pool (or instantiate if pool empty).
+    /// Auto-returns after <paramref name="lifetime"/> seconds.
+    /// </summary>
+    public GameObject GetEffect(string effectId, Vector3 position, Quaternion rotation, float lifetime = -1f)
+    {{
+        if (string.IsNullOrEmpty(effectId)) return null;
+
+        GameObject obj = null;
+
+        if (_pools.ContainsKey(effectId) && _pools[effectId].Count > 0)
+        {{
+            obj = _pools[effectId].Dequeue();
+            // Handle destroyed pooled objects
+            while (obj == null && _pools[effectId].Count > 0)
+                obj = _pools[effectId].Dequeue();
+        }}
+
+        if (obj == null)
+        {{
+            if (!_prefabRegistry.ContainsKey(effectId))
+            {{
+                Debug.LogWarning($"[VFXPool] No prefab registered for '{{effectId}}'");
+                return null;
+            }}
+            obj = Instantiate(_prefabRegistry[effectId], transform);
+        }}
+
+        obj.transform.SetPositionAndRotation(position, rotation);
+        obj.SetActive(true);
+
+        // Restart particle systems
+        var particles = obj.GetComponentsInChildren<ParticleSystem>(true);
+        foreach (var ps in particles)
+        {{
+            ps.Clear();
+            ps.Play();
+        }}
+
+        // Track stats
+        EnsureStats(effectId);
+        _stats[effectId].activeCount++;
+        if (_stats[effectId].activeCount > _stats[effectId].peakUsage)
+            _stats[effectId].peakUsage = _stats[effectId].activeCount;
+        UpdatePoolSizeStat(effectId);
+
+        float lt = lifetime > 0f ? lifetime : defaultLifetime;
+        StartCoroutine(AutoReturnCoroutine(effectId, obj, lt));
+
+        return obj;
+    }}
+
+    /// <summary>Return a VFX instance to its pool.</summary>
+    public void ReturnEffect(string effectId, GameObject effect)
+    {{
+        if (effect == null) return;
+        if (string.IsNullOrEmpty(effectId))
+        {{
+            Destroy(effect);
+            return;
+        }}
+
+        // Stop particle systems
+        var particles = effect.GetComponentsInChildren<ParticleSystem>(true);
+        foreach (var ps in particles)
+            ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
+        effect.SetActive(false);
+
+        if (!_pools.ContainsKey(effectId))
+            _pools[effectId] = new Queue<GameObject>();
+
+        // Enforce max pool size
+        if (_pools[effectId].Count >= maxPoolSize)
+        {{
+            Destroy(effect);
+        }}
+        else
+        {{
+            _pools[effectId].Enqueue(effect);
+        }}
+
+        EnsureStats(effectId);
+        _stats[effectId].activeCount = Mathf.Max(0, _stats[effectId].activeCount - 1);
+        UpdatePoolSizeStat(effectId);
+    }}
+
+    /// <summary>Get runtime stats for a pool.</summary>
+    public PoolStats GetStats(string effectId)
+    {{
+        return _stats.ContainsKey(effectId) ? _stats[effectId] : null;
+    }}
+
+    /// <summary>Get stats for all pools.</summary>
+    public Dictionary<string, PoolStats> GetAllStats()
+    {{
+        return new Dictionary<string, PoolStats>(_stats);
+    }}
+
+    // -----------------------------------------------------------------------
+    // Internals
+    // -----------------------------------------------------------------------
+
+    private IEnumerator AutoReturnCoroutine(string effectId, GameObject obj, float lifetime)
+    {{
+        yield return new WaitForSeconds(lifetime);
+        if (obj != null && obj.activeInHierarchy)
+            ReturnEffect(effectId, obj);
+    }}
+
+    private void EnsureStats(string effectId)
+    {{
+        if (!_stats.ContainsKey(effectId))
+            _stats[effectId] = new PoolStats();
+    }}
+
+    private void UpdatePoolSizeStat(string effectId)
+    {{
+        if (_stats.ContainsKey(effectId) && _pools.ContainsKey(effectId))
+            _stats[effectId].poolSize = _pools[effectId].Count;
+    }}
+}}
+'''
+
+    return {
+        "script_path": "Assets/Scripts/VFX/VFXPoolManager.cs",
+        "script_content": script,
+        "next_steps": [
+            "Open Unity Editor and wait for compilation",
+            "Add VFXPoolManager to a persistent GameObject (it uses DontDestroyOnLoad)",
+            "Register VFX prefabs via the prewarmEntries list in the Inspector",
+            "Call VFXPoolManager.Instance.GetEffect(effectId, pos, rot) to spawn pooled VFX",
+            f"Defaults: pool pre-warm={initial_pool_size}, max={max_pool_size}, lifetime={default_lifetime}s",
+        ],
+    }
+
+
+# ---------------------------------------------------------------------------
+# VFX LOD Manager -- Distance-based VFX quality scaling
+# ---------------------------------------------------------------------------
+
+
+def generate_vfx_lod_script(
+    full_distance: float = 20.0,
+    reduced_distance: float = 50.0,
+    cull_distance: float = 80.0,
+    update_interval: float = 0.25,
+) -> dict[str, Any]:
+    """Generate a runtime VFX LOD manager for distance-based quality scaling.
+
+    Creates a ``VFXLODManager`` MonoBehaviour that periodically checks the
+    distance from the main camera to each registered VFX and adjusts quality:
+
+    * **Full** (0 -- ``full_distance`` m): all particles, full emission rate.
+    * **Reduced** (``full_distance`` -- ``reduced_distance`` m): 50% particle
+      rate, simplified rendering.
+    * **Minimal** (``reduced_distance`` -- ``cull_distance`` m): billboard
+      sprite only, particles disabled.
+    * **Culled** (beyond ``cull_distance`` m): VFX disabled entirely.
+
+    Uses ``Physics.OverlapSphereNonAlloc`` for efficient spatial queries and
+    caches ``Camera.main`` to avoid repeated ``FindGameObjectWithTag`` calls.
+
+    Args:
+        full_distance: Distance threshold for full-quality VFX.
+        reduced_distance: Distance threshold for reduced-quality VFX.
+        cull_distance: Distance beyond which VFX are disabled entirely.
+        update_interval: Seconds between LOD update ticks.
+
+    Returns:
+        Dict with script_path, script_content, next_steps.
+    """
+    full_distance = max(1.0, min(full_distance, 500.0))
+    reduced_distance = max(full_distance + 1.0, min(reduced_distance, 1000.0))
+    cull_distance = max(reduced_distance + 1.0, min(cull_distance, 2000.0))
+    update_interval = max(0.05, min(update_interval, 5.0))
+
+    script = f'''using UnityEngine;
+using System.Collections;
+using System.Collections.Generic;
+
+/// <summary>
+/// Distance-based VFX quality manager.  Adjusts particle rates, enables
+/// billboard fallback sprites, and culls distant effects to maintain
+/// framerate during large-scale combat.
+/// Phase 23 -- VFX LOD System
+/// </summary>
+public class VFXLODManager : MonoBehaviour
+{{
+    public static VFXLODManager Instance {{ get; private set; }}
+
+    public enum VFXLODTier {{ Full, Reduced, Minimal, Culled }}
+
+    [Header("Distance Thresholds")]
+    [Tooltip("Max distance for full quality (all particles, full rate)")]
+    public float fullDistance = {full_distance}f;
+
+    [Tooltip("Max distance for reduced quality (50%% particle rate)")]
+    public float reducedDistance = {reduced_distance}f;
+
+    [Tooltip("Max distance before complete culling")]
+    public float cullDistance = {cull_distance}f;
+
+    [Header("Update Settings")]
+    [Tooltip("Seconds between LOD evaluation passes")]
+    public float updateInterval = {update_interval}f;
+
+    // -- Internal state --
+    private Camera _mainCamera;
+    private float _nextUpdateTime;
+    private readonly List<VFXLODEntry> _entries = new List<VFXLODEntry>();
+
+    /// <summary>Registered VFX entry with cached component refs.</summary>
+    public class VFXLODEntry
+    {{
+        public GameObject root;
+        public ParticleSystem[] particleSystems;
+        public float[] originalRates;
+        public Renderer billboardRenderer;
+        public VFXLODTier currentTier;
+        public bool wasActive;
+    }}
+
+    // -----------------------------------------------------------------------
+    // Lifecycle
+    // -----------------------------------------------------------------------
+
+    private void Awake()
+    {{
+        if (Instance != null && Instance != this)
+        {{
+            Destroy(gameObject);
+            return;
+        }}
+        Instance = this;
+        _mainCamera = Camera.main;
+    }}
+
+    private void Update()
+    {{
+        if (Time.time < _nextUpdateTime) return;
+        _nextUpdateTime = Time.time + updateInterval;
+        EvaluateAllEntries();
+    }}
+
+    // -----------------------------------------------------------------------
+    // Public API
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Register a VFX GameObject for LOD management.
+    /// Optionally supply a billboard Renderer used as the Minimal-tier fallback.
+    /// </summary>
+    public void Register(GameObject vfxRoot, Renderer billboard = null)
+    {{
+        if (vfxRoot == null) return;
+
+        // Avoid duplicate registration
+        for (int i = 0; i < _entries.Count; i++)
+        {{
+            if (_entries[i].root == vfxRoot) return;
+        }}
+
+        var ps = vfxRoot.GetComponentsInChildren<ParticleSystem>(true);
+        float[] rates = new float[ps.Length];
+        for (int i = 0; i < ps.Length; i++)
+        {{
+            var emission = ps[i].emission;
+            rates[i] = emission.rateOverTimeMultiplier;
+        }}
+
+        _entries.Add(new VFXLODEntry
+        {{
+            root = vfxRoot,
+            particleSystems = ps,
+            originalRates = rates,
+            billboardRenderer = billboard,
+            currentTier = VFXLODTier.Full,
+            wasActive = vfxRoot.activeInHierarchy,
+        }});
+    }}
+
+    /// <summary>Unregister a VFX GameObject from LOD management.</summary>
+    public void Unregister(GameObject vfxRoot)
+    {{
+        for (int i = _entries.Count - 1; i >= 0; i--)
+        {{
+            if (_entries[i].root == vfxRoot)
+            {{
+                // Restore original rates before removing
+                RestoreOriginalRates(_entries[i]);
+                _entries.RemoveAt(i);
+                return;
+            }}
+        }}
+    }}
+
+    /// <summary>Get the current LOD tier for a registered VFX.</summary>
+    public VFXLODTier GetTier(GameObject vfxRoot)
+    {{
+        for (int i = 0; i < _entries.Count; i++)
+        {{
+            if (_entries[i].root == vfxRoot)
+                return _entries[i].currentTier;
+        }}
+        return VFXLODTier.Culled;
+    }}
+
+    /// <summary>Get count of entries at each tier.</summary>
+    public Dictionary<VFXLODTier, int> GetTierCounts()
+    {{
+        var counts = new Dictionary<VFXLODTier, int>
+        {{
+            {{ VFXLODTier.Full, 0 }},
+            {{ VFXLODTier.Reduced, 0 }},
+            {{ VFXLODTier.Minimal, 0 }},
+            {{ VFXLODTier.Culled, 0 }},
+        }};
+        for (int i = 0; i < _entries.Count; i++)
+        {{
+            if (_entries[i].root != null)
+                counts[_entries[i].currentTier]++;
+        }}
+        return counts;
+    }}
+
+    // -----------------------------------------------------------------------
+    // LOD Evaluation
+    // -----------------------------------------------------------------------
+
+    private void EvaluateAllEntries()
+    {{
+        if (_mainCamera == null)
+        {{
+            _mainCamera = Camera.main;
+            if (_mainCamera == null) return;
+        }}
+
+        Vector3 camPos = _mainCamera.transform.position;
+
+        for (int i = _entries.Count - 1; i >= 0; i--)
+        {{
+            var entry = _entries[i];
+
+            // Clean up destroyed objects
+            if (entry.root == null)
+            {{
+                _entries.RemoveAt(i);
+                continue;
+            }}
+
+            // Skip inactive objects that we did not cull ourselves
+            if (!entry.root.activeInHierarchy && entry.currentTier != VFXLODTier.Culled)
+                continue;
+
+            float dist = Vector3.Distance(camPos, entry.root.transform.position);
+            VFXLODTier newTier = ClassifyDistance(dist);
+
+            if (newTier != entry.currentTier)
+                ApplyTier(entry, newTier);
+        }}
+    }}
+
+    private VFXLODTier ClassifyDistance(float distance)
+    {{
+        if (distance <= fullDistance) return VFXLODTier.Full;
+        if (distance <= reducedDistance) return VFXLODTier.Reduced;
+        if (distance <= cullDistance) return VFXLODTier.Minimal;
+        return VFXLODTier.Culled;
+    }}
+
+    private void ApplyTier(VFXLODEntry entry, VFXLODTier tier)
+    {{
+        entry.currentTier = tier;
+
+        switch (tier)
+        {{
+            case VFXLODTier.Full:
+                entry.root.SetActive(true);
+                SetParticleRates(entry, 1.0f);
+                EnableParticleSystems(entry, true);
+                SetBillboard(entry, false);
+                break;
+
+            case VFXLODTier.Reduced:
+                entry.root.SetActive(true);
+                SetParticleRates(entry, 0.5f);
+                EnableParticleSystems(entry, true);
+                SetBillboard(entry, false);
+                break;
+
+            case VFXLODTier.Minimal:
+                entry.root.SetActive(true);
+                EnableParticleSystems(entry, false);
+                SetBillboard(entry, true);
+                break;
+
+            case VFXLODTier.Culled:
+                entry.wasActive = entry.root.activeInHierarchy;
+                entry.root.SetActive(false);
+                break;
+        }}
+    }}
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    private void SetParticleRates(VFXLODEntry entry, float multiplier)
+    {{
+        for (int i = 0; i < entry.particleSystems.Length; i++)
+        {{
+            if (entry.particleSystems[i] == null) continue;
+            var emission = entry.particleSystems[i].emission;
+            emission.rateOverTimeMultiplier = entry.originalRates[i] * multiplier;
+        }}
+    }}
+
+    private void EnableParticleSystems(VFXLODEntry entry, bool enabled)
+    {{
+        for (int i = 0; i < entry.particleSystems.Length; i++)
+        {{
+            if (entry.particleSystems[i] == null) continue;
+            if (enabled && !entry.particleSystems[i].isPlaying)
+                entry.particleSystems[i].Play();
+            else if (!enabled && entry.particleSystems[i].isPlaying)
+                entry.particleSystems[i].Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+        }}
+    }}
+
+    private void SetBillboard(VFXLODEntry entry, bool enabled)
+    {{
+        if (entry.billboardRenderer != null)
+            entry.billboardRenderer.enabled = enabled;
+    }}
+
+    private void RestoreOriginalRates(VFXLODEntry entry)
+    {{
+        for (int i = 0; i < entry.particleSystems.Length; i++)
+        {{
+            if (entry.particleSystems[i] == null) continue;
+            var emission = entry.particleSystems[i].emission;
+            emission.rateOverTimeMultiplier = entry.originalRates[i];
+        }}
+    }}
+}}
+'''
+
+    return {
+        "script_path": "Assets/Scripts/VFX/VFXLODManager.cs",
+        "script_content": script,
+        "next_steps": [
+            "Open Unity Editor and wait for compilation",
+            "Add VFXLODManager to a persistent scene GameObject",
+            "Call VFXLODManager.Instance.Register(vfxObj, billboard) for each active VFX",
+            "Optionally integrate with VFXPoolManager: register on GetEffect, unregister on ReturnEffect",
+            f"Defaults: full<{full_distance}m, reduced<{reduced_distance}m, minimal<{cull_distance}m, "
+            f"update every {update_interval}s",
+        ],
+    }

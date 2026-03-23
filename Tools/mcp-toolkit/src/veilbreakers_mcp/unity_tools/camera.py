@@ -22,6 +22,7 @@ from veilbreakers_mcp.shared.unity_templates.camera_templates import (
     generate_animator_modifier_script,
     generate_avatar_mask_script,
     generate_video_player_script,
+    generate_lock_on_camera_script,
 )
 from veilbreakers_mcp.shared.unity_templates.cinematic_templates import (
     generate_cinematic_script,
@@ -49,6 +50,7 @@ async def unity_camera(
         "create_avatar_mask",         # ANIMA-03
         "setup_video_player",         # MEDIA-01
         "cinematic_sequence",         # ANIM3-07: Timeline-based cinematic sequences
+        "create_lock_on_camera",      # CAM-05: Souls-like lock-on targeting camera
     ],
     name: str = "default",
     # camera params
@@ -98,7 +100,15 @@ async def unity_camera(
     # common
     namespace: str = "",
     # cinematic sequence params (ANIM3-07)
-    shots: list[dict] | None = None
+    shots: list[dict] | None = None,
+    # lock-on camera params (CAM-05)
+    max_lock_distance: float = 20.0,
+    view_cone_angle: float = 90.0,
+    orbit_damping: float = 5.0,
+    target_switch_cooldown: float = 0.25,
+    los_break_time: float = 1.5,
+    soft_lock_weight: float = 0.5,
+    max_targets_buffer: int = 16
 ) -> str:
     """Camera, cinematics, and animation tools -- Cinemachine 3.x virtual cameras, state-driven cameras, camera shake, blend profiles, Timeline, cutscenes, animation clip editing, animator modification, avatar masks, video player, and cinematic sequences."""
     try:
@@ -148,6 +158,12 @@ async def unity_camera(
         elif action == "cinematic_sequence":
             return await _handle_camera_cinematic_sequence(
                 name, shots, output_path, namespace,
+            )
+        elif action == "create_lock_on_camera":
+            return await _handle_camera_lock_on(
+                name, max_lock_distance, view_cone_angle, orbit_damping,
+                target_switch_cooldown, los_break_time, soft_lock_weight,
+                max_targets_buffer, namespace,
             )
         else:
             return json.dumps({"status": "error", "message": f"Unknown action: {action}"})
@@ -409,4 +425,37 @@ async def _handle_camera_cinematic_sequence(
         "script_path": abs_path,
         "next_steps": STANDARD_NEXT_STEPS,
         "result_file": "Temp/vb_result.json",
+    }, indent=2)
+
+
+async def _handle_camera_lock_on(
+    name: str, max_lock_distance: float, view_cone_angle: float,
+    orbit_damping: float, target_switch_cooldown: float,
+    los_break_time: float, soft_lock_weight: float,
+    max_targets_buffer: int, namespace: str,
+) -> str:
+    """Create Souls-like lock-on targeting camera (CAM-05)."""
+    ns = namespace or "VeilBreakers.CameraSystems"
+    editor_cs, runtime_cs = generate_lock_on_camera_script(
+        max_lock_distance=max_lock_distance,
+        view_cone_angle=view_cone_angle,
+        orbit_damping=orbit_damping,
+        target_switch_cooldown=target_switch_cooldown,
+        los_break_time=los_break_time,
+        soft_lock_weight=soft_lock_weight,
+        max_targets_buffer=max_targets_buffer,
+        namespace=ns,
+    )
+    safe_name = name.replace(" ", "_").replace("-", "_")
+    editor_path = _write_to_unity(
+        editor_cs, f"Assets/Editor/Generated/Camera/{safe_name}_LockOnSetup.cs",
+    )
+    runtime_path = _write_to_unity(
+        runtime_cs, f"Assets/Scripts/Runtime/Camera/VB_LockOnCamera.cs",
+    )
+    return json.dumps({
+        "status": "success",
+        "action": "create_lock_on_camera",
+        "paths": [editor_path, runtime_path],
+        "next_steps": STANDARD_NEXT_STEPS,
     }, indent=2)

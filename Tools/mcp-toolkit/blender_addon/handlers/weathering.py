@@ -99,6 +99,46 @@ VALID_EFFECTS = frozenset({
 # Mesh data helpers (pure logic)
 # ---------------------------------------------------------------------------
 
+
+def _compute_face_normals(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, ...]],
+) -> list[tuple[float, float, float]]:
+    """Bug 13 fix: compute face normals from vertices and faces when not provided."""
+    normals: list[tuple[float, float, float]] = []
+    for face in faces:
+        if len(face) < 3:
+            normals.append((0.0, 0.0, 1.0))
+            continue
+        p0 = vertices[face[0]] if face[0] < len(vertices) else (0.0, 0.0, 0.0)
+        p1 = vertices[face[1]] if face[1] < len(vertices) else (0.0, 0.0, 0.0)
+        p2 = vertices[face[2]] if face[2] < len(vertices) else (0.0, 0.0, 0.0)
+        e1x = p1[0] - p0[0]
+        e1y = p1[1] - p0[1]
+        e1z = p1[2] - p0[2]
+        e2x = p2[0] - p0[0]
+        e2y = p2[1] - p0[1]
+        e2z = p2[2] - p0[2]
+        nx = e1y * e2z - e1z * e2y
+        ny = e1z * e2x - e1x * e2z
+        nz = e1x * e2y - e1y * e2x
+        length = math.sqrt(nx * nx + ny * ny + nz * nz)
+        if length > 1e-10:
+            normals.append((nx / length, ny / length, nz / length))
+        else:
+            normals.append((0.0, 0.0, 1.0))
+    return normals
+
+
+def _ensure_face_normals(mesh_data: dict[str, Any]) -> None:
+    """Bug 13 fix: ensure mesh_data has face_normals; compute from geometry if missing."""
+    face_normals = mesh_data.get("face_normals", [])
+    if not face_normals or len(face_normals) < len(mesh_data.get("faces", [])):
+        mesh_data["face_normals"] = _compute_face_normals(
+            mesh_data.get("vertices", []),
+            mesh_data.get("faces", []),
+        )
+
 def _compute_bounding_box(
     vertices: list[tuple[float, float, float]],
 ) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
@@ -171,10 +211,35 @@ def _compute_edge_convexity(
             angle_sum[vi] += angle
             face_count[vi] += 1
 
+    # Bug 12 fix: detect boundary vertices (not fully surrounded by faces).
+    # A vertex at the boundary has fewer faces than a fully interior vertex,
+    # causing the angle defect formula to give a large positive value
+    # (misclassifying open edges as highly convex).
+    # Build edge-face count to detect boundary edges
+    edge_face_count: dict[tuple[int, int], int] = {}
+    for face in faces:
+        fn = len(face)
+        for i_edge in range(fn):
+            a = face[i_edge]
+            b = face[(i_edge + 1) % fn]
+            edge_key = (min(a, b), max(a, b))
+            edge_face_count[edge_key] = edge_face_count.get(edge_key, 0) + 1
+
+    # Identify boundary vertices (incident to at least one boundary edge)
+    boundary_verts: set[int] = set()
+    for (a, b), count in edge_face_count.items():
+        if count < 2:  # boundary edge: shared by fewer than 2 faces
+            boundary_verts.add(a)
+            boundary_verts.add(b)
+
     # Angle defect: 2*pi - sum(angles). Positive = convex, negative = concave.
     curvature: dict[int, float] = {}
     for vi in range(num_verts):
         if face_count[vi] == 0:
+            curvature[vi] = 0.0
+            continue
+        if vi in boundary_verts:
+            # Bug 12 fix: boundary vertices get neutral convexity
             curvature[vi] = 0.0
             continue
         defect = 2.0 * math.pi - angle_sum[vi]
@@ -227,7 +292,12 @@ def apply_edge_wear(
     if num_verts == 0:
         return []
 
-    curvature = _compute_edge_convexity(mesh_data)
+    # Bug 13: ensure face normals
+    _ensure_face_normals(mesh_data)
+    # Bug 16: use cached convexity if available
+    curvature = mesh_data.get("_cached_convexity")
+    if curvature is None:
+        curvature = _compute_edge_convexity(mesh_data)
 
     wear_mask: list[float] = []
     for vi in range(num_verts):
@@ -263,8 +333,18 @@ def apply_dirt_accumulation(
     if num_verts == 0:
         return []
 
-    curvature = _compute_edge_convexity(mesh_data)
-    bbox_min, bbox_max = _compute_bounding_box(vertices)
+    # Bug 13: ensure face normals
+    _ensure_face_normals(mesh_data)
+    # Bug 16: use cached convexity if available
+    curvature = mesh_data.get("_cached_convexity")
+    if curvature is None:
+        curvature = _compute_edge_convexity(mesh_data)
+    # Bug 17: use cached bounding box if available
+    cached_bbox = mesh_data.get("_cached_bbox")
+    if cached_bbox is not None:
+        bbox_min, bbox_max = cached_bbox
+    else:
+        bbox_min, bbox_max = _compute_bounding_box(vertices)
 
     dirt_mask: list[float] = []
     for vi in range(num_verts):
@@ -308,13 +388,20 @@ def apply_moss_growth(
         Per-vertex moss mask, values in [0, 1].
     """
     vertices = mesh_data["vertices"]
+    # Bug 13: ensure face normals
+    _ensure_face_normals(mesh_data)
     face_normals = mesh_data.get("face_normals", [])
     faces = mesh_data["faces"]
     num_verts = len(vertices)
     if num_verts == 0:
         return []
 
-    bbox_min, bbox_max = _compute_bounding_box(vertices)
+    # Bug 17: use cached bounding box if available
+    cached_bbox = mesh_data.get("_cached_bbox")
+    if cached_bbox is not None:
+        bbox_min, bbox_max = cached_bbox
+    else:
+        bbox_min, bbox_max = _compute_bounding_box(vertices)
 
     # Compute per-vertex upward-facing factor from face normals
     vert_upward: dict[int, float] = {i: 0.0 for i in range(num_verts)}
@@ -381,13 +468,20 @@ def apply_rain_staining(
         Per-vertex rain stain mask, values in [0, 1].
     """
     vertices = mesh_data["vertices"]
+    # Bug 13: ensure face normals
+    _ensure_face_normals(mesh_data)
     face_normals = mesh_data.get("face_normals", [])
     faces = mesh_data["faces"]
     num_verts = len(vertices)
     if num_verts == 0:
         return []
 
-    bbox_min, bbox_max = _compute_bounding_box(vertices)
+    # Bug 17: use cached bounding box if available
+    cached_bbox = mesh_data.get("_cached_bbox")
+    if cached_bbox is not None:
+        bbox_min, bbox_max = cached_bbox
+    else:
+        bbox_min, bbox_max = _compute_bounding_box(vertices)
 
     # Compute per-vertex verticality from face normals
     vert_vertical: dict[int, float] = {i: 0.0 for i in range(num_verts)}
@@ -435,6 +529,10 @@ def apply_structural_settling(
     vertices: list[tuple[float, float, float]],
     strength: float = 0.01,
     seed: int = 42,
+    *,
+    _cached_bbox: tuple[
+        tuple[float, float, float], tuple[float, float, float]
+    ] | None = None,
 ) -> list[tuple[float, float, float]]:
     """Apply small random vertex displacements simulating structural settling.
 
@@ -445,6 +543,8 @@ def apply_structural_settling(
         vertices: List of (x, y, z) vertex positions.
         strength: Maximum displacement distance.
         seed: Random seed for reproducibility.
+        _cached_bbox: Optional pre-computed (min_corner, max_corner) to
+            avoid redundant bounding box computation.
 
     Returns:
         New list of displaced vertex positions.
@@ -452,7 +552,10 @@ def apply_structural_settling(
     if not vertices:
         return []
 
-    bbox_min, bbox_max = _compute_bounding_box(vertices)
+    if _cached_bbox is not None:
+        bbox_min, bbox_max = _cached_bbox
+    else:
+        bbox_min, bbox_max = _compute_bounding_box(vertices)
     rng = random.Random(seed)
 
     result: list[tuple[float, float, float]] = []
@@ -493,7 +596,10 @@ def apply_corruption_veins(
     if num_verts == 0:
         return []
 
-    curvature = _compute_edge_convexity(mesh_data)
+    # Bug 16: use cached convexity if available
+    curvature = mesh_data.get("_cached_convexity")
+    if curvature is None:
+        curvature = _compute_edge_convexity(mesh_data)
 
     corruption_mask: list[float] = []
     for vi in range(num_verts):
@@ -558,6 +664,17 @@ def compute_weathered_vertex_colors(
         strengths = WEATHERING_PRESETS[preset_name]
     else:
         strengths = WEATHERING_PRESETS["medium"]
+
+    # Bug 13 fix: ensure face normals are available
+    _ensure_face_normals(mesh_data)
+
+    # Bug 16 fix: compute edge convexity once, cache in mesh_data
+    if "_cached_convexity" not in mesh_data:
+        mesh_data["_cached_convexity"] = _compute_edge_convexity(mesh_data)
+
+    # Bug 17 fix: compute bounding box once, cache in mesh_data
+    if "_cached_bbox" not in mesh_data:
+        mesh_data["_cached_bbox"] = _compute_bounding_box(mesh_data["vertices"])
 
     # Compute individual masks
     wear_mask = apply_edge_wear(mesh_data, strengths.get("edge_wear", 0.0))
@@ -786,6 +903,7 @@ def handle_apply_weathering(params: dict[str, Any]) -> dict[str, Any]:
                 mesh_data["vertices"],
                 strength=settling_strength,
                 seed=seed,
+                _cached_bbox=mesh_data.get("_cached_bbox"),
             )
             # Write displaced vertices back to mesh
             for vi, v in enumerate(new_verts):
