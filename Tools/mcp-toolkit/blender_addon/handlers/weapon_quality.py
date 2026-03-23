@@ -1149,25 +1149,32 @@ def generate_quality_sword(
     vgroup_data: dict[str, list[int]] = {}
     running_vert_count = 0
 
-    # -- Style presets --
+    # -- Style presets (game-visible proportions, slightly exaggerated for readability) --
     presets = {
-        "longsword": {"blade_len": blade_length, "blade_w": blade_width, "grip_len": grip_length,
-                       "guard": guard_style, "sections": 14, "taper_start": 0.6, "taper_pow": 1.5},
-        "shortsword": {"blade_len": 0.5, "blade_w": 0.04, "grip_len": 0.15,
-                        "guard": guard_style, "sections": 10, "taper_start": 0.5, "taper_pow": 1.3},
-        "greatsword": {"blade_len": 1.2, "blade_w": 0.065, "grip_len": 0.35,
-                        "guard": guard_style, "sections": 18, "taper_start": 0.65, "taper_pow": 1.8},
-        "bastard": {"blade_len": 1.0, "blade_w": 0.055, "grip_len": 0.28,
-                     "guard": guard_style, "sections": 15, "taper_start": 0.6, "taper_pow": 1.5},
-        "rapier": {"blade_len": 1.0, "blade_w": 0.02, "grip_len": 0.18,
+        "longsword": {"blade_len": blade_length, "blade_w": max(blade_width, 0.07), "grip_len": grip_length,
+                       "guard": guard_style, "sections": 14, "taper_start": 0.55, "taper_pow": 1.5,
+                       "thickness": max(blade_thickness, 0.012)},
+        "shortsword": {"blade_len": 0.5, "blade_w": 0.06, "grip_len": 0.15,
+                        "guard": guard_style, "sections": 10, "taper_start": 0.5, "taper_pow": 1.3,
+                        "thickness": 0.012},
+        "greatsword": {"blade_len": 1.2, "blade_w": 0.09, "grip_len": 0.35,
+                        "guard": guard_style, "sections": 18, "taper_start": 0.6, "taper_pow": 1.8,
+                        "thickness": 0.015},
+        "bastard": {"blade_len": 1.0, "blade_w": 0.075, "grip_len": 0.28,
+                     "guard": guard_style, "sections": 15, "taper_start": 0.6, "taper_pow": 1.5,
+                     "thickness": 0.013},
+        "rapier": {"blade_len": 1.0, "blade_w": 0.03, "grip_len": 0.18,
                     "guard": "ring" if guard_style == "cross" else guard_style,
-                    "sections": 14, "taper_start": 0.3, "taper_pow": 1.0},
-        "flamberge": {"blade_len": 1.1, "blade_w": 0.06, "grip_len": 0.32,
-                       "guard": guard_style, "sections": 20, "taper_start": 0.7, "taper_pow": 2.0},
+                    "sections": 14, "taper_start": 0.3, "taper_pow": 1.0,
+                    "thickness": 0.01},
+        "flamberge": {"blade_len": 1.1, "blade_w": 0.085, "grip_len": 0.32,
+                       "guard": guard_style, "sections": 20, "taper_start": 0.65, "taper_pow": 2.0,
+                       "thickness": 0.014},
     }
     preset = presets.get(style, presets["longsword"])
     b_len = preset["blade_len"]
     b_wid = preset["blade_w"]
+    b_thick = preset.get("thickness", max(blade_thickness, 0.012))
     g_len = preset["grip_len"]
     g_style = preset["guard"]
     n_sections = preset["sections"]
@@ -1185,8 +1192,8 @@ def generate_quality_sword(
     # === 1. GRIP ===
     grip_verts, grip_faces, grip_uvs, wrap_idxs = _build_ergonomic_grip(
         length=g_len,
-        base_radius_x=0.013,
-        base_radius_z=0.010,
+        base_radius_x=0.018,
+        base_radius_z=0.015,
         grip_wrap=grip_wrap,
         finger_grooves=True,
         taper=0.15,
@@ -1207,11 +1214,11 @@ def generate_quality_sword(
     running_vert_count += len(grip_verts)
 
     # === 2. POMMEL ===
-    pommel_r = 0.018
+    pommel_r = 0.028
     pommel_verts, pommel_faces, pommel_uvs = _build_pommel(
         style=pommel_style,
         radius=pommel_r,
-        y_pos=-0.015,
+        y_pos=-0.02,
         ornament_level=ornament_level,
     )
     all_parts.append((pommel_verts, pommel_faces))
@@ -1223,9 +1230,9 @@ def generate_quality_sword(
     running_vert_count += len(pommel_verts)
 
     # === 3. GUARD ===
-    guard_w = b_wid * 3.0 if style != "rapier" else b_wid * 5.0
-    guard_h = 0.012
-    guard_d = blade_thickness * 3.0
+    guard_w = b_wid * 4.0 if style != "rapier" else b_wid * 6.0
+    guard_h = 0.02
+    guard_d = b_thick * 4.0
     guard_verts, guard_faces, guard_uvs = _build_cross_guard(
         width=guard_w, height=guard_h, depth=guard_d,
         guard_y=guard_y,
@@ -1251,7 +1258,7 @@ def generate_quality_sword(
     ricasso_verts, ricasso_faces, ricasso_uvs, _ = _build_cross_section_blade(
         length=ricasso_len,
         base_width=b_wid * 1.1,
-        thickness=blade_thickness * 1.3,
+        thickness=b_thick * 1.3,
         edge_bevel=0.0,  # No edge on ricasso
         fuller=False,
         fuller_depth=0.0,
@@ -1274,10 +1281,10 @@ def generate_quality_sword(
     blade_verts, blade_faces, blade_uvs, bevel_idxs = _build_cross_section_blade(
         length=b_len - ricasso_len,
         base_width=b_wid,
-        thickness=blade_thickness,
+        thickness=b_thick,
         edge_bevel=edge_bevel,
         fuller=fuller,
-        fuller_depth=blade_thickness * 0.4,
+        fuller_depth=b_thick * 0.4,
         taper_start=t_start,
         taper_power=t_pow,
         num_sections=n_sections,

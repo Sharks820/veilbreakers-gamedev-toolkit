@@ -99,25 +99,28 @@ class TripoGenerator:
 
         client = _create_tripo_client(self.api_key)
         try:
-            task_id = await asyncio.to_thread(
-                client.text_to_model,
+            raw = client.text_to_model(
                 prompt=prompt,
                 texture=texture,
                 pbr=pbr,
                 model_version=model_version,
             )
+            task_id = (await raw) if asyncio.iscoroutine(raw) else raw
 
-            task_result = await asyncio.to_thread(
-                client.wait_for_task,
+            raw2 = client.wait_for_task(
                 task_id,
                 timeout=timeout,
                 polling_interval=polling_interval,
             )
+            task_result = (await raw2) if asyncio.iscoroutine(raw2) else raw2
 
-            if task_result.status != "success":
+            task_status = getattr(task_result, "status", None) or (
+                task_result.get("status") if isinstance(task_result, dict) else "unknown"
+            )
+            if task_status != "success":
                 return {
                     "status": "failed",
-                    "error": f"Tripo3D task {task_id} ended with status: {task_result.status}",
+                    "error": f"Tripo3D task {task_id} ended with status: {task_status}",
                     "task_id": task_id,
                 }
 
@@ -128,18 +131,19 @@ class TripoGenerator:
             }
 
             # Download model file
-            if task_result.output and task_result.output.model:
+            output = getattr(task_result, "output", None) or (
+                task_result.get("output") if isinstance(task_result, dict) else None
+            )
+            model_url = getattr(output, "model", None) if output else None
+            if model_url:
                 model_path = str(Path(output_dir) / "model.glb")
-                result["model_path"] = await _download_file(
-                    task_result.output.model, model_path
-                )
+                result["model_path"] = await _download_file(model_url, model_path)
 
             # Download PBR model if available
-            if task_result.output and task_result.output.pbr_model:
+            pbr_url = getattr(output, "pbr_model", None) if output else None
+            if pbr_url:
                 pbr_path = str(Path(output_dir) / "model_pbr.glb")
-                result["pbr_model_path"] = await _download_file(
-                    task_result.output.pbr_model, pbr_path
-                )
+                result["pbr_model_path"] = await _download_file(pbr_url, pbr_path)
 
             return result
 
@@ -193,25 +197,28 @@ class TripoGenerator:
 
         client = _create_tripo_client(self.api_key)
         try:
-            task_id = await asyncio.to_thread(
-                client.image_to_model,
+            raw = client.image_to_model(
                 image_path=image_path,
                 texture=texture,
                 pbr=pbr,
                 model_version=model_version,
             )
+            task_id = (await raw) if asyncio.iscoroutine(raw) else raw
 
-            task_result = await asyncio.to_thread(
-                client.wait_for_task,
+            raw2 = client.wait_for_task(
                 task_id,
                 timeout=timeout,
                 polling_interval=polling_interval,
             )
+            task_result = (await raw2) if asyncio.iscoroutine(raw2) else raw2
 
-            if task_result.status != "success":
+            task_status = getattr(task_result, "status", None) or (
+                task_result.get("status") if isinstance(task_result, dict) else "unknown"
+            )
+            if task_status != "success":
                 return {
                     "status": "failed",
-                    "error": f"Tripo3D task {task_id} ended with status: {task_result.status}",
+                    "error": f"Tripo3D task {task_id} ended with status: {task_status}",
                     "task_id": task_id,
                 }
 
@@ -221,17 +228,18 @@ class TripoGenerator:
                 "task_id": task_id,
             }
 
-            if task_result.output and task_result.output.model:
+            output = getattr(task_result, "output", None) or (
+                task_result.get("output") if isinstance(task_result, dict) else None
+            )
+            model_url = getattr(output, "model", None) if output else None
+            if model_url:
                 model_path = str(Path(output_dir) / "model.glb")
-                result["model_path"] = await _download_file(
-                    task_result.output.model, model_path
-                )
+                result["model_path"] = await _download_file(model_url, model_path)
 
-            if task_result.output and task_result.output.pbr_model:
+            pbr_url = getattr(output, "pbr_model", None) if output else None
+            if pbr_url:
                 pbr_path = str(Path(output_dir) / "model_pbr.glb")
-                result["pbr_model_path"] = await _download_file(
-                    task_result.output.pbr_model, pbr_path
-                )
+                result["pbr_model_path"] = await _download_file(pbr_url, pbr_path)
 
             return result
 
