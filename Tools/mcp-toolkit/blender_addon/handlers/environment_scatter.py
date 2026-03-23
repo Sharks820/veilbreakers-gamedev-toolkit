@@ -153,10 +153,16 @@ def handle_scatter_vegetation(params: dict) -> dict:
     Params:
         terrain_name (str): Existing terrain object name.
         rules (list of dict, optional): Biome vegetation rules. Defaults to
-            built-in dark-fantasy rules.
+            built-in dark-fantasy rules. Each rule can include min_moisture
+            and max_moisture keys when moisture_map is provided.
         min_distance (float, default 3.0): Minimum distance between instances.
         seed (int, default 0): Random seed.
         max_instances (int, default 5000): Cap on total instances.
+        max_tilt_angle (float, default 45.0): Maximum terrain slope in degrees.
+            Points where terrain is steeper than this are rejected.
+        moisture_map (list of list or None): Optional 2D moisture map [0,1]
+            matching terrain resolution.  When provided, per-rule
+            min_moisture/max_moisture are applied during filtering.
 
     Returns dict with: name, instance_count, vegetation_types, bounds.
     """
@@ -168,6 +174,8 @@ def handle_scatter_vegetation(params: dict) -> dict:
     min_distance = params.get("min_distance", 3.0)
     seed = params.get("seed", 0)
     max_instances = params.get("max_instances", 5000)
+    max_tilt_angle = params.get("max_tilt_angle", 45.0)
+    moisture_map_raw = params.get("moisture_map", None)
 
     obj = bpy.data.objects.get(terrain_name)
     if obj is None:
@@ -201,10 +209,24 @@ def handle_scatter_vegetation(params: dict) -> dict:
         terrain_size, terrain_size, min_distance, seed=seed,
     )
 
+    # Convert moisture_map to numpy array if provided
+    moisture_np = None
+    if moisture_map_raw is not None:
+        moisture_np = np.array(moisture_map_raw, dtype=np.float64)
+        # Resize to match heightmap if needed
+        if moisture_np.shape != heightmap.shape:
+            # Simple nearest-neighbor resize
+            from numpy import round as np_round
+            y_idx = np.round(np.linspace(0, moisture_np.shape[0] - 1, side)).astype(int)
+            x_idx = np.round(np.linspace(0, moisture_np.shape[1] - 1, side)).astype(int)
+            moisture_np = moisture_np[np.ix_(y_idx, x_idx)]
+
     # Filter through biome rules
     placements = biome_filter_points(
         candidates, heightmap, slope_map, rules,
         terrain_size=terrain_size, seed=seed,
+        max_tilt_angle=max_tilt_angle,
+        moisture_map=moisture_np,
     )
 
     # Cap instances

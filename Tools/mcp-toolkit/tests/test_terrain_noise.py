@@ -157,6 +157,24 @@ class TestGenerateHeightmap:
         # Different octave count should produce different result
         assert not np.array_equal(h_default, h_custom)
 
+    def test_large_resolution_256(self):
+        """256x256 heightmap generates correctly with vectorized path."""
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        hmap = generate_heightmap(256, 256, seed=42, terrain_type="mountains")
+        assert hmap.shape == (256, 256)
+        assert hmap.min() >= 0.0
+        assert hmap.max() <= 1.0
+
+    def test_non_square_heightmap(self):
+        """Non-square heightmaps generate correctly."""
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        hmap = generate_heightmap(128, 64, seed=42, terrain_type="hills")
+        assert hmap.shape == (64, 128)
+        assert hmap.min() >= 0.0
+        assert hmap.max() <= 1.0
+
 
 # ---------------------------------------------------------------------------
 # Terrain presets tests
@@ -166,17 +184,17 @@ class TestGenerateHeightmap:
 class TestTerrainPresets:
     """Test TERRAIN_PRESETS configuration dict."""
 
-    def test_has_six_terrain_types(self):
-        """TERRAIN_PRESETS has exactly 6 terrain types."""
+    def test_has_eight_terrain_types(self):
+        """TERRAIN_PRESETS has exactly 8 terrain types."""
         from blender_addon.handlers._terrain_noise import TERRAIN_PRESETS
 
-        assert len(TERRAIN_PRESETS) == 6
+        assert len(TERRAIN_PRESETS) == 8
 
     def test_required_terrain_types_present(self):
-        """All 6 required terrain types are present."""
+        """All 8 required terrain types are present."""
         from blender_addon.handlers._terrain_noise import TERRAIN_PRESETS
 
-        required = {"mountains", "hills", "plains", "volcanic", "canyon", "cliffs"}
+        required = {"mountains", "hills", "plains", "volcanic", "canyon", "cliffs", "flat", "chaotic"}
         assert required == set(TERRAIN_PRESETS.keys())
 
     def test_each_preset_has_octaves(self):

@@ -11,10 +11,13 @@ Functions:
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -85,7 +88,9 @@ def validate_texture_file(filepath: str) -> dict:
         "valid": False,
     }
 
+    logger.info("Validating texture file: %s", filepath)
     if not os.path.isfile(filepath):
+        logger.warning("Texture file not found: %s", filepath)
         result["issues"].append(f"File not found: {filepath}")
         return result
 
@@ -94,7 +99,8 @@ def validate_texture_file(filepath: str) -> dict:
         width, height = img.size
         fmt = img.format or "unknown"
         img.close()
-    except (OSError, ValueError, RuntimeError) as exc:
+    except Exception as exc:
+        logger.error("Cannot open image %s: %s", filepath, exc)
         result["issues"].append(f"Cannot open image: {exc}")
         return result
 
@@ -214,10 +220,12 @@ def recommend_compression(filepath: str, channel_type: str) -> dict:
         Dict with keys: channel_type, recommended_format, description,
         bpp, quality, estimated_compressed_size_kb (if file is readable).
     """
+    logger.info("Recommending compression for %s (channel=%s)", filepath, channel_type)
     channel_lower = channel_type.lower()
     rec = _COMPRESSION_MAP.get(channel_lower)
 
     if rec is None:
+        logger.warning("Unknown channel type %r, defaulting to BC7", channel_type)
         # Default to BC7 for unknown channel types
         rec = {
             "format": "BC7",
@@ -244,7 +252,7 @@ def recommend_compression(filepath: str, channel_type: str) -> dict:
         result["estimated_compressed_size_kb"] = round(compressed_bytes / 1024, 1)
         result["width"] = width
         result["height"] = height
-    except (OSError, ValueError, RuntimeError):
-        pass
+    except Exception as exc:
+        logger.warning("Could not read image for size estimation: %s", exc)
 
     return result

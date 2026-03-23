@@ -12,8 +12,11 @@ Functions:
 
 from __future__ import annotations
 
+import logging
 import re
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +250,9 @@ def validate_uxml_contrast(
             passes (bool): Whether it meets WCAG AA.
     """
     import defusedxml.ElementTree as ET
+    from xml.etree.ElementTree import Element
 
+    logger.info("Validating UXML contrast against WCAG AA thresholds")
     violations: list[dict[str, Any]] = []
 
     # Parse USS rules
@@ -257,6 +262,7 @@ def validate_uxml_contrast(
     try:
         root = ET.fromstring(uxml_string)
     except ET.ParseError:
+        logger.warning("Failed to parse UXML string, returning empty violations")
         return violations
 
     # Build a class -> colors mapping from USS
@@ -299,7 +305,7 @@ def validate_uxml_contrast(
                     class_font_sizes[cls_name] = float(fs_match.group(1))
 
     # Walk all elements and check text elements
-    def _walk(elem: ET.Element, inherited_bg: tuple[int, int, int] | None = None) -> None:
+    def _walk(elem: Element, inherited_bg: tuple[int, int, int] | None = None) -> None:
         classes = elem.get("class", "").split()
         name = elem.get("name", "")
 
@@ -337,6 +343,17 @@ def validate_uxml_contrast(
                     "ratio": round(ratio, 2),
                     "required": 3.0 if is_large else 4.5,
                     "passes": passes,
+                })
+            elif fg_color and not current_bg:
+                elem_id = name or " ".join(classes) or local
+                violations.append({
+                    "element": elem_id,
+                    "foreground": fg_color,
+                    "background": (0, 0, 0),  # assume dark theme default
+                    "ratio": 0.0,
+                    "required": 4.5,
+                    "passes": True,  # informational only — parent/theme bg likely exists
+                    "warning": "No explicit background — contrast assumed from parent/theme",
                 })
 
         # Recurse

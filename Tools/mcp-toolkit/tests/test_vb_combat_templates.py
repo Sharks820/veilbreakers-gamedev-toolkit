@@ -273,7 +273,7 @@ class TestCorruptionGameplayTemplate:
 
     def test_contains_visual_feedback(self):
         result = generate_corruption_gameplay_script()
-        assert "_CorruptionLevel" in result
+        assert "_CorruptionAmount" in result
 
     def test_contains_npc_reaction(self):
         result = generate_corruption_gameplay_script()

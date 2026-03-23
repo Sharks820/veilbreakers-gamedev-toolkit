@@ -1,6 +1,6 @@
 [project]
 name = "veilbreakers-mcp"
-version = "0.1.0"
+version = "3.1.0"
 requires-python = ">=3.12"
 # Note: xatlas==0.0.11 is installed into Blender's Python at runtime
 # via the uv_ensure_xatlas handler. It is NOT a pip dependency of this package.
@@ -26,12 +26,22 @@ vb-unity-mcp = "veilbreakers_mcp.unity_server:main"
 dev = [
     "pytest>=8.0",
     "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0",
     "ruff>=0.8.0",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "strict"
+
+[tool.coverage.run]
+source = ["src/veilbreakers_mcp"]
+omit = ["*/tests/*"]
+
+[tool.coverage.report]
+fail_under = 80
+show_missing = true
+skip_covered = true
 
 [build-system]
 requires = ["hatchling"]
