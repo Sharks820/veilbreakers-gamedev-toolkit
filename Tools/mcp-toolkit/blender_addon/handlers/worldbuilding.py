@@ -654,6 +654,9 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
             key = (op.get("wall_index", 0), op.get("floor", 0))
             wall_ops[key] = op
 
+    # Collect openings indexed by (wall_index, floor)
+    openings_map = _collect_openings_by_wall(spec)
+
     for op in spec.operations:
         op_type = op.get("type")
 

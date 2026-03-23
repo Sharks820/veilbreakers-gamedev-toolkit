@@ -389,6 +389,393 @@ def _validate_brush_radius(radius: float) -> float:
     return float(radius)
 
 
+def _validate_sculpt_brush_params(params: dict) -> list[str]:
+    """Validate sculpt brush stroke parameters. Returns list of error strings.
+
+    Validates: name (required, non-empty), brush_type (must be in
+    _SCULPT_BRUSH_TYPES), strength (0.0-1.0), radius (> 0),
+    stroke_points (list of 3-element numeric lists), detail_size (> 0).
+    """
+    errors: list[str] = []
+
+    name = params.get("name")
+    if not name:
+        errors.append("name is required and must be a non-empty string")
+
+    brush_type = params.get("brush_type")
+    if brush_type is None:
+        errors.append("brush_type is required")
+    elif brush_type.upper() not in _SCULPT_BRUSH_TYPES:
+        errors.append(
+            f"Invalid brush_type: {brush_type!r}. "
+            f"Valid: {sorted(_SCULPT_BRUSH_TYPES)}"
+        )
+
+    strength = params.get("strength")
+    if strength is not None:
+        if not isinstance(strength, (int, float)):
+            errors.append(f"strength must be a number, got {type(strength).__name__}")
+        elif not (0.0 <= float(strength) <= 1.0):
+            errors.append(f"strength must be between 0.0 and 1.0, got {strength}")
+
+    radius = params.get("radius")
+    if radius is not None:
+        if not isinstance(radius, (int, float)):
+            errors.append(f"radius must be a number, got {type(radius).__name__}")
+        elif float(radius) <= 0:
+            errors.append(f"radius must be > 0, got {radius}")
+
+    stroke_points = params.get("stroke_points")
+    if stroke_points is not None:
+        if not isinstance(stroke_points, list):
+            errors.append("stroke_points must be a list of [x, y, z] triples")
+        else:
+            for i, pt in enumerate(stroke_points):
+                if not isinstance(pt, (list, tuple)) or len(pt) != 3:
+                    errors.append(
+                        f"stroke_points[{i}] must be a 3-element list, got {pt!r}"
+                    )
+                    break
+                if not all(isinstance(c, (int, float)) for c in pt):
+                    errors.append(
+                        f"stroke_points[{i}] must contain numeric values, got {pt!r}"
+                    )
+                    break
+
+    detail_size = params.get("detail_size")
+    if detail_size is not None:
+        if not isinstance(detail_size, (int, float)):
+            errors.append(f"detail_size must be a number, got {type(detail_size).__name__}")
+        elif float(detail_size) <= 0:
+            errors.append(f"detail_size must be > 0, got {detail_size}")
+
+    return errors
+
+
+def _validate_loop_cut_params(params: dict) -> dict:
+    """Validate loop cut parameters. Returns validated dict with defaults.
+
+    Required: name (non-empty string).
+    Optional: cuts (positive int, default 1), edge_index (non-negative int,
+    default None), offset (float in [-1, 1], default 0.0).
+
+    Raises ValueError for invalid parameters.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("name is required")
+
+    cuts = params.get("cuts", 1)
+    if not isinstance(cuts, int) or isinstance(cuts, bool) or cuts < 1:
+        raise ValueError("cuts must be a positive integer")
+
+    edge_index = params.get("edge_index", None)
+    if edge_index is not None:
+        if not isinstance(edge_index, int) or isinstance(edge_index, bool) or edge_index < 0:
+            raise ValueError("edge_index must be a non-negative integer")
+
+    raw_offset = params.get("offset", 0.0)
+    if isinstance(raw_offset, bool):
+        raise ValueError("offset must be a number")
+    if not isinstance(raw_offset, (int, float)):
+        raise ValueError("offset must be a number")
+    offset = float(raw_offset)
+    if not (-1.0 <= offset <= 1.0):
+        raise ValueError("offset must be between -1 and 1")
+
+    return {
+        "name": name,
+        "cuts": cuts,
+        "edge_index": edge_index,
+        "offset": offset,
+    }
+
+
+def _validate_bevel_params(params: dict) -> dict:
+    """Validate bevel edge parameters. Returns validated dict with defaults.
+
+    Required: name (non-empty string), width (positive float).
+    Optional: segments (positive int, default 1), selection_mode
+    (all/sharp/boundary/angle, default "sharp"), angle_threshold
+    (0-180 float, default 30.0).
+
+    Raises ValueError for invalid parameters.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("name is required")
+
+    raw_width = params.get("width")
+    if raw_width is None:
+        raise ValueError("width is required")
+    if isinstance(raw_width, bool) or not isinstance(raw_width, (int, float)):
+        raise ValueError("width must be a positive number")
+    width = float(raw_width)
+    if width <= 0:
+        raise ValueError("width must be a positive number")
+
+    segments = params.get("segments", 1)
+    if not isinstance(segments, int) or isinstance(segments, bool) or segments < 1:
+        raise ValueError("segments must be a positive integer")
+
+    selection_mode = params.get("selection_mode", "sharp")
+    if selection_mode not in _BEVEL_SELECTION_MODES:
+        raise ValueError(
+            f"Unknown selection_mode: {selection_mode!r}. "
+            f"Valid: {sorted(_BEVEL_SELECTION_MODES)}"
+        )
+
+    raw_angle = params.get("angle_threshold", 30.0)
+    if isinstance(raw_angle, bool) or not isinstance(raw_angle, (int, float)):
+        raise ValueError("angle_threshold must be a number")
+    angle_threshold = float(raw_angle)
+    if not (0.0 <= angle_threshold <= 180.0):
+        raise ValueError("angle_threshold must be between 0 and 180")
+
+    return {
+        "name": name,
+        "width": width,
+        "segments": segments,
+        "selection_mode": selection_mode,
+        "angle_threshold": angle_threshold,
+    }
+
+
+def _validate_knife_params(params: dict) -> dict:
+    """Validate knife/bisect parameters. Returns validated dict with defaults.
+
+    Required: name (non-empty string).
+    Optional: cut_type (bisect/loop, default "bisect"), plane_point
+    (3-element list, default [0,0,0]), plane_normal (3-element non-zero
+    list, default [0,0,1]).
+
+    Raises ValueError for invalid parameters.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("name is required")
+
+    cut_type = params.get("cut_type", "bisect")
+    if cut_type not in _KNIFE_CUT_TYPES:
+        raise ValueError(
+            f"Unknown cut_type: {cut_type!r}. Valid: {sorted(_KNIFE_CUT_TYPES)}"
+        )
+
+    raw_point = params.get("plane_point", [0.0, 0.0, 0.0])
+    if not isinstance(raw_point, (list, tuple)) or len(raw_point) != 3:
+        raise ValueError("plane_point must be a 3-element list of numbers")
+    try:
+        plane_point = [float(c) for c in raw_point]
+    except (TypeError, ValueError):
+        raise ValueError("plane_point must be a 3-element list of numbers")
+
+    raw_normal = params.get("plane_normal", [0.0, 0.0, 1.0])
+    if not isinstance(raw_normal, (list, tuple)) or len(raw_normal) != 3:
+        raise ValueError("plane_normal must be a 3-element list of numbers")
+    try:
+        plane_normal = [float(c) for c in raw_normal]
+    except (TypeError, ValueError):
+        raise ValueError("plane_normal must be a 3-element list of numbers")
+
+    if plane_normal[0] == 0.0 and plane_normal[1] == 0.0 and plane_normal[2] == 0.0:
+        raise ValueError("plane_normal must not be a zero vector")
+
+    return {
+        "name": name,
+        "cut_type": cut_type,
+        "plane_point": plane_point,
+        "plane_normal": plane_normal,
+    }
+
+
+def _validate_proportional_edit_params(params: dict) -> dict:
+    """Validate proportional edit parameters. Returns validated dict.
+
+    Required: name (non-empty string), vertex_indices (non-empty list of
+    non-negative ints), offset (3-element numeric list), radius (positive
+    float).
+    Optional: falloff_type (default "SMOOTH").
+
+    Raises ValueError for invalid parameters.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("name is required")
+
+    vertex_indices = params.get("vertex_indices")
+    if not vertex_indices or not isinstance(vertex_indices, list):
+        raise ValueError("vertex_indices must be a non-empty list of non-negative integers")
+    for idx in vertex_indices:
+        if not isinstance(idx, int) or isinstance(idx, bool) or idx < 0:
+            raise ValueError(
+                "vertex_indices must contain non-negative integers"
+            )
+
+    raw_offset = params.get("offset")
+    if not isinstance(raw_offset, (list, tuple)) or len(raw_offset) != 3:
+        raise ValueError("offset must be a 3-element list of numbers")
+    offset = [float(c) for c in raw_offset]
+
+    radius = params.get("radius")
+    if radius is None:
+        raise ValueError("radius is required")
+    if isinstance(radius, bool) or not isinstance(radius, (int, float)):
+        raise ValueError("radius must be a positive number")
+    radius = float(radius)
+    if radius <= 0:
+        raise ValueError("radius must be a positive number")
+
+    falloff_type = params.get("falloff_type", "SMOOTH")
+    if falloff_type not in _PROPORTIONAL_FALLOFF_TYPES:
+        raise ValueError(
+            f"Unknown falloff_type: {falloff_type!r}. "
+            f"Valid: {sorted(_PROPORTIONAL_FALLOFF_TYPES)}"
+        )
+
+    return {
+        "name": name,
+        "vertex_indices": vertex_indices,
+        "offset": offset,
+        "radius": radius,
+        "falloff_type": falloff_type,
+    }
+
+
+def _validate_vertex_color_params(params: dict) -> dict:
+    """Validate vertex color operation parameters. Returns validated dict.
+
+    Required: name (non-empty string).
+    Optional: operation (CREATE_LAYER/PAINT/FILL, default "CREATE_LAYER"),
+    layer_name (non-empty str, default "Col"), color (4-element RGBA list
+    in [0,1], default [1,1,1,1]), vertex_indices (list of non-negative
+    ints, default None).
+
+    Raises ValueError for invalid parameters.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("name is required")
+
+    operation = params.get("operation", "CREATE_LAYER")
+    if operation not in _VERTEX_COLOR_OPERATIONS:
+        raise ValueError(
+            f"Invalid operation: {operation!r}. "
+            f"Valid: {sorted(_VERTEX_COLOR_OPERATIONS)}"
+        )
+
+    layer_name = params.get("layer_name", "Col")
+    if not layer_name:
+        raise ValueError("layer_name must be a non-empty string")
+
+    color = params.get("color", [1.0, 1.0, 1.0, 1.0])
+    if not isinstance(color, (list, tuple)) or len(color) != 4:
+        raise ValueError("color must be a 4-element RGBA list")
+    for c in color:
+        if not isinstance(c, (int, float)) or not (0.0 <= float(c) <= 1.0):
+            raise ValueError("color values must be between 0.0 and 1.0")
+    color = [float(c) for c in color]
+
+    vertex_indices = params.get("vertex_indices", None)
+    if vertex_indices is not None:
+        if not isinstance(vertex_indices, list):
+            raise ValueError("vertex_indices must be a list of non-negative integers")
+        for idx in vertex_indices:
+            if not isinstance(idx, int) or isinstance(idx, bool) or idx < 0:
+                raise ValueError("vertex_indices must contain non-negative integers")
+
+    return {
+        "name": name,
+        "operation": operation,
+        "layer_name": layer_name,
+        "color": color,
+        "vertex_indices": vertex_indices,
+    }
+
+
+def _validate_custom_normals_params(params: dict) -> dict:
+    """Validate custom normals operation parameters. Returns validated dict.
+
+    Required: name (non-empty string).
+    Optional: operation (CALCULATE/TRANSFER/CLEAR, default "CALCULATE"),
+    split_angle (0-180 float, default 30.0), source_object (str, required
+    when operation is TRANSFER).
+
+    Raises ValueError for invalid parameters.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("name is required")
+
+    operation = params.get("operation", "CALCULATE")
+    if operation not in _CUSTOM_NORMAL_OPERATIONS:
+        raise ValueError(
+            f"Invalid operation: {operation!r}. "
+            f"Valid: {sorted(_CUSTOM_NORMAL_OPERATIONS)}"
+        )
+
+    split_angle = params.get("split_angle", 30.0)
+    if isinstance(split_angle, bool) or not isinstance(split_angle, (int, float)):
+        raise ValueError("split_angle must be a number")
+    split_angle = float(split_angle)
+    if not (0.0 <= split_angle <= 180.0):
+        raise ValueError("split_angle must be between 0 and 180")
+
+    source_object = params.get("source_object", None)
+    if operation == "TRANSFER" and not source_object:
+        raise ValueError("source_object is required when operation is TRANSFER")
+
+    return {
+        "name": name,
+        "operation": operation,
+        "split_angle": split_angle,
+        "source_object": source_object,
+    }
+
+
+def _validate_edge_data_params(params: dict) -> dict:
+    """Validate edge data operation parameters. Returns validated dict.
+
+    Required: name (non-empty string).
+    Optional: operation (SET_CREASE/SET_BEVEL_WEIGHT/SET_SHARP, default
+    "SET_CREASE"), edge_indices (list of non-negative ints, default None),
+    value (float in [0, 1], default 1.0).
+
+    Raises ValueError for invalid parameters.
+    """
+    name = params.get("name")
+    if not name:
+        raise ValueError("name is required")
+
+    operation = params.get("operation", "SET_CREASE")
+    if operation not in _EDGE_DATA_OPERATIONS:
+        raise ValueError(
+            f"Invalid operation: {operation!r}. "
+            f"Valid: {sorted(_EDGE_DATA_OPERATIONS)}"
+        )
+
+    edge_indices = params.get("edge_indices", None)
+    if edge_indices is not None:
+        if not isinstance(edge_indices, list):
+            raise ValueError("edge_indices must be a list of non-negative integers")
+        for idx in edge_indices:
+            if not isinstance(idx, int) or isinstance(idx, bool) or idx < 0:
+                raise ValueError("edge_indices must contain non-negative integers")
+
+    value = params.get("value", 1.0)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError("value must be a number")
+    value = float(value)
+    if not (0.0 <= value <= 1.0):
+        raise ValueError("value must be between 0.0 and 1.0")
+
+    return {
+        "name": name,
+        "operation": operation,
+        "edge_indices": edge_indices,
+        "value": value,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Pure-logic helpers for position-based selection (testable without Blender)
 # ---------------------------------------------------------------------------
