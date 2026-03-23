@@ -384,11 +384,27 @@ async def _handle_ui_check_contrast(
         if full.exists():
             uss = full.read_text(encoding="utf-8")
 
+    # Auto-infer USS path from UXML path if not provided
+    if not uss and uxml and not uss_path and uxml_path:
+        inferred_uss = uxml_path.rsplit(".", 1)[0] + ".uss"
+        if settings.unity_project_path:
+            inferred_full = Path(settings.unity_project_path) / inferred_uss
+            if inferred_full.exists():
+                uss = inferred_full.read_text(encoding="utf-8")
+
     if not uxml or not uss:
+        missing = []
+        if not uxml:
+            missing.append("UXML")
+        if not uss:
+            missing.append("USS")
         return json.dumps({
             "status": "error",
             "action": "check_contrast",
-            "message": "Both UXML and USS content are required (via paths or inline content).",
+            "message": (
+                f"Missing {' and '.join(missing)} content. Provide via paths or inline content. "
+                f"Tip: If you provide uxml_path, the matching .uss file is auto-detected."
+            ),
         })
 
     results = validate_uxml_contrast(uxml, uss)

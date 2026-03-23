@@ -381,3 +381,53 @@ async def unity_qa(
             "action": action,
             "message": str(exc),
         })
+
+
+# ---------------------------------------------------------------------------
+# QA action handlers
+# ---------------------------------------------------------------------------
+
+
+async def _handle_check_compile_status(bridge_port: int) -> str:
+    """Check Unity compile status via TCP bridge, fallback to result file.
+
+    Tries the VBBridge first for real-time status. If the bridge is
+    unavailable, checks the Temp/vb_result.json file for cached status.
+    """
+    try:
+        conn = UnityConnection(port=bridge_port, timeout=10)
+        result = await conn.send_command("check_compile_status")
+        return json.dumps({
+            "status": "success",
+            "action": "check_compile_status",
+            "bridge": True,
+            "is_compiling": result.get("is_compiling", False),
+            "has_errors": result.get("has_errors", False),
+            "error_count": result.get("error_count", 0),
+            "errors": result.get("errors", []),
+            "warning_count": result.get("warning_count", 0),
+        }, indent=2)
+    except (ConnectionError, UnityCommandError, OSError, Exception) as exc:
+        logger.debug("Bridge unavailable for check_compile_status: %s", exc)
+
+    # Fallback: read cached result file
+    cached = _read_unity_result()
+    if cached.get("status") == "pending":
+        return json.dumps({
+            "status": "success",
+            "action": "check_compile_status",
+            "bridge": False,
+            "is_compiling": False,
+            "has_errors": False,
+            "error_count": 0,
+            "errors": [],
+            "warning_count": 0,
+            "message": "Bridge unavailable. No cached compile status found.",
+        }, indent=2)
+
+    return json.dumps({
+        "status": "success",
+        "action": "check_compile_status",
+        "bridge": False,
+        **cached,
+    }, indent=2)

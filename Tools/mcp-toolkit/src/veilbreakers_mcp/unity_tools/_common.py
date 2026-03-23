@@ -36,19 +36,31 @@ async def _bridge_recompile_and_execute(menu_path: str) -> dict | None:
     """Recompile Unity, wait for completion, then execute a menu item.
 
     Returns the execution result, or None if bridge unavailable.
+    Uses exponential backoff polling to avoid TCP connection flooding.
     """
+    import asyncio
+
     try:
         conn = UnityConnection(timeout=30)
         # Trigger recompile
         await conn.send_command("recompile")
 
-        # Wait for compilation to finish (up to 30s)
-        import asyncio
-        for _ in range(60):
-            status = await conn.send_command("check_compile_status")
-            if not status.get("is_compiling", True):
-                break
-            await asyncio.sleep(0.5)
+        # Wait for compilation to finish (up to 30s) with exponential backoff
+        # to avoid creating 60+ TCP connections
+        delay = 0.5
+        elapsed = 0.0
+        max_wait = 30.0
+        while elapsed < max_wait:
+            await asyncio.sleep(delay)
+            elapsed += delay
+            try:
+                status = await conn.send_command("check_compile_status")
+                if not status.get("is_compiling", True):
+                    break
+            except (ConnectionError, OSError):
+                # Bridge may be temporarily unavailable during recompile
+                pass
+            delay = min(delay * 1.5, 3.0)  # Cap at 3s intervals
 
         # Check for errors
         status = await conn.send_command("check_compile_status")
@@ -142,22 +154,38 @@ async def _handle_dict_template(action_name: str, result: dict) -> str:
     """Generic handler for v3.0 template generators that return dicts.
 
     v3.0 generators (audio_middleware, ui_polish, vfx_mastery, production)
-    return ``{script_path, script_content, next_steps}``.
-    This helper writes the script to Unity and returns a standard JSON response.
+    return ``{script_path, script_content, next_steps, menu_path?}``.
+    This helper writes the script to Unity and optionally auto-executes
+    via the VBBridge TCP connection if a menu_path is provided.
     """
     script_content = result.get("script_content", "")
     rel_path = result.get("script_path", f"Assets/Scripts/Generated/{action_name}.cs")
     next_steps = result.get("next_steps", [])
+    menu_path = result.get("menu_path", "")
 
     try:
         abs_path = _write_to_unity(script_content, rel_path)
     except ValueError as exc:
         return json.dumps({"status": "error", "action": action_name, "message": str(exc)})
 
-    return json.dumps({
+    # Attempt auto-execute via bridge if menu_path is provided
+    bridge_result = None
+    if menu_path:
+        bridge_result = await _bridge_recompile_and_execute(menu_path)
+
+    response = {
         "status": "success",
         "action": action_name,
         "script_path": abs_path,
-        "next_steps": next_steps,
         "result_file": "Temp/vb_result.json",
-    }, indent=2)
+    }
+
+    if bridge_result is not None:
+        response["bridge_executed"] = True
+        response["bridge_result"] = bridge_result
+        response["next_steps"] = ["Auto-executed via VBBridge. Check result above."]
+    else:
+        response["bridge_executed"] = False
+        response["next_steps"] = next_steps
+
+    return json.dumps(response, indent=2)
