@@ -11,13 +11,15 @@ Validates all 12 generator functions across 52 style variants:
 from __future__ import annotations
 
 import importlib.util
+from pathlib import Path
 
 import pytest
 
 # Load armor_meshes without triggering blender_addon __init__ (needs bpy)
+_HANDLERS_DIR = Path(__file__).resolve().parent.parent / "blender_addon" / "handlers"
 _spec = importlib.util.spec_from_file_location(
     "armor_meshes",
-    "blender_addon/handlers/armor_meshes.py",
+    str(_HANDLERS_DIR / "armor_meshes.py"),
 )
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)

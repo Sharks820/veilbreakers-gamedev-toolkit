@@ -20,6 +20,7 @@ from veilbreakers_mcp.shared.unity_templates.vfx_templates import (
     generate_post_processing_script,
     generate_screen_effect_script,
     generate_ability_vfx_script,
+    generate_decal_system_script,
 )
 from veilbreakers_mcp.shared.unity_templates.shader_templates import (
     generate_corruption_shader,
@@ -73,6 +74,7 @@ async def unity_vfx(
         "create_deep_environmental_vfx",  # VFX3-06: volumetric fog/god rays/heat distortion/caustics
         "create_directional_hit_vfx",     # VFX3-07: directional combat hit VFX
         "create_boss_transition_vfx",     # VFX3-08: boss phase transition VFX
+        "create_decal_system",               # VFX-11: URP decal projector pool manager
     ],
     # Common params
     name: str = "default",
@@ -141,7 +143,10 @@ async def unity_vfx(
     transition_type: str = "corruption_wave",
     boss_brand: str = "DREAD",
     transition_duration: float = 3.0,
-    arena_radius: float = 20.0
+    arena_radius: float = 20.0,
+    # Decal system params (VFX-11)
+    max_active_decals: int = 50,
+    default_fade_pct: float = 0.2
 ) -> str:
     """Unity VFX system -- VFX particles, shaders, post-processing, screen effects."""
     try:
@@ -236,6 +241,8 @@ async def unity_vfx(
                     duration=transition_duration, arena_radius=arena_radius,
                 ),
             )
+        elif action == "create_decal_system":
+            return await _handle_vfx_decal_system(max_active_decals, default_fade_pct)
         else:
             return json.dumps(
                 {"status": "error", "message": f"Unknown action: {action}"}
@@ -579,3 +586,28 @@ async def _handle_vfx_ability(
     )
 
 
+async def _handle_vfx_decal_system(max_active: int, default_fade_pct: float) -> str:
+    """Create URP decal projector pool manager (VFX-11)."""
+    script = generate_decal_system_script(
+        max_active=max_active, default_fade_pct=default_fade_pct,
+    )
+    script_path = "Assets/Scripts/Runtime/VFX/VB_DecalManager.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "create_decal_system", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "create_decal_system",
+            "script_path": abs_path,
+            "max_active": max_active,
+            "next_steps": STANDARD_NEXT_STEPS,
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )

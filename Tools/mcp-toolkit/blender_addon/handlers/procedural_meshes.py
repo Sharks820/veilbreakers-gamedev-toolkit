@@ -49,12 +49,31 @@ All functions are pure Python with math-only dependencies (no bpy/bmesh).
 from __future__ import annotations
 
 import math
+from functools import lru_cache
 from typing import Any
 
 # ---------------------------------------------------------------------------
 # Mesh result type alias
 # ---------------------------------------------------------------------------
 MeshSpec = dict[str, Any]
+
+# ---------------------------------------------------------------------------
+# Cached trig lookup table
+# ---------------------------------------------------------------------------
+# Many mesh generators call math.cos / math.sin with the same evenly-spaced
+# angles (e.g. 6, 8, 10, 12, 16 segments). Caching the (cos, sin) pairs
+# per segment count eliminates redundant trig calls across hundreds of
+# cylinder, cone, lathe, sphere, and torus constructions.
+
+
+@lru_cache(maxsize=32)
+def _get_trig_table(segments: int) -> tuple[tuple[float, float], ...]:
+    """Return cached (cos, sin) pairs for *segments* evenly-spaced angles."""
+    step = 2.0 * math.pi / segments
+    return tuple(
+        (math.cos(i * step), math.sin(i * step)) for i in range(segments)
+    )
+
 
 # ---------------------------------------------------------------------------
 # Utility helpers
@@ -87,16 +106,35 @@ def _make_result(
 def _compute_dimensions(
     verts: list[tuple[float, float, float]],
 ) -> dict[str, float]:
-    """Return bounding-box width/height/depth from vertex list."""
+    """Return bounding-box width/height/depth from vertex list.
+
+    Single-pass min/max instead of 6 separate passes (3 list comprehensions
+    each calling min + max).
+    """
     if not verts:
         return {"width": 0.0, "height": 0.0, "depth": 0.0}
-    xs = [v[0] for v in verts]
-    ys = [v[1] for v in verts]
-    zs = [v[2] for v in verts]
+    v0 = verts[0]
+    min_x = max_x = v0[0]
+    min_y = max_y = v0[1]
+    min_z = max_z = v0[2]
+    for v in verts:
+        x, y, z = v[0], v[1], v[2]
+        if x < min_x:
+            min_x = x
+        elif x > max_x:
+            max_x = x
+        if y < min_y:
+            min_y = y
+        elif y > max_y:
+            max_y = y
+        if z < min_z:
+            min_z = z
+        elif z > max_z:
+            max_z = z
     return {
-        "width": max(xs) - min(xs),
-        "height": max(ys) - min(ys),
-        "depth": max(zs) - min(zs),
+        "width": max_x - min_x,
+        "height": max_y - min_y,
+        "depth": max_z - min_z,
     }
 
 
@@ -112,16 +150,20 @@ def _circle_points(
 
     axis='y' means the circle lies in the XZ plane at height cy.
     axis='z' means the circle lies in the XY plane at height cz.
+
+    Uses pre-computed trig lookup to avoid redundant sin/cos calls when
+    the same segment count is reused across many invocations.
     """
+    trig = _get_trig_table(segments)
     pts: list[tuple[float, float, float]] = []
-    for i in range(segments):
-        angle = 2.0 * math.pi * i / segments
-        ca, sa = math.cos(angle), math.sin(angle)
-        if axis == "y":
+    if axis == "y":
+        for ca, sa in trig:
             pts.append((cx + ca * radius, cy, cz + sa * radius))
-        elif axis == "z":
+    elif axis == "z":
+        for ca, sa in trig:
             pts.append((cx + ca * radius, cy + sa * radius, cz))
-        else:  # 'x'
+    else:  # 'x'
+        for ca, sa in trig:
             pts.append((cx, cy + ca * radius, cz + sa * radius))
     return pts
 
@@ -170,22 +212,16 @@ def _make_cylinder(
     verts: list[tuple[float, float, float]] = []
     faces: list[tuple[int, ...]] = []
 
+    # Pre-compute trig once and reuse for both rings
+    trig = _get_trig_table(segments)
+    cy_top = cy_bottom + height
+
     # Bottom ring
-    for i in range(segments):
-        angle = 2.0 * math.pi * i / segments
-        verts.append((
-            cx + math.cos(angle) * radius,
-            cy_bottom,
-            cz + math.sin(angle) * radius,
-        ))
+    for ca, sa in trig:
+        verts.append((cx + ca * radius, cy_bottom, cz + sa * radius))
     # Top ring
-    for i in range(segments):
-        angle = 2.0 * math.pi * i / segments
-        verts.append((
-            cx + math.cos(angle) * radius,
-            cy_bottom + height,
-            cz + math.sin(angle) * radius,
-        ))
+    for ca, sa in trig:
+        verts.append((cx + ca * radius, cy_top, cz + sa * radius))
 
     b = base_idx
     # Side faces
@@ -215,14 +251,10 @@ def _make_cone(
     verts: list[tuple[float, float, float]] = []
     faces: list[tuple[int, ...]] = []
 
-    # Base ring
-    for i in range(segments):
-        angle = 2.0 * math.pi * i / segments
-        verts.append((
-            cx + math.cos(angle) * radius,
-            cy_bottom,
-            cz + math.sin(angle) * radius,
-        ))
+    # Base ring (cached trig)
+    trig = _get_trig_table(segments)
+    for ca, sa in trig:
+        verts.append((cx + ca * radius, cy_bottom, cz + sa * radius))
     # Apex
     verts.append((cx, cy_bottom + height, cz))
 

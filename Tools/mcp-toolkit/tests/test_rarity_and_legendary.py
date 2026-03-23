@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import importlib.util
 import math
+from pathlib import Path
 
 import pytest
 
@@ -30,21 +31,18 @@ import pytest
 # Load modules without triggering blender_addon __init__ (needs bpy)
 # ---------------------------------------------------------------------------
 
-def _load_module(name: str, path: str):
-    spec = importlib.util.spec_from_file_location(name, path)
+_HANDLERS_DIR = Path(__file__).resolve().parent.parent / "blender_addon" / "handlers"
+
+
+def _load_module(name: str, filename: str):
+    spec = importlib.util.spec_from_file_location(name, str(_HANDLERS_DIR / filename))
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-_rarity_mod = _load_module(
-    "rarity_system",
-    "blender_addon/handlers/rarity_system.py",
-)
-_legendary_mod = _load_module(
-    "legendary_weapons",
-    "blender_addon/handlers/legendary_weapons.py",
-)
+_rarity_mod = _load_module("rarity_system", "rarity_system.py")
+_legendary_mod = _load_module("legendary_weapons", "legendary_weapons.py")
 
 # Rarity system imports
 RARITY_TIERS = _rarity_mod.RARITY_TIERS

@@ -24,6 +24,9 @@ Exports:
     generate_damage_overlay_shader  -- VFX-07: fullscreen damage overlay
     generate_arbitrary_shader       -- SHDR-01: configurable HLSL/ShaderLab shader
     generate_renderer_feature       -- SHDR-02: URP ScriptableRendererFeature + RenderGraph pass
+    generate_anisotropic_hair_shader -- AAA: Kajiya-Kay anisotropic hair shading
+    generate_terrain_blend_shader    -- AAA: height-based terrain material blending
+    generate_ice_crystal_shader      -- AAA: stylized ice/crystal shader (SURGE/GRACE)
 """
 
 from __future__ import annotations
@@ -134,7 +137,7 @@ def generate_corruption_shader(
             #pragma fragment frag
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile _ _ADDITIONAL_LIGHTS
-            #pragma multi_compile_fog
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -144,6 +147,7 @@ def generate_corruption_shader(
                 float4 positionOS : POSITION;
                 float2 uv : TEXCOORD0;
                 float3 normalOS : NORMAL;
+                float4 tangentOS : TANGENT;
             }};
 
             struct Varyings
@@ -152,6 +156,8 @@ def generate_corruption_shader(
                 float2 uv : TEXCOORD0;
                 float3 positionWS : TEXCOORD1;
                 float3 normalWS : TEXCOORD2;
+                float3 viewDirWS : TEXCOORD3;
+                float4 shadowCoord : TEXCOORD4;
             }};
 
             TEXTURE2D(_MainTex);
@@ -187,10 +193,13 @@ def generate_corruption_shader(
             Varyings vert(Attributes input)
             {{
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                VertexPositionInputs vertexInput = GetVertexPositionInputs(input.positionOS.xyz);
+                output.positionCS = vertexInput.positionCS;
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
-                output.positionWS = TransformObjectToWorld(input.positionOS.xyz);
+                output.positionWS = vertexInput.positionWS;
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                output.viewDirWS = GetWorldSpaceNormalizeViewDir(vertexInput.positionWS);
+                output.shadowCoord = GetShadowCoord(vertexInput);
                 return output;
             }}
 
@@ -210,7 +219,120 @@ def generate_corruption_shader(
                 // Add vein pattern scaled by corruption amount
                 corruptedColor.rgb += veinPattern * _CorruptionAmount * _CorruptionColor.rgb;
 
-                return corruptedColor;
+                // URP Lighting
+                float3 normalWS = normalize(input.normalWS);
+                Light mainLight = GetMainLight(input.shadowCoord);
+                float NdotL = saturate(dot(normalWS, mainLight.direction));
+                half3 diffuse = mainLight.color * NdotL * mainLight.shadowAttenuation * mainLight.distanceAttenuation;
+                half3 ambient = SampleSH(normalWS);
+
+                // Corruption emissive glow from veins
+                half3 emissive = veinPattern * _CorruptionAmount * _CorruptionColor.rgb * 2.0;
+
+                // Specular highlight (Blinn-Phong)
+                float3 halfDir = normalize(mainLight.direction + normalize(input.viewDirWS));
+                float spec = pow(saturate(dot(normalWS, halfDir)), 32.0) * mainLight.shadowAttenuation;
+                half3 specular = mainLight.color * spec * 0.3;
+
+                // Additional lights
+                uint additionalLightCount = GetAdditionalLightsCount();
+                for (uint li = 0u; li < additionalLightCount; li++)
+                {{
+                    Light addLight = GetAdditionalLight(li, input.positionWS);
+                    float addNdotL = saturate(dot(normalWS, addLight.direction));
+                    diffuse += addLight.color * addNdotL * addLight.shadowAttenuation * addLight.distanceAttenuation;
+                }}
+
+                half3 finalColor = corruptedColor.rgb * (diffuse + ambient) + specular + emissive;
+                return half4(finalColor, corruptedColor.a);
+            }}
+            ENDHLSL
+        }}
+
+        // ShadowCaster pass -- objects cast shadows
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode"="ShadowCaster" }}
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowVert
+            #pragma fragment ShadowFrag
+
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            struct ShadowAttributes
+            {{
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+            }};
+
+            struct ShadowVaryings
+            {{
+                float4 positionCS : SV_POSITION;
+            }};
+
+            float3 _LightDirection;
+
+            ShadowVaryings ShadowVert(ShadowAttributes input)
+            {{
+                ShadowVaryings output;
+                float3 posWS = TransformObjectToWorld(input.positionOS.xyz);
+                float3 normWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionCS = TransformWorldToHClip(ApplyShadowBias(posWS, normWS, _LightDirection));
+                #if UNITY_REVERSED_Z
+                output.positionCS.z = min(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #else
+                output.positionCS.z = max(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #endif
+                return output;
+            }}
+
+            half4 ShadowFrag(ShadowVaryings input) : SV_TARGET
+            {{
+                return 0;
+            }}
+            ENDHLSL
+        }}
+
+        // DepthOnly pass for depth prepass
+        Pass
+        {{
+            Name "DepthOnly"
+            Tags {{ "LightMode"="DepthOnly" }}
+            ZWrite On
+            ColorMask R
+
+            HLSLPROGRAM
+            #pragma vertex DepthVert
+            #pragma fragment DepthFrag
+
+            {_URP_CORE_INCLUDE}
+
+            struct DepthAttributes
+            {{
+                float4 positionOS : POSITION;
+            }};
+
+            struct DepthVaryings
+            {{
+                float4 positionCS : SV_POSITION;
+            }};
+
+            DepthVaryings DepthVert(DepthAttributes input)
+            {{
+                DepthVaryings output;
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                return output;
+            }}
+
+            half4 DepthFrag(DepthVaryings input) : SV_TARGET
+            {{
+                return 0;
             }}
             ENDHLSL
         }}
@@ -283,7 +405,7 @@ def generate_dissolve_shader(
             #pragma fragment frag
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile _ _ADDITIONAL_LIGHTS
-            #pragma multi_compile_fog
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -300,6 +422,9 @@ def generate_dissolve_shader(
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float3 normalWS : TEXCOORD1;
+                float3 positionWS : TEXCOORD2;
+                float3 viewDirWS : TEXCOORD3;
+                float4 shadowCoord : TEXCOORD4;
             }};
 
             TEXTURE2D(_MainTex);
@@ -319,9 +444,13 @@ def generate_dissolve_shader(
             Varyings vert(Attributes input)
             {{
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                VertexPositionInputs vertexInput = GetVertexPositionInputs(input.positionOS.xyz);
+                output.positionCS = vertexInput.positionCS;
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionWS = vertexInput.positionWS;
+                output.viewDirWS = GetWorldSpaceNormalizeViewDir(vertexInput.positionWS);
+                output.shadowCoord = GetShadowCoord(vertexInput);
                 return output;
             }}
 
@@ -338,10 +467,96 @@ def generate_dissolve_shader(
                 float edgeFactor = 1.0 - smoothstep(0.0, _EdgeWidth, dissolveThreshold);
                 half3 edgeGlow = _EdgeColor.rgb * edgeFactor * _EdgeEmission;
 
-                half4 finalColor = baseColor;
-                finalColor.rgb += edgeGlow;
+                // URP Lighting
+                float3 normalWS = normalize(input.normalWS);
+                Light mainLight = GetMainLight(input.shadowCoord);
+                float NdotL = saturate(dot(normalWS, mainLight.direction));
+                half3 diffuse = mainLight.color * NdotL * mainLight.shadowAttenuation * mainLight.distanceAttenuation;
+                half3 ambient = SampleSH(normalWS);
 
-                return finalColor;
+                // Specular
+                float3 halfDir = normalize(mainLight.direction + normalize(input.viewDirWS));
+                float spec = pow(saturate(dot(normalWS, halfDir)), 32.0) * mainLight.shadowAttenuation;
+                half3 specular = mainLight.color * spec * 0.2;
+
+                // Additional lights
+                uint additionalLightCount = GetAdditionalLightsCount();
+                for (uint li = 0u; li < additionalLightCount; li++)
+                {{
+                    Light addLight = GetAdditionalLight(li, input.positionWS);
+                    float addNdotL = saturate(dot(normalWS, addLight.direction));
+                    diffuse += addLight.color * addNdotL * addLight.shadowAttenuation * addLight.distanceAttenuation;
+                }}
+
+                half3 finalColor = baseColor.rgb * (diffuse + ambient) + specular + edgeGlow;
+                return half4(finalColor, baseColor.a);
+            }}
+            ENDHLSL
+        }}
+
+        // ShadowCaster pass with dissolve clip
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode"="ShadowCaster" }}
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowVert
+            #pragma fragment ShadowFrag
+
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            TEXTURE2D(_NoiseTex);
+            SAMPLER(sampler_NoiseTex);
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _MainTex_ST;
+                float4 _NoiseTex_ST;
+                float _DissolveAmount;
+                float _EdgeWidth;
+                float4 _EdgeColor;
+                float _EdgeEmission;
+            CBUFFER_END
+
+            struct ShadowAttributes
+            {{
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+                float2 uv : TEXCOORD0;
+            }};
+
+            struct ShadowVaryings
+            {{
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+            }};
+
+            float3 _LightDirection;
+
+            ShadowVaryings ShadowVert(ShadowAttributes input)
+            {{
+                ShadowVaryings output;
+                float3 posWS = TransformObjectToWorld(input.positionOS.xyz);
+                float3 normWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionCS = TransformWorldToHClip(ApplyShadowBias(posWS, normWS, _LightDirection));
+                #if UNITY_REVERSED_Z
+                output.positionCS.z = min(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #else
+                output.positionCS.z = max(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #endif
+                output.uv = input.uv * _NoiseTex_ST.xy + _NoiseTex_ST.zw;
+                return output;
+            }}
+
+            half4 ShadowFrag(ShadowVaryings input) : SV_TARGET
+            {{
+                float noiseVal = SAMPLE_TEXTURE2D(_NoiseTex, sampler_NoiseTex, input.uv).r;
+                clip(noiseVal - _DissolveAmount);
+                return 0;
             }}
             ENDHLSL
         }}
@@ -616,11 +831,26 @@ def generate_water_shader(
                 half3 normal2 = UnpackNormal(SAMPLE_TEXTURE2D(_NormalTex, sampler_NormalTex, uvOffset2));
                 half3 combinedNormal = normalize(normal1 + normal2);
 
-                // Fresnel for edge transparency / refraction approximation
-                float fresnel = pow(1.0 - saturate(dot(input.normalWS, input.viewDirWS)), 4.0);
+                // Perturb world normal with tangent-space normal map
+                float3 normalWS = normalize(input.normalWS + combinedNormal * 0.5);
 
-                // Final water color with Alpha transparency
+                // URP Lighting
+                Light mainLight = GetMainLight();
+                float NdotL = saturate(dot(normalWS, mainLight.direction));
+                half3 diffuse = mainLight.color * NdotL;
+                half3 ambient = SampleSH(normalWS);
+
+                // Water specular highlights (GGX-style sharp reflections)
+                float3 halfDir = normalize(mainLight.direction + normalize(input.viewDirWS));
+                float spec = pow(saturate(dot(normalWS, halfDir)), 128.0);
+                half3 specular = mainLight.color * spec * 1.5;
+
+                // Fresnel for edge transparency / refraction approximation
+                float fresnel = pow(1.0 - saturate(dot(normalWS, normalize(input.viewDirWS))), 4.0);
+
+                // Final water color with lighting
                 half4 col = _WaterColor;
+                col.rgb = col.rgb * (diffuse + ambient) + specular;
                 col.rgb += fresnel * 0.3;
                 col.a = lerp(_Transparency, 1.0, fresnel);
 
@@ -700,7 +930,7 @@ def generate_foliage_shader(
             #pragma fragment frag
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile _ _ADDITIONAL_LIGHTS
-            #pragma multi_compile_fog
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -720,6 +950,7 @@ def generate_foliage_shader(
                 float3 normalWS : TEXCOORD1;
                 float3 positionWS : TEXCOORD2;
                 float3 viewDirWS : TEXCOORD3;
+                float4 shadowCoord : TEXCOORD4;
             }};
 
             TEXTURE2D(_MainTex);
@@ -751,11 +982,13 @@ def generate_foliage_shader(
                 windOffset.z += swayZ;
                 input.positionOS.xyz += mul(unity_WorldToObject, float4(windOffset, 0)).xyz;
 
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                VertexPositionInputs vertexInput = GetVertexPositionInputs(input.positionOS.xyz);
+                output.positionCS = vertexInput.positionCS;
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
-                output.positionWS = TransformObjectToWorld(input.positionOS.xyz);
-                output.viewDirWS = GetWorldSpaceNormalizeViewDir(output.positionWS);
+                output.positionWS = vertexInput.positionWS;
+                output.viewDirWS = GetWorldSpaceNormalizeViewDir(vertexInput.positionWS);
+                output.shadowCoord = GetShadowCoord(vertexInput);
                 return output;
             }}
 
@@ -764,30 +997,111 @@ def generate_foliage_shader(
                 half4 baseColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
                 clip(baseColor.a - _Cutoff);
 
-                // Simple subsurface scattering approximation
-                Light mainLight = GetMainLight();
-                float NdotL = dot(input.normalWS, mainLight.direction);
-                float subsurface = saturate(-NdotL) * _SubsurfaceStrength;
-                half3 sssColor = _SubsurfaceColor.rgb * subsurface * mainLight.color;
+                float3 normalWS = normalize(input.normalWS);
 
-                half3 finalColor = baseColor.rgb + sssColor;
+                // URP main light with shadows
+                Light mainLight = GetMainLight(input.shadowCoord);
+                float NdotL = dot(normalWS, mainLight.direction);
+
+                // Diffuse lighting (wrapped for softer foliage look)
+                float wrappedNdotL = saturate(NdotL * 0.5 + 0.5);
+                half3 diffuse = mainLight.color * wrappedNdotL * mainLight.shadowAttenuation * mainLight.distanceAttenuation;
+                half3 ambient = SampleSH(normalWS);
+
+                // Subsurface scattering approximation (light through leaves)
+                float subsurface = saturate(-NdotL) * _SubsurfaceStrength;
+                half3 sssColor = _SubsurfaceColor.rgb * subsurface * mainLight.color * mainLight.shadowAttenuation;
+
+                // Additional lights
+                uint additionalLightCount = GetAdditionalLightsCount();
+                for (uint li = 0u; li < additionalLightCount; li++)
+                {{
+                    Light addLight = GetAdditionalLight(li, input.positionWS);
+                    float addNdotL = saturate(dot(normalWS, addLight.direction) * 0.5 + 0.5);
+                    diffuse += addLight.color * addNdotL * addLight.shadowAttenuation * addLight.distanceAttenuation;
+                }}
+
+                half3 finalColor = baseColor.rgb * (diffuse + ambient) + sssColor;
                 return half4(finalColor, baseColor.a);
             }}
             ENDHLSL
         }}
 
+        // ShadowCaster pass with alpha clip for foliage
         Pass
         {{
             Name "ShadowCaster"
-            Tags {{ "LightMode" = "ShadowCaster" }}
+            Tags {{ "LightMode"="ShadowCaster" }}
             ZWrite On
+            ZTest LEqual
             ColorMask 0
+            Cull Off
 
             HLSLPROGRAM
-            #pragma vertex ShadowPassVertex
-            #pragma fragment ShadowPassFragment
+            #pragma vertex ShadowVert
+            #pragma fragment ShadowFrag
+
             {_URP_CORE_INCLUDE}
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/ShadowCasterPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            TEXTURE2D(_MainTex);
+            SAMPLER(sampler_MainTex);
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _MainTex_ST;
+                float _WindStrength;
+                float _WindSpeed;
+                float4 _WindDirection;
+                float4 _SubsurfaceColor;
+                float _SubsurfaceStrength;
+                float _Cutoff;
+            CBUFFER_END
+
+            struct ShadowAttributes
+            {{
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+                float2 uv : TEXCOORD0;
+                float4 color : COLOR;
+            }};
+
+            struct ShadowVaryings
+            {{
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+            }};
+
+            float3 _LightDirection;
+
+            ShadowVaryings ShadowVert(ShadowAttributes input)
+            {{
+                ShadowVaryings output;
+                // Apply wind to shadow as well
+                float windWeight = input.color.r;
+                float3 worldPos = TransformObjectToWorld(input.positionOS.xyz);
+                float windPhase = _Time.y * _WindSpeed;
+                float swayX = sin(windPhase + worldPos.x * 0.5) * _WindStrength * windWeight;
+                float3 windOffset = normalize(_WindDirection.xyz) * swayX;
+                input.positionOS.xyz += mul(unity_WorldToObject, float4(windOffset, 0)).xyz;
+
+                float3 posWS = TransformObjectToWorld(input.positionOS.xyz);
+                float3 normWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionCS = TransformWorldToHClip(ApplyShadowBias(posWS, normWS, _LightDirection));
+                #if UNITY_REVERSED_Z
+                output.positionCS.z = min(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #else
+                output.positionCS.z = max(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #endif
+                output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
+                return output;
+            }}
+
+            half4 ShadowFrag(ShadowVaryings input) : SV_TARGET
+            {{
+                half4 tex = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
+                clip(tex.a - _Cutoff);
+                return 0;
+            }}
             ENDHLSL
         }}
     }}
@@ -885,7 +1199,7 @@ def generate_outline_shader(
             ENDHLSL
         }}
 
-        // Pass 2: Normal forward rendering
+        // Pass 2: Normal forward rendering with full URP lighting
         Pass
         {{
             Name "ForwardLit"
@@ -897,7 +1211,7 @@ def generate_outline_shader(
             #pragma fragment frag
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
             #pragma multi_compile _ _ADDITIONAL_LIGHTS
-            #pragma multi_compile_fog
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
 
             {_URP_CORE_INCLUDE}
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
@@ -914,6 +1228,9 @@ def generate_outline_shader(
                 float4 positionCS : SV_POSITION;
                 float2 uv : TEXCOORD0;
                 float3 normalWS : TEXCOORD1;
+                float3 positionWS : TEXCOORD2;
+                float3 viewDirWS : TEXCOORD3;
+                float4 shadowCoord : TEXCOORD4;
             }};
 
             TEXTURE2D(_MainTex);
@@ -929,16 +1246,93 @@ def generate_outline_shader(
             Varyings vert(Attributes input)
             {{
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                VertexPositionInputs vertexInput = GetVertexPositionInputs(input.positionOS.xyz);
+                output.positionCS = vertexInput.positionCS;
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
                 output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionWS = vertexInput.positionWS;
+                output.viewDirWS = GetWorldSpaceNormalizeViewDir(vertexInput.positionWS);
+                output.shadowCoord = GetShadowCoord(vertexInput);
                 return output;
             }}
 
             half4 frag(Varyings input) : SV_Target
             {{
-                half4 baseColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
-                return baseColor * _Color;
+                half4 baseColor = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv) * _Color;
+                float3 normalWS = normalize(input.normalWS);
+
+                // URP main light with shadows
+                Light mainLight = GetMainLight(input.shadowCoord);
+                float NdotL = saturate(dot(normalWS, mainLight.direction));
+                half3 diffuse = mainLight.color * NdotL * mainLight.shadowAttenuation * mainLight.distanceAttenuation;
+                half3 ambient = SampleSH(normalWS);
+
+                // Specular
+                float3 halfDir = normalize(mainLight.direction + normalize(input.viewDirWS));
+                float spec = pow(saturate(dot(normalWS, halfDir)), 64.0) * mainLight.shadowAttenuation;
+                half3 specular = mainLight.color * spec * 0.3;
+
+                // Additional lights
+                uint additionalLightCount = GetAdditionalLightsCount();
+                for (uint li = 0u; li < additionalLightCount; li++)
+                {{
+                    Light addLight = GetAdditionalLight(li, input.positionWS);
+                    float addNdotL = saturate(dot(normalWS, addLight.direction));
+                    diffuse += addLight.color * addNdotL * addLight.shadowAttenuation * addLight.distanceAttenuation;
+                }}
+
+                half3 finalColor = baseColor.rgb * (diffuse + ambient) + specular;
+                return half4(finalColor, baseColor.a);
+            }}
+            ENDHLSL
+        }}
+
+        // ShadowCaster pass
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode"="ShadowCaster" }}
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowVert
+            #pragma fragment ShadowFrag
+
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            struct ShadowAttributes
+            {{
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+            }};
+
+            struct ShadowVaryings
+            {{
+                float4 positionCS : SV_POSITION;
+            }};
+
+            float3 _LightDirection;
+
+            ShadowVaryings ShadowVert(ShadowAttributes input)
+            {{
+                ShadowVaryings output;
+                float3 posWS = TransformObjectToWorld(input.positionOS.xyz);
+                float3 normWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionCS = TransformWorldToHClip(ApplyShadowBias(posWS, normWS, _LightDirection));
+                #if UNITY_REVERSED_Z
+                output.positionCS.z = min(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #else
+                output.positionCS.z = max(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #endif
+                return output;
+            }}
+
+            half4 ShadowFrag(ShadowVaryings input) : SV_TARGET
+            {{
+                return 0;
             }}
             ENDHLSL
         }}
@@ -1588,3 +1982,963 @@ using UnityEngine.Rendering.RenderGraphModule;
 '''
 
     return source
+
+
+# ---------------------------------------------------------------------------
+# AAA: Anisotropic hair shader (Kajiya-Kay)
+# ---------------------------------------------------------------------------
+
+
+def generate_anisotropic_hair_shader(
+    hair_color: tuple[float, float, float, float] = (0.15, 0.1, 0.07, 1.0),
+    specular_shift1: float = 0.1,
+    specular_shift2: float = -0.1,
+) -> str:
+    """Generate Kajiya-Kay anisotropic hair shader for URP.
+
+    Dual-specular model with tangent-based highlights, alpha-to-coverage
+    transparency, backface rendering, and subsurface scattering
+    approximation through thin strands.  Targets FFXVI / God of War quality.
+
+    Args:
+        hair_color: RGBA base hair color.
+        specular_shift1: Tangent shift for primary (narrow, bright) specular.
+        specular_shift2: Tangent shift for secondary (wide, colored) specular.
+
+    Returns:
+        Complete ShaderLab source string.
+    """
+    r, g, b, a = hair_color
+
+    return f'''Shader "VeilBreakers/AnisotropicHair"
+{{
+    Properties
+    {{
+        _MainTex ("Hair Texture", 2D) = "white" {{}}
+        _HairColor ("Hair Color", Color) = ({r}, {g}, {b}, {a})
+        _SpecularColor1 ("Primary Specular Color", Color) = (1, 1, 1, 1)
+        _SpecularColor2 ("Secondary Specular Color", Color) = (0.8, 0.6, 0.4, 1)
+        _SpecularShift1 ("Primary Specular Shift", Float) = {specular_shift1}
+        _SpecularShift2 ("Secondary Specular Shift", Float) = {specular_shift2}
+        _SpecularWidth1 ("Primary Specular Width", Range(1, 256)) = 64
+        _SpecularWidth2 ("Secondary Specular Width", Range(1, 256)) = 16
+        _AlphaCutoff ("Alpha Cutoff", Range(0, 1)) = 0.5
+        _FlowMap ("Flow / Tangent Map", 2D) = "bump" {{}}
+        _SSSStrength ("SSS Strength", Range(0, 1)) = 0.3
+        _SSSColor ("SSS Color", Color) = (0.6, 0.3, 0.15, 1)
+    }}
+
+    SubShader
+    {{
+        Tags {{ "RenderType"="TransparentCutout" "RenderPipeline"="UniversalPipeline" "Queue"="AlphaTest" }}
+        LOD 300
+        Cull Off
+        AlphaToMask On
+
+        Pass
+        {{
+            Name "ForwardLit"
+            Tags {{ "LightMode"="UniversalForward" }}
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
+
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+
+            struct Attributes
+            {{
+                float4 positionOS : POSITION;
+                float2 uv : TEXCOORD0;
+                float3 normalOS : NORMAL;
+                float4 tangentOS : TANGENT;
+            }};
+
+            struct Varyings
+            {{
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float3 positionWS : TEXCOORD1;
+                float3 normalWS : TEXCOORD2;
+                float3 tangentWS : TEXCOORD3;
+                float3 bitangentWS : TEXCOORD4;
+                float3 viewDirWS : TEXCOORD5;
+                float4 shadowCoord : TEXCOORD6;
+            }};
+
+            TEXTURE2D(_MainTex);
+            SAMPLER(sampler_MainTex);
+            TEXTURE2D(_FlowMap);
+            SAMPLER(sampler_FlowMap);
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _MainTex_ST;
+                float4 _HairColor;
+                float4 _SpecularColor1;
+                float4 _SpecularColor2;
+                float _SpecularShift1;
+                float _SpecularShift2;
+                float _SpecularWidth1;
+                float _SpecularWidth2;
+                float _AlphaCutoff;
+                float4 _FlowMap_ST;
+                float _SSSStrength;
+                float4 _SSSColor;
+            CBUFFER_END
+
+            // Kajiya-Kay specular term along tangent direction
+            float KajiyaKaySpecular(float3 T, float3 H, float exponent)
+            {{
+                float TdotH = dot(T, H);
+                float sinTH = sqrt(1.0 - TdotH * TdotH);
+                return pow(saturate(sinTH), exponent);
+            }}
+
+            Varyings vert(Attributes input)
+            {{
+                Varyings output;
+                VertexPositionInputs vertexInput = GetVertexPositionInputs(input.positionOS.xyz);
+                output.positionCS = vertexInput.positionCS;
+                output.uv = TRANSFORM_TEX(input.uv, _MainTex);
+                output.positionWS = vertexInput.positionWS;
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                float3 tangentWS = TransformObjectToWorldDir(input.tangentOS.xyz);
+                output.tangentWS = normalize(tangentWS);
+                output.bitangentWS = normalize(cross(output.normalWS, tangentWS) * input.tangentOS.w);
+                output.viewDirWS = GetWorldSpaceNormalizeViewDir(vertexInput.positionWS);
+                output.shadowCoord = GetShadowCoord(vertexInput);
+                return output;
+            }}
+
+            half4 frag(Varyings input, half facing : VFACE) : SV_Target
+            {{
+                // Sample hair texture
+                half4 hairTex = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
+                half4 baseColor = hairTex * _HairColor;
+
+                // Alpha-to-coverage clip
+                clip(hairTex.a - _AlphaCutoff);
+
+                // Flip normal for backface rendering
+                float3 normalWS = normalize(input.normalWS) * (facing > 0 ? 1.0 : -1.0);
+
+                // Sample flow map to modulate tangent direction
+                half3 flowSample = SAMPLE_TEXTURE2D(_FlowMap, sampler_FlowMap, input.uv).xyz * 2.0 - 1.0;
+                float3 T = normalize(input.tangentWS + flowSample.x * input.bitangentWS * 0.5);
+
+                // URP main light
+                Light mainLight = GetMainLight(input.shadowCoord);
+                float3 L = mainLight.direction;
+                float3 V = normalize(input.viewDirWS);
+                float3 H = normalize(L + V);
+                float NdotL = saturate(dot(normalWS, L));
+
+                // Dual Kajiya-Kay specular highlights
+                float3 T1 = normalize(T + normalWS * _SpecularShift1);
+                float3 T2 = normalize(T + normalWS * _SpecularShift2);
+
+                float spec1 = KajiyaKaySpecular(T1, H, _SpecularWidth1);
+                float spec2 = KajiyaKaySpecular(T2, H, _SpecularWidth2);
+
+                half3 specular1 = _SpecularColor1.rgb * spec1;
+                half3 specular2 = _SpecularColor2.rgb * spec2;
+
+                // Diffuse lighting
+                half3 diffuse = mainLight.color * NdotL * mainLight.shadowAttenuation * mainLight.distanceAttenuation;
+                half3 ambient = SampleSH(normalWS);
+
+                // Subsurface scattering approximation through thin strands
+                float sssNdotL = saturate(-dot(normalWS, L) * 0.5 + 0.5);
+                half3 sss = _SSSColor.rgb * sssNdotL * _SSSStrength * mainLight.color * mainLight.shadowAttenuation;
+
+                // Additional lights
+                uint additionalLightCount = GetAdditionalLightsCount();
+                for (uint li = 0u; li < additionalLightCount; li++)
+                {{
+                    Light addLight = GetAdditionalLight(li, input.positionWS);
+                    float addNdotL = saturate(dot(normalWS, addLight.direction));
+                    diffuse += addLight.color * addNdotL * addLight.shadowAttenuation * addLight.distanceAttenuation;
+
+                    // Additional light specular
+                    float3 addH = normalize(addLight.direction + V);
+                    float addSpec1 = KajiyaKaySpecular(T1, addH, _SpecularWidth1);
+                    specular1 += _SpecularColor1.rgb * addSpec1 * addLight.color * addLight.shadowAttenuation * addLight.distanceAttenuation;
+                }}
+
+                half3 totalSpecular = (specular1 + specular2) * mainLight.shadowAttenuation;
+                half3 finalColor = baseColor.rgb * (diffuse + ambient) + totalSpecular + sss;
+                return half4(finalColor, hairTex.a);
+            }}
+            ENDHLSL
+        }}
+
+        // ShadowCaster pass with alpha clip for hair strands
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode"="ShadowCaster" }}
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+            Cull Off
+
+            HLSLPROGRAM
+            #pragma vertex ShadowVert
+            #pragma fragment ShadowFrag
+
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            TEXTURE2D(_MainTex);
+            SAMPLER(sampler_MainTex);
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _MainTex_ST;
+                float4 _HairColor;
+                float4 _SpecularColor1;
+                float4 _SpecularColor2;
+                float _SpecularShift1;
+                float _SpecularShift2;
+                float _SpecularWidth1;
+                float _SpecularWidth2;
+                float _AlphaCutoff;
+                float4 _FlowMap_ST;
+                float _SSSStrength;
+                float4 _SSSColor;
+            CBUFFER_END
+
+            struct ShadowAttributes
+            {{
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+                float2 uv : TEXCOORD0;
+            }};
+
+            struct ShadowVaryings
+            {{
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+            }};
+
+            float3 _LightDirection;
+
+            ShadowVaryings ShadowVert(ShadowAttributes input)
+            {{
+                ShadowVaryings output;
+                float3 posWS = TransformObjectToWorld(input.positionOS.xyz);
+                float3 normWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionCS = TransformWorldToHClip(ApplyShadowBias(posWS, normWS, _LightDirection));
+                #if UNITY_REVERSED_Z
+                output.positionCS.z = min(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #else
+                output.positionCS.z = max(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #endif
+                output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
+                return output;
+            }}
+
+            half4 ShadowFrag(ShadowVaryings input) : SV_TARGET
+            {{
+                half alpha = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv).a;
+                clip(alpha - _AlphaCutoff);
+                return 0;
+            }}
+            ENDHLSL
+        }}
+
+        // DepthOnly pass for depth prepass
+        Pass
+        {{
+            Name "DepthOnly"
+            Tags {{ "LightMode"="DepthOnly" }}
+            ZWrite On
+            ColorMask R
+            Cull Off
+
+            HLSLPROGRAM
+            #pragma vertex DepthVert
+            #pragma fragment DepthFrag
+
+            {_URP_CORE_INCLUDE}
+
+            TEXTURE2D(_MainTex);
+            SAMPLER(sampler_MainTex);
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _MainTex_ST;
+                float4 _HairColor;
+                float4 _SpecularColor1;
+                float4 _SpecularColor2;
+                float _SpecularShift1;
+                float _SpecularShift2;
+                float _SpecularWidth1;
+                float _SpecularWidth2;
+                float _AlphaCutoff;
+                float4 _FlowMap_ST;
+                float _SSSStrength;
+                float4 _SSSColor;
+            CBUFFER_END
+
+            struct DepthAttributes
+            {{
+                float4 positionOS : POSITION;
+                float2 uv : TEXCOORD0;
+            }};
+
+            struct DepthVaryings
+            {{
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+            }};
+
+            DepthVaryings DepthVert(DepthAttributes input)
+            {{
+                DepthVaryings output;
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                output.uv = input.uv * _MainTex_ST.xy + _MainTex_ST.zw;
+                return output;
+            }}
+
+            half4 DepthFrag(DepthVaryings input) : SV_TARGET
+            {{
+                half alpha = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv).a;
+                clip(alpha - _AlphaCutoff);
+                return 0;
+            }}
+            ENDHLSL
+        }}
+    }}
+
+    FallBack "Universal Render Pipeline/Lit"
+}}
+'''
+
+
+# ---------------------------------------------------------------------------
+# AAA: Terrain blend shader (height-based multi-material)
+# ---------------------------------------------------------------------------
+
+
+def generate_terrain_blend_shader(
+    blend_sharpness: float = 8.0,
+    triplanar_enabled: bool = False,
+) -> str:
+    """Generate height-based terrain material blending shader for URP.
+
+    Supports 4 terrain layers controlled by an RGBA splat map, with
+    height-map-based transitions for realistic material blending (rocks
+    peek through snow, grass fills dirt cracks).  Optional triplanar
+    projection for cliff faces.  Targets Horizon / Elden Ring quality.
+
+    Args:
+        blend_sharpness: Controls how sharp transitions are between materials.
+        triplanar_enabled: Enable triplanar projection for cliff faces.
+
+    Returns:
+        Complete ShaderLab source string.
+    """
+    triplanar_flag = "1" if triplanar_enabled else "0"
+
+    return f'''Shader "VeilBreakers/TerrainBlend"
+{{
+    Properties
+    {{
+        _SplatMap ("Splat Map (RGBA)", 2D) = "white" {{}}
+
+        _Layer0Tex ("Layer 0 Albedo", 2D) = "white" {{}}
+        _Layer0Normal ("Layer 0 Normal", 2D) = "bump" {{}}
+        _Layer0Height ("Layer 0 Height", 2D) = "gray" {{}}
+        _Layer0Tiling ("Layer 0 Tiling", Float) = 10
+        _Layer0Metallic ("Layer 0 Metallic", Range(0, 1)) = 0
+        _Layer0Roughness ("Layer 0 Roughness", Range(0, 1)) = 0.8
+
+        _Layer1Tex ("Layer 1 Albedo", 2D) = "white" {{}}
+        _Layer1Normal ("Layer 1 Normal", 2D) = "bump" {{}}
+        _Layer1Height ("Layer 1 Height", 2D) = "gray" {{}}
+        _Layer1Tiling ("Layer 1 Tiling", Float) = 10
+        _Layer1Metallic ("Layer 1 Metallic", Range(0, 1)) = 0
+        _Layer1Roughness ("Layer 1 Roughness", Range(0, 1)) = 0.8
+
+        _Layer2Tex ("Layer 2 Albedo", 2D) = "white" {{}}
+        _Layer2Normal ("Layer 2 Normal", 2D) = "bump" {{}}
+        _Layer2Height ("Layer 2 Height", 2D) = "gray" {{}}
+        _Layer2Tiling ("Layer 2 Tiling", Float) = 10
+        _Layer2Metallic ("Layer 2 Metallic", Range(0, 1)) = 0
+        _Layer2Roughness ("Layer 2 Roughness", Range(0, 1)) = 0.8
+
+        _Layer3Tex ("Layer 3 Albedo", 2D) = "white" {{}}
+        _Layer3Normal ("Layer 3 Normal", 2D) = "bump" {{}}
+        _Layer3Height ("Layer 3 Height", 2D) = "gray" {{}}
+        _Layer3Tiling ("Layer 3 Tiling", Float) = 10
+        _Layer3Metallic ("Layer 3 Metallic", Range(0, 1)) = 0
+        _Layer3Roughness ("Layer 3 Roughness", Range(0, 1)) = 0.8
+
+        _BlendSharpness ("Blend Sharpness", Range(1, 32)) = {blend_sharpness}
+        _TriplanarEnabled ("Triplanar Enabled", Float) = {triplanar_flag}
+        _TriplanarSharpness ("Triplanar Sharpness", Float) = 4.0
+    }}
+
+    SubShader
+    {{
+        Tags {{ "RenderType"="Opaque" "RenderPipeline"="UniversalPipeline" "Queue"="Geometry-100" }}
+        LOD 300
+
+        Pass
+        {{
+            Name "ForwardLit"
+            Tags {{ "LightMode"="UniversalForward" }}
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
+
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+
+            struct Attributes
+            {{
+                float4 positionOS : POSITION;
+                float2 uv : TEXCOORD0;
+                float3 normalOS : NORMAL;
+                float4 tangentOS : TANGENT;
+            }};
+
+            struct Varyings
+            {{
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float3 positionWS : TEXCOORD1;
+                float3 normalWS : TEXCOORD2;
+                float3 tangentWS : TEXCOORD3;
+                float3 bitangentWS : TEXCOORD4;
+                float3 viewDirWS : TEXCOORD5;
+                float4 shadowCoord : TEXCOORD6;
+            }};
+
+            // Splat map
+            TEXTURE2D(_SplatMap);
+            SAMPLER(sampler_SplatMap);
+
+            // Layer textures
+            TEXTURE2D(_Layer0Tex); SAMPLER(sampler_Layer0Tex);
+            TEXTURE2D(_Layer0Normal); SAMPLER(sampler_Layer0Normal);
+            TEXTURE2D(_Layer0Height); SAMPLER(sampler_Layer0Height);
+
+            TEXTURE2D(_Layer1Tex); SAMPLER(sampler_Layer1Tex);
+            TEXTURE2D(_Layer1Normal); SAMPLER(sampler_Layer1Normal);
+            TEXTURE2D(_Layer1Height); SAMPLER(sampler_Layer1Height);
+
+            TEXTURE2D(_Layer2Tex); SAMPLER(sampler_Layer2Tex);
+            TEXTURE2D(_Layer2Normal); SAMPLER(sampler_Layer2Normal);
+            TEXTURE2D(_Layer2Height); SAMPLER(sampler_Layer2Height);
+
+            TEXTURE2D(_Layer3Tex); SAMPLER(sampler_Layer3Tex);
+            TEXTURE2D(_Layer3Normal); SAMPLER(sampler_Layer3Normal);
+            TEXTURE2D(_Layer3Height); SAMPLER(sampler_Layer3Height);
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _SplatMap_ST;
+                float _Layer0Tiling; float _Layer0Metallic; float _Layer0Roughness;
+                float _Layer1Tiling; float _Layer1Metallic; float _Layer1Roughness;
+                float _Layer2Tiling; float _Layer2Metallic; float _Layer2Roughness;
+                float _Layer3Tiling; float _Layer3Metallic; float _Layer3Roughness;
+                float _BlendSharpness;
+                float _TriplanarEnabled;
+                float _TriplanarSharpness;
+            CBUFFER_END
+
+            // Height-based blending: weights biased by height for realistic transitions
+            float4 HeightBlend(float4 splatWeights, float h0, float h1, float h2, float h3, float sharpness)
+            {{
+                float4 heights = float4(h0, h1, h2, h3) * splatWeights;
+                float maxHeight = max(max(heights.x, heights.y), max(heights.z, heights.w));
+                float4 diff = heights - (maxHeight - 1.0 / sharpness);
+                float4 blended = max(diff, 0.0) * splatWeights;
+                float total = dot(blended, float4(1, 1, 1, 1));
+                return total > 0.001 ? blended / total : splatWeights;
+            }}
+
+            // UDN normal blending for multi-layer normal combination
+            float3 BlendNormalsUDN(float3 n1, float3 n2)
+            {{
+                return normalize(float3(n1.xy + n2.xy, n1.z));
+            }}
+
+            // Triplanar sampling helper
+            half4 TriplanarSample(TEXTURE2D_PARAM(tex, samp), float3 posWS, float3 blendAxes, float tiling)
+            {{
+                half4 xProj = SAMPLE_TEXTURE2D(tex, samp, posWS.yz * tiling);
+                half4 yProj = SAMPLE_TEXTURE2D(tex, samp, posWS.xz * tiling);
+                half4 zProj = SAMPLE_TEXTURE2D(tex, samp, posWS.xy * tiling);
+                return xProj * blendAxes.x + yProj * blendAxes.y + zProj * blendAxes.z;
+            }}
+
+            Varyings vert(Attributes input)
+            {{
+                Varyings output;
+                VertexPositionInputs vertexInput = GetVertexPositionInputs(input.positionOS.xyz);
+                output.positionCS = vertexInput.positionCS;
+                output.uv = TRANSFORM_TEX(input.uv, _SplatMap);
+                output.positionWS = vertexInput.positionWS;
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                float3 tangentWS = TransformObjectToWorldDir(input.tangentOS.xyz);
+                output.tangentWS = normalize(tangentWS);
+                output.bitangentWS = normalize(cross(output.normalWS, tangentWS) * input.tangentOS.w);
+                output.viewDirWS = GetWorldSpaceNormalizeViewDir(vertexInput.positionWS);
+                output.shadowCoord = GetShadowCoord(vertexInput);
+                return output;
+            }}
+
+            half4 frag(Varyings input) : SV_Target
+            {{
+                // Sample splat map weights
+                float4 splat = SAMPLE_TEXTURE2D(_SplatMap, sampler_SplatMap, input.uv);
+
+                float3 normalWS = normalize(input.normalWS);
+                float3 absNormal = abs(normalWS);
+
+                // Triplanar blend axes (for cliff faces)
+                float3 triBlend = pow(absNormal, _TriplanarSharpness);
+                triBlend /= dot(triBlend, float3(1, 1, 1));
+
+                // Sample each layer -- use triplanar on steep surfaces if enabled
+                float steepness = 1.0 - absNormal.y;
+                bool useTriplanar = _TriplanarEnabled > 0.5 && steepness > 0.5;
+
+                // Layer 0
+                float2 uv0 = input.uv * _Layer0Tiling;
+                half4 albedo0 = useTriplanar ? TriplanarSample(TEXTURE2D_ARGS(_Layer0Tex, sampler_Layer0Tex), input.positionWS, triBlend, _Layer0Tiling) : SAMPLE_TEXTURE2D(_Layer0Tex, sampler_Layer0Tex, uv0);
+                half3 normal0 = UnpackNormal(SAMPLE_TEXTURE2D(_Layer0Normal, sampler_Layer0Normal, uv0));
+                float height0 = SAMPLE_TEXTURE2D(_Layer0Height, sampler_Layer0Height, uv0).r;
+
+                // Layer 1
+                float2 uv1 = input.uv * _Layer1Tiling;
+                half4 albedo1 = useTriplanar ? TriplanarSample(TEXTURE2D_ARGS(_Layer1Tex, sampler_Layer1Tex), input.positionWS, triBlend, _Layer1Tiling) : SAMPLE_TEXTURE2D(_Layer1Tex, sampler_Layer1Tex, uv1);
+                half3 normal1 = UnpackNormal(SAMPLE_TEXTURE2D(_Layer1Normal, sampler_Layer1Normal, uv1));
+                float height1 = SAMPLE_TEXTURE2D(_Layer1Height, sampler_Layer1Height, uv1).r;
+
+                // Layer 2
+                float2 uv2 = input.uv * _Layer2Tiling;
+                half4 albedo2 = useTriplanar ? TriplanarSample(TEXTURE2D_ARGS(_Layer2Tex, sampler_Layer2Tex), input.positionWS, triBlend, _Layer2Tiling) : SAMPLE_TEXTURE2D(_Layer2Tex, sampler_Layer2Tex, uv2);
+                half3 normal2 = UnpackNormal(SAMPLE_TEXTURE2D(_Layer2Normal, sampler_Layer2Normal, uv2));
+                float height2 = SAMPLE_TEXTURE2D(_Layer2Height, sampler_Layer2Height, uv2).r;
+
+                // Layer 3
+                float2 uv3 = input.uv * _Layer3Tiling;
+                half4 albedo3 = useTriplanar ? TriplanarSample(TEXTURE2D_ARGS(_Layer3Tex, sampler_Layer3Tex), input.positionWS, triBlend, _Layer3Tiling) : SAMPLE_TEXTURE2D(_Layer3Tex, sampler_Layer3Tex, uv3);
+                half3 normal3 = UnpackNormal(SAMPLE_TEXTURE2D(_Layer3Normal, sampler_Layer3Normal, uv3));
+                float height3 = SAMPLE_TEXTURE2D(_Layer3Height, sampler_Layer3Height, uv3).r;
+
+                // Height-based blend weights
+                float4 blendWeights = HeightBlend(splat, height0, height1, height2, height3, _BlendSharpness);
+
+                // Blend albedo
+                half3 finalAlbedo = albedo0.rgb * blendWeights.x + albedo1.rgb * blendWeights.y
+                                  + albedo2.rgb * blendWeights.z + albedo3.rgb * blendWeights.w;
+
+                // Blend normals using UDN method
+                half3 blendedNormal = normalize(
+                    normal0 * blendWeights.x + normal1 * blendWeights.y
+                  + normal2 * blendWeights.z + normal3 * blendWeights.w
+                );
+
+                // Transform blended normal from tangent to world space
+                float3x3 TBN = float3x3(normalize(input.tangentWS), normalize(input.bitangentWS), normalWS);
+                float3 finalNormalWS = normalize(mul(blendedNormal, TBN));
+
+                // Blend metallic and roughness
+                float finalMetallic = _Layer0Metallic * blendWeights.x + _Layer1Metallic * blendWeights.y
+                                    + _Layer2Metallic * blendWeights.z + _Layer3Metallic * blendWeights.w;
+                float finalRoughness = _Layer0Roughness * blendWeights.x + _Layer1Roughness * blendWeights.y
+                                     + _Layer2Roughness * blendWeights.z + _Layer3Roughness * blendWeights.w;
+
+                // URP Lighting
+                Light mainLight = GetMainLight(input.shadowCoord);
+                float NdotL = saturate(dot(finalNormalWS, mainLight.direction));
+                half3 diffuse = mainLight.color * NdotL * mainLight.shadowAttenuation * mainLight.distanceAttenuation;
+                half3 ambient = SampleSH(finalNormalWS);
+
+                // GGX-style specular
+                float3 V = normalize(input.viewDirWS);
+                float3 H = normalize(mainLight.direction + V);
+                float NdotH = saturate(dot(finalNormalWS, H));
+                float roughness2 = finalRoughness * finalRoughness;
+                float d = NdotH * NdotH * (roughness2 - 1.0) + 1.0;
+                float ggx = roughness2 / (3.14159 * d * d + 0.0001);
+                half3 specular = mainLight.color * ggx * finalMetallic * mainLight.shadowAttenuation;
+
+                // Additional lights
+                uint additionalLightCount = GetAdditionalLightsCount();
+                for (uint li = 0u; li < additionalLightCount; li++)
+                {{
+                    Light addLight = GetAdditionalLight(li, input.positionWS);
+                    float addNdotL = saturate(dot(finalNormalWS, addLight.direction));
+                    diffuse += addLight.color * addNdotL * addLight.shadowAttenuation * addLight.distanceAttenuation;
+                }}
+
+                half3 finalColor = finalAlbedo * (diffuse + ambient) + specular;
+                return half4(finalColor, 1.0);
+            }}
+            ENDHLSL
+        }}
+
+        // ShadowCaster pass
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode"="ShadowCaster" }}
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowVert
+            #pragma fragment ShadowFrag
+
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            struct ShadowAttributes
+            {{
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+            }};
+
+            struct ShadowVaryings
+            {{
+                float4 positionCS : SV_POSITION;
+            }};
+
+            float3 _LightDirection;
+
+            ShadowVaryings ShadowVert(ShadowAttributes input)
+            {{
+                ShadowVaryings output;
+                float3 posWS = TransformObjectToWorld(input.positionOS.xyz);
+                float3 normWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionCS = TransformWorldToHClip(ApplyShadowBias(posWS, normWS, _LightDirection));
+                #if UNITY_REVERSED_Z
+                output.positionCS.z = min(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #else
+                output.positionCS.z = max(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #endif
+                return output;
+            }}
+
+            half4 ShadowFrag(ShadowVaryings input) : SV_TARGET
+            {{
+                return 0;
+            }}
+            ENDHLSL
+        }}
+
+        // DepthOnly pass for depth prepass
+        Pass
+        {{
+            Name "DepthOnly"
+            Tags {{ "LightMode"="DepthOnly" }}
+            ZWrite On
+            ColorMask R
+
+            HLSLPROGRAM
+            #pragma vertex DepthVert
+            #pragma fragment DepthFrag
+
+            {_URP_CORE_INCLUDE}
+
+            struct DepthAttributes
+            {{
+                float4 positionOS : POSITION;
+            }};
+
+            struct DepthVaryings
+            {{
+                float4 positionCS : SV_POSITION;
+            }};
+
+            DepthVaryings DepthVert(DepthAttributes input)
+            {{
+                DepthVaryings output;
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                return output;
+            }}
+
+            half4 DepthFrag(DepthVaryings input) : SV_TARGET
+            {{
+                return 0;
+            }}
+            ENDHLSL
+        }}
+    }}
+
+    FallBack "Universal Render Pipeline/Lit"
+}}
+'''
+
+
+# ---------------------------------------------------------------------------
+# AAA: Ice / crystal shader (SURGE / GRACE brands)
+# ---------------------------------------------------------------------------
+
+
+def generate_ice_crystal_shader(
+    ice_color: tuple[float, float, float, float] = (0.6, 0.85, 1.0, 0.8),
+    crystal_tint: tuple[float, float, float, float] = (0.3, 0.5, 0.9, 1.0),
+    refraction_strength: float = 0.05,
+) -> str:
+    """Generate stylized ice/crystal shader for dark fantasy URP.
+
+    Features fresnel edge highlights, fake interior refraction via
+    screen-space UV offset, animated internal noise patterns, sub-surface
+    scattering through ice thickness, depth-based color absorption, and
+    sparkle highlights.  Designed for SURGE / GRACE brand visuals.
+
+    Args:
+        ice_color: RGBA base ice color.
+        crystal_tint: RGBA deep crystal tint for absorption.
+        refraction_strength: Intensity of screen-space refraction offset.
+
+    Returns:
+        Complete ShaderLab source string.
+    """
+    ir, ig, ib, ia = ice_color
+    cr, cg, cb, ca = crystal_tint
+
+    return f'''Shader "VeilBreakers/IceCrystal"
+{{
+    Properties
+    {{
+        _IceColor ("Ice Color", Color) = ({ir}, {ig}, {ib}, {ia})
+        _CrystalColor ("Crystal Tint", Color) = ({cr}, {cg}, {cb}, {ca})
+        _Refraction ("Refraction Strength", Range(0, 0.2)) = {refraction_strength}
+        _Thickness ("Thickness", Range(0, 2)) = 0.5
+        _InternalNoiseTex ("Internal Noise", 2D) = "white" {{}}
+        _FresnelPower ("Fresnel Power", Float) = 3.0
+        _FresnelColor ("Fresnel Color", Color) = (0.8, 0.95, 1.0, 1.0)
+        _NoiseSpeed ("Internal Noise Speed", Float) = 0.3
+        _NoiseScale ("Internal Noise Scale", Float) = 2.0
+        _SparkleThreshold ("Sparkle Threshold", Range(0.9, 1.0)) = 0.97
+        _SparkleIntensity ("Sparkle Intensity", Float) = 3.0
+        _AbsorptionDensity ("Absorption Density", Float) = 1.5
+        _SSSStrength ("SSS Strength", Range(0, 1)) = 0.4
+        _SSSColor ("SSS Color", Color) = (0.4, 0.7, 1.0, 1)
+    }}
+
+    SubShader
+    {{
+        Tags {{ "RenderType"="Transparent" "RenderPipeline"="UniversalPipeline" "Queue"="Transparent" }}
+        LOD 300
+        Blend SrcAlpha OneMinusSrcAlpha
+        ZWrite Off
+        Cull Back
+
+        Pass
+        {{
+            Name "ForwardLit"
+            Tags {{ "LightMode"="UniversalForward" }}
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE
+            #pragma multi_compile _ _ADDITIONAL_LIGHTS
+            #pragma multi_compile_fragment _ _SHADOWS_SOFT
+
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
+
+            struct Attributes
+            {{
+                float4 positionOS : POSITION;
+                float2 uv : TEXCOORD0;
+                float3 normalOS : NORMAL;
+                float4 tangentOS : TANGENT;
+            }};
+
+            struct Varyings
+            {{
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float3 positionWS : TEXCOORD1;
+                float3 normalWS : TEXCOORD2;
+                float3 viewDirWS : TEXCOORD3;
+                float4 shadowCoord : TEXCOORD4;
+                float4 screenPos : TEXCOORD5;
+            }};
+
+            TEXTURE2D(_InternalNoiseTex);
+            SAMPLER(sampler_InternalNoiseTex);
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _IceColor;
+                float4 _CrystalColor;
+                float _Refraction;
+                float _Thickness;
+                float4 _InternalNoiseTex_ST;
+                float _FresnelPower;
+                float4 _FresnelColor;
+                float _NoiseSpeed;
+                float _NoiseScale;
+                float _SparkleThreshold;
+                float _SparkleIntensity;
+                float _AbsorptionDensity;
+                float _SSSStrength;
+                float4 _SSSColor;
+            CBUFFER_END
+
+            // Simple hash for sparkle
+            float hash21(float2 p)
+            {{
+                return frac(sin(dot(p, float2(127.1, 311.7))) * 43758.5453);
+            }}
+
+            Varyings vert(Attributes input)
+            {{
+                Varyings output;
+                VertexPositionInputs vertexInput = GetVertexPositionInputs(input.positionOS.xyz);
+                output.positionCS = vertexInput.positionCS;
+                output.uv = TRANSFORM_TEX(input.uv, _InternalNoiseTex);
+                output.positionWS = vertexInput.positionWS;
+                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
+                output.viewDirWS = GetWorldSpaceNormalizeViewDir(vertexInput.positionWS);
+                output.shadowCoord = GetShadowCoord(vertexInput);
+                output.screenPos = ComputeScreenPos(output.positionCS);
+                return output;
+            }}
+
+            half4 frag(Varyings input) : SV_Target
+            {{
+                float3 normalWS = normalize(input.normalWS);
+                float3 V = normalize(input.viewDirWS);
+
+                // Fresnel edge highlight (bright rim like real ice)
+                float fresnel = pow(1.0 - saturate(dot(normalWS, V)), _FresnelPower);
+                half3 fresnelColor = _FresnelColor.rgb * fresnel;
+
+                // Screen-space UV for fake interior refraction
+                float2 screenUV = input.screenPos.xy / input.screenPos.w;
+                float2 refractionOffset = normalWS.xy * _Refraction;
+                float2 refractedUV = screenUV + refractionOffset;
+
+                // Depth-based color absorption (deeper = darker blue)
+                float sceneDepth = LinearEyeDepth(SampleSceneDepth(screenUV), _ZBufferParams);
+                float fragDepth = input.screenPos.w;
+                float depthDiff = max(sceneDepth - fragDepth, 0.0);
+                float absorption = 1.0 - exp(-depthDiff * _AbsorptionDensity);
+                half3 absorbedColor = lerp(_IceColor.rgb, _CrystalColor.rgb, absorption);
+
+                // Animated internal noise pattern
+                float2 noiseUV1 = input.uv * _NoiseScale + _Time.y * _NoiseSpeed * float2(0.3, 0.7);
+                float2 noiseUV2 = input.uv * _NoiseScale * 1.3 - _Time.y * _NoiseSpeed * float2(0.5, 0.2);
+                float noise1 = SAMPLE_TEXTURE2D(_InternalNoiseTex, sampler_InternalNoiseTex, noiseUV1).r;
+                float noise2 = SAMPLE_TEXTURE2D(_InternalNoiseTex, sampler_InternalNoiseTex, noiseUV2).r;
+                float internalPattern = (noise1 + noise2) * 0.5;
+                half3 internalColor = lerp(absorbedColor, _CrystalColor.rgb * 1.2, internalPattern * 0.3);
+
+                // Sub-surface scattering through ice thickness
+                Light mainLight = GetMainLight(input.shadowCoord);
+                float3 L = mainLight.direction;
+                float sssNdotL = saturate(-dot(normalWS, L) * 0.5 + 0.5);
+                float sssFactor = sssNdotL * _SSSStrength * _Thickness;
+                half3 sss = _SSSColor.rgb * sssFactor * mainLight.color;
+
+                // Sparkle highlights (screen-space noise threshold)
+                float2 sparkleUV = screenUV * 500.0 + _Time.y * 2.0;
+                float sparkle = hash21(floor(sparkleUV));
+                float sparkleActive = step(_SparkleThreshold, sparkle) * _SparkleIntensity;
+                // Only sparkle on surfaces facing the light
+                float NdotL = saturate(dot(normalWS, L));
+                sparkleActive *= NdotL;
+
+                // URP Diffuse lighting
+                half3 diffuse = mainLight.color * NdotL * mainLight.shadowAttenuation * mainLight.distanceAttenuation;
+                half3 ambient = SampleSH(normalWS);
+
+                // Specular (sharp reflections for ice)
+                float3 H = normalize(L + V);
+                float spec = pow(saturate(dot(normalWS, H)), 128.0) * mainLight.shadowAttenuation;
+                half3 specular = mainLight.color * spec * 0.8;
+
+                // Additional lights
+                uint additionalLightCount = GetAdditionalLightsCount();
+                for (uint li = 0u; li < additionalLightCount; li++)
+                {{
+                    Light addLight = GetAdditionalLight(li, input.positionWS);
+                    float addNdotL = saturate(dot(normalWS, addLight.direction));
+                    diffuse += addLight.color * addNdotL * addLight.shadowAttenuation * addLight.distanceAttenuation;
+                }}
+
+                // Compose final color
+                half3 finalColor = internalColor * (diffuse + ambient) + fresnelColor + specular + sss;
+                finalColor += sparkleActive * mainLight.color;  // sparkle flashes
+
+                // Alpha: base ice alpha + fresnel rim
+                float finalAlpha = lerp(_IceColor.a, 1.0, fresnel * 0.6);
+
+                return half4(finalColor, finalAlpha);
+            }}
+            ENDHLSL
+        }}
+
+        // ShadowCaster pass for ice casting shadows
+        Pass
+        {{
+            Name "ShadowCaster"
+            Tags {{ "LightMode"="ShadowCaster" }}
+            ZWrite On
+            ZTest LEqual
+            ColorMask 0
+
+            HLSLPROGRAM
+            #pragma vertex ShadowVert
+            #pragma fragment ShadowFrag
+
+            {_URP_CORE_INCLUDE}
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Shadows.hlsl"
+
+            struct ShadowAttributes
+            {{
+                float4 positionOS : POSITION;
+                float3 normalOS : NORMAL;
+            }};
+
+            struct ShadowVaryings
+            {{
+                float4 positionCS : SV_POSITION;
+            }};
+
+            float3 _LightDirection;
+
+            ShadowVaryings ShadowVert(ShadowAttributes input)
+            {{
+                ShadowVaryings output;
+                float3 posWS = TransformObjectToWorld(input.positionOS.xyz);
+                float3 normWS = TransformObjectToWorldNormal(input.normalOS);
+                output.positionCS = TransformWorldToHClip(ApplyShadowBias(posWS, normWS, _LightDirection));
+                #if UNITY_REVERSED_Z
+                output.positionCS.z = min(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #else
+                output.positionCS.z = max(output.positionCS.z, UNITY_NEAR_CLIP_VALUE);
+                #endif
+                return output;
+            }}
+
+            half4 ShadowFrag(ShadowVaryings input) : SV_TARGET
+            {{
+                return 0;
+            }}
+            ENDHLSL
+        }}
+    }}
+
+    FallBack "Universal Render Pipeline/Lit"
+}}
+'''

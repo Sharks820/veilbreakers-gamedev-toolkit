@@ -8,6 +8,8 @@ def get_3d_context_override() -> dict | None:
     Returns dict suitable for bpy.context.temp_override(**result), or None
     if no 3D Viewport is available.
     """
+    if bpy.context.screen is None:
+        return None
     for area in bpy.context.screen.areas:
         if area.type == "VIEW_3D":
             for region in area.regions:

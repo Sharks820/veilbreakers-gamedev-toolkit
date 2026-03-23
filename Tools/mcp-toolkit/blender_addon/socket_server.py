@@ -25,8 +25,11 @@ class BlenderMCPServer:
             target=self._server_loop, daemon=True
         )
         self.server_thread.start()
+        # 10ms poll interval for snappy interactive editing response.
+        # Tradeoff: ~1% more idle CPU than 50ms, but commands execute 5x
+        # faster after arriving.  Acceptable for a dev-time tool.
         bpy.app.timers.register(
-            self._process_commands, first_interval=0.05, persistent=True
+            self._process_commands, first_interval=0.01, persistent=True
         )
         print(f"[VeilBreakers MCP] Server listening on localhost:{self.port}")
 
@@ -73,36 +76,56 @@ class BlenderMCPServer:
                 pass
 
     def _handle_client(self, client_sock: socket.socket):
-        """Background thread - NO bpy calls here."""
+        """Background thread - NO bpy calls here.
+
+        Supports persistent connections: the client may send multiple
+        length-prefixed commands on the same socket.  When the client
+        closes the connection (recv returns empty bytes), the loop exits
+        gracefully.  Legacy single-command clients still work because
+        they simply close after the first response.
+        """
         try:
             client_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            length_bytes = self._receive_exactly(client_sock, 4)
-            length = struct.unpack(">I", length_bytes)[0]
-            if length > MAX_MESSAGE_SIZE:
-                raise ValueError(
-                    f"Message too large: {length} bytes (max {MAX_MESSAGE_SIZE})"
-                )
-            json_bytes = self._receive_exactly(client_sock, length)
-            command = json.loads(json_bytes)
+            # Per-command idle timeout (30s).  If the client stays silent
+            # for this long we assume the connection is stale and drop it.
+            client_sock.settimeout(30.0)
 
-            result_event = threading.Event()
-            result_container: dict = {}
-            self.command_queue.put((command, result_event, result_container))
+            while self.running:
+                try:
+                    length_bytes = self._receive_exactly(client_sock, 4)
+                except (ConnectionError, OSError):
+                    # Client disconnected cleanly or connection lost
+                    break
+                length = struct.unpack(">I", length_bytes)[0]
+                if length > MAX_MESSAGE_SIZE:
+                    raise ValueError(
+                        f"Message too large: {length} bytes (max {MAX_MESSAGE_SIZE})"
+                    )
+                json_bytes = self._receive_exactly(client_sock, length)
+                command = json.loads(json_bytes)
 
-            result_event.wait(timeout=300)
+                result_event = threading.Event()
+                result_container: dict = {}
+                self.command_queue.put((command, result_event, result_container))
 
-            if "response" in result_container:
-                response = result_container["response"]
-            else:
-                response = {
-                    "status": "error",
-                    "message": "Command execution timed out",
-                }
+                result_event.wait(timeout=300)
 
-            response_bytes = json.dumps(response).encode("utf-8")
-            client_sock.sendall(
-                struct.pack(">I", len(response_bytes)) + response_bytes
-            )
+                if "response" in result_container:
+                    response = result_container["response"]
+                else:
+                    response = {
+                        "status": "error",
+                        "message": "Command execution timed out",
+                    }
+
+                response_bytes = json.dumps(response).encode("utf-8")
+                try:
+                    client_sock.sendall(
+                        struct.pack(">I", len(response_bytes)) + response_bytes
+                    )
+                except (BrokenPipeError, ConnectionError, OSError):
+                    # Client went away before we could send the response
+                    break
         except Exception as e:
             try:
                 error_response = json.dumps({
@@ -138,7 +161,7 @@ class BlenderMCPServer:
             try:
                 cmd, event, container = self.command_queue.get_nowait()
             except queue.Empty:
-                return 0.05
+                return 0.01
             try:
                 cmd_type = cmd.get("type", "unknown")
                 params = cmd.get("params", {})
@@ -167,4 +190,4 @@ class BlenderMCPServer:
         except Exception as e:
             # Outer guard — prevents timer from being silently unregistered
             print(f"[VeilBreakers MCP] Timer error: {e}")
-        return 0.05
+        return 0.01

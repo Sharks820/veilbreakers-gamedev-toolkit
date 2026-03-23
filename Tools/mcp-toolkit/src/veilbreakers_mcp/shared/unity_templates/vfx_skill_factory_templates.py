@@ -171,12 +171,12 @@ _CS_BRAND_COLORS = r'''
 
         static readonly Dictionary<string, Color> BrandPrimary = new()
         {
-            {"IRON",   new Color(0.55f, 0.59f, 0.65f, 1f)},
+            {"IRON",   new Color(0.55f, 0.35f, 0.22f, 1f)},
             {"SAVAGE", new Color(0.71f, 0.18f, 0.18f, 1f)},
             {"SURGE",  new Color(0.24f, 0.55f, 0.86f, 1f)},
             {"VENOM",  new Color(0.31f, 0.71f, 0.24f, 1f)},
-            {"DREAD",  new Color(0.47f, 0.24f, 0.63f, 1f)},
-            {"LEECH",  new Color(0.55f, 0.16f, 0.31f, 1f)},
+            {"DREAD",  new Color(0.24f, 0.47f, 0.27f, 1f)},
+            {"LEECH",  new Color(0.55f, 0.53f, 0.20f, 1f)},
             {"GRACE",  new Color(0.86f, 0.86f, 0.94f, 1f)},
             {"MEND",   new Color(0.78f, 0.67f, 0.31f, 1f)},
             {"RUIN",   new Color(0.86f, 0.47f, 0.16f, 1f)},
@@ -185,12 +185,12 @@ _CS_BRAND_COLORS = r'''
 
         static readonly Dictionary<string, Color> BrandGlow = new()
         {
-            {"IRON",   new Color(0.71f, 0.75f, 0.80f, 1f)},
+            {"IRON",   new Color(0.80f, 0.55f, 0.30f, 1f)},
             {"SAVAGE", new Color(0.86f, 0.27f, 0.27f, 1f)},
             {"SURGE",  new Color(0.39f, 0.71f, 1.00f, 1f)},
             {"VENOM",  new Color(0.47f, 0.86f, 0.39f, 1f)},
-            {"DREAD",  new Color(0.63f, 0.39f, 0.78f, 1f)},
-            {"LEECH",  new Color(0.71f, 0.24f, 0.43f, 1f)},
+            {"DREAD",  new Color(0.35f, 0.70f, 0.40f, 1f)},
+            {"LEECH",  new Color(0.70f, 0.65f, 0.25f, 1f)},
             {"GRACE",  new Color(1.00f, 1.00f, 1.00f, 1f)},
             {"MEND",   new Color(0.94f, 0.82f, 0.47f, 1f)},
             {"RUIN",   new Color(1.00f, 0.63f, 0.31f, 1f)},
@@ -199,12 +199,12 @@ _CS_BRAND_COLORS = r'''
 
         static readonly Dictionary<string, Color> BrandDark = new()
         {
-            {"IRON",   new Color(0.31f, 0.35f, 0.39f, 1f)},
+            {"IRON",   new Color(0.35f, 0.22f, 0.12f, 1f)},
             {"SAVAGE", new Color(0.47f, 0.10f, 0.10f, 1f)},
             {"SURGE",  new Color(0.12f, 0.31f, 0.55f, 1f)},
             {"VENOM",  new Color(0.16f, 0.39f, 0.12f, 1f)},
-            {"DREAD",  new Color(0.27f, 0.12f, 0.39f, 1f)},
-            {"LEECH",  new Color(0.35f, 0.08f, 0.20f, 1f)},
+            {"DREAD",  new Color(0.12f, 0.27f, 0.14f, 1f)},
+            {"LEECH",  new Color(0.35f, 0.33f, 0.10f, 1f)},
             {"GRACE",  new Color(0.63f, 0.63f, 0.71f, 1f)},
             {"MEND",   new Color(0.55f, 0.43f, 0.16f, 1f)},
             {"RUIN",   new Color(0.63f, 0.27f, 0.08f, 1f)},

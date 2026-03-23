@@ -30,25 +30,83 @@ from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 # ---------------------------------------------------------------------------
 
 _DEFAULT_MATERIALS: list[dict] = [
+    # PBR values from Google Filament docs + physicallybased.info + AAA research
+    # sRGB base colors, metallic 0-1, roughness 0-1 (Unity smoothness = 1 - roughness)
     {
-        "name": "stone",
+        "name": "stone_rough",
         "color_hex": "6B6B6B",
         "metallic": 0.0,
         "roughness": 0.85,
         "normal_strength": 1.2,
     },
     {
-        "name": "wood",
+        "name": "stone_polished",
+        "color_hex": "787878",
+        "metallic": 0.0,
+        "roughness": 0.35,
+        "normal_strength": 0.8,
+    },
+    {
+        "name": "wood_dark",
         "color_hex": "4A3728",
         "metallic": 0.0,
         "roughness": 0.7,
         "normal_strength": 0.8,
     },
     {
-        "name": "iron",
+        "name": "wood_light",
+        "color_hex": "8B7355",
+        "metallic": 0.0,
+        "roughness": 0.6,
+        "normal_strength": 0.7,
+    },
+    {
+        "name": "iron_raw",
         "color_hex": "3D3D3D",
         "metallic": 0.9,
         "roughness": 0.4,
+        "normal_strength": 1.0,
+    },
+    {
+        "name": "iron_rusted",
+        "color_hex": "6E3B2A",
+        "metallic": 0.3,
+        "roughness": 0.85,
+        "normal_strength": 1.4,
+    },
+    {
+        "name": "steel_polished",
+        "color_hex": "C8C8C8",
+        "metallic": 0.95,
+        "roughness": 0.15,
+        "normal_strength": 0.6,
+    },
+    {
+        "name": "steel_brushed",
+        "color_hex": "A0A0A0",
+        "metallic": 0.9,
+        "roughness": 0.35,
+        "normal_strength": 0.9,
+    },
+    {
+        "name": "gold",
+        "color_hex": "FFD700",
+        "metallic": 1.0,
+        "roughness": 0.2,
+        "normal_strength": 0.5,
+    },
+    {
+        "name": "bronze",
+        "color_hex": "CD7F32",
+        "metallic": 0.85,
+        "roughness": 0.35,
+        "normal_strength": 0.8,
+    },
+    {
+        "name": "copper_patina",
+        "color_hex": "4A7C6E",
+        "metallic": 0.6,
+        "roughness": 0.7,
         "normal_strength": 1.0,
     },
     {
@@ -66,18 +124,109 @@ _DEFAULT_MATERIALS: list[dict] = [
         "normal_strength": 0.7,
     },
     {
-        "name": "cloth",
+        "name": "cloth_common",
         "color_hex": "3D2B2B",
         "metallic": 0.0,
         "roughness": 0.8,
         "normal_strength": 0.5,
     },
     {
-        "name": "leather",
+        "name": "cloth_silk",
+        "color_hex": "6B4C5E",
+        "metallic": 0.0,
+        "roughness": 0.35,
+        "normal_strength": 0.3,
+    },
+    {
+        "name": "leather_worn",
         "color_hex": "5C3A1E",
         "metallic": 0.0,
         "roughness": 0.65,
         "normal_strength": 0.9,
+    },
+    {
+        "name": "leather_new",
+        "color_hex": "6B4226",
+        "metallic": 0.0,
+        "roughness": 0.45,
+        "normal_strength": 0.7,
+    },
+    {
+        "name": "skin_human",
+        "color_hex": "C4956A",
+        "metallic": 0.0,
+        "roughness": 0.55,
+        "normal_strength": 0.8,
+    },
+    {
+        "name": "skin_monster",
+        "color_hex": "5A4A3A",
+        "metallic": 0.0,
+        "roughness": 0.7,
+        "normal_strength": 1.2,
+    },
+    {
+        "name": "chitin",
+        "color_hex": "2A2A2A",
+        "metallic": 0.3,
+        "roughness": 0.3,
+        "normal_strength": 1.0,
+    },
+    {
+        "name": "crystal_ice",
+        "color_hex": "A0D8EF",
+        "metallic": 0.1,
+        "roughness": 0.1,
+        "normal_strength": 0.4,
+    },
+    {
+        "name": "obsidian",
+        "color_hex": "1A1A1A",
+        "metallic": 0.2,
+        "roughness": 0.05,
+        "normal_strength": 0.3,
+    },
+    {
+        "name": "mud_wet",
+        "color_hex": "3E2F1C",
+        "metallic": 0.0,
+        "roughness": 0.5,
+        "normal_strength": 1.0,
+    },
+    {
+        "name": "mud_dry",
+        "color_hex": "5C4A32",
+        "metallic": 0.0,
+        "roughness": 0.95,
+        "normal_strength": 1.3,
+    },
+    {
+        "name": "grass",
+        "color_hex": "3A5A2A",
+        "metallic": 0.0,
+        "roughness": 0.75,
+        "normal_strength": 0.5,
+    },
+    {
+        "name": "sand",
+        "color_hex": "C2B280",
+        "metallic": 0.0,
+        "roughness": 0.9,
+        "normal_strength": 0.6,
+    },
+    {
+        "name": "snow",
+        "color_hex": "EAEAF0",
+        "metallic": 0.0,
+        "roughness": 0.8,
+        "normal_strength": 0.3,
+    },
+    {
+        "name": "lava_cooled",
+        "color_hex": "2A1A1A",
+        "metallic": 0.1,
+        "roughness": 0.9,
+        "normal_strength": 1.5,
     },
 ]
 
@@ -86,11 +235,17 @@ _DEFAULT_MATERIALS: list[dict] = [
 # ---------------------------------------------------------------------------
 
 _BUDGET_MAP: dict[str, tuple[int, int]] = {
-    "hero":     (30000, 50000),
-    "mob":      (8000,  15000),
-    "weapon":   (3000,  8000),
-    "prop":     (500,   6000),
-    "building": (5000,  15000),
+    # Budgets from AAA research: Elden Ring, FFXV, Rainbow Six Siege, Sunset Overdrive
+    "hero":     (40000, 60000),   # Player character with equipment (60fps target)
+    "npc":      (20000, 50000),   # Major NPCs / story characters
+    "mob":      (15000, 35000),   # Common enemies (importance-scaled)
+    "boss":     (35000, 60000),   # Boss enemies (high detail)
+    "weapon":   (3000,  8000),    # Individual weapon mesh
+    "prop":     (500,   5000),    # Environmental props
+    "building": (5000,  15000),   # Building modules
+    "vegetation": (200, 3000),    # Trees/bushes (LOD0)
+    "armor":    (2000,  8000),    # Individual armor piece
+    "monster":  (15000, 40000),   # Monster capture creatures
 }
 
 

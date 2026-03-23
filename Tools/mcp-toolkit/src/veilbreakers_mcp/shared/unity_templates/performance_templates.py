@@ -138,12 +138,21 @@ def _validate_lod_screen_percentages(percentages: list[float]) -> bool:
 # PERF-01: Scene profiler
 # ---------------------------------------------------------------------------
 
+# Configurable budget constants -- tune these for your target platform.
+# AAA research (2024-2025): modern GPUs handle 2-6M tris @ 60 fps;
+# 3 000 draw calls is a comfortable ceiling with SRP Batcher on.
+_DEFAULT_FRAME_TIME_MS: float = 16.67
+_DEFAULT_MAX_DRAW_CALLS: int = 3000
+_DEFAULT_MAX_BATCHES: int = 5000
+_DEFAULT_MAX_TRIANGLES: int = 2_000_000
+_DEFAULT_MAX_MEMORY_MB: float = 1024.0
+
 _DEFAULT_BUDGETS: dict[str, float] = {
-    "frame_time": 16.6,
-    "draw_calls": 2000,
-    "batches": 1000,
-    "triangles": 500000,
-    "memory_mb": 512.0,
+    "frame_time": _DEFAULT_FRAME_TIME_MS,
+    "draw_calls": _DEFAULT_MAX_DRAW_CALLS,
+    "batches": _DEFAULT_MAX_BATCHES,
+    "triangles": _DEFAULT_MAX_TRIANGLES,
+    "memory_mb": _DEFAULT_MAX_MEMORY_MB,
 }
 
 
@@ -164,11 +173,11 @@ def generate_scene_profiler_script(
         Complete C# source string.
     """
     b = budgets or _DEFAULT_BUDGETS
-    frame_time_budget = b.get("frame_time", 16.6)
-    draw_calls_budget = b.get("draw_calls", 2000)
-    batches_budget = b.get("batches", 1000)
-    triangles_budget = b.get("triangles", 500000)
-    memory_budget = b.get("memory_mb", 512.0)
+    frame_time_budget = b.get("frame_time", _DEFAULT_FRAME_TIME_MS)
+    draw_calls_budget = b.get("draw_calls", _DEFAULT_MAX_DRAW_CALLS)
+    batches_budget = b.get("batches", _DEFAULT_MAX_BATCHES)
+    triangles_budget = b.get("triangles", _DEFAULT_MAX_TRIANGLES)
+    memory_budget = b.get("memory_mb", _DEFAULT_MAX_MEMORY_MB)
 
     return f'''using UnityEngine;
 using UnityEditor;

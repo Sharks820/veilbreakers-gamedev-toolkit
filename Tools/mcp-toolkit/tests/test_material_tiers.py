@@ -155,14 +155,15 @@ class TestPaletteRules:
                 )
 
     def test_metal_value_range(self):
-        """Metal base_color value should be in 2-90% range.
+        """Metal base_color value should be in 2-100% range.
 
         Dark metals (adamantine, obsidian, void_touched) can go very dark.
-        Reflective metals (silver, dragonbone) are brighter.
+        Physically-based reflective metals (gold, silver, copper) can reach
+        high reflectance values per PBR reference data.
         """
         for name, data in METAL_TIERS.items():
             _, _, v = _rgb_to_hsv(data["base_color"])
-            assert 0.02 <= v <= 0.95, (
+            assert 0.02 <= v <= 1.0, (
                 f"metal/{name}: value={v:.2f} out of expected range"
             )
 
@@ -190,7 +191,7 @@ class TestGetMaterialTier:
 
     def test_lookup_iron(self):
         tier = get_material_tier("metal", "iron")
-        assert tier["base_color"] == (0.35, 0.33, 0.30)
+        assert tier["base_color"] == (0.56, 0.57, 0.58)
         assert tier["metallic"] == 0.85
 
     def test_lookup_oak(self):
@@ -207,11 +208,11 @@ class TestGetMaterialTier:
 
     def test_case_insensitive_category(self):
         tier = get_material_tier("METAL", "iron")
-        assert tier["base_color"] == (0.35, 0.33, 0.30)
+        assert tier["base_color"] == (0.56, 0.57, 0.58)
 
     def test_case_insensitive_tier(self):
         tier = get_material_tier("metal", "IRON")
-        assert tier["base_color"] == (0.35, 0.33, 0.30)
+        assert tier["base_color"] == (0.56, 0.57, 0.58)
 
     def test_invalid_category_raises(self):
         with pytest.raises(ValueError, match="Unknown material category"):
@@ -226,7 +227,7 @@ class TestGetMaterialTier:
         tier1 = get_material_tier("metal", "iron")
         tier1["base_color"] = (1.0, 0.0, 0.0)
         tier2 = get_material_tier("metal", "iron")
-        assert tier2["base_color"] == (0.35, 0.33, 0.30)
+        assert tier2["base_color"] == (0.56, 0.57, 0.58)
 
     @pytest.mark.parametrize("category", sorted(ALL_TIER_DICTS.keys()))
     def test_all_tiers_retrievable(self, category):
@@ -289,9 +290,9 @@ class TestApplyMaterialTier:
         )
         assert result["object_name"] == "Sword_01"
         assert result["material_name"] == "Sword_01_metal_iron"
-        assert result["base_color"] == (0.35, 0.33, 0.30)
+        assert result["base_color"] == (0.56, 0.57, 0.58)
         assert result["metallic"] == 0.85
-        assert result["roughness"] == 0.65
+        assert result["roughness"] == 0.60
 
     def test_forwards_emission(self):
         result = apply_material_tier_to_equipment(
