@@ -190,6 +190,9 @@ from .equipment import (
     handle_equipment_fit_armor,
     handle_equipment_render_icon,
 )
+from .procedural_materials import (
+    handle_create_procedural_material,
+)
 from .particles import (
     handle_add_particle_system,
     handle_configure_particle_physics,
