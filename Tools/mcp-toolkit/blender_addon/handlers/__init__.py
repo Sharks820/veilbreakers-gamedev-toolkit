@@ -1,5 +1,7 @@
 from typing import Any, Callable
 
+from ._mesh_bridge import mesh_from_spec
+
 from .scene import (
     handle_get_scene_info,
     handle_clear_scene,
@@ -575,6 +577,68 @@ from .texture_quality import (  # noqa: F401 -- AAA texture quality pipeline
     BAKE_MAP_TYPES,
 )
 
+
+# ---------------------------------------------------------------------------
+# Quality mesh builder — converts pure-logic MeshSpec into a Blender object
+# with empties, vertex groups, and returns a JSON-serializable result dict.
+# ---------------------------------------------------------------------------
+
+def _build_quality_object(spec: dict, position: tuple | None = None) -> dict:
+    """Build a Blender object from a MeshSpec dict.
+
+    Creates the mesh via mesh_from_spec, attaches empties for attachment
+    points, assigns vertex groups, and returns a JSON-serializable summary.
+    """
+    import bpy
+
+    loc = tuple(position) if position else (0.0, 0.0, 0.0)
+    obj = mesh_from_spec(spec, location=loc)
+
+    # Non-Blender fallback (testing)
+    if isinstance(obj, dict):
+        return spec
+
+    obj_name = obj.name
+
+    # Create empties for attachment points
+    empties_data = spec.get("empties", {})
+    for empty_name, empty_pos in empties_data.items():
+        empty = bpy.data.objects.new(empty_name, None)
+        empty.empty_display_type = "PLAIN_AXES"
+        empty.empty_display_size = 0.02
+        empty.location = tuple(empty_pos)
+        empty.parent = obj
+        bpy.context.collection.objects.link(empty)
+
+    # Create vertex groups
+    vgroups = spec.get("vertex_groups", {})
+    for group_name, indices in vgroups.items():
+        vg = obj.vertex_groups.new(name=group_name)
+        vg.add(indices, 1.0, "ADD")
+
+    # Build serializable result
+    meta = spec.get("metadata", {})
+    result: dict[str, Any] = {
+        "object_name": obj_name,
+        "vertices": meta.get("vertex_count", len(spec.get("vertices", []))),
+        "faces": meta.get("poly_count", len(spec.get("faces", []))),
+    }
+    if empties_data:
+        result["empties"] = list(empties_data.keys())
+    if vgroups:
+        result["vertex_groups"] = list(vgroups.keys())
+    if "quality_metrics" in spec:
+        result["quality_metrics"] = spec["quality_metrics"]
+    if "dimensions" in meta:
+        result["dimensions"] = meta["dimensions"]
+    if "style" in meta:
+        result["style"] = meta["style"]
+    if "components" in spec:
+        result["components"] = spec["components"]
+
+    return result
+
+
 COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "ping": lambda params: {"status": "success", "result": "pong"},
     # Scene
@@ -734,8 +798,48 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "world_generate_easter_egg": handle_generate_easter_egg,
     # Environment v2 operations (Phase 14 -- AAA-05 storytelling props)
     "env_add_storytelling_props": handle_add_storytelling_props,
-    # Equipment operations
-    "equipment_generate_weapon": handle_equipment_generate_weapon,
+    # Equipment operations — rewired to AAA quality generators
+    "equipment_generate_weapon": lambda params: _build_quality_object(
+        generate_quality_sword(
+            style=params.get("style", "longsword"),
+            blade_length=params.get("blade_length", 0.9),
+            guard_style=params.get("guard_style", "cross"),
+            pommel_style=params.get("pommel_style", "disk"),
+            ornament_level=params.get("ornament_level", 2),
+        )
+        if params.get("weapon_type", "sword") == "sword"
+        else generate_quality_axe(
+            style=params.get("style", "battle_axe"),
+            shaft_length=params.get("shaft_length", 0.8),
+            ornament_level=params.get("ornament_level", 2),
+        )
+        if params.get("weapon_type") == "axe"
+        else generate_quality_mace(
+            style=params.get("style", "flanged"),
+            shaft_length=params.get("shaft_length", 0.5),
+            ornament_level=params.get("ornament_level", 2),
+        )
+        if params.get("weapon_type") == "mace"
+        else generate_quality_bow(
+            style=params.get("style", "longbow"),
+            ornament_level=params.get("ornament_level", 2),
+        )
+        if params.get("weapon_type") == "bow"
+        else generate_quality_shield(
+            style=params.get("style", "kite"),
+            ornament_level=params.get("ornament_level", 2),
+        )
+        if params.get("weapon_type") == "shield"
+        else generate_quality_staff(
+            style=params.get("style", "gnarled"),
+            ornament_level=params.get("ornament_level", 2),
+        )
+        if params.get("weapon_type") == "staff"
+        else generate_quality_sword(
+            style=params.get("style", "longsword"),
+            ornament_level=params.get("ornament_level", 2),
+        )
+    ),
     "equipment_split_character": handle_equipment_split_character,
     "equipment_fit_armor": handle_equipment_fit_armor,
     "equipment_render_icon": handle_equipment_render_icon,
@@ -931,66 +1035,66 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     # Skin Modifier character body generation (AAA quality)
     "character_generate_body": handle_generate_character_body,
     "character_generate_skin_code": handle_generate_skin_body,
-    # Riggable environmental objects (pure logic -- returns mesh specs with empties/vertex groups)
-    "riggable_generate_door": lambda params: generate_door(
+    # Riggable environmental objects — build Blender objects from MeshSpec
+    "riggable_generate_door": lambda params: _build_quality_object(generate_door(
         style=params.get("style", "wooden_plank"),
         width=params.get("width", 1.0),
         height=params.get("height", 2.0),
         thickness=params.get("thickness", 0.06),
-    ),
-    "riggable_generate_chain": lambda params: generate_chain(
+    )),
+    "riggable_generate_chain": lambda params: _build_quality_object(generate_chain(
         link_count=params.get("link_count", 8),
         link_width=params.get("link_width", 0.04),
         link_height=params.get("link_height", 0.06),
         link_thickness=params.get("link_thickness", 0.01),
         style=params.get("style", "iron"),
-    ),
-    "riggable_generate_flag": lambda params: generate_flag(
+    )),
+    "riggable_generate_flag": lambda params: _build_quality_object(generate_flag(
         width=params.get("width", 1.5),
         height=params.get("height", 1.0),
         pole_height=params.get("pole_height", 3.0),
         subdivisions=params.get("subdivisions", 12),
         style=params.get("style", "banner"),
-    ),
-    "riggable_generate_chest": lambda params: generate_chest(
+    )),
+    "riggable_generate_chest": lambda params: _build_quality_object(generate_chest(
         style=params.get("style", "wooden"),
         width=params.get("width", 0.6),
         height=params.get("height", 0.4),
         depth=params.get("depth", 0.4),
-    ),
-    "riggable_generate_chandelier": lambda params: generate_chandelier(
+    )),
+    "riggable_generate_chandelier": lambda params: _build_quality_object(generate_chandelier(
         style=params.get("style", "iron_ring"),
         candle_count=params.get("candle_count", 8),
         chain_length=params.get("chain_length", 1.5),
-    ),
-    "riggable_generate_drawbridge": lambda params: generate_drawbridge(
+    )),
+    "riggable_generate_drawbridge": lambda params: _build_quality_object(generate_drawbridge(
         width=params.get("width", 4.0),
         length=params.get("length", 3.0),
         plank_count=params.get("plank_count", 12),
-    ),
-    "riggable_generate_rope_bridge": lambda params: generate_rope_bridge(
+    )),
+    "riggable_generate_rope_bridge": lambda params: _build_quality_object(generate_rope_bridge(
         length=params.get("length", 8.0),
         width=params.get("width", 1.2),
         plank_count=params.get("plank_count", 20),
         sag=params.get("sag", 0.5),
-    ),
-    "riggable_generate_hanging_sign": lambda params: generate_hanging_sign(
+    )),
+    "riggable_generate_hanging_sign": lambda params: _build_quality_object(generate_hanging_sign(
         width=params.get("width", 0.8),
         height=params.get("height", 0.5),
         bracket_style=params.get("bracket_style", "iron_scroll"),
-    ),
-    "riggable_generate_windmill": lambda params: generate_windmill(
+    )),
+    "riggable_generate_windmill": lambda params: _build_quality_object(generate_windmill(
         tower_height=params.get("tower_height", 8.0),
         blade_count=params.get("blade_count", 4),
         blade_length=params.get("blade_length", 3.0),
-    ),
-    "riggable_generate_cage": lambda params: generate_cage(
+    )),
+    "riggable_generate_cage": lambda params: _build_quality_object(generate_cage(
         style=params.get("style", "hanging_cage"),
         width=params.get("width", 1.0),
         height=params.get("height", 1.5),
-    ),
-    # AAA quality weapon/armor generators (pure logic -- returns mesh specs)
-    "weapon_quality_sword": lambda params: generate_quality_sword(
+    )),
+    # AAA quality weapon/armor generators — build Blender objects from MeshSpec
+    "weapon_quality_sword": lambda params: _build_quality_object(generate_quality_sword(
         style=params.get("style", "longsword"),
         blade_length=params.get("blade_length", 0.9),
         blade_width=params.get("blade_width", 0.05),
@@ -1003,8 +1107,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         edge_bevel=params.get("edge_bevel", 0.003),
         ornament_level=params.get("ornament_level", 2),
         include_scabbard=params.get("include_scabbard", False),
-    ),
-    "weapon_quality_axe": lambda params: generate_quality_axe(
+    )),
+    "weapon_quality_axe": lambda params: _build_quality_object(generate_quality_axe(
         style=params.get("style", "battle_axe"),
         shaft_length=params.get("shaft_length", 0.8),
         head_width=params.get("head_width", 0.15),
@@ -1014,8 +1118,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         grip_wrap=params.get("grip_wrap", "leather_spiral"),
         pommel_style=params.get("pommel_style", "ring"),
         ornament_level=params.get("ornament_level", 2),
-    ),
-    "weapon_quality_mace": lambda params: generate_quality_mace(
+    )),
+    "weapon_quality_mace": lambda params: _build_quality_object(generate_quality_mace(
         style=params.get("style", "flanged"),
         shaft_length=params.get("shaft_length", 0.5),
         head_radius=params.get("head_radius", 0.04),
@@ -1024,51 +1128,51 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         grip_wrap=params.get("grip_wrap", "leather_spiral"),
         pommel_style=params.get("pommel_style", "disk"),
         ornament_level=params.get("ornament_level", 2),
-    ),
-    "weapon_quality_bow": lambda params: generate_quality_bow(
+    )),
+    "weapon_quality_bow": lambda params: _build_quality_object(generate_quality_bow(
         style=params.get("style", "longbow"),
         bow_length=params.get("bow_length", 1.2),
         riser_width=params.get("riser_width", 0.04),
         limb_width=params.get("limb_width", 0.025),
         edge_bevel=params.get("edge_bevel", 0.002),
         ornament_level=params.get("ornament_level", 2),
-    ),
-    "weapon_quality_shield": lambda params: generate_quality_shield(
+    )),
+    "weapon_quality_shield": lambda params: _build_quality_object(generate_quality_shield(
         style=params.get("style", "kite"),
         size=params.get("size", 1.0),
         edge_bevel=params.get("edge_bevel", 0.004),
         ornament_level=params.get("ornament_level", 2),
-    ),
-    "weapon_quality_staff": lambda params: generate_quality_staff(
+    )),
+    "weapon_quality_staff": lambda params: _build_quality_object(generate_quality_staff(
         style=params.get("style", "gnarled"),
         length=params.get("length", 1.6),
         shaft_radius=params.get("shaft_radius", 0.018),
         edge_bevel=params.get("edge_bevel", 0.002),
         ornament_level=params.get("ornament_level", 2),
-    ),
-    "weapon_quality_pauldron": lambda params: generate_quality_pauldron(
+    )),
+    "weapon_quality_pauldron": lambda params: _build_quality_object(generate_quality_pauldron(
         style=params.get("style", "plate"),
         size=params.get("size", 1.0),
         num_layers=params.get("num_layers", 3),
         edge_bevel=params.get("edge_bevel", 0.003),
         ornament_level=params.get("ornament_level", 2),
         side=params.get("side", "left"),
-    ),
-    "weapon_quality_chestplate": lambda params: generate_quality_chestplate(
+    )),
+    "weapon_quality_chestplate": lambda params: _build_quality_object(generate_quality_chestplate(
         style=params.get("style", "plate"),
         size=params.get("size", 1.0),
         edge_bevel=params.get("edge_bevel", 0.003),
         ornament_level=params.get("ornament_level", 2),
-    ),
-    "weapon_quality_gauntlet": lambda params: generate_quality_gauntlet(
+    )),
+    "weapon_quality_gauntlet": lambda params: _build_quality_object(generate_quality_gauntlet(
         style=params.get("style", "plate"),
         size=params.get("size", 1.0),
         side=params.get("side", "left"),
         edge_bevel=params.get("edge_bevel", 0.003),
         ornament_level=params.get("ornament_level", 2),
-    ),
-    # AAA creature anatomy generators (pure logic -- returns mesh specs)
-    "creature_mouth_interior": lambda params: generate_mouth_interior(
+    )),
+    # AAA creature anatomy generators — build Blender objects from MeshSpec
+    "creature_mouth_interior": lambda params: _build_quality_object(generate_mouth_interior(
         mouth_width=params.get("mouth_width", 0.1),
         mouth_depth=params.get("mouth_depth", 0.12),
         jaw_length=params.get("jaw_length", 0.15),
@@ -1076,47 +1180,47 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         tooth_style=params.get("tooth_style", "carnivore"),
         include_tongue=params.get("include_tongue", True),
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
-    ),
-    "creature_eyelid_topology": lambda params: generate_eyelid_topology(
+    ), position=tuple(params.get("position", (0.0, 0.0, 0.0)))),
+    "creature_eyelid_topology": lambda params: _build_quality_object(generate_eyelid_topology(
         eye_radius=params.get("eye_radius", 0.015),
         eye_position=tuple(params.get("eye_position", (0.0, 0.0, 0.0))),
-    ),
-    "creature_paw": lambda params: generate_paw(
+    )),
+    "creature_paw": lambda params: _build_quality_object(generate_paw(
         paw_type=params.get("paw_type", "canine"),
         toe_count=params.get("toe_count", 4),
         include_pads=params.get("include_pads", True),
         include_claws=params.get("include_claws", True),
         size=params.get("size", 1.0),
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
-    ),
-    "creature_wing": lambda params: generate_wing(
+    ), position=tuple(params.get("position", (0.0, 0.0, 0.0)))),
+    "creature_wing": lambda params: _build_quality_object(generate_wing(
         wing_type=params.get("wing_type", "bat"),
         wingspan=params.get("wingspan", 2.0),
         include_membrane=params.get("include_membrane", True),
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
-    ),
-    "creature_serpent_body": lambda params: generate_serpent_body(
+    ), position=tuple(params.get("position", (0.0, 0.0, 0.0)))),
+    "creature_serpent_body": lambda params: _build_quality_object(generate_serpent_body(
         length=params.get("length", 3.0),
         max_radius=params.get("max_radius", 0.08),
         segment_count=params.get("segment_count", 40),
         head_style=params.get("head_style", "viper"),
         include_hood=params.get("include_hood", False),
         size=params.get("size", 1.0),
-    ),
-    "creature_quadruped": lambda params: generate_quadruped(
+    )),
+    "creature_quadruped": lambda params: _build_quality_object(generate_quadruped(
         species=params.get("species", "wolf"),
         size=params.get("size", 1.0),
         build=params.get("build", "average"),
         include_mouth_interior=params.get("include_mouth_interior", True),
         include_eyelids=params.get("include_eyelids", True),
-    ),
-    "creature_fantasy": lambda params: generate_fantasy_creature(
+    )),
+    "creature_fantasy": lambda params: _build_quality_object(generate_fantasy_creature(
         base_type=params.get("base_type", "chimera"),
         brand=params.get("brand"),
         size=params.get("size", 1.0),
-    ),
-    # AAA building/architecture generators (pure logic -- returns mesh specs)
-    "building_stone_wall": lambda params: generate_stone_wall(
+    )),
+    # AAA building/architecture generators — build Blender objects from MeshSpec
+    "building_stone_wall": lambda params: _build_quality_object(generate_stone_wall(
         width=params.get("width", 4.0),
         height=params.get("height", 3.0),
         thickness=params.get("thickness", 0.4),
@@ -1124,8 +1228,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         mortar_depth=params.get("mortar_depth", 0.005),
         block_variation=params.get("block_variation", 0.3),
         seed=params.get("seed", 42),
-    ),
-    "building_timber_frame": lambda params: generate_timber_frame(
+    )),
+    "building_timber_frame": lambda params: _build_quality_object(generate_timber_frame(
         width=params.get("width", 5.0),
         height=params.get("height", 3.0),
         depth=params.get("depth", 4.0),
@@ -1133,8 +1237,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         beam_width=params.get("beam_width", 0.15),
         beam_depth=params.get("beam_depth", 0.15),
         seed=params.get("seed", 42),
-    ),
-    "building_gothic_window": lambda params: generate_gothic_window(
+    )),
+    "building_gothic_window": lambda params: _build_quality_object(generate_gothic_window(
         width=params.get("width", 0.8),
         height=params.get("height", 1.5),
         style=params.get("style", "pointed_arch"),
@@ -1143,8 +1247,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         has_sill=params.get("has_sill", True),
         frame_depth=params.get("frame_depth", 0.15),
         seed=params.get("seed", 42),
-    ),
-    "building_roof": lambda params: generate_roof(
+    )),
+    "building_roof": lambda params: _build_quality_object(generate_roof(
         width=params.get("width", 6.0),
         depth=params.get("depth", 5.0),
         pitch=params.get("pitch", 45.0),
@@ -1152,8 +1256,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         material=params.get("material", "tile"),
         overhang=params.get("overhang", 0.3),
         seed=params.get("seed", 42),
-    ),
-    "building_staircase": lambda params: generate_staircase(
+    )),
+    "building_staircase": lambda params: _build_quality_object(generate_staircase(
         style=params.get("style", "straight"),
         step_count=params.get("step_count", 12),
         step_width=params.get("step_width", 1.0),
@@ -1161,31 +1265,31 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         step_depth=params.get("step_depth", 0.28),
         railing=params.get("railing", True),
         seed=params.get("seed", 42),
-    ),
-    "building_archway": lambda params: generate_archway(
+    )),
+    "building_archway": lambda params: _build_quality_object(generate_archway(
         width=params.get("width", 1.2),
         height=params.get("height", 2.5),
         depth=params.get("depth", 0.5),
         arch_style=params.get("arch_style", "gothic_pointed"),
         has_keystone=params.get("has_keystone", True),
         seed=params.get("seed", 42),
-    ),
-    "building_chimney": lambda params: generate_chimney(
+    )),
+    "building_chimney": lambda params: _build_quality_object(generate_chimney(
         height=params.get("height", 2.0),
         style=params.get("style", "stone"),
         has_cap=params.get("has_cap", True),
         chimney_width=params.get("chimney_width", 0.5),
         chimney_depth=params.get("chimney_depth", 0.5),
         seed=params.get("seed", 42),
-    ),
-    "building_interior_trim": lambda params: generate_interior_trim(
+    )),
+    "building_interior_trim": lambda params: _build_quality_object(generate_interior_trim(
         room_width=params.get("room_width", 4.0),
         room_depth=params.get("room_depth", 5.0),
         room_height=params.get("room_height", 3.0),
         style=params.get("style", "medieval"),
         seed=params.get("seed", 42),
-    ),
-    "building_battlements": lambda params: generate_battlements(
+    )),
+    "building_battlements": lambda params: _build_quality_object(generate_battlements(
         wall_length=params.get("wall_length", 10.0),
         wall_height=params.get("wall_height", 6.0),
         wall_thickness=params.get("wall_thickness", 1.5),
@@ -1194,7 +1298,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         has_arrow_loops=params.get("has_arrow_loops", True),
         tower_interval=params.get("tower_interval", 0.0),
         seed=params.get("seed", 42),
-    ),
+    )),
     # AAA texture quality pipeline (pure logic -- returns params/code strings)
     "texture_smart_material_params": lambda params: compute_smart_material_params(
         material_type=params.get("material_type", "aged_stone"),
