@@ -348,21 +348,28 @@ class TripoStudioClient:
 
         try:
             # Upload image first
-            session = await self._ensure_session()
-            url = f"{STUDIO_BASE_URL}/upload"
+            jwt = await self._get_valid_jwt()
+            url = f"{STUDIO_BASE_URL}/task/upload"
+            headers = {
+                "Authorization": f"Bearer {jwt}",
+                "x-tripo-region": "rg1",
+            }
             with open(image_path, "rb") as f:
                 form = aiohttp.FormData()
                 form.add_field(
                     "file", f, filename=os.path.basename(image_path)
                 )
-                async with session.post(url, data=form) as resp:
-                    upload_data = await resp.json()
-                    if resp.status >= 400:
-                        return {
-                            "status": "failed",
-                            "error": f"Upload failed: {upload_data}",
-                        }
-                    image_token = upload_data["data"]["image_token"]
+                async with aiohttp.ClientSession() as upload_session:
+                    async with upload_session.post(
+                        url, data=form, headers=headers
+                    ) as resp:
+                        upload_data = await resp.json()
+                        if resp.status >= 400:
+                            return {
+                                "status": "failed",
+                                "error": f"Upload failed: {upload_data}",
+                            }
+                        image_token = upload_data["data"]["image_token"]
 
             _ext = Path(image_path).suffix.lower()
             _img_type = "png" if _ext == ".png" else "jpg"
