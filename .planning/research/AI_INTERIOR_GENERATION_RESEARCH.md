@@ -7,18 +7,44 @@
 
 ## Executive Summary
 
-**Tools exist, but none are production-ready for game development on consumer hardware.**
+**UPDATE: Two viable options found. One available now (World Labs Marble), one incoming (Meta WorldGen).**
 
-The field splits into three categories:
-1. **Research mesh generators** (Text2Room, Ctrl-Room, ControlRoom3D) - output real meshes but need 12-16GB+ VRAM, have quality issues, export to PLY not game formats
-2. **LLM-driven scene assembly** (Holodeck, ProcTHOR) - arrange existing 3D assets in rooms using AI planning. Most promising for our use case
-3. **Neural rendering** (Google Genie 3) - generate walkable worlds but NOT exportable to mesh. Cloud-only, not game-engine compatible
+The field splits into four categories:
+1. **Cloud room generators** (World Labs Marble) - generates full 3D rooms, exports GLB mesh (600K tris), available NOW as SaaS
+2. **Research mesh generators** (Text2Room, Ctrl-Room, ControlRoom3D, SceneCraft) - output real meshes but need 12-16GB+ VRAM, have quality issues
+3. **LLM-driven scene assembly** (Holodeck, ProcTHOR) - arrange existing 3D assets in rooms using AI planning
+4. **Neural rendering** (Google Genie 3) - walkable worlds but NOT exportable to mesh
+5. **Upcoming** (Meta WorldGen) - game-engine-native meshes WITH navmeshes, up to 50x50m. Not yet released.
 
-**Best practical approach**: Hybrid pipeline combining procedural room shells + LLM-driven prop selection + Tripo AI-generated furniture. This is what our `compose_interior` action implements.
+**Recommended approach**:
+- **Immediate**: World Labs Marble for hero interior rooms → export GLB → import to Blender → cleanup/retexture with dark fantasy PBR
+- **Bulk/layout**: compose_interior pipeline (procedural room shells + Tripo furniture)
+- **Watch**: Meta WorldGen for potential 2026 release
 
 ---
 
 ## Tools Analyzed
+
+### 0a. World Labs Marble -- AVAILABLE NOW, BEST OPTION
+- **What**: Full 3D environment generation from text/image/panorama. Generates rooms with walls, floors, ceilings, furniture.
+- **Output**: GLB mesh (~600K tris with textures) + separate collider mesh (3-4 MB). Also exports Gaussian splats.
+- **Game-ready?**: Partially. Real triangulated geometry with textures, but needs retopo/retexture for production. High-quality mesh takes up to 1 hour, 100-200 MB.
+- **VRAM**: Cloud-based (no local GPU needed). Unity import tested at 1.3 GB VRAM for 6.1M splat scene on RTX 3070.
+- **Open Source**: No. Commercial SaaS (freemium).
+- **Quality**: Good for blockouts and stylized environments. "Chisel" editor lets you define wall/room layouts before generation. Supports fantasy, sci-fi, cartoon, realistic styles.
+- **Integration**: Exports to Unity (GLB), Unreal, Blender.
+- **VeilBreakers workflow**: Generate room in Marble → export GLB → import_model to Blender → repair/retopo → re-UV → dark fantasy PBR retexture → export to Unity
+- **Sources**: https://www.worldlabs.ai/blog/marble-world-model, https://docs.worldlabs.ai/marble/export/mesh
+
+### 0b. Meta WorldGen -- NOT YET AVAILABLE, BEST FUTURE OPTION
+- **What**: Full walkable 3D environments up to 50x50m from text prompts. Includes interior rooms.
+- **Output**: Standard textured meshes (not splats) + navmesh. Directly compatible with Unity/Unreal.
+- **Game-ready?**: Yes, by design. The ONLY system designed for game-engine-native output with navigation meshes.
+- **Pipeline**: LLM layout planning → scene reconstruction → scene decomposition (extractable objects) → per-object refinement via AssetGen2.
+- **Status**: Research paper only (arXiv:2511.16825, Nov 2025). Meta says production version may arrive in 2026.
+- **Quality**: Demonstrated medieval villages, indoor rooms. Objects individually decomposable and editable.
+- **Limitations**: Max 50x50m. ~5 minutes per scene.
+- **Sources**: https://arxiv.org/abs/2511.16825, https://www.meta.com/blog/worldgen-3d-world-generation-reality-labs-generative-ai-research/
 
 ### 1. Text2Room (ICCV 2023)
 - **What**: Generates textured 3D room meshes from text prompts
@@ -78,11 +104,40 @@ The field splits into three categories:
 
 ---
 
+### 8. SceneCraft (NeurIPS 2024)
+- **What**: Multi-room apartments from 3D bounding box layouts + text
+- **Output**: NeRF (primary) with mesh export via nerfstudio
+- **Game-ready?**: No. NeRF requires baking to mesh.
+- **Quality**: Highest CLIP Score (24.34) among baselines. Supports multi-bedroom apartments with irregular layouts.
+- **Open source**: Yes - github.com/OrangeSodahub/SceneCraft
+- **Verdict**: Most ambitious room-scale generation but NeRF output not game-usable
+
+### 9. Pano2Room (SIGGRAPH Asia 2024)
+- **What**: 3D room reconstruction from a single panoramic image
+- **Output**: Intermediate mesh + final Gaussian splat
+- **Interesting pipeline**: Generate AI panorama → Pano2Room → mesh. But mesh quality degrades with distance.
+- **Open source**: Yes - github.com/TrickyGo/Pano2Room
+
+### 10. MIDI / Tripo Compositional (CVPR 2025)
+- **What**: Multi-object compositional 3D scenes from a single image (Tripo research)
+- **Output**: Multiple separate GLB/FBX meshes with spatial relationships
+- **Open source**: Yes - github.com/VAST-AI-Research/MIDI-3D
+- **Verdict**: Not room shells, but interesting for generating multiple related furniture pieces from a reference image
+
+---
+
 ## Practical Workflow for VeilBreakers Interiors
 
-Given the research, the optimal approach is what we've built:
+### Option A: World Labs Marble + Cleanup (Hero Rooms)
+1. Generate room in Marble from concept art or text prompt
+2. Use "Chisel" editor to define wall/room layout
+3. Export as GLB mesh (600K tris with textures)
+4. Import: `asset_pipeline action=import_model filepath=room.glb`
+5. Cleanup: `asset_pipeline action=cleanup object_name=room`
+6. Retexture: `blender_texture action=create_pbr` with dark fantasy materials
+7. Export to Unity
 
-### compose_interior Pipeline
+### Option B: compose_interior Pipeline (Bulk/Layout)
 1. **Procedural room shells** - Box rooms with proper dimensions, doors, occlusion markers
 2. **Per-room detailed geometry** - generate_interior with room-type-specific features
 3. **Storytelling props** - Narrative clutter placed by add_storytelling_props
