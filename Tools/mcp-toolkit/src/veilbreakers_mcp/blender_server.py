@@ -898,6 +898,7 @@ async def blender_texture(
 async def asset_pipeline(
     action: Literal[
         "generate_3d", "generate_building", "generate_terrain_mesh",
+        "compose_map", "compose_interior",
         "cleanup", "generate_lods", "validate_export",
         "tag_metadata", "batch_process", "catalog_query", "catalog_add",
         # Equipment operations (Phase 13 -- EQUIP-01/03/04/05)
@@ -955,6 +956,10 @@ async def asset_pipeline(
     terrain_height_scale: float = 20.0,
     terrain_erosion: bool = True,
     terrain_seed: int = 42,
+    # compose_map params -- full map orchestration
+    map_spec: dict | None = None,
+    # compose_interior params -- interior room orchestration
+    interior_spec: dict | None = None,
     # full_pipeline / generate_and_process params
     material_preset: str = "auto",
     weathering_preset: str = "medium",
@@ -965,7 +970,7 @@ async def asset_pipeline(
     export_dir: str | None = None,
     capture_viewport: bool = True
 ):
-    """Asset pipeline -- 3D generation (characters, buildings, terrain, props), processing, LODs, catalog, equipment. Use generate_building for architecture with dark fantasy presets. Use generate_terrain_mesh for procedural terrain. Use import_model for local files."""
+    """Asset pipeline -- 3D generation, map composition, interior building, processing, LODs, catalog, equipment. Use compose_map to build full maps (terrain+water+roads+locations+vegetation+atmosphere). Use compose_interior for walkable interiors (room shells+doors+furniture+props). Use generate_building for Tripo-powered architecture. Use generate_terrain_mesh for procedural terrain."""
     blender = get_blender_connection()
 
     if action == "generate_3d":
@@ -1190,6 +1195,420 @@ async def asset_pipeline(
                 "Export heightmap for Unity: blender_environment action=export_heightmap",
             ]
         return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "compose_map":
+        # Full map composition pipeline: terrain → water → roads → locations → vegetation → props
+        if not map_spec:
+            return json.dumps({
+                "error": "map_spec is required",
+                "example": {
+                    "name": "Thornveil Region",
+                    "seed": 42,
+                    "terrain": {"preset": "hills", "size": 200, "resolution": 256, "height_scale": 20.0},
+                    "water": {
+                        "rivers": [{"source": [10, 10], "destination": [190, 190], "width": 5}],
+                        "water_level": 2.0,
+                    },
+                    "roads": [{"waypoints": [[50, 80], [100, 100], [150, 60]], "width": 3}],
+                    "locations": [
+                        {"type": "town", "name": "Village", "districts": 3},
+                        {"type": "castle", "name": "Keep"},
+                        {"type": "dungeon", "name": "Crypt", "floors": 2},
+                    ],
+                    "biome": "thornwood_forest",
+                    "vegetation": {"density": 0.5},
+                    "atmosphere": "foggy",
+                },
+            }, indent=2)
+
+        spec = map_spec
+        map_name = spec.get("name", "Map")
+        map_seed = spec.get("seed", 42)
+        steps_completed = []
+        steps_failed = []
+        created_objects = []
+
+        # --- Step 1: Clear scene ---
+        try:
+            await blender.send_command("scene_clear", {})
+            steps_completed.append("scene_cleared")
+        except Exception as e:
+            steps_failed.append({"step": "scene_clear", "error": str(e)})
+
+        # --- Step 2: Generate terrain ---
+        terrain_cfg = spec.get("terrain", {})
+        terrain_name = f"{map_name}_Terrain"
+        try:
+            t_result = await blender.send_command("env_generate_terrain", {
+                "name": terrain_name,
+                "terrain_type": terrain_cfg.get("preset", "hills"),
+                "resolution": terrain_cfg.get("resolution", 256),
+                "height_scale": terrain_cfg.get("height_scale", 20.0),
+                "scale": terrain_cfg.get("size", 200.0),
+                "seed": map_seed,
+                "erosion": "hydraulic" if terrain_cfg.get("erosion", True) else "none",
+                "erosion_iterations": terrain_cfg.get("erosion_iterations", 5000),
+            })
+            steps_completed.append("terrain_generated")
+            created_objects.append(terrain_name)
+        except Exception as e:
+            steps_failed.append({"step": "terrain", "error": str(e)})
+
+        # --- Step 3: Water bodies ---
+        water_cfg = spec.get("water", {})
+        if water_cfg:
+            # Rivers
+            for i, river in enumerate(water_cfg.get("rivers", [])):
+                try:
+                    await blender.send_command("env_carve_river", {
+                        "terrain_name": terrain_name,
+                        "source": river.get("source", [10, 10]),
+                        "destination": river.get("destination", [190, 190]),
+                        "width": river.get("width", 5),
+                        "depth": river.get("depth", 2.0),
+                        "seed": map_seed + i,
+                    })
+                    steps_completed.append(f"river_{i}")
+                except Exception as e:
+                    steps_failed.append({"step": f"river_{i}", "error": str(e)})
+
+            # Water level (lakes/ocean)
+            if "water_level" in water_cfg:
+                try:
+                    await blender.send_command("env_create_water", {
+                        "name": f"{map_name}_Water",
+                        "water_level": water_cfg["water_level"],
+                        "terrain_name": terrain_name,
+                    })
+                    steps_completed.append("water_plane")
+                    created_objects.append(f"{map_name}_Water")
+                except Exception as e:
+                    steps_failed.append({"step": "water_plane", "error": str(e)})
+
+        # --- Step 4: Roads ---
+        for i, road in enumerate(spec.get("roads", [])):
+            try:
+                await blender.send_command("env_generate_road", {
+                    "terrain_name": terrain_name,
+                    "waypoints": road.get("waypoints", []),
+                    "width": road.get("width", 3),
+                    "seed": map_seed + 100 + i,
+                })
+                steps_completed.append(f"road_{i}")
+            except Exception as e:
+                steps_failed.append({"step": f"road_{i}", "error": str(e)})
+
+        # --- Step 5: Place locations ---
+        location_results = []
+        _LOC_HANDLERS = {
+            "town": "world_generate_town",
+            "castle": "world_generate_castle",
+            "dungeon": "world_generate_dungeon",
+            "cave": "world_generate_cave",
+            "ruins": "world_generate_ruins",
+            "building": "world_generate_building",
+            "boss_arena": "world_generate_boss_arena",
+        }
+        for i, loc in enumerate(spec.get("locations", [])):
+            loc_type = loc.get("type", "town")
+            handler = _LOC_HANDLERS.get(loc_type)
+            if not handler:
+                steps_failed.append({"step": f"location_{i}", "error": f"Unknown type: {loc_type}"})
+                continue
+            try:
+                loc_params = {
+                    "name": loc.get("name", f"{map_name}_{loc_type}_{i}"),
+                    "seed": map_seed + 200 + i,
+                }
+                # Type-specific params
+                if loc_type == "town":
+                    loc_params["num_districts"] = loc.get("districts", 3)
+                    loc_params["width"] = loc.get("grid_size", 32)
+                    loc_params["height"] = loc.get("grid_size", 32)
+                elif loc_type == "castle":
+                    loc_params["outer_size"] = loc.get("outer_size", 40)
+                    loc_params["tower_count"] = loc.get("tower_count", 4)
+                elif loc_type in ("dungeon", "cave"):
+                    loc_params["width"] = loc.get("grid_size", 64)
+                    loc_params["height"] = loc.get("grid_size", 64)
+                    if loc_type == "dungeon" and loc.get("floors"):
+                        handler = "world_generate_multi_floor_dungeon"
+                        loc_params["num_floors"] = loc["floors"]
+                elif loc_type == "ruins":
+                    loc_params["damage_level"] = loc.get("damage_level", 0.7)
+                elif loc_type == "boss_arena":
+                    loc_params["arena_type"] = loc.get("arena_type", "circular")
+
+                loc_result = await blender.send_command(handler, loc_params)
+                steps_completed.append(f"location_{loc.get('name', i)}")
+                created_objects.append(loc_params["name"])
+                location_results.append({
+                    "name": loc_params["name"],
+                    "type": loc_type,
+                    "result": loc_result if isinstance(loc_result, dict) else str(loc_result)[:200],
+                })
+            except Exception as e:
+                steps_failed.append({"step": f"location_{loc.get('name', i)}", "error": str(e)})
+
+        # --- Step 6: Biome paint ---
+        biome = spec.get("biome")
+        if biome:
+            try:
+                await blender.send_command("env_paint_terrain", {
+                    "name": terrain_name,
+                    "biome_rules": None,  # uses biome preset defaults
+                })
+                steps_completed.append("biome_painted")
+            except Exception as e:
+                steps_failed.append({"step": "biome_paint", "error": str(e)})
+
+        # --- Step 7: Vegetation scatter ---
+        veg_cfg = spec.get("vegetation", {})
+        if veg_cfg:
+            try:
+                veg_rules = veg_cfg.get("rules", [
+                    {"asset": "dead_tree", "density": 0.3 * veg_cfg.get("density", 0.5), "min_distance": 4.0},
+                    {"asset": "rock_mossy", "density": 0.2 * veg_cfg.get("density", 0.5), "min_distance": 3.0},
+                    {"asset": "mushroom_cluster", "density": 0.15 * veg_cfg.get("density", 0.5), "min_distance": 2.0},
+                ])
+                await blender.send_command("env_scatter_vegetation", {
+                    "terrain_name": terrain_name,
+                    "rules": veg_rules,
+                    "min_distance": veg_cfg.get("min_distance", 2.0),
+                    "seed": map_seed + 300,
+                    "max_instances": veg_cfg.get("max_instances", 5000),
+                })
+                steps_completed.append("vegetation_scattered")
+            except Exception as e:
+                steps_failed.append({"step": "vegetation", "error": str(e)})
+
+        # --- Step 8: Prop scatter ---
+        if spec.get("props", True):
+            try:
+                await blender.send_command("env_scatter_props", {
+                    "area_name": terrain_name,
+                    "prop_density": spec.get("prop_density", 0.3),
+                    "seed": map_seed + 400,
+                })
+                steps_completed.append("props_scattered")
+            except Exception as e:
+                steps_failed.append({"step": "props", "error": str(e)})
+
+        # --- Step 9: Generate interiors for key buildings ---
+        interior_results = []
+        for loc in spec.get("locations", []):
+            if loc.get("interiors"):
+                for room_spec in loc["interiors"]:
+                    try:
+                        int_result = await blender.send_command("world_generate_linked_interior", {
+                            "name": f"{loc.get('name', 'Loc')}_Interior",
+                            "interior_rooms": room_spec.get("rooms", []),
+                            "door_positions": room_spec.get("doors", []),
+                            "seed": map_seed + 500,
+                        })
+                        interior_results.append({
+                            "location": loc.get("name"),
+                            "result": int_result if isinstance(int_result, dict) else str(int_result)[:200],
+                        })
+                        steps_completed.append(f"interior_{loc.get('name')}")
+                    except Exception as e:
+                        steps_failed.append({"step": f"interior_{loc.get('name')}", "error": str(e)})
+
+        # --- Build result ---
+        # Atmosphere presets for Unity next_steps
+        _ATMOSPHERE = {
+            "foggy": {"fog": True, "bloom": 0.8, "vignette": 0.4, "time": "dusk"},
+            "dark": {"fog": True, "bloom": 0.3, "vignette": 0.6, "time": "night"},
+            "overcast": {"fog": True, "bloom": 0.5, "vignette": 0.3, "time": "overcast"},
+            "bright": {"fog": False, "bloom": 1.0, "vignette": 0.2, "time": "noon"},
+            "dawn": {"fog": True, "bloom": 0.7, "vignette": 0.3, "time": "dawn"},
+        }
+        atmo = spec.get("atmosphere", "foggy")
+        atmo_cfg = _ATMOSPHERE.get(atmo, _ATMOSPHERE["foggy"])
+
+        result = {
+            "status": "success" if not steps_failed else "partial",
+            "map_name": map_name,
+            "steps_completed": steps_completed,
+            "steps_failed": steps_failed,
+            "objects_created": created_objects,
+            "locations": location_results,
+            "interiors": interior_results,
+            "next_steps": [
+                "--- BLENDER (visual quality) ---",
+                "1. Review map in viewport: blender_viewport action=screenshot",
+                "2. Sculpt terrain details: blender_environment action=sculpt_terrain",
+                "3. Add storytelling props: blender_environment action=add_storytelling_props",
+                f"4. Generate hero buildings with Tripo: asset_pipeline action=generate_building building_type=tavern building_style=dark_fantasy",
+                "5. Add breakable props: blender_environment action=create_breakable",
+                "--- EXPORT TO UNITY ---",
+                "6. Export heightmap: blender_environment action=export_heightmap",
+                "7. Export buildings/props: blender_export export_format=fbx",
+                "--- UNITY SETUP ---",
+                f"8. Setup terrain: unity_scene action=setup_terrain",
+                f"9. Setup lighting: unity_scene action=setup_lighting time_of_day={atmo_cfg['time']} fog_enabled={atmo_cfg['fog']}",
+                f"10. Setup water shader: unity_vfx action=create_shader shader_type=water",
+                f"11. Add atmosphere: unity_vfx action=create_deep_environmental_vfx deep_vfx_type=volumetric_fog",
+                f"12. Weather system: unity_world action=create_weather",
+                f"13. Day/night cycle: unity_world action=create_day_night",
+                "14. Dungeon lighting: unity_world action=create_dungeon_lighting",
+                "15. Terrain blending: unity_world action=create_terrain_blend",
+                "16. Post-processing: unity_vfx action=setup_post_processing bloom_intensity={} vignette_intensity={}".format(
+                    atmo_cfg["bloom"], atmo_cfg["vignette"]
+                ),
+                "17. Bake navmesh: unity_scene action=bake_navmesh",
+                "18. Profile: unity_performance action=profile_scene",
+            ],
+        }
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "compose_interior":
+        # Interior composition pipeline: room shells → furniture → props → lighting → atmosphere
+        if not interior_spec:
+            return json.dumps({
+                "error": "interior_spec is required",
+                "example": {
+                    "name": "Tavern_Interior",
+                    "seed": 42,
+                    "rooms": [
+                        {"name": "main_hall", "type": "tavern_hall", "width": 10, "depth": 12, "height": 4},
+                        {"name": "kitchen", "type": "kitchen", "width": 5, "depth": 6, "height": 3.5},
+                        {"name": "cellar", "type": "storage", "width": 8, "depth": 8, "height": 3, "below_ground": True},
+                        {"name": "upstairs", "type": "bedroom", "width": 10, "depth": 12, "height": 3},
+                    ],
+                    "doors": [
+                        {"from": "main_hall", "to": "kitchen", "style": "wooden"},
+                        {"from": "main_hall", "to": "cellar", "style": "trapdoor"},
+                        {"from": "main_hall", "to": "upstairs", "style": "staircase"},
+                    ],
+                    "style": "medieval",
+                    "storytelling_density": 0.7,
+                    "generate_props_with_tripo": False,
+                },
+            }, indent=2)
+
+        spec = interior_spec
+        int_name = spec.get("name", "Interior")
+        int_seed = spec.get("seed", 42)
+        int_style = spec.get("style", "medieval")
+        steps_completed = []
+        steps_failed = []
+
+        # --- Step 1: Generate linked interior (room shells + door triggers + occlusion) ---
+        rooms = spec.get("rooms", [])
+        doors = spec.get("doors", [])
+        room_defs = []
+        for r in rooms:
+            room_defs.append({
+                "name": r.get("name", "room"),
+                "bounds": {
+                    "min": (0, 0),
+                    "max": (r.get("width", 6), r.get("depth", 6)),
+                },
+            })
+        door_defs = []
+        for d in doors:
+            door_defs.append({
+                "position": d.get("position", (0, 0)),
+                "facing": d.get("facing", "north"),
+            })
+
+        try:
+            linked_result = await blender.send_command("world_generate_linked_interior", {
+                "name": int_name,
+                "interior_rooms": room_defs,
+                "door_positions": door_defs,
+                "seed": int_seed,
+            })
+            steps_completed.append("linked_interior_created")
+        except Exception as e:
+            steps_failed.append({"step": "linked_interior", "error": str(e)})
+
+        # --- Step 2: Generate each room with detailed geometry ---
+        room_results = []
+        for i, room in enumerate(rooms):
+            try:
+                room_result = await blender.send_command("world_generate_interior", {
+                    "name": f"{int_name}_{room.get('name', f'Room_{i}')}",
+                    "room_type": room.get("type", "generic"),
+                    "width": room.get("width", 6),
+                    "depth": room.get("depth", 6),
+                    "height": room.get("height", 3.5),
+                    "seed": int_seed + i,
+                })
+                steps_completed.append(f"room_{room.get('name', i)}")
+                room_results.append({
+                    "name": room.get("name", f"Room_{i}"),
+                    "type": room.get("type", "generic"),
+                })
+            except Exception as e:
+                steps_failed.append({"step": f"room_{room.get('name', i)}", "error": str(e)})
+
+        # --- Step 3: Add storytelling/narrative props to each room ---
+        if spec.get("storytelling_density", 0) > 0:
+            for room in rooms:
+                try:
+                    await blender.send_command("env_add_storytelling_props", {
+                        "target_interior": f"{int_name}_{room.get('name', 'room')}",
+                        "room_type": room.get("type", "generic"),
+                        "density_modifier": spec.get("storytelling_density", 0.5),
+                        "seed": int_seed + 100,
+                    })
+                    steps_completed.append(f"props_{room.get('name')}")
+                except Exception as e:
+                    steps_failed.append({"step": f"props_{room.get('name')}", "error": str(e)})
+
+        # --- Build Tripo prop generation queue ---
+        tripo_queue = []
+        if spec.get("generate_props_with_tripo", False):
+            _ROOM_PROP_PROMPTS = {
+                "tavern_hall": ["wooden bar counter with taps", "round wooden tavern table", "wooden bench", "iron chandelier with candles", "barrel stack"],
+                "kitchen": ["medieval stone hearth with iron pot", "wooden food prep table", "hanging dried herbs bundle", "iron cooking rack"],
+                "bedroom": ["medieval wooden bed frame with canopy", "wooden nightstand with candle", "wooden wardrobe chest", "woven rug"],
+                "storage": ["wooden crate stack", "wine barrel rack", "hanging meat hooks", "wooden shelf unit"],
+                "throne_room": ["ornate stone throne", "tall banner stand", "iron brazier on stand", "stone pillar with carvings"],
+                "library": ["tall wooden bookshelf", "reading desk with candle", "globe on wooden stand", "scroll rack"],
+                "forge": ["blacksmith anvil", "stone forge with bellows", "weapon rack", "quenching barrel"],
+                "chapel": ["stone altar with candles", "prayer bench pew", "stained glass frame", "holy water font"],
+                "prison": ["iron jail cell door", "wall-mounted shackles", "wooden torture rack", "iron cage"],
+                "generic": ["wooden table", "wooden chair", "iron torch sconce", "wooden barrel"],
+            }
+            for room in rooms:
+                room_type = room.get("type", "generic")
+                prompts = _ROOM_PROP_PROMPTS.get(room_type, _ROOM_PROP_PROMPTS["generic"])
+                for prop_prompt in prompts:
+                    tripo_queue.append({
+                        "room": room.get("name"),
+                        "prompt": f"dark fantasy {int_style} {prop_prompt}, game-ready 3D model, clean topology",
+                    })
+
+        result = {
+            "status": "success" if not steps_failed else "partial",
+            "interior_name": int_name,
+            "steps_completed": steps_completed,
+            "steps_failed": steps_failed,
+            "rooms_generated": room_results,
+            "tripo_prop_queue": tripo_queue[:20] if tripo_queue else [],
+            "tripo_props_remaining": max(0, len(tripo_queue) - 20),
+            "next_steps": [
+                "--- ENHANCE VISUALS ---",
+                "1. Review interior: blender_viewport action=contact_sheet object_name=<room>",
+                "2. Add materials: blender_material action=create (stone_wall, wooden_floor, etc.)",
+                "3. Generate hero props with Tripo: asset_pipeline action=generate_3d prompt='dark fantasy <prop>'",
+                "--- UNITY INTERIOR SETUP ---",
+                "4. Setup interior streaming: unity_world action=create_interior_streaming",
+                "5. Setup door system: unity_world action=create_door_system",
+                "6. Dungeon lighting: unity_world action=create_dungeon_lighting",
+                "7. Portal audio: unity_audio action=setup_portal_audio",
+                "8. Occlusion: unity_world action=setup_occlusion",
+                "9. NPC placement: unity_world action=create_npc_placement",
+                "10. Interaction prompts: unity_ux action=interaction_prompt",
+            ],
+        }
+        if tripo_queue:
+            result["next_steps"].insert(0, f"TRIPO QUEUE: {len(tripo_queue)} props to generate. Run each with: asset_pipeline action=generate_3d prompt='<prompt>'")
+
+        return json.dumps(result, indent=2, default=str)
 
     elif action == "cleanup":
         if not object_name:
