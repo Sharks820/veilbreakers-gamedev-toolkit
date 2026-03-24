@@ -897,7 +897,8 @@ async def blender_texture(
 @mcp.tool()
 async def asset_pipeline(
     action: Literal[
-        "generate_3d", "cleanup", "generate_lods", "validate_export",
+        "generate_3d", "generate_building", "generate_terrain_mesh",
+        "cleanup", "generate_lods", "validate_export",
         "tag_metadata", "batch_process", "catalog_query", "catalog_add",
         # Equipment operations (Phase 13 -- EQUIP-01/03/04/05)
         "generate_weapon", "split_character", "fit_armor", "render_equipment_icon",
@@ -943,6 +944,17 @@ async def asset_pipeline(
     camera_distance: float = 2.0,
     camera_angle: str = "front",
     body_types: list[str] | None = None,
+    # generate_building params -- architecture presets for Tripo
+    building_type: str | None = None,  # tavern, castle, cathedral, tower, house, shop, ruin, gate, bridge, wall_section
+    building_style: str = "dark_fantasy",  # dark_fantasy, gothic, medieval, elven, dwarven, corrupted
+    building_size: str = "medium",  # small, medium, large, massive
+    # generate_terrain_mesh params -- heightmap-to-mesh in Blender
+    terrain_preset: str | None = None,  # mountains, hills, plains, canyon, volcanic, coastal, swamp
+    terrain_size: float = 100.0,  # world units
+    terrain_resolution: int = 128,  # subdivisions
+    terrain_height_scale: float = 20.0,
+    terrain_erosion: bool = True,
+    terrain_seed: int = 42,
     # full_pipeline / generate_and_process params
     material_preset: str = "auto",
     weathering_preset: str = "medium",
@@ -953,7 +965,7 @@ async def asset_pipeline(
     export_dir: str | None = None,
     capture_viewport: bool = True
 ):
-    """Asset pipeline management -- 3D generation, processing, LODs, catalog, equipment, full pipeline. Use import_model/import_and_process for local GLB/FBX files (e.g. Tripo Studio downloads)."""
+    """Asset pipeline -- 3D generation (characters, buildings, terrain, props), processing, LODs, catalog, equipment. Use generate_building for architecture with dark fantasy presets. Use generate_terrain_mesh for procedural terrain. Use import_model for local files."""
     blender = get_blender_connection()
 
     if action == "generate_3d":
@@ -1055,6 +1067,129 @@ async def asset_pipeline(
                 "status": "unavailable",
                 "error": "Neither TRIPO_SESSION_COOKIE, TRIPO_STUDIO_TOKEN, nor TRIPO_API_KEY configured",
             })
+
+    elif action == "generate_building":
+        # Architecture-specific Tripo generation with dark fantasy prompt engineering
+        _BUILDING_PROMPTS = {
+            "tavern": "medieval dark fantasy tavern, stone foundation, wooden upper floor, thatched roof, hanging sign, chimney, detailed windows",
+            "castle": "dark fantasy castle keep, stone walls, battlements, arrow slits, heavy iron-bound gate, tower turrets",
+            "cathedral": "gothic dark fantasy cathedral, pointed arches, flying buttresses, rose window, spire, gargoyles",
+            "tower": "dark fantasy wizard tower, stone construction, spiral staircase visible, narrow windows, conical roof",
+            "house": "medieval dark fantasy cottage, stone and timber frame, thatched roof, small windows, wooden door",
+            "shop": "medieval dark fantasy merchant shop, overhanging upper floor, display window, hanging trade sign",
+            "ruin": "crumbling dark fantasy stone ruins, broken walls, overgrown with vines, collapsed roof, ancient architecture",
+            "gate": "dark fantasy fortified gatehouse, portcullis, murder holes, twin guard towers, heavy stone walls",
+            "bridge": "dark fantasy stone bridge, arched supports, worn stone railings, moss-covered, over dark water",
+            "wall_section": "dark fantasy castle wall section, crenellations, walkway, torch sconces, weathered stone blocks",
+            "dungeon_entrance": "dark fantasy dungeon entrance, heavy stone doorway, iron bars, skull decorations, descending stairs",
+            "shrine": "dark fantasy roadside shrine, carved stone altar, religious symbols, candle holders, weathered and ancient",
+        }
+        _STYLE_MODIFIERS = {
+            "dark_fantasy": "dark moody atmosphere, weathered stone, iron fixtures, gothic elements",
+            "gothic": "pointed arches, ribbed vaults, ornate tracery, gargoyles, dark stone",
+            "medieval": "rough-hewn stone, timber beams, iron hinges, practical construction",
+            "elven": "elegant curves, living wood elements, nature-integrated, silver accents",
+            "dwarven": "heavy stone blocks, geometric patterns, iron reinforcement, underground aesthetic",
+            "corrupted": "twisted architecture, dark tendrils, cracked stone, eerie glow, decay",
+        }
+        _SIZE_HINTS = {
+            "small": "small scale, single story",
+            "medium": "medium scale, two stories",
+            "large": "large imposing structure, three stories",
+            "massive": "massive monumental structure, towering scale",
+        }
+
+        bt = building_type or "house"
+        base_prompt = _BUILDING_PROMPTS.get(bt, f"dark fantasy {bt}")
+        style_mod = _STYLE_MODIFIERS.get(building_style, _STYLE_MODIFIERS["dark_fantasy"])
+        size_hint = _SIZE_HINTS.get(building_size, _SIZE_HINTS["medium"])
+        full_prompt = prompt or f"{base_prompt}, {style_mod}, {size_hint}, game-ready 3D model, clean topology"
+
+        # Route to generate_3d with the composed prompt
+        studio_cookie = settings.tripo_session_cookie
+        studio_token = settings.tripo_studio_token
+        api_key = settings.tripo_api_key
+
+        if not (studio_cookie or studio_token or api_key):
+            return json.dumps({
+                "status": "unavailable",
+                "error": "No Tripo credentials configured. Set TRIPO_SESSION_COOKIE, TRIPO_STUDIO_TOKEN, or TRIPO_API_KEY.",
+                "prompt_preview": full_prompt,
+                "tip": "You can use this prompt with any 3D generation service.",
+            })
+
+        # Set output dir for buildings
+        _vb3d = settings.unity_project_path
+        if _vb3d:
+            output_dir = str(__import__("pathlib").Path(_vb3d) / "Assets/Art/3D_Models/Buildings")
+            if name:
+                output_dir = str(__import__("pathlib").Path(output_dir) / name)
+
+        if studio_cookie or studio_token:
+            from veilbreakers_mcp.shared.tripo_studio_client import TripoStudioClient
+            gen = TripoStudioClient(
+                session_cookie=studio_cookie,
+                session_token=studio_token,
+            )
+            try:
+                if image_path:
+                    result = await gen.generate_from_image(image_path, output_dir)
+                else:
+                    result = await gen.generate_from_text(full_prompt, output_dir)
+                result["building_type"] = bt
+                result["building_style"] = building_style
+                result["prompt_used"] = full_prompt
+                result["next_steps"] = [
+                    f"Generated {bt} ({building_style} style) via Tripo.",
+                    "Pick the best variant, then run: asset_pipeline action=cleanup object_name=<name>",
+                    "For terrain placement: use blender_environment action=scatter_props",
+                ]
+                return json.dumps(result, indent=2, default=str)
+            finally:
+                await gen.close()
+        else:
+            gen = TripoGenerator(api_key=api_key)
+            if image_path:
+                result = await gen.generate_from_image(image_path, output_dir)
+            else:
+                result = await gen.generate_from_text(full_prompt, output_dir)
+            result["building_type"] = bt
+            result["prompt_used"] = full_prompt
+            return json.dumps(result, indent=2, default=str)
+
+    elif action == "generate_terrain_mesh":
+        # Generate terrain directly in Blender using procedural heightmap + erosion
+        preset = terrain_preset or "mountains"
+        _TERRAIN_PRESETS = {
+            "mountains": {"noise_scale": 0.8, "octaves": 6, "height_mult": 1.0, "erosion_drops": 150000},
+            "hills": {"noise_scale": 0.5, "octaves": 4, "height_mult": 0.4, "erosion_drops": 100000},
+            "plains": {"noise_scale": 0.3, "octaves": 3, "height_mult": 0.1, "erosion_drops": 50000},
+            "canyon": {"noise_scale": 0.9, "octaves": 5, "height_mult": 1.2, "erosion_drops": 200000},
+            "volcanic": {"noise_scale": 1.0, "octaves": 5, "height_mult": 1.5, "erosion_drops": 100000},
+            "coastal": {"noise_scale": 0.4, "octaves": 4, "height_mult": 0.3, "erosion_drops": 120000},
+            "swamp": {"noise_scale": 0.2, "octaves": 3, "height_mult": 0.05, "erosion_drops": 80000},
+        }
+        cfg = _TERRAIN_PRESETS.get(preset, _TERRAIN_PRESETS["mountains"])
+
+        result = await blender.send_command("world_generate_terrain", {
+            "terrain_type": preset,
+            "resolution": terrain_resolution,
+            "height_scale": terrain_height_scale * cfg["height_mult"],
+            "erosion": terrain_erosion,
+            "erosion_iterations": cfg["erosion_drops"],
+            "seed": terrain_seed,
+            "size": terrain_size,
+        })
+        if isinstance(result, dict):
+            result["preset"] = preset
+            result["next_steps"] = [
+                f"Terrain generated: {preset} ({terrain_size}x{terrain_size} units, {terrain_resolution} resolution).",
+                "Paint textures: blender_environment action=paint_terrain",
+                "Add vegetation: blender_environment action=scatter_vegetation",
+                "Add props: blender_environment action=scatter_props",
+                "Export heightmap for Unity: blender_environment action=export_heightmap",
+            ]
+        return await _with_screenshot(blender, result, capture_viewport)
 
     elif action == "cleanup":
         if not object_name:
@@ -2345,8 +2480,6 @@ async def blender_quality(
         "quality_sword", "quality_axe", "quality_mace", "quality_bow",
         "quality_shield", "quality_staff", "quality_pauldron",
         "quality_chestplate", "quality_gauntlet",
-        "stone_wall", "timber_frame", "gothic_window", "roof",
-        "staircase", "archway", "chimney", "interior_trim", "battlements",
         "creature_mouth", "creature_eyelid", "creature_paw",
         "creature_wing", "creature_serpent", "creature_quadruped",
         "creature_fantasy",
@@ -2383,17 +2516,6 @@ async def blender_quality(
     num_layers: int = 3,
     side: str = "left",
     length: float = 3.0,
-    # Building
-    block_style: str = "ashlar",
-    mortar_depth: float = 0.005,
-    arch_style: str = "gothic_pointed",
-    has_keystone: bool = True,
-    pitch: float = 45.0,
-    material: str = "tile",
-    step_count: int = 12,
-    railing: bool = True,
-    tracery: bool = True,
-    merlon_style: str = "squared",
     # Creature
     tooth_count: int = 20,
     tooth_style: str = "carnivore",
@@ -2422,7 +2544,7 @@ async def blender_quality(
     wear_intensity: float = 0.5,
     dirt_intensity: float = 0.5,
 ):
-    """AAA quality generators for weapons, armor, buildings, creatures, riggable props, clothing, vegetation, and textures."""
+    """AAA quality generators for weapons, armor, creatures, riggable props, clothing, vegetation, and textures. For buildings/architecture, use asset_pipeline generate_3d with Tripo instead."""
     blender = get_blender_connection()
     pos = tuple(position) if position else (0.0, 0.0, 0.0)
     _style = None if style == "default" else style
@@ -2484,65 +2606,6 @@ async def blender_quality(
         result = await blender.send_command("weapon_quality_gauntlet", {
             "style": _style or "plate", "size": size, "side": side,
             "edge_bevel": edge_bevel, "ornament_level": ornament_level,
-        })
-        return await _with_screenshot(blender, result, capture_viewport)
-
-    # --- Buildings & Architecture ---
-    elif action == "stone_wall":
-        result = await blender.send_command("building_stone_wall", {
-            "width": width or 4.0, "height": height or 3.0,
-            "thickness": thickness or 0.4, "block_style": block_style,
-            "mortar_depth": mortar_depth, "seed": seed,
-        })
-        return await _with_screenshot(blender, result, capture_viewport)
-    elif action == "timber_frame":
-        result = await blender.send_command("building_timber_frame", {
-            "width": width or 5.0, "height": height or 3.0,
-            "depth": depth or 4.0, "seed": seed,
-        })
-        return await _with_screenshot(blender, result, capture_viewport)
-    elif action == "gothic_window":
-        params = {"width": width or 0.8, "height": height or 1.5,
-                  "tracery": tracery, "seed": seed}
-        if _style:
-            params["style"] = _style
-        result = await blender.send_command("building_gothic_window", params)
-        return await _with_screenshot(blender, result, capture_viewport)
-    elif action == "roof":
-        params = {"width": width or 6.0, "depth": depth or 5.0,
-                  "pitch": pitch, "material": material, "seed": seed}
-        if _style:
-            params["style"] = _style
-        result = await blender.send_command("building_roof", params)
-        return await _with_screenshot(blender, result, capture_viewport)
-    elif action == "staircase":
-        params = {"step_count": step_count, "railing": railing, "seed": seed}
-        if _style:
-            params["style"] = _style
-        result = await blender.send_command("building_staircase", params)
-        return await _with_screenshot(blender, result, capture_viewport)
-    elif action == "archway":
-        result = await blender.send_command("building_archway", {
-            "width": width or 1.2, "height": height or 2.5,
-            "depth": depth or 0.5, "arch_style": arch_style,
-            "has_keystone": has_keystone, "seed": seed,
-        })
-        return await _with_screenshot(blender, result, capture_viewport)
-    elif action == "chimney":
-        result = await blender.send_command("building_chimney", {
-            "height": height or 2.0, "style": _style or "stone", "seed": seed,
-        })
-        return await _with_screenshot(blender, result, capture_viewport)
-    elif action == "interior_trim":
-        result = await blender.send_command("building_interior_trim", {
-            "room_width": width or 4.0, "room_depth": depth or 5.0,
-            "room_height": height or 3.0, "style": _style or "medieval", "seed": seed,
-        })
-        return await _with_screenshot(blender, result, capture_viewport)
-    elif action == "battlements":
-        result = await blender.send_command("building_battlements", {
-            "wall_length": width or 10.0, "wall_height": height or 6.0,
-            "wall_thickness": thickness or 1.5, "merlon_style": merlon_style, "seed": seed,
         })
         return await _with_screenshot(blender, result, capture_viewport)
 
