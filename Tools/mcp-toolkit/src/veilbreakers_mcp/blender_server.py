@@ -1570,23 +1570,39 @@ async def asset_pipeline(
         steps_completed = []
         steps_failed = []
 
+        # Building bounds for spatial alignment (optional, from building_interior_binding)
+        building_bounds = spec.get("building_bounds")
+
         # --- Step 1: Generate linked interior (room shells + door triggers + occlusion) ---
         rooms = spec.get("rooms", [])
         doors = spec.get("doors", [])
         room_defs = []
         for r in rooms:
-            room_defs.append({
-                "name": r.get("name", "room"),
-                "bounds": {
+            # Use explicit bounds if available (from align_rooms_to_building),
+            # otherwise fall back to (0,0) -> (width, depth)
+            if "bounds" in r:
+                bounds = r["bounds"]
+            elif "position" in r:
+                pos = r["position"]
+                bounds = {
+                    "min": (pos[0], pos[1]),
+                    "max": (pos[0] + r.get("width", 6), pos[1] + r.get("depth", 6)),
+                }
+            else:
+                bounds = {
                     "min": (0, 0),
                     "max": (r.get("width", 6), r.get("depth", 6)),
-                },
+                }
+            room_defs.append({
+                "name": r.get("name", "room"),
+                "bounds": bounds,
             })
         door_defs = []
         for d in doors:
             door_defs.append({
                 "position": d.get("position", (0, 0)),
                 "facing": d.get("facing", "north"),
+                "interior_scene_name": d.get("interior_scene_name", int_name),
             })
 
         try:
