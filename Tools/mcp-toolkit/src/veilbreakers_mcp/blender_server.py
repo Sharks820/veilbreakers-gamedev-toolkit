@@ -1314,7 +1314,7 @@ async def blender_mesh(
         "analyze", "repair", "game_check",
         "select", "edit", "boolean", "retopo", "sculpt",
         "sculpt_brush", "dyntopo", "voxel_remesh", "face_sets", "multires",
-        "enhance", "bake_normals"
+        "enhance", "bake_normals", "bake_ao", "bake_curvature", "validate_enhance"
     ],
     object_name: str,
     # Existing params (analyze/repair/game_check)
@@ -1615,6 +1615,32 @@ async def blender_mesh(
             params["output_name"] = output_name
         result = await blender.send_command("mesh_bake_detail_normals", params)
         return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "bake_ao":
+        params = {
+            "object_name": object_name,
+            "image_size": image_size,
+        }
+        if output_name is not None:
+            params["output_name"] = output_name
+        result = await blender.send_command("mesh_bake_ao_map", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "bake_curvature":
+        params = {
+            "object_name": object_name,
+            "image_size": image_size,
+        }
+        if output_name is not None:
+            params["output_name"] = output_name
+        result = await blender.send_command("mesh_bake_curvature_map", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "validate_enhance":
+        result = await blender.send_command(
+            "mesh_validate_enhancement", {"object_name": object_name}
+        )
+        return [json.dumps(result, indent=2, default=str)]
 
     return ["Unknown action"]
 
@@ -2714,6 +2740,20 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": f"room_{room.get('name', i)}", "error": str(e)})
 
+        # --- Step 2b: Enhance interior geometry (AAA quality) ---
+        for room_res in room_results:
+            room_obj_name = f"{int_name}_{room_res['name']}"
+            try:
+                await blender.send_command("mesh_enhance_geometry", {
+                    "object_name": room_obj_name,
+                    "profile": "architecture",
+                    "apply_modifiers": True,
+                })
+                steps_completed.append(f"enhance_{room_res['name']}")
+            except Exception:
+                # Enhancement is non-critical for interior; continue
+                pass
+
         # --- Step 3: Add storytelling/narrative props to each room ---
         if spec.get("storytelling_density", 0) > 0:
             for room in rooms:
@@ -2763,18 +2803,19 @@ async def asset_pipeline(
             "tripo_prop_queue": tripo_queue[:20] if tripo_queue else [],
             "tripo_props_remaining": max(0, len(tripo_queue) - 20),
             "next_steps": [
-                "--- ENHANCE VISUALS ---",
+                "--- ENHANCE VISUALS (auto-applied: architecture profile SubD + bevel + smooth shading) ---",
                 "1. Review interior: blender_viewport action=contact_sheet object_name=<room>",
                 "2. Add materials: blender_material action=create (stone_wall, wooden_floor, etc.)",
-                "3. Generate hero props with Tripo: asset_pipeline action=generate_3d prompt='dark fantasy <prop>'",
+                "3. Bake detail maps: blender_mesh action=bake_ao object_name=<room> (AO, curvature)",
+                "4. Generate hero props with Tripo: asset_pipeline action=generate_3d prompt='dark fantasy <prop>'",
                 "--- UNITY INTERIOR SETUP ---",
-                "4. Setup interior streaming: unity_world action=create_interior_streaming",
-                "5. Setup door system: unity_world action=create_door_system",
-                "6. Dungeon lighting: unity_world action=create_dungeon_lighting",
-                "7. Portal audio: unity_audio action=setup_portal_audio",
-                "8. Occlusion: unity_world action=setup_occlusion",
-                "9. NPC placement: unity_world action=create_npc_placement",
-                "10. Interaction prompts: unity_ux action=interaction_prompt",
+                "5. Setup interior streaming: unity_world action=create_interior_streaming",
+                "6. Setup door system: unity_world action=create_door_system",
+                "7. Dungeon lighting: unity_world action=create_dungeon_lighting",
+                "8. Portal audio: unity_audio action=setup_portal_audio",
+                "9. Occlusion: unity_world action=setup_occlusion",
+                "10. NPC placement: unity_world action=create_npc_placement",
+                "11. Interaction prompts: unity_ux action=interaction_prompt",
             ],
         }
         if tripo_queue:

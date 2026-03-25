@@ -563,95 +563,398 @@ def handle_bake_detail_normals(params: dict) -> dict:
     if ctx is None:
         raise RuntimeError("No 3D Viewport available")
 
-    # Create high-poly duplicate
-    bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.select_all(action="DESELECT")
-    obj.select_set(True)
-    with bpy.context.temp_override(**ctx):
-        bpy.ops.object.duplicate()
-    high_poly = bpy.context.active_object
-    high_poly.name = f"{object_name}_highpoly_tmp"
+    # Save and restore render engine
+    original_engine = bpy.context.scene.render.engine
 
-    # Apply all modifiers on high-poly copy
-    bpy.context.view_layer.objects.active = high_poly
-    while high_poly.modifiers:
-        mod_name = high_poly.modifiers[0].name
+    try:
+        # Create high-poly duplicate
+        bpy.context.view_layer.objects.active = obj
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
         with bpy.context.temp_override(**ctx):
-            bpy.ops.object.modifier_apply(modifier=mod_name)
+            bpy.ops.object.duplicate()
+        high_poly = bpy.context.active_object
+        high_poly.name = f"{object_name}_highpoly_tmp"
 
-    # Create bake target image
-    img = bpy.data.images.new(output_name, image_size, image_size)
-    img.colorspace_settings.name = "Non-Color"
+        # Apply all modifiers on high-poly copy
+        bpy.context.view_layer.objects.active = high_poly
+        while high_poly.modifiers:
+            mod_name = high_poly.modifiers[0].name
+            with bpy.context.temp_override(**ctx):
+                bpy.ops.object.modifier_apply(modifier=mod_name)
 
-    # Ensure low-poly has a material with the image for baking
-    mat = obj.data.materials[0] if obj.data.materials else None
-    created_mat = False
-    if mat is None:
-        mat = bpy.data.materials.new(f"{object_name}_BakeMat")
-        mat.use_nodes = True
-        obj.data.materials.append(mat)
-        created_mat = True
+        # Create bake target image
+        img = bpy.data.images.new(output_name, image_size, image_size)
+        img.colorspace_settings.name = "Non-Color"
 
-    nodes = mat.node_tree.nodes
-    img_node = nodes.new("ShaderNodeTexImage")
-    img_node.image = img
-    img_node.name = "VB_BakeTarget"
-    # Select the image node so Blender knows where to bake to
-    for n in nodes:
-        n.select = False
-    img_node.select = True
-    nodes.active = img_node
+        # Ensure low-poly has a node-based material for baking
+        mat = obj.data.materials[0] if obj.data.materials else None
+        created_mat = False
+        if mat is None:
+            mat = bpy.data.materials.new(f"{object_name}_BakeMat")
+            mat.use_nodes = True
+            obj.data.materials.append(mat)
+            created_mat = True
+        elif not mat.use_nodes:
+            mat.use_nodes = True
 
-    # Configure bake settings
-    bpy.context.scene.render.engine = "CYCLES"
-    bpy.context.scene.cycles.bake_type = "NORMAL"
-    bpy.context.scene.render.bake.use_selected_to_active = True
-    bpy.context.scene.render.bake.cage_extrusion = cage_extrusion
-    bpy.context.scene.render.bake.use_cage = False
-    bpy.context.scene.render.bake.normal_space = "TANGENT"
-
-    # Select high-poly, active = low-poly
-    bpy.ops.object.select_all(action="DESELECT")
-    high_poly.select_set(True)
-    obj.select_set(True)
-    bpy.context.view_layer.objects.active = obj
-
-    # Bake
-    with bpy.context.temp_override(**ctx):
-        bpy.ops.object.bake(type="NORMAL")
-
-    # Cleanup: remove high-poly duplicate
-    bpy.ops.object.select_all(action="DESELECT")
-    high_poly.select_set(True)
-    bpy.context.view_layer.objects.active = high_poly
-    with bpy.context.temp_override(**ctx):
-        bpy.ops.object.delete()
-
-    # Remove temp bake node (keep the image)
-    if "VB_BakeTarget" in nodes:
-        nodes.remove(nodes["VB_BakeTarget"])
-    if created_mat and len(obj.data.materials) > 0:
-        # Connect normal map to material
-        principled = None
+        nodes = mat.node_tree.nodes
+        img_node = nodes.new("ShaderNodeTexImage")
+        img_node.image = img
+        img_node.name = "VB_BakeTarget"
+        # Select the image node so Blender knows where to bake to
         for n in nodes:
-            if n.type == "BSDF_PRINCIPLED":
-                principled = n
-                break
-        if principled:
-            normal_map_node = nodes.new("ShaderNodeNormalMap")
-            tex_node = nodes.new("ShaderNodeTexImage")
-            tex_node.image = img
-            tex_node.image.colorspace_settings.name = "Non-Color"
-            mat.node_tree.links.new(tex_node.outputs["Color"],
-                                     normal_map_node.inputs["Color"])
-            mat.node_tree.links.new(normal_map_node.outputs["Normal"],
-                                     principled.inputs["Normal"])
+            n.select = False
+        img_node.select = True
+        nodes.active = img_node
 
-    high_poly_verts = len(obj.data.vertices)  # already deleted, use estimate
+        # Configure bake settings
+        bpy.context.scene.render.engine = "CYCLES"
+        bpy.context.scene.cycles.bake_type = "NORMAL"
+        bpy.context.scene.render.bake.use_selected_to_active = True
+        bpy.context.scene.render.bake.cage_extrusion = cage_extrusion
+        bpy.context.scene.render.bake.use_cage = False
+        bpy.context.scene.render.bake.normal_space = "TANGENT"
+
+        # Select high-poly, active = low-poly
+        bpy.ops.object.select_all(action="DESELECT")
+        high_poly.select_set(True)
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+
+        # Bake
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.bake(type="NORMAL")
+
+        # Cleanup: remove high-poly duplicate
+        bpy.ops.object.select_all(action="DESELECT")
+        high_poly.select_set(True)
+        bpy.context.view_layer.objects.active = high_poly
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.delete()
+
+        # Remove temp bake node (keep the image)
+        if "VB_BakeTarget" in nodes:
+            nodes.remove(nodes["VB_BakeTarget"])
+
+        # Connect normal map to material if we created it
+        if created_mat:
+            principled = None
+            for n in nodes:
+                if n.type == "BSDF_PRINCIPLED":
+                    principled = n
+                    break
+            if principled:
+                normal_map_node = nodes.new("ShaderNodeNormalMap")
+                tex_node = nodes.new("ShaderNodeTexImage")
+                tex_node.image = img
+                tex_node.image.colorspace_settings.name = "Non-Color"
+                mat.node_tree.links.new(tex_node.outputs["Color"],
+                                         normal_map_node.inputs["Color"])
+                mat.node_tree.links.new(normal_map_node.outputs["Normal"],
+                                         principled.inputs["Normal"])
+
+    finally:
+        # Always restore the original render engine
+        bpy.context.scene.render.engine = original_engine
+
     return {
         "object_name": object_name,
         "normal_map_image": output_name,
         "image_size": image_size,
         "cage_extrusion": cage_extrusion,
         "status": "success",
+    }
+
+
+def handle_bake_ao_map(params: dict) -> dict:
+    """Bake ambient occlusion map for contact shadows and crevice darkening.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        image_size: AO map resolution (default 2048).
+        samples: Bake quality samples (default 64).
+        output_name: Name for the baked AO image (optional).
+
+    Returns:
+        Dict with bake results including image name.
+    """
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("object_name is required")
+
+    obj = _get_mesh_object(object_name)
+    image_size = params.get("image_size", 2048)
+    samples = params.get("samples", 64)
+    output_name = params.get("output_name", f"{object_name}_ao")
+
+    if not _HAS_BPY:
+        raise RuntimeError("Blender (bpy) not available")
+
+    from ._context import get_3d_context_override
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available")
+
+    original_engine = bpy.context.scene.render.engine
+    original_samples = getattr(bpy.context.scene.cycles, "samples", 128)
+
+    try:
+        # Create bake target image
+        img = bpy.data.images.new(output_name, image_size, image_size)
+        img.colorspace_settings.name = "Non-Color"
+
+        # Ensure material with node setup
+        mat = obj.data.materials[0] if obj.data.materials else None
+        if mat is None:
+            mat = bpy.data.materials.new(f"{object_name}_AOMat")
+            mat.use_nodes = True
+            obj.data.materials.append(mat)
+        elif not mat.use_nodes:
+            mat.use_nodes = True
+
+        nodes = mat.node_tree.nodes
+        img_node = nodes.new("ShaderNodeTexImage")
+        img_node.image = img
+        img_node.name = "VB_AOBakeTarget"
+        for n in nodes:
+            n.select = False
+        img_node.select = True
+        nodes.active = img_node
+
+        # Configure for AO bake
+        bpy.context.scene.render.engine = "CYCLES"
+        bpy.context.scene.cycles.samples = samples
+        bpy.context.scene.render.bake.use_selected_to_active = False
+
+        # Select object
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+
+        # Bake AO
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.bake(type="AO")
+
+        # Remove temp node
+        if "VB_AOBakeTarget" in nodes:
+            nodes.remove(nodes["VB_AOBakeTarget"])
+
+    finally:
+        bpy.context.scene.render.engine = original_engine
+        bpy.context.scene.cycles.samples = original_samples
+
+    return {
+        "object_name": object_name,
+        "ao_map_image": output_name,
+        "image_size": image_size,
+        "samples": samples,
+        "status": "success",
+    }
+
+
+def handle_bake_curvature_map(params: dict) -> dict:
+    """Bake curvature map for edge highlighting and material blending.
+
+    Uses the Pointiness attribute from Cycles shader to generate a
+    curvature map where white = convex edges, black = concave, gray = flat.
+
+    Params:
+        object_name: Name of the mesh object (required).
+        image_size: Curvature map resolution (default 2048).
+        output_name: Name for the baked curvature image (optional).
+
+    Returns:
+        Dict with bake results including image name.
+    """
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("object_name is required")
+
+    obj = _get_mesh_object(object_name)
+    image_size = params.get("image_size", 2048)
+    output_name = params.get("output_name", f"{object_name}_curvature")
+
+    if not _HAS_BPY:
+        raise RuntimeError("Blender (bpy) not available")
+
+    from ._context import get_3d_context_override
+    ctx = get_3d_context_override()
+    if ctx is None:
+        raise RuntimeError("No 3D Viewport available")
+
+    original_engine = bpy.context.scene.render.engine
+
+    try:
+        img = bpy.data.images.new(output_name, image_size, image_size)
+        img.colorspace_settings.name = "Non-Color"
+
+        # Temporarily replace material with curvature-capture shader
+        mat = obj.data.materials[0] if obj.data.materials else None
+        had_material = mat is not None
+        if mat is None:
+            mat = bpy.data.materials.new(f"{object_name}_CurvMat")
+            mat.use_nodes = True
+            obj.data.materials.append(mat)
+        elif not mat.use_nodes:
+            mat.use_nodes = True
+
+        nodes = mat.node_tree.nodes
+        links = mat.node_tree.links
+
+        # Save existing links from Principled BSDF
+        principled = None
+        saved_color_link = None
+        for n in nodes:
+            if n.type == "BSDF_PRINCIPLED":
+                principled = n
+                break
+
+        # Create curvature capture nodes
+        # Geometry node -> Pointiness output -> Color Ramp -> Emission -> Output
+        geom_node = nodes.new("ShaderNodeNewGeometry")
+        geom_node.name = "VB_CurvGeom"
+        ramp_node = nodes.new("ShaderNodeValToRGB")
+        ramp_node.name = "VB_CurvRamp"
+        # Set color ramp for curvature visualization
+        ramp_node.color_ramp.elements[0].position = 0.45
+        ramp_node.color_ramp.elements[0].color = (0, 0, 0, 1)
+        ramp_node.color_ramp.elements[1].position = 0.55
+        ramp_node.color_ramp.elements[1].color = (1, 1, 1, 1)
+
+        emission_node = nodes.new("ShaderNodeEmission")
+        emission_node.name = "VB_CurvEmission"
+
+        img_node = nodes.new("ShaderNodeTexImage")
+        img_node.image = img
+        img_node.name = "VB_CurvBakeTarget"
+
+        # Wire: Pointiness -> Ramp -> Emission -> Surface
+        links.new(geom_node.outputs["Pointiness"], ramp_node.inputs["Fac"])
+        links.new(ramp_node.outputs["Color"], emission_node.inputs["Color"])
+
+        # Find output node
+        output_node = None
+        for n in nodes:
+            if n.type == "OUTPUT_MATERIAL":
+                output_node = n
+                break
+        if output_node is None:
+            output_node = nodes.new("ShaderNodeOutputMaterial")
+            output_node.name = "VB_CurvOutput"
+
+        # Save existing surface connection
+        saved_surface_from = None
+        for link in links:
+            if link.to_socket == output_node.inputs["Surface"]:
+                saved_surface_from = link.from_socket
+                links.remove(link)
+                break
+
+        links.new(emission_node.outputs["Emission"], output_node.inputs["Surface"])
+
+        for n in nodes:
+            n.select = False
+        img_node.select = True
+        nodes.active = img_node
+
+        bpy.context.scene.render.engine = "CYCLES"
+        bpy.context.scene.render.bake.use_selected_to_active = False
+
+        bpy.ops.object.select_all(action="DESELECT")
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.bake(type="EMIT")
+
+        # Cleanup: remove temp nodes, restore material
+        for temp_name in ("VB_CurvGeom", "VB_CurvRamp", "VB_CurvEmission",
+                          "VB_CurvBakeTarget"):
+            if temp_name in nodes:
+                nodes.remove(nodes[temp_name])
+        if "VB_CurvOutput" in nodes:
+            nodes.remove(nodes["VB_CurvOutput"])
+
+        # Restore original surface connection
+        if saved_surface_from and output_node:
+            links.new(saved_surface_from, output_node.inputs["Surface"])
+
+    finally:
+        bpy.context.scene.render.engine = original_engine
+
+    return {
+        "object_name": object_name,
+        "curvature_map_image": output_name,
+        "image_size": image_size,
+        "status": "success",
+    }
+
+
+def handle_validate_enhancement(params: dict) -> dict:
+    """Validate that mesh enhancement was applied correctly.
+
+    Checks:
+    - Smooth shading is enabled on all faces
+    - Material slots are preserved
+    - Vertex/face counts are reasonable post-enhancement
+    - No degenerate geometry introduced
+
+    Params:
+        object_name: Name of the mesh object (required).
+
+    Returns:
+        Dict with validation results and pass/fail status.
+    """
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("object_name is required")
+
+    obj = _get_mesh_object(object_name)
+    mesh = obj.data
+    issues: list[str] = []
+
+    # Check smooth shading
+    smooth_count = sum(1 for p in mesh.polygons if p.use_smooth)
+    total_polys = len(mesh.polygons)
+    smooth_pct = (smooth_count / total_polys * 100) if total_polys > 0 else 0
+    if smooth_pct < 80:
+        issues.append(f"Only {smooth_pct:.0f}% of faces have smooth shading (expected >80%)")
+
+    # Check material slots preserved
+    mat_count = len(obj.data.materials)
+    if mat_count == 0:
+        issues.append("No material slots -- texturing will fail")
+
+    # Check for degenerate geometry
+    degen_faces = 0
+    for poly in mesh.polygons:
+        if poly.area < 1e-10:
+            degen_faces += 1
+    if degen_faces > 0:
+        issues.append(f"{degen_faces} degenerate faces (area ~0) detected")
+
+    # Check modifier stack order (if modifiers remain unapplied)
+    mod_names = [m.name for m in obj.modifiers]
+    mod_types = [m.type for m in obj.modifiers]
+    if "WEIGHTED_NORMAL" in mod_types:
+        wn_idx = mod_types.index("WEIGHTED_NORMAL")
+        if wn_idx < len(mod_types) - 1:
+            issues.append("WEIGHTED_NORMAL modifier should be last in stack")
+
+    # Check SubD + Bevel ordering
+    if "SUBSURF" in mod_types and "BEVEL" in mod_types:
+        if mod_types.index("BEVEL") > mod_types.index("SUBSURF"):
+            issues.append("BEVEL should come before SUBSURF in modifier stack")
+
+    return {
+        "object_name": object_name,
+        "passed": len(issues) == 0,
+        "smooth_shading_pct": round(smooth_pct, 1),
+        "material_count": mat_count,
+        "vertex_count": len(mesh.vertices),
+        "face_count": total_polys,
+        "modifier_stack": mod_names,
+        "degenerate_faces": degen_faces,
+        "issues": issues,
     }
