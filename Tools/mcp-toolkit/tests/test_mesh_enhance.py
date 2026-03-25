@@ -238,3 +238,205 @@ class TestEdgeDetectionPerformance:
         merged_v, merged_f = _merge_meshes(*parts)
         sharp = _auto_detect_sharp_edges(merged_v, merged_f, 35.0)
         assert len(sharp) == 120  # 10 cubes * 12 edges each
+
+
+# ---------------------------------------------------------------------------
+# Weathering integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestWeatheringEnhanceIntegration:
+    """Test that edge wear respects enhanced edge data."""
+
+    def test_edge_wear_uses_sharp_edges(self):
+        """apply_edge_wear should boost vertices on sharp edges."""
+        from blender_addon.handlers.weathering import apply_edge_wear
+
+        verts, faces = _make_box(0, 0, 0, 0.5, 0.5, 0.5)
+        sharp = _auto_detect_sharp_edges(verts, faces, 35.0)
+
+        mesh_data_without = {
+            "vertices": verts, "faces": faces,
+            "face_normals": [], "vertex_normals": [], "edges": [],
+        }
+        mesh_data_with = {
+            "vertices": verts, "faces": faces,
+            "face_normals": [], "vertex_normals": [], "edges": [],
+            "sharp_edges": sharp,
+        }
+
+        wear_without = apply_edge_wear(mesh_data_without, strength=1.0)
+        wear_with = apply_edge_wear(mesh_data_with, strength=1.0)
+
+        # Sharp edges should produce higher total wear
+        total_without = sum(wear_without)
+        total_with = sum(wear_with)
+        assert total_with >= total_without, (
+            f"Sharp edge boost should increase total wear: {total_with} vs {total_without}"
+        )
+
+    def test_edge_wear_empty_sharp_edges_no_crash(self):
+        """Edge wear should handle empty sharp_edges list."""
+        from blender_addon.handlers.weathering import apply_edge_wear
+
+        verts, faces = _make_box(0, 0, 0, 0.5, 0.5, 0.5)
+        mesh_data = {
+            "vertices": verts, "faces": faces,
+            "face_normals": [], "vertex_normals": [], "edges": [],
+            "sharp_edges": [],
+        }
+        wear = apply_edge_wear(mesh_data, strength=0.5)
+        assert len(wear) == len(verts)
+
+
+# ---------------------------------------------------------------------------
+# Pipeline cleanup ordering tests
+# ---------------------------------------------------------------------------
+
+
+class TestPipelineOrdering:
+    """Verify cleanup pipeline step ordering is correct."""
+
+    def test_cleanup_pipeline_has_enhance_step(self):
+        """cleanup_ai_model should include enhance_geometry step."""
+        import inspect
+        from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner
+
+        source = inspect.getsource(PipelineRunner.cleanup_ai_model)
+        # Enhancement must come BEFORE UV unwrap
+        enhance_pos = source.find("mesh_enhance_geometry")
+        uv_pos = source.find("uv_unwrap_xatlas")
+        assert enhance_pos > 0, "Enhancement step missing from cleanup"
+        assert uv_pos > 0, "UV unwrap step missing from cleanup"
+        assert enhance_pos < uv_pos, "Enhancement must come before UV unwrap"
+
+    def test_cleanup_pipeline_has_lightmap_uv(self):
+        """cleanup_ai_model should include lightmap UV2 generation."""
+        import inspect
+        from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner
+
+        source = inspect.getsource(PipelineRunner.cleanup_ai_model)
+        assert "uv_generate_lightmap" in source, "Lightmap UV2 step missing"
+        # Lightmap must come AFTER primary UV
+        uv_pos = source.find("uv_unwrap_xatlas")
+        lightmap_pos = source.find("uv_generate_lightmap")
+        assert lightmap_pos > uv_pos, "Lightmap UV2 must come after primary UV"
+
+    def test_cleanup_pipeline_has_validation(self):
+        """cleanup_ai_model should include enhancement validation."""
+        import inspect
+        from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner
+
+        source = inspect.getsource(PipelineRunner.cleanup_ai_model)
+        assert "mesh_validate_enhancement" in source, "Validation step missing"
+
+    def test_full_pipeline_maps_asset_type_to_profile(self):
+        """full_asset_pipeline should map asset types to enhance profiles."""
+        import inspect
+        from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner
+
+        source = inspect.getsource(PipelineRunner.full_asset_pipeline)
+        for asset_type in ("weapon", "character", "creature", "building"):
+            assert asset_type in source, f"Asset type '{asset_type}' not mapped"
+
+
+# ---------------------------------------------------------------------------
+# Blender server action Literal tests
+# ---------------------------------------------------------------------------
+
+
+class TestBlenderMeshActionLiteral:
+    """Verify all new actions are in the blender_mesh Literal."""
+
+    def test_new_actions_in_literal(self):
+        """All AAA enhancement actions must be in the blender_mesh Literal."""
+        import inspect
+        from veilbreakers_mcp.blender_server import blender_mesh
+
+        source = inspect.getsource(blender_mesh)
+        for action in ("enhance", "bake_normals", "bake_ao",
+                        "bake_curvature", "validate_enhance"):
+            assert f'"{action}"' in source, (
+                f"Action '{action}' missing from blender_mesh"
+            )
+
+    def test_new_actions_have_dispatch_branches(self):
+        """Every new action must have a dispatch branch."""
+        import inspect
+        from veilbreakers_mcp.blender_server import blender_mesh
+
+        source = inspect.getsource(blender_mesh)
+        for action in ("enhance", "bake_normals", "bake_ao",
+                        "bake_curvature", "validate_enhance"):
+            assert f'action == "{action}"' in source, (
+                f"No dispatch branch for action '{action}'"
+            )
+
+
+# ---------------------------------------------------------------------------
+# Handler registration tests
+# ---------------------------------------------------------------------------
+
+
+class TestHandlerRegistration:
+    """Verify all new handlers are registered in COMMAND_HANDLERS."""
+
+    def test_enhance_handlers_registered(self):
+        """All enhancement handlers must be in COMMAND_HANDLERS."""
+        from blender_addon.handlers import COMMAND_HANDLERS
+
+        expected = [
+            "mesh_enhance_geometry",
+            "mesh_bake_detail_normals",
+            "mesh_bake_ao_map",
+            "mesh_bake_curvature_map",
+            "mesh_validate_enhancement",
+        ]
+        for cmd in expected:
+            assert cmd in COMMAND_HANDLERS, f"Handler '{cmd}' not registered"
+
+    def test_enhance_handlers_are_callable(self):
+        """All registered enhancement handlers must be callable."""
+        from blender_addon.handlers import COMMAND_HANDLERS
+
+        for cmd in ("mesh_enhance_geometry", "mesh_bake_detail_normals",
+                     "mesh_bake_ao_map", "mesh_bake_curvature_map",
+                     "mesh_validate_enhancement"):
+            handler = COMMAND_HANDLERS[cmd]
+            assert callable(handler), f"Handler '{cmd}' is not callable"
+
+
+# ---------------------------------------------------------------------------
+# Interior enhancement integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestInteriorEnhanceIntegration:
+    """Verify interior compose pipeline includes enhancement."""
+
+    def test_compose_interior_calls_enhance(self):
+        """compose_interior should enhance room geometry."""
+        import inspect
+        from veilbreakers_mcp.blender_server import asset_pipeline
+
+        source = inspect.getsource(asset_pipeline)
+        # compose_interior section should call mesh_enhance_geometry
+        assert "mesh_enhance_geometry" in source, (
+            "compose_interior should call mesh_enhance_geometry for rooms"
+        )
+
+    def test_compose_interior_uses_architecture_profile(self):
+        """Interior enhancement should use 'architecture' profile."""
+        import inspect
+        from veilbreakers_mcp.blender_server import asset_pipeline
+
+        source = inspect.getsource(asset_pipeline)
+        # The compose_interior section contains the enhance call with architecture profile
+        # Search a wider window since the code is deep in the function
+        enhance_idx = source.find("mesh_enhance_geometry")
+        assert enhance_idx > 0, "mesh_enhance_geometry not found in asset_pipeline"
+        # Check that "architecture" profile is near the enhance call
+        nearby = source[max(0, enhance_idx - 200):enhance_idx + 200]
+        assert "architecture" in nearby, (
+            "Interior enhancement should use architecture profile"
+        )
