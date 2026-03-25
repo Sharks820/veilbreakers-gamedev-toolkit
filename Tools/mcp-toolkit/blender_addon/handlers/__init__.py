@@ -75,6 +75,10 @@ from .mesh import (
     _select_by_sphere,
     _select_by_plane,
 )
+from .mesh_enhance import (
+    handle_enhance_geometry,
+    handle_bake_detail_normals,
+)
 from .text_objects import (
     handle_create_text,
     handle_text_to_mesh,
@@ -725,6 +729,9 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "mesh_voxel_remesh": handle_voxel_remesh,
     "mesh_face_sets": handle_face_sets,
     "mesh_multires": handle_multires,
+    # AAA geometry enhancement (MESH-ENH)
+    "mesh_enhance_geometry": handle_enhance_geometry,
+    "mesh_bake_detail_normals": handle_bake_detail_normals,
     # UV operations
     "uv_analyze": handle_analyze_uv,
     "uv_unwrap_xatlas": handle_unwrap_xatlas,
