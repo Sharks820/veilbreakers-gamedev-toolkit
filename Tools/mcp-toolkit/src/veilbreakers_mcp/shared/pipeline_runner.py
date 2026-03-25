@@ -83,20 +83,26 @@ class PipelineRunner:
         self.settings = settings
 
     async def cleanup_ai_model(
-        self, object_name: str, poly_budget: int = 50000
+        self, object_name: str, poly_budget: int = 50000,
+        enhance_profile: str = "prop",
+        skip_enhance: bool = False,
     ) -> dict:
-        """Orchestrate repair -> UV -> material pipeline for an AI-generated model.
+        """Orchestrate repair -> enhance -> UV -> material pipeline.
 
         Steps:
         1. Auto-repair mesh (fix non-manifold, remove doubles)
         2. Check game-readiness (poly budget compliance)
         3. Retopologize if over budget
-        4. UV unwrap via xatlas
-        5. Create PBR material
+        4. Geometry enhancement (SubD, bevel, weighted normals, smooth shading)
+        5. UV unwrap via xatlas
+        6. Create PBR material
 
         Args:
             object_name: Name of the Blender object to process.
             poly_budget: Maximum triangle count target.
+            enhance_profile: Enhancement profile preset (weapon, architecture,
+                organic, prop, character, vegetation). Default "prop".
+            skip_enhance: If True, skip the geometry enhancement step.
 
         Returns:
             Dict with per-step results and overall status.
@@ -132,14 +138,27 @@ class PipelineRunner:
                     results["steps"]["retopologize"] = retopo_result
                     steps_completed.append("retopologize")
 
-            # Step 4: UV unwrap
+            # Step 4: Geometry enhancement (AAA quality)
+            if not skip_enhance:
+                enhance_result = await self.blender.send_command(
+                    "mesh_enhance_geometry",
+                    {
+                        "object_name": object_name,
+                        "profile": enhance_profile,
+                        "apply_modifiers": True,
+                    },
+                )
+                results["steps"]["enhance_geometry"] = enhance_result
+                steps_completed.append("enhance_geometry")
+
+            # Step 5: UV unwrap
             uv_result = await self.blender.send_command(
                 "uv_unwrap_xatlas", {"object_name": object_name}
             )
             results["steps"]["uv_unwrap"] = uv_result
             steps_completed.append("uv_unwrap")
 
-            # Step 5: Create PBR material
+            # Step 6: Create PBR material
             pbr_result = await self.blender.send_command(
                 "texture_create_pbr",
                 {"name": object_name, "object_name": object_name},
@@ -845,8 +864,22 @@ class PipelineRunner:
                 name = _imported_name
                 results["object_name"] = name
 
-            # ----- Step 2: Cleanup (repair -> game check -> retopo -> UV -> PBR) -----
-            cleanup_result = await self.cleanup_ai_model(name, poly_budget)
+            # ----- Step 2: Cleanup (repair -> enhance -> UV -> PBR) -----
+            # Map asset_type to enhancement profile for AAA geometry quality
+            _enhance_map = {
+                "prop": "prop",
+                "weapon": "weapon",
+                "character": "character",
+                "creature": "organic",
+                "building": "architecture",
+                "environment": "architecture",
+                "vegetation": "vegetation",
+            }
+            _enhance_profile = _enhance_map.get(asset_type, "prop")
+            cleanup_result = await self.cleanup_ai_model(
+                name, poly_budget,
+                enhance_profile=_enhance_profile,
+            )
             results["steps"]["cleanup"] = cleanup_result
             if cleanup_result.get("status") == "failed":
                 results["status"] = "failed"

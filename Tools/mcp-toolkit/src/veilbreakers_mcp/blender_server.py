@@ -1313,7 +1313,8 @@ async def blender_mesh(
     action: Literal[
         "analyze", "repair", "game_check",
         "select", "edit", "boolean", "retopo", "sculpt",
-        "sculpt_brush", "dyntopo", "voxel_remesh", "face_sets", "multires"
+        "sculpt_brush", "dyntopo", "voxel_remesh", "face_sets", "multires",
+        "enhance", "bake_normals"
     ],
     object_name: str,
     # Existing params (analyze/repair/game_check)
@@ -1381,14 +1382,30 @@ async def blender_mesh(
     adaptivity: float = 0.0,
     # Multires params (multires action)
     subdivisions: int = 1,
+    # Enhance params (enhance action) -- AAA geometry enhancement pipeline
+    enhance_profile: str = "prop",
+    subdiv_levels: int | None = None,
+    render_levels: int | None = None,
+    bevel_width_override: float | None = None,
+    bevel_segments_override: int | None = None,
+    sharp_angle: float | None = None,
+    crease_value: float | None = None,
+    displacement_strength: float | None = None,
+    apply_modifiers: bool = False,
+    skip_steps: list[str] | None = None,
+    # Bake normals params (bake_normals action)
+    image_size: int = 2048,
+    cage_extrusion: float = 0.02,
+    output_name: str | None = None,
     capture_viewport: bool = True
 ):
-    """Mesh topology analysis, repair, editing, booleans, retopology, and sculpting.
+    """Mesh topology analysis, repair, editing, booleans, retopology, sculpting, and AAA enhancement.
 
     Extended with position-based selection (GAP-01), transform operations (GAP-02),
-    loop cuts (GAP-03), bevel (GAP-04), merge/dissolve (GAP-05), and advanced
+    loop cuts (GAP-03), bevel (GAP-04), merge/dissolve (GAP-05), advanced
     sculpt operations: sculpt_brush (32 brush types), dyntopo (dynamic topology),
-    voxel_remesh, face_sets, and multires (multiresolution modifier).
+    voxel_remesh, face_sets, multires (multiresolution modifier), and AAA geometry
+    enhancement pipeline (enhance, bake_normals).
     """
     blender = get_blender_connection()
 
@@ -1564,6 +1581,39 @@ async def blender_mesh(
         if operation is not None:
             params["action"] = operation
         result = await blender.send_command("mesh_multires", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "enhance":
+        params = {"object_name": object_name, "profile": enhance_profile}
+        if subdiv_levels is not None:
+            params["subdiv_levels"] = subdiv_levels
+        if render_levels is not None:
+            params["render_levels"] = render_levels
+        if bevel_width_override is not None:
+            params["bevel_width"] = bevel_width_override
+        if bevel_segments_override is not None:
+            params["bevel_segments"] = bevel_segments_override
+        if sharp_angle is not None:
+            params["sharp_angle"] = sharp_angle
+        if crease_value is not None:
+            params["crease_value"] = crease_value
+        if displacement_strength is not None:
+            params["displacement_strength"] = displacement_strength
+        params["apply_modifiers"] = apply_modifiers
+        if skip_steps is not None:
+            params["skip_steps"] = skip_steps
+        result = await blender.send_command("mesh_enhance_geometry", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "bake_normals":
+        params = {
+            "object_name": object_name,
+            "image_size": image_size,
+            "cage_extrusion": cage_extrusion,
+        }
+        if output_name is not None:
+            params["output_name"] = output_name
+        result = await blender.send_command("mesh_bake_detail_normals", params)
         return await _with_screenshot(blender, result, capture_viewport)
 
     return ["Unknown action"]
