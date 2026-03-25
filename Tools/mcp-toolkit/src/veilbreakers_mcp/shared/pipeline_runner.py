@@ -84,15 +84,17 @@ class PipelineRunner:
         enhance_profile: str = "prop",
         skip_enhance: bool = False,
     ) -> dict:
-        """Orchestrate repair -> enhance -> UV -> material pipeline.
+        """Orchestrate repair -> enhance -> UV -> UV2 -> material -> validate pipeline.
 
         Steps:
         1. Auto-repair mesh (fix non-manifold, remove doubles)
         2. Check game-readiness (poly budget compliance)
         3. Retopologize if over budget
         4. Geometry enhancement (SubD, bevel, weighted normals, smooth shading)
-        5. UV unwrap via xatlas
-        6. Create PBR material
+        5. UV unwrap via xatlas (primary UV for textures)
+        6. UV2 lightmap generation (separate lightmap UV layer for Unity)
+        7. Create PBR material
+        8. Validate enhancement quality
 
         Args:
             object_name: Name of the Blender object to process.
@@ -148,20 +150,52 @@ class PipelineRunner:
                 results["steps"]["enhance_geometry"] = enhance_result
                 steps_completed.append("enhance_geometry")
 
-            # Step 5: UV unwrap
+            # Step 5: UV unwrap (primary UVs for textures)
             uv_result = await self.blender.send_command(
                 "uv_unwrap_xatlas", {"object_name": object_name}
             )
             results["steps"]["uv_unwrap"] = uv_result
             steps_completed.append("uv_unwrap")
 
-            # Step 6: Create PBR material
+            # Step 6: UV2 lightmap layer (separate UV for Unity lightmapping)
+            try:
+                lightmap_result = await self.blender.send_command(
+                    "uv_generate_lightmap", {"object_name": object_name}
+                )
+                results["steps"]["lightmap_uv"] = lightmap_result
+                steps_completed.append("lightmap_uv")
+            except (ConnectionError, TimeoutError, OSError, ValueError,
+                    RuntimeError, BlenderCommandError):
+                # Lightmap UV is non-critical; continue if it fails
+                results["steps"]["lightmap_uv"] = {"status": "skipped",
+                                                    "reason": "non-critical failure"}
+
+            # Step 7: Create PBR material
             pbr_result = await self.blender.send_command(
                 "texture_create_pbr",
                 {"name": object_name, "object_name": object_name},
             )
             results["steps"]["create_pbr"] = pbr_result
             steps_completed.append("create_pbr")
+
+            # Step 8: Validate enhancement quality
+            if not skip_enhance:
+                try:
+                    validate_result = await self.blender.send_command(
+                        "mesh_validate_enhancement",
+                        {"object_name": object_name},
+                    )
+                    results["steps"]["validate_enhance"] = validate_result
+                    steps_completed.append("validate_enhance")
+                    if not validate_result.get("passed", True):
+                        results.setdefault("warnings", []).extend(
+                            validate_result.get("issues", [])
+                        )
+                except (ConnectionError, TimeoutError, OSError, ValueError,
+                        RuntimeError, BlenderCommandError):
+                    results["steps"]["validate_enhance"] = {
+                        "status": "skipped", "reason": "non-critical failure"
+                    }
 
             results["status"] = "success"
             results["steps_completed"] = steps_completed

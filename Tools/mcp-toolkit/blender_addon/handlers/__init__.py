@@ -78,6 +78,9 @@ from .mesh import (
 from .mesh_enhance import (
     handle_enhance_geometry,
     handle_bake_detail_normals,
+    handle_bake_ao_map,
+    handle_bake_curvature_map,
+    handle_validate_enhancement,
 )
 from .text_objects import (
     handle_create_text,
@@ -732,6 +735,9 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     # AAA geometry enhancement (MESH-ENH)
     "mesh_enhance_geometry": handle_enhance_geometry,
     "mesh_bake_detail_normals": handle_bake_detail_normals,
+    "mesh_bake_ao_map": handle_bake_ao_map,
+    "mesh_bake_curvature_map": handle_bake_curvature_map,
+    "mesh_validate_enhancement": handle_validate_enhancement,
     # UV operations
     "uv_analyze": handle_analyze_uv,
     "uv_unwrap_xatlas": handle_unwrap_xatlas,

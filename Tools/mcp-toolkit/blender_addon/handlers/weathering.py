@@ -275,13 +275,18 @@ def apply_edge_wear(
     mesh_data: dict[str, Any],
     strength: float = 0.5,
 ) -> list[float]:
-    """Compute per-vertex edge wear mask from mesh curvature.
+    """Compute per-vertex edge wear mask from mesh curvature and edge annotations.
 
     At convex edges (protruding corners, ridges): higher wear values.
     These areas would naturally show wear from contact and abrasion.
 
+    Enhancement-aware: If the mesh_data contains ``sharp_edges`` from the
+    geometry enhancement pipeline, vertices on those edges receive a wear
+    boost since sharp/creased edges are the most prominent wear locations.
+
     Args:
         mesh_data: Dict with vertices, faces, face_normals, vertex_normals, edges.
+            Optional: ``sharp_edges`` (list of [a, b] pairs from enhancement).
         strength: Effect intensity 0-1.
 
     Returns:
@@ -299,13 +304,24 @@ def apply_edge_wear(
     if curvature is None:
         curvature = _compute_edge_convexity(mesh_data)
 
+    # Enhancement-aware: boost wear on vertices that lie on sharp/creased edges
+    sharp_vert_boost: dict[int, float] = {}
+    sharp_edges = mesh_data.get("sharp_edges", [])
+    if sharp_edges:
+        for edge in sharp_edges:
+            if len(edge) >= 2:
+                sharp_vert_boost[edge[0]] = 0.3
+                sharp_vert_boost[edge[1]] = 0.3
+
     wear_mask: list[float] = []
     for vi in range(num_verts):
         # Only convex areas show wear (positive curvature)
         convexity = max(0.0, curvature.get(vi, 0.0))
+        # Boost from sharp edge annotation (enhancement pipeline data)
+        sharp_boost = sharp_vert_boost.get(vi, 0.0)
         # Add slight noise for variation
         noise = _simple_noise(*vertices[vi], seed=42) * 0.2
-        value = (convexity + noise) * strength
+        value = (convexity + sharp_boost + noise) * strength
         wear_mask.append(max(0.0, min(1.0, value)))
 
     return wear_mask
