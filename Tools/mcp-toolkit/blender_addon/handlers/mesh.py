@@ -2419,7 +2419,7 @@ MODIFIER_DEFAULTS: dict[str, dict] = {
     "MIRROR": {"use_axis": [True, False, False], "use_bisect_axis": [False, False, False]},
     "ARRAY": {"count": 3, "relative_offset_displace": [1.0, 0.0, 0.0]},
     "SOLIDIFY": {"thickness": 0.1, "offset": -1.0},
-    "DECIMATE": {"ratio": 0.5, "decimate_type": "COLLAPSE"},
+    "DECIMATE": {"ratio": 0.5, "decimate_type": "COLLAPSE", "use_collapse_triangulate": True},
     "REMESH": {"mode": "VOXEL", "voxel_size": 0.1},
     "SMOOTH": {"factor": 0.5, "iterations": 5},
     "BOOLEAN": {"operation": "DIFFERENCE", "object": ""},

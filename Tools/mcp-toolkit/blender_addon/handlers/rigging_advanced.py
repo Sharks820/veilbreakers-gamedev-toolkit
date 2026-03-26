@@ -1238,6 +1238,13 @@ def handle_setup_ik(params: dict) -> dict:
 def handle_setup_spring_bones(params: dict) -> dict:
     """Set up secondary motion constraints for spring/jiggle bones (RIG-06).
 
+    Creates a DAMPED_TRACK constraint per bone targeting a control empty at
+    the bone's rest-position tail.  The stiffness parameter controls how
+    strongly each bone tracks back to rest (high stiffness = less swing).
+    A COPY_ROTATION from the parent provides damping (decaying along the
+    chain), and a LIMIT_ROTATION constraint biased by gravity pulls bones
+    downward.
+
     Params:
         rig_name: Name of the armature object.
         bone_names: List of bone names to apply spring constraints.
@@ -1245,8 +1252,10 @@ def handle_setup_spring_bones(params: dict) -> dict:
         damping: Damping factor [0, 1].
         gravity: Gravity influence >= 0.
 
-    Returns dict with spring_bones, stiffness, damping, gravity.
+    Returns dict with spring_bones, control_empties, stiffness, damping, gravity.
     """
+    import mathutils  # noqa: F811 -- local import for Blender math
+
     rig_name = params.get("rig_name")
     if not rig_name:
         raise ValueError("'rig_name' is required")
@@ -1266,6 +1275,46 @@ def handle_setup_spring_bones(params: dict) -> dict:
     if not rig_obj or rig_obj.type != "ARMATURE":
         raise ValueError(f"Armature object not found: {rig_name}")
 
+    # ------------------------------------------------------------------
+    # Phase 1: Create control empties at each bone's tail in EDIT mode
+    # ------------------------------------------------------------------
+    # We need the armature-space tail positions to place empties correctly.
+    bpy.context.view_layer.objects.active = rig_obj
+    bpy.ops.object.mode_set(mode="EDIT")
+
+    # Collect tail positions in armature space while in edit mode
+    bone_tail_positions: dict[str, mathutils.Vector] = {}
+    for bone_name in bone_names:
+        ebone = rig_obj.data.edit_bones.get(bone_name)
+        if ebone:
+            bone_tail_positions[bone_name] = rig_obj.matrix_world @ ebone.tail.copy()
+
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+    # Create or reuse a collection for spring control empties
+    spring_col_name = f"{rig_name}_SpringControls"
+    spring_col = bpy.data.collections.get(spring_col_name)
+    if spring_col is None:
+        spring_col = bpy.data.collections.new(spring_col_name)
+        bpy.context.scene.collection.children.link(spring_col)
+
+    control_empties: dict[str, str] = {}
+    for bone_name, tail_pos in bone_tail_positions.items():
+        empty_name = f"{rig_name}_spring_target_{bone_name}"
+        empty = bpy.data.objects.get(empty_name)
+        if empty is None:
+            empty = bpy.data.objects.new(empty_name, None)
+            spring_col.objects.link(empty)
+        empty.empty_display_type = "SPHERE"
+        empty.empty_display_size = 0.02
+        empty.location = tail_pos
+        # Parent to armature so it follows the rig
+        empty.parent = rig_obj
+        control_empties[bone_name] = empty_name
+
+    # ------------------------------------------------------------------
+    # Phase 2: Add constraints in POSE mode
+    # ------------------------------------------------------------------
     bpy.context.view_layer.objects.active = rig_obj
     bpy.ops.object.mode_set(mode="POSE")
 
@@ -1276,17 +1325,46 @@ def handle_setup_spring_bones(params: dict) -> dict:
         if not pbone:
             continue
 
-        # Add COPY_ROTATION from parent with decaying influence for damping
+        # --- DAMPED_TRACK: track toward the control empty at rest position ---
+        # This is the core spring constraint -- it gives the bone a target.
+        empty_name = control_empties.get(bone_name)
+        if empty_name:
+            target_obj = bpy.data.objects.get(empty_name)
+            if target_obj:
+                dt_con = pbone.constraints.new("DAMPED_TRACK")
+                dt_con.target = target_obj
+                dt_con.track_axis = "TRACK_Y"
+                # Stiffness controls how strongly the bone returns to rest:
+                # High stiffness (1.0) = full tracking (stiff spring, snaps back)
+                # Low stiffness (0.0) = no tracking (loose, swings freely)
+                dt_con.influence = max(0.0, min(1.0, stiffness))
+                dt_con.name = f"spring_track_{bone_name}"
+
+        # --- COPY_ROTATION from parent: provides damping (resistance to swing) ---
         if pbone.parent:
             cr_con = pbone.constraints.new("COPY_ROTATION")
             cr_con.target = rig_obj
             cr_con.subtarget = pbone.parent.name
-            # Decay influence along the chain
+            # Decay influence along the chain -- bones further from root are looser
             decay = damping * (0.8 ** i)
             cr_con.influence = max(0.0, min(1.0, decay))
             cr_con.name = f"spring_damping_{bone_name}"
 
-        # Store spring params as custom properties
+        # --- LIMIT_ROTATION: gravity bias pulls bones downward (negative Y) ---
+        if gravity > 0.0:
+            lr_con = pbone.constraints.new("LIMIT_ROTATION")
+            lr_con.owner_space = "LOCAL"
+            # Allow rotation toward gravity (positive X rotation = forward/down)
+            # Restrict upward swing proportional to gravity strength
+            lr_con.use_limit_x = True
+            lr_con.min_x = -0.1  # small upward swing allowed
+            max_down = min(1.5708, 0.5236 * gravity)  # up to 90 deg scaled by gravity
+            lr_con.max_x = max_down
+            # Influence scales with gravity (0 = no limit, 1+ = strong downward bias)
+            lr_con.influence = max(0.0, min(1.0, gravity * 0.5))
+            lr_con.name = f"spring_gravity_{bone_name}"
+
+        # Store spring params as custom properties for runtime/export reference
         pbone["spring_stiffness"] = stiffness
         pbone["spring_damping"] = damping
         pbone["spring_gravity"] = gravity
@@ -1297,6 +1375,7 @@ def handle_setup_spring_bones(params: dict) -> dict:
 
     return {
         "spring_bones": spring_bones,
+        "control_empties": list(control_empties.values()),
         "stiffness": stiffness,
         "damping": damping,
         "gravity": gravity,
