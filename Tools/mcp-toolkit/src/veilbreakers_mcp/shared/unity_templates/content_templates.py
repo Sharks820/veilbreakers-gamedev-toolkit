@@ -1616,6 +1616,7 @@ def generate_skill_tree_script(
     node_lines.append("using System.Collections.Generic;")
     node_lines.append("using UnityEngine;")
     node_lines.append("using VeilBreakers.Combat;")
+    node_lines.append("using VeilBreakers.Data;")
     node_lines.append("")
     node_lines.append("namespace " + ns)
     node_lines.append("{")
@@ -1656,7 +1657,7 @@ def generate_skill_tree_script(
     node_lines.append("        public string abilityUnlock;")
     node_lines.append("")
     node_lines.append('        [Header("Tree Position")]')
-    node_lines.append("        public string heroPath;")
+    node_lines.append("        public Path heroPath;")
     node_lines.append("        public int tier;")
     node_lines.append("        public int column;")
     node_lines.append("    }")
@@ -1670,19 +1671,10 @@ def generate_skill_tree_script(
     tree_lines.append("using System.Linq;")
     tree_lines.append("using UnityEngine;")
     tree_lines.append("using VeilBreakers.Core;")
+    tree_lines.append("using VeilBreakers.Data;")
     tree_lines.append("")
     tree_lines.append("namespace " + ns)
     tree_lines.append("{")
-
-    # Path enum
-    tree_lines.append("    /// <summary>VeilBreakers hero paths.</summary>")
-    tree_lines.append("    public enum Path")
-    tree_lines.append("    {")
-    for i, path in enumerate(hero_paths):
-        safe_path = sanitize_cs_identifier(path)
-        comma = "," if i < len(hero_paths) - 1 else ""
-        tree_lines.append("        " + safe_path + comma)
-    tree_lines.append("    }")
     tree_lines.append("")
 
     # VB_SkillTree
@@ -1773,7 +1765,7 @@ def generate_skill_tree_script(
 
     # GetNodesByPath
     tree_lines.append("        /// <summary>Get all nodes belonging to a hero path.</summary>")
-    tree_lines.append("        public List<VB_SkillNode> GetNodesByPath(string heroPath)")
+    tree_lines.append("        public List<VB_SkillNode> GetNodesByPath(Path heroPath)")
     tree_lines.append("        {")
     tree_lines.append("            return _allNodes.Where(n => n.heroPath == heroPath).ToList();")
     tree_lines.append("        }")

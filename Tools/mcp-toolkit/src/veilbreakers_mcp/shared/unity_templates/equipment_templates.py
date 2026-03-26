@@ -9,7 +9,7 @@ These are RUNTIME scripts.  They must NEVER reference ``using UnityEditor;``.
 CRITICAL DESIGN PRINCIPLE: Generated MonoBehaviours call into existing
 static utility classes.  They do NOT reimplement brand effectiveness
 matrices, synergy calculations, corruption formulas, or damage pipelines.
-  - EventBus (equipment change events)
+  - C# events for equipment change notifications
   - Phase 9 bone socket system (10 standard sockets)
 """
 
@@ -87,7 +87,7 @@ def generate_equipment_attachment_script(
         - RebindToArmature(SkinnedMeshRenderer equipmentSMR, Transform armatureRoot)
         - EquipArmor / UnequipArmor for slot management
         - Equipment slot tracking
-        - EventBus integration for equipment change events
+        - C# event (OnEquipmentChanged) for equipment change notifications
         - References Phase 9 bone socket system (10 standard sockets)
 
     weapon_sheath_cs -- VB_WeaponSheath MonoBehaviour:
@@ -123,7 +123,7 @@ def generate_equipment_attachment_script(
     att_lines.append("")
 
     # Equipment change event
-    att_lines.append("    /// <summary>Event data for equipment change notifications via EventBus.</summary>")
+    att_lines.append("    /// <summary>Event data for equipment change notifications.</summary>")
     att_lines.append("    [Serializable]")
     att_lines.append("    public struct EquipmentChangeEvent")
     att_lines.append("    {")
@@ -165,6 +165,9 @@ def generate_equipment_attachment_script(
     att_lines.append("")
     att_lines.append("        /// <summary>Cached bone map for the character armature.</summary>")
     att_lines.append("        private Dictionary<string, Transform> _boneMap;")
+    att_lines.append("")
+    att_lines.append("        /// <summary>Fired when equipment is changed (equipped or unequipped).</summary>")
+    att_lines.append("        public event Action<EquipmentChangeEvent> OnEquipmentChanged;")
     att_lines.append("")
 
     # Awake
@@ -261,7 +264,7 @@ def generate_equipment_attachment_script(
     # EquipArmor
     att_lines.append("        /// <summary>")
     att_lines.append("        /// Equip armor to a specific slot. Rebinds the SkinnedMeshRenderer to the character armature.")
-    att_lines.append("        /// Fires EquipmentChangeEvent via EventBus.")
+    att_lines.append("        /// Fires OnEquipmentChanged event.")
     att_lines.append("        /// </summary>")
     att_lines.append("        public void EquipArmor(SkinnedMeshRenderer armorSMR, EquipmentSlot slot = EquipmentSlot.Torso, string itemName = \"\")")
     att_lines.append("        {")
@@ -287,8 +290,8 @@ def generate_equipment_attachment_script(
     att_lines.append("            _equippedItems[slot] = armorSMR;")
     att_lines.append("            armorSMR.gameObject.SetActive(true);")
     att_lines.append("")
-    att_lines.append("            // Fire EventBus event")
-    att_lines.append("            EventBus.Raise(new EquipmentChangeEvent")
+    att_lines.append("            // Fire equipment changed event")
+    att_lines.append("            OnEquipmentChanged?.Invoke(new EquipmentChangeEvent")
     att_lines.append("            {")
     att_lines.append("                Slot = slot,")
     att_lines.append("                ItemName = itemName,")
@@ -300,7 +303,7 @@ def generate_equipment_attachment_script(
     # UnequipArmor
     att_lines.append("        /// <summary>")
     att_lines.append("        /// Unequip armor from a specific slot. Deactivates the equipment GameObject.")
-    att_lines.append("        /// Fires EquipmentChangeEvent via EventBus.")
+    att_lines.append("        /// Fires OnEquipmentChanged event.")
     att_lines.append("        /// </summary>")
     att_lines.append("        public void UnequipArmor(EquipmentSlot slot)")
     att_lines.append("        {")
@@ -312,7 +315,7 @@ def generate_equipment_attachment_script(
     att_lines.append("                }")
     att_lines.append("                _equippedItems.Remove(slot);")
     att_lines.append("")
-    att_lines.append("                EventBus.Raise(new EquipmentChangeEvent")
+    att_lines.append("                OnEquipmentChanged?.Invoke(new EquipmentChangeEvent")
     att_lines.append("                {")
     att_lines.append("                    Slot = slot,")
     att_lines.append('                    ItemName = "",')
