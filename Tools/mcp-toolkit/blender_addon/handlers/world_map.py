@@ -101,6 +101,69 @@ BIOME_TYPES: dict[str, dict[str, Any]] = {
 
 
 # ---------------------------------------------------------------------------
+# Veil pressure and biome-state overlays
+# ---------------------------------------------------------------------------
+
+VEIL_PRESSURE_BANDS: dict[str, tuple[float, float]] = {
+    "safehold": (0.0, 0.24),
+    "frontier": (0.24, 0.5),
+    "contested": (0.5, 0.76),
+    "veil_belt": (0.76, 1.01),
+}
+
+BIOME_ROLE_POOLS: dict[str, list[str]] = {
+    "safehold": [
+        "enchanted_glade",
+        "dark_forest",
+        "frozen_peaks",
+        "ancient_ruins",
+    ],
+    "frontier": [
+        "dark_forest",
+        "haunted_moor",
+        "ancient_ruins",
+        "frozen_peaks",
+    ],
+    "contested": [
+        "haunted_moor",
+        "corrupted_swamp",
+        "blood_marsh",
+        "ancient_ruins",
+        "bone_desert",
+    ],
+    "veil_belt": [
+        "bone_desert",
+        "volcanic_wastes",
+        "blood_marsh",
+        "corrupted_swamp",
+        "crystal_caverns",
+    ],
+}
+
+BIOME_VARIANT_BY_PRESSURE: dict[str, list[str]] = {
+    "safehold": ["clean", "windblown", "sunlit"],
+    "frontier": ["weathered", "strained", "mossed"],
+    "contested": ["corrupted", "blighted", "scarred"],
+    "veil_belt": ["void-touched", "blighted", "bone-dry"],
+}
+
+POI_ROLE_AFFINITY: dict[str, dict[str, float]] = {
+    "camp": {"safehold": 1.4, "frontier": 1.1, "contested": 0.6, "veil_belt": 0.1},
+    "ruins": {"safehold": 0.7, "frontier": 1.0, "contested": 1.3, "veil_belt": 1.2},
+    "shrine": {"safehold": 1.2, "frontier": 1.0, "contested": 1.0, "veil_belt": 0.8},
+    "boss_arena": {"safehold": 0.05, "frontier": 0.25, "contested": 1.2, "veil_belt": 1.5},
+    "treasure": {"safehold": 1.0, "frontier": 1.0, "contested": 1.0, "veil_belt": 0.8},
+    "merchant": {"safehold": 1.4, "frontier": 1.1, "contested": 0.3, "veil_belt": 0.05},
+    "dungeon_entrance": {"safehold": 0.05, "frontier": 0.6, "contested": 1.3, "veil_belt": 1.4},
+    "watchtower": {"safehold": 1.2, "frontier": 1.2, "contested": 1.0, "veil_belt": 0.4},
+    "resource_node": {"safehold": 1.0, "frontier": 1.0, "contested": 0.8, "veil_belt": 0.4},
+    "waystone": {"safehold": 1.3, "frontier": 1.0, "contested": 0.6, "veil_belt": 0.2},
+    "ambush_site": {"safehold": 0.05, "frontier": 1.0, "contested": 1.4, "veil_belt": 1.1},
+    "graveyard": {"safehold": 0.3, "frontier": 0.8, "contested": 1.2, "veil_belt": 1.4},
+}
+
+
+# ---------------------------------------------------------------------------
 # POI Type Definitions -- 12 types
 # ---------------------------------------------------------------------------
 
@@ -259,6 +322,10 @@ class Region:
     biome: str
     bounds: tuple[float, float, float, float]  # (min_x, min_y, max_x, max_y)
     area: float = 0.0
+    role: str = "frontier"
+    pressure: float = 0.0
+    biome_variant: str = "clean"
+    veil_distance: float = 0.0
 
 
 @dataclass
@@ -280,6 +347,9 @@ class POIPlacement:
     position: tuple[float, float]
     region: str
     props: list[str]
+    pressure: float = 0.0
+    pressure_band: str = "frontier"
+    biome_variant: str = "clean"
 
 
 @dataclass
@@ -314,6 +384,8 @@ class WorldMap:
     poi_positions: list[POIPlacement] = field(default_factory=list)
     landmarks: list[LandmarkPlacement] = field(default_factory=list)
     storytelling_scenes: list[StorytellingScene] = field(default_factory=list)
+    veil_origin: tuple[float, float] = (0.0, 0.0)
+    safehold_origin: tuple[float, float] = (0.0, 0.0)
     seed: int = 42
     map_size: float = 2000.0
 
@@ -325,6 +397,75 @@ class WorldMap:
 def _distance_2d(a: tuple[float, float], b: tuple[float, float]) -> float:
     """Euclidean distance between two 2D points."""
     return math.sqrt((a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2)
+
+
+def _hash_noise_2d(x: float, y: float, seed: int = 0) -> float:
+    """Deterministic pseudo-noise via integer hashing. Returns [-1, 1]."""
+    ix = int(round(x, 4) * 10000) & 0xFFFFFFFF
+    iy = int(round(y, 4) * 10000) & 0xFFFFFFFF
+    h = (ix * 73856093) ^ (iy * 19349669) ^ (seed * 83492791)
+    h = ((h >> 16) ^ h) * 0x45D9F3B
+    h = ((h >> 16) ^ h) * 0x45D9F3B
+    h = (h >> 16) ^ h
+    return ((h & 0xFFFFFFFF) / 0xFFFFFFFF) * 2.0 - 1.0
+
+
+def _veil_pressure_at(
+    x: float,
+    y: float,
+    map_size: float,
+    seed: int,
+) -> float:
+    """Return pressure on the world from the Veil, normalized to [0, 1]."""
+    nx = x / max(map_size, 1.0)
+    ny = y / max(map_size, 1.0)
+    directional = nx * 0.82 + abs(ny - 0.5) * 0.08
+    noise = (_hash_noise_2d(nx * 5.0, ny * 5.0, seed) + 1.0) * 0.5
+    pressure = directional * 0.82 + noise * 0.18
+    return max(0.0, min(1.0, pressure))
+
+
+def _pressure_band(pressure: float) -> str:
+    for band, (lo, hi) in VEIL_PRESSURE_BANDS.items():
+        if lo <= pressure < hi:
+            return band
+    return "veil_belt"
+
+
+def _biome_for_role(role: str, rng: random.Random) -> str:
+    pool = BIOME_ROLE_POOLS.get(role) or BIOME_ROLE_POOLS["frontier"]
+    return rng.choice(pool)
+
+
+def _variant_for_pressure(role: str, biome: str, pressure: float, rng: random.Random) -> str:
+    variants = BIOME_VARIANT_BY_PRESSURE.get(role) or BIOME_VARIANT_BY_PRESSURE["frontier"]
+    if biome in {"corrupted_swamp", "blood_marsh", "volcanic_wastes"} and pressure > 0.7:
+        return "heavily-corrupted"
+    if pressure > 0.85:
+        return rng.choice([v for v in variants if "veil" in v or "blight" in v] or variants)
+    return rng.choice(variants)
+
+
+def _poi_pressure_affinity(poi_type: str, pressure: float) -> float:
+    if poi_type == "veil_crack":
+        target = 0.9
+        spread = 0.18
+    elif poi_type in {"boss_arena", "dungeon_entrance"}:
+        target = 0.8
+        spread = 0.22
+    elif poi_type in {"ambush_site", "graveyard", "ruins"}:
+        target = 0.62
+        spread = 0.28
+    elif poi_type in {"camp", "merchant", "waystone", "shrine", "watchtower"}:
+        target = 0.28
+        spread = 0.26
+    else:
+        target = 0.5
+        spread = 0.35
+    delta = abs(pressure - target)
+    if delta >= spread:
+        return 0.1
+    return 0.25 + (1.0 - delta / max(spread, 1e-6)) * 0.75
 
 
 def _assign_to_nearest_center(
@@ -537,29 +678,32 @@ def generate_world_map(
         cy = rng.uniform(margin, map_size - margin)
         centers.append((cx, cy))
 
-    # Assign biomes
-    biome_names = list(BIOME_TYPES.keys())
-    rng.shuffle(biome_names)
-    assigned_biomes = [
-        biome_names[i % len(biome_names)] for i in range(num_regions)
-    ]
-
     # Compute Voronoi bounds
     voronoi_bounds = _compute_voronoi_regions(centers, map_size)
 
+    veil_origin = (map_size * 0.92, map_size * 0.5)
+    safehold_origin = (map_size * 0.08, map_size * 0.5)
+
     # Build Region objects
     regions: list[Region] = []
-    for i, (center, biome, bounds) in enumerate(
-        zip(centers, assigned_biomes, voronoi_bounds)
-    ):
+    for i, (center, bounds) in enumerate(zip(centers, voronoi_bounds)):
         w = bounds[2] - bounds[0]
         h = bounds[3] - bounds[1]
+        pressure = _veil_pressure_at(center[0], center[1], map_size, seed)
+        role = _pressure_band(pressure)
+        biome_name = _biome_for_role(role, rng)
+        biome_variant = _variant_for_pressure(role, biome_name, pressure, rng)
+        veil_distance = _distance_2d(center, veil_origin) / max(map_size, 1.0)
         regions.append(Region(
-            name=f"region_{i}_{biome}",
+            name=f"region_{i}_{role}_{biome_name}",
             center=center,
-            biome=biome,
+            biome=biome_name,
             bounds=bounds,
             area=round(w * h, 2),
+            role=role,
+            pressure=round(pressure, 4),
+            biome_variant=biome_variant,
+            veil_distance=round(veil_distance, 4),
         ))
 
     # Find adjacent regions and create road connections
@@ -617,7 +761,13 @@ def generate_world_map(
                 continue
 
             # Pick POI type weighted by danger affinity
-            chosen_type = _select_poi_type(poi_type_list, danger, rng)
+            chosen_type = _select_poi_type(
+                poi_type_list,
+                danger,
+                rng,
+                region_role=region.role,
+                pressure=region.pressure,
+            )
             type_info = POI_TYPES[chosen_type]
 
             # Check minimum spacing against existing POIs of same type
@@ -635,6 +785,9 @@ def generate_world_map(
                 position=(round(px, 2), round(py, 2)),
                 region=region.name,
                 props=list(type_info["props"]),
+                pressure=round(region.pressure, 4),
+                pressure_band=region.role,
+                biome_variant=region.biome_variant,
             ))
 
     # Ensure we meet minimum POI count by adding more in sparse regions
@@ -651,7 +804,13 @@ def generate_world_map(
         if regions[nearest].name != region.name:
             continue
 
-        chosen_type = rng.choice(poi_type_list)
+        chosen_type = _select_poi_type(
+            poi_type_list,
+            BIOME_TYPES[region.biome]["danger_level"],
+            rng=rng,
+            region_role=region.role,
+            pressure=region.pressure,
+        )
         type_info = POI_TYPES[chosen_type]
 
         too_close = False
@@ -668,12 +827,17 @@ def generate_world_map(
             position=(round(px, 2), round(py, 2)),
             region=region.name,
             props=list(type_info["props"]),
+            pressure=round(region.pressure, 4),
+            pressure_band=region.role,
+            biome_variant=region.biome_variant,
         ))
 
     return WorldMap(
         regions=regions,
         connections=connections,
         poi_positions=poi_positions,
+        veil_origin=veil_origin,
+        safehold_origin=safehold_origin,
         seed=seed,
         map_size=map_size,
     )
@@ -683,6 +847,8 @@ def _select_poi_type(
     poi_types: list[str],
     danger_level: int,
     rng: random.Random,
+    region_role: str = "frontier",
+    pressure: float = 0.5,
 ) -> str:
     """Select a POI type weighted by danger affinity."""
     weights: list[float] = []
@@ -693,7 +859,9 @@ def _select_poi_type(
         bias = info["danger_bias"]
         # Weight: frequency * danger alignment
         alignment = 1.0 + 0.1 * bias * danger_level
-        weights.append(max(0.01, freq * alignment))
+        role_factor = POI_ROLE_AFFINITY.get(pt, {}).get(region_role, 1.0)
+        pressure_factor = _poi_pressure_affinity(pt, pressure)
+        weights.append(max(0.01, freq * alignment * role_factor * pressure_factor))
 
     total = sum(weights)
     r = rng.uniform(0, total)
@@ -864,6 +1032,8 @@ def world_map_to_dict(world_map: WorldMap) -> dict[str, Any]:
     return {
         "seed": world_map.seed,
         "map_size": world_map.map_size,
+        "veil_origin": world_map.veil_origin,
+        "safehold_origin": world_map.safehold_origin,
         "num_regions": len(world_map.regions),
         "num_connections": len(world_map.connections),
         "num_pois": len(world_map.poi_positions),
@@ -876,6 +1046,10 @@ def world_map_to_dict(world_map: WorldMap) -> dict[str, Any]:
                 "biome": r.biome,
                 "bounds": r.bounds,
                 "area": r.area,
+                "role": r.role,
+                "pressure": r.pressure,
+                "biome_variant": r.biome_variant,
+                "veil_distance": r.veil_distance,
             }
             for r in world_map.regions
         ],
@@ -895,6 +1069,9 @@ def world_map_to_dict(world_map: WorldMap) -> dict[str, Any]:
                 "position": p.position,
                 "region": p.region,
                 "props": p.props,
+                "pressure": p.pressure,
+                "pressure_band": p.pressure_band,
+                "biome_variant": p.biome_variant,
             }
             for p in world_map.poi_positions
         ],

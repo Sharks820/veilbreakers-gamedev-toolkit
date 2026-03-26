@@ -24,6 +24,8 @@ from typing import Any
 
 import aiohttp
 
+from veilbreakers_mcp.shared.model_validation import validate_generated_model_file
+
 logger = logging.getLogger(__name__)
 
 STUDIO_BASE_URL = "https://api.tripo3d.ai/v2/web"
@@ -125,7 +127,11 @@ class TripoStudioClient:
         """Return a valid JWT, refreshing if needed."""
         now = time.time()
         # Refresh if expired or expiring within 5 minutes
-        if not self._jwt or (self._jwt_exp > 0 and now > self._jwt_exp - 300):
+        if (
+            not self._jwt
+            or self._jwt_exp <= 0
+            or now > self._jwt_exp - 300
+        ):
             if self._session_cookie:
                 await self._refresh_jwt()
             else:
@@ -236,6 +242,15 @@ class TripoStudioClient:
                 async for chunk in resp.content.iter_chunked(1024 * 1024):
                     if chunk:
                         f.write(chunk)
+        validation = validate_generated_model_file(output_path)
+        if not validation.get("valid", False):
+            try:
+                Path(output_path).unlink(missing_ok=True)
+            except OSError:
+                pass
+            raise RuntimeError(
+                f"Downloaded model failed validation: {validation.get('error', 'unknown')}"
+            )
         return output_path
 
     async def _poll_and_download_variants(

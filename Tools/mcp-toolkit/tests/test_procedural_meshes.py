@@ -431,7 +431,10 @@ class TestVegetation:
         dims = result["metadata"]["dimensions"]
         assert dims["height"] > 3.0
 
-    @pytest.mark.parametrize("rock_type", ["boulder", "standing_stone", "crystal", "rubble_pile"])
+    @pytest.mark.parametrize(
+        "rock_type",
+        ["boulder", "standing_stone", "crystal", "rubble_pile", "cliff_outcrop"],
+    )
     def test_rock_types(self, rock_type):
         result = generate_rock_mesh(rock_type=rock_type)
         validate_mesh_spec(result, f"Rock_{rock_type}", min_verts=10, min_faces=5)

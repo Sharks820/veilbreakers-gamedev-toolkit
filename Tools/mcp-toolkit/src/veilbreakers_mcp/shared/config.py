@@ -16,6 +16,16 @@ class Settings(BaseSettings):
     tripo_studio_token: str = ""
     # Tripo Studio session cookie (ory_kratos_session, auto-refreshes JWTs, lasts ~25 days)
     tripo_session_cookie: str = ""
+    # Preferred local 3D backend for image-to-mesh generation
+    preferred_3d_backend: str = "stable_fast_3d"
+    # Stable Fast 3D repo clone path (official repo checkout)
+    stable_fast3d_repo_path: str = ""
+    # Python executable to use for Stable Fast 3D (defaults to current interpreter when empty)
+    stable_fast3d_python: str = ""
+    # Stable Fast 3D output texture size in pixels
+    stable_fast3d_texture_resolution: int = 1024
+    # Stable Fast 3D remesh option: none, triangle, or quad
+    stable_fast3d_remesh_option: str = "quad"
     # fal.ai for concept art / image generation
     fal_key: str = ""
     # Real-ESRGAN binary path for texture upscaling
@@ -36,4 +46,7 @@ class Settings(BaseSettings):
     # ElevenLabs API key for AI audio generation
     elevenlabs_api_key: str = ""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=(".env", "pipeline.local.env"),
+        env_file_encoding="utf-8",
+    )

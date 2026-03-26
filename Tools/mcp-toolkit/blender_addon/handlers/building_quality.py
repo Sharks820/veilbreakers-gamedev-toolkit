@@ -1171,6 +1171,7 @@ def generate_roof(
     rafter_w = 0.06
     rafter_d = 0.08
     rafter_count = max(2, int(depth / 0.6))
+    total_tiles = 0
 
     total_w = width + 2 * overhang
     half_w = total_w / 2.0
@@ -1329,38 +1330,97 @@ def generate_roof(
             total_tiles += sc
         components.append("slope_tiles")
 
+    elif style == "flat":
+        # Dark-fantasy flat roof with a stone slab and low parapet.
+        slab_h = 0.12 if material in {"tile", "slate"} else 0.18
+        slab_v, slab_f = _box(
+            -half_w,
+            -overhang,
+            0.0,
+            total_w,
+            depth + 2 * overhang,
+            slab_h,
+        )
+        parts.append((slab_v, slab_f))
+        components.append("flat_slab")
+
+        parapet_h = 0.45 if material == "stone" else 0.35
+        parapet_t = 0.08
+        # Front/back rails
+        for y in (-overhang, depth + overhang - parapet_t):
+            pv, pf = _box(-half_w, y, slab_h, total_w, parapet_t, parapet_h)
+            parts.append((pv, pf))
+        # Left/right rails
+        for x in (-half_w, half_w - parapet_t):
+            pv, pf = _box(x, -overhang, slab_h, parapet_t, depth + 2 * overhang, parapet_h)
+            parts.append((pv, pf))
+
+        # Corner finials for a more fortified silhouette.
+        finial_r = 0.08
+        finial_h = 0.24
+        for x in (-half_w + finial_r, half_w - finial_r):
+            for y in (-overhang + finial_r, depth + overhang - finial_r):
+                cv, cf = _cylinder(x, y, slab_h + parapet_h, finial_r, finial_h, 6)
+                parts.append((cv, cf))
+
     elif style == "conical_tower":
-        # Conical roof for tower
+        # Vertical tower crown without any cone silhouette. This is intentionally
+        # built as an octagonal shaft with a stepped top and crenellations.
         radius = width / 2.0 + overhang
-        cone_h = radius * math.tan(pitch_rad)
-        segments = 16
-        ring_count = max(1, int(cone_h / tile_h))
-        total_tiles = 0
+        shaft_h = max(0.85, radius * 1.9)
+        crown_h = max(0.55, radius * 0.7)
+        segments = 8
 
-        for ri in range(ring_count):
-            t = ri / ring_count
-            r_at_ring = radius * (1.0 - t)
-            z_at_ring = t * cone_h
-            circumference = 2.0 * math.pi * r_at_ring
-            tile_count_ring = max(1, int(circumference / tile_w))
+        tower_verts: list[tuple[float, float, float]] = []
+        tower_faces: list[tuple[int, ...]] = []
 
-            for ti in range(tile_count_ring):
-                a0 = 2.0 * math.pi * ti / tile_count_ring
-                a1 = 2.0 * math.pi * (ti + 1) / tile_count_ring
-                r_next = radius * (1.0 - (ri + 1) / ring_count)
-                z_next = (ri + 1) / ring_count * cone_h
+        def add_ring(z: float, ring_radius: float, twist: float = 0.0) -> int:
+            start = len(tower_verts)
+            for i in range(segments):
+                ang = 2.0 * math.pi * i / segments + twist
+                tower_verts.append((math.cos(ang) * ring_radius, math.sin(ang) * ring_radius, z))
+            return start
 
-                b = len(parts)
-                tv = [
-                    (math.cos(a0) * r_at_ring, math.sin(a0) * r_at_ring, z_at_ring),
-                    (math.cos(a1) * r_at_ring, math.sin(a1) * r_at_ring, z_at_ring),
-                    (math.cos(a1) * r_next, math.sin(a1) * r_next, z_next),
-                    (math.cos(a0) * r_next, math.sin(a0) * r_next, z_next),
-                ]
-                tf = [(0, 1, 2, 3)]
-                parts.append((tv, tf))
-                total_tiles += 1
-        components.append("conical_tiles")
+        ring0 = add_ring(0.0, radius)
+        ring1 = add_ring(shaft_h * 0.48, radius * 0.97, twist=math.pi / 8.0)
+        ring2 = add_ring(shaft_h * 0.88, radius * 0.88)
+        ring3 = add_ring(shaft_h + crown_h * 0.24, radius * 0.80, twist=math.pi / 8.0)
+        ring4 = add_ring(shaft_h + crown_h * 0.50, radius * 0.74)
+
+        for base in (ring0, ring1, ring2, ring3):
+            top = base + segments
+            for i in range(segments):
+                i_next = (i + 1) % segments
+                tower_faces.append((base + i, base + i_next, top + i_next, top + i))
+
+        tower_faces.append(tuple(range(ring0 + segments - 1, ring0 - 1, -1)))
+        tower_faces.append(tuple(range(ring4, ring4 + segments)))
+        parts.append((tower_verts, tower_faces))
+        components.append("octagonal_shaft")
+        components.append("crown_bands")
+
+        # Battlements at the top edge.
+        merlon_w = max(0.18, radius * 0.22)
+        merlon_d = max(0.18, radius * 0.22)
+        merlon_h = max(0.32, crown_h * 0.45)
+        merlon_z = shaft_h + crown_h * 0.50
+        merlon_r = radius * 0.84
+        for mi in range(segments):
+            if mi % 2 == 1:
+                continue
+            ang = 2.0 * math.pi * mi / segments
+            mx = math.cos(ang) * merlon_r
+            my = math.sin(ang) * merlon_r
+            mv, mf = _box(
+                mx - merlon_w * 0.5,
+                my - merlon_d * 0.5,
+                merlon_z,
+                merlon_w,
+                merlon_d,
+                merlon_h,
+            )
+            parts.append((mv, mf))
+        components.append("merlons")
 
     elif style == "gambrel":
         # Two slopes per side: steep lower, shallow upper
@@ -2559,21 +2619,102 @@ def generate_battlements(
             tx = (ti + 1) * tower_interval
             if tx > wl:
                 break
-            # Tower as a series of ring segments (octagonal approximation)
-            tv, tf = _cylinder(tx, 0.0, -tower_r * 0.5, tower_r, tower_h, 8)
-            parts.append((tv, tf))
-            # Conical roof on tower
-            cone_h = tower_r * 1.5
-            cone_segs = 8
-            apex = (tx, tower_h + cone_h, -tower_r * 0.5)
-            ring = _cylinder_ring(tx, -tower_r * 0.5, tower_h, tower_r * 1.1, cone_segs)
-            cone_v = list(ring) + [apex]
-            cone_f = []
-            for ci in range(cone_segs):
-                ci2 = (ci + 1) % cone_segs
-                cone_f.append((ci, ci2, cone_segs))
-            cone_f.append(tuple(range(cone_segs - 1, -1, -1)))
-            parts.append((cone_v, cone_f))
+            # Tower body: layered octagonal massing with subtle profile warping so
+            # the silhouette reads like masonry, not a smooth cylinder.
+            tower_segs = 8
+            base_r = tower_r * 1.08
+            mid_r = tower_r * 0.98
+            top_r = tower_r * 0.86
+            crown_h = max(0.55, tower_r * 0.62)
+            base_z = -tower_r * 0.5
+
+            def _oct_ring(z: float, radius: float, twist: float = 0.0, profile: float = 0.0) -> list[tuple[float, float, float]]:
+                pts: list[tuple[float, float, float]] = []
+                for i in range(tower_segs):
+                    ang = 2.0 * math.pi * i / tower_segs + twist
+                    if profile > 0.0:
+                        lobe = math.cos(ang * 4.0)
+                        facet = math.cos(ang * 8.0 + twist * 0.5)
+                        radial = 1.0 + profile * (0.72 * lobe + 0.28 * facet)
+                    else:
+                        radial = 1.0
+                    pts.append((tx + math.cos(ang) * radius * radial, 0.0 + math.sin(ang) * radius * radial, z))
+                return pts
+
+            ring_a = _oct_ring(base_z, base_r, profile=0.24)
+            ring_b = _oct_ring(base_z + tower_h * 0.40, mid_r, twist=math.pi / 8.0, profile=0.16)
+            ring_c = _oct_ring(base_z + tower_h * 0.76, top_r, profile=0.10)
+            ring_d = _oct_ring(base_z + tower_h, top_r * 0.90, twist=math.pi / 8.0, profile=0.06)
+            tower_v = ring_a + ring_b + ring_c + ring_d
+            tower_f: list[tuple[int, ...]] = []
+            for base_idx in (0, tower_segs, tower_segs * 2):
+                top_idx = base_idx + tower_segs
+                for ci in range(tower_segs):
+                    ci2 = (ci + 1) % tower_segs
+                    tower_f.append((base_idx + ci, base_idx + ci2, top_idx + ci2, top_idx + ci))
+            tower_f.append(tuple(range(tower_segs - 1, -1, -1)))
+            tower_f.append(tuple(range(tower_segs * 3, tower_segs * 4)))
+            parts.append((tower_v, tower_f))
+
+            # Skirt and shoulder masses interrupt the cylindrical read at street level.
+            skirt_w = tower_r * 2.32
+            skirt_h = max(0.34, tower_h * 0.16)
+            parts.append(_box(tx - skirt_w * 0.5, -tower_r * 1.02, base_z - skirt_h * 0.25, skirt_w, tower_r * 2.04, skirt_h))
+
+            buttress_w = max(0.34, tower_r * 0.26)
+            buttress_h = max(0.8, tower_h * 0.28)
+            buttress_r = tower_r * 0.92
+            for bx, by, bw, bh in (
+                (buttress_r, 0.0, buttress_w * 0.68, buttress_h * 0.95),
+                (-buttress_r, 0.0, buttress_w * 0.68, buttress_h * 0.95),
+                (0.0, buttress_r, buttress_w * 0.82, buttress_h),
+                (0.0, -buttress_r, buttress_w * 0.82, buttress_h),
+            ):
+                parts.append(_box(tx + bx - bw * 0.5, by - bw * 0.5, base_z + skirt_h * 0.08, bw, bw, bh))
+
+            # Battlement crown: low parapet + alternating merlons.
+            crown_z = base_z + tower_h
+            crown_v, crown_f = _box(
+                tx - top_r * 0.95,
+                -top_r * 0.95,
+                crown_z - crown_h * 0.12,
+                top_r * 1.9,
+                top_r * 1.9,
+                crown_h * 0.18,
+            )
+            parts.append((crown_v, crown_f))
+
+            merlon_w = top_r * 0.32
+            merlon_d = top_r * 0.32
+            merlon_h = max(0.28, crown_h * 0.58)
+            merlon_z = crown_z + crown_h * 0.04
+            for mi in range(tower_segs):
+                if mi % 2 == 1:
+                    continue
+                ang = 2.0 * math.pi * mi / tower_segs
+                mx = tx + math.cos(ang) * (top_r * 0.84)
+                my = math.sin(ang) * (top_r * 0.84)
+                mv, mf = _box(
+                    mx - merlon_w * 0.5,
+                    my - merlon_d * 0.5,
+                    merlon_z,
+                    merlon_w,
+                    merlon_d,
+                    merlon_h,
+                )
+                parts.append((mv, mf))
+
+            # Low broken ledges make the tower silhouette feel layered and fortified.
+            for offset in (-0.34, 0.34):
+                lv, lf = _box(
+                    tx - top_r * 0.55,
+                    offset - 0.05,
+                    base_z + tower_h * 0.36,
+                    top_r * 1.1,
+                    0.08,
+                    0.12,
+                )
+                parts.append((lv, lf))
         components.append("towers")
 
     all_v, all_f = _merge(parts)

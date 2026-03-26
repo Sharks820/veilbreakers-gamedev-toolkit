@@ -15,6 +15,7 @@ Also provides pure-logic world design functions (WORLD-01 through WORLD-10):
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 from dataclasses import dataclass, field
@@ -30,6 +31,8 @@ from ._dungeon_gen import (
     generate_cave_map,
     generate_town_layout,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -316,7 +319,7 @@ def handle_generate_cave(params: dict) -> dict:
 
 
 def handle_generate_town(params: dict) -> dict:
-    """Generate a Voronoi-based town layout and create 3D geometry.
+    """Generate a Voronoi-based town layout and create AAA town geometry.
 
     Parameters
     ----------
@@ -333,6 +336,10 @@ def handle_generate_town(params: dict) -> dict:
     seed = params.get("seed", 0)
     cell_size = params.get("cell_size", 2.0)
 
+    import bpy
+    from .worldbuilding import handle_generate_building
+
+    rng = random.Random(seed)
     town = generate_town_layout(
         width=width,
         height=height,
@@ -340,8 +347,159 @@ def handle_generate_town(params: dict) -> dict:
         seed=seed,
     )
 
+    parent = bpy.data.objects.new(name, None)
+    parent.empty_display_type = "PLAIN_AXES"
+    bpy.context.collection.objects.link(parent)
+
     ops = _town_to_geometry_ops(town, cell_size=cell_size)
     obj = _ops_to_mesh(ops, name)
+    obj.parent = parent
+
+    district_lookup = {d["id"]: d for d in town.districts}
+    structure_count = 0
+
+    def _structure_params(
+        district_type: str,
+        plot_size: tuple[int, int],
+        slot_index: int = 0,
+        landmark: bool = False,
+    ) -> dict[str, Any]:
+        base_w = max(4.0, plot_size[0] * cell_size * 0.72)
+        base_d = max(4.0, plot_size[1] * cell_size * 0.72)
+        preset_pool = {
+            "market_square": ["inn", "warehouse", "rowhouse"],
+            "civic": ["shrine_major", "shrine_minor", "gatehouse"],
+            "commercial": ["inn", "warehouse", "rowhouse"],
+            "industrial": ["forge", "barracks", "gatehouse"],
+            "residential": ["abandoned_house", "rowhouse", "inn"],
+        }.get(district_type, ["abandoned_house", "rowhouse"])
+        preset = preset_pool[(slot_index + rng.randrange(len(preset_pool))) % len(preset_pool)]
+        site_profile = {
+            "market_square": "market",
+            "civic": "monastery",
+            "commercial": "market",
+            "industrial": "forgeyard",
+            "residential": "rural",
+        }.get(district_type, "rural")
+        if landmark and district_type in {"civic", "market_square"}:
+            preset = "shrine_major"
+            site_profile = "monastery"
+        if preset:
+            return {
+                "preset": preset,
+                "site_profile": site_profile,
+                "weathering_level": 0.04 if district_type == "civic" else 0.08 if district_type == "commercial" else 0.12,
+                "wall_height": 4.4 if district_type == "civic" else 4.0 if district_type == "commercial" else 3.6,
+            }
+        if district_type == "market_square":
+            return {
+                "width": base_w * 0.8,
+                "depth": base_d * 0.8,
+                "floors": 1,
+                "style": "medieval",
+                "site_profile": site_profile,
+                "weathering_level": 0.08,
+                "wall_height": 3.8,
+            }
+        if district_type == "civic":
+            return {
+                "width": base_w,
+                "depth": base_d,
+                "floors": 2,
+                "style": "gothic",
+                "site_profile": site_profile,
+                "weathering_level": 0.05,
+                "wall_height": 4.4,
+            }
+        if district_type == "commercial":
+            return {
+                "width": base_w * 0.9,
+                "depth": base_d * 0.9,
+                "floors": 2,
+                "style": "medieval",
+                "site_profile": site_profile,
+                "weathering_level": 0.12,
+                "wall_height": 3.8,
+            }
+        if district_type == "industrial":
+            return {
+                "width": base_w,
+                "depth": base_d,
+                "floors": 1,
+                "style": "fortress",
+                "site_profile": site_profile,
+                "weathering_level": 0.2,
+                "wall_height": 4.2,
+            }
+        return {
+            "width": base_w * 0.85,
+            "depth": base_d * 0.85,
+            "floors": 1,
+            "style": "medieval",
+            "site_profile": site_profile,
+            "weathering_level": 0.12,
+            "wall_height": 3.6,
+        }
+
+    # Materialize building plots as actual buildings instead of marker cubes.
+    for i, plot in enumerate(town.building_plots):
+        district = district_lookup.get(plot["district"], {})
+        district_type = district.get("type", "residential")
+        build_params = _structure_params(district_type, plot["size"], slot_index=i)
+        structure_name = f"{name}_building_{i}"
+        build_params.update({
+            "name": structure_name,
+            "seed": seed + i * 17,
+        })
+        handle_generate_building(build_params)
+
+        building_obj = bpy.data.objects.get(structure_name)
+        if building_obj is not None:
+            px, py = plot["position"]
+            building_obj.location = (px * cell_size, py * cell_size, 0.0)
+            building_obj.rotation_euler = (0.0, 0.0, 0.0)
+            building_obj.parent = parent
+            structure_count += 1
+
+    # Turn landmarks into larger, more expressive anchor buildings.
+    for i, landmark in enumerate(town.landmarks):
+        district = district_lookup.get(landmark["district"], {})
+        district_type = district.get("type", "residential")
+        lm_name = f"{name}_landmark_{i}"
+        lm_build = _structure_params(district_type, (20, 20), slot_index=i, landmark=True)
+        lm_build["name"] = lm_name
+        lm_build["seed"] = seed + 1000 + i * 31
+        handle_generate_building(lm_build)
+
+        lm_obj = bpy.data.objects.get(lm_name)
+        if lm_obj is not None:
+            lx, ly = landmark["position"]
+            lm_obj.location = (lx * cell_size, ly * cell_size, 0.0)
+            lm_obj.rotation_euler = (0.0, 0.0, 0.0)
+            lm_obj.parent = parent
+            structure_count += 1
+
+    # Overlay the richer settlement system so the town gets macro roads,
+    # perimeter features, props, and settlement-level dressing.
+    settlement_overlay = {"status": "skipped"}
+    try:
+        from .worldbuilding import handle_generate_settlement
+
+        settlement_overlay = handle_generate_settlement({
+            "name": f"{name}_SettlementOverlay",
+            "settlement_type": "town",
+            "seed": seed,
+            "center": (width * cell_size * 0.5, height * cell_size * 0.5),
+            "radius": min(width, height) * cell_size * 0.42,
+            "wall_height": cell_size * 1.5,
+            "parent_name": name,
+            "include_buildings": False,
+            "include_interiors": False,
+            "include_lights": False,
+        })
+    except Exception as exc:
+        logger.warning("Town settlement overlay failed for %s: %s", name, exc)
+        settlement_overlay = {"status": "failed", "error": str(exc)}
 
     return {
         "name": obj.name,
@@ -349,6 +507,8 @@ def handle_generate_town(params: dict) -> dict:
         "road_cell_count": len(town.roads),
         "plot_count": len(town.building_plots),
         "landmark_count": len(town.landmarks),
+        "structure_count": structure_count,
+        "settlement_overlay": settlement_overlay,
     }
 
 
@@ -605,6 +765,8 @@ def generate_location_spec(
         "fortress": ["barracks", "armory", "war_room", "guard_tower", "gatehouse"],
         "dungeon_entrance": ["ruined_tower", "cave_mouth", "guard_post"],
         "camp": ["tent", "campfire", "supply_cart", "lookout_post"],
+        "traveler_camp": ["tent", "lookout_post", "supply_tent", "market_stall"],
+        "merchant_camp": ["tent", "market_stall", "supply_tent", "lookout_post"],
         "fishing_village": ["dock", "boat_house", "tavern", "cottage", "cottage"],
         "mining_town": ["mine_entrance", "smelter", "barracks", "tavern", "general_store"],
         "port_city": ["harbor_dock", "warehouse", "lighthouse", "tavern", "market_stall", "guard_tower"],
@@ -613,6 +775,12 @@ def generate_location_spec(
         "military_outpost": ["barracks", "watchtower", "armory", "stable", "command_tent"],
         "crossroads_inn": ["tavern", "stable", "cottage"],
         "bandit_hideout": ["cave_entrance", "tent", "lookout_post"],
+        "wizard_fortress": ["castle", "fortress", "keep", "watchtower", "gatehouse", "barracks", "armory"],
+        "sorcery_school": ["monastery", "temple", "chapel", "keep", "watchtower", "gatehouse"],
+        "cliff_keep": ["keep", "fortress", "watchtower", "guard_tower", "gatehouse", "barracks"],
+        "river_castle": ["castle", "dock", "boat_house", "harbor_dock", "watchtower", "gatehouse"],
+        "ruined_town": ["house", "cottage", "abandoned_house", "ruined_tower", "market_stall", "chapel"],
+        "farmstead": ["house", "cottage", "stable", "market_stall", "chapel"],
     }
     building_types = _BUILDING_TYPES.get(location_type, ["building"])
 

@@ -10,6 +10,7 @@ rig -> animate -> LOD -> export -> validate.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -19,6 +20,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from veilbreakers_mcp.shared.blender_client import BlenderCommandError
+from veilbreakers_mcp.shared.model_validation import validate_generated_model_file
+from veilbreakers_mcp.shared.visual_validation import validate_render_screens
 
 if TYPE_CHECKING:
     from veilbreakers_mcp.shared.asset_catalog import AssetCatalog
@@ -204,6 +207,59 @@ class PipelineRunner:
             c.get("passed", False) for c in result["checks"].values()
         )
         result["valid"] = all_passed
+
+        return result
+
+    async def validate_visual_quality(
+        self,
+        object_name: str,
+        min_score: float = 55.0,
+        angles: list[list[float]] | None = None,
+    ) -> dict:
+        """Render a contact sheet and reject visually weak outputs."""
+        render_angles = angles or [
+            [0, 12],
+            [90, 12],
+            [180, 12],
+            [270, 12],
+            [45, 28],
+            [315, 28],
+        ]
+        result: dict = {
+            "valid": False,
+            "object_name": object_name,
+            "min_score": float(min_score),
+            "render": {},
+            "validation": {},
+        }
+
+        try:
+            render_result = await self.blender.send_command(
+                "render_contact_sheet",
+                {
+                    "object_name": object_name,
+                    "angles": render_angles,
+                    "resolution": [512, 512],
+                    "skip_beauty": False,
+                },
+            )
+            result["render"] = render_result
+            paths = render_result.get("paths", []) if isinstance(render_result, dict) else []
+            validation = validate_render_screens(paths, min_score=min_score)
+            result["validation"] = validation
+            result["valid"] = validation.get("valid", False)
+            if not result["valid"]:
+                result["error"] = "Visual quality gate failed"
+        except (
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            ValueError,
+            RuntimeError,
+            BlenderCommandError,
+        ) as exc:
+            result["error"] = str(exc)
+            result["validation"] = {"valid": False, "issues": [str(exc)]}
 
         return result
 
@@ -691,6 +747,8 @@ class PipelineRunner:
         rig_template: str = "auto",
         animations: list[str] | None = None,
         lod_count: int = 3,
+        visual_gate: bool = True,
+        visual_min_score: float = 55.0,
         export_format: str = "fbx",
         export_dir: str = ".",
     ) -> dict:
@@ -707,8 +765,10 @@ class PipelineRunner:
         6. **Rig** -- apply rig template + auto-weight (character/creature only).
         7. **Animate** -- generate requested animation clips.
         8. **LODs** -- generate LOD chain.
-        9. **Export** -- write FBX or glTF to *export_dir*.
-        10. **Validate** -- run export validation on the output file.
+        9. **Visual gate** -- render contact-sheet screenshots and reject
+           weak outputs before export.
+        10. **Export** -- write FBX or glTF to *export_dir*.
+        11. **Validate** -- run export validation on the output file.
 
         Each step records its result.  If a non-critical step fails the
         pipeline continues with a warning; critical failures (import,
@@ -887,7 +947,23 @@ class PipelineRunner:
                 steps_completed,
             )
 
-            # ----- Step 9: Export -----
+            # ----- Step 9: Visual gate -----
+            if visual_gate:
+                visual_result = await self.validate_visual_quality(
+                    name,
+                    min_score=visual_min_score,
+                )
+                results["steps"]["visual_gate"] = visual_result
+                steps_completed.append("visual_gate")
+                if not visual_result.get("valid", False):
+                    results["status"] = "failed"
+                    results["error"] = (
+                        f"Visual quality gate failed: {visual_result.get('error', 'low score')}"
+                    )
+                    results["steps_completed"] = steps_completed
+                    return results
+
+            # ----- Step 10: Export -----
             ext_out = "fbx" if export_format == "fbx" else "glb"
             export_path = str(Path(export_dir) / f"{name}.{ext_out}")
             export_cmd = "export_fbx" if export_format == "fbx" else "export_gltf"
@@ -954,7 +1030,7 @@ class PipelineRunner:
             **pipeline_kwargs: Forwarded to :meth:`full_asset_pipeline`
                 (``poly_budget``, ``material_preset``, ``weathering_preset``,
                 ``rig_template``, ``animations``, ``lod_count``,
-                ``export_format``).
+                ``visual_gate``, ``visual_min_score``, ``export_format``).
 
         Returns:
             Dict with ``generation`` and ``pipeline`` sub-dicts.
@@ -970,7 +1046,48 @@ class PipelineRunner:
             result["error"] = "'prompt' or 'image_path' is required"
             return result
 
-        # --- Generate via Tripo ---
+        preferred_backend = str(getattr(self.settings, "preferred_3d_backend", "stable_fast_3d") or "").strip().lower()
+        stable_fast3d_repo_path = str(getattr(self.settings, "stable_fast3d_repo_path", "") or "").strip()
+        stable_fast3d_python = str(getattr(self.settings, "stable_fast3d_python", "") or "").strip()
+        stable_fast3d_texture_resolution = int(getattr(self.settings, "stable_fast3d_texture_resolution", 1024) or 1024)
+        stable_fast3d_remesh_option = str(getattr(self.settings, "stable_fast3d_remesh_option", "quad") or "quad").strip().lower()
+
+        local_generation_attempted = False
+        local_generation_result: dict | None = None
+
+        if image_path and preferred_backend in {"stable_fast_3d", "stable-fast-3d", "sf3d"} and stable_fast3d_repo_path:
+            try:
+                from veilbreakers_mcp.shared.stable_fast3d_client import StableFast3DGenerator
+
+                local_gen = StableFast3DGenerator(
+                    repo_path=stable_fast3d_repo_path,
+                    python_executable=stable_fast3d_python or None,
+                )
+                local_generation_attempted = True
+                local_generation_result = await local_gen.generate_from_image(
+                    image_path=image_path,
+                    output_dir=output_dir,
+                    texture_resolution=stable_fast3d_texture_resolution,
+                    remesh_option=stable_fast3d_remesh_option,
+                    timeout=getattr(self.settings, "blender_timeout", 300),
+                )
+                result["generation"]["local_3d"] = local_generation_result
+            except (ConnectionError, TimeoutError, OSError, ValueError, RuntimeError) as exc:
+                local_generation_attempted = True
+                local_generation_result = {
+                    "status": "failed",
+                    "error": f"Stable Fast 3D error: {exc}",
+                }
+                result["generation"]["local_3d"] = local_generation_result
+
+            if local_generation_result and local_generation_result.get("status") == "success":
+                result["generation"] = local_generation_result
+            else:
+                result.setdefault("warnings", []).append(
+                    "Stable Fast 3D local generation failed or was unavailable; falling back to Tripo when credentials are configured."
+                )
+
+        # --- Generate via Tripo (prompt path or local fallback) ---
         studio_cookie = getattr(self.settings, "tripo_session_cookie", "")
         studio_token = getattr(self.settings, "tripo_studio_token", "")
         api_key = getattr(self.settings, "tripo_api_key", "")
@@ -980,8 +1097,11 @@ class PipelineRunner:
             result["error"] = "No Tripo credentials configured (TRIPO_API_KEY, TRIPO_SESSION_COOKIE, or TRIPO_STUDIO_TOKEN)"
             return result
 
+        gen = None
         try:
-            if studio_cookie or studio_token:
+            if local_generation_attempted and local_generation_result and local_generation_result.get("status") == "success":
+                gen_result = local_generation_result
+            elif studio_cookie or studio_token:
                 from veilbreakers_mcp.shared.tripo_studio_client import TripoStudioClient
                 gen = TripoStudioClient(
                     session_cookie=studio_cookie,
@@ -994,7 +1114,7 @@ class PipelineRunner:
                 gen_result = await gen.generate_from_image(image_path, output_dir)
             else:
                 gen_result = await gen.generate_from_text(prompt, output_dir)
-            result["generation"] = gen_result
+            result["generation"] = gen_result if gen_result is not None else result["generation"]
 
             if gen_result.get("status") != "success":
                 result["status"] = "failed"
@@ -1002,16 +1122,39 @@ class PipelineRunner:
                     f"Tripo generation failed: {gen_result.get('error', 'unknown')}"
                 )
                 return result
-        except (ConnectionError, TimeoutError, OSError, ValueError) as exc:
+        except (
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            ValueError,
+            RuntimeError,
+        ) as exc:
             result["status"] = "failed"
             result["error"] = f"Tripo generation error: {exc}"
             return result
+        finally:
+            if gen is not None:
+                try:
+                    close_result = gen.close()
+                    if asyncio.iscoroutine(close_result):
+                        await close_result
+                except (OSError, RuntimeError):
+                    pass
 
         # Prefer PBR model if available, fall back to standard model
         model_path = gen_result.get("pbr_model_path") or gen_result.get("model_path", "")
         if not model_path:
             result["status"] = "failed"
             result["error"] = "Tripo returned no model file"
+            return result
+
+        validation = validate_generated_model_file(model_path)
+        result["generation"]["model_validation"] = validation
+        if not validation.get("valid", False):
+            result["status"] = "failed"
+            result["error"] = (
+                f"Tripo model failed validation: {validation.get('error', 'unknown')}"
+            )
             return result
 
         # --- Run full pipeline on the downloaded model ---

@@ -282,21 +282,22 @@ class TestSpecializedTemplates:
         result = generate_tower_spec(radius=3.0, height=15.0, seed=0)
         assert isinstance(result, BuildingSpec)
 
-    def test_tower_has_cylindrical_body(self):
-        """Tower spec includes a cylinder type operation for the body."""
+    def test_tower_has_tower_body(self):
+        """Tower spec includes an explicit tower body operation."""
         from blender_addon.handlers._building_grammar import generate_tower_spec
 
         result = generate_tower_spec(radius=3.0, height=15.0, seed=0)
         types = [op.get("type") for op in result.operations]
-        assert "cylinder" in types
+        assert "tower" in types
 
     def test_tower_has_battlements(self):
-        """Tower spec includes 'battlement' role."""
+        """Tower spec includes a crenellated crown."""
         from blender_addon.handlers._building_grammar import generate_tower_spec
 
         result = generate_tower_spec(radius=3.0, height=15.0, seed=0)
-        roles = [op.get("role") for op in result.operations]
-        assert "battlement" in roles
+        tower_ops = [op for op in result.operations if op.get("type") == "tower"]
+        assert tower_ops
+        assert any(op.get("crown_height", 0.0) > 0.0 for op in tower_ops)
 
     def test_bridge_spec_returns_building_spec(self):
         """generate_bridge_spec returns a BuildingSpec."""

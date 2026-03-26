@@ -10,6 +10,8 @@ import asyncio
 import os
 from pathlib import Path
 
+from veilbreakers_mcp.shared.model_validation import validate_generated_model_file
+
 try:
     import tripo3d  # type: ignore[import-untyped]
 
@@ -26,9 +28,8 @@ def _create_tripo_client(api_key: str):
 async def _download_file(url: str, output_path: str) -> str:
     """Download a model file from a Tripo3D HTTPS URL to a local path.
 
-    Uses the tripo3d SDK's built-in download_file helper when available,
-    falling back to writing an empty placeholder. This function is always
-    mocked in unit tests.
+    Uses the tripo3d SDK's built-in download_file helper when available.
+    This must never succeed with an empty or corrupt file.
 
     Only HTTPS URLs from the Tripo3D CDN are expected. The URL originates
     from the Tripo3D API response (not user input).
@@ -38,14 +39,23 @@ async def _download_file(url: str, output_path: str) -> str:
         if _TRIPO_AVAILABLE and hasattr(tripo3d, "download_file"):
             tripo3d.download_file(url, output_path)
         else:
-            # Fallback: use the SDK client's own session or mark as pending
-            # In production the tripo3d SDK handles downloads; this path
-            # exists only as a safety net and is always mocked in tests.
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-            Path(output_path).write_bytes(b"")
+            raise RuntimeError(
+                "tripo3d.download_file is unavailable; refusing to create "
+                "an empty placeholder file"
+            )
         return output_path
 
-    return await asyncio.to_thread(_do_download)
+    downloaded = await asyncio.to_thread(_do_download)
+    validation = validate_generated_model_file(downloaded)
+    if not validation.get("valid", False):
+        try:
+            Path(downloaded).unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise RuntimeError(
+            f"Downloaded model failed validation: {validation.get('error', 'unknown')}"
+        )
+    return downloaded
 
 
 class TripoGenerator:
@@ -65,6 +75,10 @@ class TripoGenerator:
                 "https://platform.tripo3d.ai -> Settings -> API Keys"
             )
         self.api_key = api_key
+
+    def close(self) -> None:
+        """Compatibility no-op for callers that always close generators."""
+        return None
 
     async def generate_from_text(
         self,
@@ -143,11 +157,23 @@ class TripoGenerator:
             pbr_url = getattr(output, "pbr_model", None) if output else None
             if pbr_url:
                 pbr_path = str(Path(output_dir) / "model_pbr.glb")
-                result["pbr_model_path"] = await _download_file(pbr_url, pbr_path)
+                try:
+                    result["pbr_model_path"] = await _download_file(pbr_url, pbr_path)
+                except RuntimeError as exc:
+                    result.setdefault("warnings", []).append(
+                        f"PBR model unavailable or invalid: {exc}"
+                    )
 
             return result
 
-        except (ConnectionError, TimeoutError, OSError, ValueError, KeyError) as exc:
+        except (
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            ValueError,
+            KeyError,
+            RuntimeError,
+        ) as exc:
             return {
                 "status": "failed",
                 "error": str(exc),
@@ -241,11 +267,23 @@ class TripoGenerator:
             pbr_url = getattr(output, "pbr_model", None) if output else None
             if pbr_url:
                 pbr_path = str(Path(output_dir) / "model_pbr.glb")
-                result["pbr_model_path"] = await _download_file(pbr_url, pbr_path)
+                try:
+                    result["pbr_model_path"] = await _download_file(pbr_url, pbr_path)
+                except RuntimeError as exc:
+                    result.setdefault("warnings", []).append(
+                        f"PBR model unavailable or invalid: {exc}"
+                    )
 
             return result
 
-        except (ConnectionError, TimeoutError, OSError, ValueError, KeyError) as exc:
+        except (
+            ConnectionError,
+            TimeoutError,
+            OSError,
+            ValueError,
+            KeyError,
+            RuntimeError,
+        ) as exc:
             return {
                 "status": "failed",
                 "error": str(exc),

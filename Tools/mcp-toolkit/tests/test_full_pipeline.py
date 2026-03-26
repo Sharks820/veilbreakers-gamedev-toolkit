@@ -7,9 +7,12 @@ All Blender commands are mocked -- no live Blender instance required.
 """
 
 import asyncio
+import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from PIL import Image, ImageDraw
 
 from veilbreakers_mcp.shared.pipeline_runner import (
     ANIMATION_COMMANDS,
@@ -19,6 +22,65 @@ from veilbreakers_mcp.shared.pipeline_runner import (
     RIG_TEMPLATES,
     RIGGABLE_TYPES,
 )
+
+
+def _make_visual_gate_images() -> list[str]:
+    """Create a few simple but non-flat screenshots for the visual gate."""
+    out_dir = Path(tempfile.gettempdir()) / "veilbreakers_pipeline_visual_gate"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    paths: list[str] = []
+
+    palettes = [
+        ((48, 42, 34), (156, 112, 72), (220, 196, 160)),
+        ((28, 36, 52), (88, 124, 172), (192, 214, 238)),
+        ((36, 24, 48), (132, 84, 180), (232, 200, 250)),
+    ]
+    for idx, (bg, fill, accent) in enumerate(palettes):
+        path = out_dir / f"contact_{idx}.png"
+        image = Image.new("RGB", (512, 512), bg)
+        draw = ImageDraw.Draw(image)
+        draw.rectangle((64, 220, 448, 420), fill=fill, outline=accent, width=8)
+        draw.rectangle((160, 128, 352, 280), fill=accent, outline=(240, 240, 240), width=6)
+        draw.polygon([(64, 220), (128, 150), (160, 128), (256, 110), (352, 128), (384, 150), (448, 220)], outline=(255, 255, 255), fill=None)
+        draw.ellipse((232, 92, 280, 140), fill=(250, 220, 120), outline=(255, 255, 255), width=4)
+        draw.line((64, 420, 448, 420), fill=(20, 20, 20), width=10)
+        draw.line((120, 420, 120, 300), fill=(20, 20, 20), width=8)
+        draw.line((392, 420, 392, 300), fill=(20, 20, 20), width=8)
+        for x in range(176, 336, 32):
+            draw.rectangle((x, 164, x + 14, 192), fill=(20, 20, 20), outline=(245, 245, 245), width=2)
+            draw.rectangle((x, 208, x + 14, 236), fill=(20, 20, 20), outline=(245, 245, 245), width=2)
+        for x in range(96, 416, 48):
+            draw.line((x, 420, x + 10, 280), fill=(30, 30, 30), width=3)
+        for y in range(288, 416, 24):
+            draw.line((64, y, 448, y), fill=(32, 28, 24), width=2)
+        for i in range(6):
+            draw.line((72 + i * 72, 220, 72 + i * 72, 420), fill=(30, 30, 30), width=2)
+        image.save(path)
+        paths.append(str(path))
+
+    return paths
+
+
+VISUAL_GATE_IMAGES = _make_visual_gate_images()
+
+VALID_MODEL_VALIDATION = {
+    "valid": True,
+    "filepath": "/tmp/model.glb",
+    "format": "glb",
+    "checks": {
+        "file_size": {"value": 2048, "passed": True},
+        "header": {"passed": True, "version": 2},
+        "declared_length": {"passed": True, "value": 2048, "actual": 2048},
+        "json_chunk": {
+            "passed": True,
+            "scenes": 1,
+            "nodes": 1,
+            "meshes": 1,
+            "materials": 1,
+        },
+        "materials": {"passed": True, "count": 1},
+    },
+}
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +122,13 @@ def _make_runner(command_responses=None, tripo_api_key="test-key"):
         "anim_generate_reaction": {"status": "success", "frames": 25},
         # LODs
         "pipeline_generate_lods": {"status": "success", "lod_count": 3},
+        # Visual gate
+        "render_contact_sheet": {
+            "paths": VISUAL_GATE_IMAGES,
+            "count": len(VISUAL_GATE_IMAGES),
+            "angles": [[0, 12], [90, 12], [180, 12], [270, 12], [45, 28], [315, 28]],
+            "beauty_applied": True,
+        },
         # Export
         "export_fbx": {"status": "success", "filepath": "model.fbx"},
         "export_gltf": {"status": "success", "filepath": "model.glb"},
@@ -597,8 +666,9 @@ class TestGenerateAndProcess:
         assert result["status"] == "failed"
         assert "TRIPO_API_KEY" in result["error"]
 
+    @patch("veilbreakers_mcp.shared.pipeline_runner.validate_generated_model_file", return_value=VALID_MODEL_VALIDATION)
     @patch("veilbreakers_mcp.shared.pipeline_runner.PipelineRunner.full_asset_pipeline")
-    def test_successful_text_generation(self, mock_pipeline):
+    def test_successful_text_generation(self, mock_pipeline, _mock_validation):
         """With mocked Tripo + mocked pipeline, the flow succeeds."""
         mock_pipeline.return_value = {
             "status": "success",
@@ -628,8 +698,9 @@ class TestGenerateAndProcess:
         assert "pipeline" in result
         assert result["generation"]["status"] == "success"
 
+    @patch("veilbreakers_mcp.shared.pipeline_runner.validate_generated_model_file", return_value=VALID_MODEL_VALIDATION)
     @patch("veilbreakers_mcp.shared.pipeline_runner.PipelineRunner.full_asset_pipeline")
-    def test_successful_image_generation(self, mock_pipeline):
+    def test_successful_image_generation(self, mock_pipeline, _mock_validation):
         mock_pipeline.return_value = {
             "status": "success",
             "export_path": "model.fbx",
@@ -654,8 +725,9 @@ class TestGenerateAndProcess:
 
         assert result["status"] == "success"
 
+    @patch("veilbreakers_mcp.shared.pipeline_runner.validate_generated_model_file", return_value=VALID_MODEL_VALIDATION)
     @patch("veilbreakers_mcp.shared.pipeline_runner.PipelineRunner.full_asset_pipeline")
-    def test_tripo_failure_reported(self, mock_pipeline):
+    def test_tripo_failure_reported(self, mock_pipeline, _mock_validation):
         runner = _make_runner()
 
         with patch(
@@ -674,8 +746,9 @@ class TestGenerateAndProcess:
         assert "Tripo generation failed" in result["error"]
         mock_pipeline.assert_not_called()
 
+    @patch("veilbreakers_mcp.shared.pipeline_runner.validate_generated_model_file", return_value=VALID_MODEL_VALIDATION)
     @patch("veilbreakers_mcp.shared.pipeline_runner.PipelineRunner.full_asset_pipeline")
-    def test_prefers_pbr_model(self, mock_pipeline):
+    def test_prefers_pbr_model(self, mock_pipeline, _mock_validation):
         """Should prefer pbr_model_path over model_path."""
         mock_pipeline.return_value = {
             "status": "success",
@@ -704,8 +777,9 @@ class TestGenerateAndProcess:
         call_args = mock_pipeline.call_args
         assert "model_pbr.glb" in call_args[1]["object_name"]
 
+    @patch("veilbreakers_mcp.shared.pipeline_runner.validate_generated_model_file", return_value=VALID_MODEL_VALIDATION)
     @patch("veilbreakers_mcp.shared.pipeline_runner.PipelineRunner.full_asset_pipeline")
-    def test_export_path_propagated(self, mock_pipeline):
+    def test_export_path_propagated(self, mock_pipeline, _mock_validation):
         mock_pipeline.return_value = {
             "status": "success",
             "export_path": "/out/barrel.fbx",
