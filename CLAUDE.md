@@ -79,8 +79,12 @@ Actions: `create_pbr` | `mask_region` | `inpaint` | `hsv_adjust` | `blend_seams`
 - validate_palette: Validate dark fantasy palette rules on albedo texture (AAA-03)
 
 ### asset_pipeline
-Actions: `generate_3d` | `cleanup` | `generate_lods` | `validate_export` | `tag_metadata` | `batch_process` | `catalog_query` | `catalog_add` | `generate_weapon` | `split_character` | `fit_armor` | `render_equipment_icon` | `import_model` | `import_and_process`
+Actions: `generate_3d` | `generate_building` | `generate_terrain_mesh` | `compose_map` | `compose_interior` | `cleanup` | `generate_lods` | `validate_export` | `tag_metadata` | `batch_process` | `catalog_query` | `catalog_add` | `generate_weapon` | `split_character` | `fit_armor` | `render_equipment_icon` | `import_model` | `import_and_process`
 - generate_3d: Tripo3D from `prompt` or `image_path` (requires API credits)
+- generate_building: Tripo-powered architecture with dark fantasy presets, `building_type` (tavern/castle/cathedral/tower/house/shop/ruin/gate/bridge/wall_section/dungeon_entrance/shrine), `building_style` (dark_fantasy/gothic/medieval/elven/dwarven/corrupted), `building_size`
+- generate_terrain_mesh: Procedural terrain in Blender, `terrain_preset` (mountains/hills/plains/canyon/volcanic/coastal/swamp), `terrain_size`, `terrain_resolution`, `terrain_height_scale`, `terrain_erosion`
+- compose_map: **Full map orchestration** — single `map_spec` dict chains: terrain→water→rivers→roads→locations(town/castle/dungeon/cave/ruins/boss_arena)→biome paint→vegetation→props→interiors. Returns Unity next_steps for lighting/weather/atmosphere/navmesh.
+- compose_interior: **Walkable interior orchestration** — single `interior_spec` dict chains: linked room shells→door triggers→occlusion zones→per-room geometry→storytelling props→Tripo prop generation queue. Supports room types: tavern_hall, kitchen, bedroom, storage, throne_room, library, forge, chapel, prison.
 - import_model: Import local GLB/FBX/OBJ file into Blender (use for Tripo Studio downloads)
 - import_and_process: Import local file + run full cleanup/material/rig/LOD/export pipeline
 - cleanup: auto repair + UV + PBR on AI model
