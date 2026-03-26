@@ -85,6 +85,91 @@ SETTLEMENT_TYPES: dict[str, dict[str, Any]] = {
         "perimeter_props": ["palisade", "gate"],
         "layout_pattern": "grid",
     },
+    "traveler_camp": {
+        "building_count": (2, 5),
+        "has_walls": False,
+        "has_market": False,
+        "has_shrine": False,
+        "road_style": "none",
+        "building_types": ["tent", "lean_to", "campfire_area", "supply_tent"],
+        "prop_density": 0.35,
+        "perimeter_props": ["barricade", "lookout_post"],
+        "layout_pattern": "circular",
+    },
+    "merchant_camp": {
+        "building_count": (3, 7),
+        "has_walls": False,
+        "has_market": True,
+        "has_shrine": False,
+        "road_style": "dirt_path",
+        "building_types": ["market_stall_cluster", "tent", "supply_tent", "watchtower"],
+        "prop_density": 0.65,
+        "perimeter_props": ["fence", "gate", "lookout_post"],
+        "layout_pattern": "organic",
+    },
+    "wizard_fortress": {
+        "building_count": (6, 12),
+        "has_walls": True,
+        "has_market": False,
+        "has_shrine": True,
+        "road_style": "stone",
+        "building_types": [
+            "wizard_fortress", "ruined_fortress_tower", "shrine_major", "barracks", "forge", "watchtower",
+        ],
+        "prop_density": 0.35,
+        "perimeter_props": ["wall_segment", "gate_large", "corner_tower"],
+        "layout_pattern": "concentric",
+    },
+    "sorcery_school": {
+        "building_count": (5, 10),
+        "has_walls": True,
+        "has_market": False,
+        "has_shrine": True,
+        "road_style": "stone",
+        "building_types": [
+            "sorcery_school", "shrine_major", "abandoned_house", "barracks", "watchtower", "market_stall_cluster",
+        ],
+        "prop_density": 0.45,
+        "perimeter_props": ["wall_segment", "gate", "watchtower"],
+        "layout_pattern": "grid",
+    },
+    "cliff_keep": {
+        "building_count": (4, 8),
+        "has_walls": True,
+        "has_market": False,
+        "has_shrine": True,
+        "road_style": "stone",
+        "building_types": [
+            "ruined_fortress_tower", "barracks", "watchtower", "shrine_minor",
+        ],
+        "prop_density": 0.3,
+        "perimeter_props": ["wall_segment", "gate_large", "corner_tower"],
+        "layout_pattern": "concentric",
+    },
+    "ruined_town": {
+        "building_count": (5, 10),
+        "has_walls": False,
+        "has_market": False,
+        "has_shrine": True,
+        "road_style": "dirt_path",
+        "building_types": [
+            "abandoned_house", "abandoned_house", "forge", "shrine_minor", "ruined_fortress_tower",
+        ],
+        "prop_density": 0.55,
+        "perimeter_props": ["fence", "signpost"],
+        "layout_pattern": "organic",
+    },
+    "farmstead": {
+        "building_count": (3, 6),
+        "has_walls": False,
+        "has_market": False,
+        "has_shrine": False,
+        "road_style": "dirt_path",
+        "building_types": ["abandoned_house", "forge", "shrine_minor", "market_stall_cluster"],
+        "prop_density": 0.5,
+        "perimeter_props": ["fence", "signpost"],
+        "layout_pattern": "organic",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -95,6 +180,8 @@ ROOM_FURNISHINGS: dict[str, list[str]] = {
     "bedroom": ["bed_frame", "chest", "candelabra", "rug"],
     "kitchen": ["table", "chair", "barrel", "shelf", "cauldron"],
     "smithy": ["anvil", "forge_fire", "bellows", "weapon_rack", "quench_trough"],
+    "study": ["shelf", "table", "chair", "candelabra", "rug"],
+    "great_hall": ["table", "chair", "banner", "candelabra", "rug", "chandelier"],
     "shrine_room": ["altar", "candelabra", "prayer_mat", "offering_bowl"],
     "storage": ["barrel", "crate", "sack", "shelf"],
     "tavern": ["table", "chair", "chair", "barrel", "candelabra", "banner"],
@@ -119,6 +206,8 @@ _BUILDING_ROOMS: dict[str, list[str]] = {
     "campfire_area": [],
     "cage": ["prison"],
     "ruined_fortress_tower": ["guard_post", "storage"],
+    "wizard_fortress": ["great_hall", "study", "guard_post", "storage"],
+    "sorcery_school": ["study", "great_hall", "shrine_room", "storage"],
     "barracks": ["barracks", "barracks", "storage"],
     "watchtower": ["guard_post"],
     "supply_tent": ["storage"],
@@ -272,6 +361,8 @@ _BUILDING_FOOTPRINTS: dict[str, tuple[float, float]] = {
     "campfire_area": (5.0, 5.0),
     "cage": (3.0, 3.0),
     "ruined_fortress_tower": (6.0, 6.0),
+    "wizard_fortress": (14.0, 14.0),
+    "sorcery_school": (16.0, 12.0),
     "barracks": (10.0, 8.0),
     "watchtower": (4.0, 4.0),
     "supply_tent": (5.0, 5.0),
@@ -380,6 +471,7 @@ def _place_buildings(
             "abandoned_house": 1, "forge": 1, "tent": 1, "lean_to": 1,
             "campfire_area": 1, "cage": 1, "watchtower": 2, "barracks": 1,
             "supply_tent": 1, "market_stall_cluster": 1,
+            "wizard_fortress": 3, "sorcery_school": 3,
         }
         building = {
             "position": (round(target_pos[0], 2), round(target_pos[1], 2)),
@@ -772,6 +864,22 @@ def _scatter_settlement_props(
             "scale": round(rng.uniform(0.6, 1.4), 2),
             "source": "scatter",
         })
+
+    # 4. Farm-scape dressing: crop plots, fences, hay, and carts around the outskirts.
+    if road_style in {"dirt_path", "cobblestone"} and config.get("layout_pattern") in {"organic", "grid"}:
+        farm_count = 2 if road_style == "dirt_path" else 3
+        for i in range(farm_count):
+            angle = (2 * math.pi * i / max(farm_count, 1)) + rng.uniform(-0.35, 0.35)
+            dist = rng.uniform(radius * 0.68, radius * 0.9)
+            px = center[0] + math.cos(angle) * dist
+            py = center[1] + math.sin(angle) * dist
+            props.append({
+                "type": "farm_plot",
+                "position": (round(px, 2), round(py, 2)),
+                "rotation": round(angle + math.pi / 2.0, 4),
+                "scale": round(rng.uniform(0.9, 1.4), 2),
+                "source": "farmscape",
+            })
 
     return props
 

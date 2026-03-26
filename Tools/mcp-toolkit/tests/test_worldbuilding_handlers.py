@@ -304,20 +304,21 @@ class TestVBBuildingPresets:
     """Test VeilBreakers building preset data and lookup helpers."""
 
     def test_presets_dict_has_five_entries(self):
-        """VB_BUILDING_PRESETS must have exactly 5 presets."""
+        """VB_BUILDING_PRESETS should include the AAA preset set."""
         from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
 
-        assert len(VB_BUILDING_PRESETS) == 5
+        assert len(VB_BUILDING_PRESETS) >= 10
 
     def test_preset_names(self):
-        """All expected VB building preset names are present."""
+        """All core and extended VB building preset names are present."""
         from blender_addon.handlers.worldbuilding import VB_BUILDING_PRESETS
 
         expected = {
             "shrine_minor", "shrine_major", "ruined_fortress_tower",
-            "abandoned_house", "forge",
+            "abandoned_house", "forge", "inn", "warehouse", "barracks",
+            "gatehouse", "rowhouse",
         }
-        assert set(VB_BUILDING_PRESETS.keys()) == expected
+        assert expected.issubset(set(VB_BUILDING_PRESETS.keys()))
 
     def test_each_preset_has_required_keys(self):
         """Every VB building preset must have style, floors, width, depth."""

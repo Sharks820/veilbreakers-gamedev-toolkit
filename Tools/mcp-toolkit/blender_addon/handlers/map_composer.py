@@ -36,6 +36,13 @@ VB_BIOMES = [
     "cemetery",
 ]
 
+VEIL_PRESSURE_BANDS: dict[str, tuple[float, float]] = {
+    "safehold": (0.0, 0.24),
+    "frontier": (0.24, 0.5),
+    "contested": (0.5, 0.76),
+    "veil_belt": (0.76, 1.01),
+}
+
 # ---------------------------------------------------------------------------
 # POI placement rules
 # ---------------------------------------------------------------------------
@@ -48,6 +55,7 @@ POI_PLACEMENT_RULES: dict[str, dict[str, Any]] = {
         "min_distance_from_others": 80.0,
         "near_water": True,
         "elevation_range": (0.1, 0.4),
+        "preferred_pressure_range": (0.0, 0.42),
     },
     "town": {
         "preferred_biomes": ["thornwood_forest"],
@@ -56,6 +64,7 @@ POI_PLACEMENT_RULES: dict[str, dict[str, Any]] = {
         "min_distance_from_others": 120.0,
         "near_water": True,
         "elevation_range": (0.1, 0.3),
+        "preferred_pressure_range": (0.1, 0.5),
     },
     "bandit_camp": {
         "preferred_biomes": ["corrupted_swamp", "thornwood_forest", "battlefield"],
@@ -64,6 +73,7 @@ POI_PLACEMENT_RULES: dict[str, dict[str, Any]] = {
         "min_distance_from_others": 40.0,
         "near_water": False,
         "elevation_range": (0.2, 0.6),
+        "preferred_pressure_range": (0.25, 0.78),
     },
     "dungeon_entrance": {
         "preferred_biomes": ["mountain_pass", "ruined_fortress", "underground_dungeon"],
@@ -72,6 +82,7 @@ POI_PLACEMENT_RULES: dict[str, dict[str, Any]] = {
         "min_distance_from_others": 60.0,
         "near_water": False,
         "elevation_range": (0.3, 0.8),
+        "preferred_pressure_range": (0.45, 1.0),
     },
     "shrine": {
         "preferred_biomes": ["sacred_shrine", "thornwood_forest"],
@@ -80,6 +91,7 @@ POI_PLACEMENT_RULES: dict[str, dict[str, Any]] = {
         "min_distance_from_others": 30.0,
         "near_water": False,
         "elevation_range": (0.2, 0.7),
+        "preferred_pressure_range": (0.05, 0.7),
     },
     "veil_crack": {
         "preferred_biomes": ["veil_crack_zone"],
@@ -88,6 +100,7 @@ POI_PLACEMENT_RULES: dict[str, dict[str, Any]] = {
         "min_distance_from_others": 50.0,
         "near_water": False,
         "elevation_range": (0.4, 0.9),
+        "preferred_pressure_range": (0.78, 1.0),
     },
     "castle": {
         "preferred_biomes": ["mountain_pass", "ruined_fortress"],
@@ -96,6 +109,7 @@ POI_PLACEMENT_RULES: dict[str, dict[str, Any]] = {
         "min_distance_from_others": 150.0,
         "near_water": False,
         "elevation_range": (0.5, 0.8),
+        "preferred_pressure_range": (0.18, 0.72),
     },
 }
 
@@ -148,6 +162,39 @@ def _get_biome_at(
     combined = (nx * 0.3 + ny * 0.3 + raw * 0.4 + 1.0) / 2.0  # [0, 1]
     idx = int(combined * len(VB_BIOMES)) % len(VB_BIOMES)
     return VB_BIOMES[idx]
+
+
+def _veil_pressure_at(
+    x: float,
+    y: float,
+    width: float,
+    height: float,
+    seed: int = 0,
+) -> float:
+    """Compute pressure from the Veil, normalized to [0, 1]."""
+    nx = x / max(width, 1.0)
+    ny = y / max(height, 1.0)
+    directional = nx * 0.82 + abs(ny - 0.5) * 0.08
+    noise = (_hash_noise_2d(nx * 4.0, ny * 4.0, seed) + 1.0) * 0.5
+    pressure = directional * 0.8 + noise * 0.2
+    return max(0.0, min(1.0, pressure))
+
+
+def _pressure_band(pressure: float) -> str:
+    for band, (lo, hi) in VEIL_PRESSURE_BANDS.items():
+        if lo <= pressure < hi:
+            return band
+    return "veil_belt"
+
+
+def _corruption_variant_for_pressure(biome: str, pressure: float, rng: random.Random) -> str:
+    if pressure < 0.24:
+        return "healthy"
+    if pressure < 0.5:
+        return rng.choice(["weathered", "strained"])
+    if pressure < 0.76:
+        return rng.choice(["corrupted", "blighted"])
+    return rng.choice(["veil-touched", "void-stained", "blighted"])
 
 
 def _hash_noise_2d(x: float, y: float, seed: int = 0) -> float:
@@ -311,6 +358,7 @@ def _find_valid_position(
     slope_lo = rules.get("min_slope", 0.0)
     slope_hi = rules.get("max_slope", 90.0)
     preferred_biomes = rules.get("preferred_biomes", VB_BIOMES)
+    pressure_lo, pressure_hi = rules.get("preferred_pressure_range", (0.0, 1.0))
     # Edge margin to avoid placing right on the boundary
     margin = min(width, height) * 0.05
 
@@ -334,6 +382,11 @@ def _find_valid_position(
             # Allow placement with reduced probability even outside preferred biomes
             # This prevents impossible placement when biome zones don't cover enough area
             if rng.random() > 0.15:
+                continue
+
+        pressure = _veil_pressure_at(x, y, width, height, seed=world_seed)
+        if pressure < pressure_lo or pressure > pressure_hi:
+            if rng.random() > 0.2:
                 continue
 
         # --- Minimum distance check ---
@@ -611,6 +664,227 @@ def _generate_road_waypoints(
     return waypoints
 
 
+def _generate_world_features(
+    pois: list[dict[str, Any]],
+    roads: list[dict[str, Any]],
+    width: float,
+    height: float,
+    heightmap: list[list[float]] | None,
+    seed: int,
+) -> list[dict[str, Any]]:
+    """Derive AAA-style world features from the placed POIs and roads.
+
+    The map compiler should not stop at settlements and road segments. It
+    should also emit the higher-level pieces that make a world feel built:
+    farm belts, fences, camp perimeters, watch posts, market quarters, and
+    bridge crossings.
+    """
+    rng = random.Random(seed + 0x5F3759DF)
+    poi_lookup = {poi["name"]: poi for poi in pois}
+    features: list[dict[str, Any]] = []
+    counts: dict[str, int] = {}
+
+    def add_feature(
+        feature_type: str,
+        anchor: str,
+        position: tuple[float, float],
+        *,
+        style: str = "default",
+        scale: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        rotation: float = 0.0,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        idx = counts.get(feature_type, 0)
+        counts[feature_type] = idx + 1
+        poi = poi_lookup.get(anchor)
+        pressure = float(poi.get("pressure", 0.5)) if poi else 0.5
+        pressure_band = poi.get("pressure_band", "frontier") if poi else "frontier"
+        biome_variant = poi.get("biome_variant", "clean") if poi else "clean"
+        px = max(0.0, min(width, position[0]))
+        py = max(0.0, min(height, position[1]))
+        features.append({
+            "name": f"{anchor}_{feature_type}_{idx + 1}",
+            "type": feature_type,
+            "anchor": anchor,
+            "position": (round(px, 2), round(py, 2)),
+            "rotation": round(rotation, 3),
+            "scale": tuple(round(v, 3) for v in scale),
+            "style": style,
+            "pressure": round(pressure, 4),
+            "pressure_band": pressure_band,
+            "biome_variant": biome_variant,
+            "details": details or {},
+        })
+
+    settlement_feature_map: dict[str, list[tuple[str, str]]] = {
+        "village": [
+            ("farm_belt", "village_outskirts"),
+            ("fence_line", "wooden_picket"),
+        ],
+        "town": [
+            ("market_quarter", "market"),
+            ("fence_line", "wooden_picket"),
+            ("milestone", "road_marker"),
+        ],
+        "castle": [
+            ("bridge_crossing", "stone"),
+            ("lookout_post", "fortified"),
+            ("fence_line", "iron_wrought"),
+        ],
+        "bandit_camp": [
+            ("camp_perimeter", "rough"),
+            ("barricade_line", "spiked"),
+            ("lookout_post", "raised"),
+        ],
+        "dungeon_entrance": [
+            ("bridge_crossing", "rope"),
+            ("barricade_line", "stone"),
+            ("milestone", "warning_marker"),
+        ],
+        "shrine": [
+            ("sacrificial_circle", "sanctified"),
+            ("waystone", "sanctified"),
+        ],
+        "veil_crack": [
+            ("corruption_crystal", "veil-touched"),
+            ("dark_obelisk", "veil-touched"),
+            ("barricade_line", "ruined"),
+        ],
+    }
+
+    for poi in pois:
+        poi_type = poi["type"]
+        if poi_type not in settlement_feature_map:
+            continue
+
+        x, y = poi["position"]
+        pressure = float(poi.get("pressure", 0.5))
+        band = poi.get("pressure_band", "frontier")
+        base_rotation = rng.uniform(0.0, math.tau)
+        scale_bias = 1.0 + (pressure - 0.5) * 0.25
+
+        for offset_idx, (feature_type, style) in enumerate(settlement_feature_map[poi_type]):
+            offset_angle = base_rotation + (offset_idx * math.tau / max(1, len(settlement_feature_map[poi_type])))
+            offset_dist = 10.0 + (offset_idx * 4.0) + (pressure * 10.0)
+            fx = x + math.cos(offset_angle) * offset_dist
+            fy = y + math.sin(offset_angle) * offset_dist
+            details = {
+                "poi_type": poi_type,
+                "pressure_band": band,
+                "biome": poi.get("biome"),
+            }
+
+            if feature_type == "farm_belt":
+                add_feature(
+                    feature_type,
+                    poi["name"],
+                    (fx, fy),
+                    style=style,
+                    scale=(1.3 * scale_bias, 1.0 * scale_bias, 1.0),
+                    rotation=offset_angle,
+                    details={**details, "plot_count": 3},
+                )
+            elif feature_type == "market_quarter":
+                add_feature(
+                    feature_type,
+                    poi["name"],
+                    (fx, fy),
+                    style=style,
+                    scale=(1.2 * scale_bias, 1.0 * scale_bias, 1.0),
+                    rotation=offset_angle,
+                    details={**details, "stall_rows": 4},
+                )
+            elif feature_type == "camp_perimeter":
+                add_feature(
+                    feature_type,
+                    poi["name"],
+                    (fx, fy),
+                    style=style,
+                    scale=(1.0 * scale_bias, 1.0 * scale_bias, 1.0),
+                    rotation=offset_angle,
+                    details={**details, "tent_count": 4},
+                )
+            elif feature_type == "bridge_crossing":
+                add_feature(
+                    feature_type,
+                    poi["name"],
+                    (fx, fy),
+                    style="stone" if poi_type in {"castle", "town"} else "rope",
+                    scale=(1.0 + pressure * 0.3, 1.0, 1.0),
+                    rotation=offset_angle,
+                    details={**details, "crossing_role": poi_type},
+                )
+            else:
+                add_feature(
+                    feature_type,
+                    poi["name"],
+                    (fx, fy),
+                    style=style,
+                    scale=(scale_bias, scale_bias, 1.0),
+                    rotation=offset_angle,
+                    details=details,
+                )
+
+    # Road-derived features: bridge crossings and approach markers.
+    for road in roads:
+        waypoints = road.get("waypoints", [])
+        if len(waypoints) < 2:
+            continue
+        start = waypoints[0]
+        end = waypoints[-1]
+        mid = waypoints[len(waypoints) // 2]
+        sx, sy = start[0], start[1]
+        ex, ey = end[0], end[1]
+        mx, my = mid[0], mid[1]
+        road_length = _distance((sx, sy), (ex, ey))
+        if road_length < max(width, height) * 0.12:
+            continue
+
+        start_poi = poi_lookup.get(road.get("from", ""))
+        end_poi = poi_lookup.get(road.get("to", ""))
+        start_pressure = float(start_poi.get("pressure", 0.5)) if start_poi else 0.5
+        end_pressure = float(end_poi.get("pressure", 0.5)) if end_poi else 0.5
+        avg_pressure = (start_pressure + end_pressure) * 0.5
+
+        z_values = [pt[2] if len(pt) >= 3 else 0.25 for pt in waypoints]
+        valley_depth = (max(z_values[0], z_values[-1]) - min(z_values)) if z_values else 0.0
+        bridge_style = "stone" if road.get("road_type") == "main" or avg_pressure < 0.55 else "rope"
+        if heightmap is not None and (valley_depth > 0.04 or road.get("road_type") == "main"):
+            add_feature(
+                "bridge_crossing",
+                road.get("from", road.get("to", "road")),
+                (mx, my),
+                style=bridge_style,
+                scale=(1.0 + min(0.5, road_length / max(width, height) * 0.25), 1.0, 1.0),
+                rotation=math.atan2(ey - sy, ex - sx),
+                details={
+                    "road_type": road.get("road_type", "path"),
+                    "distance": road.get("distance", road_length),
+                    "connected": [road.get("from"), road.get("to")],
+                    "valley_depth": round(valley_depth, 4),
+                },
+            )
+        if road_length > max(width, height) * 0.18:
+            add_feature(
+                "milestone",
+                road.get("from", road.get("to", "road")),
+                (
+                    mx + math.cos(math.atan2(ey - sy, ex - sx)) * 4.0,
+                    my + math.sin(math.atan2(ey - sy, ex - sx)) * 4.0,
+                ),
+                style="road_marker",
+                scale=(0.8, 0.8, 0.8),
+                rotation=math.atan2(ey - sy, ex - sx),
+                details={
+                    "road_type": road.get("road_type", "path"),
+                    "distance": road.get("distance", road_length),
+                    "connected": [road.get("from"), road.get("to")],
+                },
+            )
+
+    return features
+
+
 # ---------------------------------------------------------------------------
 # Main composition function
 # ---------------------------------------------------------------------------
@@ -714,6 +988,7 @@ def compose_world_map(
             elev = _sample_heightmap(heightmap, x, y, width, height)
             slope = _calculate_slope(heightmap, x, y, width, height)
             biome = _get_biome_at(x, y, width, height, seed=seed)
+            pressure = _veil_pressure_at(x, y, width, height, seed=seed)
 
             placed_pois.append({
                 "name": f"{poi_type}_{placed_for_type + 1}",
@@ -722,6 +997,9 @@ def compose_world_map(
                 "elevation": round(elev, 4),
                 "biome": biome,
                 "slope": round(slope, 2),
+                "pressure": round(pressure, 4),
+                "pressure_band": _pressure_band(pressure),
+                "biome_variant": _corruption_variant_for_pressure(biome, pressure, rng),
             })
             placed_for_type += 1
 
@@ -732,22 +1010,41 @@ def compose_world_map(
         seed=seed,
     )
 
+    world_features = _generate_world_features(
+        placed_pois,
+        roads,
+        width,
+        height,
+        heightmap,
+        seed,
+    )
+
     # Compute biome distribution
     biome_dist: dict[str, int] = {}
     for poi in placed_pois:
         b = poi["biome"]
         biome_dist[b] = biome_dist.get(b, 0) + 1
 
+    feature_dist: dict[str, int] = {}
+    for feature in world_features:
+        feature_type = feature["type"]
+        feature_dist[feature_type] = feature_dist.get(feature_type, 0) + 1
+
     return {
         "pois": placed_pois,
         "roads": roads,
+        "world_features": world_features,
         "metadata": {
             "seed": seed,
             "world_size": (width, height),
+            "veil_origin": (width * 0.92, height * 0.5),
+            "safehold_origin": (width * 0.08, height * 0.5),
             "total_pois_requested": total_requested,
             "total_pois_placed": len(placed_pois),
             "placement_failures": placement_failures,
             "road_count": len(roads),
+            "feature_count": len(world_features),
+            "feature_distribution": feature_dist,
             "biome_distribution": biome_dist,
         },
     }

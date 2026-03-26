@@ -448,6 +448,7 @@ class TestComposeWorldMap:
         )
         assert "pois" in result
         assert "roads" in result
+        assert "world_features" in result
         assert "metadata" in result
 
     def test_deterministic_with_seed(self):
@@ -463,6 +464,7 @@ class TestComposeWorldMap:
         r2 = compose_world_map(**args)
         assert r1["pois"] == r2["pois"]
         assert r1["roads"] == r2["roads"]
+        assert r1["world_features"] == r2["world_features"]
 
     def test_poi_fields(self):
         result = compose_world_map(
@@ -494,7 +496,27 @@ class TestComposeWorldMap:
         assert isinstance(meta["total_pois_placed"], int)
         assert isinstance(meta["placement_failures"], list)
         assert isinstance(meta["road_count"], int)
+        assert isinstance(meta["feature_count"], int)
         assert isinstance(meta["biome_distribution"], dict)
+        assert isinstance(meta["feature_distribution"], dict)
+
+    def test_features_populated_for_settlements(self):
+        result = compose_world_map(
+            width=1000, height=1000,
+            poi_list=[
+                {"type": "village", "count": 2},
+                {"type": "town", "count": 1},
+                {"type": "castle", "count": 1},
+                {"type": "shrine", "count": 1},
+                {"type": "veil_crack", "count": 1},
+            ],
+            seed=77,
+        )
+        assert result["world_features"], "Expected derived world features"
+        feature_types = {f["type"] for f in result["world_features"]}
+        assert "farm_belt" in feature_types
+        assert "market_quarter" in feature_types or "bridge_crossing" in feature_types
+        assert result["metadata"]["feature_count"] == len(result["world_features"])
 
     def test_minimum_distance_between_pois(self):
         result = compose_world_map(

@@ -20,6 +20,7 @@ from typing import Any, Callable
 # ---------------------------------------------------------------------------
 from .procedural_meshes import (
     # Furniture
+    generate_bed_mesh,
     generate_table_mesh,
     generate_chair_mesh,
     generate_shelf_mesh,
@@ -27,6 +28,11 @@ from .procedural_meshes import (
     generate_barrel_mesh,
     generate_candelabra_mesh,
     generate_bookshelf_mesh,
+    generate_wardrobe_mesh,
+    generate_cabinet_mesh,
+    generate_fireplace_mesh,
+    generate_map_scroll_mesh,
+    generate_holy_symbol_mesh,
     # Vegetation
     generate_tree_mesh,
     generate_rock_mesh,
@@ -51,6 +57,7 @@ from .procedural_meshes import (
     # Architecture
     generate_gate_mesh,
     generate_fountain_mesh,
+    generate_staircase_mesh,
     # Structural
     generate_rampart_mesh,
     generate_drawbridge_mesh,
@@ -62,6 +69,13 @@ from .procedural_meshes import (
     generate_brazier_mesh,
     generate_lantern_mesh,
     generate_campfire_mesh,
+    # Camps / lookout / barriers
+    generate_tent_mesh,
+    generate_lookout_post_mesh,
+    generate_spike_fence_mesh,
+    generate_hitching_post_mesh,
+    generate_barricade_mesh,
+    generate_barricade_outdoor_mesh,
     # Wall decor
     generate_banner_mesh,
     generate_rug_mesh,
@@ -81,6 +95,13 @@ from .procedural_meshes import (
     # Signs & markers
     generate_signpost_mesh,
     generate_gravestone_mesh,
+    generate_waystone_mesh,
+    generate_milestone_mesh,
+    # Corruption / ritual markers
+    generate_sacrificial_circle_mesh,
+    generate_corruption_crystal_mesh,
+    generate_veil_tear_mesh,
+    generate_dark_obelisk_mesh,
     # Natural formations
     generate_fallen_log_mesh,
     # Misc containers
@@ -106,6 +127,7 @@ MeshSpec = dict[str, Any]
 
 FURNITURE_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]]] = {
     # ---- Direct matches (20) ----
+    "bed": (generate_bed_mesh, {}),
     "table": (generate_table_mesh, {}),
     "chair": (generate_chair_mesh, {}),
     "shelf": (generate_shelf_mesh, {}),
@@ -113,6 +135,8 @@ FURNITURE_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]
     "barrel": (generate_barrel_mesh, {}),
     "candelabra": (generate_candelabra_mesh, {}),
     "bookshelf": (generate_bookshelf_mesh, {}),
+    "wardrobe": (generate_wardrobe_mesh, {}),
+    "cabinet": (generate_cabinet_mesh, {}),
     "altar": (generate_altar_mesh, {}),
     "pillar": (generate_pillar_mesh, {}),
     "brazier": (generate_brazier_mesh, {}),
@@ -127,7 +151,24 @@ FURNITURE_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]
     "sarcophagus": (generate_sarcophagus_mesh, {}),
     "chain": (generate_chain_mesh, {}),
     "chains": (generate_chain_mesh, {}),
+    "staircase": (generate_staircase_mesh, {}),
+    "tent": (generate_tent_mesh, {"style": "small"}),
+    "tent_large": (generate_tent_mesh, {"style": "large"}),
+    "command_tent": (generate_tent_mesh, {"style": "command"}),
+    "supply_tent": (generate_tent_mesh, {"style": "large"}),
+    "lookout_post": (generate_lookout_post_mesh, {"style": "raised"}),
+    "lookout_post_ground": (generate_lookout_post_mesh, {"style": "ground"}),
     # ---- Close matches (9) ----
+    "bar_counter": (generate_table_mesh, {"width": 3.0, "depth": 0.8}),
+    "fireplace": (generate_fireplace_mesh, {}),
+    "cooking_fire": (generate_fireplace_mesh, {}),
+    "pew": (generate_chair_mesh, {"style": "wooden_bench"}),
+    "map_display": (generate_map_scroll_mesh, {"style": "rolled"}),
+    "holy_symbol": (generate_holy_symbol_mesh, {}),
+    "prayer_mat": (generate_rug_mesh, {}),
+    "nightstand": (generate_cabinet_mesh, {}),
+    "tool_rack": (generate_shelf_mesh, {"tiers": 2, "width": 1.0}),
+    "bellows": (generate_forge_mesh, {"size": 0.8}),
     "large_table": (generate_table_mesh, {"width": 1.8, "depth": 1.2}),
     "long_table": (generate_table_mesh, {"width": 1.8, "depth": 4.0}),
     "serving_table": (generate_table_mesh, {"width": 1.5, "depth": 0.6}),
@@ -150,6 +191,7 @@ VEGETATION_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any
     "tree": (generate_tree_mesh, {"canopy_style": "dead_twisted"}),
     "bush": (generate_mushroom_mesh, {"cap_style": "cluster"}),
     "rock": (generate_rock_mesh, {"rock_type": "boulder"}),
+    "cliff_rock": (generate_rock_mesh, {"rock_type": "cliff_outcrop"}),
     "mushroom": (generate_mushroom_mesh, {}),
     "root": (generate_root_mesh, {}),
 }
@@ -210,6 +252,7 @@ PROP_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]]] = 
     "cart": (generate_cart_mesh, {}),
     "anvil": (generate_anvil_mesh, {}),
     "rock": (generate_rock_mesh, {"rock_type": "boulder"}),
+    "cliff_rock": (generate_rock_mesh, {"rock_type": "cliff_outcrop"}),
     "mushroom": (generate_mushroom_mesh, {}),
     "fence": (generate_fence_mesh, {}),
     "sack": (generate_sack_mesh, {}),
@@ -218,9 +261,19 @@ PROP_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]]] = 
     "market_stall": (generate_market_stall_mesh, {}),
     "signpost": (generate_signpost_mesh, {}),
     "campfire": (generate_campfire_mesh, {}),
+    "spike_fence": (generate_spike_fence_mesh, {}),
+    "barricade": (generate_barricade_mesh, {}),
+    "barricade_outdoor": (generate_barricade_outdoor_mesh, {}),
+    "hitching_post": (generate_hitching_post_mesh, {}),
     "gravestone": (generate_gravestone_mesh, {}),
+    "waystone": (generate_waystone_mesh, {}),
+    "milestone": (generate_milestone_mesh, {}),
     "torch_sconce": (generate_torch_sconce_mesh, {}),
     "brazier": (generate_brazier_mesh, {}),
+    "sacrificial_circle": (generate_sacrificial_circle_mesh, {}),
+    "corruption_crystal": (generate_corruption_crystal_mesh, {}),
+    "veil_tear": (generate_veil_tear_mesh, {}),
+    "dark_obelisk": (generate_dark_obelisk_mesh, {}),
     # ---- Close matches (aliases using best-fit generators) ----
     "bench": (generate_chair_mesh, {"style": "wooden_bench"}),
     "mug": (generate_potion_bottle_mesh, {"style": "round_flask"}),

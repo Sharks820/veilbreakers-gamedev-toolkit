@@ -473,6 +473,98 @@ def _merge_meshes(
     return all_verts, all_faces
 
 
+def _make_faceted_rock_shell(
+    size: float,
+    detail: int,
+    seed: int,
+    *,
+    height_scale: float = 1.0,
+    width_scale: float = 1.0,
+    depth_scale: float = 1.0,
+    flat_base: bool = True,
+    flat_top: bool = True,
+) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]:
+    """Build an angular rock shell with fractured, non-spherical massing."""
+    import random as _rng
+
+    rng = _rng.Random(seed)
+    detail = max(1, min(5, detail))
+    segments = 8 + detail * 2
+    rings = 2 + detail
+
+    height = size * height_scale * (0.9 + 0.08 * detail)
+    half_height = height * 0.5
+    base_radius = size * 0.42
+    x_scale = width_scale * rng.uniform(0.88, 1.12)
+    z_scale = depth_scale * rng.uniform(0.82, 1.08)
+    phase = rng.uniform(0.0, math.tau)
+    fracture_bias = rng.uniform(-0.75, 0.75)
+
+    vertices: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+
+    for ring in range(rings + 1):
+        t = ring / max(rings, 1)
+        y = -half_height + t * height
+        ring_radius = base_radius * (1.08 - 0.34 * t)
+        if flat_base and ring == 0:
+            ring_radius *= 0.82
+            y -= height * 0.03
+        if flat_top and ring == rings:
+            ring_radius *= 0.72
+            y += height * 0.03
+
+        ring_radius *= 1.0 + 0.05 * math.sin((t * math.pi) + fracture_bias)
+
+        for seg in range(segments):
+            angle = (math.tau * seg / segments) + phase
+            ca = math.cos(angle)
+            sa = math.sin(angle)
+
+            ridge = 1.0
+            ridge += 0.16 * math.cos(angle * 2.0 + fracture_bias)
+            ridge += 0.08 * math.sin(angle * 5.0 - fracture_bias * 0.7)
+            ridge += rng.uniform(-0.08, 0.10)
+
+            if ca > 0.55:
+                ridge *= 0.88
+            elif ca < -0.45:
+                ridge *= 1.05
+            if sa > 0.65:
+                ridge *= 0.92
+            elif sa < -0.65:
+                ridge *= 1.02
+            if ring == 0:
+                ridge *= 0.92
+            elif ring == rings:
+                ridge *= 0.86
+
+            radius = ring_radius * max(0.55, ridge)
+            vertices.append((
+                ca * radius * x_scale,
+                y,
+                sa * radius * z_scale,
+            ))
+
+    for ring in range(rings):
+        start = ring * segments
+        next_start = (ring + 1) * segments
+        for seg in range(segments):
+            seg_next = (seg + 1) % segments
+            faces.append((
+                start + seg,
+                start + seg_next,
+                next_start + seg_next,
+                next_start + seg,
+            ))
+
+    faces.append(tuple(range(segments - 1, -1, -1)))
+    top_start = rings * segments
+    faces.append(tuple(top_start + i for i in range(segments)))
+
+    return vertices, faces
+
+
 def _make_sphere(
     cx: float, cy: float, cz: float,
     radius: float,
@@ -1378,56 +1470,78 @@ def generate_rock_mesh(
     parts = []
 
     if rock_type == "boulder":
-        # Deformed sphere
-        rings = 4 + detail * 2
-        sectors = 6 + detail * 2
-        radius = 0.4 * size
-        verts: list[tuple[float, float, float]] = []
-        faces: list[tuple[int, ...]] = []
-
-        # Generate deformed sphere
-        import random as _rng
-        _rng.seed(hash(rock_type) + detail)
-
-        verts.append((0, -radius * 0.9, 0))  # Bottom pole
-        for i in range(1, rings):
-            phi = math.pi * i / rings
-            y = -radius * math.cos(phi)
-            ring_r = radius * math.sin(phi)
-            for j in range(sectors):
-                theta = 2.0 * math.pi * j / sectors
-                # Add noise for irregular surface
-                noise = 1.0 + _rng.uniform(-0.15, 0.2)
-                r = ring_r * noise
-                yn = y * (1.0 + _rng.uniform(-0.08, 0.08))
-                verts.append((
-                    r * math.cos(theta),
-                    yn,
-                    r * math.sin(theta),
-                ))
-        verts.append((0, radius * 0.85, 0))  # Top pole (slightly flat)
-
-        # Bottom cap
-        for j in range(sectors):
-            j2 = (j + 1) % sectors
-            faces.append((0, 1 + j, 1 + j2))
-
-        # Middle quads
-        for i in range(rings - 2):
-            for j in range(sectors):
-                j2 = (j + 1) % sectors
-                r0 = 1 + i * sectors
-                r1 = 1 + (i + 1) * sectors
-                faces.append((r0 + j, r1 + j, r1 + j2, r0 + j2))
-
-        # Top cap
-        top_idx = len(verts) - 1
-        last_ring = 1 + (rings - 2) * sectors
-        for j in range(sectors):
-            j2 = (j + 1) % sectors
-            faces.append((last_ring + j, top_idx, last_ring + j2))
-
+        verts, faces = _make_faceted_rock_shell(
+            size,
+            detail,
+            seed=1701 + detail * 97 + int(size * 1000),
+            height_scale=1.0,
+            width_scale=1.0,
+            depth_scale=0.92,
+            flat_base=True,
+            flat_top=True,
+        )
         return _make_result("Rock_boulder", verts, faces,
+                            rock_type=rock_type, category="vegetation")
+
+    elif rock_type == "cliff_outcrop":
+        import random as _rng
+
+        rng = _rng.Random(9127 + detail * 131 + int(size * 1000))
+        layers = 3 + detail
+        base_width = 0.95 * size
+        base_depth = 0.58 * size
+        total_height = 1.15 * size
+
+        y_cursor = -total_height * 0.5
+        for layer_idx in range(layers):
+            t = layer_idx / max(layers - 1, 1)
+            layer_height = total_height * (0.18 + 0.10 * ((layer_idx + 1) % 2)) * (1.0 - t * 0.15)
+            layer_width = base_width * (1.0 - t * 0.24 + rng.uniform(-0.04, 0.04))
+            layer_depth = base_depth * (1.0 - t * 0.28 + rng.uniform(-0.05, 0.05))
+            x_off = rng.uniform(-0.08, 0.08) * size
+            z_off = rng.uniform(-0.06, 0.06) * size
+            y_center = y_cursor + layer_height * 0.5
+
+            slab_v, slab_f = _make_beveled_box(
+                x_off,
+                y_center,
+                z_off,
+                layer_width * 0.5,
+                layer_height * 0.5,
+                layer_depth * 0.5,
+                bevel=max(0.01, min(layer_width, layer_height, layer_depth) * 0.08),
+            )
+            parts.append((slab_v, slab_f))
+            y_cursor += layer_height * 0.88
+
+        fin_v, fin_f = _make_beveled_box(
+            size * 0.18,
+            total_height * 0.18,
+            -size * 0.10,
+            size * 0.20,
+            total_height * 0.12,
+            size * 0.08,
+            bevel=max(0.004, size * 0.02),
+        )
+        parts.append((fin_v, fin_f))
+
+        for _ in range(2):
+            ox = rng.uniform(-0.25, 0.25) * size
+            oz = rng.uniform(-0.18, 0.18) * size
+            oy = -total_height * 0.45 + rng.uniform(0.0, 0.12) * size
+            rv, rf = _make_beveled_box(
+                ox,
+                oy,
+                oz,
+                size * rng.uniform(0.12, 0.18),
+                size * rng.uniform(0.05, 0.09),
+                size * rng.uniform(0.10, 0.16),
+                bevel=max(0.003, size * 0.01),
+            )
+            parts.append((rv, rf))
+
+        verts, faces = _merge_meshes(*parts)
+        return _make_result("Rock_cliff_outcrop", verts, faces,
                             rock_type=rock_type, category="vegetation")
 
     elif rock_type == "standing_stone":

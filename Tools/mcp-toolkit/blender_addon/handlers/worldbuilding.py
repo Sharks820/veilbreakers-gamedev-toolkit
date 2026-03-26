@@ -18,7 +18,38 @@ from typing import Any
 import bpy
 import bmesh
 
+from .procedural_materials import create_procedural_material
+
 logger = logging.getLogger(__name__)
+
+
+def _assign_procedural_material(obj: Any, material_key: str) -> bool:
+    """Assign a procedural material to a mesh-like object."""
+    try:
+        if obj is None or not hasattr(obj, "data") or not hasattr(obj.data, "materials"):
+            return False
+        mat_name = f"{obj.name}_{material_key}"
+        mat = bpy.data.materials.get(mat_name)
+        if mat is None:
+            mat = create_procedural_material(mat_name, material_key)
+        if obj.data.materials:
+            obj.data.materials[0] = mat
+        else:
+            obj.data.materials.append(mat)
+        return True
+    except Exception as exc:
+        logger.debug("Material assignment failed for %s (%s): %s", getattr(obj, "name", "<unnamed>"), material_key, exc)
+        return False
+
+
+def _assign_procedural_material_recursive(obj: Any, material_key: str) -> int:
+    """Assign a procedural material to an object and its mesh descendants."""
+    if obj is None:
+        return 0
+    count = 1 if _assign_procedural_material(obj, material_key) else 0
+    for child in getattr(obj, "children", []):
+        count += _assign_procedural_material_recursive(child, material_key)
+    return count
 
 
 # ---------------------------------------------------------------------------
@@ -95,6 +126,90 @@ VB_BUILDING_PRESETS: dict[str, dict] = {
             {"type": "window", "wall": "right", "floor": 0, "style": "large_rectangular"},
         ],
         "props": ["anvil", "forge_fire", "bellows", "weapon_rack", "quench_trough"],
+        "roof_style": "shed",
+        "roof_material": "slate",
+    },
+    "inn": {
+        "style": "medieval",
+        "floors": 2,
+        "width": 10.0, "depth": 8.0,
+        "wall_height": 4.0,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "left", "floor": 1, "style": "square"},
+            {"type": "window", "wall": "right", "floor": 1, "style": "square"},
+        ],
+        "props": ["market_stall", "signpost", "barrel", "crate", "hay_bale"],
+        "roof_style": "gable",
+        "roof_material": "tile",
+    },
+    "warehouse": {
+        "style": "medieval",
+        "floors": 2,
+        "width": 12.0, "depth": 9.0,
+        "wall_height": 4.3,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "large_arch"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "square"},
+        ],
+        "props": ["crate", "barrel", "wagon_wheel", "signpost"],
+        "roof_style": "shed",
+        "roof_material": "slate",
+    },
+    "barracks": {
+        "style": "fortress",
+        "floors": 2,
+        "width": 12.0, "depth": 8.5,
+        "wall_height": 4.6,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "large_arch"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "arrow_slit"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "arrow_slit"},
+            {"type": "window", "wall": "left", "floor": 1, "style": "arrow_slit"},
+            {"type": "window", "wall": "right", "floor": 1, "style": "arrow_slit"},
+        ],
+        "props": ["weapon_rack", "bunk_bed", "barrel", "crate", "brazier"],
+        "roof_style": "flat",
+        "roof_material": "stone",
+    },
+    "gatehouse": {
+        "style": "fortress",
+        "floors": 2,
+        "width": 8.0, "depth": 6.5,
+        "wall_height": 5.2,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "large_arch"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "arrow_slit"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "arrow_slit"},
+            {"type": "window", "wall": "left", "floor": 1, "style": "arrow_slit"},
+            {"type": "window", "wall": "right", "floor": 1, "style": "arrow_slit"},
+        ],
+        "props": ["gate", "barrel", "crate", "signpost"],
+        "roof_style": "flat",
+        "roof_material": "stone",
+    },
+    "rowhouse": {
+        "style": "medieval",
+        "floors": 2,
+        "width": 6.0, "depth": 5.0,
+        "wall_height": 3.4,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "front", "floor": 1, "style": "square"},
+        ],
+        "props": ["barrel", "crate", "signpost"],
+        "roof_style": "gable",
+        "roof_material": "tile",
     },
 }
 
@@ -270,7 +385,18 @@ from ._mesh_bridge import (
     FURNITURE_GENERATOR_MAP,
     CASTLE_ELEMENT_MAP,
     DUNGEON_PROP_MAP,
+    PROP_GENERATOR_MAP,
 )
+from .procedural_meshes import (
+    generate_bridge_mesh,
+    generate_buttress_mesh,
+    generate_column_row_mesh,
+    generate_fence_mesh,
+    generate_staircase_mesh,
+)
+from .settlement_generator import generate_settlement
+from .map_composer import compose_world_map
+from .encounter_spaces import compute_encounter_layout, validate_encounter_layout
 from .worldbuilding_layout import (
     generate_boss_arena_spec,
     generate_easter_egg_spec,
@@ -738,6 +864,229 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
                 "role": op.get("role", "unknown"),
             })
 
+        elif op_type == "tower":
+            pos = op["position"]
+            cx, cy, cz = pos[0], pos[1], pos[2]
+            radius = float(op.get("radius", 3.0))
+            height = float(op.get("height", 12.0))
+            segments = max(6, int(op.get("segments", 8)))
+            taper = max(0.55, min(1.0, float(op.get("taper", 0.9))))
+            crown_height = max(0.6, min(height * 0.2, float(op.get("crown_height", max(0.9, height * 0.12)))))
+            body_height = max(0.1, height - crown_height)
+            top_radius = radius * taper
+            crown_radius = radius * max(0.95, taper * 1.05)
+            profile = str(op.get("profile", "fortress"))
+            if profile == "fortress":
+                base_profile = 0.34
+                mid_profile = 0.24
+                top_profile = 0.14
+                crown_profile = 0.08
+            elif profile == "keep":
+                base_profile = 0.26
+                mid_profile = 0.18
+                top_profile = 0.10
+                crown_profile = 0.06
+            else:
+                base_profile = 0.14
+                mid_profile = 0.10
+                top_profile = 0.06
+                crown_profile = 0.04
+
+            verts: list[tuple[float, float, float]] = []
+            faces: list[tuple[int, ...]] = []
+
+            def add_ring(z_offset: float, ring_radius: float, profile_strength: float = 0.0, phase: float = 0.0) -> int:
+                ring_start = len(verts)
+                for i in range(segments):
+                    angle = 2.0 * math.pi * i / segments
+                    if profile_strength > 0.0:
+                        lobe = math.cos(angle * 4.0 + phase)
+                        facet = math.cos(angle * 8.0 + phase * 0.5)
+                        radial = 1.0 + profile_strength * (0.72 * lobe + 0.28 * facet)
+                    else:
+                        radial = 1.0
+                    verts.append((
+                        cx + math.cos(angle) * ring_radius * radial,
+                        cy + math.sin(angle) * ring_radius * radial,
+                        cz + z_offset,
+                    ))
+                return ring_start
+
+            ring_specs = [
+                (0.0, radius * 1.18, base_profile * 1.08, 0.0),
+                (body_height * 0.15, radius * 1.12, base_profile * 0.82, math.pi / 14.0),
+                (body_height * 0.42, max(radius * 0.96, (radius + top_radius) * 0.60), mid_profile * 1.10, math.pi / 8.0),
+                (body_height * 0.70, max(radius * 0.82, top_radius * 1.04), top_profile * 1.05, math.pi / 4.0),
+                (height, crown_radius * 0.98, crown_profile, math.pi / 6.0),
+            ]
+            ring_starts: list[int] = []
+            for z_offset, ring_radius, profile_strength, phase in ring_specs:
+                ring_starts.append(add_ring(z_offset, ring_radius, profile_strength, phase))
+
+            for base, top in zip(ring_starts[:-1], ring_starts[1:]):
+                for i in range(segments):
+                    i_next = (i + 1) % segments
+                    faces.append((base + i, base + i_next, top + i_next, top + i))
+
+            faces.append(tuple(range(ring_starts[0] + segments - 1, ring_starts[0] - 1, -1)))
+            faces.append(tuple(range(ring_starts[-1], ring_starts[-1] + segments)))
+
+            # Battered base skirt and attached buttresses break the pure cylinder read.
+            skirt_w = radius * 2.28
+            skirt_h = max(0.32, height * 0.16)
+            skirt_spec = _wall_solid_box(
+                cx - skirt_w * 0.5,
+                cy - skirt_w * 0.5,
+                cz - skirt_h * 0.25,
+                skirt_w,
+                skirt_w,
+                skirt_h,
+                material=op.get("material", "default"),
+                role=op.get("role", "tower"),
+            )
+            sv = skirt_spec["vertices"]
+            sf = skirt_spec["faces"]
+            offset = len(verts)
+            verts.extend(sv)
+            faces.extend(tuple(idx + offset for idx in face) for face in sf)
+
+            buttress_w = max(0.34, radius * 0.30)
+            buttress_h = max(0.85, height * 0.30)
+            buttress_r = radius * 0.90
+            buttress_offsets = (
+                (buttress_r, 0.0, buttress_w * 0.6, buttress_h * 0.96),
+                (-buttress_r, 0.0, buttress_w * 0.6, buttress_h * 0.96),
+                (0.0, buttress_r, buttress_w * 0.72, buttress_h),
+                (0.0, -buttress_r, buttress_w * 0.72, buttress_h),
+                (buttress_r * 0.72, buttress_r * 0.72, buttress_w * 0.45, buttress_h * 0.58),
+                (-buttress_r * 0.72, buttress_r * 0.72, buttress_w * 0.45, buttress_h * 0.58),
+                (buttress_r * 0.72, -buttress_r * 0.72, buttress_w * 0.45, buttress_h * 0.58),
+                (-buttress_r * 0.72, -buttress_r * 0.72, buttress_w * 0.45, buttress_h * 0.58),
+            )
+            for dx, dy, bw_scale, bh_scale in buttress_offsets:
+                buttress_spec = _wall_solid_box(
+                    cx + dx - bw_scale * 0.5,
+                    cy + dy - bw_scale * 0.5,
+                    cz + skirt_h * 0.1,
+                    bw_scale,
+                    bw_scale,
+                    bh_scale,
+                    material=op.get("material", "default"),
+                    role=op.get("role", "tower"),
+                )
+                bv = buttress_spec["vertices"]
+                bf = buttress_spec["faces"]
+                offset = len(verts)
+                verts.extend(bv)
+                faces.extend(tuple(idx + offset for idx in face) for face in bf)
+
+            entry_depth = max(0.9, radius * 0.68)
+            entry_width = max(1.2, radius * 1.15)
+            entry_height = max(2.0, height * 0.58)
+            entry_spec = _wall_solid_box(
+                cx - entry_width * 0.5,
+                cy - radius - entry_depth * 0.14,
+                cz + skirt_h * 0.12,
+                entry_width,
+                entry_depth,
+                entry_height,
+                material=op.get("material", "default"),
+                role=op.get("role", "tower_entry"),
+            )
+            ev = entry_spec["vertices"]
+            ef = entry_spec["faces"]
+            offset = len(verts)
+            verts.extend(ev)
+            faces.extend(tuple(idx + offset for idx in face) for face in ef)
+
+            stair_spec = _wall_solid_box(
+                cx + radius * 0.92 - entry_width * 0.45,
+                cy - entry_depth * 0.24,
+                cz + skirt_h * 0.12,
+                entry_width * 1.02,
+                entry_depth * 1.08,
+                max(entry_height * 0.98, height * 0.62),
+                material=op.get("material", "default"),
+                role=op.get("role", "tower_stair_turret"),
+            )
+            sv = stair_spec["vertices"]
+            sf = stair_spec["faces"]
+            offset = len(verts)
+            verts.extend(sv)
+            faces.extend(tuple(idx + offset for idx in face) for face in sf)
+
+            rear_spec = _wall_solid_box(
+                cx - radius * 1.30,
+                cy + radius * 0.22 - entry_depth * 0.18,
+                cz + skirt_h * 0.12,
+                max(radius * 0.72, entry_width * 0.82),
+                max(radius * 0.64, entry_depth * 0.90),
+                max(height * 0.36, entry_height * 0.68),
+                material=op.get("material", "default"),
+                role=op.get("role", "tower_buttress"),
+            )
+            rv = rear_spec["vertices"]
+            rf = rear_spec["faces"]
+            offset = len(verts)
+            verts.extend(rv)
+            faces.extend(tuple(idx + offset for idx in face) for face in rf)
+
+            flank_spec = _wall_solid_box(
+                cx - radius * 0.18,
+                cy + radius * 1.02,
+                cz + skirt_h * 0.10,
+                max(radius * 0.48, entry_width * 0.42),
+                max(radius * 0.58, entry_depth * 0.56),
+                max(height * 0.42, entry_height * 0.60),
+                material=op.get("material", "default"),
+                role=op.get("role", "tower_buttress"),
+            )
+            fv = flank_spec["vertices"]
+            ff = flank_spec["faces"]
+            offset = len(verts)
+            verts.extend(fv)
+            faces.extend(tuple(idx + offset for idx in face) for face in ff)
+
+            merlon_count = segments
+            merlon_w = max(0.22, radius * 0.18)
+            merlon_d = max(0.22, radius * 0.18)
+            merlon_h = max(0.55, crown_height * 0.55)
+            merlon_base_z = cz + height - merlon_h
+            merlon_ring = radius * 1.08
+            for i in range(merlon_count):
+                if i % 2 == 1:
+                    continue
+                angle = 2.0 * math.pi * i / merlon_count
+                mx = cx + math.cos(angle) * merlon_ring
+                my = cy + math.sin(angle) * merlon_ring
+                merlon_spec = _wall_solid_box(
+                    mx - merlon_w / 2.0,
+                    my - merlon_d / 2.0,
+                    merlon_base_z,
+                    merlon_w,
+                    merlon_d,
+                    merlon_h,
+                    material=op.get("material", "default"),
+                    role=op.get("role", "tower"),
+                )
+                mv = merlon_spec["vertices"]
+                mf = merlon_spec["faces"]
+                offset = len(verts)
+                verts.extend(mv)
+                faces.extend(tuple(idx + offset for idx in face) for face in mf)
+
+            result.append({
+                "type": "tower",
+                "vertices": verts,
+                "faces": faces,
+                "vertex_count": len(verts),
+                "face_count": len(faces),
+                "material": op.get("material", "default"),
+                "role": op.get("role", "unknown"),
+                "segments": segments,
+                "taper": taper,
+            })
+
         elif op_type == "opening":
             # Convert opening to a recessed cutout box on the wall surface.
             # This creates visible window/door indentations in the geometry.
@@ -959,6 +1308,1214 @@ def _build_modular_kit_result(
         "pieces": [p["name"] for p in pieces],
         "cell_size": cell_size,
     }
+
+
+def _terrain_type_for_location(location_type: str) -> str:
+    """Map a location archetype to a terrain preset."""
+    return {
+        "village": "plains",
+        "fortress": "hills",
+        "dungeon_entrance": "mountains",
+        "camp": "plains",
+        "traveler_camp": "plains",
+        "merchant_camp": "plains",
+        "fishing_village": "plains",
+        "mining_town": "mountains",
+        "port_city": "plains",
+        "monastery": "hills",
+        "necropolis": "hills",
+        "military_outpost": "hills",
+        "crossroads_inn": "plains",
+        "bandit_hideout": "hills",
+        "wizard_fortress": "mountains",
+        "sorcery_school": "hills",
+        "cliff_keep": "mountains",
+        "river_castle": "plains",
+        "ruined_town": "plains",
+        "farmstead": "plains",
+    }.get(location_type, "plains")
+
+
+def _sample_scene_height(x: float, y: float, terrain_name: str | None) -> float:
+    """Raycast against the current scene to place objects on terrain."""
+    try:
+        from mathutils import Vector
+
+        depsgraph = bpy.context.evaluated_depsgraph_get()
+        origin = Vector((x, y, 10000.0))
+        direction = Vector((0.0, 0.0, -1.0))
+        hit, location, normal, face_index, hit_obj, matrix = bpy.context.scene.ray_cast(
+            depsgraph,
+            origin,
+            direction,
+        )
+        if hit and location is not None:
+            if terrain_name is None or hit_obj is None or hit_obj.name == terrain_name:
+                return float(location.z)
+    except Exception:
+        pass
+    return 0.0
+
+
+def _create_curve_path(
+    name: str,
+    points: list[tuple[float, float, float]],
+    width: float,
+    parent: Any | None = None,
+) -> Any:
+    """Create a visible 3D road/path curve with beveled width."""
+    curve_data = bpy.data.curves.new(name, "CURVE")
+    curve_data.dimensions = "3D"
+    curve_data.fill_mode = "FULL"
+    curve_data.bevel_depth = max(0.03, width * 0.18)
+    curve_data.bevel_resolution = 2
+    curve_data.resolution_u = 12
+    curve_data.use_fill_caps = True
+
+    spline = curve_data.splines.new("POLY")
+    spline.points.add(max(0, len(points) - 1))
+    for i, pt in enumerate(points):
+        spline.points[i].co = (pt[0], pt[1], pt[2], 1.0)
+
+    curve_obj = bpy.data.objects.new(name, curve_data)
+    bpy.context.collection.objects.link(curve_obj)
+    if parent is not None:
+        curve_obj.parent = parent
+    return curve_obj
+
+
+def _create_bridge_span(
+    name: str,
+    center: tuple[float, float, float],
+    span: float,
+    bridge_width: float,
+    parent: Any,
+    style: str = "stone",
+) -> Any | None:
+    """Create a visible bridge mesh from the bridge catalog."""
+    bridge_type = "bridge_stone" if style == "stone" else "rope_bridge"
+    entry = _catalog_entry_for_type(bridge_type)
+    if entry is None:
+        return None
+
+    gen_func, gen_kwargs = entry
+    if bridge_type == "bridge_stone":
+        bridge_spec = gen_func(style="flat", span=max(4.0, span), width=max(1.8, bridge_width), **gen_kwargs)
+    else:
+        bridge_spec = gen_func(style="sturdy", span=max(4.0, span), width=max(1.2, bridge_width), **gen_kwargs)
+
+    obj = mesh_from_spec(
+        bridge_spec,
+        name=name,
+        location=center,
+        rotation=(math.pi / 2.0, 0.0, 0.0),
+        parent=parent,
+    )
+    if isinstance(obj, dict):
+        return None
+    obj.scale = (1.0, 1.0, max(0.6, span / 10.0))
+    return obj
+
+
+def _generate_location_building(
+    base_name: str,
+    building: dict[str, Any],
+    seed: int,
+    index: int,
+    terrain_name: str | None,
+    parent: Any,
+) -> bool:
+    """Materialize a location building using the strongest available generator."""
+    b_type = building["type"]
+    px, py = building["position"]
+    rotation = building.get("rotation", 0.0)
+    size_x, size_y = building.get("size", (8.0, 8.0))
+    area = max(size_x, size_y)
+    height_z = _sample_scene_height(px, py, terrain_name) + 0.02
+    structure_name = f"{base_name}_{b_type}_{index}"
+    preset_name: str | None = None
+    site_profile: str | None = None
+    preexisting_object_names = {obj.name for obj in bpy.data.objects}
+
+    if b_type in {"castle", "fortress", "keep"}:
+        preset_name = "gatehouse"
+    elif b_type in {"shrine", "temple", "chapel", "monastery"}:
+        preset_name = "shrine_major" if area >= 8.0 else "shrine_minor"
+    elif b_type in {"blacksmith", "forge", "smelter"}:
+        preset_name = "forge"
+    elif b_type in {"watchtower", "guard_tower", "ruined_tower"}:
+        preset_name = "ruined_fortress_tower"
+    elif b_type in {"house", "cottage", "abandoned_house"}:
+        preset_name = "rowhouse" if area >= 10.0 else "abandoned_house"
+    elif b_type in {"tavern", "inn"}:
+        preset_name = "inn"
+    elif b_type == "warehouse":
+        preset_name = "warehouse"
+    elif b_type in {"barracks", "armory"}:
+        preset_name = "barracks"
+    elif b_type == "gatehouse":
+        preset_name = "gatehouse"
+    elif b_type in {"mausoleum", "catacomb"}:
+        preset_name = "shrine_minor"
+
+    if b_type in {"castle", "fortress", "keep", "watchtower", "guard_tower", "ruined_tower"}:
+        site_profile = "fortified"
+    elif b_type in {"shrine", "temple", "chapel", "monastery", "mausoleum", "catacomb"}:
+        site_profile = "monastery"
+    elif b_type in {"blacksmith", "forge", "smelter"}:
+        site_profile = "forgeyard"
+    elif b_type in {"house", "cottage", "abandoned_house", "stable"}:
+        site_profile = "rural"
+    elif b_type in {"tavern", "inn", "general_store", "market_stall"}:
+        site_profile = "market"
+    elif b_type in {"warehouse", "dock", "boat_house", "harbor_dock"}:
+        site_profile = "waterfront"
+    elif b_type in {"mine_entrance", "command_tent", "lookout_post", "cave_entrance"}:
+        site_profile = "cliffside"
+    elif b_type in {"barracks", "armory", "gatehouse"}:
+        site_profile = "fortified"
+
+    if b_type in {"castle", "fortress", "keep"}:
+        handle_generate_castle({
+            "name": structure_name,
+            "outer_size": max(24.0, area * 2.8),
+            "keep_size": max(10.0, area * 0.85),
+            "tower_count": 4 if area < 40.0 else 6,
+            "seed": seed + index * 17,
+        })
+    elif b_type in {
+        "house", "cottage", "abandoned_house", "tavern", "inn", "warehouse",
+        "market_stall", "stable", "general_store", "dock", "boat_house",
+        "harbor_dock", "lighthouse", "mine_entrance", "command_tent",
+        "cave_entrance", "tent", "supply_tent", "lookout_post", "barracks", "armory",
+        "mausoleum", "catacomb", "gatehouse",
+    }:
+        params: dict[str, Any] = {
+            "name": structure_name,
+            "width": max(4.0, size_x * 0.9),
+            "depth": max(4.0, size_y * 0.9),
+            "floors": 2 if b_type in {"tavern", "inn", "barracks", "warehouse", "general_store", "house", "cottage"} else 1,
+            "style": "fortress" if b_type in {"barracks", "armory", "gatehouse", "watchtower", "guard_tower"} else ("gothic" if b_type in {"mausoleum", "catacomb"} else "medieval"),
+            "seed": seed + index * 17,
+            "weathering_level": 0.12 if b_type in {"abandoned_house", "ruined_tower", "catacomb", "mausoleum"} else 0.04,
+            "wall_height": 4.0 if b_type not in {"tent", "campfire", "supply_tent"} else 2.4,
+        }
+        if preset_name:
+            params["preset"] = preset_name
+        if site_profile:
+            params["site_profile"] = site_profile
+        handle_generate_building(params)
+    else:
+        build_params: dict[str, Any] = {
+            "name": structure_name,
+            "width": max(4.0, size_x * 0.85),
+            "depth": max(4.0, size_y * 0.85),
+            "floors": 1,
+            "style": "medieval",
+            "seed": seed + index * 17,
+            "weathering_level": 0.08,
+        }
+        if site_profile:
+            build_params["site_profile"] = site_profile
+        handle_generate_building(build_params)
+
+    building_obj = bpy.data.objects.get(structure_name)
+    if building_obj is None:
+        return False
+    building_obj.location = (px, py, height_z)
+    building_obj.rotation_euler = (0.0, 0.0, rotation)
+    building_obj.parent = parent
+    generated_objects = [
+        obj for obj in bpy.data.objects
+        if obj.name not in preexisting_object_names and obj.name.startswith(structure_name)
+    ]
+    if not generated_objects:
+        generated_objects = [building_obj]
+    if b_type in {"castle", "fortress", "keep", "watchtower", "guard_tower", "ruined_tower", "barracks", "armory", "gatehouse"}:
+        for obj in generated_objects:
+            _assign_procedural_material(obj, "rough_stone_wall")
+    elif b_type in {"shrine", "temple", "chapel", "monastery", "mausoleum", "catacomb"}:
+        for obj in generated_objects:
+            _assign_procedural_material(obj, "smooth_stone")
+    elif b_type in {"house", "cottage", "abandoned_house", "tavern", "inn", "warehouse", "market_stall", "stable", "general_store", "dock", "boat_house", "harbor_dock", "lighthouse", "tent", "supply_tent"}:
+        for obj in generated_objects:
+            _assign_procedural_material(obj, "rough_timber")
+    elif b_type in {"mine_entrance", "command_tent", "lookout_post", "cave_entrance"}:
+        for obj in generated_objects:
+            _assign_procedural_material(obj, "cliff_rock")
+    else:
+        for obj in generated_objects:
+            _assign_procedural_material(obj, "rough_stone_wall")
+    return True
+
+
+def _generate_location_poi(
+    base_name: str,
+    poi: dict[str, Any],
+    seed: int,
+    index: int,
+    terrain_name: str | None,
+    parent: Any,
+) -> bool:
+    """Materialize a location POI using the best available prop generator."""
+    poi_type = poi["type"]
+    px, py = poi["position"]
+    height_z = _sample_scene_height(px, py, terrain_name) + 0.02
+    poi_name = f"{base_name}_poi_{poi_type}_{index}"
+
+    generator_entry = (
+        PROP_GENERATOR_MAP.get(poi_type)
+        or FURNITURE_GENERATOR_MAP.get(poi_type)
+        or DUNGEON_PROP_MAP.get(poi_type)
+    )
+
+    if generator_entry is None:
+        fallback_type = "pillar" if poi_type == "statue" else "signpost"
+        generator_entry = (
+            PROP_GENERATOR_MAP.get(fallback_type)
+            or FURNITURE_GENERATOR_MAP.get(fallback_type)
+            or DUNGEON_PROP_MAP.get(fallback_type)
+        )
+
+    if generator_entry is None:
+        return False
+
+    gen_func, gen_kwargs = generator_entry
+    spec = gen_func(**gen_kwargs)
+    mesh_obj = mesh_from_spec(spec, name=poi_name, location=(px, py, height_z), parent=parent)
+    return not isinstance(mesh_obj, dict)
+
+
+def _create_boss_arena_cover(
+    base_name: str,
+    cover: dict[str, Any],
+    seed: int,
+    index: int,
+    parent: Any,
+) -> bool:
+    """Materialize boss arena cover with a strong visual silhouette."""
+    cover_type = cover["type"]
+    px, py = cover["position"]
+    radius = float(cover.get("radius", 1.0))
+    cover_name = f"{base_name}_cover_{index}_{cover_type}"
+
+    if cover_type == "pillar":
+        spec = (PROP_GENERATOR_MAP.get("pillar") or DUNGEON_PROP_MAP.get("pillar"))
+        if spec is None:
+            return False
+        gen_func, gen_kwargs = spec
+        mesh_spec = gen_func(**gen_kwargs)
+        obj = mesh_from_spec(mesh_spec, name=cover_name, location=(px, py, 0.0), parent=parent)
+        if isinstance(obj, dict):
+            return False
+        obj.scale = (radius * 1.2, radius * 1.2, max(1.6, radius * 2.0))
+        return True
+
+    if cover_type == "rock":
+        spec = PROP_GENERATOR_MAP.get("rock")
+        if spec is None:
+            return False
+        gen_func, gen_kwargs = spec
+        mesh_spec = gen_func(**gen_kwargs)
+        obj = mesh_from_spec(mesh_spec, name=cover_name, location=(px, py, 0.0), parent=parent)
+        if isinstance(obj, dict):
+            return False
+        obj.scale = (radius * 1.4, radius * 1.0, radius * 1.1)
+        return True
+
+    if cover_type == "wall_fragment":
+        mesh_spec = generate_stone_wall(
+            width=max(2.5, radius * 4.0),
+            height=max(1.5, radius * 2.2),
+            thickness=max(0.25, radius * 0.6),
+            block_style="ashlar",
+            mortar_depth=0.008,
+            block_variation=0.2,
+            seed=seed + index * 13,
+        )
+        obj = mesh_from_spec(mesh_spec, name=cover_name, location=(px, py, 0.0), parent=parent)
+        return not isinstance(obj, dict)
+
+    if cover_type == "statue":
+        spec = PROP_GENERATOR_MAP.get("pillar")
+        if spec is None:
+            return False
+        gen_func, gen_kwargs = spec
+        mesh_spec = gen_func(**gen_kwargs)
+        obj = mesh_from_spec(mesh_spec, name=cover_name, location=(px, py, 0.0), parent=parent)
+        if isinstance(obj, dict):
+            return False
+        obj.scale = (radius * 1.0, radius * 1.0, max(2.0, radius * 2.5))
+        return True
+
+    return False
+
+
+def _create_hazard_disc(
+    base_name: str,
+    hazard: dict[str, Any],
+    index: int,
+    parent: Any,
+) -> bool:
+    """Create a visible hazard marker mesh for boss arenas."""
+    px, py = hazard["position"]
+    radius = float(hazard.get("radius", 2.0))
+    hazard_type = hazard["type"]
+    mesh = bpy.data.meshes.new(f"{base_name}_hazard_{index}_{hazard_type}")
+    bm = bmesh.new()
+    bmesh.ops.create_circle(bm, cap_fill=True, segments=24, radius=radius)
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new(f"{base_name}_hazard_{index}_{hazard_type}", mesh)
+    obj.location = (px, py, 0.02)
+    obj.parent = parent
+    bpy.context.collection.objects.link(obj)
+    return True
+
+
+def _create_fog_gate(
+    base_name: str,
+    fog_gate: dict[str, Any],
+    arena_type: str,
+    parent: Any,
+) -> bool:
+    """Create a visible fog gate archway for the arena entry."""
+    px, py = fog_gate["position"]
+    width = float(fog_gate.get("width", 4.0))
+    height = float(fog_gate.get("height", 3.5))
+    gate_name = f"{base_name}_fog_gate"
+    arch = generate_archway(
+        width=width * 1.2,
+        height=height * 1.1,
+        depth=0.75,
+        arch_style="gothic_pointed" if arena_type != "circular" else "round",
+        has_keystone=True,
+        seed=42,
+    )
+    gate_obj = mesh_from_spec(arch, name=gate_name, location=(px, py, 0.0), parent=parent)
+    return not isinstance(gate_obj, dict)
+
+
+def _create_volume_cube(
+    name: str,
+    center: tuple[float, float, float],
+    size: tuple[float, float, float],
+    parent: Any,
+) -> Any:
+    """Create a simple editable cube volume."""
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    bmesh.ops.create_cube(bm, size=1.0)
+    for vert in bm.verts:
+        vert.co.x *= size[0] / 2.0
+        vert.co.y *= size[1] / 2.0
+        vert.co.z *= size[2] / 2.0
+        vert.co.x += center[0]
+        vert.co.y += center[1]
+        vert.co.z += center[2]
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new(name, mesh)
+    obj.parent = parent
+    bpy.context.collection.objects.link(obj)
+    return obj
+
+
+def _facing_to_rotation(facing: str) -> float:
+    """Convert a cardinal facing string into a Z rotation."""
+    return {
+        "north": 0.0,
+        "east": -math.pi / 2.0,
+        "south": math.pi,
+        "west": math.pi / 2.0,
+    }.get(facing, 0.0)
+
+
+def _catalog_entry_for_type(item_type: str):
+    """Resolve a prop/furniture/castle generator entry for a type."""
+    return (
+        CASTLE_ELEMENT_MAP.get(item_type)
+        or DUNGEON_PROP_MAP.get(item_type)
+        or FURNITURE_GENERATOR_MAP.get(item_type)
+        or PROP_GENERATOR_MAP.get(item_type)
+    )
+
+
+def _normalize_scale(scale: Any) -> tuple[float, float, float]:
+    """Coerce a scalar or short iterable into a full XYZ scale triple."""
+    if isinstance(scale, (int, float)):
+        s = float(scale)
+        return (s, s, s)
+    try:
+        values = tuple(scale)
+    except TypeError:
+        s = float(scale)
+        return (s, s, s)
+    if len(values) == 0:
+        return (1.0, 1.0, 1.0)
+    if len(values) == 1:
+        s = float(values[0])
+        return (s, s, s)
+    if len(values) == 2:
+        return (float(values[0]), float(values[1]), 1.0)
+    return (float(values[0]), float(values[1]), float(values[2]))
+
+
+def _spawn_catalog_object(
+    base_name: str,
+    item_type: str,
+    index: int,
+    location: tuple[float, float, float],
+    parent: Any,
+    rotation: float = 0.0,
+    scale: tuple[float, float, float] | None = None,
+    collection: Any | None = None,
+) -> Any | None:
+    """Spawn a catalog-backed mesh or a simple fallback primitive."""
+    entry = _catalog_entry_for_type(item_type)
+    obj_name = f"{base_name}_{item_type}_{index}"
+
+    if entry is not None:
+        gen_func, gen_kwargs = entry
+        spec = gen_func(**gen_kwargs)
+        obj = mesh_from_spec(
+            spec,
+            name=obj_name,
+            location=location,
+            rotation=(0.0, 0.0, rotation),
+            collection=collection,
+            parent=parent,
+        )
+        if isinstance(obj, dict):
+            return None
+        if scale is not None:
+            obj.scale = _normalize_scale(scale)
+        return obj
+
+    fallback = _create_volume_cube(
+        obj_name,
+        center=location,
+        size=_normalize_scale(scale or (1.0, 1.0, 1.0)),
+        parent=parent,
+    )
+    return fallback
+
+
+def _create_settlement_light(
+    base_name: str,
+    light_spec: dict[str, Any],
+    index: int,
+    parent: Any,
+) -> bool:
+    """Create a real Blender light from a settlement light spec."""
+    light_name = f"{base_name}_light_{index}_{light_spec.get('light_type', 'point')}"
+    light_kind = str(light_spec.get("light_type", "point")).lower()
+    blender_type = "AREA" if light_kind == "area" else "POINT"
+    light_data = bpy.data.lights.new(light_name, type=blender_type)
+    light_data.color = tuple(light_spec.get("color", (1.0, 0.9, 0.7)))
+    light_data.energy = float(light_spec.get("intensity", 1.0)) * 100.0
+    light_data.shadow_soft_size = max(0.05, float(light_spec.get("range", 4.0)) * 0.05)
+    if blender_type == "AREA":
+        light_data.shape = "RECTANGLE"
+        light_data.size = max(0.35, float(light_spec.get("range", 4.0)) * 0.2)
+        light_data.size_y = max(0.35, float(light_spec.get("range", 4.0)) * 0.15)
+    light_obj = bpy.data.objects.new(light_name, light_data)
+    light_obj.location = tuple(light_spec.get("position", (0.0, 0.0, 0.0)))
+    light_obj.parent = parent
+    bpy.context.collection.objects.link(light_obj)
+    return True
+
+
+def _create_settlement_prop_cluster(
+    base_name: str,
+    prop: dict[str, Any],
+    index: int,
+    parent: Any,
+) -> int:
+    """Spawn visually richer clusters for settlement prop archetypes."""
+    prop_type = prop["type"]
+    position = prop.get("position", (0.0, 0.0, 0.0))
+    px = float(position[0]) if len(position) > 0 else 0.0
+    py = float(position[1]) if len(position) > 1 else 0.0
+    z = float(position[2]) if len(position) > 2 else 0.0
+    rotation = float(prop.get("rotation", 0.0))
+    scale = _normalize_scale(prop.get("scale", (1.0, 1.0, 1.0)))
+    spawned = 0
+
+    if prop_type == "market_stall_cluster":
+        offsets = [
+            (-1.4, 0.0, 0.0),
+            (1.4, 0.0, 0.0),
+            (0.0, 1.2, 0.0),
+            (0.0, -1.2, 0.0),
+        ]
+        for stall_idx, (ox, oy, oz) in enumerate(offsets):
+            stall = _spawn_catalog_object(
+                base_name,
+                "market_stall",
+                index * 10 + stall_idx,
+                (px + ox, py + oy, z + oz),
+                parent,
+                rotation=rotation + (stall_idx * math.pi / 2.0),
+                scale=(1.0, 1.0, 1.0),
+            )
+            if stall is not None:
+                spawned += 1
+        for detail_idx, detail_type in enumerate(("crate", "sack", "basket", "signpost")):
+            detail = _spawn_catalog_object(
+                base_name,
+                detail_type,
+                index * 10 + 50 + detail_idx,
+                (px + math.cos(rotation + detail_idx) * 1.8, py + math.sin(rotation + detail_idx) * 1.8, z),
+                parent,
+                rotation=rotation,
+                scale=(0.65, 0.65, 0.65),
+            )
+            if detail is not None:
+                spawned += 1
+        return spawned
+
+    if prop_type == "campfire_area":
+        for detail_idx, detail_type in enumerate(("campfire", "log", "log", "rock", "rock")):
+            detail = _spawn_catalog_object(
+                base_name,
+                detail_type,
+                index * 10 + detail_idx,
+                (
+                    px + math.cos(rotation + detail_idx * 1.3) * (0.7 + detail_idx * 0.18),
+                    py + math.sin(rotation + detail_idx * 1.3) * (0.7 + detail_idx * 0.18),
+                    z,
+                ),
+                parent,
+                rotation=rotation,
+                scale=(0.8, 0.8, 0.8),
+            )
+            if detail is not None:
+                spawned += 1
+        return spawned
+
+    if prop_type in {"tent", "lean_to", "supply_tent"}:
+        # Small shelter-like forms should read as temporary structures, not houses.
+        shelter = _spawn_catalog_object(
+            base_name,
+            "market_stall",
+            index,
+            (px, py, z),
+            parent,
+            rotation=rotation,
+            scale=(scale[0] * 0.9, scale[1] * 0.9, max(0.65, scale[2] * 0.7)),
+        )
+        return 1 if shelter is not None else 0
+
+    if prop_type == "cage":
+        for detail_idx, detail_type in enumerate(("chain", "prison_door")):
+            detail = _spawn_catalog_object(
+                base_name,
+                detail_type,
+                index * 10 + detail_idx,
+                (px, py, z + detail_idx * 0.15),
+                parent,
+                rotation=rotation,
+                scale=(scale[0], scale[1], max(0.8, scale[2])),
+            )
+            if detail is not None:
+                spawned += 1
+        return spawned
+
+    if prop_type == "farm_plot":
+        # Dark-fantasy farm plot: fenced crop rows, hay bales, and work gear.
+        plot_w = max(5.0, scale[0] * 6.0)
+        plot_d = max(4.0, scale[1] * 4.5)
+        fence_type = "fence" if scale[0] < 1.2 else "palisade"
+        fence_slots = [
+            (-plot_w / 2.0, -plot_d / 2.0, 0.0, 0.0, plot_w),
+            (-plot_w / 2.0, plot_d / 2.0, 0.0, 0.0, plot_w),
+            (-plot_w / 2.0, 0.0, 0.0, math.pi / 2.0, plot_d),
+            (plot_w / 2.0, 0.0, 0.0, math.pi / 2.0, plot_d),
+        ]
+        for seg_idx, (ox, oy, oz, rot, seg_len) in enumerate(fence_slots):
+            fence = _spawn_catalog_object(
+                base_name,
+                fence_type,
+                index * 20 + seg_idx,
+                (px + ox, py + oy, z + oz),
+                parent,
+                rotation=rotation + rot,
+                scale=(max(0.8, seg_len / 4.0), 1.0, 1.0),
+            )
+            if fence is not None:
+                spawned += 1
+        row_offsets = [-plot_d * 0.28, -plot_d * 0.08, 0.12, 0.32]
+        for row_idx, row_y in enumerate(row_offsets):
+            row = _create_volume_cube(
+                f"{base_name}_farm_row_{index}_{row_idx}",
+                center=(px + math.cos(rotation) * 0.0, py + row_y, z + 0.04),
+                size=(plot_w * 0.72, 0.12, 0.18),
+                parent=parent,
+            )
+            if row is not None:
+                spawned += 1
+        for detail_idx, detail_type in enumerate(("hay_bale", "hay_bale", "cart", "barrel")):
+            detail = _spawn_catalog_object(
+                base_name,
+                detail_type,
+                index * 20 + 50 + detail_idx,
+                (
+                    px + math.cos(rotation + detail_idx) * (plot_w * 0.18 + detail_idx * 0.35),
+                    py + math.sin(rotation + detail_idx) * (plot_d * 0.12 + detail_idx * 0.22),
+                    z,
+                ),
+                parent,
+                rotation=rotation,
+                scale=(0.8, 0.8, 0.8),
+            )
+            if detail is not None:
+                spawned += 1
+        return spawned
+
+    return 0
+
+
+def _create_curve_from_points(
+    name: str,
+    points: list[tuple[float, float, float]],
+    width: float,
+    parent: Any,
+) -> Any:
+    """Create a visible path curve from point samples."""
+    return _create_curve_path(name, points, width=width, parent=parent)
+
+
+def _create_floor_plate(
+    name: str,
+    bounds: dict[str, Any],
+    shape: str,
+    parent: Any,
+) -> Any:
+    """Create a simple but editable floor plate for arenas and rooms."""
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    if shape == "circular" and "radius" in bounds:
+        bmesh.ops.create_circle(
+            bm,
+            cap_fill=True,
+            segments=48,
+            radius=float(bounds["radius"]),
+        )
+    else:
+        min_pt = bounds.get("min", (-5.0, -5.0, 0.0))
+        max_pt = bounds.get("max", (5.0, 5.0, 0.0))
+        width = float(max_pt[0] - min_pt[0])
+        depth = float(max_pt[1] - min_pt[1])
+        bmesh.ops.create_cube(bm, size=1.0)
+        for vert in bm.verts:
+            vert.co.x *= width / 2.0
+            vert.co.y *= depth / 2.0
+            vert.co.z *= 0.08
+        for vert in bm.verts:
+            vert.co.x += (min_pt[0] + max_pt[0]) / 2.0
+            vert.co.y += (min_pt[1] + max_pt[1]) / 2.0
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new(name, mesh)
+    obj.parent = parent
+    bpy.context.collection.objects.link(obj)
+    return obj
+
+
+def _create_floor_segments(
+    base_name: str,
+    width: float,
+    depth: float,
+    parent: Any,
+    opening_center: tuple[float, float] | None = None,
+    opening_size: tuple[float, float] | None = None,
+    thickness: float = 0.06,
+) -> int:
+    """Create an editable floor made of slabs, optionally with a hole.
+
+    The hole is built from separate surrounding slabs instead of a boolean
+    so the result stays editable for downstream agents.
+    """
+    created = 0
+
+    def add_segment(segment_name: str, center: tuple[float, float], size_xy: tuple[float, float]) -> None:
+        nonlocal created
+        sx, sy = size_xy
+        if sx <= 0.0 or sy <= 0.0:
+            return
+        _create_volume_cube(
+            f"{base_name}_{segment_name}",
+            center=(center[0], center[1], thickness / 2.0),
+            size=(sx, sy, thickness),
+            parent=parent,
+        )
+        created += 1
+
+    if opening_center is None or opening_size is None:
+        add_segment("full", (width / 2.0, depth / 2.0), (width, depth))
+        return created
+
+    margin = 0.35
+    hole_w = min(max(0.8, float(opening_size[0])), max(0.8, width - 2.0 * margin))
+    hole_d = min(max(0.8, float(opening_size[1])), max(0.8, depth - 2.0 * margin))
+    hole_x = min(max(margin + hole_w / 2.0, float(opening_center[0])), width - margin - hole_w / 2.0)
+    hole_y = min(max(margin + hole_d / 2.0, float(opening_center[1])), depth - margin - hole_d / 2.0)
+
+    left_w = hole_x - hole_w / 2.0
+    right_w = width - (hole_x + hole_w / 2.0)
+    front_d = hole_y - hole_d / 2.0
+    back_d = depth - (hole_y + hole_d / 2.0)
+
+    add_segment("left", (left_w / 2.0, depth / 2.0), (left_w, depth))
+    add_segment("right", (hole_x + hole_w / 2.0 + right_w / 2.0, depth / 2.0), (right_w, depth))
+    add_segment("front", (hole_x, front_d / 2.0), (hole_w, front_d))
+    add_segment("back", (hole_x, hole_y + hole_d / 2.0 + back_d / 2.0), (hole_w, back_d))
+    return created
+
+
+def _create_interior_shell(
+    base_name: str,
+    width: float,
+    depth: float,
+    height: float,
+    parent: Any,
+    room_type: str,
+    origin: tuple[float, float] = (0.0, 0.0),
+    seed: int = 0,
+) -> int:
+    """Create a lightweight but visually readable room shell.
+
+    The shell remains split into separate editable pieces instead of a single
+    fused volume, so downstream agents can still adjust wall layout, openings,
+    and proportions.
+    """
+    rng = random.Random(seed + 211)
+    style_map = {
+        "chapel": "gothic",
+        "shrine_room": "gothic",
+        "throne_room": "gothic",
+        "great_hall": "fortress",
+        "study": "medieval",
+        "library": "medieval",
+        "alchemy_lab": "organic",
+        "wizard_lab": "organic",
+        "barracks": "fortress",
+        "guard_post": "fortress",
+        "storage": "rustic",
+        "kitchen": "rustic",
+        "tavern": "medieval",
+        "bedroom": "medieval",
+    }
+    shell_style = style_map.get(room_type, "medieval")
+    if shell_style in {"fortress", "gothic"}:
+        floor_material_key = "cobblestone_floor"
+        wall_material_key = "rough_stone_wall"
+    elif shell_style == "rustic":
+        floor_material_key = "plank_floor"
+        wall_material_key = "rough_timber"
+    elif shell_style == "organic":
+        floor_material_key = "mud"
+        wall_material_key = "smooth_stone"
+    else:
+        floor_material_key = "plank_floor"
+        wall_material_key = "rough_stone_wall"
+    shell_count = 0
+    origin_x, origin_y = origin
+
+    floor = _create_floor_plate(
+        f"{base_name}_Floor",
+        {"min": (origin_x, origin_y, 0.0), "max": (origin_x + width, origin_y + depth, 0.0)},
+        "rectangular",
+        parent,
+    )
+    if floor is not None:
+        floor["vb_room_type"] = room_type
+        floor["vb_editable_role"] = "room_floor"
+        _assign_procedural_material(floor, floor_material_key)
+        shell_count += 1
+
+    ceiling_thickness = 0.12 if shell_style != "fortress" else 0.18
+    ceiling = _create_volume_cube(
+        f"{base_name}_Ceiling",
+        center=(origin_x + width / 2.0, origin_y + depth / 2.0, height - ceiling_thickness / 2.0),
+        size=(width, depth, ceiling_thickness),
+        parent=parent,
+    )
+    if ceiling is not None:
+        ceiling["vb_room_type"] = room_type
+        ceiling["vb_editable_role"] = "room_ceiling"
+        _assign_procedural_material(ceiling, wall_material_key)
+        shell_count += 1
+
+    wall_thickness = 0.18 if shell_style not in {"fortress", "gothic"} else 0.28
+    wall_height = max(height, 2.4)
+    opening_width = min(max(1.0, width * 0.22), width * 0.38)
+    opening_height = min(max(2.0, wall_height * 0.72), wall_height - 0.2)
+    opening_center_x = origin_x + width * 0.5 + rng.uniform(-0.15, 0.15)
+    opening_center_y = origin_y + wall_thickness * 0.5
+
+    front_left_w = max(0.0, (opening_center_x - origin_x) - opening_width * 0.5)
+    front_right_w = max(0.0, (origin_x + width) - (opening_center_x + opening_width * 0.5))
+    if front_left_w > 0.0:
+        front_left = _create_volume_cube(
+            f"{base_name}_Wall_Front_L",
+            center=(origin_x + front_left_w / 2.0, origin_y + wall_thickness / 2.0, wall_height / 2.0),
+            size=(front_left_w, wall_thickness, wall_height),
+            parent=parent,
+        )
+        if front_left is not None:
+            front_left["vb_room_type"] = room_type
+            front_left["vb_editable_role"] = "room_wall"
+            _assign_procedural_material(front_left, wall_material_key)
+            shell_count += 1
+    if front_right_w > 0.0:
+        front_right = _create_volume_cube(
+            f"{base_name}_Wall_Front_R",
+            center=(opening_center_x + opening_width * 0.5 + front_right_w / 2.0, origin_y + wall_thickness / 2.0, wall_height / 2.0),
+            size=(front_right_w, wall_thickness, wall_height),
+            parent=parent,
+        )
+        if front_right is not None:
+            front_right["vb_room_type"] = room_type
+            front_right["vb_editable_role"] = "room_wall"
+            _assign_procedural_material(front_right, wall_material_key)
+            shell_count += 1
+
+    back = _create_volume_cube(
+        f"{base_name}_Wall_Back",
+        center=(origin_x + width / 2.0, origin_y + depth - wall_thickness / 2.0, wall_height / 2.0),
+        size=(width, wall_thickness, wall_height),
+        parent=parent,
+    )
+    left = _create_volume_cube(
+        f"{base_name}_Wall_Left",
+        center=(origin_x + wall_thickness / 2.0, origin_y + depth / 2.0, wall_height / 2.0),
+        size=(wall_thickness, depth, wall_height),
+        parent=parent,
+    )
+    right = _create_volume_cube(
+        f"{base_name}_Wall_Right",
+        center=(origin_x + width - wall_thickness / 2.0, origin_y + depth / 2.0, wall_height / 2.0),
+        size=(wall_thickness, depth, wall_height),
+        parent=parent,
+    )
+    for wall_obj in (back, left, right):
+        if wall_obj is not None:
+            wall_obj["vb_room_type"] = room_type
+            wall_obj["vb_editable_role"] = "room_wall"
+            _assign_procedural_material(wall_obj, wall_material_key)
+            shell_count += 1
+
+    door = generate_archway(
+        width=opening_width,
+        height=opening_height,
+        depth=max(0.18, wall_thickness * 0.75),
+        arch_style="gothic_pointed" if shell_style in {"gothic", "fortress"} else "round",
+        has_keystone=True,
+        seed=seed,
+    )
+    door_obj = mesh_from_spec(
+        door,
+        name=f"{base_name}_Doorway",
+        location=(opening_center_x, origin_y, 0.0),
+        parent=parent,
+    )
+    if not isinstance(door_obj, dict):
+        door_obj["vb_room_type"] = room_type
+        door_obj["vb_editable_role"] = "room_entry"
+        _assign_procedural_material(door_obj, wall_material_key)
+        shell_count += 1
+
+    # Only ceremonial spaces get visible internal columns; barracks and guard
+    # posts stay cleaner so they do not read like random stacked blocks.
+    if shell_style in {"gothic", "fortress"} and room_type in {"great_hall", "chapel", "shrine_room", "throne_room"}:
+        pillar_height = wall_height * 0.95
+        for suffix, px, py in (
+            ("FL", origin_x + 0.4, origin_y + 0.35),
+            ("FR", origin_x + width - 0.4, origin_y + 0.35),
+            ("BL", origin_x + 0.4, origin_y + depth - 0.35),
+            ("BR", origin_x + width - 0.4, origin_y + depth - 0.35),
+        ):
+            pillar = _spawn_catalog_object(
+                base_name,
+                "pillar",
+                800 + shell_count,
+                (px, py, 0.0),
+                parent,
+                rotation=0.0,
+                scale=(0.7, 0.7, pillar_height / 4.0),
+            )
+            if pillar is not None:
+                pillar["vb_room_type"] = room_type
+                pillar["vb_editable_role"] = "room_support"
+                _assign_procedural_material(pillar, wall_material_key)
+                shell_count += 1
+
+    return shell_count
+
+
+_SITE_PROFILE_ROOM_MAP: dict[str, list[str]] = {
+    "fortified": ["guard_post", "great_hall", "armory", "storage"],
+    "cliffside": ["guard_post", "study", "great_hall", "storage"],
+    "waterfront": ["tavern", "kitchen", "storage", "bedroom"],
+    "riverfront": ["tavern", "kitchen", "storage", "bedroom"],
+    "monastery": ["chapel", "shrine_room", "great_hall", "study"],
+    "market": ["tavern", "great_hall", "storage", "bedroom"],
+    "forgeyard": ["smithy", "storage", "guard_post", "kitchen"],
+    "rural": ["kitchen", "bedroom", "storage", "study"],
+    "wizard_lab": ["study", "alchemy_lab", "library", "storage"],
+}
+
+
+def _apply_site_profile_features(
+    name: str,
+    profile: str,
+    width: float,
+    depth: float,
+    wall_height: float,
+    parent: Any,
+    seed: int,
+) -> int:
+    """Add context-specific exterior geometry for more distinct silhouettes."""
+    profile_key = str(profile or "").strip().lower()
+    if not profile_key:
+        return 0
+
+    rng = random.Random(seed + 7919)
+    feature_count = 0
+
+    def add_generated_mesh(
+        mesh_spec: dict[str, Any],
+        suffix: str,
+        location: tuple[float, float, float],
+        rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
+        scale: tuple[float, float, float] = (1.0, 1.0, 1.0),
+    ) -> None:
+        nonlocal feature_count
+        obj = mesh_from_spec(
+            mesh_spec,
+            name=f"{name}_{suffix}_{feature_count}",
+            location=location,
+            rotation=rotation,
+            scale=scale,
+            parent=parent,
+        )
+        if not isinstance(obj, dict):
+            feature_count += 1
+
+    def add_catalog_feature(
+        item_type: str,
+        index: int,
+        location: tuple[float, float, float],
+        rotation: float = 0.0,
+        scale: tuple[float, float, float] | None = None,
+    ) -> None:
+        nonlocal feature_count
+        obj = _spawn_catalog_object(
+            name,
+            item_type,
+            index,
+            location,
+            parent,
+            rotation=rotation,
+            scale=scale,
+        )
+        if obj is not None:
+            feature_count += 1
+
+    if profile_key in {"fortified", "cliffside", "wizard_lab"}:
+        buttress_height = max(3.0, wall_height * 0.9)
+        for idx, x_pos in enumerate((0.0, max(0.0, width - 0.9))):
+            buttress_spec = generate_buttress_mesh(
+                height=buttress_height,
+                style="flying" if profile_key == "cliffside" else "standard",
+            )
+            add_generated_mesh(
+                buttress_spec,
+                "Buttress",
+                (x_pos, depth * (0.25 + 0.45 * idx), 0.0),
+                rotation=(0.0, 0.0, math.pi / 2.0 if idx == 0 else -math.pi / 2.0),
+            )
+        add_catalog_feature(
+            "archway",
+            0,
+            (width * 0.5, -0.35, 0.0),
+            rotation=0.0,
+            scale=(1.0, 1.0, max(1.0, wall_height / 3.0)),
+        )
+
+    if profile_key == "cliffside":
+        # Cliffside structures need actual cliff mass, not just a stone wall.
+        for idx, (x_pos, y_pos, z_pos) in enumerate((
+            (-0.9, depth * 0.16, -0.05),
+            (width + 0.85, depth * 0.74, -0.05),
+        )):
+            add_catalog_feature(
+                "cliff_rock",
+                40 + idx,
+                (x_pos, y_pos, z_pos),
+                rotation=rng.uniform(-0.22, 0.22),
+                scale=(1.55 + idx * 0.18, 1.0, 1.25),
+            )
+
+    if profile_key in {"waterfront", "riverfront"}:
+        bridge_spec = generate_bridge_mesh(
+            span=max(width * 0.95, 6.0),
+            width=max(2.0, depth * 0.22),
+            style="stone_arch",
+        )
+        add_generated_mesh(
+            bridge_spec,
+            "Bridgewalk",
+            (width * 0.5, -max(2.5, depth * 0.28), 0.0),
+            rotation=(math.pi / 2.0, 0.0, 0.0),
+        )
+        add_catalog_feature(
+            "fence",
+            1,
+            (width * 0.5, depth + 0.45, 0.0),
+            rotation=0.0,
+            scale=(max(width * 0.85, 4.0), 1.0, 1.0),
+        )
+
+    if profile_key in {"monastery", "market", "rural", "forgeyard"}:
+        fence_style = "wooden_picket" if profile_key in {"rural", "market"} else "iron_wrought"
+        fence_spec = generate_fence_mesh(
+            length=max(width, depth) * 0.95,
+            posts=max(4, int(max(width, depth) / 1.8)),
+            style=fence_style,
+        )
+        add_generated_mesh(
+            fence_spec,
+            "FrontYard",
+            (width * 0.5, -0.8, 0.0),
+            rotation=(0.0, 0.0, 0.0),
+        )
+        add_generated_mesh(
+            fence_spec,
+            "RearYard",
+            (width * 0.5, depth + 0.8, 0.0),
+            rotation=(0.0, 0.0, 0.0),
+        )
+        if profile_key in {"monastery", "forgeyard"}:
+            colonnade_spec = generate_column_row_mesh(
+                count=max(4, int(width / 2.5)),
+                spacing=max(1.4, width / max(4, int(width / 2.5))),
+                style="gothic" if profile_key == "monastery" else "doric",
+            )
+            add_generated_mesh(
+                colonnade_spec,
+                "Colonnade",
+                (width * 0.5, depth + 1.3, 0.0),
+                rotation=(0.0, 0.0, 0.0),
+            )
+
+    if profile_key == "rural":
+        add_catalog_feature(
+            "crate",
+            2,
+            (width + 1.4, depth * 0.55, 0.0),
+            rotation=rng.uniform(0.0, math.pi / 4.0),
+            scale=(1.2, 0.8, 0.9),
+        )
+        add_catalog_feature(
+            "barrel",
+            3,
+            (-1.1, depth * 0.45, 0.0),
+            rotation=rng.uniform(0.0, math.pi / 4.0),
+            scale=(1.1, 1.1, 1.1),
+        )
+
+    if profile_key == "wizard_lab":
+        add_catalog_feature(
+            "map_display",
+            4,
+            (width * 0.18, depth + 0.25, 0.0),
+            rotation=0.0,
+            scale=(1.2, 1.0, 1.0),
+        )
+        add_catalog_feature(
+            "candelabra",
+            5,
+            (width * 0.82, depth + 0.2, 0.0),
+            rotation=0.0,
+            scale=(1.0, 1.0, 1.0),
+        )
+
+    return feature_count
+
+
+def _create_connection_geometry(
+    base_name: str,
+    conn: dict[str, Any],
+    index: int,
+    parent: Any,
+    cell_size: float,
+    wall_height: float,
+) -> bool:
+    """Create an editable vertical connection mesh for a dungeon."""
+    px, py = conn["position"]
+    conn_type = str(conn.get("type", "staircase")).lower()
+    from_floor = int(conn.get("from_floor", 0))
+    from_z = from_floor * wall_height
+    location = (px * cell_size, py * cell_size, from_z)
+    name = f"{base_name}_conn_{conn_type}_{index}"
+
+    if conn_type == "ladder":
+        obj = _spawn_catalog_object(
+            base_name,
+            "chain",
+            index,
+            location,
+            parent,
+            rotation=0.0,
+            scale=(1.0, 1.0, max(1.8, wall_height * 1.2)),
+        )
+        return obj is not None
+
+    if conn_type in {"pit_drop", "shaft"}:
+        shaft = _create_volume_cube(
+            name,
+            center=(location[0], location[1], from_z + wall_height * 0.5),
+            size=(cell_size * 1.0, cell_size * 1.0, wall_height),
+            parent=parent,
+        )
+        return shaft is not None
+
+    if conn_type == "elevator":
+        shaft = _create_volume_cube(
+            name,
+            center=(location[0], location[1], from_z + wall_height * 0.5),
+            size=(cell_size * 1.2, cell_size * 1.2, wall_height),
+            parent=parent,
+        )
+        return shaft is not None
+
+    steps = max(5, int(round(wall_height / 0.45)))
+    step_height = wall_height / steps
+    step_depth = max(cell_size * 0.85, 0.7)
+    step_width = max(cell_size * 1.2, 1.8)
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+    for step_idx in range(steps):
+        res = bmesh.ops.create_cube(bm, size=1.0)
+        verts = res["verts"]
+        current_depth = (step_idx + 1) * step_depth
+        current_height = (step_idx + 1) * step_height
+        for vert in verts:
+            vert.co.x *= step_depth / 2.0
+            vert.co.y *= step_width / 2.0
+            vert.co.z *= step_height / 2.0
+            vert.co.x += current_depth - step_depth / 2.0
+            vert.co.z += current_height - step_height / 2.0
+    bm.to_mesh(mesh)
+    bm.free()
+    obj = bpy.data.objects.new(name, mesh)
+    obj.location = location
+    obj.parent = parent
+    bpy.context.collection.objects.link(obj)
+    return True
 
 
 def _generate_landmark_unique_features(
@@ -1506,6 +3063,7 @@ def handle_generate_building(params: dict) -> dict:
     seed = params.get("seed", 0)
     wall_height = params.get("wall_height", 4.0)
     weathering_level = params.get("weathering_level", 0.0)
+    site_profile = str(params.get("site_profile", "")).strip().lower()
 
     rng = random.Random(seed)
     total_height = wall_height * floors
@@ -1617,14 +3175,19 @@ def handle_generate_building(params: dict) -> dict:
         total_faces += len(door_spec.get("faces", []))
 
     # === ROOF ===
-    roof_style = "gable" if style != "fortress" else "flat"
+    roof_style = preset.get("roof_style") if preset else None
+    if not roof_style:
+        roof_style = "gable" if style != "fortress" else "flat"
+    roof_material = preset.get("roof_material") if preset else None
+    if not roof_material:
+        roof_material = "tile" if style != "fortress" else "stone"
     roof_spec = generate_roof(
         width=width + 0.6,
         depth=depth_val + 0.6,
-        pitch=50.0 if is_gothic else 40.0,
+        pitch=float(preset.get("roof_pitch", 50.0 if is_gothic else 40.0)) if preset else (50.0 if is_gothic else 40.0),
         style=roof_style,
-        material="tile" if style != "fortress" else "stone",
-        overhang=0.3,
+        material=roof_material,
+        overhang=float(preset.get("roof_overhang", 0.3)) if preset else 0.3,
         seed=rng.randint(0, 99999),
     )
     roof_obj = mesh_from_spec(roof_spec, name=f"{name}_Roof")
@@ -1637,6 +3200,172 @@ def handle_generate_building(params: dict) -> dict:
         total_verts += len(roof_spec.get("vertices", []))
         total_faces += len(roof_spec.get("faces", []))
 
+    # === EXTERIOR DRESSING ===
+    exterior_props = list(preset.get("props", [])) if preset else []
+    exterior_count = 0
+    if exterior_props:
+        slots = [
+            (width * 0.5, -0.9, 0.0, 0.0),              # front center
+            (width * 0.24, -0.8, 0.0, 0.0),             # front left
+            (width * 0.76, -0.8, 0.0, 0.0),             # front right
+            (-0.85, depth_val * 0.25, 0.0, math.pi / 2),  # left side
+            (-0.85, depth_val * 0.75, 0.0, math.pi / 2),  # left side rear
+            (width + 0.85, depth_val * 0.25, 0.0, -math.pi / 2),  # right side
+            (width + 0.85, depth_val * 0.75, 0.0, -math.pi / 2),  # right side rear
+            (width * 0.5, depth_val + 0.95, 0.0, math.pi),  # back center
+        ]
+        for pi, prop_type in enumerate(exterior_props):
+            sx, sy, sz, rot = slots[pi % len(slots)]
+            scale = 0.85 + 0.1 * ((pi * 13) % 3)
+            obj = _spawn_catalog_object(
+                name,
+                prop_type,
+                pi,
+                (sx, sy, sz),
+                parent,
+                rotation=rot,
+                scale=(scale, scale, scale),
+            )
+            if obj is not None:
+                exterior_count += 1
+
+    accent_count = 0
+    if style in {"gothic", "fortress"}:
+        accent_slots = [
+            (-0.45, -0.25, 0.0, 0.0),
+            (width + 0.45, -0.25, 0.0, 0.0),
+            (-0.45, depth_val + 0.25, 0.0, math.pi),
+            (width + 0.45, depth_val + 0.25, 0.0, math.pi),
+        ]
+        for ai, (ax, ay, az, rot) in enumerate(accent_slots):
+            buttress = _spawn_catalog_object(
+                name,
+                "buttress",
+                900 + ai,
+                (ax, ay, az),
+                parent,
+                rotation=rot,
+                scale=(0.95, 0.95, 1.05),
+            )
+            if buttress is not None:
+                accent_count += 1
+        for bi, (bx, by, bz, rot) in enumerate([
+            (width * 0.18, -0.95, total_height * 0.38, 0.0),
+            (width * 0.82, -0.95, total_height * 0.38, 0.0),
+        ]):
+            banner = _spawn_catalog_object(
+                name,
+                "banner",
+                950 + bi,
+                (bx, by, bz),
+                parent,
+                rotation=rot,
+                scale=(0.85, 0.85, 0.85),
+            )
+            if banner is not None:
+                accent_count += 1
+
+    site_feature_count = _apply_site_profile_features(
+        name,
+        site_profile,
+        width,
+        depth_val,
+        wall_height,
+        parent,
+        seed,
+    )
+
+    # === INTERIORS ===
+    interior_count = 0
+    room_type_map = {
+        "shrine_minor": ["shrine_room"],
+        "shrine_major": ["shrine_room", "storage"],
+        "forge": ["smithy", "storage"],
+        "inn": ["tavern", "bedroom"],
+        "warehouse": ["storage", "storage"],
+        "barracks": ["barracks", "guard_post"],
+        "gatehouse": ["guard_post", "storage"],
+        "rowhouse": ["kitchen", "bedroom", "storage"],
+        "abandoned_house": ["kitchen", "bedroom", "storage"],
+        "ruined_fortress_tower": ["guard_post", "storage"],
+    }
+    site_room_map = _SITE_PROFILE_ROOM_MAP.get(site_profile, [])
+    if site_room_map:
+        interior_room_types = list(site_room_map)
+    else:
+        interior_room_types = room_type_map.get(preset_name or "", [])
+    if not interior_room_types:
+        if style in {"fortress", "gothic"}:
+            interior_room_types = ["guard_post", "storage"]
+        else:
+            interior_room_types = ["bedroom", "kitchen", "storage"]
+
+    usable_width = max(2.5, width - 1.2)
+    usable_depth = max(2.5, depth_val - 1.2)
+    usable_height = max(2.5, wall_height - 0.4)
+    stair_anchor_map = {
+        "tavern": (0.78, 0.22),
+        "kitchen": (0.76, 0.24),
+        "storage": (0.80, 0.20),
+        "smithy": (0.80, 0.20),
+        "barracks": (0.78, 0.22),
+        "guard_post": (0.78, 0.20),
+        "shrine_room": (0.18, 0.80),
+        "chapel": (0.18, 0.80),
+        "dining_hall": (0.18, 0.78),
+        "bedroom": (0.76, 0.22),
+    }
+    stairs_steps = max(10, int(math.ceil(usable_height / 0.18)))
+    stairs_direction = "straight" if usable_depth >= (stairs_steps * 0.28) + 1.0 else "spiral"
+    stair_width = min(1.35, max(1.0, usable_width * 0.18))
+    for floor_idx in range(max(1, floors)):
+        room_type = interior_room_types[min(floor_idx, len(interior_room_types) - 1)]
+        room_name = f"{name}_Interior_{floor_idx}"
+        handle_generate_interior({
+            "name": room_name,
+            "room_type": room_type,
+            "width": usable_width,
+            "depth": usable_depth,
+            "height": usable_height,
+            "seed": rng.randint(0, 99999),
+        })
+        room_obj = bpy.data.objects.get(room_name)
+        if room_obj is not None:
+            room_obj.parent = parent
+            room_obj.location = (0.6, 0.6, floor_idx * wall_height + 0.15)
+            stair_anchor = stair_anchor_map.get(room_type, (0.78, 0.22))
+            stair_center = (
+                min(max(1.6, usable_width * stair_anchor[0]), usable_width - 1.6),
+                min(max(1.8, usable_depth * stair_anchor[1]), usable_depth - 1.8),
+            )
+            opening_center = stair_center if floor_idx > 0 else None
+            opening_size = (2.4, 2.4) if stairs_direction == "spiral" else (2.2, 2.2)
+            _create_floor_segments(
+                f"{room_name}_Floor",
+                usable_width,
+                usable_depth,
+                room_obj,
+                opening_center=opening_center,
+                opening_size=opening_size if opening_center is not None else None,
+            )
+            if floor_idx < floors - 1:
+                stairs_spec = generate_staircase_mesh(
+                    steps=stairs_steps,
+                    width=stair_width,
+                    direction=stairs_direction,
+                )
+                stairs_obj = mesh_from_spec(
+                    stairs_spec,
+                    name=f"{room_name}_Staircase",
+                    location=(stair_center[0], stair_center[1], 0.0),
+                    parent=room_obj,
+                )
+                if not isinstance(stairs_obj, dict):
+                    stairs_obj.rotation_euler = (math.pi / 2.0, 0.0, 0.0)
+                    stairs_obj["vb_room_type"] = room_type
+                    stairs_obj["vb_editable_role"] = "stair_connection"
+            interior_count += 1
+
     result = {
         "name": name,
         "style": style,
@@ -1647,12 +3376,18 @@ def handle_generate_building(params: dict) -> dict:
         "face_count": total_faces,
         "component_count": component_count,
         "window_count": window_count,
+        "exterior_prop_count": exterior_count,
+        "architectural_accent_count": accent_count,
+        "site_feature_count": site_feature_count,
+        "interior_room_count": interior_count,
         "block_style": block_style,
         "roof_style": roof_style,
         "weathering_level": weathering_level,
     }
     if preset:
         result["preset"] = preset_name
+    if site_profile:
+        result["site_profile"] = site_profile
     return {"status": "success", "result": result}
 
 
@@ -1678,10 +3413,20 @@ def handle_generate_castle(params: dict) -> dict:
 
     bm = _spec_to_bmesh(spec)
     obj = _create_mesh_object(name, bm)
+    _assign_procedural_material(obj, "stone_fortified")
 
     # Add procedural castle detail elements
     details_coll = bpy.data.collections.new(f"{name}_CastleDetails")
     bpy.context.scene.collection.children.link(details_coll)
+
+    def _material_for_castle_detail(role: str) -> str:
+        if role in {"drawbridge"}:
+            return "rough_timber"
+        if role in {"fountain"}:
+            return "smooth_stone"
+        if role in {"gate"}:
+            return "stone_dark"
+        return "stone_fortified"
 
     half = outer_size / 2.0
     procedural_count = 0
@@ -1691,13 +3436,15 @@ def handle_generate_castle(params: dict) -> dict:
     if gate_entry is not None:
         gen_func, gen_kwargs = gate_entry
         gate_spec = gen_func(**gen_kwargs)
-        mesh_from_spec(
+        gate_obj = mesh_from_spec(
             gate_spec,
             name=f"{name}_gate",
             location=(0, half, 0),
             collection=details_coll,
             parent=obj,
         )
+        if gate_obj is not None and not isinstance(gate_obj, dict):
+            _assign_procedural_material_recursive(gate_obj, _material_for_castle_detail("gate"))
         procedural_count += 1
 
     # Ramparts along wall tops (4 sides)
@@ -1721,7 +3468,7 @@ def handle_generate_castle(params: dict) -> dict:
                 else:
                     px, py = t, sy * half
                 ramp_spec = gen_func(**gen_kwargs)
-                mesh_from_spec(
+                ramp_obj = mesh_from_spec(
                     ramp_spec,
                     name=f"{name}_rampart_{side_idx}_{i}",
                     location=(px, py, 0),
@@ -1729,6 +3476,8 @@ def handle_generate_castle(params: dict) -> dict:
                     collection=details_coll,
                     parent=obj,
                 )
+                if ramp_obj is not None and not isinstance(ramp_obj, dict):
+                    _assign_procedural_material_recursive(ramp_obj, _material_for_castle_detail("rampart"))
                 procedural_count += 1
 
     # Drawbridge at gate position, extending outward
@@ -1736,13 +3485,15 @@ def handle_generate_castle(params: dict) -> dict:
     if draw_entry is not None:
         gen_func, gen_kwargs = draw_entry
         draw_spec = gen_func(**gen_kwargs)
-        mesh_from_spec(
+        draw_obj = mesh_from_spec(
             draw_spec,
             name=f"{name}_drawbridge",
             location=(0, half + 2.0, 0),
             collection=details_coll,
             parent=obj,
         )
+        if draw_obj is not None and not isinstance(draw_obj, dict):
+            _assign_procedural_material_recursive(draw_obj, _material_for_castle_detail("drawbridge"))
         procedural_count += 1
 
     # Fountain at courtyard center
@@ -1750,13 +3501,15 @@ def handle_generate_castle(params: dict) -> dict:
     if fountain_entry is not None:
         gen_func, gen_kwargs = fountain_entry
         fountain_spec = gen_func(**gen_kwargs)
-        mesh_from_spec(
+        fountain_obj = mesh_from_spec(
             fountain_spec,
             name=f"{name}_fountain",
             location=(0, 0, 0),
             collection=details_coll,
             parent=obj,
         )
+        if fountain_obj is not None and not isinstance(fountain_obj, dict):
+            _assign_procedural_material_recursive(fountain_obj, _material_for_castle_detail("fountain"))
         procedural_count += 1
 
     result = _build_castle_result(name, spec, procedural_count)
@@ -1823,7 +3576,19 @@ def handle_generate_interior(params: dict) -> dict:
     room_empty = bpy.data.objects.new(name, None)
     room_empty.empty_display_type = "CUBE"
     room_empty.empty_display_size = max(width, depth) / 2
+    room_empty["vb_room_type"] = room_type
+    room_empty["vb_editable_role"] = "interior_root"
     bpy.context.collection.objects.link(room_empty)
+
+    shell_count = _create_interior_shell(
+        name,
+        width=float(width),
+        depth=float(depth),
+        height=float(height),
+        parent=room_empty,
+        room_type=room_type,
+        seed=seed,
+    )
 
     procedural_count = 0
     for item in layout:
@@ -1863,7 +3628,12 @@ def handle_generate_interior(params: dict) -> dict:
             item_obj.parent = room_empty
             bpy.context.collection.objects.link(item_obj)
 
+        if not isinstance(item_obj, dict):
+            item_obj["vb_room_type"] = room_type
+            item_obj["vb_editable_role"] = "furniture"
+
     result = _build_interior_result(name, room_type, layout, procedural_count)
+    result["shell_count"] = shell_count
     return {"status": "success", "result": result}
 
 
@@ -1919,7 +3689,7 @@ def handle_generate_modular_kit(params: dict) -> dict:
 def handle_generate_location(params: dict) -> dict:
     """Generate a complete explorable location (WORLD-01).
 
-    Composes terrain base + buildings + paths + POIs as Blender objects.
+    Composes terrain base + buildings + roads + POIs as Blender objects.
 
     Params:
         name: location name (default "Location")
@@ -1945,49 +3715,645 @@ def handle_generate_location(params: dict) -> dict:
         seed=seed,
     )
 
-    # Create terrain base as a plane
     terrain = spec["terrain_bounds"]
+    terrain_type = _terrain_type_for_location(location_type)
+    terrain_name = f"{name}_Terrain"
     parent = bpy.data.objects.new(name, None)
     parent.empty_display_type = "PLAIN_AXES"
     parent.empty_display_size = terrain["size"] / 2
     bpy.context.collection.objects.link(parent)
 
-    # Create building markers
-    for b in spec["buildings"]:
-        b_name = f"{name}_{b['type']}"
-        b_obj = bpy.data.objects.new(b_name, None)
-        b_obj.empty_display_type = "CUBE"
-        b_obj.empty_display_size = b["size"][0] / 2
-        b_obj.location = (b["position"][0], b["position"][1], 0)
-        b_obj.rotation_euler = (0, 0, b["rotation"])
-        b_obj.parent = parent
-        bpy.context.collection.objects.link(b_obj)
+    # Terrain base first so later fitment can raycast against it.
+    from .environment import handle_generate_terrain
 
-    # Create POI markers
-    for p in spec["pois"]:
-        p_name = f"{name}_poi_{p['type']}"
-        p_obj = bpy.data.objects.new(p_name, None)
-        p_obj.empty_display_type = "SPHERE"
-        p_obj.empty_display_size = 0.5
-        p_obj.location = (p["position"][0], p["position"][1], 0)
-        p_obj.parent = parent
-        bpy.context.collection.objects.link(p_obj)
+    terrain_resolution = 129 if terrain["size"] <= 120 else 257
+    terrain_result = handle_generate_terrain({
+        "name": terrain_name,
+        "terrain_type": terrain_type,
+        "resolution": terrain_resolution,
+        "scale": terrain["size"],
+        "height_scale": 16.0 if location_type in {"fortress", "dungeon_entrance", "mountain_pass", "wizard_fortress", "cliff_keep"} else 8.0,
+        "erosion": "both" if location_type in {"fortress", "dungeon_entrance", "monastery", "mining_town", "wizard_fortress", "cliff_keep", "sorcery_school"} else "hydraulic",
+        "erosion_iterations": 1800 if location_type in {"fortress", "dungeon_entrance", "monastery", "wizard_fortress", "cliff_keep"} else 900,
+        "seed": seed,
+    })
+    terrain_status = terrain_result.get("status") if isinstance(terrain_result, dict) else None
+    if terrain_status not in (None, "success"):
+        raise RuntimeError(
+            f"Failed to generate location terrain: {terrain_result.get('error', 'unknown')}"
+        )
+    terrain_obj = bpy.data.objects.get(terrain_name)
+    if terrain_obj is None:
+        raise RuntimeError(f"Terrain object was not created: {terrain_name}")
+    terrain_obj.parent = parent
+    terrain_material_key = {
+        "cliff_keep": "cliff_rock",
+        "wizard_fortress": "cliff_rock",
+        "fortress": "cliff_rock",
+        "dungeon_entrance": "cliff_rock",
+        "river_castle": "dirt",
+        "farmstead": "grass",
+        "village": "grass",
+        "town": "dirt",
+        "monastery": "grass",
+        "sorcery_school": "grass",
+    }.get(location_type, "grass" if terrain_type in {"plains", "hills"} else "dirt")
+    _assign_procedural_material(terrain_obj, terrain_material_key)
+
+    # Build roads as visible curves, fitted onto the generated terrain.
+    road_count = 0
+    road_seed_rng = random.Random(seed + 17)
+    for i, path in enumerate(spec["paths"]):
+        start = path["from"]
+        end = path["to"]
+        width = float(path.get("width", 2.0))
+        mid_x = (start[0] + end[0]) / 2.0
+        mid_y = (start[1] + end[1]) / 2.0
+        dx = end[0] - start[0]
+        dy = end[1] - start[1]
+        length = math.sqrt(dx * dx + dy * dy) or 1.0
+        ox = -dy / length
+        oy = dx / length
+        bend = min(terrain["size"] * 0.05, length * 0.12)
+        mid_x += ox * road_seed_rng.uniform(-bend, bend)
+        mid_y += oy * road_seed_rng.uniform(-bend, bend)
+        road_points = [
+            (start[0], start[1], _sample_scene_height(start[0], start[1], terrain_name) + 0.02),
+            (mid_x, mid_y, _sample_scene_height(mid_x, mid_y, terrain_name) + 0.03),
+            (end[0], end[1], _sample_scene_height(end[0], end[1], terrain_name) + 0.02),
+        ]
+        road_obj = _create_curve_path(f"{name}_road_{i}", road_points, width=width, parent=parent)
+        try:
+            road_obj.data.materials.clear()
+        except Exception:
+            pass
+        road_count += 1
+
+    # Materialize buildings as actual geometry, grounded to the terrain.
+    structure_count = 0
+    for i, building in enumerate(spec["buildings"]):
+        if _generate_location_building(name, building, seed, i, terrain_name, parent):
+            structure_count += 1
+
+    # Materialize POIs using the strongest available prop generators.
+    poi_count_actual = 0
+    for i, poi in enumerate(spec["pois"]):
+        if _generate_location_poi(name, poi, seed, i, terrain_name, parent):
+            poi_count_actual += 1
+
+    # Water accents for coastal location types.
+    if location_type in {"fishing_village", "port_city", "river_castle"}:
+        from .environment import handle_create_water
+
+        water_size = terrain["size"] * 0.55
+        water = handle_create_water({
+            "name": f"{name}_Water",
+            "water_level": 0.0,
+            "width": water_size,
+            "depth": water_size,
+            "material_name": f"{name}_Water_Material",
+        })
+        water_obj = bpy.data.objects.get(f"{name}_Water")
+        if water_obj is not None:
+            water_obj.location = (terrain["size"] * 0.2, -terrain["size"] * 0.18, 0.0)
+            water_obj.parent = parent
+
+        bridge_center = (
+            terrain["size"] * 0.2,
+            -terrain["size"] * 0.18,
+            0.18,
+        )
+        _create_bridge_span(
+            f"{name}_Bridge",
+            bridge_center,
+            span=water_size * 0.52,
+            bridge_width=3.2,
+            parent=parent,
+            style="stone",
+        )
+
+    # Location dressing for readability and AAA silhouette variety.
+    dressing_idx = 0
+
+    def add_scene_prop(item_type: str, location: tuple[float, float, float], rotation: float = 0.0, scale: tuple[float, float, float] | None = None) -> None:
+        nonlocal dressing_idx
+        if _spawn_catalog_object(name, item_type, dressing_idx, location, parent, rotation=rotation, scale=scale) is not None:
+            dressing_idx += 1
+
+    if location_type in {"village", "farmstead", "rural"}:
+        farm_radius = terrain["size"] * 0.22
+        for i in range(3):
+            angle = (2.0 * math.pi * i / 3.0) + (0.12 * (i % 2))
+            px = terrain["size"] * 0.5 + math.cos(angle) * farm_radius
+            py = -terrain["size"] * 0.08 + math.sin(angle) * farm_radius * 0.55
+            dressing_idx += _create_settlement_prop_cluster(
+                name,
+                {
+                    "type": "farm_plot",
+                    "position": (px, py, 0.0),
+                    "rotation": angle,
+                    "scale": (1.0, 1.0, 1.0),
+                },
+                dressing_idx + i,
+                parent,
+            )
+        for i in range(2):
+            add_scene_prop(
+                "fence",
+                (terrain["size"] * (0.24 + 0.48 * i), terrain["size"] * 0.28, 0.0),
+                rotation=0.0,
+                scale=(max(4.0, terrain["size"] * 0.16), 1.0, 1.0),
+            )
+
+    elif location_type == "traveler_camp":
+        camp_radius = terrain["size"] * 0.08
+        for i in range(4):
+            angle = (2.0 * math.pi * i / 4.0) + 0.2
+            px = terrain["size"] * 0.5 + math.cos(angle) * camp_radius
+            py = terrain["size"] * 0.5 + math.sin(angle) * camp_radius
+            add_scene_prop("tent", (px, py, 0.0), rotation=angle)
+        dressing_idx += _create_settlement_prop_cluster(
+            name,
+            {
+                "type": "campfire_area",
+                "position": (terrain["size"] * 0.5, terrain["size"] * 0.5, 0.0),
+                "rotation": 0.0,
+                "scale": (1.0, 1.0, 1.0),
+            },
+            dressing_idx + 10,
+            parent,
+        )
+        add_scene_prop("lookout_post", (terrain["size"] * 0.65, terrain["size"] * 0.52, 0.0), rotation=0.0)
+        add_scene_prop("hitching_post", (terrain["size"] * 0.42, terrain["size"] * 0.48, 0.0), rotation=0.0)
+
+    elif location_type == "merchant_camp":
+        dressing_idx += _create_settlement_prop_cluster(
+            name,
+            {
+                "type": "market_stall_cluster",
+                "position": (terrain["size"] * 0.5, terrain["size"] * 0.5, 0.0),
+                "rotation": 0.0,
+                "scale": (1.0, 1.0, 1.0),
+            },
+            dressing_idx + 20,
+            parent,
+        )
+        add_scene_prop("cart", (terrain["size"] * 0.64, terrain["size"] * 0.46, 0.0), rotation=0.2)
+        add_scene_prop("hitching_post", (terrain["size"] * 0.38, terrain["size"] * 0.42, 0.0), rotation=0.0)
+        add_scene_prop("lookout_post", (terrain["size"] * 0.59, terrain["size"] * 0.67, 0.0), rotation=0.0)
+
+    elif location_type in {"wizard_fortress", "sorcery_school"}:
+        add_scene_prop("holy_symbol", (terrain["size"] * 0.5, terrain["size"] * 0.7, 0.0), rotation=0.0, scale=(1.4, 1.4, 1.4))
+        add_scene_prop("map_display", (terrain["size"] * 0.34, terrain["size"] * 0.64, 0.0), rotation=0.0, scale=(1.3, 1.0, 1.0))
+        add_scene_prop("candelabra", (terrain["size"] * 0.66, terrain["size"] * 0.62, 0.0), rotation=0.0, scale=(1.1, 1.1, 1.1))
+        add_scene_prop("pillar", (terrain["size"] * 0.5, terrain["size"] * 0.82, 0.0), rotation=0.0, scale=(1.2, 1.2, 2.0))
+
+    elif location_type == "cliff_keep":
+        _create_bridge_span(
+            f"{name}_CliffBridge",
+            (terrain["size"] * 0.52, -terrain["size"] * 0.22, 0.25),
+            span=max(10.0, terrain["size"] * 0.34),
+            bridge_width=3.5,
+            parent=parent,
+            style="stone",
+        )
+        add_scene_prop("fence", (terrain["size"] * 0.52, terrain["size"] * 0.74, 0.0), rotation=0.0, scale=(terrain["size"] * 0.18, 1.0, 1.0))
+
+    elif location_type == "river_castle":
+        _create_bridge_span(
+            f"{name}_RiverSpan",
+            (terrain["size"] * 0.34, -terrain["size"] * 0.12, 0.2),
+            span=max(10.0, terrain["size"] * 0.28),
+            bridge_width=3.2,
+            parent=parent,
+            style="stone",
+        )
+        add_scene_prop("fence", (terrain["size"] * 0.52, terrain["size"] * 0.78, 0.0), rotation=0.0, scale=(terrain["size"] * 0.16, 1.0, 1.0))
+
+    elif location_type == "ruined_town":
+        dressing_idx += _create_settlement_prop_cluster(
+            name,
+            {
+                "type": "battle_aftermath",
+                "position": (terrain["size"] * 0.48, terrain["size"] * 0.48, 0.0),
+                "rotation": 0.0,
+                "scale": (1.0, 1.0, 1.0),
+            },
+            dressing_idx + 30,
+            parent,
+        )
+        add_scene_prop("gravestone", (terrain["size"] * 0.62, terrain["size"] * 0.41, 0.0), rotation=0.0)
+        add_scene_prop("barricade", (terrain["size"] * 0.34, terrain["size"] * 0.36, 0.0), rotation=0.0)
+
+    # A simple hierarchy-friendly marker object for agents.
+    bpy.context.view_layer.objects.active = parent
 
     return {
         "status": "success",
         "result": {
             "name": name,
             "location_type": location_type,
-            "building_count": len(spec["buildings"]),
-            "path_count": len(spec["paths"]),
-            "poi_count": len(spec["pois"]),
+            "building_count": structure_count,
+            "path_count": road_count,
+            "poi_count": poi_count_actual,
             "terrain_size": terrain["size"],
+            "terrain_type": terrain_type,
+            "terrain_object": terrain_name,
+        },
+    }
+
+
+def handle_generate_settlement(params: dict) -> dict:
+    """Generate a full settlement with geometry-rich roads, props, and lighting."""
+    name = params.get("name", "Settlement")
+    settlement_type = params.get("settlement_type", "town")
+    seed = params.get("seed", 0)
+    center = tuple(params.get("center", (0.0, 0.0)))
+    radius = float(params.get("radius", 50.0))
+    wall_height = float(params.get("wall_height", 3.0))
+    terrain_name = params.get("terrain_name")
+    include_buildings = params.get("include_buildings", True)
+    include_roads = params.get("include_roads", True)
+    include_props = params.get("include_props", True)
+    include_perimeter = params.get("include_perimeter", True)
+    include_interiors = params.get("include_interiors", True)
+    include_lights = params.get("include_lights", True)
+    parent_name = params.get("parent_name")
+
+    heightmap = None
+    if terrain_name:
+        heightmap = lambda x, y: _sample_scene_height(x, y, terrain_name)  # noqa: E731
+
+    settlement = generate_settlement(
+        settlement_type=settlement_type,
+        seed=seed,
+        center=center,
+        radius=radius,
+        heightmap=heightmap,
+        wall_height=wall_height,
+    )
+
+    parent = bpy.data.objects.get(parent_name) if parent_name else None
+    if parent is None:
+        parent = bpy.data.objects.new(name, None)
+        parent.empty_display_type = "PLAIN_AXES"
+        parent.empty_display_size = max(radius, 1.0) * 0.25
+        bpy.context.collection.objects.link(parent)
+
+    building_lookup = {
+        index: bld for index, bld in enumerate(settlement.get("buildings", []))
+    }
+
+    road_count = 0
+    if include_roads:
+        road_seed = random.Random(seed + 73)
+        for i, road in enumerate(settlement.get("roads", [])):
+            start = road.get("start")
+            end = road.get("end")
+            if not start or not end:
+                continue
+            sx, sy = start
+            ex, ey = end
+            mid_x = (sx + ex) / 2.0
+            mid_y = (sy + ey) / 2.0
+            dx = ex - sx
+            dy = ey - sy
+            length = math.sqrt(dx * dx + dy * dy) or 1.0
+            bend = min(radius * 0.12, length * 0.12)
+            mid_x += road_seed.uniform(-bend, bend) * (-dy / length)
+            mid_y += road_seed.uniform(-bend, bend) * (dx / length)
+            road_z0 = _sample_scene_height(sx, sy, terrain_name) + 0.02
+            road_z1 = _sample_scene_height(mid_x, mid_y, terrain_name) + 0.03
+            road_z2 = _sample_scene_height(ex, ey, terrain_name) + 0.02
+            road_obj = _create_curve_path(
+                f"{name}_road_{i}",
+                [
+                    (sx, sy, road_z0),
+                    (mid_x, mid_y, road_z1),
+                    (ex, ey, road_z2),
+                ],
+                width=float(road.get("width", 2.0)),
+                parent=parent,
+            )
+            try:
+                road_obj.data.materials.clear()
+            except Exception:
+                pass
+            road_count += 1
+
+    building_count = 0
+    if include_buildings:
+        for i, building in enumerate(settlement.get("buildings", [])):
+            b_type = building.get("type", "house")
+            if b_type == "market_stall_cluster":
+                spawned = _create_settlement_prop_cluster(name, building, i, parent)
+                building_count += max(1, spawned)
+                continue
+            if b_type == "campfire_area":
+                spawned = _create_settlement_prop_cluster(name, building, i, parent)
+                building_count += max(1, spawned)
+                continue
+            if _generate_location_building(name, building, seed, i, terrain_name, parent):
+                building_count += 1
+
+    prop_count = 0
+    if include_props:
+        for i, prop in enumerate(settlement.get("props", [])):
+            if _create_settlement_prop_cluster(name, prop, i, parent) > 0:
+                prop_count += 1
+                continue
+            px, py = prop.get("position", (0.0, 0.0))[:2]
+            pz = _sample_scene_height(px, py, terrain_name) + 0.02
+            obj = _spawn_catalog_object(
+                name,
+                prop.get("type", "crate"),
+                i,
+                (px, py, pz),
+                parent,
+                rotation=float(prop.get("rotation", 0.0)),
+                scale=_normalize_scale(prop.get("scale", (1.0, 1.0, 1.0))),
+            )
+            if obj is not None:
+                prop_count += 1
+
+    perimeter_count = 0
+    if include_perimeter:
+        for i, element in enumerate(settlement.get("perimeter", [])):
+            px, py = element.get("position", (0.0, 0.0))[:2]
+            pz = _sample_scene_height(px, py, terrain_name) + 0.02
+            obj = _spawn_catalog_object(
+                name,
+                element.get("type", "wall_segment"),
+                i,
+                (px, py, pz),
+                parent,
+                rotation=float(element.get("rotation", 0.0)),
+                scale=(1.0, 1.0, 1.0),
+            )
+            if obj is not None:
+                perimeter_count += 1
+
+    furniture_count = 0
+    if include_interiors:
+        for bld_index, furnishings in settlement.get("interiors", {}).items():
+            building = building_lookup.get(int(bld_index))
+            if building is None:
+                continue
+            base_z = float(building.get("elevation", 0.0))
+            floor_height = float(building.get("floor_height", wall_height))
+            for j, item in enumerate(furnishings):
+                px, py = item.get("position", (0.0, 0.0))[:2]
+                floor = int(item.get("floor", 0))
+                pz = base_z + floor * floor_height + 0.05
+                obj = _spawn_catalog_object(
+                    name,
+                    item.get("type", "crate"),
+                    int(bld_index) * 1000 + j,
+                    (px, py, pz),
+                    parent,
+                    rotation=float(item.get("rotation", 0.0)),
+                    scale=(1.0, 1.0, 1.0),
+                )
+                if obj is not None:
+                    furniture_count += 1
+
+    light_count = 0
+    if include_lights:
+        for i, light_spec in enumerate(settlement.get("lights", [])):
+            light_payload = dict(light_spec)
+            light_count += 1 if _create_settlement_light(name, light_payload, i, parent) else 0
+
+    parent["settlement_type"] = settlement_type
+    parent["settlement_seed"] = seed
+    parent["settlement_radius"] = radius
+
+    return {
+        "status": "success",
+        "result": {
+            "name": name,
+            "settlement_type": settlement_type,
+            "building_count": building_count,
+            "road_count": road_count,
+            "prop_count": prop_count,
+            "perimeter_count": perimeter_count,
+            "furniture_count": furniture_count,
+            "light_count": light_count,
+            "metadata": settlement.get("metadata", {}),
+        },
+    }
+
+
+def handle_compose_world_map(params: dict) -> dict:
+    """Compose a world map and materialize its road network and POIs."""
+    name = params.get("name", "WorldMap")
+    width = float(params.get("width", 2000.0))
+    height = float(params.get("height", 2000.0))
+    poi_list = params.get("poi_list", [])
+    seed = params.get("seed", 0)
+    shortcut_roads = params.get("shortcut_roads", 2)
+
+    world_map = compose_world_map(
+        width=width,
+        height=height,
+        poi_list=poi_list,
+        seed=seed,
+        shortcut_roads=shortcut_roads,
+    )
+
+    parent = bpy.data.objects.new(name, None)
+    parent.empty_display_type = "PLAIN_AXES"
+    parent.empty_display_size = max(width, height) * 0.05
+    bpy.context.collection.objects.link(parent)
+
+    road_count = 0
+    for i, road in enumerate(world_map.get("roads", [])):
+        waypoints = road.get("waypoints", [])
+        if len(waypoints) < 2:
+            continue
+        points: list[tuple[float, float, float]] = []
+        for pt in waypoints:
+            if len(pt) >= 3:
+                points.append((float(pt[0]), float(pt[1]), float(pt[2])))
+            else:
+                points.append((float(pt[0]), float(pt[1]), 0.02))
+        _create_curve_path(
+            f"{name}_road_{i}",
+            points,
+            width=3.2 if road.get("road_type") == "main" else 2.2 if road.get("road_type") == "shortcut" else 1.6,
+            parent=parent,
+        )
+        road_obj = bpy.data.objects.get(f"{name}_road_{i}")
+        if road_obj is not None:
+            _assign_procedural_material(road_obj, "dirt")
+        road_count += 1
+
+    poi_count = 0
+    for i, poi in enumerate(world_map.get("pois", [])):
+        if _generate_location_poi(name, poi, seed, i, None, parent):
+            poi_count += 1
+
+    feature_count = 0
+    feature_type_counts: dict[str, int] = {}
+    for i, feature in enumerate(world_map.get("world_features", [])):
+        feature_type = feature.get("type", "unknown")
+        px, py = feature.get("position", (0.0, 0.0))[:2]
+        pz = 0.0
+        rotation = float(feature.get("rotation", 0.0))
+        scale = feature.get("scale", (1.0, 1.0, 1.0))
+        style = feature.get("style", "default")
+        count = 0
+
+        if feature_type == "farm_belt":
+            count = _create_settlement_prop_cluster(
+                name,
+                {
+                    "type": "farm_plot",
+                    "position": (px, py, pz),
+                    "rotation": rotation,
+                    "scale": scale,
+                },
+                i,
+                parent,
+            )
+        elif feature_type == "market_quarter":
+            count = _create_settlement_prop_cluster(
+                name,
+                {
+                    "type": "market_stall_cluster",
+                    "position": (px, py, pz),
+                    "rotation": rotation,
+                    "scale": scale,
+                },
+                i,
+                parent,
+            )
+        elif feature_type == "camp_perimeter":
+            count = _create_settlement_prop_cluster(
+                name,
+                {
+                    "type": "campfire_area",
+                    "position": (px, py, pz),
+                    "rotation": rotation,
+                    "scale": scale,
+                },
+                i,
+                parent,
+            )
+        elif feature_type == "bridge_crossing":
+            bridge_obj = _create_bridge_span(
+                f"{name}_feature_bridge_{i}",
+                (px, py, pz + 0.15),
+                span=max(8.0, float(scale[0]) * 8.0),
+                bridge_width=max(2.0, float(scale[1]) * 2.0),
+                parent=parent,
+                style=style if style in {"stone", "rope"} else "stone",
+            )
+            if bridge_obj is not None:
+                _assign_procedural_material(bridge_obj, "cliff_rock")
+            count = 1
+        elif feature_type == "fence_line":
+            obj = _spawn_catalog_object(
+                name,
+                "fence",
+                i,
+                (px, py, pz),
+                parent,
+                rotation=rotation,
+                scale=(max(3.0, float(scale[0]) * 6.0), 1.0, 1.0),
+            )
+            _assign_procedural_material(obj, "rough_timber")
+            count = 1 if obj is not None else 0
+        elif feature_type == "barricade_line":
+            obj = _spawn_catalog_object(
+                name,
+                "barricade",
+                i,
+                (px, py, pz),
+                parent,
+                rotation=rotation,
+                scale=(max(2.0, float(scale[0]) * 4.0), 1.0, 1.0),
+            )
+            _assign_procedural_material(obj, "charred_wood")
+            count = 1 if obj is not None else 0
+        elif feature_type == "lookout_post":
+            obj = _spawn_catalog_object(
+                name,
+                "lookout_post",
+                i,
+                (px, py, pz),
+                parent,
+                rotation=rotation,
+                scale=scale,
+            )
+            _assign_procedural_material(obj, "rough_timber")
+            count = 1 if obj is not None else 0
+        elif feature_type == "milestone":
+            obj = _spawn_catalog_object(
+                name,
+                "milestone",
+                i,
+                (px, py, pz),
+                parent,
+                rotation=rotation,
+                scale=(1.0, 1.0, 1.0),
+            )
+            _assign_procedural_material(obj, "smooth_stone")
+            count = 1 if obj is not None else 0
+        elif feature_type == "waystone":
+            obj = _spawn_catalog_object(
+                name,
+                "waystone",
+                i,
+                (px, py, pz),
+                parent,
+                rotation=rotation,
+                scale=scale,
+            )
+            _assign_procedural_material(obj, "smooth_stone")
+            count = 1 if obj is not None else 0
+        elif feature_type in {"sacrificial_circle", "corruption_crystal", "veil_tear", "dark_obelisk"}:
+            obj = _spawn_catalog_object(
+                name,
+                feature_type,
+                i,
+                (px, py, pz),
+                parent,
+                rotation=rotation,
+                scale=scale,
+            )
+            if feature_type == "sacrificial_circle":
+                _assign_procedural_material(obj, "mossy_stone")
+            elif feature_type == "corruption_crystal":
+                _assign_procedural_material(obj, "ice_crystal")
+            elif feature_type == "veil_tear":
+                _assign_procedural_material(obj, "corruption_overlay")
+            else:
+                _assign_procedural_material(obj, "smooth_stone")
+            count = 1 if obj is not None else 0
+
+        if count > 0:
+            feature_count += count
+            feature_type_counts[feature_type] = feature_type_counts.get(feature_type, 0) + count
+
+    parent["world_width"] = width
+    parent["world_height"] = height
+    parent["world_seed"] = seed
+
+    return {
+        "status": "success",
+        "result": {
+            "name": name,
+            "road_count": road_count,
+            "poi_count": poi_count,
+            "feature_count": feature_count,
+            "feature_type_counts": feature_type_counts,
+            "metadata": world_map.get("metadata", {}),
         },
     }
 
 
 def handle_generate_boss_arena(params: dict) -> dict:
-    """Generate a boss arena with cover, hazards, fog gate (WORLD-03).
+    """Generate a boss arena with cover, hazards, and a fog gate (WORLD-03).
 
     Params:
         name: arena name (default "BossArena")
@@ -2034,33 +4400,19 @@ def handle_generate_boss_arena(params: dict) -> dict:
     floor_obj.parent = parent
     bpy.context.collection.objects.link(floor_obj)
 
-    # Cover objects as empties
+    cover_count_actual = 0
     for i, cover in enumerate(spec["covers"]):
-        c_obj = bpy.data.objects.new(f"{name}_cover_{i}_{cover['type']}", None)
-        c_obj.empty_display_type = "CUBE"
-        c_obj.empty_display_size = cover["radius"]
-        c_obj.location = (cover["position"][0], cover["position"][1], 0)
-        c_obj.parent = parent
-        bpy.context.collection.objects.link(c_obj)
+        if _create_boss_arena_cover(name, cover, seed, i, parent):
+            cover_count_actual += 1
 
-    # Hazard zone empties
+    hazard_count_actual = 0
     for i, hz in enumerate(spec["hazard_zones"]):
-        h_obj = bpy.data.objects.new(f"{name}_hazard_{i}_{hz['type']}", None)
-        h_obj.empty_display_type = "SPHERE"
-        h_obj.empty_display_size = hz["radius"]
-        h_obj.location = (hz["position"][0], hz["position"][1], 0)
-        h_obj.parent = parent
-        bpy.context.collection.objects.link(h_obj)
+        if _create_hazard_disc(name, hz, i, parent):
+            hazard_count_actual += 1
 
-    # Fog gate marker
+    fog_gate_actual = False
     if spec["fog_gate"]:
-        fg = spec["fog_gate"]
-        fg_obj = bpy.data.objects.new(f"{name}_fog_gate", None)
-        fg_obj.empty_display_type = "PLAIN_AXES"
-        fg_obj.empty_display_size = fg["width"] / 2
-        fg_obj.location = (fg["position"][0], fg["position"][1], 0)
-        fg_obj.parent = parent
-        bpy.context.collection.objects.link(fg_obj)
+        fog_gate_actual = _create_fog_gate(name, spec["fog_gate"], arena_type, parent)
 
     return {
         "status": "success",
@@ -2068,9 +4420,9 @@ def handle_generate_boss_arena(params: dict) -> dict:
             "name": name,
             "arena_type": arena_type,
             "diameter": diameter,
-            "cover_count": len(spec["covers"]),
-            "hazard_count": len(spec["hazard_zones"]),
-            "has_fog_gate": spec["fog_gate"] is not None,
+            "cover_count": cover_count_actual,
+            "hazard_count": hazard_count_actual,
+            "has_fog_gate": fog_gate_actual,
             "phase_triggers": len(spec["phase_triggers"]),
         },
     }
@@ -2146,7 +4498,7 @@ def handle_generate_world_graph(params: dict) -> dict:
 
 
 def handle_generate_linked_interior(params: dict) -> dict:
-    """Generate interior with door trigger + occlusion zone markers (WORLD-05).
+    """Generate interior with door trigger + occlusion zone geometry (WORLD-05).
 
     Params:
         name: interior name (default "LinkedInterior")
@@ -2172,7 +4524,28 @@ def handle_generate_linked_interior(params: dict) -> dict:
     parent.empty_display_type = "PLAIN_AXES"
     bpy.context.collection.objects.link(parent)
 
-    # Door trigger empties
+    room_shell_count = 0
+    for i, room in enumerate(rooms):
+        bounds = room.get("bounds", {})
+        r_min = bounds.get("min", (0.0, 0.0, 0.0))
+        r_max = bounds.get("max", (4.0, 4.0, 3.0))
+        origin = (float(r_min[0]), float(r_min[1]))
+        shell_width = max(2.0, float(r_max[0] - r_min[0]))
+        shell_depth = max(2.0, float(r_max[1] - r_min[1]))
+        shell_height = max(2.8, float(r_max[2] - r_min[2]) if len(r_max) > 2 and len(r_min) > 2 else 3.0)
+        room_name = room.get("name", f"room_{i}")
+        room_shell_count += _create_interior_shell(
+            f"{name}_{room_name}",
+            shell_width,
+            shell_depth,
+            shell_height,
+            parent,
+            room.get("type", "tavern"),
+            origin=origin,
+            seed=42 + i,
+        )
+
+    door_geometry_count = 0
     for dt in spec["door_triggers"]:
         dt_obj = bpy.data.objects.new(f"{name}_{dt['id']}", None)
         dt_obj.empty_display_type = "ARROWS"
@@ -2181,28 +4554,64 @@ def handle_generate_linked_interior(params: dict) -> dict:
         dt_obj.parent = parent
         bpy.context.collection.objects.link(dt_obj)
 
-    # Occlusion zone empties
+        door_width = dt.get("size", (1.2, 0.3, 2.2))[0]
+        door_height = dt.get("size", (1.2, 0.3, 2.2))[2]
+        facing = dt.get("facing", "south")
+        door_mesh = generate_archway(
+            width=door_width,
+            height=door_height,
+            depth=0.35,
+            arch_style="gothic_pointed" if facing in {"north", "south"} else "round",
+            has_keystone=True,
+            seed=42,
+        )
+        door_geom = mesh_from_spec(
+            door_mesh,
+            name=f"{name}_{dt['id']}_frame",
+            location=(dt["position"][0], dt["position"][1], dt["position"][2]),
+            rotation=(0.0, 0.0, _facing_to_rotation(facing)),
+            parent=parent,
+        )
+        if not isinstance(door_geom, dict):
+            door_geometry_count += 1
+
+    occlusion_geometry_count = 0
     for oz in spec["occlusion_zones"]:
-        oz_obj = bpy.data.objects.new(f"{name}_{oz['id']}", None)
-        oz_obj.empty_display_type = "CUBE"
         bmin = oz["bounds_min"]
         bmax = oz["bounds_max"]
-        oz_obj.location = (
+        center = (
             (bmin[0] + bmax[0]) / 2,
             (bmin[1] + bmax[1]) / 2,
-            0,
+            0.0,
         )
-        oz_obj.empty_display_size = max(bmax[0] - bmin[0], bmax[1] - bmin[1]) / 2
-        oz_obj.parent = parent
-        bpy.context.collection.objects.link(oz_obj)
+        size = (
+            max(0.5, bmax[0] - bmin[0]),
+            max(0.5, bmax[1] - bmin[1]),
+            2.4,
+        )
+        _create_volume_cube(f"{name}_{oz['id']}", center, size, parent)
+        occlusion_geometry_count += 1
+
+    lighting_transition_count = 0
+    for lt in spec["lighting_transitions"]:
+        lt_obj = bpy.data.objects.new(f"{name}_{lt['id']}", None)
+        lt_obj.empty_display_type = "SPHERE"
+        lt_obj.empty_display_size = 0.35
+        lt_obj.location = tuple(lt["position"])
+        lt_obj.parent = parent
+        bpy.context.collection.objects.link(lt_obj)
+        lighting_transition_count += 1
 
     return {
         "status": "success",
         "result": {
             "name": name,
+            "room_shell_count": room_shell_count,
             "door_triggers": len(spec["door_triggers"]),
+            "door_geometry_count": door_geometry_count,
             "occlusion_zones": len(spec["occlusion_zones"]),
-            "lighting_transitions": len(spec["lighting_transitions"]),
+            "occlusion_geometry_count": occlusion_geometry_count,
+            "lighting_transitions": lighting_transition_count,
         },
     }
 
@@ -2300,20 +4709,21 @@ def handle_generate_multi_floor_dungeon(params: dict) -> dict:
             )
             total_prop_count += 1
 
-    # Connection markers
+    # Connection geometry
     for i, conn in enumerate(dungeon.connections):
-        c_name = f"{name}_conn_{conn['type']}_{i}"
-        c_obj = bpy.data.objects.new(c_name, None)
-        c_obj.empty_display_type = "SINGLE_ARROW"
-        c_obj.empty_display_size = 2.0
-        cx, cy = conn["position"]
-        c_obj.location = (
-            cx * cell_size,
-            cy * cell_size,
-            conn["from_floor"] * wall_height,
-        )
-        c_obj.parent = parent
-        bpy.context.collection.objects.link(c_obj)
+        if not _create_connection_geometry(name, conn, i, parent, cell_size, wall_height):
+            c_name = f"{name}_conn_{conn['type']}_{i}"
+            c_obj = bpy.data.objects.new(c_name, None)
+            c_obj.empty_display_type = "SINGLE_ARROW"
+            c_obj.empty_display_size = 2.0
+            cx, cy = conn["position"]
+            c_obj.location = (
+                cx * cell_size,
+                cy * cell_size,
+                conn["from_floor"] * wall_height,
+            )
+            c_obj.parent = parent
+            bpy.context.collection.objects.link(c_obj)
 
     result = {
         "name": name,
@@ -2335,6 +4745,213 @@ def handle_generate_multi_floor_dungeon(params: dict) -> dict:
         result["preset_props"] = preset.get("props", [])
         result["preset_room_types"] = preset.get("room_types", {})
     return {"status": "success", "result": result}
+
+
+def handle_generate_encounter(params: dict) -> dict:
+    """Generate an encounter space with validation-backed geometry."""
+    name = params.get("name", "Encounter")
+    template_name = params.get("template_name", params.get("template", "boss_chamber"))
+    seed = params.get("seed", 42)
+    enemy_count = params.get("enemy_count")
+    if enemy_count is not None:
+        enemy_count = int(enemy_count)
+
+    layout = compute_encounter_layout(
+        template_name=template_name,
+        seed=seed,
+        enemy_count=enemy_count,
+    )
+    validation = validate_encounter_layout(layout)
+    if not validation.get("valid", False):
+        raise ValueError(
+            f"Encounter layout rejected for '{template_name}': "
+            f"{validation.get('issues', [])}"
+        )
+
+    parent = bpy.data.objects.new(name, None)
+    parent.empty_display_type = "PLAIN_AXES"
+    bpy.context.collection.objects.link(parent)
+
+    floor = _create_floor_plate(
+        f"{name}_floor",
+        layout.get("bounds", {}),
+        layout.get("shape", "square_room"),
+        parent,
+    )
+    floor.location.z = float(layout.get("bounds", {}).get("min", (0.0, 0.0, 0.0))[2])
+
+    cover_count = 0
+    cover_palette = ["pillar", "rock", "barricade", "pillar"]
+    for i, cover in enumerate(layout.get("cover", [])):
+        px, py, pz = cover
+        cover_type = cover_palette[i % len(cover_palette)]
+        obj = _spawn_catalog_object(
+            name,
+            cover_type,
+            i,
+            (float(px), float(py), float(pz)),
+            parent,
+            rotation=0.0,
+            scale=(1.0, 1.0, 1.0),
+        )
+        if obj is None:
+            obj = _create_volume_cube(
+                f"{name}_cover_{i}",
+                center=(float(px), float(py), max(0.25, float(pz) + 0.25)),
+                size=(1.2, 1.2, 1.2),
+                parent=parent,
+            )
+        if obj is not None:
+            cover_count += 1
+
+    hazard_count = 0
+    for i, hazard in enumerate(layout.get("hazards", [])):
+        if _create_hazard_disc(name, hazard, i, parent):
+            hazard_count += 1
+
+    trigger_count = 0
+    for i, trigger in enumerate(layout.get("triggers", [])):
+        size = tuple(trigger.get("size", (3.0, 3.0, 3.0)))
+        center = tuple(trigger.get("center", (0.0, 0.0, 0.0)))
+        trigger_obj = _create_volume_cube(
+            f"{name}_{trigger.get('type', 'trigger')}_{i}",
+            center=center,
+            size=size,
+            parent=parent,
+        )
+        trigger_obj.display_type = "WIRE"
+        trigger_count += 1
+
+    prop_count = 0
+    for i, prop in enumerate(layout.get("props", [])):
+        prop_type = prop.get("type", "pillar")
+        px, py, pz = prop.get("position", (0.0, 0.0, 0.0))
+        size = prop.get("size", (1.0, 1.0, 1.0))
+        rotation = float(prop.get("rotation", 0.0))
+
+        if prop_type == "alcove":
+            alcove = generate_archway(
+                width=max(1.5, float(size[0])),
+                height=max(1.8, float(size[2])),
+                depth=max(0.8, float(size[1])),
+                arch_style="gothic_pointed" if layout.get("shape") != "circular" else "round",
+                has_keystone=True,
+                seed=seed + i * 11,
+            )
+            obj = mesh_from_spec(
+                alcove,
+                name=f"{name}_alcove_{i}",
+                location=(float(px), float(py), float(pz)),
+                rotation=(0.0, 0.0, rotation),
+                parent=parent,
+            )
+            if not isinstance(obj, dict):
+                prop_count += 1
+            continue
+
+        if prop_type == "barricade":
+            for detail_idx, detail_type in enumerate(("crate", "barrel", "crate")):
+                detail = _spawn_catalog_object(
+                    name,
+                    detail_type,
+                    i * 10 + detail_idx,
+                    (
+                        float(px) + math.cos(rotation + detail_idx) * 0.7,
+                        float(py) + math.sin(rotation + detail_idx) * 0.7,
+                        float(pz),
+                    ),
+                    parent,
+                    rotation=rotation,
+                    scale=(0.8, 0.8, 0.8),
+                )
+                if detail is not None:
+                    prop_count += 1
+            continue
+
+        if prop_type == "archer_perch":
+            perch = _create_volume_cube(
+                f"{name}_archer_perch_{i}",
+                center=(float(px), float(py), float(pz) + float(size[2]) * 0.5),
+                size=(max(1.5, float(size[0])), max(1.5, float(size[1])), max(0.8, float(size[2]))),
+                parent=parent,
+            )
+            perch.display_type = "BOUNDS"
+            prop_count += 1
+            continue
+
+        obj = _spawn_catalog_object(
+            name,
+            prop_type,
+            i,
+            (float(px), float(py), float(pz)),
+            parent,
+            rotation=rotation,
+            scale=tuple(size) if len(size) == 3 else (1.0, 1.0, 1.0),
+        )
+        if obj is not None:
+            prop_count += 1
+
+    enemy_count_actual = 0
+    for i, enemy in enumerate(layout.get("enemies", [])):
+        px, py, pz = enemy
+        marker = _create_volume_cube(
+            f"{name}_enemy_spawn_{i}",
+            center=(float(px), float(py), float(pz) + 0.2),
+            size=(0.5, 0.5, 0.5),
+            parent=parent,
+        )
+        marker.display_type = "SPHERE"
+        enemy_count_actual += 1
+
+    entry = layout.get("entry")
+    if entry:
+        ex, ey, ez = entry
+        entry_gate = generate_archway(
+            width=max(2.5, float(layout.get("bounds", {}).get("radius", 4.0)) * 0.15),
+            height=3.0,
+            depth=0.9,
+            arch_style="gothic_pointed" if layout.get("shape") != "circular" else "round",
+            has_keystone=True,
+            seed=seed + 100,
+        )
+        mesh_from_spec(
+            entry_gate,
+            name=f"{name}_entry_gate",
+            location=(float(ex), float(ey), float(ez)),
+            parent=parent,
+        )
+
+    exit_pt = layout.get("exit")
+    if exit_pt:
+        ex, ey, ez = exit_pt
+        exit_gate = generate_archway(
+            width=max(2.5, float(layout.get("bounds", {}).get("radius", 4.0)) * 0.15),
+            height=3.0,
+            depth=0.9,
+            arch_style="gothic_pointed" if layout.get("shape") != "circular" else "round",
+            has_keystone=True,
+            seed=seed + 101,
+        )
+        mesh_from_spec(
+            exit_gate,
+            name=f"{name}_exit_gate",
+            location=(float(ex), float(ey), float(ez)),
+            parent=parent,
+        )
+
+    return {
+        "status": "success",
+        "result": {
+            "name": name,
+            "template": template_name,
+            "validation": validation,
+            "cover_count": cover_count,
+            "hazard_count": hazard_count,
+            "trigger_count": trigger_count,
+            "prop_count": prop_count,
+            "enemy_markers": enemy_count_actual,
+        },
+    }
 
 
 def handle_generate_overrun_variant(params: dict) -> dict:

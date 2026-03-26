@@ -11,8 +11,9 @@ Provides:
 - generate_interior_layout(): furniture placement for room types
 - MODULAR_CATALOG + generate_modular_pieces(): snap-together architecture kit
 - FURNITURE_SCALE_REFERENCE: real-world scale constraints for validation (WORLD-07)
-- 16 room types (8 original + 8 new: blacksmith, guard_barracks, treasury,
-  war_room, alchemy_lab, torture_chamber, crypt, dining_hall) (WORLD-02)
+- expanded room set covering taverns, smithies, storage halls, barracks,
+  guard posts, shrines, treasuries, war rooms, alchemy labs, torture chambers,
+  crypts, and dining halls (WORLD-02)
 - validate_furniture_scale(): dimension validation against reference (WORLD-07)
 - _STORYTELLING_PROPS + add_storytelling_props(): layer-3 narrative clutter (AAA-05)
 - generate_overrun_variant(): narrative debris beyond structural damage (WORLD-09)
@@ -325,6 +326,108 @@ def evaluate_building_grammar(
 # ---------------------------------------------------------------------------
 
 
+def _append_fortress_tower_kit(
+    ops: list[dict],
+    *,
+    cx: float,
+    cy: float,
+    base_z: float,
+    radius: float,
+    height: float,
+    material: str,
+    role: str,
+) -> None:
+    """Append a tower built from stacked masses rather than a single shaft.
+
+    The goal is to keep fortress and castle towers readable as deliberate
+    architecture: a grounded base, a stepped shaft, a stair annex, and a
+    crenellated crown with visible shoulders. This intentionally avoids the
+    "cylinder with blocks" read.
+    """
+    shaft_height = max(2.8, height * 0.78)
+    crown_height = max(0.8, height * 0.12)
+    lower_h = max(0.9, height * 0.22)
+    mid_h = max(1.2, height * 0.30)
+    upper_h = max(0.9, height * 0.18)
+    plinth = radius * 2.35
+    shaft = radius * 1.82
+    stair_w = radius * 0.92
+    stair_d = radius * 0.78
+    stair_h = max(1.6, height * 0.52)
+    buttress_w = radius * 0.58
+    buttress_d = radius * 0.66
+    buttress_h = max(1.0, height * 0.36)
+    crown = radius * 1.96
+
+    ops.extend([
+        {
+            "type": "box",
+            "position": [cx - plinth * 0.5, cy - plinth * 0.5, base_z],
+            "size": [plinth, plinth, max(0.45, height * 0.10)],
+            "material": material,
+            "role": role,
+        },
+        {
+            "type": "box",
+            "position": [cx - shaft * 0.5, cy - shaft * 0.5, base_z + height * 0.08],
+            "size": [shaft, shaft, lower_h],
+            "material": material,
+            "role": role,
+        },
+        {
+            "type": "box",
+            "position": [cx - shaft * 0.46, cy - shaft * 0.46, base_z + height * 0.34],
+            "size": [shaft * 0.92, shaft * 0.92, mid_h],
+            "material": material,
+            "role": role,
+        },
+        {
+            "type": "box",
+            "position": [cx - shaft * 0.38, cy - shaft * 0.38, base_z + height * 0.62],
+            "size": [shaft * 0.76, shaft * 0.76, upper_h],
+            "material": material,
+            "role": role,
+        },
+        {
+            "type": "box",
+            "position": [cx + radius * 0.58, cy - stair_d * 0.30, base_z + height * 0.14],
+            "size": [stair_w, stair_d, stair_h],
+            "material": material,
+            "role": role,
+        },
+        {
+            "type": "box",
+            "position": [cx - radius * 1.12, cy + radius * 0.10, base_z + height * 0.18],
+            "size": [buttress_w, buttress_d, buttress_h],
+            "material": material,
+            "role": role,
+        },
+        {
+            "type": "box",
+            "position": [cx - crown * 0.5, cy - crown * 0.5, base_z + height * 0.76],
+            "size": [crown, crown, crown_height * 0.18],
+            "material": material,
+            "role": role,
+        },
+    ])
+
+    merlon_size = radius * 0.28
+    merlon_z = base_z + height - max(0.35, crown_height * 0.45)
+    for mx, my in (
+        (cx - radius * 0.95, cy - radius * 0.08),
+        (cx + radius * 0.95 - merlon_size, cy - radius * 0.08),
+        (cx - radius * 0.08, cy - radius * 0.95),
+        (cx - radius * 0.08, cy + radius * 0.95 - merlon_size),
+    ):
+        ops.append({
+            "type": "box",
+            "position": [mx, my, merlon_z],
+            "size": [merlon_size, merlon_size, max(0.55, crown_height * 0.50)],
+            "material": material,
+            "role": role,
+        })
+
+
 def generate_castle_spec(
     outer_size: float = 40.0,
     keep_size: float = 12.0,
@@ -336,8 +439,21 @@ def generate_castle_spec(
     ops: list[dict] = []
     wall_height = 8.0
     wall_thickness = 1.5
-    tower_radius = 3.0
-    tower_height = 12.0
+    tower_radius = max(3.4, outer_size * 0.085)
+    tower_height = wall_height + max(2.4, outer_size * 0.055)
+    tower_segments = 8
+    tower_taper = 0.9
+    tower_crown_height = max(0.8, tower_height * 0.10)
+    keep_height = tower_height + max(3.5, keep_size * 0.18)
+
+    plinth_margin = max(0.7, outer_size * 0.02)
+    ops.append({
+        "type": "box",
+        "position": [-plinth_margin, -plinth_margin, 0.0],
+        "size": [outer_size + 2 * plinth_margin, outer_size + 2 * plinth_margin, 0.7],
+        "material": "stone_heavy",
+        "role": "foundation",
+    })
 
     # Curtain walls (4 wall segments)
     # Front wall
@@ -373,7 +489,7 @@ def generate_castle_spec(
         "role": "curtain_wall",
     })
 
-    # Corner towers
+    # Corner towers: octagonal, tapering shafts with crenellated crowns.
     corners = [
         (0.0, 0.0),
         (outer_size, 0.0),
@@ -381,23 +497,35 @@ def generate_castle_spec(
         (outer_size, outer_size),
     ]
     for i, (cx, cy) in enumerate(corners[:tower_count]):
-        ops.append({
-            "type": "cylinder",
-            "position": [cx, cy, 0.0],
-            "radius": tower_radius,
-            "height": tower_height,
-            "segments": 16,
-            "material": "stone_fortified",
-            "role": "tower",
-        })
-        # Battlements on top
-        ops.append({
-            "type": "box",
-            "position": [cx - tower_radius, cy - tower_radius, tower_height],
-            "size": [tower_radius * 2, tower_radius * 2, 1.0],
-            "material": "stone_parapet",
-            "role": "battlement",
-        })
+        _append_fortress_tower_kit(
+            ops,
+            cx=cx,
+            cy=cy,
+            base_z=0.0,
+            radius=tower_radius,
+            height=tower_height,
+            material="stone_fortified",
+            role="tower",
+        )
+
+    # Optional mid-wall towers for larger castles, so long walls do not read flat.
+    extra_towers = max(0, tower_count - 4)
+    if extra_towers > 0:
+        spacing = outer_size / (extra_towers + 1)
+        for ti in range(extra_towers):
+            px = spacing * (ti + 1)
+            side = ti % 2
+            py = -tower_radius * 0.12 if side == 0 else outer_size + tower_radius * 0.12
+            _append_fortress_tower_kit(
+                ops,
+                cx=px,
+                cy=py,
+                base_z=0.0,
+                radius=tower_radius * 0.85,
+                height=tower_height * 0.95,
+                material="stone_fortified",
+                role="tower",
+            )
 
     # Keep (central building)
     keep_x = (outer_size - keep_size) / 2
@@ -416,14 +544,87 @@ def generate_castle_spec(
         op_copy["role"] = "keep"
         ops.append(op_copy)
 
+    keep_annex_depth = max(2.2, keep_size * 0.18)
+    keep_annex_height = max(2.4, keep_height * 0.38)
+    keep_annex_width = max(3.0, keep_size * 0.54)
+    ops.extend([
+        {
+            "type": "box",
+            "position": [keep_x + keep_size * 0.18, keep_y - keep_annex_depth * 0.55, 0.55],
+            "size": [keep_annex_width, keep_annex_depth, keep_annex_height],
+            "material": "stone_fortified",
+            "role": "keep_wing",
+        },
+        {
+            "type": "box",
+            "position": [keep_x + keep_size * 0.10, keep_y + keep_size - keep_annex_depth * 0.45, 0.55],
+            "size": [keep_annex_width * 0.95, keep_annex_depth, keep_annex_height * 0.92],
+            "material": "stone_fortified",
+            "role": "keep_wing",
+        },
+        {
+            "type": "box",
+            "position": [keep_x - keep_annex_depth * 0.45, keep_y + keep_size * 0.22, 0.55],
+            "size": [keep_annex_depth, max(3.0, keep_size * 0.54), keep_annex_height * 0.88],
+            "material": "stone_fortified",
+            "role": "keep_buttress",
+        },
+        {
+            "type": "box",
+            "position": [keep_x + keep_size - keep_annex_depth * 0.58, keep_y + keep_size * 0.22, 0.55],
+            "size": [keep_annex_depth, max(3.0, keep_size * 0.54), keep_annex_height * 0.88],
+            "material": "stone_fortified",
+            "role": "keep_buttress",
+        },
+    ])
+
+    # Crown turret: keep it anchored to the keep roofline instead of floating
+    # above the structure. This should read as a deliberate roof mass, not a
+    # separate tower copied on top of the keep.
+    keep_crown_height = max(5.2, keep_height * 0.44)
+    keep_crown_base_z = 0.45 + keep_height * 0.56
+    ops.append({
+        "type": "tower",
+        "position": [keep_x + keep_size / 2.0, keep_y + keep_size / 2.0, keep_crown_base_z],
+        "radius": keep_size * 0.28,
+        "height": keep_crown_height,
+        "segments": 8,
+        "taper": 0.86,
+        "crown_height": max(0.8, keep_crown_height * 0.12),
+        "profile": "keep",
+        "material": "stone_fortified",
+        "role": "keep_crown",
+    })
+
     # Gatehouse (front opening with portcullis)
     gate_x = (outer_size - 4.0) / 2
     ops.append({
         "type": "box",
-        "position": [gate_x, -1.0, 0.0],
-        "size": [4.0, wall_thickness + 2.0, wall_height + 2.0],
+        "position": [gate_x - 1.0, -1.6, 0.0],
+        "size": [6.0, wall_thickness + 3.2, wall_height + 2.8],
         "material": "stone_fortified",
         "role": "gatehouse",
+    })
+    ops.append({
+        "type": "box",
+        "position": [gate_x - 1.25, -3.0, 0.0],
+        "size": [6.5, 1.8, wall_height * 0.7],
+        "material": "stone_fortified",
+        "role": "gatehouse",
+    })
+    ops.append({
+        "type": "box",
+        "position": [gate_x - 1.45, -0.9, 0.0],
+        "size": [1.2, 1.2, wall_height * 0.9],
+        "material": "stone_fortified",
+        "role": "gatehouse_bastion",
+    })
+    ops.append({
+        "type": "box",
+        "position": [gate_x + 4.25, -0.9, 0.0],
+        "size": [1.2, 1.2, wall_height * 0.9],
+        "material": "stone_fortified",
+        "role": "gatehouse_bastion",
     })
     ops.append({
         "type": "opening",
@@ -447,74 +648,81 @@ def generate_tower_spec(
     floors: int = 3,
     seed: int = 0,
 ) -> BuildingSpec:
-    """Generate a standalone tower spec with cylindrical body and battlements."""
+    """Generate a standalone tower spec with layered fortress massing and battlements."""
     rng = random.Random(seed)
     ops: list[dict] = []
+    tower_height = max(10.0, height)
+    crown_height = max(0.9, tower_height * 0.12)
 
     # Foundation
     ops.append({
-        "type": "cylinder",
-        "position": [0.0, 0.0, 0.0],
-        "radius": radius + 0.2,
-        "height": 0.4,
-        "segments": 16,
+        "type": "box",
+        "position": [-(radius + 0.35), -(radius + 0.35), 0.0],
+        "size": [(radius + 0.35) * 2.0, (radius + 0.35) * 2.0, 0.45],
         "material": "stone_dark",
         "role": "foundation",
     })
 
-    # Main cylindrical body
+    # Main tower body. The taper and crown keep it from reading as a simple slab.
     ops.append({
-        "type": "cylinder",
-        "position": [0.0, 0.0, 0.4],
+        "type": "tower",
+        "position": [0.0, 0.0, 0.45],
         "radius": radius,
-        "height": height,
-        "segments": 16,
+        "height": tower_height,
+        "segments": 8,
+        "taper": 0.88,
+        "crown_height": crown_height,
+        "profile": "fortress",
         "material": "stone_fortified",
         "role": "tower_body",
     })
 
     # Floor slabs (internal)
-    floor_height = height / floors
+    floor_height = tower_height / floors
     for i in range(1, floors):
         ops.append({
-            "type": "cylinder",
-            "position": [0.0, 0.0, 0.4 + i * floor_height],
-            "radius": radius - 0.1,
-            "height": 0.2,
-            "segments": 16,
+            "type": "box",
+            "position": [-(radius - 0.1), -(radius - 0.1), 0.45 + i * floor_height - 0.1],
+            "size": [(radius - 0.1) * 2.0, (radius - 0.1) * 2.0, 0.2],
             "material": "stone_slab",
             "role": "floor_slab",
         })
 
-    # Spiral staircase placeholder (thin cylinder offset from center)
-    ops.append({
-        "type": "cylinder",
-        "position": [radius * 0.5, 0.0, 0.4],
-        "radius": 0.5,
-        "height": height,
-        "segments": 8,
-        "material": "stone_steps",
-        "role": "stairs",
-    })
-
-    # Battlement ring at top
-    top_z = 0.4 + height
-    n_merlons = 8
-    for i in range(n_merlons):
-        angle = (2 * math.pi * i) / n_merlons
-        mx = math.cos(angle) * (radius - 0.3)
-        my = math.sin(angle) * (radius - 0.3)
-        ops.append({
+    # Attached stair and shoulder masses break the tower's cylindrical read.
+    ops.extend([
+        {
             "type": "box",
-            "position": [mx - 0.3, my - 0.3, top_z],
-            "size": [0.6, 0.6, 0.8],
-            "material": "stone_parapet",
-            "role": "battlement",
-        })
+            "position": [radius * 0.58, -radius * 0.46, 0.45],
+            "size": [radius * 0.58, radius * 0.42, tower_height * 0.55],
+            "material": "stone_steps",
+            "role": "stairs",
+        },
+        {
+            "type": "box",
+            "position": [-radius * 0.30, -radius * 0.34, 0.45],
+            "size": [radius * 0.44, radius * 0.30, tower_height * 0.28],
+            "material": "stone_fortified",
+            "role": "tower_entry",
+        },
+        {
+            "type": "box",
+            "position": [-radius * 1.08, -radius * 0.34, 0.45],
+            "size": [radius * 0.44, radius * 0.46, tower_height * 0.34],
+            "material": "stone_fortified",
+            "role": "tower_buttress",
+        },
+        {
+            "type": "box",
+            "position": [radius * 0.72, radius * 0.42, 0.45],
+            "size": [radius * 0.38, radius * 0.42, tower_height * 0.38],
+            "material": "stone_fortified",
+            "role": "tower_buttress",
+        },
+    ])
 
     # Windows (arrow slits on each floor)
     for floor_idx in range(floors):
-        floor_z = 0.4 + floor_idx * floor_height + floor_height * 0.5
+        floor_z = 0.45 + floor_idx * floor_height + floor_height * 0.5
         n_slits = rng.randint(2, 4)
         for s in range(n_slits):
             angle = rng.uniform(0, 2 * math.pi)
@@ -645,8 +853,11 @@ def generate_fortress_spec(
     rng = random.Random(seed)
     ops: list[dict] = []
     wall_height = 10.0
-    tower_radius = 4.0
-    tower_height = 14.0
+    tower_radius = max(4.2, size * 0.08)
+    tower_height = wall_height + max(2.8, size * 0.055)
+    tower_segments = 8
+    tower_taper = 0.9
+    tower_crown_height = max(0.9, tower_height * 0.10)
     keep_size = 15.0
 
     # Outer curtain walls
@@ -691,15 +902,16 @@ def generate_fortress_spec(
         (size, size),
     ]
     for cx, cy in corners:
-        ops.append({
-            "type": "cylinder",
-            "position": [cx, cy, 0.0],
-            "radius": tower_radius,
-            "height": tower_height,
-            "segments": 16,
-            "material": "stone_fortified",
-            "role": "tower",
-        })
+        _append_fortress_tower_kit(
+            ops,
+            cx=cx,
+            cy=cy,
+            base_z=0.0,
+            radius=tower_radius,
+            height=tower_height,
+            material="stone_fortified",
+            role="tower",
+        )
 
     # Central keep
     keep_x = (size - keep_size) / 2
@@ -716,6 +928,21 @@ def generate_fortress_spec(
             op_copy["position"] = pos
         op_copy["role"] = "keep"
         ops.append(op_copy)
+
+    keep_crown_height = max(5.0, tower_height * 0.42)
+    keep_crown_base_z = 0.45 + tower_height * 0.58
+    ops.append({
+        "type": "tower",
+        "position": [keep_x + keep_size / 2.0, keep_y + keep_size / 2.0, keep_crown_base_z],
+        "radius": keep_size * 0.27,
+        "height": keep_crown_height,
+        "segments": 8,
+        "taper": 0.86,
+        "crown_height": max(0.8, keep_crown_height * 0.12),
+        "profile": "keep",
+        "material": "stone_fortified",
+        "role": "keep_crown",
+    })
 
     # Courtyard area (marker -- no solid geometry, but defines the open space)
     courtyard_inset = wall_thickness + 3.0
@@ -896,6 +1123,41 @@ _ROOM_CONFIGS: dict[str, list[tuple[str, str, tuple[float, float], float]]] = {
         ("barrel", "corner", (0.6, 0.6), 0.8),
         ("shelf", "wall", (1.5, 0.4), 1.8),
     ],
+    "smithy": [
+        ("anvil", "center", (0.7, 0.5), 0.75),
+        ("forge", "wall", (1.5, 0.8), 1.2),
+        ("workbench", "wall", (1.5, 0.6), 0.78),
+        ("weapon_rack", "wall", (1.8, 0.4), 1.8),
+        ("barrel", "corner", (0.6, 0.6), 0.8),
+        ("crate", "corner", (0.6, 0.6), 0.6),
+    ],
+    "storage": [
+        ("shelf", "wall", (2.0, 0.45), 2.1),
+        ("shelf", "wall", (2.0, 0.45), 2.1),
+        ("crate", "corner", (0.8, 0.8), 0.65),
+        ("crate", "corner", (0.8, 0.8), 0.65),
+        ("crate", "corner", (0.8, 0.8), 0.65),
+        ("barrel", "corner", (0.6, 0.6), 0.8),
+        ("barrel", "corner", (0.6, 0.6), 0.8),
+    ],
+    "barracks": [
+        ("bed", "wall", (2.0, 1.4), 0.6),
+        ("bed", "wall", (2.0, 1.4), 0.6),
+        ("bed", "wall", (2.0, 1.4), 0.6),
+        ("weapon_rack", "wall", (1.8, 0.4), 1.8),
+        ("table", "center", (1.3, 1.0), 0.75),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("crate", "corner", (0.8, 0.8), 0.6),
+    ],
+    "guard_post": [
+        ("table", "center", (1.5, 0.8), 0.75),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("weapon_rack", "wall", (1.8, 0.4), 1.8),
+        ("banner", "wall", (0.8, 0.1), 2.2),
+        ("brazier", "corner", (0.6, 0.6), 1.0),
+        ("crate", "corner", (0.8, 0.8), 0.6),
+    ],
     "throne_room": [
         ("throne", "wall", (1.5, 1.2), 2.0),
         ("carpet", "center", (3.0, 8.0), 0.02),
@@ -937,6 +1199,26 @@ _ROOM_CONFIGS: dict[str, list[tuple[str, str, tuple[float, float], float]]] = {
         ("chair", "center", (0.5, 0.5), 0.9),
         ("candelabra", "center", (0.3, 0.3), 1.2),
     ],
+    "study": [
+        ("desk", "wall", (1.6, 0.7), 0.75),
+        ("desk", "wall", (1.6, 0.7), 0.75),
+        ("bookshelf", "wall", (2.0, 0.5), 2.4),
+        ("bookshelf", "wall", (2.0, 0.5), 2.4),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("map_display", "wall", (1.4, 0.4), 0.08),
+        ("candelabra", "center", (0.3, 0.3), 1.2),
+    ],
+    "great_hall": [
+        ("long_table", "center", (2.0, 4.5), 0.75),
+        ("long_table", "center", (2.0, 3.5), 0.75),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("chandelier", "center", (0.8, 0.8), 0.35),
+        ("fireplace", "wall", (2.0, 1.0), 2.0),
+        ("banner", "wall", (1.0, 0.15), 2.8),
+        ("banner", "wall", (1.0, 0.15), 2.8),
+        ("candelabra", "center", (0.3, 0.3), 1.4),
+    ],
     "armory": [
         ("weapon_rack", "wall", (2.0, 0.5), 2.0),
         ("weapon_rack", "wall", (2.0, 0.5), 2.0),
@@ -954,6 +1236,14 @@ _ROOM_CONFIGS: dict[str, list[tuple[str, str, tuple[float, float], float]]] = {
         ("candelabra", "center", (0.3, 0.3), 1.5),
         ("banner", "wall", (0.8, 0.1), 2.5),
     ],
+    "shrine_room": [
+        ("altar", "wall", (1.5, 0.8), 1.2),
+        ("pew", "center", (2.0, 0.6), 0.8),
+        ("pew", "center", (2.0, 0.6), 0.8),
+        ("candelabra", "center", (0.3, 0.3), 1.5),
+        ("banner", "wall", (0.8, 0.1), 2.5),
+        ("rug", "center", (2.0, 1.2), 0.02),
+    ],
     # ---- 8 new room types (WORLD-02) ----
     "blacksmith": [
         ("anvil", "center", (0.7, 0.5), 0.75),
@@ -964,13 +1254,14 @@ _ROOM_CONFIGS: dict[str, list[tuple[str, str, tuple[float, float], float]]] = {
         ("bellows", "wall", (0.6, 0.5), 1.0),
     ],
     "guard_barracks": [
-        ("bunk_bed", "wall", (1.0, 1.9), 1.8),
-        ("bunk_bed", "wall", (1.0, 1.9), 1.8),
-        ("bunk_bed", "wall", (1.0, 1.9), 1.8),
+        ("bed", "wall", (2.0, 1.4), 0.6),
+        ("bed", "wall", (2.0, 1.4), 0.6),
+        ("bed", "wall", (2.0, 1.4), 0.6),
+        ("bunk_bed", "wall", (2.0, 1.2), 0.7),
         ("weapon_rack", "wall", (1.8, 0.4), 1.8),
-        ("armor_stand", "corner", (0.6, 0.6), 1.8),
         ("table", "center", (1.2, 1.2), 0.75),
-        ("footlocker", "wall", (0.8, 0.5), 0.45),
+        ("chair", "center", (0.5, 0.5), 0.9),
+        ("crate", "corner", (0.8, 0.8), 0.6),
     ],
     "treasury": [
         ("coin_pile", "center", (0.8, 0.8), 0.4),
