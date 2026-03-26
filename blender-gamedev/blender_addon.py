@@ -464,6 +464,8 @@ def export_to_unity(
             bake_anim_use_all_actions=include_animations,
             path_mode="COPY",
             embed_textures=True,
+            use_tspace=True,
+            use_armature_deform_only=True,
         )
 
         file_size = os.path.getsize(output_path) if os.path.exists(output_path) else 0

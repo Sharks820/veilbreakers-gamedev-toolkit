@@ -626,6 +626,19 @@ BONE_LOD_TIERS: dict[str, list[str]] = {
         "thigh_twist", "shin_twist",
         "upper_arm_twist_025", "forearm_twist_025",
         "thigh_twist_025", "shin_twist_025",
+        # Wing twist bones
+        "wing_upper_twist", "wing_fore_twist",
+        # Multi-armed lower arm twist bones
+        "upper_arm_lower_twist", "forearm_lower_twist",
+        # Insect leg twist bones
+        "leg_front_twist", "leg_front_lower_twist",
+        "leg_mid_twist", "leg_mid_lower_twist",
+        "leg_rear_twist", "leg_rear_lower_twist",
+        # Arachnid leg twist bones
+        "leg_1_twist", "leg_1_lower_twist",
+        "leg_2_twist", "leg_2_lower_twist",
+        "leg_3_twist", "leg_3_lower_twist",
+        "leg_4_twist", "leg_4_lower_twist",
     ],
     "LOD3_minimal": [
         # Everything from LOD1 + LOD2 plus toes and shoulders
@@ -638,6 +651,15 @@ BONE_LOD_TIERS: dict[str, list[str]] = {
         "thigh_twist", "shin_twist",
         "upper_arm_twist_025", "forearm_twist_025",
         "thigh_twist_025", "shin_twist_025",
+        "wing_upper_twist", "wing_fore_twist",
+        "upper_arm_lower_twist", "forearm_lower_twist",
+        "leg_front_twist", "leg_front_lower_twist",
+        "leg_mid_twist", "leg_mid_lower_twist",
+        "leg_rear_twist", "leg_rear_lower_twist",
+        "leg_1_twist", "leg_1_lower_twist",
+        "leg_2_twist", "leg_2_lower_twist",
+        "leg_3_twist", "leg_3_lower_twist",
+        "leg_4_twist", "leg_4_lower_twist",
         "toe", "toe.001", "shoulder",
     ],
 }

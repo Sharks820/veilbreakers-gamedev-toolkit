@@ -492,6 +492,14 @@ async def _handle_scene_create_additive_layer(
     avatar_mask_path: str,
 ) -> str:
     """Create additive animation layer (ANIM3-04)."""
+    # Inject handler-level defaults into each clip dict so the template
+    # picks them up (it reads "default_weight" and "avatar_mask" per layer).
+    if additive_clips:
+        for clip in additive_clips:
+            if "default_weight" not in clip:
+                clip["default_weight"] = default_weight
+            if "avatar_mask" not in clip and avatar_mask_path:
+                clip["avatar_mask"] = avatar_mask_path
     script = generate_additive_layer_script(
         controller_name=name,
         base_layer_name=layer_name,

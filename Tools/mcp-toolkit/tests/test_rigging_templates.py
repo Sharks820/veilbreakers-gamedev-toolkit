@@ -391,7 +391,7 @@ class TestLimbLibrary:
         assert isinstance(bones, dict)
         assert "upper_arm.L" in bones
         assert "upper_arm.R" in bones
-        assert len(bones) == 6  # 3 bones per side
+        assert len(bones) == 10  # 3 bones per side + 4 twist bones
         for bone_def in bones.values():
             assert REQUIRED_BONE_KEYS.issubset(bone_def.keys())
 
@@ -402,7 +402,7 @@ class TestLimbLibrary:
         assert isinstance(bones, dict)
         assert "thigh.L" in bones
         assert "thigh.R" in bones
-        assert len(bones) == 6
+        assert len(bones) == 10  # 3 bones per side + 4 twist bones
         for bone_def in bones.values():
             assert REQUIRED_BONE_KEYS.issubset(bone_def.keys())
 
@@ -413,7 +413,7 @@ class TestLimbLibrary:
         assert isinstance(bones, dict)
         assert "wing_upper.L" in bones
         assert "wing_upper.R" in bones
-        assert len(bones) == 6
+        assert len(bones) == 10  # 3 bones per side + 4 twist bones
         for bone_def in bones.values():
             assert REQUIRED_BONE_KEYS.issubset(bone_def.keys())
 
@@ -464,7 +464,7 @@ class TestLimbLibrary:
         from blender_addon.handlers.rigging_templates import LIMB_LIBRARY
         bones = LIMB_LIBRARY["insect_leg_pair"]()
         assert isinstance(bones, dict)
-        assert len(bones) == 6  # 3 bones per side
+        assert len(bones) == 10  # 3 bones per side + 4 twist bones
         for bone_def in bones.values():
             assert REQUIRED_BONE_KEYS.issubset(bone_def.keys())
 
@@ -473,7 +473,7 @@ class TestLimbLibrary:
         from blender_addon.handlers.rigging_templates import LIMB_LIBRARY
         bones = LIMB_LIBRARY["paw_leg_pair"](side="front")
         assert isinstance(bones, dict)
-        assert len(bones) == 6
+        assert len(bones) == 10  # 3 bones per side + 4 twist bones
         # Front paws use upper_arm naming
         assert "upper_arm.L" in bones
         assert "upper_arm.R" in bones
@@ -483,7 +483,7 @@ class TestLimbLibrary:
         from blender_addon.handlers.rigging_templates import LIMB_LIBRARY
         bones = LIMB_LIBRARY["paw_leg_pair"](side="rear")
         assert isinstance(bones, dict)
-        assert len(bones) == 6
+        assert len(bones) == 10  # 3 bones per side + 4 twist bones
         # Rear paws use thigh naming
         assert "thigh.L" in bones
         assert "thigh.R" in bones

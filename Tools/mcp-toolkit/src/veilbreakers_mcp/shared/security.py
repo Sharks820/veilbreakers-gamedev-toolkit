@@ -32,6 +32,7 @@ BLOCKED_FUNCTIONS = frozenset({
     "__import__",
     "breakpoint",
     "globals", "locals", "vars",
+    "type",                         # S1: class factory sandbox escape
 })
 
 # Block all dunder attribute access except a safe allowlist.
@@ -44,7 +45,7 @@ _ALLOWED_DUNDERS = frozenset({
     "__mod__", "__pow__", "__neg__", "__pos__", "__abs__",
     "__int__", "__float__", "__bool__", "__hash__",
     "__getitem__", "__setitem__", "__delitem__",
-    "__init__", "__new__", "__call__",
+    "__init__", "__new__",             # S7: __call__ removed (call-chaining exploit)
     "__doc__",
 })
 
@@ -71,6 +72,7 @@ BLOCKED_NAMES = frozenset({
 })
 
 MAX_CODE_LENGTH = 50_000
+_MAX_RANGE_LITERAL = 10_000_000  # S8: DoS protection for range() with huge literals
 
 
 class SecurityValidator(ast.NodeVisitor):
@@ -130,6 +132,15 @@ class SecurityValidator(ast.NodeVisitor):
             self.violations.append(
                 f"Blocked bpy operation: '.{node.func.attr}()' (security restriction)"
             )
+        # S8: Block range() with excessively large literal arguments (DoS protection)
+        if isinstance(node.func, ast.Name) and node.func.id == "range":
+            for arg in node.args:
+                big = self._is_large_literal(arg)
+                if big is not None:
+                    self.violations.append(
+                        f"Blocked: range() argument {big} exceeds "
+                        f"limit of {_MAX_RANGE_LITERAL:_} (DoS protection)"
+                    )
         self.generic_visit(node)
 
     def visit_Attribute(self, node):
@@ -166,6 +177,30 @@ class SecurityValidator(ast.NodeVisitor):
     def visit_ClassDef(self, node):
         self._check_decorators(node)
         self.generic_visit(node)
+
+    @staticmethod
+    def _is_large_literal(node) -> int | None:
+        """Return the numeric value if *node* is a literal integer > _MAX_RANGE_LITERAL.
+
+        Handles plain integers (ast.Constant) and power expressions like
+        ``10**9`` (ast.BinOp with Pow).  Returns None when the value is
+        within bounds or the node is not a recognisable literal.
+        """
+        if isinstance(node, ast.Constant) and isinstance(node.value, int):
+            if abs(node.value) > _MAX_RANGE_LITERAL:
+                return node.value
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Pow):
+            base = node.left
+            exp = node.right
+            if (isinstance(base, ast.Constant) and isinstance(base.value, int)
+                    and isinstance(exp, ast.Constant) and isinstance(exp.value, int)):
+                try:
+                    result = base.value ** exp.value
+                except (OverflowError, ValueError):
+                    return 0  # Treat overflow as "too large"
+                if abs(result) > _MAX_RANGE_LITERAL:
+                    return result
+        return None
 
     def _check_decorators(self, node):
         for decorator in node.decorator_list:

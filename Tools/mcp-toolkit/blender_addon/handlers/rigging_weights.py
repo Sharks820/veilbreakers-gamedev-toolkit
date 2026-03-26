@@ -8,12 +8,17 @@ Provides five command handlers:
   - handle_fix_weights: Normalize, clean zeros, smooth, and mirror weights (RIG-10)
   - handle_enforce_weight_limit: Clamp per-vertex bone influences to a maximum (P2-A6)
 
+Blender-dependent utility functions:
+  - limit_vertex_influences: Clamp per-vertex bone influences directly on a mesh object
+  - check_influence_limits: Report vertices exceeding the influence limit (read-only)
+
 Pure-logic functions:
   - _validate_skinning_mode: Validate skinning mode selection (LBS/DQS/Hybrid)
   - _compute_rig_grade: Compute rig quality grade A-F from numeric thresholds
   - _validate_rig_report: Build rig validation report from mesh/armature data
   - _validate_weight_fix_params: Validate weight fix operation type and parameters
   - _enforce_weight_limit_pure: Clamp per-vertex bone influences (pure logic)
+  - _check_influence_limits_pure: Check influence limit violations (pure logic, read-only)
   - _compute_skinning_quality: Compute skinning quality metrics for weight paint analysis
   - _enhanced_rig_validation: Enhanced rig validation with additional checks
 """
@@ -314,6 +319,49 @@ def _enforce_weight_limit_pure(
         "total_vertices": len(vertex_weights),
         "max_influences": max_influences,
         "vertex_weights": result_weights,
+    }
+
+
+def _check_influence_limits_pure(
+    vertex_weights: list[list[tuple[str, float]]],
+    max_influences: int = 4,
+) -> dict:
+    """Check how many vertices exceed the bone influence limit (pure logic).
+
+    Reports violations without modifying any data. Useful for validation
+    passes and pre-export checks.
+
+    Args:
+        vertex_weights: Per-vertex list of (bone_name, weight) tuples.
+        max_influences: Maximum allowed bone influences per vertex (default 4).
+
+    Returns:
+        Dict with exceeding_count, total_vertices, max_influences,
+        worst_vertex_index, worst_vertex_influences, and violations list.
+    """
+    violations: list[dict] = []
+    worst_index = -1
+    worst_count = 0
+
+    for vi, vw in enumerate(vertex_weights):
+        count = len(vw)
+        if count > max_influences:
+            violations.append({
+                "vertex_index": vi,
+                "influence_count": count,
+                "groups": [(name, round(w, 6)) for name, w in vw],
+            })
+            if count > worst_count:
+                worst_count = count
+                worst_index = vi
+
+    return {
+        "exceeding_count": len(violations),
+        "total_vertices": len(vertex_weights),
+        "max_influences": max_influences,
+        "worst_vertex_index": worst_index,
+        "worst_vertex_influences": worst_count,
+        "violations": violations,
     }
 
 
@@ -685,8 +733,12 @@ def handle_fix_weights(params: dict) -> dict:
         factor: Optional smooth factor (0.0-1.0, default 0.5).
         repeat: Optional smooth repeat count (1-10, default 1).
         threshold: Optional clean_zeros threshold (0.0-0.1, default 0.01).
+        enforce_limit: If True, clamp to 4 influences after the fix operation
+            (default True for "normalize" and "clean_zeros", False otherwise).
+        max_influences: Max influences when enforce_limit is active (default 4).
 
-    Returns dict with operation, mesh, status.
+    Returns dict with operation, mesh, status, and optionally
+    influence_limit_result if enforcement was applied.
     """
     mesh_name = params.get("mesh_name")
     operation = params.get("operation")
@@ -740,10 +792,121 @@ def handle_fix_weights(params: dict) -> dict:
                 use_topology=False,
             )
 
-    return {
+    # Optionally enforce influence limit after the fix operation.
+    # Defaults to True for normalize and clean_zeros (cleanup-oriented ops).
+    default_enforce = operation in ("normalize", "clean_zeros")
+    enforce = params.get("enforce_limit", default_enforce)
+    influence_result = None
+
+    if enforce:
+        max_inf = int(params.get("max_influences", 4))
+        influence_result = limit_vertex_influences(mesh_obj, max_inf)
+
+    result = {
         "operation": operation,
         "mesh": mesh_name,
         "status": "success",
+    }
+    if influence_result is not None:
+        result["influence_limit_result"] = influence_result
+
+    return result
+
+
+def check_influence_limits(obj, max_influences: int = 4) -> dict:
+    """Report how many vertices exceed the bone influence limit without modifying.
+
+    Scans all vertices on *obj* and returns a diagnostic report. No weights
+    are changed. Use this for pre-export validation or quality checks.
+
+    Args:
+        obj: A Blender mesh object (bpy.types.Object with type == 'MESH').
+        max_influences: Maximum bone influences per vertex (default 4).
+
+    Returns:
+        Dict with exceeding_count, total_vertices, max_influences,
+        worst_vertex_index, worst_vertex_influences, and violations list.
+
+    Raises:
+        ValueError: If *obj* is not a mesh or has no vertex groups.
+    """
+    if obj is None or obj.type != "MESH":
+        raise ValueError(f"Expected a MESH object, got: {getattr(obj, 'type', None)}")
+    if not obj.vertex_groups:
+        raise ValueError(f"Mesh '{obj.name}' has no vertex groups")
+
+    vertex_weights: list[list[tuple[str, float]]] = []
+    for v in obj.data.vertices:
+        vw: list[tuple[str, float]] = []
+        for g in v.groups:
+            if g.weight > 0.0001:
+                vg_name = obj.vertex_groups[g.group].name
+                vw.append((vg_name, g.weight))
+        vertex_weights.append(vw)
+
+    result = _check_influence_limits_pure(vertex_weights, max_influences)
+    result["mesh"] = obj.name
+    return result
+
+
+def limit_vertex_influences(obj, max_influences: int = 4) -> dict:
+    """Clamp per-vertex bone influences to *max_influences* on a Blender mesh.
+
+    For each vertex that exceeds the limit, keeps the top N weights (sorted
+    by value descending), removes the rest, and renormalizes so the kept
+    weights sum to 1.0. This is essential for GPU skinning compatibility --
+    Unity, Unreal, and most game engines only support 4 bone influences per
+    vertex.
+
+    Args:
+        obj: A Blender mesh object (bpy.types.Object with type == 'MESH').
+        max_influences: Maximum bone influences to keep (default 4).
+
+    Returns:
+        Dict with clamped_vertices, total_vertices, max_influences, mesh.
+
+    Raises:
+        ValueError: If *obj* is not a mesh or has no vertex groups.
+    """
+    if obj is None or obj.type != "MESH":
+        raise ValueError(f"Expected a MESH object, got: {getattr(obj, 'type', None)}")
+    if not obj.vertex_groups:
+        raise ValueError(f"Mesh '{obj.name}' has no vertex groups")
+
+    mesh_data = obj.data
+    clamped = 0
+
+    for v in mesh_data.vertices:
+        # Collect non-trivial weights: (group_index, weight)
+        groups = [(g.group, g.weight) for g in v.groups if g.weight > 0.0001]
+
+        if len(groups) <= max_influences:
+            continue
+
+        # Sort by weight descending, split into keep / remove
+        groups.sort(key=lambda x: x[1], reverse=True)
+        keep = groups[:max_influences]
+        remove = groups[max_influences:]
+
+        # Remove excess influences
+        for group_idx, _ in remove:
+            obj.vertex_groups[group_idx].remove([v.index])
+
+        # Renormalize kept weights to sum to 1.0
+        total = sum(w for _, w in keep)
+        if total > 0:
+            for group_idx, w in keep:
+                obj.vertex_groups[group_idx].add(
+                    [v.index], w / total, "REPLACE"
+                )
+
+        clamped += 1
+
+    return {
+        "clamped_vertices": clamped,
+        "total_vertices": len(mesh_data.vertices),
+        "max_influences": max_influences,
+        "mesh": obj.name,
     }
 
 
