@@ -1,0 +1,81 @@
+{
+  "must_install": [
+    {
+      "name": "Geometry Nodes",
+      "source": "built-in",
+      "role": "core editable world/architecture brain"
+    },
+    {
+      "name": "Terrain Mixer",
+      "source": "https://extensions.blender.org/add-ons/terrainmixer/",
+      "role": "terrain/cliff authoring"
+    },
+    {
+      "name": "A.N.T. Landscape",
+      "source": "https://extensions.blender.org/add-ons/antlandscape/",
+      "role": "procedural landscape blockouts"
+    },
+    {
+      "name": "SRTM Terrain Importer",
+      "source": "https://extensions.blender.org/add-ons/srtm-terrain-importer/",
+      "role": "real-world heightmap import"
+    },
+    {
+      "name": "rmKit",
+      "source": "https://extensions.blender.org/add-ons/rmkit/",
+      "role": "hard-surface architecture cleanup"
+    },
+    {
+      "name": "rmKitUV",
+      "source": "https://extensions.blender.org/add-ons/rmkit-uv/",
+      "role": "UV editing"
+    },
+    {
+      "name": "Ucupaint",
+      "source": "https://extensions.blender.org/add-ons/ucupaint/",
+      "role": "layered texture painting and baking"
+    },
+    {
+      "name": "LoopTools",
+      "source": "https://extensions.blender.org/add-ons/looptools/",
+      "role": "mesh cleanup"
+    },
+    {
+      "name": "EdgeFlow",
+      "source": "https://extensions.blender.org/",
+      "role": "edge flow cleanup"
+    },
+    {
+      "name": "Bool Tool",
+      "source": "https://extensions.blender.org/add-ons/bool-tool/",
+      "role": "architectural boolean work"
+    },
+    {
+      "name": "Modifier List",
+      "source": "https://extensions.blender.org/add-ons/modifier-list-fork/",
+      "role": "modifier stack management"
+    },
+    {
+      "name": "BlenderKit",
+      "source": "https://www.blenderkit.com/get-blender-add-ons/",
+      "role": "asset/material library"
+    },
+    {
+      "name": "MeshGen",
+      "source": "https://github.com/huggingface/meshgen",
+      "role": "AI control layer in Blender"
+    }
+  ],
+  "local_ai_generation": [
+    {
+      "name": "Stable Fast 3D",
+      "source": "https://github.com/Stability-AI/stable-fast-3d",
+      "role": "default local image-to-3D generator for 8GB GPUs"
+    },
+    {
+      "name": "SPAR3D",
+      "source": "https://github.com/Stability-AI/stable-point-aware-3d",
+      "role": "higher-quality fallback local generator"
+    }
+  ]
+}
