@@ -1427,7 +1427,7 @@ def generate_currency_system_script(
     """Generate C# runtime MonoBehaviour for a multi-currency system.
 
     Produces a singleton-pattern currency manager with earn/spend/query
-    methods and EventBus.CurrencyChanged integration.
+    methods and EventBus.CurrencyChanged(int) integration.
 
     Args:
         currency_types: List of currency type names (default: Gold, Souls, Marks).
@@ -1507,7 +1507,7 @@ def generate_currency_system_script(
     lines.append("            _currencies[currencyType] += amount;")
     lines.append("")
     lines.append("            _transactionHistory.Add($\"+{amount} {currencyType}\");")
-    lines.append("            EventBus.CurrencyChanged(currencyType, _currencies[currencyType]);")
+    lines.append("            EventBus.CurrencyChanged(_currencies[currencyType]);")
     lines.append("        }")
     lines.append("")
     lines.append("        /// <summary>")
@@ -1521,7 +1521,7 @@ def generate_currency_system_script(
     lines.append("            _currencies[currencyType] -= amount;")
     lines.append("")
     lines.append("            _transactionHistory.Add($\"-{amount} {currencyType}\");")
-    lines.append("            EventBus.CurrencyChanged(currencyType, _currencies[currencyType]);")
+    lines.append("            EventBus.CurrencyChanged(_currencies[currencyType]);")
     lines.append("            return true;")
     lines.append("        }")
     lines.append("")
