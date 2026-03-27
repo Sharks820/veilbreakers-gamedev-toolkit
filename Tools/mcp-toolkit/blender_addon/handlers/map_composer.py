@@ -34,6 +34,17 @@ VB_BIOMES = [
     "sacred_shrine",
     "battlefield",
     "cemetery",
+    "desert_wastes",
+    "jungle_overgrowth",
+    "mushroom_forest",
+    "crystal_cavern",
+    "coastal_cliffs",
+    "rolling_plains",
+    "ancient_deep_forest",
+    "underwater_ruins",
+    "floating_islands",
+    "void_wasteland",
+    "volcanic_caldera",
 ]
 
 VEIL_PRESSURE_BANDS: dict[str, tuple[float, float]] = {
@@ -110,6 +121,105 @@ POI_PLACEMENT_RULES: dict[str, dict[str, Any]] = {
         "near_water": False,
         "elevation_range": (0.5, 0.8),
         "preferred_pressure_range": (0.18, 0.72),
+    },
+    "desert_outpost": {
+        "preferred_biomes": ["desert_wastes"],
+        "min_slope": 0,
+        "max_slope": 15,
+        "min_distance_from_others": 90.0,
+        "near_water": False,
+        "elevation_range": (0.1, 0.4),
+        "preferred_pressure_range": (0.1, 0.6),
+    },
+    "jungle_shrine": {
+        "preferred_biomes": ["jungle_overgrowth"],
+        "min_slope": 0,
+        "max_slope": 25,
+        "min_distance_from_others": 40.0,
+        "near_water": True,
+        "elevation_range": (0.1, 0.5),
+        "preferred_pressure_range": (0.2, 0.7),
+    },
+    "mushroom_grove": {
+        "preferred_biomes": ["mushroom_forest"],
+        "min_slope": 0,
+        "max_slope": 20,
+        "min_distance_from_others": 35.0,
+        "near_water": False,
+        "elevation_range": (0.2, 0.6),
+        "preferred_pressure_range": (0.3, 0.8),
+    },
+    "crystal_node": {
+        "preferred_biomes": ["crystal_cavern"],
+        "min_slope": 5,
+        "max_slope": 40,
+        "min_distance_from_others": 45.0,
+        "near_water": False,
+        "elevation_range": (0.3, 0.7),
+        "preferred_pressure_range": (0.5, 1.0),
+    },
+    "coastal_watchtower": {
+        "preferred_biomes": ["coastal_cliffs"],
+        "min_slope": 5,
+        "max_slope": 35,
+        "min_distance_from_others": 70.0,
+        "near_water": True,
+        "elevation_range": (0.3, 0.7),
+        "preferred_pressure_range": (0.1, 0.5),
+    },
+    "plains_camp": {
+        "preferred_biomes": ["rolling_plains"],
+        "min_slope": 0,
+        "max_slope": 10,
+        "min_distance_from_others": 60.0,
+        "near_water": False,
+        "elevation_range": (0.1, 0.3),
+        "preferred_pressure_range": (0.0, 0.4),
+    },
+    "ancient_tree_hollow": {
+        "preferred_biomes": ["ancient_deep_forest"],
+        "min_slope": 0,
+        "max_slope": 20,
+        "min_distance_from_others": 50.0,
+        "near_water": False,
+        "elevation_range": (0.2, 0.5),
+        "preferred_pressure_range": (0.15, 0.65),
+    },
+    "sunken_altar": {
+        "preferred_biomes": ["underwater_ruins"],
+        "min_slope": 0,
+        "max_slope": 15,
+        "min_distance_from_others": 55.0,
+        "near_water": True,
+        "elevation_range": (0.0, 0.2),
+        "preferred_pressure_range": (0.4, 0.9),
+    },
+    "sky_fragment": {
+        "preferred_biomes": ["floating_islands"],
+        "min_slope": 0,
+        "max_slope": 50,
+        "min_distance_from_others": 80.0,
+        "near_water": False,
+        "elevation_range": (0.7, 1.0),
+        "preferred_pressure_range": (0.5, 1.0),
+    },
+    "void_rift": {
+        "preferred_biomes": ["void_wasteland"],
+        "min_slope": 0,
+        "max_slope": 60,
+        "min_distance_from_others": 65.0,
+        "near_water": False,
+        "elevation_range": (0.3, 0.9),
+        "preferred_pressure_range": (0.78, 1.0),
+    },
+    "volcanic_vent": {
+        "preferred_biomes": ["volcanic_caldera"],
+        "min_slope": 10,
+        "max_slope": 50,
+        "min_distance_from_others": 55.0,
+        "near_water": False,
+        "elevation_range": (0.4, 0.9),
+        "preferred_pressure_range": (0.6, 1.0),
     },
 }
 
@@ -1048,3 +1158,223 @@ def compose_world_map(
             "biome_distribution": biome_dist,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Biome transition blending system
+# ---------------------------------------------------------------------------
+
+BIOME_TRANSITIONS: dict[tuple[str, str], dict[str, Any]] = {
+    ("thornwood_forest", "corrupted_swamp"): {
+        "props": ["dead_tree", "murky_pool", "moss_patch", "fungal_growth"],
+        "density_modifier": 0.8,
+        "description": "Dead trees, murky pools, moss",
+    },
+    ("mountain_pass", "thornwood_forest"): {
+        "props": ["sparse_tree", "rocky_soil", "wind_bent_trunk", "fallen_boulder"],
+        "density_modifier": 0.5,
+        "description": "Sparse trees, rocky soil, wind-bent trunks",
+    },
+    ("sacred_shrine", "veil_crack_zone"): {
+        "props": ["cracked_ground", "flickering_light", "corrupted_vegetation", "shattered_ward"],
+        "density_modifier": 0.7,
+        "description": "Cracked ground, flickering lights, corrupted vegetation",
+    },
+    ("thornwood_forest", "mountain_pass"): {
+        "props": ["wind_bent_trunk", "rocky_soil", "sparse_tree", "alpine_shrub"],
+        "density_modifier": 0.5,
+        "description": "Sparse trees, rocky soil, wind-bent trunks",
+    },
+    ("corrupted_swamp", "veil_crack_zone"): {
+        "props": ["toxic_pool", "corrupted_vegetation", "bone_scatter", "dark_mist"],
+        "density_modifier": 0.9,
+        "description": "Toxic pools, corrupted vegetation, bone scatter",
+    },
+    ("ruined_fortress", "battlefield"): {
+        "props": ["rubble_pile", "broken_weapon", "scorched_earth", "crater"],
+        "density_modifier": 0.6,
+        "description": "Rubble, broken weapons, scorched earth",
+    },
+    ("cemetery", "corrupted_swamp"): {
+        "props": ["broken_gravestone", "murky_pool", "bone_scatter", "dead_tree"],
+        "density_modifier": 0.7,
+        "description": "Broken gravestones, murky pools, bone scatter",
+    },
+    ("abandoned_village", "thornwood_forest"): {
+        "props": ["overgrown_ruins", "fallen_log", "moss_patch", "wild_shrub"],
+        "density_modifier": 0.55,
+        "description": "Overgrown ruins, fallen logs, moss",
+    },
+    ("mountain_pass", "ruined_fortress"): {
+        "props": ["rocky_soil", "rubble_pile", "fallen_boulder", "scorched_earth"],
+        "density_modifier": 0.45,
+        "description": "Rocky soil, rubble, fallen boulders",
+    },
+    ("sacred_shrine", "thornwood_forest"): {
+        "props": ["prayer_stone", "wild_flower", "moss_patch", "sacred_tree"],
+        "density_modifier": 0.35,
+        "description": "Prayer stones, wild flowers, sacred trees",
+    },
+    ("veil_crack_zone", "underground_dungeon"): {
+        "props": ["cracked_ground", "dark_mist", "corrupted_crystal", "bone_scatter"],
+        "density_modifier": 0.85,
+        "description": "Cracked ground, dark mist, corrupted crystals",
+    },
+    ("battlefield", "cemetery"): {
+        "props": ["broken_weapon", "broken_gravestone", "scorched_earth", "bone_scatter"],
+        "density_modifier": 0.65,
+        "description": "Broken weapons, gravestones, scorched earth",
+    },
+}
+
+
+def get_transition_props(
+    biome_a: str,
+    biome_b: str,
+) -> dict[str, Any]:
+    """Get props and density modifier for a biome transition zone.
+
+    Looks up the transition in both directions (a->b and b->a).
+    If no specific transition is defined, returns a generic transition set.
+
+    Parameters
+    ----------
+    biome_a : str
+        First biome name.
+    biome_b : str
+        Second biome name.
+
+    Returns
+    -------
+    dict
+        ``{"props": list[str], "density_modifier": float, "description": str}``
+    """
+    if biome_a == biome_b:
+        return {"props": [], "density_modifier": 0.0, "description": "Same biome, no transition"}
+
+    # Check both orderings
+    key_ab = (biome_a, biome_b)
+    key_ba = (biome_b, biome_a)
+
+    if key_ab in BIOME_TRANSITIONS:
+        return dict(BIOME_TRANSITIONS[key_ab])
+    if key_ba in BIOME_TRANSITIONS:
+        return dict(BIOME_TRANSITIONS[key_ba])
+
+    # Generic fallback transition
+    return {
+        "props": ["dead_bush", "rock_small", "debris_pile", "fallen_log"],
+        "density_modifier": 0.4,
+        "description": f"Generic transition between {biome_a} and {biome_b}",
+    }
+
+
+def compute_biome_map(
+    grid_size: int,
+    biome_count: int = 6,
+    seed: int = 42,
+) -> list[list[dict[str, float]]]:
+    """Compute a 2D biome weight map using Voronoi cells with domain-warped noise.
+
+    Each cell in the grid receives a dict of biome weights (biome_name -> float)
+    that sum to 1.0.  Near Voronoi cell boundaries, multiple biomes have
+    non-zero weights, creating smooth transition zones 3-5 cells wide.
+
+    Parameters
+    ----------
+    grid_size : int
+        Size of the square grid (grid_size x grid_size).  Clamped to [4, 256].
+    biome_count : int
+        Number of distinct biomes to place.  Clamped to [2, len(VB_BIOMES)].
+    seed : int
+        Random seed for deterministic generation.
+
+    Returns
+    -------
+    list[list[dict[str, float]]]
+        2D array of shape (grid_size, grid_size), where each element is a dict
+        mapping biome names to their weight at that cell.  Weights sum to 1.0.
+    """
+    rng = random.Random(seed)
+    grid_size = max(4, min(grid_size, 256))
+    biome_count = max(2, min(biome_count, len(VB_BIOMES)))
+
+    # Select the biomes we'll use
+    biomes_used = VB_BIOMES[:biome_count]
+
+    # --- Generate Voronoi seed points ---
+    voronoi_seeds: list[tuple[float, float]] = []
+    seed_biomes: list[str] = []
+    for i in range(biome_count):
+        vx = rng.uniform(0.0, 1.0)
+        vy = rng.uniform(0.0, 1.0)
+        voronoi_seeds.append((vx, vy))
+        seed_biomes.append(biomes_used[i])
+
+    # --- Transition width in normalised space ---
+    # 3-5 cells wide in a grid_size grid
+    transition_width = 4.0 / grid_size  # ~4 cells wide in normalised [0,1] space
+
+    # --- Domain warp parameters ---
+    warp_strength = 0.08  # how much noise distorts the boundaries
+    warp_freq = 3.0  # frequency of the domain warp noise
+
+    # --- Build the biome weight map ---
+    biome_map: list[list[dict[str, float]]] = []
+
+    for gy in range(grid_size):
+        row: list[dict[str, float]] = []
+        for gx in range(grid_size):
+            # Normalised position
+            nx = (gx + 0.5) / grid_size
+            ny = (gy + 0.5) / grid_size
+
+            # Apply domain warping using hash noise
+            warp_x = _hash_noise_2d(nx * warp_freq, ny * warp_freq, seed + 1) * warp_strength
+            warp_y = _hash_noise_2d(nx * warp_freq + 100.0, ny * warp_freq + 100.0, seed + 2) * warp_strength
+            warped_x = nx + warp_x
+            warped_y = ny + warp_y
+
+            # Compute distance to each Voronoi seed
+            distances: list[tuple[float, int]] = []
+            for i, (sx, sy) in enumerate(voronoi_seeds):
+                dx = warped_x - sx
+                dy = warped_y - sy
+                d = math.sqrt(dx * dx + dy * dy)
+                distances.append((d, i))
+
+            distances.sort(key=lambda t: t[0])
+
+            # Compute weights based on distance differences
+            # The closest biome gets the most weight; biomes within
+            # transition_width of the closest also get weight
+            nearest_dist = distances[0][0]
+            raw_weights: dict[str, float] = {}
+
+            for dist, idx in distances:
+                biome_name = seed_biomes[idx]
+                gap = dist - nearest_dist
+
+                if gap < 1e-9:
+                    # This is the nearest (or tied nearest)
+                    raw_weights[biome_name] = 1.0
+                elif gap < transition_width:
+                    # Within transition zone: linear falloff
+                    w = 1.0 - (gap / transition_width)
+                    raw_weights[biome_name] = max(0.0, w * w)  # quadratic for smoother blending
+                # Beyond transition_width: weight = 0, skip
+
+            # Normalise weights to sum to 1.0
+            total = sum(raw_weights.values())
+            if total < 1e-9:
+                # Fallback: assign 100% to nearest
+                cell_weights = {seed_biomes[distances[0][1]]: 1.0}
+            else:
+                cell_weights = {
+                    name: round(w / total, 4) for name, w in raw_weights.items()
+                }
+
+            row.append(cell_weights)
+        biome_map.append(row)
+
+    return biome_map

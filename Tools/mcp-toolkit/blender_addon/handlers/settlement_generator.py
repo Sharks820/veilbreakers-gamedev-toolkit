@@ -170,6 +170,52 @@ SETTLEMENT_TYPES: dict[str, dict[str, Any]] = {
         "perimeter_props": ["fence", "signpost"],
         "layout_pattern": "organic",
     },
+    "city": {
+        "building_count": (20, 40),
+        "has_walls": True,
+        "has_market": True,
+        "has_shrine": True,
+        "road_style": "cobblestone",
+        "building_types": [
+            "abandoned_house", "forge", "shrine_major", "market_stall_cluster",
+            "barracks", "watchtower", "abandoned_house", "abandoned_house",
+        ],
+        "prop_density": 0.5,
+        "perimeter_props": ["wall_segment", "gate_large", "corner_tower"],
+        "layout_pattern": "district",
+    },
+}
+
+
+# ---------------------------------------------------------------------------
+# District types for city-scale generation
+# ---------------------------------------------------------------------------
+
+DISTRICT_TYPES: dict[str, dict[str, Any]] = {
+    "market_quarter": {
+        "building_types": ["market_stall_cluster", "abandoned_house", "forge"],
+        "prop_density": 0.7,
+    },
+    "noble_quarter": {
+        "building_types": ["abandoned_house", "shrine_major", "abandoned_house"],
+        "prop_density": 0.4,
+    },
+    "slums": {
+        "building_types": ["tent", "lean_to", "abandoned_house"],
+        "prop_density": 0.8,
+    },
+    "temple_district": {
+        "building_types": ["shrine_major", "shrine_minor", "abandoned_house"],
+        "prop_density": 0.3,
+    },
+    "military_quarter": {
+        "building_types": ["barracks", "forge", "watchtower"],
+        "prop_density": 0.5,
+    },
+    "port_district": {
+        "building_types": ["market_stall_cluster", "abandoned_house", "abandoned_house"],
+        "prop_density": 0.6,
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -1362,6 +1408,276 @@ def _generate_perimeter(
 
 
 # ---------------------------------------------------------------------------
+# City district generation (Voronoi-like subdivision)
+# ---------------------------------------------------------------------------
+
+def _voronoi_assign(
+    px: float,
+    py: float,
+    seeds: list[tuple[float, float]],
+) -> int:
+    """Return the index of the nearest seed point (Voronoi cell assignment)."""
+    best_idx = 0
+    best_d2 = float("inf")
+    for i, (sx, sy) in enumerate(seeds):
+        d2 = (px - sx) ** 2 + (py - sy) ** 2
+        if d2 < best_d2:
+            best_d2 = d2
+            best_idx = i
+    return best_idx
+
+
+def generate_city_districts(
+    city_width: float,
+    city_depth: float,
+    num_districts: int = 4,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Generate a city layout partitioned into districts via Voronoi subdivision.
+
+    Each district receives its own building placements, a local road grid,
+    and connects to a central main thoroughfare that runs through the city.
+    City walls with gates are placed at main road entry points.
+
+    Parameters
+    ----------
+    city_width : float
+        Total width of the city area.
+    city_depth : float
+        Total depth of the city area.
+    num_districts : int
+        Number of districts to generate (clamped to 2-8).
+    seed : int
+        Random seed for deterministic generation.
+
+    Returns
+    -------
+    dict
+        ``{"districts": [...], "main_road": dict, "walls": [...],
+        "gates": [...], "metadata": {...}}``
+
+        Each district: ``{"district_type": str, "bounds": dict,
+        "center": (x, y), "buildings": [...], "roads": [...],
+        "prop_density": float}``
+    """
+    rng = random.Random(seed)
+    num_districts = max(2, min(num_districts, 8))
+
+    district_type_names = list(DISTRICT_TYPES.keys())
+    half_w = city_width / 2.0
+    half_d = city_depth / 2.0
+    margin = min(city_width, city_depth) * 0.1
+
+    # --- Generate Voronoi seed points within the city bounds ---
+    district_seeds: list[tuple[float, float]] = []
+    for _ in range(num_districts):
+        sx = rng.uniform(-half_w + margin, half_w - margin)
+        sy = rng.uniform(-half_d + margin, half_d - margin)
+        district_seeds.append((sx, sy))
+
+    # --- Assign district types (seeded random) ---
+    assigned_types: list[str] = []
+    for i in range(num_districts):
+        dtype = district_type_names[i % len(district_type_names)]
+        assigned_types.append(dtype)
+    rng.shuffle(assigned_types)
+
+    # --- Compute district bounds via grid sampling ---
+    # Sample a grid and assign each cell to its nearest district seed.
+    # Then compute the AABB of each district from its cells.
+    grid_res = 40  # resolution of the sampling grid
+    cell_w = city_width / grid_res
+    cell_d = city_depth / grid_res
+
+    # Track cells per district for bounds computation
+    district_cells: list[list[tuple[float, float]]] = [[] for _ in range(num_districts)]
+
+    for gx in range(grid_res):
+        for gy in range(grid_res):
+            cx = -half_w + (gx + 0.5) * cell_w
+            cy = -half_d + (gy + 0.5) * cell_d
+            owner = _voronoi_assign(cx, cy, district_seeds)
+            district_cells[owner].append((cx, cy))
+
+    # --- Build district specs ---
+    districts: list[dict[str, Any]] = []
+    all_district_buildings: list[dict[str, Any]] = []
+    all_district_roads: list[dict[str, Any]] = []
+
+    for di in range(num_districts):
+        cells = district_cells[di]
+        if not cells:
+            continue
+
+        dtype = assigned_types[di]
+        dconfig = DISTRICT_TYPES[dtype]
+
+        # Compute AABB from owned cells
+        xs = [c[0] for c in cells]
+        ys = [c[1] for c in cells]
+        bounds_min = (min(xs), min(ys))
+        bounds_max = (max(xs), max(ys))
+        d_center = district_seeds[di]
+
+        d_width = bounds_max[0] - bounds_min[0]
+        d_depth = bounds_max[1] - bounds_min[1]
+        d_radius = min(d_width, d_depth) / 2.0 * 0.85
+
+        # Determine building count proportional to district area
+        total_area = city_width * city_depth
+        district_area = d_width * d_depth
+        area_ratio = district_area / max(total_area, 1.0)
+        # City has 20-40 buildings; distribute proportionally
+        base_count = max(2, int(area_ratio * 30 + 0.5))
+
+        # Place buildings within the district
+        district_config = {
+            "building_count": (base_count, base_count),
+            "has_walls": False,
+            "has_market": dtype == "market_quarter",
+            "has_shrine": dtype == "temple_district",
+            "road_style": "cobblestone",
+            "building_types": dconfig["building_types"],
+            "prop_density": dconfig["prop_density"],
+            "perimeter_props": [],
+            "layout_pattern": "grid",
+        }
+
+        district_rng = random.Random(seed + di * 7919)
+        buildings = _place_buildings(
+            district_rng, district_config, d_center, d_radius,
+        )
+
+        # Generate local road grid within the district
+        roads = _generate_roads(
+            buildings, d_center, district_config["road_style"],
+        )
+
+        district_spec = {
+            "district_type": dtype,
+            "bounds": {"min": bounds_min, "max": bounds_max},
+            "center": (round(d_center[0], 2), round(d_center[1], 2)),
+            "buildings": buildings,
+            "roads": roads,
+            "building_count": len(buildings),
+            "prop_density": dconfig["prop_density"],
+        }
+        districts.append(district_spec)
+        all_district_buildings.extend(buildings)
+        all_district_roads.extend(roads)
+
+    # --- Main thoroughfare: a road running through the city center ---
+    # Connects the leftmost and rightmost district centers
+    sorted_by_x = sorted(districts, key=lambda d: d["center"][0])
+    main_road_start = (
+        sorted_by_x[0]["center"][0] - margin,
+        sorted_by_x[0]["center"][1],
+    )
+    main_road_end = (
+        sorted_by_x[-1]["center"][0] + margin,
+        sorted_by_x[-1]["center"][1],
+    )
+    main_road = {
+        "start": (round(main_road_start[0], 2), round(main_road_start[1], 2)),
+        "end": (round(main_road_end[0], 2), round(main_road_end[1], 2)),
+        "width": 5.0,
+        "style": "cobblestone",
+        "is_main_road": True,
+    }
+
+    # Connect each district center to the main thoroughfare
+    connector_roads: list[dict[str, Any]] = []
+    for dist in districts:
+        dcx, dcy = dist["center"]
+        # Project district center onto the main road line
+        mx = max(main_road_start[0], min(dcx, main_road_end[0]))
+        my = main_road_start[1] + (
+            (main_road_end[1] - main_road_start[1])
+            * ((mx - main_road_start[0]) / max(main_road_end[0] - main_road_start[0], 1.0))
+        )
+        connector_roads.append({
+            "start": (round(dcx, 2), round(dcy, 2)),
+            "end": (round(mx, 2), round(my, 2)),
+            "width": 3.5,
+            "style": "cobblestone",
+            "is_connector": True,
+        })
+
+    # --- City walls with gates at main road entry points ---
+    wall_radius = max(city_width, city_depth) / 2.0 * 0.95
+    city_center = (0.0, 0.0)
+    segment_length = 6.0
+    circumference = 2 * math.pi * wall_radius
+    num_segments = max(8, int(circumference / segment_length))
+
+    # Gate positions: where the main road exits the city
+    gate_angles: list[float] = []
+    for pt in [main_road_start, main_road_end]:
+        gate_angles.append(math.atan2(pt[1] - city_center[1], pt[0] - city_center[0]))
+
+    walls: list[dict[str, Any]] = []
+    gates: list[dict[str, Any]] = []
+
+    for i in range(num_segments):
+        angle = 2 * math.pi * i / num_segments
+        px = city_center[0] + math.cos(angle) * wall_radius
+        py = city_center[1] + math.sin(angle) * wall_radius
+        facing = angle + math.pi
+
+        # Check if this segment is near a gate angle
+        is_gate = False
+        for ga in gate_angles:
+            angle_diff = abs(((angle - ga + math.pi) % (2 * math.pi)) - math.pi)
+            if angle_diff < (2 * math.pi / num_segments) * 1.2:
+                is_gate = True
+                break
+
+        if is_gate:
+            gates.append({
+                "type": "gate_large",
+                "position": (round(px, 2), round(py, 2)),
+                "rotation": round(facing, 4),
+                "is_gate": True,
+            })
+        else:
+            walls.append({
+                "type": "wall_segment",
+                "position": (round(px, 2), round(py, 2)),
+                "rotation": round(facing, 4),
+                "is_gate": False,
+            })
+
+        # Corner towers every quarter
+        if i % max(1, num_segments // 4) == 0 and not is_gate:
+            walls.append({
+                "type": "corner_tower",
+                "position": (round(px, 2), round(py, 2)),
+                "rotation": round(facing, 4),
+                "is_tower": True,
+            })
+
+    total_buildings = sum(d["building_count"] for d in districts)
+    total_roads = len(all_district_roads) + len(connector_roads) + 1  # +1 for main road
+
+    return {
+        "districts": districts,
+        "main_road": main_road,
+        "connector_roads": connector_roads,
+        "walls": walls,
+        "gates": gates,
+        "metadata": {
+            "city_size": (city_width, city_depth),
+            "num_districts": len(districts),
+            "total_buildings": total_buildings,
+            "total_roads": total_roads,
+            "wall_segments": len(walls),
+            "gate_count": len(gates),
+            "seed": seed,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -1429,7 +1745,133 @@ def generate_settlement(
         seed = random.randint(0, 2**31)
     rng = random.Random(seed)
 
-    # 1. Place buildings
+    # --- District-based city generation ---
+    if config.get("layout_pattern") == "district":
+        city_data = generate_city_districts(
+            city_width=radius * 2.0,
+            city_depth=radius * 2.0,
+            num_districts=max(3, min(6, rng.randint(3, 6))),
+            seed=seed,
+        )
+
+        # Offset all positions by the requested center
+        def _offset_pos(pos: tuple[float, float]) -> tuple[float, float]:
+            return (round(pos[0] + center[0], 2), round(pos[1] + center[1], 2))
+
+        # Collect all buildings from districts, apply variation + heightmap
+        all_buildings: list[dict[str, Any]] = []
+        for dist in city_data["districts"]:
+            for bld in dist["buildings"]:
+                bld["position"] = _offset_pos(bld["position"])
+                variation_rng = random.Random(bld["unique_seed"])
+                varied = _apply_building_variation(variation_rng, bld)
+                bx, by = varied["position"]
+                varied["elevation"] = round(
+                    _sample_heightmap(heightmap, bx, by), 3
+                )
+                varied["foundation_height"] = round(
+                    _compute_foundation_height(
+                        heightmap, (bx, by), varied.get("footprint", (6.0, 6.0))
+                    ),
+                    3,
+                )
+                varied["district"] = dist["district_type"]
+                all_buildings.append(varied)
+
+        # Collect all roads, offset positions
+        all_roads: list[dict[str, Any]] = []
+        for dist in city_data["districts"]:
+            for road in dist["roads"]:
+                road["start"] = _offset_pos(road["start"])
+                road["end"] = _offset_pos(road["end"])
+                all_roads.append(road)
+        # Main road + connectors
+        main_road = city_data["main_road"]
+        main_road["start"] = _offset_pos(main_road["start"])
+        main_road["end"] = _offset_pos(main_road["end"])
+        all_roads.append(main_road)
+        for cr in city_data["connector_roads"]:
+            cr["start"] = _offset_pos(cr["start"])
+            cr["end"] = _offset_pos(cr["end"])
+            all_roads.append(cr)
+
+        # Scatter props
+        props = _scatter_settlement_props(
+            rng, all_buildings, all_roads, config, radius, center
+        )
+
+        # Walls and gates, offset positions
+        perimeter: list[dict[str, Any]] = []
+        for w in city_data["walls"] + city_data["gates"]:
+            w["position"] = _offset_pos(w["position"])
+            perimeter.append(w)
+
+        # Furnish interiors + lights
+        interiors: dict[int, list[dict[str, Any]]] = {}
+        all_lights: list[dict[str, Any]] = []
+        for idx, bld in enumerate(all_buildings):
+            rooms = bld.get("room_functions", [])
+            if not rooms:
+                continue
+            bx, by = bld["position"]
+            fp = bld.get("footprint", (6.0, 6.0))
+            num_floors = bld.get("floors", 1)
+            room_height = fp[1] / max(len(rooms), 1)
+            room_furnishings: list[dict[str, Any]] = []
+            building_lights: list[dict[str, Any]] = []
+            for floor in range(max(1, num_floors)):
+                for ri, room_type in enumerate(rooms):
+                    room_bounds = {
+                        "min": (bx - fp[0] / 2, by - fp[1] / 2 + ri * room_height),
+                        "max": (bx + fp[0] / 2, by - fp[1] / 2 + (ri + 1) * room_height),
+                    }
+                    room_rng = random.Random(bld["unique_seed"] + ri + floor * 1000)
+                    furnishings = _furnish_interior(room_rng, room_type, room_bounds)
+                    for item in furnishings:
+                        item["floor"] = floor
+                    room_furnishings.extend(furnishings)
+                    light_rng = random.Random(bld["unique_seed"] + ri + floor * 2000)
+                    room_lights = _place_interior_lights(
+                        light_rng, room_type, room_bounds,
+                        floor_index=floor, wall_height=wall_height,
+                    )
+                    for lt in room_lights:
+                        lt["building_index"] = idx
+                    building_lights.extend(room_lights)
+            if room_furnishings:
+                interiors[idx] = room_furnishings
+            all_lights.extend(building_lights)
+
+        metadata = {
+            "building_count": len(all_buildings),
+            "road_count": len(all_roads),
+            "prop_count": len(props),
+            "perimeter_element_count": len(perimeter),
+            "furnished_building_count": len(interiors),
+            "total_furniture_pieces": sum(len(v) for v in interiors.values()),
+            "light_count": len(all_lights),
+            "has_walls": config["has_walls"],
+            "layout_pattern": "district",
+            "district_count": len(city_data["districts"]),
+            "district_types": [d["district_type"] for d in city_data["districts"]],
+        }
+
+        return {
+            "settlement_type": settlement_type,
+            "seed": seed,
+            "center": center,
+            "radius": radius,
+            "buildings": all_buildings,
+            "roads": all_roads,
+            "props": props,
+            "perimeter": perimeter,
+            "interiors": interiors,
+            "lights": all_lights,
+            "districts": city_data["districts"],
+            "metadata": metadata,
+        }
+
+    # 1. Place buildings (non-district layout patterns)
     buildings = _place_buildings(rng, config, center, radius)
 
     # 2. Apply per-building variation + heightmap elevation
