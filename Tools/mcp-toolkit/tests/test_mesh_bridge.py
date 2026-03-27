@@ -124,7 +124,20 @@ class TestFurnitureGeneratorMap:
 # ---------------------------------------------------------------------------
 
 
-VEGETATION_KEYS = ["tree", "bush", "rock", "mushroom", "root"]
+VEGETATION_KEYS = [
+    "tree",
+    "tree_healthy",
+    "tree_boundary",
+    "tree_blighted",
+    "tree_twisted",
+    "bush",
+    "grass",
+    "rock",
+    "rock_mossy",
+    "mushroom",
+    "mushroom_cluster",
+    "root",
+]
 
 
 class TestVegetationGeneratorMap:
@@ -142,6 +155,18 @@ class TestVegetationGeneratorMap:
         assert callable(gen_func), f"Generator for '{key}' is not callable"
         spec = gen_func(**kwargs)
         validate_mesh_spec(spec, f"VEGETATION[{key}]")
+
+    def test_settlement_defaults_do_not_use_dead_tree_or_mushroom_placeholders(self) -> None:
+        tree_func, tree_kwargs = VEGETATION_GENERATOR_MAP["tree"]
+        bush_func, bush_kwargs = VEGETATION_GENERATOR_MAP["bush"]
+
+        assert tree_kwargs.get("canopy_style") == "veil_healthy"
+        assert bush_func.__name__ != "generate_mushroom_mesh"
+
+    def test_thornwood_aliases_resolve_to_progression_tree_styles(self) -> None:
+        assert VEGETATION_GENERATOR_MAP["tree_boundary"][1]["canopy_style"] == "veil_boundary"
+        assert VEGETATION_GENERATOR_MAP["tree_blighted"][1]["canopy_style"] == "veil_blighted"
+        assert VEGETATION_GENERATOR_MAP["tree_twisted"][1]["canopy_style"] == "veil_boundary"
 
 
 # ---------------------------------------------------------------------------

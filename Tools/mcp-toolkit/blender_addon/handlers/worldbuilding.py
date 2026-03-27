@@ -370,6 +370,7 @@ from ._building_grammar import (
     generate_modular_pieces,
     generate_overrun_variant,
     add_storytelling_props,
+    plan_modular_facade,
     BuildingSpec,
     STYLE_CONFIGS,
 )
@@ -379,6 +380,7 @@ from .building_quality import (
     generate_gothic_window,
     generate_roof,
     generate_archway,
+    generate_chimney,
 )
 from ._mesh_bridge import (
     mesh_from_spec,
@@ -405,6 +407,351 @@ from .worldbuilding_layout import (
     generate_world_graph,
     _ops_to_mesh,
 )
+
+
+# ---------------------------------------------------------------------------
+# Opening-aware building helpers
+# ---------------------------------------------------------------------------
+
+_WALL_NAME_TO_INDEX = {
+    "front": 0,
+    "back": 1,
+    "left": 2,
+    "right": 3,
+}
+
+
+def _building_opening_profile(
+    opening_type: str,
+    opening_style: str,
+    *,
+    wall_height: float,
+    is_gothic: bool,
+) -> dict[str, Any]:
+    """Resolve opening dimensions and generator styles for a building opening."""
+    kind = str(opening_type or "window").strip().lower()
+    style_key = str(opening_style or "").strip().lower()
+
+    if kind == "door":
+        width = 1.2
+        height = min(max(2.2, wall_height * 0.64), wall_height - 0.18)
+        arch_style = "gothic_pointed" if is_gothic else "roman_round"
+        if style_key in {"gothic_arch", "pointed_arch", "large_arch"}:
+            arch_style = "gothic_pointed" if style_key != "large_arch" else "ogee"
+            width = 1.55 if style_key != "large_arch" else 1.8
+            height = min(max(2.45, wall_height * 0.72), wall_height - 0.12)
+        elif style_key in {"square", "plank"}:
+            arch_style = "flat_lintel"
+            width = 1.1
+        elif style_key == "iron_gate":
+            arch_style = "flat_lintel"
+            width = 1.55
+            height = min(max(2.5, wall_height * 0.74), wall_height - 0.1)
+        elif style_key in {"rounded", "round", "round_arch", "wooden_arched"}:
+            arch_style = "roman_round"
+        return {
+            "kind": "door",
+            "width": width,
+            "height": height,
+            "bottom": 0.0,
+            "window_style": None,
+            "door_arch_style": arch_style,
+        }
+
+    width = 0.9
+    height = min(max(1.1, wall_height * 0.34), wall_height * 0.55)
+    bottom = wall_height * 0.28
+    mesh_style = "pointed_arch" if is_gothic else "rectangular"
+    has_sill = True
+
+    if style_key in {"pointed_arch", "lancet"}:
+        width = 0.72 if style_key == "lancet" else 0.82
+        height = min(max(1.5, wall_height * 0.46), wall_height * 0.68)
+        bottom = wall_height * 0.24
+        mesh_style = "lancet" if style_key == "lancet" else "pointed_arch"
+    elif style_key in {"round", "round_arch"}:
+        width = 0.86
+        height = min(max(1.2, wall_height * 0.36), wall_height * 0.52)
+        bottom = wall_height * 0.3
+        mesh_style = "round_arch"
+    elif style_key in {"square", "rectangular"}:
+        width = 0.9
+        height = min(max(0.95, wall_height * 0.32), wall_height * 0.42)
+        bottom = wall_height * 0.3
+        mesh_style = "rectangular"
+    elif style_key == "large_rectangular":
+        width = 1.3
+        height = min(max(1.3, wall_height * 0.4), wall_height * 0.55)
+        bottom = wall_height * 0.24
+        mesh_style = "rectangular"
+    elif style_key == "rose_window":
+        width = min(max(1.15, wall_height * 0.28), 1.75)
+        height = width
+        bottom = wall_height * 0.48
+        mesh_style = "rose_window"
+        has_sill = False
+    elif style_key == "arrow_slit":
+        width = 0.24
+        height = min(max(1.2, wall_height * 0.42), wall_height * 0.62)
+        bottom = wall_height * 0.34
+        mesh_style = "arrow_slit"
+        has_sill = False
+
+    return {
+        "kind": "window",
+        "width": width,
+        "height": height,
+        "bottom": bottom,
+        "window_style": mesh_style,
+        "door_arch_style": None,
+        "has_sill": has_sill,
+    }
+
+
+def _place_openings_on_wall(
+    requested: list[dict[str, Any]],
+    *,
+    wall_length: float,
+    wall_height: float,
+) -> list[dict[str, Any]]:
+    """Assign horizontal centers to requested openings on a single wall/floor."""
+    if wall_length <= 0.0 or not requested:
+        return []
+
+    resolved: list[dict[str, Any]] = []
+    explicit_items: list[dict[str, Any]] = []
+    auto_doors: list[dict[str, Any]] = []
+    auto_windows: list[dict[str, Any]] = []
+
+    for item in requested:
+        center = item.get("center")
+        if center is None and "position" in item and isinstance(item["position"], (list, tuple)) and item["position"]:
+            center = float(item["position"][0])
+        if center is not None:
+            explicit_items.append({**item, "center": float(center)})
+        elif item["kind"] == "door":
+            auto_doors.append(item)
+        else:
+            auto_windows.append(item)
+
+    edge_margin = max(
+        0.5,
+        max((float(item["width"]) * 0.55 for item in requested), default=0.5),
+    )
+    usable_start = edge_margin
+    usable_end = max(usable_start, wall_length - edge_margin)
+
+    if len(auto_doors) == 1:
+        door = auto_doors[0]
+        door_center = wall_length * 0.5
+        resolved.append({**door, "center": door_center})
+
+        if auto_windows:
+            clearance = max(0.4, float(door["width"]) * 0.55)
+            left_start = usable_start
+            left_end = door_center - float(door["width"]) * 0.5 - clearance
+            right_start = door_center + float(door["width"]) * 0.5 + clearance
+            right_end = usable_end
+
+            left_room = max(0.0, left_end - left_start)
+            right_room = max(0.0, right_end - right_start)
+            left_count = 0
+            right_count = 0
+            if left_room <= 0.0 and right_room <= 0.0:
+                right_count = len(auto_windows)
+                right_start = usable_start
+                right_end = usable_end
+            elif left_room <= 0.0:
+                right_count = len(auto_windows)
+            elif right_room <= 0.0:
+                left_count = len(auto_windows)
+            else:
+                right_count = len(auto_windows) // 2
+                left_count = len(auto_windows) - right_count
+                if len(auto_windows) % 2 == 1 and right_room > left_room:
+                    right_count += 1
+                    left_count -= 1
+
+            window_index = 0
+            for side_count, start, end in (
+                (left_count, left_start, left_end),
+                (right_count, right_start, right_end),
+            ):
+                if side_count <= 0:
+                    continue
+                spacing = (end - start) / (side_count + 1) if end > start else 0.0
+                for slot_idx in range(side_count):
+                    center = start + spacing * (slot_idx + 1) if spacing > 0.0 else wall_length * 0.5
+                    resolved.append({**auto_windows[window_index], "center": center})
+                    window_index += 1
+    else:
+        ordered_auto = auto_doors + auto_windows
+        auto_count = len(ordered_auto)
+        if auto_count:
+            spacing = (usable_end - usable_start) / (auto_count + 1) if usable_end > usable_start else 0.0
+            for idx, item in enumerate(ordered_auto):
+                center = usable_start + spacing * (idx + 1) if spacing > 0.0 else wall_length * 0.5
+                resolved.append({**item, "center": center})
+
+    resolved.extend(explicit_items)
+    output: list[dict[str, Any]] = []
+    for item in resolved:
+        half_width = max(0.15, float(item["width"]) * 0.5)
+        center_min = half_width + 0.08
+        center_max = max(center_min, wall_length - half_width - 0.08)
+        center = min(max(center_min, float(item["center"])), center_max)
+        bottom = min(
+            max(0.0, float(item["bottom"])),
+            max(0.0, wall_height - float(item["height"]) - 0.06),
+        )
+        output.append({**item, "center": center, "bottom": bottom})
+
+    output.sort(key=lambda item: (item["center"], 0 if item["kind"] == "door" else 1))
+    return output
+
+
+def _resolve_building_openings(
+    *,
+    width: float,
+    depth: float,
+    floors: int,
+    wall_height: float,
+    wall_thickness: float,
+    style: str,
+    requested_openings: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    """Resolve building openings into concrete wall placements and metadata."""
+    is_gothic = style in {"gothic", "fortress"}
+    side_wall_length = max(0.0, depth - 2.0 * wall_thickness)
+    wall_lengths = {
+        "front": width,
+        "back": width,
+        "left": side_wall_length,
+        "right": side_wall_length,
+    }
+
+    requested = list(requested_openings or [])
+    if not requested:
+        default_window_style = "arrow_slit" if style == "fortress" else ("pointed_arch" if is_gothic else "rectangular")
+        front_back_count = max(1, int(width / (4.5 if style == "fortress" else 3.6)))
+        side_count = max(1, int(side_wall_length / (5.0 if style == "fortress" else 4.2))) if side_wall_length > 0.0 else 0
+        requested.append({"type": "door", "wall": "front", "floor": 0, "style": "large_arch" if is_gothic else "rounded"})
+        for floor_idx in range(max(1, floors)):
+            if floor_idx > 0:
+                for _ in range(front_back_count):
+                    requested.append({"type": "window", "wall": "front", "floor": floor_idx, "style": default_window_style})
+            for _ in range(front_back_count):
+                requested.append({"type": "window", "wall": "back", "floor": floor_idx, "style": default_window_style})
+            for wall_name in ("left", "right"):
+                for _ in range(side_count):
+                    requested.append({"type": "window", "wall": wall_name, "floor": floor_idx, "style": default_window_style})
+
+    grouped: dict[tuple[str, int], list[dict[str, Any]]] = {}
+    for raw in requested:
+        wall_name = str(raw.get("wall", "front")).strip().lower()
+        if wall_name not in wall_lengths:
+            continue
+        floor_idx = max(0, min(max(0, floors - 1), int(raw.get("floor", 0))))
+        profile = _building_opening_profile(
+            str(raw.get("type", "window")),
+            str(raw.get("style", "")),
+            wall_height=wall_height,
+            is_gothic=is_gothic,
+        )
+        wall_length = wall_lengths[wall_name]
+        max_width = max(0.35, wall_length - 0.28)
+        profile["width"] = min(float(profile["width"]), max_width)
+        if profile["kind"] == "door":
+            profile["width"] = max(1.2, profile["width"])
+            profile["height"] = max(2.2, float(profile["height"]))
+        else:
+            profile["width"] = max(0.9, profile["width"])
+            profile["height"] = max(1.1, float(profile["height"]))
+        if profile["width"] <= 0.3 or profile["height"] <= 0.3:
+            continue
+        grouped.setdefault((wall_name, floor_idx), []).append({
+            **profile,
+            "wall": wall_name,
+            "wall_index": _WALL_NAME_TO_INDEX[wall_name],
+            "floor": floor_idx,
+            "floor_base_z": floor_idx * wall_height,
+            "requested_style": str(raw.get("style", "")),
+            "center": raw.get("center"),
+            "position": raw.get("position"),
+        })
+
+    resolved: list[dict[str, Any]] = []
+    for (wall_name, floor_idx), items in grouped.items():
+        wall_length = wall_lengths[wall_name]
+        placed = _place_openings_on_wall(
+            items,
+            wall_length=wall_length,
+            wall_height=wall_height,
+        )
+        for item in placed:
+            resolved.append({
+                **item,
+                "wall_length": wall_length,
+                "world_bottom": item["floor_base_z"] + item["bottom"],
+            })
+
+    resolved.sort(key=lambda item: (item["wall_index"], item["floor"], item["center"]))
+    return resolved
+
+
+def _compute_wall_segments(
+    wall_length: float,
+    wall_height: float,
+    openings: list[dict[str, Any]],
+) -> tuple[list[dict[str, float]], list[dict[str, Any]]]:
+    """Split a wall into non-overlapping solid rectangles around openings."""
+    if wall_length <= 0.0 or wall_height <= 0.0:
+        return [], []
+
+    clamped: list[dict[str, Any]] = []
+    for opening in openings:
+        half_width = max(0.15, float(opening["width"]) * 0.5)
+        u0 = max(0.0, float(opening["center"]) - half_width)
+        u1 = min(wall_length, float(opening["center"]) + half_width)
+        v0 = max(0.0, float(opening["bottom"]))
+        v1 = min(wall_height, float(opening["bottom"]) + float(opening["height"]))
+        if u1 - u0 < 0.05 or v1 - v0 < 0.05:
+            continue
+        clamped.append({**opening, "u0": u0, "u1": u1, "v0": v0, "v1": v1})
+
+    if not clamped:
+        return [{"u0": 0.0, "u1": wall_length, "v0": 0.0, "v1": wall_height}], []
+
+    edges_u = sorted({0.0, wall_length, *(edge for op in clamped for edge in (op["u0"], op["u1"]))})
+    segments: list[dict[str, float]] = []
+    for idx in range(len(edges_u) - 1):
+        u0 = edges_u[idx]
+        u1 = edges_u[idx + 1]
+        if u1 - u0 < 0.05:
+            continue
+
+        overlapping = [
+            op for op in clamped
+            if op["u0"] < u1 - 1e-4 and op["u1"] > u0 + 1e-4
+        ]
+        if not overlapping:
+            segments.append({"u0": u0, "u1": u1, "v0": 0.0, "v1": wall_height})
+            continue
+
+        edges_v = sorted({0.0, wall_height, *(edge for op in overlapping for edge in (op["v0"], op["v1"]))})
+        for v_idx in range(len(edges_v) - 1):
+            v0 = edges_v[v_idx]
+            v1 = edges_v[v_idx + 1]
+            if v1 - v0 < 0.05:
+                continue
+            blocked = any(
+                v0 >= op["v0"] - 1e-4 and v1 <= op["v1"] + 1e-4
+                for op in overlapping
+            )
+            if not blocked:
+                segments.append({"u0": u0, "u1": u1, "v0": v0, "v1": v1})
+
+    return segments, clamped
 
 
 # ---------------------------------------------------------------------------
@@ -1431,11 +1778,16 @@ def _generate_location_building(
     rotation = building.get("rotation", 0.0)
     size_x, size_y = building.get("size", (8.0, 8.0))
     area = max(size_x, size_y)
-    height_z = _sample_scene_height(px, py, terrain_name) + 0.02
     structure_name = f"{base_name}_{b_type}_{index}"
     preset_name: str | None = None
     site_profile: str | None = None
     preexisting_object_names = {obj.name for obj in bpy.data.objects}
+    requested_width = max(5.6, size_x * 0.9)
+    requested_depth = max(5.6, size_y * 0.9)
+    foundation_profile = building.get("foundation_profile") if isinstance(building.get("foundation_profile"), dict) else None
+    platform_elevation = float(
+        building.get("platform_elevation", _sample_scene_height(px, py, terrain_name))
+    ) + 0.02
 
     if b_type in {"castle", "fortress", "keep"}:
         preset_name = "gatehouse"
@@ -1492,8 +1844,8 @@ def _generate_location_building(
     }:
         params: dict[str, Any] = {
             "name": structure_name,
-            "width": max(4.0, size_x * 0.9),
-            "depth": max(4.0, size_y * 0.9),
+            "width": requested_width,
+            "depth": requested_depth,
             "floors": 2 if b_type in {"tavern", "inn", "barracks", "warehouse", "general_store", "house", "cottage"} else 1,
             "style": "fortress" if b_type in {"barracks", "armory", "gatehouse", "watchtower", "guard_tower"} else ("gothic" if b_type in {"mausoleum", "catacomb"} else "medieval"),
             "seed": seed + index * 17,
@@ -1504,12 +1856,14 @@ def _generate_location_building(
             params["preset"] = preset_name
         if site_profile:
             params["site_profile"] = site_profile
+        if foundation_profile:
+            params["foundation_profile"] = foundation_profile
         handle_generate_building(params)
     else:
         build_params: dict[str, Any] = {
             "name": structure_name,
-            "width": max(4.0, size_x * 0.85),
-            "depth": max(4.0, size_y * 0.85),
+            "width": max(5.6, size_x * 0.85),
+            "depth": max(5.6, size_y * 0.85),
             "floors": 1,
             "style": "medieval",
             "seed": seed + index * 17,
@@ -1517,14 +1871,29 @@ def _generate_location_building(
         }
         if site_profile:
             build_params["site_profile"] = site_profile
+        if foundation_profile:
+            build_params["foundation_profile"] = foundation_profile
         handle_generate_building(build_params)
 
     building_obj = bpy.data.objects.get(structure_name)
     if building_obj is None:
         return False
-    building_obj.location = (px, py, height_z)
+    root_footprint = (
+        float(requested_width if b_type not in {"castle", "fortress", "keep"} else max(24.0, area * 2.8)),
+        float(requested_depth if b_type not in {"castle", "fortress", "keep"} else max(24.0, area * 2.8)),
+    )
+    origin_x, origin_y = _structure_origin_from_center((px, py), root_footprint, float(rotation))
+    building_obj.location = (origin_x, origin_y, platform_elevation)
     building_obj.rotation_euler = (0.0, 0.0, rotation)
     building_obj.parent = parent
+    if foundation_profile and b_type in {"castle", "fortress", "keep"}:
+        _apply_foundation_fitment(
+            structure_name,
+            parent=building_obj,
+            footprint=root_footprint,
+            wall_thickness=0.8,
+            foundation_profile=foundation_profile,
+        )
     generated_objects = [
         obj for obj in bpy.data.objects
         if obj.name not in preexisting_object_names and obj.name.startswith(structure_name)
@@ -2446,6 +2815,233 @@ def _apply_site_profile_features(
     return feature_count
 
 
+def _create_box_mesh_object(
+    name: str,
+    *,
+    position: tuple[float, float, float],
+    size: tuple[float, float, float],
+    material: str,
+    role: str,
+    parent: Any,
+) -> Any | None:
+    """Create a simple mesh box object for facade and foundation detailing."""
+    spec = _wall_solid_box(
+        float(position[0]),
+        float(position[1]),
+        float(position[2]),
+        float(size[0]),
+        float(size[1]),
+        float(size[2]),
+        material,
+        role,
+    )
+    obj = mesh_from_spec(spec, name=name)
+    if isinstance(obj, dict):
+        return None
+    obj.parent = parent
+    obj["vb_editable_role"] = role
+    _assign_procedural_material(obj, material)
+    return obj
+
+
+def _structure_origin_from_center(
+    center: tuple[float, float],
+    footprint: tuple[float, float],
+    rotation: float,
+) -> tuple[float, float]:
+    """Convert a center anchor into the corner origin used by generated shells."""
+    offset_x = footprint[0] * 0.5
+    offset_y = footprint[1] * 0.5
+    cos_r = math.cos(rotation)
+    sin_r = math.sin(rotation)
+    rotated_x = offset_x * cos_r - offset_y * sin_r
+    rotated_y = offset_x * sin_r + offset_y * cos_r
+    return (center[0] - rotated_x, center[1] - rotated_y)
+
+
+def _apply_modular_facade(
+    base_name: str,
+    *,
+    parent: Any,
+    width: float,
+    depth: float,
+    floors: int,
+    style: str,
+    wall_height: float,
+    wall_thickness: float,
+    openings: list[dict[str, Any]],
+    site_profile: str,
+    seed: int,
+) -> dict[str, Any]:
+    """Materialize only non-placeholder facade modules as editable child meshes.
+
+    Box-based bands/pilasters/frames remain in the facade plan metadata, but are
+    not emitted as separate scene meshes because they currently degrade live
+    building quality into obvious placeholder blocks.
+    """
+    facade_plan = plan_modular_facade(
+        width=width,
+        depth=depth,
+        floors=floors,
+        style=style,
+        wall_height=wall_height,
+        wall_thickness=wall_thickness,
+        openings=openings,
+        site_profile=site_profile,
+        seed=seed,
+    )
+
+    created = 0
+    chimney_count = 0
+    buttress_count = 0
+    suppressed_box_count = 0
+    for index, module in enumerate(facade_plan.get("modules", [])):
+        module_type = str(module.get("type", "box"))
+        role = str(module.get("role", "facade_module"))
+        material = str(module.get("material", "smooth_stone"))
+        if module_type == "chimney":
+            chimney_spec = generate_chimney(
+                height=float(module.get("height", 1.6)),
+                chimney_width=float(module.get("width", 0.5)),
+                chimney_depth=float(module.get("depth", 0.5)),
+                style="stone" if style in {"gothic", "fortress"} else "brick",
+            )
+            obj = mesh_from_spec(
+                chimney_spec,
+                name=f"{base_name}_Facade_{index}",
+                location=tuple(module["position"]),
+                parent=parent,
+            )
+            if not isinstance(obj, dict):
+                obj["vb_editable_role"] = role
+                _assign_procedural_material(obj, material)
+                created += 1
+                chimney_count += 1
+            continue
+        if module_type == "buttress":
+            buttress_spec = generate_buttress_mesh(
+                height=float(module.get("height", wall_height)),
+                style="flying" if style == "gothic" else "standard",
+            )
+            obj = mesh_from_spec(
+                buttress_spec,
+                name=f"{base_name}_Facade_{index}",
+                location=tuple(module["position"]),
+                parent=parent,
+            )
+            if not isinstance(obj, dict):
+                obj["vb_editable_role"] = role
+                _assign_procedural_material(obj, material)
+                created += 1
+                buttress_count += 1
+            continue
+        if module_type == "box":
+            suppressed_box_count += 1
+            continue
+
+    return {
+        "module_count": created,
+        "chimney_count": chimney_count,
+        "buttress_count": buttress_count,
+        "suppressed_box_count": suppressed_box_count,
+        "plan": facade_plan,
+    }
+
+
+def _apply_foundation_fitment(
+    base_name: str,
+    *,
+    parent: Any,
+    footprint: tuple[float, float],
+    wall_thickness: float,
+    foundation_profile: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Create plinth, retaining walls, and access steps for sloped sites."""
+    profile = foundation_profile or {}
+    foundation_height = float(profile.get("foundation_height", 0.0))
+    if foundation_height <= 0.05:
+        return {"created": 0, "retaining_wall_count": 0, "stair_count": 0}
+
+    width, depth = float(footprint[0]), float(footprint[1])
+    created = 0
+    retaining_count = 0
+    stair_count = 0
+    band = max(0.18, wall_thickness * 0.8)
+    plinth = _create_box_mesh_object(
+        f"{base_name}_Foundation",
+        position=(-band, -band, -(foundation_height + 0.08)),
+        size=(width + band * 2.0, depth + band * 2.0, foundation_height + 0.12),
+        material="stone_dark",
+        role="foundation_plinth",
+        parent=parent,
+    )
+    if plinth is not None:
+        created += 1
+
+    side_heights = profile.get("side_heights", {}) if isinstance(profile, dict) else {}
+    side_specs = [
+        ("front", (-band * 1.2, -band * 1.35, -foundation_height), (width + band * 2.4, band * 0.7)),
+        ("back", (-band * 1.2, depth + band * 0.65, -foundation_height), (width + band * 2.4, band * 0.7)),
+        ("left", (-band * 1.35, -band * 1.2, -foundation_height), (band * 0.7, depth + band * 2.4)),
+        ("right", (width + band * 0.65, -band * 1.2, -foundation_height), (band * 0.7, depth + band * 2.4)),
+    ]
+    retaining_sides = set(profile.get("retaining_sides", [])) if isinstance(profile, dict) else set()
+    for wall_name, (px, py, pz), (sx, sy) in side_specs:
+        drop = float(side_heights.get(wall_name, 0.0))
+        if wall_name not in retaining_sides or drop <= 0.2:
+            continue
+        obj = _create_box_mesh_object(
+            f"{base_name}_Retaining_{wall_name}",
+            position=(px, py, pz),
+            size=(sx, sy, max(0.28, drop)),
+            material="stone_heavy",
+            role="retaining_wall",
+            parent=parent,
+        )
+        if obj is not None:
+            created += 1
+            retaining_count += 1
+
+    stair_wall = str(profile.get("stair_wall") or "")
+    stair_steps = int(profile.get("stair_steps", 0))
+    if stair_wall and stair_steps > 0:
+        stair_spec = generate_staircase_mesh(
+            steps=max(2, stair_steps),
+            width=max(1.35, min(width * 0.24, 2.4)),
+            direction="straight",
+        )
+        if stair_wall == "front":
+            stair_loc = (width * 0.5, -max(1.0, stair_steps * 0.18), -foundation_height)
+            stair_rot = (math.pi / 2.0, 0.0, math.pi)
+        elif stair_wall == "back":
+            stair_loc = (width * 0.5, depth + max(0.4, stair_steps * 0.18), -foundation_height)
+            stair_rot = (math.pi / 2.0, 0.0, 0.0)
+        elif stair_wall == "left":
+            stair_loc = (-max(1.0, stair_steps * 0.18), depth * 0.5, -foundation_height)
+            stair_rot = (math.pi / 2.0, 0.0, -math.pi / 2.0)
+        else:
+            stair_loc = (width + max(0.4, stair_steps * 0.18), depth * 0.5, -foundation_height)
+            stair_rot = (math.pi / 2.0, 0.0, math.pi / 2.0)
+        stairs_obj = mesh_from_spec(
+            stair_spec,
+            name=f"{base_name}_Foundation_Stairs",
+            location=stair_loc,
+            rotation=stair_rot,
+            parent=parent,
+        )
+        if not isinstance(stairs_obj, dict):
+            stairs_obj["vb_editable_role"] = "foundation_stairs"
+            _assign_procedural_material(stairs_obj, "stone_dark")
+            created += 1
+            stair_count += 1
+
+    return {
+        "created": created,
+        "retaining_wall_count": retaining_count,
+        "stair_count": stair_count,
+    }
+
+
 def _create_connection_geometry(
     base_name: str,
     conn: dict[str, Any],
@@ -3056,14 +3652,15 @@ def handle_generate_building(params: dict) -> dict:
         )
 
     name = params.get("name", (preset_name or "Building"))
-    width = params.get("width", preset["width"] if preset else 10)
-    depth_val = params.get("depth", preset["depth"] if preset else 8)
-    floors = params.get("floors", preset["floors"] if preset else 2)
+    width = max(5.6, float(params.get("width", preset["width"] if preset else 10)))
+    depth_val = max(5.6, float(params.get("depth", preset["depth"] if preset else 8)))
+    floors = int(max(1, params.get("floors", preset["floors"] if preset else 2)))
     style = params.get("style", preset["style"] if preset else "medieval")
     seed = params.get("seed", 0)
-    wall_height = params.get("wall_height", 4.0)
+    wall_height = max(3.2, float(params.get("wall_height", 4.0)))
     weathering_level = params.get("weathering_level", 0.0)
     site_profile = str(params.get("site_profile", "")).strip().lower()
+    foundation_profile = params.get("foundation_profile") if isinstance(params.get("foundation_profile"), dict) else None
 
     rng = random.Random(seed)
     total_height = wall_height * floors
@@ -3081,100 +3678,198 @@ def handle_generate_building(params: dict) -> dict:
     # Wall thickness for stone walls
     wall_thick = 0.4
 
-    # === WALLS (4 sides, each a stone wall) ===
-    wall_configs = [
-        # (position_x, position_y, position_z, wall_width, rotation_z, label)
-        (0, 0, 0, width, 0, "front"),           # front (along X)
-        (0, depth_val, 0, width, 0, "back"),     # back (along X)
-        (0, 0, 0, depth_val, math.pi / 2, "left"),   # left (along Y)
-        (width, 0, 0, depth_val, math.pi / 2, "right"),  # right (along Y)
-    ]
+    # is_gothic must be defined before wall generation (fixes NameError from original code)
+    is_gothic = style in ("gothic", "fortress")
+    block_style = "ashlar" if is_gothic else "rubble"
+    _wall_mat_key = "smooth_stone" if is_gothic else "rough_stone_wall"
+    requested_openings = copy.deepcopy(
+        params.get("openings", preset.get("openings", []) if preset else [])
+    )
+    resolved_openings = _resolve_building_openings(
+        width=float(width),
+        depth=float(depth_val),
+        floors=int(max(1, floors)),
+        wall_height=float(wall_height),
+        wall_thickness=float(wall_thick),
+        style=style,
+        requested_openings=requested_openings,
+    )
+    for opening in resolved_openings:
+        opening["width"] = max(1.05 if opening["kind"] == "window" else 1.3, float(opening["width"]))
+        opening["height"] = max(1.25 if opening["kind"] == "window" else 2.3, float(opening["height"]))
 
-    block_style = "ashlar" if style in ("gothic", "fortress") else "rubble"
+    openings_by_wall: dict[str, list[dict[str, Any]]] = {wall_name: [] for wall_name in _WALL_NAME_TO_INDEX}
+    for opening in resolved_openings:
+        openings_by_wall[opening["wall"]].append(opening)
 
-    for wx, wy, wz, ww, wrot, label in wall_configs:
-        wall_spec = generate_stone_wall(
-            width=ww,
-            height=total_height,
-            thickness=wall_thick,
-            block_style=block_style,
-            mortar_depth=0.008,
-            block_variation=rng.uniform(0.2, 0.4),
-            seed=rng.randint(0, 99999),
+    wall_configs = {
+        "front": {"origin_x": 0.0, "origin_y": 0.0, "rotation": 0.0, "length": width},
+        "back": {"origin_x": 0.0, "origin_y": depth_val - wall_thick, "rotation": 0.0, "length": width},
+        "left": {"origin_x": wall_thick, "origin_y": wall_thick, "rotation": math.pi / 2.0, "length": max(0.0, depth_val - 2.0 * wall_thick)},
+        "right": {"origin_x": width, "origin_y": wall_thick, "rotation": math.pi / 2.0, "length": max(0.0, depth_val - 2.0 * wall_thick)},
+    }
+
+    wall_segment_count = 0
+    wall_opening_metadata: list[dict[str, Any]] = []
+    for wall_name, cfg in wall_configs.items():
+        wall_segments, wall_openings = _compute_wall_segments(
+            float(cfg["length"]),
+            float(total_height),
+            openings_by_wall.get(wall_name, []),
         )
-        wall_obj = mesh_from_spec(wall_spec, name=f"{name}_Wall_{label}")
-        if not isinstance(wall_obj, dict):
-            wall_obj.location = (wx, wy, wz)
-            wall_obj.rotation_euler = (0, 0, wrot)
+        for opening in wall_openings:
+            wall_opening_metadata.append({
+                "wall": opening["wall"],
+                "wall_index": opening["wall_index"],
+                "kind": opening["kind"],
+                "style": opening["requested_style"],
+                "floor": opening["floor"],
+                "center": round(float(opening["center"]), 4),
+                "bottom": round(float(opening["world_bottom"]), 4),
+                "width": round(float(opening["width"]), 4),
+                "height": round(float(opening["height"]), 4),
+            })
+        for seg_idx, segment in enumerate(wall_segments):
+            seg_width = float(segment["u1"] - segment["u0"])
+            seg_height = float(segment["v1"] - segment["v0"])
+            if seg_width < 0.08 or seg_height < 0.08:
+                continue
+            wall_spec = generate_stone_wall(
+                width=seg_width,
+                height=seg_height,
+                thickness=wall_thick,
+                block_style=block_style,
+                mortar_depth=0.008,
+                block_variation=rng.uniform(0.2, 0.4),
+                seed=rng.randint(0, 99999),
+            )
+            wall_obj = mesh_from_spec(wall_spec, name=f"{name}_Wall_{wall_name}_{seg_idx}")
+            if isinstance(wall_obj, dict):
+                continue
+            if wall_name in {"front", "back"}:
+                wall_obj.location = (
+                    float(cfg["origin_x"]) + float(segment["u0"]),
+                    float(cfg["origin_y"]),
+                    float(segment["v0"]),
+                )
+            else:
+                wall_obj.location = (
+                    float(cfg["origin_x"]),
+                    float(cfg["origin_y"]) + float(segment["u0"]),
+                    float(segment["v0"]),
+                )
+            wall_obj.rotation_euler = (0.0, 0.0, float(cfg["rotation"]))
             wall_obj.parent = parent
+            wall_obj["vb_editable_role"] = "wall_segment"
+            wall_obj["vb_wall_name"] = wall_name
+            wall_obj["vb_wall_segment_index"] = seg_idx
             for poly in wall_obj.data.polygons:
                 poly.use_smooth = True
+            _assign_procedural_material(wall_obj, _wall_mat_key)
             component_count += 1
+            wall_segment_count += 1
             total_verts += len(wall_spec.get("vertices", []))
             total_faces += len(wall_spec.get("faces", []))
 
-    # === WINDOWS (placed on front and back walls) ===
-    is_gothic = style in ("gothic", "fortress")
-    window_style = "pointed_arch" if is_gothic else "round_arch"
-    win_width = 0.8
-    win_height = 1.5
-    windows_per_wall = max(1, int(width / 3.0))
-    window_count = 0
+    def _opening_transform(opening: dict[str, Any]) -> tuple[tuple[float, float, float], float]:
+        base_z = float(opening["world_bottom"])
+        center = float(opening["center"])
+        wall_name = opening["wall"]
+        if wall_name == "front":
+            return (center, 0.0, base_z), 0.0
+        if wall_name == "back":
+            return (center, depth_val, base_z), math.pi
+        if wall_name == "left":
+            return (0.0, wall_thick + center, base_z), -math.pi / 2.0
+        return (width, wall_thick + center, base_z), math.pi / 2.0
 
-    for floor_idx in range(floors):
-        floor_z = floor_idx * wall_height + wall_height * 0.35
-        for wi in range(windows_per_wall):
-            wx = (wi + 1) * width / (windows_per_wall + 1)
+    window_count = 0
+    door_count = 0
+    for opening_idx, opening in enumerate(resolved_openings):
+        obj_location, obj_rotation_z = _opening_transform(opening)
+        if opening["kind"] == "window":
             win_spec = generate_gothic_window(
-                width=win_width,
-                height=win_height,
-                style=window_style,
-                tracery=is_gothic and floor_idx == floors - 1,
-                has_sill=True,
-                frame_depth=0.15,
+                width=float(opening["width"]),
+                height=float(opening["height"]),
+                style=str(opening.get("window_style") or ("pointed_arch" if is_gothic else "rectangular")),
+                tracery=is_gothic and opening["floor"] == floors - 1,
+                has_sill=bool(opening.get("has_sill", True)),
+                has_shutters=not is_gothic,
+                frame_depth=max(0.12, wall_thick * 0.42),
                 seed=rng.randint(0, 99999),
             )
-            # Place on front wall
-            win_obj = mesh_from_spec(win_spec, name=f"{name}_Window_F{floor_idx}_{wi}")
-            if not isinstance(win_obj, dict):
-                win_obj.location = (wx, -0.05, floor_z)
-                win_obj.parent = parent
-                for poly in win_obj.data.polygons:
-                    poly.use_smooth = True
-                window_count += 1
-                component_count += 1
-                total_verts += len(win_spec.get("vertices", []))
-                total_faces += len(win_spec.get("faces", []))
+            win_obj = mesh_from_spec(win_spec, name=f"{name}_Window_{opening['wall']}_{opening_idx}")
+            if isinstance(win_obj, dict):
+                continue
+            win_obj.location = obj_location
+            win_obj.rotation_euler = (0.0, 0.0, obj_rotation_z)
+            win_obj.parent = parent
+            win_obj["vb_editable_role"] = "window_frame"
+            win_obj["vb_wall_name"] = opening["wall"]
+            for poly in win_obj.data.polygons:
+                poly.use_smooth = True
+            _assign_procedural_material(win_obj, "smooth_stone" if is_gothic else "rough_stone_wall")
+            window_count += 1
+            component_count += 1
+            total_verts += len(win_spec.get("vertices", []))
+            total_faces += len(win_spec.get("faces", []))
+            continue
 
-            # Place on back wall
-            win_obj2 = mesh_from_spec(win_spec, name=f"{name}_Window_B{floor_idx}_{wi}")
-            if not isinstance(win_obj2, dict):
-                win_obj2.location = (wx, depth_val + 0.05, floor_z)
-                win_obj2.rotation_euler = (0, 0, math.pi)
-                win_obj2.parent = parent
-                window_count += 1
-                component_count += 1
-
-    # === DOOR (front center, ground floor) ===
-    door_spec = generate_archway(
-        width=1.2,
-        height=2.5,
-        depth=wall_thick + 0.1,
-        arch_style="gothic_pointed" if is_gothic else "round",
-        has_keystone=True,
-        seed=rng.randint(0, 99999),
-    )
-    door_obj = mesh_from_spec(door_spec, name=f"{name}_Door")
-    if not isinstance(door_obj, dict):
-        door_obj.location = (width / 2.0, -0.05, 0)
+        door_spec = generate_archway(
+            width=float(opening["width"]),
+            height=float(opening["height"]),
+            depth=wall_thick + 0.08,
+            arch_style=str(opening.get("door_arch_style") or ("gothic_pointed" if is_gothic else "roman_round")),
+            has_keystone=is_gothic,
+            seed=rng.randint(0, 99999),
+        )
+        door_obj = mesh_from_spec(door_spec, name=f"{name}_Door_{opening['wall']}_{opening_idx}")
+        if isinstance(door_obj, dict):
+            continue
+        door_obj.location = obj_location
+        door_obj.rotation_euler = (0.0, 0.0, obj_rotation_z)
         door_obj.parent = parent
+        door_obj["vb_editable_role"] = "door_frame"
+        door_obj["vb_wall_name"] = opening["wall"]
         for poly in door_obj.data.polygons:
             poly.use_smooth = True
+        _assign_procedural_material(door_obj, "smooth_stone")
+        door_count += 1
         component_count += 1
         total_verts += len(door_spec.get("vertices", []))
         total_faces += len(door_spec.get("faces", []))
 
-    # === ROOF ===
+    # === FLOOR SLABS: one per floor level so interiors have ground ===
+    for floor_idx in range(floors):
+        _fz = floor_idx * wall_height
+        _fbm = bmesh.new()
+        _ix0, _ix1 = wall_thick, width - wall_thick
+        _iy0, _iy1 = wall_thick, depth_val - wall_thick
+        _fv = [
+            _fbm.verts.new((_ix0, _iy0, _fz)),
+            _fbm.verts.new((_ix1, _iy0, _fz)),
+            _fbm.verts.new((_ix1, _iy1, _fz)),
+            _fbm.verts.new((_ix0, _iy1, _fz)),
+            _fbm.verts.new((_ix0, _iy0, _fz + 0.08)),
+            _fbm.verts.new((_ix1, _iy0, _fz + 0.08)),
+            _fbm.verts.new((_ix1, _iy1, _fz + 0.08)),
+            _fbm.verts.new((_ix0, _iy1, _fz + 0.08)),
+        ]
+        for _fi in [(0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (1, 2, 6, 5), (2, 3, 7, 6), (3, 0, 4, 7)]:
+            try:
+                _fbm.faces.new([_fv[i] for i in _fi])
+            except ValueError:
+                pass
+        _fmesh = bpy.data.meshes.new(f"{name}_Floor_{floor_idx}")
+        _fbm.to_mesh(_fmesh)
+        _fbm.free()
+        _fobj = bpy.data.objects.new(f"{name}_Floor_{floor_idx}", _fmesh)
+        bpy.context.collection.objects.link(_fobj)
+        _fobj.parent = parent
+        _assign_procedural_material(_fobj, "cobblestone_floor" if floor_idx == 0 else "plank_floor")
+        component_count += 1
+
+    # === ROOF: distinct material for visual differentiation from stone walls ===
     roof_style = preset.get("roof_style") if preset else None
     if not roof_style:
         roof_style = "gable" if style != "fortress" else "flat"
@@ -3192,13 +3887,31 @@ def handle_generate_building(params: dict) -> dict:
     )
     roof_obj = mesh_from_spec(roof_spec, name=f"{name}_Roof")
     if not isinstance(roof_obj, dict):
-        roof_obj.location = (-0.3, -0.3, total_height)
+        # Y=-0.3 correctly centers roof with 0.6m overhang each side; Z=total_height sits on wall tops
+        roof_obj.location = (width / 2.0, -0.3, total_height)
         roof_obj.parent = parent
         for poly in roof_obj.data.polygons:
             poly.use_smooth = True
+        _roof_mat = "slate_tiles" if is_gothic else "thatch_roof"
+        _assign_procedural_material(roof_obj, _roof_mat)
         component_count += 1
         total_verts += len(roof_spec.get("vertices", []))
         total_faces += len(roof_spec.get("faces", []))
+
+    facade_result = _apply_modular_facade(
+        name,
+        parent=parent,
+        width=float(width),
+        depth=float(depth_val),
+        floors=int(floors),
+        style=style,
+        wall_height=float(wall_height),
+        wall_thickness=float(wall_thick),
+        openings=resolved_openings,
+        site_profile=site_profile,
+        seed=seed,
+    )
+    component_count += int(facade_result["module_count"])
 
     # === EXTERIOR DRESSING ===
     exterior_props = list(preset.get("props", [])) if preset else []
@@ -3274,6 +3987,14 @@ def handle_generate_building(params: dict) -> dict:
         parent,
         seed,
     )
+    foundation_result = _apply_foundation_fitment(
+        name,
+        parent=parent,
+        footprint=(float(width), float(depth_val)),
+        wall_thickness=float(wall_thick),
+        foundation_profile=foundation_profile,
+    )
+    component_count += int(foundation_result["created"])
 
     # === INTERIORS ===
     interior_count = 0
@@ -3300,9 +4021,9 @@ def handle_generate_building(params: dict) -> dict:
         else:
             interior_room_types = ["bedroom", "kitchen", "storage"]
 
-    usable_width = max(2.5, width - 1.2)
-    usable_depth = max(2.5, depth_val - 1.2)
-    usable_height = max(2.5, wall_height - 0.4)
+    usable_width = max(3.0, width - 1.2)
+    usable_depth = max(3.0, depth_val - 1.2)
+    usable_height = max(2.8, wall_height - 0.35)
     stair_anchor_map = {
         "tavern": (0.78, 0.22),
         "kitchen": (0.76, 0.24),
@@ -3375,14 +4096,24 @@ def handle_generate_building(params: dict) -> dict:
         "vertex_count": total_verts,
         "face_count": total_faces,
         "component_count": component_count,
+        "wall_segment_count": wall_segment_count,
+        "door_count": door_count,
         "window_count": window_count,
+        "opening_count": len(resolved_openings),
         "exterior_prop_count": exterior_count,
         "architectural_accent_count": accent_count,
         "site_feature_count": site_feature_count,
+        "facade_module_count": int(facade_result["module_count"]),
+        "facade_chimney_count": int(facade_result["chimney_count"]),
+        "facade_buttress_count": int(facade_result["buttress_count"]),
+        "foundation_piece_count": int(foundation_result["created"]),
+        "foundation_retaining_wall_count": int(foundation_result["retaining_wall_count"]),
+        "foundation_stair_count": int(foundation_result["stair_count"]),
         "interior_room_count": interior_count,
         "block_style": block_style,
         "roof_style": roof_style,
         "weathering_level": weathering_level,
+        "openings": wall_opening_metadata,
     }
     if preset:
         result["preset"] = preset_name
@@ -3979,6 +4710,7 @@ def handle_generate_settlement(params: dict) -> dict:
     include_interiors = params.get("include_interiors", True)
     include_lights = params.get("include_lights", True)
     parent_name = params.get("parent_name")
+    layout_brief = str(params.get("layout_brief", ""))
 
     heightmap = None
     if terrain_name:
@@ -3991,6 +4723,7 @@ def handle_generate_settlement(params: dict) -> dict:
         radius=radius,
         heightmap=heightmap,
         wall_height=wall_height,
+        layout_brief=layout_brief,
     )
 
     parent = bpy.data.objects.get(parent_name) if parent_name else None

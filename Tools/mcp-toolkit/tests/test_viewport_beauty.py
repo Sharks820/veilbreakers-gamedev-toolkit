@@ -25,6 +25,7 @@ from blender_addon.handlers.viewport import (
     BEAUTY_LIGHT_PREFIX,
     BEAUTY_RIM_LIGHT,
     BEAUTY_STUDIO_LIGHT,
+    DARK_FANTASY_LIGHTING_PRESETS,
     GROUND_COLOR,
     GROUND_MATERIAL_NAME,
     GROUND_PLANE_NAME,
@@ -426,6 +427,11 @@ class TestBeautyConstants:
 
     def test_ground_material_name(self):
         assert GROUND_MATERIAL_NAME == "VB_Beauty_Ground_Mat"
+
+    def test_dark_fantasy_forest_presets_exist(self):
+        assert "forest_healthy" in DARK_FANTASY_LIGHTING_PRESETS
+        assert "forest_transition" in DARK_FANTASY_LIGHTING_PRESETS
+        assert "veil_corrupted" in DARK_FANTASY_LIGHTING_PRESETS
 
 
 # ---------------------------------------------------------------------------

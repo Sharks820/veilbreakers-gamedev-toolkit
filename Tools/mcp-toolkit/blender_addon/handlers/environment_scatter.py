@@ -28,6 +28,258 @@ from ._mesh_bridge import mesh_from_spec, VEGETATION_GENERATOR_MAP, PROP_GENERAT
 
 
 # ---------------------------------------------------------------------------
+# Lightweight scatter material presets
+# ---------------------------------------------------------------------------
+
+_SCATTER_MATERIAL_PRESETS: dict[str, dict[str, Any]] = {
+    "tree": {
+        "mode": "tree",
+        "trunk_color": (0.19, 0.15, 0.10, 1.0),
+        "foliage_color": (0.16, 0.23, 0.12, 1.0),
+        "accent_color": (0.10, 0.14, 0.08, 1.0),
+        "roughness": 0.80,
+    },
+    "tree_healthy": {
+        "mode": "tree",
+        "trunk_color": (0.20, 0.15, 0.09, 1.0),
+        "foliage_color": (0.18, 0.25, 0.14, 1.0),
+        "accent_color": (0.12, 0.17, 0.09, 1.0),
+        "roughness": 0.78,
+    },
+    "tree_boundary": {
+        "mode": "tree",
+        "trunk_color": (0.18, 0.14, 0.10, 1.0),
+        "foliage_color": (0.14, 0.18, 0.11, 1.0),
+        "accent_color": (0.11, 0.10, 0.08, 1.0),
+        "roughness": 0.83,
+    },
+    "tree_blighted": {
+        "mode": "tree",
+        "trunk_color": (0.17, 0.15, 0.14, 1.0),
+        "foliage_color": (0.12, 0.10, 0.12, 1.0),
+        "accent_color": (0.16, 0.07, 0.15, 1.0),
+        "roughness": 0.87,
+        "emission_strength": 0.04,
+    },
+    "tree_dead": {
+        "mode": "tree",
+        "trunk_color": (0.23, 0.21, 0.18, 1.0),
+        "foliage_color": (0.23, 0.21, 0.18, 1.0),
+        "accent_color": (0.14, 0.12, 0.10, 1.0),
+        "roughness": 0.88,
+    },
+    "tree_twisted": {
+        "mode": "tree",
+        "trunk_color": (0.18, 0.14, 0.10, 1.0),
+        "foliage_color": (0.14, 0.18, 0.11, 1.0),
+        "accent_color": (0.11, 0.10, 0.08, 1.0),
+        "roughness": 0.83,
+    },
+    "pine_tree": {
+        "mode": "tree",
+        "trunk_color": (0.16, 0.12, 0.08, 1.0),
+        "foliage_color": (0.10, 0.15, 0.09, 1.0),
+        "accent_color": (0.06, 0.10, 0.06, 1.0),
+        "roughness": 0.80,
+    },
+    "bush": {"mode": "foliage", "base_color": (0.14, 0.20, 0.11, 1.0), "accent_color": (0.09, 0.13, 0.07, 1.0), "roughness": 0.74},
+    "shrub": {"mode": "foliage", "base_color": (0.14, 0.20, 0.11, 1.0), "accent_color": (0.09, 0.13, 0.07, 1.0), "roughness": 0.74},
+    "grass": {"mode": "foliage", "base_color": (0.16, 0.20, 0.10, 1.0), "accent_color": (0.10, 0.12, 0.06, 1.0), "roughness": 0.72},
+    "weed": {"mode": "foliage", "base_color": (0.15, 0.17, 0.10, 1.0), "accent_color": (0.10, 0.11, 0.07, 1.0), "roughness": 0.76},
+    "rock": {"mode": "mineral", "base_color": (0.24, 0.24, 0.22, 1.0), "accent_color": (0.12, 0.16, 0.10, 1.0), "roughness": 0.92},
+    "rock_mossy": {"mode": "mineral", "base_color": (0.21, 0.22, 0.20, 1.0), "accent_color": (0.11, 0.15, 0.10, 1.0), "roughness": 0.90},
+    "cliff_rock": {"mode": "mineral", "base_color": (0.23, 0.22, 0.21, 1.0), "accent_color": (0.10, 0.12, 0.10, 1.0), "roughness": 0.94},
+    "mushroom": {"mode": "organic", "base_color": (0.28, 0.22, 0.20, 1.0), "accent_color": (0.18, 0.12, 0.10, 1.0), "roughness": 0.78},
+    "mushroom_cluster": {"mode": "organic", "base_color": (0.22, 0.20, 0.17, 1.0), "accent_color": (0.16, 0.12, 0.10, 1.0), "roughness": 0.80},
+    "root": {"mode": "organic", "base_color": (0.18, 0.14, 0.10, 1.0), "accent_color": (0.11, 0.08, 0.06, 1.0), "roughness": 0.86},
+    "fallen_log": {"mode": "organic", "base_color": (0.20, 0.15, 0.10, 1.0), "accent_color": (0.11, 0.08, 0.06, 1.0), "roughness": 0.84},
+    "barrel": {"mode": "organic", "base_color": (0.23, 0.16, 0.10, 1.0), "accent_color": (0.15, 0.10, 0.06, 1.0), "roughness": 0.74},
+    "crate": {"mode": "organic", "base_color": (0.24, 0.17, 0.11, 1.0), "accent_color": (0.16, 0.11, 0.07, 1.0), "roughness": 0.76},
+    "lantern": {"mode": "metal", "base_color": (0.18, 0.17, 0.16, 1.0), "accent_color": (0.32, 0.24, 0.12, 1.0), "roughness": 0.45},
+}
+
+
+_VEGETATION_Y_UP_TYPES = frozenset({
+    "tree",
+    "tree_healthy",
+    "tree_boundary",
+    "tree_blighted",
+    "tree_dead",
+    "tree_twisted",
+    "pine_tree",
+    "bush",
+    "shrub",
+    "grass",
+    "weed",
+    "mushroom",
+    "root",
+})
+
+_PROP_Y_UP_TYPES = frozenset({
+    "bush",
+    "shrub",
+    "dead_tree",
+    "tree",
+    "tree_healthy",
+    "tree_boundary",
+    "tree_blighted",
+    "tree_twisted",
+    "pine_tree",
+    "mushroom",
+})
+
+
+def _assign_scatter_material(obj: bpy.types.Object, material_key: str) -> None:
+    """Assign a lightweight procedural preview material.
+
+    The goal is not final authored shading; it is to avoid flat gray
+    placeholders so Blender previews show readable bark, foliage, and
+    rock variation.
+    """
+    if not hasattr(obj, "data") or obj.data is None:
+        return
+
+    preset = _SCATTER_MATERIAL_PRESETS.get(material_key, {
+        "mode": "organic",
+        "base_color": (0.2, 0.2, 0.2, 1.0),
+        "accent_color": (0.1, 0.1, 0.1, 1.0),
+        "roughness": 0.8,
+    })
+    mat_name = f"mat_{material_key}"
+    mat = bpy.data.materials.get(mat_name)
+    if mat is None:
+        mat = bpy.data.materials.new(name=mat_name)
+    mat.use_nodes = True
+    if not mat.node_tree:
+        obj.data.materials.clear()
+        obj.data.materials.append(mat)
+        return
+
+    nt = mat.node_tree
+    nt.nodes.clear()
+    output = nt.nodes.new("ShaderNodeOutputMaterial")
+    output.location = (640, 0)
+    bsdf = nt.nodes.new("ShaderNodeBsdfPrincipled")
+    bsdf.location = (360, 0)
+    tex_coord = nt.nodes.new("ShaderNodeTexCoord")
+    tex_coord.location = (-1000, 80)
+    mapping = nt.nodes.new("ShaderNodeMapping")
+    mapping.location = (-800, 80)
+    mapping.inputs["Scale"].default_value = (3.2, 3.2, 3.2)
+    noise = nt.nodes.new("ShaderNodeTexNoise")
+    noise.location = (-580, 120)
+    noise.inputs["Scale"].default_value = 5.5
+    noise.inputs["Detail"].default_value = 7.0
+    noise.inputs["Roughness"].default_value = 0.55
+    ramp = nt.nodes.new("ShaderNodeValToRGB")
+    ramp.location = (-340, 120)
+    ramp.color_ramp.elements[0].position = 0.36
+    ramp.color_ramp.elements[1].position = 0.82
+
+    mode = str(preset.get("mode", "organic"))
+    mix = nt.nodes.new("ShaderNodeMixRGB")
+    mix.location = (120, 110)
+    mix.blend_type = "MIX"
+
+    if mode == "tree":
+        geom = nt.nodes.new("ShaderNodeNewGeometry")
+        geom.location = (-1000, -180)
+        separate = nt.nodes.new("ShaderNodeSeparateXYZ")
+        separate.location = (-780, -180)
+        height_ramp = nt.nodes.new("ShaderNodeValToRGB")
+        height_ramp.location = (-520, -180)
+        height_ramp.color_ramp.elements[0].position = 0.28
+        height_ramp.color_ramp.elements[1].position = 0.52
+        height_ramp.color_ramp.elements[0].color = preset["trunk_color"]
+        height_ramp.color_ramp.elements[1].color = preset["foliage_color"]
+        accent_mix = nt.nodes.new("ShaderNodeMixRGB")
+        accent_mix.location = (-120, -20)
+        accent_mix.blend_type = "MULTIPLY"
+        accent_mix.inputs["Color2"].default_value = preset.get("accent_color", preset["foliage_color"])
+        accent_mix.inputs["Fac"].default_value = 0.28
+
+        nt.links.new(geom.outputs["Position"], separate.inputs["Vector"])
+        nt.links.new(separate.outputs["Y"], height_ramp.inputs["Fac"])
+        nt.links.new(tex_coord.outputs["Object"], mapping.inputs["Vector"])
+        nt.links.new(mapping.outputs["Vector"], noise.inputs["Vector"])
+        nt.links.new(noise.outputs["Fac"], ramp.inputs["Fac"])
+        nt.links.new(height_ramp.outputs["Color"], accent_mix.inputs["Color1"])
+        nt.links.new(noise.outputs["Fac"], accent_mix.inputs["Fac"])
+        nt.links.new(accent_mix.outputs["Color"], mix.inputs["Color1"])
+        mix.inputs["Color2"].default_value = preset.get("accent_color", preset["foliage_color"])
+        mix.inputs["Fac"].default_value = 0.15
+    else:
+        mix.inputs["Color1"].default_value = preset["base_color"]
+        mix.inputs["Color2"].default_value = preset.get("accent_color", preset["base_color"])
+        nt.links.new(tex_coord.outputs["Object"], mapping.inputs["Vector"])
+        nt.links.new(mapping.outputs["Vector"], noise.inputs["Vector"])
+        nt.links.new(noise.outputs["Fac"], ramp.inputs["Fac"])
+        nt.links.new(noise.outputs["Fac"], mix.inputs["Fac"])
+
+    nt.links.new(mix.outputs["Color"], bsdf.inputs["Base Color"])
+    if "Roughness" in bsdf.inputs:
+        bsdf.inputs["Roughness"].default_value = float(preset["roughness"])
+    if "Emission Color" in bsdf.inputs and float(preset.get("emission_strength", 0.0)) > 0.0:
+        bsdf.inputs["Emission Color"].default_value = preset.get("accent_color", preset.get("base_color", (0.1, 0.1, 0.1, 1.0)))
+    if "Emission Strength" in bsdf.inputs:
+        bsdf.inputs["Emission Strength"].default_value = float(preset.get("emission_strength", 0.0))
+    if mode == "metal":
+        if "Metallic" in bsdf.inputs:
+            bsdf.inputs["Metallic"].default_value = 0.4
+    nt.links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
+
+    obj.data.materials.clear()
+    obj.data.materials.append(mat)
+
+
+def _vegetation_rotation(veg_type: str, yaw_degrees: float) -> tuple[float, float, float]:
+    """Return a world rotation that converts Y-up generated meshes to Blender Z-up."""
+    x_rot = math.radians(90.0) if veg_type in _VEGETATION_Y_UP_TYPES else 0.0
+    return (x_rot, 0.0, math.radians(yaw_degrees))
+
+
+def _prop_rotation(prop_type: str, yaw_degrees: float) -> tuple[float, float, float]:
+    """Return a world rotation for prop-scatter meshes with Y-up authored geometry."""
+    x_rot = math.radians(90.0) if prop_type in _PROP_Y_UP_TYPES else 0.0
+    return (x_rot, 0.0, math.radians(yaw_degrees))
+
+
+def _terrain_height_sampler(terrain_obj: bpy.types.Object | None):
+    """Build a lightweight terrain-height sampler for prop placement."""
+    if terrain_obj is None or terrain_obj.type != "MESH" or terrain_obj.data is None:
+        return None
+
+    mesh = terrain_obj.data
+    bm = bmesh.new()
+    bm.from_mesh(mesh)
+    bm.verts.ensure_lookup_table()
+    vert_count = len(bm.verts)
+    side = int(math.sqrt(vert_count))
+    if side < 2 or side * side != vert_count:
+        bm.free()
+        return None
+
+    heights = np.array([v.co.z for v in bm.verts], dtype=np.float64)
+    bm.free()
+    height_max = heights.max() if heights.size and heights.max() > 0 else 1.0
+    heightmap = (heights / height_max).reshape(side, side)
+    dims = terrain_obj.dimensions
+    terrain_size = max(dims.x, dims.y, 1.0)
+    half_size = terrain_size / 2.0
+
+    def _sample(world_x: float, world_y: float) -> float:
+        u = (world_x + half_size) / terrain_size
+        v = (world_y + half_size) / terrain_size
+        ci = int(u * (side - 1))
+        ri = int(v * (side - 1))
+        ci = max(0, min(ci, side - 1))
+        ri = max(0, min(ri, side - 1))
+        return float(heightmap[ri, ci]) * height_max
+
+    return _sample
+
+
+# ---------------------------------------------------------------------------
 # Default biome vegetation rules
 # ---------------------------------------------------------------------------
 
@@ -91,8 +343,7 @@ def _create_vegetation_template(
     """Create a template mesh for a vegetation type.
 
     Uses procedural mesh generators from VEGETATION_GENERATOR_MAP when
-    available. Falls back to simple primitives for unmapped types (e.g.
-    grass stays as a flat plane -- billboard grass is standard for games).
+    available. Falls back to simple primitives for unmapped types.
     """
     gen_entry = VEGETATION_GENERATOR_MAP.get(veg_type)
     if gen_entry is not None:
@@ -110,11 +361,10 @@ def _create_vegetation_template(
             name=f"_template_{veg_type}",
             collection=collection,
         )
-        # Assign a basic material
-        if hasattr(obj, "data") and obj.data is not None:
-            mat = bpy.data.materials.new(name=f"mat_{veg_type}")
-            mat.use_nodes = True
-            obj.data.materials.append(mat)
+        if getattr(obj, "data", None) is not None and hasattr(obj.data, "polygons"):
+            for poly in obj.data.polygons:
+                poly.use_smooth = True
+        _assign_scatter_material(obj, veg_type)
         return obj
 
     # Fallback: simple primitives for unmapped types
@@ -132,11 +382,11 @@ def _create_vegetation_template(
 
     obj = bpy.data.objects.new(f"_template_{veg_type}", mesh)
     collection.objects.link(obj)
+    if hasattr(obj.data, "polygons"):
+        for poly in obj.data.polygons:
+            poly.use_smooth = True
 
-    # Assign a basic material
-    mat = bpy.data.materials.new(name=f"mat_{veg_type}")
-    mat.use_nodes = True
-    mesh.materials.append(mat)
+    _assign_scatter_material(obj, veg_type)
 
     return obj
 
@@ -275,7 +525,7 @@ def handle_scatter_vegetation(params: dict) -> dict:
         wz = float(heightmap[ri, ci]) * height_max
 
         instance.location = (wx, wy, wz)
-        instance.rotation_euler = (0, 0, math.radians(p["rotation"]))
+        instance.rotation_euler = _vegetation_rotation(vt, p["rotation"])
         s = p["scale"]
         instance.scale = (s, s, s)
 
@@ -322,11 +572,7 @@ def _create_prop_template(
             name=f"_template_{prop_type}",
             collection=collection,
         )
-        # Assign a basic dark fantasy material
-        if hasattr(obj, "data") and obj.data is not None:
-            mat = bpy.data.materials.new(name=f"mat_prop_{prop_type}")
-            mat.use_nodes = True
-            obj.data.materials.append(mat)
+        _assign_scatter_material(obj, prop_type)
         return obj
 
     # Fallback: cube with warning for unmapped prop types
@@ -341,10 +587,7 @@ def _create_prop_template(
     obj = bpy.data.objects.new(f"_template_{prop_type}", mesh)
     collection.objects.link(obj)
 
-    # Assign a fallback material
-    mat = bpy.data.materials.new(name=f"mat_prop_{prop_type}_fallback")
-    mat.use_nodes = True
-    mesh.materials.append(mat)
+    _assign_scatter_material(obj, prop_type)
 
     return obj
 
@@ -378,6 +621,7 @@ def handle_scatter_props(params: dict) -> dict:
     ys = [p[1] for p in positions]
     margin = 20.0
     area_size = max(max(xs) - min(xs) + margin * 2, max(ys) - min(ys) + margin * 2, 30.0)
+    terrain_sampler = _terrain_height_sampler(bpy.data.objects.get(area_name))
 
     placements = context_scatter(buildings, area_size, prop_density, seed)
 
@@ -403,8 +647,9 @@ def handle_scatter_props(params: dict) -> dict:
         instance = bpy.data.objects.new(
             f"{ptype}_{prop_counts[ptype]:04d}", template.data,
         )
-        instance.location = (p["position"][0], p["position"][1], 0)
-        instance.rotation_euler = (0, 0, math.radians(p["rotation"]))
+        wz = terrain_sampler(p["position"][0], p["position"][1]) if terrain_sampler else 0.0
+        instance.location = (p["position"][0], p["position"][1], wz)
+        instance.rotation_euler = _prop_rotation(ptype, p["rotation"])
         s = p["scale"]
         instance.scale = (s, s, s)
         scatter_coll.objects.link(instance)

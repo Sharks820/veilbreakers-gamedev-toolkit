@@ -69,6 +69,59 @@ BEAUTY_RIM_LIGHT = {
 
 BEAUTY_LIGHT_PREFIX = "VB_Beauty_"
 
+DARK_FANTASY_LIGHTING_PRESETS = {
+    "default": {
+        "ambient": 0.05,
+        "world_color": (0.01, 0.01, 0.02, 1.0),
+        "sun": None,
+        "key_energy": 2.0,
+        "fill_energy": 0.5,
+        "rim_energy": 1.5,
+        "mist_start": 8.0,
+        "mist_depth": 55.0,
+    },
+    "forest_healthy": {
+        "ambient": 0.035,
+        "world_color": (0.03, 0.04, 0.05, 1.0),
+        "sun": {"energy": 1.7, "azimuth": -40.0, "elevation": 26.0, "color": (0.62, 0.70, 0.56)},
+        "key_energy": 1.6,
+        "fill_energy": 0.35,
+        "rim_energy": 1.1,
+        "mist_start": 10.0,
+        "mist_depth": 62.0,
+    },
+    "forest_transition": {
+        "ambient": 0.026,
+        "world_color": (0.02, 0.025, 0.035, 1.0),
+        "sun": {"energy": 1.2, "azimuth": -55.0, "elevation": 18.0, "color": (0.54, 0.61, 0.67)},
+        "key_energy": 1.35,
+        "fill_energy": 0.25,
+        "rim_energy": 0.95,
+        "mist_start": 6.0,
+        "mist_depth": 44.0,
+    },
+    "forest_review": {
+        "ambient": 0.055,
+        "world_color": (0.07, 0.08, 0.09, 1.0),
+        "sun": {"energy": 2.2, "azimuth": -38.0, "elevation": 30.0, "color": (0.74, 0.76, 0.68)},
+        "key_energy": 1.85,
+        "fill_energy": 0.70,
+        "rim_energy": 1.20,
+        "mist_start": 14.0,
+        "mist_depth": 80.0,
+    },
+    "veil_corrupted": {
+        "ambient": 0.02,
+        "world_color": (0.015, 0.012, 0.025, 1.0),
+        "sun": {"energy": 0.7, "azimuth": -65.0, "elevation": 12.0, "color": (0.44, 0.40, 0.54)},
+        "key_energy": 1.0,
+        "fill_energy": 0.14,
+        "rim_energy": 0.85,
+        "mist_start": 4.0,
+        "mist_depth": 30.0,
+    },
+}
+
 # Ground plane settings
 GROUND_PLANE_NAME = "VB_Beauty_Ground"
 GROUND_MATERIAL_NAME = "VB_Beauty_Ground_Mat"
@@ -483,6 +536,36 @@ def _create_area_light(
     return light_obj
 
 
+def _create_sun_light(
+    *,
+    name: str,
+    energy: float,
+    color: tuple[float, float, float],
+    azimuth: float,
+    elevation: float,
+) -> object:
+    """Create a directional sun light for outdoor readability."""
+    light_data = bpy.data.lights.new(name=name, type="SUN")
+    light_data.energy = energy
+    light_data.color = color
+    light_obj = bpy.data.objects.new(name=name, object_data=light_data)
+    bpy.context.scene.collection.objects.link(light_obj)
+    light_obj.rotation_euler = (
+        math.radians(90.0 - elevation),
+        0.0,
+        math.radians(azimuth),
+    )
+    return light_obj
+
+
+def _lighting_preset_for_name(name: str) -> dict:
+    preset_name = str(name or "default").strip().lower()
+    return DARK_FANTASY_LIGHTING_PRESETS.get(
+        preset_name,
+        DARK_FANTASY_LIGHTING_PRESETS["default"],
+    )
+
+
 def handle_setup_dark_fantasy_lighting(params: dict) -> dict:
     """Set up 3-point dark fantasy lighting rig.
 
@@ -492,13 +575,17 @@ def handle_setup_dark_fantasy_lighting(params: dict) -> dict:
 
     Params:
         object_name (str, optional): Object to light around.
-        ambient (float, optional): World ambient strength (default 0.05).
+        ambient (float, optional): World ambient strength (default from preset).
+        preset (str, optional): `default`, `forest_healthy`,
+            `forest_transition`, or `veil_corrupted`.
 
     Returns:
         Dict with created light info.
     """
     object_name = params.get("object_name")
-    ambient = params.get("ambient", 0.05)
+    preset_name = params.get("preset", "default")
+    preset = _lighting_preset_for_name(preset_name)
+    ambient = params.get("ambient", preset["ambient"])
 
     # Determine center and distance
     center = (0.0, 0.0, 0.0)
@@ -522,12 +609,38 @@ def handle_setup_dark_fantasy_lighting(params: dict) -> dict:
 
     # Create 3-point lighting
     lights_created = []
-    for preset in (BEAUTY_KEY_LIGHT, BEAUTY_FILL_LIGHT, BEAUTY_RIM_LIGHT):
-        light_obj = _create_area_light(preset, center, base_distance)
+    tuned_lights = []
+    for base in (BEAUTY_KEY_LIGHT, BEAUTY_FILL_LIGHT, BEAUTY_RIM_LIGHT):
+        local = dict(base)
+        if base["name"].endswith("Key"):
+            local["energy"] = float(preset["key_energy"])
+        elif base["name"].endswith("Fill"):
+            local["energy"] = float(preset["fill_energy"])
+        else:
+            local["energy"] = float(preset["rim_energy"])
+        tuned_lights.append(local)
+
+    for light_preset in tuned_lights:
+        light_obj = _create_area_light(light_preset, center, base_distance)
         lights_created.append({
             "name": light_obj.name,
-            "energy": preset["energy"],
+            "energy": light_preset["energy"],
             "position": list(light_obj.location),
+        })
+
+    sun_cfg = preset.get("sun")
+    if isinstance(sun_cfg, dict):
+        sun_obj = _create_sun_light(
+            name=f"{BEAUTY_LIGHT_PREFIX}Sun",
+            energy=float(sun_cfg["energy"]),
+            color=tuple(sun_cfg["color"]),
+            azimuth=float(sun_cfg["azimuth"]),
+            elevation=float(sun_cfg["elevation"]),
+        )
+        lights_created.append({
+            "name": sun_obj.name,
+            "energy": float(sun_cfg["energy"]),
+            "position": list(sun_obj.location),
         })
 
     # Set dark ambient world
@@ -535,15 +648,34 @@ def handle_setup_dark_fantasy_lighting(params: dict) -> dict:
     if world is None:
         world = bpy.data.worlds.new("VB_Beauty_World")
         bpy.context.scene.world = world
+    world.use_nodes = True
     if world.use_nodes and world.node_tree:
         bg_node = world.node_tree.nodes.get("Background")
         if bg_node:
             bg_node.inputs["Strength"].default_value = ambient
-            bg_node.inputs["Color"].default_value = (0.01, 0.01, 0.02, 1.0)
+            bg_node.inputs["Color"].default_value = preset["world_color"]
+
+    mist = getattr(world, "mist_settings", None)
+    if mist is not None:
+        mist.use_mist = True
+        mist.start = float(preset["mist_start"])
+        mist.depth = float(preset["mist_depth"])
+        mist.falloff = "QUADRATIC"
+
+    scene = bpy.context.scene
+    eevee = getattr(scene, "eevee", None)
+    if eevee is not None:
+        if hasattr(eevee, "use_gtao"):
+            eevee.use_gtao = True
+        if hasattr(eevee, "use_volumetric_lights"):
+            eevee.use_volumetric_lights = True
+        if hasattr(eevee, "use_volumetric_shadows"):
+            eevee.use_volumetric_shadows = True
 
     return {
         "lights": lights_created,
         "ambient": ambient,
+        "preset": str(preset_name),
         "center": list(center),
         "base_distance": base_distance,
     }

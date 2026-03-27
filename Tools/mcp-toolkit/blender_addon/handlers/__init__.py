@@ -221,6 +221,10 @@ from .terrain_materials import (
 from .vegetation_system import (
     handle_scatter_biome_vegetation,
 )
+from .addon_toolchain import (
+    handle_inspect_external_toolchain,
+    handle_configure_external_toolchain,
+)
 from .road_network import (  # noqa: F401 -- road network generation
     compute_road_network,
     compute_mst_edges,
@@ -902,6 +906,9 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "terrain_create_biome_material": handle_create_biome_terrain,
     # Per-biome vegetation quality system
     "env_scatter_biome_vegetation": handle_scatter_biome_vegetation,
+    # External addon/toolchain inspection
+    "toolchain_inspect_external": handle_inspect_external_toolchain,
+    "toolchain_configure_external": handle_configure_external_toolchain,
     # Road network generation (pure logic -- returns mesh specs)
     "env_compute_road_network": lambda params: compute_road_network(
         waypoints=[tuple(wp) for wp in params.get("waypoints", [])],

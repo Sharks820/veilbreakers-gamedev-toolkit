@@ -409,6 +409,14 @@ class TestVBBiomePresets:
         preset["resolution"] = 9999
         assert VB_BIOME_PRESETS["thornwood_forest"]["resolution"] != 9999
 
+    def test_thornwood_forest_uses_progression_tree_assets(self):
+        from blender_addon.handlers.environment import VB_BIOME_PRESETS
+
+        assets = {rule["asset"] for rule in VB_BIOME_PRESETS["thornwood_forest"]["scatter_rules"]}
+        assert "tree_healthy" in assets
+        assert "tree_boundary" in assets
+        assert "tree_blighted" in assets
+
     def test_get_vb_biome_preset_returns_none_for_unknown(self):
         """get_vb_biome_preset returns None for unknown biome name."""
         from blender_addon.handlers.environment import get_vb_biome_preset

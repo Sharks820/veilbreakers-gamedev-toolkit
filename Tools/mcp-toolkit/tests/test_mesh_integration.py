@@ -90,9 +90,9 @@ class TestVegetationMapping:
 
     def test_vegetation_types_mapped(self):
         """All default vegetation types are either in VEGETATION_GENERATOR_MAP
-        or have a known fallback (grass -> flat plane)."""
+        or intentionally handled by fallback logic."""
         mapped = set(VEGETATION_GENERATOR_MAP.keys())
-        fallback_types = {"grass"}  # grass stays as flat plane
+        fallback_types: set[str] = set()
 
         for vt in self._DEFAULT_VEG_TYPES:
             assert vt in mapped or vt in fallback_types, (

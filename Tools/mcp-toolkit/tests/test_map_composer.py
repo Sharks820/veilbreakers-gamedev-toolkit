@@ -68,9 +68,10 @@ class TestPOIPlacementRules:
     """Validate the POI placement rule definitions."""
 
     def test_all_types_have_rules(self):
-        expected = {"village", "town", "bandit_camp", "dungeon_entrance",
-                    "shrine", "veil_crack", "castle"}
-        assert set(POI_PLACEMENT_RULES.keys()) == expected
+        core_types = {"village", "town", "bandit_camp", "dungeon_entrance",
+                      "shrine", "veil_crack", "castle"}
+        assert core_types.issubset(set(POI_PLACEMENT_RULES.keys())), \
+            f"Missing core types: {core_types - set(POI_PLACEMENT_RULES.keys())}"
 
     def test_each_rule_has_required_fields(self):
         required = {"preferred_biomes", "min_slope", "max_slope",

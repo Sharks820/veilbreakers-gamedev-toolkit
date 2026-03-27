@@ -1049,8 +1049,10 @@ class PipelineRunner:
         preferred_backend = str(getattr(self.settings, "preferred_3d_backend", "stable_fast_3d") or "").strip().lower()
         stable_fast3d_repo_path = str(getattr(self.settings, "stable_fast3d_repo_path", "") or "").strip()
         stable_fast3d_python = str(getattr(self.settings, "stable_fast3d_python", "") or "").strip()
-        stable_fast3d_texture_resolution = int(getattr(self.settings, "stable_fast3d_texture_resolution", 1024) or 1024)
-        stable_fast3d_remesh_option = str(getattr(self.settings, "stable_fast3d_remesh_option", "quad") or "quad").strip().lower()
+        stable_fast3d_device = str(getattr(self.settings, "stable_fast3d_device", "auto") or "auto").strip().lower()
+        stable_fast3d_texture_resolution = int(getattr(self.settings, "stable_fast3d_texture_resolution", 512) or 512)
+        stable_fast3d_remesh_option = str(getattr(self.settings, "stable_fast3d_remesh_option", "triangle") or "triangle").strip().lower()
+        stable_fast3d_target_vertex_count = int(getattr(self.settings, "stable_fast3d_target_vertex_count", 20000) or 20000)
 
         local_generation_attempted = False
         local_generation_result: dict | None = None
@@ -1067,8 +1069,10 @@ class PipelineRunner:
                 local_generation_result = await local_gen.generate_from_image(
                     image_path=image_path,
                     output_dir=output_dir,
+                    device=stable_fast3d_device,
                     texture_resolution=stable_fast3d_texture_resolution,
                     remesh_option=stable_fast3d_remesh_option,
+                    target_vertex_count=stable_fast3d_target_vertex_count,
                     timeout=getattr(self.settings, "blender_timeout", 300),
                 )
                 result["generation"]["local_3d"] = local_generation_result

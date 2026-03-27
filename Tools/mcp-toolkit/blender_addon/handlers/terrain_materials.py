@@ -2068,7 +2068,10 @@ def create_biome_terrain_material(
             if vcn not in mesh.color_attributes:
                 mesh.color_attributes.new(name=vcn, type="FLOAT_COLOR", domain="CORNER")
             vcol = mesh.color_attributes[vcn]
-            mesh.calc_normals_split()
+            if hasattr(mesh, "calc_normals_split"):
+                mesh.calc_normals_split()
+            elif hasattr(mesh, "calc_normals"):
+                mesh.calc_normals()
             vl = [(v.co.x, v.co.y, v.co.z) for v in mesh.vertices]
             nl = [(p.normal.x, p.normal.y, p.normal.z) for p in mesh.polygons]
             fl = [tuple(p.vertices) for p in mesh.polygons]

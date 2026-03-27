@@ -22,10 +22,14 @@ class Settings(BaseSettings):
     stable_fast3d_repo_path: str = ""
     # Python executable to use for Stable Fast 3D (defaults to current interpreter when empty)
     stable_fast3d_python: str = ""
+    # Stable Fast 3D device: auto, cuda, or cpu
+    stable_fast3d_device: str = "auto"
     # Stable Fast 3D output texture size in pixels
-    stable_fast3d_texture_resolution: int = 1024
+    stable_fast3d_texture_resolution: int = 512
     # Stable Fast 3D remesh option: none, triangle, or quad
-    stable_fast3d_remesh_option: str = "quad"
+    stable_fast3d_remesh_option: str = "triangle"
+    # Stable Fast 3D target vertex count hint
+    stable_fast3d_target_vertex_count: int = 20000
     # fal.ai for concept art / image generation
     fal_key: str = ""
     # Real-ESRGAN binary path for texture upscaling

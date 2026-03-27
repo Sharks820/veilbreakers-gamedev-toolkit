@@ -118,6 +118,441 @@ class BuildingSpec:
 
 
 # ---------------------------------------------------------------------------
+# Facade grammar
+# ---------------------------------------------------------------------------
+
+
+FACADE_STYLE_RULES: dict[str, dict[str, float | int | bool | str]] = {
+    "medieval": {
+        "plinth_height": 0.42,
+        "plinth_projection": 0.16,
+        "stringcourse_height": 0.14,
+        "cornice_height": 0.28,
+        "bay_divisor": 3,
+        "pilaster_width": 0.28,
+        "pilaster_depth": 0.15,
+        "opening_frame": 0.12,
+        "sill_height": 0.08,
+        "lintel_height": 0.1,
+        "has_balcony": 1,
+        "has_awning": 1,
+        "has_shutters": 1,
+        "has_buttress": 0,
+    },
+    "gothic": {
+        "plinth_height": 0.56,
+        "plinth_projection": 0.22,
+        "stringcourse_height": 0.18,
+        "cornice_height": 0.34,
+        "bay_divisor": 4,
+        "pilaster_width": 0.34,
+        "pilaster_depth": 0.18,
+        "opening_frame": 0.14,
+        "sill_height": 0.09,
+        "lintel_height": 0.16,
+        "has_balcony": 0,
+        "has_awning": 0,
+        "has_shutters": 0,
+        "has_buttress": 1,
+    },
+    "rustic": {
+        "plinth_height": 0.3,
+        "plinth_projection": 0.12,
+        "stringcourse_height": 0.1,
+        "cornice_height": 0.22,
+        "bay_divisor": 2,
+        "pilaster_width": 0.22,
+        "pilaster_depth": 0.1,
+        "opening_frame": 0.08,
+        "sill_height": 0.06,
+        "lintel_height": 0.08,
+        "has_balcony": 0,
+        "has_awning": 0,
+        "has_shutters": 1,
+        "has_buttress": 0,
+    },
+    "fortress": {
+        "plinth_height": 0.78,
+        "plinth_projection": 0.24,
+        "stringcourse_height": 0.18,
+        "cornice_height": 0.42,
+        "bay_divisor": 5,
+        "pilaster_width": 0.42,
+        "pilaster_depth": 0.24,
+        "opening_frame": 0.16,
+        "sill_height": 0.06,
+        "lintel_height": 0.14,
+        "has_balcony": 0,
+        "has_awning": 0,
+        "has_shutters": 0,
+        "has_buttress": 1,
+    },
+    "organic": {
+        "plinth_height": 0.38,
+        "plinth_projection": 0.1,
+        "stringcourse_height": 0.08,
+        "cornice_height": 0.18,
+        "bay_divisor": 3,
+        "pilaster_width": 0.24,
+        "pilaster_depth": 0.08,
+        "opening_frame": 0.08,
+        "sill_height": 0.04,
+        "lintel_height": 0.08,
+        "has_balcony": 0,
+        "has_awning": 0,
+        "has_shutters": 0,
+        "has_buttress": 0,
+    },
+}
+
+
+def _add_facade_box(
+    modules: list[dict],
+    *,
+    role: str,
+    material: str,
+    position: tuple[float, float, float],
+    size: tuple[float, float, float],
+    wall: str,
+    anchor: str | None = None,
+) -> None:
+    """Append a facade box module when all dimensions are positive."""
+    if min(size) <= 0.0:
+        return
+    modules.append({
+        "type": "box",
+        "role": role,
+        "material": material,
+        "position": [round(position[0], 4), round(position[1], 4), round(position[2], 4)],
+        "size": [round(size[0], 4), round(size[1], 4), round(size[2], 4)],
+        "wall": wall,
+        "anchor": anchor,
+    })
+
+
+def _bay_guides(length: float, bay_count: int) -> list[float]:
+    """Return normalized bay guide positions along a wall length."""
+    if bay_count <= 1:
+        return [length * 0.5]
+    return [length * (idx / bay_count) for idx in range(1, bay_count)]
+
+
+def plan_modular_facade(
+    width: float,
+    depth: float,
+    floors: int,
+    style: str,
+    *,
+    wall_height: float,
+    wall_thickness: float,
+    openings: list[dict] | None = None,
+    site_profile: str = "",
+    seed: int = 0,
+) -> dict[str, object]:
+    """Plan facade modules that enrich a procedural building shell.
+
+    Returns a deterministic module list using the building's local space,
+    where the shell root is still corner-based (0..width, 0..depth).
+    """
+    rng = random.Random(seed)
+    rules = FACADE_STYLE_RULES.get(style, FACADE_STYLE_RULES["medieval"])
+    openings = list(openings or [])
+    site_profile = str(site_profile or "").strip().lower()
+    total_height = wall_height * max(1, floors)
+    frame_depth = max(0.06, float(rules["opening_frame"]))
+    band_depth = max(0.06, float(rules["plinth_projection"]))
+    pilaster_w = max(0.16, float(rules["pilaster_width"]))
+    pilaster_depth = max(0.06, float(rules["pilaster_depth"]))
+    modules: list[dict] = []
+    wall_material = STYLE_CONFIGS[style]["walls"]["material"]
+    foundation_material = STYLE_CONFIGS[style]["foundation"]["material"]
+    roof_material = STYLE_CONFIGS[style]["roof"]["material"]
+
+    def _wall_span(wall_name: str) -> float:
+        return width if wall_name in {"front", "back"} else max(0.0, depth - 2.0 * wall_thickness)
+
+    # Base plinth bands
+    plinth_h = min(total_height * 0.3, float(rules["plinth_height"]))
+    _add_facade_box(
+        modules,
+        role="facade_plinth",
+        material=foundation_material,
+        position=(0.0, -band_depth, 0.0),
+        size=(width, band_depth + wall_thickness * 0.4, plinth_h),
+        wall="front",
+    )
+    _add_facade_box(
+        modules,
+        role="facade_plinth",
+        material=foundation_material,
+        position=(0.0, depth - wall_thickness * 0.4, 0.0),
+        size=(width, band_depth + wall_thickness * 0.4, plinth_h),
+        wall="back",
+    )
+    _add_facade_box(
+        modules,
+        role="facade_plinth",
+        material=foundation_material,
+        position=(-band_depth, wall_thickness, 0.0),
+        size=(band_depth + wall_thickness * 0.4, max(0.0, depth - 2.0 * wall_thickness), plinth_h),
+        wall="left",
+    )
+    _add_facade_box(
+        modules,
+        role="facade_plinth",
+        material=foundation_material,
+        position=(width - wall_thickness * 0.4, wall_thickness, 0.0),
+        size=(band_depth + wall_thickness * 0.4, max(0.0, depth - 2.0 * wall_thickness), plinth_h),
+        wall="right",
+    )
+
+    # Stringcourses between floors and cornice at the top.
+    course_h = max(0.06, float(rules["stringcourse_height"]))
+    for floor_idx in range(1, max(1, floors)):
+        z = floor_idx * wall_height - course_h * 0.5
+        for wall_name in ("front", "back"):
+            y = -band_depth * 0.35 if wall_name == "front" else depth - wall_thickness * 0.25
+            _add_facade_box(
+                modules,
+                role="facade_stringcourse",
+                material=foundation_material,
+                position=(0.0, y, z),
+                size=(width, band_depth * 0.8 + wall_thickness * 0.35, course_h),
+                wall=wall_name,
+            )
+        for wall_name, x in (("left", -band_depth * 0.35), ("right", width - wall_thickness * 0.25)):
+            _add_facade_box(
+                modules,
+                role="facade_stringcourse",
+                material=foundation_material,
+                position=(x, wall_thickness, z),
+                size=(band_depth * 0.8 + wall_thickness * 0.35, max(0.0, depth - 2.0 * wall_thickness), course_h),
+                wall=wall_name,
+            )
+
+    cornice_h = max(0.12, float(rules["cornice_height"]))
+    cornice_z = max(0.0, total_height - cornice_h)
+    for wall_name in ("front", "back"):
+        y = -band_depth * 0.45 if wall_name == "front" else depth - wall_thickness * 0.3
+        _add_facade_box(
+            modules,
+            role="facade_cornice",
+            material=roof_material,
+            position=(0.0, y, cornice_z),
+            size=(width, band_depth + wall_thickness * 0.45, cornice_h),
+            wall=wall_name,
+        )
+    for wall_name, x in (("left", -band_depth * 0.45), ("right", width - wall_thickness * 0.3)):
+        _add_facade_box(
+            modules,
+            role="facade_cornice",
+            material=roof_material,
+            position=(x, wall_thickness, cornice_z),
+            size=(band_depth + wall_thickness * 0.45, max(0.0, depth - 2.0 * wall_thickness), cornice_h),
+            wall=wall_name,
+        )
+
+    # Corner pilasters / quoins
+    corner_specs = (
+        ("front", (0.0, -pilaster_depth, plinth_h * 0.1)),
+        ("front", (width - pilaster_w, -pilaster_depth, plinth_h * 0.1)),
+        ("back", (0.0, depth - wall_thickness * 0.2, plinth_h * 0.1)),
+        ("back", (width - pilaster_w, depth - wall_thickness * 0.2, plinth_h * 0.1)),
+        ("left", (-pilaster_depth, wall_thickness, plinth_h * 0.1)),
+        ("left", (-pilaster_depth, depth - wall_thickness - pilaster_w, plinth_h * 0.1)),
+        ("right", (width - wall_thickness * 0.2, wall_thickness, plinth_h * 0.1)),
+        ("right", (width - wall_thickness * 0.2, depth - wall_thickness - pilaster_w, plinth_h * 0.1)),
+    )
+    for wall_name, pos in corner_specs:
+        size = (
+            pilaster_w if wall_name in {"front", "back"} else pilaster_depth + wall_thickness * 0.35,
+            pilaster_depth + wall_thickness * 0.35 if wall_name in {"front", "back"} else pilaster_w,
+            max(0.6, total_height - cornice_h * 0.4),
+        )
+        _add_facade_box(
+            modules,
+            role="facade_pilaster",
+            material=foundation_material,
+            position=pos,
+            size=size,
+            wall=wall_name,
+            anchor="corner",
+        )
+
+    openings_by_wall: dict[str, list[dict]] = {"front": [], "back": [], "left": [], "right": []}
+    for opening in openings:
+        wall_name = str(opening.get("wall", "front")).strip().lower()
+        if wall_name in openings_by_wall:
+            openings_by_wall[wall_name].append(opening)
+
+    # Rhythm pilasters and opening trims.
+    for wall_name, wall_openings in openings_by_wall.items():
+        span = _wall_span(wall_name)
+        if span <= 0.0:
+            continue
+        bay_count = max(2, int(rules["bay_divisor"]))
+        if wall_openings:
+            bay_count = max(bay_count, min(6, len(wall_openings) + 1))
+        for guide in _bay_guides(span, bay_count):
+            if any(abs(float(op.get("center", 0.0)) - guide) < max(0.8, pilaster_w * 1.4) for op in wall_openings):
+                continue
+            if wall_name == "front":
+                pos = (max(0.0, min(width - pilaster_w, guide - pilaster_w * 0.5)), -pilaster_depth * 0.8, plinth_h)
+                size = (pilaster_w, pilaster_depth + wall_thickness * 0.35, max(0.5, total_height - cornice_h - plinth_h))
+            elif wall_name == "back":
+                pos = (max(0.0, min(width - pilaster_w, guide - pilaster_w * 0.5)), depth - wall_thickness * 0.2, plinth_h)
+                size = (pilaster_w, pilaster_depth + wall_thickness * 0.35, max(0.5, total_height - cornice_h - plinth_h))
+            elif wall_name == "left":
+                pos = (-pilaster_depth * 0.8, wall_thickness + max(0.0, min(span - pilaster_w, guide - pilaster_w * 0.5)), plinth_h)
+                size = (pilaster_depth + wall_thickness * 0.35, pilaster_w, max(0.5, total_height - cornice_h - plinth_h))
+            else:
+                pos = (width - wall_thickness * 0.2, wall_thickness + max(0.0, min(span - pilaster_w, guide - pilaster_w * 0.5)), plinth_h)
+                size = (pilaster_depth + wall_thickness * 0.35, pilaster_w, max(0.5, total_height - cornice_h - plinth_h))
+            _add_facade_box(
+                modules,
+                role="facade_pilaster",
+                material=foundation_material,
+                position=pos,
+                size=size,
+                wall=wall_name,
+                anchor="bay",
+            )
+
+        for opening in wall_openings:
+            center = float(opening.get("center", 0.0))
+            base_z = float(opening.get("world_bottom", opening.get("bottom", 0.0)))
+            o_width = float(opening.get("width", 1.0))
+            o_height = float(opening.get("height", 1.0))
+            half_w = o_width * 0.5
+            surround_w = o_width + frame_depth * 2.0
+            surround_h = o_height + frame_depth * 2.0
+            anchor = opening.get("kind", "window")
+            if wall_name == "front":
+                _add_facade_box(
+                    modules,
+                    role="facade_surround",
+                    material=foundation_material,
+                    position=(center - surround_w * 0.5, -frame_depth, base_z - frame_depth),
+                    size=(surround_w, frame_depth + wall_thickness * 0.35, surround_h),
+                    wall=wall_name,
+                    anchor=anchor,
+                )
+                _add_facade_box(
+                    modules,
+                    role="facade_sill",
+                    material=foundation_material,
+                    position=(center - half_w - frame_depth * 0.8, -frame_depth * 1.2, max(0.0, base_z - float(rules["sill_height"]))),
+                    size=(o_width + frame_depth * 1.6, frame_depth + wall_thickness * 0.2, float(rules["sill_height"])),
+                    wall=wall_name,
+                    anchor=anchor,
+                )
+                _add_facade_box(
+                    modules,
+                    role="facade_lintel",
+                    material=foundation_material,
+                    position=(center - half_w - frame_depth * 0.6, -frame_depth * 1.2, base_z + o_height),
+                    size=(o_width + frame_depth * 1.2, frame_depth + wall_thickness * 0.2, float(rules["lintel_height"])),
+                    wall=wall_name,
+                    anchor=anchor,
+                )
+            elif wall_name == "back":
+                _add_facade_box(
+                    modules,
+                    role="facade_surround",
+                    material=foundation_material,
+                    position=(center - surround_w * 0.5, depth - wall_thickness * 0.2, base_z - frame_depth),
+                    size=(surround_w, frame_depth + wall_thickness * 0.35, surround_h),
+                    wall=wall_name,
+                    anchor=anchor,
+                )
+            elif wall_name == "left":
+                _add_facade_box(
+                    modules,
+                    role="facade_surround",
+                    material=foundation_material,
+                    position=(-frame_depth, wall_thickness + center - surround_w * 0.5, base_z - frame_depth),
+                    size=(frame_depth + wall_thickness * 0.35, surround_w, surround_h),
+                    wall=wall_name,
+                    anchor=anchor,
+                )
+            else:
+                _add_facade_box(
+                    modules,
+                    role="facade_surround",
+                    material=foundation_material,
+                    position=(width - wall_thickness * 0.2, wall_thickness + center - surround_w * 0.5, base_z - frame_depth),
+                    size=(frame_depth + wall_thickness * 0.35, surround_w, surround_h),
+                    wall=wall_name,
+                    anchor=anchor,
+                )
+
+    if bool(rules["has_buttress"]):
+        buttress_h = max(wall_height * 0.9, total_height * 0.42)
+        for wall_name, position in (
+            ("front", (0.18, -band_depth * 1.2, 0.0)),
+            ("front", (width - 0.72, -band_depth * 1.2, 0.0)),
+            ("back", (0.18, depth - wall_thickness * 0.25, 0.0)),
+            ("back", (width - 0.72, depth - wall_thickness * 0.25, 0.0)),
+        ):
+            modules.append({
+                "type": "buttress",
+                "role": "facade_buttress",
+                "material": foundation_material,
+                "position": [round(position[0], 4), round(position[1], 4), round(position[2], 4)],
+                "height": round(buttress_h, 4),
+                "width": round(max(0.48, pilaster_w * 1.3), 4),
+                "depth": round(max(0.56, pilaster_depth * 2.4), 4),
+                "wall": wall_name,
+            })
+
+    if bool(rules["has_awning"]) and site_profile in {"market", "waterfront"}:
+        awning_w = max(1.8, width * 0.28)
+        awning_x = width * (0.52 if site_profile == "market" else 0.34) - awning_w * 0.5
+        _add_facade_box(
+            modules,
+            role="facade_awning",
+            material=roof_material,
+            position=(max(0.2, awning_x), -0.55, min(total_height * 0.45, wall_height * 0.72)),
+            size=(min(width - 0.4, awning_w), 0.5, 0.1),
+            wall="front",
+            anchor="shopfront",
+        )
+
+    if bool(rules["has_balcony"]) and floors >= 2:
+        balcony_w = min(width * 0.36, max(1.8, width * 0.24))
+        _add_facade_box(
+            modules,
+            role="facade_balcony",
+            material=roof_material,
+            position=(width * 0.5 - balcony_w * 0.5, -0.78, wall_height + 0.05),
+            size=(balcony_w, 0.68, 0.12),
+            wall="front",
+            anchor="upper_front",
+        )
+
+    if style in {"medieval", "rustic"} or site_profile in {"rural", "market"}:
+        chimney_x = width * (0.22 if rng.random() < 0.5 else 0.74)
+        chimney_y = depth * (0.22 if rng.random() < 0.5 else 0.72)
+        modules.append({
+            "type": "chimney",
+            "role": "facade_chimney",
+            "material": foundation_material,
+            "position": [round(chimney_x, 4), round(chimney_y, 4), round(total_height - 0.2, 4)],
+            "height": round(max(1.2, wall_height * 0.7), 4),
+            "width": round(max(0.42, pilaster_w * 1.4), 4),
+            "depth": round(max(0.42, pilaster_w * 1.2), 4),
+            "wall": "roof",
+        })
+
+    return {
+        "style": style,
+        "site_profile": site_profile,
+        "module_count": len(modules),
+        "modules": modules,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Grammar Evaluation
 # ---------------------------------------------------------------------------
 
@@ -1905,3 +2340,377 @@ def generate_overrun_variant(
         })
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Interior-Exterior Consistency Linking (AAA-06)
+# ---------------------------------------------------------------------------
+
+# Building type → floor assignments (ground floor first, upper floors follow)
+BUILDING_FLOOR_PLANS: dict[str, list[list[str]]] = {
+    "tavern": [
+        ["tavern", "kitchen"],           # ground: main hall + kitchen
+        ["bedroom", "bedroom"],          # upper: guest rooms
+    ],
+    "house": [
+        ["kitchen", "storage"],          # ground
+        ["bedroom", "study"],            # upper
+    ],
+    "shop": [
+        ["storage", "storage"],          # ground: shop floor
+        ["bedroom"],                     # upper: shopkeeper quarters
+    ],
+    "castle": [
+        ["guard_post", "armory"],        # ground
+        ["great_hall", "war_room"],      # first
+        ["throne_room"],                 # second
+        ["bedroom", "study"],            # third
+    ],
+    "cathedral": [
+        ["chapel"],                      # ground: nave
+        ["library"],                     # upper: scriptorium
+    ],
+    "tower": [
+        ["storage"],                     # ground
+        ["alchemy_lab"],                 # first
+        ["library"],                     # second
+        ["bedroom"],                     # top
+    ],
+    "forge": [
+        ["blacksmith"],                  # ground
+        ["storage", "bedroom"],          # upper
+    ],
+    "shrine": [
+        ["shrine_room"],                 # single floor
+    ],
+    "dungeon": [
+        ["guard_post"],                  # entry
+        ["dungeon_cell", "dungeon_cell", "torture_chamber"],
+        ["crypt", "treasury"],           # deepest
+    ],
+    "barracks": [
+        ["guard_barracks", "armory"],    # ground
+        ["guard_barracks", "guard_barracks"],  # upper
+    ],
+    "library": [
+        ["library", "library"],          # ground
+        ["study", "study"],              # upper
+    ],
+    "temple": [
+        ["chapel"],                      # ground
+        ["shrine_room", "library"],      # upper
+    ],
+    "wizard_tower": [
+        ["alchemy_lab"],                 # ground
+        ["library"],                     # first
+        ["study"],                       # second
+        ["bedroom"],                     # top
+    ],
+}
+
+# Lighting rules per room type — what light sources to auto-place
+ROOM_LIGHTING: dict[str, list[dict]] = {
+    "tavern": [
+        {"type": "fireplace_light", "position": "fireplace", "range": 8.0, "color": [1.0, 0.7, 0.4], "intensity": 1.2},
+        {"type": "hanging_lantern", "position": "ceiling_center", "range": 5.0, "color": [1.0, 0.8, 0.5], "intensity": 0.8},
+    ],
+    "dungeon_cell": [
+        {"type": "torch_sconce", "position": "wall_by_door", "range": 4.0, "color": [1.0, 0.6, 0.3], "intensity": 0.5},
+    ],
+    "library": [
+        {"type": "candelabra_light", "position": "desk", "range": 3.0, "color": [1.0, 0.85, 0.6], "intensity": 0.6},
+        {"type": "window_light", "position": "window", "range": 6.0, "color": [0.9, 0.95, 1.0], "intensity": 1.0},
+    ],
+    "throne_room": [
+        {"type": "chandelier_light", "position": "ceiling_center", "range": 10.0, "color": [1.0, 0.9, 0.7], "intensity": 1.5},
+        {"type": "brazier_light", "position": "brazier", "range": 5.0, "color": [1.0, 0.6, 0.3], "intensity": 0.8},
+    ],
+    "chapel": [
+        {"type": "candelabra_light", "position": "altar", "range": 4.0, "color": [1.0, 0.9, 0.7], "intensity": 0.7},
+        {"type": "window_light", "position": "window", "range": 8.0, "color": [0.8, 0.85, 1.0], "intensity": 1.2},
+    ],
+    "blacksmith": [
+        {"type": "forge_glow", "position": "forge", "range": 6.0, "color": [1.0, 0.4, 0.1], "intensity": 1.5},
+    ],
+    "crypt": [
+        {"type": "candle_cluster", "position": "altar", "range": 3.0, "color": [0.9, 0.8, 0.5], "intensity": 0.3},
+    ],
+    "alchemy_lab": [
+        {"type": "potion_glow", "position": "cauldron", "range": 3.0, "color": [0.3, 1.0, 0.5], "intensity": 0.4},
+        {"type": "candelabra_light", "position": "workbench", "range": 3.0, "color": [1.0, 0.85, 0.6], "intensity": 0.6},
+    ],
+    "torture_chamber": [
+        {"type": "brazier_light", "position": "brazier", "range": 4.0, "color": [1.0, 0.5, 0.2], "intensity": 0.6},
+    ],
+}
+
+# Default lighting for rooms not in ROOM_LIGHTING
+_DEFAULT_LIGHTING = [
+    {"type": "torch_sconce", "position": "wall_center", "range": 5.0, "color": [1.0, 0.7, 0.4], "intensity": 0.7},
+]
+
+
+def generate_consistent_interior(
+    building_spec: BuildingSpec,
+    building_type: str = "house",
+    seed: int = 0,
+) -> dict:
+    """Generate interior layouts that match a building exterior.
+
+    Given a BuildingSpec (from evaluate_building_grammar), derive matching
+    interior rooms with:
+    - Room dimensions matching the exterior footprint
+    - Door positions matching exterior door openings
+    - Window positions aligned with exterior windows
+    - Room function assignments based on building type
+    - Furniture placement per room
+    - Lighting placement per room type
+    - Walkability clearance of 0.8m minimum paths
+
+    Parameters
+    ----------
+    building_spec : BuildingSpec
+        The exterior building specification.
+    building_type : str
+        Building archetype for room function assignment.
+    seed : int
+        Random seed for deterministic layout.
+
+    Returns
+    -------
+    dict with:
+        floors: list of floor dicts, each containing:
+            - rooms: list of room dicts with type, bounds, furniture, lighting
+            - doors: list of door positions connecting rooms
+            - windows: list of window positions (from exterior)
+        metadata: building_type, total_rooms, total_furniture, total_lights
+    """
+    rng = random.Random(seed)
+    width, depth = building_spec.footprint
+    floors_count = building_spec.floors
+    style = building_spec.style
+    config = STYLE_CONFIGS.get(style, STYLE_CONFIGS["medieval"])
+
+    wall_thickness = config["walls"]["thickness"]
+    floor_height = config["walls"]["height_per_floor"]
+    fnd_height = config["foundation"]["height"]
+
+    # Get floor plan for building type
+    floor_plan = BUILDING_FLOOR_PLANS.get(building_type, [["storage"]])
+
+    # Extract exterior openings from the building spec
+    exterior_doors = []
+    exterior_windows = []
+    for op in building_spec.operations:
+        if op.get("role") == "door_opening":
+            exterior_doors.append(op)
+        elif op.get("role") == "window_opening":
+            exterior_windows.append(op)
+
+    # Interior usable space (subtract wall thickness)
+    inner_width = width - 2 * wall_thickness
+    inner_depth = depth - 2 * wall_thickness
+
+    floors_result = []
+    total_furniture = 0
+    total_lights = 0
+    total_rooms = 0
+    min_clearance = 0.8  # minimum walkable path width
+
+    for floor_idx in range(floors_count):
+        floor_z = fnd_height + floor_idx * floor_height
+
+        # Get room types for this floor
+        if floor_idx < len(floor_plan):
+            room_types = floor_plan[floor_idx]
+        else:
+            # Repeat last floor plan or default to storage
+            room_types = floor_plan[-1] if floor_plan else ["storage"]
+
+        # Subdivide floor into rooms
+        num_rooms = len(room_types)
+        rooms = []
+
+        if num_rooms == 1:
+            # Single room takes the whole floor
+            room_bounds = [(wall_thickness, wall_thickness, inner_width, inner_depth)]
+        elif num_rooms == 2:
+            # Split along the longer axis
+            if inner_width >= inner_depth:
+                half_w = inner_width / 2 - wall_thickness / 2
+                room_bounds = [
+                    (wall_thickness, wall_thickness, half_w, inner_depth),
+                    (wall_thickness + half_w + wall_thickness, wall_thickness, half_w, inner_depth),
+                ]
+            else:
+                half_d = inner_depth / 2 - wall_thickness / 2
+                room_bounds = [
+                    (wall_thickness, wall_thickness, inner_width, half_d),
+                    (wall_thickness, wall_thickness + half_d + wall_thickness, inner_width, half_d),
+                ]
+        elif num_rooms == 3:
+            # L-shaped subdivision: two rooms on one side, one large on other
+            half_w = inner_width / 2 - wall_thickness / 2
+            half_d = inner_depth / 2 - wall_thickness / 2
+            room_bounds = [
+                (wall_thickness, wall_thickness, half_w, inner_depth),  # full-depth left
+                (wall_thickness + half_w + wall_thickness, wall_thickness, half_w, half_d),  # top-right
+                (wall_thickness + half_w + wall_thickness, wall_thickness + half_d + wall_thickness, half_w, half_d),  # bottom-right
+            ]
+        else:
+            # 4+ rooms: grid subdivision
+            cols = min(num_rooms, max(2, int(math.sqrt(num_rooms) + 0.5)))
+            rows = math.ceil(num_rooms / cols)
+            cell_w = (inner_width - (cols - 1) * wall_thickness) / cols
+            cell_d = (inner_depth - (rows - 1) * wall_thickness) / rows
+            room_bounds = []
+            for ri in range(num_rooms):
+                row = ri // cols
+                col = ri % cols
+                rx = wall_thickness + col * (cell_w + wall_thickness)
+                ry = wall_thickness + row * (cell_d + wall_thickness)
+                room_bounds.append((rx, ry, cell_w, cell_d))
+
+        # Generate each room
+        for room_idx, room_type in enumerate(room_types):
+            if room_idx >= len(room_bounds):
+                break
+            rx, ry, rw, rd = room_bounds[room_idx]
+
+            # Generate furniture with collision avoidance
+            furniture = generate_interior_layout(
+                room_type=room_type,
+                width=rw,
+                depth=rd,
+                height=floor_height - 0.1,
+                seed=seed + floor_idx * 100 + room_idx,
+            )
+
+            # Validate walkability — ensure 0.8m clearance to door
+            # Door is always on the wall nearest to the building entrance
+            door_x = rw / 2
+            door_y = 0.1
+            walkable = True
+            for item in furniture:
+                ix, iy = item["position"][0], item["position"][1]
+                isx, isy = item["scale"][0], item["scale"][1]
+                # Check if item blocks the door access path
+                if abs(ix - door_x) < (isx / 2 + min_clearance) and iy < (isy / 2 + min_clearance + 0.3):
+                    walkable = False
+                    # Push item back from door
+                    item["position"][1] = round(isy / 2 + min_clearance + 0.4, 4)
+
+            # Assign lighting
+            lighting_rules = ROOM_LIGHTING.get(room_type, _DEFAULT_LIGHTING)
+            lights = []
+            for light_rule in lighting_rules:
+                light = dict(light_rule)
+                # Resolve position to actual coordinates
+                pos_hint = light["position"]
+                if pos_hint == "ceiling_center":
+                    light["world_position"] = [round(rx + rw / 2, 4), round(ry + rd / 2, 4), round(floor_z + floor_height - 0.3, 4)]
+                elif pos_hint in ("fireplace", "forge", "brazier", "altar", "cauldron", "workbench", "desk"):
+                    # Find the furniture item matching this type
+                    matched = [f for f in furniture if pos_hint in f["type"]]
+                    if matched:
+                        fp = matched[0]["position"]
+                        light["world_position"] = [round(rx + fp[0], 4), round(ry + fp[1], 4), round(floor_z + 1.0, 4)]
+                    else:
+                        light["world_position"] = [round(rx + rw / 2, 4), round(ry + rd / 2, 4), round(floor_z + 1.5, 4)]
+                elif pos_hint == "wall_center":
+                    wall_side = rng.randint(0, 3)
+                    if wall_side == 0:
+                        light["world_position"] = [round(rx + rw / 2, 4), round(ry + 0.1, 4), round(floor_z + floor_height * 0.7, 4)]
+                    elif wall_side == 1:
+                        light["world_position"] = [round(rx + rw / 2, 4), round(ry + rd - 0.1, 4), round(floor_z + floor_height * 0.7, 4)]
+                    elif wall_side == 2:
+                        light["world_position"] = [round(rx + 0.1, 4), round(ry + rd / 2, 4), round(floor_z + floor_height * 0.7, 4)]
+                    else:
+                        light["world_position"] = [round(rx + rw - 0.1, 4), round(ry + rd / 2, 4), round(floor_z + floor_height * 0.7, 4)]
+                elif pos_hint == "wall_by_door":
+                    light["world_position"] = [round(rx + door_x + 0.5, 4), round(ry + 0.1, 4), round(floor_z + floor_height * 0.7, 4)]
+                elif pos_hint == "window":
+                    # Match exterior window position if available
+                    floor_windows = [w for w in exterior_windows if w.get("floor") == floor_idx]
+                    if floor_windows:
+                        w = floor_windows[0]
+                        wp = w.get("position", [rw / 2, 0, floor_height / 2])
+                        light["world_position"] = [round(rx + wp[0], 4), round(ry + wp[1], 4), round(floor_z + wp[2], 4)]
+                    else:
+                        light["world_position"] = [round(rx + rw / 2, 4), round(ry + 0.1, 4), round(floor_z + floor_height * 0.6, 4)]
+                else:
+                    light["world_position"] = [round(rx + rw / 2, 4), round(ry + rd / 2, 4), round(floor_z + 1.5, 4)]
+
+                lights.append(light)
+
+            # Collect windows for this floor
+            floor_windows_data = [
+                {
+                    "wall_index": w.get("wall_index", 0),
+                    "position": w.get("position", [0, 0, 0]),
+                    "size": w.get("size", [0.8, 1.2]),
+                }
+                for w in exterior_windows if w.get("floor") == floor_idx
+            ]
+
+            rooms.append({
+                "type": room_type,
+                "bounds": {"x": round(rx, 4), "y": round(ry, 4), "width": round(rw, 4), "depth": round(rd, 4)},
+                "floor_z": round(floor_z, 4),
+                "ceiling_z": round(floor_z + floor_height, 4),
+                "furniture": furniture,
+                "lighting": lights,
+                "windows": floor_windows_data,
+                "walkable": walkable,
+            })
+
+            total_furniture += len(furniture)
+            total_lights += len(lights)
+            total_rooms += 1
+
+        # Internal doors between rooms on same floor
+        internal_doors = []
+        for i in range(len(rooms) - 1):
+            r1 = rooms[i]["bounds"]
+            r2 = rooms[i + 1]["bounds"]
+            # Door at the shared wall between adjacent rooms
+            if abs((r1["x"] + r1["width"]) - r2["x"]) < wall_thickness * 2:
+                # Vertical shared wall
+                door_y_pos = max(r1["y"], r2["y"]) + min(r1["depth"], r2["depth"]) / 2
+                internal_doors.append({
+                    "position": [round(r2["x"], 4), round(door_y_pos, 4), round(floor_z, 4)],
+                    "size": [config["door"]["width"], config["door"]["height"]],
+                    "connects": [rooms[i]["type"], rooms[i + 1]["type"]],
+                    "orientation": "x",
+                })
+            elif abs((r1["y"] + r1["depth"]) - r2["y"]) < wall_thickness * 2:
+                # Horizontal shared wall
+                door_x_pos = max(r1["x"], r2["x"]) + min(r1["width"], r2["width"]) / 2
+                internal_doors.append({
+                    "position": [round(door_x_pos, 4), round(r2["y"], 4), round(floor_z, 4)],
+                    "size": [config["door"]["width"], config["door"]["height"]],
+                    "connects": [rooms[i]["type"], rooms[i + 1]["type"]],
+                    "orientation": "y",
+                })
+
+        floors_result.append({
+            "floor_index": floor_idx,
+            "floor_z": round(floor_z, 4),
+            "rooms": rooms,
+            "internal_doors": internal_doors,
+        })
+
+    return {
+        "floors": floors_result,
+        "metadata": {
+            "building_type": building_type,
+            "style": style,
+            "footprint": [width, depth],
+            "total_floors": floors_count,
+            "total_rooms": total_rooms,
+            "total_furniture": total_furniture,
+            "total_lights": total_lights,
+            "wall_thickness": wall_thickness,
+            "floor_height": floor_height,
+        },
+    }
