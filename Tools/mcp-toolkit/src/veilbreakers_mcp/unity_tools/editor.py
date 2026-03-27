@@ -14,6 +14,7 @@ from typing import Literal
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
     _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
+    sanitize_cs_identifier,
 )
 
 from veilbreakers_mcp.shared.unity_templates.editor_templates import (
@@ -368,7 +369,7 @@ async def _handle_load_scene(scene_path: str) -> str:
         })
 
     # Fallback: generate a C# script that opens the scene
-    safe_name = scene_path.rsplit("/", 1)[-1].replace(".unity", "").replace(" ", "_")
+    safe_name = sanitize_cs_identifier(scene_path.rsplit("/", 1)[-1].replace(".unity", ""))
     script = f'''using UnityEditor;
 using UnityEditor.SceneManagement;
 
