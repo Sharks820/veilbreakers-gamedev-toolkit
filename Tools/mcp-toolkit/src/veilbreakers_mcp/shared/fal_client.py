@@ -68,6 +68,10 @@ def generate_concept_art(
             "message": "FAL_KEY not configured. Set fal_key to enable AI concept art generation.",
         }
 
+    # Ensure fal-client can find the key via its env var
+    prev_fal_key = os.environ.get("FAL_KEY")
+    os.environ["FAL_KEY"] = fal_key
+
     if not _FAL_AVAILABLE:
         return {
             "status": "unavailable",
@@ -107,11 +111,12 @@ def generate_concept_art(
         os.makedirs(output_dir, exist_ok=True)
         output_path = os.path.join(output_dir, "concept_art.png")
 
-        # Download image via fal_client's built-in download helper.
-        # The fal-client SDK handles HTTPS transport securely.
-        image_bytes = _fal.download(image_url)
+        # Download image via httpx (fal-client has no download method)
+        import httpx
+        resp = httpx.get(image_url, timeout=30.0, follow_redirects=True)
+        resp.raise_for_status()
         with open(output_path, "wb") as f:
-            f.write(image_bytes)
+            f.write(resp.content)
 
         return {
             "status": "success",
@@ -126,6 +131,12 @@ def generate_concept_art(
             "status": "error",
             "message": str(exc),
         }
+    finally:
+        # Restore original FAL_KEY
+        if prev_fal_key is not None:
+            os.environ["FAL_KEY"] = prev_fal_key
+        elif "FAL_KEY" in os.environ:
+            del os.environ["FAL_KEY"]
 
 
 # ---------------------------------------------------------------------------

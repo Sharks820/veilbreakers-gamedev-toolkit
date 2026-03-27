@@ -22,7 +22,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-import aiohttp
+import httpx
 
 from veilbreakers_mcp.shared.model_validation import validate_generated_model_file
 
@@ -62,8 +62,8 @@ class TripoStudioClient:
         self._jwt: str = session_token
         self._jwt_exp: float = 0.0  # Unix timestamp when JWT expires
         self._session_cookie: str = session_cookie
-        self._session: aiohttp.ClientSession | None = None
-        self._session_jwt: str = ""  # JWT the current session was created with
+        self._client: httpx.AsyncClient | None = None
+        self._client_jwt: str = ""  # JWT the current client was created with
 
         # If we have a JWT, parse its expiry
         if self._jwt:
@@ -95,33 +95,32 @@ class TripoStudioClient:
                 "Set TRIPO_SESSION_COOKIE env var."
             )
         headers = {"Cookie": f"ory_kratos_session={self._session_cookie}"}
-        async with aiohttp.ClientSession() as s:
-            async with s.get(
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(
                 "https://studio.tripo3d.ai/",
                 headers=headers,
-                timeout=aiohttp.ClientTimeout(total=15),
-            ) as resp:
-                body = await resp.text()
-                jwts = re.findall(
-                    r"eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}"
-                    r"\.[A-Za-z0-9_-]{20,}",
-                    body,
+            )
+            body = resp.text
+            jwts = re.findall(
+                r"eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}"
+                r"\.[A-Za-z0-9_-]{20,}",
+                body,
+            )
+            if not jwts:
+                raise RuntimeError(
+                    "Failed to extract JWT from studio page. "
+                    "Session cookie may have expired."
                 )
-                if not jwts:
-                    raise RuntimeError(
-                        "Failed to extract JWT from studio page. "
-                        "Session cookie may have expired."
-                    )
-                jwt = jwts[0]
-                self._jwt = jwt
-                self._jwt_exp = self._parse_jwt_exp(jwt)
-                logger.info(
-                    "Refreshed studio JWT, expires at %s",
-                    time.strftime(
-                        "%Y-%m-%d %H:%M:%S", time.localtime(self._jwt_exp)
-                    ),
-                )
-                return jwt
+            jwt = jwts[0]
+            self._jwt = jwt
+            self._jwt_exp = self._parse_jwt_exp(jwt)
+            logger.info(
+                "Refreshed studio JWT, expires at %s",
+                time.strftime(
+                    "%Y-%m-%d %H:%M:%S", time.localtime(self._jwt_exp)
+                ),
+            )
+            return jwt
 
     async def _get_valid_jwt(self) -> str:
         """Return a valid JWT, refreshing if needed."""
@@ -140,42 +139,43 @@ class TripoStudioClient:
                 )
         return self._jwt
 
-    async def _ensure_session(self) -> aiohttp.ClientSession:
+    async def _ensure_client(self) -> httpx.AsyncClient:
         jwt = await self._get_valid_jwt()
-        if self._session and not self._session.closed and self._session_jwt == jwt:
-            return self._session
-        if self._session and not self._session.closed:
-            await self._session.close()
-        self._session = aiohttp.ClientSession(
+        if self._client and not self._client.is_closed and self._client_jwt == jwt:
+            return self._client
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+        self._client = httpx.AsyncClient(
             headers={
                 "Authorization": f"Bearer {jwt}",
                 "Content-Type": "application/json",
                 "x-tripo-region": "rg1",
-            }
+            },
+            timeout=60.0,
         )
-        self._session_jwt = jwt
-        return self._session
+        self._client_jwt = jwt
+        return self._client
 
     async def close(self) -> None:
-        if self._session and not self._session.closed:
-            await self._session.close()
-            self._session = None
+        if self._client and not self._client.is_closed:
+            await self._client.aclose()
+            self._client = None
 
     async def _request(
         self, method: str, path: str, json_data: dict | None = None
     ) -> dict:
-        session = await self._ensure_session()
+        client = await self._ensure_client()
         url = f"{STUDIO_BASE_URL}{path}"
-        async with session.request(method, url, json=json_data) as resp:
-            data = await resp.json()
-            if resp.status >= 400:
-                code = data.get("code", resp.status)
-                msg = data.get("message", resp.reason)
-                suggestion = data.get("suggestion", "")
-                raise RuntimeError(
-                    f"Tripo Studio API error {code}: {msg}. {suggestion}"
-                )
-            return data
+        resp = await client.request(method, url, json=json_data)
+        data = resp.json()
+        if resp.status_code >= 400:
+            code = data.get("code", resp.status_code)
+            msg = data.get("message", resp.reason_phrase)
+            suggestion = data.get("suggestion", "")
+            raise RuntimeError(
+                f"Tripo Studio API error {code}: {msg}. {suggestion}"
+            )
+        return data
 
     async def get_balance(self) -> dict:
         """Get studio credit balance."""
@@ -233,13 +233,13 @@ class TripoStudioClient:
 
     async def _download_file(self, url: str, output_path: str) -> str:
         """Download a model file to local path."""
-        session = await self._ensure_session()
-        async with session.get(url) as resp:
-            if resp.status >= 400:
-                raise RuntimeError(f"Download failed: {resp.status} {resp.reason}")
+        client = await self._ensure_client()
+        async with client.stream("GET", url) as resp:
+            if resp.status_code >= 400:
+                raise RuntimeError(f"Download failed: {resp.status_code} {resp.reason_phrase}")
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             with open(output_path, "wb") as f:
-                async for chunk in resp.content.iter_chunked(1024 * 1024):
+                async for chunk in resp.aiter_bytes(chunk_size=1024 * 1024):
                     if chunk:
                         f.write(chunk)
         validation = validate_generated_model_file(output_path)
@@ -370,21 +370,18 @@ class TripoStudioClient:
                 "x-tripo-region": "rg1",
             }
             with open(image_path, "rb") as f:
-                form = aiohttp.FormData()
-                form.add_field(
-                    "file", f, filename=os.path.basename(image_path)
-                )
-                async with aiohttp.ClientSession() as upload_session:
-                    async with upload_session.post(
-                        url, data=form, headers=headers
-                    ) as resp:
-                        upload_data = await resp.json()
-                        if resp.status >= 400:
-                            return {
-                                "status": "failed",
-                                "error": f"Upload failed: {upload_data}",
-                            }
-                        image_token = upload_data["data"]["image_token"]
+                files = {"file": (os.path.basename(image_path), f)}
+                async with httpx.AsyncClient(timeout=60.0) as upload_client:
+                    resp = await upload_client.post(
+                        url, files=files, headers=headers
+                    )
+                    upload_data = resp.json()
+                    if resp.status_code >= 400:
+                        return {
+                            "status": "failed",
+                            "error": f"Upload failed: {upload_data}",
+                        }
+                    image_token = upload_data["data"]["image_token"]
 
             _ext = Path(image_path).suffix.lower()
             _img_type = "png" if _ext == ".png" else "jpg"

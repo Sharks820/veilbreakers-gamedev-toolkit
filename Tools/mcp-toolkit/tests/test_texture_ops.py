@@ -479,9 +479,10 @@ class TestInpaintTexture:
         assert result["status"] == "unavailable"
         assert "fal-client" in result["message"].lower()
 
+    @patch("httpx.get")
     @patch("veilbreakers_mcp.shared.texture_ops._FAL_AVAILABLE", True)
     @patch("veilbreakers_mcp.shared.texture_ops._fal")
-    def test_success_with_mocked_fal(self, mock_fal):
+    def test_success_with_mocked_fal(self, mock_fal, mock_httpx_get):
         """Successful inpainting returns image bytes and metadata."""
         # Create test image and mask
         img = PILImage.new("RGB", (64, 64), (128, 128, 128))
@@ -493,11 +494,13 @@ class TestInpaintTexture:
         result_img.save(result_buf, format="PNG")
         result_png_bytes = result_buf.getvalue()
 
-        # Mock fal_client.subscribe and fal_client.download
+        # Mock fal_client.subscribe and httpx.get for download
         mock_fal.subscribe.return_value = {
             "images": [{"url": "https://fal.media/files/result_12345.png"}],
         }
-        mock_fal.download.return_value = result_png_bytes
+        mock_resp = mock_httpx_get.return_value
+        mock_resp.content = result_png_bytes
+        mock_resp.raise_for_status = lambda: None
 
         result = inpaint_texture(
             _to_png_bytes(img),
@@ -583,9 +586,10 @@ class TestInpaintTexture:
         assert result["status"] == "error"
         assert "rate limit" in result["message"].lower()
 
+    @patch("httpx.get")
     @patch("veilbreakers_mcp.shared.texture_ops._FAL_AVAILABLE", True)
     @patch("veilbreakers_mcp.shared.texture_ops._fal")
-    def test_strength_is_clamped(self, mock_fal):
+    def test_strength_is_clamped(self, mock_fal, mock_httpx_get):
         """Strength parameter is clamped to 0.0-1.0 range."""
         img = PILImage.new("RGB", (64, 64), (128, 128, 128))
         mask = PILImage.new("L", (64, 64), 255)
@@ -597,7 +601,9 @@ class TestInpaintTexture:
         mock_fal.subscribe.return_value = {
             "images": [{"url": "https://fal.media/files/result.png"}],
         }
-        mock_fal.download.return_value = result_buf.getvalue()
+        mock_resp = mock_httpx_get.return_value
+        mock_resp.content = result_buf.getvalue()
+        mock_resp.raise_for_status = lambda: None
 
         # Test with out-of-range strength
         inpaint_texture(
@@ -611,9 +617,10 @@ class TestInpaintTexture:
         call_args = mock_fal.subscribe.call_args
         assert call_args[1]["arguments"]["strength"] == 1.0
 
+    @patch("httpx.get")
     @patch("veilbreakers_mcp.shared.texture_ops._FAL_AVAILABLE", True)
     @patch("veilbreakers_mcp.shared.texture_ops._fal")
-    def test_mask_converted_to_rgb(self, mock_fal):
+    def test_mask_converted_to_rgb(self, mock_fal, mock_httpx_get):
         """L-mode mask is converted to RGB for the fal.ai API."""
         img = PILImage.new("RGB", (64, 64), (128, 128, 128))
         # Pass an L-mode mask (grayscale)
@@ -626,7 +633,9 @@ class TestInpaintTexture:
         mock_fal.subscribe.return_value = {
             "images": [{"url": "https://fal.media/files/result.png"}],
         }
-        mock_fal.download.return_value = result_buf.getvalue()
+        mock_resp = mock_httpx_get.return_value
+        mock_resp.content = result_buf.getvalue()
+        mock_resp.raise_for_status = lambda: None
 
         result = inpaint_texture(
             _to_png_bytes(img),
