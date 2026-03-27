@@ -86,7 +86,7 @@ class TestEquipmentAttachment:
 
     def test_eventbus_integration(self):
         att, _ = generate_equipment_attachment_script()
-        assert "EventBus.Raise" in att
+        assert "OnEquipmentChanged?.Invoke" in att
         assert "EquipmentChangeEvent" in att
 
     def test_standard_bone_sockets_referenced(self):

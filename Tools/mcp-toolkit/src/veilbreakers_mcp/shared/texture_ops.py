@@ -818,8 +818,11 @@ def inpaint_texture(
                 "message": f"Unexpected image URL scheme: {image_url[:40]}",
             }
 
-        # Download the result image
-        result_bytes = _fal.download(image_url)
+        # Download the result image via httpx (fal-client has no download method)
+        import httpx as _httpx_dl
+        _dl_resp = _httpx_dl.get(image_url, timeout=30.0, follow_redirects=True)
+        _dl_resp.raise_for_status()
+        result_bytes = _dl_resp.content
 
         # Re-encode as PNG to ensure consistent format
         result_img = Image.open(io.BytesIO(result_bytes)).convert("RGB")

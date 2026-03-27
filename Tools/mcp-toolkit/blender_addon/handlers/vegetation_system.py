@@ -197,6 +197,7 @@ BIOME_VEGETATION_SETS: dict[str, dict[str, list[dict[str, Any]]]] = {
     },
     "deep_forest": {
         "trees": [
+            {"type": "tree", "style": "ancient_oak", "density": 0.07, "scale_range": (2.0, 4.5)},
             {"type": "tree", "style": "veil_boundary", "density": 0.09, "scale_range": (1.8, 3.8)},
             {"type": "tree", "style": "veil_blighted", "density": 0.05, "scale_range": (1.3, 2.6)},
         ],
