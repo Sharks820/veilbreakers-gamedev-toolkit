@@ -134,6 +134,8 @@ async def unity_code(
                 return json.dumps(
                     {"status": "error", "action": action, "message": "script_path is required"}
                 )
+            if not settings.unity_project_path:
+                raise ValueError("UNITY_PROJECT_PATH not configured")
             project_root = Path(settings.unity_project_path).resolve()
             full_path = (project_root / script_path).resolve()
             try:

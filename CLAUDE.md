@@ -253,19 +253,19 @@ Actions: `create_shader` | `create_renderer_feature` | `sss_skin_shader` | `para
 - micro_detail_normal: Micro-detail normal compositing script (CHAR-08), `base_normal_property`
 
 ### unity_data (v2.0)
-Actions: `so_definition` | `create_asset` | `json_validator` | `json_loader` | `localization_setup` | `localization_entries` | `data_authoring_window`
+Actions: `create_so_definition` | `create_so_assets` | `validate_json` | `create_json_loader` | `setup_localization` | `add_localization_entries` | `create_data_editor`
 
 ### unity_quality (v2.0)
-Actions: `poly_budget_check` | `master_material_library` | `texture_quality_check` | `aaa_audit`
+Actions: `check_poly_budget` | `create_master_materials` | `check_texture_quality` | `aaa_audit`
 
 ### unity_pipeline (v2.0)
-Actions: `git_lfs` | `normal_map_bake` | `sprite_atlas` | `sprite_animation` | `asset_postprocessor`
+Actions: `configure_git_lfs` | `create_sprite_atlas` | `create_sprite_animation` | `configure_sprite_editor` | `create_asset_postprocessor`
 
 ### unity_game (v2.0)
-Actions: `save_system` | `health_system` | `character_controller` | `input_config` | `settings_menu` | `http_client` | `interactable` | `player_combat` | `ability_system` | `synergy_engine` | `corruption_gameplay` | `xp_leveling` | `currency_system` | `damage_types`
+Actions: `create_save_system` | `create_health_system` | `create_character_controller` | `create_input_config` | `create_settings_menu` | `create_http_client` | `create_interactable` | `create_player_combat` | `create_ability_system` | `create_synergy_engine` | `create_corruption_gameplay` | `create_xp_leveling` | `create_currency_system` | `create_damage_types`
 
 ### unity_content (v2.0)
-Actions: `inventory` | `dialogue` | `quest` | `loot_table` | `crafting` | `skill_tree` | `dps_calculator` | `encounter_simulator` | `stat_curve_editor` | `shop` | `journal` | `equipment_attachment`
+Actions: `create_inventory_system` | `create_dialogue_system` | `create_quest_system` | `create_loot_table` | `create_crafting_system` | `create_skill_tree` | `create_dps_calculator` | `create_encounter_simulator` | `create_stat_curve_editor` | `create_shop_system` | `create_journal_system` | `create_equipment_attachment`
 
 ### unity_camera (v2.0)
 Actions: `create_virtual_camera` | `create_state_driven_camera` | `create_camera_shake` | `configure_blend` | `create_timeline` | `create_cutscene` | `edit_animation_clip` | `modify_animator` | `create_avatar_mask` | `setup_video_player` | `cinematic_sequence` | `create_lock_on_camera`
@@ -279,7 +279,7 @@ Actions: `create_scene` | `create_transition_system` | `setup_probes` | `setup_o
 - create_door_system: Door/gate/lock and lever system (WORLD-13)
 
 ### unity_ux (v2.0)
-Actions: `minimap` | `damage_numbers` | `interaction_prompt` | `primetween_sequence` | `tmp_font` | `tmp_component` | `tutorial` | `accessibility` | `character_select` | `world_map` | `rarity_vfx` | `corruption_vfx`
+Actions: `create_minimap` | `create_damage_numbers` | `create_interaction_prompts` | `create_primetween_sequence` | `create_tmp_font_asset` | `setup_tmp_components` | `create_tutorial_system` | `create_accessibility` | `create_character_select` | `create_world_map` | `create_rarity_vfx` | `create_corruption_vfx`
 
 ### unity_qa (v2.0)
 Actions: `setup_bridge` | `run_tests` | `run_play_session` | `profile_scene` | `detect_memory_leaks` | `analyze_code` | `setup_crash_reporting` | `setup_analytics` | `inspect_live_state` | `check_compile_status` | `compile_recovery` | `detect_conflicts` | `orchestrate_pipeline` | `list_pipeline_steps` | `validate_art_style` | `build_smoke_test` | `code_review`
