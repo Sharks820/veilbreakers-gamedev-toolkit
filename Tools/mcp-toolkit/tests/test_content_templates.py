@@ -564,11 +564,11 @@ class TestSkillTree:
         assert "class VB_SkillTree" in tree
 
     def test_skill_tree_has_hero_paths(self):
-        _, tree = generate_skill_tree_script()
-        assert "IRONBOUND" in tree
-        assert "FANGBORN" in tree
-        assert "VOIDTOUCHED" in tree
-        assert "UNCHAINED" in tree
+        node, _ = generate_skill_tree_script()
+        assert "IRONBOUND" in node
+        assert "FANGBORN" in node
+        assert "VOIDTOUCHED" in node
+        assert "UNCHAINED" in node
 
     def test_skill_tree_has_allocate_point(self):
         _, tree = generate_skill_tree_script()
@@ -593,9 +593,9 @@ class TestSkillTree:
         assert "Invoke" in tree
 
     def test_custom_hero_paths(self):
-        _, tree = generate_skill_tree_script(hero_paths=["PathA", "PathB"])
-        assert "PathA" in tree
-        assert "PathB" in tree
+        node, _ = generate_skill_tree_script(hero_paths=["PathA", "PathB"])
+        assert "PathA" in node
+        assert "PathB" in node
 
     def test_no_editor_namespace_node(self):
         node, _ = generate_skill_tree_script()
@@ -606,8 +606,8 @@ class TestSkillTree:
         assert "using UnityEditor" not in tree
 
     def test_skill_tree_has_hero_path_enum(self):
-        _, tree = generate_skill_tree_script()
-        assert "enum Path" in tree
+        node, _ = generate_skill_tree_script()
+        assert "enum Path" in node
 
     def test_skill_tree_get_nodes_by_path(self):
         _, tree = generate_skill_tree_script()

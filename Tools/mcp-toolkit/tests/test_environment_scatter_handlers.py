@@ -99,6 +99,54 @@ class TestScatterVegetationLogic:
         capped = placements[:max_instances]
         assert len(capped) <= max_instances
 
+    def test_overlapping_rules_produce_mixed_vegetation_types(self):
+        """Overlapping biome rules should no longer collapse to first-match only."""
+        candidates = poisson_disk_sample(60.0, 60.0, 3.0, seed=12)
+        heightmap = np.full((48, 48), 0.4)
+        slope_map = np.full((48, 48), 8.0)
+        rules = [
+            {
+                "vegetation_type": "tree",
+                "min_alt": 0.0,
+                "max_alt": 1.0,
+                "min_slope": 0.0,
+                "max_slope": 20.0,
+                "scale_range": (0.9, 1.2),
+                "density": 0.6,
+            },
+            {
+                "vegetation_type": "grass",
+                "min_alt": 0.0,
+                "max_alt": 1.0,
+                "min_slope": 0.0,
+                "max_slope": 20.0,
+                "scale_range": (0.4, 0.8),
+                "density": 0.7,
+            },
+            {
+                "vegetation_type": "bush",
+                "min_alt": 0.0,
+                "max_alt": 1.0,
+                "min_slope": 0.0,
+                "max_slope": 20.0,
+                "scale_range": (0.6, 1.0),
+                "density": 0.5,
+            },
+        ]
+
+        placements = biome_filter_points(
+            candidates,
+            heightmap,
+            slope_map,
+            rules,
+            terrain_size=60.0,
+            seed=12,
+        )
+
+        vegetation_types = {placement["vegetation_type"] for placement in placements}
+        assert "tree" in vegetation_types
+        assert "grass" in vegetation_types or "bush" in vegetation_types
+
 
 class TestScatterPropsLogic:
     """Test the pure-logic path used by handle_scatter_props."""
@@ -204,6 +252,14 @@ class TestPropGeneratorMapCoverage:
         assert not missing, (
             f"PROP_GENERATOR_MAP is missing generic prop entries: {missing}"
         )
+
+    def test_generic_props_avoid_fallen_log_default_for_settlements(self):
+        """Town-adjacent generic scatter should not default to fallen logs."""
+        from blender_addon.handlers._scatter_engine import _GENERIC_PROPS
+
+        generic_types = {prop_type for prop_type, _weight in _GENERIC_PROPS}
+        assert "log" not in generic_types
+        assert "mushroom" not in generic_types
 
     def test_all_prop_generators_are_callable(self):
         """All generator functions in PROP_GENERATOR_MAP are callable."""

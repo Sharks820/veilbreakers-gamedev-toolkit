@@ -218,6 +218,139 @@ DISTRICT_TYPES: dict[str, dict[str, Any]] = {
     },
 }
 
+
+# ---------------------------------------------------------------------------
+# Layout brief interpretation
+# ---------------------------------------------------------------------------
+
+_LAYOUT_BRIEF_KEYWORDS: dict[str, set[str]] = {
+    "waterfront_edge": {"harbor", "harbour", "port", "river", "canal", "dock", "docks", "bay", "coast", "coastal", "waterfront"},
+    "terraced": {"cliff", "cliffs", "terraced", "terrace", "hill", "hillside", "mountain", "ridge", "slope", "stepped"},
+    "axial": {"capital", "imperial", "planned", "avenue", "boulevard", "ceremonial", "processional", "broad", "formal"},
+    "radial_spokes": {"radial", "spokes", "hub", "star", "citadel", "keep", "fortified", "fortress"},
+    "organic": {"organic", "winding", "maze", "medieval", "ancient", "crowded", "dense", "labyrinth"},
+}
+
+_DISTRICT_BRIEF_KEYWORDS: dict[str, set[str]] = {
+    "market_quarter": {"market", "trade", "merchant", "bazaar", "guild", "shop", "commerce"},
+    "noble_quarter": {"noble", "palace", "manor", "court", "upper", "wealthy", "aristocrat"},
+    "slums": {"slum", "poor", "crowded", "dense", "refugee", "shanty", "underclass"},
+    "temple_district": {"temple", "cathedral", "shrine", "abbey", "monastery", "sacred", "pilgrim"},
+    "military_quarter": {"military", "garrison", "barracks", "fortified", "watch", "guard", "arsenal"},
+    "port_district": {"harbor", "harbour", "port", "dock", "docks", "ship", "river", "canal", "fishing"},
+}
+
+
+def _stable_text_seed(text: str) -> int:
+    """Return a deterministic integer fingerprint for freeform text."""
+    acc = 0
+    for idx, ch in enumerate(text):
+        acc = (acc + (idx + 1) * ord(ch)) % 2147483647
+    return acc
+
+
+def _axis_vector(axis: str) -> tuple[float, float]:
+    """Return a unit-ish vector for a named settlement spine axis."""
+    return {
+        "x": (1.0, 0.0),
+        "y": (0.0, 1.0),
+        "diag_pos": (math.sqrt(0.5), math.sqrt(0.5)),
+        "diag_neg": (math.sqrt(0.5), -math.sqrt(0.5)),
+    }.get(axis, (1.0, 0.0))
+
+
+def _choose_edge(rng: random.Random) -> str:
+    return rng.choice(["north", "south", "east", "west"])
+
+
+def _derive_settlement_profile(
+    settlement_type: str,
+    layout_brief: str,
+    seed: int,
+) -> dict[str, Any]:
+    """Interpret a layout brief into spatial rules for settlement generation."""
+    base_config = SETTLEMENT_TYPES[settlement_type]
+    normalized = " ".join(layout_brief.lower().split())
+    tokens = set(normalized.replace(",", " ").replace(".", " ").split()) if normalized else set()
+    profile_rng = random.Random(seed + _stable_text_seed(normalized))
+
+    pattern_scores: dict[str, int] = {}
+    for pattern_name, keywords in _LAYOUT_BRIEF_KEYWORDS.items():
+        score = len(tokens & keywords)
+        if score:
+            pattern_scores[pattern_name] = score
+
+    default_pattern = str(base_config.get("layout_pattern", "organic"))
+    pattern_override = default_pattern
+    if pattern_scores:
+        pattern_override = max(
+            pattern_scores.items(),
+            key=lambda item: (item[1], item[0]),
+        )[0]
+
+    axis_hint = "x"
+    if {"northsouth", "vertical"} & tokens:
+        axis_hint = "y"
+    elif {"diagonal", "angled"} & tokens:
+        axis_hint = profile_rng.choice(["diag_pos", "diag_neg"])
+    elif {"river", "canal", "waterfront", "harbor", "harbour"} & tokens:
+        axis_hint = profile_rng.choice(["x", "y"])
+    elif {"avenue", "boulevard", "processional"} & tokens:
+        axis_hint = "x"
+    elif {"cliff", "ridge", "terraced", "slope"} & tokens:
+        axis_hint = "y"
+
+    if pattern_override == "waterfront_edge" and axis_hint not in {"x", "y"}:
+        axis_hint = "x"
+
+    district_priority: list[tuple[int, str]] = []
+    for district_name, keywords in _DISTRICT_BRIEF_KEYWORDS.items():
+        score = len(tokens & keywords)
+        if district_name == "port_district" and pattern_override == "waterfront_edge":
+            score += 3
+        if district_name == "military_quarter" and pattern_override in {"axial", "radial_spokes"}:
+            score += 1
+        if district_name == "temple_district" and {"temple", "cathedral", "abbey"} & tokens:
+            score += 2
+        district_priority.append((score, district_name))
+
+    ordered_districts = [
+        district_name for score, district_name in sorted(
+            district_priority,
+            key=lambda item: (-item[0], item[1]),
+        )
+        if score > 0
+    ]
+    for district_name in DISTRICT_TYPES:
+        if district_name not in ordered_districts:
+            ordered_districts.append(district_name)
+
+    district_layouts = {
+        "market_quarter": "organic" if pattern_override in {"organic", "waterfront_edge"} else "grid",
+        "noble_quarter": "axial" if pattern_override in {"axial", "radial_spokes"} else "grid",
+        "slums": "organic",
+        "temple_district": "concentric" if pattern_override in {"radial_spokes", "terraced"} else "axial",
+        "military_quarter": "axial" if pattern_override != "organic" else "grid",
+        "port_district": "waterfront_edge" if pattern_override == "waterfront_edge" else "organic",
+    }
+
+    water_edge = _choose_edge(profile_rng) if pattern_override == "waterfront_edge" else None
+    spoke_count = max(3, min(7, 3 + (seed + _stable_text_seed(normalized)) % 5))
+    terrace_count = max(2, min(5, 2 + (_stable_text_seed(normalized) % 4)))
+
+    return {
+        "brief": layout_brief,
+        "signature": f"{pattern_override}:{axis_hint}:{_stable_text_seed(normalized) % 997}",
+        "pattern": pattern_override,
+        "main_axis": axis_hint,
+        "water_edge": water_edge,
+        "spoke_count": spoke_count,
+        "terrace_count": terrace_count,
+        "district_types": ordered_districts,
+        "district_layouts": district_layouts,
+        "density_bias": 0.12 if {"dense", "crowded", "packed"} & tokens else -0.08 if {"spacious", "broad", "open"} & tokens else 0.0,
+    }
+
 # ---------------------------------------------------------------------------
 # Room function -> furniture mapping
 # ---------------------------------------------------------------------------
@@ -498,6 +631,12 @@ def _place_buildings(
     pattern = config.get("layout_pattern", "organic")
     has_shrine = config.get("has_shrine", False)
     has_market = config.get("has_market", False)
+    main_axis = str(config.get("main_axis", "x"))
+    axis_vec = _axis_vector(main_axis)
+    perp_vec = (-axis_vec[1], axis_vec[0])
+    water_edge = str(config.get("water_edge", "south"))
+    spoke_count = int(config.get("spoke_count", max(3, min(6, count // 2 or 3))))
+    terrace_count = int(config.get("terrace_count", 3))
 
     buildings: list[dict[str, Any]] = []
     occupied: list[tuple[tuple[float, float], tuple[float, float]]] = []
@@ -615,6 +754,60 @@ def _place_buildings(
                 )
                 px = center[0] + math.cos(angle) * ring_radius
                 py = center[1] + math.sin(angle) * ring_radius
+
+            elif pattern == "axial":
+                stride = max(1, int(math.ceil(count / 3)))
+                lane = (i % 3) - 1
+                t = (i // 3) / max(1, stride - 1) if stride > 1 else 0.5
+                axial = (t - 0.5) * radius * 1.35
+                lateral = lane * radius * 0.22
+                px = center[0] + axis_vec[0] * axial + perp_vec[0] * lateral
+                py = center[1] + axis_vec[1] * axial + perp_vec[1] * lateral
+                px += rng.uniform(-radius * 0.06, radius * 0.06)
+                py += rng.uniform(-radius * 0.06, radius * 0.06)
+
+            elif pattern == "radial_spokes":
+                spoke_idx = i % max(spoke_count, 1)
+                ring_idx = i // max(spoke_count, 1)
+                angle = (2 * math.pi * spoke_idx / max(spoke_count, 1)) + rng.uniform(-0.14, 0.14)
+                dist = radius * min(0.82, 0.24 + ring_idx * 0.17 + rng.uniform(-0.03, 0.04))
+                px = center[0] + math.cos(angle) * dist
+                py = center[1] + math.sin(angle) * dist
+
+            elif pattern == "terraced":
+                level_count = max(2, terrace_count)
+                level_idx = i % level_count
+                row_idx = i // level_count
+                level_offset = (level_idx - (level_count - 1) / 2.0) * radius * 0.22
+                row_t = row_idx / max(1, math.ceil(count / level_count) - 1) if count > level_count else 0.5
+                row_offset = (row_t - 0.5) * radius * 1.25
+                px = center[0] + axis_vec[0] * row_offset + perp_vec[0] * level_offset
+                py = center[1] + axis_vec[1] * row_offset + perp_vec[1] * level_offset
+                px += rng.uniform(-radius * 0.05, radius * 0.05)
+                py += rng.uniform(-radius * 0.05, radius * 0.05)
+
+            elif pattern == "waterfront_edge":
+                bands = max(2, min(4, int(math.ceil(count / 4))))
+                band_idx = i % bands
+                row_idx = i // bands
+                band_t = band_idx / max(1, bands - 1) if bands > 1 else 0.5
+                row_t = row_idx / max(1, math.ceil(count / bands) - 1) if count > bands else 0.5
+                long_offset = (row_t - 0.5) * radius * 1.35
+                shore_depth = radius * (0.18 + band_t * 0.5)
+                if water_edge == "north":
+                    px = center[0] + long_offset
+                    py = center[1] - radius * 0.52 + shore_depth
+                elif water_edge == "south":
+                    px = center[0] + long_offset
+                    py = center[1] + radius * 0.52 - shore_depth
+                elif water_edge == "east":
+                    px = center[0] - radius * 0.52 + shore_depth
+                    py = center[1] + long_offset
+                else:
+                    px = center[0] + radius * 0.52 - shore_depth
+                    py = center[1] + long_offset
+                px += rng.uniform(-radius * 0.05, radius * 0.05)
+                py += rng.uniform(-radius * 0.05, radius * 0.05)
 
             else:  # organic
                 angle = rng.uniform(0, 2 * math.pi)
@@ -1250,6 +1443,116 @@ def _compute_foundation_height(
     return max(elevations) - min(elevations)
 
 
+def _rotate_point_2d(x: float, y: float, angle: float) -> tuple[float, float]:
+    """Rotate a local-space 2D point around the origin."""
+    cos_a = math.cos(angle)
+    sin_a = math.sin(angle)
+    return (x * cos_a - y * sin_a, x * sin_a + y * cos_a)
+
+
+def _compute_foundation_profile(
+    heightmap: Optional[Callable[[float, float], float]],
+    position: tuple[float, float],
+    footprint: tuple[float, float],
+    *,
+    rotation: float = 0.0,
+    entrance_wall: str = "front",
+) -> dict[str, Any]:
+    """Compute a terrain fitment plan for a building footprint.
+
+    The platform elevation is derived from the highest sampled point so the
+    shell does not clip into sloped terrain. The returned profile is intended
+    for downstream geometry generation: plinths, retaining walls, terraces,
+    and entry steps.
+    """
+    bx, by = position
+    width = max(0.1, float(footprint[0]))
+    depth = max(0.1, float(footprint[1]))
+    half_w = width * 0.5
+    half_d = depth * 0.5
+
+    if heightmap is None:
+        zero_sides = {"front": 0.0, "back": 0.0, "left": 0.0, "right": 0.0}
+        return {
+            "platform_elevation": 0.0,
+            "min_elevation": 0.0,
+            "max_elevation": 0.0,
+            "center_elevation": 0.0,
+            "foundation_height": 0.0,
+            "terrace_count": 1,
+            "retaining_sides": [],
+            "side_heights": zero_sides,
+            "stair_wall": None,
+            "stair_steps": 0,
+            "dominant_slope_axis": "flat",
+        }
+
+    sample_offsets = {
+        "front": (0.0, -half_d),
+        "back": (0.0, half_d),
+        "left": (-half_w, 0.0),
+        "right": (half_w, 0.0),
+        "front_left": (-half_w, -half_d),
+        "front_right": (half_w, -half_d),
+        "back_left": (-half_w, half_d),
+        "back_right": (half_w, half_d),
+        "center": (0.0, 0.0),
+    }
+    sampled: dict[str, float] = {}
+    for key, (lx, ly) in sample_offsets.items():
+        rx, ry = _rotate_point_2d(lx, ly, rotation)
+        sampled[key] = float(heightmap(bx + rx, by + ry))
+
+    min_elevation = min(sampled.values())
+    max_elevation = max(sampled.values())
+    center_elevation = sampled["center"]
+    platform_elevation = max_elevation
+    foundation_height = max(0.0, platform_elevation - min_elevation)
+
+    edge_elevations = {
+        "front": sampled["front"],
+        "back": sampled["back"],
+        "left": sampled["left"],
+        "right": sampled["right"],
+    }
+    side_heights = {
+        wall: round(max(0.0, platform_elevation - edge_height), 3)
+        for wall, edge_height in edge_elevations.items()
+    }
+    retaining_sides = [
+        wall for wall, drop in side_heights.items()
+        if drop >= 0.45
+    ]
+    terrace_count = max(1, min(4, 1 + int(foundation_height / 1.2)))
+    stair_drop = side_heights.get(entrance_wall, 0.0)
+    stair_steps = int(math.ceil(stair_drop / 0.18)) if stair_drop >= 0.14 else 0
+
+    slope_x = ((sampled["right"] + sampled["front_right"] + sampled["back_right"]) / 3.0) - (
+        (sampled["left"] + sampled["front_left"] + sampled["back_left"]) / 3.0
+    )
+    slope_y = ((sampled["back"] + sampled["back_left"] + sampled["back_right"]) / 3.0) - (
+        (sampled["front"] + sampled["front_left"] + sampled["front_right"]) / 3.0
+    )
+    if abs(slope_x) < 0.08 and abs(slope_y) < 0.08:
+        dominant_axis = "flat"
+    else:
+        dominant_axis = "x" if abs(slope_x) >= abs(slope_y) else "y"
+
+    return {
+        "platform_elevation": round(platform_elevation, 3),
+        "min_elevation": round(min_elevation, 3),
+        "max_elevation": round(max_elevation, 3),
+        "center_elevation": round(center_elevation, 3),
+        "foundation_height": round(foundation_height, 3),
+        "terrace_count": terrace_count,
+        "retaining_sides": retaining_sides,
+        "side_heights": side_heights,
+        "stair_wall": entrance_wall if stair_steps > 0 else None,
+        "stair_steps": stair_steps,
+        "dominant_slope_axis": dominant_axis,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Building variation
 # ---------------------------------------------------------------------------
@@ -1432,6 +1735,7 @@ def generate_city_districts(
     city_depth: float,
     num_districts: int = 4,
     seed: int = 42,
+    city_profile: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     """Generate a city layout partitioned into districts via Voronoi subdivision.
 
@@ -1462,25 +1766,49 @@ def generate_city_districts(
     """
     rng = random.Random(seed)
     num_districts = max(2, min(num_districts, 8))
+    city_profile = city_profile or {}
 
-    district_type_names = list(DISTRICT_TYPES.keys())
+    district_type_names = list(city_profile.get("district_types") or DISTRICT_TYPES.keys())
     half_w = city_width / 2.0
     half_d = city_depth / 2.0
     margin = min(city_width, city_depth) * 0.1
+    main_axis = str(city_profile.get("main_axis", "x"))
+    water_edge = city_profile.get("water_edge")
 
     # --- Generate Voronoi seed points within the city bounds ---
     district_seeds: list[tuple[float, float]] = []
-    for _ in range(num_districts):
+    assigned_types_preview: list[str] = []
+    for i in range(num_districts):
+        assigned_types_preview.append(district_type_names[i % len(district_type_names)])
+    rng.shuffle(assigned_types_preview)
+
+    for i in range(num_districts):
+        dtype = assigned_types_preview[i]
         sx = rng.uniform(-half_w + margin, half_w - margin)
         sy = rng.uniform(-half_d + margin, half_d - margin)
+        if dtype == "port_district" and water_edge:
+            if water_edge == "north":
+                sy = -half_d + margin * 1.25
+            elif water_edge == "south":
+                sy = half_d - margin * 1.25
+            elif water_edge == "east":
+                sx = half_w - margin * 1.25
+            else:
+                sx = -half_w + margin * 1.25
+        elif dtype == "temple_district":
+            sx *= 0.35
+            sy *= 0.35
+        elif dtype == "military_quarter":
+            axis = _axis_vector(main_axis)
+            sx = axis[0] * (half_w - margin * 1.1) * 0.55 + rng.uniform(-margin, margin)
+            sy = axis[1] * (half_d - margin * 1.1) * 0.55 + rng.uniform(-margin, margin)
+        elif dtype == "slums":
+            sx *= 0.85
+            sy *= 0.85
         district_seeds.append((sx, sy))
 
     # --- Assign district types (seeded random) ---
-    assigned_types: list[str] = []
-    for i in range(num_districts):
-        dtype = district_type_names[i % len(district_type_names)]
-        assigned_types.append(dtype)
-    rng.shuffle(assigned_types)
+    assigned_types = assigned_types_preview
 
     # --- Compute district bounds via grid sampling ---
     # Sample a grid and assign each cell to its nearest district seed.
@@ -1540,7 +1868,11 @@ def generate_city_districts(
             "building_types": dconfig["building_types"],
             "prop_density": dconfig["prop_density"],
             "perimeter_props": [],
-            "layout_pattern": "grid",
+            "layout_pattern": city_profile.get("district_layouts", {}).get(dtype, "grid"),
+            "main_axis": main_axis,
+            "water_edge": water_edge,
+            "spoke_count": int(city_profile.get("spoke_count", 4)),
+            "terrace_count": int(city_profile.get("terrace_count", 3)),
         }
 
         district_rng = random.Random(seed + di * 7919)
@@ -1568,33 +1900,69 @@ def generate_city_districts(
 
     # --- Main thoroughfare: a road running through the city center ---
     # Connects the leftmost and rightmost district centers
-    sorted_by_x = sorted(districts, key=lambda d: d["center"][0])
-    main_road_start = (
-        sorted_by_x[0]["center"][0] - margin,
-        sorted_by_x[0]["center"][1],
-    )
-    main_road_end = (
-        sorted_by_x[-1]["center"][0] + margin,
-        sorted_by_x[-1]["center"][1],
-    )
+    if main_axis == "y":
+        sorted_by_axis = sorted(districts, key=lambda d: d["center"][1])
+        main_road_start = (
+            sorted_by_axis[0]["center"][0],
+            sorted_by_axis[0]["center"][1] - margin,
+        )
+        main_road_end = (
+            sorted_by_axis[-1]["center"][0],
+            sorted_by_axis[-1]["center"][1] + margin,
+        )
+    elif main_axis == "diag_pos":
+        sorted_by_axis = sorted(districts, key=lambda d: d["center"][0] + d["center"][1])
+        main_road_start = (
+            sorted_by_axis[0]["center"][0] - margin * 0.7,
+            sorted_by_axis[0]["center"][1] - margin * 0.7,
+        )
+        main_road_end = (
+            sorted_by_axis[-1]["center"][0] + margin * 0.7,
+            sorted_by_axis[-1]["center"][1] + margin * 0.7,
+        )
+    elif main_axis == "diag_neg":
+        sorted_by_axis = sorted(districts, key=lambda d: d["center"][0] - d["center"][1])
+        main_road_start = (
+            sorted_by_axis[0]["center"][0] - margin * 0.7,
+            sorted_by_axis[0]["center"][1] + margin * 0.7,
+        )
+        main_road_end = (
+            sorted_by_axis[-1]["center"][0] + margin * 0.7,
+            sorted_by_axis[-1]["center"][1] - margin * 0.7,
+        )
+    else:
+        sorted_by_axis = sorted(districts, key=lambda d: d["center"][0])
+        main_road_start = (
+            sorted_by_axis[0]["center"][0] - margin,
+            sorted_by_axis[0]["center"][1],
+        )
+        main_road_end = (
+            sorted_by_axis[-1]["center"][0] + margin,
+            sorted_by_axis[-1]["center"][1],
+        )
     main_road = {
         "start": (round(main_road_start[0], 2), round(main_road_start[1], 2)),
         "end": (round(main_road_end[0], 2), round(main_road_end[1], 2)),
         "width": 5.0,
         "style": "cobblestone",
         "is_main_road": True,
+        "axis": main_axis,
     }
 
     # Connect each district center to the main thoroughfare
     connector_roads: list[dict[str, Any]] = []
+    line_dx = main_road_end[0] - main_road_start[0]
+    line_dy = main_road_end[1] - main_road_start[1]
+    line_len_sq = max(line_dx * line_dx + line_dy * line_dy, 1.0)
     for dist in districts:
         dcx, dcy = dist["center"]
-        # Project district center onto the main road line
-        mx = max(main_road_start[0], min(dcx, main_road_end[0]))
-        my = main_road_start[1] + (
-            (main_road_end[1] - main_road_start[1])
-            * ((mx - main_road_start[0]) / max(main_road_end[0] - main_road_start[0], 1.0))
-        )
+        # Project district center onto the main road line segment.
+        t = (
+            ((dcx - main_road_start[0]) * line_dx) + ((dcy - main_road_start[1]) * line_dy)
+        ) / line_len_sq
+        t = max(0.0, min(1.0, t))
+        mx = main_road_start[0] + line_dx * t
+        my = main_road_start[1] + line_dy * t
         connector_roads.append({
             "start": (round(dcx, 2), round(dcy, 2)),
             "end": (round(mx, 2), round(my, 2)),
@@ -1673,6 +2041,8 @@ def generate_city_districts(
             "wall_segments": len(walls),
             "gate_count": len(gates),
             "seed": seed,
+            "main_axis": main_axis,
+            "layout_signature": city_profile.get("signature"),
         },
     }
 
@@ -1688,6 +2058,7 @@ def generate_settlement(
     radius: float = 50.0,
     heightmap: Optional[Callable[[float, float], float]] = None,
     wall_height: float = 3.0,
+    layout_brief: str = "",
 ) -> dict[str, Any]:
     """Generate a complete settlement layout.
 
@@ -1744,6 +2115,7 @@ def generate_settlement(
     if seed is None:
         seed = random.randint(0, 2**31)
     rng = random.Random(seed)
+    layout_profile = _derive_settlement_profile(settlement_type, layout_brief, seed)
 
     # --- District-based city generation ---
     if config.get("layout_pattern") == "district":
@@ -1752,6 +2124,7 @@ def generate_settlement(
             city_depth=radius * 2.0,
             num_districts=max(3, min(6, rng.randint(3, 6))),
             seed=seed,
+            city_profile=layout_profile,
         )
 
         # Offset all positions by the requested center
@@ -1766,15 +2139,16 @@ def generate_settlement(
                 variation_rng = random.Random(bld["unique_seed"])
                 varied = _apply_building_variation(variation_rng, bld)
                 bx, by = varied["position"]
-                varied["elevation"] = round(
-                    _sample_heightmap(heightmap, bx, by), 3
+                foundation_profile = _compute_foundation_profile(
+                    heightmap,
+                    (bx, by),
+                    varied.get("footprint", (6.0, 6.0)),
+                    rotation=float(varied.get("rotation", 0.0)),
                 )
-                varied["foundation_height"] = round(
-                    _compute_foundation_height(
-                        heightmap, (bx, by), varied.get("footprint", (6.0, 6.0))
-                    ),
-                    3,
-                )
+                varied["elevation"] = round(_sample_heightmap(heightmap, bx, by), 3)
+                varied["foundation_height"] = foundation_profile["foundation_height"]
+                varied["platform_elevation"] = foundation_profile["platform_elevation"]
+                varied["foundation_profile"] = foundation_profile
                 varied["district"] = dist["district_type"]
                 all_buildings.append(varied)
 
@@ -1854,6 +2228,9 @@ def generate_settlement(
             "layout_pattern": "district",
             "district_count": len(city_data["districts"]),
             "district_types": [d["district_type"] for d in city_data["districts"]],
+            "layout_brief": layout_brief,
+            "layout_profile": layout_profile,
+            "main_axis": city_data["metadata"].get("main_axis", layout_profile.get("main_axis")),
         }
 
         return {
@@ -1872,7 +2249,22 @@ def generate_settlement(
         }
 
     # 1. Place buildings (non-district layout patterns)
-    buildings = _place_buildings(rng, config, center, radius)
+    effective_config = dict(config)
+    effective_config["layout_pattern"] = layout_profile.get(
+        "pattern", effective_config.get("layout_pattern", "organic"),
+    )
+    effective_config["main_axis"] = layout_profile.get("main_axis", "x")
+    effective_config["water_edge"] = layout_profile.get("water_edge")
+    effective_config["spoke_count"] = int(layout_profile.get("spoke_count", 4))
+    effective_config["terrace_count"] = int(layout_profile.get("terrace_count", 3))
+    density_bias = float(layout_profile.get("density_bias", 0.0))
+    base_lo, base_hi = effective_config["building_count"]
+    effective_config["building_count"] = (
+        max(1, int(round(base_lo * (1.0 + density_bias)))),
+        max(1, int(round(base_hi * (1.0 + density_bias)))),
+    )
+
+    buildings = _place_buildings(rng, effective_config, center, radius)
 
     # 2. Apply per-building variation + heightmap elevation
     varied_buildings: list[dict[str, Any]] = []
@@ -1881,27 +2273,28 @@ def generate_settlement(
         varied = _apply_building_variation(variation_rng, bld)
         # Terrain-aware Z placement
         bx, by = varied["position"]
-        varied["elevation"] = round(
-            _sample_heightmap(heightmap, bx, by), 3
+        foundation_profile = _compute_foundation_profile(
+            heightmap,
+            (bx, by),
+            varied.get("footprint", (6.0, 6.0)),
+            rotation=float(varied.get("rotation", 0.0)),
         )
-        varied["foundation_height"] = round(
-            _compute_foundation_height(
-                heightmap, (bx, by), varied.get("footprint", (6.0, 6.0))
-            ),
-            3,
-        )
+        varied["elevation"] = round(_sample_heightmap(heightmap, bx, by), 3)
+        varied["foundation_height"] = foundation_profile["foundation_height"]
+        varied["platform_elevation"] = foundation_profile["platform_elevation"]
+        varied["foundation_profile"] = foundation_profile
         varied_buildings.append(varied)
 
     # 3. Generate roads
-    roads = _generate_roads(varied_buildings, center, config["road_style"])
+    roads = _generate_roads(varied_buildings, center, effective_config["road_style"])
 
     # 4. Scatter props
     props = _scatter_settlement_props(
-        rng, varied_buildings, roads, config, radius, center
+        rng, varied_buildings, roads, effective_config, radius, center
     )
 
     # 5. Perimeter walls
-    perimeter = _generate_perimeter(rng, config, center, radius)
+    perimeter = _generate_perimeter(rng, effective_config, center, radius)
 
     # 6. Furnish interiors (multi-floor aware) + place lights
     interiors: dict[int, list[dict[str, Any]]] = {}
@@ -1972,8 +2365,10 @@ def generate_settlement(
             len(v) for v in interiors.values()
         ),
         "light_count": len(all_lights),
-        "has_walls": config["has_walls"],
-        "layout_pattern": config.get("layout_pattern", "organic"),
+        "has_walls": effective_config["has_walls"],
+        "layout_pattern": effective_config.get("layout_pattern", "organic"),
+        "layout_brief": layout_brief,
+        "layout_profile": layout_profile,
     }
 
     return {

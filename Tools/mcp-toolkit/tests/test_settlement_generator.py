@@ -16,6 +16,8 @@ from blender_addon.handlers.settlement_generator import (
     SETTLEMENT_TYPES,
     _ROOM_LIGHTS,
     _apply_building_variation,
+    _compute_foundation_profile,
+    _derive_settlement_profile,
     _compute_foundation_height,
     _dist2d,
     _aabb_overlaps,
@@ -26,6 +28,7 @@ from blender_addon.handlers.settlement_generator import (
     _place_interior_lights,
     _sample_heightmap,
     _scatter_settlement_props,
+    generate_city_districts,
     generate_settlement,
 )
 import random
@@ -138,6 +141,44 @@ class TestGenerateSettlement:
         assert isinstance(result["seed"], int)
         assert len(result["buildings"]) > 0
 
+    def test_layout_brief_is_deterministic(self):
+        r1 = generate_settlement(
+            "town",
+            seed=77,
+            layout_brief="river trade town with docks and crowded markets",
+        )
+        r2 = generate_settlement(
+            "town",
+            seed=77,
+            layout_brief="river trade town with docks and crowded markets",
+        )
+        assert r1["metadata"]["layout_profile"]["signature"] == r2["metadata"]["layout_profile"]["signature"]
+        assert [b["position"] for b in r1["buildings"]] == [b["position"] for b in r2["buildings"]]
+
+    def test_layout_brief_changes_layout_for_same_seed(self):
+        waterfront = generate_settlement(
+            "town",
+            seed=88,
+            layout_brief="harbor trade town with docks and waterfront bazaar",
+        )
+        fortress = generate_settlement(
+            "town",
+            seed=88,
+            layout_brief="fortified hill town with processional avenue and citadel",
+        )
+        assert waterfront["metadata"]["layout_profile"]["pattern"] != fortress["metadata"]["layout_profile"]["pattern"]
+        assert [b["position"] for b in waterfront["buildings"]] != [b["position"] for b in fortress["buildings"]]
+
+    def test_heightmap_buildings_include_foundation_profile(self):
+        result = generate_settlement(
+            "town",
+            seed=51,
+            heightmap=lambda x, y: x * 0.05 + y * 0.02,
+        )
+        assert result["buildings"]
+        assert "foundation_profile" in result["buildings"][0]
+        assert "platform_elevation" in result["buildings"][0]
+
 
 # =========================================================================
 # _place_buildings
@@ -234,6 +275,37 @@ class TestPlaceBuildings:
         buildings = _place_buildings(rng, config, (0, 0), 50.0)
         for bld in buildings:
             assert isinstance(bld["room_functions"], list)
+
+
+class TestFoundationProfile:
+    """Tests for terrain-aware foundation fitting metadata."""
+
+    def test_profile_is_flat_without_heightmap(self):
+        profile = _compute_foundation_profile(None, (0.0, 0.0), (8.0, 6.0))
+        assert profile["foundation_height"] == 0.0
+        assert profile["retaining_sides"] == []
+        assert profile["dominant_slope_axis"] == "flat"
+
+    def test_profile_detects_slope_and_retaining_side(self):
+        profile = _compute_foundation_profile(
+            lambda x, y: max(0.0, x * 0.4),
+            (0.0, 0.0),
+            (8.0, 6.0),
+            rotation=0.0,
+        )
+        assert profile["foundation_height"] > 0.0
+        assert "left" in profile["retaining_sides"]
+        assert profile["dominant_slope_axis"] == "x"
+
+    def test_profile_generates_entry_steps_when_front_edge_drops(self):
+        profile = _compute_foundation_profile(
+            lambda x, y: max(0.0, y * 0.3),
+            (0.0, 0.0),
+            (8.0, 8.0),
+            entrance_wall="front",
+        )
+        assert profile["stair_wall"] == "front"
+        assert profile["stair_steps"] > 0
 
 
 # =========================================================================
@@ -719,6 +791,50 @@ class TestOutpost:
     def test_small_building_count(self):
         result = generate_settlement("outpost", seed=42)
         assert len(result["buildings"]) <= 6
+
+
+class TestLayoutBriefProfiles:
+    """Prompt-to-layout profile tests."""
+
+    def test_derive_settlement_profile_detects_waterfront(self):
+        profile = _derive_settlement_profile(
+            "city",
+            "river port city with harbor docks and merchant quays",
+            seed=42,
+        )
+        assert profile["pattern"] == "waterfront_edge"
+        assert "port_district" in profile["district_types"][:2]
+
+    def test_generate_city_districts_honors_main_axis(self):
+        profile = {
+            "main_axis": "y",
+            "district_types": ["temple_district", "market_quarter", "military_quarter"],
+            "district_layouts": {
+                "temple_district": "axial",
+                "market_quarter": "organic",
+                "military_quarter": "axial",
+            },
+            "signature": "test-axis",
+        }
+        result = generate_city_districts(120.0, 90.0, num_districts=3, seed=42, city_profile=profile)
+        assert result["main_road"]["axis"] == "y"
+        assert result["metadata"]["main_axis"] == "y"
+
+    def test_city_layout_brief_changes_main_axis_metadata(self):
+        harbor_city = generate_settlement(
+            "city",
+            seed=91,
+            layout_brief="canal city with harbor docks and merchant quays",
+        )
+        fortress_city = generate_settlement(
+            "city",
+            seed=91,
+            layout_brief="imperial capital with grand avenue and military quarter",
+        )
+        assert harbor_city["metadata"]["layout_profile"]["signature"] != fortress_city["metadata"]["layout_profile"]["signature"]
+        assert harbor_city["metadata"]["main_axis"] != fortress_city["metadata"]["main_axis"] or (
+            harbor_city["metadata"]["district_types"] != fortress_city["metadata"]["district_types"]
+        )
 
 
 # =========================================================================

@@ -296,6 +296,117 @@ class TestMeshSpecGeometry:
 
 
 # ---------------------------------------------------------------------------
+# Opening-aware wall planning
+# ---------------------------------------------------------------------------
+
+
+class TestOpeningAwareWallPlanning:
+    """Test deterministic wall opening planning for runtime buildings."""
+
+    def test_resolve_building_openings_uses_side_wall_presets(self):
+        """Preset openings on left/right/back walls must survive resolution."""
+        from blender_addon.handlers.worldbuilding import _resolve_building_openings
+
+        openings = _resolve_building_openings(
+            width=8.0,
+            depth=10.0,
+            floors=2,
+            wall_height=4.0,
+            wall_thickness=0.4,
+            style="gothic",
+            requested_openings=[
+                {"type": "door", "wall": "front", "floor": 0, "style": "pointed_arch"},
+                {"type": "window", "wall": "left", "floor": 0, "style": "pointed_arch"},
+                {"type": "window", "wall": "right", "floor": 0, "style": "pointed_arch"},
+                {"type": "window", "wall": "back", "floor": 1, "style": "rose_window"},
+            ],
+        )
+
+        walls = {(opening["wall"], opening["floor"]) for opening in openings}
+        assert ("front", 0) in walls
+        assert ("left", 0) in walls
+        assert ("right", 0) in walls
+        assert ("back", 1) in walls
+
+    def test_default_resolved_openings_cover_side_walls(self):
+        """Default building openings should not be limited to front/back walls."""
+        from blender_addon.handlers.worldbuilding import _resolve_building_openings
+
+        openings = _resolve_building_openings(
+            width=10.0,
+            depth=8.0,
+            floors=1,
+            wall_height=4.0,
+            wall_thickness=0.4,
+            style="medieval",
+            requested_openings=[],
+        )
+
+        wall_names = {opening["wall"] for opening in openings}
+        assert {"front", "back", "left", "right"}.issubset(wall_names)
+        assert any(opening["kind"] == "door" and opening["wall"] == "front" for opening in openings)
+
+    def test_resolved_openings_stay_player_usable(self):
+        """Procedural doors and windows should not collapse below usable scale."""
+        from blender_addon.handlers.worldbuilding import _resolve_building_openings
+
+        openings = _resolve_building_openings(
+            width=6.0,
+            depth=6.0,
+            floors=1,
+            wall_height=3.2,
+            wall_thickness=0.4,
+            style="medieval",
+            requested_openings=[],
+        )
+
+        for opening in openings:
+            if opening["kind"] == "door":
+                assert opening["width"] >= 1.2
+                assert opening["height"] >= 2.2
+
+    def test_compute_wall_segments_leave_true_open_holes(self):
+        """Solid wall segments must not overlap the requested opening rectangles."""
+        from blender_addon.handlers.worldbuilding import _compute_wall_segments
+
+        openings = [
+            {"kind": "door", "center": 5.0, "width": 1.4, "bottom": 0.0, "height": 2.4},
+            {"kind": "window", "center": 2.1, "width": 0.9, "bottom": 1.2, "height": 1.3},
+        ]
+        segments, clamped = _compute_wall_segments(10.0, 4.0, openings)
+
+        assert len(segments) > 1
+        assert len(clamped) == 2
+
+        for segment in segments:
+            for opening in clamped:
+                overlaps_x = segment["u0"] < opening["u1"] and segment["u1"] > opening["u0"]
+                overlaps_z = segment["v0"] < opening["v1"] and segment["v1"] > opening["v0"]
+                assert not (overlaps_x and overlaps_z), (
+                    f"segment {segment} overlaps opening {opening}"
+                )
+
+    def test_structure_origin_from_center_preserves_anchor_for_unrotated_shell(self):
+        """Settlement placement should convert center anchors into shell origins."""
+        from blender_addon.handlers.worldbuilding import _structure_origin_from_center
+
+        origin = _structure_origin_from_center((10.0, 12.0), (8.0, 6.0), 0.0)
+        assert origin == pytest.approx((6.0, 9.0), abs=1e-6)
+
+    def test_structure_origin_from_center_handles_rotation(self):
+        """Rotated shells still need their local center aligned to the target anchor."""
+        from blender_addon.handlers.worldbuilding import _structure_origin_from_center
+
+        origin_x, origin_y = _structure_origin_from_center((0.0, 0.0), (8.0, 4.0), math.pi / 2.0)
+        center_local = (4.0, 2.0)
+        world_center = (
+            origin_x + center_local[0] * math.cos(math.pi / 2.0) - center_local[1] * math.sin(math.pi / 2.0),
+            origin_y + center_local[0] * math.sin(math.pi / 2.0) + center_local[1] * math.cos(math.pi / 2.0),
+        )
+        assert world_center == pytest.approx((0.0, 0.0), abs=1e-6)
+
+
+# ---------------------------------------------------------------------------
 # VB Building Preset tests
 # ---------------------------------------------------------------------------
 

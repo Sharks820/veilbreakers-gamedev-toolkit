@@ -222,6 +222,68 @@ class TestBuildingGrammar:
         assert len(result.operations) > 0
 
 
+class TestFacadeGrammar:
+    """Test the modular facade grammar used by runtime building assembly."""
+
+    def test_facade_plan_includes_core_modules(self):
+        from blender_addon.handlers._building_grammar import plan_modular_facade
+
+        plan = plan_modular_facade(
+            width=10.0,
+            depth=8.0,
+            floors=2,
+            style="medieval",
+            wall_height=4.0,
+            wall_thickness=0.4,
+            openings=[
+                {"wall": "front", "kind": "door", "center": 5.0, "world_bottom": 0.0, "width": 1.4, "height": 2.4},
+                {"wall": "front", "kind": "window", "center": 2.2, "world_bottom": 1.2, "width": 1.0, "height": 1.4},
+            ],
+            site_profile="market",
+            seed=7,
+        )
+
+        roles = {module["role"] for module in plan["modules"]}
+        assert "facade_plinth" in roles
+        assert "facade_cornice" in roles
+        assert "facade_pilaster" in roles
+        assert "facade_surround" in roles
+        assert "facade_awning" in roles
+
+    def test_gothic_facade_includes_buttresses(self):
+        from blender_addon.handlers._building_grammar import plan_modular_facade
+
+        plan = plan_modular_facade(
+            width=14.0,
+            depth=10.0,
+            floors=3,
+            style="gothic",
+            wall_height=4.8,
+            wall_thickness=0.5,
+            openings=[],
+            site_profile="fortified",
+            seed=3,
+        )
+
+        assert any(module["type"] == "buttress" for module in plan["modules"])
+
+    def test_facade_plan_is_deterministic(self):
+        from blender_addon.handlers._building_grammar import plan_modular_facade
+
+        kwargs = {
+            "width": 12.0,
+            "depth": 9.0,
+            "floors": 2,
+            "style": "medieval",
+            "wall_height": 4.0,
+            "wall_thickness": 0.4,
+            "openings": [{"wall": "front", "kind": "door", "center": 6.0, "world_bottom": 0.0, "width": 1.5, "height": 2.5}],
+            "site_profile": "rural",
+            "seed": 11,
+        }
+        assert plan_modular_facade(**kwargs) == plan_modular_facade(**kwargs)
+
+
 # ---------------------------------------------------------------------------
 # Specialized Template tests
 # ---------------------------------------------------------------------------
@@ -665,3 +727,105 @@ class TestModularKit:
 
         result = generate_modular_pieces(cell_size=2.0, pieces=["wall_straight"])
         assert result[0]["name"] == "wall_straight"
+
+
+# ---------------------------------------------------------------------------
+# Interior-Exterior Consistency Linking tests (AAA-06)
+# ---------------------------------------------------------------------------
+
+
+class TestConsistentInterior:
+    """Test generate_consistent_interior produces valid linked interiors."""
+
+    def _make_spec(self, width=8.0, depth=6.0, floors=2, style="medieval"):
+        from blender_addon.handlers._building_grammar import evaluate_building_grammar
+        return evaluate_building_grammar(width=width, depth=depth, floors=floors, style=style, seed=42)
+
+    def test_returns_dict_with_floors(self):
+        from blender_addon.handlers._building_grammar import generate_consistent_interior
+        spec = self._make_spec()
+        result = generate_consistent_interior(spec, building_type="house", seed=42)
+        assert "floors" in result
+        assert "metadata" in result
+        assert len(result["floors"]) == 2
+
+    def test_metadata_has_required_fields(self):
+        from blender_addon.handlers._building_grammar import generate_consistent_interior
+        spec = self._make_spec()
+        result = generate_consistent_interior(spec, building_type="house", seed=42)
+        meta = result["metadata"]
+        assert meta["building_type"] == "house"
+        assert meta["total_rooms"] >= 2
+        assert meta["total_furniture"] > 0
+        assert meta["total_lights"] > 0
+        assert meta["total_floors"] == 2
+
+    def test_each_room_has_furniture(self):
+        from blender_addon.handlers._building_grammar import generate_consistent_interior
+        spec = self._make_spec()
+        result = generate_consistent_interior(spec, building_type="tavern", seed=42)
+        for floor in result["floors"]:
+            for room in floor["rooms"]:
+                assert len(room["furniture"]) > 0, f"Room {room['type']} has no furniture"
+
+    def test_each_room_has_lighting(self):
+        from blender_addon.handlers._building_grammar import generate_consistent_interior
+        spec = self._make_spec()
+        result = generate_consistent_interior(spec, building_type="tavern", seed=42)
+        for floor in result["floors"]:
+            for room in floor["rooms"]:
+                assert len(room["lighting"]) > 0, f"Room {room['type']} has no lighting"
+
+    def test_lighting_has_world_position(self):
+        from blender_addon.handlers._building_grammar import generate_consistent_interior
+        spec = self._make_spec()
+        result = generate_consistent_interior(spec, building_type="house", seed=42)
+        for floor in result["floors"]:
+            for room in floor["rooms"]:
+                for light in room["lighting"]:
+                    assert "world_position" in light
+                    assert len(light["world_position"]) == 3
+
+    def test_room_bounds_within_footprint(self):
+        from blender_addon.handlers._building_grammar import generate_consistent_interior
+        spec = self._make_spec(width=10.0, depth=8.0)
+        result = generate_consistent_interior(spec, building_type="castle", seed=42)
+        for floor in result["floors"]:
+            for room in floor["rooms"]:
+                b = room["bounds"]
+                assert b["x"] >= 0
+                assert b["y"] >= 0
+                assert b["x"] + b["width"] <= 10.0
+                assert b["y"] + b["depth"] <= 8.0
+
+    @pytest.mark.parametrize("building_type", [
+        "tavern", "house", "shop", "castle", "cathedral", "tower",
+        "forge", "shrine", "dungeon", "barracks", "library", "temple",
+        "wizard_tower",
+    ])
+    def test_all_building_types_produce_valid_output(self, building_type):
+        from blender_addon.handlers._building_grammar import generate_consistent_interior
+        floors = 3 if building_type in ("castle", "tower", "wizard_tower") else 2
+        spec = self._make_spec(floors=floors)
+        result = generate_consistent_interior(spec, building_type=building_type, seed=42)
+        assert result["metadata"]["total_rooms"] >= 1
+        assert len(result["floors"]) == floors
+
+    def test_deterministic_with_same_seed(self):
+        from blender_addon.handlers._building_grammar import generate_consistent_interior
+        spec = self._make_spec()
+        r1 = generate_consistent_interior(spec, building_type="tavern", seed=99)
+        r2 = generate_consistent_interior(spec, building_type="tavern", seed=99)
+        assert r1["metadata"] == r2["metadata"]
+        assert len(r1["floors"]) == len(r2["floors"])
+
+    def test_different_seeds_produce_different_layouts(self):
+        from blender_addon.handlers._building_grammar import generate_consistent_interior
+        spec = self._make_spec()
+        r1 = generate_consistent_interior(spec, building_type="house", seed=1)
+        r2 = generate_consistent_interior(spec, building_type="house", seed=2)
+        # Furniture positions should differ
+        f1 = r1["floors"][0]["rooms"][0]["furniture"]
+        f2 = r2["floors"][0]["rooms"][0]["furniture"]
+        if f1 and f2:
+            assert f1[0]["position"] != f2[0]["position"]

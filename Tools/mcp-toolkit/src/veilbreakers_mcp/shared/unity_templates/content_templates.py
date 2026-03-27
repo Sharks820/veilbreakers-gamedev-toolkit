@@ -1621,6 +1621,14 @@ def generate_skill_tree_script(
     node_lines.append("namespace " + ns)
     node_lines.append("{")
 
+    # Path enum (hero paths)
+    node_lines.append("    public enum Path")
+    node_lines.append("    {")
+    for hp in hero_paths:
+        node_lines.append(f"        {hp},")
+    node_lines.append("    }")
+    node_lines.append("")
+
     # SkillStatBonus
     node_lines.append("    /// <summary>A stat bonus granted by a skill node.</summary>")
     node_lines.append("    [Serializable]")

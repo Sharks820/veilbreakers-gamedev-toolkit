@@ -9,7 +9,7 @@ The handle_scatter_biome_vegetation handler wires everything together with
 Blender scene creation.
 
 Biomes:
-  - thornwood_forest: Dead twisted trees, ancient oaks, giant mushrooms
+  - thornwood_forest: Mixed healthy-to-blighted forest edge progression
   - corrupted_swamp: Sparse dead trees, mushroom clusters, scattered boulders
   - mountain_pass: Dark pines, heavy boulders, rare crystals
   - cemetery: Hanging willows, moss, gravestones
@@ -43,17 +43,18 @@ except ImportError:
 BIOME_VEGETATION_SETS: dict[str, dict[str, list[dict[str, Any]]]] = {
     "thornwood_forest": {
         "trees": [
-            {"type": "tree", "style": "dead_twisted", "density": 0.3, "scale_range": (0.8, 1.5)},
-            {"type": "tree", "style": "ancient_oak", "density": 0.1, "scale_range": (1.5, 3.0)},
-            {"type": "mushroom", "style": "giant_cap", "density": 0.05, "scale_range": (0.5, 1.2)},
+            {"type": "tree", "style": "veil_healthy", "density": 0.16, "scale_range": (1.2, 2.6)},
+            {"type": "tree", "style": "veil_boundary", "density": 0.10, "scale_range": (1.0, 2.0)},
+            {"type": "tree", "style": "veil_blighted", "density": 0.04, "scale_range": (0.8, 1.5)},
         ],
         "ground_cover": [
-            {"type": "fern", "density": 0.5, "scale_range": (0.2, 0.5)},
-            {"type": "moss", "density": 0.4, "scale_range": (0.3, 0.6)},
+            {"type": "fern", "density": 0.36, "scale_range": (0.2, 0.5)},
+            {"type": "moss", "density": 0.30, "scale_range": (0.3, 0.6)},
+            {"type": "grass", "style": "dark_floor", "density": 0.22, "scale_range": (0.2, 0.45)},
         ],
         "rocks": [
             {"type": "rock", "style": "boulder", "density": 0.1, "scale_range": (0.3, 1.0)},
-            {"type": "rock", "style": "standing_stone", "density": 0.02, "scale_range": (1.0, 2.0)},
+            {"type": "rock", "style": "root_boulder", "density": 0.04, "scale_range": (0.7, 1.6)},
         ],
     },
     "corrupted_swamp": {
@@ -196,12 +197,13 @@ BIOME_VEGETATION_SETS: dict[str, dict[str, list[dict[str, Any]]]] = {
     },
     "deep_forest": {
         "trees": [
-            {"type": "tree", "style": "ancient_massive", "density": 0.08, "scale_range": (2.0, 5.0)},
-            {"type": "tree", "style": "gnarled_elder", "density": 0.05, "scale_range": (1.5, 3.0)},
+            {"type": "tree", "style": "veil_boundary", "density": 0.09, "scale_range": (1.8, 3.8)},
+            {"type": "tree", "style": "veil_blighted", "density": 0.05, "scale_range": (1.3, 2.6)},
         ],
         "ground_cover": [
             {"type": "fern", "style": "thick_fern", "density": 0.40, "scale_range": (0.3, 0.7)},
             {"type": "moss", "style": "hanging_moss", "density": 0.30, "scale_range": (0.2, 0.6)},
+            {"type": "root", "style": "surface_root", "density": 0.14, "scale_range": (0.4, 1.0)},
         ],
         "rocks": [
             {"type": "rock", "style": "root_boulder", "density": 0.08, "scale_range": (0.5, 1.5)},

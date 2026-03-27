@@ -191,14 +191,12 @@ def biome_filter_points(
         if moisture_map is not None:
             moisture = float(moisture_map[row_idx, col_idx])
 
-        # Find first matching rule
+        matching_rules: list[dict[str, Any]] = []
         for rule in rules:
             min_alt = rule.get("min_alt", 0.0)
             max_alt = rule.get("max_alt", 1.0)
             min_slope = rule.get("min_slope", 0.0)
             max_slope = rule.get("max_slope", 90.0)
-            density = rule.get("density", 1.0)
-            scale_range = rule.get("scale_range", (0.8, 1.2))
 
             if not (min_alt <= altitude <= max_alt
                     and min_slope <= slope <= max_slope):
@@ -211,20 +209,44 @@ def biome_filter_points(
                 if not (rule_min_moisture <= moisture <= rule_max_moisture):
                     continue
 
-            # Density check
-            if rng.random() > density:
-                break  # Skip this point entirely
+            matching_rules.append(rule)
 
-            scale = rng.uniform(scale_range[0], scale_range[1])
-            rotation = rng.uniform(0, 360)
+        if not matching_rules:
+            continue
 
-            placements.append({
-                "position": (x, y),
-                "vegetation_type": rule["vegetation_type"],
-                "scale": scale,
-                "rotation": rotation,
-            })
-            break  # First matching rule wins
+        accepted_rules: list[dict[str, Any]] = []
+        for rule in matching_rules:
+            density = float(rule.get("density", 1.0))
+            density = max(0.0, min(1.0, density))
+            if rng.random() <= density:
+                accepted_rules.append(rule)
+
+        if not accepted_rules:
+            continue
+
+        if len(accepted_rules) == 1:
+            chosen_rule = accepted_rules[0]
+        else:
+            total_weight = sum(max(0.001, float(rule.get("density", 1.0))) for rule in accepted_rules)
+            pick = rng.uniform(0.0, total_weight)
+            cumulative = 0.0
+            chosen_rule = accepted_rules[-1]
+            for rule in accepted_rules:
+                cumulative += max(0.001, float(rule.get("density", 1.0)))
+                if pick <= cumulative:
+                    chosen_rule = rule
+                    break
+
+        scale_range = chosen_rule.get("scale_range", (0.8, 1.2))
+        scale = rng.uniform(scale_range[0], scale_range[1])
+        rotation = rng.uniform(0, 360)
+
+        placements.append({
+            "position": (x, y),
+            "vegetation_type": chosen_rule["vegetation_type"],
+            "scale": scale,
+            "rotation": rotation,
+        })
 
     return placements
 
@@ -272,11 +294,11 @@ PROP_AFFINITY: dict[str, list[tuple[str, float]]] = {
 }
 
 _GENERIC_PROPS: list[tuple[str, float]] = [
-    ("rock", 0.2),
-    ("log", 0.15),
-    ("mushroom", 0.1),
-    ("bush", 0.1),
-    ("barrel", 0.05),
+    ("rock", 0.24),
+    ("bush", 0.22),
+    ("crate", 0.20),
+    ("barrel", 0.18),
+    ("lantern", 0.16),
 ]
 
 

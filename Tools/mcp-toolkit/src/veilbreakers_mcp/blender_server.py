@@ -1,8 +1,11 @@
 import atexit
 import json
 import logging
+import math
 import os
+import re
 import threading
+from collections import deque
 from typing import Literal
 
 from mcp.server.fastmcp import FastMCP, Image
@@ -87,6 +90,954 @@ async def _with_screenshot(
         except (OSError, IOError, BlenderCommandError, ConnectionError) as e:
             parts.append(f"[Screenshot capture failed: {e}]")
     return parts
+
+
+def _estimate_location_radius(location: dict) -> float:
+    """Estimate a footprint radius for map auto-placement."""
+    loc_type = str(location.get("type", "building")).lower()
+
+    if loc_type == "town":
+        districts = max(1, int(location.get("districts", 3)))
+        grid_size = float(location.get("grid_size", 32))
+        return max(18.0, districts * 8.0, grid_size * 0.45)
+    if loc_type == "castle":
+        outer_size = float(location.get("outer_size", 40))
+        tower_count = max(1, int(location.get("tower_count", 4)))
+        return max(20.0, outer_size * 0.55, tower_count * 3.0)
+    if loc_type in {"dungeon", "cave"}:
+        grid_size = float(location.get("grid_size", 64))
+        floors = max(1, int(location.get("floors", 1)))
+        return max(14.0, grid_size * 0.28, floors * 4.0)
+    if loc_type == "boss_arena":
+        diameter = float(location.get("diameter", 24.0))
+        return max(16.0, diameter * 0.65)
+    if loc_type == "ruins":
+        return max(14.0, float(location.get("outer_size", 20.0)) * 0.45)
+    if loc_type == "building":
+        size = str(location.get("building_size", "medium")).lower()
+        return {
+            "small": 10.0,
+            "medium": 14.0,
+            "large": 20.0,
+            "massive": 28.0,
+        }.get(size, 14.0)
+    return 14.0
+
+
+def _normalize_map_point(position: list[float] | tuple[float, ...], terrain_size: float) -> tuple[float, float]:
+    """Normalize user map positions into centered Blender-world coordinates."""
+    if len(position) < 2:
+        raise ValueError("Map position must contain at least two coordinates.")
+
+    x = float(position[0])
+    y = float(position[1])
+    half = terrain_size / 2.0
+
+    # Heuristic: if the user supplied 0..size coordinates, convert to centered space.
+    if 0.0 <= x <= terrain_size and 0.0 <= y <= terrain_size and (x > half or y > half):
+        return (x - half, y - half)
+    return (x, y)
+
+
+def _map_point_to_terrain_cell(
+    position: list[float] | tuple[float, ...],
+    *,
+    terrain_size: float,
+    resolution: int,
+) -> tuple[int, int]:
+    """Convert a world-space map point into a terrain heightmap cell."""
+    x, y = _normalize_map_point(position, terrain_size)
+    half = terrain_size / 2.0
+    side = max(2, int(resolution))
+    row = int(round(((y + half) / max(terrain_size, 1e-6)) * (side - 1)))
+    col = int(round(((x + half) / max(terrain_size, 1e-6)) * (side - 1)))
+    row = max(0, min(side - 1, row))
+    col = max(0, min(side - 1, col))
+    return (row, col)
+
+
+def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
+    """Assign non-overlapping terrain anchors to compose_map locations."""
+    terrain_cfg = map_spec.get("terrain", {})
+    terrain_size = float(terrain_cfg.get("size", 200.0))
+    half = terrain_size / 2.0
+    locations = list(map_spec.get("locations", []))
+    placements: list[dict] = []
+
+    def _candidate_is_clear(candidate: tuple[float, float], radius: float) -> bool:
+        for existing in placements:
+            dx = candidate[0] - existing["anchor"][0]
+            dy = candidate[1] - existing["anchor"][1]
+            min_distance = existing["radius"] + radius + 8.0
+            if (dx * dx + dy * dy) < (min_distance * min_distance):
+                return False
+        return True
+
+    candidate_points: list[tuple[float, float]] = []
+    ring_fractions = (0.18, 0.30, 0.40)
+    for ring_idx, fraction in enumerate(ring_fractions):
+        radius_x = half * fraction
+        radius_y = half * max(0.16, fraction * 0.82)
+        count = max(6, len(locations) * 3)
+        for i in range(count):
+            angle = (2.0 * math.pi * i / count) + (ring_idx * 0.31)
+            candidate_points.append((
+                round(math.cos(angle) * radius_x, 3),
+                round(math.sin(angle) * radius_y, 3),
+            ))
+    candidate_points.append((0.0, 0.0))
+
+    for index, location in enumerate(locations):
+        radius = _estimate_location_radius(location)
+        requested = location.get("position")
+        anchor: tuple[float, float] | None = None
+
+        if isinstance(requested, (list, tuple)) and len(requested) >= 2:
+            anchor = _normalize_map_point(requested, terrain_size)
+
+        if anchor is None:
+            for candidate in candidate_points:
+                if _candidate_is_clear(candidate, radius):
+                    anchor = candidate
+                    break
+
+        if anchor is None:
+            search_limit = max(0.0, half - radius)
+            radial_step = max(10.0, radius * 0.9)
+            ring_count = max(4, int(search_limit / max(radial_step, 1.0)) + 1)
+            for ring in range(1, ring_count + 1):
+                search_radius = min(search_limit, ring * radial_step)
+                samples = max(18, ring * 14)
+                for sample_idx in range(samples):
+                    angle = (2.0 * math.pi * sample_idx / samples) + (ring * 0.37)
+                    candidate = (
+                        round(math.cos(angle) * search_radius, 3),
+                        round(math.sin(angle) * search_radius * 0.84, 3),
+                    )
+                    if _candidate_is_clear(candidate, radius):
+                        anchor = candidate
+                        break
+                if anchor is not None:
+                    break
+
+        if anchor is None:
+            fallback_x = -half * 0.42 + index * max(radius * 1.8, 14.0)
+            anchor = (
+                round(max(-half + radius, min(half - radius, fallback_x)), 3),
+                0.0,
+            )
+
+        clamped = (
+            max(-half + radius, min(half - radius, anchor[0])),
+            max(-half + radius, min(half - radius, anchor[1])),
+        )
+        placements.append({
+            "name": location.get("name", f"Location_{index}"),
+            "type": location.get("type", "building"),
+            "anchor": clamped,
+            "radius": radius,
+            "source": location,
+        })
+
+    return placements
+
+
+def _resolve_map_generation_budget(map_spec: dict) -> dict:
+    """Return a practical generation budget for the local iteration target."""
+    terrain_cfg = map_spec.get("terrain", {})
+    terrain_size = float(terrain_cfg.get("size", 200.0))
+    requested_profile = str(
+        map_spec.get("performance_budget")
+        or map_spec.get("budget_profile")
+        or map_spec.get("quality_tier")
+        or ""
+    ).strip().lower()
+    location_count = len(map_spec.get("locations", []))
+
+    presets = {
+        "cinematic": {
+            "profile": "cinematic",
+            "terrain_resolution_cap": 512,
+            "vegetation_max_instances": 8000,
+            "prop_density_scale": 1.0,
+        },
+        "balanced_pc": {
+            "profile": "balanced_pc",
+            "terrain_resolution_cap": 384,
+            "vegetation_max_instances": 4500,
+            "prop_density_scale": 0.9,
+        },
+        "large_world": {
+            "profile": "large_world",
+            "terrain_resolution_cap": 256,
+            "vegetation_max_instances": 2500,
+            "prop_density_scale": 0.7,
+        },
+    }
+
+    if requested_profile in presets:
+        budget = dict(presets[requested_profile])
+    elif terrain_size >= 360.0 or location_count >= 8:
+        budget = dict(presets["large_world"])
+    else:
+        budget = dict(presets["balanced_pc"])
+
+    budget["terrain_size"] = terrain_size
+    budget["location_count"] = location_count
+    return budget
+
+
+def _derive_site_profile(location: dict, map_spec: dict) -> str:
+    """Infer a building site profile from freeform location and map briefs."""
+    parts = []
+    for source in (map_spec, location):
+        for key in ("layout_brief", "visual_brief", "style_brief", "description", "prompt", "brief", "theme"):
+            value = source.get(key)
+            if isinstance(value, str) and value.strip():
+                parts.append(value.strip().lower())
+
+    combined = " ".join(parts)
+    tokens = set(combined.replace(",", " ").replace(".", " ").split())
+
+    if tokens & {"harbor", "harbour", "port", "river", "canal", "dock", "docks", "waterfront", "coast", "coastal", "bay"}:
+        return "waterfront"
+    if tokens & {"cliff", "cliffside", "cliffs", "ridge", "terrace", "terraces", "terraced", "slope", "hillside", "mountain"}:
+        return "cliffside"
+    if tokens & {"fort", "fortified", "citadel", "garrison", "barracks", "keep"}:
+        return "fortified"
+    if tokens & {"abbey", "cathedral", "temple", "shrine", "monastery", "academy", "school"}:
+        return "monastery"
+    if tokens & {"forge", "smith", "workshop", "industrial"}:
+        return "forgeyard"
+    if tokens & {"market", "merchant", "trade", "bazaar", "guild"}:
+        return "market"
+    return ""
+
+
+def _build_location_generation_params(
+    location: dict,
+    *,
+    map_spec: dict,
+    map_seed: int,
+    index: int,
+) -> dict:
+    """Build high-level generation params while preserving map/location intent."""
+    loc_type = str(location.get("type", "town")).lower()
+    params = {
+        "name": location.get("name", f"{loc_type.title()}_{index}"),
+        "seed": map_seed + 200 + index,
+    }
+
+    layout_brief = ""
+    for key in ("layout_brief", "description", "prompt", "brief"):
+        value = location.get(key)
+        if isinstance(value, str) and value.strip():
+            layout_brief = value.strip()
+            break
+    if not layout_brief:
+        map_layout = map_spec.get("layout_brief")
+        if isinstance(map_layout, str) and map_layout.strip():
+            layout_brief = map_layout.strip()
+
+    site_profile = str(location.get("site_profile") or _derive_site_profile(location, map_spec)).strip().lower()
+    style_value = location.get("style")
+    preset_value = location.get("preset")
+
+    if layout_brief:
+        params["layout_brief"] = layout_brief
+    if site_profile:
+        params["site_profile"] = site_profile
+    if isinstance(style_value, str) and style_value.strip():
+        params["style"] = style_value.strip().lower()
+    if isinstance(preset_value, str) and preset_value.strip():
+        params["preset"] = preset_value.strip()
+    if "weathering_level" in location:
+        params["weathering_level"] = location.get("weathering_level")
+
+    if loc_type == "town":
+        params["num_districts"] = location.get("districts", 3)
+        params["width"] = location.get("grid_size", 32)
+        params["height"] = location.get("grid_size", 32)
+    elif loc_type == "castle":
+        params["outer_size"] = location.get("outer_size", 40)
+        params["tower_count"] = location.get("tower_count", 4)
+        if "keep_size" in location:
+            params["keep_size"] = location.get("keep_size")
+    elif loc_type in ("dungeon", "cave"):
+        params["width"] = location.get("grid_size", 64)
+        params["height"] = location.get("grid_size", 64)
+        if loc_type == "dungeon" and location.get("floors"):
+            params["num_floors"] = location["floors"]
+    elif loc_type == "ruins":
+        params["damage_level"] = location.get("damage_level", 0.7)
+        params["width"] = location.get("width", location.get("outer_size", 18))
+        params["depth"] = location.get("depth", location.get("outer_size", 14))
+        params["floors"] = location.get("floors", 2)
+    elif loc_type == "boss_arena":
+        params["arena_type"] = location.get("arena_type", "circular")
+    elif loc_type == "building":
+        params["building_size"] = location.get("building_size", "medium")
+        params["width"] = location.get("width", 12)
+        params["depth"] = location.get("depth", 9)
+        params["floors"] = location.get("floors", 2)
+
+    return params
+
+
+def _world_quality_prefixes(result_names: list[str]) -> list[str]:
+    """Normalize non-empty scene object prefixes for world validation."""
+    prefixes = []
+    seen: set[str] = set()
+    for name in result_names:
+        clean = str(name or "").strip()
+        if not clean or clean in seen:
+            continue
+        seen.add(clean)
+        prefixes.append(clean)
+    return prefixes
+
+
+def _should_validate_world_mesh(
+    name: str,
+    obj_type: str,
+    prefixes: list[str],
+) -> bool:
+    """Return True when a generated mesh merits world-quality validation."""
+    if obj_type != "MESH":
+        return False
+    if "_LOD" in name or "Terrain" in name:
+        return False
+    if "_Window_" in name or "_Facade_" in name:
+        return False
+    return any(name == prefix or name.startswith(f"{prefix}_") for prefix in prefixes)
+
+
+def _world_quality_family(name: str) -> str:
+    """Collapse repeated mesh variants into a stable validation family."""
+    family = re.sub(r"_Interior_\d+", "_Interior", name)
+    family = re.sub(r"_(\d+)(?=$|_)", "_#", family)
+    return family
+
+
+def _default_vegetation_rules_for_biome(biome_name: str, density: float) -> list[dict]:
+    biome = str(biome_name or "").strip().lower()
+    if biome == "thornwood_forest":
+        return [
+            {
+                "vegetation_type": "tree_healthy",
+                "min_alt": 0.10,
+                "max_alt": 0.70,
+                "min_slope": 0.0,
+                "max_slope": 24.0,
+                "scale_range": (1.0, 1.9),
+                "density": 0.28 * density,
+            },
+            {
+                "vegetation_type": "tree_boundary",
+                "min_alt": 0.12,
+                "max_alt": 0.78,
+                "min_slope": 0.0,
+                "max_slope": 28.0,
+                "scale_range": (0.95, 1.8),
+                "density": 0.18 * density,
+            },
+            {
+                "vegetation_type": "tree_blighted",
+                "min_alt": 0.22,
+                "max_alt": 0.88,
+                "min_slope": 0.0,
+                "max_slope": 32.0,
+                "scale_range": (0.8, 1.45),
+                "density": 0.06 * density,
+            },
+            {
+                "vegetation_type": "shrub",
+                "min_alt": 0.06,
+                "max_alt": 0.64,
+                "min_slope": 0.0,
+                "max_slope": 34.0,
+                "scale_range": (0.7, 1.2),
+                "density": 0.38 * density,
+            },
+            {
+                "vegetation_type": "grass",
+                "min_alt": 0.0,
+                "max_alt": 0.48,
+                "min_slope": 0.0,
+                "max_slope": 30.0,
+                "scale_range": (0.55, 0.98),
+                "density": 0.52 * density,
+            },
+            {
+                "vegetation_type": "rock_mossy",
+                "min_alt": 0.24,
+                "max_alt": 1.0,
+                "min_slope": 14.0,
+                "max_slope": 90.0,
+                "scale_range": (0.7, 1.3),
+                "density": 0.16 * density,
+            },
+        ]
+    if biome == "deep_forest":
+        return [
+            {
+                "vegetation_type": "tree_boundary",
+                "min_alt": 0.08,
+                "max_alt": 0.82,
+                "min_slope": 0.0,
+                "max_slope": 24.0,
+                "scale_range": (1.4, 2.5),
+                "density": 0.24 * density,
+            },
+            {
+                "vegetation_type": "tree_blighted",
+                "min_alt": 0.16,
+                "max_alt": 0.92,
+                "min_slope": 0.0,
+                "max_slope": 28.0,
+                "scale_range": (1.0, 1.9),
+                "density": 0.10 * density,
+            },
+            {
+                "vegetation_type": "shrub",
+                "min_alt": 0.05,
+                "max_alt": 0.58,
+                "min_slope": 0.0,
+                "max_slope": 30.0,
+                "scale_range": (0.7, 1.1),
+                "density": 0.26 * density,
+            },
+            {
+                "vegetation_type": "root",
+                "min_alt": 0.08,
+                "max_alt": 0.76,
+                "min_slope": 0.0,
+                "max_slope": 38.0,
+                "scale_range": (0.8, 1.25),
+                "density": 0.16 * density,
+            },
+            {
+                "vegetation_type": "grass",
+                "min_alt": 0.0,
+                "max_alt": 0.38,
+                "min_slope": 0.0,
+                "max_slope": 26.0,
+                "scale_range": (0.45, 0.82),
+                "density": 0.22 * density,
+            },
+            {
+                "vegetation_type": "rock_mossy",
+                "min_alt": 0.28,
+                "max_alt": 1.0,
+                "min_slope": 16.0,
+                "max_slope": 90.0,
+                "scale_range": (0.8, 1.4),
+                "density": 0.18 * density,
+            },
+        ]
+    if biome in {"veil_crack_zone", "corrupted_swamp"}:
+        return [
+            {
+                "vegetation_type": "tree_blighted",
+                "min_alt": 0.10,
+                "max_alt": 0.82,
+                "min_slope": 0.0,
+                "max_slope": 28.0,
+                "scale_range": (0.9, 1.8),
+                "density": 0.20 * density,
+            },
+            {
+                "vegetation_type": "mushroom_cluster",
+                "min_alt": 0.02,
+                "max_alt": 0.44,
+                "min_slope": 0.0,
+                "max_slope": 28.0,
+                "scale_range": (0.5, 0.95),
+                "density": 0.22 * density,
+            },
+            {
+                "vegetation_type": "root",
+                "min_alt": 0.08,
+                "max_alt": 0.70,
+                "min_slope": 0.0,
+                "max_slope": 36.0,
+                "scale_range": (0.8, 1.3),
+                "density": 0.18 * density,
+            },
+            {
+                "vegetation_type": "rock",
+                "min_alt": 0.20,
+                "max_alt": 1.0,
+                "min_slope": 12.0,
+                "max_slope": 90.0,
+                "scale_range": (0.7, 1.35),
+                "density": 0.24 * density,
+            },
+        ]
+    return [
+        {
+            "vegetation_type": "tree",
+            "min_alt": 0.08,
+            "max_alt": 0.72,
+            "min_slope": 0.0,
+            "max_slope": 24.0,
+            "scale_range": (0.9, 1.6),
+            "density": 0.62 * density,
+        },
+        {
+            "vegetation_type": "bush",
+            "min_alt": 0.05,
+            "max_alt": 0.55,
+            "min_slope": 0.0,
+            "max_slope": 30.0,
+            "scale_range": (0.55, 1.1),
+            "density": 0.78 * density,
+        },
+        {
+            "vegetation_type": "grass",
+            "min_alt": 0.0,
+            "max_alt": 0.45,
+            "min_slope": 0.0,
+            "max_slope": 28.0,
+            "scale_range": (0.35, 0.78),
+            "density": 0.92 * density,
+        },
+        {
+            "vegetation_type": "rock",
+            "min_alt": 0.28,
+            "max_alt": 1.0,
+            "min_slope": 16.0,
+            "max_slope": 90.0,
+            "scale_range": (0.55, 1.25),
+            "density": 0.36 * density,
+        },
+    ]
+
+
+def _normalize_vegetation_rules(veg_cfg: dict, biome_name: str = "") -> list[dict]:
+    """Convert compose_map vegetation hints into scatter-vegetation rules."""
+    density = float(veg_cfg.get("density", 0.5))
+    raw_rules = veg_cfg.get("rules")
+    if isinstance(raw_rules, list) and raw_rules:
+        normalized: list[dict] = []
+        for entry in raw_rules:
+            if not isinstance(entry, dict):
+                continue
+            vegetation_type = str(entry.get("vegetation_type") or entry.get("asset") or "tree")
+            normalized.append({
+                "vegetation_type": vegetation_type,
+                "min_alt": float(entry.get("min_alt", 0.0)),
+                "max_alt": float(entry.get("max_alt", 1.0)),
+                "min_slope": float(entry.get("min_slope", 0.0)),
+                "max_slope": float(entry.get("max_slope", 45.0)),
+                "scale_range": tuple(entry.get("scale_range", (0.6, 1.2))),
+                "density": float(entry.get("density", density)),
+            })
+        if normalized:
+            return normalized
+    return _default_vegetation_rules_for_biome(biome_name, density)
+
+
+def _lighting_preset_for_biome(biome_name: str) -> str:
+    biome = str(biome_name or "").strip().lower()
+    if biome == "thornwood_forest":
+        return "forest_review"
+    if biome == "deep_forest":
+        return "forest_review"
+    if biome in {"veil_crack_zone", "corrupted_swamp", "cemetery"}:
+        return "veil_corrupted"
+    return "forest_healthy"
+
+
+async def _collect_mesh_targets(
+    blender: BlenderConnection,
+    prefixes: list[str],
+) -> list[str]:
+    """Collect mesh objects that belong to generated world roots."""
+    try:
+        objects = await blender.send_command("list_objects", {})
+    except (OSError, ConnectionError, TimeoutError, BlenderCommandError):
+        return []
+
+    targets: list[str] = []
+    seen: set[str] = set()
+    family_counts: dict[str, int] = {}
+    max_targets = 64
+    for obj in objects if isinstance(objects, list) else []:
+        name = str(obj.get("name", ""))
+        obj_type = str(obj.get("type", ""))
+        if not _should_validate_world_mesh(name, obj_type, prefixes):
+            continue
+        family = _world_quality_family(name)
+        if family_counts.get(family, 0) >= 1:
+            continue
+        if name not in seen:
+            seen.add(name)
+            targets.append(name)
+            family_counts[family] = family_counts.get(family, 0) + 1
+            if len(targets) >= max_targets:
+                break
+    return targets
+
+
+async def _enforce_world_quality(
+    blender: BlenderConnection,
+    *,
+    object_names: list[str],
+    poly_budget: int = 90000,
+    lod_ratios: list[float] | None = None,
+) -> dict:
+    """Validate and remediate UV/material/LOD quality for generated world meshes."""
+    prefixes = _world_quality_prefixes(object_names)
+    mesh_targets = await _collect_mesh_targets(blender, prefixes)
+    report = {
+        "mesh_targets": mesh_targets,
+        "validated_meshes": 0,
+        "uv_fixed": [],
+        "materials_fixed": [],
+        "lod_generated": [],
+        "failures": [],
+    }
+
+    for mesh_name in mesh_targets:
+        report["validated_meshes"] += 1
+        try:
+            game_ready = await blender.send_command(
+                "mesh_check_game_ready",
+                {"object_name": mesh_name, "poly_budget": poly_budget, "platform": "pc"},
+            )
+            checks = game_ready.get("checks", {}) if isinstance(game_ready, dict) else {}
+            has_material = bool(checks.get("materials", {}).get("passed", False))
+            has_uv = bool(checks.get("uv", {}).get("passed", False))
+            if not has_material:
+                await blender.send_command(
+                    "texture_create_pbr",
+                    {"name": mesh_name, "object_name": mesh_name, "texture_size": 1024},
+                )
+                report["materials_fixed"].append(mesh_name)
+
+            uv_report = await blender.send_command(
+                "uv_analyze",
+                {"object_name": mesh_name, "texture_size": 1024},
+            )
+            needs_uv_fix = (
+                not bool(uv_report.get("has_uvs", False))
+                or int(uv_report.get("overlap_count", 0)) > 0
+                or float(uv_report.get("uv_coverage", 0.0)) < 0.03
+            )
+            if needs_uv_fix:
+                try:
+                    await blender.send_command(
+                        "uv_unwrap_xatlas",
+                        {"object_name": mesh_name, "resolution": 1024, "padding": 4, "rotate_charts": True},
+                    )
+                except (OSError, ConnectionError, TimeoutError, ValueError, RuntimeError, BlenderCommandError):
+                    await blender.send_command(
+                        "uv_unwrap_blender",
+                        {"object_name": mesh_name, "method": "smart_project", "angle_limit": 66.0},
+                    )
+                report["uv_fixed"].append(mesh_name)
+
+            await blender.send_command(
+                "pipeline_generate_lods",
+                {"object_name": mesh_name, "ratios": lod_ratios or [0.6, 0.3, 0.12]},
+            )
+            report["lod_generated"].append(mesh_name)
+        except (OSError, ConnectionError, TimeoutError, ValueError, RuntimeError, BlenderCommandError) as exc:
+            report["failures"].append({"object_name": mesh_name, "error": str(exc)})
+
+    report["status"] = "success" if not report["failures"] else "partial"
+    report["mesh_target_count"] = len(report["mesh_targets"])
+    report["mesh_targets_sample"] = report["mesh_targets"][:20]
+    report["uv_fixed_count"] = len(report["uv_fixed"])
+    report["uv_fixed_sample"] = report["uv_fixed"][:12]
+    report["materials_fixed_count"] = len(report["materials_fixed"])
+    report["materials_fixed_sample"] = report["materials_fixed"][:12]
+    report["lod_generated_count"] = len(report["lod_generated"])
+    report["lod_generated_sample"] = report["lod_generated"][:12]
+    del report["mesh_targets"]
+    del report["uv_fixed"]
+    del report["materials_fixed"]
+    del report["lod_generated"]
+    return report
+
+
+def _bounds_overlap(a: dict, b: dict, padding: float = 0.0) -> bool:
+    """Return True when two 2D room bounds overlap."""
+    a_min = a["bounds"]["min"]
+    a_max = a["bounds"]["max"]
+    b_min = b["bounds"]["min"]
+    b_max = b["bounds"]["max"]
+    return not (
+        a_max[0] <= b_min[0] + padding
+        or b_max[0] <= a_min[0] + padding
+        or a_max[1] <= b_min[1] + padding
+        or b_max[1] <= a_min[1] + padding
+    )
+
+
+def _derive_room_door_position(
+    from_room: dict,
+    to_room: dict | None,
+    facing: str | None = None,
+) -> dict:
+    """Compute a usable door marker from one room to another or outside."""
+    f_min = from_room["bounds"]["min"]
+    f_max = from_room["bounds"]["max"]
+    z = 0.0
+
+    if to_room is None:
+        resolved_facing = facing or "south"
+        if resolved_facing == "north":
+            return {"position": ((f_min[0] + f_max[0]) / 2.0, f_max[1], z), "facing": "north"}
+        if resolved_facing == "east":
+            return {"position": (f_max[0], (f_min[1] + f_max[1]) / 2.0, z), "facing": "east"}
+        if resolved_facing == "west":
+            return {"position": (f_min[0], (f_min[1] + f_max[1]) / 2.0, z), "facing": "west"}
+        return {"position": ((f_min[0] + f_max[0]) / 2.0, f_min[1], z), "facing": "south"}
+
+    t_min = to_room["bounds"]["min"]
+    t_max = to_room["bounds"]["max"]
+    from_center = ((f_min[0] + f_max[0]) / 2.0, (f_min[1] + f_max[1]) / 2.0)
+    to_center = ((t_min[0] + t_max[0]) / 2.0, (t_min[1] + t_max[1]) / 2.0)
+    dx = to_center[0] - from_center[0]
+    dy = to_center[1] - from_center[1]
+
+    if abs(dx) >= abs(dy):
+        if dx >= 0.0:
+            y = max(f_min[1], min(f_max[1], (max(f_min[1], t_min[1]) + min(f_max[1], t_max[1])) / 2.0))
+            return {"position": (f_max[0], y, z), "facing": "east"}
+        y = max(f_min[1], min(f_max[1], (max(f_min[1], t_min[1]) + min(f_max[1], t_max[1])) / 2.0))
+        return {"position": (f_min[0], y, z), "facing": "west"}
+
+    if dy >= 0.0:
+        x = max(f_min[0], min(f_max[0], (max(f_min[0], t_min[0]) + min(f_max[0], t_max[0])) / 2.0))
+        return {"position": (x, f_max[1], z), "facing": "north"}
+    x = max(f_min[0], min(f_max[0], (max(f_min[0], t_min[0]) + min(f_max[0], t_max[0])) / 2.0))
+    return {"position": (x, f_min[1], z), "facing": "south"}
+
+
+def _plan_interior_rooms(interior_spec: dict) -> dict:
+    """Build room bounds and door markers from compose_interior graph data."""
+    rooms = list(interior_spec.get("rooms", []))
+    doors = list(interior_spec.get("doors", []))
+    if not rooms:
+        return {"rooms": [], "doors": [], "building_bounds": {"min": (0.0, 0.0), "max": (0.0, 0.0)}}
+
+    room_lookup = {room.get("name", f"room_{index}"): room for index, room in enumerate(rooms)}
+    placed: dict[str, dict] = {}
+    adjacency: dict[str, list[tuple[str, dict]]] = {name: [] for name in room_lookup}
+
+    for door in doors:
+        src = door.get("from")
+        dst = door.get("to")
+        if src in adjacency and dst in adjacency:
+            adjacency[src].append((dst, door))
+            adjacency[dst].append((src, door))
+
+    first_room = rooms[0]
+    first_name = first_room.get("name", "room_0")
+    first_width = float(first_room.get("width", 6.0))
+    first_depth = float(first_room.get("depth", 6.0))
+    first_height = float(first_room.get("height", 3.5))
+    placed[first_name] = {
+        "name": first_name,
+        "type": first_room.get("type", "generic"),
+        "width": first_width,
+        "depth": first_depth,
+        "height": first_height,
+        "bounds": {"min": (0.0, 0.0, 0.0), "max": (first_width, first_depth, first_height)},
+    }
+
+    used_sides: dict[str, list[str]] = {first_name: []}
+    queue: deque[str] = deque([first_name])
+    side_cycle = ("east", "north", "west", "south")
+
+    def candidate_bounds(room_name: str, neighbor_name: str, direction: str) -> dict:
+        anchor = placed[room_name]
+        target = room_lookup[neighbor_name]
+        width = float(target.get("width", 6.0))
+        depth = float(target.get("depth", 6.0))
+        height = float(target.get("height", 3.5))
+        a_min = anchor["bounds"]["min"]
+        a_max = anchor["bounds"]["max"]
+
+        if direction == "east":
+            min_x = a_max[0]
+            min_y = ((a_min[1] + a_max[1]) - depth) / 2.0
+        elif direction == "west":
+            min_x = a_min[0] - width
+            min_y = ((a_min[1] + a_max[1]) - depth) / 2.0
+        elif direction == "north":
+            min_x = ((a_min[0] + a_max[0]) - width) / 2.0
+            min_y = a_max[1]
+        else:
+            min_x = ((a_min[0] + a_max[0]) - width) / 2.0
+            min_y = a_min[1] - depth
+
+        return {
+            "name": neighbor_name,
+            "type": target.get("type", "generic"),
+            "width": width,
+            "depth": depth,
+            "height": height,
+            "bounds": {
+                "min": (round(min_x, 3), round(min_y, 3), 0.0),
+                "max": (round(min_x + width, 3), round(min_y + depth, 3), round(height, 3)),
+            },
+        }
+
+    while queue:
+        current = queue.popleft()
+        used_sides.setdefault(current, [])
+        for neighbor, _door in adjacency.get(current, []):
+            if neighbor in placed:
+                continue
+
+            chosen = None
+            for direction in side_cycle:
+                if direction in used_sides[current]:
+                    continue
+                proposal = candidate_bounds(current, neighbor, direction)
+                if not any(_bounds_overlap(proposal, existing) for existing in placed.values()):
+                    chosen = (direction, proposal)
+                    break
+
+            if chosen is None:
+                # Fallback: extend east of the current overall bbox.
+                max_x = max(room["bounds"]["max"][0] for room in placed.values())
+                current_bounds = candidate_bounds(current, neighbor, "east")
+                width = current_bounds["width"]
+                depth = current_bounds["depth"]
+                height = current_bounds["height"]
+                chosen = (
+                    "east",
+                    {
+                        "name": neighbor,
+                        "type": room_lookup[neighbor].get("type", "generic"),
+                        "width": width,
+                        "depth": depth,
+                        "height": height,
+                        "bounds": {
+                            "min": (round(max_x + 1.5, 3), current_bounds["bounds"]["min"][1], 0.0),
+                            "max": (round(max_x + 1.5 + width, 3), current_bounds["bounds"]["min"][1] + depth, round(height, 3)),
+                        },
+                    },
+                )
+
+            direction, proposal = chosen
+            placed[neighbor] = proposal
+            used_sides[current].append(direction)
+            used_sides.setdefault(neighbor, [])
+            queue.append(neighbor)
+
+    # Any disconnected rooms get stacked to the east.
+    for index, room in enumerate(rooms):
+        room_name = room.get("name", f"room_{index}")
+        if room_name in placed:
+            continue
+        width = float(room.get("width", 6.0))
+        depth = float(room.get("depth", 6.0))
+        height = float(room.get("height", 3.5))
+        max_x = max(existing["bounds"]["max"][0] for existing in placed.values())
+        min_y = min(existing["bounds"]["min"][1] for existing in placed.values())
+        y_offset = min_y + index * (depth + 1.0)
+        placed[room_name] = {
+            "name": room_name,
+            "type": room.get("type", "generic"),
+            "width": width,
+            "depth": depth,
+            "height": height,
+            "bounds": {
+                "min": (round(max_x + 2.0, 3), round(y_offset, 3), 0.0),
+                "max": (round(max_x + 2.0 + width, 3), round(y_offset + depth, 3), round(height, 3)),
+            },
+        }
+
+    room_defs = [placed[room.get("name", f"room_{index}")] for index, room in enumerate(rooms)]
+
+    bbox_min_x = min(room["bounds"]["min"][0] for room in room_defs)
+    bbox_min_y = min(room["bounds"]["min"][1] for room in room_defs)
+    bbox_max_x = max(room["bounds"]["max"][0] for room in room_defs)
+    bbox_max_y = max(room["bounds"]["max"][1] for room in room_defs)
+
+    door_defs: list[dict] = []
+    for door in doors:
+        if isinstance(door.get("position"), (list, tuple)) and len(door["position"]) >= 2:
+            explicit = door["position"]
+            facing = door.get("facing", "south")
+            z = float(explicit[2]) if len(explicit) > 2 else 0.0
+            door_defs.append({
+                "position": (float(explicit[0]), float(explicit[1]), z),
+                "facing": facing,
+            })
+            continue
+
+        src = door.get("from")
+        dst = door.get("to")
+        if src not in placed:
+            continue
+        placement = _derive_room_door_position(
+            placed[src],
+            placed.get(dst) if dst else None,
+            door.get("facing"),
+        )
+        door_defs.append(placement)
+
+    if not door_defs:
+        primary_room = room_defs[0]
+        door_defs.append(_derive_room_door_position(primary_room, None, "south"))
+
+    margin = 0.8
+    building_bounds = {
+        "min": (round(bbox_min_x - margin, 3), round(bbox_min_y - margin, 3)),
+        "max": (round(bbox_max_x + margin, 3), round(bbox_max_y + margin, 3)),
+    }
+    return {
+        "rooms": room_defs,
+        "doors": door_defs,
+        "building_bounds": building_bounds,
+    }
+
+
+async def _sample_terrain_height(
+    blender: BlenderConnection,
+    terrain_name: str,
+    x: float,
+    y: float,
+) -> float:
+    """Sample a terrain height in Blender via a safe raycast script."""
+    code = f"""
+import bpy
+from mathutils import Vector
+depsgraph = bpy.context.evaluated_depsgraph_get()
+origin = Vector(({x}, {y}, 10000.0))
+direction = Vector((0.0, 0.0, -1.0))
+hit, location, normal, face_index, hit_obj, matrix = bpy.context.scene.ray_cast(depsgraph, origin, direction)
+if hit and hit_obj and hit_obj.name == "{terrain_name}":
+    print(float(location.z))
+else:
+    print(0.0)
+""".strip()
+
+    try:
+        result = await blender.send_command("execute_code", {"code": code})
+        output = str(result.get("result", {}).get("output", "")).strip()
+        return float(output.splitlines()[-1]) if output else 0.0
+    except Exception:
+        return 0.0
+
+
+async def _position_generated_object(
+    blender: BlenderConnection,
+    object_name: str,
+    position: tuple[float, float, float],
+) -> None:
+    """Move a generated object/root to a target position if it exists."""
+    await blender.send_command("modify_object", {
+        "name": object_name,
+        "position": [float(position[0]), float(position[1]), float(position[2])],
+    })
 
 
 @mcp.tool()
@@ -901,6 +1852,7 @@ async def asset_pipeline(
         "compose_map", "compose_interior",
         "cleanup", "generate_lods", "validate_export",
         "tag_metadata", "batch_process", "catalog_query", "catalog_add",
+        "inspect_external_toolchain", "configure_external_toolchain",
         # Equipment operations (Phase 13 -- EQUIP-01/03/04/05)
         "generate_weapon", "split_character", "fit_armor", "render_equipment_icon",
         # Full production pipeline
@@ -968,7 +1920,9 @@ async def asset_pipeline(
     lod_count: int = 3,
     export_format: str = "fbx",
     export_dir: str | None = None,
-    capture_viewport: bool = True
+    capture_viewport: bool = True,
+    prefer_external: bool = True,
+    review_lighting: bool = True,
 ):
     """Asset pipeline -- 3D generation, map composition, interior building, processing, LODs, catalog, equipment. Use compose_map to build full maps (terrain+water+roads+locations+vegetation+atmosphere). Use compose_interior for walkable interiors (room shells+doors+furniture+props). Use generate_building for Tripo-powered architecture. Use generate_terrain_mesh for procedural terrain."""
     blender = get_blender_connection()
@@ -1107,6 +2061,23 @@ async def asset_pipeline(
             "wall_section": "dark fantasy castle wall section, crenellations, walkway, torch sconces, weathered stone blocks",
             "dungeon_entrance": "dark fantasy dungeon entrance, heavy stone doorway, iron bars, skull decorations, descending stairs",
             "shrine": "dark fantasy roadside shrine, carved stone altar, religious symbols, candle holders, weathered and ancient",
+            "lighthouse": "dark fantasy coastal lighthouse, crumbling stone tower, spiraling iron staircase, cracked lantern room with eerie green flame, barnacle-encrusted base, jagged cliff perch",
+            "water_mill": "dark fantasy water mill, mossy wooden wheel half-submerged in murky stream, sagging timber frame, stone foundation, grain chute, overgrown with creeping vines",
+            "mine_complex": "dark fantasy mine entrance complex, reinforced timber supports, ore cart tracks, piled rubble, iron lanterns, collapsed side tunnels, pickaxe racks",
+            "aqueduct": "dark fantasy stone aqueduct, towering arched supports, cracked channel with stagnant water, moss and lichen covered, ancient masonry, partially collapsed spans",
+            "amphitheater": "dark fantasy ruined amphitheater, tiered stone seating, crumbling stage platform, faded carvings, overgrown with thorny brambles, ritual bloodstains",
+            "library": "dark fantasy forbidden library, tall narrow stone building, arched windows with iron shutters, heavy oak doors, chain-bound entrance, arcane symbols etched in lintels",
+            "harbor_complex": "dark fantasy harbor complex, rotting wooden docks, stone quay walls, rusted crane mechanism, barnacle-covered pilings, beached hull wreckage, fog-shrouded",
+            "sewer_entrance": "dark fantasy sewer entrance, heavy iron grate set in cobblestone, fetid water drainage, rat carvings on archway, corroded metal bars, descending stone steps",
+            "catacombs": "dark fantasy catacombs entrance, ornate stone archway with skull motifs, descending stairwell into darkness, iron torch brackets, crumbling burial niches, cold mist seeping out",
+            "wizard_tower": "dark fantasy wizard tower, impossibly tall spiraling stone spire, floating crystal at apex, arcane glyphs glowing faintly, observatory dome, chained balconies",
+            "dragons_lair": "dark fantasy dragon lair entrance, massive cavern mouth in mountainside, claw-scarred stone, charred bones scattered, heat shimmer, sulfurous vents, melted rock formations",
+            "underground_forge": "dark fantasy underground forge entrance, heavy stone doorway with anvil crest, orange glow from within, smoke vents, iron reinforced walls, hammer and tongs motifs",
+            "skeleton_landmark": "dark fantasy colossal skeleton landmark, massive ancient beast ribcage arching over terrain, weathered bones half-buried, eerie atmosphere, overgrown with dark moss",
+            "war_machine_ruin": "dark fantasy ruined war machine, massive broken siege engine, splintered wooden beams, twisted iron plating, scattered ammunition, overgrown battlefield debris",
+            "temple": "dark fantasy ancient temple, massive stone columns, carved frieze depicting dark rituals, cracked obsidian altar, flickering braziers, vine-choked entrance, oppressive atmosphere",
+            "graveyard": "dark fantasy graveyard, tilted headstones, wrought iron fence, dead twisted trees, open crypts, fog rolling between graves, crumbling mausoleum in background",
+            "covered_bridge": "dark fantasy covered bridge, weathered timber roof over stone arch span, iron lanterns hanging inside, creaking wooden planks, claw marks on walls, mist-shrouded ravine below",
         }
         _STYLE_MODIFIERS = {
             "dark_fantasy": "dark moody atmosphere, weathered stone, iron fixtures, gothic elements",
@@ -1181,6 +2152,22 @@ async def asset_pipeline(
             result["prompt_used"] = full_prompt
             return json.dumps(result, indent=2, default=str)
 
+    elif action == "inspect_external_toolchain":
+        result = await blender.send_command("toolchain_inspect_external", {
+            "prefer_external": prefer_external,
+            "review_lighting": review_lighting,
+            "project_label": "VeilBreakers",
+        })
+        return json.dumps(result, indent=2, default=str)
+
+    elif action == "configure_external_toolchain":
+        result = await blender.send_command("toolchain_configure_external", {
+            "prefer_external": prefer_external,
+            "review_lighting": review_lighting,
+            "project_label": "VeilBreakers",
+        })
+        return json.dumps(result, indent=2, default=str)
+
     elif action == "generate_terrain_mesh":
         # Generate terrain directly in Blender using procedural heightmap + erosion
         preset = terrain_preset or "mountains"
@@ -1243,27 +2230,34 @@ async def asset_pipeline(
         spec = map_spec
         map_name = spec.get("name", "Map")
         map_seed = spec.get("seed", 42)
+        budget = _resolve_map_generation_budget(spec)
+        planned_locations = _plan_map_location_anchors(spec)
         steps_completed = []
         steps_failed = []
         created_objects = []
+        terrain_cfg = spec.get("terrain", {})
+        terrain_size = float(terrain_cfg.get("size", 200.0))
+        terrain_resolution = min(
+            int(terrain_cfg.get("resolution", 256)),
+            int(budget["terrain_resolution_cap"]),
+        )
 
         # --- Step 1: Clear scene ---
         try:
-            await blender.send_command("scene_clear", {})
+            await blender.send_command("clear_scene", {})
             steps_completed.append("scene_cleared")
         except Exception as e:
             steps_failed.append({"step": "scene_clear", "error": str(e)})
 
         # --- Step 2: Generate terrain ---
-        terrain_cfg = spec.get("terrain", {})
         terrain_name = f"{map_name}_Terrain"
         try:
             t_result = await blender.send_command("env_generate_terrain", {
                 "name": terrain_name,
                 "terrain_type": terrain_cfg.get("preset", "hills"),
-                "resolution": terrain_cfg.get("resolution", 256),
+                "resolution": terrain_resolution,
                 "height_scale": terrain_cfg.get("height_scale", 20.0),
-                "scale": terrain_cfg.get("size", 200.0),
+                "scale": terrain_size,
                 "seed": map_seed,
                 "erosion": "hydraulic" if terrain_cfg.get("erosion", True) else "none",
                 "erosion_iterations": terrain_cfg.get("erosion_iterations", 5000),
@@ -1279,10 +2273,20 @@ async def asset_pipeline(
             # Rivers
             for i, river in enumerate(water_cfg.get("rivers", [])):
                 try:
+                    source = _map_point_to_terrain_cell(
+                        river.get("source", [10, 10]),
+                        terrain_size=terrain_size,
+                        resolution=terrain_resolution,
+                    )
+                    destination = _map_point_to_terrain_cell(
+                        river.get("destination", [190, 190]),
+                        terrain_size=terrain_size,
+                        resolution=terrain_resolution,
+                    )
                     await blender.send_command("env_carve_river", {
                         "terrain_name": terrain_name,
-                        "source": river.get("source", [10, 10]),
-                        "destination": river.get("destination", [190, 190]),
+                        "source": list(source),
+                        "destination": list(destination),
                         "width": river.get("width", 5),
                         "depth": river.get("depth", 2.0),
                         "seed": map_seed + i,
@@ -1307,9 +2311,20 @@ async def asset_pipeline(
         # --- Step 4: Roads ---
         for i, road in enumerate(spec.get("roads", [])):
             try:
+                waypoints = [
+                    list(_map_point_to_terrain_cell(
+                        waypoint,
+                        terrain_size=terrain_size,
+                        resolution=terrain_resolution,
+                    ))
+                    for waypoint in road.get("waypoints", [])
+                    if isinstance(waypoint, (list, tuple)) and len(waypoint) >= 2
+                ]
+                if len(waypoints) < 2:
+                    raise ValueError("Road generation requires at least two waypoints")
                 await blender.send_command("env_generate_road", {
                     "terrain_name": terrain_name,
-                    "waypoints": road.get("waypoints", []),
+                    "waypoints": waypoints,
                     "width": road.get("width", 3),
                     "seed": map_seed + 100 + i,
                 })
@@ -1328,42 +2343,47 @@ async def asset_pipeline(
             "building": "world_generate_building",
             "boss_arena": "world_generate_boss_arena",
         }
-        for i, loc in enumerate(spec.get("locations", [])):
+        for i, planned in enumerate(planned_locations):
+            loc = planned["source"]
             loc_type = loc.get("type", "town")
             handler = _LOC_HANDLERS.get(loc_type)
             if not handler:
                 steps_failed.append({"step": f"location_{i}", "error": f"Unknown type: {loc_type}"})
                 continue
             try:
-                loc_params = {
-                    "name": loc.get("name", f"{map_name}_{loc_type}_{i}"),
-                    "seed": map_seed + 200 + i,
-                }
-                # Type-specific params
-                if loc_type == "town":
-                    loc_params["num_districts"] = loc.get("districts", 3)
-                    loc_params["width"] = loc.get("grid_size", 32)
-                    loc_params["height"] = loc.get("grid_size", 32)
-                elif loc_type == "castle":
-                    loc_params["outer_size"] = loc.get("outer_size", 40)
-                    loc_params["tower_count"] = loc.get("tower_count", 4)
-                elif loc_type in ("dungeon", "cave"):
-                    loc_params["width"] = loc.get("grid_size", 64)
-                    loc_params["height"] = loc.get("grid_size", 64)
-                    if loc_type == "dungeon" and loc.get("floors"):
-                        handler = "world_generate_multi_floor_dungeon"
-                        loc_params["num_floors"] = loc["floors"]
-                elif loc_type == "ruins":
-                    loc_params["damage_level"] = loc.get("damage_level", 0.7)
-                elif loc_type == "boss_arena":
-                    loc_params["arena_type"] = loc.get("arena_type", "circular")
+                loc_params = _build_location_generation_params(
+                    loc,
+                    map_spec=spec,
+                    map_seed=map_seed,
+                    index=i,
+                )
+                if loc_type == "dungeon" and loc.get("floors"):
+                    handler = "world_generate_multi_floor_dungeon"
 
                 loc_result = await blender.send_command(handler, loc_params)
+                anchor_x, anchor_y = planned["anchor"]
+                anchor_z = await _sample_terrain_height(blender, terrain_name, anchor_x, anchor_y)
+                try:
+                    await _position_generated_object(
+                        blender,
+                        loc_params["name"],
+                        (anchor_x, anchor_y, anchor_z),
+                    )
+                    steps_completed.append(f"location_placed_{loc.get('name', i)}")
+                except Exception as placement_exc:
+                    steps_failed.append({
+                        "step": f"location_place_{loc.get('name', i)}",
+                        "error": str(placement_exc),
+                    })
                 steps_completed.append(f"location_{loc.get('name', i)}")
                 created_objects.append(loc_params["name"])
                 location_results.append({
                     "name": loc_params["name"],
                     "type": loc_type,
+                    "anchor": [round(anchor_x, 3), round(anchor_y, 3), round(anchor_z, 3)],
+                    "radius": planned["radius"],
+                    "layout_brief": loc_params.get("layout_brief", ""),
+                    "site_profile": loc_params.get("site_profile", ""),
                     "result": loc_result if isinstance(loc_result, dict) else str(loc_result)[:200],
                 })
             except Exception as e:
@@ -1375,27 +2395,39 @@ async def asset_pipeline(
             try:
                 await blender.send_command("env_paint_terrain", {
                     "name": terrain_name,
-                    "biome_rules": None,  # uses biome preset defaults
+                    "height_scale": terrain_cfg.get("height_scale", 20.0),
+                })
+                await blender.send_command("terrain_create_biome_material", {
+                    "biome_name": biome,
+                    "object_name": terrain_name,
                 })
                 steps_completed.append("biome_painted")
             except Exception as e:
                 steps_failed.append({"step": "biome_paint", "error": str(e)})
 
+            try:
+                await blender.send_command("setup_dark_fantasy_lighting", {
+                    "object_name": terrain_name,
+                    "preset": _lighting_preset_for_biome(biome),
+                })
+                steps_completed.append("lighting_ready")
+            except Exception as e:
+                steps_failed.append({"step": "lighting", "error": str(e)})
+
         # --- Step 7: Vegetation scatter ---
         veg_cfg = spec.get("vegetation", {})
         if veg_cfg:
             try:
-                veg_rules = veg_cfg.get("rules", [
-                    {"asset": "dead_tree", "density": 0.3 * veg_cfg.get("density", 0.5), "min_distance": 4.0},
-                    {"asset": "rock_mossy", "density": 0.2 * veg_cfg.get("density", 0.5), "min_distance": 3.0},
-                    {"asset": "mushroom_cluster", "density": 0.15 * veg_cfg.get("density", 0.5), "min_distance": 2.0},
-                ])
+                veg_rules = _normalize_vegetation_rules(veg_cfg, str(biome or ""))
                 await blender.send_command("env_scatter_vegetation", {
                     "terrain_name": terrain_name,
                     "rules": veg_rules,
                     "min_distance": veg_cfg.get("min_distance", 2.0),
                     "seed": map_seed + 300,
-                    "max_instances": veg_cfg.get("max_instances", 5000),
+                    "max_instances": min(
+                        int(veg_cfg.get("max_instances", 5000)),
+                        int(budget["vegetation_max_instances"]),
+                    ),
                 })
                 steps_completed.append("vegetation_scattered")
             except Exception as e:
@@ -1404,9 +2436,23 @@ async def asset_pipeline(
         # --- Step 8: Prop scatter ---
         if spec.get("props", True):
             try:
+                scatter_buildings = [
+                    {
+                        "type": loc["type"],
+                        "position": loc["anchor"][:2],
+                        "footprint": [max(8.0, loc["radius"] * 0.8), max(8.0, loc["radius"] * 0.8)],
+                    }
+                    for loc in location_results
+                ]
+                if not scatter_buildings:
+                    raise ValueError("No location anchors available for contextual prop scatter")
                 await blender.send_command("env_scatter_props", {
                     "area_name": terrain_name,
-                    "prop_density": spec.get("prop_density", 0.3),
+                    "buildings": scatter_buildings,
+                    "prop_density": round(
+                        float(spec.get("prop_density", 0.3)) * float(budget["prop_density_scale"]),
+                        4,
+                    ),
                     "seed": map_seed + 400,
                 })
                 steps_completed.append("props_scattered")
@@ -1435,48 +2481,26 @@ async def asset_pipeline(
 
         # --- Build result ---
         # Atmosphere presets for Unity next_steps
-        _ATMOSPHERE = {
-            "foggy": {"fog": True, "bloom": 0.8, "vignette": 0.4, "time": "dusk"},
-            "dark": {"fog": True, "bloom": 0.3, "vignette": 0.6, "time": "night"},
-            "overcast": {"fog": True, "bloom": 0.5, "vignette": 0.3, "time": "overcast"},
-            "bright": {"fog": False, "bloom": 1.0, "vignette": 0.2, "time": "noon"},
-            "dawn": {"fog": True, "bloom": 0.7, "vignette": 0.3, "time": "dawn"},
-        }
-        atmo = spec.get("atmosphere", "foggy")
-        atmo_cfg = _ATMOSPHERE.get(atmo, _ATMOSPHERE["foggy"])
+        quality_report = await _enforce_world_quality(
+            blender,
+            object_names=created_objects,
+            poly_budget=90000 if budget["profile"] != "large_world" else 120000,
+        )
 
         result = {
-            "status": "success" if not steps_failed else "partial",
+            "status": "success" if not steps_failed and not quality_report["failures"] else "partial",
             "map_name": map_name,
             "steps_completed": steps_completed,
             "steps_failed": steps_failed,
             "objects_created": created_objects,
             "locations": location_results,
             "interiors": interior_results,
+            "budget_applied": budget,
+            "quality_report": quality_report,
             "next_steps": [
-                "--- BLENDER (visual quality) ---",
-                "1. Review map in viewport: blender_viewport action=screenshot",
-                "2. Sculpt terrain details: blender_environment action=sculpt_terrain",
-                "3. Add storytelling props: blender_environment action=add_storytelling_props",
-                f"4. Generate hero buildings with Tripo: asset_pipeline action=generate_building building_type=tavern building_style=dark_fantasy",
-                "5. Add breakable props: blender_environment action=create_breakable",
-                "--- EXPORT TO UNITY ---",
-                "6. Export heightmap: blender_environment action=export_heightmap",
-                "7. Export buildings/props: blender_export export_format=fbx",
-                "--- UNITY SETUP ---",
-                f"8. Setup terrain: unity_scene action=setup_terrain",
-                f"9. Setup lighting: unity_scene action=setup_lighting time_of_day={atmo_cfg['time']} fog_enabled={atmo_cfg['fog']}",
-                f"10. Setup water shader: unity_vfx action=create_shader shader_type=water",
-                f"11. Add atmosphere: unity_vfx action=create_deep_environmental_vfx deep_vfx_type=volumetric_fog",
-                f"12. Weather system: unity_world action=create_weather",
-                f"13. Day/night cycle: unity_world action=create_day_night",
-                "14. Dungeon lighting: unity_world action=create_dungeon_lighting",
-                "15. Terrain blending: unity_world action=create_terrain_blend",
-                "16. Post-processing: unity_vfx action=setup_post_processing bloom_intensity={} vignette_intensity={}".format(
-                    atmo_cfg["bloom"], atmo_cfg["vignette"]
-                ),
-                "17. Bake navmesh: unity_scene action=bake_navmesh",
-                "18. Profile: unity_performance action=profile_scene",
+                "Review the generated city in Blender.",
+                "Run a hero-pass with Tripo only for standout props or landmark pieces.",
+                "Export only after the quality report has no remaining failures.",
             ],
         }
         return await _with_screenshot(blender, result, capture_viewport)
@@ -1510,33 +2534,28 @@ async def asset_pipeline(
         int_name = spec.get("name", "Interior")
         int_seed = spec.get("seed", 42)
         int_style = spec.get("style", "medieval")
+        room_plan = _plan_interior_rooms(spec)
+        planned_rooms = room_plan["rooms"]
+        planned_doors = room_plan["doors"]
         steps_completed = []
         steps_failed = []
 
         # --- Step 1: Generate linked interior (room shells + door triggers + occlusion) ---
         rooms = spec.get("rooms", [])
-        doors = spec.get("doors", [])
         room_defs = []
-        for r in rooms:
+        for planned_room in planned_rooms:
             room_defs.append({
-                "name": r.get("name", "room"),
-                "bounds": {
-                    "min": (0, 0),
-                    "max": (r.get("width", 6), r.get("depth", 6)),
-                },
-            })
-        door_defs = []
-        for d in doors:
-            door_defs.append({
-                "position": d.get("position", (0, 0)),
-                "facing": d.get("facing", "north"),
+                "name": planned_room["name"],
+                "type": planned_room["type"],
+                "bounds": planned_room["bounds"],
             })
 
         try:
             linked_result = await blender.send_command("world_generate_linked_interior", {
                 "name": int_name,
+                "building_exterior_bounds": room_plan["building_bounds"],
                 "interior_rooms": room_defs,
-                "door_positions": door_defs,
+                "door_positions": planned_doors,
                 "seed": int_seed,
             })
             steps_completed.append("linked_interior_created")
@@ -1545,20 +2564,32 @@ async def asset_pipeline(
 
         # --- Step 2: Generate each room with detailed geometry ---
         room_results = []
+        room_bounds_by_name = {room["name"]: room for room in planned_rooms}
         for i, room in enumerate(rooms):
             try:
+                room_name = room.get("name", f"Room_{i}")
                 room_result = await blender.send_command("world_generate_interior", {
-                    "name": f"{int_name}_{room.get('name', f'Room_{i}')}",
+                    "name": f"{int_name}_{room_name}",
                     "room_type": room.get("type", "generic"),
                     "width": room.get("width", 6),
                     "depth": room.get("depth", 6),
                     "height": room.get("height", 3.5),
                     "seed": int_seed + i,
                 })
+                planned_room = room_bounds_by_name.get(room_name)
+                if planned_room is not None:
+                    origin = planned_room["bounds"]["min"]
+                    await _position_generated_object(
+                        blender,
+                        f"{int_name}_{room_name}",
+                        (origin[0], origin[1], 0.0),
+                    )
+                    steps_completed.append(f"room_positioned_{room_name}")
                 steps_completed.append(f"room_{room.get('name', i)}")
                 room_results.append({
-                    "name": room.get("name", f"Room_{i}"),
+                    "name": room_name,
                     "type": room.get("type", "generic"),
+                    "bounds": planned_room["bounds"] if planned_room is not None else None,
                 })
             except Exception as e:
                 steps_failed.append({"step": f"room_{room.get('name', i)}", "error": str(e)})
@@ -1607,6 +2638,8 @@ async def asset_pipeline(
             "steps_completed": steps_completed,
             "steps_failed": steps_failed,
             "rooms_generated": room_results,
+            "door_positions": planned_doors,
+            "building_bounds": room_plan["building_bounds"],
             "tripo_prop_queue": tripo_queue[:20] if tripo_queue else [],
             "tripo_props_remaining": max(0, len(tripo_queue) - 20),
             "next_steps": [

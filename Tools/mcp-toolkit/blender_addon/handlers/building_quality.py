@@ -1257,6 +1257,33 @@ def generate_roof(
         parts.append((fv, ff))
         components.append("fascia")
 
+        # Gable end triangles (close the roof at front and back)
+        # Front gable (y = -overhang)
+        gable_y_front = -overhang
+        gable_y_back = depth + overhang
+        gable_thickness = 0.08  # thin wall to close the gable
+
+        for gy in [gable_y_front, gable_y_back]:
+            # Triangle: bottom-left, bottom-right, peak
+            # Build as a thin triangular prism for solidity
+            bl = (-half_w, gy, 0.0)
+            br = (half_w, gy, 0.0)
+            pk = (0.0, gy, ridge_height)
+            bl2 = (-half_w, gy + gable_thickness, 0.0)
+            br2 = (half_w, gy + gable_thickness, 0.0)
+            pk2 = (0.0, gy + gable_thickness, ridge_height)
+            gv = [bl, br, pk, bl2, br2, pk2]
+            # 8 faces: front tri, back tri, 3 side quads
+            gf = [
+                (0, 1, 2),       # front triangle
+                (5, 4, 3),       # back triangle
+                (0, 3, 4, 1),   # bottom quad
+                (1, 4, 5, 2),   # right slope quad
+                (2, 5, 3, 0),   # left slope quad
+            ]
+            parts.append((gv, gf))
+        components.append("gable_ends")
+
         # Rafters (visible structural beams)
         for ri in range(rafter_count):
             ry = -overhang + (ri + 0.5) * (depth + 2 * overhang) / rafter_count

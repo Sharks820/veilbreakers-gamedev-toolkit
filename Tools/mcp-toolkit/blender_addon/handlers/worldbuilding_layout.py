@@ -335,6 +335,7 @@ def handle_generate_town(params: dict) -> dict:
     num_districts = params.get("num_districts", 6)
     seed = params.get("seed", 0)
     cell_size = params.get("cell_size", 2.0)
+    layout_brief = str(params.get("layout_brief", ""))
 
     import bpy
     from .worldbuilding import handle_generate_building
@@ -492,6 +493,7 @@ def handle_generate_town(params: dict) -> dict:
             "center": (width * cell_size * 0.5, height * cell_size * 0.5),
             "radius": min(width, height) * cell_size * 0.42,
             "wall_height": cell_size * 1.5,
+            "layout_brief": layout_brief,
             "parent_name": name,
             "include_buildings": False,
             "include_interiors": False,
@@ -1113,6 +1115,7 @@ def generate_settlement_spec(
     settlement_type: str = "fishing_village",
     seed: int = 0,
     poi_count: int = 3,
+    layout_brief: str = "",
 ) -> dict[str, Any]:
     """Generate a complete settlement layout from a template.
 
@@ -1166,6 +1169,8 @@ def generate_settlement_spec(
 
     base["features"] = features
     base["settlement_type"] = settlement_type
+    if layout_brief:
+        base["layout_brief"] = layout_brief
     base["template"] = template
 
     return base

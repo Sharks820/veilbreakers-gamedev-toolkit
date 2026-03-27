@@ -1332,17 +1332,19 @@ def generate_tree_mesh(
         trunk_height: Height of the main trunk.
         trunk_radius: Radius of trunk base.
         branch_count: Number of branches.
-        canopy_style: "dead_twisted", "ancient_oak", "dark_pine", or "willow_hanging".
+        canopy_style: "dead_twisted", "ancient_oak", "dark_pine",
+            "willow_hanging", "veil_healthy", "veil_boundary", or
+            "veil_blighted".
 
     Returns:
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     parts = []
-    segs = 10
+    segs = 14
 
     # Trunk with taper and organic wobble
     trunk_profile: list[tuple[float, float]] = []
-    trunk_rings = 12
+    trunk_rings = 16
     for i in range(trunk_rings + 1):
         t = i / trunk_rings
         y = t * trunk_height
@@ -1360,7 +1362,8 @@ def generate_tree_mesh(
     parts.append((tv, tf))
 
     # Branches
-    branch_start_y = trunk_height * (0.3 if canopy_style != "dead_twisted" else 0.2)
+    sparse_styles = {"dead_twisted", "veil_blighted"}
+    branch_start_y = trunk_height * (0.3 if canopy_style not in sparse_styles else 0.2)
     for i in range(branch_count):
         angle = 2.0 * math.pi * i / branch_count + (i * 0.3)  # Spiral offset
         t_branch = 0.3 + 0.6 * (i / max(branch_count - 1, 1))
@@ -1375,6 +1378,14 @@ def generate_tree_mesh(
 
         if canopy_style == "willow_hanging":
             dy = -branch_len * 0.4  # Droop down
+        elif canopy_style == "veil_blighted":
+            dy = branch_len * 0.1
+            dx *= 1.15
+            dz *= 1.15
+        elif canopy_style == "veil_boundary":
+            dy = branch_len * 0.18
+            dx *= 1.05
+            dz *= 1.05
 
         # Branch as tapered cylinder segments
         n_seg = 4
@@ -1409,10 +1420,10 @@ def generate_tree_mesh(
             oz = math.sin(angle) * trunk_height * 0.25
             oy = canopy_y + (i % 2) * trunk_height * 0.1
             cr = trunk_height * 0.2
-            cv, cf = _make_sphere(ox, oy, oz, cr, rings=5, sectors=8)
+            cv, cf = _make_sphere(ox, oy, oz, cr, rings=7, sectors=10)
             parts.append((cv, cf))
         # Central canopy mass
-        cv, cf = _make_sphere(0, canopy_y + 0.1, 0, trunk_height * 0.25, rings=6, sectors=8)
+        cv, cf = _make_sphere(0, canopy_y + 0.1, 0, trunk_height * 0.25, rings=8, sectors=12)
         parts.append((cv, cf))
 
     elif canopy_style == "dark_pine":
@@ -1431,6 +1442,88 @@ def generate_tree_mesh(
     elif canopy_style == "dead_twisted":
         # No canopy, just twisted branch tips (already generated above)
         pass
+
+    elif canopy_style == "veil_healthy":
+        canopy_y = trunk_height * 0.82
+        ring_offsets = (
+            (0.00, 0.00, trunk_height * 0.30),
+            (0.22, 0.08, trunk_height * 0.23),
+            (-0.24, 0.02, trunk_height * 0.20),
+            (0.10, -0.26, trunk_height * 0.19),
+            (-0.12, 0.25, trunk_height * 0.18),
+            (0.00, 0.18, trunk_height * 0.16),
+        )
+        for ox_mul, oz_mul, radius in ring_offsets:
+            cv, cf = _make_sphere(
+                ox_mul * trunk_height,
+                canopy_y + abs(ox_mul) * trunk_height * 0.12,
+                oz_mul * trunk_height,
+                radius,
+                rings=8,
+                sectors=12,
+            )
+            parts.append((cv, cf))
+
+    elif canopy_style == "veil_boundary":
+        canopy_y = trunk_height * 0.78
+        cluster_specs = (
+            (0.18, 0.00, trunk_height * 0.18),
+            (-0.18, 0.12, trunk_height * 0.16),
+            (0.08, -0.18, trunk_height * 0.14),
+        )
+        for ox_mul, oz_mul, radius in cluster_specs:
+            cv, cf = _make_sphere(
+                ox_mul * trunk_height,
+                canopy_y + (0.06 if ox_mul > 0 else -0.02) * trunk_height,
+                oz_mul * trunk_height,
+                radius,
+                rings=6,
+                sectors=10,
+            )
+            parts.append((cv, cf))
+        # Sparse hanging masses so the boundary forest reads sickly, not dead.
+        for i in range(6):
+            angle = 2.0 * math.pi * i / 6
+            ox = math.cos(angle) * trunk_height * 0.14
+            oz = math.sin(angle) * trunk_height * 0.14
+            sv, sf = _make_box(
+                ox,
+                canopy_y - trunk_height * 0.14,
+                oz,
+                0.03,
+                trunk_height * 0.12,
+                0.01,
+            )
+            parts.append((sv, sf))
+
+    elif canopy_style == "veil_blighted":
+        canopy_y = trunk_height * 0.72
+        for ox, oz, radius in (
+            (0.12, 0.00, trunk_height * 0.09),
+            (-0.08, 0.10, trunk_height * 0.07),
+        ):
+            cv, cf = _make_sphere(
+                ox * trunk_height,
+                canopy_y,
+                oz * trunk_height,
+                radius,
+                rings=5,
+                sectors=9,
+            )
+            parts.append((cv, cf))
+        for i in range(4):
+            angle = 2.0 * math.pi * i / 4 + 0.4
+            ox = math.cos(angle) * trunk_height * 0.18
+            oz = math.sin(angle) * trunk_height * 0.18
+            sv, sf = _make_box(
+                ox,
+                canopy_y - trunk_height * 0.10,
+                oz,
+                0.02,
+                trunk_height * 0.10,
+                0.008,
+            )
+            parts.append((sv, sf))
 
     elif canopy_style == "willow_hanging":
         # Drooping curtain of leaf strips
@@ -1781,6 +1874,112 @@ def generate_root_mesh(
 
     verts, faces = _merge_meshes(*parts)
     return _make_result("Roots", verts, faces, category="vegetation")
+
+
+def generate_grass_clump_mesh(
+    blade_count: int = 14,
+    height: float = 0.7,
+    spread: float = 0.22,
+    width: float = 0.045,
+) -> MeshSpec:
+    """Generate a reusable grass clump mesh for terrain scatter.
+
+    Uses crossed quad-like blades with mild bend variation. This remains
+    lightweight enough for instancing but avoids the flat grid-plane fallback.
+    """
+    import random as _rng
+
+    rng = _rng.Random(211)
+    vertices: list[tuple[float, float, float]] = []
+    faces: list[tuple[int, ...]] = []
+
+    for blade_idx in range(max(6, blade_count)):
+        angle = (2.0 * math.pi * blade_idx / max(blade_count, 1)) + rng.uniform(-0.25, 0.25)
+        base_r = rng.uniform(0.0, spread)
+        cx = math.cos(angle) * base_r
+        cz = math.sin(angle) * base_r
+        blade_h = height * rng.uniform(0.72, 1.18)
+        blade_w = width * rng.uniform(0.65, 1.25)
+        bend = rng.uniform(-0.18, 0.18)
+        lean_x = math.cos(angle + bend) * blade_h * 0.10
+        lean_z = math.sin(angle + bend) * blade_h * 0.10
+        twist = angle + math.pi * 0.5
+        dx = math.cos(twist) * blade_w * 0.5
+        dz = math.sin(twist) * blade_w * 0.5
+
+        base_idx = len(vertices)
+        vertices.extend([
+            (cx - dx, 0.0, cz - dz),
+            (cx + dx, 0.0, cz + dz),
+            (cx + dx * 0.28 + lean_x, blade_h, cz + dz * 0.28 + lean_z),
+            (cx - dx * 0.28 + lean_x, blade_h, cz - dz * 0.28 + lean_z),
+        ])
+        faces.append((base_idx, base_idx + 1, base_idx + 2, base_idx + 3))
+
+    return _make_result(
+        "GrassClump",
+        vertices,
+        faces,
+        category="vegetation",
+        style="grass_clump",
+    )
+
+
+def generate_shrub_mesh(
+    radius: float = 0.45,
+    height: float = 0.7,
+    cluster_count: int = 6,
+) -> MeshSpec:
+    """Generate a dense shrub mesh with a woody core and leaf masses."""
+    import random as _rng
+
+    rng = _rng.Random(313)
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+
+    stem_v, stem_f = _make_tapered_cylinder(
+        0.0,
+        0.0,
+        0.0,
+        radius * 0.12,
+        radius * 0.05,
+        height * 0.45,
+        segments=7,
+        rings=2,
+    )
+    parts.append((stem_v, stem_f))
+
+    for idx in range(max(4, cluster_count)):
+        angle = 2.0 * math.pi * idx / max(cluster_count, 1) + rng.uniform(-0.28, 0.28)
+        dist = radius * rng.uniform(0.18, 0.78)
+        ox = math.cos(angle) * dist
+        oz = math.sin(angle) * dist
+        oy = height * rng.uniform(0.35, 0.88)
+        blob_r = radius * rng.uniform(0.34, 0.58)
+        blob_v, blob_f = _make_sphere(ox, oy, oz, blob_r, rings=5, sectors=8)
+        parts.append((blob_v, blob_f))
+
+    root_count = 4
+    for idx in range(root_count):
+        angle = 2.0 * math.pi * idx / root_count + rng.uniform(-0.2, 0.2)
+        rv, rf = _make_cone(
+            math.cos(angle) * radius * 0.16,
+            0.03,
+            math.sin(angle) * radius * 0.16,
+            radius * 0.05,
+            radius * 0.26,
+            segments=4,
+        )
+        root_verts = [(vx, max(vy - radius * 0.08, 0.0), vz) for vx, vy, vz in rv]
+        parts.append((root_verts, rf))
+
+    verts, faces = _merge_meshes(*parts)
+    return _make_result(
+        "Shrub",
+        verts,
+        faces,
+        category="vegetation",
+        style="shrub",
+    )
 
 
 def generate_ivy_mesh(

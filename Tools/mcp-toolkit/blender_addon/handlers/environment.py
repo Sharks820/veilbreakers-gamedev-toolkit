@@ -60,11 +60,15 @@ VB_BIOME_PRESETS: dict[str, dict] = {
         "erosion_iterations": 2000,
         "seed": None,  # random
         "scatter_rules": [
-            {"asset": "tree_dead", "density": 0.4, "min_distance": 3.0, "scale_range": [0.8, 1.5]},
-            {"asset": "tree_twisted", "density": 0.3, "min_distance": 4.0, "scale_range": [1.0, 2.0]},
-            {"asset": "mushroom_cluster", "density": 0.2, "min_distance": 1.5, "scale_range": [0.5, 1.0]},
-            {"asset": "rock_mossy", "density": 0.15, "min_distance": 2.0, "scale_range": [0.6, 1.2]},
-            {"asset": "fallen_log", "density": 0.05, "min_distance": 5.0, "scale_range": [0.8, 1.2]},
+            {"asset": "tree_healthy", "density": 0.24, "min_distance": 4.5, "scale_range": [1.0, 1.9]},
+            {"asset": "tree_boundary", "density": 0.14, "min_distance": 4.0, "scale_range": [0.9, 1.8]},
+            {"asset": "tree_blighted", "density": 0.05, "min_distance": 5.5, "scale_range": [0.8, 1.4]},
+            {"asset": "shrub", "density": 0.24, "min_distance": 2.0, "scale_range": [0.7, 1.2]},
+            {"asset": "grass", "density": 0.35, "min_distance": 1.2, "scale_range": [0.6, 1.0]},
+            {"asset": "rock_mossy", "density": 0.10, "min_distance": 3.0, "scale_range": [0.7, 1.3]},
+            {"asset": "root", "density": 0.07, "min_distance": 2.6, "scale_range": [0.7, 1.1]},
+            {"asset": "mushroom_cluster", "density": 0.05, "min_distance": 1.8, "scale_range": [0.45, 0.9]},
+            {"asset": "fallen_log", "density": 0.02, "min_distance": 8.0, "scale_range": [0.8, 1.2]},
         ],
     },
     "corrupted_swamp": {
@@ -419,6 +423,9 @@ def handle_generate_terrain(params: dict) -> dict:
     bm.to_mesh(mesh)
     vertex_count = len(bm.verts)
     bm.free()
+    if hasattr(mesh, "polygons"):
+        for poly in mesh.polygons:
+            poly.use_smooth = True
 
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(obj)
@@ -457,7 +464,7 @@ def handle_paint_terrain(params: dict) -> dict:
     if not name:
         raise ValueError("'name' is required")
 
-    biome_rules = params.get("biome_rules", BIOME_RULES)
+    biome_rules = params.get("biome_rules") or BIOME_RULES
     height_scale = params.get("height_scale", 20.0)
 
     obj = bpy.data.objects.get(name)
