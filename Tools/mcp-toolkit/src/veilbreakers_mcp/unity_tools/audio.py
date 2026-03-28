@@ -377,7 +377,7 @@ async def _handle_audio_setup_footstep(
 ) -> str:
     """Generate footstep manager C# scripts (AUD-05)."""
     script = generate_footstep_manager_script(surfaces=surfaces)
-    script_path = f"Assets/Scripts/Runtime/Audio/VeilBreakers_FootstepManager.cs"
+    script_path = "Assets/Scripts/Runtime/Audio/VeilBreakers_FootstepManager.cs"
 
     try:
         abs_path = _write_to_unity(script, script_path)

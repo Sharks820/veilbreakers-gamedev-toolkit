@@ -455,12 +455,17 @@ async def _handle_gameplay_encounter_system(name: str, ns_kwargs: dict) -> str:
     wave_so_cs, manager_cs = generate_encounter_system_script(name=name, **ns_kwargs)
     safe_name = name.replace(" ", "_").replace("-", "_")
     paths = []
-    paths.append(_write_to_unity(
-        wave_so_cs, f"Assets/ScriptableObjects/Encounters/VB_WaveData_{safe_name}.cs",
-    ))
-    paths.append(_write_to_unity(
-        manager_cs, f"Assets/Scripts/Runtime/AI/VB_EncounterManager_{safe_name}.cs",
-    ))
+    try:
+        paths.append(_write_to_unity(
+            wave_so_cs, f"Assets/ScriptableObjects/Encounters/VB_WaveData_{safe_name}.cs",
+        ))
+        paths.append(_write_to_unity(
+            manager_cs, f"Assets/Scripts/Runtime/AI/VB_EncounterManager_{safe_name}.cs",
+        ))
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "create_encounter_system", "message": str(exc)}
+        )
     return json.dumps({
         "status": "success",
         "action": "create_encounter_system",
@@ -475,7 +480,12 @@ async def _handle_gameplay_ai_director(name: str, ns_kwargs: dict) -> str:
     script = generate_ai_director_script(name=name, **ns_kwargs)
     safe_name = name.replace(" ", "_").replace("-", "_")
     rel_path = f"Assets/Scripts/Runtime/AI/VB_AIDirector_{safe_name}.cs"
-    abs_path = _write_to_unity(script, rel_path)
+    try:
+        abs_path = _write_to_unity(script, rel_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "create_ai_director", "message": str(exc)}
+        )
     return json.dumps({
         "status": "success",
         "action": "create_ai_director",
@@ -490,7 +500,12 @@ async def _handle_gameplay_encounter_simulator(name: str, ns_kwargs: dict) -> st
     script = generate_encounter_sim_script(name=name, **ns_kwargs)
     safe_name = name.replace(" ", "_").replace("-", "_")
     rel_path = f"Assets/Editor/Generated/Tools/VB_EncounterSim_{safe_name}.cs"
-    abs_path = _write_to_unity(script, rel_path)
+    try:
+        abs_path = _write_to_unity(script, rel_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "simulate_encounters", "message": str(exc)}
+        )
     return json.dumps({
         "status": "success",
         "action": "simulate_encounters",
@@ -505,7 +520,12 @@ async def _handle_gameplay_boss_ai(name: str, phase_count: int, ns_kwargs: dict)
     script = generate_boss_ai_script(name=name, phase_count=phase_count, **ns_kwargs)
     safe_name = name.replace(" ", "_").replace("-", "_")
     rel_path = f"Assets/Scripts/Runtime/AI/VB_BossAI_{safe_name}.cs"
-    abs_path = _write_to_unity(script, rel_path)
+    try:
+        abs_path = _write_to_unity(script, rel_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "create_boss_ai", "message": str(exc)}
+        )
     return json.dumps({
         "status": "success",
         "action": "create_boss_ai",

@@ -362,7 +362,7 @@ async def _handle_game_player_combat(
     dodge_iframe_duration: float, dodge_distance: float,
     block_stamina_drain: float, stamina_max: float,
     stamina_regen_rate: float, combat_mode: str = "realtime",
-    ns_kwargs: dict = None,
+    ns_kwargs: dict | None = None,
 ) -> str:
     """Create player combat controller (VB-01)."""
     if ns_kwargs is None:
