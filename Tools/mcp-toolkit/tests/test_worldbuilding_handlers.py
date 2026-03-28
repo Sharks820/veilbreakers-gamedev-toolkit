@@ -407,6 +407,64 @@ class TestOpeningAwareWallPlanning:
 
 
 # ---------------------------------------------------------------------------
+# Scene sampling / cleanup helpers
+# ---------------------------------------------------------------------------
+
+
+class TestWorldbuildingFallbackHelpers:
+    """Test non-fatal worldbuilding fallbacks keep working and log failures."""
+
+    def test_sample_scene_height_logs_and_falls_back_when_raycast_fails(self, caplog, monkeypatch):
+        """_sample_scene_height should log and return 0.0 when ray_cast fails."""
+        import sys
+        from types import SimpleNamespace
+
+        from blender_addon.handlers import worldbuilding
+
+        monkeypatch.setattr(
+            sys.modules["mathutils"],
+            "Vector",
+            lambda values: tuple(values),
+            raising=False,
+        )
+        monkeypatch.setattr(
+            worldbuilding.bpy,
+            "context",
+            SimpleNamespace(
+                evaluated_depsgraph_get=lambda: object(),
+                scene=SimpleNamespace(
+                    ray_cast=lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("ray cast unavailable"))
+                ),
+            ),
+            raising=False,
+        )
+
+        with caplog.at_level("DEBUG", logger=worldbuilding.logger.name):
+            result = worldbuilding._sample_scene_height(12.5, -4.0, "TestTerrain")
+
+        assert result == 0.0
+        assert "Scene height sampling failed" in caplog.text
+
+    def test_clear_material_slots_logs_and_returns_false_on_failure(self, caplog):
+        """_clear_material_slots should log non-fatal failures instead of swallowing them."""
+        from types import SimpleNamespace
+
+        from blender_addon.handlers.worldbuilding import _clear_material_slots, logger
+
+        class _BrokenMaterials:
+            def clear(self):
+                raise RuntimeError("clear failed")
+
+        obj = SimpleNamespace(name="Road", data=SimpleNamespace(materials=_BrokenMaterials()))
+
+        with caplog.at_level("DEBUG", logger=logger.name):
+            result = _clear_material_slots(obj, context="road cleanup")
+
+        assert result is False
+        assert "Failed to clear materials" in caplog.text
+
+
+# ---------------------------------------------------------------------------
 # VB Building Preset tests
 # ---------------------------------------------------------------------------
 

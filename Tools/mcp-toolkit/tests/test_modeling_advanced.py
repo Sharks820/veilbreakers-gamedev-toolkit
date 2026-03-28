@@ -375,6 +375,97 @@ class TestValidateModifierParams:
         assert VALID_MODIFIER_ACTIONS == expected
 
 
+class TestHandleModifierReporting:
+    """Test modifier handler reports applied and failed settings accurately."""
+
+    class _FakeModifier:
+        def __init__(self, name: str):
+            self.name = name
+            self._good_setting = None
+
+        @property
+        def good_setting(self):
+            return self._good_setting
+
+        @good_setting.setter
+        def good_setting(self, value):
+            self._good_setting = value
+
+        @property
+        def bad_setting(self):
+            return None
+
+        @bad_setting.setter
+        def bad_setting(self, value):
+            raise TypeError("bad setting rejected")
+
+    class _FakeModifiers:
+        def __init__(self):
+            self._mods = {}
+
+        def new(self, name, type):
+            mod = TestHandleModifierReporting._FakeModifier(name)
+            self._mods[name] = mod
+            return mod
+
+        def get(self, name):
+            return self._mods.get(name)
+
+        def __iter__(self):
+            return iter(self._mods.values())
+
+    class _FakeObject:
+        def __init__(self, name="Cube"):
+            self.name = name
+            self.modifiers = TestHandleModifierReporting._FakeModifiers()
+
+    def test_add_reports_only_successful_settings(self, monkeypatch, caplog):
+        from blender_addon.handlers import modeling_advanced
+
+        fake_obj = self._FakeObject()
+        monkeypatch.setattr(modeling_advanced, "_get_mesh_object", lambda name: fake_obj)
+
+        with caplog.at_level("WARNING", logger=modeling_advanced.logger.name):
+            result = modeling_advanced.handle_modifier({
+                "object_name": "Cube",
+                "action": "add",
+                "modifier_type": "SUBSURF",
+                "modifier_name": "Subsurf",
+                "settings": {
+                    "good_setting": 2,
+                    "bad_setting": 3,
+                    "missing_setting": 4,
+                },
+            })
+
+        assert result["settings_applied"] == ["good_setting"]
+        assert set(result["failed_settings"]) == {"bad_setting", "missing_setting"}
+        assert "Failed to set modifier" in caplog.text
+
+    def test_configure_reports_only_successful_settings(self, monkeypatch, caplog):
+        from blender_addon.handlers import modeling_advanced
+
+        fake_obj = self._FakeObject()
+        fake_obj.modifiers._mods["Subsurf"] = self._FakeModifier("Subsurf")
+        monkeypatch.setattr(modeling_advanced, "_get_mesh_object", lambda name: fake_obj)
+
+        with caplog.at_level("WARNING", logger=modeling_advanced.logger.name):
+            result = modeling_advanced.handle_modifier({
+                "object_name": "Cube",
+                "action": "configure",
+                "modifier_name": "Subsurf",
+                "settings": {
+                    "good_setting": 5,
+                    "bad_setting": 6,
+                    "missing_setting": 7,
+                },
+            })
+
+        assert result["applied_settings"] == ["good_setting"]
+        assert set(result["failed_settings"]) == {"bad_setting", "missing_setting"}
+        assert "Failed to configure modifier" in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # Circularize parameter validation
 # ---------------------------------------------------------------------------

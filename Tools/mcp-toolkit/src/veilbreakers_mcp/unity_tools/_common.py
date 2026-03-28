@@ -146,6 +146,11 @@ def _write_to_unity(content: str, relative_path: str) -> str:
             f"Unity project directory."
         )
 
+    if not content or not content.strip():
+        raise ValueError(
+            f"Refusing to write empty generated content to '{relative_path}'."
+        )
+
     # Create parent directories as needed
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(content, encoding="utf-8")
