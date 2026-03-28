@@ -121,6 +121,17 @@ class TestHandlerReturnShapes:
         expected_keys = {"name", "style", "floors", "footprint", "vertex_count", "face_count", "material_count"}
         assert expected_keys.issubset(set(result.keys()))
 
+    def test_building_result_tracks_geometry_quality(self):
+        """_build_building_result returns geometry completeness metadata."""
+        from blender_addon.handlers.worldbuilding import _build_building_result
+        from blender_addon.handlers._building_grammar import evaluate_building_grammar
+
+        spec = evaluate_building_grammar(width=10, depth=8, floors=2, style="medieval", seed=0)
+        result = _build_building_result("TestBuilding", spec)
+        assert result["geometry_quality"] in {"complete", "partial"}
+        assert "opening_marker_count" in result
+        assert "geometry_issues" in result
+
     def test_castle_result_keys(self):
         """_build_castle_result returns dict with expected keys."""
         from blender_addon.handlers.worldbuilding import _build_castle_result
@@ -128,7 +139,7 @@ class TestHandlerReturnShapes:
 
         spec = generate_castle_spec(seed=0)
         result = _build_castle_result("TestCastle", spec)
-        expected_keys = {"name", "component_count"}
+        expected_keys = {"name", "component_count", "opening_count", "geometry_quality"}
         assert expected_keys.issubset(set(result.keys()))
 
     def test_castle_component_count(self):
@@ -139,6 +150,7 @@ class TestHandlerReturnShapes:
         spec = generate_castle_spec(seed=0)
         result = _build_castle_result("TestCastle", spec)
         assert result["component_count"] > 0
+        assert result["geometry_quality"] == "complete"
 
     def test_ruins_result_keys(self):
         """_build_ruins_result returns dict with expected keys."""
@@ -166,6 +178,34 @@ class TestHandlerReturnShapes:
         damaged = apply_ruins_damage(spec, damage_level=0.5, seed=0)
         result = _build_ruins_result("TestRuins", damaged, "medieval", 0.5)
         assert result["debris_count"] > 0
+
+    def test_live_building_quality_summary(self):
+        """Live build quality summary should flag missing essentials."""
+        from blender_addon.handlers.worldbuilding import _summarize_live_building_quality
+
+        complete = _summarize_live_building_quality(
+            expected_openings=3,
+            door_count=1,
+            window_count=2,
+            wall_segment_count=8,
+            foundation_piece_count=2,
+            roof_created=True,
+            component_count=12,
+        )
+        assert complete["geometry_quality"] == "complete"
+        assert complete["geometry_issues"] == []
+
+        partial = _summarize_live_building_quality(
+            expected_openings=2,
+            door_count=1,
+            window_count=0,
+            wall_segment_count=0,
+            foundation_piece_count=0,
+            roof_created=False,
+            component_count=0,
+        )
+        assert partial["geometry_quality"] == "partial"
+        assert len(partial["geometry_issues"]) >= 3
 
     def test_interior_result_keys(self):
         """_build_interior_result returns dict with expected keys."""
