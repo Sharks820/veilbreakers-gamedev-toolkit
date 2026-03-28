@@ -78,7 +78,37 @@ logger = logging.getLogger("veilbreakers_mcp.unity")
 settings = Settings()
 mcp = FastMCP(
     "veilbreakers-unity",
-    instructions="VeilBreakers Unity game development tools",
+    instructions="""\
+VeilBreakers Unity MCP — 22 compound tools (258 actions) for dark fantasy action RPG development.
+
+## Tool Architecture
+Each tool uses a compound pattern: one tool name, `action` param selects the operation.
+Tools generate C# editor scripts written to the Unity project. CRITICAL two-step pattern:
+1. Call the tool (generates .cs file)
+2. Read the `next_steps` in the response — typically: call `unity_editor` action=recompile, then execute the menu item in Unity Editor
+
+## Core Tool Categories
+**Editor Control**: unity_editor — recompile, enter/exit_play_mode, screenshot, console_logs, load_scene
+**VFX**: unity_vfx — 19 actions: particle systems, brand VFX (IRON/SAVAGE/SURGE/VENOM/DREAD/LEECH/GRACE/MEND/RUIN/VOID), shaders (dissolve/force_field/water), post-processing, projectile chains, AOE, boss transitions, decals
+**Audio**: unity_audio — 20 actions: AI SFX (ElevenLabs), music loops, ambient, adaptive music, spatial audio, dynamic music, portal audio, procedural foley, VO pipeline
+**UI**: unity_ui — 14 actions: screen generation, WCAG contrast checking, procedural frames, icon pipeline, cursors, tooltips, radial menus, notifications, loading screens, combat HUD
+**Scene**: unity_scene — terrain setup, lighting (dawn/noon/dusk/night), animators, blend trees, additive layers
+**Gameplay**: unity_gameplay — mob controllers, spawn systems, behavior trees, projectile systems, encounter systems, AI director, boss AI
+**Game Systems**: unity_game — save, health, character controller, input, abilities, synergy engine, corruption, XP, currency, damage types
+**Content**: unity_content — inventory, dialogue, quests, loot tables, crafting, skill trees, shops, journals, equipment
+**World**: unity_world — scenes, transitions, occlusion, weather, day/night, fast travel, puzzles, traps, WFC dungeons, interior streaming, door systems
+**Camera**: unity_camera — Cinemachine virtual cameras, state-driven, camera shake, timelines, cutscenes, lock-on camera
+**Performance**: unity_performance — scene profiling, LOD groups, lightmap baking, asset audits, build automation
+**QA**: unity_qa — TCP bridge setup, test runner, play sessions, memory leak detection, compile recovery, pipeline orchestration, code review
+
+## Workflow Rules
+- ALWAYS read `next_steps` from tool responses and follow them
+- After generating scripts: call `unity_editor` action=recompile to trigger compilation
+- Use `unity_editor` action=screenshot to verify visual results
+- Use `unity_performance` action=profile_scene after scene setup
+- Use `unity_qa` action=check_compile_status to detect compilation errors
+- Use `unity_quality` action=aaa_audit for comprehensive quality checks
+""",
 )
 
 

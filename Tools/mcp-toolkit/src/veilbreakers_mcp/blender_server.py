@@ -40,7 +40,36 @@ logger = logging.getLogger("veilbreakers_mcp")
 settings = Settings()
 mcp = FastMCP(
     "veilbreakers-blender",
-    instructions="VeilBreakers Blender game development tools",
+    instructions="""\
+VeilBreakers Blender MCP — 16 compound tools (162 actions) for AAA dark fantasy 3D game asset creation.
+
+## Tool Architecture
+Each tool uses a compound pattern: one tool name, `action` param selects the operation.
+Tools connect via TCP to Blender (localhost:9876). The Blender addon must be running.
+Most mutations return viewport screenshots for visual verification.
+
+## Core Pipeline (MUST follow this order)
+1. **Create/Import** — `blender_object` create, `asset_pipeline` generate_3d/import_model, or `blender_quality` generators
+2. **Repair** — `blender_mesh` action=repair (remove doubles, fix normals, fill holes)
+3. **UV Unwrap** — `blender_uv` action=unwrap (xatlas) or unwrap_blender (smart_project)
+4. **Texture** — `blender_texture` action=create_pbr, then bake/validate
+5. **Rig** — `blender_rig` action=apply_template (humanoid/quadruped), then auto_weight
+6. **Animate** — `blender_animation` action=generate_walk/attack/idle/reaction
+7. **Export** — `blender_export` format=fbx or gltf. Run `blender_mesh` action=game_check FIRST.
+
+## Key Tools
+- **blender_execute**: Direct Blender Python (bpy/bmesh/mathutils). Use for anything not covered by other tools.
+- **blender_quality**: 32 AAA procedural generators — weapons (sword/axe/mace/bow/shield/staff), armor (pauldron/chestplate/gauntlet), creatures, riggable props (door/chain/flag/chest), clothing, vegetation, materials.
+- **asset_pipeline**: Full orchestration — compose_map (terrain→water→roads→locations→vegetation), compose_interior (rooms→doors→props), generate_3d (Tripo AI), import_and_process (import + full pipeline).
+- **blender_worldbuilding**: Procedural dungeons, caves, towns, castles, ruins, boss arenas, multi-floor dungeons.
+- **blender_viewport**: ALWAYS use action=contact_sheet after creating/modifying objects for visual QA.
+
+## Quality Rules
+- Run `blender_mesh` action=game_check before ANY export (checks poly count, UVs, normals)
+- Use `blender_viewport` action=contact_sheet for multi-angle visual review after generation
+- Use seeds for reproducible terrain/worldbuilding generation
+- Batch when possible: `asset_pipeline` action=batch_process, `blender_animation` action=batch_export
+""",
 )
 
 _connection: BlenderConnection | None = None
