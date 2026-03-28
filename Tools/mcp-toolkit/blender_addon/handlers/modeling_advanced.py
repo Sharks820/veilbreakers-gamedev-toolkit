@@ -21,6 +21,7 @@ Pure-logic helpers are exported for testing without Blender.
 
 from __future__ import annotations
 
+import logging
 import math
 import time
 from typing import Any
@@ -34,6 +35,9 @@ except ImportError:
     bpy = None  # type: ignore[assignment]
     bmesh = None  # type: ignore[assignment]
     mathutils = None  # type: ignore[assignment]
+
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -988,20 +992,38 @@ def handle_modifier(params: dict) -> dict:
         mod = obj.modifiers.new(name=modifier_name, type=modifier_type)
 
         # Apply settings
+        applied_settings: list[str] = []
+        failed_settings: list[str] = []
         for key, value in settings.items():
             if hasattr(mod, key):
                 try:
                     setattr(mod, key, value)
-                except (TypeError, AttributeError) as e:
-                    # Skip invalid settings but log them
-                    pass
+                    applied_settings.append(key)
+                except (TypeError, AttributeError) as exc:
+                    failed_settings.append(key)
+                    logger.warning(
+                        "Failed to set modifier %s.%s on %s: %s",
+                        modifier_name,
+                        key,
+                        object_name,
+                        exc,
+                    )
+            else:
+                failed_settings.append(key)
+                logger.warning(
+                    "Modifier %s on %s does not support setting '%s'",
+                    modifier_name,
+                    object_name,
+                    key,
+                )
 
         return {
             "object_name": object_name,
             "action": "add",
             "modifier_name": mod.name,
             "modifier_type": modifier_type,
-            "settings_applied": list(settings.keys()),
+            "settings_applied": applied_settings,
+            "failed_settings": failed_settings,
         }
 
     elif action == "configure":
@@ -1021,10 +1043,23 @@ def handle_modifier(params: dict) -> dict:
                 try:
                     setattr(mod, key, value)
                     applied_settings.append(key)
-                except (TypeError, AttributeError):
+                except (TypeError, AttributeError) as exc:
                     failed_settings.append(key)
+                    logger.warning(
+                        "Failed to configure modifier %s.%s on %s: %s",
+                        modifier_name,
+                        key,
+                        object_name,
+                        exc,
+                    )
             else:
                 failed_settings.append(key)
+                logger.warning(
+                    "Modifier %s on %s does not support setting '%s'",
+                    modifier_name,
+                    object_name,
+                    key,
+                )
 
         return {
             "object_name": object_name,

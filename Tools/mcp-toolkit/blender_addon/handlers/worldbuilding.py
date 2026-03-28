@@ -1699,9 +1699,32 @@ def _sample_scene_height(x: float, y: float, terrain_name: str | None) -> float:
         if hit and location is not None:
             if terrain_name is None or hit_obj is None or hit_obj.name == terrain_name:
                 return float(location.z)
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug(
+            "Scene height sampling failed at (%.3f, %.3f) for %s: %s",
+            x,
+            y,
+            terrain_name or "<any>",
+            exc,
+        )
     return 0.0
+
+
+def _clear_material_slots(obj: Any, *, context: str) -> bool:
+    """Clear material slots on an object while logging non-fatal failures."""
+    if obj is None or not hasattr(obj, "data") or not hasattr(obj.data, "materials"):
+        return False
+    try:
+        obj.data.materials.clear()
+        return True
+    except Exception as exc:
+        logger.debug(
+            "Failed to clear materials on %s during %s: %s",
+            getattr(obj, "name", "<unnamed>"),
+            context,
+            exc,
+        )
+        return False
 
 
 def _create_curve_path(
@@ -4457,7 +4480,7 @@ def handle_generate_location(params: dict) -> dict:
     # Terrain base first so later fitment can raycast against it.
     from .environment import handle_generate_terrain
 
-    terrain_resolution = 129 if terrain["size"] <= 120 else 257
+    terrain_resolution = 257 if terrain["size"] <= 120 else 513
     terrain_result = handle_generate_terrain({
         "name": terrain_name,
         "terrain_type": terrain_type,
@@ -4514,10 +4537,7 @@ def handle_generate_location(params: dict) -> dict:
             (end[0], end[1], _sample_scene_height(end[0], end[1], terrain_name) + 0.02),
         ]
         road_obj = _create_curve_path(f"{name}_road_{i}", road_points, width=width, parent=parent)
-        try:
-            road_obj.data.materials.clear()
-        except Exception:
-            pass
+        _clear_material_slots(road_obj, context=f"location road {i}")
         road_count += 1
 
     # Materialize buildings as actual geometry, grounded to the terrain.
@@ -4768,10 +4788,7 @@ def handle_generate_settlement(params: dict) -> dict:
                 width=float(road.get("width", 2.0)),
                 parent=parent,
             )
-            try:
-                road_obj.data.materials.clear()
-            except Exception:
-                pass
+            _clear_material_slots(road_obj, context=f"settlement road {i}")
             road_count += 1
 
     building_count = 0

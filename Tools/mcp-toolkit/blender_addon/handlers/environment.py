@@ -100,7 +100,7 @@ VB_BIOME_PRESETS: dict[str, dict] = {
     },
     "ruined_fortress": {
         "terrain_type": "hills",
-        "resolution": 256,
+        "resolution": 257,
         "height_scale": 12.0,
         "erosion": True,
         "erosion_iterations": 1500,
@@ -115,7 +115,7 @@ VB_BIOME_PRESETS: dict[str, dict] = {
     },
     "abandoned_village": {
         "terrain_type": "plains",
-        "resolution": 256,
+        "resolution": 257,
         "height_scale": 6.0,
         "erosion": False,
         "erosion_iterations": 0,
@@ -130,7 +130,7 @@ VB_BIOME_PRESETS: dict[str, dict] = {
     },
     "veil_crack_zone": {
         "terrain_type": "chaotic",
-        "resolution": 256,
+        "resolution": 257,
         "height_scale": 20.0,
         "erosion": False,
         "erosion_iterations": 0,
@@ -144,7 +144,7 @@ VB_BIOME_PRESETS: dict[str, dict] = {
     },
     "underground_dungeon": {
         "terrain_type": "flat",
-        "resolution": 128,
+        "resolution": 257,
         "height_scale": 2.0,
         "erosion": False,
         "erosion_iterations": 0,
@@ -158,7 +158,7 @@ VB_BIOME_PRESETS: dict[str, dict] = {
     },
     "sacred_shrine": {
         "terrain_type": "plains",
-        "resolution": 256,
+        "resolution": 257,
         "height_scale": 4.0,
         "erosion": False,
         "erosion_iterations": 0,
@@ -173,7 +173,7 @@ VB_BIOME_PRESETS: dict[str, dict] = {
     },
     "battlefield": {
         "terrain_type": "hills",
-        "resolution": 256,
+        "resolution": 257,
         "height_scale": 8.0,
         "erosion": False,
         "erosion_iterations": 0,
@@ -188,7 +188,7 @@ VB_BIOME_PRESETS: dict[str, dict] = {
     },
     "cemetery": {
         "terrain_type": "flat",
-        "resolution": 256,
+        "resolution": 257,
         "height_scale": 3.0,
         "erosion": False,
         "erosion_iterations": 0,
@@ -226,7 +226,7 @@ def _validate_terrain_params(params: dict) -> dict:
     Raises ValueError for invalid parameters. Returns normalized dict.
     Pure logic -- no bpy dependency.
     """
-    resolution = params.get("resolution", 129)
+    resolution = params.get("resolution", 257)
     terrain_type = params.get("terrain_type", "mountains")
     erosion = params.get("erosion", "none")
 
@@ -315,7 +315,7 @@ def handle_generate_terrain(params: dict) -> dict:
 
     Params:
         name (str, default "Terrain"): Object name.
-        resolution (int, default 129): Grid resolution (vertices per side).
+        resolution (int, default 257): Grid resolution (vertices per side).
         terrain_type (str, default "mountains"): One of 8 terrain presets,
             or a VeilBreakers biome name (e.g. "thornwood_forest").
             When a biome name is given, its preset parameters are applied

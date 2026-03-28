@@ -1042,9 +1042,9 @@ class TestTool14BlenderEnvironment:
 
     def test_validate_terrain_params_valid(self):
         result = _validate_terrain_params({
-            "resolution": 129, "terrain_type": "mountains", "erosion": "both",
+            "resolution": 257, "terrain_type": "mountains", "erosion": "both",
         })
-        assert result["resolution"] == 129
+        assert result["resolution"] == 257
         assert result["terrain_type"] == "mountains"
         assert result["erosion"] == "both"
 

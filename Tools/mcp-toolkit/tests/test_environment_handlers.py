@@ -24,7 +24,7 @@ class TestValidateTerrainParams:
 
         result = _validate_terrain_params({})
         assert result["name"] == "Terrain"
-        assert result["resolution"] == 129
+        assert result["resolution"] == 257
         assert result["terrain_type"] == "mountains"
         assert result["erosion"] == "none"
 
