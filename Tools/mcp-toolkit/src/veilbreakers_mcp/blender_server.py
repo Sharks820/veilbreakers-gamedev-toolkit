@@ -1230,8 +1230,8 @@ async def blender_viewport(
                 for p in paths:
                     try:
                         os.unlink(p)
-                    except OSError:
-                        pass
+                    except OSError as exc:
+                        logger.debug("Failed to delete contact sheet temp file %s: %s", p, exc, exc_info=True)
         return "No images rendered for contact sheet"
 
     elif action == "set_shading":
@@ -1654,8 +1654,8 @@ async def blender_uv(
             finally:
                 try:
                     os.unlink(filepath)
-                except OSError:
-                    pass
+                except OSError as exc:
+                    logger.debug("Failed to delete temp UV layout file %s: %s", filepath, exc, exc_info=True)
         return [json.dumps(result, indent=2, default=str)]
 
     elif action == "set_layer":
