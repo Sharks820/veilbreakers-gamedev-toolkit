@@ -57,6 +57,7 @@ _DEFAULT_NAME_PATTERNS: list[re.Pattern[str]] = [
 _LOC_TOLERANCE = 0.001
 _ROT_TOLERANCE = 0.001
 _SCALE_TOLERANCE = 0.01
+_GRADE_ORDER = {"A": 5, "B": 4, "C": 3, "D": 2, "E": 1, "F": 0}
 
 
 def _compute_grade(metrics: dict) -> str:
@@ -114,6 +115,38 @@ def _list_issues(m: dict) -> list[str]:
             f"({m['e_poles']} E-poles, {m['n_poles']} N-poles)"
         )
     return issues
+
+
+def _build_topology_delta(before: dict, after: dict) -> dict:
+    """Summarize whether a topology-changing operation improved the mesh."""
+    before_grade = before.get("grade")
+    after_grade = after.get("grade")
+    before_rank = _GRADE_ORDER.get(before_grade, -1)
+    after_rank = _GRADE_ORDER.get(after_grade, -1)
+
+    if after_rank > before_rank:
+        quality_change = "improved"
+    elif after_rank < before_rank:
+        quality_change = "regressed"
+    else:
+        quality_change = "unchanged"
+
+    loose_before = before.get("loose_vertices", 0) + before.get("loose_edges", 0)
+    loose_after = after.get("loose_vertices", 0) + after.get("loose_edges", 0)
+
+    return {
+        "grade_before": before_grade,
+        "grade_after": after_grade,
+        "quality_change": quality_change,
+        "improved": after_rank > before_rank,
+        "regressed": after_rank < before_rank,
+        "face_count_delta": after.get("face_count", 0) - before.get("face_count", 0),
+        "vertex_count_delta": after.get("vertex_count", 0) - before.get("vertex_count", 0),
+        "non_manifold_edge_delta": after.get("non_manifold_edges", 0) - before.get("non_manifold_edges", 0),
+        "boundary_edge_delta": after.get("boundary_edges", 0) - before.get("boundary_edges", 0),
+        "ngon_delta": after.get("ngon_count", 0) - before.get("ngon_count", 0),
+        "loose_geometry_delta": loose_after - loose_before,
+    }
 
 
 def _is_default_name(name: str) -> bool:
@@ -570,16 +603,16 @@ def _validate_knife_params(params: dict) -> dict:
         raise ValueError("plane_point must be a 3-element list of numbers")
     try:
         plane_point = [float(c) for c in raw_point]
-    except (TypeError, ValueError):
-        raise ValueError("plane_point must be a 3-element list of numbers")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("plane_point must be a 3-element list of numbers") from exc
 
     raw_normal = params.get("plane_normal", [0.0, 0.0, 1.0])
     if not isinstance(raw_normal, (list, tuple)) or len(raw_normal) != 3:
         raise ValueError("plane_normal must be a 3-element list of numbers")
     try:
         plane_normal = [float(c) for c in raw_normal]
-    except (TypeError, ValueError):
-        raise ValueError("plane_normal must be a 3-element list of numbers")
+    except (TypeError, ValueError) as exc:
+        raise ValueError("plane_normal must be a 3-element list of numbers") from exc
 
     if plane_normal[0] == 0.0 and plane_normal[1] == 0.0 and plane_normal[2] == 0.0:
         raise ValueError("plane_normal must not be a zero vector")
@@ -1912,6 +1945,7 @@ def handle_retopologize(params: dict) -> dict:
     # Store before counts
     before_verts = len(obj.data.vertices)
     before_faces = len(obj.data.polygons)
+    before_topology = _analyze_mesh(obj)
 
     # Set object as active and selected, ensure object mode
     bpy.context.view_layer.objects.active = obj
@@ -1942,6 +1976,7 @@ def handle_retopologize(params: dict) -> dict:
 
     after_verts = len(obj.data.vertices)
     after_faces = len(obj.data.polygons)
+    after_topology = _analyze_mesh(obj)
     reduction = round(after_faces / max(before_faces, 1), 3)
 
     return {
@@ -1951,6 +1986,7 @@ def handle_retopologize(params: dict) -> dict:
         "target_faces": target_faces,
         "reduction_ratio": reduction,
         "preserve_sharp": preserve_sharp,
+        "topology_delta": _build_topology_delta(before_topology, after_topology),
     }
 
 
@@ -2227,6 +2263,7 @@ def handle_voxel_remesh(params: dict) -> dict:
 
     before_verts = len(obj.data.vertices)
     before_faces = len(obj.data.polygons)
+    before_topology = _analyze_mesh(obj)
 
     # Set remesh properties on the mesh data
     obj.data.remesh_voxel_size = voxel_size
@@ -2245,6 +2282,7 @@ def handle_voxel_remesh(params: dict) -> dict:
 
     after_verts = len(obj.data.vertices)
     after_faces = len(obj.data.polygons)
+    after_topology = _analyze_mesh(obj)
 
     return {
         "object_name": name,
@@ -2252,6 +2290,7 @@ def handle_voxel_remesh(params: dict) -> dict:
         "adaptivity": adaptivity,
         "before": {"vertices": before_verts, "faces": before_faces},
         "after": {"vertices": after_verts, "faces": after_faces},
+        "topology_delta": _build_topology_delta(before_topology, after_topology),
     }
 
 

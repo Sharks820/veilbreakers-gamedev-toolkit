@@ -705,3 +705,139 @@ class TestGameReadinessLogic:
             scale=(1.0, 1.0, 1.0),
         )
         assert result["checks"]["topology"]["passed"] is True
+
+
+class TestBuildTopologyDelta:
+    """Test topology delta summaries for cleanup/remesh operations."""
+
+    def test_flags_improved_topology(self):
+        from blender_addon.handlers.mesh import _build_topology_delta
+
+        before = {
+            "grade": "D",
+            "face_count": 1200,
+            "vertex_count": 900,
+            "non_manifold_edges": 6,
+            "boundary_edges": 12,
+            "ngon_count": 18,
+            "loose_vertices": 3,
+            "loose_edges": 2,
+        }
+        after = {
+            "grade": "B",
+            "face_count": 800,
+            "vertex_count": 700,
+            "non_manifold_edges": 0,
+            "boundary_edges": 4,
+            "ngon_count": 2,
+            "loose_vertices": 0,
+            "loose_edges": 0,
+        }
+
+        delta = _build_topology_delta(before, after)
+
+        assert delta["quality_change"] == "improved"
+        assert delta["improved"] is True
+        assert delta["regressed"] is False
+        assert delta["grade_before"] == "D"
+        assert delta["grade_after"] == "B"
+        assert delta["face_count_delta"] == -400
+        assert delta["vertex_count_delta"] == -200
+        assert delta["non_manifold_edge_delta"] == -6
+        assert delta["boundary_edge_delta"] == -8
+        assert delta["ngon_delta"] == -16
+        assert delta["loose_geometry_delta"] == -5
+
+    def test_flags_regressed_topology(self):
+        from blender_addon.handlers.mesh import _build_topology_delta
+
+        before = {
+            "grade": "B",
+            "face_count": 500,
+            "vertex_count": 420,
+            "non_manifold_edges": 0,
+            "boundary_edges": 0,
+            "ngon_count": 0,
+            "loose_vertices": 0,
+            "loose_edges": 0,
+        }
+        after = {
+            "grade": "E",
+            "face_count": 750,
+            "vertex_count": 610,
+            "non_manifold_edges": 4,
+            "boundary_edges": 7,
+            "ngon_count": 9,
+            "loose_vertices": 2,
+            "loose_edges": 1,
+        }
+
+        delta = _build_topology_delta(before, after)
+
+        assert delta["quality_change"] == "regressed"
+        assert delta["improved"] is False
+        assert delta["regressed"] is True
+        assert delta["face_count_delta"] == 250
+        assert delta["vertex_count_delta"] == 190
+        assert delta["non_manifold_edge_delta"] == 4
+        assert delta["boundary_edge_delta"] == 7
+        assert delta["ngon_delta"] == 9
+        assert delta["loose_geometry_delta"] == 3
+
+    def test_flags_unchanged_grade(self):
+        from blender_addon.handlers.mesh import _build_topology_delta
+
+        before = {
+            "grade": "C",
+            "face_count": 100,
+            "vertex_count": 80,
+            "non_manifold_edges": 0,
+            "boundary_edges": 2,
+            "ngon_count": 1,
+            "loose_vertices": 0,
+            "loose_edges": 0,
+        }
+        after = {
+            "grade": "C",
+            "face_count": 120,
+            "vertex_count": 90,
+            "non_manifold_edges": 0,
+            "boundary_edges": 2,
+            "ngon_count": 1,
+            "loose_vertices": 0,
+            "loose_edges": 0,
+        }
+
+        delta = _build_topology_delta(before, after)
+
+        assert delta["quality_change"] == "unchanged"
+        assert delta["improved"] is False
+        assert delta["regressed"] is False
+
+
+class TestKnifeParamValidation:
+    """Test knife parameter validation and traceback preservation."""
+
+    def test_invalid_plane_point_preserves_cause(self):
+        from blender_addon.handlers.mesh import _validate_knife_params
+
+        with pytest.raises(ValueError) as exc_info:
+            _validate_knife_params({
+                "name": "Cube",
+                "plane_point": ["bad", 0.0, 0.0],
+            })
+
+        assert "plane_point must be a 3-element list of numbers" in str(exc_info.value)
+        assert exc_info.value.__cause__ is not None
+
+    def test_invalid_plane_normal_preserves_cause(self):
+        from blender_addon.handlers.mesh import _validate_knife_params
+
+        with pytest.raises(ValueError) as exc_info:
+            _validate_knife_params({
+                "name": "Cube",
+                "plane_normal": [0.0, object(), 1.0],
+            })
+
+        assert "plane_normal must be a 3-element list of numbers" in str(exc_info.value)
+        assert exc_info.value.__cause__ is not None

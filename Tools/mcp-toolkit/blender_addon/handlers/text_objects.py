@@ -147,7 +147,9 @@ def handle_create_text(params: dict) -> dict:
             font = bpy.data.fonts.load(validated["font_path"])
             text_data.font = font
         except RuntimeError as e:
-            raise ValueError(f"Failed to load font: {validated['font_path']}: {e}")
+            raise ValueError(
+                f"Failed to load font: {validated['font_path']}: {e}"
+            ) from e
 
     # Create the object and link to scene
     obj = bpy.data.objects.new(validated["name"], text_data)

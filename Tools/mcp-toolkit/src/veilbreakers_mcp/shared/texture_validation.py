@@ -99,7 +99,7 @@ def validate_texture_file(filepath: str) -> dict:
         width, height = img.size
         fmt = img.format or "unknown"
         img.close()
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
         logger.error("Cannot open image %s: %s", filepath, exc)
         result["issues"].append(f"Cannot open image: {exc}")
         return result
@@ -252,7 +252,7 @@ def recommend_compression(filepath: str, channel_type: str) -> dict:
         result["estimated_compressed_size_kb"] = round(compressed_bytes / 1024, 1)
         result["width"] = width
         result["height"] = height
-    except Exception as exc:
+    except (OSError, ValueError) as exc:
         logger.warning("Could not read image for size estimation: %s", exc)
 
     return result

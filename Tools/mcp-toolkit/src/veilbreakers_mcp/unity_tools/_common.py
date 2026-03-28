@@ -20,6 +20,29 @@ STANDARD_NEXT_STEPS = [
 ]
 
 
+def _strip_schema_titles(obj: dict | list) -> None:
+    """Recursively remove redundant JSON-schema title fields."""
+    if isinstance(obj, dict):
+        obj.pop("title", None)
+        for value in obj.values():
+            if isinstance(value, (dict, list)):
+                _strip_schema_titles(value)
+    elif isinstance(obj, list):
+        for item in obj:
+            if isinstance(item, (dict, list)):
+                _strip_schema_titles(item)
+
+
+def _strip_registered_tool_titles(mcp_instance: FastMCP) -> None:
+    """Trim auto-generated schema titles from all registered tool params."""
+    tool_manager = getattr(mcp_instance, "_tool_manager", None)
+    tools = getattr(tool_manager, "_tools", {})
+    for tool in tools.values():
+        parameters = getattr(tool, "parameters", None)
+        if isinstance(parameters, (dict, list)):
+            _strip_schema_titles(parameters)
+
+
 async def _execute_menu_item(menu_path: str) -> dict | None:
     """Execute a Unity menu item via the VBBridge TCP connection.
 
@@ -197,6 +220,10 @@ async def _handle_dict_template(action_name: str, result: dict) -> str:
     rel_path = result.get("script_path", f"Assets/Scripts/Generated/{action_name}.cs")
     next_steps = result.get("next_steps", [])
     menu_path = result.get("menu_path", "")
+    passthrough_keys = {
+        key: value for key, value in result.items()
+        if key not in {"script_content", "script_path", "next_steps", "menu_path"}
+    }
 
     try:
         abs_path = _write_to_unity(script_content, rel_path)
@@ -214,6 +241,7 @@ async def _handle_dict_template(action_name: str, result: dict) -> str:
         "script_path": abs_path,
         "result_file": "Temp/vb_result.json",
     }
+    response.update(passthrough_keys)
 
     if bridge_result is not None:
         response["bridge_executed"] = True

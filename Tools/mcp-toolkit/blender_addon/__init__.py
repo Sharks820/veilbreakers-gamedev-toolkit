@@ -9,9 +9,11 @@ bl_info = {
 }
 
 import bpy
+import logging
 
 _server = None
 _auto_start_timer = None
+logger = logging.getLogger(__name__)
 
 
 def _deferred_auto_start():
@@ -22,8 +24,9 @@ def _deferred_auto_start():
         _server = BlenderMCPServer()
         _server.start()
         print("[VeilBreakers MCP] Server auto-started on port 9876")
-    except Exception as e:
-        print(f"[VeilBreakers MCP] Auto-start failed: {e}")
+    except (ImportError, OSError, RuntimeError, ValueError) as exc:
+        logger.warning("VeilBreakers MCP auto-start failed: %s", exc)
+        print(f"[VeilBreakers MCP] Auto-start failed: {exc}")
     return None  # Do not reschedule
 
 

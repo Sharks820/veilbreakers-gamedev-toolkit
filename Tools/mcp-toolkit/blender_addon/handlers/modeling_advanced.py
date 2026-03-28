@@ -632,6 +632,53 @@ def _serialize_mesh_data_pure(
     }
 
 
+def _summarize_mesh_quality(obj: object) -> dict:
+    """Return a compact topology-quality snapshot for a mesh object."""
+    object_name = getattr(obj, "name", "<unknown>")
+
+    try:
+        from blender_addon.handlers.mesh import _analyze_mesh
+
+        metrics = _analyze_mesh(obj)
+    except Exception as exc:
+        logger.warning(
+            "Failed to analyze mesh quality for %s: %s",
+            object_name,
+            exc,
+        )
+        return {
+            "topology_grade": None,
+            "geometry_quality": "unknown",
+            "repair_recommended": False,
+            "non_manifold_edges": None,
+            "boundary_edges": None,
+            "ngon_count": None,
+            "loose_vertices": None,
+            "loose_edges": None,
+            "quality_issues": [],
+        }
+
+    grade = metrics.get("grade")
+    repair_recommended = grade not in {"A", "B", "C"}
+    return {
+        "topology_grade": grade,
+        "geometry_quality": "repair_recommended" if repair_recommended else "clean",
+        "repair_recommended": repair_recommended,
+        "non_manifold_edges": metrics.get("non_manifold_edges", 0),
+        "boundary_edges": metrics.get("boundary_edges", 0),
+        "ngon_count": metrics.get("ngon_count", 0),
+        "loose_vertices": metrics.get("loose_vertices", 0),
+        "loose_edges": metrics.get("loose_edges", 0),
+        "quality_issues": list(metrics.get("issues", [])),
+    }
+
+
+def _attach_mesh_quality(result: dict, obj: object) -> dict:
+    """Merge topology-quality data into a modeling handler result."""
+    result.update(_summarize_mesh_quality(obj))
+    return result
+
+
 # ---------------------------------------------------------------------------
 # Blender handlers (require bpy + bmesh at runtime)
 # ---------------------------------------------------------------------------
@@ -942,12 +989,12 @@ def handle_bridge_edges(params: dict) -> dict:
 
         bpy.ops.object.mode_set(mode="OBJECT")
 
-    return {
+    return _attach_mesh_quality({
         "object_name": object_name,
         "fill_mode": fill_mode,
         "vertex_count": len(obj.data.vertices),
         "face_count": len(obj.data.polygons),
-    }
+    }, obj)
 
 
 def handle_modifier(params: dict) -> dict:
@@ -1083,13 +1130,13 @@ def handle_modifier(params: dict) -> dict:
         with bpy.context.temp_override(**ctx):
             bpy.ops.object.modifier_apply(modifier=modifier_name)
 
-        return {
+        return _attach_mesh_quality({
             "object_name": object_name,
             "action": "apply",
             "modifier_name": modifier_name,
             "vertex_count": len(obj.data.vertices),
             "face_count": len(obj.data.polygons),
-        }
+        }, obj)
 
     elif action == "remove":
         modifier_name = validated["modifier_name"]
@@ -1236,12 +1283,12 @@ def handle_circularize(params: dict) -> dict:
             bm_local.free()
         method = "fallback_bmesh"
 
-    return {
+    return _attach_mesh_quality({
         "object_name": object_name,
         "method": method,
         "flatten": flatten,
         "vertex_count": len(obj.data.vertices),
-    }
+    }, obj)
 
 
 def handle_insert_mesh(params: dict) -> dict:
@@ -1506,14 +1553,14 @@ def handle_proportional_edit(params: dict) -> dict:
     finally:
         bm_local.free()
 
-    return {
+    return _attach_mesh_quality({
         "object_name": object_name,
         "transform_type": transform_type,
         "falloff_type": falloff_type,
         "falloff_radius": falloff_radius,
         "affected_vertices": affected,
         "vertex_count": len(obj.data.vertices),
-    }
+    }, obj)
 
 
 def _compute_connected_weights(
@@ -1617,7 +1664,7 @@ def handle_bisect(params: dict) -> dict:
     finally:
         bm_local.free()
 
-    return {
+    return _attach_mesh_quality({
         "object_name": object_name,
         "plane_point": validated["plane_point"],
         "plane_normal": validated["plane_normal"],
@@ -1626,7 +1673,7 @@ def handle_bisect(params: dict) -> dict:
         "fill": fill,
         "vertex_count": vert_count,
         "face_count": face_count,
-    }
+    }, obj)
 
 
 def handle_mesh_checkpoint(params: dict) -> dict:

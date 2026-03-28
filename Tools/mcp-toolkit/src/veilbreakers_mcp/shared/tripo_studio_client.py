@@ -13,6 +13,7 @@ Supports two auth modes:
 from __future__ import annotations
 
 import asyncio
+import binascii
 import base64
 import json
 import logging
@@ -79,7 +80,7 @@ class TripoStudioClient:
                 payload += "=" * padding
             data = json.loads(base64.urlsafe_b64decode(payload))
             return float(data.get("exp", 0))
-        except Exception:
+        except (IndexError, TypeError, ValueError, json.JSONDecodeError, binascii.Error):
             return 0.0
 
     async def _refresh_jwt(self) -> str:

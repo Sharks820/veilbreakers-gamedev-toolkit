@@ -13,6 +13,8 @@ require bpy/Blender. Covers:
 All tests are deterministic and run without Blender.
 """
 
+import types
+
 import pytest
 
 
@@ -649,3 +651,364 @@ class TestHandlerImports:
             _validate_multires_subdivisions,
         ]:
             assert callable(fn)
+
+
+class TestRuntimeMeshHandlers:
+    """Runtime-style handler tests using a fake Blender context."""
+
+    class _FakeMeshData:
+        def __init__(self, vertex_count: int, face_count: int):
+            self.vertices = [object()] * vertex_count
+            self.polygons = [object()] * face_count
+            self.remesh_voxel_size = None
+            self.remesh_voxel_adaptivity = None
+
+    class _FakeObject:
+        def __init__(self, name: str, vertex_count: int, face_count: int):
+            self.name = name
+            self.data = TestRuntimeMeshHandlers._FakeMeshData(vertex_count, face_count)
+            self.selected = False
+
+        def select_set(self, state: bool):
+            self.selected = state
+
+    class _FakeOverride:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _FakeContext:
+        def __init__(self):
+            self.view_layer = types.SimpleNamespace(
+                objects=types.SimpleNamespace(active=None)
+            )
+
+        def temp_override(self, **kwargs):
+            return TestRuntimeMeshHandlers._FakeOverride()
+
+    class _FakeObjectOps:
+        def __init__(self, obj):
+            self._obj = obj
+            self.mode_calls = []
+            self.quadriflow_calls = []
+            self.voxel_remesh_calls = 0
+
+        def mode_set(self, mode):
+            self.mode_calls.append(mode)
+
+        def quadriflow_remesh(self, **kwargs):
+            self.quadriflow_calls.append(kwargs)
+            self._obj.data.vertices = [object()] * 900
+            self._obj.data.polygons = [object()] * 1200
+
+        def voxel_remesh(self):
+            self.voxel_remesh_calls += 1
+            self._obj.data.vertices = [object()] * 640
+            self._obj.data.polygons = [object()] * 480
+
+    def test_handle_retopologize_executes_operator_and_reports_delta(self, monkeypatch):
+        from blender_addon.handlers import mesh
+
+        fake_obj = self._FakeObject("HeroMesh", vertex_count=1800, face_count=2400)
+        fake_context = self._FakeContext()
+        fake_ops_object = self._FakeObjectOps(fake_obj)
+        fake_bpy = types.SimpleNamespace(
+            context=fake_context,
+            ops=types.SimpleNamespace(object=fake_ops_object),
+        )
+
+        monkeypatch.setattr(mesh, "_get_mesh_object", lambda name: fake_obj)
+        monkeypatch.setattr(mesh, "get_3d_context_override", lambda: {"area": "VIEW_3D"})
+        monkeypatch.setattr(mesh, "bpy", fake_bpy)
+        monkeypatch.setattr(mesh, "_analyze_mesh", lambda obj: {
+            "grade": "D" if len(obj.data.polygons) > 2000 else "B",
+            "face_count": len(obj.data.polygons),
+            "vertex_count": len(obj.data.vertices),
+            "non_manifold_edges": 6 if len(obj.data.polygons) > 2000 else 0,
+            "boundary_edges": 10 if len(obj.data.polygons) > 2000 else 2,
+            "ngon_count": 24 if len(obj.data.polygons) > 2000 else 3,
+            "loose_vertices": 2 if len(obj.data.polygons) > 2000 else 0,
+            "loose_edges": 1 if len(obj.data.polygons) > 2000 else 0,
+        })
+
+        result = mesh.handle_retopologize({
+            "object_name": "HeroMesh",
+            "target_faces": 1500,
+            "preserve_sharp": True,
+            "preserve_boundary": True,
+            "smooth_normals": True,
+            "use_symmetry": True,
+            "seed": 7,
+        })
+
+        assert fake_obj.selected is True
+        assert fake_context.view_layer.objects.active is fake_obj
+        assert fake_ops_object.mode_calls == ["OBJECT"]
+        assert fake_ops_object.quadriflow_calls == [{
+            "target_faces": 1500,
+            "use_preserve_sharp": True,
+            "use_preserve_boundary": True,
+            "smooth_normals": True,
+            "use_mesh_symmetry": True,
+            "seed": 7,
+        }]
+        assert result["before"] == {"vertices": 1800, "faces": 2400}
+        assert result["after"] == {"vertices": 900, "faces": 1200}
+        assert result["topology_delta"]["quality_change"] == "improved"
+        assert result["topology_delta"]["grade_before"] == "D"
+        assert result["topology_delta"]["grade_after"] == "B"
+
+    def test_handle_voxel_remesh_executes_operator_and_reports_delta(self, monkeypatch):
+        from blender_addon.handlers import mesh
+
+        fake_obj = self._FakeObject("TerrainChunk", vertex_count=300, face_count=320)
+        fake_context = self._FakeContext()
+        fake_ops_object = self._FakeObjectOps(fake_obj)
+        fake_bpy = types.SimpleNamespace(
+            context=fake_context,
+            ops=types.SimpleNamespace(object=fake_ops_object),
+        )
+
+        monkeypatch.setattr(mesh, "_get_mesh_object", lambda name: fake_obj)
+        monkeypatch.setattr(mesh, "get_3d_context_override", lambda: {"area": "VIEW_3D"})
+        monkeypatch.setattr(mesh, "bpy", fake_bpy)
+        monkeypatch.setattr(mesh, "_analyze_mesh", lambda obj: {
+            "grade": "C" if len(obj.data.polygons) <= 320 else "B",
+            "face_count": len(obj.data.polygons),
+            "vertex_count": len(obj.data.vertices),
+            "non_manifold_edges": 1 if len(obj.data.polygons) <= 320 else 0,
+            "boundary_edges": 4 if len(obj.data.polygons) <= 320 else 2,
+            "ngon_count": 5 if len(obj.data.polygons) <= 320 else 0,
+            "loose_vertices": 0,
+            "loose_edges": 0,
+        })
+
+        result = mesh.handle_voxel_remesh({
+            "object_name": "TerrainChunk",
+            "voxel_size": 0.125,
+            "adaptivity": 0.2,
+        })
+
+        assert fake_obj.selected is True
+        assert fake_context.view_layer.objects.active is fake_obj
+        assert fake_obj.data.remesh_voxel_size == 0.125
+        assert fake_obj.data.remesh_voxel_adaptivity == 0.2
+        assert fake_ops_object.mode_calls == ["OBJECT"]
+        assert fake_ops_object.voxel_remesh_calls == 1
+        assert result["before"] == {"vertices": 300, "faces": 320}
+        assert result["after"] == {"vertices": 640, "faces": 480}
+        assert result["topology_delta"]["quality_change"] == "improved"
+        assert result["topology_delta"]["grade_before"] == "C"
+        assert result["topology_delta"]["grade_after"] == "B"
+
+    def test_handle_sculpt_brush_executes_stroke_flow(self, monkeypatch):
+        from blender_addon.handlers import mesh
+
+        fake_obj = self._FakeObject("Statue", vertex_count=120, face_count=90)
+        fake_context = self._FakeContext()
+        fake_brush = types.SimpleNamespace(
+            sculpt_tool=None,
+            strength=None,
+            use_front_faces_only=None,
+            direction=None,
+        )
+        fake_scene = types.SimpleNamespace(
+            tool_settings=types.SimpleNamespace(
+                unified_paint_settings=types.SimpleNamespace(size=None)
+            )
+        )
+        brush_strokes = []
+
+        class _FakeSculptOps:
+            def brush_stroke(self, *, stroke):
+                brush_strokes.append(stroke)
+
+        fake_context.scene = fake_scene
+        fake_context.tool_settings = types.SimpleNamespace(
+            sculpt=types.SimpleNamespace(brush=fake_brush)
+        )
+        fake_bpy = types.SimpleNamespace(
+            context=fake_context,
+            ops=types.SimpleNamespace(
+                object=self._FakeObjectOps(fake_obj),
+                sculpt=_FakeSculptOps(),
+            ),
+        )
+
+        monkeypatch.setattr(mesh, "_get_mesh_object", lambda name: fake_obj)
+        monkeypatch.setattr(mesh, "get_3d_context_override", lambda: {"area": "VIEW_3D"})
+        monkeypatch.setattr(mesh, "bpy", fake_bpy)
+
+        result = mesh.handle_sculpt_brush({
+            "object_name": "Statue",
+            "brush_type": "CLAY",
+            "strength": 0.7,
+            "radius": 64,
+            "stroke_points": [[10, 20, 0.5], [30, 40, 1.0]],
+            "use_front_faces_only": True,
+            "direction": "SUBTRACT",
+        })
+
+        assert fake_obj.selected is True
+        assert fake_bpy.context.view_layer.objects.active is fake_obj
+        assert fake_bpy.ops.object.mode_calls == ["SCULPT", "OBJECT"]
+        assert fake_brush.sculpt_tool == "CLAY"
+        assert fake_brush.strength == 0.7
+        assert fake_brush.use_front_faces_only is True
+        assert fake_brush.direction == "SUBTRACT"
+        assert fake_scene.tool_settings.unified_paint_settings.size == 64
+        assert len(brush_strokes) == 1
+        assert len(brush_strokes[0]) == 2
+        assert result["stroke_applied"] is True
+        assert result["stroke_points_count"] == 2
+
+    def test_handle_dyntopo_enable_executes_toggle_and_updates_detail(self, monkeypatch):
+        from blender_addon.handlers import mesh
+
+        fake_obj = self._FakeObject("Creature", vertex_count=50, face_count=40)
+        fake_context = self._FakeContext()
+        fake_context.scene = types.SimpleNamespace(
+            tool_settings=types.SimpleNamespace(
+                sculpt=types.SimpleNamespace(
+                    detail_size=None,
+                    detail_type_method=None,
+                )
+            )
+        )
+        fake_context.sculpt_object = types.SimpleNamespace(
+            use_dynamic_topology_sculpting=False
+        )
+        toggle_calls = []
+
+        class _FakeSculptOps:
+            def dynamic_topology_toggle(self):
+                toggle_calls.append("toggle")
+
+        fake_bpy = types.SimpleNamespace(
+            context=fake_context,
+            ops=types.SimpleNamespace(
+                object=self._FakeObjectOps(fake_obj),
+                sculpt=_FakeSculptOps(),
+            ),
+        )
+
+        monkeypatch.setattr(mesh, "_get_mesh_object", lambda name: fake_obj)
+        monkeypatch.setattr(mesh, "get_3d_context_override", lambda: {"area": "VIEW_3D"})
+        monkeypatch.setattr(mesh, "bpy", fake_bpy)
+
+        result = mesh.handle_dyntopo({
+            "object_name": "Creature",
+            "action": "enable",
+            "detail_size": 9.5,
+            "detail_mode": "CONSTANT_DETAIL",
+        })
+
+        assert fake_obj.selected is True
+        assert fake_context.view_layer.objects.active is fake_obj
+        assert fake_bpy.ops.object.mode_calls == ["SCULPT", "OBJECT"]
+        assert toggle_calls == ["toggle"]
+        assert fake_context.scene.tool_settings.sculpt.detail_size == 9.5
+        assert fake_context.scene.tool_settings.sculpt.detail_type_method == "CONSTANT_DETAIL"
+        assert result["enabled"] is True
+
+    def test_handle_face_sets_randomize_executes_operator_flow(self, monkeypatch):
+        from blender_addon.handlers import mesh
+
+        fake_obj = self._FakeObject("MaskMesh", vertex_count=60, face_count=24)
+        fake_context = self._FakeContext()
+        randomize_calls = []
+
+        class _FakeSculptOps:
+            def face_sets_randomize_colors(self):
+                randomize_calls.append("randomize")
+
+        fake_bpy = types.SimpleNamespace(
+            context=fake_context,
+            ops=types.SimpleNamespace(
+                object=self._FakeObjectOps(fake_obj),
+                sculpt=_FakeSculptOps(),
+            ),
+        )
+
+        monkeypatch.setattr(mesh, "_get_mesh_object", lambda name: fake_obj)
+        monkeypatch.setattr(mesh, "get_3d_context_override", lambda: {"area": "VIEW_3D"})
+        monkeypatch.setattr(mesh, "bpy", fake_bpy)
+
+        result = mesh.handle_face_sets({
+            "object_name": "MaskMesh",
+            "action": "randomize",
+        })
+
+        assert fake_obj.selected is True
+        assert fake_context.view_layer.objects.active is fake_obj
+        assert fake_bpy.ops.object.mode_calls == ["SCULPT", "OBJECT"]
+        assert randomize_calls == ["randomize"]
+        assert result["face_count"] == 24
+
+    def test_handle_multires_subdivide_adds_modifier_and_subdivides(self, monkeypatch):
+        from blender_addon.handlers import mesh
+
+        class _FakeModifier:
+            def __init__(self, name, mod_type):
+                self.name = name
+                self.type = mod_type
+                self.total_levels = 2
+                self.sculpt_levels = 1
+                self.render_levels = 2
+                self.levels = 1
+
+        class _FakeModifiers(list):
+            pass
+
+        class _FakeMultiresObject(self._FakeObject):
+            def __init__(self, name, vertex_count, face_count):
+                super().__init__(name, vertex_count, face_count)
+                self.modifiers = _FakeModifiers()
+
+        fake_obj = _FakeMultiresObject("HeroHead", vertex_count=80, face_count=48)
+        fake_context = self._FakeContext()
+
+        class _FakeObjectOps(self._FakeObjectOps):
+            def __init__(self, obj):
+                super().__init__(obj)
+                self.modifier_add_calls = []
+                self.multires_subdivide_calls = []
+
+            def modifier_add(self, type):
+                self.modifier_add_calls.append(type)
+                fake_obj.modifiers.append(_FakeModifier("Multires", type))
+
+            def multires_subdivide(self, *, modifier, mode):
+                self.multires_subdivide_calls.append({
+                    "modifier": modifier,
+                    "mode": mode,
+                })
+
+        fake_ops_object = _FakeObjectOps(fake_obj)
+        fake_bpy = types.SimpleNamespace(
+            context=fake_context,
+            ops=types.SimpleNamespace(object=fake_ops_object),
+        )
+
+        monkeypatch.setattr(mesh, "_get_mesh_object", lambda name: fake_obj)
+        monkeypatch.setattr(mesh, "get_3d_context_override", lambda: {"area": "VIEW_3D"})
+        monkeypatch.setattr(mesh, "bpy", fake_bpy)
+
+        result = mesh.handle_multires({
+            "object_name": "HeroHead",
+            "action": "subdivide",
+            "subdivisions": 2,
+        })
+
+        assert fake_obj.selected is True
+        assert fake_context.view_layer.objects.active is fake_obj
+        assert fake_ops_object.mode_calls == ["OBJECT"]
+        assert fake_ops_object.modifier_add_calls == ["MULTIRES"]
+        assert fake_ops_object.multires_subdivide_calls == [
+            {"modifier": "Multires", "mode": "CATMULL_CLARK"},
+            {"modifier": "Multires", "mode": "CATMULL_CLARK"},
+        ]
+        assert result["modifier"]["modifier_name"] == "Multires"
+        assert result["action"] == "subdivide"

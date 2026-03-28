@@ -7,6 +7,7 @@ parameter validation -- no Blender/bpy required.
 
 import math
 import time
+import types
 
 import pytest
 
@@ -466,6 +467,142 @@ class TestHandleModifierReporting:
         assert "Failed to configure modifier" in caplog.text
 
 
+class TestMeshQualityReporting:
+    """Test mesh-quality reporting added to advanced modeling handlers."""
+
+    def test_summarize_mesh_quality_flags_repair_recommended(self, monkeypatch):
+        from blender_addon.handlers import mesh, modeling_advanced
+
+        monkeypatch.setattr(mesh, "_analyze_mesh", lambda obj: {
+            "grade": "D",
+            "non_manifold_edges": 3,
+            "boundary_edges": 4,
+            "ngon_count": 2,
+            "loose_vertices": 1,
+            "loose_edges": 0,
+            "issues": ["3 non-manifold edges", "1 loose vertices"],
+        })
+
+        result = modeling_advanced._summarize_mesh_quality(
+            types.SimpleNamespace(name="Cube")
+        )
+
+        assert result["topology_grade"] == "D"
+        assert result["geometry_quality"] == "repair_recommended"
+        assert result["repair_recommended"] is True
+        assert result["non_manifold_edges"] == 3
+        assert result["quality_issues"] == [
+            "3 non-manifold edges",
+            "1 loose vertices",
+        ]
+
+    def test_summarize_mesh_quality_logs_and_falls_back(self, monkeypatch, caplog):
+        from blender_addon.handlers import mesh, modeling_advanced
+
+        def _fail(obj):
+            raise RuntimeError("analysis unavailable")
+
+        monkeypatch.setattr(mesh, "_analyze_mesh", _fail)
+
+        with caplog.at_level("WARNING", logger=modeling_advanced.logger.name):
+            result = modeling_advanced._summarize_mesh_quality(
+                types.SimpleNamespace(name="Cube")
+            )
+
+        assert result["topology_grade"] is None
+        assert result["geometry_quality"] == "unknown"
+        assert result["quality_issues"] == []
+        assert "Failed to analyze mesh quality" in caplog.text
+
+    class _FakeModifier:
+        def __init__(self, name: str):
+            self.name = name
+
+    class _FakeModifiers:
+        def __init__(self, modifier):
+            self._modifier = modifier
+
+        def get(self, name):
+            return self._modifier if self._modifier.name == name else None
+
+    class _FakeObject:
+        def __init__(self, name="Cube"):
+            self.name = name
+            self.modifiers = TestMeshQualityReporting._FakeModifiers(
+                TestMeshQualityReporting._FakeModifier("Subsurf")
+            )
+            self.data = types.SimpleNamespace(
+                vertices=[object()] * 8,
+                polygons=[object()] * 6,
+            )
+            self.selected = False
+
+        def select_set(self, state: bool):
+            self.selected = state
+
+    class _FakeOverride:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _FakeContext:
+        def __init__(self):
+            self.view_layer = types.SimpleNamespace(
+                objects=types.SimpleNamespace(active=None)
+            )
+
+        def temp_override(self, **kwargs):
+            return TestMeshQualityReporting._FakeOverride()
+
+    class _FakeOpsObject:
+        def __init__(self):
+            self.applied_modifiers = []
+
+        def modifier_apply(self, modifier):
+            self.applied_modifiers.append(modifier)
+
+    def test_handle_modifier_apply_reports_mesh_quality(self, monkeypatch):
+        from blender_addon.handlers import modeling_advanced
+
+        fake_obj = self._FakeObject()
+        fake_ops_object = self._FakeOpsObject()
+        fake_bpy = types.SimpleNamespace(
+            context=self._FakeContext(),
+            ops=types.SimpleNamespace(object=fake_ops_object),
+        )
+
+        monkeypatch.setattr(modeling_advanced, "_get_mesh_object", lambda name: fake_obj)
+        monkeypatch.setattr(modeling_advanced, "_get_3d_context", lambda: {"area": "view"})
+        monkeypatch.setattr(modeling_advanced, "bpy", fake_bpy)
+        monkeypatch.setattr(modeling_advanced, "_summarize_mesh_quality", lambda obj: {
+            "topology_grade": "B",
+            "geometry_quality": "clean",
+            "repair_recommended": False,
+            "non_manifold_edges": 0,
+            "boundary_edges": 0,
+            "ngon_count": 0,
+            "loose_vertices": 0,
+            "loose_edges": 0,
+            "quality_issues": [],
+        })
+
+        result = modeling_advanced.handle_modifier({
+            "object_name": "Cube",
+            "action": "apply",
+            "modifier_name": "Subsurf",
+        })
+
+        assert fake_obj.selected is True
+        assert fake_bpy.context.view_layer.objects.active is fake_obj
+        assert fake_ops_object.applied_modifiers == ["Subsurf"]
+        assert result["modifier_name"] == "Subsurf"
+        assert result["topology_grade"] == "B"
+        assert result["geometry_quality"] == "clean"
+        assert result["repair_recommended"] is False
+
+
 # ---------------------------------------------------------------------------
 # Circularize parameter validation
 # ---------------------------------------------------------------------------
@@ -845,6 +982,162 @@ class TestValidateCheckpointParams:
                 "action": act,
             })
             assert action == act
+
+
+class TestRuntimeModelingAdvancedHandlers:
+    """Runtime-style advanced modeling tests using fake Blender objects."""
+
+    class _FakeMeshData:
+        def __init__(self, vertex_count: int = 8, polygon_count: int = 6):
+            self.vertices = [object()] * vertex_count
+            self.polygons = [object()] * polygon_count
+
+        def copy(self):
+            return TestRuntimeModelingAdvancedHandlers._FakeMeshData(
+                len(self.vertices),
+                len(self.polygons),
+            )
+
+        def update(self):
+            return None
+
+    class _FakeObject:
+        def __init__(self, name: str, data=None):
+            self.name = name
+            self.data = data or TestRuntimeModelingAdvancedHandlers._FakeMeshData()
+            self.selected = False
+            self.location = None
+            self.scale = None
+
+        def select_set(self, state: bool):
+            self.selected = state
+
+        def copy(self):
+            return TestRuntimeModelingAdvancedHandlers._FakeObject(
+                self.name,
+                data=self.data,
+            )
+
+    class _FakeCollectionObjects:
+        def __init__(self):
+            self.linked = []
+
+        def link(self, obj):
+            self.linked.append(obj)
+
+    class _FakeOverride:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _FakeContext:
+        def __init__(self):
+            self.view_layer = types.SimpleNamespace(
+                objects=types.SimpleNamespace(active=None)
+            )
+            self.collection = types.SimpleNamespace(
+                objects=TestRuntimeModelingAdvancedHandlers._FakeCollectionObjects()
+            )
+
+        def temp_override(self, **kwargs):
+            return TestRuntimeModelingAdvancedHandlers._FakeOverride()
+
+    class _FakeObjectOps:
+        def __init__(self):
+            self.mode_calls = []
+
+        def mode_set(self, mode):
+            self.mode_calls.append(mode)
+
+    class _FakeMeshOps:
+        def __init__(self):
+            self.circle_calls = []
+
+        def looptools_circle(self, **kwargs):
+            self.circle_calls.append(kwargs)
+
+    class _FakeVector:
+        def __init__(self, coords):
+            self.coords = tuple(coords)
+            self.length = math.sqrt(sum(float(c) * float(c) for c in self.coords))
+
+    def test_handle_circularize_uses_looptools_and_reports_quality(self, monkeypatch):
+        from blender_addon.handlers import modeling_advanced
+
+        fake_obj = self._FakeObject("CircleMesh")
+        fake_context = self._FakeContext()
+        object_ops = self._FakeObjectOps()
+        mesh_ops = self._FakeMeshOps()
+        fake_bpy = types.SimpleNamespace(
+            context=fake_context,
+            ops=types.SimpleNamespace(object=object_ops, mesh=mesh_ops),
+        )
+
+        monkeypatch.setattr(modeling_advanced, "_get_mesh_object", lambda name: fake_obj)
+        monkeypatch.setattr(modeling_advanced, "_get_3d_context", lambda: {"area": "VIEW_3D"})
+        monkeypatch.setattr(modeling_advanced, "bpy", fake_bpy)
+        monkeypatch.setattr(modeling_advanced, "_attach_mesh_quality", lambda payload, obj: {
+            **payload,
+            "topology_grade": "B",
+            "geometry_quality": "clean",
+        })
+
+        result = modeling_advanced.handle_circularize({
+            "object_name": "CircleMesh",
+            "flatten": False,
+        })
+
+        assert fake_obj.selected is True
+        assert fake_context.view_layer.objects.active is fake_obj
+        assert object_ops.mode_calls == ["EDIT", "OBJECT"]
+        assert mesh_ops.circle_calls == [{
+            "fit": "best",
+            "flatten": False,
+            "influence": 100,
+        }]
+        assert result["method"] == "looptools"
+        assert result["geometry_quality"] == "clean"
+
+    def test_handle_insert_mesh_creates_instances_and_links_them(self, monkeypatch):
+        from blender_addon.handlers import modeling_advanced
+
+        fake_context = self._FakeContext()
+        target_obj = self._FakeObject("Terrain")
+        source_obj = self._FakeObject("RockSource")
+        source_obj.data = self._FakeMeshData(vertex_count=12, polygon_count=8)
+        fake_bpy = types.SimpleNamespace(
+            data=types.SimpleNamespace(objects={"RockSource": source_obj}),
+            context=fake_context,
+        )
+
+        monkeypatch.setattr(modeling_advanced, "_get_mesh_object", lambda name: target_obj)
+        monkeypatch.setattr(modeling_advanced, "bpy", fake_bpy)
+        monkeypatch.setattr(modeling_advanced.mathutils, "Vector", self._FakeVector)
+
+        result = modeling_advanced.handle_insert_mesh({
+            "object_name": "Terrain",
+            "insert_mesh_name": "RockSource",
+            "points": [
+                {"position": [1, 2, 3], "scale": 2.0},
+                {"position": [4, 5, 6], "scale": 0.5},
+            ],
+            "align_to_normal": False,
+        })
+
+        linked = fake_context.collection.objects.linked
+        assert len(linked) == 2
+        assert linked[0].name == "RockSource_insert_000"
+        assert linked[1].name == "RockSource_insert_001"
+        assert linked[0].location.coords == (1, 2, 3)
+        assert linked[0].scale == (2.0, 2.0, 2.0)
+        assert linked[1].scale == (0.5, 0.5, 0.5)
+        assert result["instances_created"] == 2
+        assert result["instance_names"] == [
+            "RockSource_insert_000",
+            "RockSource_insert_001",
+        ]
 
     def test_invalid_action_raises(self):
         from blender_addon.handlers.modeling_advanced import validate_checkpoint_params

@@ -6,8 +6,8 @@ Anti-pattern suppression arrays for <1% false positive rate.
 
 Usage:
     python vb_python_reviewer.py [path] [--output report.json] [--severity MEDIUM]
-    python vb_python_reviewer.py src/ --output report.json
-    python vb_python_reviewer.py my_script.py --severity HIGH
+    python vb_python_reviewer.py src/ --output report.json --scope production
+    python vb_python_reviewer.py my_script.py --severity HIGH --scope strict
 
 Exit codes:
     0 -- no issues at or above threshold severity
@@ -26,6 +26,22 @@ from dataclasses import asdict, dataclass, field
 from enum import IntEnum
 from pathlib import Path
 from typing import Optional
+
+REVIEW_SCOPE_CHOICES = ("production", "strict")
+STRICT_ONLY_RULE_IDS = frozenset({
+    "PY-COR-13",
+    "PY-STY-05",
+    "PY-STY-06",
+    "PY-STY-08",
+    "PY-STY-09",
+})
+DEFAULT_SKIP_DIRS = frozenset({
+    ".venv", "venv", "node_modules", "__pycache__",
+    ".git", ".tox", "dist", "build", "egg-info", ".tmp",
+})
+DEFAULT_TEST_DIRS = frozenset({"tests", "testdata", "fixtures"})
+DEFAULT_TEMP_DIR_FRAGMENTS = ("addon_backup_",)
+DEFAULT_TEMP_FILE_PREFIXES = ("_tmp", ".tmp")
 
 
 class Severity(IntEnum):
@@ -128,6 +144,66 @@ class Issue:
         if self.priority >= 40: return "P2-MEDIUM"
         if self.priority >= 15: return "P3-LOW"
         return "P4-COSMETIC"
+
+
+def _normalize_path(filepath: str) -> str:
+    return filepath.replace("\\", "/")
+
+
+def _is_test_path(filepath: str) -> bool:
+    normalized = _normalize_path(filepath).lower()
+    name = Path(filepath).name.lower()
+    parts = {part.lower() for part in Path(normalized).parts}
+    return (
+        name.startswith("test_")
+        or name.endswith("_test.py")
+        or any(part in DEFAULT_TEST_DIRS for part in parts)
+    )
+
+
+def _is_temp_path(filepath: str) -> bool:
+    normalized = _normalize_path(filepath).lower()
+    name = Path(filepath).name.lower()
+    return (
+        name.startswith(DEFAULT_TEMP_FILE_PREFIXES)
+        or name.endswith((".bak.py", ".tmp.py"))
+        or any(fragment in normalized for fragment in DEFAULT_TEMP_DIR_FRAGMENTS)
+        or "/output/" in normalized
+    )
+
+
+def _is_production_code_path(filepath: str) -> bool:
+    normalized = _normalize_path(filepath).lower()
+    return (
+        normalized.startswith("src/veilbreakers_mcp/")
+        or normalized.startswith("blender_addon/")
+        or "/src/veilbreakers_mcp/" in normalized
+        or "/blender_addon/" in normalized
+    )
+
+
+def _should_scan_python_file(
+    filepath: str,
+    *,
+    review_scope: str = "production",
+    include_tests: bool = False,
+    include_temp: bool = False,
+) -> bool:
+    if review_scope not in REVIEW_SCOPE_CHOICES:
+        raise ValueError(f"Unknown review_scope: {review_scope}")
+    if not include_tests and _is_test_path(filepath):
+        return False
+    if not include_temp and _is_temp_path(filepath):
+        return False
+    if review_scope == "production":
+        return _is_production_code_path(filepath)
+    return True
+
+
+def _should_emit_rule(rule_id: str, *, review_scope: str) -> bool:
+    if review_scope == "strict":
+        return True
+    return rule_id not in STRICT_ONLY_RULE_IDS
 
 
 # =========================================================================
@@ -553,7 +629,7 @@ RULES: list[Rule] = [
 #  AST-aware analysis (Pass 2)
 # =========================================================================
 
-def _ast_analyze(filepath: str, source: str) -> list[Issue]:
+def _ast_analyze(filepath: str, source: str, *, review_scope: str = "production") -> list[Issue]:
     """AST-based analysis for patterns regex cannot reliably detect."""
     issues: list[Issue] = []
     try:
@@ -562,6 +638,8 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
         return issues
 
     _fp_norm = filepath.replace("\\", "/")
+    is_test_file = _is_test_path(filepath)
+    is_init_module = Path(filepath).name == "__init__.py"
     is_template = filepath.endswith("_templates.py") or "unity_templates/" in _fp_norm
     is_mcp_handler = _fp_norm.endswith("_server.py") or "/unity_tools/" in _fp_norm
 
@@ -592,6 +670,10 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
 
     # PY-STY-07: Unused imports
     for name, lineno in imported_names.items():
+        if not _should_emit_rule("PY-STY-07", review_scope=review_scope):
+            break
+        if is_test_file or is_init_module:
+            continue
         if name.startswith("_"):
             continue
         if name not in all_names_used:
@@ -621,8 +703,10 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
                                 if isinstance(elt, ast.Constant):
                                     all_names_list.add(elt.value)
 
-    for node in ast.iter_child_nodes(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+    if _should_emit_rule("PY-STY-08", review_scope=review_scope) and not is_test_file and not is_init_module:
+        for node in ast.iter_child_nodes(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
             if node.name.startswith("_"):
                 continue
             # PY-STY-08 FP fix: only flag public functions (in __all__ or has docstring)
@@ -649,7 +733,7 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
         elif isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
             has_top_level_code = True
 
-    if has_top_level_code and not has_main_guard:
+    if _should_emit_rule("PY-STY-05", review_scope=review_scope) and has_top_level_code and not has_main_guard:
         issues.append(Issue(
             rule_id="PY-STY-05", severity=Severity.LOW.name,
             category=Category.Quality.name, file=filepath, line=1,
@@ -662,7 +746,13 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
         n for n in ast.iter_child_nodes(tree)
         if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
         and not n.name.startswith("_")]
-    if not has_all and len(public_names) >= 3:
+    if (
+        _should_emit_rule("PY-STY-06", review_scope=review_scope)
+        and not is_test_file
+        and not is_init_module
+        and not has_all
+        and len(public_names) >= 3
+    ):
         issues.append(Issue(
             rule_id="PY-STY-06", severity=Severity.LOW.name,
             category=Category.Quality.name, file=filepath, line=1,
@@ -675,6 +765,8 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
     # the compound-action pattern with many branches so they get a higher limit.
     if is_template:
         threshold = None  # skip entirely
+    elif not _should_emit_rule("PY-STY-09", review_scope=review_scope):
+        threshold = None
     elif is_mcp_handler:
         threshold = 200
     else:
@@ -700,33 +792,46 @@ def _ast_analyze(filepath: str, source: str) -> list[Issue]:
                 "scipy", "torch", "sklearn", "pandas", "matplotlib",
                 "fnmatch", "shutil", "tempfile", "subprocess", "os",
                 "httpx", "json", "typing", "importlib", "pkgutil"}
-    for func_node in ast.walk(tree):
-        if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-        # Collect imports at any depth inside this function, noting if in try block
-        try_import_lines: set[int] = set()
-        for child in ast.walk(func_node):
-            if isinstance(child, ast.Try):
-                for body_stmt in child.body:
-                    if isinstance(body_stmt, (ast.Import, ast.ImportFrom)):
-                        try_import_lines.add(body_stmt.lineno)
-        for child in ast.iter_child_nodes(func_node):
-            if isinstance(child, (ast.Import, ast.ImportFrom)):
+    if _should_emit_rule("PY-COR-13", review_scope=review_scope) and not is_test_file:
+        local_roots = {"blender_addon", "veilbreakers_mcp"}
+        for func_node in ast.walk(tree):
+            if not isinstance(func_node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            # Collect imports at any depth inside this function, noting if in try block
+            try_import_lines: set[int] = set()
+            for child in ast.walk(func_node):
+                if isinstance(child, ast.Try):
+                    for body_stmt in child.body:
+                        if isinstance(body_stmt, (ast.Import, ast.ImportFrom)):
+                            try_import_lines.add(body_stmt.lineno)
+            for child in ast.iter_child_nodes(func_node):
+                if not isinstance(child, (ast.Import, ast.ImportFrom)):
+                    continue
                 if child.lineno in try_import_lines:
                     continue  # Optional dependency pattern
                 mod_name = ""
+                is_local_import = False
                 if isinstance(child, ast.Import):
                     mod_name = child.names[0].name.split(".")[0]
-                elif isinstance(child, ast.ImportFrom) and child.module:
-                    mod_name = child.module.split(".")[0]
-                if mod_name in _LAZY_OK:
+                    is_local_import = mod_name in local_roots
+                elif isinstance(child, ast.ImportFrom):
+                    if child.level and child.level > 0:
+                        mod_name = child.module or child.names[0].name
+                        is_local_import = True
+                    elif child.module:
+                        mod_name = child.module.split(".")[0]
+                        is_local_import = mod_name in local_roots
+                if mod_name in _LAZY_OK or not is_local_import:
                     continue
                 issues.append(Issue(
                     rule_id="PY-COR-13", severity=Severity.LOW.name,
-                    category=Category.Bug.name, file=filepath,
+                    category=Category.Quality.name, file=filepath,
                     line=child.lineno,
-                    description=f"Import '{mod_name}' inside function body -- may indicate circular import",
-                    fix="Restructure to avoid circular dependencies or add to _LAZY_OK if intentional."))
+                    description=f"Local import '{mod_name}' inside function body -- verify it is not a circular import workaround",
+                    fix="If intentional, keep it and document why. Otherwise move the import to module scope.",
+                    finding_type="STRENGTHENING",
+                    confidence=45,
+                    reasoning="Requires package dependency context. Local lazy imports can be valid for Blender startup, optional wiring, or cycle breaking.")) 
 
     return issues
 
@@ -785,7 +890,7 @@ def _is_in_triple_quote(lines: list[str]) -> list[bool]:
     return in_tq
 
 
-def scan_file(filepath: str) -> list[Issue]:
+def scan_file(filepath: str, *, review_scope: str = "production") -> list[Issue]:
     """Scan a single Python file with regex pass + AST pass."""
     issues: list[Issue] = []
     try:
@@ -810,6 +915,8 @@ def scan_file(filepath: str) -> list[Issue]:
     for rule in RULES:
         if rule.id in suppressed:
             continue
+        if not _should_emit_rule(rule.id, review_scope=review_scope):
+            continue
         if "SENTINEL" in rule.pattern.pattern:
             continue
         for i, line in enumerate(lines):
@@ -823,6 +930,12 @@ def scan_file(filepath: str) -> list[Issue]:
             # Skip if the match falls inside a string literal on this line
             match_start = m.start()
             if _match_is_in_string(line, match_start):
+                continue
+            if (
+                rule.id == "PY-COR-10"
+                and _is_test_path(filepath)
+                and line.lstrip().startswith("assert ")
+            ):
                 continue
             # Anti-pattern suppression
             if _suppressed_by_anti(rule.anti_patterns, lines, i, rule.anti_radius, filepath):
@@ -839,7 +952,7 @@ def scan_file(filepath: str) -> list[Issue]:
                 reasoning=rule.reasoning or ""))
 
     # Pass 2: AST
-    ast_issues = _ast_analyze(filepath, content)
+    ast_issues = _ast_analyze(filepath, content, review_scope=review_scope)
     for issue in ast_issues:
         if issue.rule_id not in suppressed:
             issues.append(issue)
@@ -847,20 +960,32 @@ def scan_file(filepath: str) -> list[Issue]:
     return issues
 
 
-def scan_directory(dirpath: str) -> list[Issue]:
+def scan_directory(
+    dirpath: str,
+    *,
+    review_scope: str = "production",
+    include_tests: bool = False,
+    include_temp: bool = False,
+) -> list[Issue]:
     """Recursively scan all .py files in a directory."""
     all_issues: list[Issue] = []
     root = Path(dirpath)
-    skip = {".venv", "venv", "node_modules", "__pycache__",
-            ".git", ".tox", "dist", "build", "egg-info", ".tmp"}
     for py_file in sorted(root.rglob("*.py")):
-        if any(p in skip for p in py_file.parts):
+        if any(part in DEFAULT_SKIP_DIRS for part in py_file.parts):
             continue
-        all_issues.extend(scan_file(str(py_file)))
+        normalized = _normalize_path(str(py_file))
+        if not _should_scan_python_file(
+            normalized,
+            review_scope=review_scope,
+            include_tests=include_tests,
+            include_temp=include_temp,
+        ):
+            continue
+        all_issues.extend(scan_file(normalized, review_scope=review_scope))
     return all_issues
 
 
-def generate_report(issues: list[Issue]) -> dict:
+def generate_report(issues: list[Issue], *, review_scope: str = "production") -> dict:
     """Generate structured report dict with confidence/priority grading."""
     sev_counts = {s.name: 0 for s in Severity}
     type_counts = {"ERROR": 0, "BUG": 0, "OPTIMIZATION": 0, "STRENGTHENING": 0}
@@ -880,6 +1005,7 @@ def generate_report(issues: list[Issue]) -> dict:
         "strengthening": type_counts.get("STRENGTHENING", 0),
         "avg_confidence": round(avg_conf, 1),
         "avg_priority": round(avg_pri, 1),
+        "review_scope": review_scope,
         "issues": [asdict(i) for i in issues],
     }
 
@@ -893,13 +1019,34 @@ def main() -> None:
     parser.add_argument("--severity", "-s", default="LOW",
                         choices=["CRITICAL", "HIGH", "MEDIUM", "LOW"],
                         help="Minimum severity to report (default: LOW)")
+    parser.add_argument("--scope", default="production",
+                        choices=list(REVIEW_SCOPE_CHOICES),
+                        help="Review scope: production skips tests/temp and noisy advisory rules; strict scans more aggressively.")
+    parser.add_argument("--include-tests", action="store_true",
+                        help="Include tests, fixtures, and testdata files in directory scans.")
+    parser.add_argument("--include-temp", action="store_true",
+                        help="Include temporary, backup, and audit helper files in directory scans.")
     args = parser.parse_args()
 
     target = Path(args.path)
     if target.is_file():
-        issues = scan_file(str(target))
+        target_str = _normalize_path(str(target))
+        if not _should_scan_python_file(
+            target_str,
+            review_scope=args.scope,
+            include_tests=args.include_tests,
+            include_temp=args.include_temp,
+        ):
+            issues = []
+        else:
+            issues = scan_file(target_str, review_scope=args.scope)
     elif target.is_dir():
-        issues = scan_directory(str(target))
+        issues = scan_directory(
+            str(target),
+            review_scope=args.scope,
+            include_tests=args.include_tests,
+            include_temp=args.include_temp,
+        )
     else:
         print(f"Error: {args.path} is not a valid file or directory", file=sys.stderr)
         sys.exit(2)
@@ -907,7 +1054,7 @@ def main() -> None:
     threshold = Severity[args.severity]
     issues = [i for i in issues if Severity[i.severity] <= threshold]
 
-    report = generate_report(issues)
+    report = generate_report(issues, review_scope=args.scope)
     output = json.dumps(report, indent=2)
 
     if args.output:

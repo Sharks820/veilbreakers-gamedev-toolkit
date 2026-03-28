@@ -6,6 +6,8 @@ Tests cover:
 - Each compound tool is registered (including blender_environment, blender_worldbuilding)
 """
 
+import pytest
+
 from veilbreakers_mcp.blender_server import mcp
 
 
@@ -78,3 +80,24 @@ class TestNewToolsRegistered:
             assert tool_name in mcp._tool_manager._tools, (
                 f"Original tool '{tool_name}' should still be registered"
             )
+
+
+class TestTerrainHeightFallback:
+    """Regression tests for best-effort terrain height sampling."""
+
+    @pytest.mark.asyncio
+    async def test_sample_terrain_height_returns_zero_on_connection_error(self):
+        from veilbreakers_mcp.blender_server import _sample_terrain_height
+
+        class _FakeBlender:
+            async def send_command(self, *_args, **_kwargs):
+                raise ConnectionError("offline")
+
+        result = await _sample_terrain_height(
+            _FakeBlender(),
+            "Terrain",
+            12.5,
+            30.0,
+        )
+
+        assert result == 0.0
