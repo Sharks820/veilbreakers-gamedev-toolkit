@@ -2,12 +2,10 @@
 
 import json
 import logging
-import os
-from pathlib import Path
 from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
-    mcp, settings, logger,
+    mcp, logger,
     _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
@@ -148,30 +146,12 @@ async def unity_build(
                     "message": f"Unknown ci_provider: {ci_provider}. Use 'github' or 'gitlab'.",
                 })
 
-            # CI/CD files go at project root, not under Assets/
-            if not settings.unity_project_path:
-                return json.dumps({
-                    "status": "error",
-                    "action": "generate_ci_pipeline",
-                    "message": "unity_project_path is not configured",
-                })
-            project_root = Path(settings.unity_project_path).resolve()
-            target = (project_root / output_path).resolve()
-            try:
-                target.relative_to(project_root)
-            except ValueError:
-                return json.dumps({
-                    "status": "error",
-                    "action": "generate_ci_pipeline",
-                    "message": f"Path traversal detected: '{output_path}'",
-                })
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding="utf-8")
+            target = _write_to_unity(content, output_path)
 
             return json.dumps({
                 "status": "success",
                 "action": "generate_ci_pipeline",
-                "file_path": str(target),
+                "file_path": target,
                 "ci_provider": ci_provider,
                 "next_steps": [
                     f"Review generated {ci_provider.title()} CI YAML at {output_path}",
@@ -295,30 +275,12 @@ async def unity_build(
                 collects_data=collects_data,
             )
 
-            # Store metadata goes at project root, not under Assets/
-            if not settings.unity_project_path:
-                return json.dumps({
-                    "status": "error",
-                    "action": "generate_store_metadata",
-                    "message": "unity_project_path is not configured",
-                })
-            project_root = Path(settings.unity_project_path).resolve()
-            target = (project_root / "StoreMetadata" / "STORE_LISTING.md").resolve()
-            try:
-                target.relative_to(project_root)
-            except ValueError:
-                return json.dumps({
-                    "status": "error",
-                    "action": "generate_store_metadata",
-                    "message": "Path traversal detected",
-                })
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text(content, encoding="utf-8")
+            target = _write_to_unity(content, "StoreMetadata/STORE_LISTING.md")
 
             return json.dumps({
                 "status": "success",
                 "action": "generate_store_metadata",
-                "file_path": str(target),
+                "file_path": target,
                 "next_steps": [
                     "Review generated store metadata at StoreMetadata/STORE_LISTING.md",
                     "Customize placeholder content for your game",
