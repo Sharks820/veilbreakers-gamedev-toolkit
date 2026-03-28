@@ -184,7 +184,7 @@ def _estimate_icon_file_size(output_path: str) -> int:
         file_size = img.size[0] * img.size[1] * 4  # estimate RGBA bytes
         bpy.data.images.remove(img)
         return file_size
-    except Exception as exc:
+    except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
         logger.debug(
             "Failed to estimate icon file size for %s: %s",
             output_path,

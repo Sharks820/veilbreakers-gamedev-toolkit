@@ -1,4 +1,5 @@
 import json
+import logging
 import queue
 import socket
 import struct
@@ -9,6 +10,7 @@ import bpy
 from .handlers import COMMAND_HANDLERS
 
 MAX_MESSAGE_SIZE = 64 * 1024 * 1024  # 64 MB
+logger = logging.getLogger(__name__)
 
 
 class BlenderMCPServer:
@@ -126,7 +128,7 @@ class BlenderMCPServer:
                 except (BrokenPipeError, ConnectionError, OSError):
                     # Client went away before we could send the response
                     break
-        except Exception as e:
+        except (ConnectionError, OSError, ValueError, struct.error) as e:
             try:
                 error_response = json.dumps({
                     "status": "error",
@@ -135,13 +137,21 @@ class BlenderMCPServer:
                 client_sock.sendall(
                     struct.pack(">I", len(error_response)) + error_response
                 )
-            except Exception:
-                pass
+            except (BrokenPipeError, ConnectionError, OSError) as send_exc:
+                logger.debug(
+                    "Failed to send socket server error response: %s",
+                    send_exc,
+                    exc_info=True,
+                )
         finally:
             try:
                 client_sock.close()
-            except Exception:
-                pass
+            except OSError as close_exc:
+                logger.debug(
+                    "Failed to close client socket cleanly: %s",
+                    close_exc,
+                    exc_info=True,
+                )
 
     def _receive_exactly(self, sock: socket.socket, n: int) -> bytes:
         chunks: list[bytes] = []

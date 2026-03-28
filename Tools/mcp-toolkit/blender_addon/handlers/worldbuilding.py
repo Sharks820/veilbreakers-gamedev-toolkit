@@ -38,7 +38,7 @@ def _assign_procedural_material(obj: Any, material_key: str) -> bool:
         else:
             obj.data.materials.append(mat)
         return True
-    except Exception as exc:
+    except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
         logger.debug("Material assignment failed for %s (%s): %s", getattr(obj, "name", "<unnamed>"), material_key, exc)
         return False
 
@@ -1784,7 +1784,7 @@ def _repair_bmesh_topology(
             edges=bm.edges[:],
         )
         report["dissolved_degenerate"] = len(dissolved.get("region", []))
-    except Exception as exc:
+    except (RuntimeError, TypeError, ValueError) as exc:
         report["dissolved_degenerate"] = 0
         report["dissolve_error"] = str(exc)
 
@@ -1795,14 +1795,14 @@ def _repair_bmesh_topology(
             dist=merge_distance,
         )
         report["merged_vertices"] = len(merged.get("targetmap", {}))
-    except Exception as exc:
+    except (RuntimeError, TypeError, ValueError) as exc:
         report["merged_vertices"] = 0
         report["merge_error"] = str(exc)
 
     try:
         bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
         report["normals_recalculated"] = True
-    except Exception as exc:
+    except (RuntimeError, TypeError, ValueError) as exc:
         report["normals_recalculated"] = False
         report["normal_error"] = str(exc)
 
@@ -1811,7 +1811,7 @@ def _repair_bmesh_topology(
         try:
             filled = bmesh.ops.holes_fill(bm, edges=boundary_edges, sides=max_hole_sides)
             report["holes_filled"] = len(filled.get("faces", []))
-        except Exception as exc:
+        except (RuntimeError, TypeError, ValueError) as exc:
             report["holes_filled"] = 0
             report["holes_fill_error"] = str(exc)
     else:
@@ -1856,7 +1856,7 @@ def _apply_voxel_remesh_modifier(
     if ctx is None:
         try:
             obj.modifiers.remove(mod)
-        except Exception:
+        except (RuntimeError, ReferenceError, TypeError):
             pass
         return {
             "applied": False,
@@ -1877,13 +1877,13 @@ def _apply_voxel_remesh_modifier(
             bpy.ops.object.mode_set(mode="OBJECT")
             bpy.ops.object.modifier_apply(modifier=mod.name)
         applied = True
-    except Exception as exc:
+    except (RuntimeError, ReferenceError, TypeError, ValueError) as exc:
         issues.append(str(exc))
     finally:
         if not applied:
             try:
                 obj.modifiers.remove(mod)
-            except Exception:
+            except (RuntimeError, ReferenceError, TypeError):
                 pass
 
     return {
@@ -2146,7 +2146,7 @@ def _merge_structural_shell_objects(
             try:
                 bpy.data.objects.remove(obj, do_unlink=True)
                 removed_source_count += 1
-            except Exception as exc:
+            except (RuntimeError, ReferenceError, TypeError) as exc:
                 logger.debug("Failed to remove shell source %s: %s", getattr(obj, "name", "<unnamed>"), exc)
 
     quality = _summarize_shell_merge_quality(
@@ -2365,7 +2365,7 @@ def _sample_scene_height(x: float, y: float, terrain_name: str | None) -> float:
         if hit and location is not None:
             if terrain_name is None or hit_obj is None or hit_obj.name == terrain_name:
                 return float(location.z)
-    except Exception as exc:
+    except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
         logger.debug(
             "Scene height sampling failed at (%.3f, %.3f) for %s: %s",
             x,
@@ -2383,7 +2383,7 @@ def _clear_material_slots(obj: Any, *, context: str) -> bool:
     try:
         obj.data.materials.clear()
         return True
-    except Exception as exc:
+    except (AttributeError, RuntimeError, TypeError) as exc:
         logger.debug(
             "Failed to clear materials on %s during %s: %s",
             getattr(obj, "name", "<unnamed>"),

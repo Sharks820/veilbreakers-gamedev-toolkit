@@ -4,7 +4,12 @@ Each module registers its tool(s) with the shared FastMCP instance
 from _common.py. Import all modules to register all tools.
 """
 
-from veilbreakers_mcp.unity_tools._common import mcp, settings as _settings_obj, logger
+from veilbreakers_mcp.unity_tools._common import (
+    mcp,
+    settings as _settings_obj,
+    logger,
+    _strip_registered_tool_titles,
+)
 
 from veilbreakers_mcp.unity_tools import editor  # noqa: F401
 from veilbreakers_mcp.unity_tools import vfx  # noqa: F401
@@ -28,6 +33,8 @@ from veilbreakers_mcp.unity_tools import world  # noqa: F401
 from veilbreakers_mcp.unity_tools import ux  # noqa: F401
 from veilbreakers_mcp.unity_tools import qa  # noqa: F401
 from veilbreakers_mcp.unity_tools import build  # noqa: F401
+
+_strip_registered_tool_titles(mcp)
 
 settings = _settings_obj  # re-export the Settings object (not the module)
 __all__ = ["mcp", "settings", "logger"]

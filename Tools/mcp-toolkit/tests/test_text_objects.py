@@ -3,6 +3,8 @@
 Tests the pure-logic validators from handlers/text_objects.py -- no Blender/bpy required.
 """
 
+import types
+
 import pytest
 
 
@@ -201,3 +203,46 @@ class TestTextConstants:
         from blender_addon.handlers.text_objects import _ALIGNMENTS
 
         assert _ALIGNMENTS == {"LEFT", "CENTER", "RIGHT", "JUSTIFY", "FLUSH"}
+
+
+class TestCreateTextRuntimeErrors:
+    """Runtime-style regression tests for text object handler errors."""
+
+    def test_font_load_failure_preserves_cause(self, monkeypatch):
+        from blender_addon.handlers import text_objects
+
+        fake_curve = types.SimpleNamespace(
+            body="",
+            size=0.0,
+            extrude=0.0,
+            bevel_depth=0.0,
+            resolution_u=0,
+            align_x="LEFT",
+        )
+        fake_bpy = types.SimpleNamespace(
+            data=types.SimpleNamespace(
+                curves=types.SimpleNamespace(new=lambda **kwargs: fake_curve),
+                fonts=types.SimpleNamespace(
+                    load=lambda _path: (_ for _ in ()).throw(RuntimeError("bad font"))
+                ),
+                objects=types.SimpleNamespace(new=lambda *_args, **_kwargs: None),
+            ),
+            context=types.SimpleNamespace(
+                collection=types.SimpleNamespace(
+                    objects=types.SimpleNamespace(link=lambda _obj: None)
+                ),
+                view_layer=types.SimpleNamespace(
+                    objects=types.SimpleNamespace(active=None)
+                ),
+            ),
+        )
+        monkeypatch.setattr(text_objects, "bpy", fake_bpy)
+
+        with pytest.raises(ValueError, match="Failed to load font") as exc_info:
+            text_objects.handle_create_text({
+                "text": "Hello",
+                "font_path": "broken.ttf",
+            })
+
+        assert isinstance(exc_info.value.__cause__, RuntimeError)
+        assert str(exc_info.value.__cause__) == "bad font"
