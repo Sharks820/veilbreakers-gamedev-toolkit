@@ -1679,6 +1679,9 @@ def _summarize_shell_merge_quality(
     face_count: int,
     removed_source_count: int,
     cleanup_sources: bool,
+    boundary_edge_count: int = 0,
+    non_manifold_edge_count: int = 0,
+    loose_vertex_count: int = 0,
 ) -> dict[str, Any]:
     """Summarize whether a structural shell merge produced clean output."""
     issues: list[str] = []
@@ -1690,7 +1693,65 @@ def _summarize_shell_merge_quality(
         issues.append(
             f"shell cleanup removed {removed_source_count}/{source_count} source pieces"
         )
+    if boundary_edge_count > 0:
+        issues.append(f"{boundary_edge_count} boundary edges remain")
+    if non_manifold_edge_count > 0:
+        issues.append(f"{non_manifold_edge_count} non-manifold edges remain")
+    if loose_vertex_count > 0:
+        issues.append(f"{loose_vertex_count} loose vertices remain")
     return {
+        "geometry_quality": "complete" if not issues else "partial",
+        "geometry_issues": issues,
+        "watertight": boundary_edge_count == 0 and non_manifold_edge_count == 0 and loose_vertex_count == 0,
+        "boundary_edge_count": boundary_edge_count,
+        "non_manifold_edge_count": non_manifold_edge_count,
+        "loose_vertex_count": loose_vertex_count,
+    }
+
+
+def _summarize_mesh_topology(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, ...]],
+) -> dict[str, Any]:
+    """Summarize watertightness and topology cleanliness from raw mesh data."""
+    used_vertices: set[int] = set()
+    edge_face_count: dict[tuple[int, int], int] = {}
+    degenerate_faces = 0
+
+    for face in faces:
+        if len(face) < 3:
+            degenerate_faces += 1
+            continue
+        face_indices = tuple(int(i) for i in face)
+        if len(set(face_indices)) < 3:
+            degenerate_faces += 1
+        for idx in face_indices:
+            if 0 <= idx < len(vertices):
+                used_vertices.add(idx)
+        for i, start in enumerate(face_indices):
+            end = face_indices[(i + 1) % len(face_indices)]
+            edge = (start, end) if start < end else (end, start)
+            edge_face_count[edge] = edge_face_count.get(edge, 0) + 1
+
+    boundary_edge_count = sum(1 for count in edge_face_count.values() if count == 1)
+    non_manifold_edge_count = sum(1 for count in edge_face_count.values() if count != 2)
+    loose_vertex_count = max(0, len(vertices) - len(used_vertices))
+
+    issues: list[str] = []
+    if boundary_edge_count > 0:
+        issues.append(f"{boundary_edge_count} boundary edges remain")
+    if non_manifold_edge_count > 0:
+        issues.append(f"{non_manifold_edge_count} non-manifold edges remain")
+    if loose_vertex_count > 0:
+        issues.append(f"{loose_vertex_count} loose vertices remain")
+    if degenerate_faces > 0:
+        issues.append(f"{degenerate_faces} degenerate faces remain")
+    return {
+        "watertight": not issues,
+        "boundary_edge_count": boundary_edge_count,
+        "non_manifold_edge_count": non_manifold_edge_count,
+        "loose_vertex_count": loose_vertex_count,
+        "degenerate_face_count": degenerate_faces,
         "geometry_quality": "complete" if not issues else "partial",
         "geometry_issues": issues,
     }
@@ -1801,6 +1862,13 @@ def _merge_structural_shell_objects(
     except Exception as exc:
         logger.debug("Shell normal recalculation failed for %s: %s", name, exc)
 
+    merged_bm.verts.ensure_lookup_table()
+    merged_bm.faces.ensure_lookup_table()
+    topology_result = _summarize_mesh_topology(
+        [tuple(v.co) for v in merged_bm.verts],
+        [tuple(v.index for v in face.verts) for face in merged_bm.faces],
+    )
+
     for material in merged_materials:
         merged_mesh.materials.append(material)
     merged_bm.to_mesh(merged_mesh)
@@ -1815,7 +1883,14 @@ def _merge_structural_shell_objects(
     for poly in shell_obj.data.polygons:
         poly.use_smooth = True
 
-    if cleanup_sources:
+    cleanup_applied = bool(cleanup_sources and topology_result["watertight"])
+    if cleanup_sources and not cleanup_applied:
+        logger.warning(
+            "Shell cleanup deferred for %s because merged topology is not watertight",
+            name,
+        )
+
+    if cleanup_applied:
         for obj in merged_sources:
             try:
                 bpy.data.objects.remove(obj, do_unlink=True)
@@ -1828,7 +1903,10 @@ def _merge_structural_shell_objects(
         vertex_count=len(shell_obj.data.vertices),
         face_count=len(shell_obj.data.polygons),
         removed_source_count=removed_source_count,
-        cleanup_sources=cleanup_sources,
+        cleanup_sources=cleanup_applied,
+        boundary_edge_count=int(topology_result["boundary_edge_count"]),
+        non_manifold_edge_count=int(topology_result["non_manifold_edge_count"]),
+        loose_vertex_count=int(topology_result["loose_vertex_count"]),
     )
     return {
         "created": 1,
@@ -1838,6 +1916,14 @@ def _merge_structural_shell_objects(
         "vertex_count": len(shell_obj.data.vertices),
         "face_count": len(shell_obj.data.polygons),
         "merge_distance": merge_distance,
+        "cleanup_requested": bool(cleanup_sources),
+        "cleanup_applied": cleanup_applied,
+        "cleanup_deferred": bool(cleanup_sources and not cleanup_applied),
+        "watertight": bool(topology_result["watertight"]),
+        "boundary_edge_count": int(topology_result["boundary_edge_count"]),
+        "non_manifold_edge_count": int(topology_result["non_manifold_edge_count"]),
+        "loose_vertex_count": int(topology_result["loose_vertex_count"]),
+        "degenerate_face_count": int(topology_result["degenerate_face_count"]),
         **quality,
     }
 
@@ -1884,11 +1970,20 @@ def _weld_mesh_object(
     finally:
         bm.free()
 
+    topology_result = _summarize_mesh_topology(
+        [tuple(v.co) for v in obj.data.vertices],
+        [tuple(poly.vertices) for poly in obj.data.polygons],
+    )
     return {
         "vertex_count": len(obj.data.vertices),
         "face_count": len(obj.data.polygons),
-        "geometry_quality": "complete",
-        "geometry_issues": [],
+        "watertight": bool(topology_result["watertight"]),
+        "boundary_edge_count": int(topology_result["boundary_edge_count"]),
+        "non_manifold_edge_count": int(topology_result["non_manifold_edge_count"]),
+        "loose_vertex_count": int(topology_result["loose_vertex_count"]),
+        "degenerate_face_count": int(topology_result["degenerate_face_count"]),
+        "geometry_quality": topology_result["geometry_quality"],
+        "geometry_issues": topology_result["geometry_issues"],
     }
 
 
@@ -4338,6 +4433,8 @@ def handle_generate_building(params: dict) -> dict:
     component_count += int(foundation_result["created"])
     structural_shell_objects.extend(foundation_result.get("shell_objects", []))
 
+    consolidate_shell = bool(params.get("consolidate_shell", True))
+    remove_shell_sources = bool(params.get("remove_shell_sources", True))
     shell_merge_result = {
         "created": 0,
         "source_count": 0,
@@ -4346,11 +4443,17 @@ def handle_generate_building(params: dict) -> dict:
         "vertex_count": 0,
         "face_count": 0,
         "merge_distance": 0.0001,
+        "cleanup_requested": bool(consolidate_shell),
+        "cleanup_applied": False,
+        "cleanup_deferred": bool(consolidate_shell),
+        "watertight": False,
+        "boundary_edge_count": 0,
+        "non_manifold_edge_count": 0,
+        "loose_vertex_count": 0,
+        "degenerate_face_count": 0,
         "geometry_quality": "complete",
         "geometry_issues": [],
     }
-    consolidate_shell = bool(params.get("consolidate_shell", True))
-    remove_shell_sources = bool(params.get("remove_shell_sources", True))
     if consolidate_shell:
         shell_merge_result = _merge_structural_shell_objects(
             f"{name}_Shell",
@@ -4505,6 +4608,14 @@ def handle_generate_building(params: dict) -> dict:
         "shell_vertex_count": int(shell_merge_result["vertex_count"]),
         "shell_face_count": int(shell_merge_result["face_count"]),
         "shell_merge_distance": float(shell_merge_result["merge_distance"]),
+        "shell_cleanup_requested": bool(shell_merge_result["cleanup_requested"]),
+        "shell_cleanup_applied": bool(shell_merge_result["cleanup_applied"]),
+        "shell_cleanup_deferred": bool(shell_merge_result["cleanup_deferred"]),
+        "shell_watertight": bool(shell_merge_result["watertight"]),
+        "shell_boundary_edge_count": int(shell_merge_result["boundary_edge_count"]),
+        "shell_non_manifold_edge_count": int(shell_merge_result["non_manifold_edge_count"]),
+        "shell_loose_vertex_count": int(shell_merge_result["loose_vertex_count"]),
+        "shell_degenerate_face_count": int(shell_merge_result["degenerate_face_count"]),
         "shell_merge_quality": shell_merge_result["geometry_quality"],
         "shell_merge_issues": list(shell_merge_result["geometry_issues"]),
         "exterior_prop_count": exterior_count,
@@ -4654,6 +4765,11 @@ def handle_generate_castle(params: dict) -> dict:
     result = _build_castle_result(name, spec, procedural_count)
     result["shell_weld_vertex_count"] = shell_weld_result["vertex_count"]
     result["shell_weld_face_count"] = shell_weld_result["face_count"]
+    result["shell_weld_watertight"] = bool(shell_weld_result["watertight"])
+    result["shell_weld_boundary_edge_count"] = int(shell_weld_result["boundary_edge_count"])
+    result["shell_weld_non_manifold_edge_count"] = int(shell_weld_result["non_manifold_edge_count"])
+    result["shell_weld_loose_vertex_count"] = int(shell_weld_result["loose_vertex_count"])
+    result["shell_weld_degenerate_face_count"] = int(shell_weld_result["degenerate_face_count"])
     result["shell_weld_quality"] = shell_weld_result["geometry_quality"]
     result["shell_weld_issues"] = shell_weld_result["geometry_issues"]
     if shell_weld_result["geometry_issues"]:
