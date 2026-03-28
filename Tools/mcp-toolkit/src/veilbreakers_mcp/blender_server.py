@@ -2064,8 +2064,13 @@ async def asset_pipeline(
                                 "execute_code", {"code": code}
                             )
                             imported_names.append(f"variant_{i+1}")
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.debug(
+                                "Failed to import variant %s into Blender: %s",
+                                i + 1,
+                                exc,
+                                exc_info=True,
+                            )
                     result["imported_to_blender"] = len(imported_names)
                     result["next_steps"] = [
                         "All variants imported to Blender in a grid layout.",
