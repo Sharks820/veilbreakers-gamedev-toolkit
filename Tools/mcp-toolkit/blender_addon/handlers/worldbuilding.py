@@ -815,8 +815,10 @@ def _wall_with_openings(
     for op in openings:
         o_off = op["position"][0]  # offset along wall length
         o_z = op["position"][1]    # height from wall base
-        o_w = op["size"][0]
-        o_h = op["size"][1]
+        o_w = max(0.2, float(op["size"][0]))
+        o_h = max(0.2, float(op["size"][1]))
+        o_w = min(o_w, max(0.2, wall_len - 0.1))
+        o_h = min(o_h, max(0.2, wall_height - 0.1))
         # Clamp to wall dimensions
         o_off = max(0.0, min(o_off, wall_len - o_w))
         o_z = max(0.0, min(o_z, wall_height - o_h))
@@ -1485,14 +1487,19 @@ def _opening_to_cutout_spec(
     open_size = opening_op.get("size", [1, 1])
     open_offset = open_pos[0]  # offset along wall length
     open_z = open_pos[1]       # height from wall base
-    open_w = open_size[0]      # opening width
-    open_h = open_size[1]      # opening height
+    open_w = max(0.2, float(open_size[0]))      # opening width
+    open_h = max(0.2, float(open_size[1]))      # opening height
+
+    wall_axis_width = wall_sx if wall_index < 2 else wall_sy
+    wall_axis_height = wall_sz
+    open_w = min(open_w, max(0.2, wall_axis_width - 0.1))
+    open_h = min(open_h, max(0.2, wall_axis_height - 0.1))
 
     role = opening_op.get("role", "opening")
     style = opening_op.get("style", "square")
 
     # Compute the recess depth from wall THICKNESS (min dimension), not length
-    recess_depth = min(wall_sx, wall_sy) * 1.1
+    recess_depth = max(0.05, min(wall_sx, wall_sy))
 
     # Determine cutout box position based on wall orientation
     # wall_index 0 = front (Y=0 face), 1 = back (Y=depth face),
