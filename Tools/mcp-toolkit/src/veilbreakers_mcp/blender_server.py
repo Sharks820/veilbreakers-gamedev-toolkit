@@ -1059,7 +1059,8 @@ else:
         result = await blender.send_command("execute_code", {"code": code})
         output = str(result.get("result", {}).get("output", "")).strip()
         return float(output.splitlines()[-1]) if output else 0.0
-    except Exception:
+    except Exception as exc:
+        logger.debug("Failed to query Blender location for %s: %s", object_name, exc, exc_info=True)
         return 0.0
 
 
