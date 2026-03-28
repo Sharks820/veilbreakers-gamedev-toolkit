@@ -843,7 +843,7 @@ def _walk_edge_ring(bm_local: Any, start_edge: Any) -> list:
                         continue
                     # This is an adjacent edge sharing the vertex
                     # The ring continues through the other adjacent edge
-                    pass
+                    continue
                 # Find the edge that does NOT share any vertex with current edge
                 for fe in face_edges:
                     if fe.index in visited:
@@ -1159,10 +1159,11 @@ def handle_circularize(params: dict) -> dict:
     looptools_available = False
     try:
         # Check if LoopTools addon is enabled
-        if hasattr(bpy.ops, "mesh") and hasattr(bpy.ops.mesh, "looptools_circle"):
-            looptools_available = True
+        looptools_available = bool(
+            hasattr(bpy.ops, "mesh") and hasattr(bpy.ops.mesh, "looptools_circle")
+        )
     except (AttributeError, RuntimeError):
-        pass
+        looptools_available = False
 
     if looptools_available:
         ctx = _get_3d_context()
