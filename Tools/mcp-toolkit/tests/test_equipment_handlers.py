@@ -20,6 +20,7 @@ import math
 
 import pytest
 
+from blender_addon.handlers import equipment as equipment_module
 from blender_addon.handlers.equipment import (
     DEFAULT_BODY_PARTS,
     DEFAULT_BODY_TYPES,
@@ -27,6 +28,7 @@ from blender_addon.handlers.equipment import (
     _compute_grip_point,
     _compute_trail_attach_bottom,
     _compute_trail_attach_top,
+    _estimate_icon_file_size,
     _validate_armor_params,
     _validate_icon_params,
     _validate_split_params,
@@ -455,6 +457,27 @@ class TestPreviewIcons:
         })
         assert result["resolution"] == 128
         assert isinstance(result["resolution"], int)
+
+
+class TestPreviewIconSizing:
+    """Test icon size estimation fallback behavior."""
+
+    def test_estimate_icon_file_size_returns_zero_on_load_failure(self, monkeypatch):
+        class DummyImages:
+            def load(self, _path):
+                raise RuntimeError("load failed")
+
+            def remove(self, _img):
+                raise AssertionError("remove should not be called")
+
+        monkeypatch.setattr(
+            equipment_module.bpy.data,
+            "images",
+            DummyImages(),
+            raising=False,
+        )
+
+        assert _estimate_icon_file_size("/tmp/icon.png") == 0
 
 
 # ---------------------------------------------------------------------------
