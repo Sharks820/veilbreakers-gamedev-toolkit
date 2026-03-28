@@ -2227,7 +2227,7 @@ async def asset_pipeline(
         }
         cfg = _TERRAIN_PRESETS.get(preset, _TERRAIN_PRESETS["mountains"])
 
-        result = await blender.send_command("world_generate_terrain", {
+        result = await blender.send_command("env_generate_terrain", {
             "terrain_type": preset,
             "resolution": terrain_resolution,
             "height_scale": terrain_height_scale * cfg["height_mult"],

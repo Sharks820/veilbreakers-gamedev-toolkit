@@ -189,7 +189,6 @@ from .environment_scatter import (
     handle_create_breakable,
 )
 from .equipment import (
-    handle_equipment_generate_weapon,
     handle_equipment_split_character,
     handle_equipment_fit_armor,
     handle_equipment_render_icon,
