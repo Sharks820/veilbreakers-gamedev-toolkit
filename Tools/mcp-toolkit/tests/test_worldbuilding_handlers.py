@@ -306,6 +306,68 @@ class TestHandlerReturnShapes:
         assert partial["geometry_quality"] == "partial"
         assert len(partial["geometry_issues"]) >= 1
 
+    def test_post_merge_remesh_fallback_disables_recursive_remesh(self, monkeypatch):
+        """The remesh fallback should not recurse back into itself during welding."""
+        from types import SimpleNamespace
+        from blender_addon.handlers import worldbuilding
+
+        calls = {}
+
+        def fake_remesh(obj, *, voxel_size, adaptivity=0.0):
+            return {
+                "applied": True,
+                "voxel_size": voxel_size,
+                "adaptivity": adaptivity,
+                "before_vertex_count": 12,
+                "before_face_count": 6,
+                "after_vertex_count": 24,
+                "after_face_count": 12,
+                "issues": [],
+            }
+
+        def fake_weld(obj, *, merge_distance=0.0001, remesh_fallback=True, remesh_target_face_count=None):
+            calls["merge_distance"] = merge_distance
+            calls["remesh_fallback"] = remesh_fallback
+            calls["remesh_target_face_count"] = remesh_target_face_count
+            return {
+                "watertight": True,
+                "boundary_edge_count": 0,
+                "non_manifold_edge_count": 0,
+                "loose_vertex_count": 0,
+                "degenerate_face_count": 0,
+                "geometry_quality": "complete",
+                "geometry_issues": [],
+                "holes_filled": 0,
+                "removed_loose_verts": 0,
+                "removed_loose_edges": 0,
+                "merged_vertices": 0,
+            }
+
+        monkeypatch.setattr(worldbuilding, "_apply_voxel_remesh_modifier", fake_remesh)
+        monkeypatch.setattr(worldbuilding, "_weld_mesh_object", fake_weld)
+
+        obj = SimpleNamespace(
+            type="MESH",
+            name="TestShell",
+            dimensions=(4.0, 6.0, 8.0),
+            data=SimpleNamespace(vertices=[1, 2, 3], polygons=[1, 2, 3]),
+        )
+
+        result = worldbuilding._apply_post_merge_remesh_fallback(
+            obj,
+            merge_distance=0.002,
+            target_face_count=240,
+            label="TestShell",
+        )
+
+        assert calls["remesh_fallback"] is False
+        assert calls["merge_distance"] == 0.002
+        assert calls["remesh_target_face_count"] is None
+        assert result["applied"] is True
+        assert result["watertight"] is True
+        assert result["holes_filled"] == 0
+        assert result["merged_vertices"] == 0
+
     def test_interior_result_keys(self):
         """_build_interior_result returns dict with expected keys."""
         from blender_addon.handlers.worldbuilding import _build_interior_result

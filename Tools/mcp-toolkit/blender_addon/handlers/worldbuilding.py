@@ -19,6 +19,7 @@ import bpy
 import bmesh
 
 from .procedural_materials import create_procedural_material
+from ._context import get_3d_context_override
 
 logger = logging.getLogger(__name__)
 
@@ -1819,6 +1820,163 @@ def _repair_bmesh_topology(
     return report
 
 
+def _estimate_voxel_remesh_size(
+    dimensions: tuple[float, float, float],
+    target_face_count: int,
+) -> float:
+    """Estimate a voxel remesh size from object dimensions and target density."""
+    max_dim = max(float(dimensions[0]), float(dimensions[1]), float(dimensions[2]), 0.1)
+    target_polys = max(int(target_face_count), 1)
+    voxel_size = max_dim / max(math.sqrt(target_polys / 6.0), 1.0)
+    return max(voxel_size, 0.01)
+
+
+def _apply_voxel_remesh_modifier(
+    obj: Any,
+    *,
+    voxel_size: float,
+    adaptivity: float = 0.0,
+) -> dict[str, Any]:
+    """Apply Blender's voxel remesh modifier to a mesh object."""
+    if obj is None or getattr(obj, "type", "") != "MESH" or getattr(obj, "data", None) is None:
+        return {
+            "applied": False,
+            "issues": ["mesh object unavailable for voxel remesh"],
+        }
+
+    before_vertex_count = len(obj.data.vertices)
+    before_face_count = len(obj.data.polygons)
+    mod = obj.modifiers.new(name="VB_VoxelRemesh", type="REMESH")
+    mod.mode = "VOXEL"
+    mod.voxel_size = voxel_size
+    if hasattr(mod, "adaptivity"):
+        mod.adaptivity = adaptivity
+
+    ctx = get_3d_context_override()
+    if ctx is None:
+        try:
+            obj.modifiers.remove(mod)
+        except Exception:
+            pass
+        return {
+            "applied": False,
+            "voxel_size": voxel_size,
+            "adaptivity": adaptivity,
+            "before_vertex_count": before_vertex_count,
+            "before_face_count": before_face_count,
+            "issues": ["no 3D viewport available for voxel remesh"],
+        }
+
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    applied = False
+    issues: list[str] = []
+    try:
+        with bpy.context.temp_override(**ctx):
+            bpy.ops.object.mode_set(mode="OBJECT")
+            bpy.ops.object.modifier_apply(modifier=mod.name)
+        applied = True
+    except Exception as exc:
+        issues.append(str(exc))
+    finally:
+        if not applied:
+            try:
+                obj.modifiers.remove(mod)
+            except Exception:
+                pass
+
+    return {
+        "applied": applied,
+        "voxel_size": voxel_size,
+        "adaptivity": adaptivity,
+        "before_vertex_count": before_vertex_count,
+        "before_face_count": before_face_count,
+        "after_vertex_count": len(obj.data.vertices) if applied else before_vertex_count,
+        "after_face_count": len(obj.data.polygons) if applied else before_face_count,
+        "issues": issues,
+    }
+
+
+def _apply_post_merge_remesh_fallback(
+    obj: Any,
+    *,
+    merge_distance: float,
+    target_face_count: int,
+    label: str,
+    adaptivity: float = 0.0,
+) -> dict[str, Any]:
+    """Apply a voxel remesh fallback and re-run mesh repair/topology checks."""
+    if obj is None or getattr(obj, "type", "") != "MESH" or getattr(obj, "data", None) is None:
+        return {
+            "attempted": False,
+            "applied": False,
+            "watertight": False,
+            "geometry_quality": "partial",
+            "geometry_issues": ["mesh object unavailable for remesh fallback"],
+            "remesh_issues": ["mesh object unavailable for remesh fallback"],
+        }
+
+    voxel_size = _estimate_voxel_remesh_size(
+        tuple(float(v) for v in getattr(obj, "dimensions", (0.0, 0.0, 0.0))),
+        target_face_count,
+    )
+    remesh_result = _apply_voxel_remesh_modifier(
+        obj,
+        voxel_size=voxel_size,
+        adaptivity=adaptivity,
+    )
+    if not remesh_result["applied"]:
+        return {
+            "attempted": True,
+            "applied": False,
+            "voxel_size": voxel_size,
+            "adaptivity": adaptivity,
+            "before_vertex_count": int(remesh_result.get("before_vertex_count", 0)),
+            "before_face_count": int(remesh_result.get("before_face_count", 0)),
+            "after_vertex_count": int(remesh_result.get("after_vertex_count", 0)),
+            "after_face_count": int(remesh_result.get("after_face_count", 0)),
+            "watertight": False,
+            "boundary_edge_count": 0,
+            "non_manifold_edge_count": 0,
+            "loose_vertex_count": 0,
+            "degenerate_face_count": 0,
+            "removed_loose_verts": 0,
+            "removed_loose_edges": 0,
+            "dissolved_degenerate": 0,
+            "merged_vertices": 0,
+            "holes_filled": 0,
+            "geometry_quality": "partial",
+            "geometry_issues": [f"{label}: " + "; ".join(remesh_result.get("issues", []))],
+            "remesh_issues": list(remesh_result.get("issues", [])),
+        }
+
+    repaired = _weld_mesh_object(obj, merge_distance=merge_distance, remesh_fallback=False)
+    return {
+        "attempted": True,
+        "applied": True,
+        "voxel_size": voxel_size,
+        "adaptivity": adaptivity,
+        "before_vertex_count": int(remesh_result["before_vertex_count"]),
+        "before_face_count": int(remesh_result["before_face_count"]),
+        "after_vertex_count": int(remesh_result["after_vertex_count"]),
+        "after_face_count": int(remesh_result["after_face_count"]),
+        "watertight": bool(repaired["watertight"]),
+        "boundary_edge_count": int(repaired["boundary_edge_count"]),
+        "non_manifold_edge_count": int(repaired["non_manifold_edge_count"]),
+        "loose_vertex_count": int(repaired["loose_vertex_count"]),
+        "degenerate_face_count": int(repaired["degenerate_face_count"]),
+        "removed_loose_verts": int(repaired.get("removed_loose_verts", 0)),
+        "removed_loose_edges": int(repaired.get("removed_loose_edges", 0)),
+        "dissolved_degenerate": int(repaired.get("dissolved_degenerate", 0)),
+        "merged_vertices": int(repaired.get("merged_vertices", 0)),
+        "holes_filled": int(repaired.get("holes_filled", 0)),
+        "geometry_quality": repaired["geometry_quality"],
+        "geometry_issues": list(repaired["geometry_issues"]),
+        "remesh_issues": list(remesh_result.get("issues", [])),
+    }
+
+
 def _merge_structural_shell_objects(
     name: str,
     shell_objects: list[Any],
@@ -1826,6 +1984,7 @@ def _merge_structural_shell_objects(
     *,
     cleanup_sources: bool = True,
     merge_distance: float = 0.0001,
+    remesh_fallback: bool = True,
 ) -> dict[str, Any]:
     """Merge structural shell objects into a single welded shell mesh."""
     merged_sources = [
@@ -1841,6 +2000,15 @@ def _merge_structural_shell_objects(
             "vertex_count": 0,
             "face_count": 0,
             "merge_distance": merge_distance,
+            "remesh_attempted": False,
+            "remesh_applied": False,
+            "remesh_voxel_size": 0.0,
+            "remesh_adaptivity": 0.0,
+            "remesh_before_vertex_count": 0,
+            "remesh_before_face_count": 0,
+            "remesh_after_vertex_count": 0,
+            "remesh_after_face_count": 0,
+            "remesh_issues": ["no structural shell pieces were available to merge"],
             "geometry_quality": "partial",
             "geometry_issues": ["no structural shell pieces were available to merge"],
         }
@@ -1897,6 +2065,15 @@ def _merge_structural_shell_objects(
             "vertex_count": 0,
             "face_count": 0,
             "merge_distance": merge_distance,
+            "remesh_attempted": False,
+            "remesh_applied": False,
+            "remesh_voxel_size": 0.0,
+            "remesh_adaptivity": 0.0,
+            "remesh_before_vertex_count": 0,
+            "remesh_before_face_count": 0,
+            "remesh_after_vertex_count": 0,
+            "remesh_after_face_count": 0,
+            "remesh_issues": ["shell merge produced no geometry"],
             "geometry_quality": "partial",
             "geometry_issues": ["shell merge produced no geometry"],
         }
@@ -1934,6 +2111,29 @@ def _merge_structural_shell_objects(
     for poly in shell_obj.data.polygons:
         poly.use_smooth = True
 
+    remesh_result = {
+        "attempted": False,
+        "applied": False,
+        "voxel_size": 0.0,
+        "adaptivity": 0.0,
+        "before_vertex_count": len(shell_obj.data.vertices),
+        "before_face_count": len(shell_obj.data.polygons),
+        "after_vertex_count": len(shell_obj.data.vertices),
+        "after_face_count": len(shell_obj.data.polygons),
+        "remesh_issues": [],
+    }
+
+    if remesh_fallback and not topology_result["watertight"]:
+        remesh_result = _apply_post_merge_remesh_fallback(
+            shell_obj,
+            merge_distance=merge_distance,
+            target_face_count=max(len(shell_obj.data.polygons), 1200),
+            label=name,
+        )
+        if remesh_result["applied"]:
+            topology_result = remesh_result
+            repair_report = remesh_result
+
     cleanup_applied = bool(cleanup_sources and topology_result["watertight"])
     if cleanup_sources and not cleanup_applied:
         logger.warning(
@@ -1970,6 +2170,15 @@ def _merge_structural_shell_objects(
         "cleanup_requested": bool(cleanup_sources),
         "cleanup_applied": cleanup_applied,
         "cleanup_deferred": bool(cleanup_sources and not cleanup_applied),
+        "remesh_attempted": bool(remesh_result["attempted"]),
+        "remesh_applied": bool(remesh_result["applied"]),
+        "remesh_voxel_size": float(remesh_result["voxel_size"]),
+        "remesh_adaptivity": float(remesh_result["adaptivity"]),
+        "remesh_before_vertex_count": int(remesh_result["before_vertex_count"]),
+        "remesh_before_face_count": int(remesh_result["before_face_count"]),
+        "remesh_after_vertex_count": int(remesh_result["after_vertex_count"]),
+        "remesh_after_face_count": int(remesh_result["after_face_count"]),
+        "remesh_issues": list(remesh_result["remesh_issues"]),
         "watertight": bool(topology_result["watertight"]),
         "boundary_edge_count": int(topology_result["boundary_edge_count"]),
         "non_manifold_edge_count": int(topology_result["non_manifold_edge_count"]),
@@ -1987,6 +2196,8 @@ def _weld_mesh_object(
     obj: Any,
     *,
     merge_distance: float = 0.0001,
+    remesh_fallback: bool = True,
+    remesh_target_face_count: int | None = None,
 ) -> dict[str, Any]:
     """Weld duplicate vertices and recalculate normals on a mesh object."""
     if obj is None or getattr(obj, "type", "") != "MESH" or getattr(obj, "data", None) is None:
@@ -2021,9 +2232,39 @@ def _weld_mesh_object(
         [tuple(v.co) for v in obj.data.vertices],
         [tuple(poly.vertices) for poly in obj.data.polygons],
     )
+    remesh_result = {
+        "attempted": False,
+        "applied": False,
+        "voxel_size": 0.0,
+        "adaptivity": 0.0,
+        "before_vertex_count": len(obj.data.vertices),
+        "before_face_count": len(obj.data.polygons),
+        "after_vertex_count": len(obj.data.vertices),
+        "after_face_count": len(obj.data.polygons),
+        "remesh_issues": [],
+    }
+    if remesh_fallback and not topology_result["watertight"]:
+        remesh_result = _apply_post_merge_remesh_fallback(
+            obj,
+            merge_distance=merge_distance,
+            target_face_count=remesh_target_face_count or max(len(obj.data.polygons), 1200),
+            label=getattr(obj, "name", "<unnamed>"),
+        )
+        if remesh_result["applied"]:
+            topology_result = remesh_result
+            repair_report = remesh_result
     return {
         "vertex_count": len(obj.data.vertices),
         "face_count": len(obj.data.polygons),
+        "remesh_attempted": bool(remesh_result["attempted"]),
+        "remesh_applied": bool(remesh_result["applied"]),
+        "remesh_voxel_size": float(remesh_result["voxel_size"]),
+        "remesh_adaptivity": float(remesh_result["adaptivity"]),
+        "remesh_before_vertex_count": int(remesh_result["before_vertex_count"]),
+        "remesh_before_face_count": int(remesh_result["before_face_count"]),
+        "remesh_after_vertex_count": int(remesh_result["after_vertex_count"]),
+        "remesh_after_face_count": int(remesh_result["after_face_count"]),
+        "remesh_issues": list(remesh_result["remesh_issues"]),
         "watertight": bool(topology_result["watertight"]),
         "boundary_edge_count": int(topology_result["boundary_edge_count"]),
         "non_manifold_edge_count": int(topology_result["non_manifold_edge_count"]),
