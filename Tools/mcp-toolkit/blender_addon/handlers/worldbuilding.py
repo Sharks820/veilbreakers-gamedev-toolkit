@@ -1757,6 +1757,68 @@ def _summarize_mesh_topology(
     }
 
 
+def _repair_bmesh_topology(
+    bm: bmesh.types.BMesh,
+    *,
+    merge_distance: float = 0.0001,
+    max_hole_sides: int = 8,
+) -> dict[str, Any]:
+    """Apply the mesh repair sequence used for game-ready cleanup."""
+    report: dict[str, Any] = {}
+
+    loose_verts = [v for v in bm.verts if len(v.link_edges) == 0]
+    if loose_verts:
+        bmesh.ops.delete(bm, geom=loose_verts, context="VERTS")
+    report["removed_loose_verts"] = len(loose_verts)
+
+    loose_edges = [e for e in bm.edges if len(e.link_faces) == 0]
+    if loose_edges:
+        bmesh.ops.delete(bm, geom=loose_edges, context="EDGES")
+    report["removed_loose_edges"] = len(loose_edges)
+
+    try:
+        dissolved = bmesh.ops.dissolve_degenerate(
+            bm,
+            dist=merge_distance,
+            edges=bm.edges[:],
+        )
+        report["dissolved_degenerate"] = len(dissolved.get("region", []))
+    except Exception as exc:
+        report["dissolved_degenerate"] = 0
+        report["dissolve_error"] = str(exc)
+
+    try:
+        merged = bmesh.ops.remove_doubles(
+            bm,
+            verts=bm.verts[:],
+            dist=merge_distance,
+        )
+        report["merged_vertices"] = len(merged.get("targetmap", {}))
+    except Exception as exc:
+        report["merged_vertices"] = 0
+        report["merge_error"] = str(exc)
+
+    try:
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+        report["normals_recalculated"] = True
+    except Exception as exc:
+        report["normals_recalculated"] = False
+        report["normal_error"] = str(exc)
+
+    boundary_edges = [e for e in bm.edges if e.is_boundary]
+    if boundary_edges:
+        try:
+            filled = bmesh.ops.holes_fill(bm, edges=boundary_edges, sides=max_hole_sides)
+            report["holes_filled"] = len(filled.get("faces", []))
+        except Exception as exc:
+            report["holes_filled"] = 0
+            report["holes_fill_error"] = str(exc)
+    else:
+        report["holes_filled"] = 0
+
+    return report
+
+
 def _merge_structural_shell_objects(
     name: str,
     shell_objects: list[Any],
@@ -1839,28 +1901,17 @@ def _merge_structural_shell_objects(
             "geometry_issues": ["shell merge produced no geometry"],
         }
 
-    try:
-        bmesh.ops.dissolve_degenerate(
-            merged_bm,
-            edges=merged_bm.edges[:],
-            dist=merge_distance,
-        )
-    except Exception as exc:
-        logger.debug("Shell dissolve_degenerate failed for %s: %s", name, exc)
-
-    try:
-        bmesh.ops.remove_doubles(
-            merged_bm,
-            verts=merged_bm.verts[:],
-            dist=merge_distance,
-        )
-    except Exception as exc:
-        logger.debug("Shell remove_doubles failed for %s: %s", name, exc)
-
-    try:
-        bmesh.ops.recalc_face_normals(merged_bm, faces=merged_bm.faces[:])
-    except Exception as exc:
-        logger.debug("Shell normal recalculation failed for %s: %s", name, exc)
+    repair_report = _repair_bmesh_topology(
+        merged_bm,
+        merge_distance=merge_distance,
+        max_hole_sides=8,
+    )
+    if repair_report.get("holes_fill_error"):
+        logger.debug("Shell holes_fill failed for %s: %s", name, repair_report["holes_fill_error"])
+    if repair_report.get("merge_error"):
+        logger.debug("Shell remove_doubles failed for %s: %s", name, repair_report["merge_error"])
+    if repair_report.get("normal_error"):
+        logger.debug("Shell normal recalculation failed for %s: %s", name, repair_report["normal_error"])
 
     merged_bm.verts.ensure_lookup_table()
     merged_bm.faces.ensure_lookup_table()
@@ -1924,6 +1975,10 @@ def _merge_structural_shell_objects(
         "non_manifold_edge_count": int(topology_result["non_manifold_edge_count"]),
         "loose_vertex_count": int(topology_result["loose_vertex_count"]),
         "degenerate_face_count": int(topology_result["degenerate_face_count"]),
+        "holes_filled": int(repair_report.get("holes_filled", 0)),
+        "removed_loose_verts": int(repair_report.get("removed_loose_verts", 0)),
+        "removed_loose_edges": int(repair_report.get("removed_loose_edges", 0)),
+        "merged_vertices": int(repair_report.get("merged_vertices", 0)),
         **quality,
     }
 
@@ -1942,29 +1997,21 @@ def _weld_mesh_object(
             "geometry_issues": ["mesh object unavailable for welding"],
         }
 
+    repair_report: dict[str, Any] = {}
     bm = bmesh.new()
     try:
         bm.from_mesh(obj.data)
-        try:
-            bmesh.ops.dissolve_degenerate(
-                bm,
-                edges=bm.edges[:],
-                dist=merge_distance,
-            )
-        except Exception as exc:
-            logger.debug("Mesh dissolve_degenerate failed for %s: %s", getattr(obj, "name", "<unnamed>"), exc)
-        try:
-            bmesh.ops.remove_doubles(
-                bm,
-                verts=bm.verts[:],
-                dist=merge_distance,
-            )
-        except Exception as exc:
-            logger.debug("Mesh remove_doubles failed for %s: %s", getattr(obj, "name", "<unnamed>"), exc)
-        try:
-            bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
-        except Exception as exc:
-            logger.debug("Mesh normal recalculation failed for %s: %s", getattr(obj, "name", "<unnamed>"), exc)
+        repair_report = _repair_bmesh_topology(
+            bm,
+            merge_distance=merge_distance,
+            max_hole_sides=8,
+        )
+        if repair_report.get("holes_fill_error"):
+            logger.debug("Mesh holes_fill failed for %s: %s", getattr(obj, "name", "<unnamed>"), repair_report["holes_fill_error"])
+        if repair_report.get("merge_error"):
+            logger.debug("Mesh remove_doubles failed for %s: %s", getattr(obj, "name", "<unnamed>"), repair_report["merge_error"])
+        if repair_report.get("normal_error"):
+            logger.debug("Mesh normal recalculation failed for %s: %s", getattr(obj, "name", "<unnamed>"), repair_report["normal_error"])
         bm.to_mesh(obj.data)
         obj.data.update()
     finally:
@@ -1984,6 +2031,10 @@ def _weld_mesh_object(
         "degenerate_face_count": int(topology_result["degenerate_face_count"]),
         "geometry_quality": topology_result["geometry_quality"],
         "geometry_issues": topology_result["geometry_issues"],
+        "holes_filled": int(repair_report.get("holes_filled", 0)),
+        "removed_loose_verts": int(repair_report.get("removed_loose_verts", 0)),
+        "removed_loose_edges": int(repair_report.get("removed_loose_edges", 0)),
+        "merged_vertices": int(repair_report.get("merged_vertices", 0)),
     }
 
 
