@@ -249,6 +249,30 @@ class TestHandlerReturnShapes:
         assert partial["geometry_quality"] == "partial"
         assert len(partial["geometry_issues"]) >= 3
 
+    def test_shell_merge_quality_summary(self):
+        """Structural shell merge summary should report clean and partial states."""
+        from blender_addon.handlers.worldbuilding import _summarize_shell_merge_quality
+
+        complete = _summarize_shell_merge_quality(
+            source_count=4,
+            vertex_count=128,
+            face_count=64,
+            removed_source_count=4,
+            cleanup_sources=True,
+        )
+        assert complete["geometry_quality"] == "complete"
+        assert complete["geometry_issues"] == []
+
+        partial = _summarize_shell_merge_quality(
+            source_count=0,
+            vertex_count=0,
+            face_count=0,
+            removed_source_count=0,
+            cleanup_sources=True,
+        )
+        assert partial["geometry_quality"] == "partial"
+        assert len(partial["geometry_issues"]) >= 2
+
     def test_interior_result_keys(self):
         """_build_interior_result returns dict with expected keys."""
         from blender_addon.handlers.worldbuilding import _build_interior_result

@@ -1672,6 +1672,226 @@ def _build_castle_result(
     }
 
 
+def _summarize_shell_merge_quality(
+    *,
+    source_count: int,
+    vertex_count: int,
+    face_count: int,
+    removed_source_count: int,
+    cleanup_sources: bool,
+) -> dict[str, Any]:
+    """Summarize whether a structural shell merge produced clean output."""
+    issues: list[str] = []
+    if source_count <= 0:
+        issues.append("no structural shell pieces were available to merge")
+    if vertex_count <= 0 or face_count <= 0:
+        issues.append("shell merge produced no geometry")
+    if cleanup_sources and removed_source_count < source_count:
+        issues.append(
+            f"shell cleanup removed {removed_source_count}/{source_count} source pieces"
+        )
+    return {
+        "geometry_quality": "complete" if not issues else "partial",
+        "geometry_issues": issues,
+    }
+
+
+def _merge_structural_shell_objects(
+    name: str,
+    shell_objects: list[Any],
+    parent: Any,
+    *,
+    cleanup_sources: bool = True,
+    merge_distance: float = 0.0001,
+) -> dict[str, Any]:
+    """Merge structural shell objects into a single welded shell mesh."""
+    merged_sources = [
+        obj for obj in shell_objects
+        if obj is not None and getattr(obj, "type", "") == "MESH" and getattr(obj, "data", None) is not None
+    ]
+    if not merged_sources:
+        return {
+            "created": 0,
+            "source_count": 0,
+            "removed_source_count": 0,
+            "object_name": None,
+            "vertex_count": 0,
+            "face_count": 0,
+            "merge_distance": merge_distance,
+            "geometry_quality": "partial",
+            "geometry_issues": ["no structural shell pieces were available to merge"],
+        }
+
+    merged_mesh = bpy.data.meshes.new(name)
+    merged_bm = bmesh.new()
+    merged_materials: list[Any] = []
+    material_lookup: dict[str, int] = {}
+    source_count = 0
+    removed_source_count = 0
+
+    for obj in merged_sources:
+        part_bm = bmesh.new()
+        try:
+            part_bm.from_mesh(obj.data)
+            if not part_bm.verts:
+                continue
+            source_count += 1
+            part_bm.verts.ensure_lookup_table()
+            part_bm.faces.ensure_lookup_table()
+            bmesh.ops.transform(part_bm, matrix=obj.matrix_world, verts=part_bm.verts[:])
+
+            slot_map: dict[int, int] = {}
+            for slot_index, material in enumerate(getattr(obj.data, "materials", []) or []):
+                if material is None:
+                    continue
+                material_key = getattr(material, "name", f"material_{id(material)}")
+                if material_key not in material_lookup:
+                    material_lookup[material_key] = len(merged_materials)
+                    merged_materials.append(material)
+                slot_map[slot_index] = material_lookup[material_key]
+
+            vert_map: dict[Any, Any] = {}
+            for vert in part_bm.verts:
+                vert_map[vert] = merged_bm.verts.new(vert.co)
+            for face in part_bm.faces:
+                try:
+                    new_face = merged_bm.faces.new([vert_map[v] for v in face.verts])
+                except ValueError:
+                    continue
+                new_face.smooth = face.smooth
+                if face.material_index in slot_map:
+                    new_face.material_index = slot_map[face.material_index]
+        finally:
+            part_bm.free()
+
+    if not merged_bm.verts or not merged_bm.faces:
+        merged_bm.free()
+        return {
+            "created": 0,
+            "source_count": source_count,
+            "removed_source_count": 0,
+            "object_name": None,
+            "vertex_count": 0,
+            "face_count": 0,
+            "merge_distance": merge_distance,
+            "geometry_quality": "partial",
+            "geometry_issues": ["shell merge produced no geometry"],
+        }
+
+    try:
+        bmesh.ops.dissolve_degenerate(
+            merged_bm,
+            edges=merged_bm.edges[:],
+            dist=merge_distance,
+        )
+    except Exception as exc:
+        logger.debug("Shell dissolve_degenerate failed for %s: %s", name, exc)
+
+    try:
+        bmesh.ops.remove_doubles(
+            merged_bm,
+            verts=merged_bm.verts[:],
+            dist=merge_distance,
+        )
+    except Exception as exc:
+        logger.debug("Shell remove_doubles failed for %s: %s", name, exc)
+
+    try:
+        bmesh.ops.recalc_face_normals(merged_bm, faces=merged_bm.faces[:])
+    except Exception as exc:
+        logger.debug("Shell normal recalculation failed for %s: %s", name, exc)
+
+    for material in merged_materials:
+        merged_mesh.materials.append(material)
+    merged_bm.to_mesh(merged_mesh)
+    merged_bm.free()
+
+    shell_obj = bpy.data.objects.new(name, merged_mesh)
+    bpy.context.collection.objects.link(shell_obj)
+    shell_obj.parent = parent
+    shell_obj["vb_editable_role"] = "building_shell"
+    shell_obj["vb_shell_source_count"] = source_count
+    shell_obj["vb_shell_merge_distance"] = merge_distance
+    for poly in shell_obj.data.polygons:
+        poly.use_smooth = True
+
+    if cleanup_sources:
+        for obj in merged_sources:
+            try:
+                bpy.data.objects.remove(obj, do_unlink=True)
+                removed_source_count += 1
+            except Exception as exc:
+                logger.debug("Failed to remove shell source %s: %s", getattr(obj, "name", "<unnamed>"), exc)
+
+    quality = _summarize_shell_merge_quality(
+        source_count=source_count,
+        vertex_count=len(shell_obj.data.vertices),
+        face_count=len(shell_obj.data.polygons),
+        removed_source_count=removed_source_count,
+        cleanup_sources=cleanup_sources,
+    )
+    return {
+        "created": 1,
+        "source_count": source_count,
+        "removed_source_count": removed_source_count,
+        "object_name": shell_obj.name,
+        "vertex_count": len(shell_obj.data.vertices),
+        "face_count": len(shell_obj.data.polygons),
+        "merge_distance": merge_distance,
+        **quality,
+    }
+
+
+def _weld_mesh_object(
+    obj: Any,
+    *,
+    merge_distance: float = 0.0001,
+) -> dict[str, Any]:
+    """Weld duplicate vertices and recalculate normals on a mesh object."""
+    if obj is None or getattr(obj, "type", "") != "MESH" or getattr(obj, "data", None) is None:
+        return {
+            "vertex_count": 0,
+            "face_count": 0,
+            "geometry_quality": "partial",
+            "geometry_issues": ["mesh object unavailable for welding"],
+        }
+
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(obj.data)
+        try:
+            bmesh.ops.dissolve_degenerate(
+                bm,
+                edges=bm.edges[:],
+                dist=merge_distance,
+            )
+        except Exception as exc:
+            logger.debug("Mesh dissolve_degenerate failed for %s: %s", getattr(obj, "name", "<unnamed>"), exc)
+        try:
+            bmesh.ops.remove_doubles(
+                bm,
+                verts=bm.verts[:],
+                dist=merge_distance,
+            )
+        except Exception as exc:
+            logger.debug("Mesh remove_doubles failed for %s: %s", getattr(obj, "name", "<unnamed>"), exc)
+        try:
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
+        except Exception as exc:
+            logger.debug("Mesh normal recalculation failed for %s: %s", getattr(obj, "name", "<unnamed>"), exc)
+        bm.to_mesh(obj.data)
+        obj.data.update()
+    finally:
+        bm.free()
+
+    return {
+        "vertex_count": len(obj.data.vertices),
+        "face_count": len(obj.data.polygons),
+        "geometry_quality": "complete",
+        "geometry_issues": [],
+    }
+
+
 def _build_ruins_result(
     name: str,
     spec: BuildingSpec,
@@ -2996,6 +3216,7 @@ def _apply_modular_facade(
     chimney_count = 0
     buttress_count = 0
     suppressed_box_count = 0
+    shell_objects: list[Any] = []
     for index, module in enumerate(facade_plan.get("modules", [])):
         module_type = str(module.get("type", "box"))
         role = str(module.get("role", "facade_module"))
@@ -3018,6 +3239,7 @@ def _apply_modular_facade(
                 _assign_procedural_material(obj, material)
                 created += 1
                 chimney_count += 1
+                shell_objects.append(obj)
             continue
         if module_type == "buttress":
             buttress_spec = generate_buttress_mesh(
@@ -3035,6 +3257,7 @@ def _apply_modular_facade(
                 _assign_procedural_material(obj, material)
                 created += 1
                 buttress_count += 1
+                shell_objects.append(obj)
             continue
         if module_type == "box":
             suppressed_box_count += 1
@@ -3046,6 +3269,7 @@ def _apply_modular_facade(
         "buttress_count": buttress_count,
         "suppressed_box_count": suppressed_box_count,
         "plan": facade_plan,
+        "shell_objects": shell_objects,
     }
 
 
@@ -3061,12 +3285,18 @@ def _apply_foundation_fitment(
     profile = foundation_profile or {}
     foundation_height = float(profile.get("foundation_height", 0.0))
     if foundation_height <= 0.05:
-        return {"created": 0, "retaining_wall_count": 0, "stair_count": 0}
+        return {
+            "created": 0,
+            "retaining_wall_count": 0,
+            "stair_count": 0,
+            "shell_objects": [],
+        }
 
     width, depth = float(footprint[0]), float(footprint[1])
     created = 0
     retaining_count = 0
     stair_count = 0
+    shell_objects: list[Any] = []
     band = max(0.18, wall_thickness * 0.8)
     plinth = _create_box_mesh_object(
         f"{base_name}_Foundation",
@@ -3078,6 +3308,7 @@ def _apply_foundation_fitment(
     )
     if plinth is not None:
         created += 1
+        shell_objects.append(plinth)
 
     side_heights = profile.get("side_heights", {}) if isinstance(profile, dict) else {}
     side_specs = [
@@ -3102,6 +3333,7 @@ def _apply_foundation_fitment(
         if obj is not None:
             created += 1
             retaining_count += 1
+            shell_objects.append(obj)
 
     stair_wall = str(profile.get("stair_wall") or "")
     stair_steps = int(profile.get("stair_steps", 0))
@@ -3140,6 +3372,7 @@ def _apply_foundation_fitment(
         "created": created,
         "retaining_wall_count": retaining_count,
         "stair_count": stair_count,
+        "shell_objects": shell_objects,
     }
 
 
@@ -3775,6 +4008,7 @@ def handle_generate_building(params: dict) -> dict:
     component_count = 0
     total_verts = 0
     total_faces = 0
+    structural_shell_objects: list[Any] = []
 
     # Wall thickness for stone walls
     wall_thick = 0.4
@@ -3869,6 +4103,7 @@ def handle_generate_building(params: dict) -> dict:
             _assign_procedural_material(wall_obj, _wall_mat_key)
             component_count += 1
             wall_segment_count += 1
+            structural_shell_objects.append(wall_obj)
             total_verts += len(wall_spec.get("vertices", []))
             total_faces += len(wall_spec.get("faces", []))
 
@@ -3970,6 +4205,7 @@ def handle_generate_building(params: dict) -> dict:
         _fobj.parent = parent
         _assign_procedural_material(_fobj, "cobblestone_floor" if floor_idx == 0 else "plank_floor")
         component_count += 1
+        structural_shell_objects.append(_fobj)
 
     # === ROOF: distinct material for visual differentiation from stone walls ===
     roof_style = preset.get("roof_style") if preset else None
@@ -3997,6 +4233,7 @@ def handle_generate_building(params: dict) -> dict:
         _roof_mat = "slate_tiles" if is_gothic else "thatch_roof"
         _assign_procedural_material(roof_obj, _roof_mat)
         component_count += 1
+        structural_shell_objects.append(roof_obj)
         total_verts += len(roof_spec.get("vertices", []))
         total_faces += len(roof_spec.get("faces", []))
         roof_created = True
@@ -4015,6 +4252,7 @@ def handle_generate_building(params: dict) -> dict:
         seed=seed,
     )
     component_count += int(facade_result["module_count"])
+    structural_shell_objects.extend(facade_result.get("shell_objects", []))
 
     # === EXTERIOR DRESSING ===
     exterior_props = list(preset.get("props", [])) if preset else []
@@ -4098,6 +4336,43 @@ def handle_generate_building(params: dict) -> dict:
         foundation_profile=foundation_profile,
     )
     component_count += int(foundation_result["created"])
+    structural_shell_objects.extend(foundation_result.get("shell_objects", []))
+
+    shell_merge_result = {
+        "created": 0,
+        "source_count": 0,
+        "removed_source_count": 0,
+        "object_name": None,
+        "vertex_count": 0,
+        "face_count": 0,
+        "merge_distance": 0.0001,
+        "geometry_quality": "complete",
+        "geometry_issues": [],
+    }
+    consolidate_shell = bool(params.get("consolidate_shell", True))
+    remove_shell_sources = bool(params.get("remove_shell_sources", True))
+    if consolidate_shell:
+        shell_merge_result = _merge_structural_shell_objects(
+            f"{name}_Shell",
+            structural_shell_objects,
+            parent,
+            cleanup_sources=remove_shell_sources,
+            merge_distance=max(0.00001, float(params.get("shell_merge_distance", 0.0001))),
+        )
+        if shell_merge_result["created"]:
+            if remove_shell_sources:
+                component_count = max(
+                    0,
+                    component_count - int(shell_merge_result["source_count"]) + int(shell_merge_result["created"]),
+                )
+            else:
+                component_count += int(shell_merge_result["created"])
+        if shell_merge_result["geometry_issues"]:
+            logger.warning(
+                "Building %s shell consolidation issues: %s",
+                name,
+                "; ".join(shell_merge_result["geometry_issues"]),
+            )
     quality_result = _summarize_live_building_quality(
         expected_openings=len(resolved_openings),
         door_count=door_count,
@@ -4107,6 +4382,9 @@ def handle_generate_building(params: dict) -> dict:
         roof_created=roof_created,
         component_count=component_count,
     )
+    if shell_merge_result["geometry_issues"]:
+        quality_result["geometry_issues"].extend(shell_merge_result["geometry_issues"])
+        quality_result["geometry_quality"] = "partial"
     if quality_result["geometry_issues"]:
         logger.warning(
             "Building %s generated with geometry issues: %s",
@@ -4220,6 +4498,15 @@ def handle_generate_building(params: dict) -> dict:
         "opening_count": len(resolved_openings),
         "geometry_quality": quality_result["geometry_quality"],
         "geometry_issues": quality_result["geometry_issues"],
+        "shell_consolidated": bool(shell_merge_result["created"]),
+        "shell_object_name": shell_merge_result["object_name"],
+        "shell_source_count": int(shell_merge_result["source_count"]),
+        "shell_removed_source_count": int(shell_merge_result["removed_source_count"]),
+        "shell_vertex_count": int(shell_merge_result["vertex_count"]),
+        "shell_face_count": int(shell_merge_result["face_count"]),
+        "shell_merge_distance": float(shell_merge_result["merge_distance"]),
+        "shell_merge_quality": shell_merge_result["geometry_quality"],
+        "shell_merge_issues": list(shell_merge_result["geometry_issues"]),
         "exterior_prop_count": exterior_count,
         "architectural_accent_count": accent_count,
         "site_feature_count": site_feature_count,
@@ -4264,6 +4551,7 @@ def handle_generate_castle(params: dict) -> dict:
 
     bm = _spec_to_bmesh(spec)
     obj = _create_mesh_object(name, bm)
+    shell_weld_result = _weld_mesh_object(obj)
     _assign_procedural_material(obj, "stone_fortified")
 
     # Add procedural castle detail elements
@@ -4364,6 +4652,16 @@ def handle_generate_castle(params: dict) -> dict:
         procedural_count += 1
 
     result = _build_castle_result(name, spec, procedural_count)
+    result["shell_weld_vertex_count"] = shell_weld_result["vertex_count"]
+    result["shell_weld_face_count"] = shell_weld_result["face_count"]
+    result["shell_weld_quality"] = shell_weld_result["geometry_quality"]
+    result["shell_weld_issues"] = shell_weld_result["geometry_issues"]
+    if shell_weld_result["geometry_issues"]:
+        logger.warning(
+            "Castle %s shell weld issues: %s",
+            name,
+            "; ".join(shell_weld_result["geometry_issues"]),
+        )
     if result["geometry_issues"]:
         logger.warning(
             "Castle %s generated with geometry issues: %s",
