@@ -273,6 +273,39 @@ class TestHandlerReturnShapes:
         assert partial["geometry_quality"] == "partial"
         assert len(partial["geometry_issues"]) >= 2
 
+    def test_mesh_topology_summary_watertight(self):
+        """Raw mesh topology summary should identify closed and open meshes."""
+        from blender_addon.handlers.worldbuilding import _summarize_mesh_topology
+
+        cube_vertices = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (1.0, 0.0, 1.0),
+            (1.0, 1.0, 1.0),
+            (0.0, 1.0, 1.0),
+        ]
+        cube_faces = [
+            (0, 3, 2, 1),
+            (4, 5, 6, 7),
+            (0, 1, 5, 4),
+            (2, 3, 7, 6),
+            (0, 4, 7, 3),
+            (1, 2, 6, 5),
+        ]
+        complete = _summarize_mesh_topology(cube_vertices, cube_faces)
+        assert complete["watertight"] is True
+        assert complete["geometry_quality"] == "complete"
+        assert complete["geometry_issues"] == []
+
+        open_faces = cube_faces[:-1]
+        partial = _summarize_mesh_topology(cube_vertices, open_faces)
+        assert partial["watertight"] is False
+        assert partial["geometry_quality"] == "partial"
+        assert len(partial["geometry_issues"]) >= 1
+
     def test_interior_result_keys(self):
         """_build_interior_result returns dict with expected keys."""
         from blender_addon.handlers.worldbuilding import _build_interior_result
