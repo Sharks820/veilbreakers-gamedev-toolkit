@@ -12,11 +12,15 @@ Only allowed imports are used: bpy, bmesh, mathutils, math, json.
 
 from __future__ import annotations
 
+import logging
 import math
 
 import bmesh
 import bpy
 import mathutils
+
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -168,6 +172,26 @@ def _validate_icon_params(params: dict) -> dict:
         "camera_angle": tuple(camera_angle),
         "background_alpha": background_alpha,
     }
+
+
+def _estimate_icon_file_size(output_path: str) -> int:
+    """Estimate PNG size using Blender image metadata.
+
+    Returns 0 when the file cannot be loaded back into Blender.
+    """
+    try:
+        img = bpy.data.images.load(output_path)
+        file_size = img.size[0] * img.size[1] * 4  # estimate RGBA bytes
+        bpy.data.images.remove(img)
+        return file_size
+    except Exception as exc:
+        logger.debug(
+            "Failed to estimate icon file size for %s: %s",
+            output_path,
+            exc,
+            exc_info=True,
+        )
+        return 0
 
 
 # ---------------------------------------------------------------------------
@@ -2180,13 +2204,7 @@ def handle_equipment_render_icon(params: dict) -> dict:
         bpy.context.view_layer.update()
 
     # Get file size (only using bpy-compatible approach)
-    file_size = 0
-    try:
-        img = bpy.data.images.load(output_path)
-        file_size = img.size[0] * img.size[1] * 4  # estimate RGBA bytes
-        bpy.data.images.remove(img)
-    except Exception:
-        pass
+    file_size = _estimate_icon_file_size(output_path)
 
     return {
         "object_name": object_name,
