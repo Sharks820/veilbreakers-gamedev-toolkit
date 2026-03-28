@@ -14,11 +14,15 @@ Tests cover:
 All pure-logic -- no Blender required.
 """
 
+import sys
+import types
+
 import pytest
 
 from blender_addon.handlers.animation_export import (
     MIXAMO_TO_RIGIFY,
     PREVIEW_ANGLES,
+    _attempt_ai_motion_api,
     _generate_unity_filename,
     _map_mixamo_bones,
     _validate_batch_export_params,
@@ -551,6 +555,22 @@ class TestAIMotionStub:
         expected_keys = {"status", "message", "prompt", "model", "frame_count"}
         # Verify the keys are the expected contract
         assert len(expected_keys) == 5
+
+
+class TestAIMotionApiFallback:
+    """Test the private AI motion API helper fallback path."""
+
+    def test_timeout_returns_none(self, monkeypatch):
+        fake_requests = types.ModuleType("requests")
+
+        def _post(*_args, **_kwargs):
+            raise TimeoutError("timeout")
+
+        fake_requests.post = _post
+        monkeypatch.setenv("VB_AI_MOTION_ENDPOINT", "https://example.invalid/motion")
+        monkeypatch.setitem(sys.modules, "requests", fake_requests)
+
+        assert _attempt_ai_motion_api("walk", "hy-motion", 24, 30, "idle", None) is None
 
 
 # ---------------------------------------------------------------------------
