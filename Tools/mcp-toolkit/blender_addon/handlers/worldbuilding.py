@@ -1903,13 +1903,19 @@ def _generate_location_building(
         site_profile = "fortified"
 
     if b_type in {"castle", "fortress", "keep"}:
-        handle_generate_castle({
+        build_result = handle_generate_castle({
             "name": structure_name,
             "outer_size": max(24.0, area * 2.8),
             "keep_size": max(10.0, area * 0.85),
             "tower_count": 4 if area < 40.0 else 6,
             "seed": seed + index * 17,
         })
+        quality = build_result.get("result", {}).get("geometry_quality")
+        if quality and quality != "complete":
+            logger.warning(
+                "Location castle %s generated with partial geometry",
+                structure_name,
+            )
     elif b_type in {
         "house", "cottage", "abandoned_house", "tavern", "inn", "warehouse",
         "market_stall", "stable", "general_store", "dock", "boat_house",
@@ -1933,7 +1939,13 @@ def _generate_location_building(
             params["site_profile"] = site_profile
         if foundation_profile:
             params["foundation_profile"] = foundation_profile
-        handle_generate_building(params)
+        build_result = handle_generate_building(params)
+        quality = build_result.get("result", {}).get("geometry_quality")
+        if quality and quality != "complete":
+            logger.warning(
+                "Location building %s generated with partial geometry",
+                structure_name,
+            )
     else:
         build_params: dict[str, Any] = {
             "name": structure_name,
@@ -1948,10 +1960,17 @@ def _generate_location_building(
             build_params["site_profile"] = site_profile
         if foundation_profile:
             build_params["foundation_profile"] = foundation_profile
-        handle_generate_building(build_params)
+        build_result = handle_generate_building(build_params)
+        quality = build_result.get("result", {}).get("geometry_quality")
+        if quality and quality != "complete":
+            logger.warning(
+                "Location building %s generated with partial geometry",
+                structure_name,
+            )
 
     building_obj = bpy.data.objects.get(structure_name)
     if building_obj is None:
+        logger.warning("Location building %s was not created", structure_name)
         return False
     root_footprint = (
         float(requested_width if b_type not in {"castle", "fortress", "keep"} else max(24.0, area * 2.8)),
