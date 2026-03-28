@@ -133,8 +133,12 @@ def _normalize_map_point(position: list[float] | tuple[float, ...], terrain_size
     y = float(position[1])
     half = terrain_size / 2.0
 
-    # Heuristic: if the user supplied 0..size coordinates, convert to centered space.
-    if 0.0 <= x <= terrain_size and 0.0 <= y <= terrain_size and (x > half or y > half):
+    # Heuristic: shift from 0..size space to centered (-half..+half) space.
+    # We only shift when BOTH coords are in [0, size] AND at least one exceeds
+    # 60% of terrain_size — this avoids false positives for coords that are
+    # already in centered space (e.g. (60,60) on size=100 should stay put).
+    threshold = terrain_size * 0.6
+    if 0.0 <= x <= terrain_size and 0.0 <= y <= terrain_size and (x > threshold or y > threshold):
         return (x - half, y - half)
     return (x, y)
 
@@ -764,6 +768,8 @@ async def _enforce_world_quality(
 
 def _bounds_overlap(a: dict, b: dict, padding: float = 0.0) -> bool:
     """Return True when two 2D room bounds overlap."""
+    if "bounds" not in a or "bounds" not in b:
+        return False
     a_min = a["bounds"]["min"]
     a_max = a["bounds"]["max"]
     b_min = b["bounds"]["min"]
@@ -1720,6 +1726,16 @@ async def blender_texture(
         with open(mask_path, "rb") as f:
             msk_bytes = f.read()
         result = inpaint_texture(img_bytes, msk_bytes, prompt or "", fal_key=settings.fal_key or None)
+        # Save raw image bytes to a temp file so they don't pollute JSON
+        if result.get("image_bytes"):
+            import tempfile as _tmpfile
+            tmp_dir = os.path.join(_tmpfile.gettempdir(), "vb_inpaint")
+            os.makedirs(tmp_dir, exist_ok=True)
+            out_path = os.path.join(tmp_dir, f"inpaint_{id(result)}.png")
+            with open(out_path, "wb") as _f:
+                _f.write(result["image_bytes"])
+            result["image_path"] = out_path
+            del result["image_bytes"]
         return json.dumps(result, indent=2, default=str)
 
     elif action == "hsv_adjust":
@@ -2815,12 +2831,19 @@ async def asset_pipeline(
         )
         import_result = await blender.send_command("execute_code", {"code": import_code})
 
+        # Unwrap execute_code result: {status, result: {output: <actual data>}}
+        inner = import_result
+        if isinstance(import_result, dict):
+            inner = import_result.get("result", import_result)
+            if isinstance(inner, dict) and "output" in inner:
+                inner = inner["output"]
+
         # Extract actual imported names from Blender response
         new_objects = []
         mesh_objects = []
-        if isinstance(import_result, dict):
-            new_objects = import_result.get("new_objects", [])
-            mesh_objects = import_result.get("mesh_objects", [])
+        if isinstance(inner, dict):
+            new_objects = inner.get("new_objects", [])
+            mesh_objects = inner.get("mesh_objects", [])
         imported_name = mesh_objects[0] if mesh_objects else (new_objects[0] if new_objects else _Path(filepath).stem)
 
         result = {
@@ -2861,8 +2884,14 @@ async def asset_pipeline(
             f'mesh_names'
         )
         import_result = await blender.send_command("execute_code", {"code": import_code})
-        if isinstance(import_result, list) and import_result:
-            obj_name = import_result[0]
+        # Unwrap execute_code result: {status, result: {output: <actual data>}}
+        inner = import_result
+        if isinstance(import_result, dict):
+            inner = import_result.get("result", import_result)
+            if isinstance(inner, dict) and "output" in inner:
+                inner = inner["output"]
+        if isinstance(inner, list) and inner:
+            obj_name = inner[0]
         else:
             obj_name = _Path(filepath).stem
 
@@ -3616,6 +3645,8 @@ async def blender_environment(
         params = {}
         if target_interior is not None:
             params["target_interior"] = target_interior
+        # NOTE: blender_environment has no dedicated room_type param, so
+        # the generic 'name' parameter serves as room_type for this action.
         if name is not None:
             params["room_type"] = name
         if density_modifier is not None:

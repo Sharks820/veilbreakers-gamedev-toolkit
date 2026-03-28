@@ -14,7 +14,6 @@ from veilbreakers_mcp.unity_tools._common import (
 from veilbreakers_mcp.shared.unity_templates.pipeline_templates import (
     generate_gitlfs_config,
     generate_gitignore,
-    generate_normal_map_bake_script,
     generate_sprite_atlas_script,
     generate_sprite_animation_script,
     generate_sprite_editor_config_script,
