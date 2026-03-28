@@ -102,6 +102,48 @@ class TestBuildingOpsToMeshSpec:
         assert result[0]["type"] == "opening"
         assert "subtract" in result[0] or "face_construction" in result[0]
 
+    def test_opening_cutout_clamps_to_wall_bounds(self):
+        """Oversized openings are clamped to the parent wall volume."""
+        from blender_addon.handlers.worldbuilding import _opening_to_cutout_spec
+        from blender_addon.handlers._building_grammar import BuildingSpec
+
+        spec = BuildingSpec(
+            footprint=(10, 8),
+            floors=1,
+            style="medieval",
+            operations=[
+                {
+                    "type": "box",
+                    "position": [0.0, 0.0, 0.0],
+                    "size": [10.0, 0.4, 3.0],
+                    "material": "stone",
+                    "role": "wall",
+                },
+                {
+                    "type": "opening",
+                    "wall_index": 0,
+                    "position": [2.0, 0.5],
+                    "size": [20.0, 5.0],
+                    "role": "door",
+                },
+            ],
+        )
+        wall_ops = {
+            (0, 0): {
+                "type": "box",
+                "position": [0.0, 0.0, 0.0],
+                "size": [10.0, 0.4, 3.0],
+            }
+        }
+        opening = _opening_to_cutout_spec(spec.operations[1], wall_ops, spec)
+        assert opening is not None
+        xs = [v[0] for v in opening["vertices"]]
+        ys = [v[1] for v in opening["vertices"]]
+        zs = [v[2] for v in opening["vertices"]]
+        assert max(xs) - min(xs) <= 9.9
+        assert max(ys) - min(ys) <= 0.4
+        assert max(zs) - min(zs) <= 2.9
+
 
 # ---------------------------------------------------------------------------
 # Handler return shape tests (pure-logic verification of output dicts)
