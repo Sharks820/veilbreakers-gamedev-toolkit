@@ -2,7 +2,6 @@
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Literal
 
@@ -151,7 +150,7 @@ async def unity_code(
             source = full_path.read_text(encoding="utf-8")
             # Create backup
             backup_path = str(full_path) + ".bak"
-            Path(backup_path).write_text(source, encoding="utf-8")
+            _write_to_unity(source, f"{script_path}.bak")
             modified, changes = modify_script(
                 source=source,
                 add_usings=add_usings,
@@ -160,7 +159,7 @@ async def unity_code(
                 add_methods=add_methods,
                 add_attributes=add_attributes,
             )
-            full_path.write_text(modified, encoding="utf-8")
+            _write_to_unity(modified, script_path)
             return json.dumps({
                 "status": "success",
                 "action": action,
