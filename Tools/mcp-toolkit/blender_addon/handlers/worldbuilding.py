@@ -1587,6 +1587,15 @@ def _build_building_result(name: str, spec: BuildingSpec) -> dict:
         mat = m.get("material")
         if mat:
             materials.add(mat)
+    opening_marker_count = sum(
+        1 for m in mesh_specs
+        if m.get("type") == "opening" and not m.get("is_cutout")
+    )
+    geometry_issues: list[str] = []
+    if opening_marker_count > 0:
+        geometry_issues.append("opening fallback markers present")
+    if total_verts <= 0 or total_faces <= 0:
+        geometry_issues.append("mesh spec produced no geometry")
     return {
         "name": name,
         "style": spec.style,
@@ -1596,6 +1605,40 @@ def _build_building_result(name: str, spec: BuildingSpec) -> dict:
         "face_count": total_faces,
         "material_count": len(materials),
         "opening_count": opening_count,
+        "opening_marker_count": opening_marker_count,
+        "geometry_quality": "complete" if not geometry_issues else "partial",
+        "geometry_issues": geometry_issues,
+    }
+
+
+def _summarize_live_building_quality(
+    *,
+    expected_openings: int,
+    door_count: int,
+    window_count: int,
+    wall_segment_count: int,
+    foundation_piece_count: int,
+    roof_created: bool,
+    component_count: int,
+) -> dict[str, Any]:
+    """Summarize whether a generated building is structurally complete."""
+    issues: list[str] = []
+    if wall_segment_count <= 0:
+        issues.append("no wall segments were created")
+    if foundation_piece_count <= 0:
+        issues.append("foundation fitment produced no pieces")
+    if not roof_created:
+        issues.append("roof geometry failed to generate")
+    if component_count <= 0:
+        issues.append("no building components were generated")
+    if expected_openings > 0 and (door_count + window_count) != expected_openings:
+        issues.append(
+            f"opening coverage mismatch: expected {expected_openings}, "
+            f"generated {door_count + window_count}"
+        )
+    return {
+        "geometry_quality": "complete" if not issues else "partial",
+        "geometry_issues": issues,
     }
 
 
@@ -1605,11 +1648,20 @@ def _build_castle_result(
     """Build handler return dict for a castle from its spec."""
     roles = [op.get("role") for op in spec.operations]
     component_count = len(set(roles))
+    opening_count = sum(1 for op in spec.operations if op.get("type") == "opening")
+    geometry_issues: list[str] = []
+    if component_count <= 0:
+        geometry_issues.append("no castle components were generated")
+    if opening_count <= 0:
+        geometry_issues.append("castle has no openings")
     return {
         "name": name,
         "component_count": component_count,
         "roles": list(set(roles)),
         "procedural_mesh_count": procedural_mesh_count,
+        "opening_count": opening_count,
+        "geometry_quality": "complete" if not geometry_issues else "partial",
+        "geometry_issues": geometry_issues,
     }
 
 
@@ -3808,6 +3860,7 @@ def handle_generate_building(params: dict) -> dict:
 
     window_count = 0
     door_count = 0
+    roof_created = False
     for opening_idx, opening in enumerate(resolved_openings):
         obj_location, obj_rotation_z = _opening_transform(opening)
         if opening["kind"] == "window":
@@ -3920,6 +3973,7 @@ def handle_generate_building(params: dict) -> dict:
         component_count += 1
         total_verts += len(roof_spec.get("vertices", []))
         total_faces += len(roof_spec.get("faces", []))
+        roof_created = True
 
     facade_result = _apply_modular_facade(
         name,
@@ -4018,6 +4072,21 @@ def handle_generate_building(params: dict) -> dict:
         foundation_profile=foundation_profile,
     )
     component_count += int(foundation_result["created"])
+    quality_result = _summarize_live_building_quality(
+        expected_openings=len(resolved_openings),
+        door_count=door_count,
+        window_count=window_count,
+        wall_segment_count=wall_segment_count,
+        foundation_piece_count=int(foundation_result["created"]),
+        roof_created=roof_created,
+        component_count=component_count,
+    )
+    if quality_result["geometry_issues"]:
+        logger.warning(
+            "Building %s generated with geometry issues: %s",
+            name,
+            "; ".join(quality_result["geometry_issues"]),
+        )
 
     # === INTERIORS ===
     interior_count = 0
@@ -4123,6 +4192,8 @@ def handle_generate_building(params: dict) -> dict:
         "door_count": door_count,
         "window_count": window_count,
         "opening_count": len(resolved_openings),
+        "geometry_quality": quality_result["geometry_quality"],
+        "geometry_issues": quality_result["geometry_issues"],
         "exterior_prop_count": exterior_count,
         "architectural_accent_count": accent_count,
         "site_feature_count": site_feature_count,
@@ -4267,6 +4338,12 @@ def handle_generate_castle(params: dict) -> dict:
         procedural_count += 1
 
     result = _build_castle_result(name, spec, procedural_count)
+    if result["geometry_issues"]:
+        logger.warning(
+            "Castle %s generated with geometry issues: %s",
+            name,
+            "; ".join(result["geometry_issues"]),
+        )
     return {"status": "success", "result": result}
 
 
