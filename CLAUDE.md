@@ -52,7 +52,7 @@ Direct Blender Python execution. `code` param is AST-validated.
 `export_format` (fbx/gltf), `filepath`, `selected_only`, `apply_modifiers`
 
 ### blender_mesh
-Actions: `analyze` | `repair` | `game_check` | `select` | `edit` | `boolean` | `retopo` | `sculpt`
+Actions: `analyze` | `repair` | `game_check` | `select` | `edit` | `boolean` | `retopo` | `sculpt` | `sculpt_brush` | `dyntopo` | `voxel_remesh` | `face_sets` | `multires`
 - analyze: A-F topology grading
 - repair: remove doubles, fix normals, fill holes (`merge_distance`, `max_hole_sides`)
 - game_check: `poly_budget`, `platform`
@@ -61,6 +61,11 @@ Actions: `analyze` | `repair` | `game_check` | `select` | `edit` | `boolean` | `
 - boolean: `cutter_name`, `operation` (DIFFERENCE/UNION/INTERSECT)
 - retopo: `target_faces`, `preserve_sharp`, `use_symmetry`
 - sculpt: `operation` (smooth/inflate/flatten/crease), `strength`, `iterations`
+- sculpt_brush: Advanced sculpt brush operations (clay/pinch/snake_hook/grab), `brush_type`, `radius`, `falloff`
+- dyntopo: Dynamic topology sculpting, `detail_size`, `detail_method`
+- voxel_remesh: Voxel-based remesh, `voxel_size`
+- face_sets: Create/modify face sets for sculpt masking
+- multires: Multires modifier operations, `levels`
 
 ### blender_uv
 Actions: `analyze` | `unwrap` | `unwrap_blender` | `pack` | `lightmap` | `equalize` | `export_layout` | `set_layer` | `ensure_xatlas`
@@ -79,7 +84,7 @@ Actions: `create_pbr` | `mask_region` | `inpaint` | `hsv_adjust` | `blend_seams`
 - validate_palette: Validate dark fantasy palette rules on albedo texture (AAA-03)
 
 ### asset_pipeline
-Actions: `generate_3d` | `generate_building` | `generate_terrain_mesh` | `compose_map` | `compose_interior` | `cleanup` | `generate_lods` | `validate_export` | `tag_metadata` | `batch_process` | `catalog_query` | `catalog_add` | `generate_weapon` | `split_character` | `fit_armor` | `render_equipment_icon` | `import_model` | `import_and_process`
+Actions: `generate_3d` | `generate_building` | `generate_terrain_mesh` | `compose_map` | `compose_interior` | `cleanup` | `generate_lods` | `validate_export` | `tag_metadata` | `batch_process` | `catalog_query` | `catalog_add` | `generate_weapon` | `split_character` | `fit_armor` | `render_equipment_icon` | `import_model` | `import_and_process` | `full_pipeline` | `generate_and_process` | `inspect_external_toolchain` | `configure_external_toolchain`
 - generate_3d: Tripo3D from `prompt` or `image_path` (requires API credits)
 - generate_building: Tripo-powered architecture with dark fantasy presets, `building_type` (tavern/castle/cathedral/tower/house/shop/ruin/gate/bridge/wall_section/dungeon_entrance/shrine), `building_style` (dark_fantasy/gothic/medieval/elven/dwarven/corrupted), `building_size`
 - generate_terrain_mesh: Procedural terrain in Blender, `terrain_preset` (mountains/hills/plains/canyon/volcanic/coastal/swamp), `terrain_size`, `terrain_resolution`, `terrain_height_scale`, `terrain_erosion`
@@ -117,11 +122,23 @@ Actions: `generate_walk` | `generate_fly` | `generate_idle` | `generate_attack` 
 - batch_export: `output_dir`, `naming`, `actions` list
 
 ### blender_environment
-Actions: `generate_terrain` | `paint_terrain` | `carve_river` | `generate_road` | `create_water` | `export_heightmap` | `scatter_vegetation` | `scatter_props` | `create_breakable` | `add_storytelling_props`
+Actions: `generate_terrain` | `paint_terrain` | `carve_river` | `generate_road` | `create_water` | `export_heightmap` | `scatter_vegetation` | `scatter_props` | `create_breakable` | `add_storytelling_props` | `sculpt_terrain`
 - generate_terrain: `terrain_type`, `resolution`, `height_scale`, `erosion`, `erosion_iterations`, `seed`
 - scatter_vegetation: Poisson disk, `rules`, `min_distance`, `max_instances`
 - create_breakable: intact + damaged variants, `prop_type`
 - add_storytelling_props: Add narrative clutter to interior rooms (AAA-05), `target_interior`
+
+### blender_quality
+Actions: `quality_sword` | `quality_axe` | `quality_mace` | `quality_bow` | `quality_shield` | `quality_staff` | `quality_pauldron` | `quality_chestplate` | `quality_gauntlet` | `creature_mouth` | `creature_eyelid` | `creature_paw` | `creature_wing` | `creature_serpent` | `creature_quadruped` | `creature_fantasy` | `riggable_door` | `riggable_chain` | `riggable_flag` | `riggable_chest` | `riggable_chandelier` | `riggable_drawbridge` | `riggable_rope_bridge` | `riggable_hanging_sign` | `riggable_windmill` | `riggable_cage` | `clothing_generate` | `vegetation_tree` | `vegetation_leaf_cards` | `smart_material` | `trim_sheet` | `macro_variation`
+- quality_*: AAA procedural mesh generators for weapons, armor (sword/axe/mace/bow/shield/staff/pauldron/chestplate/gauntlet)
+- creature_*: Creature anatomy generators (mouth/eyelid/paw/wing/serpent/quadruped/fantasy)
+- riggable_*: Interactive prop generators with rig-ready vertex groups (door/chain/flag/chest/chandelier/drawbridge/rope_bridge/hanging_sign/windmill/cage)
+- clothing_generate: Parametric clothing mesh generation, `clothing_type`, `style`
+- vegetation_tree: L-system tree generator, `tree_type`, `height`, `branching`
+- vegetation_leaf_cards: Billboard leaf card generation
+- smart_material: AAA smart material setup, `material_preset`
+- trim_sheet: Trim sheet layout generator
+- macro_variation: Macro detail variation for terrain textures
 
 ### blender_worldbuilding
 Actions: `generate_dungeon` | `generate_cave` | `generate_town` | `generate_building` | `generate_castle` | `generate_ruins` | `generate_interior` | `generate_modular_kit` | `generate_location` | `generate_boss_arena` | `generate_world_graph` | `generate_linked_interior` | `generate_multi_floor_dungeon` | `generate_overrun_variant` | `generate_easter_egg`
