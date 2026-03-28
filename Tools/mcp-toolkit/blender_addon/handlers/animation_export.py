@@ -16,6 +16,7 @@ _generate_unity_filename) are separated for testability without Blender.
 
 from __future__ import annotations
 
+import logging
 import json as _json
 import math
 import os
@@ -29,6 +30,9 @@ from ._action_compat import (
     setup_action_for_armature,
 )
 from ._context import get_3d_context_override
+
+
+logger = logging.getLogger(__name__)
 
 
 def _action_frame_range(action, armature_obj=None) -> list[int]:
@@ -1056,8 +1060,17 @@ def _attempt_ai_motion_api(
             data = resp.json()
             if "keyframes" in data:
                 return data
-    except (ConnectionError, TimeoutError, OSError, ValueError, KeyError):
-        pass
+        logger.debug(
+            "AI motion endpoint %s returned no usable keyframes",
+            endpoint,
+        )
+    except (ConnectionError, TimeoutError, OSError, ValueError, KeyError) as exc:
+        logger.debug(
+            "AI motion request failed for %s: %s",
+            endpoint,
+            exc,
+            exc_info=True,
+        )
 
     return None
 
