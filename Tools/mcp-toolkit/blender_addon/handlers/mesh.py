@@ -21,6 +21,7 @@ falls back to bpy.ops with temp_override for boolean, retopology, and sculpt fil
 
 from __future__ import annotations
 
+import logging
 import math
 import re
 
@@ -29,6 +30,9 @@ import bpy
 import mathutils
 
 from ._context import get_3d_context_override
+
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -3059,8 +3063,8 @@ def handle_exit_sculpt_mode(params: dict) -> dict:
             try:
                 if bpy.context.scene.tool_settings.sculpt.detail_type_method:
                     bpy.ops.sculpt.dynamic_topology_toggle()
-            except (AttributeError, RuntimeError):
-                pass
+            except (AttributeError, RuntimeError) as exc:
+                logger.debug("Failed to disable dyntopo for %s: %s", name, exc, exc_info=True)
         bpy.ops.object.mode_set(mode="OBJECT")
 
     return {
