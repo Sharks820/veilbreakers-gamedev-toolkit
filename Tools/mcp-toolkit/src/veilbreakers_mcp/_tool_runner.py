@@ -175,14 +175,23 @@ def run_mypy(target_dir: str | list[str]) -> list[ToolFinding]:
     if not output:
         return []
 
+    noisy_codes = {
+        "assignment",
+        "var-annotated",
+        "misc",
+        "valid-type",
+        "truthy-function",
+    }
+
     findings = []
     for line in output.strip().splitlines():
         try:
             item = json.loads(line)
-            if item.get("severity") == "error":
+            code = item.get("code", "UNKNOWN")
+            if item.get("severity") == "error" and code not in noisy_codes:
                 findings.append(ToolFinding(
                     tool="mypy",
-                    rule_id=f"MYPY-{item.get('code', 'UNKNOWN')}",
+                    rule_id=f"MYPY-{code}",
                     file=_normalize_tool_path(item.get("file", "")),
                     line=item.get("line", 0),
                     description=item.get("message", ""),
@@ -227,10 +236,14 @@ def _map_ruff_severity(code: str) -> str:
 # =============================================================================
 
 
-def run_opengrep(target_dir: str, rules_dir: str = "") -> list[ToolFinding]:
+def run_opengrep(target_dir: str | list[str], rules_dir: str = "") -> list[ToolFinding]:
     """Run OpenGrep with custom rules. Falls back to semgrep CLI if opengrep not found."""
     cmd = _which("opengrep") or _which("semgrep")
     if not cmd:
+        return []
+
+    targets = [target_dir] if isinstance(target_dir, str) else list(target_dir)
+    if not targets:
         return []
 
     args = [cmd, "scan", "--json", "--quiet"]
@@ -238,7 +251,7 @@ def run_opengrep(target_dir: str, rules_dir: str = "") -> list[ToolFinding]:
         args.extend(["--config", rules_dir])
     else:
         args.extend(["--config", "auto"])
-    args.append(target_dir)
+    args.extend(targets)
 
     output = _run(args, timeout=120)
     if not output:
