@@ -74,7 +74,12 @@ def _load_auto_wire_profile(prefab_type: str) -> dict:
         raise ValueError(
             f"Invalid prefab_type '{prefab_type}': resolved path escapes profiles directory"
         )
-    return json.loads(profile_path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(profile_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Malformed JSON in auto-wire profile '{prefab_type}': {exc}"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------

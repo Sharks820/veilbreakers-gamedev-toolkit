@@ -614,7 +614,7 @@ def _validate_knife_params(params: dict) -> dict:
     except (TypeError, ValueError) as exc:
         raise ValueError("plane_normal must be a 3-element list of numbers") from exc
 
-    if plane_normal[0] == 0.0 and plane_normal[1] == 0.0 and plane_normal[2] == 0.0:
+    if all(abs(c) < 1e-9 for c in plane_normal):
         raise ValueError("plane_normal must not be a zero vector")
 
     return {
