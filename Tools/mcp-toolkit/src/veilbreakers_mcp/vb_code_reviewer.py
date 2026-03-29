@@ -1812,6 +1812,12 @@ def scan_project(
     #   - AST: structural bugs regex can't see (dead fields, uncalled methods)
     #   - External tools: cross-file analysis, taint tracking, type checking
 
+    explicit_file_targets = {
+        _normalize_path(str(Path(path).resolve()))
+        for path in paths
+        if Path(path).is_file()
+    }
+
     all_issues: list[Issue] = []
     scannable_files: list[str] = []
     python_files: list[str] = []
@@ -1851,7 +1857,7 @@ def scan_project(
 
     # Single pass over all eligible files
     for filepath in files:
-        if not _should_scan_file(
+        if filepath not in explicit_file_targets and not _should_scan_file(
             filepath, lang, review_scope=review_scope,
             include_tests=include_tests, include_temp=include_temp,
         ):
@@ -1894,13 +1900,16 @@ def scan_project(
             except Exception:
                 pass
 
-    # --- Layer 3: Language-specific external tool (ONE per language) ---
+    # --- Layer 3: External tools ---
     #
-    # C# → dotnet build with Meziantou+SonarAnalyzer+Unity+NetAnalyzers (single SARIF pass)
-    # Python → ruff (single pass, 900+ rules, replaces pylint+flake8+isort)
-    #
-    # ast-grep and opengrep are NOT separate tools — they're called only if
-    # the primary tool for that language isn't available as fallback.
+    # Python:
+    #   - Ruff is the primary fast lint/smell pass
+    #   - OpenGrep adds cross-file taint/data-flow coverage
+    #   - mypy is strict-only due to cost/noise
+    # C#:
+    #   - dotnet build pass bundles Meziantou + Sonar + Unity + NetAnalyzers
+    #   - OpenGrep provides extra structural/data-flow coverage
+    #   - ast-grep remains fallback if the dotnet analyzer path is unavailable
 
     if review_scope in ("advisory", "strict") and scannable_files:
         try:
@@ -1938,10 +1947,10 @@ def scan_project(
                 for tf in run_ruff(python_files):
                     _merge_tool_finding(tf, allowed_files=python_file_set, category="Quality")
                 tools_used.append("ruff")
-            elif python_files and avail.get("opengrep"):
-                for filepath in python_files:
-                    for tf in run_opengrep(filepath):
-                        _merge_tool_finding(tf, allowed_files=python_file_set, category="Bug")
+
+            if python_files and avail.get("opengrep"):
+                for tf in run_opengrep(python_files):
+                    _merge_tool_finding(tf, allowed_files=python_file_set, category="Bug")
                 tools_used.append("opengrep")
 
             # Python strict-only typing pass
@@ -1960,18 +1969,17 @@ def scan_project(
                     ran_csharp_primary = True
                     break
 
+            if csharp_files and avail.get("opengrep"):
+                for tf in run_opengrep(csharp_files):
+                    _merge_tool_finding(tf, allowed_files=csharp_file_set, category="Bug")
+                tools_used.append("opengrep")
+
             # C# structural fallback
-            if csharp_files and not ran_csharp_primary:
-                if avail.get("ast-grep"):
-                    for filepath in csharp_files:
-                        for tf in run_ast_grep(filepath, "csharp"):
-                            _merge_tool_finding(tf, allowed_files=csharp_file_set, category="Bug")
-                    tools_used.append("ast-grep")
-                if avail.get("opengrep"):
-                    for filepath in csharp_files:
-                        for tf in run_opengrep(filepath):
-                            _merge_tool_finding(tf, allowed_files=csharp_file_set, category="Bug")
-                    tools_used.append("opengrep")
+            if csharp_files and not ran_csharp_primary and avail.get("ast-grep"):
+                for filepath in csharp_files:
+                    for tf in run_ast_grep(filepath, "csharp"):
+                        _merge_tool_finding(tf, allowed_files=csharp_file_set, category="Bug")
+                tools_used.append("ast-grep")
 
             tools_used = list(dict.fromkeys(tools_used))
         except ImportError:
