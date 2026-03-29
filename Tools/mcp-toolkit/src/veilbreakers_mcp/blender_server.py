@@ -2439,7 +2439,8 @@ async def asset_pipeline(
                         "step": f"location_place_{loc.get('name', i)}",
                         "error": str(placement_exc),
                     })
-                steps_completed.append(f"location_{loc.get('name', i)}")
+                # Track that the location mesh was generated (even if positioning failed)
+                steps_completed.append(f"location_mesh_{loc.get('name', i)}")
                 created_objects.append(loc_params["name"])
                 location_results.append({
                     "name": loc_params["name"],

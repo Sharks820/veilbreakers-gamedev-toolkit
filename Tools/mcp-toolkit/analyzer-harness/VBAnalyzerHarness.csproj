@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>11.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest</AnalysisLevel>
+    <ErrorLog>analysis.sarif,version=2.1</ErrorLog>
+    <NoWarn>CS8019;CS0162</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Meziantou.Analyzer" Version="*" PrivateAssets="all" />
+    <PackageReference Include="SonarAnalyzer.CSharp" Version="*" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Unity.Analyzers" Version="*" PrivateAssets="all" />
+  </ItemGroup>
+  <!-- Unity stubs so the code compiles without Unity Engine -->
+  <ItemGroup>
+    <Compile Remove="**" />
+  </ItemGroup>
+</Project>
