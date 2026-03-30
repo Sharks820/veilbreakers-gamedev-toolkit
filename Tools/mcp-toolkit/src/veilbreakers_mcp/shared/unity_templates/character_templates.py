@@ -12,10 +12,7 @@ Script functions return complete C# source strings.
 
 from __future__ import annotations
 
-import re
-
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
-
+from ._cs_sanitize import sanitize_cs_identifier, sanitize_cs_string
 
 _URP_CORE_INCLUDE = '#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"'
 _URP_LIGHTING_INCLUDE = '#include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"'

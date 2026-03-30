@@ -1,0 +1,1104 @@
+{
+  "status": "partial",
+  "map_name": "StarterCity_Overworld_Test",
+  "steps_completed": [
+    "scene_cleared",
+    "terrain_generated",
+    "water_plane",
+    "location_placed_StarterCity",
+    "location_StarterCity",
+    "location_placed_NorthwatchKeep",
+    "location_NorthwatchKeep",
+    "location_placed_HarborTavern",
+    "location_HarborTavern",
+    "location_placed_AcademyAnnex",
+    "location_AcademyAnnex",
+    "location_placed_OldGateRuins",
+    "location_OldGateRuins",
+    "biome_painted",
+    "vegetation_scattered",
+    "props_scattered"
+  ],
+  "steps_failed": [
+    {
+      "step": "river_0",
+      "error": "ERROR [unknown]: 'float' object cannot be interpreted as an integer"
+    },
+    {
+      "step": "road_0",
+      "error": "ERROR [unknown]: 'float' object cannot be interpreted as an integer"
+    },
+    {
+      "step": "road_1",
+      "error": "ERROR [unknown]: 'float' object cannot be interpreted as an integer"
+    },
+    {
+      "step": "road_2",
+      "error": "ERROR [unknown]: 'float' object cannot be interpreted as an integer"
+    }
+  ],
+  "objects_created": [
+    "StarterCity_Overworld_Test_Terrain",
+    "StarterCity_Overworld_Test_Water",
+    "StarterCity",
+    "NorthwatchKeep",
+    "HarborTavern",
+    "AcademyAnnex",
+    "OldGateRuins"
+  ],
+  "locations": [
+    {
+      "name": "StarterCity",
+      "type": "town",
+      "anchor": [
+        19.8,
+        0.0,
+        0.0
+      ],
+      "radius": 40.0,
+      "layout_brief": "terraced fortified waterfront trade city with a market quarter, guild streets, varied rowhouses, and an upper noble ward",
+      "site_profile": "waterfront",
+      "result": {
+        "name": "StarterCity.001",
+        "district_count": 5,
+        "road_cell_count": 479,
+        "plot_count": 6,
+        "landmark_count": 5,
+        "structure_count": 11,
+        "settlement_overlay": {
+          "status": "success",
+          "result": {
+            "name": "StarterCity_SettlementOverlay",
+            "settlement_type": "town",
+            "building_count": 0,
+            "road_count": 10,
+            "prop_count": 86,
+            "perimeter_count": 42,
+            "furniture_count": 0,
+            "light_count": 0,
+            "metadata": {
+              "building_count": 10,
+              "road_count": 10,
+              "prop_count": 86,
+              "perimeter_element_count": 42,
+              "furnished_building_count": 10,
+              "total_furniture_pieces": 109,
+              "light_count": 35,
+              "has_walls": true,
+              "layout_pattern": "waterfront_edge",
+              "layout_brief": "terraced fortified waterfront trade city with a market quarter, guild streets, varied rowhouses, and an upper noble ward",
+              "layout_profile": {
+                "brief": "terraced fortified waterfront trade city with a market quarter, guild streets, varied rowhouses, and an upper noble ward",
+                "signature": "waterfront_edge:y:905",
+                "pattern": "waterfront_edge",
+                "main_axis": "y",
+                "water_edge": "south",
+                "spoke_count": 4,
+                "terrace_count": 2,
+                "district_types": [
+                  "market_quarter",
+                  "port_district",
+                  "noble_quarter",
+                  "military_quarter",
+                  "slums",
+                  "temple_district"
+                ],
+                "district_layouts": {
+                  "market_quarter": "organic",
+                  "noble_quarter": "grid",
+                  "slums": "organic",
+                  "temple_district": "axial",
+                  "military_quarter": "axial",
+                  "port_district": "waterfront_edge"
+                },
+                "density_bias": 0.0
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "NorthwatchKeep",
+      "type": "castle",
+      "anchor": [
+        -32.667,
+        58.775,
+        0.0
+      ],
+      "radius": 28.6,
+      "layout_brief": "ridge citadel overlooking the city and the river mouth",
+      "site_profile": "waterfront",
+      "result": {
+        "name": "NorthwatchKeep",
+        "component_count": 9,
+        "roles": [
+          "foundation",
+          "keep_wing",
+          "gatehouse",
+          "tower",
+          "keep_buttress",
+          "keep",
+          "gatehouse_bastion",
+          "keep_crown",
+          "curtain_wall"
+        ],
+        "procedural_mesh_count": 55
+      }
+    },
+    {
+      "name": "HarborTavern",
+      "type": "building",
+      "anchor": [
+        -53.797,
+        3.932,
+        0.0
+      ],
+      "radius": 20.0,
+      "layout_brief": "busy merchant tavern with broad doors and player-usable room scale",
+      "site_profile": "waterfront",
+      "result": {
+        "name": "HarborTavern",
+        "style": "medieval",
+        "floors": 2,
+        "footprint": [
+          18.0,
+          12.0
+        ],
+        "wall_height": 4.0,
+        "vertex_count": 94064,
+        "face_count": 26751,
+        "component_count": 75,
+        "wall_segment_count": 47,
+        "door_count": 1,
+        "window_count": 23,
+        "opening_count": 24,
+        "exterior_prop_count": 0,
+        "architectural_accent_count": 0,
+        "site_feature_count": 2,
+        "facade_module_count": 1,
+        "facade_chimney_count": 1,
+        "facade_buttress_count": 0,
+        "foundation_piece_count": 0,
+        "foundation_retaining_wall_count": 0,
+        "foundation_stair_count": 0,
+        "interior_room_count": 2,
+        "block_style": "rubble",
+        "roof_style": "gable",
+        "weathering_level": 0.0,
+        "openings": [
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "door",
+            "style": "rounded",
+            "floor": 0,
+            "center": 9.0,
+            "bottom": 0.0,
+            "width": 1.3,
+            "height": 2.56
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 3.3333,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 6.1667,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 9.0,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 11.8333,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 14.6667,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 3.3333,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 6.1667,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 9.0,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 11.8333,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 14.6667,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 3.3333,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 6.1667,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 9.0,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 11.8333,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 14.6667,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 3.9,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 7.3,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 3.9,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 7.3,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 3.9,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 7.3,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 3.9,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 7.3,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          }
+        ],
+        "site_profile": "waterfront"
+      }
+    },
+    {
+      "name": "AcademyAnnex",
+      "type": "building",
+      "anchor": [
+        -43.676,
+        -48.081,
+        0.0
+      ],
+      "radius": 20.0,
+      "layout_brief": "cliffside sorcery annex with tall bays, study rooms, and ritual balconies",
+      "site_profile": "waterfront",
+      "result": {
+        "name": "AcademyAnnex",
+        "style": "medieval",
+        "floors": 3,
+        "footprint": [
+          20.0,
+          14.0
+        ],
+        "wall_height": 4.0,
+        "vertex_count": 148448,
+        "face_count": 42667,
+        "component_count": 102,
+        "wall_segment_count": 53,
+        "door_count": 1,
+        "window_count": 43,
+        "opening_count": 44,
+        "exterior_prop_count": 0,
+        "architectural_accent_count": 0,
+        "site_feature_count": 2,
+        "facade_module_count": 1,
+        "facade_chimney_count": 1,
+        "facade_buttress_count": 0,
+        "foundation_piece_count": 0,
+        "foundation_retaining_wall_count": 0,
+        "foundation_stair_count": 0,
+        "interior_room_count": 3,
+        "block_style": "rubble",
+        "roof_style": "gable",
+        "weathering_level": 0.0,
+        "openings": [
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "door",
+            "style": "rounded",
+            "floor": 0,
+            "center": 10.0,
+            "bottom": 0.0,
+            "width": 1.3,
+            "height": 2.56
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 3.6667,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 6.8333,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 10.0,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 13.1667,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 16.3333,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 3.6667,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 6.8333,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 10.0,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 13.1667,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "front",
+            "wall_index": 0,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 16.3333,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 3.6667,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 6.8333,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 10.0,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 13.1667,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 16.3333,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 3.6667,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 6.8333,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 10.0,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 13.1667,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 16.3333,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 3.6667,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 6.8333,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 10.0,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 13.1667,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "back",
+            "wall_index": 1,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 16.3333,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 3.55,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 6.6,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 9.65,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 3.55,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 6.6,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 9.65,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 3.55,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 6.6,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "left",
+            "wall_index": 2,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 9.65,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 3.55,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 6.6,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 0,
+            "center": 9.65,
+            "bottom": 1.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 3.55,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 6.6,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 1,
+            "center": 9.65,
+            "bottom": 5.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 3.55,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 6.6,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          },
+          {
+            "wall": "right",
+            "wall_index": 3,
+            "kind": "window",
+            "style": "rectangular",
+            "floor": 2,
+            "center": 9.65,
+            "bottom": 9.2,
+            "width": 1.05,
+            "height": 1.28
+          }
+        ],
+        "site_profile": "waterfront"
+      }
+    },
+    {
+      "name": "OldGateRuins",
+      "type": "ruins",
+      "anchor": [
+        -1.814,
+        -63.486,
+        0.0
+      ],
+      "radius": 14.0,
+      "layout_brief": "collapsed outer gate ruins near the southern road",
+      "site_profile": "waterfront",
+      "result": {
+        "name": "OldGateRuins",
+        "original_style": "medieval",
+        "damage_level": 0.48,
+        "debris_count": 27
+      }
+    }
+  ],
+  "interiors": [],
+  "budget_applied": {
+    "profile": "balanced_pc",
+    "terrain_resolution_cap": 384,
+    "vegetation_max_instances": 4500,
+    "prop_density_scale": 0.9,
+    "terrain_size": 220.0,
+    "location_count": 5
+  },
+  "quality_report": {
+    "validated_meshes": 64,
+    "failures": [],
+    "status": "success",
+    "mesh_target_count": 64,
+    "mesh_targets_sample": [
+      "AcademyAnnex_Bridgewalk_0",
+      "AcademyAnnex_Door_front_0",
+      "AcademyAnnex_fence_1",
+      "AcademyAnnex_Floor_0",
+      "AcademyAnnex_Interior_0_bar_counter",
+      "AcademyAnnex_Interior_0_barrel",
+      "AcademyAnnex_Interior_0_Ceiling",
+      "AcademyAnnex_Interior_0_chair",
+      "AcademyAnnex_Interior_0_chair.001",
+      "AcademyAnnex_Interior_0_chair.002",
+      "AcademyAnnex_Interior_0_chair.003",
+      "AcademyAnnex_Interior_0_Doorway",
+      "AcademyAnnex_Interior_0_fireplace",
+      "AcademyAnnex_Interior_0_Floor",
+      "AcademyAnnex_Interior_0_Floor_full",
+      "AcademyAnnex_Interior_0_shelf",
+      "AcademyAnnex_Interior_0_Staircase",
+      "AcademyAnnex_Interior_0_table",
+      "AcademyAnnex_Interior_0_table.001",
+      "AcademyAnnex_Interior_0_Wall_Back"
+    ],
+    "uv_fixed_count": 64,
+    "uv_fixed_sample": [
+      "AcademyAnnex_Bridgewalk_0",
+      "AcademyAnnex_Door_front_0",
+      "AcademyAnnex_fence_1",
+      "AcademyAnnex_Floor_0",
+      "AcademyAnnex_Interior_0_bar_counter",
+      "AcademyAnnex_Interior_0_barrel",
+      "AcademyAnnex_Interior_0_Ceiling",
+      "AcademyAnnex_Interior_0_chair",
+      "AcademyAnnex_Interior_0_chair.001",
+      "AcademyAnnex_Interior_0_chair.002",
+      "AcademyAnnex_Interior_0_chair.003",
+      "AcademyAnnex_Interior_0_Doorway"
+    ],
+    "materials_fixed_count": 61,
+    "materials_fixed_sample": [
+      "AcademyAnnex_Bridgewalk_0",
+      "AcademyAnnex_Door_front_0",
+      "AcademyAnnex_fence_1",
+      "AcademyAnnex_Floor_0",
+      "AcademyAnnex_Interior_0_bar_counter",
+      "AcademyAnnex_Interior_0_barrel",
+      "AcademyAnnex_Interior_0_Ceiling",
+      "AcademyAnnex_Interior_0_chair",
+      "AcademyAnnex_Interior_0_chair.001",
+      "AcademyAnnex_Interior_0_chair.002",
+      "AcademyAnnex_Interior_0_chair.003",
+      "AcademyAnnex_Interior_0_Doorway"
+    ],
+    "lod_generated_count": 64,
+    "lod_generated_sample": [
+      "AcademyAnnex_Bridgewalk_0",
+      "AcademyAnnex_Door_front_0",
+      "AcademyAnnex_fence_1",
+      "AcademyAnnex_Floor_0",
+      "AcademyAnnex_Interior_0_bar_counter",
+      "AcademyAnnex_Interior_0_barrel",
+      "AcademyAnnex_Interior_0_Ceiling",
+      "AcademyAnnex_Interior_0_chair",
+      "AcademyAnnex_Interior_0_chair.001",
+      "AcademyAnnex_Interior_0_chair.002",
+      "AcademyAnnex_Interior_0_chair.003",
+      "AcademyAnnex_Interior_0_Doorway"
+    ]
+  },
+  "next_steps": [
+    "Review the generated city in Blender.",
+    "Run a hero-pass with Tripo only for standout props or landmark pieces.",
+    "Export only after the quality report has no remaining failures."
+  ],
+  "reload_result": {
+    "status": "skipped",
+    "error": "ERROR [security]: Code validation failed: [\"Blocked import: 'importlib' (security restriction)\", \"Unknown import: 'blender_addon.handlers' (not in allowlist)\", \"Unknown import: 'blender_addon.handlers._building_grammar' (not in allowlist)\", \"Unknown import: 'blender_addon.handlers.settlement_generator' (not in allowlist)\", \"Unknown import: 'blender_addon.handlers.worldbuilding' (not in allowlist)\", \"Unknown import: 'blender_addon.handlers.worldbuilding_layout' (not in allowlist)\"]"
+  },
+  "scene_summary": {
+    "object_count": 4887,
+    "facade_object_count": 28,
+    "foundation_object_count": 0,
+    "retaining_wall_count": 0
+  },
+  "viewport_screenshot": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\cowork_bridge\\output\\starter_city_viewport.png"
+}

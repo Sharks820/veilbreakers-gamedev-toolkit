@@ -6,16 +6,15 @@ when the bridge is not connected.
 """
 
 import json
-import logging
 import os
 from pathlib import Path
 from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
-    sanitize_cs_identifier,
+    _write_to_unity, STANDARD_NEXT_STEPS,
 )
+from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 
 from veilbreakers_mcp.shared.unity_templates.editor_templates import (
     generate_recompile_script,
@@ -355,6 +354,15 @@ async def _handle_load_scene(scene_path: str) -> str:
             "status": "error",
             "action": "load_scene",
             "message": "scene_path is required (e.g., 'Assets/Scenes/MainMenu.unity')",
+        })
+
+    # Validate scene_path: must look like a Unity scene path (no injection chars)
+    import re as _re
+    if not _re.match(r'^[A-Za-z0-9_./\- ]+\.unity$', scene_path):
+        return json.dumps({
+            "status": "error",
+            "action": "load_scene",
+            "message": "Invalid scene_path: must match pattern 'Assets/.../*.unity'",
         })
 
     # Try bridge first

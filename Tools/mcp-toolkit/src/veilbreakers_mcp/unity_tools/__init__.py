@@ -18,7 +18,7 @@ from veilbreakers_mcp.unity_tools import ui  # noqa: F401
 from veilbreakers_mcp.unity_tools import scene  # noqa: F401
 from veilbreakers_mcp.unity_tools import gameplay  # noqa: F401
 from veilbreakers_mcp.unity_tools import performance  # noqa: F401
-from veilbreakers_mcp.unity_tools import settings  # noqa: F401
+import veilbreakers_mcp.unity_tools.settings  # noqa: F401
 from veilbreakers_mcp.unity_tools import prefab  # noqa: F401
 from veilbreakers_mcp.unity_tools import assets  # noqa: F401
 from veilbreakers_mcp.unity_tools import code  # noqa: F401

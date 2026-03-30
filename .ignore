@@ -1,0 +1,3 @@
+.claude/worktrees/
+.pytest_cache/
+Tools/mcp-toolkit/pytest-cache-files-*/

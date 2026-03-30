@@ -1,14 +1,12 @@
 """unity_audio tool handler."""
 
 import json
-import logging
-import os
 from pathlib import Path
 from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
+    _write_to_unity, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.audio_templates import (
@@ -405,7 +403,7 @@ async def _handle_audio_setup_adaptive_music(
 ) -> str:
     """Generate adaptive music manager C# script (AUD-06)."""
     script = generate_adaptive_music_script(layers=music_layers)
-    script_path = f"Assets/Scripts/Runtime/Audio/VeilBreakers_AdaptiveMusicManager.cs"
+    script_path = "Assets/Scripts/Runtime/Audio/VeilBreakers_AdaptiveMusicManager.cs"
 
     try:
         abs_path = _write_to_unity(script, script_path)

@@ -35,7 +35,6 @@ Validators:
 
 from __future__ import annotations
 
-import re
 from typing import Optional
 
 from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
@@ -3623,7 +3622,7 @@ def generate_status_effect_system_script(
     if err:
         raise ValueError(err)
 
-    safe_ns = sanitize_cs_identifier(namespace.replace(".", "_"))
+    sanitize_cs_identifier(namespace.replace(".", "_"))
     ns = namespace
 
     status_effect_so_cs = f'''using System;

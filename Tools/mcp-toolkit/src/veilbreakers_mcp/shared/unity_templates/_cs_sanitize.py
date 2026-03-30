@@ -1,6 +1,7 @@
 """Shared C# string sanitization utilities for Unity template generators."""
 
 from __future__ import annotations
+
 import re
 
 

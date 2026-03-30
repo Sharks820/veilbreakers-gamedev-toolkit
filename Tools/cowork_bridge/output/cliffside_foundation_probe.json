@@ -1,0 +1,242 @@
+{
+  "result": {
+    "name": "CliffsideFoundationProbe",
+    "style": "medieval",
+    "floors": 2,
+    "footprint": [
+      14.0,
+      10.0
+    ],
+    "wall_height": 4.0,
+    "vertex_count": 70892,
+    "face_count": 20174,
+    "component_count": 120,
+    "wall_segment_count": 35,
+    "door_count": 1,
+    "window_count": 17,
+    "opening_count": 18,
+    "exterior_prop_count": 0,
+    "architectural_accent_count": 0,
+    "site_feature_count": 5,
+    "facade_module_count": 60,
+    "facade_chimney_count": 1,
+    "facade_buttress_count": 0,
+    "foundation_piece_count": 4,
+    "foundation_retaining_wall_count": 2,
+    "foundation_stair_count": 1,
+    "interior_room_count": 2,
+    "block_style": "rubble",
+    "roof_style": "gable",
+    "weathering_level": 0.0,
+    "openings": [
+      {
+        "wall": "front",
+        "wall_index": 0,
+        "kind": "door",
+        "style": "rounded",
+        "floor": 0,
+        "center": 7.0,
+        "bottom": 0.0,
+        "width": 1.3,
+        "height": 2.56
+      },
+      {
+        "wall": "front",
+        "wall_index": 0,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 1,
+        "center": 3.75,
+        "bottom": 5.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "front",
+        "wall_index": 0,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 1,
+        "center": 7.0,
+        "bottom": 5.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "front",
+        "wall_index": 0,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 1,
+        "center": 10.25,
+        "bottom": 5.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "back",
+        "wall_index": 1,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 0,
+        "center": 3.75,
+        "bottom": 1.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "back",
+        "wall_index": 1,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 0,
+        "center": 7.0,
+        "bottom": 1.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "back",
+        "wall_index": 1,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 0,
+        "center": 10.25,
+        "bottom": 1.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "back",
+        "wall_index": 1,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 1,
+        "center": 3.75,
+        "bottom": 5.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "back",
+        "wall_index": 1,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 1,
+        "center": 7.0,
+        "bottom": 5.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "back",
+        "wall_index": 1,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 1,
+        "center": 10.25,
+        "bottom": 5.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "left",
+        "wall_index": 2,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 0,
+        "center": 3.2333,
+        "bottom": 1.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "left",
+        "wall_index": 2,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 0,
+        "center": 5.9667,
+        "bottom": 1.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "left",
+        "wall_index": 2,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 1,
+        "center": 3.2333,
+        "bottom": 5.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "left",
+        "wall_index": 2,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 1,
+        "center": 5.9667,
+        "bottom": 5.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "right",
+        "wall_index": 3,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 0,
+        "center": 3.2333,
+        "bottom": 1.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "right",
+        "wall_index": 3,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 0,
+        "center": 5.9667,
+        "bottom": 1.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "right",
+        "wall_index": 3,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 1,
+        "center": 3.2333,
+        "bottom": 5.2,
+        "width": 1.05,
+        "height": 1.28
+      },
+      {
+        "wall": "right",
+        "wall_index": 3,
+        "kind": "window",
+        "style": "rectangular",
+        "floor": 1,
+        "center": 5.9667,
+        "bottom": 5.2,
+        "width": 1.05,
+        "height": 1.28
+      }
+    ],
+    "site_profile": "cliffside"
+  },
+  "foundation_names": [
+    "CliffsideFoundationProbe_Foundation",
+    "CliffsideFoundationProbe_Foundation_Stairs",
+    "CliffsideFoundationProbe_Retaining_front",
+    "CliffsideFoundationProbe_Retaining_left"
+  ],
+  "stair_names": [
+    "CliffsideFoundationProbe_Foundation_Stairs"
+  ]
+}

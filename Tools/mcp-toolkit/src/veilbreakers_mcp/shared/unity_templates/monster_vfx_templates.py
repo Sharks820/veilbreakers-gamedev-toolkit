@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
+from ._cs_sanitize import sanitize_cs_identifier
 
 # ---------------------------------------------------------------------------
 # Canonical brand color palette from BrandSystem.cs -- ALL VFX must use these
@@ -382,7 +382,7 @@ def _build_monster_config_entries() -> str:
                 f'                    new AbilityVFXConfig("{ab_name}", "{ab_desc}", '
                 f'{ab_cfg["rate"]}, {ab_cfg["lifetime"]}f, {ab_cfg["size"]}f, '
                 f'ParticleSystemShapeType.{ab_cfg["shape"]}, {ab_cfg["gravity"]}f, '
-                f'{ab_cfg["burst"]}, {ab_cfg["speed"]}f)'
+                f'{ab_cfg["burst"]}, {ab_cfg["speed"]}f)',
             )
 
         brands_str = ", ".join(f'"{b}"' for b in brands)
@@ -393,10 +393,10 @@ def _build_monster_config_entries() -> str:
         lines.append(f"                {_fmt_color(glow_rgba)},")
         lines.append(f"                {_fmt_color(dark_rgba)},")
         lines.append(f"                {_fmt_color(sec_rgba)},")
-        lines.append(f"                new AbilityVFXConfig[] {{")
+        lines.append("                new AbilityVFXConfig[] {")
         lines.append(",\n".join(ability_entries))
-        lines.append(f"                }}")
-        lines.append(f"            ) }},")
+        lines.append("                }")
+        lines.append("            ) },")
     return "\n".join(lines)
 
 
@@ -414,17 +414,17 @@ def _build_hybrid_config_entries() -> str:
             ability_entries.append(
                 f'                    new HybridAbilityConfig("{ab_name}", "{ab_desc}", '
                 f'{ab_cfg["rate"]}, {ab_cfg["lifetime"]}f, {ab_cfg["size"]}f, '
-                f'{ab_cfg["burst"]}, {ab_cfg["speed"]}f)'
+                f'{ab_cfg["burst"]}, {ab_cfg["speed"]}f)',
             )
 
         lines.append(f'            {{ "{hybrid}", new HybridBrandConfig(')
         lines.append(f'                "{hybrid}", {cfg["id"]},')
         lines.append(f'                "{parents[0]}", "{parents[1]}",')
         lines.append(f"                {_fmt_color(p)}, {_fmt_color(g)}, {_fmt_color(d)},")
-        lines.append(f"                new HybridAbilityConfig[] {{")
+        lines.append("                new HybridAbilityConfig[] {")
         lines.append(",\n".join(ability_entries))
-        lines.append(f"                }}")
-        lines.append(f"            ) }},")
+        lines.append("                }")
+        lines.append("            ) },")
     return "\n".join(lines)
 
 
@@ -1350,7 +1350,7 @@ def _build_brand_execute_cs_entries() -> str:
         lines.append(f'                "{brand}", "{cfg["desc"]}",')
         lines.append(f"                {_fmt_color(rgba)}, {_fmt_color(glow)},")
         lines.append(f'                {cfg["burst"]}, {cfg["size"]}f, {cfg["speed"]}f, {cfg["gravity"]}f')
-        lines.append(f"            ) }},")
+        lines.append("            ) },")
     return "\n".join(lines)
 
 

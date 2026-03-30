@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mode": {
+    "build": {
+      "model": "opencode/mimo-v2-pro-free"
+    },
+    "plan": {
+      "model": "opencode/mimo-v2-pro-free"
+    }
+  },
+  "mcp": {
+    "vb-blender": {
+      "type": "local",
+      "command": ["uv", "--directory", "Tools/mcp-toolkit", "run", "vb-blender-mcp"],
+      "environment": {
+        "BLENDER_PORT": "9876",
+        "BLENDER_HOST": "localhost"
+      },
+      "timeout": 30000
+    },
+    "vb-unity": {
+      "type": "local",
+      "command": ["uv", "--directory", "Tools/mcp-toolkit", "run", "vb-unity-mcp"],
+      "environment": {
+        "UNITY_PROJECT_PATH": "C:/Users/Conner/OneDrive/Documents/VeilBreakers3DCurrent"
+      },
+      "timeout": 30000
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "timeout": 15000
+    },
+    "context7": {
+      "type": "local",
+      "command": ["npx", "-y", "@upstash/context7-mcp"],
+      "timeout": 15000
+    },
+    "github": {
+      "type": "local",
+      "command": ["node", "C:/Users/Conner/OneDrive/Documents/VeilBreakers3DCurrent/Tools/mcp/github-mcp-launcher.js"],
+      "timeout": 15000
+    },
+    "desktop-commander": {
+      "type": "local",
+      "command": ["npx", "-y", "@wonderwhy-er/desktop-commander@latest"],
+      "timeout": 60000
+    },
+    "filesystem": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-filesystem", "C:/Users/Conner/OneDrive/Documents/VeilBreakers3DCurrent", "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit"],
+      "timeout": 15000
+    }
+  }
+}

@@ -23,11 +23,9 @@ Helpers (imported from _cs_sanitize):
 
 from __future__ import annotations
 
-import json
 import re
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
-
+from ._cs_sanitize import sanitize_cs_identifier, sanitize_cs_string
 
 # ---------------------------------------------------------------------------
 # C# reserved keywords (for namespace sanitization)
@@ -177,7 +175,7 @@ def generate_so_definition(
     # CreateAssetMenu attribute
     lines.append(
         f'{indent}[CreateAssetMenu(menuName = "VeilBreakers/{safe_menu}", '
-        f'fileName = "{safe_file}")]'
+        f'fileName = "{safe_file}")]',
     )
     lines.append(f"{indent}public class {safe_class} : ScriptableObject")
     lines.append(f"{indent}{{")
@@ -204,14 +202,14 @@ def generate_so_definition(
                 if current_header is not None:
                     lines.append("")
                 lines.append(
-                    f'{indent}    [Header("{sanitize_cs_string(header)}")]'
+                    f'{indent}    [Header("{sanitize_cs_string(header)}")]',
                 )
                 current_header = header
 
             # Tooltip
             if tooltip:
                 lines.append(
-                    f'{indent}    [Tooltip("{sanitize_cs_string(tooltip)}")]'
+                    f'{indent}    [Tooltip("{sanitize_cs_string(tooltip)}")]',
                 )
 
             # Extra attributes
@@ -237,16 +235,16 @@ def generate_so_definition(
                 field_case = safe_name
                 access = "private"
                 lines.append(
-                    f"{indent}    [SerializeField]"
+                    f"{indent}    [SerializeField]",
                 )
                 lines.append(
-                    f"{indent}    {access} {ftype} {field_case}{default_str};"
+                    f"{indent}    {access} {ftype} {field_case}{default_str};",
                 )
             else:
                 field_case = safe_name
                 access = "public"
                 lines.append(
-                    f"{indent}    {access} {ftype} {field_case}{default_str};"
+                    f"{indent}    {access} {ftype} {field_case}{default_str};",
                 )
 
     lines.append(f"{indent}}}")
@@ -300,7 +298,7 @@ def generate_asset_creation_script(
         asset_folder = safe_folder
 
     safe_menu = sanitize_cs_string(
-        menu_path or f"Create {safe_category or safe_class} Configs"
+        menu_path or f"Create {safe_category or safe_class} Configs",
     )
     script_class = f"VeilBreakers_Create{safe_category or safe_class}Configs"
 
@@ -315,7 +313,7 @@ def generate_asset_creation_script(
     lines.append(f"public class {script_class}")
     lines.append("{")
     lines.append(
-        f'    [MenuItem("VeilBreakers/Data/{safe_menu}")]'
+        f'    [MenuItem("VeilBreakers/Data/{safe_menu}")]',
     )
     lines.append("    public static void Execute()")
     lines.append("    {")
@@ -344,10 +342,10 @@ def generate_asset_creation_script(
         for i, asset_data in enumerate(assets):
             var_name = f"asset{i}"
             lines.append(
-                f"        var {var_name} = ScriptableObject.CreateInstance<{safe_class}>();"
+                f"        var {var_name} = ScriptableObject.CreateInstance<{safe_class}>();",
             )
             lines.append(
-                f'        Undo.RegisterCreatedObjectUndo({var_name}, "Create {safe_class}");'
+                f'        Undo.RegisterCreatedObjectUndo({var_name}, "Create {safe_class}");',
             )
 
             # Set fields
@@ -357,11 +355,11 @@ def generate_asset_creation_script(
                     continue
                 if isinstance(field_value, str):
                     lines.append(
-                        f'        {var_name}.{safe_field} = "{sanitize_cs_string(field_value)}";'
+                        f'        {var_name}.{safe_field} = "{sanitize_cs_string(field_value)}";',
                     )
                 elif isinstance(field_value, bool):
                     lines.append(
-                        f"        {var_name}.{safe_field} = {str(field_value).lower()};"
+                        f"        {var_name}.{safe_field} = {str(field_value).lower()};",
                     )
                 elif isinstance(field_value, (int, float)):
                     val = f"{field_value}f" if isinstance(field_value, float) else str(field_value)
@@ -376,23 +374,23 @@ def generate_asset_creation_script(
             asset_file = sanitize_cs_identifier(first_str) if first_str else f"Asset{i}"
             asset_path = f"{asset_folder}/{asset_file}.asset"
             lines.append(
-                f'        string path{i} = "{sanitize_cs_string(asset_path)}";'
+                f'        string path{i} = "{sanitize_cs_string(asset_path)}";',
             )
             lines.append(
-                f"        AssetDatabase.CreateAsset({var_name}, path{i});"
+                f"        AssetDatabase.CreateAsset({var_name}, path{i});",
             )
             lines.append(f"        createdPaths.Add(path{i});")
             lines.append("")
     else:
         # No pre-defined assets; create a single default
         lines.append(
-            f"        var asset = ScriptableObject.CreateInstance<{safe_class}>();"
+            f"        var asset = ScriptableObject.CreateInstance<{safe_class}>();",
         )
         lines.append(
-            f'        Undo.RegisterCreatedObjectUndo(asset, "Create {safe_class}");'
+            f'        Undo.RegisterCreatedObjectUndo(asset, "Create {safe_class}");',
         )
         lines.append(
-            f'        string path = outputFolder + "/New{safe_class}.asset";'
+            f'        string path = outputFolder + "/New{safe_class}.asset";',
         )
         lines.append("        AssetDatabase.CreateAsset(asset, path);")
         lines.append("        createdPaths.Add(path);")
@@ -408,20 +406,20 @@ def generate_asset_creation_script(
         '        string resultJson = "{ \\"status\\": \\"success\\", '
         '\\"created_count\\": " + createdPaths.Count + ", '
         '\\"created_paths\\": [" + string.Join(", ", '
-        'createdPaths.ConvertAll(p => "\\"" + p + "\\"")) + "] }";'
+        'createdPaths.ConvertAll(p => "\\"" + p + "\\"")) + "] }";',
     )
     lines.append(
-        "        File.WriteAllText("
+        "        File.WriteAllText(",
     )
     lines.append(
-        '            Path.Combine(Application.dataPath, "../Temp/vb_result.json"),'
+        '            Path.Combine(Application.dataPath, "../Temp/vb_result.json"),',
     )
     lines.append("            resultJson")
     lines.append("        );")
 
     lines.append(
         f'        Debug.Log("[VeilBreakers] Created " + createdPaths.Count '
-        f'+ " {safe_class} assets");'
+        f'+ " {safe_class} assets");',
     )
     lines.append("    }")
     lines.append("}")
@@ -537,16 +535,16 @@ def generate_json_validator_script(
             # Wrap top-level array for JsonUtility
             lines.append('        // Wrap top-level array for JsonUtility')
             lines.append(
-                f'        string wrappedJson = "{{ \\"items\\": " + jsonText + " }}";'
+                '        string wrappedJson = "{ \\"items\\": " + jsonText + " }";',
             )
             lines.append(
-                f"        var data = JsonUtility.FromJson<{safe_wrapper}>(wrappedJson);"
+                f"        var data = JsonUtility.FromJson<{safe_wrapper}>(wrappedJson);",
             )
             lines.append("        if (data == null || data.items == null)")
             lines.append("        {")
             lines.append(
                 '            results.Add(new VB_ValidationResult { level = "ERROR", '
-                'message = "Failed to parse JSON" });'
+                'message = "Failed to parse JSON" });',
             )
             lines.append("            WriteResults(results);")
             lines.append("            return;")
@@ -567,33 +565,33 @@ def generate_json_validator_script(
                 if required:
                     if ftype == "string":
                         lines.append(
-                            f"            if (string.IsNullOrEmpty(entry.{safe_field}))"
+                            f"            if (string.IsNullOrEmpty(entry.{safe_field}))",
                         )
                         lines.append(
                             f'                results.Add(new VB_ValidationResult {{ level = "ERROR", '
-                            f'message = $"Item [{{index}}]: {safe_field} is required" }});'
+                            f'message = $"Item [{{index}}]: {safe_field} is required" }});',
                         )
                     else:
                         lines.append(
-                            f"            // {safe_field} is required (non-default check)"
+                            f"            // {safe_field} is required (non-default check)",
                         )
 
                 if min_val is not None and ftype in ("int", "float", "double", "long"):
                     lines.append(
-                        f"            if (entry.{safe_field} < {min_val})"
+                        f"            if (entry.{safe_field} < {min_val})",
                     )
                     lines.append(
                         f'                results.Add(new VB_ValidationResult {{ level = "ERROR", '
-                        f'message = $"Item [{{index}}]: {safe_field} must be >= {min_val}, got {{entry.{safe_field}}}" }});'
+                        f'message = $"Item [{{index}}]: {safe_field} must be >= {min_val}, got {{entry.{safe_field}}}" }});',
                     )
 
                 if max_val is not None and ftype in ("int", "float", "double", "long"):
                     lines.append(
-                        f"            if (entry.{safe_field} > {max_val})"
+                        f"            if (entry.{safe_field} > {max_val})",
                     )
                     lines.append(
                         f'                results.Add(new VB_ValidationResult {{ level = "WARNING", '
-                        f'message = $"Item [{{index}}]: {safe_field} exceeds {max_val}, got {{entry.{safe_field}}}" }});'
+                        f'message = $"Item [{{index}}]: {safe_field} exceeds {max_val}, got {{entry.{safe_field}}}" }});',
                     )
 
                 if pattern and ftype == "string":
@@ -603,11 +601,11 @@ def generate_json_validator_script(
                     display_pattern = pattern.replace("\\", "\\\\").replace('"', '\\"')
                     lines.append(
                         f'            if (!string.IsNullOrEmpty(entry.{safe_field}) '
-                        f'&& !Regex.IsMatch(entry.{safe_field}, @"{verbatim_pattern}"))'
+                        f'&& !Regex.IsMatch(entry.{safe_field}, @"{verbatim_pattern}"))',
                     )
                     lines.append(
                         f'                results.Add(new VB_ValidationResult {{ level = "WARNING", '
-                        f'message = $"Item [{{index}}]: {safe_field} does not match pattern {display_pattern}" }});'
+                        f'message = $"Item [{{index}}]: {safe_field} does not match pattern {display_pattern}" }});',
                     )
 
             lines.append("            index++;")
@@ -615,18 +613,18 @@ def generate_json_validator_script(
             lines.append("")
             lines.append(
                 '        results.Add(new VB_ValidationResult { level = "INFO", '
-                'message = $"Validated {data.items.Count} entries, {results.Count} issues found" });'
+                'message = $"Validated {data.items.Count} entries, {results.Count} issues found" });',
             )
         else:
             # Direct JSON without wrapper
             lines.append("        // Direct validation (no wrapper)")
             lines.append(
-                "        if (string.IsNullOrEmpty(jsonText))"
+                "        if (string.IsNullOrEmpty(jsonText))",
             )
             lines.append("        {")
             lines.append(
                 '            results.Add(new VB_ValidationResult { level = "ERROR", '
-                'message = "JSON file is empty" });'
+                'message = "JSON file is empty" });',
             )
             lines.append("        }")
     else:
@@ -636,14 +634,14 @@ def generate_json_validator_script(
         lines.append("        {")
         lines.append(
             '            results.Add(new VB_ValidationResult { level = "ERROR", '
-            'message = "JSON file is empty" });'
+            'message = "JSON file is empty" });',
         )
         lines.append("        }")
         lines.append("        else")
         lines.append("        {")
         lines.append(
             '            results.Add(new VB_ValidationResult { level = "INFO", '
-            'message = "JSON file loaded successfully (" + jsonText.Length + " chars)" });'
+            'message = "JSON file loaded successfully (" + jsonText.Length + " chars)" });',
         )
         lines.append("        }")
 
@@ -659,15 +657,15 @@ def generate_json_validator_script(
     lines.append("        wrapper.results = results;")
     lines.append("        string json = JsonUtility.ToJson(wrapper, true);")
     lines.append(
-        "        File.WriteAllText("
+        "        File.WriteAllText(",
     )
     lines.append(
-        '            Path.Combine(Application.dataPath, "../Temp/vb_result.json"),'
+        '            Path.Combine(Application.dataPath, "../Temp/vb_result.json"),',
     )
     lines.append("            json")
     lines.append("        );")
     lines.append(
-        f'        Debug.Log("[VeilBreakers] {safe_name} validation: " + results.Count + " results");'
+        f'        Debug.Log("[VeilBreakers] {safe_name} validation: " + results.Count + " results");',
     )
     lines.append("    }")
     lines.append("}")
@@ -753,50 +751,50 @@ def generate_json_loader_script(
     if is_array:
         lines.append(
             f"{indent}    public static List<{safe_class}> Load(string resourcePath = "
-            f'"{safe_path}")'
+            f'"{safe_path}")',
         )
         lines.append(f"{indent}    {{")
         lines.append(
-            f'{indent}        var textAsset = Resources.Load<TextAsset>(resourcePath);'
+            f'{indent}        var textAsset = Resources.Load<TextAsset>(resourcePath);',
         )
         lines.append(f"{indent}        if (textAsset == null)")
         lines.append(f"{indent}        {{")
         lines.append(
-            f'{indent}            Debug.LogError("[VeilBreakers] Failed to load: " + resourcePath);'
+            f'{indent}            Debug.LogError("[VeilBreakers] Failed to load: " + resourcePath);',
         )
         lines.append(f"{indent}            return new List<{safe_class}>();")
         lines.append(f"{indent}        }}")
         lines.append("")
         lines.append(
-            f'{indent}        string wrappedJson = "{{ \\"items\\": " + textAsset.text + " }}";'
+            f'{indent}        string wrappedJson = "{{ \\"items\\": " + textAsset.text + " }}";',
         )
         lines.append(
-            f"{indent}        var wrapper = JsonUtility.FromJson<{wrapper_name}>(wrappedJson);"
+            f"{indent}        var wrapper = JsonUtility.FromJson<{wrapper_name}>(wrappedJson);",
         )
         lines.append(
             f"{indent}        return wrapper != null && wrapper.items != null "
-            f"? wrapper.items : new List<{safe_class}>();"
+            f"? wrapper.items : new List<{safe_class}>();",
         )
         lines.append(f"{indent}    }}")
     else:
         lines.append(
             f"{indent}    public static {safe_class} Load(string resourcePath = "
-            f'"{safe_path}")'
+            f'"{safe_path}")',
         )
         lines.append(f"{indent}    {{")
         lines.append(
-            f'{indent}        var textAsset = Resources.Load<TextAsset>(resourcePath);'
+            f'{indent}        var textAsset = Resources.Load<TextAsset>(resourcePath);',
         )
         lines.append(f"{indent}        if (textAsset == null)")
         lines.append(f"{indent}        {{")
         lines.append(
-            f'{indent}            Debug.LogError("[VeilBreakers] Failed to load: " + resourcePath);'
+            f'{indent}            Debug.LogError("[VeilBreakers] Failed to load: " + resourcePath);',
         )
         lines.append(f"{indent}            return null;")
         lines.append(f"{indent}        }}")
         lines.append("")
         lines.append(
-            f"{indent}        return JsonUtility.FromJson<{safe_class}>(textAsset.text);"
+            f"{indent}        return JsonUtility.FromJson<{safe_class}>(textAsset.text);",
         )
         lines.append(f"{indent}    }}")
 
@@ -835,7 +833,7 @@ def generate_localization_setup_script(
     """
     safe_table = sanitize_cs_string(table_name)
     safe_dir = sanitize_cs_string(output_dir)
-    safe_default = sanitize_cs_string(default_locale)
+    sanitize_cs_string(default_locale)
 
     all_locales = [default_locale]
     if locales:
@@ -854,7 +852,7 @@ def generate_localization_setup_script(
     lines.append("")
     lines.append("public class VeilBreakers_SetupLocalization")
     lines.append("{")
-    lines.append(f'    [MenuItem("VeilBreakers/Data/Setup Localization")]')
+    lines.append('    [MenuItem("VeilBreakers/Data/Setup Localization")]')
     lines.append("    public static void Execute()")
     lines.append("    {")
 
@@ -874,13 +872,13 @@ def generate_localization_setup_script(
     lines.append("        }")
     lines.append("")
     lines.append(
-        '        string localesDir = outputDir + "/Locales";'
+        '        string localesDir = outputDir + "/Locales";',
     )
     lines.append("        if (!AssetDatabase.IsValidFolder(localesDir))")
     lines.append('            AssetDatabase.CreateFolder(outputDir, "Locales");')
     lines.append("")
     lines.append(
-        '        string tablesDir = outputDir + "/StringTables";'
+        '        string tablesDir = outputDir + "/StringTables";',
     )
     lines.append("        if (!AssetDatabase.IsValidFolder(tablesDir))")
     lines.append('            AssetDatabase.CreateFolder(outputDir, "StringTables");')
@@ -893,13 +891,13 @@ def generate_localization_setup_script(
         lines.append(f'        // Create locale: {safe_loc}')
         lines.append("        {")
         lines.append(
-            f'            var locale = Locale.CreateLocale(new UnityEngine.Localization.LocaleIdentifier("{safe_loc}"));'
+            f'            var locale = Locale.CreateLocale(new UnityEngine.Localization.LocaleIdentifier("{safe_loc}"));',
         )
         lines.append(
-            f'            string localePath = localesDir + "/{safe_loc}.asset";'
+            f'            string localePath = localesDir + "/{safe_loc}.asset";',
         )
         lines.append(
-            "            AssetDatabase.CreateAsset(locale, localePath);"
+            "            AssetDatabase.CreateAsset(locale, localePath);",
         )
         lines.append("            createdLocales.Add(locale);")
         lines.append("        }")
@@ -908,10 +906,10 @@ def generate_localization_setup_script(
     # Create string table collection
     lines.append("        // Create string table collection")
     lines.append(
-        f"        var collection = LocalizationEditorSettings.CreateStringTableCollection("
+        "        var collection = LocalizationEditorSettings.CreateStringTableCollection(",
     )
     lines.append(f'            "{safe_table}",')
-    lines.append(f"            tablesDir,")
+    lines.append("            tablesDir,")
     lines.append("            createdLocales")
     lines.append("        );")
     lines.append("")
@@ -925,17 +923,17 @@ def generate_localization_setup_script(
     lines.append(
         '        string resultJson = "{ \\"status\\": \\"success\\", '
         f'\\"table_name\\": \\"{safe_table}\\", '
-        '\\"locale_count\\": " + createdLocales.Count + " }";'
+        '\\"locale_count\\": " + createdLocales.Count + " }";',
     )
     lines.append("        File.WriteAllText(")
     lines.append(
-        '            System.IO.Path.Combine(Application.dataPath, "../Temp/vb_result.json"),'
+        '            System.IO.Path.Combine(Application.dataPath, "../Temp/vb_result.json"),',
     )
     lines.append("            resultJson")
     lines.append("        );")
     lines.append(
         f'        Debug.Log("[VeilBreakers] Localization setup complete: '
-        f'{safe_table} with " + createdLocales.Count + " locales");'
+        f'{safe_table} with " + createdLocales.Count + " locales");',
     )
     lines.append("    }")
     lines.append("}")
@@ -983,7 +981,7 @@ def generate_localization_entries_script(
     lines.append("public class VeilBreakers_AddLocalizationEntries")
     lines.append("{")
     lines.append(
-        f'    [MenuItem("VeilBreakers/Data/Add Localization Entries")]'
+        '    [MenuItem("VeilBreakers/Data/Add Localization Entries")]',
     )
     lines.append("    public static void Execute()")
     lines.append("    {")
@@ -995,7 +993,7 @@ def generate_localization_entries_script(
     # Find the string table collection
     lines.append("        // Find string table collection")
     lines.append(
-        f'        var collections = LocalizationEditorSettings.GetStringTableCollections();'
+        '        var collections = LocalizationEditorSettings.GetStringTableCollections();',
     )
     lines.append("        StringTableCollection targetCollection = null;")
     lines.append("        foreach (var c in collections)")
@@ -1011,7 +1009,7 @@ def generate_localization_entries_script(
     lines.append("        {")
     lines.append(
         f'            Debug.LogError("[VeilBreakers] String table collection '
-        f"not found: {safe_table}\");"
+        f"not found: {safe_table}\");",
     )
     lines.append("            return;")
     lines.append("        }")
@@ -1020,13 +1018,13 @@ def generate_localization_entries_script(
     # Get the locale's string table
     lines.append("        // Get string table for locale")
     lines.append(
-        f'        var localeId = new UnityEngine.Localization.LocaleIdentifier("{safe_locale}");'
+        f'        var localeId = new UnityEngine.Localization.LocaleIdentifier("{safe_locale}");',
     )
     lines.append("        var table = targetCollection.GetTable(localeId) as StringTable;")
     lines.append("        if (table == null)")
     lines.append("        {")
     lines.append(
-        f'            Debug.LogError("[VeilBreakers] StringTable not found for locale: {safe_locale}");'
+        f'            Debug.LogError("[VeilBreakers] StringTable not found for locale: {safe_locale}");',
     )
     lines.append("            return;")
     lines.append("        }")
@@ -1040,7 +1038,7 @@ def generate_localization_entries_script(
             lines.append("        try")
             lines.append("        {")
             lines.append(
-                f'            var existing = table.GetEntry("{safe_key}");'
+                f'            var existing = table.GetEntry("{safe_key}");',
             )
             lines.append("            if (existing != null)")
             lines.append("            {")
@@ -1049,7 +1047,7 @@ def generate_localization_entries_script(
             lines.append("            else")
             lines.append("            {")
             lines.append(
-                f'                table.AddEntry("{safe_key}", "{safe_value}");'
+                f'                table.AddEntry("{safe_key}", "{safe_value}");',
             )
             lines.append("                added++;")
             lines.append("            }")
@@ -1058,7 +1056,7 @@ def generate_localization_entries_script(
             lines.append("        {")
             lines.append(
                 f'            Debug.LogWarning("[VeilBreakers] Failed to add entry '
-                f'{safe_key}: " + e.Message);'
+                f'{safe_key}: " + e.Message);',
             )
             lines.append("            failed++;")
             lines.append("        }")
@@ -1074,17 +1072,17 @@ def generate_localization_entries_script(
         '        string resultJson = "{ \\"status\\": \\"success\\", '
         '\\"added\\": " + added + ", '
         '\\"skipped\\": " + skipped + ", '
-        '\\"failed\\": " + failed + " }";'
+        '\\"failed\\": " + failed + " }";',
     )
     lines.append("        File.WriteAllText(")
     lines.append(
-        '            System.IO.Path.Combine(Application.dataPath, "../Temp/vb_result.json"),'
+        '            System.IO.Path.Combine(Application.dataPath, "../Temp/vb_result.json"),',
     )
     lines.append("            resultJson")
     lines.append("        );")
     lines.append(
         '        Debug.Log($"[VeilBreakers] Localization entries: {added} added, '
-        '{skipped} skipped, {failed} failed");'
+        '{skipped} skipped, {failed} failed");',
     )
     lines.append("    }")
     lines.append("}")
@@ -1171,12 +1169,12 @@ def generate_data_authoring_window(
 
     # MenuItem
     lines.append(
-        f'    [MenuItem("VeilBreakers/Tools/{safe_menu}")]'
+        f'    [MenuItem("VeilBreakers/Tools/{safe_menu}")]',
     )
-    lines.append(f"    public static void ShowWindow()")
+    lines.append("    public static void ShowWindow()")
     lines.append("    {")
     lines.append(
-        f'        GetWindow<{safe_window}>("{sanitize_cs_string(safe_window)}");'
+        f'        GetWindow<{safe_window}>("{sanitize_cs_string(safe_window)}");',
     )
     lines.append("    }")
     lines.append("")
@@ -1193,13 +1191,13 @@ def generate_data_authoring_window(
     lines.append("    {")
     lines.append("        _assets.Clear();")
     lines.append(
-        f'        string[] guids = AssetDatabase.FindAssets("t:{safe_so}");'
+        f'        string[] guids = AssetDatabase.FindAssets("t:{safe_so}");',
     )
     lines.append("        foreach (string guid in guids)")
     lines.append("        {")
     lines.append("            string path = AssetDatabase.GUIDToAssetPath(guid);")
     lines.append(
-        f"            var asset = AssetDatabase.LoadAssetAtPath<{safe_so}>(path);"
+        f"            var asset = AssetDatabase.LoadAssetAtPath<{safe_so}>(path);",
     )
     lines.append("            if (asset != null)")
     lines.append("                _assets.Add(asset);")
@@ -1211,7 +1209,7 @@ def generate_data_authoring_window(
     lines.append("    private void OnGUI()")
     lines.append("    {")
     lines.append(
-        f'        GUILayout.Label("{sanitize_cs_string(safe_window)}", EditorStyles.boldLabel);'
+        f'        GUILayout.Label("{sanitize_cs_string(safe_window)}", EditorStyles.boldLabel);',
     )
     lines.append("        EditorGUILayout.Space();")
     lines.append("")
@@ -1234,49 +1232,49 @@ def generate_data_authoring_window(
             pname = f"_new{_to_pascal_case(fname)}"
             if ftype == "string":
                 lines.append(
-                    f'            {pname} = EditorGUILayout.TextField("{safe_label}", {pname});'
+                    f'            {pname} = EditorGUILayout.TextField("{safe_label}", {pname});',
                 )
             elif ftype == "int":
                 lines.append(
-                    f'            {pname} = EditorGUILayout.IntField("{safe_label}", {pname});'
+                    f'            {pname} = EditorGUILayout.IntField("{safe_label}", {pname});',
                 )
             elif ftype == "float":
                 lines.append(
-                    f'            {pname} = EditorGUILayout.FloatField("{safe_label}", {pname});'
+                    f'            {pname} = EditorGUILayout.FloatField("{safe_label}", {pname});',
                 )
             elif ftype == "bool":
                 lines.append(
-                    f'            {pname} = EditorGUILayout.Toggle("{safe_label}", {pname});'
+                    f'            {pname} = EditorGUILayout.Toggle("{safe_label}", {pname});',
                 )
             elif ftype == "Vector2":
                 lines.append(
-                    f'            {pname} = EditorGUILayout.Vector2Field("{safe_label}", {pname});'
+                    f'            {pname} = EditorGUILayout.Vector2Field("{safe_label}", {pname});',
                 )
             elif ftype == "Vector3":
                 lines.append(
-                    f'            {pname} = EditorGUILayout.Vector3Field("{safe_label}", {pname});'
+                    f'            {pname} = EditorGUILayout.Vector3Field("{safe_label}", {pname});',
                 )
             elif ftype == "Vector4":
                 lines.append(
-                    f'            {pname} = EditorGUILayout.Vector4Field("{safe_label}", {pname});'
+                    f'            {pname} = EditorGUILayout.Vector4Field("{safe_label}", {pname});',
                 )
             elif ftype == "Color":
                 lines.append(
-                    f'            {pname} = EditorGUILayout.ColorField("{safe_label}", {pname});'
+                    f'            {pname} = EditorGUILayout.ColorField("{safe_label}", {pname});',
                 )
             elif ftype == "Rect":
                 lines.append(
-                    f'            {pname} = EditorGUILayout.RectField("{safe_label}", {pname});'
+                    f'            {pname} = EditorGUILayout.RectField("{safe_label}", {pname});',
                 )
             else:
                 lines.append(
                     f'            {pname} = ({ftype})EditorGUILayout.ObjectField("{safe_label}", '
-                    f"{pname}, typeof({ftype}), false);"
+                    f"{pname}, typeof({ftype}), false);",
                 )
 
     lines.append("")
     lines.append(
-        '            if (GUILayout.Button("Create Asset"))'
+        '            if (GUILayout.Button("Create Asset"))',
     )
     lines.append("            {")
     lines.append("                CreateNewAsset();")
@@ -1288,7 +1286,7 @@ def generate_data_authoring_window(
     # Existing assets section
     lines.append("        EditorGUILayout.Space();")
     lines.append(
-        '        GUILayout.Label("Existing Assets (" + _assets.Count + ")", EditorStyles.boldLabel);'
+        '        GUILayout.Label("Existing Assets (" + _assets.Count + ")", EditorStyles.boldLabel);',
     )
     lines.append("")
     lines.append("        if (GUILayout.Button(\"Refresh\"))")
@@ -1302,7 +1300,7 @@ def generate_data_authoring_window(
     lines.append("            EditorGUILayout.BeginHorizontal();")
     lines.append(
         "            EditorGUILayout.ObjectField(asset, typeof("
-        f"{safe_so}), false);"
+        f"{safe_so}), false);",
     )
     lines.append("")
     lines.append("            // Inline editing via SerializedObject")
@@ -1314,7 +1312,7 @@ def generate_data_authoring_window(
             fname = sanitize_cs_identifier(field.get("name", ""))
             if fname:
                 lines.append(
-                    f'            EditorGUILayout.PropertyField(so.FindProperty("{fname}"));'
+                    f'            EditorGUILayout.PropertyField(so.FindProperty("{fname}"));',
                 )
 
     lines.append("            if (so.hasModifiedProperties)")
@@ -1324,7 +1322,7 @@ def generate_data_authoring_window(
     lines.append("            }")
     lines.append("")
     lines.append(
-        '            if (GUILayout.Button("Delete", GUILayout.Width(60)))'
+        '            if (GUILayout.Button("Delete", GUILayout.Width(60)))',
     )
     lines.append("                toDelete = asset;")
     lines.append("")
@@ -1340,7 +1338,7 @@ def generate_data_authoring_window(
     lines.append("            string deletePath = AssetDatabase.GetAssetPath(toDelete);")
     lines.append(
         '            if (EditorUtility.DisplayDialog("Delete Asset", '
-        '"Delete " + deletePath + "?", "Delete", "Cancel"))'
+        '"Delete " + deletePath + "?", "Delete", "Cancel"))',
     )
     lines.append("            {")
     lines.append("                AssetDatabase.DeleteAsset(deletePath);")
@@ -1351,7 +1349,7 @@ def generate_data_authoring_window(
 
     # Save all
     lines.append(
-        '        if (GUILayout.Button("Save All Changes"))'
+        '        if (GUILayout.Button("Save All Changes"))',
     )
     lines.append("        {")
     lines.append("            AssetDatabase.SaveAssets();")
@@ -1363,7 +1361,7 @@ def generate_data_authoring_window(
     lines.append("    private void CreateNewAsset()")
     lines.append("    {")
     lines.append(
-        f'        string folder = "{sanitize_cs_string(asset_folder)}";'
+        f'        string folder = "{sanitize_cs_string(asset_folder)}";',
     )
     lines.append("        if (!AssetDatabase.IsValidFolder(folder))")
     lines.append("        {")
@@ -1379,7 +1377,7 @@ def generate_data_authoring_window(
     lines.append("        }")
     lines.append("")
     lines.append(
-        f"        var asset = ScriptableObject.CreateInstance<{safe_so}>();"
+        f"        var asset = ScriptableObject.CreateInstance<{safe_so}>();",
     )
 
     if fields:
@@ -1402,21 +1400,21 @@ def generate_data_authoring_window(
     if name_field:
         lines.append(
             f'        string assetName = string.IsNullOrEmpty(_new{_to_pascal_case(name_field)}) '
-            f'? "New{safe_so}" : _new{_to_pascal_case(name_field)};'
+            f'? "New{safe_so}" : _new{_to_pascal_case(name_field)};',
         )
     else:
         lines.append(
-            f'        string assetName = "New{safe_so}_" + System.DateTime.Now.Ticks;'
+            f'        string assetName = "New{safe_so}_" + System.DateTime.Now.Ticks;',
         )
 
     lines.append(
-        '        string assetPath = folder + "/" + assetName + ".asset";'
+        '        string assetPath = folder + "/" + assetName + ".asset";',
     )
     lines.append("        AssetDatabase.CreateAsset(asset, assetPath);")
     lines.append("        AssetDatabase.SaveAssets();")
     lines.append("        RefreshAssets();")
     lines.append(
-        f'        Debug.Log("[VeilBreakers] Created {safe_so} at " + assetPath);'
+        f'        Debug.Log("[VeilBreakers] Created {safe_so} at " + assetPath);',
     )
     lines.append("    }")
     lines.append("}")

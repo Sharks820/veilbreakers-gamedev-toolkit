@@ -1,13 +1,10 @@
 """unity_qa tool handler."""
 
 import json
-import logging
-import os
-from pathlib import Path
 from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
-    mcp, settings, logger,
+    mcp, logger,
     _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 

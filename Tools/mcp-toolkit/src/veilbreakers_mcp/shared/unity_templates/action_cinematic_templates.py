@@ -19,9 +19,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
-from .cinematic_templates import validate_shots, VALID_TRANSITIONS
-
+from ._cs_sanitize import sanitize_cs_identifier, sanitize_cs_string
+from .cinematic_templates import validate_shots
 
 # ---------------------------------------------------------------------------
 # Action shot types
@@ -152,7 +151,7 @@ def generate_action_cinematic_script(
     validation = validate_shots(shots)
     if not validation["valid"]:
         raise ValueError(
-            f"Invalid shots: {'; '.join(validation['errors'])}"
+            f"Invalid shots: {'; '.join(validation['errors'])}",
         )
 
     # Validate action-specific shot_type values
@@ -161,11 +160,11 @@ def generate_action_cinematic_script(
         if shot_type not in VALID_ACTION_SHOT_TYPES:
             raise ValueError(
                 f"Shot '{shot.get('name', i)}': invalid shot_type '{shot_type}'. "
-                f"Valid: {sorted(VALID_ACTION_SHOT_TYPES)}"
+                f"Valid: {sorted(VALID_ACTION_SHOT_TYPES)}",
             )
 
     safe_name = sanitize_cs_identifier(
-        sequence_name.replace(" ", "_").replace("-", "_")
+        sequence_name.replace(" ", "_").replace("-", "_"),
     )
     safe_name_str = sanitize_cs_string(sequence_name)
     safe_path = sanitize_cs_string(output_path)
@@ -178,15 +177,9 @@ def generate_action_cinematic_script(
         shot_starts.append(current_time)
         current_time += shot.get("duration", 1.0)
 
-    # Determine if any shot needs impulse
-    needs_impulse = any(shot.get("impulse", False) for shot in shots)
     # Determine if any shot uses spline dolly
     needs_spline = any(
         shot.get("shot_type") in ("DollyIn", "DollyOut") for shot in shots
-    )
-    # Determine if any shot uses orbital
-    needs_orbital = any(
-        shot.get("shot_type") == "OrbitalShot" for shot in shots
     )
 
     lines: list[str] = []
@@ -306,7 +299,6 @@ def generate_action_cinematic_script(
                 (cam_pos[0] - cam_tgt[0]) ** 2
                 + (cam_pos[2] - cam_tgt[2]) ** 2
             ) ** 0.5
-            orbit_height = cam_pos[1] - cam_tgt[1]
             lines.append(f"{indent}            orbital_{safe_sname}.Radius = {orbit_radius:.2f}f;")
             lines.append(f"{indent}            orbital_{safe_sname}.OrbitStyle = CinemachineOrbitalFollow.OrbitStyles.Sphere;")
             lines.append(f"{indent}            vcam_{safe_sname}.Follow = lookTarget_{safe_sname}.transform;")
@@ -404,12 +396,12 @@ def generate_action_cinematic_script(
     shot_count = len(shots)
     lines.append(
         f'{indent}            string json = "{{\\"status\\":\\"success\\",\\"sequence_name\\":\\"{safe_name}\\",\\"shot_count\\":{shot_count},'
-        f'\\"total_duration\\":{total_duration},\\"asset_path\\":\\"" + assetPath.Replace("\\\\", "/") + "\\"}}";'
+        f'\\"total_duration\\":{total_duration},\\"asset_path\\":\\"" + assetPath.Replace("\\\\", "/") + "\\"}}";',
     )
     lines.append(f'{indent}            File.WriteAllText("Temp/vb_result.json", json);')
     lines.append(
         f'{indent}            Debug.Log("[VeilBreakers] Action cinematic created: {safe_name_str} '
-        f'with {shot_count} shots (" + assetPath + ")");'
+        f'with {shot_count} shots (" + assetPath + ")");',
     )
 
     # -- Catch --
@@ -418,7 +410,7 @@ def generate_action_cinematic_script(
     lines.append(f"{indent}        {{")
     lines.append(
         f'{indent}            string json = "{{\\"status\\":\\"error\\",\\"action\\":\\"action_cinematic\\",\\"message\\":\\"" '
-        f'+ ex.Message.Replace("\\"", "\\\\\\"") + "\\"}}";'
+        f'+ ex.Message.Replace("\\"", "\\\\\\"") + "\\"}}";',
     )
     lines.append(f'{indent}            File.WriteAllText("Temp/vb_result.json", json);')
     lines.append(f'{indent}            Debug.LogError("[VeilBreakers] Action cinematic creation failed: " + ex.Message);')
@@ -467,7 +459,6 @@ def generate_party_camera_system_script(
         presets = PARTY_CAMERA_PRESETS
 
     safe_class = sanitize_cs_identifier(class_name)
-    safe_class_str = sanitize_cs_string(class_name)
 
     # Build preset enum entries and data arrays
     preset_names = list(presets.keys())

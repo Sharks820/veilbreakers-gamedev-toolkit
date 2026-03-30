@@ -38,7 +38,6 @@ Helpers (imported from _cs_sanitize):
 from __future__ import annotations
 
 import json
-import re
 
 from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
@@ -1423,7 +1422,7 @@ def generate_atomic_import_script(
     if remappings:
         for mat_key, mat_val in remappings.items():
             safe_key = sanitize_cs_string(mat_key)
-            safe_val = sanitize_cs_string(mat_val)
+            sanitize_cs_string(mat_val)
             remap_block += f'''
                 modelImporter.AddRemap(new AssetImporter.SourceAssetIdentifier(typeof(Material), "{safe_key}"), createdMat);
 '''

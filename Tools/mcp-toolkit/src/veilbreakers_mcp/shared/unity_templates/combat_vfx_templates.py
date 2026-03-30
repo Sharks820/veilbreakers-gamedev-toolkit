@@ -11,10 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
+from ._cs_sanitize import sanitize_cs_identifier
 
 # Import canonical brand palette from vfx_templates
-from .vfx_templates import BRAND_PRIMARY_COLORS, BRAND_GLOW_COLORS, BRAND_DARK_COLORS
+from .vfx_templates import BRAND_DARK_COLORS, BRAND_GLOW_COLORS, BRAND_PRIMARY_COLORS
 
 ALL_BRANDS = list(BRAND_PRIMARY_COLORS.keys())
 
@@ -95,9 +95,9 @@ def generate_combo_vfx_script(brand: str = "IRON") -> dict[str, Any]:
         brand = "IRON"
 
     safe_brand = sanitize_cs_identifier(brand)
-    pr = _get_brand_color(brand)
-    gl = _get_glow_color(brand)
-    dk = _get_dark_color(brand)
+    _get_brand_color(brand)
+    _get_glow_color(brand)
+    _get_dark_color(brand)
 
     # Build per-brand finisher particle config blocks -- each brand is
     # visually distinct with unique shapes, sizes, speeds, and sub-emitters.

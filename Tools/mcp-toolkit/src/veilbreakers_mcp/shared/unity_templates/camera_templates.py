@@ -24,10 +24,10 @@ Exports:
 from __future__ import annotations
 
 import re
+
 from typing import Optional
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
-
+from ._cs_sanitize import sanitize_cs_identifier, sanitize_cs_string
 
 # ---------------------------------------------------------------------------
 # C# reserved words (needed for _safe_namespace)
@@ -109,7 +109,7 @@ def generate_cinemachine_setup_script(
     safe_cam_type = sanitize_cs_identifier(camera_type)
     safe_follow = sanitize_cs_string(follow_target)
     safe_look = sanitize_cs_string(look_at_target)
-    safe_ns = sanitize_cs_identifier(namespace.replace(".", ""))
+    sanitize_cs_identifier(namespace.replace(".", ""))
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -225,7 +225,7 @@ def generate_state_driven_camera_script(
             {"state_name": "Combat", "camera_name": "CombatCamera"},
         ]
 
-    safe_name = sanitize_cs_identifier(camera_name)
+    sanitize_cs_identifier(camera_name)
 
     lines: list[str] = []
     lines.append("using UnityEngine;")
@@ -867,7 +867,7 @@ def generate_animator_modifier_script(
     lines.append(f"{indent}        Dictionary<string, AnimatorState> stateMap = new Dictionary<string, AnimatorState>();")
     for state_name in states_to_add:
         safe_state = sanitize_cs_string(state_name)
-        safe_state_id = sanitize_cs_identifier(state_name)
+        sanitize_cs_identifier(state_name)
         lines.append(f'{indent}        stateMap["{safe_state}"] = sm.AddState("{safe_state}");')
     lines.append("")
 

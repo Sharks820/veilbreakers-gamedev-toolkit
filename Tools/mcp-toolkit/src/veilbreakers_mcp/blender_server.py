@@ -6,7 +6,7 @@ import os
 import re
 import threading
 from collections import deque
-from typing import Literal
+from typing import Literal, Any
 
 from mcp.server.fastmcp import FastMCP, Image
 from veilbreakers_mcp.shared.blender_client import BlenderConnection, BlenderCommandError
@@ -33,7 +33,7 @@ from veilbreakers_mcp.shared.fal_client import (
     test_silhouette_readability,
 )
 from veilbreakers_mcp.shared.delight import delight_albedo
-from veilbreakers_mcp.shared.palette_validator import validate_palette as _validate_palette, validate_roughness_map
+from veilbreakers_mcp.shared.palette_validator import validate_palette as _validate_palette
 
 logger = logging.getLogger("veilbreakers_mcp")
 
@@ -723,7 +723,7 @@ async def _enforce_world_quality(
     """Validate and remediate UV/material/LOD quality for generated world meshes."""
     prefixes = _world_quality_prefixes(object_names)
     mesh_targets = await _collect_mesh_targets(blender, prefixes)
-    report = {
+    report: dict[str, Any] = {
         "mesh_targets": mesh_targets,
         "validated_meshes": 0,
         "uv_fixed": [],
@@ -733,7 +733,7 @@ async def _enforce_world_quality(
     }
 
     for mesh_name in mesh_targets:
-        report["validated_meshes"] += 1
+        report["validated_meshes"] += 1  # type: ignore[operator]
         try:
             game_ready = await blender.send_command(
                 "mesh_check_game_ready",
@@ -741,13 +741,12 @@ async def _enforce_world_quality(
             )
             checks = game_ready.get("checks", {}) if isinstance(game_ready, dict) else {}
             has_material = bool(checks.get("materials", {}).get("passed", False))
-            has_uv = bool(checks.get("uv", {}).get("passed", False))
             if not has_material:
                 await blender.send_command(
                     "texture_create_pbr",
                     {"name": mesh_name, "object_name": mesh_name, "texture_size": 1024},
                 )
-                report["materials_fixed"].append(mesh_name)
+                report["materials_fixed"].append(mesh_name)  # type: ignore[append]
 
             uv_report = await blender.send_command(
                 "uv_analyze",
@@ -769,29 +768,29 @@ async def _enforce_world_quality(
                         "uv_unwrap_blender",
                         {"object_name": mesh_name, "method": "smart_project", "angle_limit": 66.0},
                     )
-                report["uv_fixed"].append(mesh_name)
+                report["uv_fixed"].append(mesh_name)  # type: ignore[append]
 
             await blender.send_command(
                 "pipeline_generate_lods",
                 {"object_name": mesh_name, "ratios": lod_ratios or [0.6, 0.3, 0.12]},
             )
-            report["lod_generated"].append(mesh_name)
+            report["lod_generated"].append(mesh_name)  # type: ignore[append]
         except (OSError, ConnectionError, TimeoutError, ValueError, RuntimeError, BlenderCommandError) as exc:
-            report["failures"].append({"object_name": mesh_name, "error": str(exc)})
+            report["failures"].append({"object_name": mesh_name, "error": str(exc)})  # type: ignore[append]
 
-    report["status"] = "success" if not report["failures"] else "partial"
-    report["mesh_target_count"] = len(report["mesh_targets"])
-    report["mesh_targets_sample"] = report["mesh_targets"][:20]
-    report["uv_fixed_count"] = len(report["uv_fixed"])
-    report["uv_fixed_sample"] = report["uv_fixed"][:12]
-    report["materials_fixed_count"] = len(report["materials_fixed"])
-    report["materials_fixed_sample"] = report["materials_fixed"][:12]
-    report["lod_generated_count"] = len(report["lod_generated"])
-    report["lod_generated_sample"] = report["lod_generated"][:12]
-    del report["mesh_targets"]
-    del report["uv_fixed"]
-    del report["materials_fixed"]
-    del report["lod_generated"]
+    report["status"] = "success" if not report["failures"] else "partial"  # type: ignore[index]
+    report["mesh_target_count"] = len(report["mesh_targets"])  # type: ignore[arg-type]
+    report["mesh_targets_sample"] = report["mesh_targets"][:20]  # type: ignore[index]
+    report["uv_fixed_count"] = len(report["uv_fixed"])  # type: ignore[arg-type]
+    report["uv_fixed_sample"] = report["uv_fixed"][:12]  # type: ignore[index]
+    report["materials_fixed_count"] = len(report["materials_fixed"])  # type: ignore[arg-type]
+    report["materials_fixed_sample"] = report["materials_fixed"][:12]  # type: ignore[index]
+    report["lod_generated_count"] = len(report["lod_generated"])  # type: ignore[arg-type]
+    report["lod_generated_sample"] = report["lod_generated"][:12]  # type: ignore[index]
+    del report["mesh_targets"]  # type: ignore[arg-type]
+    del report["uv_fixed"]  # type: ignore[arg-type]
+    del report["materials_fixed"]  # type: ignore[arg-type]
+    del report["lod_generated"]  # type: ignore[arg-type]
     return report
 
 
@@ -1042,6 +1041,12 @@ async def _sample_terrain_height(
     y: float,
 ) -> float:
     """Sample a terrain height in Blender via a safe raycast script."""
+    # Validate terrain_name to prevent code injection
+    import re as _re
+    if not _re.match(r'^[A-Za-z0-9_\-. ]+$', terrain_name):
+        logger.warning("Invalid terrain_name rejected: %s", terrain_name)
+        return 0.0
+
     code = f"""
 import bpy
 from mathutils import Vector
@@ -2316,7 +2321,7 @@ async def asset_pipeline(
         # --- Step 2: Generate terrain ---
         terrain_name = f"{map_name}_Terrain"
         try:
-            t_result = await blender.send_command("env_generate_terrain", {
+            await blender.send_command("env_generate_terrain", {
                 "name": terrain_name,
                 "terrain_type": terrain_cfg.get("preset", "hills"),
                 "resolution": terrain_resolution,
@@ -2439,7 +2444,8 @@ async def asset_pipeline(
                         "step": f"location_place_{loc.get('name', i)}",
                         "error": str(placement_exc),
                     })
-                steps_completed.append(f"location_{loc.get('name', i)}")
+                # Track that the location mesh was generated (even if positioning failed)
+                steps_completed.append(f"location_mesh_{loc.get('name', i)}")
                 created_objects.append(loc_params["name"])
                 location_results.append({
                     "name": loc_params["name"],
@@ -2615,7 +2621,7 @@ async def asset_pipeline(
             })
 
         try:
-            linked_result = await blender.send_command("world_generate_linked_interior", {
+            await blender.send_command("world_generate_linked_interior", {
                 "name": int_name,
                 "building_exterior_bounds": room_plan["building_bounds"],
                 "interior_rooms": room_defs,
@@ -2632,7 +2638,7 @@ async def asset_pipeline(
         for i, room in enumerate(rooms):
             try:
                 room_name = room.get("name", f"Room_{i}")
-                room_result = await blender.send_command("world_generate_interior", {
+                await blender.send_command("world_generate_interior", {
                     "name": f"{int_name}_{room_name}",
                     "room_type": room.get("type", "generic"),
                     "width": room.get("width", 6),

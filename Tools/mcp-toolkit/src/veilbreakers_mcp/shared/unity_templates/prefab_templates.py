@@ -36,9 +36,7 @@ Helpers:
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
-from typing import Optional
 
 from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
@@ -74,7 +72,12 @@ def _load_auto_wire_profile(prefab_type: str) -> dict:
         raise ValueError(
             f"Invalid prefab_type '{prefab_type}': resolved path escapes profiles directory"
         )
-    return json.loads(profile_path.read_text(encoding="utf-8"))
+    try:
+        return json.loads(profile_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(
+            f"Malformed JSON in auto-wire profile '{prefab_type}': {exc}"
+        ) from exc
 
 
 # ---------------------------------------------------------------------------
@@ -1585,10 +1588,10 @@ def generate_joint_setup_script(
                 lparts = str(val).split(",")
                 lmin = lparts[0].strip() if len(lparts) >= 1 else "0"
                 lmax = lparts[1].strip() if len(lparts) >= 2 else "0"
-            config_lines.append(f'            var limits = joint.limits;')
+            config_lines.append('            var limits = joint.limits;')
             config_lines.append(f'            limits.min = {lmin}f;')
             config_lines.append(f'            limits.max = {lmax}f;')
-            config_lines.append(f'            joint.limits = limits;')
+            config_lines.append('            joint.limits = limits;')
         else:
             config_lines.append(f'            // Config (unrecognized): {safe_key} = {safe_val}')
     config_code = "\n".join(config_lines)
