@@ -6,7 +6,11 @@
       "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-blender-mcp"],
       "env": {
         "BLENDER_PORT": "9876",
-        "BLENDER_HOST": "localhost"
+        "BLENDER_HOST": "localhost",
+        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
+        "TRIPO_API_KEY": "${TRIPO_API_KEY}",
+        "FAL_KEY": "${FAL_KEY}"
       }
     },
     "vb-unity": {
@@ -14,7 +18,9 @@
       "command": "uv",
       "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-unity-mcp"],
       "env": {
-        "UNITY_PROJECT_PATH": "C:/Users/Conner/OneDrive/Documents/VeilBreakers3DCurrent"
+        "UNITY_PROJECT_PATH": "C:/Users/Conner/OneDrive/Documents/VeilBreakers3DCurrent",
+        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}"
       }
     }
   }
