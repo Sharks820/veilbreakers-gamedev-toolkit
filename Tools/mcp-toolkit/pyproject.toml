@@ -32,7 +32,6 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "strict"
 
 [tool.coverage.run]
 source = ["src/veilbreakers_mcp"]
