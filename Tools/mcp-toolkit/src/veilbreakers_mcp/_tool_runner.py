@@ -297,7 +297,7 @@ def run_dotnet_analyzers(sln_or_csproj: str) -> list[ToolFinding]:
 
     sarif_path = str(Path(sln_or_csproj).parent / "analysis.sarif")
 
-    output = _run(
+    _run(
         [cmd, "build", sln_or_csproj,
          f"/p:ErrorLog={sarif_path},version=2.1",
          "/p:EnforceCodeStyleInBuild=true",
@@ -330,12 +330,20 @@ def run_dotnet_analyzers(sln_or_csproj: str) -> list[ToolFinding]:
                 line = phys.get("region", {}).get("startLine", 0)
                 level = result.get("level", "warning")
 
-                # Skip compile errors — Unity Engine DLLs not available in standalone build
-                if rule_id.startswith("CS") and level in ("error", "Error"):
+                # Skip Unity Engine DLL errors — these types exist only inside Unity Editor
+                # but keep genuine code errors (syntax, null ref, type mismatch, etc.)
+                _UNITY_DLL_ERROR_CODES = {
+                    "CS0234",  # Type/namespace not found (Unity DLL not present)
+                    "CS0246",  # Type not found (Unity type missing)
+                    "CS0012",  # Type in assembly not referenced
+                    "CS0400",  # Type in undeclared namespace
+                    "CS0518",  # Missing predefined type (Unity dependency)
+                }
+                # Skip Unity-specific noise codes at any level
+                if rule_id in _UNITY_DLL_ERROR_CODES:
                     continue
-                # Skip common compile-context noise
-                if rule_id in ("CS0234", "CS0246", "CS0103", "CS0111", "CS0117",
-                               "CS0012", "CS0400", "CS0518", "CS1061", "CS0535"):
+                # Skip remaining common compile-context noise (only warnings, not errors)
+                if rule_id in ("CS0103", "CS0111", "CS0117", "CS1061", "CS0535"):
                     continue
 
                 # Determine source tool from rule prefix
