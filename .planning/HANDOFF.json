@@ -27,7 +27,9 @@
     {"decision": "CLAUDE.md deduplication approach: strip tool reference docs (lines 25-314) that duplicate MCP server instructions, keep only project structure + workflow rules + planning refs (~40 lines)", "rationale": "MCP servers already inject tool docs via system-reminder. CLAUDE.md duplication wastes ~5,500 tokens/turn.", "phase": "meta"},
     {"decision": "Research agent set to ON (user corrected OFF recommendation)", "rationale": "User wants Context7 integration and thorough research. Quality over token savings.", "phase": "meta"},
     {"decision": "All HIGH-priority tools to be integrated: Context7, zai analyze_image, zai ui_diff_check, zai diagnose_error_screenshot, web-search-prime, web-reader", "rationale": "User explicitly wants everything except LOW impact items", "phase": "meta"},
-    {"decision": "Global GSD defaults saved to ~/.gsd/defaults.json", "rationale": "Same settings for all future projects", "phase": "meta"}
+    {"decision": "Global GSD defaults saved to ~/.gsd/defaults.json", "rationale": "Same settings for all future projects", "phase": "meta"},
+    {"decision": "Agent skill injection configured — .claude/skills/vb-mcp-tools/SKILL.md injected into executor, planner, researcher, verifier, UI researcher, debugger", "rationale": "GSD subagents need to know about 37 MCP tools to make correct decisions", "phase": "meta"},
+    {"decision": "Frontend-design skill bridged to Unity UI Toolkit — design thinking applies but output targets UXML/USS/C#/PrimeTween", "rationale": "Skill's design quality boost is valuable but needs Unity implementation, not web", "phase": "meta"}
   ],
   "uncommitted_files": [".planning/config.json", ".planning/HANDOFF.json"],
   "next_action": "Continue task #2: Write slim CLAUDE.md (~40 lines, stripping tool reference duplication). Then prune memory, test Context7, test zai, create codebase maps, update STATE.md.",

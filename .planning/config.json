@@ -24,5 +24,13 @@
   "hooks": {
     "context_warnings": true,
     "workflow_guard": true
+  },
+  "agent_skills": {
+    "gsd-executor": [".claude/skills/vb-mcp-tools"],
+    "gsd-planner": [".claude/skills/vb-mcp-tools"],
+    "gsd-phase-researcher": [".claude/skills/vb-mcp-tools"],
+    "gsd-verifier": [".claude/skills/vb-mcp-tools"],
+    "gsd-ui-researcher": [".claude/skills/vb-mcp-tools"],
+    "gsd-debugger": [".claude/skills/vb-mcp-tools"]
   }
 }
