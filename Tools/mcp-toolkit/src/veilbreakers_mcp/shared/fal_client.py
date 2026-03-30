@@ -12,7 +12,7 @@ Gracefully handles missing fal-client package.
 from __future__ import annotations
 
 import io
-import math
+import os
 from typing import Any, Sequence
 
 from PIL import Image, ImageDraw, ImageFont
@@ -77,8 +77,6 @@ def generate_concept_art(
             "status": "unavailable",
             "message": "fal-client package not installed. Run: pip install fal-client",
         }
-
-    import os
 
     try:
         styled_prompt = f"{style} style, {prompt}"
@@ -279,9 +277,9 @@ def compose_style_board(
 
     # Draw title
     try:
-        font = ImageFont.truetype("arial.ttf", 32)
+        font = ImageFont.truetype("arial.ttf", 32)  # type: ignore[assignment]
     except (IOError, OSError):
-        font = ImageFont.load_default()
+        font = ImageFont.load_default()  # type: ignore[assignment]
 
     draw.text((padding, padding), title, fill=(255, 255, 255), font=font)
 

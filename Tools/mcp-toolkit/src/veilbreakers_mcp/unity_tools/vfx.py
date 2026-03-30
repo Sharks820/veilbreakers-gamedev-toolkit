@@ -1,14 +1,11 @@
 """unity_vfx tool handler."""
 
 import json
-import logging
-import os
-from pathlib import Path
 from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
-    mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
+    mcp, logger,
+    _write_to_unity, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.vfx_templates import (
@@ -30,8 +27,6 @@ from veilbreakers_mcp.shared.unity_templates.shader_templates import (
     generate_foliage_shader,
     generate_outline_shader,
     generate_damage_overlay_shader,
-    generate_arbitrary_shader,
-    generate_renderer_feature,
 )
 from veilbreakers_mcp.shared.unity_templates.vfx_mastery_templates import (
     generate_flipbook_script,
@@ -532,7 +527,7 @@ async def _handle_vfx_screen_effect(effect_type: str, intensity: float) -> str:
             {"status": "error", "action": "create_screen_effect", "message": str(exc)}
         )
 
-    label = effect_type.replace("_", " ").title()
+    effect_type.replace("_", " ").title()
 
     return json.dumps(
         {

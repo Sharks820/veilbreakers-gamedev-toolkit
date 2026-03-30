@@ -1,0 +1,975 @@
+[
+  {
+    "rule": "BUG-43",
+    "file": "GambitCondition.cs",
+    "line": 350,
+    "severity": "LOW",
+    "msg": "Float equality comparison -- use Mathf.Approximately"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "GambitCondition.cs",
+    "line": 370,
+    "severity": "LOW",
+    "msg": "Float equality comparison -- use Mathf.Approximately"
+  },
+  {
+    "rule": "ITER-01",
+    "file": "GambitCondition.cs",
+    "line": 633,
+    "severity": "HIGH",
+    "msg": "Modifying collection during iteration -- InvalidOperationException"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "GambitController.cs",
+    "line": 829,
+    "severity": "LOW",
+    "msg": "Float equality comparison -- use Mathf.Approximately"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "AudioManager.cs",
+    "line": 260,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "AudioManager.cs",
+    "line": 603,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "BUG-27",
+    "file": "AudioTriggers.cs",
+    "line": 415,
+    "severity": "MEDIUM",
+    "msg": "Vector3.Distance in loop -- use sqrMagnitude to avoid sqrt"
+  },
+  {
+    "rule": "UNITY-15",
+    "file": "VB_UISoundManager.cs",
+    "line": 95,
+    "severity": "LOW",
+    "msg": "Singleton MonoBehaviour missing [DisallowMultipleComponent]"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "VERAVoiceController.cs",
+    "line": 327,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "BUG-27",
+    "file": "QuickCommandManager.cs",
+    "line": 614,
+    "severity": "MEDIUM",
+    "msg": "Vector3.Distance in loop -- use sqrMagnitude to avoid sqrt"
+  },
+  {
+    "rule": "BUG-27",
+    "file": "QuickCommandManager.cs",
+    "line": 679,
+    "severity": "MEDIUM",
+    "msg": "Vector3.Distance in loop -- use sqrMagnitude to avoid sqrt"
+  },
+  {
+    "rule": "BUG-27",
+    "file": "QuickCommandManager.cs",
+    "line": 702,
+    "severity": "MEDIUM",
+    "msg": "Vector3.Distance in loop -- use sqrMagnitude to avoid sqrt"
+  },
+  {
+    "rule": "BUG-27",
+    "file": "QuickCommandManager.cs",
+    "line": 716,
+    "severity": "MEDIUM",
+    "msg": "Vector3.Distance in loop -- use sqrMagnitude to avoid sqrt"
+  },
+  {
+    "rule": "ITER-01",
+    "file": "QuickCommandManager.cs",
+    "line": 535,
+    "severity": "HIGH",
+    "msg": "Modifying collection during iteration -- InvalidOperationException"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "RadialMenuController.cs",
+    "line": 451,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "RadialMenuController.cs",
+    "line": 452,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "RadialMenuController.cs",
+    "line": 453,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "RadialMenuController.cs",
+    "line": 454,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "RadialMenuController.cs",
+    "line": 455,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "RadialMenuController.cs",
+    "line": 451,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "RadialMenuController.cs",
+    "line": 452,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "RadialMenuController.cs",
+    "line": 453,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "RadialMenuController.cs",
+    "line": 454,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "RadialMenuController.cs",
+    "line": 455,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "SEC-03",
+    "file": "GameDatabase.cs",
+    "line": 180,
+    "severity": "HIGH",
+    "msg": "JsonUtility.FromJson on untrusted input -- validate schema"
+  },
+  {
+    "rule": "SEC-03",
+    "file": "GameDatabase.cs",
+    "line": 223,
+    "severity": "HIGH",
+    "msg": "JsonUtility.FromJson on untrusted input -- validate schema"
+  },
+  {
+    "rule": "SEC-03",
+    "file": "GameDatabase.cs",
+    "line": 266,
+    "severity": "HIGH",
+    "msg": "JsonUtility.FromJson on untrusted input -- validate schema"
+  },
+  {
+    "rule": "SEC-03",
+    "file": "GameDatabase.cs",
+    "line": 309,
+    "severity": "HIGH",
+    "msg": "JsonUtility.FromJson on untrusted input -- validate schema"
+  },
+  {
+    "rule": "TASK-01",
+    "file": "GameDatabase.cs",
+    "line": 204,
+    "severity": "HIGH",
+    "msg": "Returning Task.CompletedTask in catch block -- caller cannot detect the failure"
+  },
+  {
+    "rule": "TASK-01",
+    "file": "GameDatabase.cs",
+    "line": 247,
+    "severity": "HIGH",
+    "msg": "Returning Task.CompletedTask in catch block -- caller cannot detect the failure"
+  },
+  {
+    "rule": "TASK-01",
+    "file": "GameDatabase.cs",
+    "line": 290,
+    "severity": "HIGH",
+    "msg": "Returning Task.CompletedTask in catch block -- caller cannot detect the failure"
+  },
+  {
+    "rule": "TASK-01",
+    "file": "GameDatabase.cs",
+    "line": 333,
+    "severity": "HIGH",
+    "msg": "Returning Task.CompletedTask in catch block -- caller cannot detect the failure"
+  },
+  {
+    "rule": "PERF-26",
+    "file": "ItemData.cs",
+    "line": 109,
+    "severity": "MEDIUM",
+    "msg": "String.Contains without StringComparison -- culture-sensitive by default"
+  },
+  {
+    "rule": "PERF-26",
+    "file": "ItemData.cs",
+    "line": 110,
+    "severity": "MEDIUM",
+    "msg": "String.Contains without StringComparison -- culture-sensitive by default"
+  },
+  {
+    "rule": "SEC-03",
+    "file": "SaveFileHandler.cs",
+    "line": 154,
+    "severity": "HIGH",
+    "msg": "JsonUtility.FromJson on untrusted input -- validate schema"
+  },
+  {
+    "rule": "QUAL-06",
+    "file": "SaveFileHandler.cs",
+    "line": 248,
+    "severity": "LOW",
+    "msg": "Empty catch block swallows exception silently"
+  },
+  {
+    "rule": "QUAL-06",
+    "file": "SaveFileHandler.cs",
+    "line": 261,
+    "severity": "LOW",
+    "msg": "Empty catch block swallows exception silently"
+  },
+  {
+    "rule": "QUAL-06",
+    "file": "SaveFileHandler.cs",
+    "line": 410,
+    "severity": "LOW",
+    "msg": "Empty catch block swallows exception silently"
+  },
+  {
+    "rule": "ASYNC-02",
+    "file": "SaveFileHandler.cs",
+    "line": 206,
+    "severity": "HIGH",
+    "msg": "Async operation result ignored -- failure goes undetected"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "SaveManager.cs",
+    "line": 467,
+    "severity": "LOW",
+    "msg": "Float equality comparison -- use Mathf.Approximately"
+  },
+  {
+    "rule": "SAVE-02",
+    "file": "SaveManager.cs",
+    "line": 300,
+    "severity": "CRITICAL",
+    "msg": "File/slot deleted before replacement write is verified -- data loss on write failure"
+  },
+  {
+    "rule": "SEC-03",
+    "file": "SettingsManager.cs",
+    "line": 61,
+    "severity": "HIGH",
+    "msg": "JsonUtility.FromJson on untrusted input -- validate schema"
+  },
+  {
+    "rule": "ITER-01",
+    "file": "StatusEffectManager.cs",
+    "line": 823,
+    "severity": "HIGH",
+    "msg": "Modifying collection during iteration -- InvalidOperationException"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "StatusEffectManager.cs",
+    "line": 46,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "BrandSystem.cs",
+    "line": 19,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "BrandSystem.cs",
+    "line": 31,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "BrandSystem.cs",
+    "line": 48,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "BrandSystem.cs",
+    "line": 121,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "SynergySystem.cs",
+    "line": 28,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "SynergySystem.cs",
+    "line": 37,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "UNITY-19",
+    "file": "VB_AoEVFX_ground_circle_RUIN.cs",
+    "line": 242,
+    "severity": "HIGH",
+    "msg": "Shader.Find() at runtime -- returns null if shader not in Always Included list"
+  },
+  {
+    "rule": "VFX-01",
+    "file": "VB_AoEVFX_ground_circle_RUIN.cs",
+    "line": 242,
+    "severity": "MEDIUM",
+    "msg": "Runtime material created with new Material() -- must Destroy() in OnDestroy to avoid GPU leak"
+  },
+  {
+    "rule": "BUG-12",
+    "file": "VB_HitVFX_SAVAGE.cs",
+    "line": 79,
+    "severity": "MEDIUM",
+    "msg": "Coroutine started but never stopped -- potential memory leak"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "VB_HitVFX_SAVAGE.cs",
+    "line": 105,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "UNITY-19",
+    "file": "VB_HitVFX_SAVAGE.cs",
+    "line": 157,
+    "severity": "HIGH",
+    "msg": "Shader.Find() at runtime -- returns null if shader not in Always Included list"
+  },
+  {
+    "rule": "UNITY-19",
+    "file": "VB_HitVFX_SAVAGE.cs",
+    "line": 186,
+    "severity": "HIGH",
+    "msg": "Shader.Find() at runtime -- returns null if shader not in Always Included list"
+  },
+  {
+    "rule": "VFX-01",
+    "file": "VB_HitVFX_SAVAGE.cs",
+    "line": 157,
+    "severity": "MEDIUM",
+    "msg": "Runtime material created with new Material() -- must Destroy() in OnDestroy to avoid GPU leak"
+  },
+  {
+    "rule": "VFX-01",
+    "file": "VB_HitVFX_SAVAGE.cs",
+    "line": 186,
+    "severity": "MEDIUM",
+    "msg": "Runtime material created with new Material() -- must Destroy() in OnDestroy to avoid GPU leak"
+  },
+  {
+    "rule": "UNITY-19",
+    "file": "VB_StatusVFX_SURGE.cs",
+    "line": 54,
+    "severity": "HIGH",
+    "msg": "Shader.Find() at runtime -- returns null if shader not in Always Included list"
+  },
+  {
+    "rule": "UNITY-19",
+    "file": "VB_StatusVFX_SURGE.cs",
+    "line": 145,
+    "severity": "HIGH",
+    "msg": "Shader.Find() at runtime -- returns null if shader not in Always Included list"
+  },
+  {
+    "rule": "UNITY-19",
+    "file": "VB_StatusVFX_SURGE.cs",
+    "line": 171,
+    "severity": "HIGH",
+    "msg": "Shader.Find() at runtime -- returns null if shader not in Always Included list"
+  },
+  {
+    "rule": "VFX-01",
+    "file": "VB_StatusVFX_SURGE.cs",
+    "line": 54,
+    "severity": "MEDIUM",
+    "msg": "Runtime material created with new Material() -- must Destroy() in OnDestroy to avoid GPU leak"
+  },
+  {
+    "rule": "VFX-01",
+    "file": "VB_StatusVFX_SURGE.cs",
+    "line": 145,
+    "severity": "MEDIUM",
+    "msg": "Runtime material created with new Material() -- must Destroy() in OnDestroy to avoid GPU leak"
+  },
+  {
+    "rule": "VFX-01",
+    "file": "VB_StatusVFX_SURGE.cs",
+    "line": 171,
+    "severity": "MEDIUM",
+    "msg": "Runtime material created with new Material() -- must Destroy() in OnDestroy to avoid GPU leak"
+  },
+  {
+    "rule": "BUG-11",
+    "file": "CharacterSelectManager.cs",
+    "line": 785,
+    "severity": "HIGH",
+    "msg": "async void method -- exceptions are silently swallowed"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "CharacterSelectManager.cs",
+    "line": 1222,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "GAME-02",
+    "file": "CharacterSelectManager.cs",
+    "line": 798,
+    "severity": "HIGH",
+    "msg": "AudioSource.PlayClipAtPoint creates hidden GameObject -- use audio pool"
+  },
+  {
+    "rule": "SAVE-02",
+    "file": "CharacterSelectManager.cs",
+    "line": 880,
+    "severity": "CRITICAL",
+    "msg": "File/slot deleted before replacement write is verified -- data loss on write failure"
+  },
+  {
+    "rule": "ASYNC-02",
+    "file": "CharacterSelectManager.cs",
+    "line": 897,
+    "severity": "HIGH",
+    "msg": "Async operation result ignored -- failure goes undetected"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "CharSelectVisualEnhancer.cs",
+    "line": 605,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "UNITY-19",
+    "file": "HeroStageController.cs",
+    "line": 293,
+    "severity": "HIGH",
+    "msg": "Shader.Find() at runtime -- returns null if shader not in Always Included list"
+  },
+  {
+    "rule": "UNITY-19",
+    "file": "HeroStageController.cs",
+    "line": 294,
+    "severity": "HIGH",
+    "msg": "Shader.Find() at runtime -- returns null if shader not in Always Included list"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "HeroStatsPanelController.cs",
+    "line": 40,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "HoldToEmbarkController.cs",
+    "line": 283,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "HoldToEmbarkController.cs",
+    "line": 386,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "HoldToEmbarkController.cs",
+    "line": 394,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "HoldToEmbarkController.cs",
+    "line": 415,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "HoldToEmbarkController.cs",
+    "line": 442,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "HoldToEmbarkController.cs",
+    "line": 450,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "UNITY-23",
+    "file": "HoldToEmbarkController.cs",
+    "line": 615,
+    "severity": "MEDIUM",
+    "msg": "TMP_Text.text assigned in Update -- allocates string every frame"
+  },
+  {
+    "rule": "BUG-22",
+    "file": "VolumeProfileTransitioner.cs",
+    "line": 125,
+    "severity": "MEDIUM",
+    "msg": "Instantiate without parent transform -- world-space recalculation"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "CaptureBannerController.cs",
+    "line": 266,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "CaptureBannerController.cs",
+    "line": 283,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "CaptureBannerController.cs",
+    "line": 307,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "UNITY-23",
+    "file": "CaptureBannerController.cs",
+    "line": 216,
+    "severity": "MEDIUM",
+    "msg": "TMP_Text.text assigned in Update -- allocates string every frame"
+  },
+  {
+    "rule": "UNITY-23",
+    "file": "CaptureBannerController.cs",
+    "line": 227,
+    "severity": "MEDIUM",
+    "msg": "TMP_Text.text assigned in Update -- allocates string every frame"
+  },
+  {
+    "rule": "UNITY-23",
+    "file": "CaptureBannerController.cs",
+    "line": 240,
+    "severity": "MEDIUM",
+    "msg": "TMP_Text.text assigned in Update -- allocates string every frame"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "SkillSlotController.cs",
+    "line": 364,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "SkillSlotController.cs",
+    "line": 365,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "SkillSlotController.cs",
+    "line": 366,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "SkillSlotController.cs",
+    "line": 367,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "SkillSlotController.cs",
+    "line": 368,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "SkillSlotController.cs",
+    "line": 369,
+    "severity": "MEDIUM",
+    "msg": "Closure allocation in lambda/delegate in hot path"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "SkillSlotController.cs",
+    "line": 294,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "SkillSlotController.cs",
+    "line": 317,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "SkillSlotController.cs",
+    "line": 380,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "SkillSlotController.cs",
+    "line": 386,
+    "severity": "LOW",
+    "msg": "SetActive toggling in hot path -- consider CanvasGroup.alpha"
+  },
+  {
+    "rule": "UNITY-23",
+    "file": "SkillSlotController.cs",
+    "line": 300,
+    "severity": "MEDIUM",
+    "msg": "TMP_Text.text assigned in Update -- allocates string every frame"
+  },
+  {
+    "rule": "UNITY-23",
+    "file": "SkillSlotController.cs",
+    "line": 310,
+    "severity": "MEDIUM",
+    "msg": "TMP_Text.text assigned in Update -- allocates string every frame"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "ButtonVFXHelper.cs",
+    "line": 23,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "ButtonVFXHelper.cs",
+    "line": 28,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "ButtonVFXHelper.cs",
+    "line": 33,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "ButtonVFXHelper.cs",
+    "line": 39,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "ButtonVFXHelper.cs",
+    "line": 45,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "ButtonVFXHelper.cs",
+    "line": 51,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "ButtonVFXHelper.cs",
+    "line": 58,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "ButtonVFXHelper.cs",
+    "line": 63,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "ButtonVFXHelper.cs",
+    "line": 68,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "UNITY-15",
+    "file": "FPSCounter.cs",
+    "line": 12,
+    "severity": "LOW",
+    "msg": "Singleton MonoBehaviour missing [DisallowMultipleComponent]"
+  },
+  {
+    "rule": "BUG-39",
+    "file": "TitleScreenVFX.cs",
+    "line": 1037,
+    "severity": "CRITICAL",
+    "msg": "new RenderTexture() without Release -- leaks native GPU memory"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "HeroMonsterPairPreview.cs",
+    "line": 166,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "HeroMonsterPairPreview.cs",
+    "line": 177,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "HeroMonsterPairPreview.cs",
+    "line": 186,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "PERF-06",
+    "file": "MainMenuBootstrap.cs",
+    "line": 625,
+    "severity": "MEDIUM",
+    "msg": "Texture2D.GetPixel/SetPixel per-pixel -- use bulk API"
+  },
+  {
+    "rule": "GAME-02",
+    "file": "MainMenuBootstrap.cs",
+    "line": 413,
+    "severity": "HIGH",
+    "msg": "AudioSource.PlayClipAtPoint creates hidden GameObject -- use audio pool"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuBootstrap.cs",
+    "line": 25,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuBootstrap.cs",
+    "line": 30,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuBootstrap.cs",
+    "line": 35,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuBootstrap.cs",
+    "line": 39,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "MainMenuController.cs",
+    "line": 1001,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "MainMenuController.cs",
+    "line": 1018,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "MainMenuController.cs",
+    "line": 1037,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "PERF-09",
+    "file": "MainMenuController.cs",
+    "line": 1119,
+    "severity": "LOW",
+    "msg": "Mathf.Pow(x, 2) -- use x * x for simple multiply"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "MainMenuController.cs",
+    "line": 349,
+    "severity": "LOW",
+    "msg": "Float equality comparison -- use Mathf.Approximately"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuController.cs",
+    "line": 26,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuController.cs",
+    "line": 31,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuController.cs",
+    "line": 36,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuController.cs",
+    "line": 42,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuController.cs",
+    "line": 47,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuController.cs",
+    "line": 53,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuController.cs",
+    "line": 57,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuController.cs",
+    "line": 61,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuController.cs",
+    "line": 66,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "MainMenuController.cs",
+    "line": 70,
+    "severity": "MEDIUM",
+    "msg": "Static readonly mutable collection -- readonly prevents reassignment but callers can still Add/Remove items"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "SaveSlotBrowserController.cs",
+    "line": 218,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "SaveSlotBrowserController.cs",
+    "line": 235,
+    "severity": "MEDIUM",
+    "msg": "new WaitForSeconds() allocated every yield -- cache as a field"
+  },
+  {
+    "rule": "SAVE-02",
+    "file": "SaveSlotBrowserController.cs",
+    "line": 444,
+    "severity": "CRITICAL",
+    "msg": "File/slot deleted before replacement write is verified -- data loss on write failure"
+  },
+  {
+    "rule": "UNITY-23",
+    "file": "VERADialogueController.cs",
+    "line": 474,
+    "severity": "MEDIUM",
+    "msg": "TMP_Text.text assigned in Update -- allocates string every frame"
+  },
+  {
+    "rule": "UNITY-23",
+    "file": "VERADialogueController.cs",
+    "line": 572,
+    "severity": "MEDIUM",
+    "msg": "TMP_Text.text assigned in Update -- allocates string every frame"
+  }
+]

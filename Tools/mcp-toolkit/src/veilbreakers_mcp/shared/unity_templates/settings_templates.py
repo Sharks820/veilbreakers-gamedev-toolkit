@@ -25,7 +25,6 @@ Exports:
 from __future__ import annotations
 
 import hashlib
-import re
 
 from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
@@ -296,19 +295,19 @@ def generate_player_settings_script(
     if splash_path:
         safe = sanitize_cs_string(splash_path)
         settings_lines.append(
-            f'            // Load sprite from asset path (persistent) instead of creating non-persistent Sprite'
+            '            // Load sprite from asset path (persistent) instead of creating non-persistent Sprite'
         )
         settings_lines.append(
             f'            var splashSprite = AssetDatabase.LoadAssetAtPath<Sprite>("{safe}");'
         )
         settings_lines.append(
-            f'            if (splashSprite == null)'
+            '            if (splashSprite == null)'
         )
         settings_lines.append(
             '            {'
         )
         settings_lines.append(
-            f'                // Ensure TextureImporter has sprite mode enabled so we can load as Sprite'
+            '                // Ensure TextureImporter has sprite mode enabled so we can load as Sprite'
         )
         settings_lines.append(
             f'                var texImporter = AssetImporter.GetAtPath("{safe}") as TextureImporter;'
@@ -1351,7 +1350,7 @@ def generate_graphics_settings_script(
             "ExponentialSquared": "FogMode.ExponentialSquared",
         }
         cs_fog_mode = fog_mode_map.get(fog_mode, f"FogMode.{sanitize_cs_identifier(fog_mode)}")
-        settings_lines.append(f'            RenderSettings.fog = true;')
+        settings_lines.append('            RenderSettings.fog = true;')
         settings_lines.append(f'            RenderSettings.fogMode = {cs_fog_mode};')
 
     if fog_color and len(fog_color) >= 3:

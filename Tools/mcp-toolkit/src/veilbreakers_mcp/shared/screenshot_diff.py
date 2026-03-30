@@ -13,7 +13,7 @@ from __future__ import annotations
 import logging
 
 import numpy as np
-from PIL import Image, ImageChops, ImageDraw
+from PIL import Image, ImageChops
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def compare_screenshots(
     if cur_img.size != ref_img.size:
         logger.warning("Screenshot sizes differ (ref=%s, cur=%s), resizing current", ref_size, cur_size)
         original_cur = cur_img
-        cur_img = cur_img.resize(ref_img.size, Image.LANCZOS)
+        cur_img = cur_img.resize(ref_img.size, Image.Resampling.LANCZOS)
         original_cur.close()
 
     # Compute pixel-level difference
@@ -127,7 +127,7 @@ def generate_diff_image(
     # Resize current to match reference if sizes differ
     if cur_img.size != ref_img.size:
         original_cur = cur_img
-        cur_img = cur_img.resize(ref_img.size, Image.LANCZOS)
+        cur_img = cur_img.resize(ref_img.size, Image.Resampling.LANCZOS)
         original_cur.close()
 
     # Compute difference

@@ -6,13 +6,11 @@ and shared state (logger, settings, mcp) used by all tool handlers.
 
 import json
 import logging
-import os
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 from veilbreakers_mcp.shared.config import Settings
-from veilbreakers_mcp.shared.unity_client import UnityConnection, UnityCommandError
-from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
+from veilbreakers_mcp.shared.unity_client import UnityConnection
 
 STANDARD_NEXT_STEPS = [
     "Recompile: unity_editor action=recompile",

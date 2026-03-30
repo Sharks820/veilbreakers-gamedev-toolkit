@@ -1,13 +1,12 @@
 """unity_code tool handler."""
 
 import json
-import logging
 from pathlib import Path
 from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
+    _write_to_unity, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.code_templates import (
@@ -24,7 +23,6 @@ from veilbreakers_mcp.shared.unity_templates.code_templates import (
     generate_state_machine,
     generate_so_event_channel,
 )
-from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 
 
 

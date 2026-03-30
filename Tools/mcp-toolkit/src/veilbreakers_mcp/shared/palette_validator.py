@@ -19,6 +19,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+from PIL import Image
+
 logger = logging.getLogger(__name__)
 
 try:
@@ -28,8 +30,6 @@ except ImportError:
     _HAS_NUMPY = False
     np = None  # type: ignore
     logger.warning("numpy not installed; palette validation unavailable")
-
-from PIL import Image
 
 
 # ---------------------------------------------------------------------------

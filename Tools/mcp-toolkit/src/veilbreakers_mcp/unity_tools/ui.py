@@ -1,14 +1,12 @@
 """unity_ui tool handler."""
 
 import json
-import logging
-import os
 from pathlib import Path
 from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
+    _write_to_unity, _handle_dict_template, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.ui_templates import (
@@ -21,7 +19,6 @@ from veilbreakers_mcp.shared.unity_templates.ui_templates import (
 from veilbreakers_mcp.shared.wcag_checker import validate_uxml_contrast
 from veilbreakers_mcp.shared.screenshot_diff import (
     compare_screenshots as _compare_screenshots,
-    generate_diff_image,
 )
 from veilbreakers_mcp.shared.unity_templates.ui_polish_templates import (
     generate_procedural_frame_script,

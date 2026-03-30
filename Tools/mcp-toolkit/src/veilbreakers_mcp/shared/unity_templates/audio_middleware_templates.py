@@ -16,11 +16,9 @@ Requirements: AUDM-01 through AUDM-08
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
-
+from ._cs_sanitize import sanitize_cs_identifier
 
 # ---------------------------------------------------------------------------
 # AUDM-01: Spatial Audio System
@@ -1326,7 +1324,7 @@ public class VeilBreakers_ProceduralFoley : MonoBehaviour
 '''
 
     return {
-        "script_path": f"Assets/Scripts/Runtime/Audio/VeilBreakers_ProceduralFoley.cs",
+        "script_path": "Assets/Scripts/Runtime/Audio/VeilBreakers_ProceduralFoley.cs",
         "script_content": script,
         "next_steps": [
             "Save the script to your Unity project",
@@ -1372,7 +1370,7 @@ def generate_dynamic_music_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = sanitize_cs_identifier(music_name)
+    sanitize_cs_identifier(music_name)
 
     if not sections:
         sections = ["Intro", "Exploration", "Tension", "Combat", "BossPhase1",
@@ -1730,7 +1728,7 @@ def generate_portal_audio_script(
     Returns:
         Dict with script_path, script_content, next_steps.
     """
-    safe_name = sanitize_cs_identifier(portal_name)
+    sanitize_cs_identifier(portal_name)
 
     script = f'''// VeilBreakers Auto-Generated: Portal Audio Propagation System
 // Room-based sound with portal attenuation and reverb blending

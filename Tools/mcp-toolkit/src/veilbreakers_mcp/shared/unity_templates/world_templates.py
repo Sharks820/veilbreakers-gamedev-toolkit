@@ -186,7 +186,7 @@ def generate_scene_creation_script(
     """
     safe_name = sanitize_cs_string(scene_name)
     safe_id = sanitize_cs_identifier(scene_name)
-    safe_ns = sanitize_cs_identifier(namespace.replace(".", "_"))
+    sanitize_cs_identifier(namespace.replace(".", "_"))
 
     setup_enum = "NewSceneSetup.DefaultGameObjects"
     if scene_setup == "EmptyScene":
@@ -230,7 +230,7 @@ def generate_scene_creation_script(
         lines.append("            EditorBuildSettings.scenes = scenes.ToArray();")
         lines.append("")
 
-    lines.append(f'            Debug.Log("[VeilBreakers] Scene created: " + scenePath);')
+    lines.append('            Debug.Log("[VeilBreakers] Scene created: " + scenePath);')
     lines.append("")
     lines.append("            // Write result")
     lines.append('            string json = "{ \\"status\\": \\"ok\\", \\"scene_path\\": \\"" + scenePath + "\\" }";')
@@ -277,7 +277,7 @@ def generate_scene_transition_script(
     Returns:
         Tuple of ``(editor_cs, runtime_cs)``.
     """
-    safe_ns = sanitize_cs_identifier(namespace.replace(".", "_"))
+    sanitize_cs_identifier(namespace.replace(".", "_"))
 
     # ---- Runtime MonoBehaviour ----
     rt: list[str] = []
@@ -1070,7 +1070,7 @@ def generate_2d_physics_script(
         max_dist = joint_params.get("max_distance", 5.0)
         lines.append("            // DistanceJoint2D")
         lines.append("            DistanceJoint2D distJoint = target.AddComponent<DistanceJoint2D>();")
-        lines.append(f"            distJoint.maxDistanceOnly = true;")
+        lines.append("            distJoint.maxDistanceOnly = true;")
         lines.append(f"            distJoint.distance = {max_dist}f;")
 
     lines.append("")

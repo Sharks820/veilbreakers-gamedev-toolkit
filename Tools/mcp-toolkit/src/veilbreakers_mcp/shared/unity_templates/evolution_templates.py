@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
+from ._cs_sanitize import sanitize_cs_identifier
 
 # ---------------------------------------------------------------------------
 # Canonical brand color palette from BrandSystem.cs -- ALL VFX must use these
@@ -122,7 +122,7 @@ def generate_evolution_system_script(brand: str = "IRON") -> dict[str, Any]:
     safe_brand = sanitize_cs_identifier(brand)
 
     # Pre-compute brand color literals for the inline shader defaults
-    bp = BRAND_PRIMARY_COLORS[brand]
+    BRAND_PRIMARY_COLORS[brand]
     bg = BRAND_GLOW_COLORS[brand]
 
     script = f'''using UnityEngine;
@@ -2287,7 +2287,7 @@ def generate_brand_death_idle_script(brand: str = "IRON") -> dict[str, Any]:
     brand = brand.upper()
     if brand not in ALL_BRANDS:
         brand = "IRON"
-    safe_brand = sanitize_cs_identifier(brand)
+    sanitize_cs_identifier(brand)
 
     script = f'''using UnityEngine;
 using UnityEditor;

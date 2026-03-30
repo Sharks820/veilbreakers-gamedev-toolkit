@@ -1,0 +1,1276 @@
+[
+  {
+    "rule": "PERF-26",
+    "severity": "MEDIUM",
+    "file": "Tests\\EditMode\\BrandSystem_EditModeTests.cs",
+    "line": 263,
+    "code": "Assert.IsTrue(BrandSystem.GetEffectivenessText(2.0f).Contains(\"2x\"));"
+  },
+  {
+    "rule": "PERF-26",
+    "severity": "MEDIUM",
+    "file": "Tests\\EditMode\\BrandSystem_EditModeTests.cs",
+    "line": 264,
+    "code": "Assert.IsTrue(BrandSystem.GetEffectivenessText(0.5f).Contains(\"0.5x\"));"
+  },
+  {
+    "rule": "UNITY-19",
+    "severity": "HIGH",
+    "file": "Tests\\EditMode\\MainMenuAssets_EditModeTests.cs",
+    "line": 33,
+    "code": "Assert.NotNull(Shader.Find(\"UI/Default\"), \"Missing shader: UI/Default\");"
+  },
+  {
+    "rule": "UNITY-19",
+    "severity": "HIGH",
+    "file": "Tests\\EditMode\\MainMenuAssets_EditModeTests.cs",
+    "line": 34,
+    "code": "Assert.NotNull(Shader.Find(\"Hidden/Internal-Colored\"), \"Missing shader: Hidden/Internal-Colored\");"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Tests\\RuntimeTests\\CaptureTests.cs",
+    "line": 41,
+    "code": "yield return new WaitForSeconds(0.1f);"
+  },
+  {
+    "rule": "BUG-43",
+    "severity": "LOW",
+    "file": "Tests\\RuntimeTests\\CombatTestSetup.cs",
+    "line": 383,
+    "code": "bool passed = actual == expected;"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Tests\\RuntimeTests\\GambitTests.cs",
+    "line": 41,
+    "code": "yield return new WaitForSeconds(0.1f);"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Tests\\RuntimeTests\\QuickCommandTests.cs",
+    "line": 41,
+    "code": "yield return new WaitForSeconds(0.1f);"
+  },
+  {
+    "rule": "PERF-26",
+    "severity": "MEDIUM",
+    "file": "Tests\\RuntimeTests\\QuickCommandTests.cs",
+    "line": 218,
+    "code": "Assert(attackDesc.Contains(\"target\"), \"Attack description mentions target\","
+  },
+  {
+    "rule": "BUG-11",
+    "severity": "HIGH",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 48,
+    "code": "public async void RunAllTests()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 60,
+    "code": "public async Task RunAllTestsAsync()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 114,
+    "code": "private async Task Test_SaveData_CreateNew()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 139,
+    "code": "private async Task Test_SaveData_ValidateAndRepair()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 166,
+    "code": "private async Task Test_SaveFileHandler_SerializeDeserialize()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 202,
+    "code": "private async Task Test_SaveFileHandler_Compression()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 236,
+    "code": "private async Task Test_SaveFileHandler_Checksum()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 266,
+    "code": "private async Task Test_SaveManager_CreateAndSave()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 291,
+    "code": "private async Task Test_SaveManager_Load()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 322,
+    "code": "private async Task Test_SaveManager_SlotMetadata()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 352,
+    "code": "private async Task Test_SaveManager_Delete()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 381,
+    "code": "private async Task Test_MigrationRunner_CanMigrate()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 404,
+    "code": "private async Task Test_ShrineManager_Discovery()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 453,
+    "code": "private async Task Test_FullSaveCycle()"
+  },
+  {
+    "rule": "SAVE-02",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 366,
+    "code": "bool success = SaveManager.Instance.DeleteSlot(TEST_SLOT);"
+  },
+  {
+    "rule": "SAVE-02",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 525,
+    "code": "SaveManager.Instance?.DeleteSlot(TEST_SLOT);"
+  },
+  {
+    "rule": "BUG-11",
+    "severity": "HIGH",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 56,
+    "code": "public async void RunAllTests()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 68,
+    "code": "public async Task RunAllTestsAsync()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 154,
+    "code": "private async Task Test_EffectInstance_Create()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 187,
+    "code": "private async Task Test_EffectInstance_Timer()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 224,
+    "code": "private async Task Test_Manager_ApplyEffect()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 251,
+    "code": "private async Task Test_Manager_NoStackRule()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 282,
+    "code": "private async Task Test_Manager_RefreshOnReapply()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 316,
+    "code": "private async Task Test_Manager_RemoveEffect()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 343,
+    "code": "private async Task Test_Manager_Cleanse()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 383,
+    "code": "private async Task Test_Manager_Dispel()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 415,
+    "code": "private async Task Test_Manager_ShieldAbsorption()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 451,
+    "code": "private async Task Test_Manager_BreakOnDamage()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 479,
+    "code": "private async Task Test_Manager_Immunity()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 510,
+    "code": "private async Task Test_Manager_Exhausted()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 540,
+    "code": "private async Task Test_Manager_CanAct()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 568,
+    "code": "private async Task Test_Manager_StatModifiers()"
+  },
+  {
+    "rule": "GAME-06",
+    "severity": "CRITICAL",
+    "file": "Tests\\RuntimeTests\\StatusEffectTests.cs",
+    "line": 605,
+    "code": "private async Task Test_Manager_EffectCount()"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Tests\\RuntimeTests\\TestArenaManager.cs",
+    "line": 76,
+    "code": "yield return new WaitForSeconds(0.5f);"
+  },
+  {
+    "rule": "BUG-43",
+    "severity": "LOW",
+    "file": "Scripts\\AI\\GambitCondition.cs",
+    "line": 350,
+    "code": "return lowestEnemy == target;"
+  },
+  {
+    "rule": "BUG-43",
+    "severity": "LOW",
+    "file": "Scripts\\AI\\GambitCondition.cs",
+    "line": 370,
+    "code": "return highestEnemy == target;"
+  },
+  {
+    "rule": "ITER-01",
+    "severity": "HIGH",
+    "file": "Scripts\\AI\\GambitCondition.cs",
+    "line": 633,
+    "code": "_threatScores.Remove(key);"
+  },
+  {
+    "rule": "BUG-43",
+    "severity": "LOW",
+    "file": "Scripts\\AI\\GambitController.cs",
+    "line": 829,
+    "code": "return _lastDamageTargetId == killedUnitId;"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Audio\\AudioManager.cs",
+    "line": 260,
+    "code": "yield return new WaitForSeconds(delay);"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Audio\\AudioManager.cs",
+    "line": 603,
+    "code": "yield return new WaitForSeconds(delay);"
+  },
+  {
+    "rule": "BUG-27",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Audio\\AudioTriggers.cs",
+    "line": 415,
+    "code": "float dist = Vector3.Distance(transform.position, _overlapResults[i].transform.position);"
+  },
+  {
+    "rule": "UNITY-15",
+    "severity": "LOW",
+    "file": "Scripts\\Audio\\VB_UISoundManager.cs",
+    "line": 95,
+    "code": "public static VB_UISoundManager Instance => _instance;"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Audio\\VERAVoiceController.cs",
+    "line": 327,
+    "code": "yield return new WaitForSeconds(_glitchDuration);"
+  },
+  {
+    "rule": "BUG-27",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Commands\\QuickCommandManager.cs",
+    "line": 614,
+    "code": "float distToPlayer = Vector3.Distance("
+  },
+  {
+    "rule": "BUG-27",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Commands\\QuickCommandManager.cs",
+    "line": 679,
+    "code": "float dist = Vector3.Distance(from.transform.position, enemy.transform.position);"
+  },
+  {
+    "rule": "BUG-27",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Commands\\QuickCommandManager.cs",
+    "line": 702,
+    "code": "float dist = Vector3.Distance(from.transform.position, enemy.transform.position);"
+  },
+  {
+    "rule": "BUG-27",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Commands\\QuickCommandManager.cs",
+    "line": 716,
+    "code": "float dist = Vector3.Distance("
+  },
+  {
+    "rule": "ITER-01",
+    "severity": "HIGH",
+    "file": "Scripts\\Commands\\QuickCommandManager.cs",
+    "line": 535,
+    "code": "_cooldowns.Remove(ally);"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Commands\\RadialMenuController.cs",
+    "line": 451,
+    "code": "private void SetMenuVisible(bool visible) => _menuContainer?.gameObject.SetActive(visible);"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Commands\\RadialMenuController.cs",
+    "line": 452,
+    "code": "private void ShowAllyWheel() => _allyWheelContainer?.gameObject.SetActive(true);"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Commands\\RadialMenuController.cs",
+    "line": 453,
+    "code": "private void HideAllyWheel() => _allyWheelContainer?.gameObject.SetActive(false);"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Commands\\RadialMenuController.cs",
+    "line": 454,
+    "code": "private void ShowCommandWheel() => _commandWheelContainer?.gameObject.SetActive(true);"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Commands\\RadialMenuController.cs",
+    "line": 455,
+    "code": "private void HideCommandWheel() => _commandWheelContainer?.gameObject.SetActive(false);"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\Commands\\RadialMenuController.cs",
+    "line": 451,
+    "code": "private void SetMenuVisible(bool visible) => _menuContainer?.gameObject.SetActive(visible);"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\Commands\\RadialMenuController.cs",
+    "line": 452,
+    "code": "private void ShowAllyWheel() => _allyWheelContainer?.gameObject.SetActive(true);"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\Commands\\RadialMenuController.cs",
+    "line": 453,
+    "code": "private void HideAllyWheel() => _allyWheelContainer?.gameObject.SetActive(false);"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\Commands\\RadialMenuController.cs",
+    "line": 454,
+    "code": "private void ShowCommandWheel() => _commandWheelContainer?.gameObject.SetActive(true);"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\Commands\\RadialMenuController.cs",
+    "line": 455,
+    "code": "private void HideCommandWheel() => _commandWheelContainer?.gameObject.SetActive(false);"
+  },
+  {
+    "rule": "SEC-03",
+    "severity": "HIGH",
+    "file": "Scripts\\Core\\GameDatabase.cs",
+    "line": 180,
+    "code": "var wrapper = JsonUtility.FromJson<MonsterDataWrapper>(wrappedJson);"
+  },
+  {
+    "rule": "SEC-03",
+    "severity": "HIGH",
+    "file": "Scripts\\Core\\GameDatabase.cs",
+    "line": 223,
+    "code": "var wrapper = JsonUtility.FromJson<SkillDataWrapper>(wrappedJson);"
+  },
+  {
+    "rule": "SEC-03",
+    "severity": "HIGH",
+    "file": "Scripts\\Core\\GameDatabase.cs",
+    "line": 266,
+    "code": "var wrapper = JsonUtility.FromJson<HeroDataWrapper>(wrappedJson);"
+  },
+  {
+    "rule": "SEC-03",
+    "severity": "HIGH",
+    "file": "Scripts\\Core\\GameDatabase.cs",
+    "line": 309,
+    "code": "var wrapper = JsonUtility.FromJson<ItemDataWrapper>(wrappedJson);"
+  },
+  {
+    "rule": "TASK-01",
+    "severity": "HIGH",
+    "file": "Scripts\\Core\\GameDatabase.cs",
+    "line": 204,
+    "code": "return Task.CompletedTask;"
+  },
+  {
+    "rule": "TASK-01",
+    "severity": "HIGH",
+    "file": "Scripts\\Core\\GameDatabase.cs",
+    "line": 247,
+    "code": "return Task.CompletedTask;"
+  },
+  {
+    "rule": "TASK-01",
+    "severity": "HIGH",
+    "file": "Scripts\\Core\\GameDatabase.cs",
+    "line": 290,
+    "code": "return Task.CompletedTask;"
+  },
+  {
+    "rule": "TASK-01",
+    "severity": "HIGH",
+    "file": "Scripts\\Core\\GameDatabase.cs",
+    "line": 333,
+    "code": "return Task.CompletedTask;"
+  },
+  {
+    "rule": "PERF-26",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Data\\ItemData.cs",
+    "line": 109,
+    "code": "(item_id?.Contains(\"capture\") ?? false) ||"
+  },
+  {
+    "rule": "PERF-26",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Data\\ItemData.cs",
+    "line": 110,
+    "code": "(item_id?.Contains(\"orb\") ?? false);"
+  },
+  {
+    "rule": "SEC-03",
+    "severity": "HIGH",
+    "file": "Scripts\\Managers\\SaveFileHandler.cs",
+    "line": 154,
+    "code": "SaveData data = JsonUtility.FromJson<SaveData>(json);"
+  },
+  {
+    "rule": "QUAL-06",
+    "severity": "LOW",
+    "file": "Scripts\\Managers\\SaveFileHandler.cs",
+    "line": 248,
+    "code": "try { File.Move(oldBackup, filePath); } catch { }"
+  },
+  {
+    "rule": "QUAL-06",
+    "severity": "LOW",
+    "file": "Scripts\\Managers\\SaveFileHandler.cs",
+    "line": 261,
+    "code": "try { if (File.Exists(tempPath)) File.Delete(tempPath); } catch { }"
+  },
+  {
+    "rule": "QUAL-06",
+    "severity": "LOW",
+    "file": "Scripts\\Managers\\SaveFileHandler.cs",
+    "line": 410,
+    "code": "catch { }"
+  },
+  {
+    "rule": "ASYNC-02",
+    "severity": "HIGH",
+    "file": "Scripts\\Managers\\SaveFileHandler.cs",
+    "line": 206,
+    "code": "await stream.WriteAsync(data, 0, data.Length);"
+  },
+  {
+    "rule": "BUG-43",
+    "severity": "LOW",
+    "file": "Scripts\\Managers\\SaveManager.cs",
+    "line": 467,
+    "code": "bool isAutoSlot = meta.slotIndex == kAutoSlot || meta.slotIndex == kAutoSlotCheckpoint;"
+  },
+  {
+    "rule": "SAVE-02",
+    "severity": "CRITICAL",
+    "file": "Scripts\\Managers\\SaveManager.cs",
+    "line": 300,
+    "code": "public bool DeleteSlot(int slot)"
+  },
+  {
+    "rule": "SEC-03",
+    "severity": "HIGH",
+    "file": "Scripts\\Managers\\SettingsManager.cs",
+    "line": 61,
+    "code": "_settings = JsonUtility.FromJson<GameSettings>(json);"
+  },
+  {
+    "rule": "ITER-01",
+    "severity": "HIGH",
+    "file": "Scripts\\Managers\\StatusEffectManager.cs",
+    "line": 823,
+    "code": "_effectsByTarget.Remove(target);"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Managers\\StatusEffectManager.cs",
+    "line": 46,
+    "code": "private static readonly List<StatusEffectInstance> _emptyEffectList = new List<StatusEffectInstance>(0);"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Systems\\BrandSystem.cs",
+    "line": 19,
+    "code": "private static readonly Dictionary<Brand, string> _brandDisplayNames = new Dictionary<Brand, string>();"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Systems\\BrandSystem.cs",
+    "line": 31,
+    "code": "private static readonly Dictionary<Brand, (Brand[] strong, Brand[] weak)> EffectivenessMatrix ="
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Systems\\BrandSystem.cs",
+    "line": 48,
+    "code": "private static readonly Dictionary<Brand, Brand> HybridToParentBrand = new Dictionary<Brand, Brand>"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Systems\\BrandSystem.cs",
+    "line": 121,
+    "code": "private static readonly Dictionary<Brand, Color> _brandColors = new Dictionary<Brand, Color>"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Systems\\SynergySystem.cs",
+    "line": 28,
+    "code": "private static readonly Dictionary<Path, Brand[]> PathSynergyBrands = new Dictionary<Path, Brand[]>"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\Systems\\SynergySystem.cs",
+    "line": 37,
+    "code": "private static readonly Dictionary<Path, Brand[]> PathWeakBrands = new Dictionary<Path, Brand[]>"
+  },
+  {
+    "rule": "UNITY-19",
+    "severity": "HIGH",
+    "file": "Scripts\\VFX\\VB_AoEVFX_ground_circle_RUIN.cs",
+    "line": 242,
+    "code": "renderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/Stan"
+  },
+  {
+    "rule": "VFX-01",
+    "severity": "MEDIUM",
+    "file": "Scripts\\VFX\\VB_AoEVFX_ground_circle_RUIN.cs",
+    "line": 242,
+    "code": "renderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/Stan"
+  },
+  {
+    "rule": "BUG-12",
+    "severity": "MEDIUM",
+    "file": "Scripts\\VFX\\VB_HitVFX_SAVAGE.cs",
+    "line": 79,
+    "code": "StartCoroutine(SpawnHitEffect(hitPoint, hitRotation, magnitude));"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\VFX\\VB_HitVFX_SAVAGE.cs",
+    "line": 105,
+    "code": "yield return new WaitForSeconds(effectDuration * magnitude);"
+  },
+  {
+    "rule": "UNITY-19",
+    "severity": "HIGH",
+    "file": "Scripts\\VFX\\VB_HitVFX_SAVAGE.cs",
+    "line": 157,
+    "code": "renderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/Stan"
+  },
+  {
+    "rule": "UNITY-19",
+    "severity": "HIGH",
+    "file": "Scripts\\VFX\\VB_HitVFX_SAVAGE.cs",
+    "line": 186,
+    "code": "renderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/Stan"
+  },
+  {
+    "rule": "VFX-01",
+    "severity": "MEDIUM",
+    "file": "Scripts\\VFX\\VB_HitVFX_SAVAGE.cs",
+    "line": 157,
+    "code": "renderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/Stan"
+  },
+  {
+    "rule": "VFX-01",
+    "severity": "MEDIUM",
+    "file": "Scripts\\VFX\\VB_HitVFX_SAVAGE.cs",
+    "line": 186,
+    "code": "renderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/Stan"
+  },
+  {
+    "rule": "UNITY-19",
+    "severity": "HIGH",
+    "file": "Scripts\\VFX\\VB_StatusVFX_SURGE.cs",
+    "line": 54,
+    "code": "lineRenderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/"
+  },
+  {
+    "rule": "UNITY-19",
+    "severity": "HIGH",
+    "file": "Scripts\\VFX\\VB_StatusVFX_SURGE.cs",
+    "line": 145,
+    "code": "renderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/Stan"
+  },
+  {
+    "rule": "UNITY-19",
+    "severity": "HIGH",
+    "file": "Scripts\\VFX\\VB_StatusVFX_SURGE.cs",
+    "line": 171,
+    "code": "renderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/Stan"
+  },
+  {
+    "rule": "VFX-01",
+    "severity": "MEDIUM",
+    "file": "Scripts\\VFX\\VB_StatusVFX_SURGE.cs",
+    "line": 54,
+    "code": "lineRenderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/"
+  },
+  {
+    "rule": "VFX-01",
+    "severity": "MEDIUM",
+    "file": "Scripts\\VFX\\VB_StatusVFX_SURGE.cs",
+    "line": 145,
+    "code": "renderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/Stan"
+  },
+  {
+    "rule": "VFX-01",
+    "severity": "MEDIUM",
+    "file": "Scripts\\VFX\\VB_StatusVFX_SURGE.cs",
+    "line": 171,
+    "code": "renderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\") ?? Shader.Find(\"Particles/Stan"
+  },
+  {
+    "rule": "BUG-11",
+    "severity": "HIGH",
+    "file": "Scripts\\UI\\CharacterSelect\\CharacterSelectManager.cs",
+    "line": 785,
+    "code": "private async void TriggerEmbark()"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\CharacterSelect\\CharacterSelectManager.cs",
+    "line": 1222,
+    "code": "ScreenTransition.Instance.Transition(() => SceneManager.LoadScene(kMainMenuScene));"
+  },
+  {
+    "rule": "GAME-02",
+    "severity": "HIGH",
+    "file": "Scripts\\UI\\CharacterSelect\\CharacterSelectManager.cs",
+    "line": 798,
+    "code": "AudioSource.PlayClipAtPoint(config.embarkVoiceLine, cam.transform.position, 0.8f);"
+  },
+  {
+    "rule": "SAVE-02",
+    "severity": "CRITICAL",
+    "file": "Scripts\\UI\\CharacterSelect\\CharacterSelectManager.cs",
+    "line": 880,
+    "code": "saveManager.DeleteSlot(slot);"
+  },
+  {
+    "rule": "ASYNC-02",
+    "severity": "HIGH",
+    "file": "Scripts\\UI\\CharacterSelect\\CharacterSelectManager.cs",
+    "line": 897,
+    "code": "await saveManager.SaveAsync(slot);"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\CharacterSelect\\CharSelectVisualEnhancer.cs",
+    "line": 605,
+    "code": "private static readonly Dictionary<string, HeroCardColors> kHeroCardPalette = new Dictionary<string, HeroCardColors>"
+  },
+  {
+    "rule": "UNITY-19",
+    "severity": "HIGH",
+    "file": "Scripts\\UI\\CharacterSelect\\HeroStageController.cs",
+    "line": 293,
+    "code": "if (shader == null) shader = Shader.Find(\"Universal Render Pipeline/Lit\");"
+  },
+  {
+    "rule": "UNITY-19",
+    "severity": "HIGH",
+    "file": "Scripts\\UI\\CharacterSelect\\HeroStageController.cs",
+    "line": 294,
+    "code": "if (shader == null) shader = Shader.Find(\"Standard\");"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\CharacterSelect\\HeroStatsPanelController.cs",
+    "line": 40,
+    "code": "private static readonly Dictionary<Brand, Color> kBrandColors = new Dictionary<Brand, Color>"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\CharacterSelect\\HoldToEmbarkController.cs",
+    "line": 283,
+    "code": "onValueChange: (glow, val) => { glow.style.opacity = val; },"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\CharacterSelect\\HoldToEmbarkController.cs",
+    "line": 386,
+    "code": "onValueChange: (edge, val) => { edge.style.opacity = val; },"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\CharacterSelect\\HoldToEmbarkController.cs",
+    "line": 394,
+    "code": "onValueChange: (btn, val) => { btn.style.scale = new Scale(new Vector2(val, val)); },"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\CharacterSelect\\HoldToEmbarkController.cs",
+    "line": 415,
+    "code": "onValueChange: (btn, val) => { btn.style.scale = new Scale(new Vector2(val, val)); },"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\CharacterSelect\\HoldToEmbarkController.cs",
+    "line": 442,
+    "code": "onValueChange: (flash, val) => { flash.style.opacity = val; },"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\CharacterSelect\\HoldToEmbarkController.cs",
+    "line": 450,
+    "code": "onValueChange: (btn, val) => { btn.style.scale = new Scale(new Vector2(val, val)); },"
+  },
+  {
+    "rule": "UNITY-23",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\CharacterSelect\\HoldToEmbarkController.cs",
+    "line": 615,
+    "code": "_embarkSubtitle.text = \"HOLD TO CONFIRM\";"
+  },
+  {
+    "rule": "BUG-22",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\CharacterSelect\\VolumeProfileTransitioner.cs",
+    "line": 125,
+    "code": "_volume.profile = Instantiate(_volume.sharedProfile);"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\UI\\Combat\\CaptureBannerController.cs",
+    "line": 266,
+    "code": "gameObject.SetActive(true);"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\UI\\Combat\\CaptureBannerController.cs",
+    "line": 283,
+    "code": "gameObject.SetActive(false);"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\UI\\Combat\\CaptureBannerController.cs",
+    "line": 307,
+    "code": "gameObject.SetActive(false);"
+  },
+  {
+    "rule": "UNITY-23",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Combat\\CaptureBannerController.cs",
+    "line": 216,
+    "code": "_captureText.text = \"CAPTURE\";"
+  },
+  {
+    "rule": "UNITY-23",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Combat\\CaptureBannerController.cs",
+    "line": 227,
+    "code": "_captureText.text = \"CAPTURE!\";"
+  },
+  {
+    "rule": "UNITY-23",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Combat\\CaptureBannerController.cs",
+    "line": 240,
+    "code": "_captureText.text = \"CAPTURING...\";"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 364,
+    "code": "SkillSlotState.READY => _readyColor,"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 365,
+    "code": "SkillSlotState.COOLDOWN => _cooldownColor,"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 366,
+    "code": "SkillSlotState.IN_USE => _inUseColor,"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 367,
+    "code": "SkillSlotState.LOW_MP => _lowMPColor,"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 368,
+    "code": "SkillSlotState.DISABLED => _disabledColor,"
+  },
+  {
+    "rule": "PERF-02",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 369,
+    "code": "_ => _readyColor"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 294,
+    "code": "_cooldownText.gameObject.SetActive(true);"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 317,
+    "code": "_cooldownText.gameObject.SetActive(false);"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 380,
+    "code": "_cooldownOverlay.gameObject.SetActive(_currentState == SkillSlotState.COOLDOWN);"
+  },
+  {
+    "rule": "PERF-19",
+    "severity": "LOW",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 386,
+    "code": "_cooldownText.gameObject.SetActive(_currentState == SkillSlotState.COOLDOWN && _cooldownRemaining > 0);"
+  },
+  {
+    "rule": "UNITY-23",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 300,
+    "code": "_cooldownText.text = cooldownValue.ToString();"
+  },
+  {
+    "rule": "UNITY-23",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Combat\\SkillSlotController.cs",
+    "line": 310,
+    "code": "_cooldownText.text = _tenthsStrings[tenths];"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Controls\\ButtonVFXHelper.cs",
+    "line": 23,
+    "code": "private static readonly List<StylePropertyName> kShimmerProperties = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Controls\\ButtonVFXHelper.cs",
+    "line": 28,
+    "code": "private static readonly List<TimeValue> kShimmerDurations = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Controls\\ButtonVFXHelper.cs",
+    "line": 33,
+    "code": "private static readonly List<EasingFunction> kShimmerEasing = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Controls\\ButtonVFXHelper.cs",
+    "line": 39,
+    "code": "private static readonly List<StylePropertyName> kBurstProperties = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Controls\\ButtonVFXHelper.cs",
+    "line": 45,
+    "code": "private static readonly List<TimeValue> kBurstDurations = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Controls\\ButtonVFXHelper.cs",
+    "line": 51,
+    "code": "private static readonly List<EasingFunction> kBurstEasing = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Controls\\ButtonVFXHelper.cs",
+    "line": 58,
+    "code": "private static readonly List<StylePropertyName> kChargeProperties = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Controls\\ButtonVFXHelper.cs",
+    "line": 63,
+    "code": "private static readonly List<TimeValue> kChargeDurations = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Controls\\ButtonVFXHelper.cs",
+    "line": 68,
+    "code": "private static readonly List<EasingFunction> kChargeEasing = new()"
+  },
+  {
+    "rule": "UNITY-15",
+    "severity": "LOW",
+    "file": "Scripts\\UI\\Core\\FPSCounter.cs",
+    "line": 12,
+    "code": "public static FPSCounter Instance => _instance;"
+  },
+  {
+    "rule": "BUG-39",
+    "severity": "CRITICAL",
+    "file": "Scripts\\UI\\Core\\TitleScreenVFX.cs",
+    "line": 1037,
+    "code": "var rt = new RenderTexture(width, height, 0, RenderTextureFormat.ARGB32);"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\HeroMonsterPairPreview.cs",
+    "line": 166,
+    "code": "yield return new WaitForSeconds(_fadeOutDuration * 0.5f);"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\HeroMonsterPairPreview.cs",
+    "line": 177,
+    "code": "yield return new WaitForSeconds(_monsterSpawnDelay);"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\HeroMonsterPairPreview.cs",
+    "line": 186,
+    "code": "yield return new WaitForSeconds(_fadeInDuration);"
+  },
+  {
+    "rule": "PERF-06",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuBootstrap.cs",
+    "line": 625,
+    "code": "tex.SetPixel(x, h - 1 - y, new Color(darkBase.r, darkBase.g, darkBase.b, alpha));"
+  },
+  {
+    "rule": "GAME-02",
+    "severity": "HIGH",
+    "file": "Scripts\\UI\\Menus\\MainMenuBootstrap.cs",
+    "line": 413,
+    "code": "AudioSource.PlayClipAtPoint(clip, _cachedCamera?.transform.position ?? Vector3.zero, volume);"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuBootstrap.cs",
+    "line": 25,
+    "code": "private static readonly List<StylePropertyName> kDimProperties = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuBootstrap.cs",
+    "line": 30,
+    "code": "private static readonly List<TimeValue> kDimDurations = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuBootstrap.cs",
+    "line": 35,
+    "code": "private static readonly List<StylePropertyName> kDimBgProperties = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuBootstrap.cs",
+    "line": 39,
+    "code": "private static readonly List<TimeValue> kDimBgDurations = new()"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 1001,
+    "code": "yield return new WaitForSeconds(delay);"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 1018,
+    "code": "yield return new WaitForSeconds(delay);"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 1037,
+    "code": "yield return new WaitForSeconds(delay);"
+  },
+  {
+    "rule": "PERF-09",
+    "severity": "LOW",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 1119,
+    "code": "return 1 + c3 * Mathf.Pow(t - 1, 3) + c1 * Mathf.Pow(t - 1, 2);"
+  },
+  {
+    "rule": "BUG-43",
+    "severity": "LOW",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 349,
+    "code": "corrupted = meta?.isCorrupted == true;"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 26,
+    "code": "private static readonly List<StylePropertyName> kScatterProperties = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 31,
+    "code": "private static readonly List<TimeValue> kScatterDurations = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 36,
+    "code": "private static readonly List<EasingFunction> kScatterEasing = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 42,
+    "code": "private static readonly List<StylePropertyName> kTitleExitProperties = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 47,
+    "code": "private static readonly List<TimeValue> kTitleExitDurations = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 53,
+    "code": "private static readonly List<StylePropertyName> kFlashProperties = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 57,
+    "code": "private static readonly List<TimeValue> kFlashInDurations = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 61,
+    "code": "private static readonly List<TimeValue> kFlashOutDurations = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 66,
+    "code": "private static readonly List<StylePropertyName> kRootFadeProperties = new()"
+  },
+  {
+    "rule": "BUG-57",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 70,
+    "code": "private static readonly List<TimeValue> kRootFadeDurations = new()"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\SaveSlotBrowserController.cs",
+    "line": 218,
+    "code": "yield return new WaitForSeconds(kAnimDuration);"
+  },
+  {
+    "rule": "BUG-13",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\SaveSlotBrowserController.cs",
+    "line": 235,
+    "code": "yield return new WaitForSeconds(kAnimDuration * 0.7f);"
+  },
+  {
+    "rule": "SAVE-02",
+    "severity": "CRITICAL",
+    "file": "Scripts\\UI\\Menus\\SaveSlotBrowserController.cs",
+    "line": 444,
+    "code": "bool deleted = SaveManager.Instance.DeleteSlot(slot);"
+  },
+  {
+    "rule": "UNITY-23",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\VERADialogueController.cs",
+    "line": 474,
+    "code": "_dialogueText.text = \"\";"
+  },
+  {
+    "rule": "UNITY-23",
+    "severity": "MEDIUM",
+    "file": "Scripts\\UI\\Menus\\VERADialogueController.cs",
+    "line": 572,
+    "code": "_dialogueText.text = _displayedTextBuilder.ToString();"
+  }
+]

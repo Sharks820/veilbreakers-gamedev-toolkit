@@ -1,0 +1,2116 @@
+[
+  {
+    "rule": "ADDR-01",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Tests\\Runtime\\AddressablesIntegrationTestsI",
+    "line": 2786,
+    "code": "var handle = m_Addressables.InstantiateAsync(AssetReferenceObjectKey);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "ADDR-01",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Tests\\Runtime\\AddressablesIntegrationTestsI",
+    "line": 2831,
+    "code": "var handle = m_Addressables.InstantiateAsync(AssetReferenceObjectKey);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "ADDR-01",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Tests\\Runtime\\SceneTests.cs",
+    "line": 313,
+    "code": "var instOp = m_Addressables.InstantiateAsync(prefabKey);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "ASYNC-01",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Lighting\\ProbeVolume\\Probe",
+    "line": 219,
+    "code": "brickStreamingRequest.Wait();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "ASYNC-01",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Lighting\\ProbeVolume\\Probe",
+    "line": 220,
+    "code": "supportStreamingRequest.Wait();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "ASYNC-01",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Lighting\\ProbeVolume\\Probe",
+    "line": 221,
+    "code": "cellDataStreamingRequest.Wait();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "ASYNC-02",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\Export\\GltfWriter.cs",
+    "line": 665,
+    "code": "await outStream.WriteAsync(bytes);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "ASYNC-02",
+    "file": "Assets\\Scripts\\Managers\\SaveFileHandler.cs",
+    "line": 206,
+    "code": "await stream.WriteAsync(data, 0, data.Length);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "ASYNC-02",
+    "file": "Assets\\Scripts\\UI\\CharacterSelect\\CharacterSelectManager.cs",
+    "line": 897,
+    "code": "await saveManager.SaveAsync(slot);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-01",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 61,
+    "code": "ProjectileController projectile = Instantiate(weaponList.weapons[(int)currentWeapon].weaponPrefab, t",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-01",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 114,
+    "code": "asteroid = Instantiate(asteroidPrefab, spawnPosition, Quaternion.identity).GetComponent<AsteroidCont",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-01",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\2D\\Shadows\\ShadowCast",
+    "line": 440,
+    "code": "m_HasRenderer = TryGetComponent<Renderer>(out renderer);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-02",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 98,
+    "code": "if (Camera.main != null)",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-02",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 102,
+    "code": "Vector2 positionOnCamera = Camera.main.WorldToViewportPoint(transform.position);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-02",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 106,
+    "code": "transform.position = (Vector2)Camera.main.ViewportToWorldPoint(new Vector2(-0.05f, positionOnCamera.",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-04",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Samples~\\RendererShaderUserValue_C",
+    "line": 63,
+    "code": "List<int> frameCounts = new List<int>();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-04",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Runtime\\ResourceManager\\ResourceManager.cs",
+    "line": 1077,
+    "code": "m_DeferredCallbacksToRegister = new List<DeferredCallbackRegisterRequest>();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-04",
+    "file": "Library\\PackageCache\\com.unity.adaptiveperformance@a1a7d681b600\\Samples~\\VariableRefreshRate\\Variabl",
+    "line": 93,
+    "code": "var options = new List<Dropdown.OptionData>();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-07",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Samples~\\URPPackageSamples\\Sh",
+    "line": 83,
+    "code": "overlayCamera.transform.rotation = baseCamera.transform.rotation;",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-07",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Samples~\\URPPackageSamples\\Ca",
+    "line": 31,
+    "code": "transform.rotation = m_MainCamera.transform.rotation;",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-07",
+    "file": "Library\\PackageCache\\com.unity.inputsystem@57d0e36f6123\\Samples~\\UIvsGameInput\\UIvsGameInputHandler.",
+    "line": 421,
+    "code": "newProjectile.transform.position = transform.position + transform.forward * 0.6f;",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-08",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 54,
+    "code": "Destroy(gameObject);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-08",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Tests\\YieldInstructionsClash_.cs",
+    "line": 35,
+    "code": "Destroy(gameObject);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-11",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Tests\\Tweens.cs",
+    "line": 1639,
+    "code": "static async void AwaitingDeadCompletesImmediatelyAsync([NotNull] Action callback) {",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-11",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Tests\\Tweens.cs",
+    "line": 1659,
+    "code": "static async void waitForTweenAsync(Tween tween, [NotNull] Action callback) {",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-11",
+    "file": "Assets\\Tests\\RuntimeTests\\SaveSystemTests.cs",
+    "line": 48,
+    "code": "public async void RunAllTests()",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-12",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 88,
+    "code": "StartCoroutine(RespawnShipCoroutine(delay));",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-12",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Samples~\\PrefabSpawner\\PrefabSpawnerSample.",
+    "line": 35,
+    "code": "StartCoroutine(StartSpawner());",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-12",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Samples~\\PrefabSpawner\\PrefabSpawnerSample.",
+    "line": 43,
+    "code": "StartCoroutine(SpawnTemporaryCube());",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Canvas\\CanvasScalerWithChildText",
+    "line": 44,
+    "code": "yield return new WaitForSeconds(0.1f);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Canvas\\NoActiveCameraInSceneDoes",
+    "line": 48,
+    "code": "yield return new WaitForSeconds(0.1f);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Canvas\\RectMask2DWithNestedCanva",
+    "line": 49,
+    "code": "yield return new WaitForSeconds(0.1f);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-18",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\UIBehaviour.cs",
+    "line": 8,
+    "code": "protected virtual void Awake()",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-18",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\UIBehaviour.cs",
+    "line": 14,
+    "code": "protected virtual void Start()",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-18",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 21,
+    "code": "void Start () {",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-22",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_Dropdown.cs",
+    "line": 1100,
+    "code": "return (GameObject)Instantiate(template);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-22",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_Dropdown.cs",
+    "line": 1126,
+    "code": "return (DropdownItem)Instantiate(itemTemplate);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-22",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\UI\\Core\\Dropdown.cs",
+    "line": 993,
+    "code": "return (GameObject)Instantiate(template);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-23",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\UIElements\\UIToolkitIntero",
+    "line": 176,
+    "code": "go.AddComponent<WorldDocumentRaycaster>();",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-23",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\UIElements\\UIToolkitIntero",
+    "line": 182,
+    "code": "go.AddComponent<WorldDocumentRaycaster>().camera = cam;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-23",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\DebugUpdater.cs",
+    "line": 146,
+    "code": "gameObject.AddComponent<EventSystem>();",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-27",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 24,
+    "code": "if (Vector2.Distance(transform.position, Vector2.zero) > 20.0f)",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-27",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 17,
+    "code": "if (Vector2.Distance(transform.position, Vector2.zero) > 20.0f)",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-27",
+    "file": "Library\\PackageCache\\com.unity.ai.navigation@734c2c4c5591\\Samples~\\Scripts\\AgentSpeedController.cs",
+    "line": 46,
+    "code": "float distance = Vector3.Distance(m_PathCorners[0], m_PathCorners[1]);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-28",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEditor.TestRunner\\GUI\\TestRunnerResu",
+    "line": 90,
+    "code": "else if (childrenResult.Any(x => x.resultStatus == ResultStatus.Skipped))",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\Prefabs\\Scripts\\",
+    "line": 114,
+    "code": "if (panel.isEditorOnly || panel.children.Count(x => !x.isEditorOnly && !x.isHidden) == 0)",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-30",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\Decal\\Entities\\DecalE",
+    "line": 412,
+    "code": "if (entityChunks[i].material == null)",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-30",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\Decal\\Entities\\DecalE",
+    "line": 413,
+    "code": "entityChunks[i].material = errorMaterial;",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-30",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\Decal\\Entities\\DecalE",
+    "line": 443,
+    "code": "return a.entityChunk.material.GetHashCode().CompareTo(b.entityChunk.material.GetHashCode());",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-32",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Samples~\\RendererShaderUserValue_C",
+    "line": 50,
+    "code": "SkinnedMeshRenderer smr = target.GetComponentInChildren<SkinnedMeshRenderer>();",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-32",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\Prefabs\\Scripts\\",
+    "line": 100,
+    "code": "Rect parentRect = GetComponentInParent<RectTransform>().rect;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-39",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\ReflectionProbeManage",
+    "line": 74,
+    "code": "m_AtlasTexture0 = new RenderTexture(new RenderTextureDescriptor",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-39",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\ReflectionProbeManage",
+    "line": 90,
+    "code": "m_AtlasTexture1 = new RenderTexture(m_AtlasTexture0.descriptor);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-39",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Tests\\Runtime\\RuntimeTests.cs",
+    "line": 40,
+    "code": "rr.destination = new RenderTexture(128, 128, UnityEngine.Experimental.Rendering.GraphicsFormat.R8G8B",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-40",
+    "file": "Library\\PackageCache\\com.unity.adaptiveperformance@a1a7d681b600\\Samples~\\SceneMenu-donotship\\SceneMe",
+    "line": 76,
+    "code": "DontDestroyOnLoad(this);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-40",
+    "file": "Library\\PackageCache\\com.unity.adaptiveperformance@a1a7d681b600\\Samples~\\SceneMenu-donotship\\SceneMe",
+    "line": 156,
+    "code": "DontDestroyOnLoad(this);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-42",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Button\\ButtonTests.cs",
+    "line": 143,
+    "code": "yield return new WaitWhile(() => button.StateTransitionCount == 2);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-42",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Canvas\\CanvasSizeCorrectInAwakeA",
+    "line": 51,
+    "code": "yield return new WaitUntil(() => component.isAwakeCalled && component.isStartCalled);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-42",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Graphic\\RawImageTest.cs",
+    "line": 62,
+    "code": "yield return new WaitUntil(() => m_image.isGeometryUpdated);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TextMeshPro.cs",
+    "line": 2924,
+    "code": "bool isFirstCharacterOfLine = m_characterCount == m_firstCharacterOfLine;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TextMeshProUGUI.cs",
+    "line": 3273,
+    "code": "bool isFirstCharacterOfLine = m_characterCount == m_firstCharacterOfLine;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_Dropdown.cs",
+    "line": 897,
+    "code": "item.toggle.isOn = value == i;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-44",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Tests",
+    "line": 190,
+    "code": "Assert.IsTrue(asteroid.transform.position.x == 0.0f && asteroid.transform.position.y > 0.0f);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-44",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Tests",
+    "line": 155,
+    "code": "Assert.IsTrue(spaceship.transform.position.y >= 0.0f && spaceship.transform.position.x == 0.0f);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-47",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Tests\\Sequence.cs",
+    "line": 1511,
+    "code": "public IEnumerator TestSequenceEnumerator() {",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-47",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Tests\\Sequence.cs",
+    "line": 1846,
+    "code": "public IEnumerator SequenceRecursiveCreate() {",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-48",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\DebugUpdater.cs",
+    "line": 166,
+    "code": "CoreUtils.Destroy(GetComponent<StandaloneInputModule>());",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-48",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\DebugUpdater.cs",
+    "line": 167,
+    "code": "CoreUtils.Destroy(GetComponent<BaseInput>());",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-49",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Runtime\\Internal\\StackTraces.cs",
+    "line": 117,
+    "code": "while (true) {",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUG-52",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Button\\ButtonTests.cs",
+    "line": 143,
+    "code": "yield return new WaitWhile(() => button.StateTransitionCount == 2);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-52",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Canvas\\CanvasSizeCorrectInAwakeA",
+    "line": 51,
+    "code": "yield return new WaitUntil(() => component.isAwakeCalled && component.isStartCalled);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-52",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Graphic\\RawImageTest.cs",
+    "line": 62,
+    "code": "yield return new WaitUntil(() => m_image.isGeometryUpdated);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-53",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\EventSystem\\GraphicRaycasterButt",
+    "line": 40,
+    "code": "m_Sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-53",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\EventSystem\\Physics2DRaycasterTe",
+    "line": 27,
+    "code": "var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0, 0)",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-53",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Graphic\\ImageTests.cs",
+    "line": 140,
+    "code": "m_Sprite = Sprite.Create(texture, new Rect(32, 32, 64, 64), new Vector2(0.5f, 0.5f), 100);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-54",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 9,
+    "code": "animator.enabled = false;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-54",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Samples~\\RendererShaderUserValue_C",
+    "line": 48,
+    "code": "if (animator != null) animator.enabled = false;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAsset.cs",
+    "line": 685,
+    "code": "static readonly List<WeakReference<TMP_FontAsset>> s_CallbackInstances = new();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_ResourcesManager.cs",
+    "line": 60,
+    "code": "static readonly Dictionary<int, FontAssetRef> s_FontAssetReferences = new Dictionary<int, FontAssetR",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_ResourcesManager.cs",
+    "line": 61,
+    "code": "static readonly Dictionary<int, TMP_FontAsset> s_FontAssetNameReferenceLookup = new Dictionary<int, ",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated2\\AutoRecompile\\VeilBreakers_Recompile.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\AutoRecompile\\VeilBreakers_Recompile.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\ConsoleLogs\\VeilBreakers_ConsoleLogs.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-02",
+    "file": "Assets\\Scripts\\UI\\CharacterSelect\\CharacterSelectManager.cs",
+    "line": 798,
+    "code": "AudioSource.PlayClipAtPoint(config.embarkVoiceLine, cam.transform.position, 0.8f);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "GAME-02",
+    "file": "Assets\\Scripts\\UI\\Menus\\MainMenuBootstrap.cs",
+    "line": 413,
+    "code": "AudioSource.PlayClipAtPoint(clip, _cachedCamera?.transform.position ?? Vector3.zero, volume);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "GAME-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\Prefabs\\Scripts\\",
+    "line": 122,
+    "code": "rectTransform.anchoredPosition = safeAreaOffset;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\DocExamples\\ExportSamples.cs",
+    "line": 21,
+    "code": "async Task AdvancedExport()",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\DocExamples\\ExportSamples.cs",
+    "line": 107,
+    "code": "async Task LocalTransform()",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\DocExamples\\LoadGltfFromMemory.cs",
+    "line": 22,
+    "code": "async Task Start()",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-09",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\Loading\\CustomHeaderDownlo",
+    "line": 111,
+    "code": "m_AsyncOperation = m_Request.SendWebRequest();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "GAME-09",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\Loading\\CustomHeaderDownlo",
+    "line": 130,
+    "code": "m_AsyncOperation = m_Request.SendWebRequest();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "GAME-09",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\Loading\\DefaultDownloadPro",
+    "line": 91,
+    "code": "m_AsyncOperation = m_Request.SendWebRequest();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "ITER-01",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\UIElements\\UIToolkitIntero",
+    "line": 362,
+    "code": "trackedPanels.Remove(panel);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "ITER-01",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEditor.TestRunner\\TestRun\\TestJobDat",
+    "line": 53,
+    "code": "instance.TestRuns.Remove(testRun);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "ITER-01",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\RendererFeatures\\Surf",
+    "line": 921,
+    "code": "instanceIDToDescriptor.Remove(materialInstanceID);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\UIElements\\UIToolkitIntero",
+    "line": 146,
+    "code": "var destroyed = destroyedActions[panel] = () => DestroyPanelGameObject(panel);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEditor.TestRunner\\GUI\\TestRunnerResu",
+    "line": 90,
+    "code": "else if (childrenResult.Any(x => x.resultStatus == ResultStatus.Skipped))",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-02",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\Prefabs\\Scripts\\",
+    "line": 114,
+    "code": "if (panel.isEditorOnly || panel.children.Count(x => !x.isEditorOnly && !x.isHidden) == 0)",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\Raycasters\\PhysicsRaycaste",
+    "line": 200,
+    "code": "public int Compare(RaycastHit x, RaycastHit y)",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\ShadowUtils.cs",
+    "line": 632,
+    "code": "static Matrix4x4 GetShadowTransform(Matrix4x4 proj, Matrix4x4 view)",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\UniversalRenderPipeli",
+    "line": 258,
+    "code": "internal void SetViewAndProjectionMatrix(Matrix4x4 viewMatrix, Matrix4x4 projectionMatrix)",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-05",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\2D\\PixelPerfectCamera",
+    "line": 435,
+    "code": "string warning = string.Format(\"Rendering at an odd-numbered resolution ({0} * {1}). Pixel Perfect C",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-05",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Runtime\\ResourceManager\\ResourceProviders\\S",
+    "line": 363,
+    "code": "var err = string.Format(\"Error while downloading Asset Bundle: CRC Mismatch. Provided {0}, calculate",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-06",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Canvas\\CheckMeshColorsAndColors3",
+    "line": 99,
+    "code": "Color screenPixelColorForMeshColor = screenTexture.GetPixel(Screen.width / 2 + 100, Screen.height / ",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-06",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Canvas\\CheckMeshColorsAndColors3",
+    "line": 100,
+    "code": "Color screenPixelColorForMesh32Color = screenTexture.GetPixel(100, 100);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-06",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Canvas\\CheckMeshColorsAndColors3",
+    "line": 101,
+    "code": "Color screenPixelOutsideMesh = screenTexture.GetPixel(Screen.width / 2 + 100, 100);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-07",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Samples~\\RendererShaderUserValue_C",
+    "line": 88,
+    "code": "Vector3 pos = mesh.vertices[v];",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "PERF-07",
+    "file": "Library\\PackageCache\\com.unity.ai.navigation@734c2c4c5591\\Samples~\\Scripts\\MeshTool.cs",
+    "line": 87,
+    "code": "Vector3[] vertices = mesh.vertices;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "PERF-07",
+    "file": "Library\\PackageCache\\com.unity.ai.navigation@734c2c4c5591\\Samples~\\Scripts\\MeshTool.cs",
+    "line": 95,
+    "code": "mesh.vertices = vertices;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "PERF-08",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Samples~\\RendererShaderUserValue_C",
+    "line": 19,
+    "code": "if (Physics.Raycast(ray, out hit))",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-09",
+    "file": "Assets\\Scripts\\UI\\Menus\\MainMenuController.cs",
+    "line": 1119,
+    "code": "return 1 + c3 * Mathf.Pow(t - 1, 3) + c1 * Mathf.Pow(t - 1, 2);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-10",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Samples~\\RendererShaderUserValue_C",
+    "line": 15,
+    "code": "Ray ray = Camera.main.ScreenPointToRay(Mouse.current.position.ReadValue());",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-10",
+    "file": "Library\\PackageCache\\com.unity.ai.navigation@734c2c4c5591\\Samples~\\Scripts\\ClickToMove.cs",
+    "line": 24,
+    "code": "var ray = Camera.main.ScreenPointToRay(Input.mousePosition);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-11",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\Decal\\Entities\\DecalE",
+    "line": 410,
+    "code": "for (int i = 0; i < chunkCount; ++i)",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-11",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Samples~\\RendererShaderUserValue_C",
+    "line": 74,
+    "code": "for (int c = 0; c < clips.Count; c++)",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-11",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Samples~\\RendererShaderUserValue_C",
+    "line": 80,
+    "code": "for (int f = 0; f < frameCount; f++)",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-17",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\TMP\\TMP_RuntimeTests.cs",
+    "line": 290,
+    "code": "Canvas.ForceUpdateCanvases();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "PERF-17",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\TMP\\TMP_RuntimeTests.cs",
+    "line": 309,
+    "code": "Canvas.ForceUpdateCanvases();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "PERF-17",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\TMP\\TMP_RuntimeTests.cs",
+    "line": 312,
+    "code": "Canvas.ForceUpdateCanvases();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 24,
+    "code": "pauseMenu.SetActive(isPaused);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Samples~\\URPPackageSamples\\Sh",
+    "line": 55,
+    "code": "m_WarningGameObject.SetActive(!correctAssetAssigned);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-19",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\Prefabs\\Scripts\\",
+    "line": 221,
+    "code": "m_UIPanels.ForEach(p => p.gameObject.SetActive(false));",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-20",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\UniversalRenderPipeli",
+    "line": 376,
+    "code": "foreach (var c in Camera.allCameras)",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-21",
+    "file": "Library\\PackageCache\\com.unity.adaptiveperformance@a1a7d681b600\\Samples~\\Environment\\Bottleneck\\BeeS",
+    "line": 32,
+    "code": "bees = Physics.OverlapSphere(transform.position, 10, 1 << 9);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "PERF-23",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEditor.TestRunner\\UnityTestProtocol\\",
+    "line": 100,
+    "code": "if (result.ResultState.ToLowerInvariant().Equals(\"inconclusive\"))",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-23",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEditor.TestRunner\\GUI\\TestAssets\\Fol",
+    "line": 89,
+    "code": "var folderComponentsIncludeEditorFolder = folderComponents.Any(n => n.ToLower().Equals(\"editor\"));",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-23",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\Passes\\PostProcessPas",
+    "line": 206,
+    "code": "if (SystemInfo.IsFormatSupported(GraphicsFormat.R8G8_UNorm, GraphicsFormatUsage.Render) && SystemInf",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-26",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\Performance\\VeilBreakers_AssetAudit.cs",
+    "line": 61,
+    "code": "if (!usedPaths.Contains(path) && !path.EndsWith(\".unity\") && !path.Contains(\"/Editor/\"))",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-26",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_InputField.cs",
+    "line": 4245,
+    "code": "if (lastChar != ' ' && lastChar != '\\'' && nextChar != '\\'' && !text.Contains(\"'\"))",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-26",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\UI\\Core\\InputField.cs",
+    "line": 3059,
+    "code": "if (!text.Contains(\"'\"))",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-27",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Samples~\\Common\\Scripts\\SamplesSho",
+    "line": 201,
+    "code": "Transform viewPoint = currentPrefab.transform.Find(\"ViewPoint\");",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-27",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\Prefabs\\Scripts\\",
+    "line": 48,
+    "code": "var valueChild = child.transform.Find(\"Value\");",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-28",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 61,
+    "code": "ProjectileController projectile = Instantiate(weaponList.weapons[(int)currentWeapon].weaponPrefab, t",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-28",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 114,
+    "code": "asteroid = Instantiate(asteroidPrefab, spawnPosition, Quaternion.identity).GetComponent<AsteroidCont",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Samples~\\RendererShaderUserValue_C",
+    "line": 47,
+    "code": "Animator animator = target.GetComponent<Animator>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-29",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\NUnitExtensions\\Co",
+    "line": 225,
+    "code": "while (!flags.HasFlag(ExecutionFlags.SkipAfterActions) && state.NextAfterStepIndex < AfterActions.Le",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-29",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\NUnitExtensions\\Co",
+    "line": 298,
+    "code": "if (!flags.HasFlag(ExecutionFlags.SkipStateReset))",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-29",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\NUnitExtensions\\Co",
+    "line": 33,
+    "code": "if (!action.Targets.HasFlag(ActionTargets.Test))",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-30",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 61,
+    "code": "ProjectileController projectile = Instantiate(weaponList.weapons[(int)currentWeapon].weaponPrefab, t",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-30",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 67,
+    "code": "weaponInstance = Instantiate(weaponList.weapons[(int)currentWeapon].weaponPrefab, transform.position",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-30",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Scrip",
+    "line": 114,
+    "code": "asteroid = Instantiate(asteroidPrefab, spawnPosition, Quaternion.identity).GetComponent<AsteroidCont",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-32",
+    "file": "Library\\PackageCache\\com.unity.test-framework.performance@0840f58e4562\\Runtime\\Measurements\\MethodMe",
+    "line": 461,
+    "code": "System.GC.Collect();",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "QUAL-05",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEditor.TestRunner\\NUnitExtension\\Tes",
+    "line": 33,
+    "code": "private long StartTicks;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "QUAL-05",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEditor.TestRunner\\NUnitExtension\\Tes",
+    "line": 36,
+    "code": "private double StartTimeOA;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "QUAL-05",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEditor.TestRunner\\TestRunner\\EditMod",
+    "line": 160,
+    "code": "private bool RunningTests;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "QUAL-06",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\RenderGraph\\Compiler\\Nativ",
+    "line": 228,
+    "code": "catch (Exception) { }",
+    "severity": "LOW"
+  },
+  {
+    "rule": "QUAL-06",
+    "file": "Library\\PackageCache\\com.unity.collections@aea9d3bd5e19\\Unity.Collections.Tests\\FixedStringCultureTe",
+    "line": 149,
+    "code": "try { expectedOutput = Single.Parse(localizedString); } catch {}",
+    "severity": "LOW"
+  },
+  {
+    "rule": "QUAL-06",
+    "file": "Assets\\Scripts\\Managers\\SaveFileHandler.cs",
+    "line": 248,
+    "code": "try { File.Move(oldBackup, filePath); } catch { }",
+    "severity": "LOW"
+  },
+  {
+    "rule": "QUAL-11",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\Assertions\\Invalid",
+    "line": 7,
+    "code": "internal class InvalidSignatureException : ResultStateException",
+    "severity": "LOW"
+  },
+  {
+    "rule": "QUAL-11",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\Assertions\\OutOfOr",
+    "line": 8,
+    "code": "internal class OutOfOrderExpectedLogMessageException : ResultStateException",
+    "severity": "LOW"
+  },
+  {
+    "rule": "QUAL-11",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\Assertions\\Unexpec",
+    "line": 8,
+    "code": "internal class UnexpectedLogMessageException : ResultStateException",
+    "severity": "LOW"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\ConsoleLogs\\VeilBreakers_ConsoleLogs.cs",
+    "line": 8,
+    "code": "private static List<string> _logEntries = new List<string>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAsset.cs",
+    "line": 1245,
+    "code": "private static HashSet<int> k_SearchedFontAssetLookup;",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAsset.cs",
+    "line": 1642,
+    "code": "private static List<TMP_FontAsset> k_FontAssets_FontFeaturesUpdateQueue = new List<TMP_FontAsset>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-14",
+    "file": "Library\\PackageCache\\com.unity.inputsystem@57d0e36f6123\\InputSystem\\Events\\InputEventTrace.cs",
+    "line": 232,
+    "code": "var writer = new BinaryWriter(stream);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-14",
+    "file": "Library\\PackageCache\\com.unity.inputsystem@57d0e36f6123\\InputSystem\\Events\\InputEventTrace.cs",
+    "line": 322,
+    "code": "var reader = new BinaryReader(stream);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-14",
+    "file": "Library\\PackageCache\\com.unity.collections@aea9d3bd5e19\\Unity.Collections.CodeGen\\JobsILPostProcesso",
+    "line": 75,
+    "code": "var pe = new MemoryStream();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-15",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAssetCommon.cs",
+    "line": 423,
+    "code": "for (int i = 0; i < font.fallbackFontAssetTable.Count && character == null; i++)",
+    "severity": "LOW"
+  },
+  {
+    "rule": "QUAL-15",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\RenderingUtils.cs",
+    "line": 191,
+    "code": "bool isCameraColorFinalTarget = (cameraData.cameraType == CameraType.Game && renderer.cameraColorTar",
+    "severity": "LOW"
+  },
+  {
+    "rule": "QUAL-15",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\UniversalRenderer.cs",
+    "line": 1547,
+    "code": "bool needsColorEncoding = DebugHandler == null || !DebugHandler.HDRDebugViewIsActive(cameraData.reso",
+    "severity": "LOW"
+  },
+  {
+    "rule": "SAVE-02",
+    "file": "Library\\PackageCache\\com.unity.shadergraph@3e48e962d639\\Samples~\\UGUIShaders\\ShaderGraphExtensions\\S",
+    "line": 28,
+    "code": "RemoveSlotsNameNotMatching(slots, true);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "SAVE-02",
+    "file": "Library\\PackageCache\\com.unity.shadergraph@3e48e962d639\\Samples~\\UGUIShaders\\ShaderGraphExtensions\\S",
+    "line": 36,
+    "code": "RemoveSlotsNameNotMatching(slots, true);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "SAVE-02",
+    "file": "Library\\PackageCache\\com.unity.shadergraph@3e48e962d639\\Samples~\\UGUIShaders\\ShaderGraphExtensions\\S",
+    "line": 44,
+    "code": "RemoveSlotsNameNotMatching(slots, true);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "SEC-03",
+    "file": "Library\\PackageCache\\com.unity.scriptablebuildpipeline@418957ab75a6\\Tests\\Runtime\\Catalog.cs",
+    "line": 81,
+    "code": "Catalog catalog = JsonUtility.FromJson<Catalog>(jsonText);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "SEC-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Samples~\\Common\\Scripts\\Samples.cs",
+    "line": 13,
+    "code": "var newSamples = JsonUtility.FromJson<Samples>(jsonString);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "SEC-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\RenderGraph\\Debug\\RenderGr",
+    "line": 14,
+    "code": "return !string.IsNullOrEmpty(json) ? JsonUtility.FromJson<DebugData>(json) : null;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "SEC-05",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Tests\\Runtime\\AddressablesIntegrationTestsI",
+    "line": 1960,
+    "code": "var bundleLoc1 = new ResourceLocationBase(\"sizeTestBundle1\", \"http://nonExistingUrlForAddressableTes",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "SEC-05",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Tests\\Runtime\\AddressablesIntegrationTestsI",
+    "line": 1965,
+    "code": "var bundleLoc2 = new ResourceLocationBase(\"sizeTestBundle2\", \"http://nonExistingUrlForAddressableTes",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "SEC-05",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Tests\\Runtime\\AddressablesIntegrationTestsI",
+    "line": 1996,
+    "code": "var bundleLoc1 = new ResourceLocationBase(\"cachedSizeTestBundle1\", \"http://nonExistingUrlForAddressa",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "SEC-11",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\TestRunner\\TestEnu",
+    "line": 38,
+    "code": "return m_TestMethod.Method.MethodInfo.Invoke(context.TestObject, m_TestMethod.parms != null ? m_Test",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "SEC-11",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\TestRunner\\TestTas",
+    "line": 39,
+    "code": "return m_TestMethod.Method.MethodInfo.Invoke(context.TestObject, m_TestMethod.parms != null ? m_Test",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "SEC-11",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\Utils\\AttributeHel",
+    "line": 16,
+    "code": "targetClass = Type.GetType(targetClassName + \",\" + name);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "TASK-01",
+    "file": "Assets\\Scripts\\Core\\GameDatabase.cs",
+    "line": 204,
+    "code": "return Task.CompletedTask;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "TASK-01",
+    "file": "Assets\\Scripts\\Core\\GameDatabase.cs",
+    "line": 247,
+    "code": "return Task.CompletedTask;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "TASK-01",
+    "file": "Assets\\Scripts\\Core\\GameDatabase.cs",
+    "line": 290,
+    "code": "return Task.CompletedTask;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "THREAD-01",
+    "file": "Library\\PackageCache\\com.unity.collections@aea9d3bd5e19\\Unity.Collections.Tests\\AllocatorCustomTests",
+    "line": 335,
+    "code": "var task = Task.Run(() =>",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "THREAD-01",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\GltfImport.cs",
+    "line": 1279,
+    "code": "Root = await Task.Run(() => ParseJson(json));",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "TWEEN-01",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Tests\\Sequence.cs",
+    "line": 2180,
+    "code": "var t = transform.DOMove(diff, 1f)",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "TWEEN-01",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Tests\\Sequence.cs",
+    "line": 2200,
+    "code": "var t = transform.DOMove(endValue, 1f)",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "TWEEN-01",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Tests\\Tweens.cs",
+    "line": 2871,
+    "code": "await transform.DOScale(1f, minDuration).SetEase(curve);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-04",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\Utils\\MonoBehaviou",
+    "line": 53,
+    "code": "Object.DontDestroyOnLoad(go);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-04",
+    "file": "Library\\PackageCache\\com.unity.test-framework.performance@0840f58e4562\\Runtime\\Measurements\\FramesMe",
+    "line": 348,
+    "code": "if (Application.isPlaying) Object.DontDestroyOnLoad(go);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-04",
+    "file": "Library\\PackageCache\\com.unity.test-framework.performance@0840f58e4562\\Runtime\\Measurements\\Profiler",
+    "line": 34,
+    "code": "if (Application.isPlaying) Object.DontDestroyOnLoad(go);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-08",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_UpdateRegistery.cs",
+    "line": 46,
+    "code": "Canvas.willRenderCanvases += PerformUpdateForCanvasRendererObjects;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-08",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\UI\\Core\\CanvasUpdateRegistry.cs",
+    "line": 91,
+    "code": "Canvas.willRenderCanvases += PerformUpdate;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-08",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\UI\\Core\\Layout\\LayoutRebuilder.cs",
+    "line": 37,
+    "code": "RectTransform.reapplyDrivenProperties += ReapplyDrivenProperties;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-11",
+    "file": "Library\\PackageCache\\com.unity.adaptiveperformance@a1a7d681b600\\Samples~\\Environment\\SampleFactory.c",
+    "line": 18,
+    "code": "private GameObject[] spawnedObjects = new GameObject[2000];",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-15",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\Utils\\ColorEqualit",
+    "line": 19,
+    "code": "public static ColorEqualityComparer Instance { get { return m_Instance; } }",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-15",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\Utils\\FloatEqualit",
+    "line": 18,
+    "code": "public static FloatEqualityComparer Instance { get { return m_Instance; } }",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-15",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\Utils\\QuaternionEq",
+    "line": 22,
+    "code": "public static QuaternionEqualityComparer Instance { get { return m_Instance; } }",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-18",
+    "file": "Library\\PackageCache\\com.unity.inputsystem@57d0e36f6123\\InputSystem\\Plugins\\PlayerInput\\PlayerInput.",
+    "line": 1516,
+    "code": "BroadcastMessage(messageName, m_InputValueObject, SendMessageOptions.DontRequireReceiver);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "UNITY-18",
+    "file": "Library\\PackageCache\\com.unity.inputsystem@57d0e36f6123\\InputSystem\\Plugins\\PlayerInput\\PlayerInput.",
+    "line": 1518,
+    "code": "SendMessage(messageName, m_InputValueObject, SendMessageOptions.DontRequireReceiver);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "UNITY-18",
+    "file": "Library\\PackageCache\\com.unity.inputsystem@57d0e36f6123\\InputSystem\\Plugins\\PlayerInput\\PlayerInput.",
+    "line": 1969,
+    "code": "SendMessage(DeviceLostMessage, this, SendMessageOptions.DontRequireReceiver);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "UNITY-19",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\VFX\\VeilBreakers_Aura_DREAD_ShadowAura.cs",
+    "line": 58,
+    "code": "renderer.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\"));",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-19",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\VFX\\VeilBreakers_Trail_IRON_WeaponTrail.cs",
+    "line": 43,
+    "code": "trail.material = new Material(Shader.Find(\"Universal Render Pipeline/Particles/Unlit\"));",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-19",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Canvas\\CheckMeshColorsAndColors3",
+    "line": 53,
+    "code": "Material material = new Material(Shader.Find(\"UI/Default\"));",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-20",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\Performance\\VeilBreakers_AssetAudit.cs",
+    "line": 74,
+    "code": "if (material != null && material.shader != null)",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-20",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\Performance\\VeilBreakers_AssetAudit.cs",
+    "line": 76,
+    "code": "string shaderKey = material.shader.name;",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-20",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_ShaderUtilities.cs",
+    "line": 377,
+    "code": "if (material.shaderKeywords.Contains(ShaderUtilities.Keyword_MASK_SOFT) || material.shaderKeywords.C",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-21",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Runtime\\Internal\\TweenGenerated.cs",
+    "line": 581,
+    "code": "public static Tween RigidbodyMoveRotation([NotNull] UnityEngine.Rigidbody target,                   ",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-21",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Runtime\\Internal\\TweenGenerated.cs",
+    "line": 582,
+    "code": "public static Tween RigidbodyMoveRotation([NotNull] UnityEngine.Rigidbody target, UnityEngine.Vector",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-21",
+    "file": "Library\\PackageCache\\com.kyrylokuzyk.primetween@0434e913bef4\\Runtime\\Internal\\TweenGenerated.cs",
+    "line": 586,
+    "code": "public static Tween RigidbodyMovePosition([NotNull] UnityEngine.Rigidbody target,                   ",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-23",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\Prefabs\\Scripts\\",
+    "line": 42,
+    "code": "nameLabel.text = m_Field.message;",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "UNITY-23",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\Prefabs\\Scripts\\",
+    "line": 72,
+    "code": "valueLabel.text = m_Value.FormatString(value);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "UNITY-23",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\Debugging\\Prefabs\\Scripts\\",
+    "line": 64,
+    "code": "valueLabel.text = m_Field.FormatString(value);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "UNITY-24",
+    "file": "Library\\PackageCache\\com.unity.ai.navigation@734c2c4c5591\\Samples~\\Scripts\\AgentSpeedController.cs",
+    "line": 24,
+    "code": "m_Agent.SetDestination(m_Target.position);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-25",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\InputModules\\BaseInputModu",
+    "line": 320,
+    "code": "m_AxisEventData.moveVector = new Vector2(x, y);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "UNITY-25",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\InputModules\\BaseInputModu",
+    "line": 321,
+    "code": "m_AxisEventData.moveDir = DetermineMoveDirection(x, y, moveDeadZone);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "UNITY-25",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEditor.TestRunner\\TestRun\\TestJobRun",
+    "line": 59,
+    "code": "m_JobData.isHandledByRunner = true;",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Runtime\\Addressables.cs",
+    "line": 1830,
+    "code": "return m_Addressables.InstantiateAsync(location, new InstantiationParameters(parent, instantiateInWo",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Runtime\\Addressables.cs",
+    "line": 1844,
+    "code": "return m_Addressables.InstantiateAsync(location, position, rotation, parent, trackHandle);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Runtime\\Addressables.cs",
+    "line": 1857,
+    "code": "return m_Addressables.InstantiateAsync(key, parent, instantiateInWorldSpace, trackHandle);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.scriptablebuildpipeline@418957ab75a6\\Tests\\Runtime\\ContentLoadScenesT",
+    "line": 112,
+    "code": "ContentFile fileHandle = ContentLoadInterface.LoadContentFileAsync(m_NS, vfsPath, new NativeArray<Co",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.scriptablebuildpipeline@418957ab75a6\\Tests\\Runtime\\ContentLoadTests.c",
+    "line": 36,
+    "code": "ContentFile fileHandle = ContentLoadInterface.LoadContentFileAsync(m_NS, vfsPath, new NativeArray<Co",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\ForwardLights.cs",
+    "line": 148,
+    "code": "m_ZBins = new NativeArray<uint>(UniversalRenderPipeline.maxZBinWords, Allocator.Persistent);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-31",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\EventSystem\\GraphicRaycasterButt",
+    "line": 19,
+    "code": "readonly Texture2D texture = new Texture2D(TextureSize, TextureSize);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "UNITY-31",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Graphic\\ImageTests.cs",
+    "line": 13,
+    "code": "readonly Texture2D texture = new Texture2D(128, 128);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "UNITY-31",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Graphic\\ImageTests.cs",
+    "line": 14,
+    "code": "readonly Texture2D overrideTexture = new Texture2D(512, 512);",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "VFX-01",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\Canvas\\CheckMeshColorsAndColors3",
+    "line": 53,
+    "code": "Material material = new Material(Shader.Find(\"UI/Default\"));",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "VFX-01",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAsset.cs",
+    "line": 620,
+    "code": "tmp_material = new Material(ShaderUtilities.ShaderRef_MobileBitmap);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "VFX-01",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAsset.cs",
+    "line": 622,
+    "code": "tmp_material = new Material(Shader.Find(\"TextMeshPro/Sprite\"));",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\Performance\\VeilBreakers_AssetAudit.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\PlayMode\\VeilBreakers_PlayMode_enterplaymode.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\PlayMode\\VeilBreakers_PlayMode_exit_play_mode.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\Prefab\\VeilBreakers_ValidateProject.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\Quality\\AAAQualityAudit.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\Screenshot\\VeilBreakers_Screenshot.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\VFX\\VeilBreakers_Aura_DREAD_ShadowAura.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\VFX\\VeilBreakers_BrandVFX_DREAD.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "BUILD-01",
+    "file": "_Archive\\GeneratedCleanup\\EditorGenerated\\VFX\\VeilBreakers_PostProcessing.cs",
+    "line": 2,
+    "code": "using UnityEditor;",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\ForwardLights.cs",
+    "line": 151,
+    "code": "m_TileMasks = new NativeArray<uint>(UniversalRenderPipeline.maxTileWords, Allocator.Persistent);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\Decal\\Entities\\DecalE",
+    "line": 298,
+    "code": "drawCallChunks.Add(new DecalDrawCallChunk() { subCallCounts = new NativeArray<int>(1, Allocator.Pers",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\2D\\UTess2D\\PlanarGrap",
+    "line": 346,
+    "code": "NativeArray<int> duplicates = new NativeArray<int>(ModuleHandle.kMaxEdgeCount, allocator);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\2D\\UTess2D\\PlanarGrap",
+    "line": 347,
+    "code": "NativeArray<int2> edges = new NativeArray<int2>(ModuleHandle.kMaxEdgeCount, allocator);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\2D\\UTess2D\\PlanarGrap",
+    "line": 348,
+    "code": "NativeArray<int2> tJunctions = new NativeArray<int2>(ModuleHandle.kMaxEdgeCount, allocator);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\2D\\UTess2D\\PlanarGrap",
+    "line": 349,
+    "code": "NativeArray<int2> edgeIntersections = new NativeArray<int2>(ModuleHandle.kMaxEdgeCount, allocator);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\2D\\UTess2D\\PlanarGrap",
+    "line": 350,
+    "code": "NativeArray<double2> points = new NativeArray<double2>(pointCount * 8, allocator);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\2D\\UTess2D\\PlanarGrap",
+    "line": 351,
+    "code": "NativeArray<double2> intersects = new NativeArray<double2>(pointCount * 8, allocator);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "UNITY-28",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\2D\\UTess2D\\Tessellato",
+    "line": 413,
+    "code": "NativeArray<int3> cellsOut = new NativeArray<int3>(m_NumPoints * (m_NumPoints + 1), m_Allocator);",
+    "severity": "HIGH"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAssetCommon.cs",
+    "line": 423,
+    "code": "for (int i = 0; i < font.fallbackFontAssetTable.Count && character == null; i++)",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_InputField.cs",
+    "line": 1271,
+    "code": "bool isThisObject = obj == m_TextComponent;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_Text.cs",
+    "line": 4395,
+    "code": "bool isFirstCharacterOfLine = m_characterCount == m_firstCharacterOfLine;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\UIBehaviour.cs",
+    "line": 73,
+    "code": "return this == null;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\UI\\Core\\Dropdown.cs",
+    "line": 813,
+    "code": "item.toggle.isOn = value == i;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\UI\\Core\\Layout\\LayoutRebuilder.cs",
+    "line": 52,
+    "code": "return m_ToRebuild == null;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\NUnitExtensions\\Te",
+    "line": 164,
+    "code": "return test.Parent.Parent == null;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\Utils\\Utils.cs",
+    "line": 39,
+    "code": "return expected == actual;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-43",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\Utils\\Vector2Compa",
+    "line": 42,
+    "code": "return expected == actual;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\DocExamples\\LoadGltfFromMemory.cs",
+    "line": 29,
+    "code": "async Task LoadGltfFile()",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\DocExamples\\LoadGltfFromMemory.cs",
+    "line": 45,
+    "code": "async Task LoadGltfFile()",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\GltfImport.cs",
+    "line": 1438,
+    "code": "async Task LoadImages(Uri baseUri)",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\GltfImport.cs",
+    "line": 1596,
+    "code": "async Task LoadImageFromBuffer(Task<Tuple<byte[],string>> decodeBufferTask, int imageIndex, Image im",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\GltfImport.cs",
+    "line": 2519,
+    "code": "async Task WaitForAllMeshGenerators()",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\GltfImport.cs",
+    "line": 2531,
+    "code": "async Task GenerateMaterials()",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\GltfImport.cs",
+    "line": 2605,
+    "code": "async Task WaitForImageCreateContexts()",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\GltfImport.cs",
+    "line": 2805,
+    "code": "async Task InstantiateSceneInternal(IInstantiator instantiator, int sceneId)",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "GAME-06",
+    "file": "Library\\PackageCache\\com.unity.cloud.gltfast@0847aee0f6da\\Runtime\\Scripts\\GltfImport.cs",
+    "line": 2815,
+    "code": "async Task IterateNodes(uint nodeIndex, uint? parentIndex, Action<uint, uint?> callback)",
+    "severity": "CRITICAL"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAsset.cs",
+    "line": 1643,
+    "code": "private static HashSet<int> k_FontAssets_FontFeaturesUpdateQueueLookup = new HashSet<int>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAsset.cs",
+    "line": 1645,
+    "code": "private static List<Texture2D> k_FontAssets_AtlasTexturesUpdateQueue = new List<Texture2D>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAsset.cs",
+    "line": 1646,
+    "code": "private static HashSet<int> k_FontAssets_AtlasTexturesUpdateQueueLookup = new HashSet<int>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAssetCommon.cs",
+    "line": 373,
+    "code": "private static List<int> k_searchedFontAssets;",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_FontAssetUtilities.cs",
+    "line": 30,
+    "code": "private static HashSet<int> k_SearchedAssets;",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_MaterialManager.cs",
+    "line": 14,
+    "code": "private static List<MaskingMaterial> m_materialList = new List<MaskingMaterial>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_MaterialManager.cs",
+    "line": 16,
+    "code": "private static Dictionary<long, FallbackMaterial> m_fallbackMaterials = new Dictionary<long, Fallbac",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_MaterialManager.cs",
+    "line": 17,
+    "code": "private static Dictionary<int, long> m_fallbackMaterialLookup = new Dictionary<int, long>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "QUAL-12",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_MaterialManager.cs",
+    "line": 18,
+    "code": "private static List<FallbackMaterial> m_fallbackCleanupList = new List<FallbackMaterial>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_ResourcesManager.cs",
+    "line": 62,
+    "code": "static readonly Dictionary<long, TMP_FontAsset> s_FontAssetFamilyNameAndStyleReferenceLookup = new D",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_ResourcesManager.cs",
+    "line": 63,
+    "code": "static readonly List<int> s_FontAssetRemovalList = new List<int>(16);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_TextParsingUtilities.cs",
+    "line": 184,
+    "code": "static readonly HashSet<uint> k_EmojiLookup = new HashSet<uint>() {",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\TMP\\TMP_TextParsingUtilities.cs",
+    "line": 219,
+    "code": "static readonly HashSet<uint> k_EmojiPresentationFormLookup = new HashSet<uint>() {",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\ExecuteEvents.cs",
+    "line": 288,
+    "code": "private static readonly List<Transform> s_InternalTransformList = new List<Transform>(30);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\EventSystem\\RaycasterManager.cs",
+    "line": 7,
+    "code": "private static readonly List<BaseRaycaster> s_Raycasters = new List<BaseRaycaster>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\UI\\Core\\GraphicRaycaster.cs",
+    "line": 313,
+    "code": "[NonSerialized] static readonly List<Graphic> s_SortedGraphics = new List<Graphic>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Runtime\\UGUI\\UI\\Core\\GraphicRegistry.cs",
+    "line": 182,
+    "code": "private static readonly List<Graphic> s_EmptyList = new List<Graphic>();",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-57",
+    "file": "Library\\PackageCache\\com.unity.test-framework@0b7a23ab2e1d\\UnityEngine.TestRunner\\NUnitExtensions\\Co",
+    "line": 16,
+    "code": "private static readonly Dictionary<Type, List<MethodInfo>> m_BeforeActionsCache = new Dictionary<Typ",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Runtime\\Addressables.cs",
+    "line": 1871,
+    "code": "return m_Addressables.InstantiateAsync(key, position, rotation, parent, trackHandle);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Runtime\\Addressables.cs",
+    "line": 1883,
+    "code": "return m_Addressables.InstantiateAsync(key, instantiateParameters, trackHandle);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Runtime\\Addressables.cs",
+    "line": 1895,
+    "code": "return m_Addressables.InstantiateAsync(location, instantiateParameters, trackHandle);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Runtime\\AssetReference.cs",
+    "line": 612,
+    "code": "return Addressables.InstantiateAsync(RuntimeKey, position, rotation, parent, true);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Runtime\\AssetReference.cs",
+    "line": 628,
+    "code": "return Addressables.InstantiateAsync(RuntimeKey, parent, instantiateInWorldSpace, true);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Tests\\Runtime\\AddressablesIntegrationTestsI",
+    "line": 63,
+    "code": "op = m_Addressables.LoadAssetAsync<GameObject>(\"notARealKey\");",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Tests\\Runtime\\AddressablesIntegrationTestsI",
+    "line": 166,
+    "code": "op = m_Addressables.LoadAssetAsync<MeshRenderer>(\"test0BASE\");",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Tests\\Runtime\\AddressablesIntegrationTestsI",
+    "line": 186,
+    "code": "handle = m_Addressables.LoadAssetAsync<GameObject>(keyString);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "UNITY-26",
+    "file": "Library\\PackageCache\\com.unity.addressables@2dc42e61a5f5\\Tests\\Runtime\\AddressablesIntegrationTestsI",
+    "line": 214,
+    "code": "handle = m_Addressables.LoadAssetAsync<TextAsset>(keyString);",
+    "severity": "LOW"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\EventSystem\\SelectableTests.cs",
+    "line": 259,
+    "code": "yield return new WaitForSeconds(1);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\EventSystem\\SelectableTests.cs",
+    "line": 265,
+    "code": "yield return new WaitForSeconds(1);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\EventSystem\\SelectableTests.cs",
+    "line": 302,
+    "code": "yield return new WaitForSeconds(1);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\InputField\\GenericInputFieldTest",
+    "line": 307,
+    "code": "yield return new WaitForSeconds(1.0f);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.ugui@b9d1dd437cb9\\Tests\\Runtime\\UGUI\\InputField\\GenericInputFieldTest",
+    "line": 315,
+    "code": "yield return new WaitForSeconds(1.0f);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Tests",
+    "line": 79,
+    "code": "yield return new WaitForSeconds(explosion.main.duration);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Tests",
+    "line": 101,
+    "code": "yield return new WaitForSeconds(0.2f);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Tests",
+    "line": 105,
+    "code": "yield return new WaitForSeconds(0.5f);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "BUG-13",
+    "file": "Library\\PackageCache\\com.unity.testtools.codecoverage@e4e5058206c0\\Samples~\\Tutorial\\Asteroids\\Tests",
+    "line": 109,
+    "code": "yield return new WaitForSeconds(GameManager.SPACESHIP_RESPAWN_DELAY);",
+    "severity": "MEDIUM"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\UniversalRenderPipeli",
+    "line": 263,
+    "code": "internal void SetViewProjectionAndJitterMatrix(Matrix4x4 viewMatrix, Matrix4x4 projectionMatrix, Mat",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\FrameData\\UniversalCa",
+    "line": 18,
+    "code": "internal void SetViewAndProjectionMatrix(Matrix4x4 viewMatrix, Matrix4x4 projectionMatrix)",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\FrameData\\UniversalCa",
+    "line": 25,
+    "code": "internal void SetViewProjectionAndJitterMatrix(Matrix4x4 viewMatrix, Matrix4x4 projectionMatrix, Mat",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\Decal\\Entities\\DecalU",
+    "line": 258,
+    "code": "private BoundingSphere GetDecalProjectBoundingSphere(Matrix4x4 decalToWorld)",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.universal@1e87cf1dccb8\\Runtime\\2D\\Shadows\\ShadowProv",
+    "line": 11,
+    "code": "static public float GetTrimEdgeFromBounds(Bounds bounds, float trimMultipler)",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\CommandBuffers\\ComputeComm",
+    "line": 181,
+    "code": "public void SetViewProjectionMatrices(Matrix4x4 view, Matrix4x4 proj)  {  m_WrappedCommandBuffer.Set",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\CommandBuffers\\IBaseComman",
+    "line": 137,
+    "code": "public void SetViewProjectionMatrices(Matrix4x4 view, Matrix4x4 proj) ;",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\CommandBuffers\\IRasterComm",
+    "line": 166,
+    "code": "public void DrawProcedural(Matrix4x4 matrix, Material material, int shaderPass, MeshTopology topolog",
+    "severity": "LOW"
+  },
+  {
+    "rule": "PERF-03",
+    "file": "Library\\PackageCache\\com.unity.render-pipelines.core@9a9c0155552c\\Runtime\\CommandBuffers\\IRasterComm",
+    "line": 175,
+    "code": "public void DrawProcedural(Matrix4x4 matrix, Material material, int shaderPass, MeshTopology topolog",
+    "severity": "LOW"
+  }
+]

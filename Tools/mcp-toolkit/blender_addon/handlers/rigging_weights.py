@@ -471,7 +471,7 @@ def _enhanced_rig_validation(
         base = bname.split(".")[0]
         if any(base.startswith(p) for p in limb_prefixes):
             roll = bone_rolls.get(bname, 0.0)
-            if roll == 0.0:
+            if abs(roll) < 1e-6:
                 default_roll_bones.append(bname)
                 issues.append(f"Bone '{bname}' has default roll 0.0")
 

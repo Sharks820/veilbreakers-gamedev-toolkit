@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
+from ._cs_sanitize import sanitize_cs_identifier, sanitize_cs_string
 
 # Brand palette -- canonical RGBA colors for all 10 VeilBreakers brands.
 # Defined inline because vfx_templates only exports BRAND_VFX_CONFIGS (not
@@ -361,7 +361,7 @@ def generate_spell_vfx_script(spell_type: str = "fireball") -> dict[str, Any]:
     if spell_type not in SPELL_CONFIGS:
         spell_type = "fireball"
 
-    safe_spell = sanitize_cs_identifier(spell_type)
+    sanitize_cs_identifier(spell_type)
     spell_configs_block = _spell_configs_cs()
 
     script = f'''using UnityEngine;
@@ -1109,7 +1109,7 @@ def generate_monster_ability_vfx_script(ability_type: str = "breath_weapon") -> 
     if ability_type not in MONSTER_ABILITY_CONFIGS:
         ability_type = "breath_weapon"
 
-    safe_ability = sanitize_cs_identifier(ability_type)
+    sanitize_cs_identifier(ability_type)
     ability_configs_block = _monster_ability_configs_cs()
     brand_primary_block = _brand_color_dict_cs("BrandPrimary", BRAND_PRIMARY_COLORS)
     brand_glow_block = _brand_color_dict_cs("BrandGlow", BRAND_GLOW_COLORS)

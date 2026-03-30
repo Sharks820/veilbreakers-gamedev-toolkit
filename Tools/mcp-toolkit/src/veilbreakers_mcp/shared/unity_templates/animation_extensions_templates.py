@@ -8,8 +8,8 @@ These live in a separate file from animation_templates.py to avoid merge
 conflicts with parallel terminal work.
 
 Exports:
-    generate_animator_with_transitions_script -- G14: AnimatorController with transitions
-    generate_animation_layer_manager_script   -- P5-Q8: Runtime layer weight manager
+    generate_animator_with_transitions_script -- G14: AnimatorController
+    generate_animation_layer_manager_script   -- P5-Q8: Runtime layer manager
     generate_multi_hit_events_script          -- Multi-hit AnimationEvent bridge
 """
 
@@ -17,8 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
-
+from ._cs_sanitize import sanitize_cs_identifier, sanitize_cs_string
 
 # ---------------------------------------------------------------------------
 # Default animator data
@@ -111,15 +110,127 @@ _LAYER_PRESETS: dict[str, dict[str, Any]] = {
 # ---------------------------------------------------------------------------
 
 _DEFAULT_HIT_EVENTS: list[dict[str, Any]] = [
-    {"frame": 8,  "hit_index": 0, "brand": "IRON",   "damage_type": "slash",  "vfx_intensity": 0.8},
-    {"frame": 16, "hit_index": 1, "brand": "SAVAGE", "damage_type": "pierce", "vfx_intensity": 1.0},
-    {"frame": 24, "hit_index": 2, "brand": "SURGE",  "damage_type": "slam",   "vfx_intensity": 1.2},
+    {"frame": 8, "hit_index": 0, "brand": "IRON", "damage_type": "slash",
+     "vfx_intensity": 0.8},
+    {"frame": 16, "hit_index": 1, "brand": "SAVAGE", "damage_type": "pierce",
+     "vfx_intensity": 1.0},
+    {"frame": 24, "hit_index": 2, "brand": "SURGE", "damage_type": "slam",
+     "vfx_intensity": 1.2},
 ]
 
 
 # ---------------------------------------------------------------------------
 # G14: AnimatorController with proper transitions
 # ---------------------------------------------------------------------------
+
+def _add_animator_parameters(
+    lines: list[str], parameters: list[dict[str, str]],
+) -> None:
+    """Add animator parameters to the C# code generation."""
+    for param in parameters:
+        pname = sanitize_cs_string(param["name"])
+        ptype = param.get("type", "Float")
+        type_map = {
+            "Float": "Float",
+            "Int": "Int",
+            "Bool": "Bool",
+            "Trigger": "Trigger",
+        }
+        cs_type = type_map.get(ptype, "Float")
+        lines.append(f'            controller.AddParameter("{pname}", AnimatorControllerParameterType.{cs_type});')
+    lines.append("")
+
+
+def _add_animator_states(
+    lines: list[str],
+    states: list[dict[str, Any]],
+    safe_name_str: str,
+) -> dict[str, str]:
+    """Add animator states and return state variable mapping."""
+    state_var_map: dict[str, str] = {}
+    for i, state in enumerate(states):
+        sname = state["name"]
+        safe_sname = sanitize_cs_identifier(sname)
+        var_name = f"state_{safe_sname}"
+        state_var_map[sname] = var_name
+        motion_path = state.get("motion_path", "")
+
+        x_pos = 250 + (i % 3) * 250
+        y_pos = 100 + (i // 3) * 80
+        lines.append(f'            var {var_name} = rootSM.AddState("{sanitize_cs_string(sname)}", new Vector3({x_pos}, {y_pos}, 0));')
+        if motion_path:
+            lines.append(f'            var clip_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(motion_path)}");')
+            lines.append(f"            if (clip_{safe_sname} != null) {var_name}.motion = clip_{safe_sname};")
+        if i == 0:
+            lines.append(f"            rootSM.defaultState = {var_name};")
+    lines.append("")
+    return state_var_map
+
+
+def _add_transition_conditions(
+    lines: list[str], trans_var: str, conditions: list[dict[str, Any]],
+) -> None:
+    """Add transition conditions to the C# code generation."""
+    for cond in conditions:
+        cparam = sanitize_cs_string(cond["param"])
+        cmode = cond.get("mode", "Greater")
+        cthreshold = cond.get("threshold", 0.0)
+
+        if cmode == "Trigger":
+            lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.If, 0f, "{cparam}");')
+        elif cmode == "Greater":
+            lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.Greater, {cthreshold}f, "{cparam}");')
+        elif cmode == "Less":
+            lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.Less, {cthreshold}f, "{cparam}");')
+        elif cmode == "Equals":
+            lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.Equals, {cthreshold}f, "{cparam}");')
+        elif cmode == "NotEqual":
+            lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.NotEqual, {cthreshold}f, "{cparam}");')
+        elif cmode == "IfTrue":
+            lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.If, 0f, "{cparam}");')
+        elif cmode == "IfFalse":
+            lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.IfNot, 0f, "{cparam}");')
+
+
+def _add_animator_transitions(
+    lines: list[str],
+    transitions: list[dict[str, Any]],
+    state_var_map: dict[str, str],
+) -> None:
+    """Add animator transitions to the C# code generation."""
+    for t_idx, trans in enumerate(transitions):
+        from_state = trans["from"]
+        to_state = trans["to"]
+        conditions = trans.get("conditions", [])
+        duration = trans.get("duration", 0.25)
+        has_exit_time = trans.get("has_exit_time", False)
+        exit_time = trans.get("exit_time", 1.0)
+
+        to_var = state_var_map.get(to_state)
+        if to_var is None:
+            continue
+
+        trans_var = f"trans_{t_idx}"
+
+        if from_state == "Any":
+            lines.append(f"            // Transition: AnyState -> {sanitize_cs_string(to_state)}")
+            lines.append(f"            var {trans_var} = rootSM.AddAnyStateTransition({to_var});")
+        else:
+            from_var = state_var_map.get(from_state)
+            if from_var is None:
+                continue
+            lines.append(f"            // Transition: {sanitize_cs_string(from_state)} -> {sanitize_cs_string(to_state)}")
+            lines.append(f"            var {trans_var} = {from_var}.AddTransition({to_var});")
+
+        lines.append(f"            {trans_var}.duration = {duration}f;")
+        lines.append(f"            {trans_var}.hasExitTime = {str(has_exit_time).lower()};")
+        if has_exit_time:
+            lines.append(f"            {trans_var}.exitTime = {exit_time}f;")
+        lines.append(f"            {trans_var}.hasFixedDuration = true;")
+
+        _add_transition_conditions(lines, trans_var, conditions)
+        lines.append("")
+
 
 def generate_animator_with_transitions_script(
     controller_name: str = "VB_CombatAnimator",
@@ -154,7 +265,7 @@ def generate_animator_with_transitions_script(
         parameters = _DEFAULT_PARAMETERS
 
     safe_name = sanitize_cs_identifier(
-        controller_name.replace(" ", "_").replace("-", "_")
+        controller_name.replace(" ", "_").replace("-", "_"),
     )
     safe_name_str = sanitize_cs_string(controller_name)
 
@@ -188,90 +299,13 @@ def generate_animator_with_transitions_script(
     lines.append("")
 
     # -- Add parameters --
-    for param in parameters:
-        pname = sanitize_cs_string(param["name"])
-        ptype = param.get("type", "Float")
-        # Map to AnimatorControllerParameterType
-        type_map = {
-            "Float": "Float",
-            "Int": "Int",
-            "Bool": "Bool",
-            "Trigger": "Trigger",
-        }
-        cs_type = type_map.get(ptype, "Float")
-        lines.append(f'            controller.AddParameter("{pname}", AnimatorControllerParameterType.{cs_type});')
-    lines.append("")
+    _add_animator_parameters(lines, parameters)
 
     # -- Create states --
-    state_var_map: dict[str, str] = {}
-    for i, state in enumerate(states):
-        sname = state["name"]
-        safe_sname = sanitize_cs_identifier(sname)
-        var_name = f"state_{safe_sname}"
-        state_var_map[sname] = var_name
-        motion_path = state.get("motion_path", "")
-
-        lines.append(f'            var {var_name} = rootSM.AddState("{sanitize_cs_string(sname)}", new Vector3({250 + (i % 3) * 250}, {100 + (i // 3) * 80}, 0));')
-        if motion_path:
-            lines.append(f'            var clip_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(motion_path)}");')
-            lines.append(f"            if (clip_{safe_sname} != null) {var_name}.motion = clip_{safe_sname};")
-        if i == 0:
-            lines.append(f"            rootSM.defaultState = {var_name};")
-    lines.append("")
+    state_var_map = _add_animator_states(lines, states, safe_name_str)
 
     # -- Create transitions --
-    for t_idx, trans in enumerate(transitions):
-        from_state = trans["from"]
-        to_state = trans["to"]
-        conditions = trans.get("conditions", [])
-        duration = trans.get("duration", 0.25)
-        has_exit_time = trans.get("has_exit_time", False)
-        exit_time = trans.get("exit_time", 1.0)
-
-        to_var = state_var_map.get(to_state)
-        if to_var is None:
-            continue  # skip invalid targets
-
-        trans_var = f"trans_{t_idx}"
-
-        if from_state == "Any":
-            lines.append(f"            // Transition: AnyState -> {sanitize_cs_string(to_state)}")
-            lines.append(f"            var {trans_var} = rootSM.AddAnyStateTransition({to_var});")
-        else:
-            from_var = state_var_map.get(from_state)
-            if from_var is None:
-                continue
-            lines.append(f"            // Transition: {sanitize_cs_string(from_state)} -> {sanitize_cs_string(to_state)}")
-            lines.append(f"            var {trans_var} = {from_var}.AddTransition({to_var});")
-
-        lines.append(f"            {trans_var}.duration = {duration}f;")
-        lines.append(f"            {trans_var}.hasExitTime = {str(has_exit_time).lower()};")
-        if has_exit_time:
-            lines.append(f"            {trans_var}.exitTime = {exit_time}f;")
-        lines.append(f"            {trans_var}.hasFixedDuration = true;")
-
-        # -- Add conditions --
-        for cond in conditions:
-            cparam = sanitize_cs_string(cond["param"])
-            cmode = cond.get("mode", "Greater")
-            cthreshold = cond.get("threshold", 0.0)
-
-            if cmode == "Trigger":
-                lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.If, 0f, "{cparam}");')
-            elif cmode == "Greater":
-                lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.Greater, {cthreshold}f, "{cparam}");')
-            elif cmode == "Less":
-                lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.Less, {cthreshold}f, "{cparam}");')
-            elif cmode == "Equals":
-                lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.Equals, {cthreshold}f, "{cparam}");')
-            elif cmode == "NotEqual":
-                lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.NotEqual, {cthreshold}f, "{cparam}");')
-            elif cmode == "IfTrue":
-                lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.If, 0f, "{cparam}");')
-            elif cmode == "IfFalse":
-                lines.append(f'            {trans_var}.AddCondition(AnimatorConditionMode.IfNot, 0f, "{cparam}");')
-
-        lines.append("")
+    _add_animator_transitions(lines, transitions, state_var_map)
 
     # -- Save and result --
     lines.append("            AssetDatabase.SaveAssets();")
@@ -281,14 +315,14 @@ def generate_animator_with_transitions_script(
     trans_count = len(transitions)
     param_count = len(parameters)
     lines.append(
-        f'            string json = "{{\\"status\\":\\"success\\",\\"action\\":\\"animator_transitions\\",'
+        '            string json = "{\\"status\\":\\"success\\",\\"action\\":\\"animator_transitions\\",'
         f'\\"controller\\":\\"" + controllerPath + "\\",\\"states\\":{state_count},'
-        f'\\"transitions\\":{trans_count},\\"parameters\\":{param_count}}}";'
+        f'\\"transitions\\":{trans_count},\\"parameters\\":{param_count}}}";',
     )
     lines.append('            File.WriteAllText("Temp/vb_result.json", json);')
     lines.append(
-        f'            Debug.Log("[VeilBreakers] AnimatorController created with '
-        f'{state_count} states and {trans_count} transitions: " + controllerPath);'
+        '            Debug.Log("[VeilBreakers] AnimatorController created with '
+        f'{state_count} states and {trans_count} transitions: " + controllerPath);',
     )
 
     # -- Catch --
@@ -297,7 +331,7 @@ def generate_animator_with_transitions_script(
     lines.append("        {")
     lines.append(
         '            string json = "{\\"status\\":\\"error\\",\\"action\\":\\"animator_transitions\\",'
-        '\\"message\\":\\"" + ex.Message.Replace("\\"", "\\\\\\"") + "\\"}";'
+        '\\"message\\":\\"" + ex.Message.Replace("\\"", "\\\\\\"") + "\\"}";',
     )
     lines.append('            File.WriteAllText("Temp/vb_result.json", json);')
     lines.append('            Debug.LogError("[VeilBreakers] AnimatorController creation failed: " + ex.Message);')
@@ -587,7 +621,7 @@ def generate_multi_hit_events_script(
         hit_events = _DEFAULT_HIT_EVENTS
 
     safe_name = sanitize_cs_identifier(
-        clip_name.replace(" ", "_").replace("-", "_")
+        clip_name.replace(" ", "_").replace("-", "_"),
     )
     safe_name_str = sanitize_cs_string(clip_name)
 
@@ -608,38 +642,38 @@ def generate_multi_hit_events_script(
     lines.append("        {")
 
     # -- Find the clip --
-    lines.append(f'            // Find the animation clip by name')
+    lines.append('            // Find the animation clip by name')
     lines.append(f'            string[] guids = AssetDatabase.FindAssets("t:AnimationClip {safe_name_str}");')
-    lines.append(f"            AnimationClip clip = null;")
-    lines.append(f"            foreach (string guid in guids)")
-    lines.append(f"            {{")
-    lines.append(f"                string path = AssetDatabase.GUIDToAssetPath(guid);")
-    lines.append(f"                var candidate = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);")
+    lines.append("            AnimationClip clip = null;")
+    lines.append("            foreach (string guid in guids)")
+    lines.append("            {")
+    lines.append("                string path = AssetDatabase.GUIDToAssetPath(guid);")
+    lines.append("                var candidate = AssetDatabase.LoadAssetAtPath<AnimationClip>(path);")
     lines.append(f'                if (candidate != null && candidate.name == "{safe_name_str}")')
-    lines.append(f"                {{")
-    lines.append(f"                    clip = candidate;")
-    lines.append(f"                    break;")
-    lines.append(f"                }}")
-    lines.append(f"            }}")
+    lines.append("                {")
+    lines.append("                    clip = candidate;")
+    lines.append("                    break;")
+    lines.append("                }")
+    lines.append("            }")
     lines.append("")
-    lines.append(f"            // If not found, create a placeholder clip")
-    lines.append(f"            if (clip == null)")
-    lines.append(f"            {{")
-    lines.append(f'                string animDir = "Assets/Animations/Clips";')
-    lines.append(f"                if (!AssetDatabase.IsValidFolder(animDir))")
-    lines.append(f"                {{")
-    lines.append(f'                    if (!AssetDatabase.IsValidFolder("Assets/Animations"))')
-    lines.append(f'                        AssetDatabase.CreateFolder("Assets", "Animations");')
-    lines.append(f'                    AssetDatabase.CreateFolder("Assets/Animations", "Clips");')
-    lines.append(f"                }}")
+    lines.append("            // If not found, create a placeholder clip")
+    lines.append("            if (clip == null)")
+    lines.append("            {")
+    lines.append('                string animDir = "Assets/Animations/Clips";')
+    lines.append("                if (!AssetDatabase.IsValidFolder(animDir))")
+    lines.append("                {")
+    lines.append('                    if (!AssetDatabase.IsValidFolder("Assets/Animations"))')
+    lines.append('                        AssetDatabase.CreateFolder("Assets", "Animations");')
+    lines.append('                    AssetDatabase.CreateFolder("Assets/Animations", "Clips");')
+    lines.append("                }")
     lines.append(f'                clip = new AnimationClip {{ name = "{safe_name_str}" }};')
     lines.append(f'                AssetDatabase.CreateAsset(clip, animDir + "/{safe_name_str}.anim");')
-    lines.append(f"            }}")
+    lines.append("            }")
     lines.append("")
 
     # -- Build events list --
-    lines.append(f"            // Build multi-hit animation events")
-    lines.append(f"            var events = new List<AnimationEvent>();")
+    lines.append("            // Build multi-hit animation events")
+    lines.append("            var events = new List<AnimationEvent>();")
     lines.append("")
 
     for i, evt in enumerate(hit_events):
@@ -651,14 +685,14 @@ def generate_multi_hit_events_script(
         time_value = frame / frame_rate
 
         lines.append(f"            // Hit {hit_index}: frame {frame} ({time_value:.4f}s) - {brand}|{damage_type}")
-        lines.append(f"            events.Add(new AnimationEvent")
-        lines.append(f"            {{")
+        lines.append("            events.Add(new AnimationEvent")
+        lines.append("            {")
         lines.append(f"                time = {time_value:.4f}f,")
-        lines.append(f'                functionName = "OnCombatHit",')
+        lines.append('                functionName = "OnCombatHit",')
         lines.append(f'                stringParameter = "{brand}|{damage_type}",')
         lines.append(f"                intParameter = {hit_index},")
         lines.append(f"                floatParameter = {vfx_intensity}f")
-        lines.append(f"            }});")
+        lines.append("            });")
         lines.append("")
 
     # -- Apply events --
@@ -670,17 +704,17 @@ def generate_multi_hit_events_script(
     # -- Result JSON --
     event_count = len(hit_events)
     lines.append(
-        f'            string clipPath = AssetDatabase.GetAssetPath(clip);'
+        '            string clipPath = AssetDatabase.GetAssetPath(clip);',
     )
     lines.append(
         f'            string json = "{{\\"status\\":\\"success\\",\\"action\\":\\"multi_hit_events\\",'
         f'\\"clip_name\\":\\"{safe_name_str}\\",\\"event_count\\":{event_count},'
-        f'\\"clip_path\\":\\"" + clipPath.Replace("\\\\", "/") + "\\"}}";'
+        f'\\"clip_path\\":\\"" + clipPath.Replace("\\\\", "/") + "\\"}}";',
     )
     lines.append('            File.WriteAllText("Temp/vb_result.json", json);')
     lines.append(
         f'            Debug.Log("[VeilBreakers] Added {event_count} multi-hit events to clip: '
-        f'{safe_name_str} (" + clipPath + ")");'
+        f'{safe_name_str} (" + clipPath + ")");',
     )
 
     # -- Catch --
@@ -689,7 +723,7 @@ def generate_multi_hit_events_script(
     lines.append("        {")
     lines.append(
         '            string json = "{\\"status\\":\\"error\\",\\"action\\":\\"multi_hit_events\\",'
-        '\\"message\\":\\"" + ex.Message.Replace("\\"", "\\\\\\"") + "\\"}";'
+        '\\"message\\":\\"" + ex.Message.Replace("\\"", "\\\\\\"") + "\\"}";',
     )
     lines.append('            File.WriteAllText("Temp/vb_result.json", json);')
     lines.append('            Debug.LogError("[VeilBreakers] Multi-hit event creation failed: " + ex.Message);')
