@@ -21,7 +21,6 @@ Each function returns ``{"script_path", "script_content", "next_steps"}``.
 
 from __future__ import annotations
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------

@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +197,7 @@ def _brand_profile_cs(name: str, data: dict[str, Any]) -> str:
     lines.append(f"            flash = {_fmt_color(data['flash'])},")
     lines.append(f"            bloomMultiplier = {data['bloom']}f,")
     lines.append(f'            coreBlendMode = "{data.get("core_blend", "Additive")}",')
-    lines.append(f'            smokeBlendMode = "AlphaBlend",')
+    lines.append('            smokeBlendMode = "AlphaBlend",')
     lines.append(f'            particleTexture = "{data.get("texture", "SoftGlow")}",')
     # IRON has runic glow fields
     if "runic_glow" in data:

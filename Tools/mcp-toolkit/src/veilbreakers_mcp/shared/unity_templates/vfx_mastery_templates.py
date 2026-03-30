@@ -16,10 +16,9 @@ Requirements: VFX3-01 through VFX3-08
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
+from ._cs_sanitize import sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -713,7 +712,6 @@ def generate_projectile_vfx_chain_script(
     gr, gg, gb, ga = bc["glow"]
 
     # Stage config: either custom or auto-generated
-    stage_names = ["spawn_burst", "travel_trail", "impact_explosion", "aftermath_residue"]
     stage_durations = [0.3, -1.0, 0.5, 2.0]  # -1 = until impact
     stage_rates = [200, 80, 500, 30]
     stage_sizes = [0.15, 0.08, 0.4, 0.2]
@@ -2360,21 +2358,21 @@ def generate_boss_transition_vfx_script(
 
     # Build transition-specific coroutine
     if transition_type == "corruption_wave":
-        transition_coroutine = f'''
+        transition_coroutine = '''
     private IEnumerator RunCorruptionWave()
-    {{
+    {
         // Stage 1: Charge up (0-20% duration)
         float chargeEnd = duration * 0.2f;
         if (chargePS != null) chargePS.Play();
 
         float t = 0f;
         while (t < chargeEnd)
-        {{
+        {
             t += Time.deltaTime;
             float pulse = Mathf.Sin(t * 20f) * 0.5f + 0.5f;
             ApplyGlow(pulse * 3f);
             yield return null;
-        }}
+        }
 
         // Stage 2: Wave expansion (20-80% duration)
         if (chargePS != null) chargePS.Stop();
@@ -2386,22 +2384,22 @@ def generate_boss_transition_vfx_script(
         t = 0f;
 
         while (t < waveDuration)
-        {{
+        {
             t += Time.deltaTime;
             float progress = t / waveDuration;
             float currentRadius = Mathf.Lerp(0f, arenaRadius, progress);
 
             // Expand wave ring
             if (wavePS != null)
-            {{
+            {
                 var shape = wavePS.shape;
                 shape.radius = currentRadius;
-            }}
+            }
 
             // Camera shake based on proximity
             ApplyScreenShake(1f - progress);
             yield return null;
-        }}
+        }
 
         // Stage 3: Aftermath (80-100% duration)
         if (wavePS != null) wavePS.Stop();
@@ -2411,33 +2409,33 @@ def generate_boss_transition_vfx_script(
         float afterDuration = duration - afterStart;
         t = 0f;
         while (t < afterDuration)
-        {{
+        {
             t += Time.deltaTime;
             float fadeOut = 1f - (t / afterDuration);
             ApplyGlow(fadeOut);
             yield return null;
-        }}
+        }
 
         if (aftermathPS != null) aftermathPS.Stop();
         OnTransitionComplete();
-    }}'''
+    }'''
     elif transition_type == "power_surge":
-        transition_coroutine = f'''
+        transition_coroutine = '''
     private IEnumerator RunPowerSurge()
-    {{
+    {
         // Stage 1: Energy gathering (0-30% duration)
         float gatherEnd = duration * 0.3f;
         if (chargePS != null) chargePS.Play();
 
         float t = 0f;
         while (t < gatherEnd)
-        {{
+        {
             t += Time.deltaTime;
             float progress = t / gatherEnd;
             // Particles pull inward during gathering
             ApplyGlow(progress * 5f);
             yield return null;
-        }}
+        }
 
         // Stage 2: Column eruption + shockwave (30-60% duration)
         if (chargePS != null) chargePS.Stop();
@@ -2449,26 +2447,26 @@ def generate_boss_transition_vfx_script(
         t = 0f;
 
         while (t < eruptDuration)
-        {{
+        {
             t += Time.deltaTime;
             float progress = t / eruptDuration;
 
             // Column rises
             if (columnPS != null)
-            {{
+            {
                 columnPS.transform.localScale = new Vector3(1f, Mathf.Lerp(0.1f, 3f, progress), 1f);
-            }}
+            }
 
             // Shockwave expands
             if (wavePS != null)
-            {{
+            {
                 var shape = wavePS.shape;
                 shape.radius = Mathf.Lerp(0f, arenaRadius, progress);
-            }}
+            }
 
             ApplyScreenShake(1f);
             yield return null;
-        }}
+        }
 
         // Stage 3: Dissipation (60-100% duration)
         if (columnPS != null) columnPS.Stop();
@@ -2479,20 +2477,20 @@ def generate_boss_transition_vfx_script(
         float dissipateDuration = dissipateEnd - eruptEnd;
         t = 0f;
         while (t < dissipateDuration)
-        {{
+        {
             t += Time.deltaTime;
             float fadeOut = 1f - (t / dissipateDuration);
             ApplyGlow(fadeOut * 2f);
             yield return null;
-        }}
+        }
 
         if (aftermathPS != null) aftermathPS.Stop();
         OnTransitionComplete();
-    }}'''
+    }'''
     else:  # arena_transformation
-        transition_coroutine = f'''
+        transition_coroutine = '''
     private IEnumerator RunArenaTransformation()
-    {{
+    {
         // Stage 1: Color shift begins (0-40% duration)
         float shiftEnd = duration * 0.4f;
         float t = 0f;
@@ -2503,7 +2501,7 @@ def generate_boss_transition_vfx_script(
         float targetFogDensity = originalFogDensity * 2f;
 
         while (t < shiftEnd)
-        {{
+        {
             t += Time.deltaTime;
             float progress = t / shiftEnd;
 
@@ -2516,7 +2514,7 @@ def generate_boss_transition_vfx_script(
             RenderSettings.ambientLight = Color.Lerp(Color.white * 0.5f, brandColor * 0.3f, progress);
 
             yield return null;
-        }}
+        }
 
         // Stage 2: Particle rain + environment effects (40-80% duration)
         if (wavePS != null) wavePS.Play();
@@ -2526,11 +2524,11 @@ def generate_boss_transition_vfx_script(
         float rainDuration = rainEnd - shiftEnd;
         t = 0f;
         while (t < rainDuration)
-        {{
+        {
             t += Time.deltaTime;
             ApplyScreenShake(0.3f);
             yield return null;
-        }}
+        }
 
         // Stage 3: Stabilize in new state (80-100% duration)
         if (wavePS != null) wavePS.Stop();
@@ -2540,16 +2538,16 @@ def generate_boss_transition_vfx_script(
         float stabilizeDuration = stabilizeEnd - rainEnd;
         t = 0f;
         while (t < stabilizeDuration)
-        {{
+        {
             t += Time.deltaTime;
             float progress = t / stabilizeDuration;
             // Gentle settle
             RenderSettings.fogDensity = Mathf.Lerp(targetFogDensity, targetFogDensity * 0.7f, progress);
             yield return null;
-        }}
+        }
 
         OnTransitionComplete();
-    }}'''
+    }'''
 
     # Column PS field only for power_surge
     column_field = ""

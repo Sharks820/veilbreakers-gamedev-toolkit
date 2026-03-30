@@ -1,0 +1,107 @@
+{
+  "terrain_result": {
+    "name": "ScatterProbeTerrain",
+    "vertex_count": 9216,
+    "terrain_type": "plains",
+    "resolution": 96,
+    "height_scale": 5.0,
+    "erosion_applied": true
+  },
+  "vegetation_result": {
+    "name": "ScatterProbeTerrain_vegetation",
+    "instance_count": 260,
+    "vegetation_types": {
+      "bush": 81,
+      "tree": 37,
+      "grass": 142
+    },
+    "bounds": {
+      "width": 70.0,
+      "depth": 70.0
+    }
+  },
+  "props_result": {
+    "name": "ScatterProbeProps",
+    "prop_count": 18,
+    "prop_types": {
+      "rock": 3,
+      "lantern": 3,
+      "crate": 5,
+      "barrel": 4,
+      "bush": 3
+    }
+  },
+  "templates": {
+    "tree": {
+      "name": "_template_tree",
+      "exists": true,
+      "vertices": 534,
+      "polygons": 473,
+      "dimensions": [
+        2.498,
+        3.45,
+        2.5679
+      ],
+      "materials": [
+        "mat_tree"
+      ]
+    },
+    "bush": {
+      "name": "_template_bush",
+      "exists": true,
+      "vertices": 245,
+      "polygons": 276,
+      "dimensions": [
+        0.9257,
+        0.7098,
+        0.7767
+      ],
+      "materials": [
+        "mat_bush"
+      ]
+    },
+    "grass": {
+      "name": "_template_grass",
+      "exists": true,
+      "vertices": 56,
+      "polygons": 14,
+      "dimensions": [
+        0.3932,
+        0.8164,
+        0.5035
+      ],
+      "materials": [
+        "mat_grass"
+      ]
+    },
+    "rock": {
+      "name": "_template_rock",
+      "exists": true,
+      "vertices": 60,
+      "polygons": 50,
+      "dimensions": [
+        0.9785,
+        1.1236,
+        0.7251
+      ],
+      "materials": [
+        "mat_rock"
+      ]
+    },
+    "crate": {
+      "name": "_template_crate",
+      "exists": true,
+      "vertices": 80,
+      "polygons": 60,
+      "dimensions": [
+        0.636,
+        0.6,
+        0.636
+      ],
+      "materials": [
+        "mat_crate"
+      ]
+    }
+  },
+  "viewport_screenshot": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\cowork_bridge\\output\\environment_scatter_probe.png"
+}

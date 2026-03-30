@@ -15,11 +15,9 @@ Exports:
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
-
+from ._cs_sanitize import sanitize_cs_identifier, sanitize_cs_string
 
 # ---------------------------------------------------------------------------
 # ANIM3-03: Blend tree generation
@@ -80,7 +78,7 @@ def generate_blend_tree_script(
     valid_types = ("directional_8way", "speed_blend", "directional_speed")
     if blend_type not in valid_types:
         raise ValueError(
-            f"Unknown blend_type: {blend_type!r}. Valid: {valid_types}"
+            f"Unknown blend_type: {blend_type!r}. Valid: {valid_types}",
         )
 
     safe_name = sanitize_cs_identifier(controller_name.replace(" ", "_").replace("-", "_"))
@@ -141,7 +139,7 @@ def generate_blend_tree_script(
                     lines.append(f'            var clip_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(clip_path)}");')
                     lines.append(f"            if (clip_{safe_sname} != null)")
                     lines.append(f"                blendTree.AddChild(clip_{safe_sname}, new Vector2({pos['x']}f, {pos['y']}f));")
-                    lines.append(f"            else")
+                    lines.append("            else")
                     lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(sname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
                 else:
                     lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(sname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
@@ -154,7 +152,7 @@ def generate_blend_tree_script(
                     lines.append(f'            var clip_{safe_pname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(clip_path)}");')
                     lines.append(f"            if (clip_{safe_pname} != null)")
                     lines.append(f"                blendTree.AddChild(clip_{safe_pname}, new Vector2({pos['x']}f, {pos['y']}f));")
-                    lines.append(f"            else")
+                    lines.append("            else")
                     lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
                 else:
                     lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
@@ -180,7 +178,7 @@ def generate_blend_tree_script(
                     lines.append(f'            var clip_{safe_sname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(clip_path)}");')
                     lines.append(f"            if (clip_{safe_sname} != null)")
                     lines.append(f"                blendTree.AddChild(clip_{safe_sname}, {thresh}f);")
-                    lines.append(f"            else")
+                    lines.append("            else")
                     lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(sname)}" }}, {thresh}f);')
                 else:
                     lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(sname)}" }}, {thresh}f);')
@@ -193,7 +191,7 @@ def generate_blend_tree_script(
                     lines.append(f'            var clip_{safe_tname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(clip_path)}");')
                     lines.append(f"            if (clip_{safe_tname} != null)")
                     lines.append(f'                blendTree.AddChild(clip_{safe_tname}, {t["threshold"]}f);')
-                    lines.append(f"            else")
+                    lines.append("            else")
                     lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(tname)}" }}, {t["threshold"]}f);')
                 else:
                     lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(tname)}" }}, {t["threshold"]}f);')
@@ -220,7 +218,7 @@ def generate_blend_tree_script(
                 lines.append(f'            var clip_{safe_pname} = AssetDatabase.LoadAssetAtPath<AnimationClip>("{sanitize_cs_string(clip_path)}");')
                 lines.append(f"            if (clip_{safe_pname} != null)")
                 lines.append(f"                blendTree.AddChild(clip_{safe_pname}, new Vector2({pos['x']}f, {pos['y']}f));")
-                lines.append(f"            else")
+                lines.append("            else")
                 lines.append(f'                blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
             else:
                 lines.append(f'            blendTree.AddChild(new AnimationClip {{ name = "{sanitize_cs_string(pname)}" }}, new Vector2({pos["x"]}f, {pos["y"]}f));')
@@ -230,7 +228,7 @@ def generate_blend_tree_script(
     lines.append("")
     lines.append(f'            string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"blend_tree\\", \\"blend_type\\": \\"{blend_type}\\", \\"controller\\": \\"" + controllerPath + "\\"}}";')
     lines.append('            File.WriteAllText("Temp/vb_result.json", json);')
-    lines.append(f'            Debug.Log("[VeilBreakers] Blend tree controller created: " + controllerPath);')
+    lines.append('            Debug.Log("[VeilBreakers] Blend tree controller created: " + controllerPath);')
     lines.append("        }")
     lines.append("        catch (System.Exception ex)")
     lines.append("        {")
@@ -344,9 +342,9 @@ def generate_additive_layer_script(
 
     # Configure base layer
     lines.append(f'            // Base layer: {safe_base_layer} (Override, weight=1.0)')
-    lines.append(f"            var allLayers = controller.layers;")
+    lines.append("            var allLayers = controller.layers;")
     lines.append(f'            allLayers[0].name = "{safe_base_layer}";')
-    lines.append(f"            controller.layers = allLayers;")
+    lines.append("            controller.layers = allLayers;")
     lines.append("            var baseSM = controller.layers[0].stateMachine;")
     lines.append("")
 
@@ -381,9 +379,9 @@ def generate_additive_layer_script(
         lines.append(f"            // Additive layer: {safe_layer}")
         lines.append(f"            controller.AddLayer(\"{safe_layer}\");")
         if layer_idx == 0:
-            lines.append(f"            var additiveLayers = controller.layers;")
+            lines.append("            var additiveLayers = controller.layers;")
         else:
-            lines.append(f"            additiveLayers = controller.layers;")
+            lines.append("            additiveLayers = controller.layers;")
         lines.append(f"            var layer_{safe_layer_id} = additiveLayers[{layer_idx + 1}];")
         lines.append(f"            layer_{safe_layer_id}.defaultWeight = {default_weight}f;")
 
@@ -397,7 +395,7 @@ def generate_additive_layer_script(
         lines.append(f'            var mask_{safe_layer_id} = new AvatarMask();')
 
         if mask_type == "upper_body":
-            lines.append(f"            // Upper body mask: enable head, arms, torso; disable legs")
+            lines.append("            // Upper body mask: enable head, arms, torso; disable legs")
             lines.append(f"            mask_{safe_layer_id}.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Root, false);")
             lines.append(f"            mask_{safe_layer_id}.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Body, true);")
             lines.append(f"            mask_{safe_layer_id}.SetHumanoidBodyPartActive(AvatarMaskBodyPart.Head, true);")
@@ -412,13 +410,13 @@ def generate_additive_layer_script(
             lines.append(f"            mask_{safe_layer_id}.SetHumanoidBodyPartActive(AvatarMaskBodyPart.LeftHandIK, true);")
             lines.append(f"            mask_{safe_layer_id}.SetHumanoidBodyPartActive(AvatarMaskBodyPart.RightHandIK, true);")
         else:
-            lines.append(f"            // Full body mask: enable all parts")
-            lines.append(f"            for (int i = 0; i < (int)AvatarMaskBodyPart.LastBodyPart; i++)")
+            lines.append("            // Full body mask: enable all parts")
+            lines.append("            for (int i = 0; i < (int)AvatarMaskBodyPart.LastBodyPart; i++)")
             lines.append(f"                mask_{safe_layer_id}.SetHumanoidBodyPartActive((AvatarMaskBodyPart)i, true);")
 
         lines.append(f"            layer_{safe_layer_id}.avatarMask = mask_{safe_layer_id};")
         lines.append(f"            additiveLayers[{layer_idx + 1}] = layer_{safe_layer_id};")
-        lines.append(f"            controller.layers = additiveLayers;")
+        lines.append("            controller.layers = additiveLayers;")
         lines.append("")
 
         # Add states to additive layer

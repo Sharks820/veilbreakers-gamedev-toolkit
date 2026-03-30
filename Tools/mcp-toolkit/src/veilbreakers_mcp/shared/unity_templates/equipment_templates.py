@@ -16,9 +16,7 @@ matrices, synergy calculations, corruption formulas, or damage pipelines.
 from __future__ import annotations
 
 import re
-from typing import Optional
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 def _safe_namespace(ns: str) -> str:

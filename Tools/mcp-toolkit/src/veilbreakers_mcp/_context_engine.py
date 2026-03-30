@@ -13,7 +13,6 @@ import ast
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 
 # =============================================================================
@@ -43,7 +42,7 @@ class Reference:
     line: int
     column: int = 0
     context: str = "call"  # "call", "type_use", "inheritance", "attribute", "import"
-    resolved_symbol: Optional[str] = None  # The definition it points to
+    resolved_symbol: str | None = None  # The definition it points to
 
 
 @dataclass
@@ -588,7 +587,7 @@ class ContextEngine:
             field_match = field_pattern.search(line)
             if field_match and current_class:
                 attributes = field_match.group(1) or ""
-                field_type = field_match.group(2)
+                field_match.group(2)
                 field_name = field_match.group(3)
 
                 # Check for serialization attributes
@@ -862,7 +861,7 @@ class ContextEngine:
 
         Args:
             method_name: Name of the method to find callers for
-            file: Optional file filter
+            file: Optional file path to filter results
 
         Returns:
             List of qualified method names that call this method
@@ -951,9 +950,9 @@ class ContextEngine:
             return 1.0
 
         # Count uses before this line
-        uses_before = sum(1 for f, l in var_state.uses if f == file and l < line)
+        uses_before = sum(1 for f, line_no in var_state.uses if f == file and line_no < line)
         checks_before = sum(
-            1 for f, l in var_state.null_checks if f == file and l < line
+            1 for f, line_no in var_state.null_checks if f == file and line_no < line
         )
 
         if uses_before == 0:
@@ -961,7 +960,7 @@ class ContextEngine:
 
         return min(1.0, checks_before / uses_before)
 
-    def resolve_reference(self, ref: Reference) -> Optional[Definition]:
+    def resolve_reference(self, ref: Reference) -> Definition | None:
         """
         Try to resolve a reference to its definition.
 

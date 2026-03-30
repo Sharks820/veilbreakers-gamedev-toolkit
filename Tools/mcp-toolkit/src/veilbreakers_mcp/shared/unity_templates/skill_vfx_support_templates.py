@@ -931,7 +931,7 @@ def generate_defensive_skill_vfx_script(skill_name: str = "void_barrier") -> dic
     if skill_name not in DEFENSIVE_SKILL_CONFIGS:
         skill_name = "void_barrier"
 
-    safe_name = sanitize_cs_identifier(skill_name)
+    sanitize_cs_identifier(skill_name)
     configs_block = _build_skill_configs_cs(
         DEFENSIVE_SKILL_CONFIGS, "DefenseConfig", "DefenseConfigs",
     )
@@ -1243,7 +1243,7 @@ def generate_healing_skill_vfx_script(skill_name: str = "restorative_bloom") -> 
     if skill_name not in HEALING_SKILL_CONFIGS:
         skill_name = "restorative_bloom"
 
-    safe_name = sanitize_cs_identifier(skill_name)
+    sanitize_cs_identifier(skill_name)
     configs_block = _build_skill_configs_cs(
         HEALING_SKILL_CONFIGS, "HealConfig", "HealConfigs",
     )
@@ -1530,7 +1530,7 @@ def generate_summon_skill_vfx_script(skill_name: str = "skeletal_rising") -> dic
     if skill_name not in SUMMON_SKILL_CONFIGS:
         skill_name = "skeletal_rising"
 
-    safe_name = sanitize_cs_identifier(skill_name)
+    sanitize_cs_identifier(skill_name)
     configs_block = _build_skill_configs_cs(
         SUMMON_SKILL_CONFIGS, "SummonConfig", "SummonConfigs",
     )
@@ -1873,7 +1873,7 @@ def generate_transform_skill_vfx_script(skill_name: str = "demon_trigger") -> di
     if skill_name not in TRANSFORM_SKILL_CONFIGS:
         skill_name = "demon_trigger"
 
-    safe_name = sanitize_cs_identifier(skill_name)
+    sanitize_cs_identifier(skill_name)
     configs_block = _build_skill_configs_cs(
         TRANSFORM_SKILL_CONFIGS, "TransformConfig", "TransformConfigs",
         include_persistent=True,

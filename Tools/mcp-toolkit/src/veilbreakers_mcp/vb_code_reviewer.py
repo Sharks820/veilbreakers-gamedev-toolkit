@@ -258,6 +258,45 @@ _RULE_RELIABILITY: dict[str, float | dict] = {
 
     # High-reliability rules - 1.0x multiplier (default)
     # Most bug rules keep 1.0 as they have good precision
+
+    # Uncompiled regex — FP in analysis infrastructure files where regex calls
+    # are inside guard function loops scanning source lines, not hot data loops
+    "PY-PERF-02": {
+        "multiplier": 0.3,  # Heavy confidence penalty — mostly FP
+        "skip_patterns": [
+            r"_rules_.*\.py$",      # Rule definition files (analysis infrastructure)
+            r"vb_python_reviewer\.py$",
+            r"vb_code_reviewer\.py$",
+            r"_tool_runner\.py$",
+            r"_ast_analyzer\.py$",
+        ],
+    },
+
+    # Broad except — FP in analysis/infra code where best-effort handlers are intentional
+    "PY-COR-12": {
+        "multiplier": 0.6,
+        "skip_patterns": [
+            r"vb_code_reviewer\.py$",  # Reviewer's own error handling is intentional
+            r"_tool_runner\.py$",      # Tool runner best-effort is by design
+        ],
+    },
+
+    # Database connection — FP for sqlite3 local caches (not server DBs)
+    "PY-RES-01": {
+        "multiplier": 0.5,
+        "skip_patterns": [
+            r"asset_catalog\.py$",  # Local sqlite3 cache, not a server connection
+        ],
+    },
+
+    # Division guard — FP when max() guard IS the correct mitigation pattern
+    "PY-RES-03": {
+        "multiplier": 0.5,
+        "skip_patterns": [
+            r"blender_server\.py$",
+            r"pipeline_runner\.py$",
+        ],
+    },
 }
 
 # Tool reputation weighting: Historical precision scores per tool
@@ -1615,6 +1654,14 @@ def scan_python_file(
             continue
         if not _should_emit_rule(rule, review_scope):
             continue
+        # Skip rules with file-specific skip patterns in _RULE_RELIABILITY
+        rule_config = _RULE_RELIABILITY.get(rule.id)
+        if isinstance(rule_config, dict):
+            skip_patterns = rule_config.get("skip_patterns", [])
+            if skip_patterns:
+                norm_fp = filepath.replace("\\", "/")
+                if any(re.search(p, norm_fp) for p in skip_patterns):
+                    continue
         if "SENTINEL" in rule.pattern.pattern:
             continue
 
@@ -1732,6 +1779,15 @@ def scan_csharp_file(
     for rule in rules:
         if not _should_emit_rule(rule, review_scope):
             continue
+
+        # Skip rules with file-specific skip patterns in _RULE_RELIABILITY
+        rule_config = _RULE_RELIABILITY.get(rule.id)
+        if isinstance(rule_config, dict):
+            skip_patterns = rule_config.get("skip_patterns", [])
+            if skip_patterns:
+                norm_fp = filepath.replace("\\", "/")
+                if any(re.search(p, norm_fp) for p in skip_patterns):
+                    continue
 
         # File filter (normalize path separators for cross-platform)
         norm_fp = filepath.replace("\\", "/")

@@ -376,7 +376,7 @@ def generate_addressables_config_script(
         lines.append(f"                    schema.LoadPath.SetVariableByName(settings, {load_path_var});")
         lines.append(f"                    schema.BundleMode = BundledAssetGroupSchema.BundlePackingMode.{packing};")
         lines.append("                }")
-        lines.append(f'                Debug.Log("[VeilBreakers] Configured group: " + groupName);')
+        lines.append('                Debug.Log("[VeilBreakers] Configured group: " + groupName);')
         lines.append("            }")
         lines.append("")
 
@@ -507,7 +507,7 @@ def _generate_android_config(
         '            string manifestPath = Path.Combine(manifestDir, "AndroidManifest.xml");',
         "            File.WriteAllText(manifestPath, manifestContent);",
         "",
-        f'            string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"configure_android\\", \\"manifest_path\\": \\"" + manifestPath.Replace("\\\\", "/") + "\\"}}";',
+        '            string json = "{\\"status\\": \\"success\\", \\"action\\": \\"configure_android\\", \\"manifest_path\\": \\"" + manifestPath.Replace("\\\\", "/") + "\\"}";',
         '            File.WriteAllText("Temp/vb_result.json", json);',
         '            Debug.Log("[VeilBreakers] Android manifest written to " + manifestPath);',
         "            AssetDatabase.Refresh();",

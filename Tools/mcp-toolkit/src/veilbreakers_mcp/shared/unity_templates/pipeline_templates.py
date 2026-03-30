@@ -841,7 +841,7 @@ def generate_asset_postprocessor_script(
         Complete C# AssetPostprocessor script source.
     """
     safe_name = sanitize_cs_identifier(processor_name)
-    safe_ns = sanitize_cs_identifier(namespace.replace(".", "_"))
+    sanitize_cs_identifier(namespace.replace(".", "_"))
     clean_ns = _safe_namespace(namespace)
 
     # Build texture rules code

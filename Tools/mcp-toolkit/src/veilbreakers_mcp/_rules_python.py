@@ -477,7 +477,6 @@ def _check_regex_in_loop(
     line_indent = len(line) - len(line.lstrip())
     for j in range(max(0, idx - 10), idx):
         candidate = all_lines[j]
-        candidate_stripped = candidate.lstrip()
         if re.search(r"^\s*(for|while)\b", candidate):
             loop_indent = len(candidate) - len(candidate.lstrip())
             if loop_indent < line_indent:
@@ -1148,6 +1147,103 @@ def create_rules() -> list[Any]:
             layer="hard_correctness",
             requires_context=False,
         ),
+
+        # ==================================================================
+        #  MISSING DETECTION PATTERNS
+        #  Patterns identified by gap analysis that were not previously caught
+        # ==================================================================
+
+        # Database connection lifecycle - opened without context manager support
+        Rule(
+            id="PY-RES-01",
+            severity=Severity.HIGH,
+            category=Category.Bug,
+            description="Database connection opened in __init__ without context manager support -- connection leak risk",
+            fix="Implement __enter__/__exit__ or __del__ for cleanup, or use contextlib",
+            pattern=re.compile(r"self\.\w+\s*=\s*sqlite3\.connect"),
+            layer="hard_correctness",
+            requires_context=False,
+        ),
+
+        # Temp directory without cleanup
+        Rule(
+            id="PY-RES-02",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="tempfile.mkdtemp() without cleanup or context manager -- temp directory leak",
+            fix="Use tempfile.TemporaryDirectory() as context manager or clean up in finally block",
+            pattern=re.compile(r"tempfile\.mkdtemp\s*\("),
+            anti_patterns=_compile_anti([r"shutil\.rmtree", r"cleanup", r"TemporaryDirectory"]),
+            anti_radius=40,
+            layer="hard_correctness",
+            requires_context=False,
+        ),
+
+        # Division by zero guard with max() is fragile
+        Rule(
+            id="PY-RES-03",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="Division with max() guard -- verify zero/negative edge cases are handled",
+            fix="Add explicit check: if divisor <= 0: return default or raise ValueError",
+            pattern=re.compile(r"/\s*max\s*\(\s*\w+\s*,\s*[\d.]+\s*\)"),
+            layer="semantic",
+            requires_context=False,
+        ),
+
+        # Mutable default with truthy empty check
+        Rule(
+            id="PY-RES-04",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="Mutable default with 'or []' fallback -- empty list is replaced with defaults unexpectedly",
+            fix="Use 'if param is None:' instead of 'param or []' to distinguish None from empty",
+            pattern=re.compile(r"=\s*None\s*\)[^)]{0,200}?\w+\s+or\s*\["),
+            layer="semantic",
+            requires_context=False,
+        ),
+
+        # Empty exception handler
+        Rule(
+            id="PY-RES-05",
+            severity=Severity.MEDIUM,
+            category=Category.Quality,
+            description="Empty exception handler silently swallows errors -- should log or rethrow",
+            fix="Add logging: 'except Exception as exc: logger.warning(\"...\", exc)'",
+            pattern=re.compile(r"except\s+Exception\s*:\s*pass"),
+            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"intentional", r"graceful"]),
+            anti_radius=5,
+            layer="semantic",
+            requires_context=False,
+        ),
+
+        # Global variable mutation
+        Rule(
+            id="PY-RES-06",
+            severity=Severity.LOW,
+            category=Category.Quality,
+            description="Global variable mutation -- consider dependency injection or singleton pattern",
+            fix="Use class-level state, dependency injection, or documented singleton pattern",
+            pattern=re.compile(r"^\s*global\s+\w+"),
+            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"singleton", r"cache"]),
+            anti_radius=10,
+            layer="heuristic",
+            requires_context=False,
+        ),
+
+        # Resource opened without context manager
+        Rule(
+            id="PY-RES-07",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="Resource opened without context manager -- potential resource leak",
+            fix="Use 'with open(...) as f:' pattern to ensure cleanup",
+            pattern=re.compile(r"(?:socket|file|connection)\s*\.\s*open\s*\("),
+            anti_patterns=_compile_anti([r"with\s+", r"finally\s*:"]),
+            anti_radius=30,
+            layer="hard_correctness",
+            requires_context=False,
+        ),
     ]
 
     return RULES
@@ -1172,7 +1268,7 @@ def _ast_analyze_unused_imports(
     3. If import is a known runtime-glue module
     4. If import is a re-export (from x import y as y)
     """
-    issues = []
+    issues: list[dict[str, object]] = []
     try:
         tree = ast.parse(source, filename=filepath)
     except SyntaxError:
@@ -1204,13 +1300,11 @@ def _ast_analyze_unused_imports(
                 imported_names[name] = node.lineno
 
     # Check for __all__ definition
-    has_all = False
     all_names_list: set[str] = set()
     for n in ast.iter_child_nodes(tree):
         if isinstance(n, ast.Assign):
             for t in n.targets:
                 if isinstance(t, ast.Name) and t.id == "__all__":
-                    has_all = True
                     if isinstance(n.value, (ast.List, ast.Tuple)):
                         for elt in n.value.elts:
                             if isinstance(elt, ast.Constant) and isinstance(
@@ -1252,7 +1346,7 @@ def _ast_analyze_lazy_imports(
     is_test_file: bool = False,
 ) -> list[dict]:
     """AST-based analysis for lazy imports (PY-COR-13)."""
-    issues = []
+    issues: list[dict[str, object]] = []
     try:
         tree = ast.parse(source, filename=filepath)
     except SyntaxError:
@@ -1311,7 +1405,7 @@ def _ast_analyze_type_annotations(
     is_init_module: bool = False,
 ) -> list[dict]:
     """AST-based analysis for missing type annotations (PY-STY-08)."""
-    issues = []
+    issues: list[dict[str, object]] = []
     try:
         tree = ast.parse(source, filename=filepath)
     except SyntaxError:
@@ -1363,7 +1457,7 @@ def _ast_analyze_main_guard(
     is_init_module: bool = False,
 ) -> list[dict]:
     """AST-based analysis for missing __main__ guard (PY-STY-05)."""
-    issues = []
+    issues: list[dict[str, object]] = []
     module_name = Path(filepath).name
     if module_name.startswith("_"):
         return issues
@@ -1412,7 +1506,7 @@ def _ast_analyze_all_export(
     is_init_module: bool = False,
 ) -> list[dict]:
     """AST-based analysis for missing __all__ (PY-STY-06)."""
-    issues = []
+    issues: list[dict[str, object]] = []
     module_name = Path(filepath).name
     if module_name.startswith("_"):
         return issues
@@ -1460,7 +1554,7 @@ def _ast_analyze_function_length(
     threshold: Optional[int] = None,
 ) -> list[dict]:
     """AST-based analysis for long functions (PY-STY-09)."""
-    issues = []
+    issues: list[dict[str, object]] = []
     try:
         tree = ast.parse(source, filename=filepath)
     except SyntaxError:

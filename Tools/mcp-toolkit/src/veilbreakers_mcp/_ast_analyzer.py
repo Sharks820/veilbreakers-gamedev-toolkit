@@ -9,8 +9,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
 
 # Lazy imports — tree-sitter is optional
 _TS_AVAILABLE = False
@@ -18,6 +17,9 @@ _CS_LANG = None
 _PY_LANG = None
 _cs_parser = None
 _py_parser = None
+
+if TYPE_CHECKING:
+    from tree_sitter import Node
 
 try:
     import tree_sitter_c_sharp as _tscs
@@ -76,13 +78,13 @@ def analyze_csharp(filepath: str, source: bytes) -> list[ASTFinding]:
     findings.extend(_cs_write_only_fields(root, source, filepath))
     findings.extend(_cs_uncalled_private_methods(root, source, filepath))
     findings.extend(_cs_collection_modified_in_foreach(root, source, filepath))
-    findings.extend(_cs_async_void(root, filepath))
+    findings.extend(_cs_async_void(root, source, filepath))
 
     return findings
 
 
 def _cs_write_only_fields(
-    root: "tree_sitter.Node", source: bytes, filepath: str
+    root: "Node", source: bytes, filepath: str
 ) -> list[ASTFinding]:
     """Find private fields assigned but never read."""
     findings = []
@@ -162,7 +164,7 @@ def _cs_write_only_fields(
 
 
 def _cs_uncalled_private_methods(
-    root: "tree_sitter.Node", source: bytes, filepath: str
+    root: "Node", source: bytes, filepath: str
 ) -> list[ASTFinding]:
     """Find private methods with no call sites in the same file."""
     findings = []
@@ -217,7 +219,7 @@ def _cs_uncalled_private_methods(
                 file=filepath,
                 line=line,
                 description=f"Private method '{method_name}' has no call sites in this file",
-                fix=f"Remove if dead code, or add [UsedImplicitly] if called via reflection",
+                fix="Remove if dead code, or add [UsedImplicitly] if called via reflection",
                 severity="MEDIUM",
                 confidence=70,
             ))
@@ -226,7 +228,7 @@ def _cs_uncalled_private_methods(
 
 
 def _cs_collection_modified_in_foreach(
-    root: "tree_sitter.Node", source: bytes, filepath: str
+    root: "Node", source: bytes, filepath: str
 ) -> list[ASTFinding]:
     """Detect collection modification inside foreach using AST structure."""
     findings = []
@@ -268,11 +270,11 @@ def _cs_collection_modified_in_foreach(
     return findings
 
 
-def _cs_async_void(root: "tree_sitter.Node", filepath: str) -> list[ASTFinding]:
+def _cs_async_void(root: "Node", source: bytes, filepath: str) -> list[ASTFinding]:
     """Detect async void methods (non-event-handler)."""
     findings = []
 
-    def walk(node: "tree_sitter.Node"):
+    def walk(node: "Node"):
         if node.type == "method_declaration":
             modifiers = []
             return_type = None
