@@ -21,7 +21,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------

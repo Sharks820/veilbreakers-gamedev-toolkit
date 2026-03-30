@@ -13,8 +13,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
-from .vfx_templates import BRAND_PRIMARY_COLORS, BRAND_GLOW_COLORS
+from ._cs_sanitize import sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -362,7 +361,7 @@ def generate_status_effect_controller_script(
     effect_type = effect_type.lower()
     if effect_type not in STATUS_EFFECTS:
         effect_type = "stun"
-    safe_type = sanitize_cs_identifier(effect_type)
+    sanitize_cs_identifier(effect_type)
 
     # Build config dictionary entries
     config_entries = ",\n".join(
@@ -809,7 +808,7 @@ def generate_crowd_control_vfx_script(
     cc_type = cc_type.lower()
     if cc_type not in CC_TYPES:
         cc_type = "mass_stun"
-    safe_type = sanitize_cs_identifier(cc_type)
+    sanitize_cs_identifier(cc_type)
 
     # Build CC config dictionary entries
     cc_config_entries = ",\n".join(

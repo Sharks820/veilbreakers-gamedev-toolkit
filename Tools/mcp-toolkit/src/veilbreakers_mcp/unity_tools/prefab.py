@@ -1,14 +1,11 @@
 """unity_prefab tool handler."""
 
 import json
-import logging
-import os
-from pathlib import Path
 from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
-    mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
+    mcp, logger,
+    _write_to_unity, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.prefab_templates import (
@@ -32,9 +29,6 @@ from veilbreakers_mcp.shared.unity_templates.prefab_templates import (
 )
 from veilbreakers_mcp.shared.unity_templates.character_templates import (
     generate_cloth_setup_script,
-    generate_sss_skin_shader,
-    generate_parallax_eye_shader,
-    generate_micro_detail_normal_script,
 )
 
 

@@ -166,7 +166,7 @@ def apply_hsv_adjustment(
 
     # Try numpy path for large images, fall back to pixel-by-pixel
     try:
-        import numpy as np
+        import numpy as np  # noqa: F401
         return _hsv_adjust_numpy(img, mask, hue_shift, saturation_scale, value_scale)
     except ImportError:
         logger.warning("numpy not available, falling back to pixel-by-pixel HSV adjustment")
@@ -177,13 +177,22 @@ def apply_hsv_adjustment(
     mask_pixels = mask.load()
     result_pixels = result.load()
 
+    # Type ignore for PixelAccess - these are guaranteed to not be None for valid images
+    if img_pixels is None or mask_pixels is None or result_pixels is None:
+        raise ValueError("Failed to load pixel access for image")
+
     for y in range(height):
         for x in range(width):
-            m = mask_pixels[x, y]
+            m_val = mask_pixels[x, y]  # type: ignore[index]
+            # Mask is L-mode, so it should be an int, but type checker sees tuple
+            m = int(m_val) if isinstance(m_val, (int, float)) else 0
             if m == 0:
                 continue  # Unmasked: keep original (bit-identical)
 
-            r, g, b = img_pixels[x, y]
+            pixel = img_pixels[x, y]  # type: ignore[index]
+            if not isinstance(pixel, tuple) or len(pixel) != 3:
+                continue
+            r, g, b = pixel
             h, s, v = colorsys.rgb_to_hsv(r / 255.0, g / 255.0, b / 255.0)
 
             # Apply adjustments
@@ -195,14 +204,14 @@ def apply_hsv_adjustment(
             adjusted = (round(rn * 255), round(gn * 255), round(bn * 255))
 
             if m == 255:
-                result_pixels[x, y] = adjusted
+                result_pixels[x, y] = adjusted  # type: ignore[index]
             else:
                 # Alpha blend for seamless feathered edges
                 alpha = m / 255.0
-                result_pixels[x, y] = (
-                    round(r * (1 - alpha) + adjusted[0] * alpha),
-                    round(g * (1 - alpha) + adjusted[1] * alpha),
-                    round(b * (1 - alpha) + adjusted[2] * alpha),
+                result_pixels[x, y] = (  # type: ignore[index]
+                    round(r * (1 - alpha) + adjusted[0] * alpha),  # type: ignore[operator]
+                    round(g * (1 - alpha) + adjusted[1] * alpha),  # type: ignore[operator]
+                    round(b * (1 - alpha) + adjusted[2] * alpha),  # type: ignore[operator]
                 )
 
     buf = io.BytesIO()
@@ -285,22 +294,34 @@ def _hsv_adjust_numpy(
 
     # Sector 0: 0 <= h6 < 1
     sel = (h6 >= 0) & (h6 < 1)
-    r_out[sel] = c[sel]; g_out[sel] = x[sel]; b_out[sel] = 0
+    r_out[sel] = c[sel]
+    g_out[sel] = x[sel]
+    b_out[sel] = 0
     # Sector 1
     sel = (h6 >= 1) & (h6 < 2)
-    r_out[sel] = x[sel]; g_out[sel] = c[sel]; b_out[sel] = 0
+    r_out[sel] = x[sel]
+    g_out[sel] = c[sel]
+    b_out[sel] = 0
     # Sector 2
     sel = (h6 >= 2) & (h6 < 3)
-    r_out[sel] = 0; g_out[sel] = c[sel]; b_out[sel] = x[sel]
+    r_out[sel] = 0
+    g_out[sel] = c[sel]
+    b_out[sel] = x[sel]
     # Sector 3
     sel = (h6 >= 3) & (h6 < 4)
-    r_out[sel] = 0; g_out[sel] = x[sel]; b_out[sel] = c[sel]
+    r_out[sel] = 0
+    g_out[sel] = x[sel]
+    b_out[sel] = c[sel]
     # Sector 4
     sel = (h6 >= 4) & (h6 < 5)
-    r_out[sel] = x[sel]; g_out[sel] = 0; b_out[sel] = c[sel]
+    r_out[sel] = x[sel]
+    g_out[sel] = 0
+    b_out[sel] = c[sel]
     # Sector 5
     sel = (h6 >= 5) & (h6 < 6)
-    r_out[sel] = c[sel]; g_out[sel] = 0; b_out[sel] = x[sel]
+    r_out[sel] = c[sel]
+    g_out[sel] = 0
+    b_out[sel] = x[sel]
 
     r_out += m
     g_out += m
@@ -526,7 +547,7 @@ def render_wear_map(
     if uv_data is not None:
         # Render curvature into UV space using face polygons
         try:
-            import numpy as np
+            import numpy as np  # noqa: F401
             _render_wear_numpy(img, curvature_data, uv_data, texture_size, _curv_to_brightness, min_c, c_range)
         except ImportError:
             _render_wear_pil(img, curvature_data, uv_data, texture_size, _curv_to_brightness)
@@ -694,9 +715,9 @@ def _ensure_mask_rgb_png(mask_bytes: bytes) -> bytes:
     The mask convention: white (255,255,255) = regions to inpaint,
     black (0,0,0) = regions to keep.
     """
-    mask = Image.open(io.BytesIO(mask_bytes))
+    mask = Image.open(io.BytesIO(mask_bytes))  # type: ignore[assignment]
     if mask.mode != "RGB":
-        mask = mask.convert("RGB")
+        mask = mask.convert("RGB")  # type: ignore[assignment]
     buf = io.BytesIO()
     mask.save(buf, format="PNG")
     return buf.getvalue()

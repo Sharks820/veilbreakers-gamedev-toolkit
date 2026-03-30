@@ -17,8 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
-from .vfx_templates import BRAND_PRIMARY_COLORS, BRAND_GLOW_COLORS
+from ._cs_sanitize import sanitize_cs_identifier
 
 
 # ---------------------------------------------------------------------------
@@ -44,10 +43,10 @@ _SHADER_FIND = (
 # Defensive buff configs
 # ---------------------------------------------------------------------------
 
-def _bc(d, de, c, g, r, l, sz, ra, sh):
+def _bc(d, de, c, g, r, lifetime, sz, ra, sh):
     """Shorthand defensive buff config constructor."""
     return {"display": d, "desc": de, "color": c, "glow": g, "rate": r,
-            "lifetime": l, "size": sz, "radius": ra, "shape": sh}
+            "lifetime": lifetime, "size": sz, "radius": ra, "shape": sh}
 
 DEFENSIVE_BUFF_CONFIGS: dict[str, dict[str, Any]] = {
     "shield": _bc("Hex Shield", "Blue-white hexagonal shield sphere, absorption ripple on hit",
@@ -77,10 +76,10 @@ DEFENSIVE_BUFF_CONFIGS: dict[str, dict[str, Any]] = {
 # Debuff configs
 # ---------------------------------------------------------------------------
 
-def _dc(d, de, c, g, r, l, sz, sh):
+def _dc(d, de, c, g, r, lifetime, sz, sh):
     """Shorthand debuff config constructor."""
     return {"display": d, "desc": de, "color": c, "glow": g,
-            "rate": r, "lifetime": l, "size": sz, "shape": sh}
+            "rate": r, "lifetime": lifetime, "size": sz, "shape": sh}
 
 DEBUFF_CONFIGS: dict[str, dict[str, Any]] = {
     "expose": _dc("Expose", "Red target reticle, vulnerability cracks, amplified damage flash",
@@ -516,14 +515,14 @@ def generate_defensive_buff_vfx_script(
     if buff_type not in DEFENSIVE_BUFF_CONFIGS:
         buff_type = "shield"
     cfg = DEFENSIVE_BUFF_CONFIGS[buff_type]
-    safe_type = sanitize_cs_identifier(buff_type)
+    sanitize_cs_identifier(buff_type)
     triggered_method = _build_secondary_method_defensive(buff_type, cfg)
     shape_code = _cs_shape_block(cfg["shape"])
 
     # Build the buff config dictionary as a C# initializer
     buff_entries: list[str] = []
     for bt, bc in DEFENSIVE_BUFF_CONFIGS.items():
-        safe = sanitize_cs_identifier(bt)
+        sanitize_cs_identifier(bt)
         buff_entries.append(
             f'            {{ "{bt}", new BuffConfig("{bc["display"]}", '
             f'{_fmt(bc["color"])}, {_fmt(bc["glow"])}, '
@@ -804,7 +803,7 @@ public class DefensiveBuffVFXController : MonoBehaviour
 '''
 
     return {
-        "script_path": f"Assets/Scripts/VFX/StatusEffects/DefensiveBuffVFXController.cs",
+        "script_path": "Assets/Scripts/VFX/StatusEffects/DefensiveBuffVFXController.cs",
         "script_content": script,
         "next_steps": [
             *STANDARD_NEXT_STEPS,
@@ -840,7 +839,7 @@ def generate_debuff_vfx_script(
     if debuff_type not in DEBUFF_CONFIGS:
         debuff_type = "expose"
     cfg = DEBUFF_CONFIGS[debuff_type]
-    safe_type = sanitize_cs_identifier(debuff_type)
+    sanitize_cs_identifier(debuff_type)
     update_method = _build_debuff_update_method(debuff_type, cfg)
     shape_code = _cs_shape_block(cfg["shape"])
 
@@ -1132,7 +1131,7 @@ public class DebuffVFXController : MonoBehaviour
 '''
 
     return {
-        "script_path": f"Assets/Scripts/VFX/StatusEffects/DebuffVFXController.cs",
+        "script_path": "Assets/Scripts/VFX/StatusEffects/DebuffVFXController.cs",
         "script_content": script,
         "next_steps": [
             *STANDARD_NEXT_STEPS,

@@ -19,7 +19,6 @@ from __future__ import annotations
 import argparse
 import ast
 import json
-import os
 import re
 import sys
 from dataclasses import asdict, dataclass, field
@@ -132,17 +131,24 @@ class Issue:
 
     @property
     def confidence_label(self) -> str:
-        if self.confidence >= 90: return "CERTAIN"
-        if self.confidence >= 75: return "HIGH"
-        if self.confidence >= 50: return "LIKELY"
+        if self.confidence >= 90:
+            return "CERTAIN"
+        if self.confidence >= 75:
+            return "HIGH"
+        if self.confidence >= 50:
+            return "LIKELY"
         return "POSSIBLE"
 
     @property
     def priority_label(self) -> str:
-        if self.priority >= 90: return "P0-CRITICAL"
-        if self.priority >= 70: return "P1-HIGH"
-        if self.priority >= 40: return "P2-MEDIUM"
-        if self.priority >= 15: return "P3-LOW"
+        if self.priority >= 90:
+            return "P0-CRITICAL"
+        if self.priority >= 70:
+            return "P1-HIGH"
+        if self.priority >= 40:
+            return "P2-MEDIUM"
+        if self.priority >= 15:
+            return "P3-LOW"
         return "P4-COSMETIC"
 
 
@@ -1110,7 +1116,7 @@ def main() -> None:
         # Summary
         r = report
         print(f"\n{'='*70}")
-        print(f"  REVIEW SUMMARY")
+        print("  REVIEW SUMMARY")
         print(f"{'='*70}")
         print(f"  Files scanned:  {len(by_file)}")
         print(f"  Total findings: {r['total_issues']}")
@@ -1124,7 +1130,7 @@ def main() -> None:
         if r['low'] > 0:
             print(f"  [ . ] LOW:       {r['low']}  -- informational")
         if r['total_issues'] == 0:
-            print(f"  ALL CLEAN - no issues found")
+            print("  ALL CLEAN - no issues found")
         print()
         print(f"  Bugs/Errors:     {r['errors_bugs']}")
         print(f"  Optimizations:   {r['optimizations']}")

@@ -498,7 +498,7 @@ def generate_environmental_vfx_script(effect_type: str) -> str:
     safe = effect_type.capitalize()
     gravity = cfg["gravity"]
 
-    safe_desc = sanitize_cs_string(cfg["desc"])
+    sanitize_cs_string(cfg["desc"])
 
     # Effect-specific AAA tuning
     noise_strength = {"dust": 0.8, "fireflies": 1.2, "snow": 0.3, "rain": 0.05, "ash": 0.6}.get(effect_type, 0.5)

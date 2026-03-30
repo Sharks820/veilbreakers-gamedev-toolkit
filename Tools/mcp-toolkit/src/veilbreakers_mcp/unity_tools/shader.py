@@ -1,29 +1,18 @@
 """unity_shader tool handler."""
 
 import json
-import logging
-import os
-from pathlib import Path
 from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
-    mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
+    mcp, logger,
+    _write_to_unity, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.shader_templates import (
-    generate_corruption_shader,
-    generate_dissolve_shader,
-    generate_force_field_shader,
-    generate_water_shader,
-    generate_foliage_shader,
-    generate_outline_shader,
-    generate_damage_overlay_shader,
     generate_arbitrary_shader,
     generate_renderer_feature,
 )
 from veilbreakers_mcp.shared.unity_templates.character_templates import (
-    generate_cloth_setup_script,
     generate_sss_skin_shader,
     generate_parallax_eye_shader,
     generate_micro_detail_normal_script,

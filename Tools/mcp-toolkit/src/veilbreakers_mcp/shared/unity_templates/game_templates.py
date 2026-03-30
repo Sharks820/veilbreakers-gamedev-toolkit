@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import re
 import uuid
-from typing import Optional
 
 from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
 
@@ -822,7 +821,7 @@ def generate_character_controller_script(
     Returns:
         Complete C# source string.
     """
-    safe_mode = sanitize_cs_identifier(mode)
+    sanitize_cs_identifier(mode)
     lines = []
 
     lines.append("using UnityEngine;")

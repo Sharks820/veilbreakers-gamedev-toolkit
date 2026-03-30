@@ -1,0 +1,142 @@
+VeilBreakers MCP Toolkit - Audit Summary
+========================================
+
+CRITICAL ISSUES (3):
+
+1. MESH PROPORTIONAL EDIT DUPLICATE
+   File: blender_addon/handlers/__init__.py
+   Issue: Two command keys map to same handler
+   - "mesh_proportional_edit": handle_proportional_edit
+   - "mesh_proportional": handle_proportional_edit
+   Action: Verify if both should exist or if mesh_proportional needs different handler
+   Risk: LOW (both work, but namespace pollution)
+
+2. EMPTY UNITY TEMPLATES (27 files)
+   Files: src/veilbreakers_mcp/shared/unity_templates/*.py
+   Issue: Templates return empty strings or dicts: return "{}" or return {}
+   Files affected:
+     - action_cinematic_templates.py
+     - animation_extensions_templates.py
+     - animation_templates.py
+     - asset_templates.py
+     - audio_middleware_templates.py
+     - audio_templates.py
+     - build_templates.py
+     - camera_templates.py
+     - character_templates.py
+     - cinematic_templates.py
+     - code_review_templates.py
+     - code_templates.py
+     - combat_feel_templates.py
+     - combat_spell_vfx_templates.py
+     - combat_templates.py
+     - content_templates.py
+     - data_templates.py
+     - editor_templates.py
+     - encounter_templates.py
+     - equipment_templates.py
+     - game_templates.py
+     - gameplay_templates.py
+     - performance_templates.py
+     - prefab_templates.py
+     - qa_templates.py
+     - quality_templates.py
+     - scene_templates.py
+   Action: Verify these are intentionally empty or need completion
+   Risk: MEDIUM (can cause incomplete code generation)
+
+3. SILENT EXCEPTION HANDLING
+   Files: 
+     - blender_addon/handlers/modeling_advanced.py (multiple try/except pass blocks)
+     - blender_addon/handlers/worldbuilding.py (silently skips failed location generation)
+   Issue: Exceptions are caught but silently ignored with pass statement
+   Action: Add logging or error reporting
+   Risk: MEDIUM (hidden failures hard to debug)
+
+COVERAGE GAPS (96):
+
+Handler modules WITHOUT direct test files:
+  - addon_toolchain
+  - animation_abilities, animation_blob, animation_combat, animation_environment
+  - animation_gaits, animation_hover, animation_ik, animation_locomotion
+  - animation_monster, animation_production, animation_social, animation_spellcast
+  - armor_meshes, armor_sets
+  - atmospheric_volumes, autonomous_loop
+  - boss_presence
+  - building_quality
+  - character_advanced, character_skin_modifier
+  - class_equipment, clothing_system
+  - coastline
+  - creature_anatomy, curves
+  - decal_system, destruction_system, drivers
+  - dungeon_themes
+  - enchantment_overlay, encounter_spaces
+  - environment, environment_scatter, equipment, equipment_fitting, execute, export
+  - eye_mesh
+  - facial_topology
+  - geometry_nodes
+  - hair_system
+  - legendary_weapons, light_integration, lod_pipeline, loot_display
+  - map_composer, material_tiers, materials
+  - mesh, mesh_smoothing, modeling_advanced
+  - modular_building_kit
+  - monster_bodies, monster_surface_detail
+  - npc_characters
+  - objects
+  - particles, physics, pipeline_lod
+  - procedural_materials, procedural_meshes
+  - prop_density
+  - rarity_system
+  - riggable_objects, rigging, rigging_advanced, rigging_templates, rigging_weights
+  - road_network
+  - scene
+  - settlement_generator
+  - terrain_advanced, terrain_chunking, terrain_features, terrain_materials
+  - terrain_sculpt
+  - text_objects
+  - texture, texture_painting, texture_quality
+  - udim_support
+  - uv
+  - vegetation_lsystem, vegetation_system
+  - vertex_colors, vertex_paint_live, viewport
+  - weapon_quality
+  - weathering
+  - world_map
+  - worldbuilding, worldbuilding_layout
+  - wrinkle_maps
+
+Note: 174 test files exist, but they're aggregated (e.g., test_animation_handlers.py covers multiple animation_*.py modules)
+
+ACTION PLAN:
+============
+
+IMMEDIATE (within 1 week):
+1. Decide: Keep mesh_proportional duplicate or fix naming
+2. Check: Are empty templates intentional (code generation pattern) or incomplete?
+3. Add logging to silent exception handlers in modeling_advanced.py and worldbuilding.py
+
+NEAR-TERM (within 1 month):
+4. Review and complete empty Unity templates
+5. Create test_animation_* files for uncovered animation handlers
+6. Create test_terrain_* files for uncovered terrain handlers
+7. Document lambda handler pattern in toolkit API docs
+
+LONG-TERM (ongoing):
+8. Maintain 1:1 test_*.py to handler_*.py mapping
+9. Add validation layer for empty templates in code generation
+10. Periodic audit runs (quarterly)
+
+CLEAN AREAS:
+============
+✓ No broken imports (all 96 handlers compile)
+✓ No circular dependencies
+✓ No explicit NotImplementedError or TODO in handler code
+✓ No missing handle_* function implementations
+✓ 283 total commands properly registered
+✓ All imports successfully resolve
+
+Total Handlers: 96
+Total Commands: 283 (199 handle_*, 82 lambdas)
+Total Tests: 174
+
+Generated: 2026-03-27

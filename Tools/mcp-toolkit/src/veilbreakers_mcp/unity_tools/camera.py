@@ -1,14 +1,11 @@
 """unity_camera tool handler."""
 
 import json
-import logging
-import os
-from pathlib import Path
 from typing import Literal
 
 from veilbreakers_mcp.unity_tools._common import (
-    mcp, settings, logger,
-    _write_to_unity, _read_unity_result, _handle_dict_template, STANDARD_NEXT_STEPS,
+    mcp, logger,
+    _write_to_unity, STANDARD_NEXT_STEPS,
 )
 
 from veilbreakers_mcp.shared.unity_templates.camera_templates import (
@@ -451,7 +448,7 @@ async def _handle_camera_lock_on(
         editor_cs, f"Assets/Editor/Generated/Camera/{safe_name}_LockOnSetup.cs",
     )
     runtime_path = _write_to_unity(
-        runtime_cs, f"Assets/Scripts/Runtime/Camera/VB_LockOnCamera.cs",
+        runtime_cs, "Assets/Scripts/Runtime/Camera/VB_LockOnCamera.cs",
     )
     return json.dumps({
         "status": "success",

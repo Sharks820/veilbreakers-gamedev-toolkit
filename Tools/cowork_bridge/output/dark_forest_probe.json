@@ -1,0 +1,12 @@
+{
+  "object_count": 426,
+  "scatter_counts": {
+    "grass": 98,
+    "shrub": 110,
+    "tree": 212
+  },
+  "terrain_materials": [
+    "VB_Terrain_thornwood_forest"
+  ],
+  "viewport_screenshot": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\cowork_bridge\\output\\dark_forest_probe.png"
+}

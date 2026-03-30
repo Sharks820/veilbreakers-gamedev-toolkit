@@ -532,7 +532,7 @@ def _texture_field_has_destroy(
     if not re.search(r"_\w+\s*=\s*new\s+Texture2D", line):
         return False  # Not a field assignment
     # Check if Destroy exists anywhere in file
-    has_destroy = any("Destroy" in l for l in all_lines)
+    has_destroy = any("Destroy" in line for line in all_lines)
     return not has_destroy  # Flag only if no Destroy present
 
 
@@ -3665,9 +3665,6 @@ def _deep_incomplete_state_clearing(
         return findings
 
     # Second pass: find reset/clear methods and check which collections they clear
-    reset_method_re = re.compile(
-        r"\b(?:void|async\s+\w+)\s+(Clear\w*|Reset\w*|OnCombatEnd|OnDefeat|OnDisable|Initialize|Cleanup|Dispose|Teardown)\s*\("
-    )
     clear_call_re = re.compile(r"\b([A-Za-z_]\w*)\.Clear\s*\(")
 
     for method_name, start_idx, end_idx in _find_method_bounds(lines):
@@ -3953,7 +3950,7 @@ RULES.append(
         r"\.ToString\s*\(\)|string\s+\w+\s*=|\".*\"\s*\+",
         scope="AnyMethod",
         anti_patterns=[r"//\s*VB-IGNORE", r"FixedString", "NativeText", "BurstCompile"],
-        guard=lambda line, all, i, ctx: any("IJob" in l or "BurstCompile" in l for l in all[max(0,i-10):i+1]),
+        guard=lambda line, all, i, ctx: any("IJob" in line or "BurstCompile" in line for line in all[max(0,i-10):i+1]),
         layer="semantic",
     )
 )
@@ -4000,7 +3997,7 @@ RULES.append(
         r"\.Schedule\s*\(\s*\)",
         scope="AnyMethod",
         anti_patterns=[r"//\s*VB-IGNORE", r"JobHandle\s+\w+\s*=", r"\.Schedule\s*\([^)]+\)"],
-        guard=lambda line, all, i, ctx: sum(1 for l in all[max(0,i-3):i+1] if ".Schedule(" in l) > 1,
+        guard=lambda line, all, i, ctx: sum(1 for line in all[max(0,i-3):i+1] if ".Schedule(" in line) > 1,
         layer="semantic",
     )
 )
@@ -4292,8 +4289,8 @@ def _deep_singleton_ready_check(
     findings: list[dict] = []
     lines = content.split("\n")
 
-    has_ready = any(re.search(r"\b(IsReady|IsInitialized|IsLoaded)\b", l) for l in lines)
-    has_async_init = any(re.search(r"async\s+Task\s+\w*(Init|Load|Setup)\w*Async", l) for l in lines)
+    has_ready = any(re.search(r"\b(IsReady|IsInitialized|IsLoaded)\b", line) for line in lines)
+    has_async_init = any(re.search(r"async\s+Task\s+\w*(Init|Load|Setup)\w*Async", line) for line in lines)
 
     if not has_ready or not has_async_init:
         return findings
@@ -4330,7 +4327,7 @@ def _deep_singleton_ready_check(
                 "severity": "HIGH",
                 "category": "Bug",
                 "description": f"Public method '{method_name}' accesses data without checking IsReady -- returns empty/null before async init completes",
-                "fix": f"Add 'if (!IsReady) {{ Debug.LogWarning(...); return default; }}' at method start.",
+                "fix": "Add 'if (!IsReady) { Debug.LogWarning(...); return default; }' at method start.",
                 "confidence": 72,
                 "priority": 70,
             })
@@ -4353,11 +4350,6 @@ def _deep_undisposed_disposable(
         "NetworkStream", "MemoryStream",
     }
 
-    has_dispose = any(re.search(r"\.(Dispose|Release|Close)\s*\(", l) for l in lines)
-    has_ondestroy_dispose = any(
-        re.search(r"(void\s+OnDestroy|void\s+Dispose)\s*\(", l) for l in lines
-    )
-
     for i, line in enumerate(lines):
         for dtype in disposable_types:
             if re.search(rf"new\s+{dtype}\s*\(", line):
@@ -4368,8 +4360,8 @@ def _deep_undisposed_disposable(
                 field_name = m.group(1)
                 # Check if Dispose/Release is called on this field
                 field_disposed = any(
-                    re.search(rf"{re.escape(field_name)}\s*[\?.]?\s*\.(Dispose|Release|Close)\s*\(", l)
-                    for l in lines
+                    re.search(rf"{re.escape(field_name)}\s*[\?.]?\s*\.(Dispose|Release|Close)\s*\(", line)
+                    for line in lines
                 )
                 if not field_disposed:
                     findings.append({

@@ -362,7 +362,7 @@ async def _handle_load_scene(scene_path: str) -> str:
         return json.dumps({
             "status": "error",
             "action": "load_scene",
-            "message": f"Invalid scene_path: must match pattern 'Assets/.../*.unity'",
+            "message": "Invalid scene_path: must match pattern 'Assets/.../*.unity'",
         })
 
     # Try bridge first

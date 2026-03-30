@@ -11,7 +11,7 @@ for identification.
 
 from __future__ import annotations
 
-from ._cs_sanitize import sanitize_cs_string, sanitize_cs_identifier
+from ._cs_sanitize import sanitize_cs_identifier
 
 
 def generate_footstep_manager_script(

@@ -1089,7 +1089,7 @@ def check_name_conflicts(
                 "existing_files": type_registry[name],
                 "suggestions": [
                     f"Rename to {name}V2 or {name}_Alt",
-                    f"Use a namespace to avoid collision",
+                    "Use a namespace to avoid collision",
                 ],
             })
         else:
@@ -2535,7 +2535,7 @@ def validate_cs_syntax(file_content: str) -> list[dict[str, Any]]:
                     "line": line_num,
                     "column": len(line),
                     "severity": "warning",
-                    "message": f"Statement may be missing semicolon",
+                    "message": "Statement may be missing semicolon",
                     "code": "CS_MISSING_SEMICOLON",
                 })
 
