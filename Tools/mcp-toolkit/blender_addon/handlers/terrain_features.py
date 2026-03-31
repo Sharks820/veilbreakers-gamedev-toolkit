@@ -29,13 +29,16 @@ Vec3 = tuple[float, float, float]
 # Noise utility -- opensimplex via _terrain_noise (replaces old sin-hash)
 # ---------------------------------------------------------------------------
 
-# Module-level cache to avoid recreating noise generators per call.
+# Cached noise generator to avoid re-creating per call
 _features_gen = None
-_features_seed: int = -1
+_features_seed = -1
 
 
-def _hash_noise(x: float, y: float, seed: int) -> float:
-    """Opensimplex noise replacing old sin-hash. Returns values in [-1, 1]."""
+def _hash_noise(x: float, y: float, seed: int = 0) -> float:
+    """Opensimplex noise replacing old sin-hash.
+
+    Returns values in approximately [-1, 1], deterministic for a given seed.
+    """
     global _features_gen, _features_seed
     if _features_gen is None or _features_seed != seed:
         _features_gen = _make_noise_generator(seed)
@@ -43,19 +46,20 @@ def _hash_noise(x: float, y: float, seed: int) -> float:
     return _features_gen.noise2(x, y)
 
 
-def _fbm(x: float, y: float, seed: int, octaves: int = 4) -> float:
-    """Fractal Brownian motion noise using opensimplex."""
+def _fbm(x: float, y: float, seed: int = 0, octaves: int = 4,
+         persistence: float = 0.5, lacunarity: float = 2.0) -> float:
+    """Fractal Brownian motion using opensimplex instead of sin-hash."""
     gen = _make_noise_generator(seed)
-    total = 0.0
+    value = 0.0
     amplitude = 1.0
     frequency = 1.0
     max_val = 0.0
     for _ in range(octaves):
-        total += gen.noise2(x * frequency, y * frequency) * amplitude
+        value += gen.noise2(x * frequency, y * frequency) * amplitude
         max_val += amplitude
-        amplitude *= 0.5
-        frequency *= 2.0
-    return total / max_val if max_val > 0 else 0.0
+        amplitude *= persistence
+        frequency *= lacunarity
+    return value / max_val if max_val > 0 else 0.0
 
 
 # ---------------------------------------------------------------------------

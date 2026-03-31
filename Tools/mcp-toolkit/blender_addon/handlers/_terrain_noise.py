@@ -336,10 +336,9 @@ def generate_heightmap(
         One of TERRAIN_PRESETS keys: mountains, hills, plains, volcanic,
         canyon, cliffs.
     warp_strength : float
-        Domain warp amplitude. 0 = off (default, backward compatible),
-        0.3-0.8 = organic terrain, 1.0+ = extreme distortion.
+        Domain warp amplitude (0=off, 0.3-0.8=organic, 1.0+=extreme).
     warp_scale : float
-        Frequency of the domain warp noise. Lower = broader warping.
+        Frequency of the domain warp noise (default 0.5).
 
     Returns
     -------
@@ -365,13 +364,13 @@ def generate_heightmap(
     y_coords = np.arange(height, dtype=np.float64) / scale  # shape (height,)
     xs_base, ys_base = np.meshgrid(x_coords, y_coords)      # both (height, width)
 
-    # Apply domain warping for organic, non-repetitive terrain
+    # Apply domain warping for organic, non-repetitive terrain features
     if warp_strength > 0.0:
         xs_base, ys_base = domain_warp_array(
             xs_base, ys_base,
             warp_strength=warp_strength,
             warp_scale=warp_scale,
-            seed=seed + 7919,  # Offset seed for independent warp noise
+            seed=seed + 7919,
         )
 
     # Accumulate fBm octaves with vectorized noise evaluation
