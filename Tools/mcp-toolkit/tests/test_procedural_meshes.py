@@ -122,6 +122,9 @@ from blender_addon.handlers.procedural_meshes import (
     generate_key_mesh,
     generate_map_scroll_mesh,
     generate_lockpick_mesh,
+    # Natural formations
+    generate_stalactite_mesh,
+    generate_fallen_log_mesh,
     # Registry
     GENERATORS,
     # Utilities
@@ -1946,3 +1949,42 @@ class TestItemPolyBudgets:
         pc = result["metadata"]["poly_count"]
         assert pc <= 1500, f"{name}: {pc} faces exceeds 1500 budget"
         assert pc >= 1, f"{name}: 0 faces"
+
+
+# ---------------------------------------------------------------------------
+# Determinism tests -- same inputs always produce identical MeshSpec output
+# ---------------------------------------------------------------------------
+
+
+class TestDeterministicOutput:
+    """Verify that generators produce identical output across multiple calls.
+
+    This validates that all RNG usage is seed-based (instance RNG) rather
+    than global random state, ensuring reproducible mesh generation.
+    """
+
+    DETERMINISM_GENERATORS = [
+        (generate_table_mesh, {}, "table"),
+        (generate_chair_mesh, {}, "chair"),
+        (generate_bookshelf_mesh, {}, "bookshelf"),
+        (generate_barrel_mesh, {}, "barrel"),
+        (generate_rock_mesh, {"rock_type": "crystal"}, "rock_crystal"),
+        (generate_rock_mesh, {"rock_type": "rubble_pile"}, "rock_rubble"),
+        (generate_mushroom_mesh, {"cap_style": "cluster"}, "mushroom_cluster"),
+        (generate_skull_pile_mesh, {}, "skull_pile"),
+        (generate_stalactite_mesh, {}, "stalactite"),
+        (generate_fallen_log_mesh, {}, "fallen_log"),
+    ]
+
+    @pytest.mark.parametrize("gen_func,kwargs,name", DETERMINISM_GENERATORS)
+    def test_deterministic_output(self, gen_func, kwargs, name):
+        """Call the same generator twice and verify identical MeshSpec."""
+        result1 = gen_func(**kwargs)
+        result2 = gen_func(**kwargs)
+
+        assert result1["vertices"] == result2["vertices"], (
+            f"{name}: vertices differ between identical calls (non-deterministic RNG)"
+        )
+        assert result1["faces"] == result2["faces"], (
+            f"{name}: faces differ between identical calls (non-deterministic RNG)"
+        )
