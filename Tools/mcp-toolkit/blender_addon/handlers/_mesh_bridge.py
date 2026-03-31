@@ -18,6 +18,8 @@ from typing import Any, Callable
 # ---------------------------------------------------------------------------
 # Import all generators from procedural_meshes
 # ---------------------------------------------------------------------------
+from .vegetation_lsystem import generate_lsystem_tree, generate_leaf_cards
+
 from .procedural_meshes import (
     # Furniture
     generate_bed_mesh,
@@ -183,20 +185,78 @@ FURNITURE_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]
 }
 
 # ---------------------------------------------------------------------------
+# L-system tree adapter for VEGETATION_GENERATOR_MAP
+# ---------------------------------------------------------------------------
+
+
+def _lsystem_tree_generator(**kwargs: Any) -> MeshSpec:
+    """Adapter: calls generate_lsystem_tree with dict params, returns MeshSpec.
+
+    Bridges the (func, kwargs) pattern used by VEGETATION_GENERATOR_MAP to
+    the dict-params interface of generate_lsystem_tree. Optionally merges
+    leaf card geometry at branch tips when leaf_type is specified.
+    """
+    # Extract leaf_type before passing params to L-system generator
+    leaf_type = kwargs.pop("leaf_type", "broadleaf")
+
+    tree_result = generate_lsystem_tree(kwargs)
+
+    # Build MeshSpec from L-system output
+    spec: MeshSpec = {
+        "vertices": tree_result["vertices"],
+        "faces": tree_result["faces"],
+        "metadata": {
+            "generator": "lsystem_tree",
+            "tree_type": kwargs.get("tree_type", "oak"),
+            "category": "vegetation",
+            **tree_result.get("metadata", {}),
+        },
+    }
+
+    # Add leaf cards if tip data available and leaf generation requested
+    if leaf_type and tree_result.get("tip_positions"):
+        tips: list[dict[str, Any]] = []
+        for i, pos in enumerate(tree_result["tip_positions"]):
+            tip_dirs = tree_result.get("tip_directions", [])
+            tip_radii = tree_result.get("tip_radii", [])
+            tips.append({
+                "position": pos,
+                "direction": tip_dirs[i] if i < len(tip_dirs) else [0, 0, 1],
+                "radius": tip_radii[i] if i < len(tip_radii) else 0.05,
+            })
+        leaf_spec = generate_leaf_cards(
+            tips, leaf_type=leaf_type, seed=kwargs.get("seed", 42),
+        )
+        # Merge leaf vertices/faces into main spec
+        v_offset = len(spec["vertices"])
+        spec["vertices"] = list(spec["vertices"]) + list(leaf_spec["vertices"])
+        spec["faces"] = list(spec["faces"]) + [
+            tuple(idx + v_offset for idx in face)
+            for face in leaf_spec["faces"]
+        ]
+
+    return spec
+
+
+# ---------------------------------------------------------------------------
 # VEGETATION_GENERATOR_MAP
 # ---------------------------------------------------------------------------
 # Maps vegetation type strings (as used in environment_scatter templates)
 # to (generator_function, kwargs_override) tuples.
+#
+# Tree entries use L-system branching (not sphere clusters) via
+# _lsystem_tree_generator. iterations=4 caps branching depth for scatter
+# performance (prevents exponential geometry growth).
 # ---------------------------------------------------------------------------
 
 VEGETATION_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]]] = {
-    "tree": (generate_tree_mesh, {"canopy_style": "veil_healthy"}),
-    "tree_healthy": (generate_tree_mesh, {"canopy_style": "veil_healthy"}),
-    "tree_boundary": (generate_tree_mesh, {"canopy_style": "veil_boundary"}),
-    "tree_blighted": (generate_tree_mesh, {"canopy_style": "veil_blighted"}),
-    "tree_dead": (generate_tree_mesh, {"canopy_style": "dead_twisted"}),
-    "tree_twisted": (generate_tree_mesh, {"canopy_style": "veil_boundary"}),
-    "pine_tree": (generate_tree_mesh, {"canopy_style": "dark_pine"}),
+    "tree": (_lsystem_tree_generator, {"tree_type": "oak", "iterations": 4, "leaf_type": "broadleaf"}),
+    "tree_healthy": (_lsystem_tree_generator, {"tree_type": "oak", "iterations": 4, "leaf_type": "broadleaf"}),
+    "tree_boundary": (_lsystem_tree_generator, {"tree_type": "birch", "iterations": 4, "leaf_type": "broadleaf"}),
+    "tree_blighted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine"}),
+    "tree_dead": (_lsystem_tree_generator, {"tree_type": "dead", "iterations": 4, "leaf_type": None}),
+    "tree_twisted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine"}),
+    "pine_tree": (_lsystem_tree_generator, {"tree_type": "pine", "iterations": 4, "leaf_type": "needle"}),
     "bush": (generate_shrub_mesh, {}),
     "shrub": (generate_shrub_mesh, {}),
     "grass": (generate_grass_clump_mesh, {}),
@@ -293,8 +353,8 @@ PROP_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]]] = 
     "mug": (generate_potion_bottle_mesh, {"style": "round_flask"}),
     "pot": (generate_cauldron_mesh, {"size": 0.3}),
     "tombstone": (generate_gravestone_mesh, {}),
-    "dead_tree": (generate_tree_mesh, {"canopy_style": "dead_twisted"}),
-    "tree_twisted": (generate_tree_mesh, {"canopy_style": "veil_boundary"}),
+    "dead_tree": (_lsystem_tree_generator, {"tree_type": "dead", "iterations": 4, "leaf_type": None}),
+    "tree_twisted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine"}),
     "fallen_log": (generate_fallen_log_mesh, {}),
     "log": (generate_fallen_log_mesh, {}),
     "bush": (generate_shrub_mesh, {}),
@@ -320,6 +380,314 @@ _ALL_MAPS: dict[str, dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]]]] 
     "castle": CASTLE_ELEMENT_MAP,
     "prop": PROP_GENERATOR_MAP,
 }
+
+
+# ---------------------------------------------------------------------------
+# CATEGORY_MATERIAL_MAP -- procedural material auto-assignment
+# ---------------------------------------------------------------------------
+# Maps generator category strings (from MeshSpec metadata["category"]) to
+# the procedural material key from MATERIAL_LIBRARY in procedural_materials.py.
+#
+# Every mesh category gets an appropriate AAA-quality procedural material
+# instead of a flat single-color Principled BSDF.
+# ---------------------------------------------------------------------------
+
+CATEGORY_MATERIAL_MAP: dict[str, str] = {
+    # Furniture -- aged wood look with grain and roughness variation
+    "furniture": "rough_timber",
+    # Vegetation -- bark for trunks, leaf for canopy (bark is default)
+    "vegetation": "bark",
+    # Dungeon props -- dark stone for the dungeon atmosphere
+    "dungeon_prop": "rough_stone_wall",
+    # Weapons -- rusted iron for dark fantasy weapons
+    "weapon": "rusted_iron",
+    # Armor -- polished steel with wear
+    "armor": "polished_steel",
+    # Architecture -- stone wall appearance
+    "architecture": "rough_stone_wall",
+    # Building -- brick wall appearance
+    "building": "brick_wall",
+    # Containers -- aged wood crates/barrels
+    "container": "rough_timber",
+    # Dark fantasy -- corruption overlay with purple glow
+    "dark_fantasy": "corruption_overlay",
+    # Monster parts -- organic chitin/scales
+    "monster_part": "chitin_carapace",
+    # Monster bodies -- organic skin
+    "monster_body": "monster_skin",
+    # Projectiles -- rusted iron for arrows/bolts
+    "projectile": "rusted_iron",
+    # Traps -- chain metal for mechanical traps
+    "trap": "chain_metal",
+    # Light sources -- tarnished bronze for lanterns/braziers
+    "light_source": "tarnished_bronze",
+    # Wall decorations -- burlap cloth for banners/rugs
+    "wall_decor": "burlap_cloth",
+    # Crafting stations -- rusted iron for forges/anvils
+    "crafting": "rusted_iron",
+    # Vehicles -- rough timber for carts
+    "vehicle": "rough_timber",
+    # Structural -- rough stone for pillars/buttresses
+    "structural": "rough_stone_wall",
+    # Fortification -- smooth stone for castle elements
+    "fortification": "smooth_stone",
+    # Signs/markers -- rough timber for signposts
+    "sign": "rough_timber",
+    # Natural formations -- cliff rock
+    "natural": "cliff_rock",
+    # Fences and barriers -- rough timber
+    "fence_barrier": "rough_timber",
+    # Doors -- rough timber
+    "door": "rough_timber",
+    # Camp equipment -- leather
+    "camp": "leather",
+    # Infrastructure -- cobblestone floor
+    "infrastructure": "cobblestone_floor",
+    # Consumables -- organic mushroom cap
+    "consumable": "mushroom_cap",
+    # Crafting materials -- cliff rock for ore
+    "crafting_material": "cliff_rock",
+    # Currency -- gold ornament
+    "currency": "gold_ornament",
+    # Key items -- polished wood
+    "key_item": "polished_wood",
+    # Combat items -- rusted iron
+    "combat_item": "rusted_iron",
+    # Forest animals -- fur base
+    "forest_animal": "fur_base",
+    # Mountain animals -- fur base
+    "mountain_animal": "fur_base",
+    # Domestic animals -- fur base
+    "domestic_animal": "fur_base",
+    # Vermin -- chitin carapace
+    "vermin": "chitin_carapace",
+    # Swamp animals -- scales
+    "swamp_animal": "scales",
+}
+
+
+def get_material_for_category(category: str) -> str | None:
+    """Return the procedural material key for a generator category.
+
+    Args:
+        category: Generator category string from MeshSpec metadata.
+
+    Returns:
+        Material key for MATERIAL_LIBRARY, or None if no mapping exists.
+    """
+    return CATEGORY_MATERIAL_MAP.get(category)
+
+
+# ---------------------------------------------------------------------------
+# post_boolean_cleanup -- pure-logic mesh cleanup after boolean operations
+# ---------------------------------------------------------------------------
+
+
+def post_boolean_cleanup(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, ...]],
+    *,
+    merge_distance: float = 0.0001,
+    max_hole_sides: int = 8,
+) -> dict[str, Any]:
+    """Clean up mesh geometry after boolean operations.
+
+    Pure-logic function (no bpy). Performs:
+    1. Remove doubles (merge vertices closer than merge_distance)
+    2. Recalculate normals (ensure consistent face winding)
+    3. Detect non-manifold edges (boundary edges with only 1 face)
+    4. Fill holes up to max_hole_sides
+
+    Args:
+        vertices: Input vertex list.
+        faces: Input face list.
+        merge_distance: Distance threshold for merging duplicate vertices.
+        max_hole_sides: Maximum number of sides for hole filling.
+
+    Returns:
+        Dict with:
+        - vertices: Cleaned vertex list
+        - faces: Cleaned face list
+        - report: Dict with doubles_removed, normals_fixed, holes_filled,
+          non_manifold_edges counts
+    """
+    if not vertices or not faces:
+        return {
+            "vertices": vertices,
+            "faces": faces,
+            "report": {
+                "doubles_removed": 0,
+                "normals_fixed": 0,
+                "holes_filled": 0,
+                "non_manifold_edges": 0,
+            },
+        }
+
+    # --- Step 1: Remove doubles (merge nearby vertices) ---
+    merge_dist_sq = merge_distance * merge_distance
+    n_verts = len(vertices)
+    remap = list(range(n_verts))  # vertex -> canonical vertex
+    doubles_removed = 0
+
+    # Simple O(n^2) merge for correctness (boolean outputs are typically small)
+    for i in range(n_verts):
+        if remap[i] != i:
+            continue
+        for j in range(i + 1, n_verts):
+            if remap[j] != j:
+                continue
+            vi = vertices[i]
+            vj = vertices[j]
+            dx = vi[0] - vj[0]
+            dy = vi[1] - vj[1]
+            dz = vi[2] - vj[2]
+            if dx * dx + dy * dy + dz * dz < merge_dist_sq:
+                remap[j] = i
+                doubles_removed += 1
+
+    # Remap face indices and remove degenerate faces
+    remapped_faces: list[tuple[int, ...]] = []
+    for face in faces:
+        new_face_indices: list[int] = []
+        seen: set[int] = set()
+        for idx in face:
+            canonical = remap[idx]
+            if canonical not in seen:
+                new_face_indices.append(canonical)
+                seen.add(canonical)
+        if len(new_face_indices) >= 3:
+            remapped_faces.append(tuple(new_face_indices))
+
+    # Compact vertex list (remove unreferenced vertices)
+    used = sorted(set(idx for f in remapped_faces for idx in f))
+    compact_map = {old: new for new, old in enumerate(used)}
+    clean_verts = [vertices[i] for i in used]
+    clean_faces = [
+        tuple(compact_map[idx] for idx in f) for f in remapped_faces
+    ]
+
+    # --- Step 2: Recalculate normals (consistent winding) ---
+    normals_fixed = 0
+    # Build edge -> face adjacency
+    edge_faces: dict[tuple[int, int], list[int]] = {}
+    for fi, face in enumerate(clean_faces):
+        n = len(face)
+        for i in range(n):
+            a, b = face[i], face[(i + 1) % n]
+            key = (min(a, b), max(a, b))
+            if key not in edge_faces:
+                edge_faces[key] = []
+            edge_faces[key].append(fi)
+
+    # BFS to propagate consistent winding from face 0
+    if clean_faces:
+        visited = [False] * len(clean_faces)
+        face_list = [list(f) for f in clean_faces]
+        queue = [0]
+        visited[0] = True
+        while queue:
+            fi = queue.pop(0)
+            face = face_list[fi]
+            n = len(face)
+            for i in range(n):
+                a, b = face[i], face[(i + 1) % n]
+                key = (min(a, b), max(a, b))
+                for neighbor_fi in edge_faces.get(key, []):
+                    if visited[neighbor_fi]:
+                        continue
+                    visited[neighbor_fi] = True
+                    queue.append(neighbor_fi)
+                    # Check winding consistency
+                    nf = face_list[neighbor_fi]
+                    # Find shared edge in neighbor
+                    for j in range(len(nf)):
+                        na, nb = nf[j], nf[(j + 1) % len(nf)]
+                        if (min(na, nb), max(na, nb)) == key:
+                            # Shared edge should have OPPOSITE winding
+                            if na == a and nb == b:
+                                # Same winding -- need to reverse neighbor
+                                face_list[neighbor_fi] = list(reversed(nf))
+                                normals_fixed += 1
+                            break
+        clean_faces = [tuple(f) for f in face_list]
+
+    # --- Step 3: Detect non-manifold edges ---
+    # Rebuild edge adjacency after potential face reversals
+    edge_faces_final: dict[tuple[int, int], int] = {}
+    for fi, face in enumerate(clean_faces):
+        n = len(face)
+        for i in range(n):
+            a, b = face[i], face[(i + 1) % n]
+            key = (min(a, b), max(a, b))
+            edge_faces_final[key] = edge_faces_final.get(key, 0) + 1
+
+    non_manifold_edges = sum(
+        1 for count in edge_faces_final.values() if count == 1
+    )
+
+    # --- Step 4: Fill holes (boundary loops up to max_hole_sides) ---
+    holes_filled = 0
+    if non_manifold_edges > 0:
+        # Find boundary edges (edges with only 1 face)
+        boundary_edges: list[tuple[int, int]] = [
+            edge for edge, count in edge_faces_final.items() if count == 1
+        ]
+
+        # Build boundary adjacency: vertex -> list of connected boundary vertices
+        boundary_adj: dict[int, list[int]] = {}
+        for a, b in boundary_edges:
+            boundary_adj.setdefault(a, []).append(b)
+            boundary_adj.setdefault(b, []).append(a)
+
+        # Trace boundary loops
+        visited_edges: set[tuple[int, int]] = set()
+        for start_a, start_b in boundary_edges:
+            key = (min(start_a, start_b), max(start_a, start_b))
+            if key in visited_edges:
+                continue
+
+            # Trace loop from start_a
+            loop: list[int] = [start_a]
+            current = start_b
+            prev = start_a
+            for _ in range(max_hole_sides + 2):
+                ekey = (min(prev, current), max(prev, current))
+                visited_edges.add(ekey)
+                if current == start_a:
+                    break
+                loop.append(current)
+                neighbors = boundary_adj.get(current, [])
+                next_v = None
+                for nb in neighbors:
+                    if nb != prev:
+                        nkey = (min(current, nb), max(current, nb))
+                        if nkey not in visited_edges:
+                            next_v = nb
+                            break
+                if next_v is None:
+                    break
+                prev = current
+                current = next_v
+
+            if (
+                len(loop) >= 3
+                and len(loop) <= max_hole_sides
+                and current == start_a
+            ):
+                # Fill this hole with a face
+                clean_faces.append(tuple(reversed(loop)))
+                holes_filled += 1
+
+    return {
+        "vertices": clean_verts,
+        "faces": clean_faces,
+        "report": {
+            "doubles_removed": doubles_removed,
+            "normals_fixed": normals_fixed,
+            "holes_filled": holes_filled,
+            "non_manifold_edges": non_manifold_edges,
+        },
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -581,6 +949,28 @@ def mesh_from_spec(
     # Set parent
     if parent is not None:
         obj.parent = parent
+
+    # Auto-assign procedural material based on generator category
+    category = spec.get("metadata", {}).get("category", "")
+    if category:
+        material_key = CATEGORY_MATERIAL_MAP.get(category)
+        if material_key:
+            try:
+                from .procedural_materials import (
+                    create_procedural_material,
+                    MATERIAL_LIBRARY,
+                )
+                if material_key in MATERIAL_LIBRARY:
+                    mat_name = f"{obj_name}_{material_key}"
+                    mat = create_procedural_material(mat_name, material_key)
+                    if obj.data.materials:
+                        obj.data.materials[0] = mat
+                    else:
+                        obj.data.materials.append(mat)
+            except Exception:
+                # Graceful fallback: if procedural material creation fails,
+                # the object keeps its default material (no crash)
+                pass
 
     return obj
 

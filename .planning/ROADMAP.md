@@ -1,13 +1,14 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-03-21 (v3.0 complete)
+**Updated:** 2026-03-31 (v7.0 planning in progress)
 
 ## Milestones
 
 - [x] **v1.0 Foundation & Full Pipeline** - Phases 1-8 (shipped 2026-03-19)
 - [x] **v2.0 Complete Unity Game Development Coverage** - Phases 9-17 (shipped 2026-03-21)
 - [x] **v3.0 AAA Mesh Quality + Professional Systems** - Phases 18-24 (shipped 2026-03-21)
+- [ ] **v7.0 AAA Procedural City Production** - Phases 30-38 (planning in progress)
 
 ## Phases
 
@@ -44,9 +45,10 @@
 
 </details>
 
-### v3.0 AAA Mesh Quality + Professional Systems
+<details>
+<summary>v3.0 AAA Mesh Quality + Professional Systems (Phases 18-24) - SHIPPED 2026-03-21</summary>
 
-- [x] **Phase 18: Procedural Mesh Integration + Terrain Depth** - Wire 127 procedural meshes into worldbuilding/environment, add cliff/cave/waterfall/bridge/multi-biome terrain features, LOD variants (3/3 plans complete)
+- [x] **Phase 18: Procedural Mesh Integration + Terrain Depth** - Wire 267 procedural meshes into worldbuilding/environment, add cliff/cave/waterfall/bridge/multi-biome terrain features, LOD variants (3/3 plans complete)
 - [x] **Phase 19: Character Excellence** - Body proportion validation, hair card generation, face/hand/foot topology validation, character-aware LOD retopology, armor seam hiding, Unity cloth physics, SSS skin shader, parallax eye shader, micro-detail normals (3/3 plans complete)
 - [x] **Phase 20: Advanced Animation + FromSoft Combat Feel** - Combat timing system (anticipation/active/recovery), animation events, blend trees, additive layers, root motion refinement, AI motion, cinematic sequences (3/3 plans complete)
 - [x] **Phase 21: Audio Middleware Architecture** - Spatial audio propagation/occlusion, layered sound design, audio event chains, dynamic music (re-sequencing/stingers), portal propagation, audio LOD, VO pipeline, procedural foley (1/1 plan complete, 8 AUDM requirements, 157 tests)
@@ -55,10 +57,7 @@
 - [x] **Phase 24: Production Pipeline** - Compile error auto-recovery, asset conflict detection, multi-tool pipeline orchestration, art style consistency validation, build verification smoke tests
 
 **Delivered:** 37 MCP tools (15 Blender + 22 Unity), 350 actions (41 new), 8,473+ tests (1,154 new), 56 requirements across 8 categories. FromSoft combat timing, Wwise-level spatial audio, Diablo 4 VFX, AAA dark fantasy UI, production pipeline automation.
-
-- [ ] **v4.0 AAA Procedural 3D Architecture** - Phases 25-29 (researched 2026-03-30)
-- [ ] **v6.0 Tripo Integration & Code Reviewer** - Tripo Studio API client, unified code reviewer v3 (completed 2026-03-27)
-- [ ] **v7.0 AAA Procedural City Production** - Phases 30-38 (NEW - not started)
+</details>
 
 ## Phase Details
 
@@ -366,7 +365,8 @@ Plans:
 
 </details>
 
-### v3.0 Phase Details (Phases 18-24)
+<details>
+<summary>v3.0 Phase Details (Phases 18-24) - SHIPPED 2026-03-21</summary>
 
 ### Phase 18: Procedural Mesh Integration + Terrain Depth
 **Goal**: Every worldbuilding and environment handler uses real procedural meshes instead of primitive cubes/cones, and terrain generation supports vertical geometry (cliffs, caves, waterfalls, bridges) beyond 2.5D heightmaps
@@ -463,21 +463,10 @@ Plans:
 Plans:
 - [x] 24-01-PLAN.md -- Production pipeline: compile recovery, conflict detection, pipeline orchestration, art style validation, build smoke tests
 
-<details>
-<summary>v7.0 AAA Procedural City Production (Phases 30-38) - NEW</summary>
-
-- [ ] **Phase 30 (P0): Mesh Foundation** - Execute 20+ parametric mesh generators, material presets, LOD presets, boolean cleanup, silhouette validation
-- [ ] **Phase 31 (P1): Terrain & Environment** - Execute height-blended splatmap terrain, cliff mesh overlays, biome noise system, vegetation scatter with LOD
-- [ ] **Phase 32 (P2): Building System** - Execute modular kit expansion (300+ pieces), trim sheet authoring, building composition, district parameters
-- [ ] **Phase 33 (P3): Interior System** - Execute interior room shells, purpose-based furniture placement, interactive props, occlusion zones
-- [ ] **Phase 34 (P4): Multi-biome Terrain** - Execute biome blending algorithms, corruption-aware generation, terrain-conforming foundations
-- [ ] **Phase 35 (P5): Multi-backend AI Integration** - Execute Tripo pipeline for hero assets, Hunyuan for bulk props, unified art style validation
-- [ ] **Phase 36 (P6): World Composer** - Execute settlement generation, road networks, POI placement, district zoning
-- [ ] **Phase 37: Pipeline Integration** - Connect all systems into full map composition, state persistence, Addressables streaming
-- [ ] **Phase 38: Starter Town** - Generate complete starter town (10-15 buildings), furnished interiors, market area, fortifications, gameplay testing ready
-
-**Delivered:** TBD
 </details>
+
+<details>
+<summary>v4.0 AAA Procedural 3D Architecture (Phases 25-29) - ARCHIVED (superseded by v7.0)</summary>
 
 - [ ] **Phase 25: Procedural Mesh Foundation** - 20+ parametric mesh generators, material presets, LOD presets, boolean cleanup pipeline, silhouette validation
 - [ ] **Phase 26: Terrain and Environment** - Height-blended splatmap terrain, cliff face mesh overlays, biome noise system, vegetation scatter with LOD, terrain-conforming foundations
@@ -485,8 +474,120 @@ Plans:
 - [ ] **Phase 28: Pipeline Integration and Starter Town** - Multi-backend AI integration, style normalization, starter town generation (10-15 buildings), Addressables streaming setup, state persistence
 - [ ] **Phase 29: Research and Polish** - AAA technique documentation, performance optimization, visual quality review against benchmarks
 
-**Delivered:** TBD
+**Status:** ARCHIVED -- v4.0 scope was restructured into v7.0 (Phases 30-38) with expanded scope and detailed requirements.
 </details>
+
+### v7.0 AAA Procedural City Production (Phases 30-38)
+
+### Phase 30: Mesh Foundation
+**Goal**: Every procedural mesh generator produces game-ready geometry with proper topology, seed-based determinism, material assignment, LOD presets, and visual quality verified by contact sheet -- establishing the quality floor for all subsequent phases
+**Depends on**: Phase 24 (production pipeline for quality enforcement)
+**Requirements**: MESH-01, MESH-02, MESH-06, MESH-11, MESH-14, MESH-15
+**Success Criteria** (what must be TRUE):
+  1. Every furniture generator (table, chair, chest, barrel, shelf, bed, bookshelf, crate) produces mesh with >500 vertices, proper edge flow at joints, and contact sheet shows silhouette distinguishable from primitive shapes at 4 viewing angles
+  2. All 267 generators use `random.Random(seed)` exclusively -- zero instances of global random state -- and identical seeds produce byte-identical MeshSpec output across runs
+  3. Smart material auto-assignment maps each generator category to the appropriate procedural material preset (wood for furniture, stone for architecture, metal for weapons) with roughness driven by noise texture nodes, never a single float value
+  4. LOD chain generation produces 3-4 levels per asset type using existing `lod_pipeline.py` presets, with silhouette preservation >85% measured by `compute_silhouette_importance()`, and scene budget validator enforces per-room (50K-150K tris) and per-block (200K-500K tris) budgets
+  5. Post-boolean cleanup pipeline (remove doubles at 0.0001, recalculate normals, fix non-manifold, fill holes up to 8 sides) runs automatically after every boolean operation, and no exported mesh contains non-manifold edges
+**Plans**: TBD (to be created during plan-phase)
+
+### Phase 31: Terrain & Environment
+**Goal**: Terrain generation produces dramatic, eroded landscapes with multi-biome blending, cliff mesh overlays beyond heightmap limitations, and vegetation scattered by Poisson disk sampling -- visually comparable to Skyrim's overworld
+**Depends on**: Phase 30 (mesh foundation for vegetation/rock generators)
+**Requirements**: MESH-05, MESH-09, MESH-10
+**Success Criteria** (what must be TRUE):
+  1. Hydraulic erosion runs 50,000+ droplets (up from current 1,000) producing visible river channels, sediment deposits, and cliff faces in the terrain contact sheet -- terrain passes A/B comparison against Skyrim terrain reference
+  2. Height-blended splatmap painting assigns terrain layers by slope (>45 degrees = cliff rock), altitude (>80% = snow), moisture (near water = mud/grass), with smooth 5-10m blend zones between biome transitions
+  3. Cliff mesh overlays generate vertical geometry that extends beyond heightmap limitations, with proper UV mapping for tileable rock textures and seamless blending at terrain contact edges
+  4. Vegetation scatter uses Poisson disk sampling (Bridson's algorithm) with density modulated by biome type, slope angle, and moisture map -- no uniform random distribution, minimum 3 tree species with L-system branching (not sphere-cluster canopies)
+  5. Domain warping applied to base noise produces organic, non-repetitive terrain features -- no visible tiling patterns at any viewing distance in the contact sheet
+**Plans**: TBD
+
+### Phase 32: Building System
+**Goal**: Building generation uses CGA-style split grammar for facade composition, producing architecturally varied structures with proper roofs, window/door cutouts, and modular kit pieces that snap on a consistent grid -- no building is a box with texture
+**Depends on**: Phase 30 (mesh quality), Phase 31 (terrain for placement context)
+**Requirements**: MESH-04, MESH-07
+**Success Criteria** (what must be TRUE):
+  1. Building grammar evaluates recursive split rules: footprint -> extrude -> comp(faces) -> split(y, floors) -> split(x, bays) -> fill(window|door|wall), producing facades with aligned windows across floors and stylistically consistent detail
+  2. `building_quality.py` generators (stone block grid, arch curves, voussoir blocks, shingle rows) are wired INTO the building grammar pipeline -- wall faces use stone block geometry, openings have arch geometry, roofs have shingle geometry
+  3. Roof generation uses straight skeleton algorithm (bpypolyskel) producing correct hip, gable, and mansard roofs from arbitrary building footprints -- no flat-box roof approximations
+  4. Modular building kit has 50+ pieces per style (medieval, gothic, fortress, organic) on a 2m snap grid, with trim sheet UV mapping for efficient texture sharing across pieces
+  5. Contact sheet comparison of 5 generated buildings shows no two buildings with identical facade layouts -- architectural variation achieved through randomized bay rules, floor counts, and style parameters
+**Plans**: TBD
+
+### Phase 33: Interior System
+**Goal**: Interior generation produces purpose-driven room layouts with spatially-aware furniture placement, decorative clutter, practical lighting, and occlusion zones -- interiors feel lived-in, not empty boxes
+**Depends on**: Phase 30 (furniture generators), Phase 32 (building shells for interior context)
+**Requirements**: MESH-03
+**Success Criteria** (what must be TRUE):
+  1. Room purpose templates define spatial relationship graphs: tavern (bar counter + stools facing it, tables + 2-4 chairs around each, fireplace with seating arc), bedroom (bed + nightstand adjacent, wardrobe against wall, desk facing window), kitchen (stove + counter + storage in work triangle)
+  2. Furniture placement uses constraint satisfaction: minimum clearance from walls (0.3m), path to door always clear (1m corridor), items aligned to walls or other furniture, no interpenetration -- validated by collision check
+  3. Decorative clutter scatter adds 5-15 props per room: books on shelves, dishes on tables, tools near workbenches, candles on surfaces -- using Poisson disk sampling within surface bounds, with room-purpose-appropriate prop palettes
+  4. Lighting placement: torches at doorways and corridor junctions, candles on tables and nightstands, fireplace emissive, window-aligned ambient -- every room has at least 2 light sources with warm color temperature (2700-3500K)
+  5. Interior contact sheet shows a furnished tavern, bedroom, and blacksmith workshop with prop density visually comparable to Skyrim interior cells -- assessed by item count per room and surface coverage percentage
+**Plans**: TBD
+
+### Phase 34: Multi-biome Terrain
+**Goal**: Biome system distributes distinct terrain types across the world map using Voronoi-based zoning with corruption-aware tinting, smooth biome transitions, and terrain-conforming building foundations -- no floating buildings or sharp biome boundaries
+**Depends on**: Phase 31 (terrain foundation), Phase 32 (buildings for terrain integration)
+**Requirements**: MESH-05, MESH-09, MESH-10
+**Success Criteria** (what must be TRUE):
+  1. Voronoi-based biome distribution creates 5+ distinct biome regions (thornwood forest, corrupted swamp, mountain pass, volcanic wastes, frozen tundra) from the existing 14 biome palettes, with temperature/moisture/elevation parameters per cell
+  2. Biome transition zones span 10-20m with material blending (splatmap alpha gradient), vegetation density fade, and prop palette interpolation -- no hard edges visible in overhead contact sheet
+  3. Corruption system tints affected biome regions (purple/black overlay scaling 0-100%), affects vegetation (dead/twisted variants), and modulates material properties (increased roughness, darkened albedo)
+  4. Building foundations generate terrain-conforming meshes that flatten terrain in a radius around the building footprint, with material blending at the foundation-terrain contact edge -- zero visible gaps in side-view contact sheet
+  5. Multi-biome terrain renders as a single coherent world map (512m x 512m minimum) with 3+ biome types visible, terrain height variation >50m, and at least one river/road cutting across biome boundaries
+**Plans**: TBD
+
+### Phase 35: Multi-backend AI Integration
+**Goal**: Tripo pipeline produces game-ready hero assets with full post-processing, texture extraction from GLB into standalone PBR maps, and unified art style validation ensuring AI-generated assets match procedural assets visually
+**Depends on**: Phase 30 (mesh quality baseline for comparison)
+**Requirements**: MESH-12
+**Success Criteria** (what must be TRUE):
+  1. Tripo-generated models automatically go through: de-lighting -> mesh repair -> retopology -> UV unwrap -> PBR texture EXTRACTION from embedded GLB textures into standalone albedo/normal/roughness/metallic/AO files (not blank images)
+  2. Smart material overlay applies procedural weathering (edge wear, cavity dirt, height-based moss) on TOP of Tripo's extracted textures -- AI textures enhanced, not replaced
+  3. Art style validation compares Tripo output color palette, roughness distribution, and detail density against project standards -- flagging outliers with specific deviation metrics
+  4. 4 variants generated per Tripo request, displayed in Blender grid layout for visual comparison -- best variant selected based on quality scoring (vertex count, UV coverage, material fidelity)
+  5. Full pipeline from text prompt to Unity-ready FBX completes in under 10 minutes with zero manual intervention -- validated by end-to-end test with 3 asset types (prop, weapon, character)
+**Plans**: TBD
+
+### Phase 36: World Composer
+**Goal**: Settlement generation produces complete town layouts with road networks, lot subdivision, district zoning, building placement on lots, and street-level props -- a generated town is walkable and visually coherent from ground level
+**Depends on**: Phase 32 (buildings), Phase 33 (interiors), Phase 34 (terrain)
+**Requirements**: MESH-08
+**Success Criteria** (what must be TRUE):
+  1. Road network generation uses L-system or tensor field approach producing organic street layouts with T-junctions, intersections, and varying road widths -- road MESHES have curbs, cobblestone texture, and proper UV mapping (not flat colored boxes)
+  2. Lot subdivision from road network creates building plots with street frontage, and EVERY plot has a building generated on it via the building grammar -- no empty marker boxes
+  3. District zoning assigns building types by distance from center: market square (shops, tavern) -> civic (temple, town hall) -> residential (houses) -> industrial (blacksmith, tannery) -> outskirts (farms, walls)
+  4. Street-level props placed along roads: lamp posts at intersections, benches near buildings, market stalls in commercial districts, wells in residential areas, defensive posts near walls -- using Poisson disk sampling with prop-type-appropriate spacing
+  5. Generated town contact sheet (overhead + 4 ground-level angles) shows a coherent settlement that could pass as a Skyrim village -- buildings connected by roads, terrain integrated, vegetation present, no floating objects
+**Plans**: TBD
+
+### Phase 37: Pipeline Integration
+**Goal**: All procedural systems compose into a single end-to-end map generation pipeline with state persistence, Addressables streaming setup, and runtime occlusion -- a complete map can be generated, exported, and loaded in Unity
+**Depends on**: Phase 36 (world composition), Phase 35 (AI asset integration)
+**Requirements**: MESH-16, PIPE-01
+**Success Criteria** (what must be TRUE):
+  1. `asset_pipeline action=compose_map` generates terrain -> roads -> building lots -> buildings -> interiors -> vegetation -> props in sequence, with state persisted to JSON between steps for resumability
+  2. Addressables streaming groups generated per district: each building with interior is a separate addressable group, terrain tiles are distance-based groups -- loading zones defined by district boundaries
+  3. Occlusion zones generated at doorways and district transitions, with portal geometry for interior/exterior streaming boundary
+  4. Full map generation pipeline produces a Unity-importable package: FBX meshes + PBR texture sets + LOD variants + Addressables config + scene hierarchy JSON
+  5. Research document (PIPE-01) covers AAA techniques from Skyrim, Fable, AC Valhalla with specific implementation references for each technique adopted in the pipeline
+**Plans**: TBD
+
+### Phase 38: Starter Town
+**Goal**: Generate a complete, playable starter town with 10-15 buildings, furnished interiors, market area, fortifications, and terrain integration -- the town is the quality benchmark proving the entire pipeline works end-to-end
+**Depends on**: Phase 37 (full pipeline), all preceding phases
+**Requirements**: MESH-13
+**Success Criteria** (what must be TRUE):
+  1. Starter town has 10-15 buildings: 1 tavern (interior: bar, tables, rooms), 1 blacksmith (interior: forge, anvils, weapons), 1 temple, 2-3 shops, 4-6 houses, 1 town hall, defensive wall with gate -- each with furnished interior
+  2. Market area with 5+ stalls, a central well/fountain, cobblestone ground, and street-level props (crates, barrels, signs, lanterns)
+  3. Fortification perimeter: wall sections with walkways, 2+ guard towers, main gate with portcullis geometry, at least 1 secret entrance (sewer/cave)
+  4. Every building exterior and interior passes visual QA: contact sheet reviewed, no floating objects, no z-fighting, no missing faces, consistent material quality, prop density comparable to Skyrim
+  5. Town exports to Unity as Addressables-ready package, loads in under 5 seconds on PC, maintains 60fps at 1080p with all buildings and terrain visible -- profiled via unity_performance action=profile_scene
+**Plans**: TBD
+
+**Delivered:** TBD
 
 ## Progress
 
@@ -519,6 +620,15 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 22. AAA Dark Fantasy UI/UX Polish | v3.0 | 1/1 | Complete | 2026-03-21 |
 | 23. VFX Mastery | v3.0 | 1/1 | Complete | 2026-03-21 |
 | 24. Production Pipeline | v3.0 | 1/1 | Complete | 2026-03-21 |
+| 30. Mesh Foundation | v7.0 | 1/1 | Complete    | 2026-03-31 |
+| 31. Terrain & Environment | v7.0 | 0/TBD | Not Started | - |
+| 32. Building System | v7.0 | 0/TBD | Not Started | - |
+| 33. Interior System | v7.0 | 0/TBD | Not Started | - |
+| 34. Multi-biome Terrain | v7.0 | 0/TBD | Not Started | - |
+| 35. Multi-backend AI Integration | v7.0 | 0/TBD | Not Started | - |
+| 36. World Composer | v7.0 | 0/TBD | Not Started | - |
+| 37. Pipeline Integration | v7.0 | 0/TBD | Not Started | - |
+| 38. Starter Town | v7.0 | 0/TBD | Not Started | - |
 
 ---
 *Roadmap created: 2026-03-18*
@@ -526,3 +636,4 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 *v2.0 shipped: 2026-03-21*
 *v3.0 phases added: 2026-03-21*
 *v3.0 shipped: 2026-03-21*
+*v7.0 planning started: 2026-03-31*

@@ -17,8 +17,12 @@ from blender_addon.handlers._mesh_bridge import (
     VEGETATION_GENERATOR_MAP,
     DUNGEON_PROP_MAP,
     CASTLE_ELEMENT_MAP,
+    PROP_GENERATOR_MAP,
+    CATEGORY_MATERIAL_MAP,
     generate_lod_specs,
     resolve_generator,
+    get_material_for_category,
+    post_boolean_cleanup,
 )
 
 
@@ -416,3 +420,171 @@ class TestMeshFromSpecPureLogic:
         result = mesh_from_spec(spec)
         # Should complete without error
         assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# CATEGORY_MATERIAL_MAP tests -- procedural material auto-assignment
+# ---------------------------------------------------------------------------
+
+# All generator categories found in procedural_meshes.py
+ALL_GENERATOR_CATEGORIES = [
+    "furniture", "vegetation", "dungeon_prop", "weapon", "armor",
+    "architecture", "building", "container", "dark_fantasy",
+    "monster_part", "monster_body", "projectile", "trap",
+    "light_source", "wall_decor", "crafting", "vehicle",
+    "structural", "fortification", "sign", "natural",
+    "fence_barrier", "door", "camp", "infrastructure",
+    "consumable", "crafting_material", "currency", "key_item",
+    "combat_item", "forest_animal", "mountain_animal",
+    "domestic_animal", "vermin", "swamp_animal",
+]
+
+
+class TestCategoryMaterialMap:
+    """Tests for CATEGORY_MATERIAL_MAP coverage and validity."""
+
+    @pytest.mark.parametrize("category", ALL_GENERATOR_CATEGORIES)
+    def test_every_generator_category_has_material(self, category: str) -> None:
+        """Every generator category must map to a procedural material."""
+        assert category in CATEGORY_MATERIAL_MAP, (
+            f"CATEGORY_MATERIAL_MAP missing category '{category}'"
+        )
+
+    @pytest.mark.parametrize("category", ALL_GENERATOR_CATEGORIES)
+    def test_material_key_exists_in_library(self, category: str) -> None:
+        """Every mapped material key must exist in MATERIAL_LIBRARY."""
+        from blender_addon.handlers.procedural_materials import MATERIAL_LIBRARY
+        material_key = CATEGORY_MATERIAL_MAP[category]
+        assert material_key in MATERIAL_LIBRARY, (
+            f"Category '{category}' maps to '{material_key}' "
+            f"which is not in MATERIAL_LIBRARY"
+        )
+
+    def test_total_mappings_at_least_21(self) -> None:
+        """Must cover at least 21 generator categories."""
+        assert len(CATEGORY_MATERIAL_MAP) >= 21, (
+            f"Expected >= 21 category mappings, got {len(CATEGORY_MATERIAL_MAP)}"
+        )
+
+    def test_get_material_for_category_returns_key(self) -> None:
+        result = get_material_for_category("furniture")
+        assert result == "rough_timber"
+
+    def test_get_material_for_category_returns_none_for_unknown(self) -> None:
+        result = get_material_for_category("nonexistent_category_xyz")
+        assert result is None
+
+    def test_furniture_maps_to_wood_material(self) -> None:
+        key = CATEGORY_MATERIAL_MAP["furniture"]
+        assert "timber" in key or "wood" in key, (
+            f"Furniture should map to a wood material, got '{key}'"
+        )
+
+    def test_weapon_maps_to_metal_material(self) -> None:
+        key = CATEGORY_MATERIAL_MAP["weapon"]
+        assert "iron" in key or "steel" in key or "metal" in key, (
+            f"Weapons should map to a metal material, got '{key}'"
+        )
+
+    def test_architecture_maps_to_stone_material(self) -> None:
+        key = CATEGORY_MATERIAL_MAP["architecture"]
+        assert "stone" in key, (
+            f"Architecture should map to a stone material, got '{key}'"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Post-boolean cleanup tests
+# ---------------------------------------------------------------------------
+
+
+def _make_simple_cube():
+    """Create a simple cube for cleanup testing."""
+    verts = [
+        (-0.5, -0.5, -0.5), (0.5, -0.5, -0.5),
+        (0.5, 0.5, -0.5), (-0.5, 0.5, -0.5),
+        (-0.5, -0.5, 0.5), (0.5, -0.5, 0.5),
+        (0.5, 0.5, 0.5), (-0.5, 0.5, 0.5),
+    ]
+    faces = [
+        (0, 3, 2, 1), (4, 5, 6, 7),
+        (0, 1, 5, 4), (2, 3, 7, 6),
+        (0, 4, 7, 3), (1, 2, 6, 5),
+    ]
+    return verts, faces
+
+
+class TestPostBooleanCleanup:
+    """Tests for post_boolean_cleanup pure-logic mesh cleanup."""
+
+    def test_clean_mesh_unchanged(self) -> None:
+        """A clean cube should pass through with no changes."""
+        verts, faces = _make_simple_cube()
+        result = post_boolean_cleanup(verts, faces)
+        assert result["report"]["doubles_removed"] == 0
+        assert len(result["vertices"]) == 8
+        assert len(result["faces"]) == 6
+
+    def test_removes_duplicate_vertices(self) -> None:
+        """Vertices at the same location should be merged."""
+        verts = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.00005, 0.00005, 0.00005),  # Near-duplicate of vertex 0
+        ]
+        faces = [
+            (0, 1, 2, 3),
+            (4, 1, 2),  # Uses near-duplicate
+        ]
+        result = post_boolean_cleanup(verts, faces, merge_distance=0.0001)
+        assert result["report"]["doubles_removed"] >= 1
+
+    def test_empty_mesh_returns_empty(self) -> None:
+        result = post_boolean_cleanup([], [])
+        assert result["vertices"] == []
+        assert result["faces"] == []
+        assert result["report"]["doubles_removed"] == 0
+
+    def test_report_has_all_keys(self) -> None:
+        verts, faces = _make_simple_cube()
+        result = post_boolean_cleanup(verts, faces)
+        report = result["report"]
+        assert "doubles_removed" in report
+        assert "normals_fixed" in report
+        assert "holes_filled" in report
+        assert "non_manifold_edges" in report
+
+    def test_degenerate_faces_removed(self) -> None:
+        """Faces that collapse to < 3 verts after merge should be removed."""
+        verts = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.00005, 0.00005, 0.00005),  # Duplicate of 0
+        ]
+        faces = [(0, 1, 2)]  # After merge, becomes (0, 1, 0) -> degenerate
+        result = post_boolean_cleanup(verts, faces, merge_distance=0.0001)
+        # The degenerate face should be removed
+        assert len(result["faces"]) == 0
+
+    def test_face_indices_valid_after_cleanup(self) -> None:
+        """All face indices must be valid after vertex compaction."""
+        verts, faces = _make_simple_cube()
+        # Add some duplicate verts
+        verts_with_dupes = list(verts) + [
+            (0.500005, 0.500005, 0.500005),  # Near-dupe of vertex 6
+        ]
+        faces_extended = list(faces) + [(8, 5, 4)]
+        result = post_boolean_cleanup(verts_with_dupes, faces_extended, merge_distance=0.0001)
+        n_verts = len(result["vertices"])
+        for fi, face in enumerate(result["faces"]):
+            for idx in face:
+                assert 0 <= idx < n_verts, (
+                    f"Face {fi} has index {idx} >= {n_verts}"
+                )
+
+    def test_manifold_cube_has_zero_non_manifold_edges(self) -> None:
+        verts, faces = _make_simple_cube()
+        result = post_boolean_cleanup(verts, faces)
+        assert result["report"]["non_manifold_edges"] == 0

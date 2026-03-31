@@ -142,12 +142,13 @@ class TestLODPresets:
     """Validate LOD_PRESETS dictionary structure and content."""
 
     def test_all_expected_asset_types_present(self):
-        """LOD_PRESETS has all seven required asset types."""
+        """LOD_PRESETS has all eight required asset types (including furniture)."""
         from blender_addon.handlers.lod_pipeline import LOD_PRESETS
 
         expected = {
             "hero_character", "standard_mob", "building",
             "prop_small", "prop_medium", "weapon", "vegetation",
+            "furniture",
         }
         assert expected == set(LOD_PRESETS.keys())
 
@@ -833,3 +834,135 @@ class TestIntegration:
             verts, faces, 0.4, combined,
         )
         assert len(result_verts) < len(verts)
+
+
+# ---------------------------------------------------------------------------
+# Furniture LOD preset tests
+# ---------------------------------------------------------------------------
+
+
+class TestFurnitureLodPreset:
+    """Tests for the furniture LOD preset."""
+
+    def test_furniture_preset_exists(self) -> None:
+        from blender_addon.handlers.lod_pipeline import LOD_PRESETS
+        assert "furniture" in LOD_PRESETS, "Missing 'furniture' LOD preset"
+
+    def test_furniture_ratios(self) -> None:
+        from blender_addon.handlers.lod_pipeline import LOD_PRESETS
+        preset = LOD_PRESETS["furniture"]
+        assert preset["ratios"] == [1.0, 0.5, 0.25]
+
+    def test_furniture_screen_percentages(self) -> None:
+        from blender_addon.handlers.lod_pipeline import LOD_PRESETS
+        preset = LOD_PRESETS["furniture"]
+        assert preset["screen_percentages"] == [1.0, 0.3, 0.1]
+
+    def test_furniture_min_tris(self) -> None:
+        from blender_addon.handlers.lod_pipeline import LOD_PRESETS
+        preset = LOD_PRESETS["furniture"]
+        assert preset["min_tris"] == [200, 100, 50]
+
+    def test_furniture_generates_3_lod_levels(self) -> None:
+        from blender_addon.handlers.lod_pipeline import generate_lod_chain
+        big_verts, big_faces = _make_subdivided_plane(10)
+        mesh_data = {"vertices": big_verts, "faces": big_faces}
+        chain = generate_lod_chain(mesh_data, "furniture")
+        assert len(chain) == 3, f"Expected 3 LOD levels, got {len(chain)}"
+
+    def test_furniture_lod_decreasing_faces(self) -> None:
+        from blender_addon.handlers.lod_pipeline import generate_lod_chain
+        big_verts, big_faces = _make_subdivided_plane(10)
+        mesh_data = {"vertices": big_verts, "faces": big_faces}
+        chain = generate_lod_chain(mesh_data, "furniture")
+        for i in range(len(chain) - 1):
+            assert len(chain[i][1]) >= len(chain[i + 1][1]), (
+                f"LOD{i} ({len(chain[i][1])} faces) < LOD{i+1} ({len(chain[i+1][1])} faces)"
+            )
+
+    def test_total_presets_now_8(self) -> None:
+        from blender_addon.handlers.lod_pipeline import LOD_PRESETS
+        assert len(LOD_PRESETS) == 8, (
+            f"Expected 8 LOD presets, got {len(LOD_PRESETS)}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# SceneBudgetValidator tests
+# ---------------------------------------------------------------------------
+
+
+class TestSceneBudgetValidator:
+    """Tests for the scene budget validator."""
+
+    def test_under_budget(self) -> None:
+        from blender_addon.handlers.lod_pipeline import SceneBudgetValidator
+        validator = SceneBudgetValidator()
+        report = validator.validate([5000, 10000, 8000], scope="per_room")
+        assert report["total_tris"] == 23000
+        assert report["over_budget"] is False
+        assert report["object_count"] == 3
+        assert report["scope"] == "per_room"
+
+    def test_over_budget_room(self) -> None:
+        from blender_addon.handlers.lod_pipeline import SceneBudgetValidator
+        validator = SceneBudgetValidator()
+        report = validator.validate([80000, 40000, 50000], scope="per_room")
+        assert report["total_tris"] == 170000
+        assert report["over_budget"] is True
+        assert len(report["recommendations"]) > 0
+
+    def test_per_block_scope(self) -> None:
+        from blender_addon.handlers.lod_pipeline import SceneBudgetValidator
+        validator = SceneBudgetValidator()
+        report = validator.validate([100000, 200000, 300000], scope="per_block")
+        assert report["total_tris"] == 600000
+        assert report["over_budget"] is True
+
+    def test_per_frame_scope(self) -> None:
+        from blender_addon.handlers.lod_pipeline import SceneBudgetValidator
+        validator = SceneBudgetValidator()
+        report = validator.validate([500000], scope="per_frame")
+        assert report["total_tris"] == 500000
+        assert report["over_budget"] is False
+
+    def test_empty_scene(self) -> None:
+        from blender_addon.handlers.lod_pipeline import SceneBudgetValidator
+        validator = SceneBudgetValidator()
+        report = validator.validate([], scope="per_room")
+        assert report["total_tris"] == 0
+        assert report["over_budget"] is False
+        assert report["object_count"] == 0
+
+    def test_unknown_scope_raises(self) -> None:
+        from blender_addon.handlers.lod_pipeline import SceneBudgetValidator
+        validator = SceneBudgetValidator()
+        with pytest.raises(ValueError, match="Unknown scope"):
+            validator.validate([1000], scope="nonexistent")
+
+    def test_validate_all_scopes(self) -> None:
+        from blender_addon.handlers.lod_pipeline import SceneBudgetValidator
+        validator = SceneBudgetValidator()
+        reports = validator.validate_all_scopes([50000, 30000])
+        assert len(reports) == 3
+        scopes = {r["scope"] for r in reports}
+        assert scopes == {"per_room", "per_block", "per_frame"}
+
+    def test_utilization_percentage(self) -> None:
+        from blender_addon.handlers.lod_pipeline import SceneBudgetValidator
+        validator = SceneBudgetValidator()
+        report = validator.validate([75000], scope="per_room")
+        # 75000 / 150000 = 50%
+        assert report["utilization_pct"] == 50.0
+
+    def test_recommendations_for_high_tris_objects(self) -> None:
+        from blender_addon.handlers.lod_pipeline import SceneBudgetValidator
+        validator = SceneBudgetValidator()
+        # One huge object dominates budget
+        report = validator.validate([140000, 5000, 10000], scope="per_room")
+        assert report["over_budget"] is True
+        # Should recommend LOD culling for the big object
+        has_object_recommendation = any(
+            "Object #0" in r for r in report["recommendations"]
+        )
+        assert has_object_recommendation

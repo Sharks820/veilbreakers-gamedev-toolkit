@@ -351,8 +351,11 @@ def _create_vegetation_template(
         # scatter templates (these get instanced 1000s of times)
         gen_func, gen_kwargs = gen_entry
         scatter_kwargs = dict(gen_kwargs)
-        if veg_type == "tree":
-            scatter_kwargs.setdefault("branch_count", 4)  # lower for scatter
+        # For L-system tree types, use lower iterations and ring segments
+        # for scatter templates (these get instanced 1000s of times)
+        if veg_type.startswith("tree") or veg_type == "pine_tree":
+            scatter_kwargs.setdefault("iterations", 3)  # lower for scatter templates
+            scatter_kwargs.setdefault("ring_segments", 4)  # lower LOD for instanced trees
         elif veg_type == "rock":
             scatter_kwargs.setdefault("detail", 2)  # lower for scatter
         spec = gen_func(**scatter_kwargs)
