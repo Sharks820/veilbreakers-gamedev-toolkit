@@ -236,4 +236,49 @@ Based on research, the highest-impact improvements in order:
 
 ---
 
+## 4. Context7 API Reference (for implementation)
+
+### 4.1 Unity Procedural Mesh API
+- `Mesh.SetVertexBufferParams` / `SetVertexBufferData` — direct vertex buffer manipulation
+- `Mesh.AllocateWritableMeshData` — NativeArray zero-copy path for Job System
+- `Graphics.DrawMeshInstancedIndirect` — GPU instancing for mass vegetation/rock rendering
+- Unity 6 Mesh LOD: automatic LOD generation within single mesh asset, cross-fade with `LOD Cross Fade` in URP
+
+### 4.2 Blender bmesh (from Context7 /websites/blender_api_4_5)
+- Always use bmesh for procedural creation (rated "Best" for both creation and manipulation)
+- Always `bm.verts.ensure_lookup_table()` after creating vertices
+- Always `bm.free()` after `bm.to_mesh()`
+- For edit-mode: `bmesh.from_edit_mesh(mesh)` and `bmesh.update_edit_mesh(mesh)`
+- Key ops: `extrude_face_region`, `subdivide_edges`, `bevel`, `bisect_plane`, `solidify`, `face_split`
+
+### 4.3 FastNoise Lite (for terrain)
+- Context7 ID: `/auburn/fastnoiselite`
+- Noise types: OpenSimplex2, OpenSimplex2S, Cellular (Voronoi), Perlin, Value, Value Cubic
+- Fractal types: None, FBm, Rigid, PingPong, DomainWarpProgressive, DomainWarpIndependent
+- Domain warping: separate FastNoiseLite instance for warp, `DomainWarp(ref x, ref y)` modifies coords in-place
+- Cellular distance: Euclidean, EuclideanSq, Manhattan, Hybrid
+
+### 4.4 Unity Terrain API
+- Heightmap resolution: power-of-two + 1 (513, 1025, 2049)
+- `SetHeights()` / `GetHeights()` for programmatic heightmap
+- `SetAlphamaps()` / `GetAlphamaps()` for splatmap texture blending
+- `DetailPrototype` for grass, `TreePrototype` for large vegetation
+- Namespaces: `UnityEngine.TerrainTools`, `UnityEditor.TerrainTools`, `UnityEngine.TerrainUtils`
+
+### 4.5 ProceduralToolkit (Unity, Context7 ID: /syomus/proceduraltoolkit)
+- `BuildingGenerator` with `FacadePlanner` + `FacadeConstructor` (strategy pattern)
+- `RoofPlanner` + `RoofConstructor` ScriptableObjects for swappable roof styles
+- `MeshDraft` composable geometry: Add, Move, Rotate, Scale, Paint, ToMesh()
+- Building foundations as `List<Vector2>` polygon — supports arbitrary footprints
+- Straight skeleton generation for roof ridge lines
+- Cellular automata for organic layout, maze generation for dungeons
+
+### 4.6 PBR Baking (Blender)
+- `bpy.ops.object.bake(type='COMBINED', width=1024, height=1024)`
+- Bake types: COMBINED, DIFFUSE, GLOSSY, EMIT, NORMAL, AO, ROUGHNESS
+- Supports cage objects for ray casting, configurable margins
+- Best practice: 2048×2048 for hero assets, 1024×1024 for environment props
+
+---
+
 *Research compiled from: codebase audit (2026-03-31), Context7 Unity/Blender API docs, procedural generation literature (CGA, WFC, L-systems, erosion algorithms)*
