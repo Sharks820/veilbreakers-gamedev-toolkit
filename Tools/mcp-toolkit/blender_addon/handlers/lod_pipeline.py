@@ -59,6 +59,11 @@ LOD_PRESETS: dict[str, dict[str, Any]] = {
         "screen_percentages": [1.0, 0.3, 0.08, 0.02],
         "min_tris": [5000, 2500, 800, 4],  # 4 = billboard quad
     },
+    "furniture": {
+        "ratios": [1.0, 0.5, 0.25],
+        "screen_percentages": [1.0, 0.3, 0.1],
+        "min_tris": [200, 100, 50],
+    },
 }
 
 # Type alias matching the project convention
@@ -760,6 +765,136 @@ def generate_lod_chain(
             lod_chain.append((lod_verts, lod_faces, level))
 
     return lod_chain
+
+
+# ---------------------------------------------------------------------------
+# Pure-logic: Scene Budget Validator
+# ---------------------------------------------------------------------------
+
+# Budget thresholds for different spatial scopes
+SCENE_BUDGETS: dict[str, dict[str, int]] = {
+    "per_room": {
+        "min_tris": 50_000,
+        "max_tris": 150_000,
+        "label": "Per-Room Budget (50K-150K tris)",
+    },
+    "per_block": {
+        "min_tris": 200_000,
+        "max_tris": 500_000,
+        "label": "Per-Block Budget (200K-500K tris)",
+    },
+    "per_frame": {
+        "min_tris": 2_000_000,
+        "max_tris": 6_000_000,
+        "label": "Per-Frame Budget (2M-6M tris @ 60fps)",
+    },
+}
+
+
+class SceneBudgetValidator:
+    """Validate scene polygon budgets at room, block, and frame levels.
+
+    Pure-logic validator (no bpy). Accepts a list of object triangle counts
+    and evaluates against configurable budgets.
+
+    Usage:
+        validator = SceneBudgetValidator()
+        report = validator.validate(
+            object_tris=[1200, 3400, 800, 2100],
+            scope="per_room",
+        )
+    """
+
+    def validate(
+        self,
+        object_tris: list[int],
+        scope: str = "per_room",
+    ) -> dict[str, Any]:
+        """Validate total triangle count against a budget scope.
+
+        Args:
+            object_tris: List of triangle counts per visible object.
+            scope: Budget scope key ("per_room", "per_block", "per_frame").
+
+        Returns:
+            Dict with total_tris, budget info, utilization, over_budget flag,
+            and recommendations list.
+
+        Raises:
+            ValueError: If scope is not a valid budget key.
+        """
+        budget = SCENE_BUDGETS.get(scope)
+        if budget is None:
+            raise ValueError(
+                f"Unknown scope '{scope}'. "
+                f"Available: {', '.join(sorted(SCENE_BUDGETS.keys()))}"
+            )
+
+        total_tris = sum(object_tris)
+        max_tris = budget["max_tris"]
+        min_tris = budget["min_tris"]
+        over_budget = total_tris > max_tris
+        utilization_pct = (total_tris / max_tris * 100.0) if max_tris > 0 else 0.0
+
+        recommendations: list[str] = []
+
+        if over_budget:
+            excess = total_tris - max_tris
+            recommendations.append(
+                f"Over budget by {excess:,} tris. "
+                f"Need to reduce by {excess / total_tris * 100:.1f}%."
+            )
+            # Find objects consuming most of the budget
+            if object_tris:
+                sorted_tris = sorted(enumerate(object_tris), key=lambda x: x[1], reverse=True)
+                top_3 = sorted_tris[:3]
+                for idx, tris in top_3:
+                    pct = tris / total_tris * 100.0
+                    if pct > 15.0:
+                        recommendations.append(
+                            f"Object #{idx} uses {tris:,} tris ({pct:.1f}%) "
+                            f"-- consider LOD culling or simplification."
+                        )
+            recommendations.append(
+                "Consider enabling LOD distance culling for distant objects."
+            )
+            recommendations.append(
+                "Consider material consolidation to reduce draw calls."
+            )
+        elif utilization_pct < 30.0 and total_tris > 0:
+            recommendations.append(
+                f"Only {utilization_pct:.1f}% of budget used. "
+                f"Room for more detail or higher LOD distances."
+            )
+
+        return {
+            "scope": scope,
+            "label": budget["label"],
+            "total_tris": total_tris,
+            "object_count": len(object_tris),
+            "budget_min": min_tris,
+            "budget_max": max_tris,
+            "utilization_pct": round(utilization_pct, 1),
+            "over_budget": over_budget,
+            "recommendations": recommendations,
+        }
+
+    def validate_all_scopes(
+        self,
+        object_tris: list[int],
+    ) -> list[dict[str, Any]]:
+        """Validate against all budget scopes at once.
+
+        Args:
+            object_tris: List of triangle counts per visible object.
+
+        Returns:
+            List of validation reports, one per scope.
+        """
+        return [
+            self.validate(object_tris, scope)
+            for scope in SCENE_BUDGETS
+        ]
 
 
 # ---------------------------------------------------------------------------
