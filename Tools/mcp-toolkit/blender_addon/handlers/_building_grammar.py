@@ -553,6 +553,610 @@ def plan_modular_facade(
 
 
 # ---------------------------------------------------------------------------
+# Detail geometry generation -- wires building_quality AAA generators
+# ---------------------------------------------------------------------------
+
+
+def _mesh_spec_to_op(
+    mesh: dict,
+    *,
+    position: tuple[float, float, float],
+    detail_type: str,
+    material: str = "stone",
+) -> dict:
+    """Convert a building_quality MeshSpec dict into a BuildingSpec operation.
+
+    Offsets all vertices by *position* so the detail sits at the correct
+    world-space location within the building.
+    """
+    px, py, pz = position
+    offset_verts = [
+        (v[0] + px, v[1] + py, v[2] + pz)
+        for v in mesh["vertices"]
+    ]
+    return {
+        "type": "mesh_spec",
+        "vertices": offset_verts,
+        "faces": mesh["faces"],
+        "material": material,
+        "role": "detail",
+        "detail_type": detail_type,
+    }
+
+
+def _generate_detail_operations(
+    details: list[str],
+    width: float,
+    depth: float,
+    roof_z: float,
+    base_z: float,
+    floors: int,
+    floor_height: float,
+    wall_thickness: float,
+    style: str,
+    rng: random.Random,
+) -> list[dict]:
+    """Generate AAA-quality detail geometry for a building.
+
+    Uses building_quality generators to produce real geometry instead of
+    placeholder 0.5m cubes.  Each detail type maps to a specific generator
+    or inline geometry function.
+
+    Returns a list of BuildingSpec operations (type='mesh_spec' with full
+    vertex/face data, or standard box/cylinder ops).
+    """
+    from .building_quality import (
+        generate_chimney,
+        generate_gothic_window,
+        generate_battlements,
+        generate_archway,
+    )
+
+    ops: list[dict] = []
+
+    for detail_name in details:
+
+        if detail_name == "chimney":
+            # Place chimney on roof near back wall
+            cx = rng.uniform(width * 0.3, width * 0.7)
+            cy = rng.uniform(depth * 0.5, depth * 0.8)
+            chimney_style = "stone" if style in ("gothic", "fortress") else "brick"
+            if style == "rustic":
+                chimney_style = "rustic"
+            mesh = generate_chimney(
+                height=rng.uniform(1.5, 2.5),
+                style=chimney_style,
+                chimney_width=rng.uniform(0.4, 0.6),
+                chimney_depth=rng.uniform(0.4, 0.6),
+                seed=rng.randint(0, 99999),
+            )
+            ops.append(_mesh_spec_to_op(
+                mesh, position=(cx, cy, roof_z),
+                detail_type="chimney", material="stone_dark",
+            ))
+
+        elif detail_name == "timber_frame":
+            # Add timber frame overlay on front and back walls per floor
+            for floor_idx in range(floors):
+                floor_z = base_z + floor_idx * floor_height
+                # Front wall timber overlay
+                _add_timber_frame_detail(
+                    ops, 0.0, 0.0, floor_z,
+                    width, floor_height, wall_thickness,
+                    rng, "front",
+                )
+                # Back wall
+                _add_timber_frame_detail(
+                    ops, 0.0, depth - wall_thickness, floor_z,
+                    width, floor_height, wall_thickness,
+                    rng, "back",
+                )
+
+        elif detail_name == "window_boxes":
+            # Planter boxes under windows on front wall
+            bay_count = max(2, int(width / 2.0))
+            spacing = width / (bay_count + 1)
+            for bi in range(bay_count):
+                bx = spacing * (bi + 1) - 0.3
+                bz = base_z + floor_height * 0.35
+                _add_window_box_detail(ops, bx, -0.15, bz, rng)
+
+        elif detail_name == "flying_buttress":
+            # Gothic flying buttresses on side walls
+            butt_count = max(2, int(depth / 3.0))
+            spacing = depth / (butt_count + 1)
+            total_h = base_z + floors * floor_height
+            for bi in range(butt_count):
+                by = spacing * (bi + 1)
+                # Left side buttress
+                _add_flying_buttress_detail(
+                    ops, -0.1, by, base_z, total_h, rng,
+                )
+                # Right side buttress
+                _add_flying_buttress_detail(
+                    ops, width + 0.1, by, base_z, total_h, rng,
+                )
+
+        elif detail_name == "gargoyle":
+            # Gargoyles perched on corners at roof line
+            gargoyle_positions = [
+                (0.0, 0.0), (width, 0.0),
+                (0.0, depth), (width, depth),
+            ]
+            for gx, gy in gargoyle_positions:
+                if rng.random() < 0.6:  # not every corner
+                    _add_gargoyle_detail(ops, gx, gy, roof_z, rng)
+
+        elif detail_name == "rose_window":
+            # Large circular window on front facade (upper floor)
+            cx = width / 2.0
+            cz = roof_z - floor_height * 0.4
+            mesh = generate_gothic_window(
+                width=min(1.5, width * 0.25),
+                height=min(1.5, width * 0.25),
+                style="rose_window",
+                tracery=True,
+                seed=rng.randint(0, 99999),
+            )
+            ops.append(_mesh_spec_to_op(
+                mesh, position=(cx, -0.05, cz),
+                detail_type="rose_window", material="stone_carved",
+            ))
+
+        elif detail_name == "spire":
+            # Pointed spire on roof
+            cx = width / 2.0
+            cy = depth / 2.0
+            _add_spire_detail(ops, cx, cy, roof_z, rng)
+
+        elif detail_name == "battlement":
+            # Crenellated parapet on fortress roofline
+            mesh = generate_battlements(
+                wall_length=width,
+                wall_height=1.2,
+                wall_thickness=wall_thickness * 0.8,
+                merlon_style=rng.choice(["squared", "swallow_tail"]),
+                has_machicolations=True,
+                has_arrow_loops=False,
+                seed=rng.randint(0, 99999),
+            )
+            # Front parapet
+            ops.append(_mesh_spec_to_op(
+                mesh, position=(0.0, 0.0, roof_z),
+                detail_type="battlement", material="stone_fortified",
+            ))
+            # Back parapet
+            ops.append(_mesh_spec_to_op(
+                mesh, position=(0.0, depth - wall_thickness, roof_z),
+                detail_type="battlement", material="stone_fortified",
+            ))
+
+        elif detail_name == "machicolation":
+            # Machicolation corbels along front wall top
+            corbel_count = max(3, int(width / 1.5))
+            spacing = width / (corbel_count + 1)
+            for ci in range(corbel_count):
+                cx = spacing * (ci + 1)
+                cz = roof_z - 0.3
+                _add_machicolation_detail(ops, cx, -0.1, cz, rng)
+
+        elif detail_name == "murder_hole":
+            # Murder hole above door (ground floor ceiling)
+            door_cx = width / 2.0
+            mh_z = base_z + floor_height - 0.1
+            ops.append({
+                "type": "box",
+                "position": [door_cx - 0.3, wall_thickness * 0.2, mh_z],
+                "size": [0.6, wall_thickness * 0.6, 0.15],
+                "material": "stone_dark",
+                "role": "detail",
+                "detail_type": "murder_hole",
+            })
+
+        elif detail_name == "vine_growth":
+            # Organic vines climbing walls
+            vine_count = rng.randint(2, 5)
+            for _ in range(vine_count):
+                vx = rng.uniform(0.2, width - 0.2)
+                vy = rng.choice([0.0, depth])
+                max_z = base_z + floors * floor_height
+                _add_vine_detail(ops, vx, vy, base_z, max_z, rng)
+
+        elif detail_name == "moss_patches":
+            # Moss patches at base and joints
+            patch_count = rng.randint(3, 8)
+            for _ in range(patch_count):
+                px = rng.uniform(0.0, width)
+                py = rng.choice([0.0, depth])
+                pz = rng.uniform(0.0, base_z + floor_height * 0.3)
+                ops.append({
+                    "type": "box",
+                    "position": [px - 0.15, py - 0.02, pz],
+                    "size": [rng.uniform(0.2, 0.5), 0.03, rng.uniform(0.1, 0.3)],
+                    "material": "moss",
+                    "role": "detail",
+                    "detail_type": "moss_patch",
+                })
+
+        elif detail_name == "root_buttress":
+            # Organic root supports at base
+            root_count = rng.randint(2, 4)
+            for _ in range(root_count):
+                rx = rng.uniform(0.3, width - 0.3)
+                ry = rng.choice([0.0, depth])
+                _add_root_detail(ops, rx, ry, base_z, rng)
+
+        elif detail_name == "woodpile":
+            # Stacked logs against a wall
+            wpx = rng.uniform(0.3, width - 1.0)
+            wpy = rng.choice([-0.3, depth + 0.1])
+            _add_woodpile_detail(ops, wpx, wpy, base_z, rng)
+
+        else:
+            # Fallback: small architectural accent box (better than 0.5m cube)
+            detail_x = rng.uniform(0.3, width - 0.3)
+            detail_y = rng.uniform(0.3, depth - 0.3)
+            ops.append({
+                "type": "box",
+                "position": [detail_x, detail_y, roof_z],
+                "size": [0.3, 0.3, rng.uniform(0.2, 0.6)],
+                "material": detail_name,
+                "role": "detail",
+                "detail_type": detail_name,
+            })
+
+    return ops
+
+
+def _add_timber_frame_detail(
+    ops: list[dict],
+    x0: float, y0: float, z0: float,
+    width: float, height: float, thickness: float,
+    rng: random.Random, wall_name: str,
+) -> None:
+    """Add half-timber frame beams to a wall section."""
+    beam_w = 0.08
+    beam_d = 0.04  # protrusion
+    y_off = -beam_d if wall_name == "front" else thickness
+
+    # Vertical posts at 1/3 intervals
+    post_count = max(2, int(width / 2.0))
+    spacing = width / post_count
+    for pi in range(post_count + 1):
+        px = x0 + pi * spacing
+        ops.append({
+            "type": "box",
+            "position": [px - beam_w / 2, y0 + y_off, z0],
+            "size": [beam_w, beam_d, height],
+            "material": "timber",
+            "role": "detail",
+            "detail_type": "timber_post",
+        })
+
+    # Horizontal rails at top and mid
+    for frac in [0.0, 0.5, 1.0]:
+        rz = z0 + frac * height - beam_w / 2
+        ops.append({
+            "type": "box",
+            "position": [x0, y0 + y_off, max(z0, rz)],
+            "size": [width, beam_d, beam_w],
+            "material": "timber",
+            "role": "detail",
+            "detail_type": "timber_rail",
+        })
+
+    # Diagonal braces in each bay (upper half)
+    for pi in range(post_count):
+        bx = x0 + pi * spacing + spacing * 0.1
+        bz = z0 + height * 0.5
+        ops.append({
+            "type": "box",
+            "position": [bx, y0 + y_off, bz],
+            "size": [spacing * 0.8, beam_d, beam_w],
+            "material": "timber",
+            "role": "detail",
+            "detail_type": "timber_brace",
+        })
+
+
+def _add_window_box_detail(
+    ops: list[dict],
+    x: float, y: float, z: float,
+    rng: random.Random,
+) -> None:
+    """Add a planter box with vegetation cluster."""
+    box_w = rng.uniform(0.5, 0.7)
+    box_h = 0.12
+    box_d = 0.15
+    # Planter box
+    ops.append({
+        "type": "box",
+        "position": [x, y, z],
+        "size": [box_w, box_d, box_h],
+        "material": "wood_planks",
+        "role": "detail",
+        "detail_type": "window_box",
+    })
+    # Vegetation cluster (small rounded mass above)
+    ops.append({
+        "type": "box",
+        "position": [x + 0.05, y - 0.02, z + box_h],
+        "size": [box_w - 0.1, box_d + 0.04, rng.uniform(0.08, 0.15)],
+        "material": "vegetation",
+        "role": "detail",
+        "detail_type": "window_box_plants",
+    })
+
+
+def _add_flying_buttress_detail(
+    ops: list[dict],
+    x: float, y: float, z_base: float,
+    building_height: float,
+    rng: random.Random,
+) -> None:
+    """Add a gothic flying buttress with pier and arch strut."""
+    pier_w = rng.uniform(0.25, 0.4)
+    pier_d = rng.uniform(0.25, 0.35)
+    pier_h = building_height * rng.uniform(0.7, 0.85)
+    strut_h = 0.15
+
+    # Pier (vertical pillar)
+    sign = -1.0 if x < 0.5 else 1.0
+    pier_x = x + sign * 0.5
+    ops.append({
+        "type": "box",
+        "position": [pier_x - pier_w / 2, y - pier_d / 2, z_base],
+        "size": [pier_w, pier_d, pier_h],
+        "material": "stone_grey",
+        "role": "detail",
+        "detail_type": "buttress_pier",
+    })
+    # Pier cap (wider at top)
+    ops.append({
+        "type": "box",
+        "position": [pier_x - pier_w * 0.7, y - pier_d * 0.7, z_base + pier_h],
+        "size": [pier_w * 1.4, pier_d * 1.4, 0.1],
+        "material": "stone_grey",
+        "role": "detail",
+        "detail_type": "buttress_cap",
+    })
+    # Angled strut connecting pier top to wall
+    strut_w = pier_w * 0.6
+    ops.append({
+        "type": "box",
+        "position": [min(x, pier_x) - 0.05, y - strut_w / 2,
+                      z_base + pier_h * 0.6],
+        "size": [abs(pier_x - x) + 0.1, strut_w, strut_h],
+        "material": "stone_grey",
+        "role": "detail",
+        "detail_type": "buttress_strut",
+    })
+    # Pinnacle on top of pier
+    pin_s = pier_w * 0.4
+    ops.append({
+        "type": "box",
+        "position": [pier_x - pin_s / 2, y - pin_s / 2,
+                      z_base + pier_h + 0.1],
+        "size": [pin_s, pin_s, rng.uniform(0.3, 0.5)],
+        "material": "stone_grey",
+        "role": "detail",
+        "detail_type": "buttress_pinnacle",
+    })
+
+
+def _add_gargoyle_detail(
+    ops: list[dict],
+    x: float, y: float, z: float,
+    rng: random.Random,
+) -> None:
+    """Add a gargoyle creature perched on a corner ledge."""
+    # Base/perch (corbel)
+    perch_w = 0.25
+    perch_d = 0.3
+    perch_h = 0.08
+    # Direction: outward from corner
+    dx = -0.15 if x < 1.0 else 0.15
+    dy = -0.15 if y < 1.0 else 0.15
+    ops.append({
+        "type": "box",
+        "position": [x + dx - perch_w / 2, y + dy - perch_d / 2, z - perch_h],
+        "size": [perch_w, perch_d, perch_h],
+        "material": "stone_carved",
+        "role": "detail",
+        "detail_type": "gargoyle_perch",
+    })
+    # Body (hunched creature torso)
+    body_w = 0.18
+    body_d = 0.22
+    body_h = 0.2
+    ops.append({
+        "type": "box",
+        "position": [x + dx - body_w / 2, y + dy - body_d / 2, z],
+        "size": [body_w, body_d, body_h],
+        "material": "stone_carved",
+        "role": "detail",
+        "detail_type": "gargoyle_body",
+    })
+    # Head (smaller, forward-facing)
+    head_s = 0.1
+    ops.append({
+        "type": "box",
+        "position": [x + dx - head_s / 2, y + dy * 1.5 - head_s / 2, z + body_h],
+        "size": [head_s, head_s * 1.2, head_s],
+        "material": "stone_carved",
+        "role": "detail",
+        "detail_type": "gargoyle_head",
+    })
+    # Wings (two angled plates)
+    wing_w = 0.15
+    wing_h = 0.15
+    wing_d = 0.03
+    for wing_side in [-1, 1]:
+        ops.append({
+            "type": "box",
+            "position": [x + dx + wing_side * body_w * 0.5, y + dy,
+                          z + body_h * 0.3],
+            "size": [wing_w, wing_d, wing_h],
+            "material": "stone_carved",
+            "role": "detail",
+            "detail_type": "gargoyle_wing",
+        })
+
+
+def _add_spire_detail(
+    ops: list[dict],
+    cx: float, cy: float, z: float,
+    rng: random.Random,
+) -> None:
+    """Add a pointed spire (octagonal tapered tower)."""
+    spire_h = rng.uniform(2.0, 4.0)
+    base_r = rng.uniform(0.3, 0.5)
+    # Build as stacked octagonal rings shrinking upward
+    segments = 8
+    rings = 6
+    for ri in range(rings):
+        frac = ri / rings
+        next_frac = (ri + 1) / rings
+        r0 = base_r * (1.0 - frac * 0.9)
+        r1 = base_r * (1.0 - next_frac * 0.9)
+        z0 = z + frac * spire_h
+        ring_h = spire_h / rings
+        # Approximate each ring as a box (octagon approximation)
+        ops.append({
+            "type": "box",
+            "position": [cx - r0, cy - r0, z0],
+            "size": [r0 * 2, r0 * 2, ring_h],
+            "material": "slate",
+            "role": "detail",
+            "detail_type": "spire_ring",
+        })
+    # Finial at top
+    ops.append({
+        "type": "box",
+        "position": [cx - 0.03, cy - 0.03, z + spire_h],
+        "size": [0.06, 0.06, 0.2],
+        "material": "iron",
+        "role": "detail",
+        "detail_type": "spire_finial",
+    })
+
+
+def _add_machicolation_detail(
+    ops: list[dict],
+    x: float, y: float, z: float,
+    rng: random.Random,
+) -> None:
+    """Add a single machicolation corbel."""
+    corbel_w = 0.2
+    corbel_d = 0.25
+    corbel_h = 0.15
+    # Corbel bracket
+    ops.append({
+        "type": "box",
+        "position": [x - corbel_w / 2, y, z],
+        "size": [corbel_w, corbel_d, corbel_h],
+        "material": "stone_fortified",
+        "role": "detail",
+        "detail_type": "machicolation_corbel",
+    })
+    # Platform on top
+    ops.append({
+        "type": "box",
+        "position": [x - corbel_w * 0.7, y - 0.05, z + corbel_h],
+        "size": [corbel_w * 1.4, corbel_d + 0.1, 0.08],
+        "material": "stone_fortified",
+        "role": "detail",
+        "detail_type": "machicolation_platform",
+    })
+
+
+def _add_vine_detail(
+    ops: list[dict],
+    x: float, y: float, z_base: float, z_top: float,
+    rng: random.Random,
+) -> None:
+    """Add climbing vine geometry along a wall."""
+    vine_w = 0.04
+    vine_d = 0.03
+    height = (z_top - z_base) * rng.uniform(0.3, 0.8)
+    # Main stem
+    ops.append({
+        "type": "box",
+        "position": [x - vine_w / 2, y - vine_d, z_base],
+        "size": [vine_w, vine_d, height],
+        "material": "vine",
+        "role": "detail",
+        "detail_type": "vine_stem",
+    })
+    # Leaf clusters along stem
+    leaf_count = max(2, int(height / 0.4))
+    for li in range(leaf_count):
+        lz = z_base + (li + 0.5) * height / leaf_count
+        lx_off = rng.uniform(-0.12, 0.12)
+        ops.append({
+            "type": "box",
+            "position": [x + lx_off - 0.06, y - vine_d - 0.01, lz],
+            "size": [0.12, 0.02, rng.uniform(0.06, 0.12)],
+            "material": "leaf",
+            "role": "detail",
+            "detail_type": "vine_leaves",
+        })
+
+
+def _add_root_detail(
+    ops: list[dict],
+    x: float, y: float, z_base: float,
+    rng: random.Random,
+) -> None:
+    """Add an organic root/tendril at the building base."""
+    root_w = rng.uniform(0.06, 0.15)
+    root_d = rng.uniform(0.1, 0.2)
+    root_h = rng.uniform(0.3, 0.8)
+    dy = -root_d if y < 0.5 else 0.0
+    ops.append({
+        "type": "box",
+        "position": [x - root_w / 2, y + dy, z_base],
+        "size": [root_w, root_d, root_h],
+        "material": "root",
+        "role": "detail",
+        "detail_type": "root_support",
+    })
+    # Root tip curving outward
+    ops.append({
+        "type": "box",
+        "position": [x - root_w * 0.3, y + dy - 0.05, z_base],
+        "size": [root_w * 0.6, root_d + 0.1, root_w],
+        "material": "root",
+        "role": "detail",
+        "detail_type": "root_tip",
+    })
+
+
+def _add_woodpile_detail(
+    ops: list[dict],
+    x: float, y: float, z_base: float,
+    rng: random.Random,
+) -> None:
+    """Add a stack of logs against a wall."""
+    log_count = rng.randint(4, 8)
+    log_r = 0.06
+    stack_w = rng.uniform(0.6, 1.0)
+    for li in range(log_count):
+        row = li // 3
+        col = li % 3
+        lx = x + col * (log_r * 2.2)
+        lz = z_base + row * (log_r * 2.1)
+        ops.append({
+            "type": "box",
+            "position": [lx, y, lz],
+            "size": [log_r * 2, 0.4, log_r * 2],
+            "material": "wood_log",
+            "role": "detail",
+            "detail_type": "woodpile_log",
+        })
+
+
+# ---------------------------------------------------------------------------
 # Grammar Evaluation
 # ---------------------------------------------------------------------------
 
@@ -733,20 +1337,14 @@ def evaluate_building_grammar(
         "style": door_cfg["style"],
     })
 
-    # 7. Detail operations from style config
+    # 7. Detail operations from style config -- AAA geometry from building_quality
     details = config["details"]
-    for detail_name in details:
-        # Place details at random positions along walls or roof
-        detail_x = rng.uniform(0.5, width - 0.5)
-        detail_y = rng.uniform(0.5, depth - 0.5)
-        ops.append({
-            "type": "box",
-            "position": [detail_x, detail_y, roof_z],
-            "size": [0.5, 0.5, 0.5],
-            "material": detail_name,
-            "role": "detail",
-            "detail_type": detail_name,
-        })
+    detail_ops = _generate_detail_operations(
+        details, width, depth, roof_z, base_z, floors,
+        wall_cfg["height_per_floor"], wall_cfg["thickness"],
+        style, rng,
+    )
+    ops.extend(detail_ops)
 
     return BuildingSpec(
         footprint=(width, depth),
