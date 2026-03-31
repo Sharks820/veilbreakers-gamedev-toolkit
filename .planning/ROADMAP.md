@@ -56,6 +56,10 @@
 
 **Delivered:** 37 MCP tools (15 Blender + 22 Unity), 350 actions (41 new), 8,473+ tests (1,154 new), 56 requirements across 8 categories. FromSoft combat timing, Wwise-level spatial audio, Diablo 4 VFX, AAA dark fantasy UI, production pipeline automation.
 
+- [ ] **v4.0 AAA Procedural 3D Architecture** - Phases 25-29 (researched 2026-03-30)
+- [ ] **v6.0 Tripo Integration & Code Reviewer** - Tripo Studio API client, unified code reviewer v3 (completed 2026-03-27)
+- [ ] **v7.0 AAA Procedural City Production** - Phases 30-38 (NEW - not started)
+
 ## Phase Details
 
 <details>
@@ -458,6 +462,31 @@ Plans:
 **Status**: COMPLETE (2026-03-21) -- 205 tests, 5 requirements fulfilled
 Plans:
 - [x] 24-01-PLAN.md -- Production pipeline: compile recovery, conflict detection, pipeline orchestration, art style validation, build smoke tests
+
+<details>
+<summary>v7.0 AAA Procedural City Production (Phases 30-38) - NEW</summary>
+
+- [ ] **Phase 30 (P0): Mesh Foundation** - Execute 20+ parametric mesh generators, material presets, LOD presets, boolean cleanup, silhouette validation
+- [ ] **Phase 31 (P1): Terrain & Environment** - Execute height-blended splatmap terrain, cliff mesh overlays, biome noise system, vegetation scatter with LOD
+- [ ] **Phase 32 (P2): Building System** - Execute modular kit expansion (300+ pieces), trim sheet authoring, building composition, district parameters
+- [ ] **Phase 33 (P3): Interior System** - Execute interior room shells, purpose-based furniture placement, interactive props, occlusion zones
+- [ ] **Phase 34 (P4): Multi-biome Terrain** - Execute biome blending algorithms, corruption-aware generation, terrain-conforming foundations
+- [ ] **Phase 35 (P5): Multi-backend AI Integration** - Execute Tripo pipeline for hero assets, Hunyuan for bulk props, unified art style validation
+- [ ] **Phase 36 (P6): World Composer** - Execute settlement generation, road networks, POI placement, district zoning
+- [ ] **Phase 37: Pipeline Integration** - Connect all systems into full map composition, state persistence, Addressables streaming
+- [ ] **Phase 38: Starter Town** - Generate complete starter town (10-15 buildings), furnished interiors, market area, fortifications, gameplay testing ready
+
+**Delivered:** TBD
+</details>
+
+- [ ] **Phase 25: Procedural Mesh Foundation** - 20+ parametric mesh generators, material presets, LOD presets, boolean cleanup pipeline, silhouette validation
+- [ ] **Phase 26: Terrain and Environment** - Height-blended splatmap terrain, cliff face mesh overlays, biome noise system, vegetation scatter with LOD, terrain-conforming foundations
+- [ ] **Phase 27: Building and Architecture** - Dark fantasy modular kit expansion (300+ pieces), trim sheet authoring, building composition with district parameters, interior room shells, storytelling prop placement, corruption-aware variants
+- [ ] **Phase 28: Pipeline Integration and Starter Town** - Multi-backend AI integration, style normalization, starter town generation (10-15 buildings), Addressables streaming setup, state persistence
+- [ ] **Phase 29: Research and Polish** - AAA technique documentation, performance optimization, visual quality review against benchmarks
+
+**Delivered:** TBD
+</details>
 
 ## Progress
 
