@@ -1,333 +1,332 @@
-# Feature Landscape: AI Game Development MCP Toolkit
+# Feature Research: AAA Procedural 3D Architecture
 
-**Domain:** AI-powered game development automation toolkit (MCP-based)
-**Researched:** 2026-03-18
-**Confidence:** MEDIUM-HIGH (verified against existing tool repos, official MCP docs, AI gamedev ecosystem surveys)
+**Domain:** AAA procedural 3D content generation for open-world dark fantasy RPG
+**Milestone:** v4.0 -- AAA Procedural 3D Architecture
+**Researched:** 2026-03-30
+**Confidence:** MEDIUM-HIGH (training data on AAA game techniques cross-referenced with existing toolkit gap analysis and prior research files)
+
+---
 
 ## Scope
 
-This research covers three pillars of an AI-powered game development toolkit delivered via Model Context Protocol (MCP):
+This research covers features required for the v4.0 milestone: upgrading the VeilBreakers MCP toolkit from placeholder-grade procedural generation (cubes, cones, spheres) to AAA-quality procedural 3D architecture benchmarked against Skyrim, Fable, AC Valhalla, Witcher 3, and Elden Ring. The focus areas are:
 
-1. **Blender Automation** -- rigging, animation, topology, texturing, environment generation
-2. **Unity Automation** -- visual testing, scene building, VFX, audio, AI/mobs, performance
-3. **Asset Pipeline** -- AI 3D generation, texture generation, mesh processing, engine import
+1. **Procedural city/town generation** -- Street geometry, market stalls, fortifications, district zoning
+2. **Interior mapping and furnishing** -- Room shells, prop meshes, interactive states, storytelling props
+3. **Terrain/building mesh integration** -- Seamless blending, cliff faces, cave entrances, foundation conforming
+4. **Biome-aware generation** -- Corruption zones, seasonal variation, Whittaker diagram placement, wind moisture
+5. **Road/path/shop mapping** -- L-system roads, terrain-deforming paths, signage, wayfinding
+6. **LOD and optimization strategies** -- Scene budgets, LOD chains, occlusion, streaming chunks
+7. **Storyline-aware building placement** -- Narrative-driven layouts, quest markers, environmental storytelling
 
-The analysis benchmarks against existing tools: `blender-mcp` (ahujasid), `mcp-unity` (CoderGamester), `Unity-MCP` (IvanMurzak), `gamedev-mcp-hub` (FryMyCalamari), `Blender-MCP-Server` (poly-mcp), `Ludo.ai MCP`, and standalone AI asset generators (Meshy, Tripo3D).
+Benchmark games:
 
----
-
-## Table Stakes (Must Have or Tool Is Useless)
-
-Features users expect from any AI game development toolkit. Missing any of these means the tool is not taken seriously.
-
-### Blender Automation -- Table Stakes
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Object CRUD (create, read, update, delete)** | Every Blender MCP does this. Basic scene manipulation is the entry point. Without it, the AI cannot interact with the 3D workspace at all. | LOW | `blender-mcp` and `poly-mcp/Blender-MCP-Server` both provide this. 13+ tools typically. Standard via `bpy` Python API. |
-| **Material creation and assignment** | Textureless models are useless. Materials must be creatable and assignable to objects and faces. | LOW | All existing Blender MCPs handle basic material ops. PBR node tree setup (Principled BSDF) is the minimum. |
-| **Scene inspection and state query** | The AI must know what exists in the scene before modifying it. Without read-back, operations are blind. | LOW | `blender-mcp` provides `get_scene_info`. Essential for any agentic workflow -- the LLM needs to "see" state. |
-| **Transform operations (move, rotate, scale)** | Spatial positioning is fundamental to 3D work. Every tool in the ecosystem provides this. | LOW | Standard. Must support both local and world space, and batch operations on selections. |
-| **Import/Export (FBX, OBJ, glTF/GLB)** | Assets must flow between Blender and game engines. FBX is the Unity/UE standard. glTF is the web/interchange standard. | LOW | `poly-mcp/Blender-MCP-Server` lists file operations. Must handle scale/axis conversion correctly (Y-up vs Z-up). |
-| **Viewport screenshot capture** | The AI must see its own work. Without visual feedback, it cannot iterate or verify results. This is the single most important feedback mechanism. | LOW | `blender-mcp` supports this. Critical for closed-loop iteration. Must support configurable resolution and camera angle. |
-| **Arbitrary Python execution (sandboxed)** | Escape hatch for operations not covered by named tools. Every complex Blender workflow eventually needs custom Python. | MEDIUM | `blender-mcp` provides `execute_blender_code`. Security is the concern -- must sandbox or audit. This is how gaps get filled. |
-
-### Unity Automation -- Table Stakes
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **GameObject CRUD** | Creating, selecting, updating, and deleting GameObjects is the minimum viable Unity interaction. Every Unity MCP provides this. | LOW | `mcp-unity` (CoderGamester) and `Unity-MCP` (IvanMurzak) both provide 20+ scene/hierarchy tools. |
-| **Component manipulation** | Adding/removing/updating components is how Unity objects get behavior. Without this, the AI cannot configure anything. | LOW | Must handle serialized fields, references, and nested properties. Both major Unity MCPs support this. |
-| **Scene hierarchy query** | The AI must understand the scene graph to make decisions. Hierarchy traversal with component introspection is essential. | LOW | `mcp-unity` provides `unity://gameobject/{id}` resources. Must return transform, components, children, and active state. |
-| **Asset database browsing** | Finding existing assets (textures, prefabs, scripts, materials) is required before the AI can reference or use them. | LOW | `mcp-unity` provides `unity://assets` resource. Must support search/filter by type and path. |
-| **Console log access** | The AI must read Unity's console output to diagnose errors, warnings, and runtime messages. Without this, debugging is impossible. | LOW | Both major Unity MCPs expose console logs. Must support pagination and severity filtering. |
-| **Script compilation trigger** | After code changes, compilation must be triggerable. The AI needs to verify its code changes compile before proceeding. | LOW | `mcp-unity` provides `recompile_scripts`. Essential for any code-generation workflow. |
-| **Editor screenshot capture** | Visual verification of scene state, game view, or specific cameras. The AI must confirm visual outcomes. | LOW | `Unity-MCP` (IvanMurzak) supports camera screenshots. Critical for visual QA and iteration. |
-| **Prefab operations** | Creating prefabs from scene objects and instantiating prefabs into scenes. Core Unity workflow. | MEDIUM | `mcp-unity` provides `create_prefab` and `add_asset_to_scene`. Must handle prefab variants and nested prefabs. |
-
-### Asset Pipeline -- Table Stakes
-
-| Feature | Why Expected | Complexity | Notes |
-|---------|--------------|------------|-------|
-| **Text-to-3D model generation** | The fundamental promise of AI asset tooling. Without this, the toolkit has no generative capability. | MEDIUM | Meshy, Tripo3D, Ludo.ai, and Hyper3D all provide APIs. Quality varies significantly. Must output game-ready formats (FBX/GLB). |
-| **Image-to-3D model generation** | Concept art to 3D is the most requested pipeline. Artists create 2D concepts; AI converts to 3D. | MEDIUM | Meshy and Tripo3D both support image-to-3D. Quality is approaching production-ready for stylized assets in 2026. |
-| **Format conversion (GLB/FBX/OBJ)** | Generated assets must be in formats that game engines accept. Format interop is non-negotiable. | LOW | Most generators output GLB natively. FBX export is essential for Unity (animation/rig compat). |
-| **Texture map generation (diffuse at minimum)** | A model without textures is useless for game development. At minimum, diffuse/albedo must be generated alongside geometry. | MEDIUM | All major generators include basic texturing. PBR map quality (normal, roughness, metallic) varies by provider. |
+| Game | Key Technique |
+|------|-------------|
+| **Skyrim** | Modular kit system (grid-snapped pieces), ~200 kit pieces serve entire game, Radiant Story for procedural quest variation |
+| **Witcher 3** | Hand-crafted Novigrad with modular building kits, interior/exterior streaming, POI density rules (no empty space) |
+| **AC Valhalla** | Procedural world blending, biome transitions, settlement building, massive scale with performance budgets |
+| **Elden Ring** | Legacy dungeons (hand-crafted) + open world (modular), distinct biome identity per region, landmark visibility |
+| **Fable** | Region-based world, hero interaction with environment, reactive world changes based on player alignment |
 
 ---
 
-## Differentiators (Competitive Advantage -- What Makes This AAA-Grade)
+## Table Stakes (Must Have or Users Notice Missing)
 
-Features that set a toolkit apart from the existing `blender-mcp` + `mcp-unity` + `gamedev-mcp-hub` combination. These are what make the difference between "another MCP wrapper" and "an actual game development platform."
+Features players expect from any AAA open-world dark fantasy game. Missing any of these makes the world feel unfinished or artificial.
 
-### Blender Automation -- Differentiators
+### T1. Procedural Mesh Foundation
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **Actual mesh geometry, not primitives** | Every shipped game uses real geometry. Cubes/cones/spheres as furniture and vegetation scream "prototype." | HIGH | 67 gaps identified in gap analysis. Systemic issue X-01: placement systems output cubes instead of meshes. Need parametric generators for 20+ prop types. |
+| **Parametric furniture generators** | Tables with legs, chairs with backs, beds with frames, barrels with staves, chests with lids. Every interior needs these. | HIGH | 16 room types produce placeholder cubes currently. Need at minimum: table, chair, barrel, crate, chest, shelf, bed, stool, bench, desk, wardrobe, cauldron. |
+| **Vegetation mesh generators** | Trees with trunk/branch structure, bushes with leaf clusters, grass billboard strips, rocks with irregular surfaces. Open worlds without real vegetation look barren. | HIGH | Current: tree=cone, bush=icosphere, grass=plane, rock=cube. Need L-system trees (already have `vegetation_tree`), rock formation generators, leaf card systems, biome-specific variants. |
+| **Modular architectural kit pieces** | Walls, floors, ceilings, doorways, windows, columns, stairs that snap together on a grid. Skyrim uses ~200 kit pieces for its entire game. | HIGH | `generate_modular_kit` exists but lacks connection validation. Need snap-to-grid geometry with standardized dimensions (4m x 4m x 3.5m cells per Skyrim GDC 2013). |
+| **Parametric weapon generators (complete set)** | At minimum 15 weapon types with separate submesh components (blade, guard, grip, pommel). Dark fantasy RPGs need weapon variety. | MEDIUM | 7 types exist. Missing: hammer, spear, crossbow, greatsword, halberd, flail, wand, scythe. Need component separation for material assignment. |
+
+### T2. City/Town Infrastructure
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **Street geometry with surfaces** | Roads are the connective tissue of settlements. Flat quads feel like debug visualization. Need cobblestone, dirt, gravel surfaces with curbs. | MEDIUM | Current: road cells as flat 2D tiles. Need road mesh generation with surface texture, width variation, intersection handling, cosine-blended terrain deformation (UE Landscape Spline approach). |
+| **District zoning with distinct architecture** | Market districts look different from noble quarters. Players navigate by visual district identity. | MEDIUM | Voronoi district zoning exists but buildings use same grammar. Need per-district building style (market: half-open stalls, noble: stone manors, slums: lean-tos, religious: spires). |
+| **Market stall/shop front generation** | Towns need commerce. Stalls with canopies, display counters, hanging goods. Without these, towns feel like residential blocks. | MEDIUM | Zero support. Need canopy mesh (cloth over frame), counter geometry, hanging merchandise hooks, signage attachment points. |
+| **Town wall and gate system** | Medieval towns have walls. Players expect fortifications as navigation landmarks and gameplay boundaries. | MEDIUM | Castle walls exist but town-specific walls (irregular boundary, multiple gates, guard towers at intervals) do not. Need perimeter-following wall generation. |
+| **Building variety within style** | Cookie-cutter buildings break immersion. Skyrim uses modular kits to create variety from ~200 pieces. | HIGH | Building grammar produces 5 styles but similar output per style. Need parameter space expansion: roof angle, stories, wing count, dormer placement, chimney, window pattern. |
+
+### T3. Interior Systems
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **Walkable interior geometry** | Players enter buildings. Interior needs walls, floor, ceiling with doorways, windows, and proper scale. | HIGH | `compose_interior` orchestrates room shells but geometry is box primitives. Need proper room shells with wall thickness, doorway openings, window recesses, ceiling beams. |
+| **Furniture placement with purpose** | Furniture follows function: bed against wall, table in center, shelves against walls. Random placement looks wrong. | MEDIUM | Room configs specify type/position but not placement rules. Need constraint-based placement: wall-hugging, center-clearing, traffic-flow awareness. |
+| **Interactive prop states** | Chests open, doors swing, levers pull. Static props are non-interactive decoration. | HIGH | `create_breakable` gives intact/damaged for 5 types. Need open/closed/locked for chests, open/closed/broken for doors, up/down for levers, raised/lowered for drawbridges. Each needs pivot points and animation ranges. |
+| **Interior lighting points** | Rooms need torches, candles, fireplaces. Without light sources, interiors are dark boxes. | LOW | Need empty markers at sconce, fireplace, candle positions with metadata for Unity light placement. |
+| **Occlusion zones per room** | Only the room the player is in should render. Without occlusion, 20 interior rooms kills framerate. | MEDIUM | Door triggers and occlusion zones planned in `compose_interior`. Need proper implementation with Unity streaming integration. |
+
+### T4. Terrain and Biome Integration
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **Multi-biome terrain transitions** | Walking from forest to swamp should be gradual. Sharp biome boundaries look like debug output. | HIGH | Current: per-face altitude/slope assignment. Need splatmap-based blending with height-based transitions. Height blend algorithm documented in MAP_BUILDING_TECHNIQUES.md. |
+| **Cliff face and vertical geometry** | Dramatic cliff faces, overhangs, cave mouths. Heightmap-only terrain cannot represent vertical features. | HIGH | Heightmaps are 2.5D (one height per XY). Need separate mesh objects for vertical features placed at terrain edges. |
+| **Terrain-conforming buildings** | Buildings should follow terrain slope or flatten terrain beneath them. Floating buildings break immersion immediately. | MEDIUM | No terrain-conforming foundation generation exists. Need: terrain sampling under building footprint, foundation walls to fill gaps, or terrain flattening with cosine falloff blend. |
+| **Corruption zone visual transformation** | VeilBreakers has 0-100% corruption. Corrupted areas must look corrupted: darkened vegetation, cracked earth, twisted architecture. | MEDIUM | `generate_overrun_variant` exists for basic overlay. Need: vegetation state changes, ground texture darkening, building decay escalation, corruption boundary transition zone. |
+| **Water bodies with shorelines** | Lakes, rivers, ocean need water surfaces with foam lines, depth coloring, and shore transitions. | MEDIUM | `create_water` exists with basic water plane. Need shoreline detection, foam line mesh, depth gradient, river bank geometry. |
+
+### T5. Performance and Optimization
+
+| Feature | Why Expected | Complexity | Notes |
+|---------|--------------|------------|-------|
+| **Scene-level polygon budgets** | A room with 50 under-budget props can still exceed frame budget. Need per-scene tracking. | MEDIUM | `game_check` validates individual objects. Need scene budget manager that sums all visible objects against target (500K tris indoor, 2M outdoor). |
+| **LOD chain generation per asset type** | Objects at distance need lower detail. Without LOD, far objects waste GPU. Every shipped game uses LOD. | MEDIUM | `generate_lods` exists with ratio-based reduction. Need per-asset-type presets: hero 50K/25K/12K/5K, prop 3K/1.5K/500, building 15K/7K/3K. Budgets in AAA_QUALITY_ASSETS.md. |
+| **Occlusion culling data** | Interior rooms, dungeon corridors, city alleys must cull unseen geometry. | MEDIUM | Unity handles runtime occlusion but needs properly marked occluders/occludees and baking data. Export occlusion volumes with interiors. |
+| **Terrain chunking for streaming** | Large terrain as single mesh is unstreamable. Need chunked export for Unity streaming. | MEDIUM | No terrain chunking tool. Need heightmap export as tiles (512x512 per chunk) with seamless edge matching. Unity terrain sectors as target format. |
+
+---
+
+## Differentiators (Competitive Advantage)
+
+Features that set VeilBreakers apart from typical procedural generation. Not expected by players, but make the world feel handcrafted.
+
+### D1. Storyline-Aware Generation
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **AI-powered auto-rigging with game-ready skeletons** | Existing Blender MCPs have ZERO rigging tools. Going from mesh to rigged character requires Mixamo (limited to humanoids) or manual work (hours). Automating this via Rigify/AccuRIG integration or Tripo AI's universal rig would be transformative. Supports humanoid, quadruped, creature types. | HIGH | Gap in every existing MCP. Tripo AI offers universal rig. AccuRIG 2 is free. Integration path: call rigging tool APIs from MCP, validate result, return rigged FBX. |
-| **Animation retargeting and library** | Apply Mixamo/motion capture animations to any rigged character. Currently requires manual setup in Blender. Automating retarget + NLA strip creation saves hours per character. | HIGH | DeepMotion Animate 3D converts 2D video to 3D animation. Cascadeur provides AI-assisted keyframe animation. Neither is MCP-integrated today. |
-| **Intelligent retopology with polycount control** | AI-generated meshes have terrible topology for game use (50K+ tris, non-manifold, no edge loops). Automated retopology to game-ready polycount (1K-10K tris) with proper edge flow for deformation is essential for production. | HIGH | Tripo AI offers polycount/LOD slider. InstantMeshes and Blender's Voxel Remesh are free alternatives. No MCP wraps these today. |
-| **PBR texture baking pipeline** | Bake high-poly detail into game-ready texture maps (normal, AO, roughness, metallic, emissive) on low-poly mesh. Currently a 15-step manual Blender process. Automating this turns a 2-hour task into a 30-second tool call. | HIGH | Blender has all baking infrastructure via Cycles. No existing MCP exposes baking tools. Ubisoft's open-source "Generative Base Material" (SIGGRAPH Asia 2025) shows the direction. |
-| **Environment scene composition** | Place multiple objects in a scene with proper spacing, grounding (on terrain), lighting, and composition. Current MCPs create objects but do not compose scenes intelligently. | HIGH | No existing MCP provides intelligent placement. Would need: terrain-aware placement, collision avoidance, aesthetic composition rules. Infinigen (Princeton) shows procedural approach. |
-| **Modifier stack automation** | Apply and configure modifier stacks (subdivision, bevel, mirror, array, solidify, decimate) based on asset purpose (hero asset vs background prop). Current MCPs list modifiers but do not intelligently select them. | MEDIUM | `poly-mcp/Blender-MCP-Server` lists modeling tools including modifiers. Differentiator is intelligent defaults: "make this game-ready" applies decimate + normal transfer + UV unwrap automatically. |
-| **UV unwrapping with smart projection** | Automated UV unwrapping with seam placement optimized for texture resolution and minimal stretching. Critical for texturing pipeline. | MEDIUM | Blender's Smart UV Project and Lightmap Pack are available via Python. No MCP exposes these with quality controls. |
-| **Geometry Nodes procedural generation** | Create procedural assets (foliage, rocks, fences, modular pieces) via Geometry Nodes. One parametric setup generates hundreds of variants. | HIGH | `poly-mcp/Blender-MCP-Server` lists geometry nodes category. Actually composing useful node trees programmatically is extremely difficult for LLMs -- likely needs high-level templates. |
+| **Corruption-aware biome progression** | Corruption does not just tint terrain -- it changes what generates. Corrupted forest spawns different trees, creatures, props. Unique to VeilBreakers. | HIGH | Need per-corruption-level biome overrides: 0% healthy forest, 50% dying/withered, 100% dead trees/void-touched geometry. Corruption parameter threaded through all generators. |
+| **Narrative debris layer** | After story events, the world shows scars: battle damage, burned sections, abandoned camps. | MEDIUM | `add_storytelling_props` places narrative clutter. Extend with event-state-aware prop sets: pre-battle, during-battle, post-battle variants. |
+| **Quest-driven building placement** | Place quest-relevant buildings near quest-giver NPCs. Makes world feel designed, not random. | HIGH | Requires quest dependency graph feeding into building placement priority. Defer to v5.0. |
 
-### Unity Automation -- Differentiators
+### D2. Architectural Intelligence
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **Visual regression testing with AI-powered diff** | Capture screenshots of game views, compare against baselines, detect meaningful visual changes while ignoring noise (animation frames, particle randomness). No Unity MCP provides this. Would enable automated QA after every AI-driven change. | HIGH | Percy.io demonstrates AI-powered visual diff for web. Adapting to Unity game views is novel. Must handle: camera position consistency, deterministic rendering, threshold tuning. |
-| **VFX Graph/Particle System authoring** | Create and configure particle effects via MCP. Current Unity MCPs can add ParticleSystem components but cannot configure emission, shape, color gradients, or modules programmatically. VFX is 100% manual today. | HIGH | Unity's VFX Graph and Shuriken are complex systems with dozens of modules. Wrapping these as MCP tools would be first-of-kind. Start with template-based VFX (fire, smoke, sparks, magic) rather than freeform. |
-| **Audio asset management and SFX wiring** | Generate placeholder SFX via AI (Ludo.ai, SFX Engine), import into Unity, wire to AudioSource components on GameObjects, configure spatial blend and mixing. Currently zero audio tooling in any Unity MCP. | HIGH | Ludo.ai MCP already generates audio. Gap is the Unity-side wiring: creating AudioSource components, assigning clips, configuring 3D spatial settings, hooking to events. |
-| **Scene composition from prefab library** | Build game levels by placing prefabs according to layout rules: spawn points, enemy placement, item distribution, walkable area definition. Current MCPs can place objects but have no concept of game design patterns. | HIGH | Novel capability. Would need: prefab catalog awareness, placement rules (spacing, density, height), validation (reachability, visibility). |
-| **Performance profiling integration** | Trigger Unity Profiler captures, analyze results for common issues (GC spikes, draw call counts, overdraw), and suggest optimizations. No MCP exposes profiler data today. | HIGH | Unity's Profiler API is accessible via C#. Would need to capture frames, extract metrics, and provide actionable analysis. Could flag: allocation hotspots, shader complexity, batch breaking. |
-| **Material and shader configuration** | Create URP materials, assign shaders, configure properties (colors, textures, smoothness, metallic, emission). Current MCPs handle basic material creation but not shader-specific property configuration. | MEDIUM | `mcp-unity` provides `create_material` and `modify_material`. Differentiator is URP-aware configuration: understanding Lit vs Unlit vs UI shaders and their specific properties. |
-| **Test Runner integration** | Run EditMode and PlayMode tests, capture results, feed failures back to the AI for diagnosis. Enables test-driven development via AI. | MEDIUM | `mcp-unity` already exposes test runner resources. Differentiator is running tests after changes and feeding failures into a fix-iterate loop. |
-| **Play Mode control with runtime inspection** | Enter Play Mode, inspect runtime state (variable values, component states), capture runtime screenshots, and detect runtime errors. Essential for verifying gameplay behavior. | HIGH | Play Mode domain reloads currently disconnect MCP bridges. Solving this reliably would be a major differentiator. |
+| **Non-cookie-cutter building design** | Buildings influenced by local materials, climate, wealth, function. Mountain town uses stone; forest town uses timber. | HIGH | Need location-context parameters: biome, elevation, resource proximity, wealth level. Feed into building grammar for material selection, roof style, wall construction. |
+| **Defensible settlement layout** | Towns in dangerous areas (near dungeons, corruption) have more fortifications, narrower streets, watchtowers. Safe areas are more open. | MEDIUM | Need threat-level parameter per location driving wall presence, tower density, street width, gate count, guard post placement. |
+| **Economic zone generation** | Towns near mines have smithies; near water have docks; on trade routes have large markets. Economic logic makes world feel lived-in. | MEDIUM | Need resource proximity detection: nearest biome type, water, dungeon. Drive district specialization from this. |
 
-### Asset Pipeline -- Differentiators
+### D3. Visual Quality Systems
 
 | Feature | Value Proposition | Complexity | Notes |
 |---------|-------------------|------------|-------|
-| **End-to-end generation pipeline: prompt to engine-ready asset** | Text prompt -> 3D model -> retopology -> PBR textures -> rigging -> FBX export -> Unity import -> material setup -> prefab creation. No existing tool does this end-to-end. Each step exists in isolation. Orchestrating the full pipeline is the killer feature. | VERY HIGH | Requires: AI generation API (Meshy/Tripo), Blender MCP for processing, Unity MCP for import. The orchestration layer is the differentiator, not any single step. Atlas AI (closed beta, AAA studios) claims 10-50x faster with this approach. |
-| **Full PBR map generation (normal, roughness, metallic, AO, emissive)** | Albedo-only textures look flat. Full PBR maps with proper metallic/roughness values make assets look professional in URP/HDRP. Most generators produce albedo + normal at best. | HIGH | Scenario.ai and TextureWorks generate full PBR sets. Tripo3D includes PBR in generation. Quality gap is in metallic/roughness accuracy. |
-| **LOD chain generation** | Automatically generate LOD0 through LOD3 from a source mesh, with proper polycount reduction and UV preservation at each level. Import as Unity LOD Group. | HIGH | Tripo AI offers polycount slider. Blender's Decimate modifier can generate LOD levels. No tool chains these into a proper LOD Group for Unity import. |
-| **Automatic collision mesh generation** | Generate simplified collision meshes (convex hulls, box approximations) from visual meshes. Required for physics but never generated by AI tools. | MEDIUM | Blender can generate convex hulls. Unity's Mesh Collider uses the visual mesh by default (expensive). Providing optimized collision meshes saves runtime performance. |
-| **Texture atlas generation** | Combine multiple material textures into atlas sheets for draw call reduction. Essential for mobile and large-scene optimization. | MEDIUM | Blender has texture baking to atlas. Unity has Sprite Atlas for 2D. No MCP automates 3D texture atlasing. |
-| **Asset validation pipeline** | Verify generated assets meet game requirements: polycount budgets, texture resolution limits, UV coverage, material count limits, bone count limits for rigged models. Reject or flag non-compliant assets before engine import. | MEDIUM | Novel concept for MCP tooling. Would catch: over-tessellated meshes, missing UVs, non-manifold geometry, excessive materials. Saves debugging time downstream. |
-| **Style consistency enforcement** | Ensure generated assets match a project's art style (toon, realistic, stylized) by providing reference images and style parameters to generation APIs. | MEDIUM | Scenario.ai allows training on project-specific styles. Meshy supports style parameters. Enforcing consistency across a batch of assets is the gap. |
+| **Cross-asset silhouette validation** | Every asset distinguishable from every other at gameplay distance. A mace and hammer must read differently at 20m. | MEDIUM | `silhouette_test` checks one asset. Need batch comparison: generate all silhouettes, compute overlap metrics, flag conflicts. |
+| **Art style consistency checker** | AI-generated assets vary in style. Geometric checker validates shared edge sharpness, detail density, proportion language. | HIGH | Needs reference geometry library and comparison metrics. Defer to v5.0. |
+| **Weather-affected mesh variants** | Snow on roofs, icicles on eaves, rain-wet surfaces. Seasonal variation makes world feel alive. | MEDIUM | Mostly shader/material work on Unity side. Blender needs snow cap geometry, icicle meshes, material presets per weather state. |
+| **Smart material system** | Procedural materials that respond to context: age, weather, corruption, damage state. Like Substance Painter smart materials in Blender. | MEDIUM | Curvature + AO + noise-driven masking. `smart_material` action exists in blender_quality. Extend with context parameters. |
+
+### D4. Advanced Procedural Techniques
+
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| **WFC dungeon generation** | Wave Function Collapse produces more organic, varied layouts than BSP. Encodes architectural style rules directly. | HIGH | Algorithm fully documented in AAA_MAP_WORLD_DUNGEON_RESEARCH.md. ~150 lines Python. Produces tile-based layouts mapping to modular kit pieces. |
+| **Cyclic dungeon generation** | Lock-and-key cycles, shortcut loops, secret paths. Dark Souls design language. Produces dungeons that FEEL designed. | HIGH | Algorithm in AAA_MAP_WORLD_DUNGEON_RESEARCH.md section 2.2. 24 cycle types from Unexplored. |
+| **L-system road networks** | Roads that grow organically like medieval paths, not grid-planned. Follows terrain contours, avoids steep slopes. | MEDIUM | Algorithm in AAA_MAP_WORLD_DUNGEON_RESEARCH.md section 3.1. Use "organic" axiom with angle randomization (70-110 degrees). |
+| **Agent-based city growth** | Simulate city expansion over time for organic district formation. Roads extend, builders fill lots, districts emerge. | HIGH | CityGrowthSimulation in section 3.2. More believable than Voronoi zoning alone. Defer to v5.0. |
 
 ---
 
 ## Anti-Features (Things to Deliberately NOT Build)
 
-Features that seem valuable but create complexity without proportional value, or actively harm the developer experience.
-
 | Anti-Feature | Why It Seems Good | Why Avoid | What to Do Instead |
 |--------------|-------------------|-----------|-------------------|
-| **Custom LLM training/fine-tuning interface** | "Train the AI on our game's style" | Fine-tuning LLMs is a completely different domain (ML infrastructure, GPU clusters, dataset curation). An MCP toolkit should use the best available foundation models, not try to train its own. This is a year-long research project, not a feature. | Provide style reference images and project context to existing models via prompts. Use Scenario.ai's per-project training for texture/asset style if needed. |
-| **Full game engine reimplementation** | "Let the AI build the entire game" | The dream of "describe a game, AI builds it" fails at production quality. Generated code is fragile, untestable, and unmaintainable. Building an "AI game engine" competes with Unity/Unreal, which is unwinnable. | Automate specific, well-defined tasks (asset generation, scene setup, testing) and leave architecture decisions to human developers. |
-| **Real-time collaborative editing** | "Multiple AI agents editing simultaneously" | Concurrent edits to Unity scenes or Blender files cause merge conflicts, state corruption, and race conditions. The file formats (`.unity`, `.blend`) are not designed for concurrent access. | Sequential tool execution with state verification between steps. One agent operates at a time per application instance. |
-| **In-game runtime AI agent** | "AI NPCs that use the MCP toolkit" | MCP is a development-time protocol for tooling, not a runtime game system. Mixing development tooling with game runtime creates security vulnerabilities (arbitrary code execution in shipped games) and performance issues. | Keep MCP strictly for development. Use Unity ML-Agents or custom behavior trees for runtime AI. |
-| **Photorealistic rendering pipeline** | "Generate photorealistic assets" | Game assets need to be stylistically consistent and performance-optimized, not photorealistic. Chasing photorealism leads to massive texture sizes, high polycounts, and assets that look wrong next to hand-crafted ones. | Focus on "game-ready" output: optimized polycounts, appropriate texture resolutions, style-consistent PBR values. Let the game's post-processing (bloom, color grading) handle visual polish. |
-| **Version control integration** | "Auto-commit assets, manage branches" | Git operations on binary assets (.fbx, .png, .blend) are fraught with LFS issues, merge conflicts, and repository bloat. Automating this amplifies mistakes. | Provide asset export to known directories. Let human developers manage version control of binaries via their existing Git LFS / Plastic SCM / Perforce workflow. |
-| **Cross-engine abstraction layer** | "Support Unity AND Unreal AND Godot in one API" | Each engine has fundamentally different architectures (ECS vs MonoBehaviour vs Node), different asset formats, different scripting languages. A cross-engine abstraction is either too shallow to be useful or too complex to maintain. | Build engine-specific MCP servers with shared conventions. `gamedev-mcp-hub` already aggregates multiple engines via routing, which is the right architectural approach. |
-| **AI-generated game design documents** | "AI designs the game for you" | Game design is creative direction, not automation. AI-generated GDDs are generic, lack vision, and produce games that feel soulless. 81% of devs already use AI for brainstorming (GDC 2026 survey) -- the brainstorming is the human part. | Provide tools that help implement human-authored designs faster, not tools that replace the design process. |
+| **Fully autonomous city generation** | "Press button, get city" | Without art direction, procedural cities look generic. Witcher 3's Novigrad took years of hand-crafting with modular kits. Full autonomy produces detectable repetition. | Generate layouts and blockouts procedurally, allow human-guided refinement. Modular kits where each piece is hand-quality. |
+| **Real-time procedural generation at runtime** | "Infinite content!" | Runtime proc gen adds CPU cost, requires streaming infrastructure, produces LOD pop-in, makes QA impossible. Minecraft works because its style is intentionally blocky. | Generate at development time in Blender, export as static assets. Procedural generation for authoring, not runtime. |
+| **Neural radiance field / Gaussian splat environments** | "Photorealistic 3D capture!" | Not game-ready: no collision, no LOD, no material separation, huge memory, no animation. World Labs Marble outputs 600K tri meshes needing full reprocessing. | Generate clean polygon meshes with proper topology. Use Tripo3D for individual props, not environment capture. |
+| **Cross-engine abstraction** | "Works in Unity AND Unreal!" | Each engine has fundamentally different terrain, material, lighting systems. Abstracting produces mediocre output for both. | Build for Unity URP specifically. Export FBX/glTF with Unity naming (_LOD0, _LOD1). Optimize for URP material pipeline. |
+| **Photogrammetry-quality assets** | "Real-world scanned quality!" | Massive textures (10K-100K per object), incompatible with dark fantasy style, requires proprietary pipelines. | AI generation (Tripo3D) + hand-tuned PBR + dark fantasy palette enforcement. Quality from art direction, not scan fidelity. |
+| **Procedural quest/narrative generation** | "Infinite quests like Radiant Story!" | Radiant quests are widely criticized as Skyrim's weakest feature. Procedural quests feel repetitive and meaningless. | Focus on world geometry quality. Quest systems are separate. Storyline-aware placement (which buildings where) is the right scope boundary. |
+| **Physics-based destruction for all geometry** | "Every wall breakable!" | Pre-fractured meshes per asset, physics simulation, debris particles. Enormous performance cost. Only Battlefield/Fortnite invest here. | Selective destruction via `create_breakable` for predefined props (crates, barrels, pots). Structures remain static. |
+| **Per-building unique textures** | "Every building looks unique!" | Memory explosion: 100 buildings x 6 textures x 2048px = GBs of VRAM. | Trim sheets: 1-2 per architectural style (4096x4096), shared across all buildings. UV-mapped to trim sheet layout. |
+| **Virtual Texturing** | "Infinite texture detail!" | URP does not support VT. HDRP-only feature. | Texture streaming via Addressables, LOD-appropriate resolution selection. |
+| **Houdini integration** | "Industry standard procedural!" | $4,495/year. Blender Geometry Nodes covers equivalent capability for our scope. | Geo Nodes + bpy scripting. Already decided in Key Decisions. |
 
 ---
 
 ## Feature Dependencies
 
 ```
-[Text-to-3D Generation API]
+[Parametric Mesh Foundation]
     |
-    +--enables--> [Image-to-3D Generation]
-    +--enables--> [Basic Mesh Output]
-                      |
-                      +--requires--> [Retopology Pipeline]
-                      |                   |
-                      |                   +--requires--> [UV Unwrapping]
-                      |                   |                   |
-                      |                   |                   +--requires--> [PBR Texture Baking]
-                      |                   |                   +--requires--> [Texture Atlas Generation]
-                      |                   |
-                      |                   +--requires--> [LOD Chain Generation]
-                      |                   +--requires--> [Collision Mesh Generation]
-                      |
-                      +--requires--> [Auto-Rigging Pipeline]
-                      |                   |
-                      |                   +--requires--> [Animation Retargeting]
-                      |                   +--requires--> [Bone Weight Optimization]
-                      |
-                      +--requires--> [Asset Validation Pipeline]
-                      |
-                      +--requires--> [Format Export (FBX/GLB)]
-                                          |
-                                          +--requires--> [Unity Asset Import]
-                                                              |
-                                                              +--requires--> [Material Auto-Setup]
-                                                              +--requires--> [Prefab Creation]
-                                                              +--requires--> [LOD Group Setup]
-
-[Blender Scene Inspection]
-    |
-    +--enables--> [Object CRUD]
-    +--enables--> [Viewport Screenshot]
+    +--enables--> [Furniture Generators] (table, chair, barrel, chest, shelf, bed)
     |                 |
-    |                 +--enables--> [Visual Feedback Loop] (AI sees its own work)
-    |
-    +--enables--> [Material Operations]
-    +--enables--> [Modifier Stack Automation]
-    +--enables--> [Environment Scene Composition]
-
-[Unity Scene Hierarchy Query]
-    |
-    +--enables--> [GameObject CRUD]
-    +--enables--> [Component Manipulation]
-    +--enables--> [Editor Screenshot]
+    |                 +--enables--> [Interior Furnishing] (place real meshes in rooms)
+    |                 |                 |
+    |                 |                 +--requires--> [Room Shell Geometry] (walls, floors, ceilings)
+    |                 |                 +--requires--> [Interactive Prop States] (open/closed/locked)
+    |                 |                 +--requires--> [Occlusion Zones] (per-room culling)
     |                 |
-    |                 +--enables--> [Visual Regression Testing]
+    |                 +--enables--> [Market Stall Generation] (shop fronts, canopies)
     |
-    +--enables--> [Prefab Operations]
-    +--enables--> [Scene Composition from Prefabs]
-
-[Console Log Access]
-    |
-    +--enables--> [Script Compilation Trigger]
+    +--enables--> [Vegetation Generators] (trees, bushes, grass, rocks)
     |                 |
-    |                 +--enables--> [Compile Error Diagnosis]
+    |                 +--requires--> [Biome Rules System] (what grows where)
+    |                 |                 |
+    |                 |                 +--requires--> [Corruption Overrides] (corruption-aware variants)
+    |                 |
+    |                 +--enables--> [Terrain Scatter] (place vegetation on terrain)
     |
-    +--enables--> [Runtime Error Detection]
-    +--enables--> [Performance Profiling Integration]
+    +--enables--> [Modular Kit Pieces] (walls, floors, doorways, stairs)
+    |                 |
+    |                 +--enables--> [Building Grammar v2] (assemble from real pieces)
+    |                 |                 |
+    |                 |                 +--requires--> [Terrain Conforming] (foundations follow terrain)
+    |                 |                 +--requires--> [District Style Parameters] (per-district materials/shapes)
+    |                 |
+    |                 +--enables--> [WFC Dungeon Generation] (tile-based from kit pieces)
+    |                 +--enables--> [Interior Room Shells] (room geometry from kit pieces)
+    |
+    +--enables--> [Weapon Type Expansion] (8 missing weapon types)
 
-[Test Runner Integration]
+[Terrain Foundation]
     |
-    +--enhances--> [Visual Regression Testing]
-    +--enhances--> [Code Generation Verification]
-    +--enhances--> [Performance Profiling]
+    +--requires--> [Height-based Biome Blending] (splatmap transitions)
+    |                 |
+    |                 +--requires--> [Whittaker Diagram System] (temperature + moisture biomes)
+    |
+    +--requires--> [Cliff/Cave Mesh Generation] (vertical geometry beyond heightmap)
+    |
+    +--requires--> [L-System Road Networks] (organic road growth following terrain)
+    |                 |
+    |                 +--enables--> [Street Geometry] (cobblestone, curbs, intersections)
+    |                 +--enables--> [Terrain Deformation Under Roads] (cosine-blended carving)
+    |
+    +--requires--> [Terrain Chunking] (streamable export tiles)
 
-[Audio Generation (Ludo.ai API)]
+[LOD and Optimization]
     |
-    +--requires--> [Unity Audio Asset Import]
-    +--requires--> [AudioSource Component Wiring]
+    +--requires--> [Per-Asset-Type LOD Presets] (character, prop, building budgets)
+    +--requires--> [Scene Budget Validator] (cross-object polygon tracking)
+    +--requires--> [Occlusion Data Export] (Unity culling integration)
+
+[Storyline Integration]
+    |
+    +--enhances--> [Corruption Zone Transformation] (0-100% visual progression)
+    +--enhances--> [Narrative Debris Layer] (post-event world state)
+    +--enhances--> [Economic Zone Generation] (resource-proximity building logic)
 ```
 
-### Critical Dependency Chains
+### Critical Dependency Notes
 
-1. **Generation-to-Engine Chain:** Text prompt -> AI generation -> mesh cleanup (retopo) -> texturing -> rigging -> export -> import -> material setup -> prefab. Each step depends on the previous. The orchestration layer must handle failures at any point gracefully (retry, fallback, or report).
+1. **Parametric Mesh Foundation unblocks everything.** Without actual mesh generators, no other system can produce AAA output. Single biggest blocker (gap X-01). Every other feature depends on having real geometry to place.
 
-2. **Visual Feedback Loop:** Both Blender and Unity screenshots feed back to the LLM for verification. Without this loop, the AI operates blind and quality drops catastrophically. This should be wired into every operation that changes visual state.
+2. **Furniture generators depend on mesh foundation but block interiors.** Interior furnishing is the second most impactful feature (affects 16 room types). Must come after mesh foundation but before advanced interior features.
 
-3. **Validation Gate:** Asset validation should sit between Blender export and Unity import. Catching bad assets before they enter the engine prevents cascading errors (missing UVs causing shader errors, too-high polycounts causing frame drops).
+3. **Modular kit pieces serve buildings AND dungeons.** One kit system serves both exterior building grammar and interior dungeon generation. Skyrim uses this approach (~200 pieces serve both). Dual-use makes kit pieces the highest ROI investment.
 
----
+4. **Terrain blending requires splatmap generation in Blender.** Current biome assignment is per-cell index. Need RGBA weight maps for Unity terrain import. Blender-side pipeline change.
 
-## MVP Recommendation
+5. **LOD chains depend on target budgets per asset type.** Budget tables exist in AAA_QUALITY_ASSETS.md. Encode as presets in the LOD generation tool.
 
-### Phase 1: Foundation (make existing MCPs work together)
-
-Prioritize orchestration over new capability:
-
-1. **Blender MCP with screenshot feedback** -- Use existing `blender-mcp` as base, ensure viewport capture works reliably
-2. **Unity MCP with scene inspection** -- Use existing `mcp-unity` (CoderGamester) as base, ensure hierarchy + screenshot works
-3. **Asset format bridge** -- Export from Blender (FBX/GLB), import into Unity, verify material setup
-4. **Text-to-3D via external API** -- Integrate Meshy or Tripo3D for generation, route output through Blender for cleanup
-
-**Rationale:** The gap today is not that tools do not exist. It is that they do not talk to each other. The first differentiating value is orchestrating Blender + Unity + AI generation into a single workflow.
-
-### Phase 2: Blender Processing Pipeline (make AI-generated assets game-ready)
-
-5. **Retopology automation** -- Decimate/remesh AI-generated meshes to game budgets
-6. **UV unwrapping automation** -- Smart UV Project with quality controls
-7. **PBR texture baking** -- High-poly to low-poly bake pipeline
-8. **Auto-rigging integration** -- Rigify or AccuRIG for humanoid characters
-
-**Rationale:** AI-generated meshes are not game-ready out of the box. The processing pipeline is what transforms "cool demo" into "production asset."
-
-### Phase 3: Unity Intelligence (make the toolkit understand game development)
-
-9. **Visual regression testing** -- Screenshot capture + AI-powered comparison
-10. **VFX template system** -- Pre-built particle effect templates configurable via MCP
-11. **Audio pipeline** -- Generate + import + wire SFX to GameObjects
-12. **Performance profiling** -- Capture + analyze + suggest optimizations
-
-**Rationale:** Unity-side intelligence is what makes the toolkit useful for ongoing development, not just initial asset creation.
-
-### Phase 4: End-to-End Pipeline (the killer feature)
-
-13. **Orchestrated prompt-to-prefab pipeline** -- Full end-to-end from text description to Unity prefab
-14. **Asset validation gates** -- Quality checks at each pipeline stage
-15. **Style consistency system** -- Enforce art direction across generated assets
-16. **LOD chain generation** -- Multi-level detail for performance optimization
-
-**Rationale:** End-to-end orchestration is what Atlas AI (closed beta, AAA studios) claims enables 10-50x faster asset creation. This is the ultimate differentiator.
-
-### Defer Indefinitely
-
-- **Cross-engine abstraction** -- Focus on Unity first, do it well
-- **Custom LLM training** -- Use foundation models, do not train your own
-- **Runtime AI agents** -- Development tool, not runtime system
-- **Photorealistic rendering** -- Game-ready, not cinema-grade
+6. **Corruption awareness must thread through ALL generation.** Not a separate system -- it modifies parameters in vegetation, terrain, buildings, props, and lighting. The corruption parameter needs to be a standard argument in every generator.
 
 ---
 
-## Existing Tool Gap Analysis
+## MVP Definition
 
-| Capability | blender-mcp | mcp-unity (CoderGamester) | Unity-MCP (IvanMurzak) | gamedev-mcp-hub | Ludo.ai MCP | Gap? |
-|------------|-------------|---------------------------|------------------------|-----------------|-------------|------|
-| Object CRUD | YES | YES | YES | Aggregates | N/A | NO |
-| Materials | YES (basic) | YES | YES | Aggregates | N/A | PARTIAL -- no PBR pipeline |
-| Screenshot feedback | YES | PARTIAL | YES | N/A | N/A | NO |
-| Rigging | NO | N/A | N/A | NO | NO | **CRITICAL GAP** |
-| Animation | NO (basic keyframes) | N/A | PARTIAL | PARTIAL | NO | **MAJOR GAP** |
-| Retopology | NO | N/A | N/A | NO | NO | **CRITICAL GAP** |
-| PBR Texture Baking | NO | N/A | N/A | NO | NO | **CRITICAL GAP** |
-| UV Unwrapping | NO | N/A | N/A | NO | NO | **MAJOR GAP** |
-| AI 3D Generation | Via Hyper3D | NO | NO | Via Meshy | NO (separate) | PARTIAL |
-| AI Texture Generation | NO | NO | NO | NO | YES (images) | **MAJOR GAP** |
-| AI Audio Generation | NO | NO | NO | NO | YES | PARTIAL |
-| VFX/Particles | NO | NO | PARTIAL | NO | NO | **CRITICAL GAP** |
-| Visual Testing | NO | NO | PARTIAL | NO | NO | **CRITICAL GAP** |
-| Performance Profiling | NO | NO | NO | NO | NO | **CRITICAL GAP** |
-| Scene Composition | NO | BASIC | BASIC | NO | NO | **MAJOR GAP** |
-| Asset Validation | NO | NO | NO | NO | NO | **CRITICAL GAP** |
-| End-to-End Pipeline | NO | NO | NO | NO | NO | **CRITICAL GAP** |
-| LOD Generation | NO | NO | NO | NO | NO | **MAJOR GAP** |
-| Collision Mesh | NO | NO | NO | NO | NO | **MAJOR GAP** |
+### v4.0 Launch With (Phase Core)
 
-**Key finding:** Existing tools handle basic CRUD operations well. The entire processing and intelligence layer is missing. No tool converts AI-generated output into production-ready game assets. No tool provides game-development-aware automation (visual testing, performance profiling, VFX authoring). The gap is not in basic operations -- it is in the pipeline between "raw AI output" and "shipping game."
+Minimum for "AAA procedural 3D architecture" milestone:
+
+1. **Parametric mesh generation library** -- 20+ prop generators replacing cubes with real geometry. Tables, chairs, barrels, chests, shelves, beds, rocks, trees, bushes. Single most impactful deliverable.
+2. **Modular kit piece system with snap validation** -- Wall, floor, ceiling, doorway, stair, column pieces on standardized grid with connection point validation. Enables buildings and dungeons.
+3. **Interior room shells with real geometry** -- Walls with thickness, doorways with frames, window recesses, ceiling beams. Not box primitives.
+4. **Multi-biome terrain blending** -- Splatmap-based transitions using height-blend algorithm. No more hard biome lines.
+5. **Terrain-conforming building foundations** -- Buildings follow terrain slope without floating. Foundation walls fill gaps.
+6. **Per-asset-type LOD presets** -- Budget tables from AAA_QUALITY_ASSETS.md encoded as generator defaults. One-call LOD chain generation.
+7. **Starter town for testing** -- Complete gameplay-ready settlement with district variety, market area, fortifications, and furnished interiors. Validates all systems together.
+
+### v4.0 Add After Core (Phase Polish)
+
+8. **WFC dungeon generation** -- Wave Function Collapse as alternative to BSP for more organic dungeons.
+9. **Corruption zone visual system** -- Corruption parameter modifying vegetation, terrain, and building appearance.
+10. **L-system road networks** -- Organic road generation replacing waypoint-based system.
+11. **Street geometry with surfaces** -- Cobblestone, dirt, gravel road meshes replacing flat quads.
+12. **Market stall/shop front generation** -- Commerce-specific building additions.
+13. **Interactive prop states** -- Open/closed/locked chests, doors, levers.
+
+### Defer to v5.0
+
+14. **Agent-based city growth simulation** -- Complex, marginal improvement over Voronoi zoning for v4.0.
+15. **Art style consistency checker** -- Requires reference geometry library and comparison metrics.
+16. **Ecosystem-aware vegetation competition** -- Growth simulation overkill for v4.0. Poisson disk + biome rules is sufficient.
+17. **Quest-driven building placement** -- Requires quest system integration. v4.0 handles geometry, not game systems.
+18. **Weather-affected mesh variants** -- Mostly shader work. Snow/icicle geometry can wait.
+19. **AI-directed building variation** -- LLM integration for room composition. Start with rule-based.
+
+---
+
+## Feature Prioritization Matrix
+
+| Feature | User Value | Implementation Cost | Priority | Phase |
+|---------|------------|---------------------|----------|-------|
+| Parametric mesh library (20+ generators) | CRITICAL | HIGH | P0 | Core |
+| Modular kit pieces with snap validation | CRITICAL | HIGH | P0 | Core |
+| Interior room shells (real geometry) | CRITICAL | MEDIUM | P0 | Core |
+| Multi-biome terrain blending | HIGH | MEDIUM | P0 | Core |
+| Terrain-conforming building foundations | HIGH | MEDIUM | P0 | Core |
+| LOD presets per asset type | HIGH | LOW | P0 | Core |
+| Scene-level polygon budget validator | HIGH | LOW | P0 | Core |
+| Starter town (integration test) | HIGH | MEDIUM | P1 | Core |
+| Interactive prop states (open/closed) | HIGH | MEDIUM | P1 | Polish |
+| Cliff face and cave entrance geometry | HIGH | HIGH | P1 | Polish |
+| Corruption-aware generation parameter | HIGH | MEDIUM | P1 | Polish |
+| Vegetation mesh generators | HIGH | HIGH | P1 | Core |
+| WFC dungeon generation | MEDIUM | MEDIUM | P2 | Polish |
+| L-system road networks | MEDIUM | MEDIUM | P2 | Polish |
+| Street geometry with surfaces | MEDIUM | MEDIUM | P2 | Polish |
+| Market stall generation | MEDIUM | LOW | P2 | Polish |
+| Weapon type expansion (8 types) | MEDIUM | MEDIUM | P2 | Polish |
+| District-specific architecture | MEDIUM | MEDIUM | P2 | Polish |
+| Town wall/gate system | MEDIUM | MEDIUM | P2 | Polish |
+| Occlusion data export | MEDIUM | MEDIUM | P2 | Polish |
+
+**Priority key:**
+- P0: Must have for v4.0 -- without these the world does not look AAA
+- P1: Should have -- difference between "good" and "great"
+- P2: Nice to have -- adds polish and depth
 
 ---
 
 ## Competitor Feature Analysis
 
-| Feature | blender-mcp | mcp-unity | gamedev-mcp-hub | Ludo.ai | Atlas AI (private beta) | **Target Toolkit** |
-|---------|-------------|-----------|-----------------|---------|------------------------|-------------------|
-| Basic 3D ops | Yes | Yes | Aggregates | N/A | Yes | Yes (table stakes) |
-| AI generation | Via Hyper3D | No | Via Meshy | Yes (images, 3D, audio) | Yes (multi-model) | Yes (multi-provider) |
-| Mesh processing | No | N/A | No | No | Yes | **Yes (differentiator)** |
-| Rigging | No | N/A | No | No | Yes | **Yes (differentiator)** |
-| Visual QA | No | Partial | No | No | Unknown | **Yes (differentiator)** |
-| VFX authoring | No | No | No | No | No | **Yes (differentiator)** |
-| Audio pipeline | No | No | No | Generate only | Unknown | **Yes (differentiator)** |
-| End-to-end | No | No | No | Partial (generate only) | Yes (AAA studios) | **Yes (differentiator)** |
-| Performance | No | No | No | No | Unknown | **Yes (differentiator)** |
-| Asset validation | No | No | No | No | Yes | **Yes (differentiator)** |
+| Feature | Skyrim | Witcher 3 | AC Valhalla | Elden Ring | VB v3 (current) | VB v4 (target) |
+|---------|--------|-----------|-------------|------------|-----------------|----------------|
+| Modular kit pieces | 200+ grid-snapped | Custom modular buildings | Large modular set | Hand-crafted + modular | 7 weapon types, building grammar | Full kit system with snap validation |
+| Interior cell system | Separate interior cells | Interior/exterior streaming | Building interiors | Legacy dungeon interiors | Room configs (placeholder cubes) | Real room geometry with furnishing |
+| Terrain blending | Per-region splatmaps | Hand-painted terrain | Procedural biome blend | Distinct biome zones | Hard altitude/slope boundaries | Height-blended splatmap transitions |
+| Biome variety | 5 main biomes | 7 distinct regions | Multiple climate zones | 6+ distinct regions | 6 presets (simple rules) | Whittaker diagram + corruption overrides |
+| City layout | 5 major cities, hand-placed | Novigrad (handcrafted modular) | Settlement building | Limited towns | Voronoi districts (abstract) | District-zoned real geometry |
+| LOD system | 3-4 LOD levels per asset | Multiple LOD levels | Aggressive LOD + culling | Distance-based LOD | Basic ratio-based LOD | Per-asset-type LOD presets |
+| Vegetation | SpeedTree forests | Hand-placed foliage | Procedural scatter | Hand-placed per region | Cone/sphere/cube placeholders | L-system trees + biome-aware scatter |
+| Corruption/decay | N/A | N/A (war damage hand-placed) | Settlement destruction | Scarlet rot zones | Basic overrun variant | Corruption-parameter-driven generation |
 
 ---
 
 ## Sources
 
-### Primary Sources (HIGH confidence)
-- [blender-mcp GitHub (ahujasid)](https://github.com/ahujasid/blender-mcp) -- 16.3K+ stars, primary Blender MCP reference
-- [mcp-unity GitHub (CoderGamester)](https://github.com/CoderGamester/mcp-unity) -- Primary Unity MCP with WebSocket bridge
-- [Unity-MCP GitHub (IvanMurzak)](https://github.com/IvanMurzak/Unity-MCP) -- 50+ tools, Roslyn execution
-- [Blender-MCP-Server (poly-mcp)](https://github.com/poly-mcp/Blender-MCP-Server) -- 51 tools, thread-safe execution
-- [gamedev-mcp-hub GitHub (FryMyCalamari)](https://github.com/FryMyCalamari/gamedev-mcp-hub) -- 165+ tools aggregator
-- [Ludo.ai API & MCP Integration](https://ludo.ai/blog/introducing-ludo-ai-api-mcp-integration) -- 9 tools for game asset creation
+### Primary Research (HIGH confidence -- verified against existing toolkit code)
+- `.planning/research/3d-modeling-gap-analysis.md` -- 67 gaps across 10 categories, systemic issue X-01
+- `.planning/research/AAA_MAP_WORLD_DUNGEON_RESEARCH.md` -- Terrain erosion, city generation L-systems, WFC dungeons, cyclic dungeons, Whittaker biomes, vegetation scatter
+- `.planning/research/MAP_BUILDING_TECHNIQUES.md` -- UE terrain blending, ProBuilder CSG, Houdini terrain tools, modular kit design, foliage painting
+- `.planning/research/AAA_QUALITY_ASSETS.md` -- Polygon budgets per asset type, AI post-processing pipeline, PBR quality standards
+- `.planning/research/AI_INTERIOR_GENERATION_RESEARCH.md` -- World Labs Marble, Meta WorldGen, Holodeck, interior generation options
+- `.planning/PROJECT.md` -- v4.0 milestone requirements MESH-01 through PIPE-01
 
-### AI Generation Tools (MEDIUM confidence)
-- [Meshy AI](https://www.meshy.ai/) -- 3D generation with Unity/Blender plugins
-- [Tripo3D](https://www.tripo3d.ai/) -- Text/image-to-3D with polycount control, universal rig
-- [Scenario.ai](https://www.scenario.com/blog/ai-texture-generation) -- Game-ready PBR texture generation
-- [AccuRIG 2 (Reallusion)](https://magazine.reallusion.com/2025/07/30/accurig-2-vs-mixamo-smarter-auto-rigging-for-3d-animators/) -- Free auto-rigging alternative to Mixamo
-- [Atlas AI Platform](https://www.globenewswire.com/news-release/2026/03/09/3252089/0/en/Atlas-Launches-AI-Agents-That-Build-Game-Production-Pipelines.html) -- Multi-agent pipeline for AAA studios (closed beta)
+### Game Technique References (MEDIUM confidence -- from training data and GDC talks)
+- Joel Burgess, Skyrim Modular Level Design (GDC 2013) -- Grid-snapped kit pieces, ~200 pieces serve entire game
+- CD Projekt Red, Witcher 3 Novigrad architecture -- Modular building kits hand-assembled for interiors
+- Ubisoft, AC Valhalla World Building -- Procedural terrain blending with hand-placed POIs
+- FromSoftware, Elden Ring world design -- Legacy dungeons hand-crafted, open world modular
+- Level Design Book, Modular Kit Design -- Kit piece types, naming conventions, grid metrics
 
-### Industry Analysis (MEDIUM confidence)
-- [GDC 2026 State of the Game Industry](https://gdconf.com/article/gdc-2026-state-of-the-game-industry-reveals-impact-of-layoffs-generative-ai-and-more/) -- 52% skepticism, 81% brainstorming use
-- [State of AI Game Development 2025](https://medium.com/@theresearchlab/the-state-of-ai-game-development-in-2025-progress-and-barriers-42dc95aafc58) -- Barriers and progress
-- [AI Reshaping Game Development Pipelines 2026](https://studiokrew.com/blog/ai-reshaping-game-development-pipeline-2026/) -- Pipeline trends
-- [JetBrains Game Dev Report 2025](https://blog.jetbrains.com/dotnet/2026/01/29/game-dev-in-2025-excerpts-from-the-state-of-game-development-report/) -- Developer tool preferences
-
-### Visual Testing (MEDIUM confidence)
-- [Percy Visual Testing](https://percy.io/blog/visual-screenshot-testing) -- AI-powered visual diff reference
-- [AltTester Unity Automation](https://alttester.com/tools/) -- Unity test automation tools
-
-### Blender & Rigging (MEDIUM confidence)
-- [Tripo AI Rigging Tools](https://www.tripo3d.ai/content/en/guide/the-best-ai-auto-rigger-tools-for-blender) -- Universal rig for game characters
-- [Ubisoft Generative Base Material (SIGGRAPH Asia 2025)](https://www.ubisoft.com/en-us/studio/laforge/news/1i3YOvQX2iArLlScBPqBZs/generative-base-material-an-opensource-prototype-for-pbr-material-estimation-debuting-at-siggraph-asia-2025) -- Open-source PBR estimation
+### Algorithm References (HIGH confidence -- cross-referenced with implementations)
+- Parish & Mueller 2001, Procedural Modeling of Cities -- L-system road networks
+- Maxim Gumin, WaveFunctionCollapse -- Constraint-solving tile generation
+- Joris Dormans, Cyclic Dungeon Generation -- Lock-and-key cycles for gameplay
+- Sebastian Lague, Hydraulic Erosion -- Particle-based droplet simulation
+- Vanegas et al. 2012, Procedural Generation of Parcels -- OBB lot subdivision
 
 ---
-*Feature research for: AI Game Development MCP Toolkit*
-*Researched: 2026-03-18*
+*Feature research for: AAA Procedural 3D Architecture (v4.0)*
+*Researched: 2026-03-30*

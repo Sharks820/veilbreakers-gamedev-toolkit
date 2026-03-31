@@ -1,482 +1,406 @@
-# Domain Pitfalls: AI Game Dev Toolkit (MCP Servers for Blender + Unity)
+# Domain Pitfalls: AAA Procedural 3D Architecture
 
-**Domain:** MCP server ecosystem bridging Blender and Unity for AI-assisted 3D game asset creation
-**Researched:** 2026-03-18
-**Confidence:** HIGH (verified against official Blender API docs, MCP specification, blender-mcp issue tracker, and multiple production post-mortems)
+**Domain:** Procedural 3D generation for AAA dark fantasy RPG (Blender + Unity pipeline)
+**Researched:** 2026-03-30
+**Confidence:** HIGH (verified against existing project research, gap analysis, AAA benchmarks, and production post-mortems)
 
 ---
 
 ## Critical Pitfalls
 
-Mistakes that cause architectural rewrites, data loss, or project abandonment.
+Mistakes that cause rewrites, user-visible quality failures, or project abandonment.
 
 ---
 
-### Pitfall 1: Tool Explosion Destroys Token Budget Before Work Begins
+### Pitfall 1: Placeholder Primitives Masquerading as AAA Assets
 
 **What goes wrong:**
-Every MCP tool definition is injected into the LLM's context window at conversation start. A Blender MCP server with 40+ tools consumes 15,000-25,000 tokens just in schema definitions. Add a Unity MCP server with another 30+ tools and you burn 30,000-60,000 tokens before the first user message. At that point 25-30% of the context window is metadata, the LLM struggles to select the right tool, and per-session costs balloon. The existing blender-mcp project (ahujasid/blender-mcp) ships 40+ tools and users report 100K+ token sessions for simple tasks.
+Procedural generators produce scaled cubes for furniture (tables are 1.2x1.2x0.75 boxes), cones for trees, icospheres for bushes, and cylinders for pillars. These read as placeholder blocking, not game geometry. The v3.0 gap analysis identified this as the single largest systemic issue: placement systems output geometric primitives while the scatter engine, interior layout, and dungeon BSP are AAA-grade. The gap analysis found 67 gaps with furniture/props at 20% coverage and environmental detail at 25% coverage -- precisely because all placed objects are primitives.
 
 **Why it happens:**
-Developers design MCP tools like REST APIs -- one endpoint per operation. `create_cube`, `create_sphere`, `create_cylinder`, `create_cone` become four tools when `create_primitive(shape="cube")` would suffice. Each tool carries a full JSON schema with parameter descriptions, types, and examples. The LLM sees ALL tools regardless of whether it needs them for the current task.
+Procedural placement is architecturally easier than procedural mesh generation. Placing a cube at coordinates (x, y, z) is trivial. Generating a table with four turned legs, a beveled top, and wood grain surface detail is substantially harder. Developers build the placement system first (it shows results immediately), then never circle back to replace the placeholder geometry with actual meshes.
 
-**Consequences:**
-- 25-30% of context window wasted on tool schemas the LLM never uses
-- LLM accuracy degrades as tool count increases -- it picks wrong tools or hallucinates parameters
-- Session costs 5-10x higher than necessary (Speakeasy measured 102,000 tokens for a task that should use 2,000)
-- Users hit context limits mid-task and lose conversation state
-
-**Prevention:**
-1. **Dynamic toolsets:** Expose 3 meta-tools (`search_tools`, `describe_tool`, `execute_tool`) instead of 40 individual tools. LLM discovers what it needs, loads schemas on demand. Speakeasy achieved 96.7% token reduction with this pattern.
-2. **Intent-based tool design:** Group by user goal, not API operation. `create_character_model` (high-level) instead of 15 mesh/bone/material tools. Anthropic's engineering blog confirms coarse-grained tools outperform fine-grained ones.
-3. **Code execution fallback:** For complex Blender operations, expose a single `execute_blender_code` tool that runs Python. This avoids encoding every bpy operation as an MCP tool. Token cost drops from 150K to 2K per Anthropic's measurements.
-4. **Category gating:** Register tools by workflow context (modeling, rigging, texturing, export). Only load the relevant category for the current task.
+**How to avoid:**
+1. Build the procedural mesh generation library FIRST, before any placement or scattering system. If you cannot generate a table mesh, you cannot test whether the placement system works.
+2. Define mesh generators by parametric blueprints: a table generator takes `leg_style`, `top_thickness`, `surface_detail` and produces a real mesh with topology grading.
+3. Enforce a "no primitives in production" rule: every `bpy.ops.mesh.primitive_cube_add` in generator code that is not a collision mesh must be replaced with a proper mesh generator.
+4. The Skin Modifier approach (from CHARACTER_MESH_QUALITY_TECHNIQUES.md) can produce organic continuous meshes for characters, vegetation, and natural forms. Use it instead of primitive assembly.
 
 **Warning signs:**
-- Conversation starts consume more than 10,000 tokens before user's first message
-- LLM frequently calls wrong tools or passes incorrect parameters
-- Users report "the AI forgot what I asked" mid-session (context eviction)
-
-**Detection:**
-Monitor `tools_list` token count at session init. If it exceeds 15% of context window, you have a tool explosion.
+- Generated scenes contain objects named "Cube", "Cone", "Sphere" instead of descriptive names
+- Mesh analysis reports "8 faces" for a "table" object
+- Screenshots show blocky, Minecraft-like geometry instead of detailed dark fantasy props
+- Contact sheet reviews show identical silhouette across all props of a category
 
 **Phase to address:**
-Phase 1 (Architecture) -- tool API design must be decided before any tool implementation. Retrofitting dynamic toolsets onto a static 40-tool server is a rewrite.
+Phase 1 (Procedural Mesh Foundation) -- build the mesh generation library before any other content work.
 
 ---
 
-### Pitfall 2: Blender Socket Bridge Dies Silently on Long Operations
+### Pitfall 2: Uniform Roughness Makes Everything Look Like Plastic
 
 **What goes wrong:**
-The standard Blender MCP architecture uses a TCP socket (typically localhost:9876) between the MCP server process and a Blender addon. The MCP server sends JSON commands, Blender executes them, returns JSON results. For quick operations (create cube, move object) this works. For long operations (generate rig, bake textures, boolean operations on complex meshes, Rodin/Hyper3D API polling), the socket times out or Blender's main thread blocks so long that the heartbeat fails. The blender-mcp issue tracker has multiple reports: "Successfully connected to Blender on startup but can't receive answer" (Issue #73), "MCP error -32001: Request Timed out" (Issue #50), and repeated "Server transport closed unexpectedly" errors.
+All generated materials have flat roughness values (e.g., roughness=0.5 everywhere). Stone looks like gray plastic. Metal looks like shiny plastic. Wood looks like brown plastic. This is the single most common visual quality killer in procedural generation -- the AAA research explicitly identifies it: "roughness variation is king" and "flat uniform roughness is the #1 differentiator between cheap and professional PBR."
 
 **Why it happens:**
-Blender's Python API is single-threaded. While a bpy operation executes, Blender cannot process socket reads. The MCP server's socket has a 180-second timeout (in ahujasid's implementation). Complex operations like rigging, mesh booleans, or subdivision surface baking can exceed this. The socket connection has no keepalive/heartbeat mechanism -- it's blocking send/receive with a fixed timeout. If the MCP transport (stdio or SSE) also has its own timeout, you get cascading timeouts at multiple layers.
+Procedural material generators assign a single roughness value per material. But real-world materials have roughness variation within a single surface: edges are smoother (worn by contact), crevices are rougher (dust accumulation), flat surfaces have subtle variation (fingerprints, use patterns). Without this variation, Principled BSDF with uniform roughness produces the "plastic look" regardless of how good the geometry is.
 
-**Consequences:**
-- User's 72-hour rigging session produces nothing because the connection dropped after the first complex operation
-- No way to distinguish "Blender is still working" from "Blender crashed"
-- Partial state: Blender may have completed half the operation when the timeout fires, leaving the scene in an inconsistent state
-- Port conflicts after unclean disconnection require Blender restart
-
-**Prevention:**
-1. **Async command pattern:** Send command, immediately return a job ID. Poll for completion via a separate lightweight status endpoint. Blender addon uses `bpy.app.timers` to check job completion without blocking.
-2. **Progress reporting:** Blender addon writes progress to a shared file or separate status socket. MCP server streams progress events back to client. This solves both timeout and "is it still working?" problems.
-3. **Operation chunking:** Break long operations (e.g., "rig this character") into discrete steps (create armature, add bones, set constraints, bind mesh). Each step is a short socket call. LLM orchestrates the sequence.
-4. **Heartbeat mechanism:** Blender addon sends periodic "still alive" pings on a separate lightweight channel while the main operation runs.
-5. **Graceful timeout recovery:** On timeout, query Blender's state before retrying. Don't blindly re-send the command -- the first one may have partially completed.
+**How to avoid:**
+1. Never assign a single roughness float. Always use a roughness texture map with procedural noise.
+2. For every material, add a Curvature-based wear map (the toolkit already has `handle_generate_wear_map`). Edges get lower roughness (polished), crevices get higher roughness (dirt).
+3. Use the Blender node approach: Noise Texture (scale 50-200) + color ramp to add micro-roughness variation on top of the base roughness value.
+4. Implement material presets with roughness ranges, not single values: Stone roughness 0.6-0.9, Polished metal 0.1-0.3, Leather 0.5-0.8, Fabric 0.7-1.0.
+5. Add AO darkening to crevices (10-30%, not black halos).
 
 **Warning signs:**
-- Operations that take more than 30 seconds in Blender fail when triggered via MCP
-- "Socket timeout during chunked receive" warnings in server logs
-- Users must restart Blender after failed operations due to port binding issues
-
-**Detection:**
-Log operation start time and completion time. Any operation exceeding 60 seconds without progress callback is at risk.
+- All materials in a scene have the same specular highlight behavior
+- Stone walls reflect light uniformly across the entire surface
+- Metal objects look like molded plastic, not forged iron
+- validate_palette passes but the scene still looks "off"
 
 **Phase to address:**
-Phase 1 (Architecture) -- the socket communication protocol must support async operations from day one. You cannot bolt async onto a synchronous request-response protocol without rewriting the addon.
+Phase 1 (Procedural Mesh Foundation) -- material presets must be defined alongside mesh generators, not added later.
 
 ---
 
-### Pitfall 3: Blind Execution Without Visual Verification Loops
+### Pitfall 3: Heightmap Terrain Cannot Represent Vertical Geometry
 
 **What goes wrong:**
-The LLM generates Blender Python code, sends it through the MCP bridge, receives a text response ("mesh created successfully"), and moves on. It never sees what it actually created. A "humanoid rig" might have bones pointing in wrong directions, inverted normals, intersecting geometry, or textures mapped to the wrong UV islands. The LLM optimistically reports success based on the absence of Python exceptions, not on visual correctness. The user's experience of "72 hours of rigging that was still broken" stems directly from this pattern.
+Terrain is generated as a heightmap grid (one height value per XY position). This fundamentally cannot represent vertical cliffs, overhangs, cave mouths, or arch formations. When the game requires dramatic cliff walls or cave entrances (a dark fantasy staple), the terrain system silently produces sloped ramps instead of vertical faces. The gap analysis identified cliff face generation and cave entrance geometry as CRITICAL gaps.
 
 **Why it happens:**
-MCP's default response format is text/JSON. Rendering a viewport screenshot, transmitting it as base64, and having the LLM evaluate it adds latency and token cost. Most MCP server implementations skip this because it's hard and expensive. But 3D modeling is inherently visual -- text confirmation of geometric correctness is unreliable.
+Heightmap terrain is the standard approach in both Blender and Unity. It is computationally efficient and well-supported. The limitation only becomes apparent when the design calls for features that require 2+ height values at the same XY position (cliff overhangs, cave tunnels, natural arches). By the time this is discovered, the entire terrain pipeline is built around heightmap assumptions.
 
-**Consequences:**
-- Hours of LLM iterations produce geometrically invalid output
-- Errors compound: wrong bone orientation in step 3 makes steps 4-20 worthless
-- User doesn't discover problems until they inspect manually, at which point recovery requires starting over
-- Trust erosion: users stop using the tool after one bad experience
-
-**Prevention:**
-1. **Mandatory viewport capture after mutations:** After every operation that changes geometry, materials, or armature, render a viewport screenshot and return it as part of the tool response. The LLM can then evaluate visual correctness before proceeding.
-2. **Multi-angle verification:** For 3D operations, capture front + side + top views (3 screenshots). A single perspective hides problems on other axes.
-3. **Automated validation checks:** Before returning "success," run programmatic checks:
-   - Mesh: `bpy.ops.mesh.normals_check()`, vertex count, face count, non-manifold edges
-   - Armature: bone count, chain connectivity, symmetry validation
-   - UV: island count, overlap detection, coverage percentage
-   - Materials: slot assignment verification, texture path validation
-4. **Checkpoint/rollback system:** Before each major operation, save a `.blend` checkpoint. If the LLM determines the result is wrong, roll back to the checkpoint instead of trying to fix broken geometry.
-5. **Diff visualization:** Show before/after comparisons for modifications, not just the final state.
+**How to avoid:**
+1. Accept the heightmap limitation for the base terrain surface. Do not fight it.
+2. Implement a separate mesh object layer for vertical features: cliff face meshes, overhang geometry, cave entrance transition pieces. These are placed on top of the heightmap, not carved into it.
+3. Use modular kit pieces for cliff faces (straight, corner, curved sections) that snap to terrain edges.
+4. Create transition meshes where vertical cliff meets terrain surface (blended vertex colors + terrain material matching).
+5. In the Unity terrain shader, add height-based blending that matches the cliff mesh material at the seam.
 
 **Warning signs:**
-- Tool responses contain only text like "Object created" with no visual data
-- User reports "it said it worked but when I looked in Blender it was wrong"
-- LLM confidently proceeds through a 20-step workflow without any visual checkpoints
-
-**Detection:**
-Count tool responses that include image data vs. text-only. If less than 50% of mutation operations include visual verification, the feedback loop is broken.
+- Mountain slopes look like smooth ramps instead of dramatic cliff faces
+- Cave entrances are just dark spots on a hillside, not actual openings
+- Rivers carve V-shaped valleys instead of the steep-walled canyons dark fantasy requires
+- Terrain cross-sections show smooth curves everywhere, no verticality
 
 **Phase to address:**
-Phase 2 (Core Tools) -- every tool that mutates scene state must include a viewport capture in its response. This is not a "nice to have" -- it is the single most important differentiator from existing broken implementations.
+Phase 2 (Terrain and Environment) -- cliff/overhang mesh generation must be part of the terrain system, not bolted on after.
 
 ---
 
-### Pitfall 4: Arbitrary Code Execution Creates an Unrestricted Shell
+### Pitfall 4: Per-Object Budget Passes But Scene Budget Fails
 
 **What goes wrong:**
-The most powerful MCP tool for Blender is `execute_blender_code` -- it takes a Python string and passes it to `exec()` inside Blender. This gives the LLM (and by extension, any prompt injection) full access to the host machine's filesystem, network, and processes. A malicious prompt or confused LLM can run `import subprocess; subprocess.run(["rm", "-rf", "/"])` through the Blender Python interpreter. The existing blender-mcp project does exactly this: accepts arbitrary Python, passes it to `exec()` with no restriction.
+Every individual prop passes `game_check` (under its poly budget, valid UVs, correct material). But a furnished room contains 50 props, each at their individual limit, totaling 100K+ triangles plus 50 draw calls. A town with 20 buildings, each under budget, plus vegetation scatter produces 2M+ triangles. The scene crawls at 15 FPS despite every individual asset being "optimized." The gap analysis identified cross-asset polycount budgeting as a HIGH gap.
 
 **Why it happens:**
-Blender's Python API (`bpy`) is so vast that encoding every operation as a typed MCP tool is impractical. The escape hatch is "just run Python." But Python's `exec()` has no sandbox -- it's a full interpreter with OS access. Developers assume the MCP server runs locally and is therefore "trusted," but MCP connections can be established remotely, and prompt injection can weaponize even local execution.
+Quality validation checks operate on individual objects (`game_check` validates per-object poly budgets). No tool sums visible objects in a scene and validates against a frame budget. Developers check each asset in isolation and assume the total will be fine.
 
-**Consequences:**
-- Full filesystem access: read SSH keys, credentials, environment variables
-- Network access: exfiltrate data, download malware
-- Process execution: launch arbitrary binaries
-- Blender state corruption: malicious scripts can corrupt the scene file
-
-**Prevention:**
-1. **Allowlist-based execution:** Instead of raw `exec()`, parse the Python AST and reject any code that imports modules outside a whitelist (`bpy`, `mathutils`, `bmesh`, `math`, `random`). Block `subprocess`, `os`, `sys`, `socket`, `http`, `shutil`, `ctypes`.
-2. **Code review before execution:** Return generated code to the user for approval before running it. Add a `--auto-approve` flag for trusted workflows, but default to manual review.
-3. **Scoped API surface:** Prefer typed MCP tools for common operations. Reserve `execute_blender_code` for edge cases and require explicit user opt-in.
-4. **Filesystem isolation:** Run Blender in a container or with restricted filesystem permissions. Mount only the project directory, not the home folder.
-5. **Execution logging:** Log every Python string sent to `exec()` with timestamp, source, and result. Enable audit trail for security review.
+**How to avoid:**
+1. Define scene-level budgets alongside per-object budgets:
+   - Visible scene at 60 FPS PC: 2-6M triangles, 500-2000 draw calls, 4GB VRAM
+   - Single room interior: 50K-150K triangles total (all furniture + walls + props)
+   - Town block (10 buildings + roads + scatter): 200K-500K triangles total
+2. Build a scene budget auditor that sums all visible objects and compares against frame budgets.
+3. Use LOD aggressively: LOD2 at 15% screen space, LOD3 at 5%, cull below 2%.
+4. Use GPU instancing for repeated props (barrels, crates, vegetation). One draw call for all barrels, not one per barrel.
+5. Implement a per-room prop budget: each room type gets a maximum triangle count, and the furnishing generator must stay under it.
 
 **Warning signs:**
-- MCP tool accepts arbitrary string and passes to `exec()` without validation
-- No import restrictions on executed code
-- No user confirmation step before code execution
-- Server documentation doesn't mention security implications
-
-**Detection:**
-Search for `exec(` and `eval(` in the server codebase. If they accept user/LLM-provided strings without AST validation, you have an unrestricted shell.
+- Frame rate drops significantly in furnished rooms vs. empty rooms
+- Draw call count exceeds 1000 in town scenes
+- GPU profiler shows triangle count well under per-object budgets but total scene is over frame budget
+- Vegetation scatter with 1000+ instances causes visible stuttering
 
 **Phase to address:**
-Phase 1 (Architecture) -- security model must be designed before any `execute_code` tool is implemented. Retrofitting sandboxing onto an existing unrestricted system requires rewriting the execution layer.
+Phase 2 (Terrain and Environment) -- scene budgets must be defined before populating environments.
 
 ---
 
-### Pitfall 5: Blender Python Threading Prohibition Causes Deadlocks and Crashes
+### Pitfall 5: Cookie-Cutter Buildings From Identical Modules
 
 **What goes wrong:**
-Blender's Python integration is explicitly not thread-safe. The official documentation states: "Python Threads are Not Supported." Attempting to call any `bpy` API from a background thread causes crashes, data corruption, or silent incorrect behavior. The MCP bridge naturally wants to handle socket I/O on a background thread and dispatch bpy calls on the main thread, but getting this wrong is trivial and the failure modes are catastrophic (Blender segfault, corrupted .blend file).
+Modular kit buildings use the same 5-10 wall/floor/roof pieces in the same combinations. Every building in the town looks like the same structure with slightly different dimensions. The player cannot tell the tavern from the blacksmith from the guard barracks by silhouette alone. This is the "procgen sameness" problem -- technically correct but visually boring.
 
 **Why it happens:**
-The socket server in the Blender addon must listen for incoming connections without blocking Blender's UI. The obvious solution is a background thread for socket I/O. But developers then call `bpy.ops` or modify `bpy.data` directly from that thread, causing crashes. The correct pattern (thread-safe queue + `bpy.app.timers` dispatch) is non-obvious and poorly documented.
+Modular kit design constrains the part vocabulary to a small set of snap-together pieces. Without variation systems (damage states, material swaps, trim overlays, narrative props), every assembly from the same kit produces buildings with identical character. The building grammar produces structural variation but not visual variation.
 
-**Consequences:**
-- Random Blender crashes with no Python traceback (segfault in C code)
-- Corrupted scene data that only manifests when saving
-- Race conditions where two MCP commands interleave their bpy modifications
-- Crashes that only occur under load (multiple rapid commands), making them hard to reproduce
-
-**Prevention:**
-1. **Queue + Timer pattern:** Socket listener thread puts commands on a `queue.Queue()`. A `bpy.app.timers.register()` callback polls the queue every 0.05-0.1 seconds and executes commands on Blender's main thread. This is the ONLY safe pattern.
-2. **Single-command serialization:** Process one MCP command at a time. Do not allow concurrent bpy operations even if they appear independent. Blender's internal state is globally mutable.
-3. **No `bpy` imports in thread context:** The socket handler module should not import `bpy` at the module level. Only the timer callback (which runs on the main thread) should access `bpy`.
-4. **Crash recovery:** Implement auto-save before each MCP command. If Blender crashes, the addon can recover from the auto-save on restart.
-5. **Test under load:** Send 10 rapid MCP commands in sequence and verify no crash. This is the minimum reliability test.
+**How to avoid:**
+1. Each kit style needs 25-40 module pieces minimum (per AAA_BEST_PRACTICES_COMPREHENSIVE.md), including 4-6 damage/variation pieces.
+2. Implement a narrative dressing layer: `add_storytelling_props` places context-specific clutter (horseshoes at the blacksmith, tankards at the tavern, weapons at the guard barracks). These break the visual monotony.
+3. Use vertex color randomization per-instance: slight hue shifts on walls, different weathering patterns on each building.
+4. Create variant sub-kits: a "dark_fantasy" building kit needs pristine, weathered, damaged, corrupted, and ruined sub-variants.
+5. Implement silhouette variation through roof shape (peaked, flat, domed, spired), wall height, and building footprint asymmetry -- not just width/depth scaling.
+6. Add the overrun_variant system to existing buildings (WORLD-09) to create corrupted versions with different visual character.
 
 **Warning signs:**
-- Blender crashes with no Python error message (segfault)
-- Operations work individually but fail when combined rapidly
-- `bpy` calls appear in any code path that could execute off the main thread
-- Threading module imported alongside bpy in the same file
-
-**Detection:**
-Grep for `import threading` or `Thread(` in addon code. Trace all code paths from thread entry points to verify no `bpy` access occurs.
+- Screenshots of different buildings could be swapped and nobody would notice
+- All buildings in a town have the same roof angle and wall texture
+- The only visual difference between a tavern and a temple is the sign text
+- Silhouette_test returns similar silhouette scores for all building types
 
 **Phase to address:**
-Phase 1 (Architecture) -- the Blender addon's threading model is foundational. Getting it wrong corrupts everything built on top. The queue+timer pattern must be the first thing implemented and tested.
+Phase 3 (Building and Architecture) -- kit variation must be designed into the module set, not applied as post-processing.
 
 ---
 
-### Pitfall 6: FBX Pipeline Between Blender and Unity Silently Corrupts Assets
+### Pitfall 6: Terrain-Building Seam Gaps and Z-Fighting
 
 **What goes wrong:**
-The Blender-to-Unity asset pipeline via FBX is riddled with silent data loss. Per-vertex normals exported with `IndexToDirect` reference mode are misinterpreted by Unity (Blender bug #123088). Materials and textures are not embedded in FBX files -- they must be manually reassigned in Unity. Unity's FBX importer applies a 0.01 scale factor (Blender uses meters, Unity uses... also meters, but the importer scales anyway). Blender-specific modifiers (boolean, subdivision, mirror) don't export -- they must be applied first. Armature bone orientations differ between Blender and Unity conventions. An automated pipeline that doesn't account for ALL of these produces assets that look correct in Blender but are broken in Unity.
+Buildings placed on procedural terrain either float above the terrain surface (visible gap underneath) or intersect it (walls clipping through terrain, doors blocked by ground mesh). When building floors and terrain heightmaps occupy the same Y coordinate, z-fighting produces flickering artifacts. This is the terrain/building mesh integration problem (MESH-05) and it is one of the most visible quality failures -- players walk through a town and see buildings hovering or partially buried.
 
 **Why it happens:**
-FBX is a proprietary Autodesk format. Blender's FBX exporter is a reverse-engineered Python implementation, not an official SDK integration. Unity's FBX importer makes assumptions about authoring tools (primarily Maya/Max). The format itself cannot represent all Blender features (geometry nodes, EEVEE materials, Cycles shader trees). Every translation step is lossy.
+Terrain heightmaps have limited resolution (typically 512x512 or 1024x1024 grid). A building footprint is a rectangle that rarely aligns to the heightmap grid. The terrain height at the building corner might be 12.3m while the building floor is at 12.0m (designed for "flat ground"). The heightmap cannot represent a flat building pad within a sloped terrain without flattening the entire area.
 
-**Consequences:**
-- Models appear inside-out in Unity (inverted normals)
-- Materials show as pink (missing references)
-- Characters are 100x too small or too large
-- Animations play at wrong speed (different FPS assumptions)
-- Rigs don't deform correctly (bone roll/orientation mismatch)
-
-**Prevention:**
-1. **Standardized export preset:** Create a Blender FBX export preset that matches Unity's expectations: Apply Modifiers ON, Forward -Z, Up Y, Apply Unit ON, Apply Transform ON, Mesh > Smoothing: Face. Store this preset in version control.
-2. **Pre-export validation:** Before FBX export, run automated checks: all modifiers applied, no n-gons, no zero-area faces, UV maps present, materials assigned, armature in rest pose.
-3. **Post-import validation:** After Unity import, verify: correct scale (compare bounding box), material count matches, bone hierarchy intact, animation clip count/duration correct.
-4. **Use glTF instead:** glTF 2.0 is an open standard with better Blender support (official exporter) and Unity support (via UnityGLTF package). It embeds textures, preserves PBR materials, and has fewer conversion gotchas than FBX.
-5. **Round-trip test:** Part of CI: export from Blender, import to Unity, compare metrics (vertex count, bone count, material count, bounding box dimensions). Flag any deviation.
+**How to avoid:**
+1. Terrain flattening at building sites: when placing a building, flatten the terrain heightmap under the building footprint to the building's floor height. Use cosine-blended falloff at the edges (from MAP_BUILDING_TECHNIQUES.md, Unreal Landscape Spline approach).
+2. Foundation meshes: every building gets a foundation mesh that extends below the floor height by 0.3-0.5m. This hides the terrain-building seam.
+3. Height probing: before placing a building, sample the terrain height at all four corners. If the height difference exceeds a threshold (0.3m), either reject the placement or adjust the building floor height.
+4. Terrain skirt meshes: create transition geometry between building walls and terrain -- stone foundations, dirt berms, stepped terracing for hillside buildings.
+5. In Unity, use terrain decals at building perimeters to blend the transition visually.
 
 **Warning signs:**
-- Models in Unity look different from Blender viewport
-- Pink/missing materials after import
-- Character is tiny or enormous
-- Bones are rotated 90 degrees from expected orientation
-
-**Detection:**
-Automated comparison script that exports from Blender, imports to Unity, and diffs key metrics.
+- Buildings visible floating above terrain from certain camera angles
+- Terrain clipping through building floors
+- Z-fighting flicker at building bases
+- Doors that cannot be entered because terrain blocks the threshold
 
 **Phase to address:**
-Phase 2 (Asset Pipeline) -- export/import validation must be built into every pipeline tool, not treated as a post-hoc check.
+Phase 2 (Terrain and Environment) -- terrain-building integration must be solved before town/city generation.
 
 ---
 
-## Moderate Pitfalls
-
-Mistakes that cause significant debugging time or feature regression but not complete rewrites.
-
----
-
-### Pitfall 7: Blender Operator Context Requirements Break Automation
+### Pitfall 7: Tripo Pipeline Quality Does Not Match Procedural Quality
 
 **What goes wrong:**
-Many `bpy.ops` functions require specific UI context to execute: the correct area type, an active object, a specific mode (Edit/Object/Pose), or a selected object. In interactive Blender, this context is naturally set by the user's workflow. In automated/headless mode, context is often wrong. `bpy.ops.mesh.subdivide()` fails silently if no mesh is selected. `bpy.ops.object.modifier_apply()` requires the object to be active AND in Object mode. `bpy.ops.armature.bone_primitive_add()` requires Edit mode on an armature. The error messages are often just `RuntimeError: Operator bpy.ops.mesh.subdivide.poll() failed`.
+AI-generated models from Tripo3D have different topology, texture style, and proportions than procedurally generated Blender meshes. When mixed in the same scene (e.g., Tripo-generated hero character standing next to procedural buildings), the style clash is jarring. Tripo models have dense triangle soup (200K-2M tris) while procedural models have clean topology. Tripo textures are photo-realistic while procedural textures use node-based PBR. The combination looks like two different art directors worked on the same scene.
 
-**What to do instead:**
-- Prefer `bpy.data` API (low-level data manipulation) over `bpy.ops` (operator calls) wherever possible. Data API doesn't require context.
-- When operators are unavoidable, use `bpy.context.temp_override()` to explicitly set the required context.
-- For mode switches, always verify current mode before switching: `if obj.mode != 'EDIT': bpy.ops.object.mode_set(mode='EDIT')`.
-- Wrap every operator call in try/except and return meaningful error messages that include what context was expected.
+**Why it happens:**
+The Tripo pipeline and the procedural pipeline are separate workflows with separate quality standards. Tripo output goes through: generate -> cleanup -> retopo -> UV -> texture. Procedural output goes through: mesh generation -> material presets. These pipelines produce fundamentally different aesthetic results even when targeting the same art style.
+
+**How to avoid:**
+1. Define a unified art style validation pass that both pipelines must pass. Use `validate_art_style` (PROD-04) with dark fantasy palette enforcement.
+2. Apply a consistent material override: regardless of source (Tripo or procedural), all assets in a scene use the same master material library (20-40 materials from AAA_QUALITY_ASSETS.md Section 2.1).
+3. Run the de-lighting pass (`texture_ops.py handle_delight`) on ALL textures, Tripo and procedural alike, to normalize lighting information.
+4. Use the same texel density standard (10.24 px/cm baseline) enforced by `uv_equalize_density` for both pipelines.
+5. Create a style transfer step for Tripo textures: adjust hue/saturation/value to match the dark fantasy palette before compositing into the scene.
 
 **Warning signs:**
-- `poll() failed` errors with no additional context
-- Operations that work in Blender UI but fail when scripted
-- Mode-dependent tools that only work sometimes
+- Tripo characters look photorealistic while buildings look stylized (or vice versa)
+- Texture resolution differs visibly between AI and procedural assets
+- Material response to lighting is noticeably different between sources
+- Color temperature shifts between Tripo and procedural objects in the same scene
 
 **Phase to address:**
-Phase 2 (Core Tools) -- every Blender tool implementation must handle context setup explicitly.
+Phase 4 (Pipeline Integration) -- style normalization must be part of the pipeline, not a manual review step.
 
 ---
 
-### Pitfall 8: Blender Undo System Corrupts State During Automated Sequences
+### Pitfall 8: LOD Decimation Destroys Silhouette Readability
 
 **What goes wrong:**
-Every `bpy.ops` call pushes an undo step. In a 50-step automated rigging sequence, this creates 50 undo snapshots consuming gigabytes of memory. Worse, if a step fails mid-sequence and the user (or recovery code) calls undo, it may undo to an intermediate state that was never meant to be standalone. The undo system can also crash Blender in background mode when called programmatically (Blender bug T60934). Memory from undo snapshots is NOT released until the file is saved, closed, and reopened.
+Automatic LOD generation (decimate modifier at 50%, 25%, 10%) produces LOD meshes that lose the distinctive silhouette of the original. A sword with an ornate cross-guard becomes a plain stick at LOD2. A building with a peaked roof becomes a blob at LOD3. At distance, all objects collapse into similar-looking low-poly shapes, destroying the visual identity that the player uses for navigation and recognition.
 
-**What to do instead:**
-- Disable undo for automated sequences: `bpy.context.preferences.edit.use_global_undo = False` before the sequence, restore after.
-- For recovery, use file-level checkpoints (save .blend before the sequence) instead of undo steps.
-- After long automated sequences, use `bpy.ops.outliner.orphans_purge(do_recursive=True)` to clean up orphaned data blocks.
-- Never call `bpy.ops.ed.undo()` or `bpy.ops.ed.undo_history()` in automated/background mode.
+**Why it happens:**
+Decimate modifier operates uniformly across the mesh. It reduces polygon count without understanding which features are structurally important (silhouette-defining edges) versus which are surface detail (engravings, bevels). The most distinctive features (guard shape, roofline, spire) are often the first to be simplified because they have the highest local curvature.
+
+**How to avoid:**
+1. Use per-asset-type LOD presets, not uniform decimation ratios:
+   - Weapons: preserve silhouette profile, simplify surface detail first
+   - Buildings: preserve roofline and wall outlines, simplify interior detail
+   - Characters: preserve face detail at LOD2, simplify body aggressively
+   - Props: preserve bounding shape, simplify all surface detail
+2. Implement silhouette-preserving decimation: weight edge collapse cost by silhouette importance. Edges on the mesh silhouette (perpendicular to view) have higher cost than interior edges.
+3. For LOD3, consider billboard/impostor approach instead of further decimation. A sprite captured from the original looks better than 50 triangles of blob.
+4. Validate each LOD level with silhouette_test at the expected viewing distance for that LOD level.
+5. Use the region-weighted vertex importance system (from v3.0) to guide LOD reduction on characters.
 
 **Warning signs:**
-- Memory usage grows continuously during long MCP sessions
-- Blender crashes during automated sequences with no Python error
-- Undo after a failed automation puts scene in unexpected state
+- Distant objects all look like featureless blobs
+- Players cannot identify building types from distance
+- LOD transitions cause visible shape change (not just detail change)
+- Weapon outlines change shape between LOD1 and LOD2
 
 **Phase to address:**
-Phase 2 (Core Tools) -- undo management must be explicitly handled in the Blender addon, not left to Blender's defaults.
+Phase 1 (Procedural Mesh Foundation) -- LOD presets must be defined alongside mesh generators.
 
 ---
 
-### Pitfall 9: MCP Error Responses That Kill the Conversation
+### Pitfall 9: Boolean Operations Produce Dirty Geometry
 
 **What goes wrong:**
-When a tool fails, returning a bare error string ("Error: operation failed") gives the LLM no information to recover. It either retries blindly (same error, same result, wasting tokens) or gives up and tells the user it cannot proceed. Conversely, returning a massive stack trace (500+ tokens of Python traceback) wastes context and confuses the LLM. The sweet spot -- actionable error information that enables recovery -- is rarely implemented.
+Using boolean operations (DIFFERENCE, UNION, INTERSECT) for procedural mesh construction (carving windows, adding detail, cutting doorways) produces non-manifold edges, degenerate faces, T-junctions, and micro-patches. These artifacts cause rendering errors (shadow acne, light leaking), physics collision problems, and UV unwrap failures. The gap analysis identified mesh boolean cleanup as a systemic cross-cutting gap.
 
-**What to do instead:**
-- Return errors using MCP's `isError: true` flag in the tool response (NOT as a protocol-level JSON-RPC error). This tells the LLM "the tool ran but the operation failed" vs. "the tool itself is broken."
-- Structure error responses: `{ error_type, message, suggestion, can_retry }`. Example: `{ "error_type": "context_error", "message": "No active mesh object", "suggestion": "Select a mesh object first using select_object tool", "can_retry": true }`.
-- Include recovery instructions that reference other available tools.
-- Limit error detail to 200 tokens maximum. Log full details server-side.
-- For Blender-specific errors, translate bpy error codes into actionable messages: `poll() failed, context is incorrect` becomes "The armature must be in Edit Mode. Call set_mode('EDIT') first."
+**Why it happens:**
+Boolean operations on arbitrary meshes are numerically imprecise. When a cutter mesh intersects a target mesh at angles or positions that create near-coincident vertices, the boolean algorithm produces floating point approximation artifacts. These are invisible at creation time but cause cascading failures in downstream operations (UV unwrap, normal calculation, physics mesh generation).
+
+**How to avoid:**
+1. Run mandatory post-boolean cleanup after every boolean operation:
+   - Remove doubles (merge_distance=0.001)
+   - Recalculate normals
+   - Delete loose geometry
+   - Fill holes (max_hole_sides=4)
+   - Check for non-manifold edges
+2. Prefer non-boolean construction methods where possible: extrude faces instead of boolean-cut holes, inset instead of boolean-add detail, mirror instead of boolean-union symmetric halves.
+3. When booleans are unavoidable, use clean input meshes: no n-gons, no non-manifold geometry, no overlapping faces. Run `mesh analyze` on both inputs before the boolean.
+4. After boolean + cleanup, validate the result with `game_check` before proceeding.
 
 **Warning signs:**
-- LLM retries the same failing operation 3+ times
-- Error messages contain raw Python tracebacks
-- Errors say "operation failed" without saying why or how to fix it
+- Mesh analyze reports non-manifold edges after boolean operations
+- UV unwrap produces islands with zero area
+- Shadow artifacts appear on boolean-cut surfaces
+- Physics collision mesh has holes or spikes
 
 **Phase to address:**
-Phase 2 (Core Tools) -- error handling format should be standardized before individual tools are implemented.
+Phase 1 (Procedural Mesh Foundation) -- boolean cleanup must be part of every mesh generator that uses booleans.
 
 ---
 
-### Pitfall 10: Blender Data Block References Invalidated by Operations
+### Pitfall 10: Context Window Bloat During Generation Sessions
 
 **What goes wrong:**
-Python objects that reference Blender data (`mesh = bpy.data.meshes["MyMesh"]`) can become dangling pointers when Blender operations reallocate internal memory. Adding items to a collection can trigger reallocation that invalidates all existing Python references to items in that collection. Accessing invalidated references causes crashes (not Python exceptions -- actual segfaults). The official docs warn: "When removing data, be sure not to hold references to it."
+Generating a complete town with 20 buildings, furnishing interiors, scattering vegetation, and validating quality consumes enormous LLM context. Each tool call returns structured data (vertex counts, material assignments, validation results). After generating 10 buildings, the context window is 60-70% full. After furnishing interiors, it hits 80%. The auto-compact threshold fires and the LLM loses track of what it has already generated, leading to duplicate objects, inconsistent naming, and broken references.
 
-**What to do instead:**
-- Never cache `bpy.data` references across MCP tool calls. Resolve references fresh at the start of each tool execution by name/index.
-- After any operation that adds or removes objects, meshes, or materials, re-resolve all references.
-- Use object names (strings) as stable identifiers passed between MCP calls, not Python object references.
-- Implement a naming convention for MCP-created objects (e.g., `mcp_char_arm_01`) to enable reliable re-resolution.
+**Why it happens:**
+Each procedural generation step produces structured output (JSON responses with metrics, coordinates, validation data). The compound tool pattern reduces token overhead per tool call, but the cumulative output from 50+ sequential operations fills the context. The LLM cannot "forget" intermediate results selectively -- compaction removes the oldest content, which is often the architectural decisions and constraints from the beginning of the session.
+
+**How to avoid:**
+1. Implement state persistence: write generation state (building list, prop placements, validation results) to files on disk, not in the conversation context. Reference files by name, not by content.
+2. Use the auto-compact workflow at 80% (MESH-14). Design generators to be stateless -- each generator reads its input from files, not from conversation history.
+3. Batch generation calls: instead of "generate one building" repeated 20 times, use "generate town" as a single operation that produces all buildings. One tool call, one response.
+4. Compress validation output: instead of full `game_check` reports, return pass/fail with a single-line summary. Log full details to a file.
+5. Use the GLM memory persistence (MESH-15) to save learnings between sessions rather than re-deriving them from context.
 
 **Warning signs:**
-- Blender crashes when accessing objects after other operations modified the scene
-- `ReferenceError: StructRNA of type Object has been removed` in Python console
-- Crashes that only occur when operations are sequenced (not when run individually)
+- LLM generates duplicate buildings that already exist in the scene
+- Object naming becomes inconsistent (Building_01, building_2, BUILDING-03)
+- Validation results from earlier objects are referenced incorrectly
+- Context compaction causes the LLM to "forget" the art style constraints
 
 **Phase to address:**
-Phase 1 (Architecture) -- the Blender addon must use name-based resolution, never cached references. This is a design principle, not a per-tool fix.
+Phase 1 (Procedural Mesh Foundation) -- state persistence and batch operations must be designed into the generator architecture.
 
 ---
 
-### Pitfall 11: MCP Transport Choice Locks You Into Architecture
+## Technical Debt Patterns
 
-**What goes wrong:**
-Choosing the wrong MCP transport (stdio vs. Streamable HTTP vs. SSE) at the start constrains deployment options later. stdio is simplest but requires the server to run as a subprocess of the client -- no remote operation, no multi-client support. SSE was the original HTTP transport but is now deprecated (as of MCP spec 2025-03-26). Streamable HTTP is the current standard for remote/production servers but adds complexity. Building on stdio and discovering later that you need remote operation means rewriting the transport layer.
+Shortcuts that seem reasonable during procedural generation but create long-term quality problems.
 
-**What to do instead:**
-- **Local-only tool (user runs Blender on their machine):** Use stdio. It's simpler, faster, and has zero network overhead. This is the right choice for a dev tool.
-- **Design the server to be transport-agnostic:** Use a framework like FastMCP that abstracts transport. Switching from stdio to Streamable HTTP should be a configuration change, not a code change.
-- **Never build on SSE for new projects.** It is deprecated and will be removed.
-- If you must support remote operation (e.g., cloud rendering), plan for Streamable HTTP from the start.
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Cube placeholders for props | Quick scene blocking, validates placement logic | Must replace every placeholder with actual mesh later; double work | Initial prototyping only, NEVER in production |
+| Single roughness value per material | Simple material system, fewer texture maps | Everything looks like plastic; must regenerate all materials | Never |
+| Uniform decimation for LOD | One line of code for all LOD levels | Silhouette destruction; must create per-type LOD presets | Prototyping only |
+| Heightmap-only terrain | Well-supported, fast rendering | No cliffs, caves, or overhangs; must add mesh overlay system | Base terrain only; vertical features must be separate meshes |
+| Boolean for all detail | Fast way to cut windows, doors, notches | Dirty geometry cascading into UV/normal/shadow failures | Only with mandatory post-boolean cleanup |
+| One texture per material | Simpler pipeline, fewer draw calls | No PBR variation, no micro-detail, plastic look | Never for visible surfaces |
+| Global random seed only | Reproducible scenes from one seed | Cannot regenerate individual elements; must regenerate entire scene | Acceptable if elements also support local seeds |
 
-**Warning signs:**
-- Server code directly handles stdin/stdout parsing instead of using a transport abstraction
-- SSE-specific code in a new project
-- "We'll add remote support later" without transport abstraction
+## Integration Gotchas
 
-**Phase to address:**
-Phase 1 (Architecture) -- transport abstraction is a one-time decision with long-lasting consequences.
+Common mistakes when connecting procedural generation to external systems.
 
----
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Tripo3D output -> Blender cleanup | Assume cleanup fixes all AI defects | Cleanup handles topology normals/holes. Must also: de-light textures, validate UV seam placement, enforce texel density, check scale |
+| Blender export -> Unity import | Assume FBX "just works" | Must: apply modifiers, set correct Forward/Up axes, embed materials, validate scale (Blender 1m = Unity 1m but FBX importer applies 0.01x), use glTF when possible |
+| Procedural material -> Unity URP | Export Cycles shader nodes | Cycles nodes do not convert to URP. Export texture maps (albedo/normal/MRAO), apply URP Lit shader in Unity |
+| Terrain heightmap -> Unity terrain | Export raw heightmap at arbitrary resolution | Unity terrain expects specific resolution (513x513 for 512x512 terrain). Must export with correct bit depth (16-bit) and correct byte order |
+| Scatter instances -> Unity | Export as individual mesh objects | Must export as collection instances or convert to GPU instancing. Individual objects = massive draw call count |
+| Modular kit pieces -> Unity snapping | Assume Unity uses same grid as Blender | Unity transform snapping uses different defaults. Export kit pieces with pivot at bottom-left-back, document grid size in metadata |
+| AI character mesh -> Rigify rig | Auto-weight after retopo | Retopo'd mesh has no vertex groups. Must: retopo -> mark sharp edges -> define UV seams -> THEN auto-weight. Skipping steps produces garbage weights |
 
-## Minor Pitfalls
+## Performance Traps
 
-Issues that cause friction or minor bugs but are easily fixable.
+Patterns that work at small scale but fail as scene complexity grows.
 
----
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Per-prop unique materials | Draw calls spike to 500+ in furnished room | Material atlas per room/kit; share materials across props | >10 props with unique materials in view |
+| No LOD on scatter instances | Frame drop when looking at forest | LOD Groups on scatter templates; billboard at distance | >50 instanced trees in view |
+| Heightmap resolution too high | Terrain mesh has 1M+ faces; slow to export and import | Use 512x512 or 1024x1024 max; quadtree LOD in Unity | >1024x1024 heightmap grid |
+| Furnishing without prop budget | Room with 50 props = 100K+ triangles | Define per-room triangle budget; prioritize and cut | >20 props in a single room |
+| Physics mesh per-prop | Unity physics engine overwhelmed | Use simplified collision meshes (box/capsule), share across instances | >30 physics-enabled props in scene |
+| No texture atlasing for kit pieces | Each modular wall segment = 1 draw call | One shared material per kit; trim sheet atlas for all pieces | >15 kit pieces in view |
+| Real-time boolean computation | Frame drops during generation, not runtime | Pre-compute all booleans; bake results to static meshes | Any real-time boolean in game loop |
+| Uncompressed textures in generation | Memory spikes during batch texture operations | Use compressed formats (BCn/DXT) for intermediate textures when possible | >10 textures at 2048x2048 simultaneously |
 
-### Pitfall 12: Blender File Path Encoding Breaks Cross-Platform
+## "Looks Done But Isn't" Checklist
 
-**What goes wrong:**
-Blender internally uses UTF-8 for file paths, but Windows uses UTF-16. Paths with non-ASCII characters (accented usernames, CJK characters in project names) can cause silent failures in file operations. The `//` relative path prefix in Blender (relative to .blend file) doesn't translate to absolute paths correctly in all contexts.
+Things that appear complete during generation but are missing critical pieces.
 
-**What to do instead:**
-- Always use `bpy.path.abspath()` to resolve Blender relative paths before passing them to Python `os` functions.
-- Use `pathlib.Path` instead of string concatenation for path operations.
-- Test with a project path containing spaces and non-ASCII characters.
-
-**Phase to address:**
-Phase 3 (Polish) -- edge case that should be tested but doesn't block core functionality.
-
----
-
-### Pitfall 13: Blender Version Skew Between Addon and Server
-
-**What goes wrong:**
-Blender 4.x/5.x changed numerous Python APIs: `bpy.props` dictionary-style access removed, `BGL` module removed entirely, new `temp_override()` syntax. If the MCP addon is developed against Blender 4.2 but the user runs Blender 5.0, scripts silently fail or crash. Blender has no built-in addon version compatibility checking.
-
-**What to do instead:**
-- Check `bpy.app.version` at addon startup and warn/block on unsupported versions.
-- Document minimum and maximum supported Blender versions explicitly.
-- Use `hasattr()` checks before accessing APIs that changed between versions.
-- Test against the 2-3 most recent Blender stable releases.
-
-**Phase to address:**
-Phase 3 (Polish) -- version compatibility is important but can be handled after core functionality works on the primary target version.
-
----
-
-### Pitfall 14: Node Wrangler and Addon Conflicts
-
-**What goes wrong:**
-Many Blender users have third-party addons installed (Node Wrangler, Auto Rig Pro, Hard Ops). These addons register custom operators, modify keymap, and can intercept or conflict with MCP tool operations. Auto Rig Pro, for example, has known syntax errors in certain Blender versions (bug #74319). If the MCP addon assumes a vanilla Blender installation, operations may fail due to addon conflicts.
-
-**What to do instead:**
-- Don't depend on any third-party addon being installed.
-- Catch and handle errors from addon conflicts gracefully.
-- For rigging, implement your own tools rather than depending on Auto Rig Pro being available.
-- Document known addon conflicts.
-
-**Phase to address:**
-Phase 3 (Polish) -- addon conflicts are edge cases but should be documented.
-
----
-
-## Phase-Specific Warnings
-
-| Phase Topic | Likely Pitfall | Mitigation |
-|-------------|---------------|------------|
-| Architecture & Protocol Design | Tool explosion (#1), transport lock-in (#11), threading model (#5) | Design dynamic toolset API, use transport abstraction, implement queue+timer pattern from day one |
-| Blender Addon Core | Silent socket death (#2), threading crashes (#5), data block invalidation (#10) | Async command pattern with job IDs, main-thread-only bpy access, name-based resolution |
-| Core Tool Implementation | Blind execution (#3), operator context failures (#7), undo corruption (#8) | Mandatory viewport capture, explicit context setup, disable undo for sequences |
-| Security Layer | Arbitrary code execution (#4) | AST-validated code execution, import whitelist, user approval flow |
-| Asset Pipeline (FBX/glTF) | Silent corruption (#6) | Standardized export presets, pre/post validation, prefer glTF |
-| Error Handling | Conversation-killing errors (#9) | Structured error responses with recovery suggestions |
-| Cross-Platform & Compatibility | Path encoding (#12), version skew (#13), addon conflicts (#14) | pathlib usage, version checking, graceful addon conflict handling |
-
-## Domain-Specific Anti-Patterns
-
-Patterns that seem reasonable but are consistently wrong in this domain.
-
-| Anti-Pattern | Why It Seems Right | Why It Fails | Instead |
-|-------------|-------------------|--------------|---------|
-| One MCP tool per bpy operator | Clean API mapping | Tool explosion, 500+ tools, unusable token budget | Intent-based tools or code execution |
-| Raw `exec()` for flexibility | Covers all Blender operations | Security nightmare, no validation | AST-checked execution with import whitelist |
-| Synchronous socket protocol | Simple request/response | Long operations timeout, no progress feedback | Async jobs with status polling |
-| Cached bpy.data references | Performance optimization | Dangling pointers cause crashes | Name-based resolution per-call |
-| Relying on operator `poll()` | Let Blender validate context | Unhelpful error messages, silent failures | Explicit context setup with meaningful errors |
-| FBX as universal interchange | Industry standard format | Lossy, proprietary, convention mismatches | glTF 2.0 or validated FBX presets |
-| Text-only tool responses for 3D | Lower bandwidth/tokens | LLM cannot verify visual correctness | Viewport screenshots after mutations |
-| Global undo during automation | Safety net for recovery | Memory explosion, state corruption | File-level checkpoints, disable global undo |
-
-## "Looks Working But Isn't" Checklist
-
-Things that pass basic testing but fail in real workflows.
-
-- [ ] **Socket recovery:** Kill and restart the MCP server mid-session. Does Blender addon recover the connection without restarting Blender?
-- [ ] **Long operation:** Trigger a 2-minute Blender operation (subdivide a 1M-poly mesh). Does the MCP connection survive?
-- [ ] **Rapid fire:** Send 10 MCP commands in 2 seconds. Do all execute correctly without crashes?
-- [ ] **Error recovery:** Cause a tool to fail (e.g., operate on deleted object). Does the next tool call work correctly?
-- [ ] **Memory stability:** Run 50 create/delete cycles. Does Blender memory return to baseline?
-- [ ] **Visual accuracy:** Create a rigged character via MCP. Compare viewport screenshot with expected result. Are bones oriented correctly?
-- [ ] **FBX round-trip:** Export from Blender, import to Unity, compare vertex count, bone count, and bounding box. All match within 1%?
-- [ ] **Code execution safety:** Submit code with `import os; os.listdir("/")` through execute_code tool. Is it blocked?
-- [ ] **Context handling:** Call a mesh operation when an armature is selected. Does it return a meaningful error, not `poll() failed`?
-- [ ] **Token budget:** Start a new session with all tools loaded. How many tokens are consumed before the first user message? Under 10K?
+- [ ] **Procedural building:** Often missing interior geometry -- verify walls have thickness (not paper-thin planes), floors have undersides, windows have frames (not holes)
+- [ ] **Furnished room:** Often missing collision meshes -- verify every prop has a simplified collision shape for player interaction
+- [ ] **Terrain vegetation scatter:** Often missing LOD -- verify scattered objects have LOD groups set up, not just the base mesh
+- [ ] **Material assignment:** Often missing PBR maps -- verify not just albedo but also normal, roughness, metallic, AO maps are generated and assigned
+- [ ] **UV unwrap:** Often missing texel density validation -- verify UV density matches the scene standard (10.24 px/cm), not just that UVs exist
+- [ ] **Export validation:** Often missing scale check -- verify exported mesh matches expected world-space dimensions in Unity (1 Blender unit = 1 Unity meter)
+- [ ] **Scene composition:** Often missing lighting setup -- verify scene has proper light sources (sun, ambient, point lights for interiors), not just geometry
+- [ ] **Kit piece snapping:** Often missing gap check -- verify pieces snap without visible seams (gap < 0.5mm), not just that they align to grid
+- [ ] **Tripo cleanup pipeline:** Often missing de-lighting -- verify albedo has no baked-in shadows/ambient occlusion from the AI generator
+- [ ] **LOD chain:** Often missing silhouette validation -- verify LOD3 is still recognizable as the same object, not just that it has fewer polygons
 
 ## Recovery Strategies
 
+When pitfalls occur despite prevention, how to recover.
+
 | Pitfall | Recovery Cost | Recovery Steps |
-|---------|--------------|----------------|
-| Tool explosion (100K+ tokens/session) | HIGH | Redesign to dynamic toolsets. Requires rewriting tool registration and adding discovery/describe meta-tools. |
-| Socket timeout on long operations | MEDIUM | Add job queue and status polling to addon. Keep existing sync path for quick operations. |
-| No visual verification | MEDIUM | Add viewport capture to existing tool responses. Requires adding screenshot capability to Blender addon. |
-| Security hole via exec() | HIGH | Implement AST parser and import whitelist. Existing code paths must be audited and restricted. |
-| Threading crash | HIGH | Rewrite addon to use queue+timer pattern. All existing bpy calls in thread context must be moved. |
-| FBX corruption | LOW | Create and distribute standardized export preset. Add validation scripts. |
-| Operator context failures | LOW | Add context setup wrapper around each bpy.ops call. Per-tool fix. |
-| Undo memory explosion | LOW | Add undo disable/enable wrapper around automated sequences. |
-| Unhelpful error responses | MEDIUM | Standardize error format across all tools. Add bpy error code translation. |
-| Data block reference crash | MEDIUM | Refactor all cached references to name-based resolution. Requires auditing all addon code. |
+|---------|---------------|----------------|
+| Placeholder primitives in production | HIGH | Replace every primitive with parametric mesh generator. Requires building mesh library retroactively. Worst case: regenerate entire scene. |
+| Plastic-looking materials | MEDIUM | Add roughness variation maps to all materials. Can be done post-hoc with procedural node graph updates. Does not require regenerating geometry. |
+| No vertical terrain features | HIGH | Add cliff/overhang mesh overlay system. Requires new generator code and re-placement on existing terrain. Cannot fix existing heightmap. |
+| Scene budget exceeded | MEDIUM | Audit scene, identify over-budget objects, reduce LOD levels, merge instances, remove unnecessary props. Can be done without regenerating assets. |
+| Cookie-cutter buildings | MEDIUM | Add variation overlays (vertex color randomization, narrative props, damage states). Does not require regenerating structural mesh. |
+| Terrain-building seam gaps | MEDIUM | Add foundation meshes and terrain flattening. Can be retrofitted to existing buildings. |
+| Style mismatch between pipelines | MEDIUM | Apply style transfer / color grading pass to normalize. Can be automated as a pipeline step. |
+| LOD silhouette destruction | LOW | Re-generate LOD chain with silhouette-preserving weights. Does not affect LOD0. |
+| Boolean dirty geometry | MEDIUM | Run post-boolean cleanup on affected meshes. May require re-unwrapping UVs and re-baking textures. |
+| Context window bloat | LOW | Implement state persistence, compact and reload from files. Existing generation is not lost, just context. |
+
+## Pitfall-to-Phase Mapping
+
+How roadmap phases should address these pitfalls.
+
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Placeholder primitives | Phase 1: Mesh Foundation | Generate 10 props, run mesh_analyze -- all must pass A/B topology grade |
+| Plastic materials | Phase 1: Mesh Foundation | Apply material to test object, render in MATERIAL shading, verify non-uniform specular highlights |
+| No vertical terrain | Phase 2: Terrain and Environment | Generate terrain with cliff feature, verify vertical faces exist and cave entrance transitions work |
+| Scene budget overflow | Phase 2: Terrain and Environment | Furnish 5 rooms, run scene profiler, verify total under room budget |
+| Cookie-cutter buildings | Phase 3: Building and Architecture | Generate town of 20 buildings, run silhouette_test comparison -- all must be distinguishable |
+| Terrain-building gaps | Phase 2: Terrain and Environment | Place building on sloped terrain, screenshot from below -- verify no gap visible |
+| Pipeline style mismatch | Phase 4: Pipeline Integration | Place Tripo character next to procedural building, run validate_art_style -- both pass |
+| LOD silhouette destruction | Phase 1: Mesh Foundation | Generate LOD chain for 5 asset types, verify LOD2 silhouette score within 15% of LOD0 |
+| Boolean dirty geometry | Phase 1: Mesh Foundation | Run boolean test suite, verify 0 non-manifold edges on all results |
+| Context window bloat | Phase 1: Mesh Foundation | Generate 20 objects in sequence, verify state persisted to disk and retrievable |
 
 ## Sources
 
-### Official Documentation (HIGH confidence)
-- [Blender Python API: Gotchas](https://docs.blender.org/api/current/info_gotcha.html) -- Threading prohibition, operator context, data block references
-- [Blender Python API: Best Practice](https://docs.blender.org/api/current/info_best_practice.html) -- Data API vs operators, context handling
-- [Blender Python API: Application Timers](https://docs.blender.org/api/current/bpy.app.timers.html) -- Timer-based main thread dispatch
-- [MCP Specification: Transports](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) -- stdio vs SSE vs Streamable HTTP
-- [MCP Error Handling Guide](https://mcpcat.io/guides/error-handling-custom-mcp-servers/) -- Three-tier error model, JSON-RPC codes
-- [Anthropic Engineering: Code Execution with MCP](https://www.anthropic.com/engineering/code-execution-with-mcp) -- 98.7% token reduction via code execution pattern
+### Project Research (HIGH confidence -- verified against codebase and prior analysis)
+- `.planning/research/3d-modeling-gap-analysis.md` -- 67 gaps identified, primitives-as-placeholders is systemic issue
+- `.planning/research/AAA_QUALITY_ASSETS.md` -- PBR quality standards, roughness variation, polygon budgets, texture resolutions
+- `.planning/research/AAA_BEST_PRACTICES_COMPREHENSIVE.md` -- Modular kit design, terrain blending, LOD strategy, draw call budgets
+- `.planning/research/MAP_BUILDING_TECHNIQUES.md` -- Terrain splatmaps, spline carving, level streaming, cliff face approaches
+- `.planning/research/CHARACTER_MESH_QUALITY_TECHNIQUES.md` -- Primitive assembly vs continuous field, Skin Modifier approach
+- `.planning/research/TEXTURING_ENVIRONMENTS_RESEARCH.md` -- Splatmap blending, anti-tiling, weathering systems
+- `.planning/research/AI_MESH_GENERATION_TECHNIQUES.md` -- SDF-based mesh extraction, topology quality from AI vs procedural
 
-### Issue Trackers & Project Analysis (HIGH confidence)
-- [blender-mcp Issue #50: Request Timed Out](https://github.com/ahujasid/blender-mcp/issues/50) -- Socket timeout failures
-- [blender-mcp Issue #73: Connected but no response](https://github.com/ahujasid/blender-mcp/issues/73) -- Silent connection failures
-- [blender-mcp Issue #137: Connection failing](https://github.com/ahujasid/blender-mcp/issues/137) -- Recurring connection reliability problems
-- [Blender Bug #123088: FBX Normals export issue](https://projects.blender.org/blender/blender/issues/123088) -- IndexToDirect normals misinterpreted by Unity
-- [Blender Bug T60934: Undo crashes in background mode](https://developer.blender.org/T60934) -- Undo system unreliable for automation
+### Memory Files (MEDIUM confidence -- point-in-time observations, verified against project state)
+- `project_visual_quality_crisis.md` -- "Generated 3D is primitive boxes with flat colors"
+- `project_v5_gap_analysis.md` -- 192 gaps: 63 equipment, 83 world, 46 visual
+- `project_template_quality_audit.md` -- 293 generators at 72% AAA readiness
 
-### Industry Analysis (MEDIUM confidence)
-- [Speakeasy: Reducing MCP token usage by 100x](https://www.speakeasy.com/blog/how-we-reduced-token-usage-by-100x-dynamic-toolsets-v2) -- Dynamic toolsets achieving 96.7% token reduction
-- [a16z: Deep Dive Into MCP and AI Tooling](https://a16z.com/a-deep-dive-into-mcp-and-the-future-of-ai-tooling/) -- Tool granularity analysis
-- [Jenova.ai: MCP Context Overload](https://www.jenova.ai/en/resources/mcp-tool-scalability-problem) -- Performance degradation with tool count
-- [Eclipse Source: MCP and Context Overload](https://eclipsesource.com/blogs/2026/01/22/mcp-context-overload/) -- 25-30% context window consumed by tool schemas
-- [Socket communication with Blender](https://ciesie.com/post/blender_sockets/) -- Timer-based socket architecture for Blender addon
-
-### Community & Practical Reports (MEDIUM confidence)
-- [Blender Developer Forum: Thread/socket issue](https://devtalk.blender.org/t/blender-thread-socket-issue/17273) -- Threading crash patterns
-- [Blender Developer Forum: Application timers usage](https://devtalk.blender.org/t/about-using-application-timers-bpy-app-timers/9593) -- Timer best practices
-- [Unity Discussions: FBX import problems in 2025](https://discussions.unity.com/t/fbx-import-problems-in-2025/1576069) -- Ongoing FBX import issues
-- [MCP Server Security Report (Astrix)](https://astrix.security/learn/blog/state-of-mcp-server-security-2025/) -- 53% of servers use static API keys
-- [MCP Vulnerabilities (Composio)](https://composio.dev/content/mcp-vulnerabilities-every-developer-should-know) -- Confused deputy problem, prompt injection
+### Industry References (HIGH confidence -- cross-referenced)
+- Polycount Wiki -- Triangle budgets, LOD strategy, modular kit design
+- Google Filament PBR documentation -- Roughness variation importance
+- DOOM 2016 Graphics Study (Adrian Courreges) -- Scene budget management
+- GDC 2011 Fast SSS approximation -- Character rendering quality
+- Bethesda/FromSoftware modular design -- Kit-based construction at 25-40 pieces per kit
+- Unreal Engine Landscape system -- Spline terrain carving, height-blend splatmaps
+- Unity URP documentation -- SRP Batcher, LOD Groups, GPU instancing
 
 ---
-*Pitfalls research for: AI Game Dev Toolkit (MCP Servers for Blender + Unity)*
-*Researched: 2026-03-18*
-*Confidence: HIGH overall -- critical pitfalls verified against official docs and real-world failure reports*
+*Pitfalls research for: AAA Procedural 3D Architecture (Blender + Unity pipeline)*
+*Researched: 2026-03-30*
+*Confidence: HIGH -- critical pitfalls verified against existing project research, gap analysis, and AAA benchmarks*
