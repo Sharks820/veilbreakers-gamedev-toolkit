@@ -17,8 +17,11 @@ from blender_addon.handlers._mesh_bridge import (
     VEGETATION_GENERATOR_MAP,
     DUNGEON_PROP_MAP,
     CASTLE_ELEMENT_MAP,
+    PROP_GENERATOR_MAP,
+    CATEGORY_MATERIAL_MAP,
     generate_lod_specs,
     resolve_generator,
+    get_material_for_category,
 )
 
 
@@ -416,3 +419,74 @@ class TestMeshFromSpecPureLogic:
         result = mesh_from_spec(spec)
         # Should complete without error
         assert result is not None
+
+
+# ---------------------------------------------------------------------------
+# CATEGORY_MATERIAL_MAP tests -- procedural material auto-assignment
+# ---------------------------------------------------------------------------
+
+# All generator categories found in procedural_meshes.py
+ALL_GENERATOR_CATEGORIES = [
+    "furniture", "vegetation", "dungeon_prop", "weapon", "armor",
+    "architecture", "building", "container", "dark_fantasy",
+    "monster_part", "monster_body", "projectile", "trap",
+    "light_source", "wall_decor", "crafting", "vehicle",
+    "structural", "fortification", "sign", "natural",
+    "fence_barrier", "door", "camp", "infrastructure",
+    "consumable", "crafting_material", "currency", "key_item",
+    "combat_item", "forest_animal", "mountain_animal",
+    "domestic_animal", "vermin", "swamp_animal",
+]
+
+
+class TestCategoryMaterialMap:
+    """Tests for CATEGORY_MATERIAL_MAP coverage and validity."""
+
+    @pytest.mark.parametrize("category", ALL_GENERATOR_CATEGORIES)
+    def test_every_generator_category_has_material(self, category: str) -> None:
+        """Every generator category must map to a procedural material."""
+        assert category in CATEGORY_MATERIAL_MAP, (
+            f"CATEGORY_MATERIAL_MAP missing category '{category}'"
+        )
+
+    @pytest.mark.parametrize("category", ALL_GENERATOR_CATEGORIES)
+    def test_material_key_exists_in_library(self, category: str) -> None:
+        """Every mapped material key must exist in MATERIAL_LIBRARY."""
+        from blender_addon.handlers.procedural_materials import MATERIAL_LIBRARY
+        material_key = CATEGORY_MATERIAL_MAP[category]
+        assert material_key in MATERIAL_LIBRARY, (
+            f"Category '{category}' maps to '{material_key}' "
+            f"which is not in MATERIAL_LIBRARY"
+        )
+
+    def test_total_mappings_at_least_21(self) -> None:
+        """Must cover at least 21 generator categories."""
+        assert len(CATEGORY_MATERIAL_MAP) >= 21, (
+            f"Expected >= 21 category mappings, got {len(CATEGORY_MATERIAL_MAP)}"
+        )
+
+    def test_get_material_for_category_returns_key(self) -> None:
+        result = get_material_for_category("furniture")
+        assert result == "rough_timber"
+
+    def test_get_material_for_category_returns_none_for_unknown(self) -> None:
+        result = get_material_for_category("nonexistent_category_xyz")
+        assert result is None
+
+    def test_furniture_maps_to_wood_material(self) -> None:
+        key = CATEGORY_MATERIAL_MAP["furniture"]
+        assert "timber" in key or "wood" in key, (
+            f"Furniture should map to a wood material, got '{key}'"
+        )
+
+    def test_weapon_maps_to_metal_material(self) -> None:
+        key = CATEGORY_MATERIAL_MAP["weapon"]
+        assert "iron" in key or "steel" in key or "metal" in key, (
+            f"Weapons should map to a metal material, got '{key}'"
+        )
+
+    def test_architecture_maps_to_stone_material(self) -> None:
+        key = CATEGORY_MATERIAL_MAP["architecture"]
+        assert "stone" in key, (
+            f"Architecture should map to a stone material, got '{key}'"
+        )
