@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v6.0
-milestone_name: Tripo Integration & Code Reviewer v3
+milestone: v7.0
+milestone_name: AAA Procedural City Production
 status: active
 stopped_at: null
-last_updated: 2026-03-30T00:00:00.000Z
+last_updated: 2026-03-30T12:30:00.000Z
 last_activity: 2026-03-30
 progress:
-  total_phases: 24
-  completed_phases: 24
-  total_plans: 24
-  completed_plans: 24
+  total_phases: 9
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 ## Current Position
 
-Phase: All 24 phases complete
+Phase: Phase 30 (P0) - Mesh Foundation
 Plan: —
-Status: Milestone v6.0 in progress - audit fixes complete, code reviewer deployed
-Last activity: 2026-03-30 -- Meta-optimization session completed
+Status: Milestone v7.0 in progress - v4.0 research complete, v6.0 delivered, ROADMAP updated with 9 phases (30-38)
+Last activity: 2026-03-30 -- v7.0 milestone initialized, ROADMAP phases defined
 
 ## Accumulated Context
 
@@ -53,6 +53,49 @@ Recent decisions affecting v6.0 work:
 - [meta]: zai analyze_image tested — Blender connection works, URL format limitation noted for contact_sheet workflow
 
 ### v6.0 Deliverables
+
+**Branch:** feature/unified-code-reviewer-v5 (MERGED)
+**Status:** Complete
+- Tripo Studio API client (v3.0, JWT auth, subscription credits)
+- Unified code reviewer v3 (210 rules, DeepAnalyzer, 0% FP, 82.3% confidence)
+- aiohttp → httpx migration
+- fal.download fix
+- FAL_KEY environment variable setup
+- 17,900 tests passing
+- All mcp-unity references removed from codebase
+
+### v7.0 Deliverables
+
+**Branch:** feature/aaa-procedural-city (TO BE CREATED)
+**Status:** Starting Phase 30 (P0: Mesh Foundation)
+
+**Planned Phases (P0-P6, phases 30-38):**
+- P0 (Phase 30): Mesh Foundation — 20+ parametric generators, LOD presets
+- P1 (Phase 31): Terrain & Environment — Splatmaps, cliff meshes, biome system
+- P2 (Phase 32): Building System — Modular kit (300+ pieces), trim sheets, composition
+- P3 (Phase 33): Interior System — Room shells, furniture placement, interactive props
+- P4 (Phase 34): Multi-biome Terrain — Biome blending, corruption-aware
+- P5 (Phase 35): Multi-backend AI — Tripo + Hunyuan, unified art style
+- P6 (Phase 36): World Composer — Settlement generation, road networks
+- P7 (Phase 37): Pipeline Integration — Full map composition, state persistence
+- P8 (Phase 38): Starter Town — 10-15 buildings, furnished interiors, market area
+
+**Key Requirements:**
+- Ultra-think quality (Skyrim/Fable/AC Valhalla benchmark)
+- Visual-first AI workflow (every inch verified in Blender)
+- No Hugging Face (8GB VRAM limit) — Tripo pipeline only
+- Complete starter town for testing before stopping
+- AAA-quality environmental props throughout
+
+**Branch:** feature/aaa-procedural-architecture (NEW - to be created)
+**Status:** Starting Phase 25
+
+**Planned Phases:**
+- Phase 25: Procedural Mesh Foundation — 20+ parametric generators (tables, chairs, barrels, chests, shelves, beds, rocks, trees, bushes)
+- Phase 26: Terrain and Environment — Height-blended splatmaps, cliff meshes, biome system, vegetation scatter
+- Phase 27: Building and Architecture — Modular kit expansion (300+ pieces), trim sheets, building composition, interior room shells
+- Phase 28: Pipeline Integration and Starter Town — Multi-backend AI integration, starter town (10-15 buildings)
+- Phase 29: Research and Polish — AAA technique documentation, performance optimization, visual quality review
 
 **Branch:** feature/unified-code-reviewer-v5
 **Status:** Active (audit complete, code reviewer deployed)
