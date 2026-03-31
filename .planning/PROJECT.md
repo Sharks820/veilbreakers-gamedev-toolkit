@@ -30,7 +30,7 @@ v2.0 delivered (2026-03-21): 37 MCP tools (15 Blender + 22 Unity), 309 actions, 
 - ✓ Unity TCP bridge (direct editor communication, no mcp-unity dependency)
 - ✓ QA/Testing (test runner, profiler, memory leaks, static analysis, compile error detection)
 - ✓ Build pipeline (multi-platform, Addressables, CI/CD, versioning, shader stripping)
-- ✓ 127 procedural mesh generators across 21 categories
+- ✓ 267 procedural mesh generators across 21 categories
 
 v3.0 delivered (2026-03-21): COMPLETE
 - ✓ AAA Mesh Quality + Professional Systems (all 56 requirements, 8,473+ tests, 24 phases)
@@ -133,7 +133,7 @@ v3.0 delivered (2026-03-21): COMPLETE
 | v1.0 code generation pattern for Unity tools | Generates C# scripts written to disk, not live RPC | ✓ Good |
 | v2.0 Unity TCP bridge (not mcp-unity) | Direct editor communication, no external dependency | ✓ Good |
 | v2.0 Line-based string concat for C# templates | Consistent, readable, easy to test | ✓ Good |
-| v3.0 Generator mapping pattern | Clean type-to-generator dispatch for all 127 procedural meshes | ✓ Good |
+| v3.0 Generator mapping pattern | Clean type-to-generator dispatch for all 267 procedural meshes | ✓ Good |
 | v3.0 bpy-guarded bridge pattern | Pure-logic + try/import bpy in same module | ✓ Good |
 | v3.0 Pure-logic character validation | Enables comprehensive pytest testing without Blender | ✓ Good |
 | v3.0 GDC 2011 fast SSS approximation | Real-time skin rendering in URP | ✓ Good |

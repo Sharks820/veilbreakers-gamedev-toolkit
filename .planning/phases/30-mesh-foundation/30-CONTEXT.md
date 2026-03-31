@@ -23,7 +23,7 @@ All implementation choices are at Claude's discretion — discuss phase was skip
 Codebase context will be gathered during plan-phase research.
 
 ## Existing Systems
-- 127+ procedural mesh generators across 21 categories (procedural_meshes.py)
+- 267 procedural mesh generators across 21 categories (procedural_meshes.py)
 - Pure-logic/bpy-guarded split: generators return MeshSpec dicts, only _mesh_bridge.py touches bpy/bmesh
 - xatlas for UV unwrapping
 - pymeshlab for high-quality remeshing/decimation
@@ -46,11 +46,12 @@ Codebase context will be gathered during plan-phase research.
 
 No specific requirements — discuss phase skipped. Refer to ROADMAP phase description and success criteria.
 
-Critical Rules (from v4.0 PITFALLS.md):
-- NO PLACEHOLDER PRIMITIVES — every generator must produce real mesh geometry
-- NO UNIFORM ROUGHNESS — always use roughness texture maps with variation
-- NO GLOBAL RANDOM STATE — always use seed-based RNG
+Critical Rules (revised 2026-03-31 — see 30-RESEARCH.md):
+- OUTPUT QUALITY OVER CONSTRUCTION METHOD — primitives are valid building blocks; measure final output quality via contact sheets, vertex density, and topology checks (see 30-01-GAP-ANALYSIS.md v2)
+- NO UNIFORM ROUGHNESS — always use roughness texture maps with variation (noise-driven, never single float)
+- NO GLOBAL RANDOM STATE — always use seed-based RNG (`random.Random(seed)`)
 - QUALITY GATE AFTER EVERY STEP — generate → validate → next step
+- AUTO-ASSIGN PROCEDURAL MATERIALS — every generated mesh gets appropriate material from procedural_materials.py (not flat-color Principled BSDF)
 </specifics>
 
 <deferred>
