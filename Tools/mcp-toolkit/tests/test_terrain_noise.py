@@ -220,6 +220,85 @@ class TestTerrainPresets:
 
 
 # ---------------------------------------------------------------------------
+# Domain warp integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestDomainWarpIntegration:
+    """Test domain warping integration in generate_heightmap."""
+
+    def test_warp_produces_different_output(self):
+        """generate_heightmap with warp_strength=0.5 differs from warp_strength=0.0."""
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        h_no_warp = generate_heightmap(
+            128, 128, seed=42, terrain_type="mountains", warp_strength=0.0
+        )
+        h_warped = generate_heightmap(
+            128, 128, seed=42, terrain_type="mountains", warp_strength=0.5
+        )
+        assert not np.array_equal(h_no_warp, h_warped), (
+            "Domain warping with warp_strength=0.5 should produce different output"
+        )
+
+    def test_warp_backward_compat(self):
+        """warp_strength=0.0 produces identical output to no warp param (backward compat)."""
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        h_default = generate_heightmap(128, 128, seed=42, terrain_type="mountains")
+        h_explicit_zero = generate_heightmap(
+            128, 128, seed=42, terrain_type="mountains", warp_strength=0.0
+        )
+        np.testing.assert_array_equal(
+            h_default, h_explicit_zero,
+            err_msg="warp_strength=0.0 should be identical to default (no warp)"
+        )
+
+    def test_warp_produces_valid_terrain(self):
+        """Warped heightmap has values in [0,1] with meaningful variation (std > 0.05)."""
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        hmap = generate_heightmap(
+            128, 128, seed=42, terrain_type="mountains", warp_strength=0.5
+        )
+        assert hmap.min() >= 0.0
+        assert hmap.max() <= 1.0
+        assert hmap.std() > 0.05, (
+            f"Warped terrain std={hmap.std():.4f} is too low (< 0.05), terrain is flat"
+        )
+
+    def test_warp_scale_affects_output(self):
+        """Different warp_scale values produce different results."""
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        h1 = generate_heightmap(
+            64, 64, seed=42, terrain_type="mountains",
+            warp_strength=0.5, warp_scale=0.3,
+        )
+        h2 = generate_heightmap(
+            64, 64, seed=42, terrain_type="mountains",
+            warp_strength=0.5, warp_scale=1.5,
+        )
+        assert not np.array_equal(h1, h2), (
+            "Different warp_scale should produce different results"
+        )
+
+    def test_warp_deterministic(self):
+        """Same seed + warp params produce identical output."""
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        h1 = generate_heightmap(
+            64, 64, seed=42, terrain_type="mountains",
+            warp_strength=0.5, warp_scale=0.5,
+        )
+        h2 = generate_heightmap(
+            64, 64, seed=42, terrain_type="mountains",
+            warp_strength=0.5, warp_scale=0.5,
+        )
+        np.testing.assert_array_equal(h1, h2)
+
+
+# ---------------------------------------------------------------------------
 # Slope map tests
 # ---------------------------------------------------------------------------
 
