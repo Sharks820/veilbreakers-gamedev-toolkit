@@ -1444,3 +1444,88 @@ def handle_snap_to_terrain(params: dict) -> dict:
         "total_objects": len(object_names),
         "results": results,
     }
+
+
+# ---------------------------------------------------------------------------
+# Terrain Flatten Zones -- building foundation support (MESH-05)
+# ---------------------------------------------------------------------------
+
+
+def flatten_terrain_zone(
+    heightmap: np.ndarray,
+    center_x: float,
+    center_y: float,
+    radius: float,
+    target_height: float | None = None,
+    blend_width: float = 0.1,
+    seed: int = 0,
+) -> np.ndarray:
+    """Flatten a circular zone for building placement, with smooth blend.
+
+    Pure-logic function. Creates a level platform suitable for building
+    foundations with a smoothstep transition to surrounding terrain.
+    No floating buildings -- the terrain is lowered/raised to meet the
+    building footprint exactly.
+
+    Args:
+        heightmap: 2D numpy array of height values in [0, 1].
+        center_x: Normalized X coordinate of flatten center (0-1).
+        center_y: Normalized Y coordinate of flatten center (0-1).
+        radius: Normalized radius of the flat zone (0-1).
+        target_height: Target height for the flat zone. If None, uses the
+            average height within the radius.
+        blend_width: Width of the smooth transition zone (normalized).
+        seed: Random seed (reserved for future noise-based blend).
+
+    Returns:
+        New heightmap with the flattened zone applied, clipped to [0, 1].
+    """
+    rows, cols = heightmap.shape
+
+    ys = np.arange(rows, dtype=np.float64) / rows
+    xs = np.arange(cols, dtype=np.float64) / cols
+    yy, xx = np.meshgrid(ys, xs, indexing="ij")
+    dist = np.sqrt((xx - center_x) ** 2 + (yy - center_y) ** 2)
+
+    # Compute target height from average inside radius if not specified
+    mask = dist < radius
+    if target_height is None:
+        target_height = float(heightmap[mask].mean()) if mask.any() else 0.5
+
+    # Blend factor: 1.0 inside radius, smooth fade to 0.0 at radius+blend_width
+    blend = np.clip(1.0 - (dist - radius) / max(blend_width, 1e-6), 0.0, 1.0)
+    # Smoothstep: 3t^2 - 2t^3 for C1 continuity (no step discontinuity)
+    blend = blend * blend * (3.0 - 2.0 * blend)
+
+    result = heightmap * (1.0 - blend) + target_height * blend
+    return np.clip(result, 0.0, 1.0)
+
+
+def flatten_multiple_zones(
+    heightmap: np.ndarray,
+    zones: list[dict],
+) -> np.ndarray:
+    """Apply multiple flatten zones sequentially.
+
+    Each zone dict must have center_x, center_y, radius.
+    Optional keys: target_height, blend_width, seed.
+
+    Args:
+        heightmap: 2D numpy array of height values in [0, 1].
+        zones: List of zone dicts with flatten parameters.
+
+    Returns:
+        New heightmap with all zones applied.
+    """
+    result = heightmap
+    for zone in zones:
+        result = flatten_terrain_zone(
+            result,
+            center_x=zone["center_x"],
+            center_y=zone["center_y"],
+            radius=zone["radius"],
+            target_height=zone.get("target_height"),
+            blend_width=zone.get("blend_width", 0.1),
+            seed=zone.get("seed", 0),
+        )
+    return result
