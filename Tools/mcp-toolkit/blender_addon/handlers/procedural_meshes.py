@@ -80,16 +80,86 @@ def _get_trig_table(segments: int) -> tuple[tuple[float, float], ...]:
 # ---------------------------------------------------------------------------
 
 
+def _auto_detect_sharp_edges(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, ...]],
+    angle_threshold_deg: float = 35.0,
+) -> list[list[int]]:
+    """Detect sharp edges by dihedral angle between adjacent faces.
+
+    Returns list of [vert_a, vert_b] pairs for edges whose face angle
+    exceeds the threshold, plus all boundary edges. This is embedded in
+    the MeshSpec so the Blender bridge can mark them sharp at creation time.
+    """
+    if not vertices or not faces:
+        return []
+
+    threshold_rad = math.pi * angle_threshold_deg / 180.0
+    cos_threshold = math.cos(threshold_rad)
+
+    # Build edge -> face adjacency + face normals in a single pass
+    edge_faces: dict[tuple[int, int], list[int]] = {}
+    face_normals: list[tuple[float, float, float]] = []
+
+    for fi, face in enumerate(faces):
+        # Newell's method for face normal
+        nx, ny, nz = 0.0, 0.0, 0.0
+        n = len(face)
+        for i in range(n):
+            v0 = vertices[face[i]]
+            v1 = vertices[face[(i + 1) % n]]
+            nx += (v0[1] - v1[1]) * (v0[2] + v1[2])
+            ny += (v0[2] - v1[2]) * (v0[0] + v1[0])
+            nz += (v0[0] - v1[0]) * (v0[1] + v1[1])
+        length = math.sqrt(nx * nx + ny * ny + nz * nz)
+        if length > 1e-10:
+            nx /= length
+            ny /= length
+            nz /= length
+        face_normals.append((nx, ny, nz))
+
+        for i in range(n):
+            a, b = face[i], face[(i + 1) % n]
+            key = (min(a, b), max(a, b))
+            if key not in edge_faces:
+                edge_faces[key] = []
+            edge_faces[key].append(fi)
+
+    sharp: list[list[int]] = []
+    for (a, b), fi_list in edge_faces.items():
+        if len(fi_list) == 2:
+            n0 = face_normals[fi_list[0]]
+            n1 = face_normals[fi_list[1]]
+            dot = n0[0] * n1[0] + n0[1] * n1[1] + n0[2] * n1[2]
+            dot = max(-1.0, min(1.0, dot))
+            if dot < cos_threshold:
+                sharp.append([a, b])
+        elif len(fi_list) == 1:
+            sharp.append([a, b])
+
+    return sharp
+
+
 def _make_result(
     name: str,
     vertices: list[tuple[float, float, float]],
     faces: list[tuple[int, ...]],
     uvs: list[tuple[float, float]] | None = None,
+    sharp_angle: float = 35.0,
     **extra_meta: Any,
 ) -> MeshSpec:
-    """Package vertices/faces into a standard mesh spec dict."""
+    """Package vertices/faces into a standard mesh spec dict.
+
+    Automatically computes sharp edges by dihedral angle and embeds them
+    in the MeshSpec for the Blender bridge to process.
+
+    Args:
+        sharp_angle: Dihedral angle threshold (degrees) for sharp edge
+            detection. Edges sharper than this get marked. Set to 0 to
+            disable auto-detection.
+    """
     dims = _compute_dimensions(vertices)
-    return {
+    result: MeshSpec = {
         "vertices": vertices,
         "faces": faces,
         "uvs": uvs or [],
@@ -101,6 +171,12 @@ def _make_result(
             **extra_meta,
         },
     }
+    # Auto-detect sharp edges for smooth shading support
+    if sharp_angle > 0 and vertices and faces:
+        result["sharp_edges"] = _auto_detect_sharp_edges(
+            vertices, faces, sharp_angle
+        )
+    return result
 
 
 def _compute_dimensions(

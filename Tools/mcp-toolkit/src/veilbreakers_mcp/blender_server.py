@@ -1313,7 +1313,8 @@ async def blender_mesh(
     action: Literal[
         "analyze", "repair", "game_check",
         "select", "edit", "boolean", "retopo", "sculpt",
-        "sculpt_brush", "dyntopo", "voxel_remesh", "face_sets", "multires"
+        "sculpt_brush", "dyntopo", "voxel_remesh", "face_sets", "multires",
+        "enhance", "bake_normals", "bake_ao", "bake_curvature", "validate_enhance"
     ],
     object_name: str,
     # Existing params (analyze/repair/game_check)
@@ -1381,14 +1382,30 @@ async def blender_mesh(
     adaptivity: float = 0.0,
     # Multires params (multires action)
     subdivisions: int = 1,
+    # Enhance params (enhance action) -- AAA geometry enhancement pipeline
+    enhance_profile: str = "prop",
+    subdiv_levels: int | None = None,
+    render_levels: int | None = None,
+    bevel_width_override: float | None = None,
+    bevel_segments_override: int | None = None,
+    sharp_angle: float | None = None,
+    crease_value: float | None = None,
+    displacement_strength: float | None = None,
+    apply_modifiers: bool = False,
+    skip_steps: list[str] | None = None,
+    # Bake normals params (bake_normals action)
+    image_size: int = 2048,
+    cage_extrusion: float = 0.02,
+    output_name: str | None = None,
     capture_viewport: bool = True
 ):
-    """Mesh topology analysis, repair, editing, booleans, retopology, and sculpting.
+    """Mesh topology analysis, repair, editing, booleans, retopology, sculpting, and AAA enhancement.
 
     Extended with position-based selection (GAP-01), transform operations (GAP-02),
-    loop cuts (GAP-03), bevel (GAP-04), merge/dissolve (GAP-05), and advanced
+    loop cuts (GAP-03), bevel (GAP-04), merge/dissolve (GAP-05), advanced
     sculpt operations: sculpt_brush (32 brush types), dyntopo (dynamic topology),
-    voxel_remesh, face_sets, and multires (multiresolution modifier).
+    voxel_remesh, face_sets, multires (multiresolution modifier), and AAA geometry
+    enhancement pipeline (enhance, bake_normals).
     """
     blender = get_blender_connection()
 
@@ -1565,6 +1582,65 @@ async def blender_mesh(
             params["action"] = operation
         result = await blender.send_command("mesh_multires", params)
         return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "enhance":
+        params = {"object_name": object_name, "profile": enhance_profile}
+        if subdiv_levels is not None:
+            params["subdiv_levels"] = subdiv_levels
+        if render_levels is not None:
+            params["render_levels"] = render_levels
+        if bevel_width_override is not None:
+            params["bevel_width"] = bevel_width_override
+        if bevel_segments_override is not None:
+            params["bevel_segments"] = bevel_segments_override
+        if sharp_angle is not None:
+            params["sharp_angle"] = sharp_angle
+        if crease_value is not None:
+            params["crease_value"] = crease_value
+        if displacement_strength is not None:
+            params["displacement_strength"] = displacement_strength
+        params["apply_modifiers"] = apply_modifiers
+        if skip_steps is not None:
+            params["skip_steps"] = skip_steps
+        result = await blender.send_command("mesh_enhance_geometry", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "bake_normals":
+        params = {
+            "object_name": object_name,
+            "image_size": image_size,
+            "cage_extrusion": cage_extrusion,
+        }
+        if output_name is not None:
+            params["output_name"] = output_name
+        result = await blender.send_command("mesh_bake_detail_normals", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "bake_ao":
+        params = {
+            "object_name": object_name,
+            "image_size": image_size,
+        }
+        if output_name is not None:
+            params["output_name"] = output_name
+        result = await blender.send_command("mesh_bake_ao_map", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "bake_curvature":
+        params = {
+            "object_name": object_name,
+            "image_size": image_size,
+        }
+        if output_name is not None:
+            params["output_name"] = output_name
+        result = await blender.send_command("mesh_bake_curvature_map", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "validate_enhance":
+        result = await blender.send_command(
+            "mesh_validate_enhancement", {"object_name": object_name}
+        )
+        return [json.dumps(result, indent=2, default=str)]
 
     return ["Unknown action"]
 
@@ -2664,6 +2740,20 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": f"room_{room.get('name', i)}", "error": str(e)})
 
+        # --- Step 2b: Enhance interior geometry (AAA quality) ---
+        for room_res in room_results:
+            room_obj_name = f"{int_name}_{room_res['name']}"
+            try:
+                await blender.send_command("mesh_enhance_geometry", {
+                    "object_name": room_obj_name,
+                    "profile": "architecture",
+                    "apply_modifiers": True,
+                })
+                steps_completed.append(f"enhance_{room_res['name']}")
+            except Exception:
+                # Enhancement is non-critical for interior; continue
+                pass
+
         # --- Step 3: Add storytelling/narrative props to each room ---
         if spec.get("storytelling_density", 0) > 0:
             for room in rooms:
@@ -2713,18 +2803,19 @@ async def asset_pipeline(
             "tripo_prop_queue": tripo_queue[:20] if tripo_queue else [],
             "tripo_props_remaining": max(0, len(tripo_queue) - 20),
             "next_steps": [
-                "--- ENHANCE VISUALS ---",
+                "--- ENHANCE VISUALS (auto-applied: architecture profile SubD + bevel + smooth shading) ---",
                 "1. Review interior: blender_viewport action=contact_sheet object_name=<room>",
                 "2. Add materials: blender_material action=create (stone_wall, wooden_floor, etc.)",
-                "3. Generate hero props with Tripo: asset_pipeline action=generate_3d prompt='dark fantasy <prop>'",
+                "3. Bake detail maps: blender_mesh action=bake_ao object_name=<room> (AO, curvature)",
+                "4. Generate hero props with Tripo: asset_pipeline action=generate_3d prompt='dark fantasy <prop>'",
                 "--- UNITY INTERIOR SETUP ---",
-                "4. Setup interior streaming: unity_world action=create_interior_streaming",
-                "5. Setup door system: unity_world action=create_door_system",
-                "6. Dungeon lighting: unity_world action=create_dungeon_lighting",
-                "7. Portal audio: unity_audio action=setup_portal_audio",
-                "8. Occlusion: unity_world action=setup_occlusion",
-                "9. NPC placement: unity_world action=create_npc_placement",
-                "10. Interaction prompts: unity_ux action=interaction_prompt",
+                "5. Setup interior streaming: unity_world action=create_interior_streaming",
+                "6. Setup door system: unity_world action=create_door_system",
+                "7. Dungeon lighting: unity_world action=create_dungeon_lighting",
+                "8. Portal audio: unity_audio action=setup_portal_audio",
+                "9. Occlusion: unity_world action=setup_occlusion",
+                "10. NPC placement: unity_world action=create_npc_placement",
+                "11. Interaction prompts: unity_ux action=interaction_prompt",
             ],
         }
         if tripo_queue:

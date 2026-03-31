@@ -369,6 +369,8 @@ class TestTool7BlenderMesh:
         "select", "edit", "boolean", "retopo", "sculpt",
         # v6: expanded sculpt/modeling operations
         "sculpt_brush", "dyntopo", "voxel_remesh", "face_sets", "multires",
+        # AAA geometry enhancement pipeline
+        "enhance", "bake_normals", "bake_ao", "bake_curvature", "validate_enhance",
     }
 
     def test_function_exists_and_is_async(self):
@@ -380,7 +382,7 @@ class TestTool7BlenderMesh:
     def test_action_literal_has_expected_values(self):
         values = _get_literal_values(blender_mesh, "action")
         assert values == self.EXPECTED_ACTIONS
-        assert len(values) == 13  # 8 original + 5 v6 sculpt expansions
+        assert len(values) == 18  # 8 original + 5 v6 sculpt + 5 AAA enhance
 
     def test_no_unreachable_actions(self):
         source = _get_source(blender_mesh)

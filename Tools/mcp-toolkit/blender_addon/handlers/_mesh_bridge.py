@@ -434,11 +434,17 @@ def mesh_from_spec(
     scale: tuple[float, float, float] = (1.0, 1.0, 1.0),
     collection: Any = None,
     parent: Any = None,
+    smooth_shading: bool = True,
+    auto_smooth_angle: float = 35.0,
 ) -> Any:
     """Convert a MeshSpec dict into a Blender mesh object.
 
     Uses the bmesh pattern from worldbuilding._spec_to_bmesh for vertex/face
     creation and optionally assigns UVs, normals, collection, and parent.
+
+    Now also supports:
+    - Smooth shading with auto-smooth angle threshold
+    - Edge annotations from MeshSpec: ``sharp_edges`` and ``crease_edges``
 
     When running outside Blender (bpy is a stub), returns a dict summary
     instead of a bpy.types.Object so that pure-logic tests can verify
@@ -446,12 +452,17 @@ def mesh_from_spec(
 
     Args:
         spec: MeshSpec dict with vertices, faces, uvs, metadata.
+            Optional keys:
+            - ``sharp_edges``: list of [vert_a, vert_b] pairs to mark sharp.
+            - ``crease_edges``: list of {"edge": [a, b], "value": float} dicts.
         name: Override object name. Falls back to spec metadata name.
         location: World-space position (x, y, z).
         rotation: Euler rotation in radians (x, y, z).
         scale: Scale factors (x, y, z).
         collection: Blender collection to link the object into.
         parent: Blender object to set as parent.
+        smooth_shading: Apply smooth shading to all faces (default True).
+        auto_smooth_angle: Auto-smooth angle in degrees (default 35.0).
 
     Returns:
         bpy.types.Object when Blender is available, otherwise a dict
@@ -469,6 +480,8 @@ def mesh_from_spec(
     verts = spec["vertices"]
     faces = spec["faces"]
     uvs = spec.get("uvs", [])
+    sharp_edges = spec.get("sharp_edges", [])
+    crease_edges = spec.get("crease_edges", [])
 
     # -- Fallback for non-Blender environments (testing) --
     if not _HAS_BPY or not hasattr(bpy, "data"):
@@ -476,6 +489,7 @@ def mesh_from_spec(
             "obj_name": obj_name,
             "vertex_count": len(verts),
             "face_count": len(faces),
+            "smooth_shading": smooth_shading,
         }
 
     # -- Blender path --
@@ -491,6 +505,39 @@ def mesh_from_spec(
             bm.faces.new([bm_verts[i] for i in face_indices])
         except (ValueError, IndexError):
             print(f"Warning: skipped degenerate face {face_indices}")
+
+    # Process edge annotations from MeshSpec
+    if sharp_edges or crease_edges:
+        bm.edges.ensure_lookup_table()
+
+        # Build vertex-pair -> edge lookup
+        edge_lookup: dict[tuple[int, int], Any] = {}
+        for edge in bm.edges:
+            key = (min(edge.verts[0].index, edge.verts[1].index),
+                   max(edge.verts[0].index, edge.verts[1].index))
+            edge_lookup[key] = edge
+
+        # Mark sharp edges
+        for se in sharp_edges:
+            if len(se) >= 2:
+                key = (min(se[0], se[1]), max(se[0], se[1]))
+                edge = edge_lookup.get(key)
+                if edge:
+                    edge.smooth = False
+
+        # Set edge creases
+        if crease_edges:
+            crease_layer = bm.edges.layers.float.get("crease_edge")
+            if crease_layer is None:
+                crease_layer = bm.edges.layers.float.new("crease_edge")
+            for ce in crease_edges:
+                edge_pair = ce.get("edge", [])
+                if len(edge_pair) >= 2:
+                    key = (min(edge_pair[0], edge_pair[1]),
+                           max(edge_pair[0], edge_pair[1]))
+                    edge = edge_lookup.get(key)
+                    if edge:
+                        edge[crease_layer] = ce.get("value", 1.0)
 
     # Assign UVs if present
     if uvs:
@@ -511,6 +558,15 @@ def mesh_from_spec(
     bm.to_mesh(mesh_data)
     bm.free()
 
+    # Apply smooth shading
+    if smooth_shading:
+        for poly in mesh_data.polygons:
+            poly.use_smooth = True
+        # Auto-smooth: Blender 3.x has use_auto_smooth, 4.x uses sharp edges
+        if hasattr(mesh_data, "use_auto_smooth"):
+            mesh_data.use_auto_smooth = True
+            mesh_data.auto_smooth_angle = _math_radians(auto_smooth_angle)
+
     obj = bpy.data.objects.new(obj_name, mesh_data)
     obj.location = location
     obj.rotation_euler = rotation
@@ -527,3 +583,8 @@ def mesh_from_spec(
         obj.parent = parent
 
     return obj
+
+
+def _math_radians(degrees: float) -> float:
+    """Convert degrees to radians (avoids importing math at module level)."""
+    return degrees * 3.141592653589793 / 180.0
