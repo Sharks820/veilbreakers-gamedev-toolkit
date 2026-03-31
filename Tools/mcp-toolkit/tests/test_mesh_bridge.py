@@ -22,6 +22,7 @@ from blender_addon.handlers._mesh_bridge import (
     generate_lod_specs,
     resolve_generator,
     get_material_for_category,
+    post_boolean_cleanup,
 )
 
 
@@ -490,3 +491,100 @@ class TestCategoryMaterialMap:
         assert "stone" in key, (
             f"Architecture should map to a stone material, got '{key}'"
         )
+
+
+# ---------------------------------------------------------------------------
+# Post-boolean cleanup tests
+# ---------------------------------------------------------------------------
+
+
+def _make_simple_cube():
+    """Create a simple cube for cleanup testing."""
+    verts = [
+        (-0.5, -0.5, -0.5), (0.5, -0.5, -0.5),
+        (0.5, 0.5, -0.5), (-0.5, 0.5, -0.5),
+        (-0.5, -0.5, 0.5), (0.5, -0.5, 0.5),
+        (0.5, 0.5, 0.5), (-0.5, 0.5, 0.5),
+    ]
+    faces = [
+        (0, 3, 2, 1), (4, 5, 6, 7),
+        (0, 1, 5, 4), (2, 3, 7, 6),
+        (0, 4, 7, 3), (1, 2, 6, 5),
+    ]
+    return verts, faces
+
+
+class TestPostBooleanCleanup:
+    """Tests for post_boolean_cleanup pure-logic mesh cleanup."""
+
+    def test_clean_mesh_unchanged(self) -> None:
+        """A clean cube should pass through with no changes."""
+        verts, faces = _make_simple_cube()
+        result = post_boolean_cleanup(verts, faces)
+        assert result["report"]["doubles_removed"] == 0
+        assert len(result["vertices"]) == 8
+        assert len(result["faces"]) == 6
+
+    def test_removes_duplicate_vertices(self) -> None:
+        """Vertices at the same location should be merged."""
+        verts = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (1.0, 1.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.00005, 0.00005, 0.00005),  # Near-duplicate of vertex 0
+        ]
+        faces = [
+            (0, 1, 2, 3),
+            (4, 1, 2),  # Uses near-duplicate
+        ]
+        result = post_boolean_cleanup(verts, faces, merge_distance=0.0001)
+        assert result["report"]["doubles_removed"] >= 1
+
+    def test_empty_mesh_returns_empty(self) -> None:
+        result = post_boolean_cleanup([], [])
+        assert result["vertices"] == []
+        assert result["faces"] == []
+        assert result["report"]["doubles_removed"] == 0
+
+    def test_report_has_all_keys(self) -> None:
+        verts, faces = _make_simple_cube()
+        result = post_boolean_cleanup(verts, faces)
+        report = result["report"]
+        assert "doubles_removed" in report
+        assert "normals_fixed" in report
+        assert "holes_filled" in report
+        assert "non_manifold_edges" in report
+
+    def test_degenerate_faces_removed(self) -> None:
+        """Faces that collapse to < 3 verts after merge should be removed."""
+        verts = [
+            (0.0, 0.0, 0.0),
+            (1.0, 0.0, 0.0),
+            (0.00005, 0.00005, 0.00005),  # Duplicate of 0
+        ]
+        faces = [(0, 1, 2)]  # After merge, becomes (0, 1, 0) -> degenerate
+        result = post_boolean_cleanup(verts, faces, merge_distance=0.0001)
+        # The degenerate face should be removed
+        assert len(result["faces"]) == 0
+
+    def test_face_indices_valid_after_cleanup(self) -> None:
+        """All face indices must be valid after vertex compaction."""
+        verts, faces = _make_simple_cube()
+        # Add some duplicate verts
+        verts_with_dupes = list(verts) + [
+            (0.500005, 0.500005, 0.500005),  # Near-dupe of vertex 6
+        ]
+        faces_extended = list(faces) + [(8, 5, 4)]
+        result = post_boolean_cleanup(verts_with_dupes, faces_extended, merge_distance=0.0001)
+        n_verts = len(result["vertices"])
+        for fi, face in enumerate(result["faces"]):
+            for idx in face:
+                assert 0 <= idx < n_verts, (
+                    f"Face {fi} has index {idx} >= {n_verts}"
+                )
+
+    def test_manifold_cube_has_zero_non_manifold_edges(self) -> None:
+        verts, faces = _make_simple_cube()
+        result = post_boolean_cleanup(verts, faces)
+        assert result["report"]["non_manifold_edges"] == 0

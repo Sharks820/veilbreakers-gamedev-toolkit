@@ -419,6 +419,218 @@ def get_material_for_category(category: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
+# post_boolean_cleanup -- pure-logic mesh cleanup after boolean operations
+# ---------------------------------------------------------------------------
+
+
+def post_boolean_cleanup(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, ...]],
+    *,
+    merge_distance: float = 0.0001,
+    max_hole_sides: int = 8,
+) -> dict[str, Any]:
+    """Clean up mesh geometry after boolean operations.
+
+    Pure-logic function (no bpy). Performs:
+    1. Remove doubles (merge vertices closer than merge_distance)
+    2. Recalculate normals (ensure consistent face winding)
+    3. Detect non-manifold edges (boundary edges with only 1 face)
+    4. Fill holes up to max_hole_sides
+
+    Args:
+        vertices: Input vertex list.
+        faces: Input face list.
+        merge_distance: Distance threshold for merging duplicate vertices.
+        max_hole_sides: Maximum number of sides for hole filling.
+
+    Returns:
+        Dict with:
+        - vertices: Cleaned vertex list
+        - faces: Cleaned face list
+        - report: Dict with doubles_removed, normals_fixed, holes_filled,
+          non_manifold_edges counts
+    """
+    if not vertices or not faces:
+        return {
+            "vertices": vertices,
+            "faces": faces,
+            "report": {
+                "doubles_removed": 0,
+                "normals_fixed": 0,
+                "holes_filled": 0,
+                "non_manifold_edges": 0,
+            },
+        }
+
+    # --- Step 1: Remove doubles (merge nearby vertices) ---
+    merge_dist_sq = merge_distance * merge_distance
+    n_verts = len(vertices)
+    remap = list(range(n_verts))  # vertex -> canonical vertex
+    doubles_removed = 0
+
+    # Simple O(n^2) merge for correctness (boolean outputs are typically small)
+    for i in range(n_verts):
+        if remap[i] != i:
+            continue
+        for j in range(i + 1, n_verts):
+            if remap[j] != j:
+                continue
+            vi = vertices[i]
+            vj = vertices[j]
+            dx = vi[0] - vj[0]
+            dy = vi[1] - vj[1]
+            dz = vi[2] - vj[2]
+            if dx * dx + dy * dy + dz * dz < merge_dist_sq:
+                remap[j] = i
+                doubles_removed += 1
+
+    # Remap face indices and remove degenerate faces
+    remapped_faces: list[tuple[int, ...]] = []
+    for face in faces:
+        new_face_indices: list[int] = []
+        seen: set[int] = set()
+        for idx in face:
+            canonical = remap[idx]
+            if canonical not in seen:
+                new_face_indices.append(canonical)
+                seen.add(canonical)
+        if len(new_face_indices) >= 3:
+            remapped_faces.append(tuple(new_face_indices))
+
+    # Compact vertex list (remove unreferenced vertices)
+    used = sorted(set(idx for f in remapped_faces for idx in f))
+    compact_map = {old: new for new, old in enumerate(used)}
+    clean_verts = [vertices[i] for i in used]
+    clean_faces = [
+        tuple(compact_map[idx] for idx in f) for f in remapped_faces
+    ]
+
+    # --- Step 2: Recalculate normals (consistent winding) ---
+    normals_fixed = 0
+    # Build edge -> face adjacency
+    edge_faces: dict[tuple[int, int], list[int]] = {}
+    for fi, face in enumerate(clean_faces):
+        n = len(face)
+        for i in range(n):
+            a, b = face[i], face[(i + 1) % n]
+            key = (min(a, b), max(a, b))
+            if key not in edge_faces:
+                edge_faces[key] = []
+            edge_faces[key].append(fi)
+
+    # BFS to propagate consistent winding from face 0
+    if clean_faces:
+        visited = [False] * len(clean_faces)
+        face_list = [list(f) for f in clean_faces]
+        queue = [0]
+        visited[0] = True
+        while queue:
+            fi = queue.pop(0)
+            face = face_list[fi]
+            n = len(face)
+            for i in range(n):
+                a, b = face[i], face[(i + 1) % n]
+                key = (min(a, b), max(a, b))
+                for neighbor_fi in edge_faces.get(key, []):
+                    if visited[neighbor_fi]:
+                        continue
+                    visited[neighbor_fi] = True
+                    queue.append(neighbor_fi)
+                    # Check winding consistency
+                    nf = face_list[neighbor_fi]
+                    # Find shared edge in neighbor
+                    for j in range(len(nf)):
+                        na, nb = nf[j], nf[(j + 1) % len(nf)]
+                        if (min(na, nb), max(na, nb)) == key:
+                            # Shared edge should have OPPOSITE winding
+                            if na == a and nb == b:
+                                # Same winding -- need to reverse neighbor
+                                face_list[neighbor_fi] = list(reversed(nf))
+                                normals_fixed += 1
+                            break
+        clean_faces = [tuple(f) for f in face_list]
+
+    # --- Step 3: Detect non-manifold edges ---
+    # Rebuild edge adjacency after potential face reversals
+    edge_faces_final: dict[tuple[int, int], int] = {}
+    for fi, face in enumerate(clean_faces):
+        n = len(face)
+        for i in range(n):
+            a, b = face[i], face[(i + 1) % n]
+            key = (min(a, b), max(a, b))
+            edge_faces_final[key] = edge_faces_final.get(key, 0) + 1
+
+    non_manifold_edges = sum(
+        1 for count in edge_faces_final.values() if count == 1
+    )
+
+    # --- Step 4: Fill holes (boundary loops up to max_hole_sides) ---
+    holes_filled = 0
+    if non_manifold_edges > 0:
+        # Find boundary edges (edges with only 1 face)
+        boundary_edges: list[tuple[int, int]] = [
+            edge for edge, count in edge_faces_final.items() if count == 1
+        ]
+
+        # Build boundary adjacency: vertex -> list of connected boundary vertices
+        boundary_adj: dict[int, list[int]] = {}
+        for a, b in boundary_edges:
+            boundary_adj.setdefault(a, []).append(b)
+            boundary_adj.setdefault(b, []).append(a)
+
+        # Trace boundary loops
+        visited_edges: set[tuple[int, int]] = set()
+        for start_a, start_b in boundary_edges:
+            key = (min(start_a, start_b), max(start_a, start_b))
+            if key in visited_edges:
+                continue
+
+            # Trace loop from start_a
+            loop: list[int] = [start_a]
+            current = start_b
+            prev = start_a
+            for _ in range(max_hole_sides + 2):
+                ekey = (min(prev, current), max(prev, current))
+                visited_edges.add(ekey)
+                if current == start_a:
+                    break
+                loop.append(current)
+                neighbors = boundary_adj.get(current, [])
+                next_v = None
+                for nb in neighbors:
+                    if nb != prev:
+                        nkey = (min(current, nb), max(current, nb))
+                        if nkey not in visited_edges:
+                            next_v = nb
+                            break
+                if next_v is None:
+                    break
+                prev = current
+                current = next_v
+
+            if (
+                len(loop) >= 3
+                and len(loop) <= max_hole_sides
+                and current == start_a
+            ):
+                # Fill this hole with a face
+                clean_faces.append(tuple(reversed(loop)))
+                holes_filled += 1
+
+    return {
+        "vertices": clean_verts,
+        "faces": clean_faces,
+        "report": {
+            "doubles_removed": doubles_removed,
+            "normals_fixed": normals_fixed,
+            "holes_filled": holes_filled,
+            "non_manifold_edges": non_manifold_edges,
+        },
+    }
+
+
+# ---------------------------------------------------------------------------
 # resolve_generator
 # ---------------------------------------------------------------------------
 
