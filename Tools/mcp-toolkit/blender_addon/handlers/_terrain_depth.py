@@ -3,6 +3,9 @@
 Produces vertical/3D terrain geometry beyond heightmap limitations:
 cliff faces, cave entrances, biome transitions, waterfalls, and bridges.
 
+Also provides cliff edge detection for automatic cliff overlay placement
+at steep terrain edges.
+
 NO bpy/bmesh imports. All functions return MeshSpec dicts compatible
 with the procedural_meshes module. Fully testable without Blender.
 """
@@ -12,6 +15,8 @@ from __future__ import annotations
 import math
 import random
 from typing import Any
+
+import numpy as np
 
 from .procedural_meshes import (
     _make_result,
@@ -502,3 +507,122 @@ def generate_terrain_bridge_mesh(
         end_pos=end_pos,
         span=span,
     )
+
+
+# ---------------------------------------------------------------------------
+# Cliff Edge Detection -- find steep terrain regions for overlay placement
+# ---------------------------------------------------------------------------
+
+
+def detect_cliff_edges(
+    heightmap: np.ndarray,
+    slope_threshold_deg: float = 60.0,
+    min_cluster_size: int = 4,
+    terrain_size: float = 100.0,
+) -> list[dict[str, Any]]:
+    """Find terrain regions where slope exceeds threshold for cliff overlay.
+
+    Pure-logic function. Analyzes the heightmap gradient to locate steep
+    cliff regions, clusters adjacent steep cells, and returns placement
+    parameters for cliff face mesh overlays.
+
+    Args:
+        heightmap: 2D numpy array of height values (normalized or world-scale).
+        slope_threshold_deg: Minimum slope in degrees to qualify as cliff.
+        min_cluster_size: Minimum number of connected steep cells to form
+            a cliff placement (filters noise).
+        terrain_size: World-space size of the terrain (for coordinate mapping).
+
+    Returns:
+        List of cliff placement dicts, each containing:
+          - position: [x, y, z] world-space center of the cliff region
+          - rotation: [rx, ry, rz] Euler angles for cliff face orientation
+          - width: Estimated width of the cliff face
+          - height: Estimated vertical extent of the cliff
+          - cell_count: Number of steep cells in this cluster
+    """
+    from ._terrain_noise import compute_slope_map
+
+    slope_map = compute_slope_map(heightmap)
+    rows, cols = heightmap.shape
+
+    # Binary mask of steep cells
+    cliff_mask = slope_map > slope_threshold_deg
+
+    # Connected component labeling using simple flood-fill
+    labels = np.full((rows, cols), -1, dtype=np.int32)
+    label_id = 0
+
+    for r in range(rows):
+        for c in range(cols):
+            if cliff_mask[r, c] and labels[r, c] < 0:
+                # Flood-fill from this cell
+                stack = [(r, c)]
+                cluster: list[tuple[int, int]] = []
+                while stack:
+                    cr, cc = stack.pop()
+                    if (
+                        0 <= cr < rows
+                        and 0 <= cc < cols
+                        and cliff_mask[cr, cc]
+                        and labels[cr, cc] < 0
+                    ):
+                        labels[cr, cc] = label_id
+                        cluster.append((cr, cc))
+                        # 4-connected neighbors
+                        stack.append((cr - 1, cc))
+                        stack.append((cr + 1, cc))
+                        stack.append((cr, cc - 1))
+                        stack.append((cr, cc + 1))
+                label_id += 1
+
+    # Extract placement info for each qualifying cluster
+    placements: list[dict[str, Any]] = []
+    cell_to_world = terrain_size / max(rows, cols)
+
+    for lid in range(label_id):
+        cells = np.argwhere(labels == lid)
+        if len(cells) < min_cluster_size:
+            continue
+
+        # Bounding box in grid coordinates
+        r_min, c_min = cells.min(axis=0)
+        r_max, c_max = cells.max(axis=0)
+
+        # Center position in world space
+        r_center = (r_min + r_max) / 2.0
+        c_center = (c_min + c_max) / 2.0
+
+        # Map to world coordinates: grid center -> world center
+        wx = (c_center / cols - 0.5) * terrain_size
+        wy = (r_center / rows - 0.5) * terrain_size
+
+        # Height at center
+        ri = int(np.clip(r_center, 0, rows - 1))
+        ci = int(np.clip(c_center, 0, cols - 1))
+        wz = float(heightmap[ri, ci])
+
+        # Gradient direction at center (for rotation)
+        dy, dx = np.gradient(heightmap)
+        grad_x = float(dx[ri, ci])
+        grad_y = float(dy[ri, ci])
+        face_angle = math.atan2(grad_y, grad_x)
+
+        # Cliff dimensions from cluster extent
+        width = (c_max - c_min + 1) * cell_to_world
+        height_range = float(
+            heightmap[cells[:, 0], cells[:, 1]].max()
+            - heightmap[cells[:, 0], cells[:, 1]].min()
+        )
+        # Minimum cliff height based on cell count
+        cliff_height = max(height_range * terrain_size * 0.1, 2.0)
+
+        placements.append({
+            "position": [wx, wy, wz],
+            "rotation": [0.0, 0.0, face_angle],
+            "width": max(width, 2.0),
+            "height": cliff_height,
+            "cell_count": len(cells),
+        })
+
+    return placements

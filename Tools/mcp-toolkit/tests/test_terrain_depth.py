@@ -6,12 +6,14 @@ Validates that the 5 terrain depth generators produce valid mesh data:
 - Correct dimensions and metadata
 - Seed determinism
 - Category = terrain_depth for all generators
+- Cliff edge detection finds steep regions
 """
 
 from __future__ import annotations
 
 import math
 
+import numpy as np
 import pytest
 
 from blender_addon.handlers._terrain_depth import (
@@ -20,6 +22,7 @@ from blender_addon.handlers._terrain_depth import (
     generate_biome_transition_mesh,
     generate_waterfall_mesh,
     generate_terrain_bridge_mesh,
+    detect_cliff_edges,
 )
 
 
@@ -378,3 +381,79 @@ class TestAllGenerators:
     def test_category_terrain_depth(self, gen_fn, kwargs):
         result = gen_fn(**kwargs)
         assert result["metadata"].get("category") == "terrain_depth"
+
+
+# ---------------------------------------------------------------------------
+# Cliff edge detection tests
+# ---------------------------------------------------------------------------
+
+
+class TestDetectCliffEdges:
+    """Tests for detect_cliff_edges pure-logic function."""
+
+    def test_detect_cliff_edges_steep_area(self):
+        """Heightmap with a known steep column should produce at least 1 cliff."""
+        # Create a heightmap with a dramatic cliff edge.
+        # np.gradient uses central differences so we need a large height
+        # change per cell to exceed the slope threshold in degrees.
+        hmap = np.full((32, 32), 1.0, dtype=np.float64)
+        # Steep drop: 1.0 -> 0.0 in a single cell column
+        hmap[:, 16:] = 0.0
+
+        # Use a low threshold since normalized heightmaps produce modest
+        # slopes (arctan(0.5) ~ 26 deg for a 1.0 drop across 1 cell with
+        # central differences).
+        placements = detect_cliff_edges(
+            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
+        )
+        assert len(placements) >= 1, "No cliff edges detected on steep heightmap"
+
+    def test_detect_cliff_edges_returns_placement_keys(self):
+        """Each placement dict should have position, rotation, width, height."""
+        hmap = np.full((32, 32), 1.0, dtype=np.float64)
+        hmap[:, 16:] = 0.0
+
+        placements = detect_cliff_edges(
+            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
+        )
+        assert len(placements) >= 1
+        p = placements[0]
+        assert "position" in p, "Missing 'position' key"
+        assert "rotation" in p, "Missing 'rotation' key"
+        assert "width" in p, "Missing 'width' key"
+        assert "height" in p, "Missing 'height' key"
+        assert "cell_count" in p, "Missing 'cell_count' key"
+        assert len(p["position"]) == 3
+        assert len(p["rotation"]) == 3
+
+    def test_detect_cliff_edges_flat_returns_empty(self):
+        """Completely flat heightmap should produce no cliff placements."""
+        hmap = np.full((32, 32), 0.5, dtype=np.float64)
+        placements = detect_cliff_edges(
+            hmap, slope_threshold_deg=60.0, min_cluster_size=4, terrain_size=100.0
+        )
+        assert len(placements) == 0, f"Flat terrain produced {len(placements)} cliffs"
+
+    def test_detect_cliff_edges_min_cluster_filter(self):
+        """Small clusters below min_cluster_size should be filtered out."""
+        hmap = np.full((32, 32), 0.5, dtype=np.float64)
+        # Create a tiny 1-pixel cliff (below min_cluster_size=4)
+        hmap[15, 15] = 0.0
+
+        placements = detect_cliff_edges(
+            hmap, slope_threshold_deg=20.0, min_cluster_size=4, terrain_size=100.0
+        )
+        # The single steep cell should not form a qualifying cluster
+        assert len(placements) == 0, "Single-cell cliff should be filtered"
+
+    def test_detect_cliff_edges_positive_dimensions(self):
+        """Cliff width and height should be positive values."""
+        hmap = np.full((32, 32), 1.0, dtype=np.float64)
+        hmap[:, 16:] = 0.0
+
+        placements = detect_cliff_edges(
+            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
+        )
+        for p in placements:
+            assert p["width"] > 0, f"Cliff width {p['width']} <= 0"
+            assert p["height"] > 0, f"Cliff height {p['height']} <= 0"

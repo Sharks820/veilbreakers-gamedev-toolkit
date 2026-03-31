@@ -1905,11 +1905,35 @@ def auto_assign_terrain_layers(
     slope_cliff_deg: float = 60.0,
     special_low_pct: float = 0.15,
     special_high_pct: float = 0.85,
+    moisture_map: Any = None,
+    terrain_resolution: int = 0,
 ) -> list[tuple[float, float, float, float]]:
-    """Compute per-vertex RGBA splatmap weights from slope and height.
+    """Compute per-vertex RGBA splatmap weights from slope, height, and moisture.
 
     Pure-logic function -- no bpy dependency.
     R=ground, G=slope, B=cliff, A=special. Normalised to sum=1.
+
+    When moisture_map is provided (2D numpy array, values in [0, 1]),
+    the ground layer (R channel) is modulated by moisture level:
+      - High moisture (> 0.7) + low slope -> mud/wetland (boosted R)
+      - Medium moisture (0.3-0.7) + low slope -> grass (standard R)
+      - Low moisture (< 0.3) + low slope -> dry earth (reduced R, boosted A)
+    Slope and altitude rules still override: steep = cliff, high = snow.
+
+    Args:
+        vertices: List of (x, y, z) vertex positions.
+        face_normals: List of (nx, ny, nz) per-face normal vectors.
+        faces: List of face tuples (vertex indices).
+        biome_name: Biome palette name (for future per-biome rules).
+        slope_flat_deg: Maximum slope angle for flat ground.
+        slope_cliff_deg: Minimum slope angle for cliff surfaces.
+        special_low_pct: Height percentile below which A channel activates.
+        special_high_pct: Height percentile above which A channel activates.
+        moisture_map: Optional 2D numpy array of moisture values in [0, 1].
+            Shape should match terrain resolution. If None, no moisture
+            modulation is applied (backward compatible).
+        terrain_resolution: Grid resolution for mapping vertices to moisture
+            cells. If 0, inferred from moisture_map shape.
     """
     num_verts = len(vertices)
     if num_verts == 0:
@@ -1944,10 +1968,27 @@ def auto_assign_terrain_layers(
         [0.5] * num_verts if z_range < 1e-9
         else [(z - z_min) / z_range for z in z_values]
     )
+
+    # Prepare moisture lookup if moisture_map is provided
+    has_moisture = moisture_map is not None
+    if has_moisture:
+        import numpy as _np
+        mmap = _np.asarray(moisture_map, dtype=_np.float64)
+        m_rows, m_cols = mmap.shape
+        # Compute terrain bounding box for vertex -> grid mapping
+        x_vals = [v[0] for v in vertices]
+        y_vals = [v[1] for v in vertices]
+        x_min_t, x_max_t = min(x_vals), max(x_vals)
+        y_min_t, y_max_t = min(y_vals), max(y_vals)
+        x_range_t = x_max_t - x_min_t
+        y_range_t = y_max_t - y_min_t
+
     result: list[tuple[float, float, float, float]] = []
     for vi in range(num_verts):
         angle = vert_slopes[vi]
         h_pct = height_pcts[vi]
+
+        # Base slope/height assignment (unchanged logic)
         if angle < slope_flat_rad:
             t = angle / slope_flat_rad if slope_flat_rad > 0 else 0.0
             r, g, b = 1.0 - t, t, 0.0
@@ -1957,12 +1998,40 @@ def auto_assign_terrain_layers(
             r, g, b = 0.0, 1.0 - t, t
         else:
             r, g, b = 0.0, 0.0, 1.0
+
+        # Moisture modulation on flat/low-slope ground (R channel dominant)
+        if has_moisture and angle < slope_flat_rad:
+            vx, vy = vertices[vi][0], vertices[vi][1]
+            # Map vertex position to moisture grid cell
+            if x_range_t > 1e-9 and y_range_t > 1e-9:
+                u = (vx - x_min_t) / x_range_t
+                v_coord = (vy - y_min_t) / y_range_t
+                mi = int(max(0, min(m_rows - 1, v_coord * (m_rows - 1))))
+                mj = int(max(0, min(m_cols - 1, u * (m_cols - 1))))
+                moisture = float(mmap[mi, mj])
+            else:
+                moisture = 0.5
+
+            if moisture > 0.7:
+                # High moisture: mud/wetland -- boost ground, slight special
+                r = r * 1.2
+                a_moisture = 0.15 * (moisture - 0.7) / 0.3
+            elif moisture < 0.3:
+                # Low moisture: dry earth -- reduce ground, boost special
+                r = r * 0.7
+                a_moisture = 0.1 * (0.3 - moisture) / 0.3
+            else:
+                a_moisture = 0.0
+        else:
+            a_moisture = 0.0
+
         a = 0.0
         if h_pct < special_low_pct and special_low_pct > 0:
             a = 1.0 - (h_pct / special_low_pct)
         elif h_pct > special_high_pct and special_high_pct < 1.0:
             a = (h_pct - special_high_pct) / (1.0 - special_high_pct)
-        a = max(0.0, min(1.0, a))
+        a = max(0.0, min(1.0, a + a_moisture))
+
         rgb_sum = r + g + b
         if rgb_sum > 0:
             remaining = 1.0 - a
