@@ -1545,6 +1545,229 @@ def apply_ruins_damage(
 # Room type furniture definitions
 # Each item: (type, placement_rule, base_size_xy, height)
 # placement_rule: "wall" = along wall, "center" = center area, "corner" = in corner
+# ---------------------------------------------------------------------------
+# Room Spatial Graphs (MESH-03)
+# ---------------------------------------------------------------------------
+# Define per-room-type spatial relationships: focal points (anchors placed
+# on preferred walls), clusters (items grouped around anchors), and wall
+# preferences for remaining items.  Used by generate_interior_layout() to
+# produce constraint-satisfied, spatially coherent layouts.
+# ---------------------------------------------------------------------------
+
+ROOM_SPATIAL_GRAPHS: dict[str, dict] = {
+    "tavern": {
+        "focal_points": [
+            {"type": "bar_counter", "wall_pref": "back"},
+            {"type": "fireplace", "wall_pref": "side"},
+        ],
+        "clusters": [
+            {
+                "anchor": "table",
+                "members": [
+                    ("chair", 0.7, True),
+                    ("chair", 0.7, True),
+                ],
+            },
+            {
+                "anchor": "table",
+                "members": [
+                    ("chair", 0.7, True),
+                    ("chair", 0.7, True),
+                ],
+            },
+        ],
+        "wall_preferences": {
+            "shelf": "side",
+            "barrel": "back",
+        },
+    },
+    "bedroom": {
+        "focal_points": [
+            {"type": "bed", "wall_pref": "back"},
+        ],
+        "clusters": [
+            {
+                "anchor": "bed",
+                "members": [
+                    ("nightstand", 0.4, False),
+                ],
+            },
+            {
+                "anchor": "desk",
+                "members": [
+                    ("chair", 0.6, True),
+                ],
+            },
+        ],
+        "wall_preferences": {
+            "wardrobe": "side",
+            "desk": "side",
+        },
+    },
+    "kitchen": {
+        "focal_points": [
+            {"type": "cooking_fire", "wall_pref": "back"},
+        ],
+        "clusters": [
+            {
+                "anchor": "table",
+                "members": [],
+            },
+        ],
+        "wall_preferences": {
+            "shelf": "side",
+            "barrel": "side",
+            "crate": "side",
+        },
+    },
+    "blacksmith": {
+        "focal_points": [
+            {"type": "forge", "wall_pref": "back"},
+        ],
+        "clusters": [
+            {
+                "anchor": "forge",
+                "members": [
+                    ("bellows", 0.8, False),
+                ],
+            },
+            {
+                "anchor": "anvil",
+                "members": [],
+            },
+        ],
+        "wall_preferences": {
+            "workbench": "side",
+            "weapon_rack": "side",
+            "tool_rack": "side",
+        },
+    },
+    "library": {
+        "focal_points": [
+            {"type": "desk", "wall_pref": "any"},
+        ],
+        "clusters": [
+            {
+                "anchor": "desk",
+                "members": [
+                    ("chair", 0.6, True),
+                    ("candelabra", 0.5, False),
+                ],
+            },
+        ],
+        "wall_preferences": {
+            "bookshelf": "back",
+        },
+    },
+    "chapel": {
+        "focal_points": [
+            {"type": "altar", "wall_pref": "back"},
+        ],
+        "clusters": [],
+        "wall_preferences": {
+            "pew": "center_rows",
+            "candelabra": "side",
+            "banner": "side",
+        },
+    },
+    "throne_room": {
+        "focal_points": [
+            {"type": "throne", "wall_pref": "back"},
+        ],
+        "clusters": [],
+        "wall_preferences": {
+            "pillar": "side",
+            "banner": "side",
+            "brazier": "center",
+            "carpet": "center",
+        },
+    },
+    "smithy": {
+        "focal_points": [
+            {"type": "forge", "wall_pref": "back"},
+        ],
+        "clusters": [
+            {
+                "anchor": "anvil",
+                "members": [],
+            },
+        ],
+        "wall_preferences": {
+            "workbench": "side",
+            "weapon_rack": "side",
+        },
+    },
+    "great_hall": {
+        "focal_points": [
+            {"type": "fireplace", "wall_pref": "side"},
+        ],
+        "clusters": [],
+        "wall_preferences": {
+            "long_table": "center",
+            "chandelier": "center",
+            "banner": "side",
+        },
+    },
+    "dining_hall": {
+        "focal_points": [
+            {"type": "fireplace", "wall_pref": "side"},
+        ],
+        "clusters": [],
+        "wall_preferences": {
+            "long_table": "center",
+            "chandelier": "center",
+            "serving_table": "side",
+            "banner": "side",
+        },
+    },
+    "war_room": {
+        "focal_points": [
+            {"type": "large_table", "wall_pref": "any"},
+        ],
+        "clusters": [
+            {
+                "anchor": "large_table",
+                "members": [
+                    ("chair", 0.8, True),
+                    ("chair", 0.8, True),
+                    ("chair", 0.8, True),
+                    ("chair", 0.8, True),
+                ],
+            },
+        ],
+        "wall_preferences": {
+            "banner": "side",
+            "candelabra": "side",
+        },
+    },
+    "alchemy_lab": {
+        "focal_points": [
+            {"type": "cauldron", "wall_pref": "any"},
+        ],
+        "clusters": [
+            {
+                "anchor": "workbench",
+                "members": [],
+            },
+        ],
+        "wall_preferences": {
+            "shelf_with_bottles": "back",
+            "herb_rack": "side",
+        },
+    },
+    "crypt": {
+        "focal_points": [
+            {"type": "altar", "wall_pref": "back"},
+        ],
+        "clusters": [],
+        "wall_preferences": {
+            "sarcophagus": "center",
+            "wall_tomb": "side",
+            "candelabra": "side",
+        },
+    },
+}
+
 _ROOM_CONFIGS: dict[str, list[tuple[str, str, tuple[float, float], float]]] = {
     "tavern": [
         ("bar_counter", "wall", (3.0, 0.8), 1.1),
@@ -1760,6 +1983,147 @@ _ROOM_CONFIGS: dict[str, list[tuple[str, str, tuple[float, float], float]]] = {
 }
 
 
+def _pick_wall_position(
+    wall_id: int,
+    sx: float,
+    sy: float,
+    width: float,
+    depth: float,
+    wall_margin: float,
+    rng: random.Random,
+) -> tuple[float, float, float, float, float]:
+    """Return (x, y, rotation, effective_sx, effective_sy) for a wall placement."""
+    if wall_id == 0:  # front wall (y=0)
+        x = rng.uniform(sx / 2 + wall_margin, width - sx / 2 - wall_margin)
+        y = sy / 2 + wall_margin
+        return x, y, 0.0, sx, sy
+    elif wall_id == 1:  # back wall (y=depth)
+        x = rng.uniform(sx / 2 + wall_margin, width - sx / 2 - wall_margin)
+        y = depth - sy / 2 - wall_margin
+        return x, y, math.pi, sx, sy
+    elif wall_id == 2:  # left wall (x=0)
+        x = sy / 2 + wall_margin
+        y = rng.uniform(sx / 2 + wall_margin, depth - sx / 2 - wall_margin)
+        return x, y, math.pi / 2, sy, sx
+    else:  # right wall (x=width)
+        x = width - sy / 2 - wall_margin
+        y = rng.uniform(sx / 2 + wall_margin, depth - sx / 2 - wall_margin)
+        return x, y, -math.pi / 2, sy, sx
+
+
+def _wall_pref_to_ids(wall_pref: str, rng: random.Random) -> list[int]:
+    """Convert a wall preference string to ordered wall IDs to try."""
+    if wall_pref == "back":
+        return [1]
+    elif wall_pref == "front":
+        return [0]
+    elif wall_pref == "side":
+        return [2, 3] if rng.random() < 0.5 else [3, 2]
+    elif wall_pref == "exterior":
+        return [1, 2, 3]
+    else:  # "any"
+        walls = [0, 1, 2, 3]
+        rng.shuffle(walls)
+        return walls
+
+
+def _check_collision(
+    x: float,
+    y: float,
+    sx: float,
+    sy: float,
+    occupied: list[tuple[float, float, float, float]],
+    item_height: float = 1.0,
+) -> bool:
+    """Return True if (x,y,sx,sy) AABB overlaps any occupied box.
+
+    Floor-level items (height < 0.1m, e.g. rugs/carpets) never collide --
+    they are walkable surfaces that other furniture can stand on.
+    """
+    if item_height < 0.1:
+        return False
+    for ocx, ocy, osx, osy in occupied:
+        if abs(x - ocx) < (sx + osx) / 2 and abs(y - ocy) < (sy + osy) / 2:
+            return True
+    return False
+
+
+def _in_bounds(x: float, y: float, sx: float, sy: float,
+               width: float, depth: float) -> bool:
+    """Check item center+extents fit within room."""
+    return (sx / 2 <= x <= width - sx / 2 and
+            sy / 2 <= y <= depth - sy / 2)
+
+
+def _place_item(
+    x: float,
+    y: float,
+    rotation: float,
+    sx: float,
+    sy: float,
+    item_type: str,
+    item_height: float,
+    occupied: list[tuple[float, float, float, float]],
+    placed: list[dict],
+) -> bool:
+    """Append an item to placed/occupied lists. Returns True on success.
+
+    Floor-level items (height < 0.1m, e.g. rugs/carpets) are walkable and
+    do NOT add to the occupied collision list.
+    """
+    if item_height >= 0.1:
+        occupied.append((x, y, sx, sy))
+    placed.append({
+        "type": item_type,
+        "position": [round(x, 4), round(y, 4), 0.0],
+        "rotation": round(rotation, 4),
+        "scale": [round(sx, 4), round(sy, 4), round(item_height, 4)],
+    })
+    return True
+
+
+def _door_corridor_clear(
+    x: float, y: float, sx: float, sy: float,
+    width: float, depth: float, corridor_width: float,
+    item_height: float = 1.0,
+) -> bool:
+    """Check that an item does not block the 1.0m door-to-center corridor.
+
+    Door zones are assumed at the center of the front wall (y=0).
+    The corridor runs from (width/2, 0) to (width/2, depth/2).
+    Floor-level items (height < 0.1m) like rugs/carpets are walkable and exempt.
+    """
+    # Floor-level items (rugs, carpets, map displays) are walkable -- exempt
+    if item_height < 0.1:
+        return True
+    corridor_cx = width / 2
+    corridor_half_w = corridor_width / 2
+    # Item must not overlap the corridor rectangle from y=0 to y=depth/2
+    item_left = x - sx / 2
+    item_right = x + sx / 2
+    item_front = y - sy / 2
+    item_back = y + sy / 2
+    corr_left = corridor_cx - corridor_half_w
+    corr_right = corridor_cx + corridor_half_w
+    # Check overlap
+    if item_right > corr_left and item_left < corr_right:
+        if item_front < depth / 2 and item_back > 0:
+            return False
+    return True
+
+
+def _find_config_index(
+    config_items: list[tuple[str, str, tuple[float, float], float]],
+    item_type: str,
+    placed_indices: set[int],
+) -> Optional[int]:
+    """Find the first unplaced config index matching item_type."""
+    for i, (itype, _rule, _size, _h) in enumerate(config_items):
+        if itype == item_type and i not in placed_indices:
+            return i
+    return None
+
+
 def generate_interior_layout(
     room_type: str,
     width: float,
@@ -1767,10 +2131,15 @@ def generate_interior_layout(
     height: float = 3.0,
     seed: int = 0,
 ) -> list[dict]:
-    """Generate furniture placement for a room type.
+    """Generate spatially-aware furniture placement for a room type.
+
+    Uses ROOM_SPATIAL_GRAPHS for relationship-based placement when available:
+      Phase 1: Place focal points on preferred walls
+      Phase 2: Place clustered items relative to anchors (chairs face tables)
+      Phase 3: Place remaining wall/corner items with 0.3m wall clearance
+      Phase 4: Enforce 1.0m door clearance corridor
 
     Returns list of dicts with: type, position (x,y,z), rotation, scale.
-    Uses collision avoidance to prevent overlapping items.
     """
     rng = random.Random(seed)
     config = _ROOM_CONFIGS.get(room_type, [])
@@ -1778,96 +2147,265 @@ def generate_interior_layout(
         return []
 
     placed: list[dict] = []
-    occupied: list[tuple[float, float, float, float]] = []  # (cx, cy, sx, sy) bounding boxes
+    occupied: list[tuple[float, float, float, float]] = []  # (cx, cy, sx, sy)
 
-    # Margins from walls
-    wall_margin = 0.15
+    wall_margin = 0.3
+    door_corridor_width = 1.0
 
-    for item_type, rule, base_size, item_height in config:
+    # Build lookup from config for quick access
+    config_items: list[tuple[str, str, tuple[float, float], float]] = list(config)
+
+    spatial = ROOM_SPATIAL_GRAPHS.get(room_type)
+
+    if spatial is None:
+        # Fallback: use basic placement for room types without spatial graphs
+        return _generate_interior_layout_basic(
+            config_items, width, depth, wall_margin, door_corridor_width, rng,
+        )
+
+    # Track which config items have been placed (by index)
+    placed_indices: set[int] = set()
+    # Map anchor type -> placed position for cluster resolution
+    anchor_positions: dict[str, tuple[float, float]] = {}
+
+    # ---- Phase 1: Place focal points on preferred walls ----
+    for fp in spatial.get("focal_points", []):
+        fp_type = fp["type"]
+        wall_pref = fp.get("wall_pref", "any")
+        # Find matching config item
+        idx = _find_config_index(config_items, fp_type, placed_indices)
+        if idx is None:
+            continue
+        _, rule, base_size, item_height = config_items[idx]
         sx, sy = base_size
-        rotation = 0.0
+        wall_ids = _wall_pref_to_ids(wall_pref, rng)
 
-        # Try to find a non-overlapping placement
+        ok = False
+        for wall_id in wall_ids:
+            for _attempt in range(20):
+                px, py, rot, esx, esy = _pick_wall_position(
+                    wall_id, sx, sy, width, depth, wall_margin, rng,
+                )
+                if (not _check_collision(px, py, esx, esy, occupied, item_height)
+                        and _in_bounds(px, py, esx, esy, width, depth)
+                        and _door_corridor_clear(px, py, esx, esy, width, depth,
+                                                 door_corridor_width, item_height)):
+                    _place_item(px, py, rot, esx, esy, fp_type, item_height,
+                                occupied, placed)
+                    anchor_positions[fp_type] = (px, py)
+                    placed_indices.add(idx)
+                    ok = True
+                    break
+            if ok:
+                break
+
+    # ---- Phase 2: Place clustered items relative to anchors ----
+    for cluster in spatial.get("clusters", []):
+        anchor_type = cluster["anchor"]
+        members = cluster.get("members", [])
+
+        # If anchor not yet placed, place it now (as center item)
+        if anchor_type not in anchor_positions:
+            idx = _find_config_index(config_items, anchor_type, placed_indices)
+            if idx is None:
+                continue
+            _, rule, base_size, item_height = config_items[idx]
+            sx, sy = base_size
+            # Place anchor in center area
+            ok = False
+            for _attempt in range(50):
+                margin = max(sx, sy) / 2 + wall_margin
+                px = rng.uniform(margin, width - margin)
+                py = rng.uniform(margin, depth - margin)
+                rot = rng.uniform(-0.1, 0.1)
+                if (not _check_collision(px, py, sx, sy, occupied, item_height)
+                        and _in_bounds(px, py, sx, sy, width, depth)
+                        and _door_corridor_clear(px, py, sx, sy, width, depth,
+                                                 door_corridor_width)):
+                    _place_item(px, py, rot, sx, sy, anchor_type, item_height,
+                                occupied, placed)
+                    anchor_positions[anchor_type] = (px, py)
+                    placed_indices.add(idx)
+                    ok = True
+                    break
+
+        anchor_pos = anchor_positions.get(anchor_type)
+        if anchor_pos is None:
+            continue
+
+        # Place cluster members around anchor
+        ax, ay = anchor_pos
+        for member_type, offset_dist, face_anchor in members:
+            idx = _find_config_index(config_items, member_type, placed_indices)
+            if idx is None:
+                continue
+            _, rule, base_size, item_height = config_items[idx]
+            msx, msy = base_size
+
+            ok = False
+            for _attempt in range(30):
+                angle = rng.uniform(0, 2 * math.pi)
+                px = ax + math.cos(angle) * offset_dist
+                py = ay + math.sin(angle) * offset_dist
+                if face_anchor:
+                    # Rotate to face anchor center
+                    rot = math.atan2(ay - py, ax - px) - math.pi / 2
+                else:
+                    rot = rng.uniform(-0.1, 0.1)
+                if (not _check_collision(px, py, msx, msy, occupied, item_height)
+                        and _in_bounds(px, py, msx, msy, width, depth)
+                        and _door_corridor_clear(px, py, msx, msy, width, depth,
+                                                 door_corridor_width)):
+                    _place_item(px, py, rot, msx, msy, member_type, item_height,
+                                occupied, placed)
+                    placed_indices.add(idx)
+                    ok = True
+                    break
+
+    # ---- Phase 3: Place remaining items (wall/corner with preferences) ----
+    wall_prefs = spatial.get("wall_preferences", {})
+    for idx, (item_type, rule, base_size, item_height) in enumerate(config_items):
+        if idx in placed_indices:
+            continue
+        sx, sy = base_size
+
+        pref = wall_prefs.get(item_type, None)
+        ok = False
+
+        if rule == "wall":
+            if pref and pref not in ("center", "center_rows"):
+                wall_ids = _wall_pref_to_ids(pref, rng)
+            else:
+                wall_ids = [0, 1, 2, 3]
+                rng.shuffle(wall_ids)
+
+            for wall_id in wall_ids:
+                for _attempt in range(15):
+                    px, py, rot, esx, esy = _pick_wall_position(
+                        wall_id, sx, sy, width, depth, wall_margin, rng,
+                    )
+                    if (not _check_collision(px, py, esx, esy, occupied,
+                                             item_height)
+                            and _in_bounds(px, py, esx, esy, width, depth)
+                            and _door_corridor_clear(px, py, esx, esy, width,
+                                                     depth, door_corridor_width,
+                                                     item_height)):
+                        _place_item(px, py, rot, esx, esy, item_type,
+                                    item_height, occupied, placed)
+                        placed_indices.add(idx)
+                        ok = True
+                        break
+                if ok:
+                    break
+
+        elif rule == "center":
+            for _attempt in range(50):
+                margin = max(sx, sy) / 2 + wall_margin
+                px = rng.uniform(margin, width - margin)
+                py = rng.uniform(margin, depth - margin)
+                rot = rng.uniform(-0.1, 0.1)
+                if (not _check_collision(px, py, sx, sy, occupied,
+                                         item_height)
+                        and _in_bounds(px, py, sx, sy, width, depth)
+                        and _door_corridor_clear(px, py, sx, sy, width, depth,
+                                                 door_corridor_width,
+                                                 item_height)):
+                    _place_item(px, py, rot, sx, sy, item_type, item_height,
+                                occupied, placed)
+                    placed_indices.add(idx)
+                    ok = True
+                    break
+
+        elif rule == "corner":
+            corners = [0, 1, 2, 3]
+            rng.shuffle(corners)
+            for corner in corners:
+                if corner == 0:
+                    px, py = sx / 2 + wall_margin, sy / 2 + wall_margin
+                elif corner == 1:
+                    px, py = width - sx / 2 - wall_margin, sy / 2 + wall_margin
+                elif corner == 2:
+                    px, py = sx / 2 + wall_margin, depth - sy / 2 - wall_margin
+                else:
+                    px, py = (width - sx / 2 - wall_margin,
+                              depth - sy / 2 - wall_margin)
+                rot = 0.0
+                if (not _check_collision(px, py, sx, sy, occupied,
+                                         item_height)
+                        and _in_bounds(px, py, sx, sy, width, depth)
+                        and _door_corridor_clear(px, py, sx, sy, width, depth,
+                                                 door_corridor_width,
+                                                 item_height)):
+                    _place_item(px, py, rot, sx, sy, item_type, item_height,
+                                occupied, placed)
+                    placed_indices.add(idx)
+                    ok = True
+                    break
+
+    return placed
+
+
+def _generate_interior_layout_basic(
+    config_items: list[tuple[str, str, tuple[float, float], float]],
+    width: float,
+    depth: float,
+    wall_margin: float,
+    door_corridor_width: float,
+    rng: random.Random,
+) -> list[dict]:
+    """Basic interior layout for room types without spatial graphs.
+
+    Uses improved collision + wall clearance + door corridor enforcement.
+    """
+    placed: list[dict] = []
+    occupied: list[tuple[float, float, float, float]] = []
+
+    for item_type, rule, base_size, item_height in config_items:
+        sx, sy = base_size
         max_attempts = 50
-        placed_ok = False
 
-        for attempt in range(max_attempts):
+        for _attempt in range(max_attempts):
             if rule == "wall":
-                # Place along a wall
                 wall = rng.randint(0, 3)
-                if wall == 0:  # front wall (y=0)
-                    x = rng.uniform(sx / 2 + wall_margin, width - sx / 2 - wall_margin)
-                    y = sy / 2 + wall_margin
-                    rotation = 0.0
-                elif wall == 1:  # back wall (y=depth)
-                    x = rng.uniform(sx / 2 + wall_margin, width - sx / 2 - wall_margin)
-                    y = depth - sy / 2 - wall_margin
-                    rotation = math.pi
-                elif wall == 2:  # left wall (x=0)
-                    x = sy / 2 + wall_margin
-                    y = rng.uniform(sx / 2 + wall_margin, depth - sx / 2 - wall_margin)
-                    rotation = math.pi / 2
-                    # swap effective size for rotated item
-                    sx, sy = sy, sx
-                else:  # right wall (x=width)
-                    x = width - sy / 2 - wall_margin
-                    y = rng.uniform(sx / 2 + wall_margin, depth - sx / 2 - wall_margin)
-                    rotation = -math.pi / 2
-                    sx, sy = sy, sx
-
+                px, py, rot, esx, esy = _pick_wall_position(
+                    wall, sx, sy, width, depth, wall_margin, rng,
+                )
             elif rule == "center":
-                # Place in the center area (away from walls)
-                margin = max(sx, sy) / 2 + 0.3
-                x = rng.uniform(margin, width - margin)
-                y = rng.uniform(margin, depth - margin)
-                rotation = rng.uniform(-0.1, 0.1)  # slight random rotation
-
+                margin = max(sx, sy) / 2 + wall_margin
+                px = rng.uniform(margin, width - margin)
+                py = rng.uniform(margin, depth - margin)
+                rot = rng.uniform(-0.1, 0.1)
+                esx, esy = sx, sy
             elif rule == "corner":
-                # Place in a corner
                 corner = rng.randint(0, 3)
                 if corner == 0:
-                    x = sx / 2 + wall_margin
-                    y = sy / 2 + wall_margin
+                    px, py = sx / 2 + wall_margin, sy / 2 + wall_margin
                 elif corner == 1:
-                    x = width - sx / 2 - wall_margin
-                    y = sy / 2 + wall_margin
+                    px, py = (width - sx / 2 - wall_margin,
+                              sy / 2 + wall_margin)
                 elif corner == 2:
-                    x = sx / 2 + wall_margin
-                    y = depth - sy / 2 - wall_margin
+                    px, py = (sx / 2 + wall_margin,
+                              depth - sy / 2 - wall_margin)
                 else:
-                    x = width - sx / 2 - wall_margin
-                    y = depth - sy / 2 - wall_margin
-                rotation = 0.0
+                    px, py = (width - sx / 2 - wall_margin,
+                              depth - sy / 2 - wall_margin)
+                rot = 0.0
+                esx, esy = sx, sy
             else:
-                x = width / 2
-                y = depth / 2
-                rotation = 0.0
+                px, py = width / 2, depth / 2
+                rot = 0.0
+                esx, esy = sx, sy
 
-            # Check collision with previously placed items
-            collides = False
-            for ocx, ocy, osx, osy in occupied:
-                if abs(x - ocx) < (sx + osx) / 2 and abs(y - ocy) < (sy + osy) / 2:
-                    collides = True
-                    break
-
-            if not collides:
-                # Check bounds
-                if (sx / 2 <= x <= width - sx / 2 and
-                        sy / 2 <= y <= depth - sy / 2):
-                    occupied.append((x, y, sx, sy))
-                    placed.append({
-                        "type": item_type,
-                        "position": [round(x, 4), round(y, 4), 0.0],
-                        "rotation": round(rotation, 4),
-                        "scale": [round(sx, 4), round(sy, 4), round(item_height, 4)],
-                    })
-                    placed_ok = True
-                    break
+            if (not _check_collision(px, py, esx, esy, occupied, item_height)
+                    and _in_bounds(px, py, esx, esy, width, depth)
+                    and _door_corridor_clear(px, py, esx, esy, width, depth,
+                                             door_corridor_width, item_height)):
+                _place_item(px, py, rot, esx, esy, item_type, item_height,
+                            occupied, placed)
+                break
 
             # Reset swapped sizes for next attempt
             sx, sy = base_size
-
-        # If we exhausted attempts, skip this item silently
 
     return placed
 
