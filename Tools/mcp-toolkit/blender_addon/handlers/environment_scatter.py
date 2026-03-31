@@ -565,8 +565,9 @@ def _create_prop_template(
         gen_func, gen_kwargs = gen_entry
         # Use lower detail for scatter templates (instanced many times)
         scatter_kwargs = dict(gen_kwargs)
-        if prop_type in ("dead_tree",):
-            scatter_kwargs.setdefault("branch_count", 3)
+        if prop_type in ("dead_tree", "tree_twisted"):
+            scatter_kwargs.setdefault("iterations", 3)  # lower for scatter
+            scatter_kwargs.setdefault("ring_segments", 4)  # lower LOD
         elif prop_type in ("rock", "coal_pile"):
             scatter_kwargs.setdefault("detail", 2)
         spec = gen_func(**scatter_kwargs)
