@@ -559,9 +559,9 @@ Requirements for v7.0 — AAA Procedural City Production. IDs match PROJECT.md A
 
 ### Mesh Quality
 
-- [ ] **MESH-01**: Every procedural mesh generator produces geometry with proper edge flow, zero non-manifold edges, and contact sheet showing silhouette distinguishable from primitive shapes — furniture >500 verts, buildings >2000 verts, vegetation >300 verts
-- [ ] **MESH-02**: All materials assigned via smart material system with roughness driven by noise texture nodes (never single float). Procedural materials baked to image textures (albedo, normal, roughness, metallic, AO) for export
-- [ ] **MESH-06**: Mesh topology passes game-readiness: zero non-manifold edges, consistent normals, UV coverage >0.8, no degenerate faces (<0.001 area), proper edge loops at deformation points
+- [x] **MESH-01**: Every procedural mesh generator produces geometry with proper edge flow, zero non-manifold edges, and contact sheet showing silhouette distinguishable from primitive shapes — furniture >500 verts, buildings >2000 verts, vegetation >300 verts
+- [x] **MESH-02**: All materials assigned via smart material system with roughness driven by noise texture nodes (never single float). Procedural materials baked to image textures (albedo, normal, roughness, metallic, AO) for export
+- [x] **MESH-06**: Mesh topology passes game-readiness: zero non-manifold edges, consistent normals, UV coverage >0.8, no degenerate faces (<0.001 area), proper edge loops at deformation points
 
 ### Architecture & Interiors
 
@@ -577,11 +577,11 @@ Requirements for v7.0 — AAA Procedural City Production. IDs match PROJECT.md A
 
 ### Performance & Pipeline
 
-- [ ] **MESH-11**: LOD chain per asset type using existing lod_pipeline.py presets with silhouette preservation >85%. Scene budget validator enforces per-room (50K-150K tris) and per-block (200K-500K tris) polygon budgets
+- [x] **MESH-11**: LOD chain per asset type using existing lod_pipeline.py presets with silhouette preservation >85%. Scene budget validator enforces per-room (50K-150K tris) and per-block (200K-500K tris) polygon budgets
 - [ ] **MESH-12**: Tripo pipeline with automatic post-processing: de-lighting, mesh repair, UV unwrap, PBR texture EXTRACTION from GLB into standalone maps (not blank images), LOD generation, quality gate
 - [ ] **MESH-13**: Starter town: 10-15 buildings with furnished interiors, market area, fortifications, road network, vegetation, terrain integration. Exports to Unity as Addressables-ready package, maintains 60fps at 1080p
-- [ ] **MESH-14**: All 267 generators use seed-based RNG (`random.Random(seed)`) exclusively — zero instances of global random state. Same seed produces identical output
-- [ ] **MESH-15**: Boolean cleanup pipeline: remove doubles (0.0001 merge distance), recalculate normals, fix non-manifold edges, fill holes (up to 8 sides). Runs automatically after every boolean operation
+- [x] **MESH-14**: All 267 generators use seed-based RNG (`random.Random(seed)`) exclusively — zero instances of global random state. Same seed produces identical output
+- [x] **MESH-15**: Boolean cleanup pipeline: remove doubles (0.0001 merge distance), recalculate normals, fix non-manifold edges, fill holes (up to 8 sides). Runs automatically after every boolean operation
 
 ### Infrastructure
 
