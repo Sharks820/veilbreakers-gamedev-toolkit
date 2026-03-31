@@ -5,6 +5,7 @@ Blender-dependent tests are marked with @pytest.mark.blender and skipped by defa
 """
 
 import math
+import os
 import types
 import pytest
 
@@ -318,7 +319,7 @@ class TestRuntimeUvHandlers:
         assert export_calls[0]["size"] == (512, 512)
         assert export_calls[0]["opacity"] == 0.4
         assert result == {
-            "filepath": "C:/Temp\\vb_uv_layout_deadbeef.png",
+            "filepath": os.path.join("C:/Temp", "vb_uv_layout_deadbeef.png"),
             "size": 512,
             "format": "png",
         }
