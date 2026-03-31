@@ -30,6 +30,8 @@ import bpy
 import mathutils
 
 from ._context import get_3d_context_override
+from ._mesh_bridge import post_boolean_cleanup
+from .lod_pipeline import SceneBudgetValidator
 
 
 logger = logging.getLogger(__name__)
@@ -1201,7 +1203,7 @@ def handle_check_game_ready(params: dict) -> dict:
     rotation = tuple(obj.rotation_euler)
     scale = tuple(obj.scale)
 
-    return _evaluate_game_readiness(
+    result = _evaluate_game_readiness(
         topology_result=topology_result,
         object_name=obj.name,
         poly_budget=poly_budget,
@@ -1211,6 +1213,25 @@ def handle_check_game_ready(params: dict) -> dict:
         rotation=rotation,
         scale=scale,
     )
+
+    # --- Scene budget validation (MESH-11) ---
+    # Gather tri counts from all visible mesh objects for scene-level budget check
+    object_tris: list[int] = []
+    for scene_obj in bpy.context.view_layer.objects:
+        if scene_obj.type == "MESH" and scene_obj.visible_get():
+            mesh_data = scene_obj.data
+            tri_est = sum(
+                1 if len(p.vertices) == 3
+                else 2 if len(p.vertices) == 4
+                else len(p.vertices) - 2
+                for p in mesh_data.polygons
+            )
+            object_tris.append(tri_est)
+
+    budget_validator = SceneBudgetValidator()
+    result["scene_budget"] = budget_validator.validate_all_scopes(object_tris)
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -1911,11 +1932,36 @@ def handle_boolean_op(params: dict) -> dict:
     if remove_cutter:
         bpy.data.objects.remove(cutter, do_unlink=True)
 
+    # --- Post-boolean cleanup using bmesh (preserves UVs/materials) ---
+    merge_distance = params.get("merge_distance", 0.0001)
+    bm = bmesh.new()
+    try:
+        bm.from_mesh(target.data)
+        # Remove doubles
+        doubles_result = bmesh.ops.remove_doubles(
+            bm, verts=bm.verts, dist=merge_distance
+        )
+        doubles_removed = len(doubles_result.get("verts", []))
+        # Recalculate normals
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        bm.to_mesh(target.data)
+    finally:
+        bm.free()
+    target.data.update()
+
+    # Run pure-logic post_boolean_cleanup for the analysis report
+    verts = [(v.co.x, v.co.y, v.co.z) for v in target.data.vertices]
+    faces = [tuple(p.vertices) for p in target.data.polygons]
+    cleanup_result = post_boolean_cleanup(
+        verts, faces, merge_distance=merge_distance
+    )
+
     return {
         "object_name": name,
         "operation": operation,
         "vertex_count": len(target.data.vertices),
         "face_count": len(target.data.polygons),
+        "cleanup_report": cleanup_result["report"],
     }
 
 

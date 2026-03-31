@@ -15,7 +15,7 @@
     "bug_scan_after_phase": true,
     "research_before_questions": false,
     "skip_discuss": true,
-    "_auto_chain_active": true
+    "_auto_chain_active": false
   },
   "git": {
     "branching_strategy": "phase",
@@ -26,11 +26,23 @@
     "workflow_guard": true
   },
   "agent_skills": {
-    "gsd-executor": [".claude/skills/vb-mcp-tools"],
-    "gsd-planner": [".claude/skills/vb-mcp-tools"],
-    "gsd-phase-researcher": [".claude/skills/vb-mcp-tools"],
-    "gsd-verifier": [".claude/skills/vb-mcp-tools"],
-    "gsd-ui-researcher": [".claude/skills/vb-mcp-tools"],
-    "gsd-debugger": [".claude/skills/vb-mcp-tools"]
+    "gsd-executor": [
+      ".claude/skills/vb-mcp-tools"
+    ],
+    "gsd-planner": [
+      ".claude/skills/vb-mcp-tools"
+    ],
+    "gsd-phase-researcher": [
+      ".claude/skills/vb-mcp-tools"
+    ],
+    "gsd-verifier": [
+      ".claude/skills/vb-mcp-tools"
+    ],
+    "gsd-ui-researcher": [
+      ".claude/skills/vb-mcp-tools"
+    ],
+    "gsd-debugger": [
+      ".claude/skills/vb-mcp-tools"
+    ]
   }
 }
