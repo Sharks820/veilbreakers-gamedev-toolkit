@@ -1768,6 +1768,307 @@ ROOM_SPATIAL_GRAPHS: dict[str, dict] = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# Room Activity Zones (MESH-03)
+# ---------------------------------------------------------------------------
+# Partition each room type into functional areas.  Each zone has a name,
+# a fraction of room area it occupies, a position anchor (which wall or
+# "center"), and allowed item types.  The constraint solver uses these to
+# bias furniture placement into appropriate zones.
+# ---------------------------------------------------------------------------
+
+ROOM_ACTIVITY_ZONES: dict[str, list[dict]] = {
+    "tavern": [
+        {
+            "name": "bar_zone",
+            "fraction": 0.30,
+            "anchor": "back_wall",
+            "allowed": {"bar_counter", "barrel", "shelf"},
+        },
+        {
+            "name": "seating_zone",
+            "fraction": 0.50,
+            "anchor": "center",
+            "allowed": {"table", "chair"},
+        },
+        {
+            "name": "hearth_zone",
+            "fraction": 0.20,
+            "anchor": "side_wall",
+            "allowed": {"fireplace"},
+        },
+    ],
+    "bedroom": [
+        {
+            "name": "sleep_zone",
+            "fraction": 0.40,
+            "anchor": "back_wall",
+            "allowed": {"bed", "nightstand"},
+        },
+        {
+            "name": "work_zone",
+            "fraction": 0.30,
+            "anchor": "side_wall",
+            "allowed": {"desk", "chair"},
+        },
+        {
+            "name": "storage_zone",
+            "fraction": 0.30,
+            "anchor": "side_wall",
+            "allowed": {"wardrobe", "rug"},
+        },
+    ],
+    "kitchen": [
+        {
+            "name": "fire_zone",
+            "fraction": 0.35,
+            "anchor": "back_wall",
+            "allowed": {"cooking_fire"},
+        },
+        {
+            "name": "prep_zone",
+            "fraction": 0.35,
+            "anchor": "center",
+            "allowed": {"table"},
+        },
+        {
+            "name": "storage_zone",
+            "fraction": 0.30,
+            "anchor": "side_wall",
+            "allowed": {"shelf", "barrel", "crate"},
+        },
+    ],
+    "blacksmith": [
+        {
+            "name": "forge_zone",
+            "fraction": 0.35,
+            "anchor": "back_wall",
+            "allowed": {"forge", "bellows"},
+        },
+        {
+            "name": "anvil_zone",
+            "fraction": 0.35,
+            "anchor": "center",
+            "allowed": {"anvil"},
+        },
+        {
+            "name": "storage_zone",
+            "fraction": 0.30,
+            "anchor": "side_wall",
+            "allowed": {"workbench", "weapon_rack", "tool_rack"},
+        },
+    ],
+    "library": [
+        {
+            "name": "reading_zone",
+            "fraction": 0.35,
+            "anchor": "center",
+            "allowed": {"desk", "chair", "candelabra"},
+        },
+        {
+            "name": "stacks_zone",
+            "fraction": 0.65,
+            "anchor": "back_wall",
+            "allowed": {"bookshelf"},
+        },
+    ],
+    "chapel": [
+        {
+            "name": "altar_zone",
+            "fraction": 0.25,
+            "anchor": "back_wall",
+            "allowed": {"altar", "candelabra"},
+        },
+        {
+            "name": "congregation_zone",
+            "fraction": 0.60,
+            "anchor": "center",
+            "allowed": {"pew"},
+        },
+        {
+            "name": "vestibule_zone",
+            "fraction": 0.15,
+            "anchor": "front_wall",
+            "allowed": {"banner"},
+        },
+    ],
+    "throne_room": [
+        {
+            "name": "throne_zone",
+            "fraction": 0.25,
+            "anchor": "back_wall",
+            "allowed": {"throne", "banner"},
+        },
+        {
+            "name": "processional_zone",
+            "fraction": 0.50,
+            "anchor": "center",
+            "allowed": {"carpet", "brazier"},
+        },
+        {
+            "name": "flanking_zone",
+            "fraction": 0.25,
+            "anchor": "side_wall",
+            "allowed": {"pillar"},
+        },
+    ],
+    "great_hall": [
+        {
+            "name": "feast_zone",
+            "fraction": 0.55,
+            "anchor": "center",
+            "allowed": {"long_table", "chair", "chandelier"},
+        },
+        {
+            "name": "hearth_zone",
+            "fraction": 0.25,
+            "anchor": "side_wall",
+            "allowed": {"fireplace"},
+        },
+        {
+            "name": "decor_zone",
+            "fraction": 0.20,
+            "anchor": "side_wall",
+            "allowed": {"banner", "candelabra"},
+        },
+    ],
+    "dining_hall": [
+        {
+            "name": "feast_zone",
+            "fraction": 0.55,
+            "anchor": "center",
+            "allowed": {"long_table", "chair", "chandelier"},
+        },
+        {
+            "name": "service_zone",
+            "fraction": 0.25,
+            "anchor": "side_wall",
+            "allowed": {"serving_table", "fireplace"},
+        },
+        {
+            "name": "decor_zone",
+            "fraction": 0.20,
+            "anchor": "side_wall",
+            "allowed": {"banner"},
+        },
+    ],
+    "war_room": [
+        {
+            "name": "strategy_zone",
+            "fraction": 0.60,
+            "anchor": "center",
+            "allowed": {"large_table", "chair", "map_display"},
+        },
+        {
+            "name": "decor_zone",
+            "fraction": 0.40,
+            "anchor": "side_wall",
+            "allowed": {"banner", "candelabra"},
+        },
+    ],
+    "alchemy_lab": [
+        {
+            "name": "brew_zone",
+            "fraction": 0.40,
+            "anchor": "center",
+            "allowed": {"cauldron", "workbench"},
+        },
+        {
+            "name": "ingredient_zone",
+            "fraction": 0.60,
+            "anchor": "back_wall",
+            "allowed": {"shelf_with_bottles", "herb_rack", "distillation_apparatus"},
+        },
+    ],
+    "crypt": [
+        {
+            "name": "burial_zone",
+            "fraction": 0.60,
+            "anchor": "center",
+            "allowed": {"sarcophagus"},
+        },
+        {
+            "name": "wall_burial_zone",
+            "fraction": 0.25,
+            "anchor": "side_wall",
+            "allowed": {"wall_tomb", "candelabra"},
+        },
+        {
+            "name": "altar_zone",
+            "fraction": 0.15,
+            "anchor": "back_wall",
+            "allowed": {"altar"},
+        },
+    ],
+    "smithy": [
+        {
+            "name": "forge_zone",
+            "fraction": 0.35,
+            "anchor": "back_wall",
+            "allowed": {"forge"},
+        },
+        {
+            "name": "work_zone",
+            "fraction": 0.35,
+            "anchor": "center",
+            "allowed": {"anvil"},
+        },
+        {
+            "name": "storage_zone",
+            "fraction": 0.30,
+            "anchor": "side_wall",
+            "allowed": {"workbench", "weapon_rack", "barrel", "crate"},
+        },
+    ],
+}
+
+
+def get_zone_for_item(room_type: str, item_type: str) -> Optional[str]:
+    """Return the activity zone name for an item type in a room, or None."""
+    zones = ROOM_ACTIVITY_ZONES.get(room_type, [])
+    for zone in zones:
+        if item_type in zone["allowed"]:
+            return zone["name"]
+    return None
+
+
+def get_zone_bounds(
+    zone: dict, width: float, depth: float,
+) -> tuple[float, float, float, float]:
+    """Return (x_min, y_min, x_max, y_max) for an activity zone.
+
+    Zones are rectangular regions derived from their anchor position
+    and fraction of room area.
+    """
+    anchor = zone["anchor"]
+    frac = zone["fraction"]
+
+    if anchor == "back_wall":
+        # Strip along back wall (high-y region)
+        return (0.0, depth * (1.0 - frac), width, depth)
+    elif anchor == "front_wall":
+        # Strip along front wall (low-y region)
+        return (0.0, 0.0, width, depth * frac)
+    elif anchor == "side_wall":
+        # Split evenly on left+right sides
+        side_width = width * frac / 2
+        return (0.0, 0.0, side_width, depth)  # left side primary
+    else:  # "center"
+        # Central rectangle
+        margin_x = width * (1.0 - frac) / 2
+        margin_y = depth * (1.0 - frac) / 2
+        return (margin_x, margin_y, width - margin_x, depth - margin_y)
+
+
+def compute_zone_coverage(room_type: str) -> float:
+    """Return total fraction of room area covered by activity zones.
+
+    Returns 0.0 if no zones defined for room_type.
+    """
+    zones = ROOM_ACTIVITY_ZONES.get(room_type, [])
+    return sum(z["fraction"] for z in zones)
+
+
 _ROOM_CONFIGS: dict[str, list[tuple[str, str, tuple[float, float], float]]] = {
     "tavern": [
         ("bar_counter", "wall", (3.0, 0.8), 1.1),
