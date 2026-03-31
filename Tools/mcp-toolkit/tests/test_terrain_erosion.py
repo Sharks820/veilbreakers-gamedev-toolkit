@@ -148,3 +148,43 @@ class TestApplyThermalErosion:
         result = apply_thermal_erosion(hmap, iterations=10, talus_angle=20.0)
         assert result.min() >= 0.0
         assert result.max() <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# High-iteration erosion quality tests
+# ---------------------------------------------------------------------------
+
+
+class TestErosion50kVisibleChannels:
+    """Test that 50K droplet erosion produces visible channel depth."""
+
+    def test_erosion_50k_visible_channels(self):
+        """50K droplet erosion on 64x64 heightmap carves channels > 0.05 depth."""
+        from blender_addon.handlers._terrain_erosion import apply_hydraulic_erosion
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        # Generate a mountainous heightmap with real terrain features
+        hmap = generate_heightmap(64, 64, seed=42, terrain_type="mountains")
+        original = hmap.copy()
+
+        # Run 50K droplets -- this is the AAA quality threshold
+        eroded = apply_hydraulic_erosion(hmap, iterations=50000, seed=42)
+
+        # Compute max channel depth (where erosion carved the most)
+        depth_map = original - eroded
+        max_channel_depth = float(depth_map.max())
+
+        assert max_channel_depth > 0.05, (
+            f"Max channel depth {max_channel_depth:.4f} is too shallow (< 0.05). "
+            f"50K droplets should carve visible river channels."
+        )
+
+    def test_erosion_50k_stays_in_bounds(self):
+        """50K droplet erosion keeps values in [0, 1]."""
+        from blender_addon.handlers._terrain_erosion import apply_hydraulic_erosion
+        from blender_addon.handlers._terrain_noise import generate_heightmap
+
+        hmap = generate_heightmap(64, 64, seed=42, terrain_type="mountains")
+        eroded = apply_hydraulic_erosion(hmap, iterations=50000, seed=42)
+        assert eroded.min() >= 0.0
+        assert eroded.max() <= 1.0
