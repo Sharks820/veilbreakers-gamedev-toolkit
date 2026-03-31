@@ -8,6 +8,7 @@
 - [x] **v1.0 Foundation & Full Pipeline** - Phases 1-8 (shipped 2026-03-19)
 - [x] **v2.0 Complete Unity Game Development Coverage** - Phases 9-17 (shipped 2026-03-21)
 - [x] **v3.0 AAA Mesh Quality + Professional Systems** - Phases 18-24 (shipped 2026-03-21)
+- [ ] **v7.0 AAA Procedural City Production** - Phases 30-38 (planning in progress)
 
 ## Phases
 
@@ -44,9 +45,10 @@
 
 </details>
 
-### v3.0 AAA Mesh Quality + Professional Systems
+<details>
+<summary>v3.0 AAA Mesh Quality + Professional Systems (Phases 18-24) - SHIPPED 2026-03-21</summary>
 
-- [x] **Phase 18: Procedural Mesh Integration + Terrain Depth** - Wire 127 procedural meshes into worldbuilding/environment, add cliff/cave/waterfall/bridge/multi-biome terrain features, LOD variants (3/3 plans complete)
+- [x] **Phase 18: Procedural Mesh Integration + Terrain Depth** - Wire 267 procedural meshes into worldbuilding/environment, add cliff/cave/waterfall/bridge/multi-biome terrain features, LOD variants (3/3 plans complete)
 - [x] **Phase 19: Character Excellence** - Body proportion validation, hair card generation, face/hand/foot topology validation, character-aware LOD retopology, armor seam hiding, Unity cloth physics, SSS skin shader, parallax eye shader, micro-detail normals (3/3 plans complete)
 - [x] **Phase 20: Advanced Animation + FromSoft Combat Feel** - Combat timing system (anticipation/active/recovery), animation events, blend trees, additive layers, root motion refinement, AI motion, cinematic sequences (3/3 plans complete)
 - [x] **Phase 21: Audio Middleware Architecture** - Spatial audio propagation/occlusion, layered sound design, audio event chains, dynamic music (re-sequencing/stingers), portal propagation, audio LOD, VO pipeline, procedural foley (1/1 plan complete, 8 AUDM requirements, 157 tests)
@@ -55,10 +57,7 @@
 - [x] **Phase 24: Production Pipeline** - Compile error auto-recovery, asset conflict detection, multi-tool pipeline orchestration, art style consistency validation, build verification smoke tests
 
 **Delivered:** 37 MCP tools (15 Blender + 22 Unity), 350 actions (41 new), 8,473+ tests (1,154 new), 56 requirements across 8 categories. FromSoft combat timing, Wwise-level spatial audio, Diablo 4 VFX, AAA dark fantasy UI, production pipeline automation.
-
-- [ ] **v4.0 AAA Procedural 3D Architecture** - Phases 25-29 (ARCHIVED - superseded by v7.0)
-- [ ] **v6.0 Tripo Integration & Code Reviewer** - Tripo Studio API client, unified code reviewer v3 (completed 2026-03-27)
-- [ ] **v7.0 AAA Procedural City Production** - Phases 30-38 (planning in progress)
+</details>
 
 ## Phase Details
 
