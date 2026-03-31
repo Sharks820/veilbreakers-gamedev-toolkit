@@ -15,6 +15,8 @@ import math
 import random
 from typing import Any
 
+from ._terrain_noise import _make_noise_generator
+
 
 # ---------------------------------------------------------------------------
 # Type aliases
@@ -24,27 +26,40 @@ Vec3 = tuple[float, float, float]
 
 
 # ---------------------------------------------------------------------------
-# Noise utility (deterministic, no external dependency)
+# Noise utility -- opensimplex via _terrain_noise (replaces old sin-hash)
 # ---------------------------------------------------------------------------
 
-def _hash_noise(x: float, y: float, seed: int) -> float:
-    """Simple deterministic pseudo-noise in [-1, 1]."""
-    val = math.sin(x * 12.9898 + y * 78.233 + seed * 43.1234) * 43758.5453
-    return (val - math.floor(val)) * 2.0 - 1.0
+# Cached noise generator to avoid re-creating per call
+_features_gen = None
+_features_seed = -1
 
 
-def _fbm(x: float, y: float, seed: int, octaves: int = 4) -> float:
-    """Fractal Brownian motion noise."""
-    total = 0.0
+def _hash_noise(x: float, y: float, seed: int = 0) -> float:
+    """Opensimplex noise replacing old sin-hash.
+
+    Returns values in approximately [-1, 1], deterministic for a given seed.
+    """
+    global _features_gen, _features_seed
+    if _features_gen is None or _features_seed != seed:
+        _features_gen = _make_noise_generator(seed)
+        _features_seed = seed
+    return _features_gen.noise2(x, y)
+
+
+def _fbm(x: float, y: float, seed: int = 0, octaves: int = 4,
+         persistence: float = 0.5, lacunarity: float = 2.0) -> float:
+    """Fractal Brownian motion using opensimplex instead of sin-hash."""
+    gen = _make_noise_generator(seed)
+    value = 0.0
     amplitude = 1.0
     frequency = 1.0
     max_val = 0.0
     for _ in range(octaves):
-        total += _hash_noise(x * frequency, y * frequency, seed) * amplitude
+        value += gen.noise2(x * frequency, y * frequency) * amplitude
         max_val += amplitude
-        amplitude *= 0.5
-        frequency *= 2.0
-    return total / max_val if max_val > 0 else 0.0
+        amplitude *= persistence
+        frequency *= lacunarity
+    return value / max_val if max_val > 0 else 0.0
 
 
 # ---------------------------------------------------------------------------
