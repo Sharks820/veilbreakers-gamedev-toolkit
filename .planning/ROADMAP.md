@@ -513,7 +513,8 @@ Plans:
   3. Roof generation uses straight skeleton algorithm (bpypolyskel) producing correct hip, gable, and mansard roofs from arbitrary building footprints -- no flat-box roof approximations
   4. Modular building kit has 50+ pieces per style (medieval, gothic, fortress, organic) on a 2m snap grid, with trim sheet UV mapping for efficient texture sharing across pieces
   5. Contact sheet comparison of 5 generated buildings shows no two buildings with identical facade layouts -- architectural variation achieved through randomized bay rules, floor counts, and style parameters
-**Plans**: TBD
+**Plans**: 1 plan (COMPLETE)
+- Plan 01: Grammar upgrade, quality wiring, roof, variation, kit expansion (6 tasks, 438 tests)
 
 ### Phase 33: Interior System
 **Goal**: Interior generation produces purpose-driven room layouts with spatially-aware furniture placement, decorative clutter, practical lighting, and occlusion zones -- interiors feel lived-in, not empty boxes
@@ -622,7 +623,7 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 24. Production Pipeline | v3.0 | 1/1 | Complete | 2026-03-21 |
 | 30. Mesh Foundation | v7.0 | 1/1 | Complete    | 2026-03-31 |
 | 31. Terrain & Environment | v7.0 | 3/3 | Complete   | 2026-03-31 |
-| 32. Building System | v7.0 | 0/TBD | Not Started | - |
+| 32. Building System | v7.0 | 1/1 | Complete | 2026-03-31 |
 | 33. Interior System | v7.0 | 0/TBD | Not Started | - |
 | 34. Multi-biome Terrain | v7.0 | 0/TBD | Not Started | - |
 | 35. Multi-backend AI Integration | v7.0 | 0/TBD | Not Started | - |

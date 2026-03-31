@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: AAA Procedural City Production
 status: executing
-last_updated: "2026-03-31T13:13:20.437Z"
-last_activity: 2026-03-31
+last_updated: "2026-03-31T13:33:20Z"
+last_activity: 2026-03-31 -- Phase 32 Plan 01 COMPLETE
 progress:
   total_phases: 9
   completed_phases: 1
   total_plans: 5
-  completed_plans: 4
+  completed_plans: 5
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -19,14 +19,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** Phase 31 — Terrain & Environment
+**Current focus:** Phase 32 — Building System (COMPLETE)
 
 ## Current Position
 
-Phase: 31 (Terrain & Environment) — EXECUTING
-Plan: 3 of 3
-Status: Ready to execute
-Last activity: 2026-03-31
+Phase: 32 (Building System) — COMPLETE
+Plan: 1 of 1
+Status: Phase 32 complete -- all success criteria met
+Last activity: 2026-03-31 -- Phase 32 Plan 01 complete (6 tasks, 438 tests, 15m41s)
 
 ## Accumulated Context
 
@@ -54,7 +54,7 @@ Recent decisions affecting v6.0 work:
 ### v6.0 Deliverables
 
 **Branch:** feature/unified-code-reviewer-v5 (MERGED)
-**Status:** Ready to execute
+**Status:** Executing Phase 32
 
 - Tripo Studio API client (v3.0, JWT auth, subscription credits)
 - Unified code reviewer v3 (210 rules, DeepAnalyzer, 0% FP, 82.3% confidence)
@@ -129,33 +129,31 @@ Recent decisions affecting v6.0 work:
 
 ### Blockers
 
-None. Phase 30 ready for execution.
+None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T13:13:20.433Z
-Completed: v7.0 planning overhaul — deep codebase audit, technique research, all planning artifacts fixed
-Next action: Execute Phase 30 plans 2.1-2.6 (wire materials, enforce RNG, edge loops, LOD+budget, boolean cleanup, visual QA)
+Last session: 2026-03-31T13:33:20Z
+Completed: Phase 32 (Building System) -- all 6 tasks, 438 tests passing
+Next action: Continue to Phase 33 (Interior System) or Phase 30 execution
 
-### Recent Work (2026-03-31 planning overhaul)
+### Recent Work (2026-03-31 Phase 32 execution)
 
 **Completed:**
 
-1. Deep codebase audit: 267 generators analyzed, quality rated per category
-2. Context7 research: Unity/Blender procedural generation APIs documented
-3. Technique research: CGA split grammars, WFC, L-systems, hydraulic erosion, Poisson disk, straight skeleton roofs
-4. Tripo pipeline audit: texture extraction gap, de-lighting, post-processing pipeline mapped
-5. ROADMAP.md fixed: broken HTML tags, v4.0 archived, v7.0 success criteria (9 phases × 5 criteria each)
-6. REQUIREMENTS.md: v7.0 section added (MESH-01..16, PIPE-01 with measurable acceptance criteria)
-7. 30-RESEARCH.md created: actual codebase state + technique research consolidated
-8. 30-01-GAP-ANALYSIS.md v2: corrected count (267), fixed misclassifications, replaced "no primitives" with output quality
-9. 30-02-PLAN.md v2: 6 plans with proper requirement IDs and AAA verification gates
-10. 30-01-PLAN.md: marked superseded with explanation of what was wrong
-11. STATE.md: updated to reflect current accurate state
-12. All 8 Codex-identified bugs addressed
+1. Wired building_quality AAA generators into grammar details (13 detail types with real geometry)
+2. Implemented CGA-style facade split grammar (recursive floor/bay splitting with fill rules)
+3. Replaced flat-box roofs with AAA tile/shingle geometry from generate_roof()
+4. Added per-building variation system (floor height, wall thickness, detail subset, bay randomization)
+5. Expanded modular building kit from 25 to 52 piece types (260 variants across 5 styles)
+6. Added 20 comprehensive wiring tests, total 438 building tests passing
 
-**Next:** `/gsd:execute-phase 30` or `/gsd:autonomous --from 30`
+**Key decisions:**
+- mesh_spec operation type added to BuildingSpec for full vertex/face data from generators
+- Lazy imports for building_quality to maintain pure-logic module separation
+- CGA split uses weighted probability tables per floor context and per style
+- 5 STYLE_CONFIGS preserved (mansard mapped as option, not 6th style)
 
 ---
 *State initialized: 2026-03-30*
-*Last updated: 2026-03-31 — v7.0 planning complete, Phase 30 ready for execution*
+*Last updated: 2026-03-31 -- Phase 32 complete, building system upgraded to AAA quality*
