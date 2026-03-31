@@ -571,9 +571,9 @@ Requirements for v7.0 — AAA Procedural City Production. IDs match PROJECT.md A
 
 ### Terrain & Environment
 
-- [ ] **MESH-05**: Terrain-building integration with foundation meshes, terrain flatten/cutout zones, and material blending at contact edges. Zero visible gaps in side-view verification
-- [ ] **MESH-09**: Voronoi-based biome distribution with 5+ biome types, corruption-aware tinting (0-100%), smooth 10-20m blend zones between biomes. Uses existing 14 biome palettes
-- [ ] **MESH-10**: Vegetation uses L-system branching for trees (not sphere clusters), 3+ species with leaf card geometry, billboard LOD fallback. Poisson disk scatter (Bridson's algorithm) for natural distribution
+- [x] **MESH-05**: Terrain-building integration with foundation meshes, terrain flatten/cutout zones, and material blending at contact edges. Zero visible gaps in side-view verification
+- [x] **MESH-09**: Voronoi-based biome distribution with 5+ biome types, corruption-aware tinting (0-100%), smooth 10-20m blend zones between biomes. Uses existing 14 biome palettes
+- [x] **MESH-10**: Vegetation uses L-system branching for trees (not sphere clusters), 3+ species with leaf card geometry, billboard LOD fallback. Poisson disk scatter (Bridson's algorithm) for natural distribution
 
 ### Performance & Pipeline
 
