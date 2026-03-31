@@ -643,3 +643,101 @@ class TestBiomeTransition:
         for tw, pw in zip(transition, pure):
             for i in range(4):
                 assert abs(tw[i] - pw[i]) < 0.01
+
+
+# ===========================================================================
+# Moisture-aware splatmap tests
+# ===========================================================================
+
+
+class TestMoistureAwareSplatmap:
+    """Tests for moisture_map parameter in auto_assign_terrain_layers."""
+
+    def test_splatmap_moisture_aware_differs(self):
+        """Flat area with high vs low moisture should produce different layers."""
+        import numpy as np
+
+        # Use flat quad vertices spanning a 10x10 area at z=5
+        verts = [
+            (0.0, 0.0, 5.0), (10.0, 0.0, 5.0),
+            (10.0, 10.0, 5.0), (0.0, 10.0, 5.0),
+        ]
+        normals = [(0.0, 0.0, 1.0)]
+        faces = [(0, 1, 2, 3)]
+
+        # No moisture
+        result_dry = auto_assign_terrain_layers(
+            verts, normals, faces,
+        )
+
+        # High moisture map
+        moisture_high = np.full((4, 4), 0.9, dtype=np.float64)
+        result_wet = auto_assign_terrain_layers(
+            verts, normals, faces,
+            moisture_map=moisture_high,
+        )
+
+        # Results should differ when moisture is provided
+        assert result_dry != result_wet, (
+            "Moisture map should change layer assignment on flat terrain"
+        )
+
+    def test_splatmap_moisture_weights_sum_to_one(self):
+        """With moisture_map, weights should still sum to ~1.0."""
+        import numpy as np
+
+        verts = FLAT_QUAD_VERTS
+        normals = FLAT_QUAD_NORMALS
+        faces = FLAT_QUAD_FACES
+
+        moisture = np.full((4, 4), 0.8, dtype=np.float64)
+        result = auto_assign_terrain_layers(
+            verts, normals, faces,
+            moisture_map=moisture,
+        )
+        for w in result:
+            weight_sum = sum(w)
+            assert abs(weight_sum - 1.0) < 0.02, (
+                f"Weight sum {weight_sum} != 1.0 with moisture"
+            )
+
+    def test_splatmap_no_moisture_backward_compatible(self):
+        """Without moisture_map, output should be identical to original."""
+        result_default = auto_assign_terrain_layers(
+            FLAT_QUAD_VERTS, FLAT_QUAD_NORMALS, FLAT_QUAD_FACES,
+        )
+        result_none = auto_assign_terrain_layers(
+            FLAT_QUAD_VERTS, FLAT_QUAD_NORMALS, FLAT_QUAD_FACES,
+            moisture_map=None,
+        )
+        assert result_default == result_none, (
+            "moisture_map=None should produce identical output to no arg"
+        )
+
+    def test_splatmap_low_moisture_changes_ground(self):
+        """Low moisture on flat ground should shift weights away from default."""
+        import numpy as np
+
+        verts = [
+            (0.0, 0.0, 5.0), (10.0, 0.0, 5.0),
+            (10.0, 10.0, 5.0), (0.0, 10.0, 5.0),
+        ]
+        normals = [(0.0, 0.0, 1.0)]
+        faces = [(0, 1, 2, 3)]
+
+        moisture_low = np.full((4, 4), 0.1, dtype=np.float64)
+        result_low = auto_assign_terrain_layers(
+            verts, normals, faces,
+            moisture_map=moisture_low,
+        )
+
+        moisture_high = np.full((4, 4), 0.9, dtype=np.float64)
+        result_high = auto_assign_terrain_layers(
+            verts, normals, faces,
+            moisture_map=moisture_high,
+        )
+
+        # High and low moisture should produce different R channel values
+        assert result_low[0] != result_high[0], (
+            "Low and high moisture should produce different splatmap weights"
+        )

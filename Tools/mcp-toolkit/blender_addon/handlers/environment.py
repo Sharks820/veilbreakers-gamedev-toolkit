@@ -403,6 +403,26 @@ def handle_generate_terrain(params: dict) -> dict:
         heightmap = apply_thermal_erosion(heightmap, iterations=max(erosion_iters // 50, 5))
         erosion_applied = True
 
+    # Apply flatten zones for building foundations (MESH-05)
+    flatten_zones = params.get("flatten_zones", None)
+    if flatten_zones:
+        from .terrain_advanced import flatten_multiple_zones
+        heightmap = flatten_multiple_zones(heightmap, flatten_zones)
+
+    # Compute moisture map from flow accumulation (for splatmap painting)
+    moisture_map = None
+    if erosion_applied:
+        from .terrain_advanced import compute_flow_map
+        flow_result = compute_flow_map(heightmap)
+        flow_acc = np.asarray(flow_result["flow_accumulation"], dtype=np.float64)
+        # Normalize flow accumulation to [0, 1] using log scale
+        log_flow = np.log1p(flow_acc)
+        fa_max = log_flow.max()
+        if fa_max > 0:
+            moisture_map = log_flow / fa_max
+        else:
+            moisture_map = np.zeros_like(heightmap)
+
     # Convert heightmap to Blender mesh
     terrain_size = scale
     rows, cols = heightmap.shape
@@ -440,6 +460,48 @@ def handle_generate_terrain(params: dict) -> dict:
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(obj)
 
+    # Auto-generate cliff mesh overlays at steep edges (MESH-05)
+    cliff_overlays_enabled = params.get("cliff_overlays", True)
+    cliff_threshold = params.get("cliff_threshold_deg", 60.0)
+    cliff_placements = []
+    if cliff_overlays_enabled:
+        from ._terrain_depth import detect_cliff_edges, generate_cliff_face_mesh
+        cliff_placements = detect_cliff_edges(
+            heightmap,
+            slope_threshold_deg=cliff_threshold,
+            min_cluster_size=4,
+            terrain_size=terrain_size,
+        )
+        for i, cp in enumerate(cliff_placements):
+            cliff_mesh_spec = generate_cliff_face_mesh(
+                width=cp["width"],
+                height=cp["height"],
+                seed=seed + i + 1000,
+            )
+            # Create cliff mesh object in Blender
+            cliff_mesh = bpy.data.meshes.new(f"{name}_Cliff_{i}")
+            cliff_bm = bmesh.new()
+            for vert_data in cliff_mesh_spec["vertices"]:
+                cliff_bm.verts.new(vert_data)
+            cliff_bm.verts.ensure_lookup_table()
+            for face_data in cliff_mesh_spec["faces"]:
+                try:
+                    cliff_bm.faces.new(
+                        [cliff_bm.verts[vi] for vi in face_data]
+                    )
+                except (ValueError, IndexError):
+                    pass  # Skip degenerate faces
+            cliff_bm.to_mesh(cliff_mesh)
+            cliff_bm.free()
+
+            cliff_obj = bpy.data.objects.new(f"{name}_Cliff_{i}", cliff_mesh)
+            cliff_obj.location = (cp["position"][0], cp["position"][1],
+                                  cp["position"][2] * height_scale)
+            cliff_obj.rotation_euler = tuple(cp["rotation"])
+            bpy.context.collection.objects.link(cliff_obj)
+            # Parent cliff to terrain
+            cliff_obj.parent = obj
+
     result = {
         "name": obj.name,
         "vertex_count": vertex_count,
@@ -447,6 +509,9 @@ def handle_generate_terrain(params: dict) -> dict:
         "resolution": resolution,
         "height_scale": height_scale,
         "erosion_applied": erosion_applied,
+        "cliff_overlays": len(cliff_placements),
+        "flatten_zones_applied": len(flatten_zones) if flatten_zones else 0,
+        "has_moisture_map": moisture_map is not None,
     }
     if biome_preset is not None:
         result["biome_preset"] = biome_name
