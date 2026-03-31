@@ -313,6 +313,8 @@ def generate_heightmap(
     lacunarity: float | None = None,
     seed: int = 0,
     terrain_type: str = "mountains",
+    warp_strength: float = 0.0,
+    warp_scale: float = 0.5,
 ) -> np.ndarray:
     """Generate a 2D heightmap using fBm (fractal Brownian motion) noise.
 
@@ -333,6 +335,11 @@ def generate_heightmap(
     terrain_type : str
         One of TERRAIN_PRESETS keys: mountains, hills, plains, volcanic,
         canyon, cliffs.
+    warp_strength : float
+        Domain warp amplitude. 0 = off (default, backward compatible),
+        0.3-0.8 = organic terrain, 1.0+ = extreme distortion.
+    warp_scale : float
+        Frequency of the domain warp noise. Lower = broader warping.
 
     Returns
     -------
@@ -357,6 +364,15 @@ def generate_heightmap(
     x_coords = np.arange(width, dtype=np.float64) / scale   # shape (width,)
     y_coords = np.arange(height, dtype=np.float64) / scale  # shape (height,)
     xs_base, ys_base = np.meshgrid(x_coords, y_coords)      # both (height, width)
+
+    # Apply domain warping for organic, non-repetitive terrain
+    if warp_strength > 0.0:
+        xs_base, ys_base = domain_warp_array(
+            xs_base, ys_base,
+            warp_strength=warp_strength,
+            warp_scale=warp_scale,
+            seed=seed + 7919,  # Offset seed for independent warp noise
+        )
 
     # Accumulate fBm octaves with vectorized noise evaluation
     hmap = np.zeros((height, width), dtype=np.float64)

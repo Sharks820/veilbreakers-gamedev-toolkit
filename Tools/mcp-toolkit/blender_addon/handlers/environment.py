@@ -370,6 +370,14 @@ def handle_generate_terrain(params: dict) -> dict:
     erosion = validated["erosion"]
     erosion_iters = validated["erosion_iterations"]
 
+    # Auto-scale erosion: minimum 50K droplets for visible river channels
+    if erosion != "none" and erosion_iters < 50000:
+        erosion_iters = max(50000, resolution * resolution // 5)
+
+    # Domain warp params (organic terrain by default when not explicitly set)
+    warp_strength = params.get("warp_strength", 0.4)
+    warp_scale = params.get("warp_scale", 0.5)
+
     # Generate heightmap
     heightmap = generate_heightmap(
         width=resolution,
@@ -380,6 +388,8 @@ def handle_generate_terrain(params: dict) -> dict:
         lacunarity=validated["lacunarity"],
         seed=seed,
         terrain_type=terrain_type,
+        warp_strength=warp_strength,
+        warp_scale=warp_scale,
     )
 
     # Apply erosion
