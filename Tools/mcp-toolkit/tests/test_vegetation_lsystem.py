@@ -700,3 +700,114 @@ class TestFullPipeline:
         ]
         leaves = generate_leaf_cards(tips, density=0.0, seed=42)
         assert leaves["cards_generated"] == 0
+
+
+# ===================================================================
+# L-system scatter integration (VEGETATION_GENERATOR_MAP wiring)
+# ===================================================================
+
+
+class TestLsystemScatterIntegration:
+    """Test that VEGETATION_GENERATOR_MAP uses L-system trees, not sphere clusters."""
+
+    def test_vegetation_map_tree_calls_lsystem(self):
+        """VEGETATION_GENERATOR_MAP['tree'] entry uses _lsystem_tree_generator."""
+        from blender_addon.handlers._mesh_bridge import VEGETATION_GENERATOR_MAP
+        gen_func, gen_kwargs = VEGETATION_GENERATOR_MAP["tree"]
+        # The function name should indicate L-system, not generate_tree_mesh
+        assert "lsystem" in gen_func.__name__.lower(), (
+            f"Expected L-system generator, got {gen_func.__name__}"
+        )
+
+    def test_all_tree_types_mapped_to_lsystem(self):
+        """All 7 tree type entries map to L-system grammars."""
+        from blender_addon.handlers._mesh_bridge import VEGETATION_GENERATOR_MAP
+        tree_keys = [
+            "tree", "tree_healthy", "tree_boundary", "tree_blighted",
+            "tree_dead", "tree_twisted", "pine_tree",
+        ]
+        for key in tree_keys:
+            gen_func, gen_kwargs = VEGETATION_GENERATOR_MAP[key]
+            assert "lsystem" in gen_func.__name__.lower(), (
+                f"'{key}' uses {gen_func.__name__}, expected L-system generator"
+            )
+
+    def test_lsystem_tree_produces_rich_mesh(self):
+        """Calling the generator for 'tree_healthy' produces mesh with > 100 vertices."""
+        from blender_addon.handlers._mesh_bridge import VEGETATION_GENERATOR_MAP
+        gen_func, gen_kwargs = VEGETATION_GENERATOR_MAP["tree_healthy"]
+        spec = gen_func(**gen_kwargs, seed=42)
+        assert len(spec["vertices"]) > 100, (
+            f"Expected > 100 vertices, got {len(spec['vertices'])} "
+            "(may still be using sphere cluster generator)"
+        )
+
+    def test_lsystem_tree_has_branch_metadata(self):
+        """L-system tree output contains generator='lsystem_tree' metadata."""
+        from blender_addon.handlers._mesh_bridge import VEGETATION_GENERATOR_MAP
+        gen_func, gen_kwargs = VEGETATION_GENERATOR_MAP["tree"]
+        spec = gen_func(**gen_kwargs, seed=42)
+        assert spec["metadata"]["generator"] == "lsystem_tree", (
+            "Expected metadata.generator='lsystem_tree'"
+        )
+
+    def test_lsystem_leaf_cards_attached(self):
+        """L-system tree with leaf_type='broadleaf' has more vertices than without."""
+        from blender_addon.handlers._mesh_bridge import VEGETATION_GENERATOR_MAP
+        gen_func_healthy, kwargs_healthy = VEGETATION_GENERATOR_MAP["tree_healthy"]
+        gen_func_dead, kwargs_dead = VEGETATION_GENERATOR_MAP["tree_dead"]
+
+        spec_with_leaves = gen_func_healthy(**kwargs_healthy, seed=42)
+        spec_no_leaves = gen_func_dead(**kwargs_dead, seed=42)
+
+        # Healthy tree has leaf cards, dead does not (leaf_type=None)
+        assert len(spec_with_leaves["vertices"]) > len(spec_no_leaves["vertices"]), (
+            "Tree with leaves should have more vertices than dead tree"
+        )
+
+    def test_iterations_capped_at_4_for_scatter(self):
+        """VEGETATION_GENERATOR_MAP tree entries have iterations <= 4."""
+        from blender_addon.handlers._mesh_bridge import VEGETATION_GENERATOR_MAP
+        tree_keys = [
+            "tree", "tree_healthy", "tree_boundary", "tree_blighted",
+            "tree_dead", "tree_twisted", "pine_tree",
+        ]
+        for key in tree_keys:
+            _, gen_kwargs = VEGETATION_GENERATOR_MAP[key]
+            iters = gen_kwargs.get("iterations", 99)
+            assert iters <= 4, (
+                f"'{key}' has iterations={iters}, expected <= 4 for scatter"
+            )
+
+    def test_dead_tree_has_no_leaf_type(self):
+        """tree_dead entry has leaf_type=None (dead trees have no leaves)."""
+        from blender_addon.handlers._mesh_bridge import VEGETATION_GENERATOR_MAP
+        _, gen_kwargs = VEGETATION_GENERATOR_MAP["tree_dead"]
+        assert gen_kwargs.get("leaf_type") is None, (
+            f"Dead tree should have leaf_type=None, got {gen_kwargs.get('leaf_type')}"
+        )
+
+    def test_each_tree_type_returns_valid_meshspec(self):
+        """Every tree entry returns dict with vertices and faces keys."""
+        from blender_addon.handlers._mesh_bridge import VEGETATION_GENERATOR_MAP
+        tree_keys = [
+            "tree", "tree_healthy", "tree_boundary", "tree_blighted",
+            "tree_dead", "tree_twisted", "pine_tree",
+        ]
+        for key in tree_keys:
+            gen_func, gen_kwargs = VEGETATION_GENERATOR_MAP[key]
+            spec = gen_func(**gen_kwargs, seed=42)
+            assert "vertices" in spec, f"'{key}' missing 'vertices'"
+            assert "faces" in spec, f"'{key}' missing 'faces'"
+            assert len(spec["vertices"]) > 0, f"'{key}' has empty vertices"
+            assert len(spec["faces"]) > 0, f"'{key}' has empty faces"
+
+    def test_prop_map_tree_entries_use_lsystem(self):
+        """PROP_GENERATOR_MAP dead_tree and tree_twisted also use L-system."""
+        from blender_addon.handlers._mesh_bridge import PROP_GENERATOR_MAP
+        for key in ["dead_tree", "tree_twisted"]:
+            gen_func, _ = PROP_GENERATOR_MAP[key]
+            assert "lsystem" in gen_func.__name__.lower(), (
+                f"PROP_GENERATOR_MAP['{key}'] uses {gen_func.__name__}, "
+                "expected L-system generator"
+            )
