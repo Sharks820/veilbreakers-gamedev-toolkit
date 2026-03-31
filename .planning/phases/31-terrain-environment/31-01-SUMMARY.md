@@ -53,7 +53,7 @@ completed: 2026-03-31
 - **Started:** 2026-03-31T12:45:02Z
 - **Completed:** 2026-03-31T12:49:09Z
 - **Tasks:** 1
-- **Files modified:** 3
+- **Files modified:** 5 (3 source + 2 test)
 
 ## Accomplishments
 - generate_heightmap now accepts warp_strength/warp_scale and calls domain_warp_array conditionally, producing organic non-repetitive terrain
@@ -64,14 +64,17 @@ completed: 2026-03-31
 
 ## Task Commits
 
-Each task was committed atomically:
+Each task was committed atomically (TDD: RED then GREEN):
 
-1. **Task 1: Domain warp integration + erosion escalation + noise fix** - `97e6790` (feat)
+1. **Task 1 (RED): Failing tests for domain warp + erosion quality** - `ab86f99` (test)
+2. **Task 1 (GREEN): Domain warp integration + erosion escalation + noise fix** - `97e6790` (feat)
 
 ## Files Created/Modified
 - `Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py` - Added warp_strength/warp_scale params to generate_heightmap, domain_warp_array call before fBm loop
 - `Tools/mcp-toolkit/blender_addon/handlers/environment.py` - Auto-scale erosion to 50K+, pass warp params through to generate_heightmap
 - `Tools/mcp-toolkit/blender_addon/handlers/terrain_features.py` - Replaced sin-hash _hash_noise/_fbm with opensimplex via _make_noise_generator import
+- `Tools/mcp-toolkit/tests/test_terrain_noise.py` - Added 5 domain warp integration tests (TestDomainWarpIntegration class)
+- `Tools/mcp-toolkit/tests/test_terrain_erosion.py` - Added 2 erosion quality tests (TestErosion50kVisibleChannels class)
 
 ## Decisions Made
 - Domain warp default is 0.0 in generate_heightmap (API backward compat) but 0.4 in handle_generate_terrain (organic terrain by default for the handler path) -- this means direct API callers opt-in while the Blender handler gets quality by default
@@ -93,13 +96,22 @@ None - no external service configuration required.
 - 50K+ erosion creates drainage patterns usable as moisture proxy for splatmap painting
 - Opensimplex noise in terrain_features.py means all canyon/cliff/waterfall/arch features have organic noise without artifacts
 
+## Known Stubs
+
+None -- all implementations are fully wired with real data sources.
+
 ## Self-Check: PASSED
 
 - [x] _terrain_noise.py exists with warp_strength/warp_scale params
-- [x] environment.py exists with erosion auto-scaling
-- [x] terrain_features.py exists with opensimplex import
+- [x] environment.py exists with erosion auto-scaling to 50K+
+- [x] terrain_features.py exists with opensimplex import (_make_noise_generator)
+- [x] No sin-hash (math.sin * 12.9898) remaining in terrain_features.py
+- [x] test_terrain_noise.py has TestDomainWarpIntegration (5 tests)
+- [x] test_terrain_erosion.py has TestErosion50kVisibleChannels (2 tests)
+- [x] All 134 tests pass
 - [x] 31-01-SUMMARY.md created
-- [x] Commit 97e6790 found in git log
+- [x] Commit ab86f99 (test) found in git log
+- [x] Commit 97e6790 (feat) found in git log
 
 ---
 *Phase: 31-terrain-environment*
