@@ -28,9 +28,10 @@ import json
 import re
 import sys
 from dataclasses import asdict, dataclass, field
-from enum import IntEnum
 from pathlib import Path
 from typing import Any, Callable, Optional
+
+from veilbreakers_mcp._types import Category, FindingType, Severity
 
 # =========================================================================
 # IMPORT FALLBACKS -- modules may not exist yet (built by other agents)
@@ -133,28 +134,6 @@ _SEVERITY_BASE_CONF = {
 # =========================================================================
 # DATA STRUCTURES
 # =========================================================================
-
-
-class Severity(IntEnum):
-    CRITICAL = 0
-    HIGH = 1
-    MEDIUM = 2
-    LOW = 3
-
-
-class Category(IntEnum):
-    Security = 0
-    Bug = 1
-    Performance = 2
-    Quality = 3
-    Unity = 4  # C# specific
-
-
-class FindingType(IntEnum):
-    ERROR = 0
-    BUG = 1
-    OPTIMIZATION = 2
-    STRENGTHENING = 3
 
 
 @dataclass
