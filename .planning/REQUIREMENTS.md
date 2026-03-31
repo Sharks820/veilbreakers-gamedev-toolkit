@@ -550,3 +550,55 @@ Requirements for v3.0 — AAA Mesh Quality + Professional Systems.
 
 ---
 *Requirements defined: 2026-03-18 (v1), updated 2026-03-19 (v2), updated 2026-03-21 (v3 -- ALL COMPLETE)*
+
+## v7.0 Requirements
+
+Requirements for v7.0 — AAA Procedural City Production. IDs match PROJECT.md Active section.
+
+> **Note:** v1 requirements (128 total including PIPE-01 through PIPE-07) are summarized by category count in the v1 section above but were never individually listed with descriptions in this file. The PIPE-01 below is a new v7.0 requirement, distinct from the v1 PIPE category.
+
+### Mesh Quality
+
+- [ ] **MESH-01**: Every procedural mesh generator produces geometry with proper edge flow, zero non-manifold edges, and contact sheet showing silhouette distinguishable from primitive shapes — furniture >500 verts, buildings >2000 verts, vegetation >300 verts
+- [ ] **MESH-02**: All materials assigned via smart material system with roughness driven by noise texture nodes (never single float). Procedural materials baked to image textures (albedo, normal, roughness, metallic, AO) for export
+- [ ] **MESH-06**: Mesh topology passes game-readiness: zero non-manifold edges, consistent normals, UV coverage >0.8, no degenerate faces (<0.001 area), proper edge loops at deformation points
+
+### Architecture & Interiors
+
+- [ ] **MESH-03**: Interior rooms have purpose-driven furniture placement with spatial relationships (chairs face tables, beds have nightstands, work triangles in kitchens), 5-15 props per room, path to door always clear
+- [ ] **MESH-04**: Building generation uses CGA-style split grammar for facades — footprint → extrude → split(floors) → split(bays) → fill(window|door|wall). No two buildings within line of sight have identical facade layouts
+- [ ] **MESH-07**: Modular building kit has 50+ pieces per style on consistent snap grid. Includes: wall (straight/corner/window/door), floor, ceiling, roof (ridge/eave/hip/gable), stairs, trim, foundation. Straight skeleton roofs from arbitrary footprints
+
+### Terrain & Environment
+
+- [ ] **MESH-05**: Terrain-building integration with foundation meshes, terrain flatten/cutout zones, and material blending at contact edges. Zero visible gaps in side-view verification
+- [ ] **MESH-09**: Voronoi-based biome distribution with 5+ biome types, corruption-aware tinting (0-100%), smooth 10-20m blend zones between biomes. Uses existing 14 biome palettes
+- [ ] **MESH-10**: Vegetation uses L-system branching for trees (not sphere clusters), 3+ species with leaf card geometry, billboard LOD fallback. Poisson disk scatter (Bridson's algorithm) for natural distribution
+
+### Performance & Pipeline
+
+- [ ] **MESH-11**: LOD chain per asset type using existing lod_pipeline.py presets with silhouette preservation >85%. Scene budget validator enforces per-room (50K-150K tris) and per-block (200K-500K tris) polygon budgets
+- [ ] **MESH-12**: Tripo pipeline with automatic post-processing: de-lighting, mesh repair, UV unwrap, PBR texture EXTRACTION from GLB into standalone maps (not blank images), LOD generation, quality gate
+- [ ] **MESH-13**: Starter town: 10-15 buildings with furnished interiors, market area, fortifications, road network, vegetation, terrain integration. Exports to Unity as Addressables-ready package, maintains 60fps at 1080p
+- [ ] **MESH-14**: All 267 generators use seed-based RNG (`random.Random(seed)`) exclusively — zero instances of global random state. Same seed produces identical output
+- [ ] **MESH-15**: Boolean cleanup pipeline: remove doubles (0.0001 merge distance), recalculate normals, fix non-manifold edges, fill holes (up to 8 sides). Runs automatically after every boolean operation
+
+### Infrastructure
+
+- [ ] **MESH-08**: City infrastructure with road MESH generation (curbs, cobblestones, intersections), market stalls, wells, lamp posts, benches. Road network connects all buildings via L-system or tensor field approach
+- [ ] **MESH-16**: Clean commit workflow — atomic commits after every bug/error scan, state tracked in STATE.md
+- [ ] **PIPE-01**: AAA technique research documented: CGA split grammars, WFC, L-systems, hydraulic erosion (50K+ droplets), Poisson disk sampling, straight skeleton roofs, domain warping
+
+### Requirement-to-Phase Mapping
+
+| Requirement | Phase | Description |
+|---|---|---|
+| MESH-01, MESH-02, MESH-06, MESH-11, MESH-14, MESH-15 | Phase 30 (P0) | Mesh Foundation |
+| MESH-05, MESH-09, MESH-10 | Phase 31 (P1) | Terrain & Environment |
+| MESH-04, MESH-07 | Phase 32 (P2) | Building System |
+| MESH-03 | Phase 33 (P3) | Interior System |
+| MESH-05, MESH-09, MESH-10 | Phase 34 (P4) | Multi-biome Terrain |
+| MESH-12 | Phase 35 (P5) | Multi-backend AI |
+| MESH-08 | Phase 36 (P6) | World Composer |
+| MESH-16, PIPE-01 | Phase 37 (P7) | Pipeline Integration |
+| MESH-13 | Phase 38 (P8) | Starter Town |
