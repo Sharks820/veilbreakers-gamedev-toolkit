@@ -91,9 +91,9 @@ def _valid_mesh(result):
 class TestRegistry:
     """Test piece registry completeness."""
 
-    def test_all_25_piece_types_registered(self):
-        """All 25 core piece types must be registered."""
-        assert len(ALL_PIECE_TYPES) == 25
+    def test_all_52_piece_types_registered(self):
+        """All 52 piece types must be registered (25 original + 27 expansion)."""
+        assert len(ALL_PIECE_TYPES) == 52
 
     def test_all_generators_are_callable(self):
         for name, fn in MODULAR_KIT_GENERATORS.items():
@@ -123,8 +123,8 @@ class TestRegistry:
 
     def test_total_variants_count(self):
         info = get_available_pieces()
-        assert info["total_piece_types"] == 25
-        assert info["total_variants"] == 25 * 5
+        assert info["total_piece_types"] == 52
+        assert info["total_variants"] == 52 * 5
 
 
 # ---------------------------------------------------------------------------

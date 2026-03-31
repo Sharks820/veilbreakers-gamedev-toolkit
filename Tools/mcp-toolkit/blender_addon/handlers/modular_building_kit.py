@@ -1390,6 +1390,927 @@ def window_pointed(
 
 
 # ---------------------------------------------------------------------------
+# ADDITIONAL PIECES: Foundation, Columns, Balconies, Beams, Trim, etc.
+# (27 new pieces to bring total from 25 to 52)
+# ---------------------------------------------------------------------------
+
+
+def foundation_block(
+    style: str = "medieval",
+    width: float = 2.0,
+    height: float = 0.4,
+    seed: int = 42,
+) -> MeshSpec:
+    """Solid foundation block with stepped top profile."""
+    t = _get_thickness(style) * 1.3
+    parts = []
+    # Main block
+    parts.append(_box(0.0, 0.0, 0.0, width, t, height))
+    # Stepped lip at top
+    lip_h = 0.05
+    parts.append(_box(-0.03, -0.03, height - lip_h, width + 0.06, t + 0.06, lip_h))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"foundation_block_{style}", verts, faces,
+        style=style, piece_type="foundation_block",
+        grid_size=(width, t, height),
+        connection_points=[
+            {"face": "top", "position": (width / 2, t / 2, height)},
+            {"face": "left", "position": (0.0, t / 2, height / 2)},
+            {"face": "right", "position": (width, t / 2, height / 2)},
+        ],
+    )
+
+
+def foundation_stepped(
+    style: str = "medieval",
+    width: float = 2.0,
+    height: float = 0.6,
+    steps: int = 3,
+    seed: int = 42,
+) -> MeshSpec:
+    """Stepped foundation with progressively narrowing courses."""
+    t = _get_thickness(style) * 1.5
+    parts = []
+    step_h = height / steps
+    for si in range(steps):
+        inset = si * 0.04
+        parts.append(_box(inset, inset, si * step_h,
+                          width - 2 * inset, t - 2 * inset, step_h))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"foundation_stepped_{style}", verts, faces,
+        style=style, piece_type="foundation_stepped",
+        grid_size=(width, t, height),
+        connection_points=[
+            {"face": "top", "position": (width / 2, t / 2, height)},
+        ],
+    )
+
+
+def column_round(
+    style: str = "medieval",
+    height: float = 3.0,
+    radius: float = 0.12,
+    segments: int = 8,
+    seed: int = 42,
+) -> MeshSpec:
+    """Round column with base and capital."""
+    parts = []
+    rng = random.Random(seed)
+    # Base (wider)
+    base_h = 0.1
+    base_r = radius * 1.4
+    bv: list[tuple[float, float, float]] = []
+    bf: list[tuple[int, ...]] = []
+    for i in range(segments):
+        a = 2.0 * math.pi * i / segments
+        bv.append((math.cos(a) * base_r, math.sin(a) * base_r, 0.0))
+    for i in range(segments):
+        a = 2.0 * math.pi * i / segments
+        bv.append((math.cos(a) * base_r, math.sin(a) * base_r, base_h))
+    for i in range(segments):
+        i2 = (i + 1) % segments
+        bf.append((i, i2, i2 + segments, i + segments))
+    bf.append(tuple(range(segments - 1, -1, -1)))
+    bf.append(tuple(range(segments, 2 * segments)))
+    parts.append((bv, bf))
+
+    # Shaft
+    sv: list[tuple[float, float, float]] = []
+    sf: list[tuple[int, ...]] = []
+    for i in range(segments):
+        a = 2.0 * math.pi * i / segments
+        sv.append((math.cos(a) * radius, math.sin(a) * radius, base_h))
+    for i in range(segments):
+        a = 2.0 * math.pi * i / segments
+        sv.append((math.cos(a) * radius, math.sin(a) * radius, height - base_h))
+    for i in range(segments):
+        i2 = (i + 1) % segments
+        sf.append((i, i2, i2 + segments, i + segments))
+    parts.append((sv, sf))
+
+    # Capital (wider at top)
+    cap_r = radius * 1.5
+    cv: list[tuple[float, float, float]] = []
+    cf: list[tuple[int, ...]] = []
+    for i in range(segments):
+        a = 2.0 * math.pi * i / segments
+        cv.append((math.cos(a) * radius, math.sin(a) * radius, height - base_h))
+    for i in range(segments):
+        a = 2.0 * math.pi * i / segments
+        cv.append((math.cos(a) * cap_r, math.sin(a) * cap_r, height))
+    for i in range(segments):
+        i2 = (i + 1) % segments
+        cf.append((i, i2, i2 + segments, i + segments))
+    cf.append(tuple(range(segments, 2 * segments)))
+    parts.append((cv, cf))
+
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"column_round_{style}", verts, faces,
+        style=style, piece_type="column_round",
+        grid_size=(radius * 2, radius * 2, height),
+        connection_points=[
+            {"face": "top", "position": (0.0, 0.0, height)},
+            {"face": "bottom", "position": (0.0, 0.0, 0.0)},
+        ],
+    )
+
+
+def column_square(
+    style: str = "medieval",
+    height: float = 3.0,
+    width: float = 0.2,
+    seed: int = 42,
+) -> MeshSpec:
+    """Square column with chamfered base and capital."""
+    parts = []
+    # Base (wider)
+    base_h = 0.1
+    base_w = width * 1.4
+    parts.append(_box(-base_w / 2, -base_w / 2, 0.0, base_w, base_w, base_h))
+    # Shaft
+    parts.append(_box(-width / 2, -width / 2, base_h, width, width, height - 2 * base_h))
+    # Capital
+    cap_w = width * 1.5
+    parts.append(_box(-cap_w / 2, -cap_w / 2, height - base_h, cap_w, cap_w, base_h))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"column_square_{style}", verts, faces,
+        style=style, piece_type="column_square",
+        grid_size=(width, width, height),
+        connection_points=[
+            {"face": "top", "position": (0.0, 0.0, height)},
+            {"face": "bottom", "position": (0.0, 0.0, 0.0)},
+        ],
+    )
+
+
+def column_cluster(
+    style: str = "gothic",
+    height: float = 3.0,
+    radius: float = 0.08,
+    count: int = 4,
+    seed: int = 42,
+) -> MeshSpec:
+    """Cluster of small columns arranged in a group (gothic pillar)."""
+    parts = []
+    segments = 6
+    spread = radius * 2.5
+    rng = random.Random(seed)
+    for ci in range(count):
+        angle = 2.0 * math.pi * ci / count
+        cx = math.cos(angle) * spread
+        cy = math.sin(angle) * spread
+        # Each mini-column as a simple box approximation
+        col_w = radius * 2
+        parts.append(_box(cx - radius, cy - radius, 0.0, col_w, col_w, height))
+    # Shared capital
+    cap_r = spread + radius * 2
+    parts.append(_box(-cap_r, -cap_r, height - 0.08, cap_r * 2, cap_r * 2, 0.08))
+    # Shared base
+    parts.append(_box(-cap_r, -cap_r, 0.0, cap_r * 2, cap_r * 2, 0.06))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"column_cluster_{style}", verts, faces,
+        style=style, piece_type="column_cluster",
+        grid_size=(cap_r * 2, cap_r * 2, height),
+        connection_points=[
+            {"face": "top", "position": (0.0, 0.0, height)},
+        ],
+    )
+
+
+def balcony_simple(
+    style: str = "medieval",
+    width: float = 2.0,
+    depth: float = 0.8,
+    seed: int = 42,
+) -> MeshSpec:
+    """Simple balcony platform with railing."""
+    t = _get_thickness(style)
+    parts = []
+    rng = random.Random(seed)
+    # Platform slab
+    slab_h = 0.1
+    parts.append(_box(0.0, 0.0, 0.0, width, depth, slab_h))
+    # Railing: 3 sides
+    rail_h = 0.9
+    rail_t = 0.04
+    # Front rail
+    parts.append(_box(0.0, depth - rail_t, slab_h, width, rail_t, rail_h))
+    # Side rails
+    parts.append(_box(0.0, 0.0, slab_h, rail_t, depth, rail_h))
+    parts.append(_box(width - rail_t, 0.0, slab_h, rail_t, depth, rail_h))
+    # Support brackets underneath
+    bracket_w = 0.08
+    bracket_h = 0.3
+    for bx in [width * 0.2, width * 0.8]:
+        parts.append(_box(bx - bracket_w / 2, 0.0, -bracket_h, bracket_w, depth * 0.6, bracket_h))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"balcony_simple_{style}", verts, faces,
+        style=style, piece_type="balcony_simple",
+        grid_size=(width, depth, slab_h + rail_h),
+        connection_points=[
+            {"face": "back", "position": (width / 2, 0.0, slab_h / 2)},
+        ],
+    )
+
+
+def balcony_ornate(
+    style: str = "gothic",
+    width: float = 2.0,
+    depth: float = 1.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Ornate balcony with balusters and corbels."""
+    parts = []
+    rng = random.Random(seed)
+    slab_h = 0.12
+    # Platform
+    parts.append(_box(0.0, 0.0, 0.0, width, depth, slab_h))
+    # Decorative edge (thicker lip)
+    parts.append(_box(-0.03, -0.03, 0.0, width + 0.06, depth + 0.03, 0.04))
+    # Balusters along front
+    baluster_count = max(3, int(width / 0.2))
+    baluster_h = 0.8
+    baluster_w = 0.04
+    spacing = width / (baluster_count + 1)
+    for bi in range(baluster_count):
+        bx = spacing * (bi + 1) - baluster_w / 2
+        parts.append(_box(bx, depth - baluster_w, slab_h, baluster_w, baluster_w, baluster_h))
+    # Top rail
+    parts.append(_box(0.0, depth - 0.05, slab_h + baluster_h, width, 0.05, 0.04))
+    # Corbel brackets (3 under platform)
+    for cx_frac in [0.15, 0.5, 0.85]:
+        cx = width * cx_frac
+        parts.append(_box(cx - 0.06, 0.0, -0.25, 0.12, depth * 0.5, 0.25))
+        parts.append(_box(cx - 0.08, 0.0, -0.25, 0.16, depth * 0.3, 0.06))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"balcony_ornate_{style}", verts, faces,
+        style=style, piece_type="balcony_ornate",
+        grid_size=(width, depth, slab_h + baluster_h + 0.04),
+        connection_points=[
+            {"face": "back", "position": (width / 2, 0.0, slab_h / 2)},
+        ],
+    )
+
+
+def beam_horizontal(
+    style: str = "medieval",
+    length: float = 2.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Horizontal structural beam."""
+    bw = 0.12
+    bh = 0.15
+    verts, faces = _box(0.0, 0.0, 0.0, length, bw, bh)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"beam_horizontal_{style}", verts, faces,
+        style=style, piece_type="beam_horizontal",
+        grid_size=(length, bw, bh),
+        connection_points=[
+            {"face": "left", "position": (0.0, bw / 2, bh / 2)},
+            {"face": "right", "position": (length, bw / 2, bh / 2)},
+        ],
+    )
+
+
+def beam_diagonal(
+    style: str = "medieval",
+    length: float = 2.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Diagonal brace beam (45 degree)."""
+    bw = 0.1
+    bh = 0.1
+    # Create a skewed box for diagonal orientation
+    half_len = length / 2.0
+    verts = [
+        (0.0, 0.0, 0.0), (bw, 0.0, 0.0), (bw, bh, 0.0), (0.0, bh, 0.0),
+        (half_len, 0.0, half_len), (half_len + bw, 0.0, half_len),
+        (half_len + bw, bh, half_len), (half_len, bh, half_len),
+    ]
+    faces = [
+        (0, 3, 2, 1), (4, 5, 6, 7),
+        (0, 1, 5, 4), (2, 3, 7, 6),
+        (0, 4, 7, 3), (1, 2, 6, 5),
+    ]
+    verts_list = list(verts)
+    verts_list = _jitter(verts_list, _get_jitter(style), seed)
+    return _make_result(
+        f"beam_diagonal_{style}", verts_list, faces,
+        style=style, piece_type="beam_diagonal",
+        grid_size=(half_len + bw, bh, half_len),
+        connection_points=[
+            {"face": "bottom", "position": (bw / 2, bh / 2, 0.0)},
+            {"face": "top", "position": (half_len + bw / 2, bh / 2, half_len)},
+        ],
+    )
+
+
+def beam_cross(
+    style: str = "medieval",
+    width: float = 2.0,
+    height: float = 2.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """X-shaped cross brace (two diagonal beams)."""
+    bw = 0.08
+    bd = 0.08
+    parts = []
+    # Diagonal 1: bottom-left to top-right (approximated as thin box)
+    parts.append(_box(0.0, 0.0, 0.0, width, bd, bw))
+    parts.append(_box(0.0, 0.0, height - bw, width, bd, bw))
+    # Diagonal 2 cross member
+    parts.append(_box(width / 2 - bw / 2, 0.0, 0.0, bw, bd, height))
+    # Center cross point
+    parts.append(_box(width / 2 - bw, 0.0, height / 2 - bw, bw * 2, bd, bw * 2))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"beam_cross_{style}", verts, faces,
+        style=style, piece_type="beam_cross",
+        grid_size=(width, bd, height),
+        connection_points=[
+            {"face": "left", "position": (0.0, bd / 2, height / 2)},
+            {"face": "right", "position": (width, bd / 2, height / 2)},
+        ],
+    )
+
+
+def trim_baseboard(
+    style: str = "medieval",
+    length: float = 2.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Baseboard trim molding along floor-wall junction."""
+    h = 0.08
+    d = 0.02
+    lip_h = 0.015
+    parts = []
+    parts.append(_box(0.0, 0.0, 0.0, length, d, h))
+    # Top lip (ogee profile approximation)
+    parts.append(_box(0.0, -0.005, h, length, d + 0.005, lip_h))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"trim_baseboard_{style}", verts, faces,
+        style=style, piece_type="trim_baseboard",
+        grid_size=(length, d, h + lip_h),
+        connection_points=[
+            {"face": "back", "position": (length / 2, d, h / 2)},
+        ],
+    )
+
+
+def trim_crown(
+    style: str = "medieval",
+    length: float = 2.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Crown molding trim at ceiling-wall junction."""
+    h = 0.06
+    d = 0.04
+    parts = []
+    # Main profile
+    parts.append(_box(0.0, 0.0, 0.0, length, d, h))
+    # Cove section (angled)
+    parts.append(_box(0.0, d, -0.02, length, d * 0.5, h + 0.02))
+    # Small bead at bottom
+    parts.append(_box(0.0, -0.005, -0.01, length, 0.01, 0.01))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"trim_crown_{style}", verts, faces,
+        style=style, piece_type="trim_crown",
+        grid_size=(length, d * 1.5, h),
+        connection_points=[
+            {"face": "back", "position": (length / 2, d, h / 2)},
+        ],
+    )
+
+
+def trim_corner(
+    style: str = "medieval",
+    height: float = 3.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Corner trim piece for wall junctions."""
+    w = 0.06
+    parts = []
+    # L-shaped profile running vertically
+    parts.append(_box(0.0, 0.0, 0.0, w, 0.02, height))
+    parts.append(_box(-0.02, 0.0, 0.0, 0.02, w, height))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"trim_corner_{style}", verts, faces,
+        style=style, piece_type="trim_corner",
+        grid_size=(w, w, height),
+        connection_points=[
+            {"face": "bottom", "position": (w / 2, w / 2, 0.0)},
+            {"face": "top", "position": (w / 2, w / 2, height)},
+        ],
+    )
+
+
+def chimney_stack(
+    style: str = "medieval",
+    height: float = 2.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Chimney stack with visible brick/stone coursework."""
+    cw = 0.5
+    cd = 0.5
+    parts = []
+    rng = random.Random(seed)
+    # Main shaft
+    parts.append(_box(0.0, 0.0, 0.0, cw, cd, height))
+    # Corbeling near top (stepped outward)
+    for ci in range(3):
+        step_z = height - 0.3 + ci * 0.08
+        step_inset = -0.02 * (ci + 1)
+        parts.append(_box(step_inset, step_inset, step_z,
+                          cw - 2 * step_inset, cd - 2 * step_inset, 0.06))
+    # Cap
+    parts.append(_box(-0.04, -0.04, height, cw + 0.08, cd + 0.08, 0.05))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"chimney_stack_{style}", verts, faces,
+        style=style, piece_type="chimney_stack",
+        grid_size=(cw, cd, height + 0.05),
+        connection_points=[
+            {"face": "bottom", "position": (cw / 2, cd / 2, 0.0)},
+        ],
+    )
+
+
+def chimney_pot(
+    style: str = "medieval",
+    height: float = 0.4,
+    seed: int = 42,
+) -> MeshSpec:
+    """Chimney pot (sits on top of chimney stack)."""
+    parts = []
+    r = 0.08
+    segments = 6
+    # Cylindrical pot
+    cv: list[tuple[float, float, float]] = []
+    cf: list[tuple[int, ...]] = []
+    for i in range(segments):
+        a = 2.0 * math.pi * i / segments
+        cv.append((math.cos(a) * r, math.sin(a) * r, 0.0))
+    for i in range(segments):
+        a = 2.0 * math.pi * i / segments
+        cv.append((math.cos(a) * r, math.sin(a) * r, height))
+    for i in range(segments):
+        i2 = (i + 1) % segments
+        cf.append((i, i2, i2 + segments, i + segments))
+    cf.append(tuple(range(segments - 1, -1, -1)))
+    parts.append((cv, cf))
+    # Flared top rim
+    rim_r = r * 1.3
+    rv: list[tuple[float, float, float]] = []
+    rf: list[tuple[int, ...]] = []
+    for i in range(segments):
+        a = 2.0 * math.pi * i / segments
+        rv.append((math.cos(a) * r, math.sin(a) * r, height))
+    for i in range(segments):
+        a = 2.0 * math.pi * i / segments
+        rv.append((math.cos(a) * rim_r, math.sin(a) * rim_r, height + 0.03))
+    for i in range(segments):
+        i2 = (i + 1) % segments
+        rf.append((i, i2, i2 + segments, i + segments))
+    parts.append((rv, rf))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"chimney_pot_{style}", verts, faces,
+        style=style, piece_type="chimney_pot",
+        grid_size=(r * 2, r * 2, height + 0.03),
+        connection_points=[
+            {"face": "bottom", "position": (0.0, 0.0, 0.0)},
+        ],
+    )
+
+
+def arch_round(
+    style: str = "medieval",
+    width: float = 1.2,
+    height: float = 2.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Round (Roman) archway piece."""
+    t = _get_thickness(style)
+    parts = []
+    # Jambs
+    jamb_w = 0.12
+    rect_h = height * 0.65
+    parts.append(_box(0.0, 0.0, 0.0, jamb_w, t, rect_h))
+    parts.append(_box(width - jamb_w, 0.0, 0.0, jamb_w, t, rect_h))
+    # Arch voussoirs (semicircular)
+    arch_r = width / 2
+    arch_segs = 8
+    for i in range(arch_segs):
+        a0 = math.pi * i / arch_segs
+        a1 = math.pi * (i + 1) / arch_segs
+        x0 = width / 2 + math.cos(a0) * arch_r
+        z0 = rect_h + math.sin(a0) * arch_r
+        x1 = width / 2 + math.cos(a1) * arch_r
+        z1 = rect_h + math.sin(a1) * arch_r
+        bv = [
+            (x0, 0.0, z0), (x1, 0.0, z1),
+            (x1, t, z1), (x0, t, z0),
+        ]
+        bf = [(0, 1, 2, 3)]
+        parts.append((bv, bf))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"arch_round_{style}", verts, faces,
+        style=style, piece_type="arch_round",
+        grid_size=(width, t, height),
+        connection_points=[
+            {"face": "left", "position": (0.0, t / 2, rect_h / 2)},
+            {"face": "right", "position": (width, t / 2, rect_h / 2)},
+        ],
+    )
+
+
+def arch_pointed(
+    style: str = "gothic",
+    width: float = 1.0,
+    height: float = 2.5,
+    seed: int = 42,
+) -> MeshSpec:
+    """Pointed (Gothic) archway piece."""
+    t = _get_thickness(style)
+    parts = []
+    jamb_w = 0.1
+    rect_h = height * 0.6
+    parts.append(_box(0.0, 0.0, 0.0, jamb_w, t, rect_h))
+    parts.append(_box(width - jamb_w, 0.0, 0.0, jamb_w, t, rect_h))
+    # Pointed arch (two arcs meeting at peak)
+    arch_segs = 8
+    peak_z = height
+    hw = width / 2
+    for i in range(arch_segs):
+        frac0 = i / arch_segs
+        frac1 = (i + 1) / arch_segs
+        # Left arc
+        x0 = frac0 * hw
+        z0 = rect_h + frac0 * (peak_z - rect_h)
+        x1 = frac1 * hw
+        z1 = rect_h + frac1 * (peak_z - rect_h)
+        bv = [(x0, 0.0, z0), (x1, 0.0, z1), (x1, t, z1), (x0, t, z0)]
+        parts.append((bv, [(0, 1, 2, 3)]))
+        # Right arc (mirror)
+        rx0 = width - x0
+        rx1 = width - x1
+        bv2 = [(rx0, 0.0, z0), (rx1, 0.0, z1), (rx1, t, z1), (rx0, t, z0)]
+        parts.append((bv2, [(0, 1, 2, 3)]))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"arch_pointed_{style}", verts, faces,
+        style=style, piece_type="arch_pointed",
+        grid_size=(width, t, height),
+        connection_points=[
+            {"face": "left", "position": (0.0, t / 2, rect_h / 2)},
+            {"face": "right", "position": (width, t / 2, rect_h / 2)},
+        ],
+    )
+
+
+def battlement_wall(
+    style: str = "fortress",
+    width: float = 2.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Battlement parapet section with merlons and crenels."""
+    t = _get_thickness(style)
+    parts = []
+    # Parapet base
+    parapet_h = 0.5
+    parts.append(_box(0.0, 0.0, 0.0, width, t, parapet_h))
+    # Merlons
+    merlon_w = 0.25
+    merlon_h = 0.4
+    crenel_w = 0.2
+    x = 0.0
+    while x + merlon_w <= width:
+        parts.append(_box(x, 0.0, parapet_h, merlon_w, t, merlon_h))
+        x += merlon_w + crenel_w
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"battlement_wall_{style}", verts, faces,
+        style=style, piece_type="battlement_wall",
+        grid_size=(width, t, parapet_h + merlon_h),
+        connection_points=[
+            {"face": "left", "position": (0.0, t / 2, parapet_h / 2)},
+            {"face": "right", "position": (width, t / 2, parapet_h / 2)},
+        ],
+    )
+
+
+def battlement_tower(
+    style: str = "fortress",
+    width: float = 2.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Corner battlement tower piece (L-shaped parapet)."""
+    t = _get_thickness(style)
+    parts = []
+    parapet_h = 0.5
+    merlon_h = 0.4
+    merlon_w = 0.25
+    # L-shaped base
+    parts.append(_box(0.0, 0.0, 0.0, width, t, parapet_h))
+    parts.append(_box(0.0, 0.0, 0.0, t, width, parapet_h))
+    # Merlons on both arms
+    for mx in [0.0, width - merlon_w]:
+        parts.append(_box(mx, 0.0, parapet_h, merlon_w, t, merlon_h))
+    for my in [0.0, width - merlon_w]:
+        parts.append(_box(0.0, my, parapet_h, t, merlon_w, merlon_h))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"battlement_tower_{style}", verts, faces,
+        style=style, piece_type="battlement_tower",
+        grid_size=(width, width, parapet_h + merlon_h),
+        connection_points=[
+            {"face": "right", "position": (width, t / 2, parapet_h / 2)},
+            {"face": "back", "position": (t / 2, width, parapet_h / 2)},
+        ],
+    )
+
+
+def dormer_gable(
+    style: str = "medieval",
+    width: float = 1.0,
+    height: float = 1.2,
+    seed: int = 42,
+) -> MeshSpec:
+    """Gable-roofed dormer window projection."""
+    t = _get_thickness(style)
+    depth = 0.6
+    parts = []
+    # Dormer walls
+    wall_h = height * 0.6
+    parts.append(_box(0.0, 0.0, 0.0, t * 0.5, depth, wall_h))  # left
+    parts.append(_box(width - t * 0.5, 0.0, 0.0, t * 0.5, depth, wall_h))  # right
+    # Front wall with window opening
+    parts.append(_box(0.0, 0.0, 0.0, width, t * 0.5, wall_h))
+    # Mini gable roof
+    ridge_h = height - wall_h
+    parts.append(_box(0.0, 0.0, wall_h, width, depth, 0.04))  # base
+    # Triangle front
+    tv = [
+        (0.0, 0.0, wall_h), (width, 0.0, wall_h),
+        (width / 2, 0.0, height),
+        (0.0, 0.04, wall_h), (width, 0.04, wall_h),
+        (width / 2, 0.04, height),
+    ]
+    tf = [(0, 1, 2), (5, 4, 3), (0, 3, 4, 1), (1, 4, 5, 2), (2, 5, 3, 0)]
+    parts.append((tv, tf))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"dormer_gable_{style}", verts, faces,
+        style=style, piece_type="dormer_gable",
+        grid_size=(width, depth, height),
+        connection_points=[
+            {"face": "bottom", "position": (width / 2, depth / 2, 0.0)},
+        ],
+    )
+
+
+def dormer_shed(
+    style: str = "medieval",
+    width: float = 1.0,
+    height: float = 1.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Shed-roofed dormer (single slope)."""
+    depth = 0.5
+    t = _get_thickness(style)
+    parts = []
+    wall_h = height * 0.7
+    # Side walls (one taller than other for shed slope)
+    parts.append(_box(0.0, 0.0, 0.0, t * 0.4, depth, wall_h))
+    parts.append(_box(width - t * 0.4, 0.0, 0.0, t * 0.4, depth, wall_h * 0.7))
+    # Front wall
+    parts.append(_box(0.0, 0.0, 0.0, width, t * 0.4, wall_h))
+    # Roof slab (angled)
+    parts.append(_box(0.0, 0.0, wall_h, width, depth + 0.1, 0.04))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"dormer_shed_{style}", verts, faces,
+        style=style, piece_type="dormer_shed",
+        grid_size=(width, depth, height),
+        connection_points=[
+            {"face": "bottom", "position": (width / 2, depth / 2, 0.0)},
+        ],
+    )
+
+
+def awning_simple(
+    style: str = "medieval",
+    width: float = 2.0,
+    depth: float = 0.8,
+    seed: int = 42,
+) -> MeshSpec:
+    """Simple awning/canopy projection over door or window."""
+    parts = []
+    # Angled canopy surface
+    canopy_h = 0.03
+    parts.append(_box(0.0, 0.0, 0.0, width, depth, canopy_h))
+    # Support brackets
+    bracket_w = 0.04
+    bracket_h = 0.3
+    for bx in [0.05, width - 0.05 - bracket_w]:
+        parts.append(_box(bx, 0.0, -bracket_h, bracket_w, depth * 0.5, bracket_h))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"awning_simple_{style}", verts, faces,
+        style=style, piece_type="awning_simple",
+        grid_size=(width, depth, canopy_h + bracket_h),
+        connection_points=[
+            {"face": "back", "position": (width / 2, 0.0, 0.0)},
+        ],
+    )
+
+
+def bracket_corbel(
+    style: str = "gothic",
+    height: float = 0.3,
+    seed: int = 42,
+) -> MeshSpec:
+    """Decorative corbel bracket for supporting beams or balconies."""
+    w = 0.15
+    d = 0.2
+    parts = []
+    # Main bracket body (tapered)
+    parts.append(_box(0.0, 0.0, 0.0, w, d, height))
+    # Tapered bottom
+    parts.append(_box(w * 0.15, d * 0.15, 0.0, w * 0.7, d * 0.7, height * 0.4))
+    # Top platform
+    parts.append(_box(-0.02, -0.02, height, w + 0.04, d + 0.04, 0.03))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"bracket_corbel_{style}", verts, faces,
+        style=style, piece_type="bracket_corbel",
+        grid_size=(w, d, height),
+        connection_points=[
+            {"face": "back", "position": (w / 2, 0.0, height / 2)},
+            {"face": "top", "position": (w / 2, d / 2, height)},
+        ],
+    )
+
+
+def gable_end(
+    style: str = "medieval",
+    width: float = 2.0,
+    height: float = 1.5,
+    seed: int = 42,
+) -> MeshSpec:
+    """Triangular gable end wall piece."""
+    t = _get_thickness(style) * 0.5
+    # Triangular prism
+    verts = [
+        (0.0, 0.0, 0.0), (width, 0.0, 0.0), (width / 2, 0.0, height),
+        (0.0, t, 0.0), (width, t, 0.0), (width / 2, t, height),
+    ]
+    faces = [
+        (0, 1, 2), (5, 4, 3),
+        (0, 3, 4, 1), (1, 4, 5, 2), (2, 5, 3, 0),
+    ]
+    verts_list = list(verts)
+    verts_list = _jitter(verts_list, _get_jitter(style), seed)
+    return _make_result(
+        f"gable_end_{style}", verts_list, faces,
+        style=style, piece_type="gable_end",
+        grid_size=(width, t, height),
+        connection_points=[
+            {"face": "bottom", "position": (width / 2, t / 2, 0.0)},
+        ],
+    )
+
+
+def pillar_base(
+    style: str = "medieval",
+    width: float = 0.4,
+    seed: int = 42,
+) -> MeshSpec:
+    """Pillar/column base piece with stepped profile."""
+    parts = []
+    h = 0.15
+    # Bottom step (widest)
+    parts.append(_box(0.0, 0.0, 0.0, width, width, h * 0.4))
+    # Middle step
+    inset1 = width * 0.1
+    parts.append(_box(inset1, inset1, h * 0.4,
+                       width - 2 * inset1, width - 2 * inset1, h * 0.3))
+    # Top step (meets column)
+    inset2 = width * 0.2
+    parts.append(_box(inset2, inset2, h * 0.7,
+                       width - 2 * inset2, width - 2 * inset2, h * 0.3))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"pillar_base_{style}", verts, faces,
+        style=style, piece_type="pillar_base",
+        grid_size=(width, width, h),
+        connection_points=[
+            {"face": "top", "position": (width / 2, width / 2, h)},
+        ],
+    )
+
+
+def pillar_capital(
+    style: str = "medieval",
+    width: float = 0.4,
+    seed: int = 42,
+) -> MeshSpec:
+    """Pillar/column capital piece with flared profile."""
+    parts = []
+    h = 0.12
+    # Narrow bottom (meets column)
+    inset = width * 0.2
+    parts.append(_box(inset, inset, 0.0,
+                       width - 2 * inset, width - 2 * inset, h * 0.4))
+    # Flared middle
+    inset2 = width * 0.08
+    parts.append(_box(inset2, inset2, h * 0.4,
+                       width - 2 * inset2, width - 2 * inset2, h * 0.3))
+    # Wide top (supports beam/arch)
+    parts.append(_box(0.0, 0.0, h * 0.7, width, width, h * 0.3))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"pillar_capital_{style}", verts, faces,
+        style=style, piece_type="pillar_capital",
+        grid_size=(width, width, h),
+        connection_points=[
+            {"face": "bottom", "position": (width / 2, width / 2, 0.0)},
+            {"face": "top", "position": (width / 2, width / 2, h)},
+        ],
+    )
+
+
+def bay_window(
+    style: str = "medieval",
+    width: float = 1.5,
+    height: float = 2.0,
+    seed: int = 42,
+) -> MeshSpec:
+    """Bay window projection (3-sided box protruding from wall)."""
+    t = _get_thickness(style)
+    depth = 0.6
+    parts = []
+    # 3 window walls
+    panel_w = width / 3
+    # Front panel
+    parts.append(_box(panel_w, 0.0, 0.0, panel_w, t * 0.5, height))
+    # Left angled panel
+    parts.append(_box(0.0, t * 0.5, 0.0, panel_w, depth - t * 0.5, t * 0.5))
+    parts.append(_box(0.0, 0.0, 0.0, t * 0.5, depth, height))
+    # Right angled panel
+    parts.append(_box(width - t * 0.5, 0.0, 0.0, t * 0.5, depth, height))
+    # Floor slab
+    parts.append(_box(0.0, 0.0, 0.0, width, depth, 0.08))
+    # Ceiling slab
+    parts.append(_box(0.0, 0.0, height - 0.06, width, depth, 0.06))
+    verts, faces = _merge_geometry(parts)
+    verts = _jitter(verts, _get_jitter(style), seed)
+    return _make_result(
+        f"bay_window_{style}", verts, faces,
+        style=style, piece_type="bay_window",
+        grid_size=(width, depth, height),
+        connection_points=[
+            {"face": "back", "position": (width / 2, depth, height / 2)},
+        ],
+    )
+
+
+# ---------------------------------------------------------------------------
 # PIECE REGISTRY
 # ---------------------------------------------------------------------------
 
@@ -1425,6 +2346,43 @@ MODULAR_KIT_GENERATORS: dict[str, Any] = {
     "window_small": window_small,
     "window_large": window_large,
     "window_pointed": window_pointed,
+    # Foundations
+    "foundation_block": foundation_block,
+    "foundation_stepped": foundation_stepped,
+    # Columns
+    "column_round": column_round,
+    "column_square": column_square,
+    "column_cluster": column_cluster,
+    # Balconies
+    "balcony_simple": balcony_simple,
+    "balcony_ornate": balcony_ornate,
+    # Beams
+    "beam_horizontal": beam_horizontal,
+    "beam_diagonal": beam_diagonal,
+    "beam_cross": beam_cross,
+    # Trim
+    "trim_baseboard": trim_baseboard,
+    "trim_crown": trim_crown,
+    "trim_corner": trim_corner,
+    # Chimneys
+    "chimney_stack": chimney_stack,
+    "chimney_pot": chimney_pot,
+    # Arches
+    "arch_round": arch_round,
+    "arch_pointed": arch_pointed,
+    # Battlements
+    "battlement_wall": battlement_wall,
+    "battlement_tower": battlement_tower,
+    # Dormers
+    "dormer_gable": dormer_gable,
+    "dormer_shed": dormer_shed,
+    # Misc
+    "awning_simple": awning_simple,
+    "bracket_corbel": bracket_corbel,
+    "gable_end": gable_end,
+    "pillar_base": pillar_base,
+    "pillar_capital": pillar_capital,
+    "bay_window": bay_window,
 }
 
 # All piece type names
