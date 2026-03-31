@@ -323,6 +323,102 @@ _ALL_MAPS: dict[str, dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]]]] 
 
 
 # ---------------------------------------------------------------------------
+# CATEGORY_MATERIAL_MAP -- procedural material auto-assignment
+# ---------------------------------------------------------------------------
+# Maps generator category strings (from MeshSpec metadata["category"]) to
+# the procedural material key from MATERIAL_LIBRARY in procedural_materials.py.
+#
+# Every mesh category gets an appropriate AAA-quality procedural material
+# instead of a flat single-color Principled BSDF.
+# ---------------------------------------------------------------------------
+
+CATEGORY_MATERIAL_MAP: dict[str, str] = {
+    # Furniture -- aged wood look with grain and roughness variation
+    "furniture": "rough_timber",
+    # Vegetation -- bark for trunks, leaf for canopy (bark is default)
+    "vegetation": "bark",
+    # Dungeon props -- dark stone for the dungeon atmosphere
+    "dungeon_prop": "rough_stone_wall",
+    # Weapons -- rusted iron for dark fantasy weapons
+    "weapon": "rusted_iron",
+    # Armor -- polished steel with wear
+    "armor": "polished_steel",
+    # Architecture -- stone wall appearance
+    "architecture": "rough_stone_wall",
+    # Building -- brick wall appearance
+    "building": "brick_wall",
+    # Containers -- aged wood crates/barrels
+    "container": "rough_timber",
+    # Dark fantasy -- corruption overlay with purple glow
+    "dark_fantasy": "corruption_overlay",
+    # Monster parts -- organic chitin/scales
+    "monster_part": "chitin_carapace",
+    # Monster bodies -- organic skin
+    "monster_body": "monster_skin",
+    # Projectiles -- rusted iron for arrows/bolts
+    "projectile": "rusted_iron",
+    # Traps -- chain metal for mechanical traps
+    "trap": "chain_metal",
+    # Light sources -- tarnished bronze for lanterns/braziers
+    "light_source": "tarnished_bronze",
+    # Wall decorations -- burlap cloth for banners/rugs
+    "wall_decor": "burlap_cloth",
+    # Crafting stations -- rusted iron for forges/anvils
+    "crafting": "rusted_iron",
+    # Vehicles -- rough timber for carts
+    "vehicle": "rough_timber",
+    # Structural -- rough stone for pillars/buttresses
+    "structural": "rough_stone_wall",
+    # Fortification -- smooth stone for castle elements
+    "fortification": "smooth_stone",
+    # Signs/markers -- rough timber for signposts
+    "sign": "rough_timber",
+    # Natural formations -- cliff rock
+    "natural": "cliff_rock",
+    # Fences and barriers -- rough timber
+    "fence_barrier": "rough_timber",
+    # Doors -- rough timber
+    "door": "rough_timber",
+    # Camp equipment -- leather
+    "camp": "leather",
+    # Infrastructure -- cobblestone floor
+    "infrastructure": "cobblestone_floor",
+    # Consumables -- organic mushroom cap
+    "consumable": "mushroom_cap",
+    # Crafting materials -- cliff rock for ore
+    "crafting_material": "cliff_rock",
+    # Currency -- gold ornament
+    "currency": "gold_ornament",
+    # Key items -- polished wood
+    "key_item": "polished_wood",
+    # Combat items -- rusted iron
+    "combat_item": "rusted_iron",
+    # Forest animals -- fur base
+    "forest_animal": "fur_base",
+    # Mountain animals -- fur base
+    "mountain_animal": "fur_base",
+    # Domestic animals -- fur base
+    "domestic_animal": "fur_base",
+    # Vermin -- chitin carapace
+    "vermin": "chitin_carapace",
+    # Swamp animals -- scales
+    "swamp_animal": "scales",
+}
+
+
+def get_material_for_category(category: str) -> str | None:
+    """Return the procedural material key for a generator category.
+
+    Args:
+        category: Generator category string from MeshSpec metadata.
+
+    Returns:
+        Material key for MATERIAL_LIBRARY, or None if no mapping exists.
+    """
+    return CATEGORY_MATERIAL_MAP.get(category)
+
+
+# ---------------------------------------------------------------------------
 # resolve_generator
 # ---------------------------------------------------------------------------
 
@@ -581,6 +677,28 @@ def mesh_from_spec(
     # Set parent
     if parent is not None:
         obj.parent = parent
+
+    # Auto-assign procedural material based on generator category
+    category = spec.get("metadata", {}).get("category", "")
+    if category:
+        material_key = CATEGORY_MATERIAL_MAP.get(category)
+        if material_key:
+            try:
+                from .procedural_materials import (
+                    create_procedural_material,
+                    MATERIAL_LIBRARY,
+                )
+                if material_key in MATERIAL_LIBRARY:
+                    mat_name = f"{obj_name}_{material_key}"
+                    mat = create_procedural_material(mat_name, material_key)
+                    if obj.data.materials:
+                        obj.data.materials[0] = mat
+                    else:
+                        obj.data.materials.append(mat)
+            except Exception:
+                # Graceful fallback: if procedural material creation fails,
+                # the object keeps its default material (no crash)
+                pass
 
     return obj
 
