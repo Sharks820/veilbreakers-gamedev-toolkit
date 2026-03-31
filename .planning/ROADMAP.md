@@ -621,7 +621,7 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 23. VFX Mastery | v3.0 | 1/1 | Complete | 2026-03-21 |
 | 24. Production Pipeline | v3.0 | 1/1 | Complete | 2026-03-21 |
 | 30. Mesh Foundation | v7.0 | 1/1 | Complete    | 2026-03-31 |
-| 31. Terrain & Environment | v7.0 | 1/3 | In Progress|  |
+| 31. Terrain & Environment | v7.0 | 3/3 | Complete   | 2026-03-31 |
 | 32. Building System | v7.0 | 0/TBD | Not Started | - |
 | 33. Interior System | v7.0 | 0/TBD | Not Started | - |
 | 34. Multi-biome Terrain | v7.0 | 0/TBD | Not Started | - |
