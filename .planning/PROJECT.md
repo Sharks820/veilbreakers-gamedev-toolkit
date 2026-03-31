@@ -63,9 +63,9 @@ v3.0 delivered (2026-03-21): COMPLETE
 - Houdini integration — too expensive, Blender Geometry Nodes covers procedural needs
 - Third-grade model generation — EXPLICITLY OUT (user requirement)
 
-## Current Milestone: v4.0 — AAA Procedural 3D Architecture (NEW)
+## Current Milestone: v7.0 — AAA Procedural City Production (ACTIVE)
 
-**Goal:** Overhaul the 3D Blender architectural system to create true AAA-level procedural models (Skyrim/Fable/Valhalla quality) with intelligent building design, interior mapping/furnishing, terrain/building mesh integration, high-level geometry with clean edges, and storyline-aware map building. Complete starter town for gameplay testing.
+**Goal:** Transform VeilBreakers MCP Toolkit from placeholder-grade procedural generation to ultra-competitive AAA studio quality comparable to Skyrim/Fable/AC Valhalla. Build complete procedural city pipeline with walkable interiors, modular architecture, multi-biome terrain, intelligent prop placement, and AAA-quality environmental props. Implement visual-first AI workflow where every inch of generated geometry and material is inspectable without reimporting to Blender. No Hugging Face (8GB VRAM limit) — use Tripo pipeline exclusively. Deliver production-ready starter town for testing with full streaming, occlusion, and runtime systems.
 
 **Target features:**
 - AAA procedural 3D models — Skyrim/Fable/Valhalla benchmark quality
