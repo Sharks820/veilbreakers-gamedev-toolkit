@@ -535,6 +535,168 @@ def _make_beveled_box(
     return verts, faces
 
 
+def _enhance_mesh_detail(
+    vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, ...]],
+    *,
+    min_vertex_count: int = 500,
+    bevel_offset: float = 0.015,
+    sharp_angle_deg: float = 35.0,
+) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]:
+    """Enhance mesh detail by splitting edges near sharp angles.
+
+    Pure-logic mesh enhancement that increases vertex density by inserting
+    midpoint vertices on sharp edges. This adds supporting edge loops near
+    hard transitions so the mesh catches light properly under smooth shading.
+
+    The algorithm:
+    1. Detect all sharp edges (dihedral angle > threshold)
+    2. For each sharp edge, insert a midpoint vertex
+    3. Subdivide adjacent faces to include the new midpoint
+    4. Repeat until min_vertex_count is reached or no more sharp edges
+
+    Args:
+        vertices: Input vertex list.
+        faces: Input face list.
+        min_vertex_count: Target minimum vertex count after enhancement.
+        bevel_offset: Offset amount for midpoint placement (fraction of edge
+            length toward each endpoint creates two new verts instead of one,
+            simulating a bevel chamfer).
+        sharp_angle_deg: Angle threshold for sharp edge detection.
+
+    Returns:
+        Enhanced (vertices, faces) tuple with increased vertex density.
+    """
+    if not vertices or not faces:
+        return vertices, faces
+
+    if len(vertices) >= min_vertex_count:
+        return vertices, faces
+
+    # Work with mutable lists
+    verts = list(vertices)
+    fcs = [list(f) for f in faces]
+
+    threshold_rad = math.pi * sharp_angle_deg / 180.0
+    cos_threshold = math.cos(threshold_rad)
+
+    # Up to 3 passes of subdivision to reach target vertex count
+    for _pass in range(3):
+        if len(verts) >= min_vertex_count:
+            break
+
+        # Build edge -> adjacent face indices and face normals
+        edge_faces: dict[tuple[int, int], list[int]] = {}
+        face_normals: list[tuple[float, float, float]] = []
+
+        for fi, face in enumerate(fcs):
+            # Newell's method for face normal
+            nx, ny, nz = 0.0, 0.0, 0.0
+            n = len(face)
+            for i in range(n):
+                v0 = verts[face[i]]
+                v1 = verts[face[(i + 1) % n]]
+                nx += (v0[1] - v1[1]) * (v0[2] + v1[2])
+                ny += (v0[2] - v1[2]) * (v0[0] + v1[0])
+                nz += (v0[0] - v1[0]) * (v0[1] + v1[1])
+            length = math.sqrt(nx * nx + ny * ny + nz * nz)
+            if length > 1e-10:
+                nx /= length
+                ny /= length
+                nz /= length
+            face_normals.append((nx, ny, nz))
+
+            for i in range(n):
+                a, b = face[i], face[(i + 1) % n]
+                key = (min(a, b), max(a, b))
+                if key not in edge_faces:
+                    edge_faces[key] = []
+                edge_faces[key].append(fi)
+
+        # Find sharp edges
+        sharp_edges: list[tuple[int, int]] = []
+        for (a, b), fi_list in edge_faces.items():
+            if len(fi_list) == 2:
+                n0 = face_normals[fi_list[0]]
+                n1 = face_normals[fi_list[1]]
+                dot = n0[0] * n1[0] + n0[1] * n1[1] + n0[2] * n1[2]
+                dot = max(-1.0, min(1.0, dot))
+                if dot < cos_threshold:
+                    sharp_edges.append((a, b))
+            elif len(fi_list) == 1:
+                # Boundary edge — always sharp
+                sharp_edges.append((a, b))
+
+        if not sharp_edges:
+            break
+
+        # For each sharp edge, insert two bevel vertices (offset from midpoint)
+        edge_to_new_verts: dict[tuple[int, int], tuple[int, int]] = {}
+
+        for a, b in sharp_edges:
+            va = verts[a]
+            vb = verts[b]
+            # Two new verts offset from endpoints toward midpoint
+            t = bevel_offset
+            new_a = (
+                va[0] + (vb[0] - va[0]) * t,
+                va[1] + (vb[1] - va[1]) * t,
+                va[2] + (vb[2] - va[2]) * t,
+            )
+            new_b = (
+                vb[0] + (va[0] - vb[0]) * t,
+                vb[1] + (va[1] - vb[1]) * t,
+                vb[2] + (va[2] - vb[2]) * t,
+            )
+            idx_a = len(verts)
+            verts.append(new_a)
+            idx_b = len(verts)
+            verts.append(new_b)
+            key = (min(a, b), max(a, b))
+            edge_to_new_verts[key] = (idx_a, idx_b)
+
+        # Subdivide faces that contain sharp edges
+        new_faces: list[list[int]] = []
+        for fi, face in enumerate(fcs):
+            n = len(face)
+            # Check which edges of this face are sharp and got new verts
+            splits = {}
+            for i in range(n):
+                a = face[i]
+                b = face[(i + 1) % n]
+                key = (min(a, b), max(a, b))
+                if key in edge_to_new_verts:
+                    na, nb = edge_to_new_verts[key]
+                    # Order depends on which vertex is first in this face
+                    if a == key[0]:
+                        splits[i] = (na, nb)  # a -> na -> nb -> b
+                    else:
+                        splits[i] = (nb, na)  # b -> nb -> na -> a
+
+            if not splits:
+                new_faces.append(face)
+            else:
+                # Build expanded face with inserted vertices
+                expanded: list[int] = []
+                for i in range(n):
+                    expanded.append(face[i])
+                    if i in splits:
+                        v1, v2 = splits[i]
+                        expanded.append(v1)
+                        expanded.append(v2)
+                # If expanded face has > 6 verts, split into quads/tris
+                if len(expanded) <= 6:
+                    new_faces.append(expanded)
+                else:
+                    # Fan triangulation from first vertex
+                    for j in range(1, len(expanded) - 1):
+                        new_faces.append([expanded[0], expanded[j], expanded[j + 1]])
+
+        fcs = new_faces
+
+    return verts, [tuple(f) for f in fcs]
+
+
 def _merge_meshes(
     *parts: tuple[list[tuple[float, float, float]], list[tuple[int, ...]]],
 ) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]:
@@ -880,6 +1042,7 @@ def generate_table_mesh(
             parts.append((bv2, bf2))
 
     verts, faces = _merge_meshes(*parts)
+    verts, faces = _enhance_mesh_detail(verts, faces, min_vertex_count=500)
     return _make_result(f"Table_{style}", verts, faces, style=style, category="furniture")
 
 
@@ -984,6 +1147,7 @@ def generate_chair_mesh(
             parts.append((av, af))
 
     verts, faces = _merge_meshes(*parts)
+    verts, faces = _enhance_mesh_detail(verts, faces, min_vertex_count=500)
     return _make_result(f"Chair_{style}", verts, faces, style=style, category="furniture")
 
 
@@ -1056,6 +1220,7 @@ def generate_shelf_mesh(
                 parts.append((vv, vf))
 
     verts, faces = _merge_meshes(*parts)
+    verts, faces = _enhance_mesh_detail(verts, faces, min_vertex_count=500)
     return _make_result("Shelf", verts, faces, tiers=tiers, category="furniture")
 
 
@@ -1153,6 +1318,7 @@ def generate_chest_mesh(
                     parts.append((sv, sf))
 
     verts, faces = _merge_meshes(*parts)
+    verts, faces = _enhance_mesh_detail(verts, faces, min_vertex_count=500)
     return _make_result(f"Chest_{style}", verts, faces, style=style, category="furniture")
 
 
@@ -1202,6 +1368,7 @@ def generate_barrel_mesh(
         parts.append((tv, tf))
 
     verts, faces = _merge_meshes(*parts)
+    verts, faces = _enhance_mesh_detail(verts, faces, min_vertex_count=500)
     return _make_result("Barrel", verts, faces, category="furniture")
 
 
@@ -1388,6 +1555,7 @@ def generate_bookshelf_mesh(
                 x_cursor += book_w + rng.uniform(0.002, 0.008)
 
     verts, faces = _merge_meshes(*parts)
+    verts, faces = _enhance_mesh_detail(verts, faces, min_vertex_count=500)
     return _make_result("Bookshelf", verts, faces, sections=sections, category="furniture")
 
 
@@ -9330,6 +9498,7 @@ def generate_crate_mesh(
             parts.append((dv, df))
 
     verts, faces = _merge_meshes(*parts)
+    verts, faces = _enhance_mesh_detail(verts, faces, min_vertex_count=500)
     return _make_result(f"Crate_{condition}", verts, faces,
                         condition=condition, category="container")
 
@@ -10265,6 +10434,7 @@ def generate_door_mesh(
         parts.append((fv, ff))
 
     verts, faces = _merge_meshes(*parts)
+    verts, faces = _enhance_mesh_detail(verts, faces, min_vertex_count=500)
     return _make_result(f"Door_{style}", verts, faces,
                         style=style, category="door")
 
@@ -14409,6 +14579,7 @@ def generate_bed_mesh(
                     parts.append((bsv, bsf))
 
     verts, faces = _merge_meshes(*parts)
+    verts, faces = _enhance_mesh_detail(verts, faces, min_vertex_count=500)
     return _make_result(f"Bed_{style}", verts, faces,
                         style=style, category="furniture")
 
