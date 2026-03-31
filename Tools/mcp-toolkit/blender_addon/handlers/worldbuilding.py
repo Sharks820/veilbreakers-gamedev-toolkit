@@ -1437,6 +1437,22 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
                 "taper": taper,
             })
 
+        elif op_type == "mesh_spec":
+            # Full vertex/face data from building_quality generators.
+            # Already positioned in world space by _generate_detail_operations.
+            mesh_verts = op.get("vertices", [])
+            mesh_faces = op.get("faces", [])
+            if mesh_verts and mesh_faces:
+                result.append({
+                    "type": "mesh_spec",
+                    "vertices": mesh_verts,
+                    "faces": mesh_faces,
+                    "vertex_count": len(mesh_verts),
+                    "face_count": len(mesh_faces),
+                    "material": op.get("material", "default"),
+                    "role": op.get("role", "detail"),
+                })
+
         elif op_type == "opening":
             # Convert opening to a recessed cutout box on the wall surface.
             # This creates visible window/door indentations in the geometry.
