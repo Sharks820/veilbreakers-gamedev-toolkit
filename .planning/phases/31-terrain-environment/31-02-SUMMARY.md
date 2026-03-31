@@ -120,7 +120,7 @@ None - no external service configuration required.
 ## Next Phase Readiness
 - L-system trees wired into scatter pipeline, ready for biome-aware terrain scatter (31-03)
 - Poisson disk scatter engine already functional with biome filtering
-- All vegetation/scatter tests passing (184 total)
+- All vegetation/scatter tests passing (185 total)
 
 ## Self-Check: PASSED
 
@@ -130,6 +130,7 @@ None - no external service configuration required.
 - FOUND: .planning/phases/31-terrain-environment/31-02-SUMMARY.md
 - FOUND: commit 1eb53de (TDD RED)
 - FOUND: commit bd6a02e (TDD GREEN)
+- FOUND: commit da5a868 (TDD REFACTOR)
 
 ---
 *Phase: 31-terrain-environment*
