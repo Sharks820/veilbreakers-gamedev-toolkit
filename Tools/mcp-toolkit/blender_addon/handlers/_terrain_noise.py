@@ -1224,3 +1224,98 @@ def domain_warp_array(
     warp_y = gen.noise2_array(xs * warp_scale + 1.7, ys * warp_scale + 9.2)
 
     return (xs + warp_x * warp_strength, ys + warp_y * warp_strength)
+
+
+# ---------------------------------------------------------------------------
+# Voronoi biome distribution (MESH-09)
+# ---------------------------------------------------------------------------
+
+
+def voronoi_biome_distribution(
+    width: int,
+    height: int,
+    biome_count: int = 6,
+    transition_width: float = 0.1,
+    seed: int = 0,
+    biome_names: list[str] | None = None,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute Voronoi-based biome distribution with smooth transitions.
+
+    Pure-logic function. Places biome_count seed points using a jittered
+    grid, assigns each cell to the nearest seed's biome, and computes
+    soft blend weights at Voronoi boundaries using domain-warped distances.
+
+    Args:
+        width: Grid width in cells.
+        height: Grid height in cells.
+        biome_count: Number of distinct biomes to distribute.
+        transition_width: Normalized width of the soft transition zone
+            between biomes. Larger values produce wider blending.
+        seed: Random seed for reproducibility.
+        biome_names: Optional list of biome name strings. If None,
+            integer indices are used.
+
+    Returns:
+        biome_ids: np.ndarray (height, width) of int biome indices [0, biome_count).
+        biome_weights: np.ndarray (height, width, biome_count) of float
+            blend weights summing to 1.0 per cell.
+    """
+    import random as _rnd
+
+    rng = _rnd.Random(seed)
+
+    # --- Place seed points using jittered grid for good spatial coverage ---
+    # Compute grid dimensions for seed placement
+    grid_side = max(1, int(np.ceil(np.sqrt(biome_count))))
+    cell_w = 1.0 / grid_side
+    cell_h = 1.0 / grid_side
+
+    seed_points: list[tuple[float, float]] = []
+    for i in range(biome_count):
+        row = i // grid_side
+        col = i % grid_side
+        # Jittered position within grid cell (avoid edges)
+        sx = (col + 0.2 + rng.random() * 0.6) * cell_w
+        sy = (row + 0.2 + rng.random() * 0.6) * cell_h
+        seed_points.append((sx, sy))
+
+    seed_arr = np.array(seed_points, dtype=np.float64)  # (biome_count, 2)
+
+    # --- Build coordinate grids ---
+    ys = np.arange(height, dtype=np.float64) / height
+    xs = np.arange(width, dtype=np.float64) / width
+    yy, xx = np.meshgrid(ys, xs, indexing="ij")  # (height, width)
+
+    # --- Apply domain warping for organic boundaries ---
+    warp_seed = seed + 31337
+    gen = _make_noise_generator(warp_seed)
+    warp_strength = transition_width * 0.5
+    warp_scale = 3.0
+    warp_x = gen.noise2_array(xx * warp_scale + 5.2, yy * warp_scale + 1.3)
+    warp_y = gen.noise2_array(xx * warp_scale + 1.7, yy * warp_scale + 9.2)
+    xx_warped = xx + warp_x * warp_strength
+    yy_warped = yy + warp_y * warp_strength
+
+    # --- Compute distances from every cell to every seed point ---
+    # distances shape: (height, width, biome_count)
+    distances = np.zeros((height, width, biome_count), dtype=np.float64)
+    for bi in range(biome_count):
+        dx = xx_warped - seed_arr[bi, 0]
+        dy = yy_warped - seed_arr[bi, 1]
+        distances[:, :, bi] = np.sqrt(dx * dx + dy * dy)
+
+    # --- Primary biome = nearest seed ---
+    biome_ids = np.argmin(distances, axis=2).astype(np.int32)
+
+    # --- Blend weights via softmax of negative distances ---
+    # Scale distances by transition_width for blend sharpness
+    tw = max(transition_width, 1e-6)
+    # Negative distances scaled: closer = higher weight
+    scaled = -distances / tw
+    # Numerical stability: subtract max per cell before exp
+    scaled_max = scaled.max(axis=2, keepdims=True)
+    exp_vals = np.exp(scaled - scaled_max)
+    weight_sum = exp_vals.sum(axis=2, keepdims=True)
+    biome_weights = exp_vals / np.maximum(weight_sum, 1e-12)
+
+    return biome_ids, biome_weights
