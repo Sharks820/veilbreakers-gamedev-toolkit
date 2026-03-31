@@ -1157,6 +1157,284 @@ def _add_woodpile_detail(
 
 
 # ---------------------------------------------------------------------------
+# CGA-style facade split grammar
+# ---------------------------------------------------------------------------
+
+# Bay fill types with their probability weights per floor context
+_BAY_FILL_TYPES = {
+    "ground": {
+        "window": 0.4,
+        "door": 0.15,
+        "wall_panel": 0.3,
+        "balcony": 0.0,
+        "archway": 0.15,
+    },
+    "upper": {
+        "window": 0.55,
+        "door": 0.0,
+        "wall_panel": 0.2,
+        "balcony": 0.15,
+        "archway": 0.1,
+    },
+    "top": {
+        "window": 0.45,
+        "door": 0.0,
+        "wall_panel": 0.25,
+        "balcony": 0.2,
+        "archway": 0.1,
+    },
+}
+
+# Style overrides for bay fill probabilities
+_STYLE_BAY_OVERRIDES: dict[str, dict[str, dict[str, float]]] = {
+    "fortress": {
+        "ground": {"window": 0.2, "door": 0.1, "wall_panel": 0.5, "balcony": 0.0, "archway": 0.2},
+        "upper": {"window": 0.3, "door": 0.0, "wall_panel": 0.5, "balcony": 0.0, "archway": 0.2},
+        "top": {"window": 0.2, "door": 0.0, "wall_panel": 0.4, "balcony": 0.0, "archway": 0.4},
+    },
+    "gothic": {
+        "ground": {"window": 0.5, "door": 0.15, "wall_panel": 0.15, "balcony": 0.0, "archway": 0.2},
+        "upper": {"window": 0.65, "door": 0.0, "wall_panel": 0.1, "balcony": 0.05, "archway": 0.2},
+        "top": {"window": 0.5, "door": 0.0, "wall_panel": 0.1, "balcony": 0.1, "archway": 0.3},
+    },
+    "rustic": {
+        "ground": {"window": 0.3, "door": 0.2, "wall_panel": 0.5, "balcony": 0.0, "archway": 0.0},
+        "upper": {"window": 0.4, "door": 0.0, "wall_panel": 0.5, "balcony": 0.1, "archway": 0.0},
+        "top": {"window": 0.3, "door": 0.0, "wall_panel": 0.6, "balcony": 0.1, "archway": 0.0},
+    },
+    "organic": {
+        "ground": {"window": 0.35, "door": 0.15, "wall_panel": 0.4, "balcony": 0.0, "archway": 0.1},
+        "upper": {"window": 0.45, "door": 0.0, "wall_panel": 0.35, "balcony": 0.1, "archway": 0.1},
+        "top": {"window": 0.35, "door": 0.0, "wall_panel": 0.45, "balcony": 0.1, "archway": 0.1},
+    },
+}
+
+
+def _weighted_choice(options: dict[str, float], rng: random.Random) -> str:
+    """Pick a key from *options* dict with weighted probabilities."""
+    items = list(options.items())
+    total = sum(w for _, w in items)
+    if total <= 0:
+        return items[0][0]
+    r = rng.uniform(0, total)
+    cumulative = 0.0
+    for key, weight in items:
+        cumulative += weight
+        if r <= cumulative:
+            return key
+    return items[-1][0]
+
+
+def _cga_facade_split(
+    *,
+    width: float,
+    depth: float,
+    floors: int,
+    base_z: float,
+    floor_height: float,
+    slab_thickness: float,
+    wall_thickness: float,
+    win_cfg: dict,
+    door_cfg: dict,
+    facade_rules: dict,
+    style: str,
+    rng: random.Random,
+) -> list[dict]:
+    """CGA-style recursive facade split grammar.
+
+    Pipeline: comp(faces) -> split(y, floors) -> split(x, bays) -> fill(rule)
+
+    For each wall face of the building:
+      1. Split vertically into floor bands
+      2. Split each floor band horizontally into bays
+      3. Fill each bay with a rule: window, door, wall_panel, balcony, archway
+      4. Corner bays are always solid (structural)
+      5. Ground floor gets at least one door on the front wall
+      6. Windows are aligned across floors (same column positions)
+
+    Returns list of BuildingSpec opening/detail operations.
+    """
+    ops: list[dict] = []
+
+    # Determine bay count per wall (randomized within style range)
+    base_bay = int(facade_rules.get("bay_divisor", 3))
+    bay_variation = rng.randint(-1, 1)
+    front_bays = max(2, base_bay + bay_variation)
+    back_bays = max(2, base_bay + rng.randint(-1, 0))
+    # Side walls get fewer bays
+    side_bays = max(2, base_bay - 1 + rng.randint(-1, 0))
+
+    # Randomize window dimensions within +/- 20%
+    win_w = win_cfg["width"] * rng.uniform(0.8, 1.2)
+    win_h = win_cfg["height"] * rng.uniform(0.8, 1.2)
+    win_style = win_cfg["style"]
+
+    # Get style-specific fill probabilities
+    style_fills = _STYLE_BAY_OVERRIDES.get(style, _BAY_FILL_TYPES)
+
+    # Pre-compute column positions for alignment across floors
+    # Each wall gets its own column grid
+    wall_configs = [
+        {"wall_idx": 0, "length": width, "bays": front_bays, "is_front": True},
+        {"wall_idx": 1, "length": width, "bays": back_bays, "is_front": False},
+        {"wall_idx": 2, "length": depth - 2 * wall_thickness, "bays": side_bays, "is_front": False},
+        {"wall_idx": 3, "length": depth - 2 * wall_thickness, "bays": side_bays, "is_front": False},
+    ]
+
+    # Track door placement -- ensure at least one on front wall
+    door_placed = False
+
+    for wc in wall_configs:
+        wall_idx = wc["wall_idx"]
+        wall_len = wc["length"]
+        n_bays = wc["bays"]
+        is_front = wc["is_front"]
+
+        if wall_len < 1.0:
+            continue
+
+        # Compute bay column positions (consistent across floors for alignment)
+        bay_width = wall_len / n_bays
+        bay_centers = [bay_width * (i + 0.5) for i in range(n_bays)]
+
+        # Select which bays are "fillable" (exclude corners)
+        fillable_bays = list(range(n_bays))
+        if n_bays >= 3:
+            # Corner bays are solid wall panels
+            fillable_bays = list(range(1, n_bays - 1))
+
+        # Pre-select a door bay on the front wall ground floor
+        door_bay_idx = -1
+        if is_front and not door_placed:
+            # Pick a bay near center for the door
+            center_bay = len(fillable_bays) // 2
+            if fillable_bays:
+                door_bay_idx = fillable_bays[center_bay]
+                # Allow off-center variation
+                if len(fillable_bays) >= 3:
+                    offset = rng.randint(-1, 1)
+                    clamped = max(0, min(len(fillable_bays) - 1, center_bay + offset))
+                    door_bay_idx = fillable_bays[clamped]
+
+        # Split(y, floors) -- iterate floor bands
+        for floor_idx in range(floors):
+            floor_z = base_z + floor_idx * (floor_height + slab_thickness)
+
+            # Determine floor context for fill rules
+            if floor_idx == 0:
+                floor_ctx = "ground"
+            elif floor_idx == floors - 1:
+                floor_ctx = "top"
+            else:
+                floor_ctx = "upper"
+
+            fill_probs = style_fills.get(floor_ctx, _BAY_FILL_TYPES[floor_ctx])
+
+            # Split(x, bays) -- iterate bay columns
+            for bay_idx in range(n_bays):
+                bay_x = bay_centers[bay_idx] - win_w / 2
+
+                # Corner bays: always solid panel (no opening)
+                if bay_idx not in fillable_bays:
+                    continue
+
+                # Ground floor front wall: place door in selected bay
+                if floor_idx == 0 and is_front and bay_idx == door_bay_idx:
+                    door_x = bay_centers[bay_idx] - door_cfg["width"] / 2
+                    ops.append({
+                        "type": "opening",
+                        "wall_index": wall_idx,
+                        "position": [door_x, 0.0],
+                        "size": [door_cfg["width"], door_cfg["height"]],
+                        "role": "door",
+                        "floor": floor_idx,
+                        "style": door_cfg["style"],
+                        "bay_index": bay_idx,
+                    })
+                    door_placed = True
+                    continue
+
+                # Fill rule selection
+                fill_type = _weighted_choice(fill_probs, rng)
+
+                if fill_type == "window":
+                    # Window at 35-45% wall height (slight per-bay variation)
+                    win_y_frac = rng.uniform(0.35, 0.45)
+                    win_y = floor_height * win_y_frac
+                    ops.append({
+                        "type": "opening",
+                        "wall_index": wall_idx,
+                        "position": [bay_x, win_y],
+                        "size": [win_w, win_h],
+                        "role": "window",
+                        "floor": floor_idx,
+                        "style": win_style,
+                        "bay_index": bay_idx,
+                    })
+
+                elif fill_type == "balcony":
+                    # Balcony: window + projecting platform
+                    win_y = floor_height * 0.15  # lower for balcony access
+                    ops.append({
+                        "type": "opening",
+                        "wall_index": wall_idx,
+                        "position": [bay_x, win_y],
+                        "size": [win_w * 1.2, win_h * 1.1],
+                        "role": "window",
+                        "floor": floor_idx,
+                        "style": win_style,
+                        "bay_index": bay_idx,
+                    })
+
+                elif fill_type == "archway":
+                    # Archway: tall opening with arch profile
+                    arch_w = win_w * 1.1
+                    arch_h = win_h * 1.3
+                    ops.append({
+                        "type": "opening",
+                        "wall_index": wall_idx,
+                        "position": [bay_centers[bay_idx] - arch_w / 2, 0.0],
+                        "size": [arch_w, arch_h],
+                        "role": "window",
+                        "floor": floor_idx,
+                        "style": "pointed_arch" if style == "gothic" else "arched",
+                        "bay_index": bay_idx,
+                    })
+
+                elif fill_type == "door" and floor_idx == 0:
+                    # Secondary door (side/back entrance)
+                    d_w = door_cfg["width"] * rng.uniform(0.8, 1.0)
+                    d_h = door_cfg["height"] * rng.uniform(0.85, 1.0)
+                    ops.append({
+                        "type": "opening",
+                        "wall_index": wall_idx,
+                        "position": [bay_centers[bay_idx] - d_w / 2, 0.0],
+                        "size": [d_w, d_h],
+                        "role": "door",
+                        "floor": floor_idx,
+                        "style": door_cfg["style"],
+                        "bay_index": bay_idx,
+                    })
+
+                # wall_panel: no opening (solid bay) -- intentionally no operation
+
+    # Fallback: if no door was placed (very narrow building), force one
+    if not door_placed:
+        door_x = (width - door_cfg["width"]) / 2
+        ops.append({
+            "type": "opening",
+            "wall_index": 0,
+            "position": [door_x, 0.0],
+            "size": [door_cfg["width"], door_cfg["height"]],
+            "role": "door",
+            "floor": 0,
+            "style": door_cfg["style"],
+        })
+
+    return ops
+
+
+# ---------------------------------------------------------------------------
 # Grammar Evaluation
 # ---------------------------------------------------------------------------
 
@@ -1301,41 +1579,25 @@ def evaluate_building_grammar(
             "roof_type": "domed",
         })
 
-    # 5. Windows per wall per floor
+    # 5 + 6. CGA facade split: comp(faces) -> split(y, floors) -> split(x, bays) -> fill
     win_cfg = config["windows"]
-    for floor_idx in range(floors):
-        floor_z = base_z + floor_idx * (wall_cfg["height_per_floor"] + slab_cfg["thickness"])
-        win_y = wall_cfg["height_per_floor"] * 0.4  # place windows at 40% wall height
-
-        for wall_idx in range(4):
-            wall_length = width if wall_idx < 2 else depth - 2 * wall_cfg["thickness"]
-            n_windows = win_cfg["per_wall"]
-            spacing = wall_length / (n_windows + 1)
-
-            for w_i in range(n_windows):
-                offset = spacing * (w_i + 1) - win_cfg["width"] / 2
-                ops.append({
-                    "type": "opening",
-                    "wall_index": wall_idx,
-                    "position": [offset, win_y],
-                    "size": [win_cfg["width"], win_cfg["height"]],
-                    "role": "window",
-                    "floor": floor_idx,
-                    "style": win_cfg["style"],
-                })
-
-    # 6. Door on front wall (ground floor)
     door_cfg = config["door"]
-    door_x = (width - door_cfg["width"]) / 2
-    ops.append({
-        "type": "opening",
-        "wall_index": 0,
-        "position": [door_x, 0.0],
-        "size": [door_cfg["width"], door_cfg["height"]],
-        "role": "door",
-        "floor": 0,
-        "style": door_cfg["style"],
-    })
+    facade_rules = FACADE_STYLE_RULES.get(style, FACADE_STYLE_RULES["medieval"])
+    facade_ops = _cga_facade_split(
+        width=width,
+        depth=depth,
+        floors=floors,
+        base_z=base_z,
+        floor_height=wall_cfg["height_per_floor"],
+        slab_thickness=slab_cfg["thickness"],
+        wall_thickness=wall_cfg["thickness"],
+        win_cfg=win_cfg,
+        door_cfg=door_cfg,
+        facade_rules=facade_rules,
+        style=style,
+        rng=rng,
+    )
+    ops.extend(facade_ops)
 
     # 7. Detail operations from style config -- AAA geometry from building_quality
     details = config["details"]
