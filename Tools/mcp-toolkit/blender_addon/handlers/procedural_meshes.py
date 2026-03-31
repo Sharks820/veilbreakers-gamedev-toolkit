@@ -1366,17 +1366,17 @@ def generate_bookshelf_mesh(
     # Books
     if with_books:
         import random as _rng
-        _rng.seed(42)  # Deterministic book placement
+        rng = _rng.Random(42)  # Deterministic book placement
         inner_w = total_w - panel_thick * 2
         for section in range(sections):
             shelf_y = section * section_h + panel_thick
             x_cursor = -inner_w / 2 + 0.02
             while x_cursor < inner_w / 2 - 0.03:
-                book_w = _rng.uniform(0.015, 0.035)
-                book_h = _rng.uniform(section_h * 0.6, section_h * 0.88)
-                book_d = _rng.uniform(total_d * 0.6, total_d * 0.85)
+                book_w = rng.uniform(0.015, 0.035)
+                book_h = rng.uniform(section_h * 0.6, section_h * 0.88)
+                book_d = rng.uniform(total_d * 0.6, total_d * 0.85)
                 # Slight lean
-                lean = _rng.uniform(-0.02, 0.02)
+                lean = rng.uniform(-0.02, 0.02)
                 bkv, bkf = _make_beveled_box(
                     x_cursor + book_w / 2 + lean,
                     shelf_y + book_h / 2,
@@ -1385,7 +1385,7 @@ def generate_bookshelf_mesh(
                     bevel=0.002,
                 )
                 parts.append((bkv, bkf))
-                x_cursor += book_w + _rng.uniform(0.002, 0.008)
+                x_cursor += book_w + rng.uniform(0.002, 0.008)
 
     verts, faces = _merge_meshes(*parts)
     return _make_result("Bookshelf", verts, faces, sections=sections, category="furniture")
@@ -1719,13 +1719,13 @@ def generate_rock_mesh(
         h = 1.5 * size
         base_r = 0.3 * size
         _rng_ss = __import__("random")
-        _rng_ss.seed(77)
+        rng = _rng_ss.Random(77)
         ring_count = 8 + detail * 2
         for i in range(ring_count + 1):
             t = i / ring_count
             y = t * h
             # Taper toward top with noise
-            r = base_r * (1.0 - t * 0.4) * (1.0 + _rng_ss.uniform(-0.08, 0.08))
+            r = base_r * (1.0 - t * 0.4) * (1.0 + rng.uniform(-0.08, 0.08))
             profile.append((max(r, 0.02), y))
 
         sv, sf = _make_lathe(profile, segments=6 + detail, close_bottom=True, close_top=True)
@@ -1735,12 +1735,12 @@ def generate_rock_mesh(
     elif rock_type == "crystal":
         # Hexagonal crystal cluster
         import random as _rng
-        _rng.seed(99)
+        rng = _rng.Random(99)
         for c in range(3 + detail):
-            cx = _rng.uniform(-0.15, 0.15) * size
-            cz = _rng.uniform(-0.15, 0.15) * size
-            crystal_h = _rng.uniform(0.3, 0.7) * size
-            crystal_r = _rng.uniform(0.04, 0.1) * size
+            cx = rng.uniform(-0.15, 0.15) * size
+            cz = rng.uniform(-0.15, 0.15) * size
+            crystal_h = rng.uniform(0.3, 0.7) * size
+            crystal_r = rng.uniform(0.04, 0.1) * size
             # Hexagonal prism with pointed top
             cv, cf = _make_tapered_cylinder(
                 cx, 0, cz,
@@ -1756,19 +1756,19 @@ def generate_rock_mesh(
 
     else:  # rubble_pile
         import random as _rng
-        _rng.seed(55)
+        rng = _rng.Random(55)
         count = 5 + detail * 3
         for _ in range(count):
-            rx = _rng.uniform(-0.3, 0.3) * size
-            rz = _rng.uniform(-0.3, 0.3) * size
-            ry = _rng.uniform(0, 0.15) * size
-            rs = _rng.uniform(0.03, 0.12) * size
+            rx = rng.uniform(-0.3, 0.3) * size
+            rz = rng.uniform(-0.3, 0.3) * size
+            ry = rng.uniform(0, 0.15) * size
+            rs = rng.uniform(0.03, 0.12) * size
             # Small irregular boxes
             rv, rf = _make_beveled_box(
                 rx, ry + rs, rz,
-                rs * _rng.uniform(0.7, 1.3),
-                rs * _rng.uniform(0.5, 1.0),
-                rs * _rng.uniform(0.7, 1.3),
+                rs * rng.uniform(0.7, 1.3),
+                rs * rng.uniform(0.5, 1.0),
+                rs * rng.uniform(0.7, 1.3),
                 bevel=rs * 0.15,
             )
             parts.append((rv, rf))
@@ -1836,12 +1836,12 @@ def generate_mushroom_mesh(
     elif cap_style == "cluster":
         # Multiple small mushrooms
         import random as _rng
-        _rng.seed(33)
+        rng = _rng.Random(33)
         cluster_count = 5
         for _ in range(cluster_count):
-            ox = _rng.uniform(-0.1, 0.1) * size
-            oz = _rng.uniform(-0.1, 0.1) * size
-            s = _rng.uniform(0.3, 0.8) * size
+            ox = rng.uniform(-0.1, 0.1) * size
+            oz = rng.uniform(-0.1, 0.1) * size
+            s = rng.uniform(0.3, 0.8) * size
             sh = 0.2 * s
             sr = 0.02 * s
 
@@ -2073,11 +2073,11 @@ def generate_ivy_mesh(
     """
     parts = []
     import random as _rng
-    _rng.seed(71)
+    rng = _rng.Random(71)
 
     for strand in range(density):
-        x_offset = _rng.uniform(-0.3, 0.3)
-        strand_len = length * _rng.uniform(0.6, 1.0)
+        x_offset = rng.uniform(-0.3, 0.3)
+        strand_len = length * rng.uniform(0.6, 1.0)
         vine_segs = 10
         vine_r = 0.005
 
@@ -2096,8 +2096,8 @@ def generate_ivy_mesh(
 
             # Leaves at intervals
             if s % 2 == 0:
-                leaf_size = _rng.uniform(0.02, 0.04)
-                lx = x + _rng.choice([-1, 1]) * 0.03
+                leaf_size = rng.uniform(0.02, 0.04)
+                lx = x + rng.choice([-1, 1]) * 0.03
                 # Leaf as small diamond quad
                 leaf_verts = [
                     (lx, y + leaf_size, z + 0.01),
@@ -2543,12 +2543,12 @@ def generate_pillar_mesh(
 
         # Rubble chunks at the break point
         import random as _rng_pillar
-        _rng_pillar.seed(77)
+        rng = _rng_pillar.Random(77)
         for _ in range(6):
-            rx = _rng_pillar.uniform(-radius * 1.5, radius * 1.5)
-            rz = _rng_pillar.uniform(-radius * 1.5, radius * 1.5)
-            ry = break_h + _rng_pillar.uniform(-0.05, 0.1)
-            rs = _rng_pillar.uniform(radius * 0.15, radius * 0.4)
+            rx = rng.uniform(-radius * 1.5, radius * 1.5)
+            rz = rng.uniform(-radius * 1.5, radius * 1.5)
+            ry = break_h + rng.uniform(-0.05, 0.1)
+            rs = rng.uniform(radius * 0.15, radius * 0.4)
             rv, rf = _make_beveled_box(rx, ry, rz, rs, rs * 0.7, rs * 0.8, bevel=0.005)
             parts.append((rv, rf))
 
@@ -2729,11 +2729,11 @@ def generate_archway_mesh(
 
         # Fallen rubble on the ground (from collapsed portion)
         import random as _rng_arch
-        _rng_arch.seed(99)
+        rng = _rng_arch.Random(99)
         for _ in range(5):
-            rx = _rng_arch.uniform(-width * 0.3, width * 0.8)
-            rz = _rng_arch.uniform(-depth, depth)
-            rs = _rng_arch.uniform(0.05, 0.15)
+            rx = rng.uniform(-width * 0.3, width * 0.8)
+            rz = rng.uniform(-depth, depth)
+            rs = rng.uniform(0.05, 0.15)
             rv, rf = _make_beveled_box(rx, rs * 0.5, rz,
                                        rs, rs * 0.5, rs * 0.8, bevel=0.005)
             parts.append((rv, rf))
@@ -2837,15 +2837,15 @@ def generate_skull_pile_mesh(
     """
     parts = []
     import random as _rng
-    _rng.seed(666)  # Appropriately dark seed
+    rng = _rng.Random(666)  # Appropriately dark seed
 
     skull_r = 0.06
 
     for i in range(count):
         # Arrange in a rough pile
         layer = 0 if i < max(count * 2 // 3, 1) else 1
-        angle = _rng.uniform(0, 2 * math.pi)
-        dist = _rng.uniform(0, skull_r * 2) if layer == 0 else _rng.uniform(0, skull_r)
+        angle = rng.uniform(0, 2 * math.pi)
+        dist = rng.uniform(0, skull_r * 2) if layer == 0 else rng.uniform(0, skull_r)
         x = math.cos(angle) * dist
         z = math.sin(angle) * dist
         y = layer * skull_r * 1.5 + skull_r
@@ -2856,7 +2856,7 @@ def generate_skull_pile_mesh(
         parts.append((cv, cf))
 
         # Face/jaw (smaller box in front)
-        face_angle = _rng.uniform(0, 2 * math.pi)
+        face_angle = rng.uniform(0, 2 * math.pi)
         fx = x + math.cos(face_angle) * skull_r * 0.5
         fz = z + math.sin(face_angle) * skull_r * 0.5
         jv, jf = _make_box(fx, y - skull_r * 0.3, fz,
@@ -8398,13 +8398,13 @@ def generate_corruption_crystal_mesh(
 
     # Secondary crystal shards growing from base
     import random as _rng
-    _rng.seed(42)
+    rng = _rng.Random(42)
     n_shards = max(3, facets // 2)
     for i in range(n_shards):
-        angle = _rng.uniform(0, 2 * math.pi)
-        dist = _rng.uniform(crystal_r * 0.8, crystal_r * 1.5)
-        shard_h = _rng.uniform(height * 0.2, height * 0.4)
-        shard_r = _rng.uniform(crystal_r * 0.2, crystal_r * 0.4)
+        angle = rng.uniform(0, 2 * math.pi)
+        dist = rng.uniform(crystal_r * 0.8, crystal_r * 1.5)
+        shard_h = rng.uniform(height * 0.2, height * 0.4)
+        shard_r = rng.uniform(crystal_r * 0.2, crystal_r * 0.4)
         sx = math.cos(angle) * dist
         sz = math.sin(angle) * dist
 
@@ -8451,15 +8451,15 @@ def generate_veil_tear_mesh(
 
     # Create jagged border using displaced points on an ellipse
     import random as _rng
-    _rng.seed(777)
+    rng = _rng.Random(777)
 
     for i in range(n_shards):
         angle = 2.0 * math.pi * i / n_shards
         next_angle = 2.0 * math.pi * (i + 1) / n_shards
 
         # Elliptical base shape with jagged displacement
-        r_inner = 0.85 + _rng.uniform(-0.1, 0.1)
-        r_outer = 1.15 + _rng.uniform(-0.1, 0.15)
+        r_inner = 0.85 + rng.uniform(-0.1, 0.1)
+        r_outer = 1.15 + rng.uniform(-0.1, 0.15)
 
         ix = math.cos(angle) * width / 2 * r_inner
         iy = math.sin(angle) * height / 2 * r_inner + height / 2
@@ -8486,9 +8486,9 @@ def generate_veil_tear_mesh(
 
     # Energy wisps (small spheres scattered in the tear)
     for i in range(6):
-        wx = _rng.uniform(-width / 3, width / 3)
-        wy = _rng.uniform(height / 3, height * 2 / 3)
-        wr = _rng.uniform(0.03, 0.06)
+        wx = rng.uniform(-width / 3, width / 3)
+        wy = rng.uniform(height / 3, height * 2 / 3)
+        wr = rng.uniform(0.03, 0.06)
         wv, wf = _make_sphere(wx, wy, 0, wr, rings=3, sectors=4)
         parts.append((wv, wf))
 
@@ -9457,7 +9457,7 @@ def generate_treasure_pile_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng
-    _rng.seed(42)
+    rng = _rng.Random(42)
     parts = []
 
     # Base mound (flattened sphere)
@@ -9475,23 +9475,23 @@ def generate_treasure_pile_mesh(
 
     # Scatter coins (thin cylinders)
     for _ in range(coin_count):
-        cx = _rng.uniform(-size * 0.7, size * 0.7)
-        cz = _rng.uniform(-size * 0.7, size * 0.7)
+        cx = rng.uniform(-size * 0.7, size * 0.7)
+        cz = rng.uniform(-size * 0.7, size * 0.7)
         dist = math.sqrt(cx * cx + cz * cz)
         if dist > size * 0.8:
             continue
-        cy = size * 0.15 * (1.0 - dist / size) + _rng.uniform(0, size * 0.05)
-        coin_r = _rng.uniform(size * 0.025, size * 0.04)
+        cy = size * 0.15 * (1.0 - dist / size) + rng.uniform(0, size * 0.05)
+        coin_r = rng.uniform(size * 0.025, size * 0.04)
         cv, cf = _make_cylinder(cx, cy, cz, coin_r, size * 0.005, segments=6)
         parts.append((cv, cf))
 
     # A few gem shapes (octahedra approximated as double cones)
     gem_count = max(2, coin_count // 5)
     for _ in range(gem_count):
-        gx = _rng.uniform(-size * 0.4, size * 0.4)
-        gz = _rng.uniform(-size * 0.4, size * 0.4)
-        gy = size * 0.15 + _rng.uniform(0, size * 0.08)
-        gem_r = _rng.uniform(size * 0.02, size * 0.04)
+        gx = rng.uniform(-size * 0.4, size * 0.4)
+        gz = rng.uniform(-size * 0.4, size * 0.4)
+        gy = size * 0.15 + rng.uniform(0, size * 0.08)
+        gem_r = rng.uniform(size * 0.02, size * 0.04)
         # Top cone
         cv, cf = _make_cone(gx, gy, gz, gem_r, gem_r * 1.2, segments=6)
         parts.append((cv, cf))
@@ -10004,7 +10004,7 @@ def generate_crystal_light_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng
-    _rng.seed(77)
+    rng = _rng.Random(77)
     cluster_count = max(2, min(12, cluster_count))
     parts = []
 
@@ -10017,11 +10017,11 @@ def generate_crystal_light_mesh(
 
     # Crystal shards (hexagonal prisms tapering to points)
     for _ in range(cluster_count):
-        cx = _rng.uniform(-size * 0.15, size * 0.15)
-        cz = _rng.uniform(-size * 0.15, size * 0.15)
-        cy = _rng.uniform(0, size * 0.1)
-        c_height = _rng.uniform(size * 0.3, size * 0.8)
-        c_radius = _rng.uniform(size * 0.04, size * 0.08)
+        cx = rng.uniform(-size * 0.15, size * 0.15)
+        cz = rng.uniform(-size * 0.15, size * 0.15)
+        cy = rng.uniform(0, size * 0.1)
+        c_height = rng.uniform(size * 0.3, size * 0.8)
+        c_radius = rng.uniform(size * 0.04, size * 0.08)
         cv, cf = _make_tapered_cylinder(
             cx, cy, cz,
             c_radius, c_radius * 0.05,
@@ -10219,17 +10219,17 @@ def generate_door_mesh(
 
         # Books on shelves (thin boxes)
         import random as _rng
-        _rng.seed(88)
+        rng = _rng.Random(88)
         for shelf_i in range(shelf_count):
             base_y = shelf_i * shelf_h / shelf_count + frame_t
             book_x = -shelf_w / 2 + frame_t + 0.02
             while book_x < shelf_w / 2 - frame_t - 0.02:
-                bw = _rng.uniform(0.02, 0.04)
-                bh = _rng.uniform(shelf_h / shelf_count * 0.5, shelf_h / shelf_count * 0.85)
+                bw = rng.uniform(0.02, 0.04)
+                bh = rng.uniform(shelf_h / shelf_count * 0.5, shelf_h / shelf_count * 0.85)
                 bkv, bkf = _make_box(book_x + bw / 2, base_y + bh / 2, 0,
                                      bw / 2, bh / 2, shelf_d * 0.35)
                 parts.append((bkv, bkf))
-                book_x += bw + _rng.uniform(0.002, 0.008)
+                book_x += bw + rng.uniform(0.002, 0.008)
 
     else:  # dungeon_gate
         # Portcullis-style gate
@@ -11807,7 +11807,7 @@ def generate_stalactite_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng
-    _rng.seed(31)
+    rng = _rng.Random(31)
     parts = []
     segs = 8
 
@@ -11837,10 +11837,10 @@ def generate_stalactite_mesh(
 
     # Secondary drip formations
     for _ in range(3):
-        ox = _rng.uniform(-thickness * 0.5, thickness * 0.5)
-        oz = _rng.uniform(-thickness * 0.5, thickness * 0.5)
-        sl = length * _rng.uniform(0.2, 0.5)
-        sr = thickness * _rng.uniform(0.2, 0.4)
+        ox = rng.uniform(-thickness * 0.5, thickness * 0.5)
+        oz = rng.uniform(-thickness * 0.5, thickness * 0.5)
+        sl = length * rng.uniform(0.2, 0.5)
+        sr = thickness * rng.uniform(0.2, 0.4)
         dv, df = _make_tapered_cylinder(ox, -sl, oz, 0.001, sr, sl,
                                         segments=5, cap_top=True, cap_bottom=True)
         parts.append((dv, df))
@@ -11863,7 +11863,7 @@ def generate_stalagmite_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng
-    _rng.seed(37)
+    rng = _rng.Random(37)
     parts = []
     segs = 8
 
@@ -11891,10 +11891,10 @@ def generate_stalagmite_mesh(
     parts.append((bv, bf))
 
     for _ in range(2):
-        ox = _rng.uniform(-thickness * 0.6, thickness * 0.6)
-        oz = _rng.uniform(-thickness * 0.6, thickness * 0.6)
-        sh = height * _rng.uniform(0.2, 0.5)
-        sr = thickness * _rng.uniform(0.2, 0.4)
+        ox = rng.uniform(-thickness * 0.6, thickness * 0.6)
+        oz = rng.uniform(-thickness * 0.6, thickness * 0.6)
+        sh = height * rng.uniform(0.2, 0.5)
+        sr = thickness * rng.uniform(0.2, 0.4)
         dv, df = _make_tapered_cylinder(ox, 0, oz, sr, 0.001, sh,
                                         segments=5, cap_top=True, cap_bottom=True)
         parts.append((dv, df))
@@ -11917,20 +11917,20 @@ def generate_bone_pile_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng
-    _rng.seed(66)
+    rng = _rng.Random(66)
     count = max(5, min(30, count))
     parts = []
     s = creature_size
 
     for _ in range(count):
-        bone_type = _rng.choice(["long", "short", "round"])
-        bx = _rng.uniform(-0.3 * s, 0.3 * s)
-        bz = _rng.uniform(-0.3 * s, 0.3 * s)
-        by = _rng.uniform(0, 0.05 * s)
+        bone_type = rng.choice(["long", "short", "round"])
+        bx = rng.uniform(-0.3 * s, 0.3 * s)
+        bz = rng.uniform(-0.3 * s, 0.3 * s)
+        by = rng.uniform(0, 0.05 * s)
 
         if bone_type == "long":
-            bone_len = _rng.uniform(0.15, 0.3) * s
-            bone_r = _rng.uniform(0.008, 0.015) * s
+            bone_len = rng.uniform(0.15, 0.3) * s
+            bone_r = rng.uniform(0.008, 0.015) * s
             bv, bf = _make_tapered_cylinder(bx, by, bz, bone_r, bone_r * 0.8,
                                             bone_len, segments=5,
                                             cap_top=True, cap_bottom=True)
@@ -11940,13 +11940,13 @@ def generate_bone_pile_mesh(
             parts.append((kv, kf))
 
         elif bone_type == "short":
-            bone_r = _rng.uniform(0.01, 0.02) * s
-            bone_h = _rng.uniform(0.01, 0.02) * s
+            bone_r = rng.uniform(0.01, 0.02) * s
+            bone_h = rng.uniform(0.01, 0.02) * s
             bv, bf = _make_cylinder(bx, by, bz, bone_r, bone_h, segments=5)
             parts.append((bv, bf))
 
         else:  # round
-            bone_r = _rng.uniform(0.015, 0.035) * s
+            bone_r = rng.uniform(0.015, 0.035) * s
             bv, bf = _make_sphere(bx, by + bone_r, bz,
                                   bone_r, rings=4, sectors=5)
             parts.append((bv, bf))
@@ -11970,7 +11970,7 @@ def generate_nest_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng
-    _rng.seed(44)
+    rng = _rng.Random(44)
     parts = []
 
     if material == "bird_sticks":
@@ -11992,17 +11992,17 @@ def generate_nest_mesh(
 
         twig_count = 15
         for _ in range(twig_count):
-            tx = _rng.uniform(-size * 0.4, size * 0.4)
-            tz = _rng.uniform(-size * 0.4, size * 0.4)
-            ty = _rng.uniform(0.04, 0.10)
-            tl = _rng.uniform(size * 0.1, size * 0.3)
+            tx = rng.uniform(-size * 0.4, size * 0.4)
+            tz = rng.uniform(-size * 0.4, size * 0.4)
+            ty = rng.uniform(0.04, 0.10)
+            tl = rng.uniform(size * 0.1, size * 0.3)
             tr = size * 0.005
             tv, tf = _make_cylinder(tx, ty, tz, tr, tl, segments=3)
             parts.append((tv, tf))
 
         for _ in range(3):
-            ex = _rng.uniform(-size * 0.1, size * 0.1)
-            ez = _rng.uniform(-size * 0.1, size * 0.1)
+            ex = rng.uniform(-size * 0.1, size * 0.1)
+            ez = rng.uniform(-size * 0.1, size * 0.1)
             er = size * 0.04
             ev, ef = _make_sphere(ex, 0.03, ez, er, rings=4, sectors=6)
             ev = [(v[0], v[1] * 1.2, v[2]) for v in ev]
@@ -12020,7 +12020,7 @@ def generate_nest_mesh(
             angle = 2.0 * math.pi * i / strand_count
             sx = math.cos(angle) * size * 0.8
             sz = math.sin(angle) * size * 0.8
-            sy = size * 0.5 + _rng.uniform(-size * 0.2, size * 0.2)
+            sy = size * 0.5 + rng.uniform(-size * 0.2, size * 0.2)
             mid_x = sx * 0.5
             mid_z = sz * 0.5
             sv2, sf2 = _make_cylinder(mid_x, sy, mid_z, size * 0.003,
@@ -12044,7 +12044,7 @@ def generate_nest_mesh(
             angle = 2.0 * math.pi * i / bone_count
             bx = math.cos(angle) * size * 0.55
             bz = math.sin(angle) * size * 0.55
-            bone_len = size * _rng.uniform(0.3, 0.6)
+            bone_len = size * rng.uniform(0.3, 0.6)
             bone_r = size * 0.025
             bov, bof = _make_tapered_cylinder(bx, 0.08, bz, bone_r, bone_r * 0.5,
                                               bone_len, segments=5, cap_top=True)
@@ -12074,7 +12074,7 @@ def generate_geyser_vent_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng
-    _rng.seed(51)
+    rng = _rng.Random(51)
     parts = []
     segs = 12
 
@@ -12103,11 +12103,11 @@ def generate_geyser_vent_mesh(
     parts.append((vv, vf))
 
     for i in range(8):
-        angle = 2.0 * math.pi * i / 8 + _rng.uniform(-0.2, 0.2)
-        dx = math.cos(angle) * radius * _rng.uniform(0.8, 1.2)
-        dz = math.sin(angle) * radius * _rng.uniform(0.8, 1.2)
-        dh = _rng.uniform(0.02, 0.06)
-        dr = _rng.uniform(radius * 0.05, radius * 0.12)
+        angle = 2.0 * math.pi * i / 8 + rng.uniform(-0.2, 0.2)
+        dx = math.cos(angle) * radius * rng.uniform(0.8, 1.2)
+        dz = math.sin(angle) * radius * rng.uniform(0.8, 1.2)
+        dh = rng.uniform(0.02, 0.06)
+        dr = rng.uniform(radius * 0.05, radius * 0.12)
         cv, cf = _make_cone(dx, 0.04, dz, dr, dh, segments=5)
         parts.append((cv, cf))
 
@@ -12129,7 +12129,7 @@ def generate_fallen_log_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng
-    _rng.seed(73)
+    rng = _rng.Random(73)
     parts = []
     segs = 12
     r = diameter / 2
@@ -12153,12 +12153,12 @@ def generate_fallen_log_mesh(
     # Broken branch stubs
     stub_count = 4
     for _ in range(stub_count):
-        sz = _rng.uniform(0.1, 0.9) * length
-        angle = _rng.uniform(0, 2.0 * math.pi)
+        sz = rng.uniform(0.1, 0.9) * length
+        angle = rng.uniform(0, 2.0 * math.pi)
         sx = math.cos(angle) * r * 0.9
         sy = r + math.sin(angle) * r * 0.9
-        stub_r = r * _rng.uniform(0.08, 0.15)
-        stub_h = _rng.uniform(0.05, 0.15)
+        stub_r = r * rng.uniform(0.08, 0.15)
+        stub_h = rng.uniform(0.05, 0.15)
         sv, sf = _make_cone(sx, sy, sz, stub_r, stub_h, segments=5)
         parts.append((sv, sf))
 
@@ -14903,14 +14903,14 @@ def generate_hay_bale_mesh(
     elif style == "scattered":
         # Loose pile: several small irregular boxes
         import random as _rng
-        _rng.seed(42)  # Deterministic
+        rng = _rng.Random(42)  # Deterministic
         for _ in range(8):
-            sx = _rng.uniform(0.05, 0.15)
-            sy = _rng.uniform(0.02, 0.06)
-            sz = _rng.uniform(0.03, 0.08)
-            px = _rng.uniform(-0.3, 0.3)
+            sx = rng.uniform(0.05, 0.15)
+            sy = rng.uniform(0.02, 0.06)
+            sz = rng.uniform(0.03, 0.08)
+            px = rng.uniform(-0.3, 0.3)
             py = sy  # sit on ground
-            pz = _rng.uniform(-0.3, 0.3)
+            pz = rng.uniform(-0.3, 0.3)
             sv, sf = _make_beveled_box(px, py, pz, sx, sy, sz, bevel=0.005)
             parts.append((sv, sf))
 
@@ -18371,7 +18371,7 @@ def generate_ritual_candles_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng_candles
-    _rng_candles.seed(55)
+    rng = _rng_candles.Random(55)
     parts = []
     count = max(3, min(9, count))
 
@@ -18382,11 +18382,11 @@ def generate_ritual_candles_mesh(
             cx = math.cos(angle) * dist
             cz = math.sin(angle) * dist
         else:
-            cx = _rng_candles.uniform(-0.1, 0.1)
-            cz = _rng_candles.uniform(-0.1, 0.1)
+            cx = rng.uniform(-0.1, 0.1)
+            cz = rng.uniform(-0.1, 0.1)
 
-        candle_h = 0.08 + _rng_candles.uniform(0, 0.06)
-        candle_r = 0.008 + _rng_candles.uniform(0, 0.004)
+        candle_h = 0.08 + rng.uniform(0, 0.06)
+        candle_r = 0.008 + rng.uniform(0, 0.004)
 
         cv, cf = _make_tapered_cylinder(cx, 0, cz,
                                         candle_r, candle_r * 0.85, candle_h,
@@ -18614,14 +18614,14 @@ def generate_spider_egg_sac_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng_eggs
-    _rng_eggs.seed(88)
+    rng = _rng_eggs.Random(88)
     parts = []
 
     for _ in range(count):
-        ox = _rng_eggs.uniform(-0.08, 0.08)
-        oy = _rng_eggs.uniform(-0.03, 0.03)
-        oz = _rng_eggs.uniform(-0.08, 0.08)
-        sac_r = _rng_eggs.uniform(0.02, 0.04)
+        ox = rng.uniform(-0.08, 0.08)
+        oy = rng.uniform(-0.03, 0.03)
+        oz = rng.uniform(-0.08, 0.08)
+        sac_r = rng.uniform(0.02, 0.04)
 
         egg_profile = [
             (0.001, oy - sac_r * 0.8),
@@ -18636,13 +18636,13 @@ def generate_spider_egg_sac_mesh(
         parts.append((e_verts, ef))
 
     thread_r = 0.001
-    _rng_eggs.seed(88)
+    rng2 = _rng_eggs.Random(88)
     positions = []
     for _ in range(count):
         positions.append((
-            _rng_eggs.uniform(-0.08, 0.08),
-            _rng_eggs.uniform(-0.03, 0.03),
-            _rng_eggs.uniform(-0.08, 0.08),
+            rng2.uniform(-0.08, 0.08),
+            rng2.uniform(-0.03, 0.03),
+            rng2.uniform(-0.08, 0.08),
         ))
     for i in range(min(count - 1, 4)):
         p0 = positions[i]
@@ -18673,7 +18673,7 @@ def generate_rubble_pile_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng_rubble
-    _rng_rubble.seed(44)
+    rng = _rng_rubble.Random(44)
     parts = []
 
     mound_profile = [
@@ -18690,24 +18690,24 @@ def generate_rubble_pile_mesh(
     chunk_count = 12 if style in ("stone", "mixed") else 8
 
     for _ in range(chunk_count):
-        cx = _rng_rubble.uniform(-size * 0.6, size * 0.6)
-        cz = _rng_rubble.uniform(-size * 0.6, size * 0.6)
+        cx = rng.uniform(-size * 0.6, size * 0.6)
+        cz = rng.uniform(-size * 0.6, size * 0.6)
         dist = math.sqrt(cx * cx + cz * cz)
         if dist > size * 0.7:
             continue
-        cy = size * 0.15 * (1.0 - dist / size) + _rng_rubble.uniform(0, size * 0.05)
+        cy = size * 0.15 * (1.0 - dist / size) + rng.uniform(0, size * 0.05)
 
-        if style == "stone" or (style == "mixed" and _rng_rubble.random() > 0.4):
-            cs = _rng_rubble.uniform(size * 0.04, size * 0.12)
+        if style == "stone" or (style == "mixed" and rng.random() > 0.4):
+            cs = rng.uniform(size * 0.04, size * 0.12)
             cv, cf = _make_beveled_box(cx, cy, cz,
-                                       cs, cs * _rng_rubble.uniform(0.5, 1.0),
-                                       cs * _rng_rubble.uniform(0.6, 1.2),
+                                       cs, cs * rng.uniform(0.5, 1.0),
+                                       cs * rng.uniform(0.6, 1.2),
                                        bevel=cs * 0.1)
             parts.append((cv, cf))
         else:
-            pw = _rng_rubble.uniform(size * 0.02, size * 0.04)
-            pl = _rng_rubble.uniform(size * 0.1, size * 0.25)
-            ph = _rng_rubble.uniform(size * 0.01, size * 0.03)
+            pw = rng.uniform(size * 0.02, size * 0.04)
+            pl = rng.uniform(size * 0.1, size * 0.25)
+            ph = rng.uniform(size * 0.01, size * 0.03)
             cv, cf = _make_box(cx, cy, cz, pw, ph, pl)
             parts.append((cv, cf))
 
@@ -18834,7 +18834,7 @@ def generate_rat_nest_mesh() -> MeshSpec:
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng_nest
-    _rng_nest.seed(66)
+    rng = _rng_nest.Random(66)
     parts = []
     nest_r = 0.12
 
@@ -18850,19 +18850,19 @@ def generate_rat_nest_mesh() -> MeshSpec:
     parts.append((mv, mf))
 
     for _ in range(10):
-        sx = _rng_nest.uniform(-nest_r * 0.7, nest_r * 0.7)
-        sz = _rng_nest.uniform(-nest_r * 0.7, nest_r * 0.7)
+        sx = rng.uniform(-nest_r * 0.7, nest_r * 0.7)
+        sz = rng.uniform(-nest_r * 0.7, nest_r * 0.7)
         if math.sqrt(sx * sx + sz * sz) > nest_r * 0.8:
             continue
-        sy = _rng_nest.uniform(0.01, 0.035)
-        pw = _rng_nest.uniform(0.005, 0.015)
-        pl = _rng_nest.uniform(0.01, 0.03)
+        sy = rng.uniform(0.01, 0.035)
+        pw = rng.uniform(0.005, 0.015)
+        pl = rng.uniform(0.01, 0.03)
         sv, sf = _make_box(sx, sy, sz, pw, 0.002, pl)
         parts.append((sv, sf))
 
     for _ in range(3):
-        bx = _rng_nest.uniform(-nest_r * 0.5, nest_r * 0.5)
-        bz = _rng_nest.uniform(-nest_r * 0.5, nest_r * 0.5)
+        bx = rng.uniform(-nest_r * 0.5, nest_r * 0.5)
+        bz = rng.uniform(-nest_r * 0.5, nest_r * 0.5)
         bv, bf = _make_cylinder(bx, 0.02, bz, 0.003, 0.025, segments=4)
         parts.append((bv, bf))
 
@@ -19047,17 +19047,17 @@ def generate_gem_pile_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng_gems
-    _rng_gems.seed(33)
+    rng = _rng_gems.Random(33)
     parts = []
 
     for _ in range(gem_count):
-        gx = _rng_gems.uniform(-size * 0.6, size * 0.6)
-        gz = _rng_gems.uniform(-size * 0.6, size * 0.6)
+        gx = rng.uniform(-size * 0.6, size * 0.6)
+        gz = rng.uniform(-size * 0.6, size * 0.6)
         dist = math.sqrt(gx * gx + gz * gz)
         if dist > size * 0.7:
             continue
-        gy = 0.005 + _rng_gems.uniform(0, size * 0.04)
-        gem_r = _rng_gems.uniform(size * 0.03, size * 0.06)
+        gy = 0.005 + rng.uniform(0, size * 0.04)
+        gem_r = rng.uniform(size * 0.03, size * 0.06)
 
         cv, cf = _make_cone(gx, gy, gz, gem_r, gem_r * 1.0, segments=6)
         parts.append((cv, cf))
@@ -19084,7 +19084,7 @@ def generate_gold_pile_mesh(
         MeshSpec with vertices, faces, uvs, and metadata.
     """
     import random as _rng_gold
-    _rng_gold.seed(42)
+    rng = _rng_gold.Random(42)
     parts = []
 
     mound_profile = [
@@ -19099,13 +19099,13 @@ def generate_gold_pile_mesh(
     parts.append((mv, mf))
 
     for _ in range(coin_count):
-        cx = _rng_gold.uniform(-size * 0.6, size * 0.6)
-        cz = _rng_gold.uniform(-size * 0.6, size * 0.6)
+        cx = rng.uniform(-size * 0.6, size * 0.6)
+        cz = rng.uniform(-size * 0.6, size * 0.6)
         dist = math.sqrt(cx * cx + cz * cz)
         if dist > size * 0.7:
             continue
-        cy = 0.015 * (1.0 - dist / size) + _rng_gold.uniform(0, 0.008)
-        coin_r = _rng_gold.uniform(0.008, 0.012)
+        cy = 0.015 * (1.0 - dist / size) + rng.uniform(0, 0.008)
+        coin_r = rng.uniform(0.008, 0.012)
         cv, cf = _make_cylinder(cx, cy, cz, coin_r, 0.002, segments=6)
         parts.append((cv, cf))
 
