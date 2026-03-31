@@ -1,303 +1,354 @@
-# Technology Stack: AI Game Development MCP Toolkit
+# Technology Stack: AAA Procedural 3D Architecture
 
-**Project:** VeilBreakers 3D - Custom MCP Server Toolkit (Blender + Unity + AI Generation APIs)
-**Researched:** 2026-03-18
-**Overall Confidence:** HIGH (verified against official PyPI, MCP spec, GitHub repos, and vendor docs)
+**Project:** VeilBreakers v4.0 -- AAA Procedural 3D Architecture
+**Researched:** 2026-03-30
+**Overall Confidence:** HIGH (cross-verified across official docs, AAA studio references, existing research files)
 
 ## Context
 
-This stack research covers building custom MCP servers that bridge three domains into a unified AI-assisted game development toolkit:
+This stack covers the AAA procedural 3D generation pipeline for v4.0: procedural buildings, interior mapping/furnishing, terrain/building mesh integration, biome-aware generation, high-level geometry with clean edges, and AAA-quality texturing. It builds on the existing MCP toolkit (37 compound tools, 127 procedural mesh generators) and the established Blender-to-Unity pipeline.
 
-1. **Blender** (Python bpy API) -- 3D modeling, materials, scene composition
-2. **Unity** (C# Editor scripting) -- game engine integration, asset import, scene management
-3. **AI Generation APIs** (REST/Python SDK) -- image generation, 3D model generation, texture synthesis
-
-The project already uses `blender-mcp` (ahujasid) and `mcp-unity` (CoderGamester) as reference implementations. This research informs building custom MCP servers that extend beyond their capabilities, specifically for VeilBreakers' monster/hero asset pipeline.
+The existing STACK.md covers MCP server infrastructure (Python SDK, transports, HTTP clients). This document covers the procedural 3D architecture dimension specifically.
 
 ---
 
 ## Recommended Stack
 
-### MCP Server Framework (Python)
+### Core Procedural Engine
 
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
-| Python | 3.12 | Runtime for all custom MCP servers | 3.12 is the sweet spot: fully supported by MCP SDK (>=3.10), supported by Blender 4.x bpy, and has the best performance of the 3.10-3.12 range. Avoid 3.13 for now -- Blender addon compatibility is unverified. | HIGH |
-| mcp (official SDK) | 1.26.0 | MCP protocol implementation, transport, lifecycle | The official Python SDK from Anthropic. Includes FastMCP high-level decorator API (`@mcp.tool()`, `@mcp.resource()`), stdio and Streamable HTTP transports, JSON-RPC message handling, and OAuth support. This IS the protocol implementation -- no alternatives exist. | HIGH |
-| FastMCP (standalone) | 3.1.1 | Higher-level MCP server framework | FastMCP was originally integrated into the MCP SDK as the `@mcp.tool()` decorator API. The standalone FastMCP 3.x adds composition, proxying, and middleware beyond the built-in SDK FastMCP. Use the built-in SDK FastMCP for simple servers; reach for standalone FastMCP 3.x only if you need server composition (chaining multiple MCP servers). Start with the SDK's built-in FastMCP. | MEDIUM |
-| uv | latest | Python package management and virtual environments | The MCP Python SDK officially uses uv. 10-100x faster than pip for dependency resolution. Use `uv init`, `uv add`, `uv sync` for all project setup. Lock files (`uv.lock`) go into version control. This is not optional -- the MCP ecosystem standardized on uv. | HIGH |
+| Blender Geometry Nodes | 5.1 | Declarative procedural geometry, node-based systems | Geometry Nodes 5.1 introduces Repeat Zones, For Each Geometry Element zones, Closures, Bake nodes, and new Generate nodes (Array, Scatter on Surface, Curve to Tube). These enable complex procedural buildings, facade generation, and scatter systems without Python scripting. The Bake node enables caching expensive computations. Array node replaces manual duplication. Scatter on Surface replaces custom Poisson disk for many cases. | HIGH |
+| Blender Python (bpy) | 4.x/5.x | Imperative procedural generators, bridge handlers, mesh manipulation | The existing 127+ generators use bpy/bmesh/mathutils directly. bpy is required for operations Geometry Nodes cannot express: custom topology construction, vertex group creation, UV manipulation beyond basic unwrapping, armature/rig generation, and the TCP socket bridge handlers. bpy and Geometry Nodes complement each other -- bpy for precise control, Geo Nodes for declarative patterns. | HIGH |
+| bmesh | 4.x/5.x | Low-level mesh construction, topology operations | bmesh provides BMesh API for direct vertex/edge/face manipulation. Used for boolean operations, hole filling, edge loop creation, and custom topology generation that the higher-level bpy ops cannot achieve. Critical for procedural building construction where every vertex position matters. | HIGH |
+| mathutils | 4.x/5.x | Vector/matrix math, noise, interpolation | Vector, Matrix, Quaternion, Euler, Color, kdtree, noise modules. Used for all spatial calculations in procedural generators. noise.fractal, noise.voronoi, noise.cell provide deterministic procedural variation from seeds. | HIGH |
 
-**Why Python over TypeScript for custom servers:** The primary integration targets are Blender (Python-only bpy API) and AI generation APIs (Python SDKs are first-class for fal.ai, Replicate, Stability AI, OpenAI). TypeScript SDK exists and is used by mcp-unity's Node.js bridge, but writing Blender integration in TypeScript would require a Python subprocess bridge anyway. Python is the single language that touches all three domains natively.
-
-**Why NOT TypeScript:** The TypeScript MCP SDK v2 is still in pre-alpha (stable v2 anticipated Q1 2026 but not yet released). The v1.x is stable but Python is the better fit for this specific toolkit given Blender's Python API and the AI SDK ecosystem.
-
-### Communication & Transport
+### AI 3D Generation APIs
 
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
-| stdio transport | MCP spec 2025-03-26 | Primary transport for Claude Code / Cursor integration | stdio is the simplest, lowest-latency transport. Claude Code, Cursor, and Codex all launch MCP servers as subprocesses communicating over stdin/stdout. No network stack overhead. Microsecond-level response times. Use this for all local development servers. | HIGH |
-| TCP sockets (JSON-RPC) | Python `asyncio` stdlib | Communication between MCP server and Blender addon | Proven pattern from ahujasid/blender-mcp: Blender runs a socket server on localhost:9876, MCP server connects as a client, sends JSON commands, receives JSON responses. Keep this exact pattern -- it works and Blender's Python environment cannot run an MCP server directly (GIL + bpy threading constraints). | HIGH |
-| WebSocket (JSON-RPC) | websockets 14.x | Communication between MCP server and Unity Editor | Proven pattern from CoderGamester/mcp-unity: Unity runs a WebSocket server on port 8090, Node.js MCP server connects as client. For a Python MCP server talking to Unity, use the `websockets` library instead of Node.js. Same protocol, different client language. | HIGH |
-| Streamable HTTP | MCP spec 2025-03-26 | Future: remote/multi-user MCP server deployment | Only needed if you want to deploy MCP servers as remote services (e.g., team-shared AI generation endpoint). Not needed for local single-developer workflow. Defer implementation until there is a real multi-user requirement. | LOW (defer) |
+| Tripo3D v3.0 | v3.0 API | Primary AI 3D generator (characters, monsters, props) | Already integrated. v3.0 upgrade brings quad mesh mode, 2M polygon output, improved PBR materials, style transforms, auto-rigging. Best topology of commercial APIs. Cost: ~$0.10-0.25/model. Use for: characters, enemies, weapons, armor, key props. | HIGH |
+| Hunyuan3D 2.1 | 2.1 | Self-hosted secondary generator (bulk props, environment) | Open-source (Tencent), zero marginal cost per generation, 8K PBR textures (highest resolution), 6GB VRAM minimum, PolyGen quad topology mode. Use for: bulk furniture, environmental objects, vegetation props, rock formations. Eliminates per-model API cost for bulk assets. | HIGH |
+| Rodin Gen-2 (Hyper3D) | Gen-2 | Hero/boss asset generation (maximum quality) | 10B parameter model, native quad mesh mode (up to 200K quad faces), best overall quality. Cost: $0.30-1.50/model via WaveSpeedAI/fal.ai. Reserve for: hero characters, boss creatures, legendary weapons, key architectural focal points. NOT for bulk generation. | HIGH |
+| fal.ai FLUX | latest | Concept art, reference images, texture source material | Already integrated via `concept_art generate`. FLUX provides high-quality concept art for directing 3D generation and texture creation. Use for: building reference sheets, material reference, texture source images for inpainting. | HIGH |
 
-**Architecture pattern:**
-
-```
-Claude Code / Cursor (MCP Client)
-       |
-       | stdio (JSON-RPC over stdin/stdout)
-       |
-  [Python MCP Server]  <-- Your custom code lives here
-       |          |
-       |          +-- TCP socket (JSON) --> [Blender Addon] (bpy API)
-       |          |                          localhost:9876
-       |          +-- WebSocket (JSON) ---> [Unity Editor] (C# McpUnityServer)
-       |          |                          localhost:8090
-       |          +-- HTTPS REST ---------> [AI Generation APIs]
-       |                                    fal.ai / Replicate / OpenAI / ComfyUI
-```
-
-### HTTP Client & Async Runtime
+### Interior / Room Generation
 
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
-| httpx | >=0.27.1 | HTTP client for AI API calls | Already a core dependency of the MCP SDK -- do not add a second HTTP library. httpx supports both sync and async, HTTP/1.1 and HTTP/2, and is the MCP team's choice. Use `httpx.AsyncClient` for all outbound API calls. | HIGH |
-| anyio | >=4.5 | Async I/O abstraction | Already a core dependency of the MCP SDK. Provides structured concurrency (`anyio.create_task_group`) that works with both asyncio and trio. Use anyio primitives instead of raw asyncio for compatibility with the MCP runtime. | HIGH |
-| websockets | 14.x | WebSocket client for Unity bridge | Lightweight, well-maintained, async-native WebSocket library. Used for connecting to Unity's WebSocket server. Do NOT use aiohttp for this -- websockets is purpose-built and simpler. | HIGH |
+| World Labs Marble | current | Hero interior room generation (cloud SaaS) | Only available-now tool that generates full 3D rooms with walls/floors/ceilings/furniture as exportable GLB mesh (~600K tris). "Chisel" editor for wall/room layout. Cloud-based (no local GPU). Exports to GLB for Blender import pipeline. Use for: tavern halls, throne rooms, boss chambers, key interior locations. | MEDIUM |
+| compose_interior (existing) | v4.0 | Bulk interior pipeline (procedural room shells + Tripo furniture) | Existing `asset_pipeline compose_interior` action chains: linked room shells -> door triggers -> occlusion zones -> per-room geometry -> storytelling props -> Tripo prop queue. Supports 9 room types. Use for: bulk interior generation, dungeon rooms, generic buildings, procedural dungeons. | HIGH |
+| Tripo Studio (subscription) | current | Small/medium furniture and prop generation | User has active Tripo subscription with Studio access. Generate furniture pieces, decorative props, clutter items via the Tripo Studio web interface, then import via `asset_pipeline import_model`. Use for: chairs, tables, barrels, crates, shelves, candlesticks, chandeliers. | HIGH |
 
-**Why NOT aiohttp:** aiohttp is async-only and optimized for high-concurrency server workloads. For an MCP server making a handful of concurrent API calls, httpx (already bundled) is sufficient. Adding aiohttp would be a redundant dependency.
-
-**Why NOT requests:** Synchronous-only. The MCP server runtime is async (anyio). Using `requests` would block the event loop. httpx is the async-capable equivalent and is already installed.
-
-### AI Generation APIs
+### Texture Pipeline
 
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
-| fal-client | 0.13.x | Image generation (Stable Diffusion, Flux), 3D model generation (Hunyuan3D v3, Trellis) | fal.ai is the best unified platform for game asset generation in 2026. Single SDK covers both 2D (SDXL, Flux, SD3.5) and 3D (Hunyuan3D v3 with PBR materials, Trellis). Async-native with `subscribe_async`. Pay-per-use, no GPU required locally. Hunyuan3D v3 outputs glTF with PBR textures directly. | HIGH |
-| replicate | latest | Fallback/alternative for 3D generation (TripoSR, Hunyuan3D 2) | Replicate hosts the same models as fal.ai but with broader selection. Use as fallback when fal.ai models are unavailable or for models not yet on fal.ai. Python SDK is well-maintained. TripoSR on Replicate is $0.07/generation. | MEDIUM |
-| openai | latest | GPT Image (gpt-image-1, gpt-image-1.5) for concept art, reference sheets | OpenAI's GPT Image models replaced DALL-E (deprecated May 2026). Best for high-fidelity concept art, character reference sheets, and UI art. NOT for textures (use Stable Diffusion for that). Use for creative direction and reference image generation. | HIGH |
-| Direct REST (via httpx) | N/A | ComfyUI local server API, Stability AI API, any future API | For APIs without a Python SDK or when you want to avoid SDK dependency bloat, use httpx directly with the REST endpoint. ComfyUI exposes a JSON workflow API on localhost -- call it directly rather than adding a ComfyUI Python SDK. | HIGH |
+| Blender Shader Nodes | 4.x/5.x | Procedural texture generation, material authoring | Full procedural material system: Noise Texture, Voronoi, Musgrave, Wave, Brick, Checker for pattern generation. ColorRamp, MixRGB, Math for combination. Baking to image textures for Unity export. Use for: PBR material creation, trim sheet generation, smart materials, macro variation maps. | HIGH |
+| xatlas (via blender_uv) | current | UV unwrapping for procedural meshes | Automatic UV unwrapping with chart packing. Already integrated via `blender_uv unwrap`. Produces clean UV layouts suitable for PBR texturing. Use for: all procedural meshes that need texture application. | HIGH |
+| Real-ESRGAN (via blender_texture) | current | Texture upscaling (AI super-resolution) | Already integrated via `blender_texture upscale`. Upscales textures 2x-4x with AI. Use for: upscaling AI-generated textures, enhancing procedural textures, increasing resolution of baked textures. | HIGH |
+| fal.ai inpainting | latest | Texture inpainting, seam healing, region replacement | Already integrated via `blender_texture inpaint`. fal.ai FLUX-based inpainting for repairing texture seams, extending textures, replacing regions. Use for: healing UV seam artifacts, extending tiled textures, removing baked-in lighting. | HIGH |
+| Scenario.gg | current | AI PBR texture generation (full channel sets) | REST API generates complete PBR sets: albedo, normal, roughness, metallic, height, AO. Custom model training from 10-50 reference images for style consistency. Seamless/tileable output. Use for: generating dark fantasy material sets (stone, wood, metal, leather) with consistent art style. | MEDIUM |
 
-**AI API Strategy:**
-
-| Use Case | Recommended API | Model | Output Format |
-|----------|----------------|-------|---------------|
-| Monster concept art | OpenAI GPT Image | gpt-image-1.5 | PNG |
-| Texture generation (diffuse, normal) | fal.ai | SD3.5 or Flux | PNG |
-| Seamless tileable textures | ComfyUI (local) | SD3.5 + ControlNet Tile | PNG |
-| 3D monster model (hero quality) | fal.ai | Hunyuan3D v3 | glTF/GLB with PBR |
-| 3D prop model (fast iteration) | fal.ai | Trellis | glTF/GLB |
-| 3D character (clean topology for rigging) | Tripo3D API | Tripo v3.0 | glTF with quad topology |
-| Multi-view reference sheets | OpenAI GPT Image | gpt-image-1 | PNG |
-
-**Why NOT run Stable Diffusion locally:** Running SD locally requires a dedicated GPU, VRAM management, model downloads, and CUDA setup. For a development toolkit, cloud APIs are faster to integrate, always have the latest models, and cost cents per generation. ComfyUI local is the exception -- use it when you need custom pipelines (e.g., ControlNet-guided texture generation) that cloud APIs don't support.
-
-### Image Processing
+### Mesh Processing & Optimization
 
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
-| Pillow | 12.1.x | Image format conversion, texture atlas composition, DDS read/write, resizing, channel manipulation | The standard Python image library. Pillow 12.x reads/writes DDS (DirectX textures), PNG, JPEG, TGA, BMP, EXR (with OpenEXR), and more. Use for: AI output post-processing, texture atlas packing, normal map channel manipulation, format conversion for Unity import. | HIGH |
-| numpy | >=1.26 | Pixel-level image manipulation, normal map computation, batch operations | Already a transitive dependency (via Pillow and trimesh). Use for fast pixel operations: normal map generation from height maps, channel splitting/merging, batch color corrections. Avoid Pillow's per-pixel loops -- use numpy arrays. | HIGH |
+| trimesh | 4.11.x | Mesh validation, format conversion, analysis | Already in stack. Loads/exports OBJ, GLB, STL, PLY, FBX (via assimp). Polygon count analysis, mesh repair, simplification. Use for: validating AI-generated meshes, checking poly budgets, format conversion between Blender and Unity. | HIGH |
+| pymeshlab | 2025.07 | Advanced remeshing, decimation, surface reconstruction | Wraps full MeshLab engine. Quadric Edge Collapse decimation (better quality than trimesh), isotropic remeshing, Poisson surface reconstruction, texture parameterization. Use for: retopology of AI-generated meshes, LOD chain generation, high-quality decimation. | MEDIUM |
+| Quadriflow (Blender built-in) | built-in | Auto-retopology to quad mesh | `bpy.ops.mesh.quadriflow_remesh()` -- Blender's built-in auto-retopology. Produces quad-dominant topology with configurable target face count. Use for: retopology of AI-generated meshes to game-ready topology, creating clean base meshes for sculpting. | HIGH |
+| pygltflib | 1.16.x | Direct glTF/GLB manipulation, PBR material editing | Low-level glTF control: edit PBR material properties, swap textures, read/write extensions. Use for: post-processing AI-generated GLB files before Blender import, embedding PBR textures, fixing glTF metadata. | MEDIUM |
 
-**Why NOT OpenCV (cv2):** OpenCV is massive (100+ MB), mostly for computer vision tasks (object detection, camera calibration). For game texture processing, Pillow + numpy covers 95% of needs. The remaining 5% (edge detection for normal maps) can use scipy.ndimage which is much lighter. Do not add cv2 unless you need actual computer vision features.
-
-**Why NOT sharp (Node.js):** sharp is excellent but is a Node.js library. All MCP servers are Python. Do not introduce a Node.js subprocess for image processing.
-
-### 3D Mesh Processing
+### Terrain & World Building
 
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
-| trimesh | 4.11.x | Mesh loading, format conversion, analysis, simplification | The best Python mesh library. Pure Python core with only numpy as hard dependency. Loads/exports OBJ, glTF/GLB, STL, PLY, 3MF, COLLADA. Has mesh simplification, boolean operations, convex hull, ray casting. Use for: validating AI-generated meshes, format conversion (GLB to FBX via intermediate), polygon count analysis, mesh repair. | HIGH |
-| pygltflib | 1.16.x | Direct glTF 2.0 manipulation, PBR material editing, texture embedding | Low-level glTF library for precise control over glTF files. Use when trimesh's glTF support is too abstracted -- e.g., editing PBR material properties, swapping textures in an existing GLB, reading/writing glTF extensions. Complements trimesh, does not replace it. | MEDIUM |
-| pymeshlab | 2025.07 | Advanced mesh operations: remeshing, decimation, topology optimization | PyMeshLab wraps the full MeshLab engine. Use for operations trimesh cannot do: isotropic remeshing, Quadric Edge Collapse decimation (better quality than trimesh's simplify), Poisson surface reconstruction, texture parameterization. Heavy dependency (C++ binaries) -- only install in the mesh-processing MCP server, not in all servers. | MEDIUM |
+| OpenSimplex noise | Python lib | Deterministic terrain generation, biome variation | Already used in toolkit. Provides 2D/3D/4D simplex noise for terrain heightmaps, biome distribution, density maps. Superior to Perlin noise (no directional artifacts). Seed-based for reproducibility. Use for: terrain heightmaps, biome noise, macro variation maps. | HIGH |
+| Hydraulic/thermal erosion | custom (existing) | Terrain erosion simulation | Existing `_terrain_erosion.py` implements hydraulic + thermal erosion. Produces realistic terrain features (ridges, valleys, sediment deposits). Use for: all terrain generation, post-processing procedural heightmaps. | HIGH |
+| WFC (Wave Function Collapse) | Python implementation | Procedural dungeon layout, tile-based level design | Algorithm for constraint-based procedural generation. Define tile set with adjacency constraints, collapse from lowest entropy. Use for: dungeon room layouts, city street networks, building interior layouts. 20-40 unique tiles for convincing variety. Already exposed via `unity_world create_wfc_dungeon`. | MEDIUM |
+| L-Systems | custom (existing) | Road networks, branching structures, vegetation | Already used in `vegetation_tree` generator. L-System grammar rules generate branching road networks (main roads branch at 30-90 degrees, width decreases with depth), tree structures, river tributaries. Use for: town road networks, vegetation branching, decorative elements. | HIGH |
 
-**Mesh processing pipeline for AI-generated assets:**
-
-```
-AI API output (GLB/OBJ)
-    |
-    v
-[trimesh] -- Load, validate, inspect polygon count
-    |
-    v
-[pymeshlab] -- Remesh/decimate if needed (target poly budget)
-    |
-    v
-[pygltflib] -- Assign/edit PBR materials, embed textures
-    |
-    v
-[trimesh] -- Export to format Unity can import (FBX via assimp, or GLB)
-    |
-    v
-Unity import via MCP tool call
-```
-
-**Why NOT Open3D:** Open3D is focused on point cloud processing and 3D reconstruction (SLAM, depth cameras). It CAN process meshes but is optimized for a different use case. Trimesh + PyMeshLab covers game asset processing better with lighter weight.
-
-**Why NOT Aspose.3D:** Commercial license, expensive, overkill for this use case. Trimesh is MIT-licensed and sufficient.
-
-### Data Validation & Configuration
+### LOD & Performance
 
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
-| pydantic | >=2.12.0 | Tool input/output validation, config schemas, API response models | Already a core MCP SDK dependency. Use Pydantic models for ALL tool parameters and return types. The MCP SDK uses Pydantic for JSON Schema generation (tool descriptions sent to LLMs). Defining tool inputs as Pydantic models automatically generates correct schemas. | HIGH |
-| pydantic-settings | >=2.5.2 | Environment variable and .env file configuration | Already a core MCP SDK dependency. Use for API keys (FAL_KEY, OPENAI_API_KEY, REPLICATE_API_TOKEN), port configuration, file paths. Reads from environment variables and .env files. | HIGH |
-| python-dotenv | 1.x | .env file loading for local development | Lightweight .env file loader. pydantic-settings can use it as a backend. Keep API keys in `.env` files, never in code or config committed to git. | HIGH |
+| LOD chain generation (existing) | v4.0 | Automated LOD level creation | `asset_pipeline generate_lods` creates LOD chain from ratios (e.g., [1.0, 0.5, 0.25, 0.1]). Use for: all environment meshes, buildings, props, vegetation. Bethesda-style 3-type LOD (terrain, object, tree) for large world rendering. | HIGH |
+| Occlusion culling | Unity built-in | Runtime visibility optimization | Unity URP occlusion culling via baked occlusion data. `unity_world setup_occlusion` configures. Use for: interior rooms (prevent rendering unseen rooms), dense city areas, dungeon corridors. Critical for interior/dungeon performance. | HIGH |
+| GPU instancing | Unity built-in | Efficient rendering of repeated meshes | Unity `Graphics.DrawMeshInstanced()` or terrain detail system. All instances of same mesh+material rendered in single draw call. Use for: vegetation, props, building modular pieces, furniture. MaterialPropertyBlock for per-instance variation. | HIGH |
+| Addressables | Unity package | Asset streaming, memory management | `unity_build configure_addressables` sets up Unity Addressables for asset bundling and streaming. Use for: interior streaming (load rooms on demand), large world chunking, texture streaming. Enables seamless interior/exterior transitions without loading screens. | HIGH |
 
-### Project Structure & Tooling
+### Unity-Side Integration
 
 | Technology | Version | Purpose | Why | Confidence |
 |------------|---------|---------|-----|------------|
-| uv | latest | Package management, virtual environments, project scaffolding | Official MCP ecosystem tool. Replaces pip, pip-tools, poetry, pipenv. 10-100x faster. `uv init` for project setup, `uv add` for dependencies, `uv sync` for reproducible installs. Lock file (`uv.lock`) committed to git. | HIGH |
-| pyproject.toml | PEP 621 | Project metadata, dependencies, scripts | Standard Python project configuration. Define MCP server entry points as `[project.scripts]` for `uvx` execution. | HIGH |
-| ruff | latest | Linting and formatting | Replaces flake8, black, isort, pylint. Single tool, 10-100x faster (written in Rust). Configure in `pyproject.toml` under `[tool.ruff]`. | HIGH |
-| mypy | latest | Static type checking | Critical for MCP tool parameter correctness. Pydantic models + mypy catches type mismatches before runtime. Use strict mode. | MEDIUM |
-| pytest | 8.x | Testing | Standard Python testing. Use `pytest-asyncio` for testing async MCP tool handlers. Mock AI API calls with `respx` (httpx mock). | MEDIUM |
-| pytest-asyncio | 0.24.x | Async test support | MCP tool handlers are async functions. pytest-asyncio enables `async def test_*()`. | MEDIUM |
-
-### Project Layout (Recommended)
-
-```
-Tools/
-  mcp-toolkit/                    # Root of the custom MCP toolkit
-    pyproject.toml                # uv project config, dependencies, entry points
-    uv.lock                       # Locked dependencies (committed to git)
-    .env                          # API keys (NOT committed to git)
-    .env.example                  # Template for API keys (committed)
-    src/
-      veilbreakers_mcp/
-        __init__.py
-        blender_server.py         # MCP server: Blender bridge tools
-        unity_server.py           # MCP server: Unity bridge tools
-        asset_gen_server.py       # MCP server: AI generation tools
-        mesh_pipeline.py          # MCP server: mesh processing tools
-        shared/
-          __init__.py
-          blender_client.py       # TCP socket client for Blender addon
-          unity_client.py         # WebSocket client for Unity Editor
-          ai_clients.py           # httpx wrappers for AI APIs
-          image_utils.py          # Pillow/numpy image processing
-          mesh_utils.py           # trimesh/pygltflib utilities
-          models.py               # Pydantic models for tool I/O
-          config.py               # pydantic-settings configuration
-    tests/
-      test_blender_tools.py
-      test_unity_tools.py
-      test_asset_gen.py
-      test_mesh_pipeline.py
-    blender_addon/
-      __init__.py                 # Blender addon registration
-      socket_server.py            # TCP socket server running inside Blender
-      operators.py                # Blender operators exposed to MCP
-```
-
-**Why monorepo (single `Tools/mcp-toolkit/`) over separate repos per server:** All servers share common utilities (clients, image processing, mesh processing, config). Separate repos would duplicate shared code or require a private PyPI package. A monorepo with multiple entry points (`[project.scripts]` in pyproject.toml) is the pragmatic choice for a single-developer project. Each server is a separate entry point but shares the same codebase.
-
-**Why `Tools/mcp-toolkit/` inside the Unity project:** Keeps the MCP toolkit co-located with the game project it serves. The `.mcp.json` can reference it directly. Unity ignores non-Assets directories. If the toolkit grows, it can be extracted to a separate repo later.
+| URP (Universal Render Pipeline) | 2022.3+ | Rendering pipeline for dark fantasy visuals | Project constraint (Unity 2022.3+, URP). Use Forward+ rendering for many point/spot lights (torches, braziers, magic effects). Configure: 4 shadow cascades, 2048 shadow resolution, 80-120m shadow distance, SRP Batcher enabled. | HIGH |
+| UI Toolkit | 2022.3+ | Runtime UI framework | Project constraint. Use for: minimap, damage numbers, HUD, inventory UI, loading screens. | HIGH |
+| Cinemachine | 3.x | Camera system, cutscenes, lock-on targeting | `unity_camera` tools already integrated. Cinemachine 3.x for: state-driven cameras, lock-on targeting (Souls-like), cinematic sequences, camera shake. | HIGH |
+| NavMesh | Unity built-in | AI pathfinding, navigation | `unity_scene bake_navmesh` for runtime pathfinding. Use for: enemy AI navigation in procedural interiors, NPC pathing in towns, boss arena navigation. | HIGH |
 
 ---
 
-## Alternatives Considered
+## Architecture: How the Stack Fits Together
 
-| Category | Recommended | Alternative | Why Not |
-|----------|-------------|-------------|---------|
-| MCP SDK Language | Python (mcp 1.26.0) | TypeScript (MCP SDK v1.x) | Blender API is Python-only. AI SDKs are Python-first. TypeScript SDK v2 is pre-alpha. Would require Python subprocess bridge for Blender anyway. |
-| MCP Framework | Built-in SDK FastMCP | FastMCP 3.1.1 standalone | Standalone FastMCP adds complexity (composition, proxying) not needed for first iteration. Built-in decorator API is sufficient. Upgrade later if needed. |
-| HTTP Client | httpx (bundled with MCP) | aiohttp | aiohttp is async-only, heavier, and redundant with httpx already installed. httpx handles both sync and async. |
-| HTTP Client | httpx (bundled with MCP) | requests | Synchronous-only. Blocks the async MCP event loop. httpx is the async-capable replacement. |
-| WebSocket | websockets 14.x | aiohttp WebSocket client | aiohttp's WebSocket client is part of a larger server framework. websockets is focused, lighter, better documented for client-only use. |
-| Image Processing | Pillow 12.x + numpy | OpenCV (cv2) | 100+ MB dependency for features not needed. Pillow + numpy handles texture processing without computer vision overhead. |
-| Image Processing | Pillow 12.x + numpy | Wand (ImageMagick binding) | ImageMagick is an external system dependency. Pillow is pure Python. Simpler deployment. |
-| Mesh Processing | trimesh 4.11.x | Open3D | Open3D focuses on point clouds and reconstruction. Heavier (C++ binaries for features we don't need). Trimesh is focused on triangle mesh operations. |
-| Mesh Processing | trimesh + pymeshlab | pyvista | pyvista is a VTK wrapper for scientific visualization. Not optimized for game asset pipelines. |
-| 3D API (primary) | fal.ai (fal-client) | Meshy API | Meshy is good but fal.ai has broader model selection (Hunyuan3D v3, Trellis, Flux) under one SDK. Meshy is a fallback option. |
-| 3D API (primary) | fal.ai | Replicate | Replicate is the fallback. fal.ai is faster for image/3D gen with better pricing. Replicate has broader model catalog for edge cases. |
-| Project management | uv | poetry / pip-tools | MCP ecosystem standardized on uv. 10-100x faster. Better lock file format. Official recommendation from MCP SDK team. |
-| Linting | ruff | flake8 + black + isort | Ruff replaces all three in a single tool. 10-100x faster. One config section in pyproject.toml. |
-| Package manager | uv | pip | pip is slow, has no lock file, and uv is a drop-in replacement with massive speed improvements. |
+```
+GENERATION LAYER
+================================================================
+|                                                                |
+|  Blender bpy/bmesh          Geometry Nodes 5.1                 |
+|  (imperative generators)    (declarative systems)              |
+|  - Buildings, interiors     - Facade scattering                |
+|  - Terrain, biomes          - Detail instancing                |
+|  - Mesh repair/retopo       - Trim sheet UV mapping            |
+|  - UV/texturing             - Procedural materials             |
+|                                                                |
+|  AI Generation APIs                                            |
+|  - Tripo v3.0 (primary, all asset types)                       |
+|  - Hunyuan3D 2.1 (self-hosted, bulk props/env)                |
+|  - Rodin Gen-2 (hero/boss assets)                              |
+|  - World Labs Marble (hero interior rooms)                     |
+|                                                                |
+OPTIMIZATION LAYER
+================================================================
+|                                                                |
+|  Mesh Processing        LOD Generation        UV/Texture       |
+|  - trimesh (validate)   - LOD chains          - xatlas unwrap  |
+|  - pymeshlab (remesh)   - Quadric decimation  - PBR baking     |
+|  - Quadriflow (retopo)  - Billboards          - Real-ESRGAN    |
+|                                                                |
+EXPORT LAYER
+================================================================
+|                                                                |
+|  Blender Export (FBX/GLB) -> Unity Import                      |
+|  - game_check validation                                       |
+|  - poly budget enforcement                                     |
+|                                                                |
+RUNTIME LAYER (Unity)
+================================================================
+|                                                                |
+|  URP Forward+   Addressables    NavMesh     Cinemachine 3.x   |
+|  Occlusion      GPU Instancing  LOD Groups  Interior Streaming |
+|                                                                |
+```
 
 ---
 
-## Installation
+## Triangle Budget Standards (AAA Reference)
 
-```bash
-# Prerequisites: Python 3.12, uv installed
-# On Windows:
-# pip install uv   (or)   winget install astral-sh.uv
+Enforce these budgets via `blender_mesh game_check` before any export.
 
-# Initialize project
-cd Tools/mcp-toolkit
-uv init --python 3.12
+| Asset Category | LOD0 Tris | LOD1 | LOD2 | LOD3/Cull | Notes |
+|---|---|---|---|---|---|
+| Hero Character | 40K-60K | 20K-30K | 8K-15K | 2K-5K | Player + equipped gear total |
+| Boss Monster | 30K-80K | 15K-40K | 5K-15K | 2K-5K | Phase-specific meshes multiply |
+| Common Enemy | 15K-35K | 7K-20K | 3K-8K | 1K-2K | Budget for 10+ on screen |
+| Building (modular piece) | 2K-8K | 1K-4K | 500-2K | Cull | Per module, not whole building |
+| Interior Room Shell | 4K-12K | 2K-6K | 1K-3K | Cull | Walls + floor + ceiling |
+| Furniture Prop | 500-3K | 200-1.5K | 100-500 | Cull | Tables, chairs, shelves |
+| Tree (full mesh) | 3K-8K | 1K-3K | 200-500 (cards) | 2 (billboard) | LOD2 = intersecting planes |
+| Weapon | 1K-4K | 500-2K | 200-1K | Cull | Higher for hero weapons |
+| Rock/Clutter | 200-1K | 100-500 | Cull | Cull | Instanced heavily |
+| **Scene Total @ 60fps** | **2M-6M** | | | | PC target |
 
-# Core MCP SDK
-uv add "mcp[cli]>=1.26.0"
+---
 
-# Communication
-uv add "websockets>=14.0"
+## Procedural Building Workflow (Recommended)
 
-# AI Generation APIs
-uv add "fal-client>=0.13.0"
-uv add "openai>=1.60.0"
-uv add "replicate>=1.0.0"
+### Modular Kit Approach (Bethesda/FromSoftware Pattern)
 
-# Image Processing
-uv add "Pillow>=12.1.0"
-uv add "numpy>=1.26.0"
+The standard AAA approach uses modular kit pieces, not monolithic buildings:
 
-# 3D Mesh Processing
-uv add "trimesh[easy]>=4.11.0"
-uv add "pygltflib>=1.16.0"
+1. **Create kit pieces** (25-40 per architectural style): wall_straight_1m, wall_corner, floor_1x1, ceiling_1x1, pillar, arch, stairs, door_frame, window_frame, trim pieces, damaged variants. Grid: 1m primary, 0.5m secondary.
 
-# Optional: heavy mesh processing (install only when needed)
-uv add "pymeshlab>=2025.7"
+2. **Author trim sheets** (1-2 per kit): 2048x2048 or 4096x4096 texture atlas with horizontal strips for moldings, stone courses, brick patterns, wood planks. All kit pieces UV-mapped to the shared trim sheet. Single material = single draw call per building.
 
-# Configuration
-uv add "python-dotenv>=1.0.0"
+3. **Compose buildings** from kit pieces: place wall modules at grid positions, snap corners, add doors/windows, stack floors. Rules ensure structural coherence.
 
-# Dev dependencies
-uv add --dev "pytest>=8.0"
-uv add --dev "pytest-asyncio>=0.24.0"
-uv add --dev "respx>=0.22.0"
-uv add --dev "ruff>=0.8.0"
-uv add --dev "mypy>=1.13.0"
+4. **Add variation**: damaged variants, different material swaps (stone/wood/brick), vertex color blending (moss/dirt/damage overlays), storytelling props.
+
+### Geometry Nodes for Composition
+
+Geometry Nodes 5.1 nodes for procedural building assembly:
+
+| Node | Building Use |
+|------|-------------|
+| **Array** | Repeat wall/floor modules along axes |
+| **Extrude Mesh** | Create wall thickness from floor plan curves |
+| **Mesh Boolean** | Cut door/window openings in wall panels |
+| **Instance on Points** | Place window/door props along facade |
+| **Scatter on Surface** | Scatter damage, moss, debris on surfaces |
+| **Repeat Zone** | Iterate floors, windows, decorative elements |
+| **For Each Element** | Apply per-piece variation (scale, rotation, damage) |
+| **Subdivision Surface** | Smooth architectural curves (arches, domes) |
+| **UV Unwrap + Pack UV Islands** | Automated UV mapping for trim sheets |
+| **Bake** | Cache expensive procedural computations |
+| **Curve to Tube** | Generate pillars, columns, railings from curves |
+| **Closure + Evaluate Closure** | Reusable building component generators |
+
+### Python bpy for Custom Topology
+
+Use bpy/bmesh for operations Geometry Nodes cannot handle:
+
+- Custom vertex group creation for rigging
+- Vertex color painting for material blending masks
+- Edge loop construction for clean topology
+- Face set creation for sculpt masking
+- Shape key creation for building damage states
+- Vertex weight painting for terrain blending
+
+---
+
+## Texture Pipeline (Recommended)
+
+### Procedural Material Workflow
+
+```
+1. DEFINE: Blender Shader Nodes (procedural pattern + PBR channels)
+   - Noise/Voronoi/Brick/Wave for base patterns
+   - ColorRamp for color mapping
+   - Separate XYZ + Math for height-based effects
+   - MixRGB for combining layers
+
+2. BAKE: blender_texture bake (COMBINED/NORMAL/AO/ROUGHNESS/METALLIC)
+   - Bake each PBR channel to 2048x2048 or 4096x4096 image
+   - Use Cycles for baking (more accurate than Eevee)
+
+3. VALIDATE: blender_texture validate_palette (dark fantasy palette rules)
+   - Check albedo against dark fantasy color constraints
+   - Validate PBR channel ranges (roughness 0.3-0.95, metallic 0 or 1)
+
+4. PROCESS: Optional post-processing
+   - Real-ESRGAN upscale if resolution insufficient
+   - Inpainting for seam healing
+   - make_tileable for repeating textures
+   - delight for removing baked-in lighting
+
+5. EXPORT: Apply to Unity material
+   - unity_settings configure for texture import settings
+   - unity_shader create_shader for custom URP shaders
 ```
 
-### Entry Points (pyproject.toml)
+### Terrain Splatmap Strategy
 
-```toml
-[project.scripts]
-vb-blender-mcp = "veilbreakers_mcp.blender_server:main"
-vb-unity-mcp = "veilbreakers_mcp.unity_server:main"
-vb-assetgen-mcp = "veilbreakers_mcp.asset_gen_server:main"
-vb-mesh-mcp = "veilbreakers_mcp.mesh_pipeline:main"
+4-channel splatmap with height-based blending (NOT linear interpolation):
+
+| Channel | Material | Slope Range | Height Range |
+|---------|----------|-------------|--------------|
+| R | Ground cover (grass/dirt) | 0-25 degrees | Valley to mid |
+| G | Dirt/mud/paths | 15-40 degrees | Low areas |
+| B | Rock/cliff | 30-90 degrees | Mid to peak |
+| A | Biome-specific (snow/moss/sand) | Varies | Varies |
+
+Height-blend algorithm (per-pixel):
+```
+for each pixel:
+    adjusted[i] = weight[i] * heightmap[i]
+    max_h = max(adjusted)
+    threshold = max_h - blend_depth
+    output[i] = max(0, adjusted[i] - threshold)
+    normalize(output)
 ```
 
-### .mcp.json Integration
+### Macro Variation Maps
 
-```json
-{
-  "mcpServers": {
-    "vb-blender": {
-      "type": "stdio",
-      "command": "uv",
-      "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-blender-mcp"],
-      "env": { "BLENDER_PORT": "9876" }
-    },
-    "vb-assetgen": {
-      "type": "stdio",
-      "command": "uv",
-      "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-assetgen-mcp"],
-      "env": { "FAL_KEY": "${FAL_KEY}", "OPENAI_API_KEY": "${OPENAI_API_KEY}" }
-    },
-    "vb-mesh": {
-      "type": "stdio",
-      "command": "uv",
-      "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-mesh-mcp"],
-      "description": "3D mesh processing, format conversion, validation"
-    }
-  }
-}
+Anti-tiling technique: 256-512px low-frequency noise map covering entire terrain. Modulates color tint, roughness offset, and brightness. Generated via:
 ```
+Noise Texture (scale 0.02, detail 4, roughness 0.5)
+-> ColorRamp (3 stops: 0.85/1.0/0.9)
+-> multiply with base terrain color
+```
+
+### Trim Sheet Standard
+
+Per architectural kit, one 2048x2048 or 4096x4096 trim sheet:
+
+| Strip | Content | Height |
+|-------|---------|--------|
+| 0 | Crown molding | 64px |
+| 1 | Large stone course | 128px |
+| 2 | Small stone course | 128px |
+| 3 | Brick pattern | 256px |
+| 4 | Wood planks | 128px |
+| 5 | Window/door frame | 256px |
+| 6 | Foundation stone | 128px |
+| 7 | Roof tiles | 256px |
+
+All kit pieces UV-mapped to appropriate strips. Single shared material per kit.
+
+---
+
+## LOD Strategy (AAA Reference)
+
+### 3-Type LOD (Bethesda Pattern)
+
+| LOD Type | What | Technique | Update |
+|----------|------|-----------|--------|
+| **Terrain LOD** | Heightmap terrain | Quadtree LOD, reduce resolution with distance | Continuous |
+| **Object LOD** | Buildings, props, rocks | Mesh LOD chain (4 levels), impostor at max distance | On threshold |
+| **Tree LOD** | Vegetation | Full mesh -> cards -> billboard | On threshold |
+
+### LOD Chain Per Asset Type
+
+**Buildings (modular pieces):**
+- LOD0 (>15% screen): Full detail, all geometry, 2K-8K tris
+- LOD1 (8-15%): Simplified, merged detail, 1K-4K tris
+- LOD2 (3-8%): Low-poly shell, 500-2K tris
+- LOD3 (<3%): Billboard impostor
+
+**Vegetation:**
+- LOD0 (>15%): Full 3D mesh, 3K-8K tris
+- LOD1 (8-15%): Simplified mesh, 1K-3K tris
+- LOD2 (3-8%): Card-based (6-12 intersecting planes), 100-500 tris
+- LOD3 (<3%): Single billboard quad, 2 tris
+
+**Interior Streaming (not LOD):**
+- Interior rooms loaded/unloaded via Addressables
+- Occlusion culling prevents rendering unseen rooms
+- Door triggers initiate load/unload
+- Load adjacent rooms, unload distant rooms
+
+---
+
+## Biome System
+
+### Biome Mapping
+
+Use OpenSimplex noise with seed-based deterministic distribution:
+
+| Biome | Height Range | Noise Threshold | Primary Materials |
+|-------|-------------|-----------------|-------------------|
+| Deep Forest | Low-mid | <0.3 | Dark wood, moss, ferns |
+| Dark Plains | Low | 0.3-0.5 | Dead grass, mud, scattered ruins |
+| Volcanic | Mid | 0.5-0.65 | Basalt, lava rock, ash |
+| Corrupted | Any | 0.65-0.8 | Purple-black crystal, decay, void |
+| Mountain | High | >0.8 | Snow, ice, bare rock |
+
+### Corruption-Aware Distribution
+
+Corruption zones overlay biome system:
+- Corruption level 0-100% affects material choices, prop placement, vegetation density
+- 0-30%: Subtle corruption (discolored plants, occasional crystal growth)
+- 30-60%: Moderate corruption (dead vegetation, void fissures, corrupted enemies)
+- 60-100%: Heavy corruption (crystal terrain, void tears, no natural vegetation, boss-level enemies)
+
+### Transition Rules
+
+- Transition zone width: 20-50 meters
+- Blend: smoothstep based on distance from biome boundary
+- Layer order: ground texture first, then vegetation, then skybox/fog
+- Scatter transition props: dead trees at forest-desert boundary, frost crystals at volcanic-corrupt boundary
+
+---
+
+## Performance Targets
+
+| Metric | Target | Technique |
+|---------|--------|-----------|
+| Frame time | 16.67ms (60fps) | Budget: 2M-6M scene tris total |
+| Draw calls | <2000 | SRP Batcher + GPU instancing + shared materials |
+| VRAM (textures) | <2GB | Texture streaming, Addressables, LOD-appropriate resolution |
+| VRAM (meshes) | <1GB | LOD chains, occlusion culling, interior streaming |
+| Set pass calls | <500 | Shared materials per kit, MaterialPropertyBlock for variation |
+| Batch count | <1000 | SRP Batcher groups by shader variant |
 
 ---
 
@@ -305,141 +356,131 @@ vb-mesh-mcp = "veilbreakers_mcp.mesh_pipeline:main"
 
 | Technology | Why Not |
 |------------|---------|
-| TypeScript for Blender integration | Blender's API is Python-only (bpy). A TypeScript server would need to shell out to Python, adding latency and complexity for zero benefit. |
-| aiohttp | Redundant with httpx (already in MCP SDK). Adds ~15MB of dependencies for zero additional capability in this context. |
-| requests | Synchronous-only. Blocks the async MCP event loop. Use httpx instead. |
-| OpenCV (cv2) | 100+ MB. Designed for computer vision, not texture processing. Pillow + numpy is sufficient and 10x lighter. |
-| gRPC | Over-engineered for local IPC. MCP already defines JSON-RPC over stdio. Blender/Unity bridges use TCP/WebSocket JSON. Adding gRPC would be a fourth protocol for no benefit. |
-| Docker for local development | MCP servers run as local subprocesses. Docker adds startup latency (seconds vs milliseconds) and complicates GPU passthrough for local ComfyUI. Use Docker only if deploying remote Streamable HTTP servers. |
-| Flask / Django | The MCP SDK includes Starlette/uvicorn for HTTP transport. Adding another web framework is redundant and creates conflicts. |
-| FastAPI | Same issue as Flask/Django. FastAPI is built on Starlette, which is already in the MCP SDK. If you need HTTP endpoints beyond MCP, use Starlette directly from the SDK's dependencies. |
-| Poetry / Pipenv | uv is the MCP ecosystem standard. Mixing package managers causes lock file conflicts and confuses contributors. |
-| SSE transport (legacy) | SSE transport was deprecated in MCP spec 2025-03-26, replaced by Streamable HTTP. Do not implement SSE servers. |
-| Aspose.3D | Commercial license ($999+/year). Trimesh + PyMeshLab covers all game asset mesh operations for free. |
-| numpy-stl | Trimesh handles STL plus dozens of other formats. numpy-stl is STL-only. Use trimesh. |
+| Houdini | Too expensive for indie team. Blender Geometry Nodes + Python covers equivalent procedural capability. Project constraint explicitly excludes Houdini. |
+| HDRP | Project uses URP. HDRP entering maintenance per Unity 2026 strategy. URP Forward+ handles dark fantasy lighting requirements (many point lights, volumetrics). |
+| Virtual Texturing | URP does not support Virtual Texturing (HDRP-only). Use texture streaming via Addressables instead. |
+| Google Genie 3 / Neural rendering | No mesh export. Neural rendering output cannot be used in game engines. Fundamentally incompatible with game development pipeline. |
+| Shap-E / Point-E / DreamFusion | Abandoned research tools. Completely superseded by Tripo, Hunyuan3D, Rodin. |
+| Single AI generator strategy | The quality gap between generators makes multi-tool mandatory. Tripo for topology, Hunyuan for bulk, Rodin for hero quality. |
+| aiohttp | Redundant with httpx (already in MCP SDK). Adds ~15MB dependencies for zero additional capability. |
+| OpenCV (cv2) | 100+ MB. Designed for computer vision, not texture processing. Pillow + numpy handles all texture operations. |
+| Per-building unique textures | Memory nightmare. Use trim sheets and shared materials per kit. One 4096x4096 trim sheet per architectural style, not per building. |
+| Monolithic building meshes | No LOD flexibility, no interior streaming, no modular variation. Use kit pieces at 1m grid. |
+| Linear terrain blending | Height-based blending is the AAA standard. Linear interpolation creates obvious material borders. |
 
 ---
 
-## Version Compatibility Matrix
+## Alternatives Considered
 
-| Component | Required Version | Rationale | Status |
-|-----------|-----------------|-----------|--------|
-| Python | 3.12.x | MCP SDK >=3.10, Blender 4.x uses 3.11-3.12, best perf/compat balance | INSTALL |
-| mcp SDK | >=1.26.0 | Latest stable with Streamable HTTP, OAuth, all transports | INSTALL |
-| Blender | 4.x (4.2+ preferred) | bpy API stability, Python 3.11-3.12 embedded | EXTERNAL (user installed) |
-| Unity | 6000.3.6f1 | Locked per PROJECT.md constraint. mcp-unity package required in project | EXISTING |
-| Node.js | 18+ | Only for mcp-unity bridge server (existing). Not used for custom Python servers | EXISTING |
-| fal.ai | Account + FAL_KEY | Pay-per-use API. No local GPU needed | EXTERNAL |
-| OpenAI | Account + API key | Pay-per-use API | EXTERNAL |
-| ComfyUI | Local install (optional) | Only needed for custom SD pipelines. Not required for cloud-only workflow | OPTIONAL |
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Procedural Engine | bpy + Geometry Nodes | Pure Geometry Nodes | Geo Nodes cannot create vertex groups, vertex colors, shape keys, or complex topology. bpy is required for these operations. Hybrid approach is correct. |
+| AI Generator (primary) | Tripo v3.0 | Meshy 4 | Tripo produces better topology for animation. Meshy excels at props but our cleanup pipeline handles that. |
+| AI Generator (bulk) | Hunyuan3D 2.1 (self-hosted) | TRELLIS.2 | Hunyuan has better PBR (8K textures), lower VRAM (6GB), and proven production track record. TRELLIS.2 is newer with less production history. Consider as future backup. |
+| AI Generator (hero) | Rodin Gen-2 | Kaedim | Kaedim requires $299+/mo enterprise subscription. Rodin achieves comparable quality at $0.30-1.50 per asset via API. |
+| Interior Gen (hero) | World Labs Marble | Meta WorldGen | Meta WorldGen not yet released (research paper only, possible 2026 release). Marble is available now. |
+| Interior Gen (bulk) | compose_interior pipeline | Holodeck (Allen AI) | Holodeck requires AI2-THOR framework + GPT-4o API. compose_interior is already integrated, uses our existing tools, no external framework dependency. |
+| Texture Gen (AI) | Scenario.gg | Leonardo.AI | Scenario.gg has better PBR channel support and custom model training. Leonardo has broader model selection but less PBR focus. Both are viable; Scenario.gg is more game-dev specific. |
+| Terrain Gen | OpenSimplex (custom) | Gaea 2.2 | Gaea produces better erosion but requires separate application + export workflow. OpenSimplex + custom erosion keeps everything in Blender pipeline. |
+| Level Design | Modular kits + WFC | Full procedural generation | Full procedural lacks hand-crafted feel that Souls-like games require. Modular kits + WFC for layout + manual composition for quality. |
+| LOD Decimation | pymeshlab (Quadric Edge Collapse) | trimesh simplify | pymeshlab's Quadric Edge Collapse preserves silhouette better. trimesh's simplification is adequate for quick LODs but lower quality. |
 
 ---
 
-## MCP Server Minimal Example
+## Installation
 
-```python
-"""Minimal MCP server showing the SDK pattern."""
-from mcp.server.fastmcp import FastMCP
+### AI Generation APIs
 
-mcp = FastMCP("veilbreakers-assetgen")
+```bash
+# Tripo3D (existing - upgrade model version)
+# No new install needed. Update model_version parameter to v3.0 in tripo_client.py
 
-@mcp.tool()
-async def generate_monster_concept(
-    description: str,
-    style: str = "dark fantasy",
-    width: int = 1024,
-    height: int = 1024,
-) -> str:
-    """Generate concept art for a VeilBreakers monster.
+# Hunyuan3D 2.1 (new - self-hosted)
+git clone https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1.git
+cd Hunyuan3D-2.1
+pip install -r requirements.txt
+# Download model weights (~6GB)
+python app.py  # Starts Gradio server on localhost
 
-    Args:
-        description: Monster description (e.g., 'corrupted wolf with void crystals')
-        style: Art style directive
-        width: Image width in pixels
-        height: Image height in pixels
+# Rodin Gen-2 (new - API only, no install)
+# REST API via developer.hyper3d.ai - no local install required
+# Add RODIN_API_KEY to .env
 
-    Returns:
-        Path to the generated image file
-    """
-    import httpx
-    # Use httpx (already in MCP SDK deps) to call fal.ai
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://fal.run/fal-ai/flux/schnell",
-            headers={"Authorization": f"Key {get_fal_key()}"},
-            json={
-                "prompt": f"{description}, {style}, game character concept art",
-                "image_size": {"width": width, "height": height},
-            },
-        )
-        result = response.json()
-        # Download and save image...
-        return f"Generated monster concept: {result['images'][0]['url']}"
+# World Labs Marble (new - SaaS, no install)
+# Sign up at worldlabs.ai, use web interface for generation
+# Export GLB files for Blender import pipeline
+```
 
-@mcp.resource("monsters://brands")
-async def get_brand_list() -> str:
-    """List all VeilBreakers monster brands."""
-    return "IRON, SAVAGE, SURGE, VENOM, DREAD, LEECH, GRACE, MEND, RUIN, VOID"
+### Python Dependencies
 
-if __name__ == "__main__":
-    mcp.run(transport="stdio")
+```bash
+# Already in stack (no new installs needed for core):
+# trimesh, pygltflib, pymeshlab, Pillow, numpy, httpx
+
+# New dependency for Scenario.gg (if added):
+uv add "httpx>=0.27.1"  # Already installed - use for REST calls
+
+# New dependency for Hunyuan3D client (if self-hosting):
+# Gradio client for Python API calls
+uv add "gradio-client>=1.0"
+```
+
+### Environment Variables
+
+```bash
+# Existing (keep):
+TRIPO_API_KEY=...
+FAL_KEY=...
+
+# New:
+RODIN_API_KEY=...          # Hyper3D API key (hero assets)
+HUNYUAN_URL=http://localhost:7860  # Local Hunyuan3D Gradio server
+WORLDLABS_API_KEY=...      # World Labs Marble (hero interiors)
+SCENARIO_API_KEY=...       # Scenario.gg (PBR textures, optional)
 ```
 
 ---
 
-## Key Architectural Decisions
+## Integration with Existing Pipeline
 
-### Decision 1: Separate MCP Servers per Domain (Not One Monolith)
+The existing `asset_pipeline` and related tools form the backbone. New capabilities layer on top:
 
-**Decision:** Four separate MCP server entry points (blender, unity, asset-gen, mesh), sharing a common Python package.
-
-**Rationale:** MCP clients (Claude Code) load each server as a separate subprocess. A monolith with 40+ tools would overwhelm the tool selection heuristic. Separate servers allow:
-- Loading only what is needed (e.g., asset-gen without Blender running)
-- Independent failure (Blender crash does not kill the mesh processor)
-- Clearer tool namespacing in the LLM's tool list
-
-### Decision 2: TCP Sockets for Blender, WebSocket for Unity
-
-**Decision:** Keep the same IPC patterns as the reference implementations (ahujasid/blender-mcp, CoderGamester/mcp-unity).
-
-**Rationale:** These patterns are battle-tested. Blender's bpy API has GIL constraints that make embedding an MCP server inside Blender impractical. The socket server addon pattern works around this. Unity's WebSocket server is already integrated via the mcp-unity package. Changing protocols would break compatibility with the existing Unity package.
-
-### Decision 3: Cloud APIs First, Local ComfyUI as Escape Hatch
-
-**Decision:** Default to fal.ai/OpenAI cloud APIs. ComfyUI local only for custom pipelines.
-
-**Rationale:** Cloud APIs have the latest models (Hunyuan3D v3, GPT Image 1.5, Flux), require no GPU, and cost cents per generation. Local ComfyUI is kept as an option for ControlNet-guided texture generation pipelines that cloud APIs cannot replicate. This avoids forcing GPU requirements on the development setup.
+| Existing Tool | New Capability | How |
+|---------------|---------------|-----|
+| `asset_pipeline compose_map` | Enhanced biome system | Add corruption-aware biome noise to map_spec |
+| `asset_pipeline compose_interior` | World Labs Marble hero rooms | Add Marble GLB import as room geometry source |
+| `asset_pipeline generate_3d` | Multi-backend AI generation | Add backend parameter (tripo/hunyuan/rodin) |
+| `asset_pipeline generate_building` | Geometry Nodes facade system | Build GNG facade generators for building exteriors |
+| `blender_texture create_pbr` | Scenario.gg PBR sets | Add AI texture generation as PBR source |
+| `blender_texture validate_palette` | Dark fantasy enforcement | Already exists, use for all procedural materials |
+| `blender_mesh game_check` | Poly budget enforcement | Already exists, use for all generated meshes |
+| `blender_quality` generators | Enhanced AAA quality | Upgrade existing 32 generators with better topology |
+| `blender_worldbuilding` | Corruption variants | Add corruption_level parameter to all generators |
 
 ---
 
 ## Sources
 
 ### Official Documentation (HIGH confidence)
-- [MCP Python SDK - GitHub](https://github.com/modelcontextprotocol/python-sdk) -- v1.26.0, FastMCP API, transport details
-- [MCP Python SDK - PyPI](https://pypi.org/project/mcp/) -- Version 1.26.0, Python >=3.10
-- [MCP Specification - Transports](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) -- stdio and Streamable HTTP spec
-- [MCP TypeScript SDK - GitHub](https://github.com/modelcontextprotocol/typescript-sdk) -- v2 pre-alpha, v1.x stable
-- [FastMCP - PyPI](https://pypi.org/project/fastmcp/) -- v3.1.1 standalone
-- [MCP SDK Dependencies - DeepWiki](https://deepwiki.com/modelcontextprotocol/python-sdk/1.1-installation-and-dependencies) -- Full dependency list with version constraints
-- [MCP Transport Comparison - AWS Builder](https://builder.aws.com/content/35A0IphCeLvYzly9Sw40G1dVNzc/mcp-transport-mechanisms-stdio-vs-streamable-http) -- stdio vs Streamable HTTP analysis
-- [trimesh - PyPI](https://pypi.org/project/trimesh/) -- v4.11.4, format support, dependencies
-- [Pillow - PyPI](https://pypi.org/project/pillow/) -- v12.1.1, DDS support details
-- [Pillow DDS Format](https://pillow.readthedocs.io/en/stable/handbook/image-file-formats.html) -- DDS read/write capabilities
-- [fal.ai 3D Models](https://fal.ai/3d-models) -- Hunyuan3D v3, Trellis API
-- [fal-client PyPI](https://pypi.org/project/fal-client/) -- v0.13.x
-- [OpenAI Image Generation](https://platform.openai.com/docs/guides/image-generation) -- GPT Image models, DALL-E deprecation
-- [pygltflib - PyPI](https://pypi.org/project/pygltflib/) -- glTF 2.0 manipulation
-- [uv Documentation](https://docs.astral.sh/uv/guides/projects/) -- Project setup, dependency management
+- Blender 5.1 Geometry Nodes: https://docs.blender.org/manual/en/latest/modeling/geometry_nodes/index.html
+- Tripo3D API: https://platform.tripo3d.ai/docs
+- Hunyuan3D-2.1 GitHub: https://github.com/Tencent-Hunyuan/Hunyuan3D-2.1
+- Hyper3D Rodin Gen-2 API: https://developer.hyper3d.ai
+- World Labs Marble: https://docs.worldlabs.ai/marble/export/mesh
+- Unity URP Docs: https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@14.0
 
-### Reference Implementations (HIGH confidence)
-- [blender-mcp (ahujasid)](https://github.com/ahujasid/blender-mcp) -- TCP socket architecture, Blender addon pattern
-- [mcp-unity (CoderGamester)](https://github.com/CoderGamester/mcp-unity) -- WebSocket bridge, Unity C# server, Node.js MCP client
-- [mcp-game-asset-gen (Flux159)](https://github.com/Flux159/mcp-game-asset-gen) -- TypeScript game asset generation MCP, fal.ai/OpenAI integration
+### Existing Research Files (HIGH confidence, project-verified)
+- `.planning/research/AI_3D_GENERATION_TOOLS_RESEARCH.md` -- 15+ AI 3D tools compared
+- `.planning/research/AI_INTERIOR_GENERATION_RESEARCH.md` -- Interior generation tools
+- `.planning/research/AAA_TOOLS_MODELING_RESEARCH.md` -- 14 industry tools analyzed
+- `.planning/research/AAA_TOOLS_TERRAIN_ENVIRONMENT_RESEARCH.md` -- Studio terrain techniques
+- `.planning/research/AAA_BEST_PRACTICES_COMPREHENSIVE.md` -- Triangle budgets, LOD, equipment
+- `.planning/research/TEXTURING_ENVIRONMENTS_RESEARCH.md` -- Terrain/building texturing pipeline
+- `.planning/research/MAP_BUILDING_TECHNIQUES.md` -- Level design, modular kits, streaming
 
-### Ecosystem Research (MEDIUM confidence)
-- [MCP Transport Future - Blog](https://blog.modelcontextprotocol.io/posts/2025-12-19-mcp-transport-future/) -- Transport evolution direction
-- [PyMeshLab - GitHub](https://github.com/cnr-isti-vclab/PyMeshLab) -- v2025.07 release
-- [3D API Comparison 2026](https://www.3daistudio.com/blog/best-3d-model-generation-apis-2026) -- Meshy, Tripo, Rodin, fal.ai comparison
-- [httpx vs aiohttp vs requests](https://www.speakeasy.com/blog/python-http-clients-requests-vs-httpx-vs-aiohttp) -- HTTP client comparison
-- [MCP Game Development Servers](https://mcpmarket.com/categories/game-development) -- Ecosystem overview
-- [ComfyUI API Guide](https://comfyui.org/en/programmatic-image-generation-api-workflow) -- Programmatic workflow execution
+### AAA Studio References (MEDIUM-HIGH confidence)
+- FromSoftware level design: interconnected world, 30-second rule, prop density 10-20 per room
+- Bethesda: cell grid, 3-type LOD, modular kit system
+- Guerrilla Games: GPU-based procedural placement, graph editor
+- CDPR: 16384x16384 heightmaps, 40-second POI rule
+- DOOM 2016 Graphics Study (Adrian Courreges): performance reference
