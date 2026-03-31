@@ -366,7 +366,8 @@ Plans:
 
 </details>
 
-### v3.0 Phase Details (Phases 18-24)
+<details>
+<summary>v3.0 Phase Details (Phases 18-24) - SHIPPED 2026-03-21</summary>
 
 ### Phase 18: Procedural Mesh Integration + Terrain Depth
 **Goal**: Every worldbuilding and environment handler uses real procedural meshes instead of primitive cubes/cones, and terrain generation supports vertical geometry (cliffs, caves, waterfalls, bridges) beyond 2.5D heightmaps
@@ -463,6 +464,8 @@ Plans:
 Plans:
 - [x] 24-01-PLAN.md -- Production pipeline: compile recovery, conflict detection, pipeline orchestration, art style validation, build smoke tests
 
+</details>
+
 <details>
 <summary>v4.0 AAA Procedural 3D Architecture (Phases 25-29) - ARCHIVED (superseded by v7.0)</summary>
 
@@ -475,10 +478,9 @@ Plans:
 **Status:** ARCHIVED -- v4.0 scope was restructured into v7.0 (Phases 30-38) with expanded scope and detailed requirements.
 </details>
 
-<details>
-<summary>v7.0 AAA Procedural City Production (Phases 30-38) - Planning in Progress</summary>
+### v7.0 AAA Procedural City Production (Phases 30-38)
 
-### Phase 30 (P0): Mesh Foundation
+### Phase 30: Mesh Foundation
 **Goal**: Every procedural mesh generator produces game-ready geometry with proper topology, seed-based determinism, material assignment, LOD presets, and visual quality verified by contact sheet -- establishing the quality floor for all subsequent phases
 **Depends on**: Phase 24 (production pipeline for quality enforcement)
 **Requirements**: MESH-01, MESH-02, MESH-06, MESH-11, MESH-14, MESH-15
@@ -490,7 +492,7 @@ Plans:
   5. Post-boolean cleanup pipeline (remove doubles at 0.0001, recalculate normals, fix non-manifold, fill holes up to 8 sides) runs automatically after every boolean operation, and no exported mesh contains non-manifold edges
 **Plans**: TBD (to be created during plan-phase)
 
-### Phase 31 (P1): Terrain & Environment
+### Phase 31: Terrain & Environment
 **Goal**: Terrain generation produces dramatic, eroded landscapes with multi-biome blending, cliff mesh overlays beyond heightmap limitations, and vegetation scattered by Poisson disk sampling -- visually comparable to Skyrim's overworld
 **Depends on**: Phase 30 (mesh foundation for vegetation/rock generators)
 **Requirements**: MESH-05, MESH-09, MESH-10
@@ -502,7 +504,7 @@ Plans:
   5. Domain warping applied to base noise produces organic, non-repetitive terrain features -- no visible tiling patterns at any viewing distance in the contact sheet
 **Plans**: TBD
 
-### Phase 32 (P2): Building System
+### Phase 32: Building System
 **Goal**: Building generation uses CGA-style split grammar for facade composition, producing architecturally varied structures with proper roofs, window/door cutouts, and modular kit pieces that snap on a consistent grid -- no building is a box with texture
 **Depends on**: Phase 30 (mesh quality), Phase 31 (terrain for placement context)
 **Requirements**: MESH-04, MESH-07
@@ -514,7 +516,7 @@ Plans:
   5. Contact sheet comparison of 5 generated buildings shows no two buildings with identical facade layouts -- architectural variation achieved through randomized bay rules, floor counts, and style parameters
 **Plans**: TBD
 
-### Phase 33 (P3): Interior System
+### Phase 33: Interior System
 **Goal**: Interior generation produces purpose-driven room layouts with spatially-aware furniture placement, decorative clutter, practical lighting, and occlusion zones -- interiors feel lived-in, not empty boxes
 **Depends on**: Phase 30 (furniture generators), Phase 32 (building shells for interior context)
 **Requirements**: MESH-03
@@ -526,7 +528,7 @@ Plans:
   5. Interior contact sheet shows a furnished tavern, bedroom, and blacksmith workshop with prop density visually comparable to Skyrim interior cells -- assessed by item count per room and surface coverage percentage
 **Plans**: TBD
 
-### Phase 34 (P4): Multi-biome Terrain
+### Phase 34: Multi-biome Terrain
 **Goal**: Biome system distributes distinct terrain types across the world map using Voronoi-based zoning with corruption-aware tinting, smooth biome transitions, and terrain-conforming building foundations -- no floating buildings or sharp biome boundaries
 **Depends on**: Phase 31 (terrain foundation), Phase 32 (buildings for terrain integration)
 **Requirements**: MESH-05, MESH-09, MESH-10
@@ -538,7 +540,7 @@ Plans:
   5. Multi-biome terrain renders as a single coherent world map (512m x 512m minimum) with 3+ biome types visible, terrain height variation >50m, and at least one river/road cutting across biome boundaries
 **Plans**: TBD
 
-### Phase 35 (P5): Multi-backend AI Integration
+### Phase 35: Multi-backend AI Integration
 **Goal**: Tripo pipeline produces game-ready hero assets with full post-processing, texture extraction from GLB into standalone PBR maps, and unified art style validation ensuring AI-generated assets match procedural assets visually
 **Depends on**: Phase 30 (mesh quality baseline for comparison)
 **Requirements**: MESH-12
@@ -550,7 +552,7 @@ Plans:
   5. Full pipeline from text prompt to Unity-ready FBX completes in under 10 minutes with zero manual intervention -- validated by end-to-end test with 3 asset types (prop, weapon, character)
 **Plans**: TBD
 
-### Phase 36 (P6): World Composer
+### Phase 36: World Composer
 **Goal**: Settlement generation produces complete town layouts with road networks, lot subdivision, district zoning, building placement on lots, and street-level props -- a generated town is walkable and visually coherent from ground level
 **Depends on**: Phase 32 (buildings), Phase 33 (interiors), Phase 34 (terrain)
 **Requirements**: MESH-08
@@ -562,7 +564,7 @@ Plans:
   5. Generated town contact sheet (overhead + 4 ground-level angles) shows a coherent settlement that could pass as a Skyrim village -- buildings connected by roads, terrain integrated, vegetation present, no floating objects
 **Plans**: TBD
 
-### Phase 37 (P7): Pipeline Integration
+### Phase 37: Pipeline Integration
 **Goal**: All procedural systems compose into a single end-to-end map generation pipeline with state persistence, Addressables streaming setup, and runtime occlusion -- a complete map can be generated, exported, and loaded in Unity
 **Depends on**: Phase 36 (world composition), Phase 35 (AI asset integration)
 **Requirements**: MESH-16, PIPE-01
@@ -574,7 +576,7 @@ Plans:
   5. Research document (PIPE-01) covers AAA techniques from Skyrim, Fable, AC Valhalla with specific implementation references for each technique adopted in the pipeline
 **Plans**: TBD
 
-### Phase 38 (P8): Starter Town
+### Phase 38: Starter Town
 **Goal**: Generate a complete, playable starter town with 10-15 buildings, furnished interiors, market area, fortifications, and terrain integration -- the town is the quality benchmark proving the entire pipeline works end-to-end
 **Depends on**: Phase 37 (full pipeline), all preceding phases
 **Requirements**: MESH-13
@@ -587,7 +589,6 @@ Plans:
 **Plans**: TBD
 
 **Delivered:** TBD
-</details>
 
 ## Progress
 
