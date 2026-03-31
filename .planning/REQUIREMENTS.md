@@ -566,8 +566,8 @@ Requirements for v7.0 — AAA Procedural City Production. IDs match PROJECT.md A
 ### Architecture & Interiors
 
 - [ ] **MESH-03**: Interior rooms have purpose-driven furniture placement with spatial relationships (chairs face tables, beds have nightstands, work triangles in kitchens), 5-15 props per room, path to door always clear
-- [ ] **MESH-04**: Building generation uses CGA-style split grammar for facades — footprint → extrude → split(floors) → split(bays) → fill(window|door|wall). No two buildings within line of sight have identical facade layouts
-- [ ] **MESH-07**: Modular building kit has 50+ pieces per style on consistent snap grid. Includes: wall (straight/corner/window/door), floor, ceiling, roof (ridge/eave/hip/gable), stairs, trim, foundation. Straight skeleton roofs from arbitrary footprints
+- [x] **MESH-04**: Building generation uses CGA-style split grammar for facades — footprint → extrude → split(floors) → split(bays) → fill(window|door|wall). No two buildings within line of sight have identical facade layouts
+- [x] **MESH-07**: Modular building kit has 50+ pieces per style on consistent snap grid. Includes: wall (straight/corner/window/door), floor, ceiling, roof (ridge/eave/hip/gable), stairs, trim, foundation. Straight skeleton roofs from arbitrary footprints
 
 ### Terrain & Environment
 
