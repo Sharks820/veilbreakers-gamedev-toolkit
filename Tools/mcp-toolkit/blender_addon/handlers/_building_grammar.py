@@ -1560,30 +1560,51 @@ def evaluate_building_grammar(
     """Evaluate grammar rules to produce a building spec.
 
     Layer ordering: foundation -> walls (per floor) -> floor slabs -> roof
-    -> window openings -> door opening -> detail operations.
+    -> CGA facade split -> detail operations.
+
+    Variation system ensures no two buildings with different seeds look
+    identical:
+    - Per-floor height randomized within +/- 15%
+    - Wall thickness varied +/- 10%
+    - Random subset of style details selected
+    - CGA split provides bay count, window size, fill type variation
+    - Roof generation uses randomized seed
     """
     rng = random.Random(seed)
     config = STYLE_CONFIGS[style]
 
     ops: list[dict] = []
 
+    # --- Variation: per-building parameter randomization ---
+    base_floor_h = config["walls"]["height_per_floor"]
+    base_wall_t = config["walls"]["thickness"]
+    # Per-floor height variation (+/- 15%)
+    floor_heights = [
+        base_floor_h * rng.uniform(0.85, 1.15) for _ in range(floors)
+    ]
+    # Wall thickness variation (+/- 10%)
+    wall_thickness_var = base_wall_t * rng.uniform(0.90, 1.10)
+
     # 1. Foundation
     fnd = config["foundation"]
+    # Slight foundation height variation
+    fnd_h = fnd["height"] * rng.uniform(0.9, 1.1)
     ops.append({
         "type": "box",
         "position": [-fnd["inset"], -fnd["inset"], 0.0],
-        "size": [width + 2 * fnd["inset"], depth + 2 * fnd["inset"], fnd["height"]],
+        "size": [width + 2 * fnd["inset"], depth + 2 * fnd["inset"], fnd_h],
         "material": fnd["material"],
         "role": "foundation",
     })
 
     wall_cfg = config["walls"]
     slab_cfg = config["floor_slab"]
-    base_z = fnd["height"]
+    base_z = fnd_h
 
     # 2. Walls per floor + 3. Floor slabs between floors
+    cumulative_z = base_z
     for floor_idx in range(floors):
-        floor_z = base_z + floor_idx * (wall_cfg["height_per_floor"] + slab_cfg["thickness"])
+        floor_z = cumulative_z
 
         # Floor slab (between floors, not under ground floor)
         if floor_idx > 0:
@@ -1595,8 +1616,8 @@ def evaluate_building_grammar(
                 "role": "floor_slab",
             })
 
-        t = wall_cfg["thickness"]
-        h = wall_cfg["height_per_floor"]
+        t = wall_thickness_var
+        h = floor_heights[floor_idx]
         mat = wall_cfg["material"]
 
         # 4 walls: front (y=0), back (y=depth-t), left (x=0), right (x=width-t)
@@ -1641,13 +1662,19 @@ def evaluate_building_grammar(
             "floor": floor_idx,
         })
 
+        # Advance cumulative Z for next floor
+        cumulative_z += h + slab_cfg["thickness"]
+
     # 4. Roof -- AAA geometry from building_quality.generate_roof()
     roof_cfg = config["roof"]
-    roof_z = base_z + floors * (wall_cfg["height_per_floor"] + slab_cfg["thickness"]) - slab_cfg["thickness"]
+    roof_z = cumulative_z - slab_cfg["thickness"]
     roof_ops = _generate_roof_operations(
         width, depth, roof_z, roof_cfg, style, rng,
     )
     ops.extend(roof_ops)
+
+    # Use average floor height for facade split (column alignment)
+    avg_floor_h = sum(floor_heights) / len(floor_heights) if floor_heights else base_floor_h
 
     # 5 + 6. CGA facade split: comp(faces) -> split(y, floors) -> split(x, bays) -> fill
     win_cfg = config["windows"]
@@ -1658,9 +1685,9 @@ def evaluate_building_grammar(
         depth=depth,
         floors=floors,
         base_z=base_z,
-        floor_height=wall_cfg["height_per_floor"],
+        floor_height=avg_floor_h,
         slab_thickness=slab_cfg["thickness"],
-        wall_thickness=wall_cfg["thickness"],
+        wall_thickness=wall_thickness_var,
         win_cfg=win_cfg,
         door_cfg=door_cfg,
         facade_rules=facade_rules,
@@ -1670,10 +1697,17 @@ def evaluate_building_grammar(
     ops.extend(facade_ops)
 
     # 7. Detail operations from style config -- AAA geometry from building_quality
-    details = config["details"]
+    # Variation: select a random subset of details (at least 1, at most all)
+    all_details = list(config["details"])
+    if len(all_details) > 1:
+        min_details = max(1, len(all_details) - 1)
+        detail_count = rng.randint(min_details, len(all_details))
+        details = rng.sample(all_details, detail_count)
+    else:
+        details = all_details
     detail_ops = _generate_detail_operations(
         details, width, depth, roof_z, base_z, floors,
-        wall_cfg["height_per_floor"], wall_cfg["thickness"],
+        avg_floor_h, wall_thickness_var,
         style, rng,
     )
     ops.extend(detail_ops)
