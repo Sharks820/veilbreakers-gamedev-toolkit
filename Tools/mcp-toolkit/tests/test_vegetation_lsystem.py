@@ -802,6 +802,22 @@ class TestLsystemScatterIntegration:
             assert len(spec["vertices"]) > 0, f"'{key}' has empty vertices"
             assert len(spec["faces"]) > 0, f"'{key}' has empty faces"
 
+    def test_at_least_3_distinct_tree_species(self):
+        """At least 3 distinct tree_type values across all tree entries."""
+        from blender_addon.handlers._mesh_bridge import VEGETATION_GENERATOR_MAP
+        tree_keys = [
+            "tree", "tree_healthy", "tree_boundary", "tree_blighted",
+            "tree_dead", "tree_twisted", "pine_tree",
+        ]
+        tree_types = set()
+        for key in tree_keys:
+            _, gen_kwargs = VEGETATION_GENERATOR_MAP[key]
+            tree_types.add(gen_kwargs.get("tree_type"))
+        assert len(tree_types) >= 3, (
+            f"Only {len(tree_types)} distinct tree species: {tree_types}. "
+            "Need at least 3."
+        )
+
     def test_prop_map_tree_entries_use_lsystem(self):
         """PROP_GENERATOR_MAP dead_tree and tree_twisted also use L-system."""
         from blender_addon.handlers._mesh_bridge import PROP_GENERATOR_MAP
