@@ -1157,6 +1157,117 @@ def _add_woodpile_detail(
 
 
 # ---------------------------------------------------------------------------
+# Roof generation -- wires building_quality.generate_roof()
+# ---------------------------------------------------------------------------
+
+# Mapping from STYLE_CONFIGS roof type to building_quality roof style
+_ROOF_TYPE_MAP: dict[str, str] = {
+    "gabled": "gable",
+    "pointed": "hip",
+    "flat": "flat",
+    "domed": "conical_tower",
+    "mansard": "mansard",
+    "gambrel": "gambrel",
+    "shed": "shed",
+}
+
+# Mapping from STYLE_CONFIGS roof material to building_quality material
+_ROOF_MATERIAL_MAP: dict[str, str] = {
+    "thatch": "thatch",
+    "thatch_worn": "thatch",
+    "slate": "slate",
+    "stone_parapet": "tile",
+    "living_thatch": "thatch",
+    "tile": "tile",
+    "shingle": "shingle",
+}
+
+
+def _generate_roof_operations(
+    width: float,
+    depth: float,
+    roof_z: float,
+    roof_cfg: dict,
+    style: str,
+    rng: random.Random,
+) -> list[dict]:
+    """Generate AAA roof geometry using building_quality.generate_roof().
+
+    Produces a mesh_spec operation with individual tiles/shingles, ridge tiles,
+    fascia, gable ends, and rafters -- instead of a flat box placeholder.
+
+    Falls back to simple box for unknown roof types.
+    """
+    from .building_quality import generate_roof
+
+    roof_type = roof_cfg.get("type", "gabled")
+    overhang = roof_cfg.get("overhang", 0.3)
+    pitch = roof_cfg.get("pitch", 35)
+    material_key = roof_cfg.get("material", "tile")
+
+    # Map to building_quality parameters
+    bq_style = _ROOF_TYPE_MAP.get(roof_type, "gable")
+    bq_material = _ROOF_MATERIAL_MAP.get(material_key, "tile")
+
+    # Handle domed specially -- keep as cylinder for now
+    if roof_type == "domed":
+        return [{
+            "type": "cylinder",
+            "position": [width / 2, depth / 2, roof_z],
+            "radius": min(width, depth) / 2,
+            "height": min(width, depth) / 3,
+            "segments": 16,
+            "material": material_key,
+            "role": "roof",
+            "roof_type": "domed",
+        }]
+
+    # Generate AAA roof mesh
+    mesh = generate_roof(
+        width=width,
+        depth=depth,
+        pitch=pitch,
+        style=bq_style,
+        material=bq_material,
+        overhang=overhang,
+        seed=rng.randint(0, 99999),
+    )
+
+    # Offset roof vertices to sit at roof_z height, centered on building
+    # generate_roof() produces geometry centered at origin, x spans -half_w to half_w
+    # We need to shift: x += width/2 (center to corner-origin), z += roof_z
+    ops: list[dict] = []
+    offset_verts = [
+        (v[0] + width / 2.0, v[1] + depth / 2.0, v[2] + roof_z)
+        for v in mesh["vertices"]
+    ]
+
+    ops.append({
+        "type": "mesh_spec",
+        "vertices": offset_verts,
+        "faces": mesh["faces"],
+        "material": material_key,
+        "role": "roof",
+        "roof_type": bq_style,
+        "detail_type": "roof_tiles",
+    })
+
+    # Also keep a simplified roof bounding box for collision/raycasting reference
+    ridge_height = math.tan(math.radians(pitch)) * (width / 2 + overhang)
+    ops.append({
+        "type": "box",
+        "position": [-overhang, -overhang, roof_z],
+        "size": [width + 2 * overhang, depth + 2 * overhang, 0.05],
+        "material": material_key,
+        "role": "roof_base",
+        "roof_type": bq_style,
+        "ridge_height": ridge_height,
+    })
+
+    return ops
+
+
+# ---------------------------------------------------------------------------
 # CGA-style facade split grammar
 # ---------------------------------------------------------------------------
 
@@ -1530,54 +1641,13 @@ def evaluate_building_grammar(
             "floor": floor_idx,
         })
 
-    # 4. Roof
+    # 4. Roof -- AAA geometry from building_quality.generate_roof()
     roof_cfg = config["roof"]
     roof_z = base_z + floors * (wall_cfg["height_per_floor"] + slab_cfg["thickness"]) - slab_cfg["thickness"]
-
-    if roof_cfg["type"] == "gabled":
-        overhang = roof_cfg["overhang"]
-        ridge_height = math.tan(math.radians(roof_cfg["pitch"])) * (depth / 2 + overhang)
-        ops.append({
-            "type": "box",
-            "position": [-overhang, -overhang, roof_z],
-            "size": [width + 2 * overhang, depth + 2 * overhang, 0.1],
-            "material": roof_cfg["material"],
-            "role": "roof",
-            "roof_type": "gabled",
-            "ridge_height": ridge_height,
-        })
-    elif roof_cfg["type"] == "pointed":
-        overhang = roof_cfg["overhang"]
-        ridge_height = math.tan(math.radians(roof_cfg["pitch"])) * (depth / 2 + overhang)
-        ops.append({
-            "type": "box",
-            "position": [-overhang, -overhang, roof_z],
-            "size": [width + 2 * overhang, depth + 2 * overhang, 0.1],
-            "material": roof_cfg["material"],
-            "role": "roof",
-            "roof_type": "pointed",
-            "ridge_height": ridge_height,
-        })
-    elif roof_cfg["type"] == "flat":
-        ops.append({
-            "type": "box",
-            "position": [0.0, 0.0, roof_z],
-            "size": [width, depth, 0.15],
-            "material": roof_cfg["material"],
-            "role": "roof",
-            "roof_type": "flat",
-        })
-    elif roof_cfg["type"] == "domed":
-        ops.append({
-            "type": "cylinder",
-            "position": [width / 2, depth / 2, roof_z],
-            "radius": min(width, depth) / 2,
-            "height": min(width, depth) / 3,
-            "segments": 16,
-            "material": roof_cfg["material"],
-            "role": "roof",
-            "roof_type": "domed",
-        })
+    roof_ops = _generate_roof_operations(
+        width, depth, roof_z, roof_cfg, style, rng,
+    )
+    ops.extend(roof_ops)
 
     # 5 + 6. CGA facade split: comp(faces) -> split(y, floors) -> split(x, bays) -> fill
     win_cfg = config["windows"]
