@@ -2035,6 +2035,8 @@ async def asset_pipeline(
         "full_pipeline", "generate_and_process",
         # Import local model files (GLB/FBX/OBJ) -- use with Tripo Studio downloads
         "import_model", "import_and_process",
+        # Map packaging (Phase 37 -- MESH-16)
+        "generate_map_package",
     ],
     # Common params
     object_name: str | None = None,
@@ -2102,6 +2104,12 @@ async def asset_pipeline(
     # Tripo post-processing params (for cleanup action after generate_3d)
     has_extracted_textures: bool = False,
     texture_channels: dict | None = None,
+    # Pipeline checkpoint params (compose_map resume)
+    checkpoint_dir: str | None = None,
+    resume: bool = False,
+    force_restart: bool = False,
+    # Map package export params (generate_map_package)
+    map_package_spec: dict | None = None,
 ):
     """Asset pipeline -- 3D generation, map composition, interior building, processing, LODs, catalog, equipment. Use compose_map to build full maps (terrain+water+roads+locations+vegetation+atmosphere). Use compose_interior for walkable interiors (room shells+doors+furniture+props). Use generate_building for Tripo-powered architecture. Use generate_terrain_mesh for procedural terrain."""
     blender = get_blender_connection()
@@ -2439,9 +2447,11 @@ async def asset_pipeline(
         map_seed = spec.get("seed", 42)
         budget = _resolve_map_generation_budget(spec)
         planned_locations = _plan_map_location_anchors(spec)
-        steps_completed = []
-        steps_failed = []
-        created_objects = []
+        steps_completed: list[str] = []
+        steps_failed: list[dict] = []
+        created_objects: list[str] = []
+        location_results: list[dict] = []
+        interior_results: list[dict] = []
         terrain_cfg = spec.get("terrain", {})
         terrain_size = float(terrain_cfg.get("size", 200.0))
         terrain_resolution = min(
@@ -2449,30 +2459,78 @@ async def asset_pipeline(
             int(budget["terrain_resolution_cap"]),
         )
 
+        # --- Checkpoint resume logic (Phase 37) ---
+        _CHKPT_LOADED = False
+        if checkpoint_dir:
+            from blender_addon.handlers.pipeline_state import (
+                load_pipeline_checkpoint as _load_chkpt,
+                validate_checkpoint_compatibility as _validate_chkpt,
+                delete_pipeline_checkpoint as _delete_chkpt,
+            )
+            if force_restart:
+                _delete_chkpt(checkpoint_dir, map_name)
+            elif resume:
+                ckpt = _load_chkpt(checkpoint_dir, map_name)
+                if ckpt is not None:
+                    ok, reason = _validate_chkpt(ckpt, spec)
+                    if not ok:
+                        return json.dumps({
+                            "status": "error",
+                            "error": f"Checkpoint incompatible: {reason}",
+                            "hint": "Set force_restart=True to discard the incompatible checkpoint.",
+                        })
+                    steps_completed = ckpt.get("steps_completed", [])
+                    created_objects = ckpt.get("created_objects", [])
+                    location_results = ckpt.get("location_results", [])
+                    interior_results = ckpt.get("interior_results", [])
+                    _CHKPT_LOADED = True
+
+        def _save_chkpt():
+            """Persist current pipeline state to checkpoint file."""
+            if not checkpoint_dir:
+                return
+            from blender_addon.handlers.pipeline_state import (
+                save_pipeline_checkpoint as _save_cp,
+            )
+            _save_cp(checkpoint_dir, {
+                "map_name": map_name,
+                "seed": map_seed,
+                "location_count": len(spec.get("locations", [])),
+                "steps_completed": steps_completed,
+                "created_objects": created_objects,
+                "location_results": location_results,
+                "interior_results": interior_results,
+                "params_snapshot": {"terrain_size": terrain_size, "seed": map_seed},
+            })
+
         # --- Step 1: Clear scene ---
-        try:
-            await blender.send_command("clear_scene", {})
-            steps_completed.append("scene_cleared")
-        except Exception as e:
-            steps_failed.append({"step": "scene_clear", "error": str(e)})
+        if "scene_cleared" not in steps_completed:
+            try:
+                await blender.send_command("clear_scene", {})
+                steps_completed.append("scene_cleared")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "scene_clear", "error": str(e)})
 
         # --- Step 2: Generate terrain ---
         terrain_name = f"{map_name}_Terrain"
-        try:
-            await blender.send_command("env_generate_terrain", {
-                "name": terrain_name,
-                "terrain_type": terrain_cfg.get("preset", "hills"),
-                "resolution": terrain_resolution,
-                "height_scale": terrain_cfg.get("height_scale", 20.0),
-                "scale": terrain_size,
-                "seed": map_seed,
-                "erosion": "hydraulic" if terrain_cfg.get("erosion", True) else "none",
-                "erosion_iterations": terrain_cfg.get("erosion_iterations", 5000),
-            })
-            steps_completed.append("terrain_generated")
-            created_objects.append(terrain_name)
-        except Exception as e:
-            steps_failed.append({"step": "terrain", "error": str(e)})
+        if "terrain_generated" not in steps_completed:
+            try:
+                await blender.send_command("env_generate_terrain", {
+                    "name": terrain_name,
+                    "terrain_type": terrain_cfg.get("preset", "hills"),
+                    "resolution": terrain_resolution,
+                    "height_scale": terrain_cfg.get("height_scale", 20.0),
+                    "scale": terrain_size,
+                    "seed": map_seed,
+                    "erosion": "hydraulic" if terrain_cfg.get("erosion", True) else "none",
+                    "erosion_iterations": terrain_cfg.get("erosion_iterations", 5000),
+                })
+                steps_completed.append("terrain_generated")
+                created_objects.append(terrain_name)
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "terrain", "error": str(e)})
 
         # --- Step 3: Water bodies ---
         water_cfg = spec.get("water", {})
@@ -2515,8 +2573,13 @@ async def asset_pipeline(
                 except Exception as e:
                     steps_failed.append({"step": "water_plane", "error": str(e)})
 
+            _save_chkpt()  # checkpoint after water
+
         # --- Step 4: Roads ---
+        _completed_roads = {s for s in steps_completed if s.startswith("road_")}
         for i, road in enumerate(spec.get("roads", [])):
+            if f"road_{i}" in _completed_roads:
+                continue
             try:
                 waypoints = [
                     list(_map_point_to_terrain_cell(
@@ -2539,8 +2602,10 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": f"road_{i}", "error": str(e)})
 
+        _save_chkpt()  # checkpoint after roads
+
         # --- Step 5: Place locations ---
-        location_results = []
+        _completed_locs = {s.replace("location_mesh_", "") for s in steps_completed if s.startswith("location_mesh_")}
         _LOC_HANDLERS = {
             "town": "world_generate_town",
             "castle": "world_generate_castle",
@@ -2552,6 +2617,9 @@ async def asset_pipeline(
         }
         for i, planned in enumerate(planned_locations):
             loc = planned["source"]
+            loc_name = loc.get("name", str(i))
+            if loc_name in _completed_locs:
+                continue
             loc_type = loc.get("type", "town")
             handler = _LOC_HANDLERS.get(loc_type)
             if not handler:
@@ -2597,6 +2665,8 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": f"location_{loc.get('name', i)}", "error": str(e)})
 
+        _save_chkpt()  # checkpoint after locations
+
         # --- Step 6: Biome paint ---
         biome = spec.get("biome")
         if biome:
@@ -2622,6 +2692,9 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": "lighting", "error": str(e)})
 
+        if "biome_painted" in steps_completed or "lighting_ready" in steps_completed:
+            _save_chkpt()  # checkpoint after biome+lighting
+
         # --- Step 7: Vegetation scatter ---
         veg_cfg = spec.get("vegetation", {})
         if veg_cfg:
@@ -2640,6 +2713,9 @@ async def asset_pipeline(
                 steps_completed.append("vegetation_scattered")
             except Exception as e:
                 steps_failed.append({"step": "vegetation", "error": str(e)})
+
+        if "vegetation_scattered" in steps_completed:
+            _save_chkpt()  # checkpoint after vegetation
 
         # --- Step 8: Prop scatter ---
         if spec.get("props", True):
@@ -2667,6 +2743,9 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": "props", "error": str(e)})
 
+        if "props_scattered" in steps_completed:
+            _save_chkpt()  # checkpoint after props
+
         # --- Step 9: Generate interiors for key buildings ---
         interior_results = []
         for loc in spec.get("locations", []):
@@ -2687,6 +2766,9 @@ async def asset_pipeline(
                     except Exception as e:
                         steps_failed.append({"step": f"interior_{loc.get('name')}", "error": str(e)})
 
+        if interior_results:
+            _save_chkpt()  # checkpoint after interiors
+
         # --- Build result ---
         # Atmosphere presets for Unity next_steps
         quality_report = await _enforce_world_quality(
@@ -2705,6 +2787,8 @@ async def asset_pipeline(
             "interiors": interior_results,
             "budget_applied": budget,
             "quality_report": quality_report,
+            "resumed_from_checkpoint": _CHKPT_LOADED,
+            "checkpoint_dir": checkpoint_dir,
             "next_steps": [
                 "Review the generated city in Blender.",
                 "Run a hero-pass with Tripo only for standout props or landmark pieces.",
@@ -2712,6 +2796,114 @@ async def asset_pipeline(
             ],
         }
         return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_map_package":
+        # Package compose_map output into per-district Addressable FBX groups + scene hierarchy JSON
+        if not map_package_spec:
+            return json.dumps({
+                "error": "map_package_spec is required",
+                "example": {
+                    "map_name": "Thornveil",
+                    "objects": ["Thornveil_Terrain", "Thornveil_Village"],
+                    "locations": [{"name": "Village", "type": "town"}],
+                    "export_dir": "/tmp/exports",
+                    "generate_lods": True,
+                },
+            }, indent=2)
+
+        _mpspec = map_package_spec
+        _mp_name = _mpspec.get("map_name", "Map")
+        _mp_objects = _mpspec.get("objects", [])
+        _mp_locations = _mpspec.get("locations", [])
+        _mp_export_dir = _mpspec.get("export_dir", ".")
+        _mp_gen_lods = _mpspec.get("generate_lods", True)
+        _mp_skip_check = _mpspec.get("skip_game_check", False)
+
+        import os as _os
+        _os.makedirs(_mp_export_dir, exist_ok=True)
+        _os.makedirs(_os.path.join(_mp_export_dir, _mp_name), exist_ok=True)
+
+        from blender_addon.handlers.pipeline_state import (
+            derive_addressable_groups as _derive_groups,
+            emit_scene_hierarchy as _emit_hierarchy,
+        )
+
+        # Step 1: Game-readiness check
+        _game_failures = []
+        if not _mp_skip_check:
+            for _obj_name in _mp_objects:
+                try:
+                    _chk = await blender.send_command("mesh_check_game_ready", {"object_name": _obj_name})
+                    if isinstance(_chk, dict) and _chk.get("issues"):
+                        _game_failures.append({"object": _obj_name, "issues": _chk["issues"]})
+                except Exception:
+                    pass
+
+        if _game_failures and not _mp_skip_check:
+            return json.dumps({
+                "status": "error",
+                "error": f"{len(_game_failures)} objects failed game_check",
+                "failures": _game_failures,
+                "hint": "Fix issues or set skip_game_check=True",
+            })
+
+        # Step 2: LOD generation
+        _lod_count = 0
+        if _mp_gen_lods:
+            for _obj_name in _mp_objects:
+                try:
+                    await blender.send_command("asset_pipeline", {
+                        "action": "generate_lods",
+                        "object_name": _obj_name,
+                    })
+                    _lod_count += 1
+                except Exception:
+                    pass
+
+        # Step 3: Derive Addressable groups
+        _addr_groups = _derive_groups(_mp_name, _mp_locations)
+
+        # Step 4: Export FBX per group
+        _fbx_files = []
+        for _grp in _addr_groups:
+            _grp_name = _grp["group_name"]
+            _grp_objects = _grp.get("objects", [])
+            if not _grp_objects:
+                continue
+            _export_path = _os.path.join(_mp_export_dir, _mp_name, f"{_grp_name}.fbx")
+            try:
+                await blender.send_command("export_fbx", {
+                    "filepath": _export_path,
+                    "selected_only": False,
+                    "object_names": _grp_objects,
+                })
+                if _os.path.isfile(_export_path):
+                    _fbx_files.append(_export_path)
+            except Exception:
+                pass
+
+        # Step 5: Emit scene hierarchy JSON
+        _hierarchy_path = _os.path.join(_mp_export_dir, _mp_name, "scene_hierarchy.json")
+        try:
+            _hierarchy = _emit_hierarchy(_mp_name, _mp_locations)
+            with open(_hierarchy_path, "w", encoding="utf-8") as _fh:
+                json.dump(_hierarchy, _fh, indent=2, default=str)
+        except RuntimeError:
+            _hierarchy_path = None
+
+        return {
+            "status": "success" if _fbx_files else "partial",
+            "map_name": _mp_name,
+            "fbx_files": _fbx_files,
+            "scene_hierarchy_json": _hierarchy_path,
+            "addressable_groups": _addr_groups,
+            "game_check_failures": _game_failures,
+            "lod_variants_generated": _lod_count,
+            "next_steps": [
+                f"Import FBX files into Unity Assets/Maps/{_mp_name}/",
+                "Run: unity_world action=setup_map_streaming with scene_hierarchy_json path",
+            ],
+        }
 
     elif action == "compose_interior":
         # Interior composition pipeline: room shells → furniture → props → lighting → atmosphere
