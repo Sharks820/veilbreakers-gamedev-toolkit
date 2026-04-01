@@ -1118,3 +1118,77 @@ class TestInteriorLighting:
         for light in result["lights"]:
             idx = light["building_index"]
             assert 0 <= idx < len(result["buildings"])
+
+
+# ===========================================================================
+# Prop cache / prefetch infrastructure (Phase 36-02)
+# ===========================================================================
+
+
+class TestPropPrefetchInfrastructure:
+    """Tests for prefetch_town_props() and prop manifest structure (Plan 36-02)."""
+
+    def _make_manifest(self, entries: list[tuple[str, str]]) -> list[dict]:
+        """Build a minimal prop manifest with cache_key tuples."""
+        return [
+            {
+                "prop_type": t,
+                "corruption_band": b,
+                "cache_key": (t, b),
+                "position": (0.0, 0.0, 0.0),
+                "rotation_z": 0.0,
+                "district": "residential",
+            }
+            for t, b in entries
+        ]
+
+    def test_prefetch_returns_summary_dict(self):
+        """prefetch_town_props returns dict keyed by (type, band) tuples."""
+        from blender_addon.handlers.worldbuilding import (
+            prefetch_town_props,
+            clear_prop_cache,
+        )
+        clear_prop_cache()
+        manifest = self._make_manifest([("lantern_post", "pristine"), ("well", "weathered")])
+        result = prefetch_town_props(manifest, veil_pressure=0.1, blender_connection=None)
+        assert isinstance(result, dict)
+        # Both keys should appear (values may be None when blender_connection is None)
+        assert ("lantern_post", "pristine") in result
+        assert ("well", "weathered") in result
+
+    def test_prefetch_deduplicates_cache_keys(self):
+        """Duplicate cache_key entries in manifest produce only one lookup."""
+        from blender_addon.handlers.worldbuilding import (
+            prefetch_town_props,
+            clear_prop_cache,
+        )
+        clear_prop_cache()
+        # Same (type, band) repeated three times
+        manifest = self._make_manifest(
+            [("lantern_post", "pristine")] * 3
+        )
+        result = prefetch_town_props(manifest, veil_pressure=0.0, blender_connection=None)
+        assert len(result) == 1
+
+    def test_prefetch_empty_manifest_returns_empty(self):
+        """Empty manifest produces empty result dict."""
+        from blender_addon.handlers.worldbuilding import prefetch_town_props
+        result = prefetch_town_props([], veil_pressure=0.0, blender_connection=None)
+        assert result == {}
+
+    def test_prop_manifest_position_format(self):
+        """All prop positions in manifest are 3-tuples of numbers."""
+        manifest = self._make_manifest([("bench", "damaged"), ("cart", "corrupted")])
+        for spec in manifest:
+            pos = spec["position"]
+            assert len(pos) == 3
+            assert all(isinstance(v, (int, float)) for v in pos)
+
+    def test_prop_manifest_cache_keys_are_tuples(self):
+        """All cache_key values are (str, str) pairs."""
+        manifest = self._make_manifest([("trough", "pristine"), ("barrel_cluster", "weathered")])
+        for spec in manifest:
+            ck = spec["cache_key"]
+            assert isinstance(ck, tuple)
+            assert len(ck) == 2
+            assert all(isinstance(s, str) for s in ck)

@@ -7044,3 +7044,49 @@ def handle_generate_landmark(params: dict) -> dict:
     parent["landmark_props"] = str(preset.get("props", []))
 
     return {"status": "success", "result": result}
+
+
+# ---------------------------------------------------------------------------
+# Prop prefetch handler (Phase 36-02, Task 2)
+# ---------------------------------------------------------------------------
+
+
+def handle_prefetch_settlement_props(params: dict) -> dict:
+    """Pre-generate unique (prop_type, corruption_band) combinations via Tripo.
+
+    Allows pre-warming the prop cache before a settlement generation session.
+    Separates slow Tripo calls from fast Blender object placement.
+
+    Params:
+        prop_manifest : list of prop spec dicts (each has "cache_key": [type, band])
+        veil_pressure : float 0.0-1.0 (default 0.0) -- used for logging context
+        settlement_type : str (optional, for logging)
+
+    Returns:
+        {
+            "prefetched": <total unique types>,
+            "from_cache": <how many were already in cache>,
+            "failed": <how many returned None>,
+            "prop_types": [<list of "type/band" strings>],
+        }
+    """
+    prop_manifest = params.get("prop_manifest", [])
+    veil_pressure = float(params.get("veil_pressure", 0.0))
+
+    resolved = prefetch_town_props(
+        prop_manifest,
+        veil_pressure=veil_pressure,
+        blender_connection=None,  # Called from server context; Tripo uses its own session
+    )
+
+    failed = sum(1 for v in resolved.values() if v is None)
+    from_cache = sum(1 for k in resolved if k in _PROP_CACHE and resolved[k] is not None)
+    prop_types = [f"{t}/{b}" for t, b in resolved]
+
+    return {
+        "status": "success",
+        "prefetched": len(resolved),
+        "from_cache": from_cache,
+        "failed": failed,
+        "prop_types": prop_types,
+    }
