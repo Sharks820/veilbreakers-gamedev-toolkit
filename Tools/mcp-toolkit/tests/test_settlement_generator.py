@@ -179,6 +179,41 @@ class TestGenerateSettlement:
         assert "foundation_profile" in result["buildings"][0]
         assert "platform_elevation" in result["buildings"][0]
 
+    def test_medieval_town_generates_roads(self):
+        """medieval_town uses concentric_organic layout with winding road network."""
+        result = generate_settlement("medieval_town", seed=42, radius=150.0)
+        assert result["settlement_type"] == "medieval_town"
+        # Must produce roads
+        assert len(result["roads"]) > 0, "medieval_town must generate road segments"
+        # Roads must have required keys
+        for road in result["roads"]:
+            assert "start" in road, f"Road missing 'start': {road}"
+            assert "end" in road, f"Road missing 'end': {road}"
+            assert "width" in road, f"Road missing 'width': {road}"
+            assert "style" in road, f"Road missing 'style': {road}"
+        # Must produce buildings
+        assert len(result["buildings"]) > 0, "medieval_town must place buildings"
+        # Buildings must have district assignment
+        for bld in result["buildings"]:
+            assert "district" in bld, f"Building missing district: {bld}"
+        # Props may include Tripo manifest entries
+        assert isinstance(result["props"], list)
+        # Metadata must reflect concentric_organic pattern
+        assert result["metadata"]["layout_pattern"] == "concentric_organic"
+        # Deterministic: same seed → same road count
+        result2 = generate_settlement("medieval_town", seed=42, radius=150.0)
+        assert len(result["roads"]) == len(result2["roads"])
+
+    def test_medieval_town_veil_pressure_scales_props(self):
+        """Higher veil_pressure should produce fewer props (sparser Poisson spacing)."""
+        low = generate_settlement("medieval_town", seed=99, radius=150.0, veil_pressure=0.1)
+        high = generate_settlement("medieval_town", seed=99, radius=150.0, veil_pressure=0.9)
+        # High pressure → larger minimum spacing → fewer props
+        assert len(high["props"]) <= len(low["props"]), (
+            f"High pressure ({len(high['props'])} props) should have <= props than "
+            f"low pressure ({len(low['props'])} props)"
+        )
+
 
 # =========================================================================
 # _place_buildings
