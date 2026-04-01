@@ -370,9 +370,10 @@ def handle_generate_terrain(params: dict) -> dict:
     erosion = validated["erosion"]
     erosion_iters = validated["erosion_iterations"]
 
-    # Auto-scale erosion: minimum 50K droplets for visible river channels
-    if erosion in ("hydraulic", "both") and erosion_iters < 50000:
-        erosion_iters = max(50000, resolution * resolution // 5)
+    # Auto-scale erosion: minimum 150K droplets for AAA-quality river channels
+    # and natural-looking drainage (Skyrim/Valhalla uses 150K+ for visible features)
+    if erosion in ("hydraulic", "both") and erosion_iters < 150000:
+        erosion_iters = max(150000, resolution * resolution // 2)
 
     # Domain warp params (organic terrain features)
     warp_strength = params.get("warp_strength", 0.4)  # default organic
@@ -440,15 +441,31 @@ def handle_generate_terrain(params: dict) -> dict:
 
     bm.verts.ensure_lookup_table()
 
-    # Set vertex Z from heightmap
+    # Set vertex Z from heightmap using bilinear interpolation for smooth terrain
     for vert in bm.verts:
         u = (vert.co.x + terrain_size / 2.0) / terrain_size
         v = (vert.co.y + terrain_size / 2.0) / terrain_size
-        col_idx = int(u * (cols - 1))
-        row_idx = int(v * (rows - 1))
-        col_idx = max(0, min(col_idx, cols - 1))
-        row_idx = max(0, min(row_idx, rows - 1))
-        vert.co.z = float(heightmap[row_idx, col_idx]) * height_scale
+        # Continuous float coordinates in heightmap space
+        col_f = u * (cols - 1)
+        row_f = v * (rows - 1)
+        # Bilinear interpolation corners
+        c0 = max(0, min(int(col_f), cols - 2))
+        r0 = max(0, min(int(row_f), rows - 2))
+        c1 = c0 + 1
+        r1 = r0 + 1
+        # Fractional parts for interpolation weights
+        cf = col_f - c0
+        rf = row_f - r0
+        # Bilinear blend of 4 surrounding heightmap samples
+        h00 = float(heightmap[r0, c0])
+        h10 = float(heightmap[r0, c1])
+        h01 = float(heightmap[r1, c0])
+        h11 = float(heightmap[r1, c1])
+        h = (h00 * (1 - cf) * (1 - rf)
+             + h10 * cf * (1 - rf)
+             + h01 * (1 - cf) * rf
+             + h11 * cf * rf)
+        vert.co.z = h * height_scale
 
     bm.to_mesh(mesh)
     vertex_count = len(bm.verts)

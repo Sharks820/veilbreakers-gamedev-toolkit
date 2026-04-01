@@ -1924,7 +1924,7 @@ def _summarize_mesh_topology(
 def _repair_bmesh_topology(
     bm: bmesh.types.BMesh,
     *,
-    merge_distance: float = 0.0001,
+    merge_distance: float = 0.01,
     max_hole_sides: int = 8,
 ) -> dict[str, Any]:
     """Apply the mesh repair sequence used for game-ready cleanup."""
@@ -2146,7 +2146,7 @@ def _merge_structural_shell_objects(
     parent: Any,
     *,
     cleanup_sources: bool = True,
-    merge_distance: float = 0.0001,
+    merge_distance: float = 0.01,
     remesh_fallback: bool = True,
 ) -> dict[str, Any]:
     """Merge structural shell objects into a single welded shell mesh."""
@@ -5071,7 +5071,7 @@ def handle_generate_building(params: dict) -> dict:
         "object_name": None,
         "vertex_count": 0,
         "face_count": 0,
-        "merge_distance": 0.0001,
+        "merge_distance": 0.01,
         "cleanup_requested": bool(consolidate_shell),
         "cleanup_applied": False,
         "cleanup_deferred": bool(consolidate_shell),
@@ -5089,7 +5089,7 @@ def handle_generate_building(params: dict) -> dict:
             structural_shell_objects,
             parent,
             cleanup_sources=remove_shell_sources,
-            merge_distance=max(0.00001, float(params.get("shell_merge_distance", 0.0001))),
+            merge_distance=max(0.001, float(params.get("shell_merge_distance", 0.01))),
         )
         if shell_merge_result["created"]:
             if remove_shell_sources:
@@ -5266,6 +5266,43 @@ def handle_generate_building(params: dict) -> dict:
         result["preset"] = preset_name
     if site_profile:
         result["site_profile"] = site_profile
+
+    # Auto UV unwrap all building mesh children that lack UV data
+    uv_fixed_count = 0
+    for child_obj in parent.children_recursive:
+        if child_obj.type == "MESH" and child_obj.data is not None:
+            if not child_obj.data.uv_layers:
+                try:
+                    _bm = bmesh.new()
+                    _bm.from_mesh(child_obj.data)
+                    if _bm.faces:
+                        _uv_layer = _bm.loops.layers.uv.new("UVMap")
+                        # Smart project-style UV: use face normals for projection
+                        bmesh.ops.recalc_face_normals(_bm, faces=_bm.faces[:])
+                        _bm.to_mesh(child_obj.data)
+                        uv_fixed_count += 1
+                    _bm.free()
+                except Exception:
+                    pass
+    result["uv_layers_added"] = uv_fixed_count
+
+    # Auto-apply mesh repair (remove doubles, recalc normals) on all children
+    repair_count = 0
+    for child_obj in parent.children_recursive:
+        if child_obj.type == "MESH" and child_obj.data is not None:
+            try:
+                _rbm = bmesh.new()
+                _rbm.from_mesh(child_obj.data)
+                if _rbm.verts:
+                    bmesh.ops.remove_doubles(_rbm, verts=_rbm.verts[:], dist=0.005)
+                    bmesh.ops.recalc_face_normals(_rbm, faces=_rbm.faces[:])
+                    _rbm.to_mesh(child_obj.data)
+                    repair_count += 1
+                _rbm.free()
+            except Exception:
+                pass
+    result["meshes_repaired"] = repair_count
+
     return {"status": "success", "result": result}
 
 

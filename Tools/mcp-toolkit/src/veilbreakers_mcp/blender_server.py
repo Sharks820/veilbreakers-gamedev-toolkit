@@ -736,11 +736,12 @@ async def _enforce_world_quality(
     for mesh_name in mesh_targets:
         report["validated_meshes"] += 1  # type: ignore[operator]
         try:
-            game_ready = await blender.send_command(
+            game_ready_result = await blender.send_command(
                 "mesh_check_game_ready",
                 {"object_name": mesh_name, "poly_budget": poly_budget, "platform": "pc"},
             )
-            checks = game_ready.get("checks", {}) if isinstance(game_ready, dict) else {}
+            checks = game_ready_result.get("checks", {}) if isinstance(game_ready_result, dict) else {}
+            is_game_ready = bool(game_ready_result.get("game_ready", False)) if isinstance(game_ready_result, dict) else False
             has_material = bool(checks.get("materials", {}).get("passed", False))
             if not has_material:
                 await blender.send_command(
@@ -776,6 +777,23 @@ async def _enforce_world_quality(
                 {"object_name": mesh_name, "ratios": lod_ratios or [0.6, 0.3, 0.12]},
             )
             report["lod_generated"].append(mesh_name)  # type: ignore[append]
+
+            # Re-validate after fixes to catch assets that are STILL not game-ready
+            if not is_game_ready:
+                recheck = await blender.send_command(
+                    "mesh_check_game_ready",
+                    {"object_name": mesh_name, "poly_budget": poly_budget, "platform": "pc"},
+                )
+                if isinstance(recheck, dict) and not recheck.get("game_ready", False):
+                    _failed = [
+                        k for k, v in recheck.get("checks", {}).items()
+                        if isinstance(v, dict) and not v.get("passed", True)
+                    ]
+                    report["failures"].append({  # type: ignore[append]
+                        "object_name": mesh_name,
+                        "error": f"Still not game-ready after fixes: {', '.join(_failed)}",
+                        "failed_checks": _failed,
+                    })
         except (OSError, ConnectionError, TimeoutError, ValueError, RuntimeError, BlenderCommandError) as exc:
             report["failures"].append({"object_name": mesh_name, "error": str(exc)})  # type: ignore[append]
 
@@ -2637,7 +2655,65 @@ async def asset_pipeline(
 
                 loc_result = await blender.send_command(handler, loc_params)
                 anchor_x, anchor_y = planned["anchor"]
-                anchor_z = await _sample_terrain_height(blender, terrain_name, anchor_x, anchor_y)
+
+                # Flatten terrain under building footprint before placement
+                # Sample corners to determine slope and correct height
+                loc_radius = float(planned.get("radius", 15.0))
+                corner_heights = []
+                for dx, dy in [(-loc_radius, -loc_radius), (loc_radius, -loc_radius),
+                               (-loc_radius, loc_radius), (loc_radius, loc_radius),
+                               (0.0, 0.0)]:
+                    ch = await _sample_terrain_height(blender, terrain_name, anchor_x + dx, anchor_y + dy)
+                    corner_heights.append(ch)
+
+                # Use the maximum corner height so building sits ON terrain, not IN it
+                anchor_z = max(corner_heights) if corner_heights else 0.0
+
+                # Flatten terrain in footprint radius via spline deform (if terrain exists)
+                if terrain_name:
+                    try:
+                        await blender.send_command("terrain_spline_deform", {
+                            "terrain_name": terrain_name,
+                            "points": [
+                                [anchor_x - loc_radius, anchor_y - loc_radius],
+                                [anchor_x + loc_radius, anchor_y - loc_radius],
+                                [anchor_x + loc_radius, anchor_y + loc_radius],
+                                [anchor_x - loc_radius, anchor_y + loc_radius],
+                            ],
+                            "mode": "flatten",
+                            "strength": 0.85,
+                            "falloff_distance": loc_radius * 0.4,
+                        })
+                    except Exception:
+                        pass  # Non-fatal: building still placed, just terrain not flattened
+
+                # Auto-compute foundation profile from terrain slope
+                _foundation_profile = None
+                if corner_heights and len(corner_heights) >= 5:
+                    _min_h = min(corner_heights[:4])
+                    _max_h = max(corner_heights[:4])
+                    _height_diff = _max_h - _min_h
+                    if _height_diff > 0.3:  # significant slope
+                        _foundation_profile = {
+                            "foundation_height": _height_diff + 0.2,
+                            "side_heights": {
+                                "front": max(0.0, anchor_z - corner_heights[0]),
+                                "back": max(0.0, anchor_z - corner_heights[2]),
+                                "left": max(0.0, anchor_z - corner_heights[0]),
+                                "right": max(0.0, anchor_z - corner_heights[1]),
+                            },
+                            "retaining_sides": [
+                                side for side, h in [
+                                    ("front", corner_heights[0]), ("back", corner_heights[2]),
+                                    ("left", corner_heights[0]), ("right", corner_heights[1]),
+                                ]
+                                if anchor_z - h > 0.5
+                            ],
+                            "stair_wall": "front",
+                            "stair_steps": max(2, int(_height_diff / 0.25)),
+                        }
+                        loc_params["foundation_profile"] = _foundation_profile
+
                 try:
                     await _position_generated_object(
                         blender,
@@ -2769,8 +2845,27 @@ async def asset_pipeline(
         if interior_results:
             _save_chkpt()  # checkpoint after interiors
 
+        # --- Step 10: Export heightmap for Unity import ---
+        heightmap_export_path = None
+        if terrain_name:
+            try:
+                _hm_dir = checkpoint_dir or "/tmp/veilbreakers_exports"
+                import os as _os_hm
+                _os_hm.makedirs(_hm_dir, exist_ok=True)
+                _hm_path = _os_hm.path.join(_hm_dir, f"{map_name}_heightmap.raw")
+                hm_result = await blender.send_command("env_export_heightmap", {
+                    "terrain_name": terrain_name,
+                    "filepath": _hm_path,
+                    "unity_compat": True,
+                    "flip_vertical": True,
+                })
+                if isinstance(hm_result, dict) and hm_result.get("filepath"):
+                    heightmap_export_path = hm_result["filepath"]
+                    steps_completed.append("heightmap_exported")
+            except Exception as e:
+                steps_failed.append({"step": "heightmap_export", "error": str(e)})
+
         # --- Build result ---
-        # Atmosphere presets for Unity next_steps
         quality_report = await _enforce_world_quality(
             blender,
             object_names=created_objects,
@@ -2787,12 +2882,15 @@ async def asset_pipeline(
             "interiors": interior_results,
             "budget_applied": budget,
             "quality_report": quality_report,
+            "heightmap_export_path": heightmap_export_path,
             "resumed_from_checkpoint": _CHKPT_LOADED,
             "checkpoint_dir": checkpoint_dir,
             "next_steps": [
-                "Review the generated city in Blender.",
+                "Review the generated map in Blender viewport (use contact_sheet for thorough review).",
                 "Run a hero-pass with Tripo only for standout props or landmark pieces.",
                 "Export only after the quality report has no remaining failures.",
+                f"Import heightmap to Unity: unity_scene action=setup_terrain heightmap_path={heightmap_export_path}" if heightmap_export_path else "Export heightmap manually: blender_environment action=export_heightmap",
+                "Run blender_mesh action=game_check on each building to verify geometry quality.",
             ],
         }
         return await _with_screenshot(blender, result, capture_viewport)
@@ -2834,8 +2932,17 @@ async def asset_pipeline(
             for _obj_name in _mp_objects:
                 try:
                     _chk = await blender.send_command("mesh_check_game_ready", {"object_name": _obj_name})
-                    if isinstance(_chk, dict) and _chk.get("issues"):
-                        _game_failures.append({"object": _obj_name, "issues": _chk["issues"]})
+                    if isinstance(_chk, dict) and not _chk.get("game_ready", False):
+                        _failed_checks = [
+                            k for k, v in _chk.get("checks", {}).items()
+                            if isinstance(v, dict) and not v.get("passed", True)
+                        ]
+                        _game_failures.append({
+                            "object": _obj_name,
+                            "game_ready": False,
+                            "failed_checks": _failed_checks,
+                            "summary": _chk.get("summary", "Unknown failure"),
+                        })
                 except Exception:
                     pass
 

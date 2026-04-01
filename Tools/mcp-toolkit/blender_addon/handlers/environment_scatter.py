@@ -482,6 +482,39 @@ def handle_scatter_vegetation(params: dict) -> dict:
         moisture_map=moisture_np,
     )
 
+    # Filter out placements that overlap with building footprints
+    # Collect bounding boxes of all EMPTY-type objects (building parents) in scene
+    _building_zones: list[tuple[float, float, float, float]] = []
+    for _obj in bpy.data.objects:
+        if _obj.type == "EMPTY" and _obj.children:
+            # Estimate building footprint from children bounds
+            _min_x = _min_y = float("inf")
+            _max_x = _max_y = float("-inf")
+            for _child in _obj.children:
+                if _child.type == "MESH":
+                    _loc = _child.matrix_world.translation
+                    _min_x = min(_min_x, _loc.x - 3.0)
+                    _max_x = max(_max_x, _loc.x + 3.0)
+                    _min_y = min(_min_y, _loc.y - 3.0)
+                    _max_y = max(_max_y, _loc.y + 3.0)
+            if _min_x < float("inf"):
+                _building_zones.append((_min_x, _min_y, _max_x, _max_y))
+
+    if _building_zones:
+        terrain_half_bz = terrain_size / 2.0
+        _filtered = []
+        for p in placements:
+            wx = p["position"][0] - terrain_half_bz
+            wy = p["position"][1] - terrain_half_bz
+            _in_building = False
+            for bz_min_x, bz_min_y, bz_max_x, bz_max_y in _building_zones:
+                if bz_min_x <= wx <= bz_max_x and bz_min_y <= wy <= bz_max_y:
+                    _in_building = True
+                    break
+            if not _in_building:
+                _filtered.append(p)
+        placements = _filtered
+
     # Cap instances
     if len(placements) > max_instances:
         placements = placements[:max_instances]
@@ -518,17 +551,37 @@ def handle_scatter_vegetation(params: dict) -> dict:
         wx = p["position"][0] - terrain_half
         wy = p["position"][1] - terrain_half
 
-        # Sample terrain height at this position
+        # Sample terrain height at this position with bilinear interpolation
         u = p["position"][0] / terrain_size
         v = p["position"][1] / terrain_size
-        ci = int(u * (side - 1))
-        ri = int(v * (side - 1))
-        ci = max(0, min(ci, side - 1))
-        ri = max(0, min(ri, side - 1))
-        wz = float(heightmap[ri, ci]) * height_max
+        col_f = u * (side - 1)
+        row_f = v * (side - 1)
+        c0 = max(0, min(int(col_f), side - 2))
+        r0 = max(0, min(int(row_f), side - 2))
+        c1, r1 = c0 + 1, r0 + 1
+        cf, rf = col_f - c0, row_f - r0
+        h00 = float(heightmap[r0, c0])
+        h10 = float(heightmap[r0, c1])
+        h01 = float(heightmap[r1, c0])
+        h11 = float(heightmap[r1, c1])
+        wz = (h00 * (1 - cf) * (1 - rf) + h10 * cf * (1 - rf)
+              + h01 * (1 - cf) * rf + h11 * cf * rf) * height_max
 
         instance.location = (wx, wy, wz)
-        instance.rotation_euler = _vegetation_rotation(vt, p["rotation"])
+
+        # Align vegetation to terrain normal (slope-perpendicular placement)
+        # Compute terrain normal from finite differences of heightmap
+        cell_size = terrain_size / max(side - 1, 1)
+        dzdx = (h10 - h00) * height_max / max(cell_size, 0.01)
+        dzdy = (h01 - h00) * height_max / max(cell_size, 0.01)
+        slope_pitch = math.atan2(-dzdy, 1.0)  # tilt around X
+        slope_roll = math.atan2(dzdx, 1.0)   # tilt around Y
+        base_rot = _vegetation_rotation(vt, p["rotation"])
+        instance.rotation_euler = (
+            base_rot[0] + slope_pitch * 0.7,  # partial alignment (70%) for natural look
+            base_rot[1] + slope_roll * 0.7,
+            base_rot[2],
+        )
         s = p["scale"]
         instance.scale = (s, s, s)
 
