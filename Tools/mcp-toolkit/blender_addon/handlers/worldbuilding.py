@@ -20,8 +20,151 @@ import bmesh
 
 from .procedural_materials import create_procedural_material
 from ._context import get_3d_context_override
+from ._settlement_grammar import (
+    PROP_PROMPTS,
+    CORRUPTION_DESCS,
+    get_prop_prompt,
+    generate_prop_manifest,
+    _road_segment_mesh_spec_with_curbs,
+)
 
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Prop cache: (prop_type, corruption_band) -> glb_path
+# Persists for the Blender session to avoid regenerating across towns.
+# ---------------------------------------------------------------------------
+_PROP_CACHE: dict[tuple[str, str], str] = {}
+
+
+def clear_prop_cache() -> None:
+    """Clear the session-level prop GLB cache.
+
+    Callable externally for testing or to force regeneration.
+    """
+    _PROP_CACHE.clear()
+
+
+def _get_or_generate_prop(
+    prop_type: str,
+    corruption_band: str,
+    prompt: str,
+    blender_connection: Any | None = None,
+) -> str | None:
+    """Return a cached GLB path for a prop type, generating via Tripo if needed.
+
+    Parameters
+    ----------
+    prop_type : str
+        Prop category key (e.g. "lantern_post").
+    corruption_band : str
+        Corruption tier (e.g. "pristine", "corrupted").
+    prompt : str
+        Fully-formatted Tripo AI prompt string.
+    blender_connection : Any, optional
+        Active Blender socket connection for dispatching asset_pipeline calls.
+        When None (testing), generation is skipped and None is returned.
+
+    Returns
+    -------
+    str or None
+        Absolute path to the generated GLB file, or None if generation failed.
+    """
+    key = (prop_type, corruption_band)
+    if key in _PROP_CACHE:
+        return _PROP_CACHE[key]
+
+    if blender_connection is None:
+        logger.debug("No blender_connection — skipping Tripo generation for %s/%s", prop_type, corruption_band)
+        return None
+
+    try:
+        result = blender_connection.send_command_sync(
+            "asset_pipeline",
+            {
+                "action": "generate_3d",
+                "prompt": prompt,
+                "art_style": "dark_fantasy",
+            },
+        )
+        glb_path = result.get("glb_path") if isinstance(result, dict) else None
+        if glb_path:
+            _PROP_CACHE[key] = glb_path
+            # Non-fatal post-process pass (delight + validate)
+            try:
+                blender_connection.send_command_sync(
+                    "asset_pipeline",
+                    {"action": "post_process_model", "glb_path": glb_path},
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Post-process failed for %s/%s: %s", prop_type, corruption_band, exc)
+            return glb_path
+        logger.warning("Tripo generation returned no glb_path for %s/%s", prop_type, corruption_band)
+        return None
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Tripo generation failed for %s/%s: %s", prop_type, corruption_band, exc)
+        return None
+
+
+def prefetch_town_props(
+    prop_manifest: list[dict],
+    veil_pressure: float = 0.0,
+    blender_connection: Any | None = None,
+) -> dict[tuple[str, str], str | None]:
+    """Pre-generate unique (prop_type, corruption_band) combos for a town.
+
+    Separates slow Tripo calls from fast Blender object placement.
+
+    Parameters
+    ----------
+    prop_manifest : list of dict
+        Prop spec dicts from generate_prop_manifest() — each must have
+        "cache_key": (prop_type, corruption_band).
+    veil_pressure : float
+        Veil pressure (used for logging context only).
+    blender_connection : Any, optional
+        Active Blender socket connection. None in test mode.
+
+    Returns
+    -------
+    dict
+        {(prop_type, corruption_band): glb_path_or_None}
+    """
+    unique_keys: set[tuple[str, str]] = set()
+    for spec in prop_manifest:
+        ck = spec.get("cache_key")
+        if isinstance(ck, (tuple, list)) and len(ck) == 2:
+            unique_keys.add((str(ck[0]), str(ck[1])))
+
+    already_cached = sum(1 for k in unique_keys if k in _PROP_CACHE)
+    logger.info(
+        "Prefetching %d prop types (%d already cached) for pressure=%.2f",
+        len(unique_keys),
+        already_cached,
+        veil_pressure,
+    )
+
+    resolved: dict[tuple[str, str], str | None] = {}
+    for prop_type, corruption_band in unique_keys:
+        if (prop_type, corruption_band) in _PROP_CACHE:
+            resolved[(prop_type, corruption_band)] = _PROP_CACHE[(prop_type, corruption_band)]
+            continue
+        try:
+            prompt = get_prop_prompt(prop_type, corruption_band)
+        except KeyError:
+            logger.warning("Unknown prop_type/corruption_band: %s/%s", prop_type, corruption_band)
+            resolved[(prop_type, corruption_band)] = None
+            continue
+        glb_path = _get_or_generate_prop(prop_type, corruption_band, prompt, blender_connection)
+        resolved[(prop_type, corruption_band)] = glb_path
+        logger.info("Generated prop: %s (%s) -> %s", prop_type, corruption_band, glb_path)
+
+    logger.info(
+        "Prefetched %d prop types (%d from cache)",
+        len(unique_keys),
+        already_cached,
+    )
+    return resolved
 
 
 def _assign_procedural_material(obj: Any, material_key: str) -> bool:
