@@ -894,3 +894,189 @@ def _nearest_pot_plus_1(n: int) -> int:
     while pot + 1 < n:
         pot *= 2
     return pot + 1
+
+
+# ---------------------------------------------------------------------------
+# Handler: generate_multi_biome_world
+# ---------------------------------------------------------------------------
+
+def handle_generate_multi_biome_world(params: dict) -> dict:
+    """Generate a complete multi-biome world map in Blender.
+
+    Orchestrates: WorldMapSpec -> terrain mesh -> biome vertex colors ->
+    biome material -> vegetation scatter.  Requires bpy (runs inside Blender).
+
+    Params:
+        name (str): Base name for terrain object. Default "MultibiomeTerrain".
+        width (int): Grid resolution. Default 256.
+        height (int): Grid resolution. Default 256.
+        world_size (float): Terrain size in meters. Default 512.0.
+        height_scale (float): Vertical exaggeration. Default 80.0.
+        biome_count (int): Number of Voronoi regions. Default 6.
+        biomes (list[str]): Biome names. Default 6 VB presets.
+        seed (int): Master seed. Default 42.
+        corruption_level (float): Global corruption intensity 0-1. Default 0.3.
+        building_plots (list[dict]): Pre-placed footprints for foundation flatten.
+        erosion (str): "hydraulic"|"thermal"|"both"|"none". Default "hydraulic".
+        erosion_iterations (int): Default 5000.
+        scatter_vegetation (bool): Whether to scatter per-biome vegetation. Default True.
+        min_veg_distance (float): Min spacing between vegetation instances. Default 4.0.
+        max_veg_instances (int): Cap per biome. Default 2000.
+        transition_width_m (float): Blend zone width in meters. Default 15.0.
+
+    Returns dict with:
+        name, biome_count, biome_names, corruption_level, corruption_zones,
+        vegetation_count, flatten_zones_applied, vertex_count, world_size_m.
+    """
+    from ._biome_grammar import generate_world_map_spec
+    from .terrain_materials import BIOME_PALETTES_V2
+
+    # --- 1. Build world spec (pure logic, no bpy) ---
+    name = params.get("name", "MultibiomeTerrain")
+    seed = params.get("seed", 42)
+    world_size = params.get("world_size", 512.0)
+    width = params.get("width", 256)
+    height = params.get("height", 256)
+    biome_count = params.get("biome_count", 6)
+    biomes = params.get("biomes")
+    corruption_level = params.get("corruption_level", 0.3)
+    building_plots = params.get("building_plots", [])
+    scatter_veg = params.get("scatter_vegetation", True)
+
+    spec = generate_world_map_spec(
+        width=width,
+        height=height,
+        world_size=world_size,
+        biome_count=biome_count,
+        biomes=biomes,
+        seed=seed,
+        corruption_level=corruption_level,
+        building_plots=building_plots,
+        transition_width_m=params.get("transition_width_m", 15.0),
+    )
+
+    # --- 2. Generate base terrain mesh ---
+    terrain_params = {
+        "name": name,
+        "terrain_type": "mountain",   # base heightmap type
+        "resolution": width,
+        "height_scale": params.get("height_scale", 80.0),
+        "scale": world_size,
+        "seed": seed,
+        "erosion": params.get("erosion", "hydraulic"),
+        "erosion_iterations": params.get("erosion_iterations", 5000),
+        "flatten_zones": spec.flatten_zones,
+    }
+    terrain_result = handle_generate_terrain(terrain_params)
+
+    obj = bpy.data.objects.get(name)
+    if obj is None:
+        raise RuntimeError(f"Terrain object '{name}' not found after generation")
+
+    # --- 3. Assign biome vertex colors per-vertex ---
+    vertex_colors = _compute_vertex_colors_for_biome_map(
+        obj, spec, world_size
+    )
+
+    mesh = obj.data
+    if mesh.color_attributes.get("BiomeColor"):
+        mesh.color_attributes.remove(mesh.color_attributes["BiomeColor"])
+    col_attr = mesh.color_attributes.new(
+        name="BiomeColor", type="FLOAT_COLOR", domain="POINT"
+    )
+    for i, rgba in enumerate(vertex_colors):
+        col_attr.data[i].color = rgba
+
+    # --- 4. Apply biome material for primary biome ---
+    # Primary biome = dominant biome at terrain center (simple heuristic)
+    cx_cell = int(spec.biome_ids[height // 2, width // 2])
+    primary_biome = spec.biome_names[cx_cell]
+    if primary_biome in BIOME_PALETTES_V2:
+        from .terrain_materials import handle_create_biome_terrain
+        try:
+            handle_create_biome_terrain({
+                "name": name,
+                "biome_name": primary_biome,
+            })
+        except Exception:
+            pass  # Non-fatal: material assignment is best-effort
+
+    # --- 5. Scatter vegetation per biome (if enabled) ---
+    vegetation_total = 0
+    if scatter_veg:
+        from .vegetation_system import handle_scatter_biome_vegetation
+        for biome_name in spec.biome_names:
+            try:
+                veg_result = handle_scatter_biome_vegetation({
+                    "terrain_name": name,
+                    "biome_name": biome_name,
+                    "min_distance": params.get("min_veg_distance", 4.0),
+                    "seed": seed + (hash(biome_name) & 0xFFFF),
+                    "max_instances": params.get("max_veg_instances", 2000),
+                    "season": "corrupted" if corruption_level > 0.5 else None,
+                    "bake_wind_colors": True,
+                    "water_level": 0.05,
+                })
+                vegetation_total += veg_result.get("instance_count", 0)
+            except Exception:
+                pass  # Biome may not have vegetation set -- skip silently
+
+    # --- 6. Count corruption zones ---
+    corruption_zones = int((spec.corruption_map > 0.3).sum())
+
+    return {
+        "name": name,
+        "biome_count": biome_count,
+        "biome_names": spec.biome_names,
+        "corruption_level": corruption_level,
+        "corruption_zones": corruption_zones,
+        "vegetation_count": vegetation_total,
+        "flatten_zones_applied": len(spec.flatten_zones),
+        "vertex_count": terrain_result.get("vertex_count", 0),
+        "world_size_m": world_size,
+    }
+
+
+def _compute_vertex_colors_for_biome_map(
+    obj,            # Blender object
+    spec,           # WorldMapSpec
+    world_size: float,
+) -> list:
+    """Sample per-vertex biome color from WorldMapSpec corruption map + biome palette.
+
+    Returns list of (R, G, B, A) tuples, one per vertex.
+    """
+    from .terrain_materials import apply_corruption_tint, BIOME_PALETTES, _get_material_def
+
+    mesh = obj.data
+    rows, cols = spec.biome_ids.shape
+
+    result_colors = []
+    for v in mesh.vertices:
+        vx, vy = v.co.x, v.co.y
+
+        # Map world position to biome grid cell
+        nx = max(0, min(cols - 1, int((vx / world_size + 0.5) * cols)))
+        ny = max(0, min(rows - 1, int((vy / world_size + 0.5) * rows)))
+        biome_idx = int(spec.biome_ids[ny, nx])
+        corruption = float(spec.corruption_map[ny, nx])
+
+        # Base color from biome palette
+        base_color = (0.15, 0.12, 0.10, 1.0)
+        try:
+            biome_name = spec.biome_names[biome_idx]
+            palette = BIOME_PALETTES.get(biome_name, {})
+            ground_mats = palette.get("ground", [])
+            if ground_mats:
+                mat_def = _get_material_def(ground_mats[0])
+                if mat_def and "base_color" in mat_def:
+                    base_color = tuple(mat_def["base_color"])
+                    if len(base_color) == 3:
+                        base_color = base_color + (1.0,)
+        except Exception:
+            pass
+
+        tinted = apply_corruption_tint([base_color], corruption)
+        result_colors.append(tinted[0])
+
+    return result_colors
