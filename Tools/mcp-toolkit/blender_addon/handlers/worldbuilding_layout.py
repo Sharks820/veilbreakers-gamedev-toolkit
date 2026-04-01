@@ -552,6 +552,153 @@ def handle_generate_town(params: dict) -> dict:
     }
 
 
+def handle_generate_hearthvale(params: dict) -> dict:
+    """Generate Hearthvale fortified castle-town via generate_settlement().
+
+    Uses the fully-featured settlement path (perimeter walls, interiors,
+    lighting) rather than the older generate_town_layout() path.
+
+    Parameters
+    ----------
+    name : str, default "Hearthvale"
+    seed : int, default 3810
+    center : list[float], default [0.0, 0.0]
+    radius : float, default 65.0
+    layout_brief : str, optional
+    """
+    import bpy
+
+    from .settlement_generator import generate_settlement
+
+    name = params.get("name", "Hearthvale")
+    seed = int(params.get("seed", 3810))
+    center = tuple(params.get("center", [0.0, 0.0]))
+    radius = float(params.get("radius", 65.0))
+    layout_brief = params.get(
+        "layout_brief",
+        "fortified castle-town, winding cobblestone, market square at center, "
+        "radial streets from square, military quarter, commerce district",
+    )
+    veil_pressure = float(params.get("veil_pressure", 0.0))
+
+    result = generate_settlement(
+        settlement_type="hearthvale",
+        seed=seed,
+        center=center,
+        radius=radius,
+        wall_height=3.5,
+        layout_brief=layout_brief,
+        veil_pressure=veil_pressure,
+    )
+
+    # Create parent empty
+    parent = bpy.data.objects.new(name, None)
+    parent.empty_display_type = "PLAIN_AXES"
+    bpy.context.collection.objects.link(parent)
+
+    # Materialize buildings as Blender objects
+    buildings_created = 0
+    for i, bld in enumerate(result.get("buildings", [])):
+        bld_type = bld.get("type", "abandoned_house")
+        bld_name = f"{name}_{bld_type}_{i}"
+        bx, by = bld.get("position", (0.0, 0.0))
+        fp = bld.get("footprint", (8.0, 6.0))
+        floors = bld.get("floors", 1)
+        elevation = bld.get("elevation", 0.0)
+
+        # Create a representative mesh for the building
+        mesh = bpy.data.meshes.new(f"{bld_name}_mesh")
+        obj = bpy.data.objects.new(bld_name, mesh)
+        obj.location = (bx, by, elevation)
+        obj.rotation_euler = (0.0, 0.0, bld.get("rotation", 0.0))
+        obj.parent = parent
+        bpy.context.collection.objects.link(obj)
+
+        # Create simple box geometry representing the building volume
+        import bmesh
+        bm = bmesh.new()
+        hw, hd = fp[0] / 2.0, fp[1] / 2.0
+        wh = 3.5 * floors  # wall_height * floors
+        verts = [
+            bm.verts.new((-hw, -hd, 0.0)),
+            bm.verts.new((hw, -hd, 0.0)),
+            bm.verts.new((hw, hd, 0.0)),
+            bm.verts.new((-hw, hd, 0.0)),
+            bm.verts.new((-hw, -hd, wh)),
+            bm.verts.new((hw, -hd, wh)),
+            bm.verts.new((hw, hd, wh)),
+            bm.verts.new((-hw, hd, wh)),
+        ]
+        faces = [
+            bm.faces.new([verts[0], verts[1], verts[2], verts[3]]),  # bottom
+            bm.faces.new([verts[4], verts[5], verts[6], verts[7]]),  # top
+            bm.faces.new([verts[0], verts[1], verts[5], verts[4]]),  # front
+            bm.faces.new([verts[2], verts[3], verts[7], verts[6]]),  # back
+            bm.faces.new([verts[0], verts[3], verts[7], verts[4]]),  # left
+            bm.faces.new([verts[1], verts[2], verts[6], verts[5]]),  # right
+        ]
+        bm.to_mesh(mesh)
+        bm.free()
+        buildings_created += 1
+
+    # Materialize perimeter walls
+    perimeter_created = 0
+    for i, elem in enumerate(result.get("perimeter", [])):
+        elem_type = elem.get("type", "wall_segment")
+        elem_name = f"{name}_perimeter_{elem_type}_{i}"
+        ex, ey = elem.get("position", (0.0, 0.0))
+
+        mesh = bpy.data.meshes.new(f"{elem_name}_mesh")
+        obj = bpy.data.objects.new(elem_name, mesh)
+        obj.location = (ex, ey, 0.0)
+        obj.rotation_euler = (0.0, 0.0, elem.get("rotation", 0.0))
+        obj.parent = parent
+        bpy.context.collection.objects.link(obj)
+
+        import bmesh
+        bm = bmesh.new()
+        if elem.get("is_gate"):
+            # Portcullis gate -- wider opening
+            hw, hd, wh = 3.0, 1.0, 5.5
+        elif elem.get("is_tower"):
+            # Corner tower -- square footprint, taller
+            hw, hd, wh = 2.5, 2.5, 7.0
+        else:
+            # Wall segment
+            hw, hd, wh = 3.0, 0.8, 5.5
+        verts = [
+            bm.verts.new((-hw, -hd, 0.0)),
+            bm.verts.new((hw, -hd, 0.0)),
+            bm.verts.new((hw, hd, 0.0)),
+            bm.verts.new((-hw, hd, 0.0)),
+            bm.verts.new((-hw, -hd, wh)),
+            bm.verts.new((hw, -hd, wh)),
+            bm.verts.new((hw, hd, wh)),
+            bm.verts.new((-hw, hd, wh)),
+        ]
+        faces = [
+            bm.faces.new([verts[0], verts[1], verts[2], verts[3]]),
+            bm.faces.new([verts[4], verts[5], verts[6], verts[7]]),
+            bm.faces.new([verts[0], verts[1], verts[5], verts[4]]),
+            bm.faces.new([verts[2], verts[3], verts[7], verts[6]]),
+            bm.faces.new([verts[0], verts[3], verts[7], verts[4]]),
+            bm.faces.new([verts[1], verts[2], verts[6], verts[5]]),
+        ]
+        bm.to_mesh(mesh)
+        bm.free()
+        perimeter_created += 1
+
+    return {
+        "status": "success",
+        "name": name,
+        "buildings_created": buildings_created,
+        "perimeter_created": perimeter_created,
+        "road_count": len(result.get("roads", [])),
+        "prop_count": len(result.get("props", [])),
+        "metadata": result.get("metadata", {}),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Pure-logic world design functions (testable without Blender)
 # ---------------------------------------------------------------------------

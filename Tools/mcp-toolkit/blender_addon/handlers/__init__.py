@@ -191,6 +191,7 @@ from .worldbuilding_layout import (
     handle_generate_dungeon,
     handle_generate_cave,
     handle_generate_town,
+    handle_generate_hearthvale,
 )
 from .environment_scatter import (
     handle_scatter_vegetation,
@@ -828,6 +829,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "world_generate_dungeon": handle_generate_dungeon,
     "world_generate_cave": handle_generate_cave,
     "world_generate_town": handle_generate_town,
+    "world_generate_hearthvale": handle_generate_hearthvale,
     # Worldbuilding v2 operations (Phase 14 -- world design)
     "world_generate_location": handle_generate_location,
     "world_generate_settlement": handle_generate_settlement,
