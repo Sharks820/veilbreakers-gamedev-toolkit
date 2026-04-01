@@ -182,6 +182,30 @@ FURNITURE_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]
     "cage": (generate_falling_cage_mesh, {}),
     "shelf_with_bottles": (generate_shelf_mesh, {}),
     "wall_tomb": (generate_sarcophagus_mesh, {}),
+    # ---- Clutter type mappings (MESH-03) ----
+    "mug": (generate_potion_bottle_mesh, {"style": "round_flask"}),
+    "plate": (generate_rug_mesh, {}),  # flat disc approximation
+    "bottle": (generate_potion_bottle_mesh, {}),
+    "goblet": (generate_potion_bottle_mesh, {"style": "round_flask"}),
+    "pot": (generate_cauldron_mesh, {"size": 0.3}),
+    "candle_stub": (generate_candelabra_mesh, {}),
+    "book": (generate_map_scroll_mesh, {"style": "rolled"}),
+    "open_book": (generate_map_scroll_mesh, {"style": "rolled"}),
+    "scroll": (generate_map_scroll_mesh, {"style": "rolled"}),
+    "potion_bottle": (generate_potion_bottle_mesh, {}),
+    "coin_pile": (generate_rock_mesh, {"rock_type": "rubble_pile", "size": 0.2}),
+    "skull_pile": (generate_skull_pile_mesh, {}),
+    "bone_fragment": (generate_skull_pile_mesh, {}),
+    "coal_pile": (generate_rock_mesh, {"rock_type": "rubble_pile", "size": 0.5}),
+    "hammer": (generate_anvil_mesh, {"size": 0.3}),
+    "tongs": (generate_anvil_mesh, {"size": 0.25}),
+    "horseshoe": (generate_anvil_mesh, {"size": 0.15}),
+    "metal_ingot": (generate_crate_mesh, {}),
+    "rope_coil": (generate_basket_mesh, {"handle": False}),
+    "sack": (generate_sack_mesh, {}),
+    "basket": (generate_basket_mesh, {}),
+    "lantern": (generate_lantern_mesh, {}),
+    "torch_sconce": (generate_torch_sconce_mesh, {}),
 }
 
 # ---------------------------------------------------------------------------
