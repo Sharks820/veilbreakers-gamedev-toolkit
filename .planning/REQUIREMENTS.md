@@ -578,7 +578,7 @@ Requirements for v7.0 — AAA Procedural City Production. IDs match PROJECT.md A
 ### Performance & Pipeline
 
 - [x] **MESH-11**: LOD chain per asset type using existing lod_pipeline.py presets with silhouette preservation >85%. Scene budget validator enforces per-room (50K-150K tris) and per-block (200K-500K tris) polygon budgets
-- [ ] **MESH-12**: Tripo pipeline with automatic post-processing: de-lighting, mesh repair, UV unwrap, PBR texture EXTRACTION from GLB into standalone maps (not blank images), LOD generation, quality gate
+- [x] **MESH-12**: Tripo pipeline with automatic post-processing: de-lighting, mesh repair, UV unwrap, PBR texture EXTRACTION from GLB into standalone maps (not blank images), LOD generation, quality gate
 - [ ] **MESH-13**: Starter town: 10-15 buildings with furnished interiors, market area, fortifications, road network, vegetation, terrain integration. Exports to Unity as Addressables-ready package, maintains 60fps at 1080p
 - [x] **MESH-14**: All 267 generators use seed-based RNG (`random.Random(seed)`) exclusively — zero instances of global random state. Same seed produces identical output
 - [x] **MESH-15**: Boolean cleanup pipeline: remove doubles (0.0001 merge distance), recalculate normals, fix non-manifold edges, fill holes (up to 8 sides). Runs automatically after every boolean operation
