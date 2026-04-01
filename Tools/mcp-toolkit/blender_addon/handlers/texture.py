@@ -558,6 +558,171 @@ def _estimate_uv_coverage(obj: Any) -> float:
 
 
 # ---------------------------------------------------------------------------
+# Handler: load extracted textures (Tripo post-processing)
+# ---------------------------------------------------------------------------
+
+def handle_load_extracted_textures(params: dict) -> dict:
+    """Wire pre-extracted PBR channel PNGs into a Blender PBR node tree.
+
+    Unlike ``handle_create_pbr_material``, this handler does NOT create blank
+    placeholder images.  It loads the already-extracted PNG files produced by
+    ``glb_texture_extractor.extract_glb_textures`` and connects them to the
+    correct Principled BSDF sockets.
+
+    ORM channel handling: the ORM image is loaded as Non-Color and split via a
+    Separate RGB node.  G -> Roughness, B -> Metallic, R -> AO multiply before
+    Base Color.
+
+    Params:
+        object_name (str): Blender object to wire textures into.
+        albedo_path (str, optional): Path to albedo (base color) PNG.
+        albedo_delit_path (str, optional): Path to de-lit albedo -- preferred
+            over albedo_path when present.
+        normal_path (str, optional): Path to normal map PNG.
+        orm_path (str, optional): Path to ORM-packed PNG (R=AO, G=rough, B=metal).
+
+    Returns:
+        Dict with status, channels_loaded (list), warnings (list).
+    """
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("'object_name' is required")
+
+    obj = bpy.data.objects.get(object_name)
+    if obj is None:
+        raise ValueError(f"Object not found: {object_name}")
+
+    # Get or create material
+    if obj.data is None or not hasattr(obj.data, "materials"):
+        raise ValueError(f"Object '{object_name}' does not support materials")
+
+    if obj.data.materials and obj.data.materials[0] is not None:
+        mat = obj.data.materials[0]
+    else:
+        mat = bpy.data.materials.new(name=f"{object_name}_PBR")
+        if obj.data.materials:
+            obj.data.materials[0] = mat
+        else:
+            obj.data.materials.append(mat)
+
+    mat.use_nodes = True
+    tree = mat.node_tree
+    nodes = tree.nodes
+    links = tree.links
+
+    # Find or create Principled BSDF
+    bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
+    if bsdf is None:
+        bsdf = nodes.new("ShaderNodeBsdfPrincipled")
+        bsdf.location = (0, 0)
+        # Ensure output node exists and is linked
+        output = next(
+            (n for n in nodes if n.type == "OUTPUT_MATERIAL"), None
+        )
+        if output is None:
+            output = nodes.new("ShaderNodeOutputMaterial")
+            output.location = (300, 0)
+        links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
+
+    channels_loaded: list[str] = []
+    warnings: list[str] = []
+    albedo_tex_node = None
+    y_pos = 300
+
+    # Helper: load an image file and create a texture node
+    def _load_tex(path: str, colorspace: str, label: str):
+        nonlocal y_pos
+        img = bpy.data.images.load(path, check_existing=True)
+        img.colorspace_settings.name = colorspace
+        tex = nodes.new("ShaderNodeTexImage")
+        tex.image = img
+        tex.label = label
+        tex.location = (-700, y_pos)
+        y_pos -= 320
+        return tex
+
+    # ------------------------------------------------------------------
+    # Albedo (prefer de-lit version)
+    # ------------------------------------------------------------------
+    albedo_path = params.get("albedo_delit_path") or params.get("albedo_path")
+    if albedo_path:
+        try:
+            albedo_tex = _load_tex(albedo_path, "sRGB", "Albedo")
+            albedo_tex_node = albedo_tex
+            base_color_socket = _get_bsdf_input(bsdf, "base_color")
+            links.new(albedo_tex.outputs["Color"], base_color_socket)
+            channels_loaded.append("albedo")
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"Failed to load albedo: {exc}")
+
+    # ------------------------------------------------------------------
+    # ORM: load as Non-Color, split R/G/B via Separate RGB node
+    # ------------------------------------------------------------------
+    orm_path = params.get("orm_path")
+    if orm_path:
+        try:
+            orm_tex = _load_tex(orm_path, "Non-Color", "ORM")
+            sep = nodes.new("ShaderNodeSeparateRGB")
+            sep.location = (-400, y_pos + 160)
+
+            links.new(orm_tex.outputs["Color"], sep.inputs["Image"])
+
+            # G -> Roughness
+            rough_socket = _get_bsdf_input(bsdf, "roughness")
+            links.new(sep.outputs["G"], rough_socket)
+
+            # B -> Metallic
+            metal_socket = _get_bsdf_input(bsdf, "metallic")
+            links.new(sep.outputs["B"], metal_socket)
+
+            # R -> AO multiply before Base Color (if albedo loaded)
+            if albedo_tex_node is not None:
+                ao_mix = nodes.new("ShaderNodeMixRGB")
+                ao_mix.blend_type = "MULTIPLY"
+                ao_mix.inputs["Fac"].default_value = 1.0
+                ao_mix.location = (-200, 300)
+
+                # Reconnect: albedo -> Mix A, AO R -> Mix B, Mix -> Base Color
+                base_color_socket = _get_bsdf_input(bsdf, "base_color")
+                # Remove existing albedo -> base_color link
+                for link in list(links):
+                    if (
+                        link.to_socket == base_color_socket
+                        and link.from_node == albedo_tex_node
+                    ):
+                        links.remove(link)
+                links.new(albedo_tex_node.outputs["Color"], ao_mix.inputs["Color1"])
+                links.new(sep.outputs["R"], ao_mix.inputs["Color2"])
+                links.new(ao_mix.outputs["Color"], base_color_socket)
+
+            channels_loaded.append("orm")
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"Failed to load ORM: {exc}")
+
+    # ------------------------------------------------------------------
+    # Normal map
+    # ------------------------------------------------------------------
+    normal_path = params.get("normal_path")
+    if normal_path:
+        try:
+            normal_tex = _load_tex(normal_path, "Non-Color", "Normal")
+            normal_map_node = nodes.new("ShaderNodeNormalMap")
+            normal_map_node.location = (-400, y_pos + 160)
+            links.new(normal_tex.outputs["Color"], normal_map_node.inputs["Color"])
+            normal_socket = _get_bsdf_input(bsdf, "normal")
+            links.new(normal_map_node.outputs["Normal"], normal_socket)
+            channels_loaded.append("normal")
+        except Exception as exc:  # noqa: BLE001
+            warnings.append(f"Failed to load normal: {exc}")
+
+    return {
+        "status": "success",
+        "channels_loaded": channels_loaded,
+        "warnings": warnings,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Handler: generate wear map (per-vertex curvature via bmesh)
 # ---------------------------------------------------------------------------
 
