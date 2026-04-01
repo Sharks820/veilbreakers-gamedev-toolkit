@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: AAA Procedural City Production
 status: executing
-last_updated: "2026-03-31T23:05:28.217Z"
-last_activity: 2026-03-31 -- Phase 33 execution started
+last_updated: "2026-04-01T00:36:14Z"
+last_activity: 2026-04-01 -- Phase 33 plan 01 complete (interior system)
 progress:
   total_phases: 9
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 7
-  completed_plans: 5
+  completed_plans: 6
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -23,10 +23,10 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 
 ## Current Position
 
-Phase: 33 (interior-system) — EXECUTING
-Plan: 1 of 1
-Status: Executing Phase 33
-Last activity: 2026-03-31 -- Phase 33 execution started
+Phase: 33 (interior-system) — COMPLETE
+Plan: 1 of 1 COMPLETE
+Status: Phase 33 complete. Next: Phase 34 (Multi-biome Terrain)
+Last activity: 2026-04-01 -- Phase 33 plan 01 complete (interior system)
 
 ## Accumulated Context
 
@@ -137,23 +137,22 @@ Last session: 2026-03-31T13:33:20Z
 Completed: Phase 32 (Building System) -- all 6 tasks, 438 tests passing
 Next action: Continue to Phase 33 (Interior System) or Phase 30 execution
 
-### Recent Work (2026-03-31 Phase 32 execution)
+### Recent Work (2026-04-01 Phase 33 execution)
 
 **Completed:**
 
-1. Wired building_quality AAA generators into grammar details (13 detail types with real geometry)
-2. Implemented CGA-style facade split grammar (recursive floor/bay splitting with fill rules)
-3. Replaced flat-box roofs with AAA tile/shingle geometry from generate_roof()
-4. Added per-building variation system (floor height, wall thickness, detail subset, bay randomization)
-5. Expanded modular building kit from 25 to 52 piece types (260 variants across 5 styles)
-6. Added 20 comprehensive wiring tests, total 438 building tests passing
+1. Spatial graphs + constraint solver — ROOM_SPATIAL_GRAPHS for 14+ room types with focal_points, clusters, wall_preferences
+2. Activity zones — ROOM_ACTIVITY_ZONES with get_zone_for_item / get_zone_bounds helpers
+3. Decorative clutter scatter — Poisson disk sampling, CLUTTER_POOLS (12 room types), 24 clutter generator mappings
+4. Lighting placement engine — LIGHTING_SCHEMAS for all 22 room types, color temperature 2700K-3500K
+5. 63 integration tests + clutter/lighting fully wired into handle_generate_interior
 
 **Key decisions:**
 
-- mesh_spec operation type added to BuildingSpec for full vertex/face data from generators
-- Lazy imports for building_quality to maintain pure-logic module separation
-- CGA split uses weighted probability tables per floor context and per style
-- 5 STYLE_CONFIGS preserved (mansard mapped as option, not 6th style)
+- item_height parameter added to _check_collision and _door_corridor_clear so floor items (rugs < 0.1m) skip collision
+- _find_config_index hoisted above generate_interior_layout for correct call order
+- Clutter uses cube fallback for unmapped prop types (food_scrap, spilled_drink, etc.)
+- Lighting color temperature approximated as linear RGB blend (warm orange to cool white)
 
 ---
 *State initialized: 2026-03-30*
