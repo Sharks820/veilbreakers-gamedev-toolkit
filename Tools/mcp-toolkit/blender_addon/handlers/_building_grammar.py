@@ -8,7 +8,11 @@ Provides:
 - evaluate_building_grammar(): grammar-rule building generation
 - generate_castle_spec/tower_spec/bridge_spec/fortress_spec(): specialized templates
 - apply_ruins_damage(): damage existing building specs
-- generate_interior_layout(): furniture placement for room types
+- ROOM_SPATIAL_GRAPHS: per-room spatial relationship definitions (MESH-03)
+- ROOM_ACTIVITY_ZONES: per-room functional zone partitions (MESH-03)
+- generate_interior_layout(): spatially-aware furniture placement for room types
+- generate_clutter_layout(): Poisson disk decorative prop scatter (MESH-03)
+- generate_lighting_layout(): intelligent light source placement (MESH-03)
 - MODULAR_CATALOG + generate_modular_pieces(): snap-together architecture kit
 - FURNITURE_SCALE_REFERENCE: real-world scale constraints for validation (WORLD-07)
 - expanded room set covering taverns, smithies, storage halls, barracks,
@@ -3030,6 +3034,276 @@ def generate_clutter_layout(
             placed_count += 1
 
     return clutter
+
+
+# ---------------------------------------------------------------------------
+# Lighting Placement Engine (MESH-03)
+# ---------------------------------------------------------------------------
+# Intelligent lighting placement producing light source data for each room
+# with appropriate color temperature and coverage.
+# ---------------------------------------------------------------------------
+
+# Light type definitions: (color_temp_K, radius_m, default_intensity)
+LIGHT_TYPES: dict[str, tuple[int, float, float]] = {
+    "torch_sconce": (2800, 4.0, 1.0),
+    "candle": (3000, 2.0, 0.5),
+    "fireplace_light": (2700, 5.0, 1.5),
+    "chandelier_light": (3200, 8.0, 2.0),
+    "brazier_light": (3000, 3.0, 0.8),
+}
+
+# Per-room-type lighting schemas: mandatory and conditional light sources.
+# Each entry: (light_type, condition, position_rule)
+# condition: "always" or item type that must exist in furniture
+# position_rule: "doorway", "surface:{item_type}", "item:{item_type}",
+#                "ceiling_center", "wall_supplement"
+LIGHTING_SCHEMAS: dict[str, list[tuple[str, str, str]]] = {
+    "tavern": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "table", "surface:table"),
+        ("fireplace_light", "fireplace", "item:fireplace"),
+        ("candle", "bar_counter", "surface:bar_counter"),
+    ],
+    "bedroom": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "nightstand", "surface:nightstand"),
+        ("candle", "desk", "surface:desk"),
+    ],
+    "kitchen": [
+        ("torch_sconce", "always", "doorway"),
+        ("fireplace_light", "cooking_fire", "item:cooking_fire"),
+        ("candle", "table", "surface:table"),
+    ],
+    "blacksmith": [
+        ("torch_sconce", "always", "doorway"),
+        ("fireplace_light", "forge", "item:forge"),
+        ("brazier_light", "always", "wall_supplement"),
+    ],
+    "library": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "desk", "surface:desk"),
+        ("candle", "always", "wall_supplement"),
+    ],
+    "chapel": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "altar", "surface:altar"),
+        ("candle", "candelabra", "item:candelabra"),
+        ("chandelier_light", "always", "ceiling_center"),
+    ],
+    "throne_room": [
+        ("torch_sconce", "always", "doorway"),
+        ("brazier_light", "brazier", "item:brazier"),
+        ("chandelier_light", "always", "ceiling_center"),
+    ],
+    "smithy": [
+        ("torch_sconce", "always", "doorway"),
+        ("fireplace_light", "forge", "item:forge"),
+        ("brazier_light", "always", "wall_supplement"),
+    ],
+    "great_hall": [
+        ("torch_sconce", "always", "doorway"),
+        ("chandelier_light", "chandelier", "item:chandelier"),
+        ("fireplace_light", "fireplace", "item:fireplace"),
+        ("candle", "long_table", "surface:long_table"),
+    ],
+    "dining_hall": [
+        ("torch_sconce", "always", "doorway"),
+        ("chandelier_light", "chandelier", "item:chandelier"),
+        ("fireplace_light", "fireplace", "item:fireplace"),
+        ("candle", "long_table", "surface:long_table"),
+    ],
+    "war_room": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "large_table", "surface:large_table"),
+        ("candle", "candelabra", "item:candelabra"),
+    ],
+    "alchemy_lab": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "workbench", "surface:workbench"),
+        ("brazier_light", "cauldron", "item:cauldron"),
+    ],
+    "crypt": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "candelabra", "item:candelabra"),
+        ("candle", "altar", "surface:altar"),
+    ],
+    "storage": [
+        ("torch_sconce", "always", "doorway"),
+        ("torch_sconce", "always", "wall_supplement"),
+    ],
+    "barracks": [
+        ("torch_sconce", "always", "doorway"),
+        ("torch_sconce", "always", "wall_supplement"),
+    ],
+    "guard_post": [
+        ("torch_sconce", "always", "doorway"),
+        ("brazier_light", "brazier", "item:brazier"),
+    ],
+    "dungeon_cell": [
+        ("torch_sconce", "always", "doorway"),
+    ],
+    "armory": [
+        ("torch_sconce", "always", "doorway"),
+        ("torch_sconce", "always", "wall_supplement"),
+    ],
+    "study": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "desk", "surface:desk"),
+        ("candle", "candelabra", "item:candelabra"),
+    ],
+    "shrine_room": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "altar", "surface:altar"),
+        ("candle", "candelabra", "item:candelabra"),
+    ],
+    "torture_chamber": [
+        ("torch_sconce", "always", "doorway"),
+        ("brazier_light", "brazier", "item:brazier"),
+    ],
+    "treasury": [
+        ("torch_sconce", "always", "doorway"),
+        ("chandelier_light", "chandelier", "item:chandelier"),
+    ],
+    "guard_barracks": [
+        ("torch_sconce", "always", "doorway"),
+        ("torch_sconce", "always", "wall_supplement"),
+    ],
+}
+
+
+def generate_lighting_layout(
+    room_type: str,
+    width: float,
+    depth: float,
+    height: float = 3.0,
+    furniture_items: Optional[list[dict]] = None,
+    door_positions: Optional[list[tuple[float, float]]] = None,
+    seed: int = 0,
+) -> list[dict]:
+    """Generate light source placement for a room.
+
+    Returns list of light source dicts with:
+        type, position (x,y,z), light_type, color_temperature, radius, intensity
+
+    Guarantees minimum 2 light sources per room.
+    All color temperatures in 2700-3500K range.
+    """
+    rng = random.Random(seed + 7777)  # offset from furniture/clutter seeds
+    if furniture_items is None:
+        furniture_items = []
+    if door_positions is None:
+        # Default: door at center of front wall
+        door_positions = [(width / 2, 0.0)]
+
+    schema = LIGHTING_SCHEMAS.get(room_type, [
+        ("torch_sconce", "always", "doorway"),
+        ("torch_sconce", "always", "wall_supplement"),
+    ])
+
+    # Build furniture lookup: type -> list of positions
+    furn_lookup: dict[str, list[dict]] = {}
+    for furn in furniture_items:
+        ftype = furn["type"]
+        if ftype not in furn_lookup:
+            furn_lookup[ftype] = []
+        furn_lookup[ftype].append(furn)
+
+    lights: list[dict] = []
+
+    for light_type_name, condition, pos_rule in schema:
+        # Check condition
+        if condition != "always" and condition not in furn_lookup:
+            continue
+
+        light_def = LIGHT_TYPES.get(light_type_name, (3000, 3.0, 1.0))
+        color_temp, radius, intensity = light_def
+
+        if pos_rule == "doorway":
+            # Place torches at each doorway (1.6m height, both sides)
+            for dx, dy in door_positions:
+                # Left side of door
+                lx = max(0.3, dx - 0.6)
+                lights.append(_make_light(
+                    light_type_name, lx, dy + 0.1, 1.6,
+                    color_temp, radius, intensity,
+                ))
+                # Right side of door
+                rx = min(width - 0.3, dx + 0.6)
+                lights.append(_make_light(
+                    light_type_name, rx, dy + 0.1, 1.6,
+                    color_temp, radius, intensity,
+                ))
+
+        elif pos_rule.startswith("surface:"):
+            # Place light on top of furniture surface
+            target = pos_rule.split(":")[1]
+            targets = furn_lookup.get(target, [])
+            for t in targets[:2]:  # max 2 per surface type
+                tx, ty, tz = t["position"]
+                tsz = t["scale"][2]
+                lights.append(_make_light(
+                    light_type_name, tx, ty, tsz + 0.05,
+                    color_temp, radius, intensity,
+                ))
+
+        elif pos_rule.startswith("item:"):
+            # Place light at item position (emissive source)
+            target = pos_rule.split(":")[1]
+            targets = furn_lookup.get(target, [])
+            for t in targets[:2]:
+                tx, ty, tz = t["position"]
+                tsz = t["scale"][2]
+                lights.append(_make_light(
+                    light_type_name, tx, ty, tsz * 0.6,
+                    color_temp, radius, intensity,
+                ))
+
+        elif pos_rule == "ceiling_center":
+            # Chandelier at ceiling center (only if room > 8m in any dim)
+            if max(width, depth) > 8.0 or light_type_name == "chandelier_light":
+                lights.append(_make_light(
+                    light_type_name, width / 2, depth / 2, height - 0.3,
+                    color_temp, radius, intensity,
+                ))
+
+        elif pos_rule == "wall_supplement":
+            # Add supplemental torches on side walls
+            wall_y = depth / 2
+            lights.append(_make_light(
+                light_type_name, 0.2, wall_y, 1.6,
+                color_temp, radius, intensity,
+            ))
+
+    # Ensure minimum 2 light sources
+    while len(lights) < 2:
+        # Add wall torches as fallback
+        torch_def = LIGHT_TYPES["torch_sconce"]
+        supplement_x = width - 0.2 if len(lights) % 2 == 0 else 0.2
+        supplement_y = depth * rng.uniform(0.3, 0.7)
+        lights.append(_make_light(
+            "torch_sconce", supplement_x, supplement_y, 1.6,
+            torch_def[0], torch_def[1], torch_def[2],
+        ))
+
+    return lights
+
+
+def _make_light(
+    light_type: str,
+    x: float, y: float, z: float,
+    color_temperature: int,
+    radius: float,
+    intensity: float,
+) -> dict:
+    """Create a light source dict."""
+    return {
+        "type": light_type,
+        "position": [round(x, 4), round(y, 4), round(z, 4)],
+        "light_type": light_type,
+        "color_temperature": color_temperature,
+        "radius": round(radius, 2),
+        "intensity": round(intensity, 2),
+    }
 
 
 # ---------------------------------------------------------------------------
