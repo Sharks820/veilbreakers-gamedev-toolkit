@@ -8,7 +8,11 @@ Provides:
 - evaluate_building_grammar(): grammar-rule building generation
 - generate_castle_spec/tower_spec/bridge_spec/fortress_spec(): specialized templates
 - apply_ruins_damage(): damage existing building specs
-- generate_interior_layout(): furniture placement for room types
+- ROOM_SPATIAL_GRAPHS: per-room spatial relationship definitions (MESH-03)
+- ROOM_ACTIVITY_ZONES: per-room functional zone partitions (MESH-03)
+- generate_interior_layout(): spatially-aware furniture placement for room types
+- generate_clutter_layout(): Poisson disk decorative prop scatter (MESH-03)
+- generate_lighting_layout(): intelligent light source placement (MESH-03)
 - MODULAR_CATALOG + generate_modular_pieces(): snap-together architecture kit
 - FURNITURE_SCALE_REFERENCE: real-world scale constraints for validation (WORLD-07)
 - expanded room set covering taverns, smithies, storage halls, barracks,
@@ -553,999 +557,6 @@ def plan_modular_facade(
 
 
 # ---------------------------------------------------------------------------
-# Detail geometry generation -- wires building_quality AAA generators
-# ---------------------------------------------------------------------------
-
-
-def _mesh_spec_to_op(
-    mesh: dict,
-    *,
-    position: tuple[float, float, float],
-    detail_type: str,
-    material: str = "stone",
-) -> dict:
-    """Convert a building_quality MeshSpec dict into a BuildingSpec operation.
-
-    Offsets all vertices by *position* so the detail sits at the correct
-    world-space location within the building.
-    """
-    px, py, pz = position
-    offset_verts = [
-        (v[0] + px, v[1] + py, v[2] + pz)
-        for v in mesh["vertices"]
-    ]
-    return {
-        "type": "mesh_spec",
-        "vertices": offset_verts,
-        "faces": mesh["faces"],
-        "material": material,
-        "role": "detail",
-        "detail_type": detail_type,
-    }
-
-
-def _generate_detail_operations(
-    details: list[str],
-    width: float,
-    depth: float,
-    roof_z: float,
-    base_z: float,
-    floors: int,
-    floor_height: float,
-    wall_thickness: float,
-    style: str,
-    rng: random.Random,
-) -> list[dict]:
-    """Generate AAA-quality detail geometry for a building.
-
-    Uses building_quality generators to produce real geometry instead of
-    placeholder 0.5m cubes.  Each detail type maps to a specific generator
-    or inline geometry function.
-
-    Returns a list of BuildingSpec operations (type='mesh_spec' with full
-    vertex/face data, or standard box/cylinder ops).
-    """
-    from .building_quality import (
-        generate_chimney,
-        generate_gothic_window,
-        generate_battlements,
-        generate_archway,
-    )
-
-    ops: list[dict] = []
-
-    for detail_name in details:
-
-        if detail_name == "chimney":
-            # Place chimney on roof near back wall
-            cx = rng.uniform(width * 0.3, width * 0.7)
-            cy = rng.uniform(depth * 0.5, depth * 0.8)
-            chimney_style = "stone" if style in ("gothic", "fortress") else "brick"
-            if style == "rustic":
-                chimney_style = "rustic"
-            mesh = generate_chimney(
-                height=rng.uniform(1.5, 2.5),
-                style=chimney_style,
-                chimney_width=rng.uniform(0.4, 0.6),
-                chimney_depth=rng.uniform(0.4, 0.6),
-                seed=rng.randint(0, 99999),
-            )
-            ops.append(_mesh_spec_to_op(
-                mesh, position=(cx, cy, roof_z),
-                detail_type="chimney", material="stone_dark",
-            ))
-
-        elif detail_name == "timber_frame":
-            # Add timber frame overlay on front and back walls per floor
-            for floor_idx in range(floors):
-                floor_z = base_z + floor_idx * floor_height
-                # Front wall timber overlay
-                _add_timber_frame_detail(
-                    ops, 0.0, 0.0, floor_z,
-                    width, floor_height, wall_thickness,
-                    rng, "front",
-                )
-                # Back wall
-                _add_timber_frame_detail(
-                    ops, 0.0, depth - wall_thickness, floor_z,
-                    width, floor_height, wall_thickness,
-                    rng, "back",
-                )
-
-        elif detail_name == "window_boxes":
-            # Planter boxes under windows on front wall
-            bay_count = max(2, int(width / 2.0))
-            spacing = width / (bay_count + 1)
-            for bi in range(bay_count):
-                bx = spacing * (bi + 1) - 0.3
-                bz = base_z + floor_height * 0.35
-                _add_window_box_detail(ops, bx, -0.15, bz, rng)
-
-        elif detail_name == "flying_buttress":
-            # Gothic flying buttresses on side walls
-            butt_count = max(2, int(depth / 3.0))
-            spacing = depth / (butt_count + 1)
-            total_h = base_z + floors * floor_height
-            for bi in range(butt_count):
-                by = spacing * (bi + 1)
-                # Left side buttress
-                _add_flying_buttress_detail(
-                    ops, -0.1, by, base_z, total_h, rng,
-                )
-                # Right side buttress
-                _add_flying_buttress_detail(
-                    ops, width + 0.1, by, base_z, total_h, rng,
-                )
-
-        elif detail_name == "gargoyle":
-            # Gargoyles perched on corners at roof line
-            gargoyle_positions = [
-                (0.0, 0.0), (width, 0.0),
-                (0.0, depth), (width, depth),
-            ]
-            for gx, gy in gargoyle_positions:
-                if rng.random() < 0.6:  # not every corner
-                    _add_gargoyle_detail(ops, gx, gy, roof_z, rng)
-
-        elif detail_name == "rose_window":
-            # Large circular window on front facade (upper floor)
-            cx = width / 2.0
-            cz = roof_z - floor_height * 0.4
-            mesh = generate_gothic_window(
-                width=min(1.5, width * 0.25),
-                height=min(1.5, width * 0.25),
-                style="rose_window",
-                tracery=True,
-                seed=rng.randint(0, 99999),
-            )
-            ops.append(_mesh_spec_to_op(
-                mesh, position=(cx, -0.05, cz),
-                detail_type="rose_window", material="stone_carved",
-            ))
-
-        elif detail_name == "spire":
-            # Pointed spire on roof
-            cx = width / 2.0
-            cy = depth / 2.0
-            _add_spire_detail(ops, cx, cy, roof_z, rng)
-
-        elif detail_name == "battlement":
-            # Crenellated parapet on fortress roofline
-            mesh = generate_battlements(
-                wall_length=width,
-                wall_height=1.2,
-                wall_thickness=wall_thickness * 0.8,
-                merlon_style=rng.choice(["squared", "swallow_tail"]),
-                has_machicolations=True,
-                has_arrow_loops=False,
-                seed=rng.randint(0, 99999),
-            )
-            # Front parapet
-            ops.append(_mesh_spec_to_op(
-                mesh, position=(0.0, 0.0, roof_z),
-                detail_type="battlement", material="stone_fortified",
-            ))
-            # Back parapet
-            ops.append(_mesh_spec_to_op(
-                mesh, position=(0.0, depth - wall_thickness, roof_z),
-                detail_type="battlement", material="stone_fortified",
-            ))
-
-        elif detail_name == "machicolation":
-            # Machicolation corbels along front wall top
-            corbel_count = max(3, int(width / 1.5))
-            spacing = width / (corbel_count + 1)
-            for ci in range(corbel_count):
-                cx = spacing * (ci + 1)
-                cz = roof_z - 0.3
-                _add_machicolation_detail(ops, cx, -0.1, cz, rng)
-
-        elif detail_name == "murder_hole":
-            # Murder hole above door (ground floor ceiling)
-            door_cx = width / 2.0
-            mh_z = base_z + floor_height - 0.1
-            ops.append({
-                "type": "box",
-                "position": [door_cx - 0.3, wall_thickness * 0.2, mh_z],
-                "size": [0.6, wall_thickness * 0.6, 0.15],
-                "material": "stone_dark",
-                "role": "detail",
-                "detail_type": "murder_hole",
-            })
-
-        elif detail_name == "vine_growth":
-            # Organic vines climbing walls
-            vine_count = rng.randint(2, 5)
-            for _ in range(vine_count):
-                vx = rng.uniform(0.2, width - 0.2)
-                vy = rng.choice([0.0, depth])
-                max_z = base_z + floors * floor_height
-                _add_vine_detail(ops, vx, vy, base_z, max_z, rng)
-
-        elif detail_name == "moss_patches":
-            # Moss patches at base and joints
-            patch_count = rng.randint(3, 8)
-            for _ in range(patch_count):
-                px = rng.uniform(0.0, width)
-                py = rng.choice([0.0, depth])
-                pz = rng.uniform(0.0, base_z + floor_height * 0.3)
-                ops.append({
-                    "type": "box",
-                    "position": [px - 0.15, py - 0.02, pz],
-                    "size": [rng.uniform(0.2, 0.5), 0.03, rng.uniform(0.1, 0.3)],
-                    "material": "moss",
-                    "role": "detail",
-                    "detail_type": "moss_patch",
-                })
-
-        elif detail_name == "root_buttress":
-            # Organic root supports at base
-            root_count = rng.randint(2, 4)
-            for _ in range(root_count):
-                rx = rng.uniform(0.3, width - 0.3)
-                ry = rng.choice([0.0, depth])
-                _add_root_detail(ops, rx, ry, base_z, rng)
-
-        elif detail_name == "woodpile":
-            # Stacked logs against a wall
-            wpx = rng.uniform(0.3, width - 1.0)
-            wpy = rng.choice([-0.3, depth + 0.1])
-            _add_woodpile_detail(ops, wpx, wpy, base_z, rng)
-
-        else:
-            # Fallback: small architectural accent box (better than 0.5m cube)
-            detail_x = rng.uniform(0.3, width - 0.3)
-            detail_y = rng.uniform(0.3, depth - 0.3)
-            ops.append({
-                "type": "box",
-                "position": [detail_x, detail_y, roof_z],
-                "size": [0.3, 0.3, rng.uniform(0.2, 0.6)],
-                "material": detail_name,
-                "role": "detail",
-                "detail_type": detail_name,
-            })
-
-    return ops
-
-
-def _add_timber_frame_detail(
-    ops: list[dict],
-    x0: float, y0: float, z0: float,
-    width: float, height: float, thickness: float,
-    rng: random.Random, wall_name: str,
-) -> None:
-    """Add half-timber frame beams to a wall section."""
-    beam_w = 0.08
-    beam_d = 0.04  # protrusion
-    y_off = -beam_d if wall_name == "front" else thickness
-
-    # Vertical posts at 1/3 intervals
-    post_count = max(2, int(width / 2.0))
-    spacing = width / post_count
-    for pi in range(post_count + 1):
-        px = x0 + pi * spacing
-        ops.append({
-            "type": "box",
-            "position": [px - beam_w / 2, y0 + y_off, z0],
-            "size": [beam_w, beam_d, height],
-            "material": "timber",
-            "role": "detail",
-            "detail_type": "timber_post",
-        })
-
-    # Horizontal rails at top and mid
-    for frac in [0.0, 0.5, 1.0]:
-        rz = z0 + frac * height - beam_w / 2
-        ops.append({
-            "type": "box",
-            "position": [x0, y0 + y_off, max(z0, rz)],
-            "size": [width, beam_d, beam_w],
-            "material": "timber",
-            "role": "detail",
-            "detail_type": "timber_rail",
-        })
-
-    # Diagonal braces in each bay (upper half)
-    for pi in range(post_count):
-        bx = x0 + pi * spacing + spacing * 0.1
-        bz = z0 + height * 0.5
-        ops.append({
-            "type": "box",
-            "position": [bx, y0 + y_off, bz],
-            "size": [spacing * 0.8, beam_d, beam_w],
-            "material": "timber",
-            "role": "detail",
-            "detail_type": "timber_brace",
-        })
-
-
-def _add_window_box_detail(
-    ops: list[dict],
-    x: float, y: float, z: float,
-    rng: random.Random,
-) -> None:
-    """Add a planter box with vegetation cluster."""
-    box_w = rng.uniform(0.5, 0.7)
-    box_h = 0.12
-    box_d = 0.15
-    # Planter box
-    ops.append({
-        "type": "box",
-        "position": [x, y, z],
-        "size": [box_w, box_d, box_h],
-        "material": "wood_planks",
-        "role": "detail",
-        "detail_type": "window_box",
-    })
-    # Vegetation cluster (small rounded mass above)
-    ops.append({
-        "type": "box",
-        "position": [x + 0.05, y - 0.02, z + box_h],
-        "size": [box_w - 0.1, box_d + 0.04, rng.uniform(0.08, 0.15)],
-        "material": "vegetation",
-        "role": "detail",
-        "detail_type": "window_box_plants",
-    })
-
-
-def _add_flying_buttress_detail(
-    ops: list[dict],
-    x: float, y: float, z_base: float,
-    building_height: float,
-    rng: random.Random,
-) -> None:
-    """Add a gothic flying buttress with pier and arch strut."""
-    pier_w = rng.uniform(0.25, 0.4)
-    pier_d = rng.uniform(0.25, 0.35)
-    pier_h = building_height * rng.uniform(0.7, 0.85)
-    strut_h = 0.15
-
-    # Pier (vertical pillar)
-    sign = -1.0 if x < 0.5 else 1.0
-    pier_x = x + sign * 0.5
-    ops.append({
-        "type": "box",
-        "position": [pier_x - pier_w / 2, y - pier_d / 2, z_base],
-        "size": [pier_w, pier_d, pier_h],
-        "material": "stone_grey",
-        "role": "detail",
-        "detail_type": "buttress_pier",
-    })
-    # Pier cap (wider at top)
-    ops.append({
-        "type": "box",
-        "position": [pier_x - pier_w * 0.7, y - pier_d * 0.7, z_base + pier_h],
-        "size": [pier_w * 1.4, pier_d * 1.4, 0.1],
-        "material": "stone_grey",
-        "role": "detail",
-        "detail_type": "buttress_cap",
-    })
-    # Angled strut connecting pier top to wall
-    strut_w = pier_w * 0.6
-    ops.append({
-        "type": "box",
-        "position": [min(x, pier_x) - 0.05, y - strut_w / 2,
-                      z_base + pier_h * 0.6],
-        "size": [abs(pier_x - x) + 0.1, strut_w, strut_h],
-        "material": "stone_grey",
-        "role": "detail",
-        "detail_type": "buttress_strut",
-    })
-    # Pinnacle on top of pier
-    pin_s = pier_w * 0.4
-    ops.append({
-        "type": "box",
-        "position": [pier_x - pin_s / 2, y - pin_s / 2,
-                      z_base + pier_h + 0.1],
-        "size": [pin_s, pin_s, rng.uniform(0.3, 0.5)],
-        "material": "stone_grey",
-        "role": "detail",
-        "detail_type": "buttress_pinnacle",
-    })
-
-
-def _add_gargoyle_detail(
-    ops: list[dict],
-    x: float, y: float, z: float,
-    rng: random.Random,
-) -> None:
-    """Add a gargoyle creature perched on a corner ledge."""
-    # Base/perch (corbel)
-    perch_w = 0.25
-    perch_d = 0.3
-    perch_h = 0.08
-    # Direction: outward from corner
-    dx = -0.15 if x < 1.0 else 0.15
-    dy = -0.15 if y < 1.0 else 0.15
-    ops.append({
-        "type": "box",
-        "position": [x + dx - perch_w / 2, y + dy - perch_d / 2, z - perch_h],
-        "size": [perch_w, perch_d, perch_h],
-        "material": "stone_carved",
-        "role": "detail",
-        "detail_type": "gargoyle_perch",
-    })
-    # Body (hunched creature torso)
-    body_w = 0.18
-    body_d = 0.22
-    body_h = 0.2
-    ops.append({
-        "type": "box",
-        "position": [x + dx - body_w / 2, y + dy - body_d / 2, z],
-        "size": [body_w, body_d, body_h],
-        "material": "stone_carved",
-        "role": "detail",
-        "detail_type": "gargoyle_body",
-    })
-    # Head (smaller, forward-facing)
-    head_s = 0.1
-    ops.append({
-        "type": "box",
-        "position": [x + dx - head_s / 2, y + dy * 1.5 - head_s / 2, z + body_h],
-        "size": [head_s, head_s * 1.2, head_s],
-        "material": "stone_carved",
-        "role": "detail",
-        "detail_type": "gargoyle_head",
-    })
-    # Wings (two angled plates)
-    wing_w = 0.15
-    wing_h = 0.15
-    wing_d = 0.03
-    for wing_side in [-1, 1]:
-        ops.append({
-            "type": "box",
-            "position": [x + dx + wing_side * body_w * 0.5, y + dy,
-                          z + body_h * 0.3],
-            "size": [wing_w, wing_d, wing_h],
-            "material": "stone_carved",
-            "role": "detail",
-            "detail_type": "gargoyle_wing",
-        })
-
-
-def _add_spire_detail(
-    ops: list[dict],
-    cx: float, cy: float, z: float,
-    rng: random.Random,
-) -> None:
-    """Add a pointed spire (octagonal tapered tower)."""
-    spire_h = rng.uniform(2.0, 4.0)
-    base_r = rng.uniform(0.3, 0.5)
-    # Build as stacked octagonal rings shrinking upward
-    segments = 8
-    rings = 6
-    for ri in range(rings):
-        frac = ri / rings
-        next_frac = (ri + 1) / rings
-        r0 = base_r * (1.0 - frac * 0.9)
-        r1 = base_r * (1.0 - next_frac * 0.9)
-        z0 = z + frac * spire_h
-        ring_h = spire_h / rings
-        # Approximate each ring as a box (octagon approximation)
-        ops.append({
-            "type": "box",
-            "position": [cx - r0, cy - r0, z0],
-            "size": [r0 * 2, r0 * 2, ring_h],
-            "material": "slate",
-            "role": "detail",
-            "detail_type": "spire_ring",
-        })
-    # Finial at top
-    ops.append({
-        "type": "box",
-        "position": [cx - 0.03, cy - 0.03, z + spire_h],
-        "size": [0.06, 0.06, 0.2],
-        "material": "iron",
-        "role": "detail",
-        "detail_type": "spire_finial",
-    })
-
-
-def _add_machicolation_detail(
-    ops: list[dict],
-    x: float, y: float, z: float,
-    rng: random.Random,
-) -> None:
-    """Add a single machicolation corbel."""
-    corbel_w = 0.2
-    corbel_d = 0.25
-    corbel_h = 0.15
-    # Corbel bracket
-    ops.append({
-        "type": "box",
-        "position": [x - corbel_w / 2, y, z],
-        "size": [corbel_w, corbel_d, corbel_h],
-        "material": "stone_fortified",
-        "role": "detail",
-        "detail_type": "machicolation_corbel",
-    })
-    # Platform on top
-    ops.append({
-        "type": "box",
-        "position": [x - corbel_w * 0.7, y - 0.05, z + corbel_h],
-        "size": [corbel_w * 1.4, corbel_d + 0.1, 0.08],
-        "material": "stone_fortified",
-        "role": "detail",
-        "detail_type": "machicolation_platform",
-    })
-
-
-def _add_vine_detail(
-    ops: list[dict],
-    x: float, y: float, z_base: float, z_top: float,
-    rng: random.Random,
-) -> None:
-    """Add climbing vine geometry along a wall."""
-    vine_w = 0.04
-    vine_d = 0.03
-    height = (z_top - z_base) * rng.uniform(0.3, 0.8)
-    # Main stem
-    ops.append({
-        "type": "box",
-        "position": [x - vine_w / 2, y - vine_d, z_base],
-        "size": [vine_w, vine_d, height],
-        "material": "vine",
-        "role": "detail",
-        "detail_type": "vine_stem",
-    })
-    # Leaf clusters along stem
-    leaf_count = max(2, int(height / 0.4))
-    for li in range(leaf_count):
-        lz = z_base + (li + 0.5) * height / leaf_count
-        lx_off = rng.uniform(-0.12, 0.12)
-        ops.append({
-            "type": "box",
-            "position": [x + lx_off - 0.06, y - vine_d - 0.01, lz],
-            "size": [0.12, 0.02, rng.uniform(0.06, 0.12)],
-            "material": "leaf",
-            "role": "detail",
-            "detail_type": "vine_leaves",
-        })
-
-
-def _add_root_detail(
-    ops: list[dict],
-    x: float, y: float, z_base: float,
-    rng: random.Random,
-) -> None:
-    """Add an organic root/tendril at the building base."""
-    root_w = rng.uniform(0.06, 0.15)
-    root_d = rng.uniform(0.1, 0.2)
-    root_h = rng.uniform(0.3, 0.8)
-    dy = -root_d if y < 0.5 else 0.0
-    ops.append({
-        "type": "box",
-        "position": [x - root_w / 2, y + dy, z_base],
-        "size": [root_w, root_d, root_h],
-        "material": "root",
-        "role": "detail",
-        "detail_type": "root_support",
-    })
-    # Root tip curving outward
-    ops.append({
-        "type": "box",
-        "position": [x - root_w * 0.3, y + dy - 0.05, z_base],
-        "size": [root_w * 0.6, root_d + 0.1, root_w],
-        "material": "root",
-        "role": "detail",
-        "detail_type": "root_tip",
-    })
-
-
-def _add_woodpile_detail(
-    ops: list[dict],
-    x: float, y: float, z_base: float,
-    rng: random.Random,
-) -> None:
-    """Add a stack of logs against a wall."""
-    log_count = rng.randint(4, 8)
-    log_r = 0.06
-    stack_w = rng.uniform(0.6, 1.0)
-    for li in range(log_count):
-        row = li // 3
-        col = li % 3
-        lx = x + col * (log_r * 2.2)
-        lz = z_base + row * (log_r * 2.1)
-        ops.append({
-            "type": "box",
-            "position": [lx, y, lz],
-            "size": [log_r * 2, 0.4, log_r * 2],
-            "material": "wood_log",
-            "role": "detail",
-            "detail_type": "woodpile_log",
-        })
-
-
-# ---------------------------------------------------------------------------
-# Roof generation -- wires building_quality.generate_roof()
-# ---------------------------------------------------------------------------
-
-# Mapping from STYLE_CONFIGS roof type to building_quality roof style
-_ROOF_TYPE_MAP: dict[str, str] = {
-    "gabled": "gable",
-    "pointed": "hip",
-    "flat": "flat",
-    "domed": "conical_tower",
-    "mansard": "mansard",
-    "gambrel": "gambrel",
-    "shed": "shed",
-}
-
-# Mapping from STYLE_CONFIGS roof material to building_quality material
-_ROOF_MATERIAL_MAP: dict[str, str] = {
-    "thatch": "thatch",
-    "thatch_worn": "thatch",
-    "slate": "slate",
-    "stone_parapet": "tile",
-    "living_thatch": "thatch",
-    "tile": "tile",
-    "shingle": "shingle",
-}
-
-
-def _generate_roof_operations(
-    width: float,
-    depth: float,
-    roof_z: float,
-    roof_cfg: dict,
-    style: str,
-    rng: random.Random,
-) -> list[dict]:
-    """Generate AAA roof geometry using building_quality.generate_roof().
-
-    Produces a mesh_spec operation with individual tiles/shingles, ridge tiles,
-    fascia, gable ends, and rafters -- instead of a flat box placeholder.
-
-    Falls back to simple box for unknown roof types.
-    """
-    from .building_quality import generate_roof
-
-    roof_type = roof_cfg.get("type", "gabled")
-    overhang = roof_cfg.get("overhang", 0.3)
-    pitch = roof_cfg.get("pitch", 35)
-    material_key = roof_cfg.get("material", "tile")
-
-    # Map to building_quality parameters
-    bq_style = _ROOF_TYPE_MAP.get(roof_type, "gable")
-    bq_material = _ROOF_MATERIAL_MAP.get(material_key, "tile")
-
-    # Handle domed specially -- keep as cylinder for now
-    if roof_type == "domed":
-        return [{
-            "type": "cylinder",
-            "position": [width / 2, depth / 2, roof_z],
-            "radius": min(width, depth) / 2,
-            "height": min(width, depth) / 3,
-            "segments": 16,
-            "material": material_key,
-            "role": "roof",
-            "roof_type": "domed",
-        }]
-
-    # Generate AAA roof mesh
-    mesh = generate_roof(
-        width=width,
-        depth=depth,
-        pitch=pitch,
-        style=bq_style,
-        material=bq_material,
-        overhang=overhang,
-        seed=rng.randint(0, 99999),
-    )
-
-    # Offset roof vertices to sit at roof_z height, centered on building
-    # generate_roof() produces geometry centered at origin, x spans -half_w to half_w
-    # We need to shift: x += width/2 (center to corner-origin), z += roof_z
-    ops: list[dict] = []
-    offset_verts = [
-        (v[0] + width / 2.0, v[1] + depth / 2.0, v[2] + roof_z)
-        for v in mesh["vertices"]
-    ]
-
-    ops.append({
-        "type": "mesh_spec",
-        "vertices": offset_verts,
-        "faces": mesh["faces"],
-        "material": material_key,
-        "role": "roof",
-        "roof_type": bq_style,
-        "detail_type": "roof_tiles",
-    })
-
-    # Also keep a simplified roof bounding box for collision/raycasting reference
-    ridge_height = math.tan(math.radians(pitch)) * (width / 2 + overhang)
-    ops.append({
-        "type": "box",
-        "position": [-overhang, -overhang, roof_z],
-        "size": [width + 2 * overhang, depth + 2 * overhang, 0.05],
-        "material": material_key,
-        "role": "roof_base",
-        "roof_type": bq_style,
-        "ridge_height": ridge_height,
-    })
-
-    return ops
-
-
-# ---------------------------------------------------------------------------
-# CGA-style facade split grammar
-# ---------------------------------------------------------------------------
-
-# Bay fill types with their probability weights per floor context
-_BAY_FILL_TYPES = {
-    "ground": {
-        "window": 0.4,
-        "door": 0.15,
-        "wall_panel": 0.3,
-        "balcony": 0.0,
-        "archway": 0.15,
-    },
-    "upper": {
-        "window": 0.55,
-        "door": 0.0,
-        "wall_panel": 0.2,
-        "balcony": 0.15,
-        "archway": 0.1,
-    },
-    "top": {
-        "window": 0.45,
-        "door": 0.0,
-        "wall_panel": 0.25,
-        "balcony": 0.2,
-        "archway": 0.1,
-    },
-}
-
-# Style overrides for bay fill probabilities
-_STYLE_BAY_OVERRIDES: dict[str, dict[str, dict[str, float]]] = {
-    "fortress": {
-        "ground": {"window": 0.2, "door": 0.1, "wall_panel": 0.5, "balcony": 0.0, "archway": 0.2},
-        "upper": {"window": 0.3, "door": 0.0, "wall_panel": 0.5, "balcony": 0.0, "archway": 0.2},
-        "top": {"window": 0.2, "door": 0.0, "wall_panel": 0.4, "balcony": 0.0, "archway": 0.4},
-    },
-    "gothic": {
-        "ground": {"window": 0.5, "door": 0.15, "wall_panel": 0.15, "balcony": 0.0, "archway": 0.2},
-        "upper": {"window": 0.65, "door": 0.0, "wall_panel": 0.1, "balcony": 0.05, "archway": 0.2},
-        "top": {"window": 0.5, "door": 0.0, "wall_panel": 0.1, "balcony": 0.1, "archway": 0.3},
-    },
-    "rustic": {
-        "ground": {"window": 0.3, "door": 0.2, "wall_panel": 0.5, "balcony": 0.0, "archway": 0.0},
-        "upper": {"window": 0.4, "door": 0.0, "wall_panel": 0.5, "balcony": 0.1, "archway": 0.0},
-        "top": {"window": 0.3, "door": 0.0, "wall_panel": 0.6, "balcony": 0.1, "archway": 0.0},
-    },
-    "organic": {
-        "ground": {"window": 0.35, "door": 0.15, "wall_panel": 0.4, "balcony": 0.0, "archway": 0.1},
-        "upper": {"window": 0.45, "door": 0.0, "wall_panel": 0.35, "balcony": 0.1, "archway": 0.1},
-        "top": {"window": 0.35, "door": 0.0, "wall_panel": 0.45, "balcony": 0.1, "archway": 0.1},
-    },
-}
-
-
-def _weighted_choice(options: dict[str, float], rng: random.Random) -> str:
-    """Pick a key from *options* dict with weighted probabilities."""
-    items = list(options.items())
-    total = sum(w for _, w in items)
-    if total <= 0:
-        return items[0][0]
-    r = rng.uniform(0, total)
-    cumulative = 0.0
-    for key, weight in items:
-        cumulative += weight
-        if r <= cumulative:
-            return key
-    return items[-1][0]
-
-
-def _cga_facade_split(
-    *,
-    width: float,
-    depth: float,
-    floors: int,
-    base_z: float,
-    floor_height: float,
-    slab_thickness: float,
-    wall_thickness: float,
-    win_cfg: dict,
-    door_cfg: dict,
-    facade_rules: dict,
-    style: str,
-    rng: random.Random,
-) -> list[dict]:
-    """CGA-style recursive facade split grammar.
-
-    Pipeline: comp(faces) -> split(y, floors) -> split(x, bays) -> fill(rule)
-
-    For each wall face of the building:
-      1. Split vertically into floor bands
-      2. Split each floor band horizontally into bays
-      3. Fill each bay with a rule: window, door, wall_panel, balcony, archway
-      4. Corner bays are always solid (structural)
-      5. Ground floor gets at least one door on the front wall
-      6. Windows are aligned across floors (same column positions)
-
-    Returns list of BuildingSpec opening/detail operations.
-    """
-    ops: list[dict] = []
-
-    # Determine bay count per wall (randomized within style range)
-    base_bay = int(facade_rules.get("bay_divisor", 3))
-    bay_variation = rng.randint(-1, 1)
-    front_bays = max(2, base_bay + bay_variation)
-    back_bays = max(2, base_bay + rng.randint(-1, 0))
-    # Side walls get fewer bays
-    side_bays = max(2, base_bay - 1 + rng.randint(-1, 0))
-
-    # Randomize window dimensions within +/- 20%
-    win_w = win_cfg["width"] * rng.uniform(0.8, 1.2)
-    win_h = win_cfg["height"] * rng.uniform(0.8, 1.2)
-    win_style = win_cfg["style"]
-
-    # Get style-specific fill probabilities
-    style_fills = _STYLE_BAY_OVERRIDES.get(style, _BAY_FILL_TYPES)
-
-    # Pre-compute column positions for alignment across floors
-    # Each wall gets its own column grid
-    wall_configs = [
-        {"wall_idx": 0, "length": width, "bays": front_bays, "is_front": True},
-        {"wall_idx": 1, "length": width, "bays": back_bays, "is_front": False},
-        {"wall_idx": 2, "length": depth - 2 * wall_thickness, "bays": side_bays, "is_front": False},
-        {"wall_idx": 3, "length": depth - 2 * wall_thickness, "bays": side_bays, "is_front": False},
-    ]
-
-    # Track door placement -- ensure at least one on front wall
-    door_placed = False
-
-    for wc in wall_configs:
-        wall_idx = wc["wall_idx"]
-        wall_len = wc["length"]
-        n_bays = wc["bays"]
-        is_front = wc["is_front"]
-
-        if wall_len < 1.0:
-            continue
-
-        # Compute bay column positions (consistent across floors for alignment)
-        bay_width = wall_len / n_bays
-        bay_centers = [bay_width * (i + 0.5) for i in range(n_bays)]
-
-        # Select which bays are "fillable" (exclude corners)
-        fillable_bays = list(range(n_bays))
-        if n_bays >= 3:
-            # Corner bays are solid wall panels
-            fillable_bays = list(range(1, n_bays - 1))
-
-        # Pre-select a door bay on the front wall ground floor
-        door_bay_idx = -1
-        if is_front and not door_placed:
-            # Pick a bay near center for the door
-            center_bay = len(fillable_bays) // 2
-            if fillable_bays:
-                door_bay_idx = fillable_bays[center_bay]
-                # Allow off-center variation
-                if len(fillable_bays) >= 3:
-                    offset = rng.randint(-1, 1)
-                    clamped = max(0, min(len(fillable_bays) - 1, center_bay + offset))
-                    door_bay_idx = fillable_bays[clamped]
-
-        # Split(y, floors) -- iterate floor bands
-        for floor_idx in range(floors):
-            floor_z = base_z + floor_idx * (floor_height + slab_thickness)
-
-            # Determine floor context for fill rules
-            if floor_idx == 0:
-                floor_ctx = "ground"
-            elif floor_idx == floors - 1:
-                floor_ctx = "top"
-            else:
-                floor_ctx = "upper"
-
-            fill_probs = style_fills.get(floor_ctx, _BAY_FILL_TYPES[floor_ctx])
-
-            # Split(x, bays) -- iterate bay columns
-            for bay_idx in range(n_bays):
-                bay_x = bay_centers[bay_idx] - win_w / 2
-
-                # Corner bays: always solid panel (no opening)
-                if bay_idx not in fillable_bays:
-                    continue
-
-                # Ground floor front wall: place door in selected bay
-                if floor_idx == 0 and is_front and bay_idx == door_bay_idx:
-                    door_x = bay_centers[bay_idx] - door_cfg["width"] / 2
-                    ops.append({
-                        "type": "opening",
-                        "wall_index": wall_idx,
-                        "position": [door_x, 0.0],
-                        "size": [door_cfg["width"], door_cfg["height"]],
-                        "role": "door",
-                        "floor": floor_idx,
-                        "style": door_cfg["style"],
-                        "bay_index": bay_idx,
-                    })
-                    door_placed = True
-                    continue
-
-                # Fill rule selection
-                fill_type = _weighted_choice(fill_probs, rng)
-
-                if fill_type == "window":
-                    # Window at 35-45% wall height (slight per-bay variation)
-                    win_y_frac = rng.uniform(0.35, 0.45)
-                    win_y = floor_height * win_y_frac
-                    ops.append({
-                        "type": "opening",
-                        "wall_index": wall_idx,
-                        "position": [bay_x, win_y],
-                        "size": [win_w, win_h],
-                        "role": "window",
-                        "floor": floor_idx,
-                        "style": win_style,
-                        "bay_index": bay_idx,
-                    })
-
-                elif fill_type == "balcony":
-                    # Balcony: window + projecting platform
-                    win_y = floor_height * 0.15  # lower for balcony access
-                    ops.append({
-                        "type": "opening",
-                        "wall_index": wall_idx,
-                        "position": [bay_x, win_y],
-                        "size": [win_w * 1.2, win_h * 1.1],
-                        "role": "window",
-                        "floor": floor_idx,
-                        "style": win_style,
-                        "bay_index": bay_idx,
-                    })
-
-                elif fill_type == "archway":
-                    # Archway: tall opening with arch profile
-                    arch_w = win_w * 1.1
-                    arch_h = win_h * 1.3
-                    ops.append({
-                        "type": "opening",
-                        "wall_index": wall_idx,
-                        "position": [bay_centers[bay_idx] - arch_w / 2, 0.0],
-                        "size": [arch_w, arch_h],
-                        "role": "window",
-                        "floor": floor_idx,
-                        "style": "pointed_arch" if style == "gothic" else "arched",
-                        "bay_index": bay_idx,
-                    })
-
-                elif fill_type == "door" and floor_idx == 0:
-                    # Secondary door (side/back entrance)
-                    d_w = door_cfg["width"] * rng.uniform(0.8, 1.0)
-                    d_h = door_cfg["height"] * rng.uniform(0.85, 1.0)
-                    ops.append({
-                        "type": "opening",
-                        "wall_index": wall_idx,
-                        "position": [bay_centers[bay_idx] - d_w / 2, 0.0],
-                        "size": [d_w, d_h],
-                        "role": "door",
-                        "floor": floor_idx,
-                        "style": door_cfg["style"],
-                        "bay_index": bay_idx,
-                    })
-
-                # wall_panel: no opening (solid bay) -- intentionally no operation
-
-    # Fallback: if no door was placed (very narrow building), force one
-    if not door_placed:
-        door_x = (width - door_cfg["width"]) / 2
-        ops.append({
-            "type": "opening",
-            "wall_index": 0,
-            "position": [door_x, 0.0],
-            "size": [door_cfg["width"], door_cfg["height"]],
-            "role": "door",
-            "floor": 0,
-            "style": door_cfg["style"],
-        })
-
-    return ops
-
-
-# ---------------------------------------------------------------------------
 # Grammar Evaluation
 # ---------------------------------------------------------------------------
 
@@ -1560,51 +571,30 @@ def evaluate_building_grammar(
     """Evaluate grammar rules to produce a building spec.
 
     Layer ordering: foundation -> walls (per floor) -> floor slabs -> roof
-    -> CGA facade split -> detail operations.
-
-    Variation system ensures no two buildings with different seeds look
-    identical:
-    - Per-floor height randomized within +/- 15%
-    - Wall thickness varied +/- 10%
-    - Random subset of style details selected
-    - CGA split provides bay count, window size, fill type variation
-    - Roof generation uses randomized seed
+    -> window openings -> door opening -> detail operations.
     """
     rng = random.Random(seed)
     config = STYLE_CONFIGS[style]
 
     ops: list[dict] = []
 
-    # --- Variation: per-building parameter randomization ---
-    base_floor_h = config["walls"]["height_per_floor"]
-    base_wall_t = config["walls"]["thickness"]
-    # Per-floor height variation (+/- 15%)
-    floor_heights = [
-        base_floor_h * rng.uniform(0.85, 1.15) for _ in range(floors)
-    ]
-    # Wall thickness variation (+/- 10%)
-    wall_thickness_var = base_wall_t * rng.uniform(0.90, 1.10)
-
     # 1. Foundation
     fnd = config["foundation"]
-    # Slight foundation height variation
-    fnd_h = fnd["height"] * rng.uniform(0.9, 1.1)
     ops.append({
         "type": "box",
         "position": [-fnd["inset"], -fnd["inset"], 0.0],
-        "size": [width + 2 * fnd["inset"], depth + 2 * fnd["inset"], fnd_h],
+        "size": [width + 2 * fnd["inset"], depth + 2 * fnd["inset"], fnd["height"]],
         "material": fnd["material"],
         "role": "foundation",
     })
 
     wall_cfg = config["walls"]
     slab_cfg = config["floor_slab"]
-    base_z = fnd_h
+    base_z = fnd["height"]
 
     # 2. Walls per floor + 3. Floor slabs between floors
-    cumulative_z = base_z
     for floor_idx in range(floors):
-        floor_z = cumulative_z
+        floor_z = base_z + floor_idx * (wall_cfg["height_per_floor"] + slab_cfg["thickness"])
 
         # Floor slab (between floors, not under ground floor)
         if floor_idx > 0:
@@ -1616,8 +606,8 @@ def evaluate_building_grammar(
                 "role": "floor_slab",
             })
 
-        t = wall_thickness_var
-        h = floor_heights[floor_idx]
+        t = wall_cfg["thickness"]
+        h = wall_cfg["height_per_floor"]
         mat = wall_cfg["material"]
 
         # 4 walls: front (y=0), back (y=depth-t), left (x=0), right (x=width-t)
@@ -1662,55 +652,105 @@ def evaluate_building_grammar(
             "floor": floor_idx,
         })
 
-        # Advance cumulative Z for next floor
-        cumulative_z += h + slab_cfg["thickness"]
-
-    # 4. Roof -- AAA geometry from building_quality.generate_roof()
+    # 4. Roof
     roof_cfg = config["roof"]
-    roof_z = cumulative_z - slab_cfg["thickness"]
-    roof_ops = _generate_roof_operations(
-        width, depth, roof_z, roof_cfg, style, rng,
-    )
-    ops.extend(roof_ops)
+    roof_z = base_z + floors * (wall_cfg["height_per_floor"] + slab_cfg["thickness"]) - slab_cfg["thickness"]
 
-    # Use average floor height for facade split (column alignment)
-    avg_floor_h = sum(floor_heights) / len(floor_heights) if floor_heights else base_floor_h
+    if roof_cfg["type"] == "gabled":
+        overhang = roof_cfg["overhang"]
+        ridge_height = math.tan(math.radians(roof_cfg["pitch"])) * (depth / 2 + overhang)
+        ops.append({
+            "type": "box",
+            "position": [-overhang, -overhang, roof_z],
+            "size": [width + 2 * overhang, depth + 2 * overhang, 0.1],
+            "material": roof_cfg["material"],
+            "role": "roof",
+            "roof_type": "gabled",
+            "ridge_height": ridge_height,
+        })
+    elif roof_cfg["type"] == "pointed":
+        overhang = roof_cfg["overhang"]
+        ridge_height = math.tan(math.radians(roof_cfg["pitch"])) * (depth / 2 + overhang)
+        ops.append({
+            "type": "box",
+            "position": [-overhang, -overhang, roof_z],
+            "size": [width + 2 * overhang, depth + 2 * overhang, 0.1],
+            "material": roof_cfg["material"],
+            "role": "roof",
+            "roof_type": "pointed",
+            "ridge_height": ridge_height,
+        })
+    elif roof_cfg["type"] == "flat":
+        ops.append({
+            "type": "box",
+            "position": [0.0, 0.0, roof_z],
+            "size": [width, depth, 0.15],
+            "material": roof_cfg["material"],
+            "role": "roof",
+            "roof_type": "flat",
+        })
+    elif roof_cfg["type"] == "domed":
+        ops.append({
+            "type": "cylinder",
+            "position": [width / 2, depth / 2, roof_z],
+            "radius": min(width, depth) / 2,
+            "height": min(width, depth) / 3,
+            "segments": 16,
+            "material": roof_cfg["material"],
+            "role": "roof",
+            "roof_type": "domed",
+        })
 
-    # 5 + 6. CGA facade split: comp(faces) -> split(y, floors) -> split(x, bays) -> fill
+    # 5. Windows per wall per floor
     win_cfg = config["windows"]
-    door_cfg = config["door"]
-    facade_rules = FACADE_STYLE_RULES.get(style, FACADE_STYLE_RULES["medieval"])
-    facade_ops = _cga_facade_split(
-        width=width,
-        depth=depth,
-        floors=floors,
-        base_z=base_z,
-        floor_height=avg_floor_h,
-        slab_thickness=slab_cfg["thickness"],
-        wall_thickness=wall_thickness_var,
-        win_cfg=win_cfg,
-        door_cfg=door_cfg,
-        facade_rules=facade_rules,
-        style=style,
-        rng=rng,
-    )
-    ops.extend(facade_ops)
+    for floor_idx in range(floors):
+        floor_z = base_z + floor_idx * (wall_cfg["height_per_floor"] + slab_cfg["thickness"])
+        win_y = wall_cfg["height_per_floor"] * 0.4  # place windows at 40% wall height
 
-    # 7. Detail operations from style config -- AAA geometry from building_quality
-    # Variation: select a random subset of details (at least 1, at most all)
-    all_details = list(config["details"])
-    if len(all_details) > 1:
-        min_details = max(1, len(all_details) - 1)
-        detail_count = rng.randint(min_details, len(all_details))
-        details = rng.sample(all_details, detail_count)
-    else:
-        details = all_details
-    detail_ops = _generate_detail_operations(
-        details, width, depth, roof_z, base_z, floors,
-        avg_floor_h, wall_thickness_var,
-        style, rng,
-    )
-    ops.extend(detail_ops)
+        for wall_idx in range(4):
+            wall_length = width if wall_idx < 2 else depth - 2 * wall_cfg["thickness"]
+            n_windows = win_cfg["per_wall"]
+            spacing = wall_length / (n_windows + 1)
+
+            for w_i in range(n_windows):
+                offset = spacing * (w_i + 1) - win_cfg["width"] / 2
+                ops.append({
+                    "type": "opening",
+                    "wall_index": wall_idx,
+                    "position": [offset, win_y],
+                    "size": [win_cfg["width"], win_cfg["height"]],
+                    "role": "window",
+                    "floor": floor_idx,
+                    "style": win_cfg["style"],
+                })
+
+    # 6. Door on front wall (ground floor)
+    door_cfg = config["door"]
+    door_x = (width - door_cfg["width"]) / 2
+    ops.append({
+        "type": "opening",
+        "wall_index": 0,
+        "position": [door_x, 0.0],
+        "size": [door_cfg["width"], door_cfg["height"]],
+        "role": "door",
+        "floor": 0,
+        "style": door_cfg["style"],
+    })
+
+    # 7. Detail operations from style config
+    details = config["details"]
+    for detail_name in details:
+        # Place details at random positions along walls or roof
+        detail_x = rng.uniform(0.5, width - 0.5)
+        detail_y = rng.uniform(0.5, depth - 0.5)
+        ops.append({
+            "type": "box",
+            "position": [detail_x, detail_y, roof_z],
+            "size": [0.5, 0.5, 0.5],
+            "material": detail_name,
+            "role": "detail",
+            "detail_type": detail_name,
+        })
 
     return BuildingSpec(
         footprint=(width, depth),
@@ -2506,14 +1546,17 @@ def apply_ruins_damage(
 # Interior Generation
 # ---------------------------------------------------------------------------
 
+# Room type furniture definitions
+# Each item: (type, placement_rule, base_size_xy, height)
+# placement_rule: "wall" = along wall, "center" = center area, "corner" = in corner
 # ---------------------------------------------------------------------------
-# Room Spatial Graphs -- define spatial relationships per room type
+# Room Spatial Graphs (MESH-03)
 # ---------------------------------------------------------------------------
-# focal_points: items anchoring room zones with preferred wall placement
-#   - wall_pref: "back" | "front" | "side" | "exterior" | "any"
-# clusters: groups of items placed relative to an anchor item
-#   - anchor: item type name, members: list of (type, offset_dist, face_anchor)
-# wall_preferences: default wall preference for specific furniture types
+# Define per-room-type spatial relationships: focal points (anchors placed
+# on preferred walls), clusters (items grouped around anchors), and wall
+# preferences for remaining items.  Used by generate_interior_layout() to
+# produce constraint-satisfied, spatially coherent layouts.
+# ---------------------------------------------------------------------------
 
 ROOM_SPATIAL_GRAPHS: dict[str, dict] = {
     "tavern": {
@@ -2729,9 +1772,307 @@ ROOM_SPATIAL_GRAPHS: dict[str, dict] = {
     },
 }
 
-# Room type furniture definitions
-# Each item: (type, placement_rule, base_size_xy, height)
-# placement_rule: "wall" = along wall, "center" = center area, "corner" = in corner
+# ---------------------------------------------------------------------------
+# Room Activity Zones (MESH-03)
+# ---------------------------------------------------------------------------
+# Partition each room type into functional areas.  Each zone has a name,
+# a fraction of room area it occupies, a position anchor (which wall or
+# "center"), and allowed item types.  The constraint solver uses these to
+# bias furniture placement into appropriate zones.
+# ---------------------------------------------------------------------------
+
+ROOM_ACTIVITY_ZONES: dict[str, list[dict]] = {
+    "tavern": [
+        {
+            "name": "bar_zone",
+            "fraction": 0.30,
+            "anchor": "back_wall",
+            "allowed": {"bar_counter", "barrel", "shelf"},
+        },
+        {
+            "name": "seating_zone",
+            "fraction": 0.50,
+            "anchor": "center",
+            "allowed": {"table", "chair"},
+        },
+        {
+            "name": "hearth_zone",
+            "fraction": 0.20,
+            "anchor": "side_wall",
+            "allowed": {"fireplace"},
+        },
+    ],
+    "bedroom": [
+        {
+            "name": "sleep_zone",
+            "fraction": 0.40,
+            "anchor": "back_wall",
+            "allowed": {"bed", "nightstand"},
+        },
+        {
+            "name": "work_zone",
+            "fraction": 0.30,
+            "anchor": "side_wall",
+            "allowed": {"desk", "chair"},
+        },
+        {
+            "name": "storage_zone",
+            "fraction": 0.30,
+            "anchor": "side_wall",
+            "allowed": {"wardrobe", "rug"},
+        },
+    ],
+    "kitchen": [
+        {
+            "name": "fire_zone",
+            "fraction": 0.35,
+            "anchor": "back_wall",
+            "allowed": {"cooking_fire"},
+        },
+        {
+            "name": "prep_zone",
+            "fraction": 0.35,
+            "anchor": "center",
+            "allowed": {"table"},
+        },
+        {
+            "name": "storage_zone",
+            "fraction": 0.30,
+            "anchor": "side_wall",
+            "allowed": {"shelf", "barrel", "crate"},
+        },
+    ],
+    "blacksmith": [
+        {
+            "name": "forge_zone",
+            "fraction": 0.35,
+            "anchor": "back_wall",
+            "allowed": {"forge", "bellows"},
+        },
+        {
+            "name": "anvil_zone",
+            "fraction": 0.35,
+            "anchor": "center",
+            "allowed": {"anvil"},
+        },
+        {
+            "name": "storage_zone",
+            "fraction": 0.30,
+            "anchor": "side_wall",
+            "allowed": {"workbench", "weapon_rack", "tool_rack"},
+        },
+    ],
+    "library": [
+        {
+            "name": "reading_zone",
+            "fraction": 0.35,
+            "anchor": "center",
+            "allowed": {"desk", "chair", "candelabra"},
+        },
+        {
+            "name": "stacks_zone",
+            "fraction": 0.65,
+            "anchor": "back_wall",
+            "allowed": {"bookshelf"},
+        },
+    ],
+    "chapel": [
+        {
+            "name": "altar_zone",
+            "fraction": 0.25,
+            "anchor": "back_wall",
+            "allowed": {"altar", "candelabra"},
+        },
+        {
+            "name": "congregation_zone",
+            "fraction": 0.60,
+            "anchor": "center",
+            "allowed": {"pew"},
+        },
+        {
+            "name": "vestibule_zone",
+            "fraction": 0.15,
+            "anchor": "front_wall",
+            "allowed": {"banner"},
+        },
+    ],
+    "throne_room": [
+        {
+            "name": "throne_zone",
+            "fraction": 0.25,
+            "anchor": "back_wall",
+            "allowed": {"throne", "banner"},
+        },
+        {
+            "name": "processional_zone",
+            "fraction": 0.50,
+            "anchor": "center",
+            "allowed": {"carpet", "brazier"},
+        },
+        {
+            "name": "flanking_zone",
+            "fraction": 0.25,
+            "anchor": "side_wall",
+            "allowed": {"pillar"},
+        },
+    ],
+    "great_hall": [
+        {
+            "name": "feast_zone",
+            "fraction": 0.55,
+            "anchor": "center",
+            "allowed": {"long_table", "chair", "chandelier"},
+        },
+        {
+            "name": "hearth_zone",
+            "fraction": 0.25,
+            "anchor": "side_wall",
+            "allowed": {"fireplace"},
+        },
+        {
+            "name": "decor_zone",
+            "fraction": 0.20,
+            "anchor": "side_wall",
+            "allowed": {"banner", "candelabra"},
+        },
+    ],
+    "dining_hall": [
+        {
+            "name": "feast_zone",
+            "fraction": 0.55,
+            "anchor": "center",
+            "allowed": {"long_table", "chair", "chandelier"},
+        },
+        {
+            "name": "service_zone",
+            "fraction": 0.25,
+            "anchor": "side_wall",
+            "allowed": {"serving_table", "fireplace"},
+        },
+        {
+            "name": "decor_zone",
+            "fraction": 0.20,
+            "anchor": "side_wall",
+            "allowed": {"banner"},
+        },
+    ],
+    "war_room": [
+        {
+            "name": "strategy_zone",
+            "fraction": 0.60,
+            "anchor": "center",
+            "allowed": {"large_table", "chair", "map_display"},
+        },
+        {
+            "name": "decor_zone",
+            "fraction": 0.40,
+            "anchor": "side_wall",
+            "allowed": {"banner", "candelabra"},
+        },
+    ],
+    "alchemy_lab": [
+        {
+            "name": "brew_zone",
+            "fraction": 0.40,
+            "anchor": "center",
+            "allowed": {"cauldron", "workbench"},
+        },
+        {
+            "name": "ingredient_zone",
+            "fraction": 0.60,
+            "anchor": "back_wall",
+            "allowed": {"shelf_with_bottles", "herb_rack", "distillation_apparatus"},
+        },
+    ],
+    "crypt": [
+        {
+            "name": "burial_zone",
+            "fraction": 0.60,
+            "anchor": "center",
+            "allowed": {"sarcophagus"},
+        },
+        {
+            "name": "wall_burial_zone",
+            "fraction": 0.25,
+            "anchor": "side_wall",
+            "allowed": {"wall_tomb", "candelabra"},
+        },
+        {
+            "name": "altar_zone",
+            "fraction": 0.15,
+            "anchor": "back_wall",
+            "allowed": {"altar"},
+        },
+    ],
+    "smithy": [
+        {
+            "name": "forge_zone",
+            "fraction": 0.35,
+            "anchor": "back_wall",
+            "allowed": {"forge"},
+        },
+        {
+            "name": "work_zone",
+            "fraction": 0.35,
+            "anchor": "center",
+            "allowed": {"anvil"},
+        },
+        {
+            "name": "storage_zone",
+            "fraction": 0.30,
+            "anchor": "side_wall",
+            "allowed": {"workbench", "weapon_rack", "barrel", "crate"},
+        },
+    ],
+}
+
+
+def get_zone_for_item(room_type: str, item_type: str) -> Optional[str]:
+    """Return the activity zone name for an item type in a room, or None."""
+    zones = ROOM_ACTIVITY_ZONES.get(room_type, [])
+    for zone in zones:
+        if item_type in zone["allowed"]:
+            return zone["name"]
+    return None
+
+
+def get_zone_bounds(
+    zone: dict, width: float, depth: float,
+) -> tuple[float, float, float, float]:
+    """Return (x_min, y_min, x_max, y_max) for an activity zone.
+
+    Zones are rectangular regions derived from their anchor position
+    and fraction of room area.
+    """
+    anchor = zone["anchor"]
+    frac = zone["fraction"]
+
+    if anchor == "back_wall":
+        # Strip along back wall (high-y region)
+        return (0.0, depth * (1.0 - frac), width, depth)
+    elif anchor == "front_wall":
+        # Strip along front wall (low-y region)
+        return (0.0, 0.0, width, depth * frac)
+    elif anchor == "side_wall":
+        # Split evenly on left+right sides
+        side_width = width * frac / 2
+        return (0.0, 0.0, side_width, depth)  # left side primary
+    else:  # "center"
+        # Central rectangle
+        margin_x = width * (1.0 - frac) / 2
+        margin_y = depth * (1.0 - frac) / 2
+        return (margin_x, margin_y, width - margin_x, depth - margin_y)
+
+
+def compute_zone_coverage(room_type: str) -> float:
+    """Return total fraction of room area covered by activity zones.
+
+    Returns 0.0 if no zones defined for room_type.
+    """
+    zones = ROOM_ACTIVITY_ZONES.get(room_type, [])
+    return sum(z["fraction"] for z in zones)
+
+
 _ROOM_CONFIGS: dict[str, list[tuple[str, str, tuple[float, float], float]]] = {
     "tavern": [
         ("bar_counter", "wall", (3.0, 0.8), 1.1),
@@ -2997,8 +2338,15 @@ def _check_collision(
     sx: float,
     sy: float,
     occupied: list[tuple[float, float, float, float]],
+    item_height: float = 1.0,
 ) -> bool:
-    """Return True if (x,y,sx,sy) AABB overlaps any occupied box."""
+    """Return True if (x,y,sx,sy) AABB overlaps any occupied box.
+
+    Floor-level items (height < 0.1m, e.g. rugs/carpets) never collide --
+    they are walkable surfaces that other furniture can stand on.
+    """
+    if item_height < 0.1:
+        return False
     for ocx, ocy, osx, osy in occupied:
         if abs(x - ocx) < (sx + osx) / 2 and abs(y - ocy) < (sy + osy) / 2:
             return True
@@ -3023,8 +2371,13 @@ def _place_item(
     occupied: list[tuple[float, float, float, float]],
     placed: list[dict],
 ) -> bool:
-    """Append an item to placed/occupied lists. Returns True on success."""
-    occupied.append((x, y, sx, sy))
+    """Append an item to placed/occupied lists. Returns True on success.
+
+    Floor-level items (height < 0.1m, e.g. rugs/carpets) are walkable and
+    do NOT add to the occupied collision list.
+    """
+    if item_height >= 0.1:
+        occupied.append((x, y, sx, sy))
     placed.append({
         "type": item_type,
         "position": [round(x, 4), round(y, 4), 0.0],
@@ -3062,6 +2415,18 @@ def _door_corridor_clear(
         if item_front < depth / 2 and item_back > 0:
             return False
     return True
+
+
+def _find_config_index(
+    config_items: list[tuple[str, str, tuple[float, float], float]],
+    item_type: str,
+    placed_indices: set[int],
+) -> Optional[int]:
+    """Find the first unplaced config index matching item_type."""
+    for i, (itype, _rule, _size, _h) in enumerate(config_items):
+        if itype == item_type and i not in placed_indices:
+            return i
+    return None
 
 
 def generate_interior_layout(
@@ -3126,7 +2491,7 @@ def generate_interior_layout(
                 px, py, rot, esx, esy = _pick_wall_position(
                     wall_id, sx, sy, width, depth, wall_margin, rng,
                 )
-                if (not _check_collision(px, py, esx, esy, occupied)
+                if (not _check_collision(px, py, esx, esy, occupied, item_height)
                         and _in_bounds(px, py, esx, esy, width, depth)
                         and _door_corridor_clear(px, py, esx, esy, width, depth,
                                                  door_corridor_width, item_height)):
@@ -3158,7 +2523,7 @@ def generate_interior_layout(
                 px = rng.uniform(margin, width - margin)
                 py = rng.uniform(margin, depth - margin)
                 rot = rng.uniform(-0.1, 0.1)
-                if (not _check_collision(px, py, sx, sy, occupied)
+                if (not _check_collision(px, py, sx, sy, occupied, item_height)
                         and _in_bounds(px, py, sx, sy, width, depth)
                         and _door_corridor_clear(px, py, sx, sy, width, depth,
                                                  door_corridor_width)):
@@ -3192,7 +2557,7 @@ def generate_interior_layout(
                     rot = math.atan2(ay - py, ax - px) - math.pi / 2
                 else:
                     rot = rng.uniform(-0.1, 0.1)
-                if (not _check_collision(px, py, msx, msy, occupied)
+                if (not _check_collision(px, py, msx, msy, occupied, item_height)
                         and _in_bounds(px, py, msx, msy, width, depth)
                         and _door_corridor_clear(px, py, msx, msy, width, depth,
                                                  door_corridor_width)):
@@ -3224,10 +2589,12 @@ def generate_interior_layout(
                     px, py, rot, esx, esy = _pick_wall_position(
                         wall_id, sx, sy, width, depth, wall_margin, rng,
                     )
-                    if (not _check_collision(px, py, esx, esy, occupied)
+                    if (not _check_collision(px, py, esx, esy, occupied,
+                                             item_height)
                             and _in_bounds(px, py, esx, esy, width, depth)
                             and _door_corridor_clear(px, py, esx, esy, width,
-                                                     depth, door_corridor_width)):
+                                                     depth, door_corridor_width,
+                                                     item_height)):
                         _place_item(px, py, rot, esx, esy, item_type,
                                     item_height, occupied, placed)
                         placed_indices.add(idx)
@@ -3242,10 +2609,12 @@ def generate_interior_layout(
                 px = rng.uniform(margin, width - margin)
                 py = rng.uniform(margin, depth - margin)
                 rot = rng.uniform(-0.1, 0.1)
-                if (not _check_collision(px, py, sx, sy, occupied)
+                if (not _check_collision(px, py, sx, sy, occupied,
+                                         item_height)
                         and _in_bounds(px, py, sx, sy, width, depth)
                         and _door_corridor_clear(px, py, sx, sy, width, depth,
-                                                 door_corridor_width)):
+                                                 door_corridor_width,
+                                                 item_height)):
                     _place_item(px, py, rot, sx, sy, item_type, item_height,
                                 occupied, placed)
                     placed_indices.add(idx)
@@ -3266,10 +2635,12 @@ def generate_interior_layout(
                     px, py = (width - sx / 2 - wall_margin,
                               depth - sy / 2 - wall_margin)
                 rot = 0.0
-                if (not _check_collision(px, py, sx, sy, occupied)
+                if (not _check_collision(px, py, sx, sy, occupied,
+                                         item_height)
                         and _in_bounds(px, py, sx, sy, width, depth)
                         and _door_corridor_clear(px, py, sx, sy, width, depth,
-                                                 door_corridor_width)):
+                                                 door_corridor_width,
+                                                 item_height)):
                     _place_item(px, py, rot, sx, sy, item_type, item_height,
                                 occupied, placed)
                     placed_indices.add(idx)
@@ -3277,18 +2648,6 @@ def generate_interior_layout(
                     break
 
     return placed
-
-
-def _find_config_index(
-    config_items: list[tuple[str, str, tuple[float, float], float]],
-    item_type: str,
-    placed_indices: set[int],
-) -> Optional[int]:
-    """Find the first unplaced config index matching item_type."""
-    for i, (itype, _rule, _size, _h) in enumerate(config_items):
-        if itype == item_type and i not in placed_indices:
-            return i
-    return None
 
 
 def _generate_interior_layout_basic(
@@ -3308,7 +2667,6 @@ def _generate_interior_layout_basic(
 
     for item_type, rule, base_size, item_height in config_items:
         sx, sy = base_size
-        rotation = 0.0
         max_attempts = 50
 
         for _attempt in range(max_attempts):
@@ -3343,10 +2701,10 @@ def _generate_interior_layout_basic(
                 rot = 0.0
                 esx, esy = sx, sy
 
-            if (not _check_collision(px, py, esx, esy, occupied)
+            if (not _check_collision(px, py, esx, esy, occupied, item_height)
                     and _in_bounds(px, py, esx, esy, width, depth)
                     and _door_corridor_clear(px, py, esx, esy, width, depth,
-                                             door_corridor_width)):
+                                             door_corridor_width, item_height)):
                 _place_item(px, py, rot, esx, esy, item_type, item_height,
                             occupied, placed)
                 break
@@ -3355,6 +2713,597 @@ def _generate_interior_layout_basic(
             sx, sy = base_size
 
     return placed
+
+
+# ---------------------------------------------------------------------------
+# Decorative Clutter Scatter (MESH-03)
+# ---------------------------------------------------------------------------
+# Poisson disk scatter system for placing 5-15 decorative props per room
+# on furniture surfaces and floor areas.
+# ---------------------------------------------------------------------------
+
+CLUTTER_POOLS: dict[str, list[str]] = {
+    "tavern": [
+        "mug", "plate", "bottle", "candle_stub", "coin_pile",
+        "food_scrap", "spilled_drink",
+    ],
+    "bedroom": [
+        "book", "candle", "mirror", "clothing_pile", "comb",
+        "jewelry_box",
+    ],
+    "kitchen": [
+        "pot", "ladle", "cutting_board", "vegetable", "flour_bag",
+        "herb_bunch",
+    ],
+    "blacksmith": [
+        "hammer", "tongs", "horseshoe", "metal_ingot",
+        "grinding_stone", "coal_pile",
+    ],
+    "library": [
+        "open_book", "quill_ink", "scroll", "magnifying_glass",
+        "globe_small",
+    ],
+    "chapel": [
+        "prayer_bead", "incense_holder", "offering_bowl",
+        "holy_water_vial",
+    ],
+    "smithy": [
+        "hammer", "tongs", "horseshoe", "metal_ingot",
+        "grinding_stone", "coal_pile",
+    ],
+    "throne_room": [
+        "coin_pile", "scroll", "banner_fragment", "goblet",
+        "cushion",
+    ],
+    "great_hall": [
+        "mug", "plate", "bottle", "goblet", "food_scrap",
+        "candle_stub",
+    ],
+    "dining_hall": [
+        "mug", "plate", "bottle", "goblet", "food_scrap",
+        "candle_stub",
+    ],
+    "war_room": [
+        "scroll", "quill_ink", "map_piece", "coin_pile",
+        "seal_stamp",
+    ],
+    "alchemy_lab": [
+        "potion_bottle", "herb_bunch", "mortar_pestle", "crystal",
+        "dried_ingredient",
+    ],
+    "crypt": [
+        "bone_fragment", "offering_bowl", "candle_stub",
+        "dust_pile", "cobweb",
+    ],
+    "storage": [
+        "rope_coil", "sack", "nail_box", "lantern_unlit",
+    ],
+    "barracks": [
+        "clothing_pile", "boot", "sharpening_stone", "mug",
+    ],
+    "guard_post": [
+        "mug", "food_scrap", "torch_stub", "dice",
+    ],
+    "dungeon_cell": [
+        "bone_fragment", "rock_small", "straw_pile",
+    ],
+    "armory": [
+        "oilcloth", "whetstone", "strap_leather", "bolt_quiver",
+    ],
+    "torture_chamber": [
+        "bone_fragment", "chain_link", "blood_stain", "iron_spike",
+    ],
+    "study": [
+        "open_book", "quill_ink", "scroll", "magnifying_glass",
+        "ink_bottle",
+    ],
+    "shrine_room": [
+        "prayer_bead", "incense_holder", "offering_bowl",
+        "candle_stub",
+    ],
+    "treasury": [
+        "coin_pile", "gem_loose", "gold_bar", "scroll",
+    ],
+    "guard_barracks": [
+        "clothing_pile", "boot", "sharpening_stone", "mug",
+        "dice",
+    ],
+}
+
+# Surfaces we can scatter clutter onto (item types that have flat tops)
+_SURFACE_TYPES: set[str] = {
+    "table", "large_table", "long_table", "serving_table", "desk",
+    "workbench", "shelf", "bookshelf", "shelf_with_bottles", "nightstand",
+    "altar", "bar_counter",
+}
+
+
+def _poisson_disk_scatter_2d(
+    width: float,
+    depth: float,
+    min_distance: float,
+    rng: random.Random,
+    max_points: int = 200,
+) -> list[tuple[float, float]]:
+    """Bridson's Poisson disk sampling in 2D.
+
+    Returns sample points with guaranteed minimum distance between them.
+    Points are within (0, 0) to (width, depth).
+    """
+    cell_size = min_distance / math.sqrt(2)
+    cols = max(1, int(math.ceil(width / cell_size)))
+    rows = max(1, int(math.ceil(depth / cell_size)))
+    grid: list[Optional[int]] = [None] * (cols * rows)
+
+    points: list[tuple[float, float]] = []
+    active: list[int] = []
+
+    # Seed point at center
+    x0 = width / 2
+    y0 = depth / 2
+    points.append((x0, y0))
+    active.append(0)
+    gi = int(x0 / cell_size)
+    gj = int(y0 / cell_size)
+    if 0 <= gi < cols and 0 <= gj < rows:
+        grid[gj * cols + gi] = 0
+
+    k = 30  # candidates per active point
+
+    while active and len(points) < max_points:
+        idx = rng.randint(0, len(active) - 1)
+        pt_idx = active[idx]
+        px, py = points[pt_idx]
+        found = False
+
+        for _ in range(k):
+            angle = rng.uniform(0, 2 * math.pi)
+            dist = rng.uniform(min_distance, 2 * min_distance)
+            nx = px + math.cos(angle) * dist
+            ny = py + math.sin(angle) * dist
+
+            if nx < 0 or nx >= width or ny < 0 or ny >= depth:
+                continue
+
+            gi = int(nx / cell_size)
+            gj = int(ny / cell_size)
+            if gi < 0 or gi >= cols or gj < 0 or gj >= rows:
+                continue
+
+            # Check neighbors in 5x5 grid
+            too_close = False
+            for di in range(-2, 3):
+                for dj in range(-2, 3):
+                    ni = gi + di
+                    nj = gj + dj
+                    if 0 <= ni < cols and 0 <= nj < rows:
+                        neighbor = grid[nj * cols + ni]
+                        if neighbor is not None:
+                            ex, ey = points[neighbor]
+                            dx = nx - ex
+                            dy = ny - ey
+                            if dx * dx + dy * dy < min_distance * min_distance:
+                                too_close = True
+                                break
+                    if too_close:
+                        break
+                if too_close:
+                    break
+
+            if not too_close:
+                new_idx = len(points)
+                points.append((nx, ny))
+                active.append(new_idx)
+                grid[gj * cols + gi] = new_idx
+                found = True
+                break
+
+        if not found:
+            active.pop(idx)
+
+    return points
+
+
+def generate_clutter_layout(
+    room_type: str,
+    width: float,
+    depth: float,
+    furniture_items: list[dict],
+    seed: int = 0,
+    density: float = 0.5,
+) -> list[dict]:
+    """Generate decorative clutter items for a room.
+
+    Uses Poisson disk scatter to place 5-15 decorative props on furniture
+    surfaces and floor areas.
+
+    Args:
+        room_type: type of room (determines clutter pool)
+        width: room width in meters
+        depth: room depth in meters
+        furniture_items: list of placed furniture dicts from generate_interior_layout
+        seed: random seed for reproducibility
+        density: 0.0-1.0, controls item count: floor(5 + density * 10)
+
+    Returns:
+        list of clutter item dicts with: type, position, rotation, scale, surface_parent
+    """
+    rng = random.Random(seed + 9999)  # offset seed to differ from furniture
+    pool = CLUTTER_POOLS.get(room_type, [])
+    if not pool:
+        return []
+
+    density = max(0.0, min(1.0, density))
+    target_count = int(5 + density * 10)
+
+    # Identify scatter surfaces from furniture
+    surfaces: list[dict] = []
+    floor_occupied: list[tuple[float, float, float, float]] = []
+
+    for furn in furniture_items:
+        ftype = furn["type"]
+        fx, fy, fz = furn["position"]
+        fsx, fsy, fsz = furn["scale"]
+        floor_occupied.append((fx, fy, fsx, fsy))
+
+        if ftype in _SURFACE_TYPES:
+            surfaces.append({
+                "type": ftype,
+                "x": fx,
+                "y": fy,
+                "z": fsz,  # top surface height
+                "width": fsx * 0.7,  # usable surface is ~70% of item
+                "depth": fsy * 0.7,
+            })
+
+    clutter: list[dict] = []
+    placed_count = 0
+
+    # Phase 1: Place clutter on surfaces (up to 60% of target)
+    surface_target = int(target_count * 0.6)
+    if surfaces:
+        for surface in surfaces:
+            if placed_count >= surface_target:
+                break
+            sw = surface["width"]
+            sd = surface["depth"]
+            min_dist = max(0.15, min(sw, sd) / 3)
+            points = _poisson_disk_scatter_2d(sw, sd, min_dist, rng, max_points=4)
+
+            for px, py in points:
+                if placed_count >= surface_target:
+                    break
+                item_type = rng.choice(pool)
+                scale_var = rng.uniform(0.85, 1.15)
+                base_scale = 0.1  # clutter items are small
+                clutter.append({
+                    "type": item_type,
+                    "position": [
+                        round(surface["x"] - sw / 2 + px, 4),
+                        round(surface["y"] - sd / 2 + py, 4),
+                        round(surface["z"], 4),
+                    ],
+                    "rotation": round(rng.uniform(0, 2 * math.pi), 4),
+                    "scale": [
+                        round(base_scale * scale_var, 4),
+                        round(base_scale * scale_var, 4),
+                        round(base_scale * scale_var, 4),
+                    ],
+                    "surface_parent": surface["type"],
+                })
+                placed_count += 1
+
+    # Phase 2: Place remaining clutter on floor
+    floor_target = target_count - placed_count
+    if floor_target > 0:
+        min_dist = 0.3
+        floor_points = _poisson_disk_scatter_2d(
+            width, depth, min_dist, rng, max_points=floor_target * 3,
+        )
+
+        margin = 0.3
+        for px, py in floor_points:
+            if placed_count >= target_count:
+                break
+            # Skip points too close to walls
+            if px < margin or px > width - margin or py < margin or py > depth - margin:
+                continue
+            # Skip points inside furniture footprints
+            in_furniture = False
+            for fx, fy, fsx, fsy in floor_occupied:
+                if abs(px - fx) < fsx / 2 + 0.1 and abs(py - fy) < fsy / 2 + 0.1:
+                    in_furniture = True
+                    break
+            if in_furniture:
+                continue
+
+            item_type = rng.choice(pool)
+            scale_var = rng.uniform(0.85, 1.15)
+            base_scale = 0.12
+            clutter.append({
+                "type": item_type,
+                "position": [round(px, 4), round(py, 4), 0.0],
+                "rotation": round(rng.uniform(0, 2 * math.pi), 4),
+                "scale": [
+                    round(base_scale * scale_var, 4),
+                    round(base_scale * scale_var, 4),
+                    round(base_scale * scale_var, 4),
+                ],
+                "surface_parent": None,
+            })
+            placed_count += 1
+
+    return clutter
+
+
+# ---------------------------------------------------------------------------
+# Lighting Placement Engine (MESH-03)
+# ---------------------------------------------------------------------------
+# Intelligent lighting placement producing light source data for each room
+# with appropriate color temperature and coverage.
+# ---------------------------------------------------------------------------
+
+# Light type definitions: (color_temp_K, radius_m, default_intensity)
+LIGHT_TYPES: dict[str, tuple[int, float, float]] = {
+    "torch_sconce": (2800, 4.0, 1.0),
+    "candle": (3000, 2.0, 0.5),
+    "fireplace_light": (2700, 5.0, 1.5),
+    "chandelier_light": (3200, 8.0, 2.0),
+    "brazier_light": (3000, 3.0, 0.8),
+}
+
+# Per-room-type lighting schemas: mandatory and conditional light sources.
+# Each entry: (light_type, condition, position_rule)
+# condition: "always" or item type that must exist in furniture
+# position_rule: "doorway", "surface:{item_type}", "item:{item_type}",
+#                "ceiling_center", "wall_supplement"
+LIGHTING_SCHEMAS: dict[str, list[tuple[str, str, str]]] = {
+    "tavern": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "table", "surface:table"),
+        ("fireplace_light", "fireplace", "item:fireplace"),
+        ("candle", "bar_counter", "surface:bar_counter"),
+    ],
+    "bedroom": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "nightstand", "surface:nightstand"),
+        ("candle", "desk", "surface:desk"),
+    ],
+    "kitchen": [
+        ("torch_sconce", "always", "doorway"),
+        ("fireplace_light", "cooking_fire", "item:cooking_fire"),
+        ("candle", "table", "surface:table"),
+    ],
+    "blacksmith": [
+        ("torch_sconce", "always", "doorway"),
+        ("fireplace_light", "forge", "item:forge"),
+        ("brazier_light", "always", "wall_supplement"),
+    ],
+    "library": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "desk", "surface:desk"),
+        ("candle", "always", "wall_supplement"),
+    ],
+    "chapel": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "altar", "surface:altar"),
+        ("candle", "candelabra", "item:candelabra"),
+        ("chandelier_light", "always", "ceiling_center"),
+    ],
+    "throne_room": [
+        ("torch_sconce", "always", "doorway"),
+        ("brazier_light", "brazier", "item:brazier"),
+        ("chandelier_light", "always", "ceiling_center"),
+    ],
+    "smithy": [
+        ("torch_sconce", "always", "doorway"),
+        ("fireplace_light", "forge", "item:forge"),
+        ("brazier_light", "always", "wall_supplement"),
+    ],
+    "great_hall": [
+        ("torch_sconce", "always", "doorway"),
+        ("chandelier_light", "chandelier", "item:chandelier"),
+        ("fireplace_light", "fireplace", "item:fireplace"),
+        ("candle", "long_table", "surface:long_table"),
+    ],
+    "dining_hall": [
+        ("torch_sconce", "always", "doorway"),
+        ("chandelier_light", "chandelier", "item:chandelier"),
+        ("fireplace_light", "fireplace", "item:fireplace"),
+        ("candle", "long_table", "surface:long_table"),
+    ],
+    "war_room": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "large_table", "surface:large_table"),
+        ("candle", "candelabra", "item:candelabra"),
+    ],
+    "alchemy_lab": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "workbench", "surface:workbench"),
+        ("brazier_light", "cauldron", "item:cauldron"),
+    ],
+    "crypt": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "candelabra", "item:candelabra"),
+        ("candle", "altar", "surface:altar"),
+    ],
+    "storage": [
+        ("torch_sconce", "always", "doorway"),
+        ("torch_sconce", "always", "wall_supplement"),
+    ],
+    "barracks": [
+        ("torch_sconce", "always", "doorway"),
+        ("torch_sconce", "always", "wall_supplement"),
+    ],
+    "guard_post": [
+        ("torch_sconce", "always", "doorway"),
+        ("brazier_light", "brazier", "item:brazier"),
+    ],
+    "dungeon_cell": [
+        ("torch_sconce", "always", "doorway"),
+    ],
+    "armory": [
+        ("torch_sconce", "always", "doorway"),
+        ("torch_sconce", "always", "wall_supplement"),
+    ],
+    "study": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "desk", "surface:desk"),
+        ("candle", "candelabra", "item:candelabra"),
+    ],
+    "shrine_room": [
+        ("torch_sconce", "always", "doorway"),
+        ("candle", "altar", "surface:altar"),
+        ("candle", "candelabra", "item:candelabra"),
+    ],
+    "torture_chamber": [
+        ("torch_sconce", "always", "doorway"),
+        ("brazier_light", "brazier", "item:brazier"),
+    ],
+    "treasury": [
+        ("torch_sconce", "always", "doorway"),
+        ("chandelier_light", "chandelier", "item:chandelier"),
+    ],
+    "guard_barracks": [
+        ("torch_sconce", "always", "doorway"),
+        ("torch_sconce", "always", "wall_supplement"),
+    ],
+}
+
+
+def generate_lighting_layout(
+    room_type: str,
+    width: float,
+    depth: float,
+    height: float = 3.0,
+    furniture_items: Optional[list[dict]] = None,
+    door_positions: Optional[list[tuple[float, float]]] = None,
+    seed: int = 0,
+) -> list[dict]:
+    """Generate light source placement for a room.
+
+    Returns list of light source dicts with:
+        type, position (x,y,z), light_type, color_temperature, radius, intensity
+
+    Guarantees minimum 2 light sources per room.
+    All color temperatures in 2700-3500K range.
+    """
+    rng = random.Random(seed + 7777)  # offset from furniture/clutter seeds
+    if furniture_items is None:
+        furniture_items = []
+    if door_positions is None:
+        # Default: door at center of front wall
+        door_positions = [(width / 2, 0.0)]
+
+    schema = LIGHTING_SCHEMAS.get(room_type, [
+        ("torch_sconce", "always", "doorway"),
+        ("torch_sconce", "always", "wall_supplement"),
+    ])
+
+    # Build furniture lookup: type -> list of positions
+    furn_lookup: dict[str, list[dict]] = {}
+    for furn in furniture_items:
+        ftype = furn["type"]
+        if ftype not in furn_lookup:
+            furn_lookup[ftype] = []
+        furn_lookup[ftype].append(furn)
+
+    lights: list[dict] = []
+
+    for light_type_name, condition, pos_rule in schema:
+        # Check condition
+        if condition != "always" and condition not in furn_lookup:
+            continue
+
+        light_def = LIGHT_TYPES.get(light_type_name, (3000, 3.0, 1.0))
+        color_temp, radius, intensity = light_def
+
+        if pos_rule == "doorway":
+            # Place torches at each doorway (1.6m height, both sides)
+            for dx, dy in door_positions:
+                # Left side of door
+                lx = max(0.3, dx - 0.6)
+                lights.append(_make_light(
+                    light_type_name, lx, dy + 0.1, 1.6,
+                    color_temp, radius, intensity,
+                ))
+                # Right side of door
+                rx = min(width - 0.3, dx + 0.6)
+                lights.append(_make_light(
+                    light_type_name, rx, dy + 0.1, 1.6,
+                    color_temp, radius, intensity,
+                ))
+
+        elif pos_rule.startswith("surface:"):
+            # Place light on top of furniture surface
+            target = pos_rule.split(":")[1]
+            targets = furn_lookup.get(target, [])
+            for t in targets[:2]:  # max 2 per surface type
+                tx, ty, tz = t["position"]
+                tsz = t["scale"][2]
+                lights.append(_make_light(
+                    light_type_name, tx, ty, tsz + 0.05,
+                    color_temp, radius, intensity,
+                ))
+
+        elif pos_rule.startswith("item:"):
+            # Place light at item position (emissive source)
+            target = pos_rule.split(":")[1]
+            targets = furn_lookup.get(target, [])
+            for t in targets[:2]:
+                tx, ty, tz = t["position"]
+                tsz = t["scale"][2]
+                lights.append(_make_light(
+                    light_type_name, tx, ty, tsz * 0.6,
+                    color_temp, radius, intensity,
+                ))
+
+        elif pos_rule == "ceiling_center":
+            # Chandelier at ceiling center (only if room > 8m in any dim)
+            if max(width, depth) > 8.0 or light_type_name == "chandelier_light":
+                lights.append(_make_light(
+                    light_type_name, width / 2, depth / 2, height - 0.3,
+                    color_temp, radius, intensity,
+                ))
+
+        elif pos_rule == "wall_supplement":
+            # Add supplemental torches on side walls
+            wall_y = depth / 2
+            lights.append(_make_light(
+                light_type_name, 0.2, wall_y, 1.6,
+                color_temp, radius, intensity,
+            ))
+
+    # Ensure minimum 2 light sources
+    while len(lights) < 2:
+        # Add wall torches as fallback
+        torch_def = LIGHT_TYPES["torch_sconce"]
+        supplement_x = width - 0.2 if len(lights) % 2 == 0 else 0.2
+        supplement_y = depth * rng.uniform(0.3, 0.7)
+        lights.append(_make_light(
+            "torch_sconce", supplement_x, supplement_y, 1.6,
+            torch_def[0], torch_def[1], torch_def[2],
+        ))
+
+    return lights
+
+
+def _make_light(
+    light_type: str,
+    x: float, y: float, z: float,
+    color_temperature: int,
+    radius: float,
+    intensity: float,
+) -> dict:
+    """Create a light source dict."""
+    return {
+        "type": light_type,
+        "position": [round(x, 4), round(y, 4), round(z, 4)],
+        "light_type": light_type,
+        "color_temperature": color_temperature,
+        "radius": round(radius, 2),
+        "intensity": round(intensity, 2),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -4199,676 +4148,3 @@ def generate_consistent_interior(
             "floor_height": floor_height,
         },
     }
-
-
-# ---------------------------------------------------------------------------
-# Lighting Placement Engine (Phase 33 Task 4)
-# ---------------------------------------------------------------------------
-
-# Light type physical properties -- color temperatures in 2700-3500K range
-_LIGHT_TYPE_PROPS: dict[str, dict] = {
-    "torch_sconce":     {"color_temperature": 2800, "radius": 4.0, "intensity": 1.0},
-    "candle":           {"color_temperature": 3000, "radius": 2.0, "intensity": 0.5},
-    "fireplace_light":  {"color_temperature": 2700, "radius": 5.0, "intensity": 1.5},
-    "chandelier_light": {"color_temperature": 3200, "radius": 8.0, "intensity": 2.0},
-    "brazier_light":    {"color_temperature": 3000, "radius": 3.0, "intensity": 0.8},
-}
-
-# Per-room lighting schemas:
-#   mandatory: list of light type strings that are always placed
-#   conditional: list of dicts with 'type' and 'trigger' (furniture substring)
-LIGHTING_SCHEMAS: dict[str, dict] = {
-    "tavern": {
-        "mandatory": ["torch_sconce", "torch_sconce", "fireplace_light"],
-        "conditional": [
-            {"type": "chandelier_light", "trigger": "chandelier"},
-            {"type": "candle",           "trigger": "table"},
-        ],
-    },
-    "smithy": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "brazier_light", "trigger": "brazier"},
-            {"type": "fireplace_light", "trigger": "forge"},
-        ],
-    },
-    "storage": {
-        "mandatory": ["torch_sconce"],
-        "conditional": [
-            {"type": "candle", "trigger": "table"},
-        ],
-    },
-    "barracks": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "brazier_light", "trigger": "brazier"},
-            {"type": "candle", "trigger": "table"},
-        ],
-    },
-    "guard_post": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "brazier_light", "trigger": "brazier"},
-            {"type": "candle", "trigger": "table"},
-        ],
-    },
-    "throne_room": {
-        "mandatory": ["chandelier_light", "torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "brazier_light", "trigger": "brazier"},
-            {"type": "candle", "trigger": "candelabra"},
-        ],
-    },
-    "dungeon_cell": {
-        "mandatory": ["torch_sconce"],
-        "conditional": [
-            {"type": "candle", "trigger": "table"},
-        ],
-    },
-    "bedroom": {
-        "mandatory": ["torch_sconce"],
-        "conditional": [
-            {"type": "candle", "trigger": "nightstand"},
-            {"type": "candle", "trigger": "desk"},
-            {"type": "fireplace_light", "trigger": "fireplace"},
-        ],
-    },
-    "kitchen": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "fireplace_light", "trigger": "cooking_fire"},
-            {"type": "candle", "trigger": "table"},
-        ],
-    },
-    "library": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "candle", "trigger": "candelabra"},
-            {"type": "candle", "trigger": "desk"},
-            {"type": "chandelier_light", "trigger": "chandelier"},
-        ],
-    },
-    "study": {
-        "mandatory": ["torch_sconce"],
-        "conditional": [
-            {"type": "candle", "trigger": "candelabra"},
-            {"type": "candle", "trigger": "desk"},
-        ],
-    },
-    "great_hall": {
-        "mandatory": ["chandelier_light", "torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "fireplace_light", "trigger": "fireplace"},
-            {"type": "candle", "trigger": "candelabra"},
-            {"type": "candle", "trigger": "table"},
-        ],
-    },
-    "armory": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "candle", "trigger": "table"},
-            {"type": "brazier_light", "trigger": "brazier"},
-        ],
-    },
-    "chapel": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "candle", "trigger": "candelabra"},
-            {"type": "candle", "trigger": "altar"},
-            {"type": "chandelier_light", "trigger": "chandelier"},
-        ],
-    },
-    "shrine_room": {
-        "mandatory": ["torch_sconce"],
-        "conditional": [
-            {"type": "candle", "trigger": "candelabra"},
-            {"type": "candle", "trigger": "altar"},
-        ],
-    },
-    "blacksmith": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "fireplace_light", "trigger": "forge"},
-            {"type": "brazier_light", "trigger": "brazier"},
-        ],
-    },
-    "guard_barracks": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "brazier_light", "trigger": "brazier"},
-            {"type": "candle", "trigger": "table"},
-        ],
-    },
-    "treasury": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "chandelier_light", "trigger": "chandelier"},
-            {"type": "candle", "trigger": "candelabra"},
-        ],
-    },
-    "war_room": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "candle", "trigger": "candelabra"},
-            {"type": "candle", "trigger": "table"},
-            {"type": "chandelier_light", "trigger": "chandelier"},
-        ],
-    },
-    "alchemy_lab": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "candle", "trigger": "workbench"},
-            {"type": "brazier_light", "trigger": "brazier"},
-        ],
-    },
-    "torture_chamber": {
-        "mandatory": ["torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "brazier_light", "trigger": "brazier"},
-            {"type": "fireplace_light", "trigger": "fireplace"},
-        ],
-    },
-    "crypt": {
-        "mandatory": ["torch_sconce"],
-        "conditional": [
-            {"type": "candle", "trigger": "candelabra"},
-            {"type": "candle", "trigger": "altar"},
-        ],
-    },
-    "dining_hall": {
-        "mandatory": ["chandelier_light", "torch_sconce", "torch_sconce"],
-        "conditional": [
-            {"type": "fireplace_light", "trigger": "fireplace"},
-            {"type": "candle", "trigger": "table"},
-        ],
-    },
-}
-
-# Minimum guaranteed light sources per room
-_MIN_LIGHTS_PER_ROOM = 2
-
-
-def generate_lighting_layout(
-    room_type: str,
-    width: float,
-    depth: float,
-    height: float,
-    furniture_items: list[dict],
-    door_positions: list[tuple[float, float]],
-    seed: int = 0,
-) -> list[dict]:
-    """Generate a deterministic lighting layout for a room.
-
-    Placement rules:
-    - Torches at doorway positions (both sides, 1.6m height)
-    - Candles on table surfaces (furniture with "table" in type name)
-    - Fireplace emissive if fireplace in furniture_items
-    - Chandelier at ceiling center if room > 8m in any dimension
-    - Minimum 2 light sources guaranteed via supplemental wall torches
-
-    Parameters
-    ----------
-    room_type : str
-        Key into LIGHTING_SCHEMAS. Falls back to a minimal default schema.
-    width, depth, height : float
-        Room dimensions in metres.
-    furniture_items : list[dict]
-        List of placed furniture dicts with at least a "type" key.
-    door_positions : list[tuple[float, float]]
-        (x, y) positions of doors along the room perimeter.
-    seed : int
-        RNG seed for deterministic placement.
-
-    Returns
-    -------
-    list[dict] with keys:
-        type, position (x, y, z), color_temperature, radius, intensity
-    """
-    rng = random.Random(seed)
-    lights: list[dict] = []
-
-    schema = LIGHTING_SCHEMAS.get(room_type, {
-        "mandatory": ["torch_sconce"],
-        "conditional": [],
-    })
-
-    furniture_types: list[str] = [
-        str(item.get("type", "")).lower() for item in furniture_items
-    ]
-
-    def _has_furniture(trigger: str) -> bool:
-        return any(trigger in ft for ft in furniture_types)
-
-    def _make_light(
-        light_type: str,
-        x: float,
-        y: float,
-        z: float,
-    ) -> dict:
-        props = _LIGHT_TYPE_PROPS.get(light_type, _LIGHT_TYPE_PROPS["torch_sconce"])
-        return {
-            "type": light_type,
-            "position": (round(x, 4), round(y, 4), round(z, 4)),
-            "color_temperature": props["color_temperature"],
-            "radius": props["radius"],
-            "intensity": props["intensity"],
-        }
-
-    def _clamp_to_room(x: float, y: float) -> tuple[float, float]:
-        margin = 0.15
-        cx = max(margin, min(width - margin, x))
-        cy = max(margin, min(depth - margin, y))
-        return cx, cy
-
-    # ------------------------------------------------------------------
-    # 1. Torches at doorway positions (both sides of each door, 1.6m h)
-    # ------------------------------------------------------------------
-    torch_height = 1.6
-    for dx, dy in door_positions:
-        # Determine which wall the door is on and place torches on each side
-        # Door on front wall (y ~ 0) or back wall (y ~ depth)
-        on_front = dy < depth * 0.2
-        on_back = dy > depth * 0.8
-        on_left = dx < width * 0.2
-        on_right = dx > width * 0.8
-
-        if on_front or on_back:
-            offset = 0.7
-            tx1, ty1 = _clamp_to_room(dx - offset, dy)
-            tx2, ty2 = _clamp_to_room(dx + offset, dy)
-        elif on_left or on_right:
-            offset = 0.7
-            tx1, ty1 = _clamp_to_room(dx, dy - offset)
-            tx2, ty2 = _clamp_to_room(dx, dy + offset)
-        else:
-            # Door at ambiguous position — offset along x
-            offset = 0.7
-            tx1, ty1 = _clamp_to_room(dx - offset, dy)
-            tx2, ty2 = _clamp_to_room(dx + offset, dy)
-
-        lights.append(_make_light("torch_sconce", tx1, ty1, torch_height))
-        lights.append(_make_light("torch_sconce", tx2, ty2, torch_height))
-
-    # ------------------------------------------------------------------
-    # 2. Candles on table surfaces
-    # ------------------------------------------------------------------
-    candle_height_above_table = 0.78 + 0.05  # table height + candle base
-    for item in furniture_items:
-        itype = str(item.get("type", "")).lower()
-        if "table" in itype:
-            pos = item.get("position", [width / 2, depth / 2, 0.0])
-            cx, cy = _clamp_to_room(pos[0], pos[1])
-            lights.append(_make_light("candle", cx, cy, candle_height_above_table))
-
-    # ------------------------------------------------------------------
-    # 3. Fireplace emissive if fireplace present
-    # ------------------------------------------------------------------
-    if _has_furniture("fireplace") or _has_furniture("cooking_fire"):
-        for item in furniture_items:
-            itype = str(item.get("type", "")).lower()
-            if "fireplace" in itype or "cooking_fire" in itype:
-                pos = item.get("position", [width / 2, depth / 2, 0.0])
-                fx, fy = _clamp_to_room(pos[0], pos[1])
-                lights.append(_make_light("fireplace_light", fx, fy, 0.8))
-                break  # one fireplace light per fireplace
-
-    # ------------------------------------------------------------------
-    # 4. Chandelier at ceiling center if room > 8m in any dimension
-    # ------------------------------------------------------------------
-    if width > 8.0 or depth > 8.0:
-        cx, cy = width / 2, depth / 2
-        chandelier_z = height - 0.3
-        lights.append(_make_light("chandelier_light", cx, cy, chandelier_z))
-
-    # ------------------------------------------------------------------
-    # 5. Mandatory lights from schema (skip if type already contributed)
-    # ------------------------------------------------------------------
-    # We add mandatory lights from the schema as supplemental wall torches
-    # positioned deterministically along the walls
-    mandatory_list = list(schema.get("mandatory", []))
-    # Wall positions for supplemental lights: evenly spaced along walls
-    wall_positions: list[tuple[float, float]] = [
-        (width * 0.25, 0.15),           # front wall left quarter
-        (width * 0.75, 0.15),           # front wall right quarter
-        (width * 0.25, depth - 0.15),   # back wall left quarter
-        (width * 0.75, depth - 0.15),   # back wall right quarter
-        (0.15, depth * 0.25),           # left wall lower
-        (0.15, depth * 0.75),           # left wall upper
-        (width - 0.15, depth * 0.25),   # right wall lower
-        (width - 0.15, depth * 0.75),   # right wall upper
-    ]
-    wall_idx = 0
-    for mtype in mandatory_list:
-        if wall_idx >= len(wall_positions):
-            break
-        wx, wy = wall_positions[wall_idx]
-        wall_idx += 1
-        lights.append(_make_light(mtype, wx, wy, torch_height))
-
-    # ------------------------------------------------------------------
-    # 6. Conditional lights from schema
-    # ------------------------------------------------------------------
-    for cond in schema.get("conditional", []):
-        trigger = cond.get("trigger", "")
-        ctype = cond.get("type", "torch_sconce")
-        if _has_furniture(trigger) and wall_idx < len(wall_positions):
-            wx, wy = wall_positions[wall_idx]
-            wall_idx += 1
-            lights.append(_make_light(ctype, wx, wy, torch_height))
-
-    # ------------------------------------------------------------------
-    # 7. Guarantee minimum 2 light sources — add supplemental wall torches
-    # ------------------------------------------------------------------
-    while len(lights) < _MIN_LIGHTS_PER_ROOM and wall_idx < len(wall_positions):
-        wx, wy = wall_positions[wall_idx]
-        wall_idx += 1
-        lights.append(_make_light("torch_sconce", wx, wy, torch_height))
-
-    # Fallback if wall_positions exhausted but still < minimum
-    if len(lights) < _MIN_LIGHTS_PER_ROOM:
-        lights.append(_make_light(
-            "torch_sconce",
-            round(width / 2 + rng.uniform(-0.5, 0.5), 4),
-            round(depth / 4, 4),
-            torch_height,
-        ))
-        if len(lights) < _MIN_LIGHTS_PER_ROOM:
-            lights.append(_make_light(
-                "candle",
-                round(width / 2, 4),
-                round(depth * 3 / 4, 4),
-                0.83,
-            ))
-
-    return lights
-
-
-# ---------------------------------------------------------------------------
-# Decorative Clutter Scatter (Task 33-03)
-# ---------------------------------------------------------------------------
-
-CLUTTER_POOLS: dict[str, list[str]] = {
-    "tavern": [
-        "mug", "plate", "bottle", "candle_stub", "coin_pile",
-        "food_scrap", "spilled_drink",
-    ],
-    "bedroom": [
-        "book", "candle", "mirror", "clothing_pile", "comb", "jewelry_box",
-    ],
-    "kitchen": [
-        "pot", "ladle", "cutting_board", "vegetable", "flour_bag", "herb_bunch",
-    ],
-    "blacksmith": [
-        "hammer", "tongs", "horseshoe", "metal_ingot", "grinding_stone", "coal_pile",
-    ],
-    "library": [
-        "open_book", "quill_ink", "scroll", "magnifying_glass", "globe_small",
-    ],
-    "chapel": [
-        "prayer_bead", "incense_holder", "offering_bowl", "holy_water_vial",
-    ],
-    # Remaining room types from _ROOM_CONFIGS
-    "smithy": [
-        "hammer", "tongs", "metal_ingot", "coal_pile", "horseshoe", "grinding_stone",
-    ],
-    "storage": [
-        "rope_coil", "broken_crate_lid", "loose_nail", "dust_rag", "old_sack",
-    ],
-    "barracks": [
-        "boot", "ration_pouch", "playing_card", "dice", "canteen", "rolled_cloth",
-    ],
-    "guard_post": [
-        "playing_card", "dice", "canteen", "torn_notice", "boot", "ration_pouch",
-    ],
-    "throne_room": [
-        "goblet", "flower_arrangement", "parchment_scroll", "wax_seal", "quill_ink",
-    ],
-    "dungeon_cell": [
-        "gnawed_bone", "torn_cloth", "rusted_chain_link", "straw_pile", "crude_cup",
-    ],
-    "study": [
-        "open_book", "quill_ink", "scroll", "ink_pot", "loose_paper", "wax_candle",
-    ],
-    "great_hall": [
-        "goblet", "plate", "candle_stub", "flower_arrangement", "discarded_bone",
-    ],
-    "armory": [
-        "oilcloth", "whetstone", "broken_sword_hilt", "spare_buckle", "leather_strap",
-    ],
-    "shrine_room": [
-        "prayer_bead", "incense_holder", "offering_bowl", "flower_offering", "votive_candle",
-    ],
-    "guard_barracks": [
-        "boot", "canteen", "playing_card", "dice", "ration_pouch", "rolled_cloth",
-    ],
-    "treasury": [
-        "coin_pile", "gem_chip", "wax_seal", "counting_stone", "old_ledger",
-    ],
-    "war_room": [
-        "parchment_scroll", "quill_ink", "wax_seal", "miniature_soldier", "empty_goblet",
-    ],
-    "alchemy_lab": [
-        "glass_vial", "mortar_pestle", "dried_herb", "stoppered_bottle", "crystal_shard",
-    ],
-    "torture_chamber": [
-        "rusted_chain_link", "torn_cloth", "gnawed_bone", "broken_manacle", "dried_blood_rag",
-    ],
-    "crypt": [
-        "prayer_bead", "flower_offering", "candle_stub", "offering_bowl", "skull_fragment",
-    ],
-    "dining_hall": [
-        "plate", "goblet", "candle_stub", "discarded_bone", "bread_heel", "spilled_wine",
-    ],
-}
-
-# Fallback pool for room types not explicitly listed
-_DEFAULT_CLUTTER_POOL: list[str] = [
-    "candle_stub", "dust_pile", "old_rag", "broken_cup", "loose_coin",
-]
-
-
-def _poisson_disk_scatter_2d(
-    width: float,
-    depth: float,
-    min_distance: float,
-    rng: random.Random,
-    max_attempts: int = 30,
-) -> list[tuple[float, float]]:
-    """Bridson's Poisson disk sampling in 2D. Deterministic with the given rng.
-
-    Returns a list of (x, y) sample points where no two points are closer
-    than min_distance apart. Points are within [0, width] x [0, depth].
-    """
-    if min_distance <= 0 or width <= 0 or depth <= 0:
-        return []
-
-    cell_size = min_distance / math.sqrt(2.0)
-    grid_cols = max(1, int(math.ceil(width / cell_size)))
-    grid_rows = max(1, int(math.ceil(depth / cell_size)))
-    grid: dict[tuple[int, int], tuple[float, float]] = {}
-
-    def _grid_cell(px: float, py: float) -> tuple[int, int]:
-        return int(px / cell_size), int(py / cell_size)
-
-    def _has_neighbour_too_close(px: float, py: float) -> bool:
-        gx, gy = _grid_cell(px, py)
-        for dx in range(-2, 3):
-            for dy in range(-2, 3):
-                neighbour = grid.get((gx + dx, gy + dy))
-                if neighbour is not None:
-                    dist_sq = (px - neighbour[0]) ** 2 + (py - neighbour[1]) ** 2
-                    if dist_sq < min_distance * min_distance:
-                        return True
-        return False
-
-    # Initial random point
-    x0 = rng.uniform(0.0, width)
-    y0 = rng.uniform(0.0, depth)
-    samples: list[tuple[float, float]] = [(x0, y0)]
-    active: list[tuple[float, float]] = [(x0, y0)]
-    grid[_grid_cell(x0, y0)] = (x0, y0)
-
-    while active:
-        idx = rng.randint(0, len(active) - 1)
-        ax, ay = active[idx]
-        found = False
-        for _ in range(max_attempts):
-            angle = rng.uniform(0.0, 2.0 * math.pi)
-            radius = rng.uniform(min_distance, 2.0 * min_distance)
-            nx = ax + radius * math.cos(angle)
-            ny = ay + radius * math.sin(angle)
-            if 0.0 <= nx <= width and 0.0 <= ny <= depth:
-                if not _has_neighbour_too_close(nx, ny):
-                    samples.append((nx, ny))
-                    active.append((nx, ny))
-                    grid[_grid_cell(nx, ny)] = (nx, ny)
-                    found = True
-                    break
-        if not found:
-            active.pop(idx)
-
-    return samples
-
-
-def generate_clutter_layout(
-    room_type: str,
-    width: float,
-    depth: float,
-    furniture_items: list[dict],
-    seed: int,
-    density: float = 0.5,
-) -> list[dict]:
-    """Generate decorative clutter placement for a room.
-
-    Identifies scatter surfaces from furniture bounding boxes (table tops,
-    shelf tops, floor zones), samples candidate points via Poisson disk
-    sampling, and assigns room-appropriate clutter items.
-
-    Args:
-        room_type: Key into CLUTTER_POOLS (e.g. "tavern", "kitchen").
-        width: Room width in metres.
-        depth: Room depth in metres.
-        furniture_items: List of furniture dicts from generate_interior_layout().
-            Each dict has 'type', 'position' [x, y, z], 'scale' [sx, sy, sz].
-        seed: Random seed for deterministic output. Same seed = same layout.
-        density: 0.0-1.0 multiplier. item_count = clamp(floor(5 + density*10), 5, 15).
-
-    Returns:
-        List of dicts: {name, position:(x,y,z), rotation:(rx,ry,rz),
-                        scale:(sx,sy,sz), surface_parent}.
-    """
-    rng = random.Random(seed)
-    pool = CLUTTER_POOLS.get(room_type, _DEFAULT_CLUTTER_POOL)
-    if not pool:
-        return []
-
-    target_count = max(5, min(15, int(5 + density * 10)))
-
-    # ---- Build scatter surfaces ----
-    # Each surface: {"type": "table_top"|"shelf_top"|"floor", "cx", "cy", "z",
-    #                "w", "d", "parent"}
-    surfaces: list[dict] = []
-
-    # Surface-eligible furniture types and the height offset to place on top
-    _TABLE_TYPES = {"table", "long_table", "large_table", "workbench", "desk",
-                    "serving_table", "bar_counter", "altar"}
-    _SHELF_TYPES = {"shelf", "bookshelf", "shelf_with_bottles", "weapon_rack",
-                    "display_case", "herb_rack", "tool_rack"}
-
-    for item in furniture_items:
-        itype = item.get("type", "")
-        pos = item.get("position", [0.0, 0.0, 0.0])
-        sc = item.get("scale", [1.0, 1.0, 1.0])
-        cx, cy = float(pos[0]), float(pos[1])
-        floor_z = float(pos[2]) if len(pos) > 2 else 0.0
-        sw, sd, sh = float(sc[0]), float(sc[1]), float(sc[2])
-
-        if itype in _TABLE_TYPES:
-            surfaces.append({
-                "surface_type": "table_top",
-                "cx": cx, "cy": cy,
-                "z": floor_z + sh,
-                "w": sw * 0.8,  # inset slightly from edges
-                "d": sd * 0.8,
-                "parent": itype,
-                "min_dist": 0.15,
-            })
-        elif itype in _SHELF_TYPES:
-            # One scatter zone per shelf level (simplified: one top surface)
-            surfaces.append({
-                "surface_type": "shelf_top",
-                "cx": cx, "cy": cy,
-                "z": floor_z + sh * 0.6,  # mid-shelf level
-                "w": sw * 0.7,
-                "d": sd * 0.7,
-                "parent": itype,
-                "min_dist": 0.12,
-            })
-
-    # Always include floor scatter zones (corners + center strip)
-    margin = 0.4
-    floor_zones = [
-        # Center strip
-        {
-            "surface_type": "floor",
-            "cx": width / 2, "cy": depth / 2,
-            "z": 0.0,
-            "w": max(0.1, width - 2 * margin),
-            "d": max(0.1, depth - 2 * margin),
-            "parent": "floor",
-            "min_dist": 0.25,
-        },
-    ]
-    surfaces.extend(floor_zones)
-
-    # ---- Sample points per surface using Poisson disk ----
-    candidate_points: list[tuple[float, float, float, str]] = []  # (x, y, z, parent)
-
-    for surf in surfaces:
-        half_w = surf["w"] / 2.0
-        half_d = surf["d"] / 2.0
-        if half_w < 0.05 or half_d < 0.05:
-            continue
-
-        pts = _poisson_disk_scatter_2d(
-            surf["w"], surf["d"], surf["min_dist"], rng,
-        )
-        for px, py in pts:
-            world_x = round(surf["cx"] - half_w + px, 4)
-            world_y = round(surf["cy"] - half_d + py, 4)
-            world_z = round(surf["z"], 4)
-            # Clamp to room bounds
-            world_x = max(margin, min(width - margin, world_x))
-            world_y = max(margin, min(depth - margin, world_y))
-            candidate_points.append((world_x, world_y, world_z, surf["parent"]))
-
-    if not candidate_points:
-        # Fallback: uniform random floor points
-        for _ in range(target_count):
-            fx = rng.uniform(margin, width - margin)
-            fy = rng.uniform(margin, depth - margin)
-            candidate_points.append((round(fx, 4), round(fy, 4), 0.0, "floor"))
-
-    # ---- Sample target_count points and assign clutter items ----
-    rng.shuffle(candidate_points)
-    selected = candidate_points[:target_count]
-
-    result: list[dict] = []
-    for x, y, z, parent in selected:
-        item_name = rng.choice(pool)
-        # Scale variation +/-15%
-        base_scale = 1.0
-        sv = round(base_scale * rng.uniform(0.85, 1.15), 4)
-        rx = 0.0
-        ry = 0.0
-        rz = round(rng.uniform(0.0, 2.0 * math.pi), 4)
-
-        result.append({
-            "name": item_name,
-            "position": (x, y, z),
-            "rotation": (rx, ry, rz),
-            "scale": (sv, sv, sv),
-            "surface_parent": parent,
-        })
-
-    return result
