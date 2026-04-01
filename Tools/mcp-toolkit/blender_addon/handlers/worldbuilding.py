@@ -368,6 +368,8 @@ from ._building_grammar import (
     generate_castle_spec,
     apply_ruins_damage,
     generate_interior_layout,
+    generate_clutter_layout,
+    generate_lighting_layout,
     generate_modular_pieces,
     generate_overrun_variant,
     add_storytelling_props,
@@ -5195,8 +5197,88 @@ def handle_generate_interior(params: dict) -> dict:
             item_obj["vb_room_type"] = room_type
             item_obj["vb_editable_role"] = "furniture"
 
+    # ---- Clutter scatter (MESH-03) ----
+    clutter_density = params.get("clutter_density", 0.5)
+    clutter = generate_clutter_layout(
+        room_type, width, depth, layout, seed, density=clutter_density,
+    )
+    clutter_count = 0
+    for c_item in clutter:
+        c_name = f"{name}_clutter_{c_item['type']}"
+        c_type = c_item["type"]
+        csx, csy, csz = c_item["scale"]
+
+        gen_entry = FURNITURE_GENERATOR_MAP.get(c_type)
+        if gen_entry is not None:
+            gen_func, gen_kwargs = gen_entry
+            spec = gen_func(**gen_kwargs)
+            c_obj = mesh_from_spec(
+                spec,
+                name=c_name,
+                location=tuple(c_item["position"]),
+                rotation=(0, 0, c_item["rotation"]),
+                scale=(csx, csy, csz),
+                parent=room_empty,
+            )
+        else:
+            # Small cube fallback for unmapped clutter types
+            c_bm = bmesh.new()
+            bmesh.ops.create_cube(c_bm, size=1.0)
+            for v in c_bm.verts:
+                v.co.x *= csx
+                v.co.y *= csy
+                v.co.z *= csz
+                v.co.z += csz / 2
+            c_mesh = bpy.data.meshes.new(c_name)
+            c_bm.to_mesh(c_mesh)
+            c_bm.free()
+            c_obj = bpy.data.objects.new(c_name, c_mesh)
+            c_obj.location = tuple(c_item["position"])
+            c_obj.rotation_euler = (0, 0, c_item["rotation"])
+            c_obj.parent = room_empty
+            bpy.context.collection.objects.link(c_obj)
+
+        if not isinstance(c_obj, dict):
+            c_obj["vb_room_type"] = room_type
+            c_obj["vb_editable_role"] = "clutter"
+        clutter_count += 1
+
+    # ---- Lighting placement (MESH-03) ----
+    lights = generate_lighting_layout(
+        room_type, width, depth, height, layout, seed=seed,
+    )
+    light_count = 0
+    for light in lights:
+        l_name = f"{name}_light_{light['light_type']}_{light_count}"
+        lx, ly, lz = light["position"]
+
+        # Create Blender point light
+        light_data = bpy.data.lights.new(name=l_name, type="POINT")
+        light_data.energy = light["intensity"] * 100  # Blender watts
+        light_data.shadow_soft_size = light["radius"]
+        # Convert color temperature to approximate RGB
+        temp = light["color_temperature"]
+        # Warm light approximation: 2700K=orange, 3500K=warm white
+        t_norm = (temp - 2700) / 800.0  # 0.0=warmest, 1.0=coolest
+        light_data.color = (
+            1.0,
+            0.75 + 0.15 * t_norm,
+            0.45 + 0.35 * t_norm,
+        )
+
+        light_obj = bpy.data.objects.new(l_name, light_data)
+        light_obj.location = (lx, ly, lz)
+        light_obj.parent = room_empty
+        light_obj["vb_room_type"] = room_type
+        light_obj["vb_editable_role"] = "light"
+        light_obj["vb_color_temperature"] = temp
+        bpy.context.collection.objects.link(light_obj)
+        light_count += 1
+
     result = _build_interior_result(name, room_type, layout, procedural_count)
     result["shell_count"] = shell_count
+    result["clutter_count"] = clutter_count
+    result["light_count"] = light_count
     return {"status": "success", "result": result}
 
 
