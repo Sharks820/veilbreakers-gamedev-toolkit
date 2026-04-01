@@ -2712,6 +2712,327 @@ def _generate_interior_layout_basic(
 
 
 # ---------------------------------------------------------------------------
+# Decorative Clutter Scatter (MESH-03)
+# ---------------------------------------------------------------------------
+# Poisson disk scatter system for placing 5-15 decorative props per room
+# on furniture surfaces and floor areas.
+# ---------------------------------------------------------------------------
+
+CLUTTER_POOLS: dict[str, list[str]] = {
+    "tavern": [
+        "mug", "plate", "bottle", "candle_stub", "coin_pile",
+        "food_scrap", "spilled_drink",
+    ],
+    "bedroom": [
+        "book", "candle", "mirror", "clothing_pile", "comb",
+        "jewelry_box",
+    ],
+    "kitchen": [
+        "pot", "ladle", "cutting_board", "vegetable", "flour_bag",
+        "herb_bunch",
+    ],
+    "blacksmith": [
+        "hammer", "tongs", "horseshoe", "metal_ingot",
+        "grinding_stone", "coal_pile",
+    ],
+    "library": [
+        "open_book", "quill_ink", "scroll", "magnifying_glass",
+        "globe_small",
+    ],
+    "chapel": [
+        "prayer_bead", "incense_holder", "offering_bowl",
+        "holy_water_vial",
+    ],
+    "smithy": [
+        "hammer", "tongs", "horseshoe", "metal_ingot",
+        "grinding_stone", "coal_pile",
+    ],
+    "throne_room": [
+        "coin_pile", "scroll", "banner_fragment", "goblet",
+        "cushion",
+    ],
+    "great_hall": [
+        "mug", "plate", "bottle", "goblet", "food_scrap",
+        "candle_stub",
+    ],
+    "dining_hall": [
+        "mug", "plate", "bottle", "goblet", "food_scrap",
+        "candle_stub",
+    ],
+    "war_room": [
+        "scroll", "quill_ink", "map_piece", "coin_pile",
+        "seal_stamp",
+    ],
+    "alchemy_lab": [
+        "potion_bottle", "herb_bunch", "mortar_pestle", "crystal",
+        "dried_ingredient",
+    ],
+    "crypt": [
+        "bone_fragment", "offering_bowl", "candle_stub",
+        "dust_pile", "cobweb",
+    ],
+    "storage": [
+        "rope_coil", "sack", "nail_box", "lantern_unlit",
+    ],
+    "barracks": [
+        "clothing_pile", "boot", "sharpening_stone", "mug",
+    ],
+    "guard_post": [
+        "mug", "food_scrap", "torch_stub", "dice",
+    ],
+    "dungeon_cell": [
+        "bone_fragment", "rock_small", "straw_pile",
+    ],
+    "armory": [
+        "oilcloth", "whetstone", "strap_leather", "bolt_quiver",
+    ],
+    "torture_chamber": [
+        "bone_fragment", "chain_link", "blood_stain", "iron_spike",
+    ],
+    "study": [
+        "open_book", "quill_ink", "scroll", "magnifying_glass",
+        "ink_bottle",
+    ],
+    "shrine_room": [
+        "prayer_bead", "incense_holder", "offering_bowl",
+        "candle_stub",
+    ],
+    "treasury": [
+        "coin_pile", "gem_loose", "gold_bar", "scroll",
+    ],
+    "guard_barracks": [
+        "clothing_pile", "boot", "sharpening_stone", "mug",
+        "dice",
+    ],
+}
+
+# Surfaces we can scatter clutter onto (item types that have flat tops)
+_SURFACE_TYPES: set[str] = {
+    "table", "large_table", "long_table", "serving_table", "desk",
+    "workbench", "shelf", "bookshelf", "shelf_with_bottles", "nightstand",
+    "altar", "bar_counter",
+}
+
+
+def _poisson_disk_scatter_2d(
+    width: float,
+    depth: float,
+    min_distance: float,
+    rng: random.Random,
+    max_points: int = 200,
+) -> list[tuple[float, float]]:
+    """Bridson's Poisson disk sampling in 2D.
+
+    Returns sample points with guaranteed minimum distance between them.
+    Points are within (0, 0) to (width, depth).
+    """
+    cell_size = min_distance / math.sqrt(2)
+    cols = max(1, int(math.ceil(width / cell_size)))
+    rows = max(1, int(math.ceil(depth / cell_size)))
+    grid: list[Optional[int]] = [None] * (cols * rows)
+
+    points: list[tuple[float, float]] = []
+    active: list[int] = []
+
+    # Seed point at center
+    x0 = width / 2
+    y0 = depth / 2
+    points.append((x0, y0))
+    active.append(0)
+    gi = int(x0 / cell_size)
+    gj = int(y0 / cell_size)
+    if 0 <= gi < cols and 0 <= gj < rows:
+        grid[gj * cols + gi] = 0
+
+    k = 30  # candidates per active point
+
+    while active and len(points) < max_points:
+        idx = rng.randint(0, len(active) - 1)
+        pt_idx = active[idx]
+        px, py = points[pt_idx]
+        found = False
+
+        for _ in range(k):
+            angle = rng.uniform(0, 2 * math.pi)
+            dist = rng.uniform(min_distance, 2 * min_distance)
+            nx = px + math.cos(angle) * dist
+            ny = py + math.sin(angle) * dist
+
+            if nx < 0 or nx >= width or ny < 0 or ny >= depth:
+                continue
+
+            gi = int(nx / cell_size)
+            gj = int(ny / cell_size)
+            if gi < 0 or gi >= cols or gj < 0 or gj >= rows:
+                continue
+
+            # Check neighbors in 5x5 grid
+            too_close = False
+            for di in range(-2, 3):
+                for dj in range(-2, 3):
+                    ni = gi + di
+                    nj = gj + dj
+                    if 0 <= ni < cols and 0 <= nj < rows:
+                        neighbor = grid[nj * cols + ni]
+                        if neighbor is not None:
+                            ex, ey = points[neighbor]
+                            dx = nx - ex
+                            dy = ny - ey
+                            if dx * dx + dy * dy < min_distance * min_distance:
+                                too_close = True
+                                break
+                    if too_close:
+                        break
+                if too_close:
+                    break
+
+            if not too_close:
+                new_idx = len(points)
+                points.append((nx, ny))
+                active.append(new_idx)
+                grid[gj * cols + gi] = new_idx
+                found = True
+                break
+
+        if not found:
+            active.pop(idx)
+
+    return points
+
+
+def generate_clutter_layout(
+    room_type: str,
+    width: float,
+    depth: float,
+    furniture_items: list[dict],
+    seed: int = 0,
+    density: float = 0.5,
+) -> list[dict]:
+    """Generate decorative clutter items for a room.
+
+    Uses Poisson disk scatter to place 5-15 decorative props on furniture
+    surfaces and floor areas.
+
+    Args:
+        room_type: type of room (determines clutter pool)
+        width: room width in meters
+        depth: room depth in meters
+        furniture_items: list of placed furniture dicts from generate_interior_layout
+        seed: random seed for reproducibility
+        density: 0.0-1.0, controls item count: floor(5 + density * 10)
+
+    Returns:
+        list of clutter item dicts with: type, position, rotation, scale, surface_parent
+    """
+    rng = random.Random(seed + 9999)  # offset seed to differ from furniture
+    pool = CLUTTER_POOLS.get(room_type, [])
+    if not pool:
+        return []
+
+    density = max(0.0, min(1.0, density))
+    target_count = int(5 + density * 10)
+
+    # Identify scatter surfaces from furniture
+    surfaces: list[dict] = []
+    floor_occupied: list[tuple[float, float, float, float]] = []
+
+    for furn in furniture_items:
+        ftype = furn["type"]
+        fx, fy, fz = furn["position"]
+        fsx, fsy, fsz = furn["scale"]
+        floor_occupied.append((fx, fy, fsx, fsy))
+
+        if ftype in _SURFACE_TYPES:
+            surfaces.append({
+                "type": ftype,
+                "x": fx,
+                "y": fy,
+                "z": fsz,  # top surface height
+                "width": fsx * 0.7,  # usable surface is ~70% of item
+                "depth": fsy * 0.7,
+            })
+
+    clutter: list[dict] = []
+    placed_count = 0
+
+    # Phase 1: Place clutter on surfaces (up to 60% of target)
+    surface_target = int(target_count * 0.6)
+    if surfaces:
+        for surface in surfaces:
+            if placed_count >= surface_target:
+                break
+            sw = surface["width"]
+            sd = surface["depth"]
+            min_dist = max(0.15, min(sw, sd) / 3)
+            points = _poisson_disk_scatter_2d(sw, sd, min_dist, rng, max_points=4)
+
+            for px, py in points:
+                if placed_count >= surface_target:
+                    break
+                item_type = rng.choice(pool)
+                scale_var = rng.uniform(0.85, 1.15)
+                base_scale = 0.1  # clutter items are small
+                clutter.append({
+                    "type": item_type,
+                    "position": [
+                        round(surface["x"] - sw / 2 + px, 4),
+                        round(surface["y"] - sd / 2 + py, 4),
+                        round(surface["z"], 4),
+                    ],
+                    "rotation": round(rng.uniform(0, 2 * math.pi), 4),
+                    "scale": [
+                        round(base_scale * scale_var, 4),
+                        round(base_scale * scale_var, 4),
+                        round(base_scale * scale_var, 4),
+                    ],
+                    "surface_parent": surface["type"],
+                })
+                placed_count += 1
+
+    # Phase 2: Place remaining clutter on floor
+    floor_target = target_count - placed_count
+    if floor_target > 0:
+        min_dist = 0.3
+        floor_points = _poisson_disk_scatter_2d(
+            width, depth, min_dist, rng, max_points=floor_target * 3,
+        )
+
+        margin = 0.3
+        for px, py in floor_points:
+            if placed_count >= target_count:
+                break
+            # Skip points too close to walls
+            if px < margin or px > width - margin or py < margin or py > depth - margin:
+                continue
+            # Skip points inside furniture footprints
+            in_furniture = False
+            for fx, fy, fsx, fsy in floor_occupied:
+                if abs(px - fx) < fsx / 2 + 0.1 and abs(py - fy) < fsy / 2 + 0.1:
+                    in_furniture = True
+                    break
+            if in_furniture:
+                continue
+
+            item_type = rng.choice(pool)
+            scale_var = rng.uniform(0.85, 1.15)
+            base_scale = 0.12
+            clutter.append({
+                "type": item_type,
+                "position": [round(px, 4), round(py, 4), 0.0],
+                "rotation": round(rng.uniform(0, 2 * math.pi), 4),
+                "scale": [
+                    round(base_scale * scale_var, 4),
+                    round(base_scale * scale_var, 4),
+                    round(base_scale * scale_var, 4),
+                ],
+                "surface_parent": None,
+            })
+            placed_count += 1
+
+    return clutter
+
+
+# ---------------------------------------------------------------------------
 # Modular Kit
 # ---------------------------------------------------------------------------
 
