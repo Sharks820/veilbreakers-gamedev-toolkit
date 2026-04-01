@@ -423,6 +423,137 @@ def _road_segment_mesh_spec(
     }
 
 
+def _road_segment_mesh_spec_with_curbs(
+    start: Vec3,
+    end: Vec3,
+    width: float,
+    curb_height: float = 0.15,
+    gutter_width: float = 0.3,
+    resolution: int = 4,
+) -> dict[str, Any]:
+    """Generate a mesh spec for a road segment with raised curb geometry.
+
+    Cross-section layout (6 vertex columns per row, indexed left-to-right):
+      col 0: outer-left gutter    X = -(width/2 + gutter_width),  Z = 0
+      col 1: curb-top-left        X = -width/2,                   Z = curb_height
+      col 2: inner-left road      X = -(width/2 - gutter_width*0.3), Z = 0
+      col 3: inner-right road     X =  (width/2 - gutter_width*0.3), Z = 0
+      col 4: curb-top-right       X =  width/2,                   Z = curb_height
+      col 5: outer-right gutter   X =  (width/2 + gutter_width),  Z = 0
+
+    The 5 quad strips per segment step:
+      gutter-L  (col0-col1-col1'-col0')
+      curb-L    (col1-col2-col2'-col1')
+      road-surf (col2-col3-col3'-col2')
+      curb-R    (col3-col4-col4'-col3')
+      gutter-R  (col4-col5-col5'-col4')
+
+    UV layers:
+      road_surface — U along road direction, V across road width (0-1 over full width+gutters)
+      curb         — U along road direction, V 0-1 over curb face height only
+
+    Returns a dict with vertices, faces, uv_layers (road_surface, curb), type.
+    """
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    length = math.sqrt(dx * dx + dy * dy)
+    if length < 1e-6:
+        return {"vertices": [], "faces": [], "uv_layers": {"road_surface": [], "curb": []}}
+
+    # Unit along-road direction
+    tx = dx / length
+    ty = dy / length
+    # Unit perpendicular (left normal)
+    nx = -ty
+    ny = tx
+
+    hw = width / 2.0
+    # Column X offsets from road center (local space, positive = right)
+    col_offsets: list[tuple[float, float]] = [
+        (-(hw + gutter_width), 0.0),            # col 0: outer-left gutter
+        (-hw, curb_height),                     # col 1: curb-top-left
+        (-(hw - gutter_width * 0.3), 0.0),      # col 2: inner-left road
+        (hw - gutter_width * 0.3, 0.0),         # col 3: inner-right road
+        (hw, curb_height),                      # col 4: curb-top-right
+        (hw + gutter_width, 0.0),               # col 5: outer-right gutter
+    ]
+    num_cols = len(col_offsets)  # 6
+
+    vertices: list[Vec3] = []
+    faces: list[tuple[int, int, int, int]] = []
+
+    # UV data per face (4 UV coords per quad, one entry per face)
+    uv_road_surface: list[list[tuple[float, float]]] = []
+    uv_curb: list[list[tuple[float, float]]] = []
+
+    # Total span for V normalisation in road_surface UV
+    total_span = 2.0 * (hw + gutter_width)
+
+    for row in range(resolution + 1):
+        t = row / resolution
+        px = start[0] + dx * t
+        py = start[1] + dy * t
+        pz = start[2] + (end[2] - start[2]) * t
+        u = t  # UV along road direction
+
+        for col_xoff, col_z in col_offsets:
+            wx = px + nx * col_xoff
+            wy = py + ny * col_xoff
+            wz = pz + col_z
+            vertices.append((wx, wy, wz))
+
+    # Build quads between consecutive rows
+    for row in range(resolution):
+        base_a = row * num_cols
+        base_b = (row + 1) * num_cols
+        u0 = row / resolution
+        u1 = (row + 1) / resolution
+
+        for col in range(num_cols - 1):
+            # Quad: (a_col, a_col+1, b_col+1, b_col)  -- CCW
+            ia0 = base_a + col
+            ia1 = base_a + col + 1
+            ib0 = base_b + col
+            ib1 = base_b + col + 1
+            faces.append((ia0, ia1, ib1, ib0))
+
+            # road_surface UV: V goes from left to right over full span
+            xoff_l = col_offsets[col][0]
+            xoff_r = col_offsets[col + 1][0]
+            v0 = (xoff_l + hw + gutter_width) / total_span
+            v1 = (xoff_r + hw + gutter_width) / total_span
+            uv_road_surface.append([
+                (u0, v0), (u0, v1), (u1, v1), (u1, v0)
+            ])
+
+            # curb UV: only meaningful on curb strips (col 1 and col 3)
+            # For non-curb quads emit zeros; consumers read only relevant strips.
+            if col in (1, 3):
+                # V goes 0 (road surface) to 1 (curb top)
+                z0 = col_offsets[col][1]
+                z1 = col_offsets[col + 1][1]
+                cv0 = z0 / curb_height if curb_height > 0 else 0.0
+                cv1 = z1 / curb_height if curb_height > 0 else 0.0
+                uv_curb.append([
+                    (u0, cv0), (u0, cv1), (u1, cv1), (u1, cv0)
+                ])
+            else:
+                uv_curb.append([(0.0, 0.0)] * 4)
+
+    return {
+        "vertices": vertices,
+        "faces": faces,
+        "uv_layers": {
+            "road_surface": uv_road_surface,
+            "curb": uv_curb,
+        },
+        "type": "road_strip_with_curbs",
+        "width": width,
+        "curb_height": curb_height,
+        "gutter_width": gutter_width,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Main API
 # ---------------------------------------------------------------------------
@@ -544,9 +675,15 @@ def compute_road_network(
     )
 
     # Step 5: Generate mesh specs
+    # Main roads and cobblestone streets get full curb geometry;
+    # paths and trails use the simpler flat strip.
+    _curb_road_types = {"main", "cobblestone"}
     mesh_specs: list[dict[str, Any]] = []
     for start, end, width, road_type in segments:
-        spec = _road_segment_mesh_spec(start, end, width)
+        if road_type in _curb_road_types:
+            spec = _road_segment_mesh_spec_with_curbs(start, end, width)
+        else:
+            spec = _road_segment_mesh_spec(start, end, width)
         spec["road_type"] = road_type
         spec["width"] = width
         mesh_specs.append(spec)
