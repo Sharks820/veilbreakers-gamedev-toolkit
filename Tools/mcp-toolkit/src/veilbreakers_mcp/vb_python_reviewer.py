@@ -22,9 +22,10 @@ import json
 import re
 import sys
 from dataclasses import asdict, dataclass, field
-from enum import IntEnum
 from pathlib import Path
 from typing import Optional
+
+from veilbreakers_mcp._types import Category, FindingType, Severity
 
 REVIEW_SCOPE_CHOICES = ("production", "strict")
 STRICT_ONLY_RULE_IDS = frozenset({
@@ -41,27 +42,6 @@ DEFAULT_SKIP_DIRS = frozenset({
 DEFAULT_TEST_DIRS = frozenset({"tests", "testdata", "fixtures"})
 DEFAULT_TEMP_DIR_FRAGMENTS = ("addon_backup_",)
 DEFAULT_TEMP_FILE_PREFIXES = ("_tmp", ".tmp")
-
-
-class Severity(IntEnum):
-    CRITICAL = 0
-    HIGH = 1
-    MEDIUM = 2
-    LOW = 3
-
-
-class Category(IntEnum):
-    Security = 0
-    Bug = 1
-    Performance = 2
-    Quality = 3
-
-
-class FindingType(IntEnum):
-    ERROR = 0
-    BUG = 1
-    OPTIMIZATION = 2
-    STRENGTHENING = 3
 
 
 # Map severity to default confidence/priority
