@@ -1777,6 +1777,7 @@ async def blender_texture(
         "create_pbr", "mask_region", "inpaint", "hsv_adjust",
         "blend_seams", "generate_wear", "bake", "upscale",
         "make_tileable", "validate", "delight", "validate_palette",
+        "load_extracted_textures", "mix_weathering_over_texture",
     ],
     object_name: str | None = None,
     # PBR creation params
@@ -1813,6 +1814,13 @@ async def blender_texture(
     # Palette validation params
     rules: dict | None = None,
     sample_pixels: int = 10000,
+    # Extracted texture params (load_extracted_textures)
+    albedo_path: str | None = None,
+    albedo_delit_path: str | None = None,
+    normal_path: str | None = None,
+    orm_path: str | None = None,
+    # Weathering overlay params (mix_weathering_over_texture)
+    weathering_strength: float = 0.4,
     capture_viewport: bool = True
 ):
     """Comprehensive texture operations -- Blender-side and MCP-side."""
@@ -1977,6 +1985,33 @@ async def blender_texture(
             sample_pixels=sample_pixels,
         )
         return json.dumps(result, indent=2, default=str)
+
+    elif action == "load_extracted_textures":
+        if not object_name:
+            return "ERROR: 'object_name' is required for load_extracted_textures"
+        if not albedo_path and not albedo_delit_path and not normal_path and not orm_path:
+            return "ERROR: at least one texture path (albedo_path, albedo_delit_path, normal_path, orm_path) is required"
+        params: dict = {"object_name": object_name}
+        if albedo_delit_path:
+            params["albedo_delit_path"] = albedo_delit_path
+        elif albedo_path:
+            params["albedo_path"] = albedo_path
+        if normal_path:
+            params["normal_path"] = normal_path
+        if orm_path:
+            params["orm_path"] = orm_path
+        result = await blender.send_command("texture_load_extracted_textures", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "mix_weathering_over_texture":
+        if not object_name:
+            return "ERROR: 'object_name' is required for mix_weathering_over_texture"
+        params = {
+            "object_name": object_name,
+            "weathering_strength": weathering_strength,
+        }
+        result = await blender.send_command("texture_mix_weathering_over_texture", params)
+        return await _with_screenshot(blender, result, capture_viewport)
 
     return "Unknown action"
 
@@ -3598,6 +3633,7 @@ async def blender_environment(
         "create_breakable",
         "add_storytelling_props",
         "sculpt_terrain",
+        "generate_multi_biome_world",
     ],
     # Common params
     name: str | None = None,
@@ -3647,6 +3683,16 @@ async def blender_environment(
     operation: str | None = None,
     falloff: str = "smooth",
     heightmap: list[list[float]] | None = None,
+    # generate_multi_biome_world params
+    biome_count: int | None = None,
+    biomes: list[str] | None = None,
+    world_size: float | None = None,
+    corruption_level: float | None = None,
+    building_plots: list[dict] | None = None,
+    scatter_vegetation: bool | None = None,
+    min_veg_distance: float | None = None,
+    max_veg_instances: int | None = None,
+    transition_width_m: float | None = None,
     # Visual feedback
     capture_viewport: bool = True
 ):
@@ -3819,6 +3865,62 @@ async def blender_environment(
         if heightmap is not None:
             params["heightmap"] = heightmap
         result = await blender.send_command("terrain_sculpt", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_multi_biome_world":
+        params: dict = {}
+        if name is not None:
+            params["name"] = name
+        if seed is not None:
+            params["seed"] = seed
+        if resolution is not None:
+            params["width"] = resolution
+            params["height"] = resolution
+        if height_scale is not None:
+            params["height_scale"] = height_scale
+        if scale is not None:
+            params["world_size"] = scale
+        if world_size is not None:
+            params["world_size"] = world_size
+        if erosion is not None:
+            params["erosion"] = erosion
+        if erosion_iterations is not None:
+            params["erosion_iterations"] = erosion_iterations
+        if biome_count is not None:
+            params["biome_count"] = biome_count
+        if biomes is not None:
+            params["biomes"] = biomes
+        if corruption_level is not None:
+            params["corruption_level"] = corruption_level
+        if building_plots is not None:
+            params["building_plots"] = building_plots
+        if scatter_vegetation is not None:
+            params["scatter_vegetation"] = scatter_vegetation
+        if min_veg_distance is not None:
+            params["min_veg_distance"] = min_veg_distance
+        if max_veg_instances is not None:
+            params["max_veg_instances"] = max_veg_instances
+        if transition_width_m is not None:
+            params["transition_width_m"] = transition_width_m
+
+        result = await blender.send_command("env_generate_multi_biome_world", params)
+        biome_names = result.get("biome_names", [])
+        veg_count = result.get("vegetation_count", 0)
+        corruption_zones = result.get("corruption_zones", 0)
+        world_sz = result.get("world_size_m", 512.0)
+        flatten_ct = result.get("flatten_zones_applied", 0)
+        result["next_steps"] = [
+            f"Verify biome distribution: use blender_viewport action=contact_sheet"
+            f" object_name='{result.get('name', name)}'",
+            f"Biomes generated: {', '.join(biome_names)}",
+            f"Vegetation instances: {veg_count}",
+            f"Corruption zones (>30%): {corruption_zones}",
+            f"Foundation flatten zones: {flatten_ct}",
+            f"World size: {world_sz}m",
+            "Add river: use blender_environment action=carve_river",
+            "Export heightmap: use blender_environment action=export_heightmap",
+            "Game-readiness check: use blender_mesh action=game_check",
+        ]
         return await _with_screenshot(blender, result, capture_viewport)
 
     return "Unknown action"
