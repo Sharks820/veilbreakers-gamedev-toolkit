@@ -3846,6 +3846,7 @@ async def blender_worldbuilding(
         "generate_multi_floor_dungeon",
         "generate_overrun_variant",
         "generate_easter_egg",
+        "prefetch_settlement_props",
     ],
     # Common params (float to accommodate both grid dimensions and building dimensions)
     name: str | None = None,
@@ -3903,6 +3904,9 @@ async def blender_worldbuilding(
     secret_room_count: int | None = None,
     hidden_path_count: int | None = None,
     lore_item_count: int | None = None,
+    # Prop prefetch params (Phase 36-02)
+    prop_manifest: list | None = None,
+    veil_pressure: float | None = None,
     # Visual feedback
     capture_viewport: bool = True
 ):
@@ -4161,6 +4165,15 @@ async def blender_worldbuilding(
             params["seed"] = seed
         result = await blender.send_command("world_generate_easter_egg", params)
         return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "prefetch_settlement_props":
+        params = {}
+        if prop_manifest is not None:
+            params["prop_manifest"] = prop_manifest
+        if veil_pressure is not None:
+            params["veil_pressure"] = veil_pressure
+        result = await blender.send_command("world_prefetch_settlement_props", params)
+        return result
 
     return "Unknown action"
 
