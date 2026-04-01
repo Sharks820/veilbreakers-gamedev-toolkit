@@ -18,6 +18,14 @@ import math
 import random
 from typing import Any, Callable, Optional
 
+from blender_addon.handlers._settlement_grammar import (
+    assign_buildings_to_lots,
+    generate_prop_manifest,
+    generate_road_network_organic,
+    ring_for_position,
+    subdivide_block_to_lots,
+)
+
 
 # ---------------------------------------------------------------------------
 # Settlement type configurations
@@ -169,6 +177,22 @@ SETTLEMENT_TYPES: dict[str, dict[str, Any]] = {
         "prop_density": 0.5,
         "perimeter_props": ["fence", "signpost"],
         "layout_pattern": "organic",
+    },
+    "medieval_town": {
+        "building_count": (40, 80),
+        "has_walls": True,
+        "has_market": True,
+        "has_shrine": True,
+        "road_style": "cobblestone",
+        "building_types": [
+            "abandoned_house", "forge", "shrine_major", "market_stall_cluster",
+            "barracks", "watchtower", "abandoned_house", "abandoned_house",
+            "tavern", "blacksmith", "guild_hall", "manor",
+        ],
+        "prop_density": 0.6,
+        "perimeter_props": ["wall_segment", "gate_large", "corner_tower"],
+        "layout_pattern": "concentric_organic",
+        "default_radius": 150.0,
     },
     "city": {
         "building_count": (20, 40),
@@ -2048,6 +2072,231 @@ def generate_city_districts(
 
 
 # ---------------------------------------------------------------------------
+# Concentric-organic district layout (medieval_town)
+# ---------------------------------------------------------------------------
+
+def generate_concentric_districts(
+    center: tuple[float, float],
+    radius: float,
+    seed: int,
+    veil_pressure: float = 0.0,
+    heightmap: list[list[float]] | None = None,
+    wall_height: float = 3.5,
+) -> dict[str, Any]:
+    """Generate a medieval town using concentric ring zoning + OBB lot subdivision.
+
+    Uses pure-logic grammar functions from _settlement_grammar.py:
+      - ring_for_position → district assignment
+      - generate_road_network_organic → winding medieval streets
+      - subdivide_block_to_lots → OBB recursive lot split per road block
+      - assign_buildings_to_lots → district-weighted building types
+      - generate_prop_manifest → corruption-scaled prop placement specs
+
+    Returns a dict compatible with generate_settlement() output structure so
+    the same Blender wiring layer can consume it without modification.
+    """
+    rng = random.Random(seed)
+
+    # --- Step 1: Generate organic road network ---
+    # Seed settlement anchor points radially so roads radiate from center
+    num_anchors = rng.randint(8, 14)
+    anchor_points: list[tuple[float, float, float]] = [center + (0.0,)]  # type: ignore[operator]
+    for i in range(num_anchors):
+        angle = (i / num_anchors) * 2.0 * math.pi + rng.uniform(-0.3, 0.3)
+        dist = rng.uniform(radius * 0.25, radius * 0.85)
+        ax = center[0] + math.cos(angle) * dist
+        ay = center[1] + math.sin(angle) * dist
+        az = _sample_heightmap(heightmap, ax, ay)
+        anchor_points.append((ax, ay, az))
+
+    raw_roads = generate_road_network_organic(
+        center=center,
+        radius=radius,
+        seed=seed,
+        settlement_points=anchor_points,
+    )
+
+    # Convert grammar road dicts to settlement_generator format
+    roads: list[dict[str, Any]] = []
+    for seg in raw_roads:
+        pts = seg["points"]
+        if len(pts) < 2:
+            continue
+        for pi in range(len(pts) - 1):
+            roads.append({
+                "start": (pts[pi][0], pts[pi][1]),
+                "end": (pts[pi + 1][0], pts[pi + 1][1]),
+                "width": seg["width"],
+                "style": seg["style"],
+            })
+
+    # --- Step 2: Build road-bounded block polygons (simple rectangular blocks) ---
+    # For each pair of adjacent anchor points + center, form a triangular block polygon
+    # that the lot subdivider can recurse into.
+    blocks: list[list[tuple[float, float]]] = []
+    num_ap = len(anchor_points) - 1  # exclude center at index 0
+    for i in range(num_ap):
+        a1 = anchor_points[1 + i]
+        a2 = anchor_points[1 + (i + 1) % num_ap]
+        block_poly = [
+            (center[0], center[1]),
+            (a1[0], a1[1]),
+            (a2[0], a2[1]),
+        ]
+        blocks.append(block_poly)
+
+    # --- Step 3: Subdivide blocks into lots, assign buildings ---
+    all_lots: list[dict[str, Any]] = []
+    all_buildings: list[dict[str, Any]] = []
+
+    for block_poly in blocks:
+        # Determine district for block centroid
+        cx = sum(p[0] for p in block_poly) / len(block_poly)
+        cy = sum(p[1] for p in block_poly) / len(block_poly)
+        district = ring_for_position((cx, cy), center, radius)
+
+        lots = subdivide_block_to_lots(
+            block_polygon=block_poly,
+            district=district,
+            seed=rng.randint(0, 2**31),
+        )
+        all_lots.extend(lots)
+
+    # Assign building types to lots
+    assigned = assign_buildings_to_lots(
+        lots=all_lots,
+        center=center,
+        radius=radius,
+        veil_pressure=veil_pressure,
+        seed=seed,
+    )
+
+    # Convert grammar building assignments to settlement_generator building format
+    for idx, lot in enumerate(assigned):
+        lot_cx = sum(p[0] for p in lot["polygon"]) / len(lot["polygon"])
+        lot_cy = sum(p[1] for p in lot["polygon"]) / len(lot["polygon"])
+        lot_area = lot.get("area", 25.0)
+        fp_side = max(3.0, min(12.0, math.sqrt(lot_area) * 0.6))
+        elevation = _sample_heightmap(heightmap, lot_cx, lot_cy)
+        foundation_profile = _compute_foundation_profile(
+            heightmap,
+            (lot_cx, lot_cy),
+            (fp_side, fp_side),
+            rotation=0.0,
+        )
+        btype = lot.get("building_type", "abandoned_house")
+        variation_rng = random.Random(seed ^ idx)
+        bld = {
+            "type": btype,
+            "position": (round(lot_cx, 2), round(lot_cy, 2)),
+            "footprint": (fp_side, fp_side),
+            "rotation": variation_rng.uniform(0.0, math.pi * 2.0),
+            "floors": variation_rng.randint(1, 2),
+            "district": lot["district"],
+            "unique_seed": seed ^ idx,
+            "elevation": round(elevation, 3),
+            "foundation_height": foundation_profile["foundation_height"],
+            "platform_elevation": foundation_profile["platform_elevation"],
+            "foundation_profile": foundation_profile,
+            "orientation_edge": lot.get("orientation_edge"),
+        }
+        variation_rng2 = random.Random(seed ^ idx ^ 0xBEEF)
+        bld = _apply_building_variation(variation_rng2, bld)
+        all_buildings.append(bld)
+
+    # --- Step 4: Generate prop manifest ---
+    prop_manifest = generate_prop_manifest(
+        road_segments=raw_roads,
+        center=center,
+        radius=radius,
+        veil_pressure=veil_pressure,
+        seed=seed,
+    )
+
+    # Convert prop manifest to settlement prop format
+    props: list[dict[str, Any]] = []
+    for pm in prop_manifest:
+        pos = pm["position"]
+        px, py = pos[0], pos[1]
+        props.append({
+            "type": pm["prop_type"],
+            "position": (round(px, 2), round(py, 2)),
+            "rotation": pm["rotation_z"],
+            "corruption_band": pm["corruption_band"],
+            "cache_key": pm["cache_key"],
+            "source": "tripo_manifest",
+        })
+
+    # --- Step 5: Perimeter walls ---
+    perimeter_config = {
+        "has_walls": True,
+        "perimeter_props": ["wall_segment", "gate_large", "corner_tower"],
+    }
+    perimeter = _generate_perimeter(rng, perimeter_config, center, radius)
+
+    # --- Step 6: Furnish interiors + lights ---
+    interiors: dict[int, list[dict[str, Any]]] = {}
+    all_lights: list[dict[str, Any]] = []
+    for idx, bld in enumerate(all_buildings):
+        rooms = bld.get("room_functions", [])
+        if not rooms:
+            continue
+        bx, by = bld["position"]
+        fp = bld.get("footprint", (6.0, 6.0))
+        num_floors = bld.get("floors", 1)
+        room_height = fp[1] / max(len(rooms), 1)
+        room_furnishings: list[dict[str, Any]] = []
+        building_lights: list[dict[str, Any]] = []
+        for floor in range(max(1, num_floors)):
+            for ri, room_type in enumerate(rooms):
+                room_bounds = {
+                    "min": (bx - fp[0] / 2, by - fp[1] / 2 + ri * room_height),
+                    "max": (bx + fp[0] / 2, by - fp[1] / 2 + (ri + 1) * room_height),
+                }
+                room_rng = random.Random(bld["unique_seed"] + ri + floor * 1000)
+                furnishings = _furnish_interior(room_rng, room_type, room_bounds)
+                for item in furnishings:
+                    item["floor"] = floor
+                room_furnishings.extend(furnishings)
+                light_rng = random.Random(bld["unique_seed"] + ri + floor * 2000)
+                room_lights = _place_interior_lights(
+                    light_rng, room_type, room_bounds,
+                    floor_index=floor, wall_height=wall_height,
+                )
+                for lt in room_lights:
+                    lt["building_index"] = idx
+                building_lights.extend(room_lights)
+        if room_furnishings:
+            interiors[idx] = room_furnishings
+        all_lights.extend(building_lights)
+
+    metadata = {
+        "building_count": len(all_buildings),
+        "road_count": len(roads),
+        "prop_count": len(props),
+        "lot_count": len(all_lots),
+        "perimeter_element_count": len(perimeter),
+        "furnished_building_count": len(interiors),
+        "total_furniture_pieces": sum(len(v) for v in interiors.values()),
+        "light_count": len(all_lights),
+        "veil_pressure": veil_pressure,
+        "layout_pattern": "concentric_organic",
+        "prop_manifest": prop_manifest,
+    }
+
+    return {
+        "buildings": all_buildings,
+        "roads": roads,
+        "props": props,
+        "perimeter": perimeter,
+        "interiors": interiors,
+        "lights": all_lights,
+        "metadata": metadata,
+        "districts": [],  # district info embedded per-building
+    }
+
+
+# ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
 
@@ -2059,6 +2308,7 @@ def generate_settlement(
     heightmap: Optional[Callable[[float, float], float]] = None,
     wall_height: float = 3.0,
     layout_brief: str = "",
+    veil_pressure: float = 0.0,
 ) -> dict[str, Any]:
     """Generate a complete settlement layout.
 
@@ -2116,6 +2366,38 @@ def generate_settlement(
         seed = random.randint(0, 2**31)
     rng = random.Random(seed)
     layout_profile = _derive_settlement_profile(settlement_type, layout_brief, seed)
+
+    # --- Concentric-organic medieval town generation ---
+    if config.get("layout_pattern") == "concentric_organic":
+        effective_radius = radius if radius > 0 else config.get("default_radius", 150.0)
+        town_data = generate_concentric_districts(
+            center=center,
+            radius=effective_radius,
+            seed=seed,
+            veil_pressure=veil_pressure,
+            heightmap=heightmap,
+            wall_height=wall_height,
+        )
+        return {
+            "settlement_type": settlement_type,
+            "seed": seed,
+            "center": center,
+            "radius": effective_radius,
+            "buildings": town_data["buildings"],
+            "roads": town_data["roads"],
+            "props": town_data["props"],
+            "perimeter": town_data["perimeter"],
+            "interiors": town_data["interiors"],
+            "lights": town_data["lights"],
+            "districts": town_data["districts"],
+            "metadata": {
+                **town_data["metadata"],
+                "has_walls": config["has_walls"],
+                "layout_pattern": "concentric_organic",
+                "layout_brief": layout_brief,
+                "layout_profile": layout_profile,
+            },
+        }
 
     # --- District-based city generation ---
     if config.get("layout_pattern") == "district":

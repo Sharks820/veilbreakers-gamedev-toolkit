@@ -184,6 +184,7 @@ from .worldbuilding import (
     handle_generate_overrun_variant,
     handle_generate_easter_egg,
     handle_add_storytelling_props,
+    handle_prefetch_settlement_props,
 )
 from .worldbuilding_layout import (
     handle_generate_dungeon,
@@ -835,6 +836,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "world_generate_multi_floor_dungeon": handle_generate_multi_floor_dungeon,
     "world_generate_overrun_variant": handle_generate_overrun_variant,
     "world_generate_easter_egg": handle_generate_easter_egg,
+    "world_prefetch_settlement_props": handle_prefetch_settlement_props,
     # Environment v2 operations (Phase 14 -- AAA-05 storytelling props)
     "env_add_storytelling_props": handle_add_storytelling_props,
     # Equipment operations — rewired to AAA quality generators
