@@ -520,6 +520,66 @@ def subdivide_block_to_lots(
 
 
 # ---------------------------------------------------------------------------
+# District-weighted building assignment (D-06)
+# ---------------------------------------------------------------------------
+
+# Building types weighted per district ring.  The first entry in each list is
+# the most common — ``random.choices`` uses descending weights.
+_DISTRICT_BUILDING_TYPES: dict[str, list[str]] = {
+    "market_square": [
+        "market_stall_cluster", "tavern", "guild_hall", "blacksmith",
+    ],
+    "civic_ring": [
+        "manor", "shrine_major", "barracks", "guild_hall", "tavern",
+    ],
+    "residential": [
+        "abandoned_house", "abandoned_house", "forge", "shrine_minor",
+    ],
+    "industrial": [
+        "forge", "blacksmith", "abandoned_house", "watchtower",
+    ],
+    "outskirts": [
+        "abandoned_house", "shrine_minor", "watchtower",
+    ],
+}
+
+
+def assign_buildings_to_lots(
+    lots: list[dict[str, Any]],
+    center: Vec2 = (0.0, 0.0),
+    radius: float = 50.0,
+    veil_pressure: float = 0.0,
+    seed: int = 0,
+) -> list[dict[str, Any]]:
+    """Assign a ``building_type`` to each lot based on its district ring.
+
+    Parameters
+    ----------
+    lots : list of dict
+        Lot dicts from ``subdivide_block_to_lots`` (must have *polygon* and
+        *district* keys).
+    center, radius : settlement geometry for ring classification.
+    veil_pressure : float
+        Currently unused — reserved for corruption-biased type selection.
+    seed : int
+        Deterministic seed.
+
+    Returns
+    -------
+    list of dict
+        The same lot dicts, each augmented with a ``building_type`` key.
+    """
+    rng = random.Random(seed + 7777)
+    for lot in lots:
+        district = lot.get("district", "outskirts")
+        available = _DISTRICT_BUILDING_TYPES.get(district, ["abandoned_house"])
+        # Descending weight: first item ~2x more likely than last
+        weights = [max(1, len(available) - i) for i in range(len(available))]
+        lot["building_type"] = rng.choices(available, weights=weights, k=1)[0]
+    return lots
+
+
+# ---------------------------------------------------------------------------
 # Prop manifest generation (D-07, D-08, D-09)
 # ---------------------------------------------------------------------------
 
