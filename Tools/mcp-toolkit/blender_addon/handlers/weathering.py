@@ -949,3 +949,163 @@ def handle_apply_weathering(params: dict[str, Any]) -> dict[str, Any]:
             "dirt_max": max(dirt_mask) if dirt_mask else 0.0,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# Handler: mix weathering vertex colors over albedo texture
+# ---------------------------------------------------------------------------
+
+def handle_mix_weathering_over_texture(params: dict) -> dict:
+    """Composite weathering vertex colors on top of an albedo texture node.
+
+    Inserts a ``Mix Color`` node (mode=Multiply) between the existing albedo
+    texture node and the Principled BSDF ``Base Color`` input.  A
+    ``Color Attribute`` node reading the ``"weathering"`` vertex color layer
+    provides the weathering mask.
+
+    This composites weathering ON TOP of the extracted Tripo texture rather
+    than replacing it.  Pipeline order must be: load textures -> apply
+    weathering vertex colors -> then call this handler.
+
+    Params:
+        object_name (str): Target Blender object.
+        weathering_strength (float, default 0.4): Mix factor (0.0-1.0).
+            0.0 = no weathering visible, 1.0 = full multiply.
+
+    Returns:
+        Dict with status, mix_node_created (bool), warnings (list).
+    """
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("'object_name' is required")
+
+    if bpy is None:
+        raise RuntimeError("bpy is not available (not running inside Blender)")
+
+    obj = bpy.data.objects.get(object_name)
+    if obj is None:
+        raise ValueError(f"Object not found: {object_name}")
+
+    weathering_strength = float(params.get("weathering_strength", 0.4))
+    weathering_strength = max(0.0, min(1.0, weathering_strength))
+
+    warnings: list[str] = []
+
+    # Find active material
+    mat = None
+    if obj.data is not None and hasattr(obj.data, "materials"):
+        if obj.data.materials:
+            mat = obj.data.materials[0]
+
+    if mat is None or not mat.use_nodes:
+        return {
+            "status": "skipped",
+            "mix_node_created": False,
+            "warnings": ["No material with nodes found on object"],
+        }
+
+    tree = mat.node_tree
+    nodes = tree.nodes
+    links = tree.links
+
+    # Find Principled BSDF
+    bsdf = next((n for n in nodes if n.type == "BSDF_PRINCIPLED"), None)
+    if bsdf is None:
+        return {
+            "status": "skipped",
+            "mix_node_created": False,
+            "warnings": ["No Principled BSDF found in material"],
+        }
+
+    # Find the albedo texture node (labeled "Albedo" or first sRGB TEX_IMAGE)
+    albedo_tex = None
+    for node in nodes:
+        if node.type == "TEX_IMAGE":
+            if node.label == "Albedo":
+                albedo_tex = node
+                break
+            if (
+                node.image is not None
+                and node.image.colorspace_settings.name == "sRGB"
+                and albedo_tex is None
+            ):
+                albedo_tex = node  # fallback: first sRGB image
+
+    if albedo_tex is None:
+        warnings.append("No albedo texture node found; weathering mix node not inserted")
+        return {
+            "status": "skipped",
+            "mix_node_created": False,
+            "warnings": warnings,
+        }
+
+    # Find Base Color socket on BSDF
+    base_color_socket = None
+    for socket_name in ("Base Color", "Color"):
+        s = bsdf.inputs.get(socket_name)
+        if s is not None:
+            base_color_socket = s
+            break
+
+    if base_color_socket is None:
+        return {
+            "status": "skipped",
+            "mix_node_created": False,
+            "warnings": ["Could not find Base Color socket on BSDF"],
+        }
+
+    # Check if mix node already exists (idempotent)
+    existing_mix = next(
+        (
+            n
+            for n in nodes
+            if n.type in ("MIX_RGB", "SHADERNODEMIXTYPES") and n.label == "WeatheringMix"
+        ),
+        None,
+    )
+    if existing_mix is not None:
+        return {
+            "status": "already_wired",
+            "mix_node_created": False,
+            "warnings": [],
+        }
+
+    # Create Color Attribute node for weathering vertex colors
+    attr_node = nodes.new("ShaderNodeVertexColor")
+    attr_node.layer_name = "weathering"
+    attr_node.label = "WeatheringVertexColor"
+    attr_node.location = (albedo_tex.location[0], albedo_tex.location[1] - 200)
+
+    # Create Mix Color node (Multiply)
+    mix_node = nodes.new("ShaderNodeMixRGB")
+    mix_node.blend_type = "MULTIPLY"
+    mix_node.label = "WeatheringMix"
+    mix_node.inputs["Fac"].default_value = weathering_strength
+    mix_node.location = (albedo_tex.location[0] + 250, albedo_tex.location[1])
+
+    # Remove existing link from albedo_tex -> base_color_socket
+    removed = False
+    for link in list(links):
+        if link.to_socket == base_color_socket and link.from_node == albedo_tex:
+            links.remove(link)
+            removed = True
+            break
+
+    # Also remove link from any AO mix node -> base_color_socket so we can re-chain
+    # (the ORM AO mix node is upstream; we wire: albedo -> AO_mix -> weathering_mix -> BSDF)
+    # For simplicity: wire albedo_tex -> mix_A, attr -> mix_B, mix_result -> base_color
+    if not removed:
+        # The connection may go through an AO multiply node -- wire after it instead
+        warnings.append(
+            "No direct albedo->Base Color link found; mix node inserted but may need manual wiring"
+        )
+
+    links.new(albedo_tex.outputs["Color"], mix_node.inputs["Color1"])
+    links.new(attr_node.outputs["Color"], mix_node.inputs["Color2"])
+    links.new(mix_node.outputs["Color"], base_color_socket)
+
+    return {
+        "status": "success",
+        "mix_node_created": True,
+        "warnings": warnings,
+    }
