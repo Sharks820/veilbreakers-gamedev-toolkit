@@ -86,6 +86,8 @@ class PipelineRunner:
         self, object_name: str, poly_budget: int = 50000,
         enhance_profile: str = "prop",
         skip_enhance: bool = False,
+        has_extracted_textures: bool = False,
+        texture_channels: dict | None = None,
     ) -> dict:
         """Orchestrate repair -> enhance -> UV -> UV2 -> material -> validate pipeline.
 
@@ -96,7 +98,11 @@ class PipelineRunner:
         4. Geometry enhancement (SubD, bevel, weighted normals, smooth shading)
         5. UV unwrap via xatlas (primary UV for textures)
         6. UV2 lightmap generation (separate lightmap UV layer for Unity)
-        7. Create PBR material
+        7. Wire textures:
+           - If *has_extracted_textures* is True and *texture_channels* is provided,
+             call ``texture_load_extracted_textures`` to wire the pre-extracted PBR
+             channel PNGs into the node tree WITHOUT creating blank placeholders.
+           - Otherwise fall back to ``texture_create_pbr`` (blank placeholder material).
         8. Validate enhancement quality
 
         Args:
@@ -105,6 +111,13 @@ class PipelineRunner:
             enhance_profile: Enhancement profile preset (weapon, architecture,
                 organic, prop, character, vegetation). Default "prop".
             skip_enhance: If True, skip the geometry enhancement step.
+            has_extracted_textures: When True, skip blank PBR creation and wire
+                pre-extracted textures from *texture_channels* instead.
+            texture_channels: Dict mapping channel names to absolute file paths,
+                as returned by ``glb_texture_extractor.extract_glb_textures`` /
+                ``tripo_post_processor.post_process_tripo_model``.
+                Expected keys: ``albedo``, ``albedo_delit`` (preferred over albedo),
+                ``orm``, ``normal``.  Missing keys are silently ignored.
 
         Returns:
             Dict with per-step results and overall status.
@@ -173,13 +186,33 @@ class PipelineRunner:
                 results["steps"]["lightmap_uv"] = {"status": "skipped",
                                                     "reason": "non-critical failure"}
 
-            # Step 7: Create PBR material
-            pbr_result = await self.blender.send_command(
-                "texture_create_pbr",
-                {"name": object_name, "object_name": object_name},
-            )
-            results["steps"]["create_pbr"] = pbr_result
-            steps_completed.append("create_pbr")
+            # Step 7: Wire textures
+            if has_extracted_textures and texture_channels:
+                # Use pre-extracted PBR channel PNGs -- do NOT create blank placeholders.
+                channels = texture_channels
+                tex_params: dict = {"object_name": object_name}
+                # Prefer de-lit albedo when available
+                if channels.get("albedo_delit"):
+                    tex_params["albedo_delit_path"] = channels["albedo_delit"]
+                elif channels.get("albedo"):
+                    tex_params["albedo_path"] = channels["albedo"]
+                if channels.get("normal"):
+                    tex_params["normal_path"] = channels["normal"]
+                if channels.get("orm"):
+                    tex_params["orm_path"] = channels["orm"]
+                tex_result = await self.blender.send_command(
+                    "texture_load_extracted_textures", tex_params
+                )
+                results["steps"]["load_extracted_textures"] = tex_result
+                steps_completed.append("load_extracted_textures")
+            else:
+                # Fallback: blank Principled BSDF placeholder material
+                pbr_result = await self.blender.send_command(
+                    "texture_create_pbr",
+                    {"name": object_name, "object_name": object_name},
+                )
+                results["steps"]["create_pbr"] = pbr_result
+                steps_completed.append("create_pbr")
 
             # Step 8: Validate enhancement quality
             if not skip_enhance:

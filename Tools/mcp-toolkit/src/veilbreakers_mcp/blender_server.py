@@ -34,6 +34,7 @@ from veilbreakers_mcp.shared.fal_client import (
 )
 from veilbreakers_mcp.shared.delight import delight_albedo
 from veilbreakers_mcp.shared.palette_validator import validate_palette as _validate_palette
+from veilbreakers_mcp.shared.tripo_post_processor import post_process_tripo_model
 
 logger = logging.getLogger("veilbreakers_mcp")
 
@@ -2098,6 +2099,9 @@ async def asset_pipeline(
     capture_viewport: bool = True,
     prefer_external: bool = True,
     review_lighting: bool = True,
+    # Tripo post-processing params (for cleanup action after generate_3d)
+    has_extracted_textures: bool = False,
+    texture_channels: dict | None = None,
 ):
     """Asset pipeline -- 3D generation, map composition, interior building, processing, LODs, catalog, equipment. Use compose_map to build full maps (terrain+water+roads+locations+vegetation+atmosphere). Use compose_interior for walkable interiors (room shells+doors+furniture+props). Use generate_building for Tripo-powered architecture. Use generate_terrain_mesh for procedural terrain."""
     blender = get_blender_connection()
@@ -2177,6 +2181,28 @@ async def asset_pipeline(
                     for i, m in enumerate(verified):
                         px, py = positions[i % len(positions)]
                         safe = m["path"].replace("\\", "/")
+
+                        # Post-process GLB: extract textures, delight, validate, score
+                        glb_out_dir = str(
+                            __import__("pathlib").Path(m["path"]).parent
+                            / f"variant_{i+1}_textures"
+                        )
+                        try:
+                            post_result = await post_process_tripo_model(
+                                m["path"], glb_out_dir,
+                                asset_type=asset_type or "prop",
+                            )
+                            m["post_process"] = post_result
+                            m["texture_channels"] = post_result.get("channels", {})
+                            if post_result.get("albedo_delit"):
+                                m["texture_channels"]["albedo_delit"] = post_result["albedo_delit"]
+                        except Exception as exc:
+                            logger.debug(
+                                "Post-process failed for variant %s: %s", i + 1, exc,
+                                exc_info=True,
+                            )
+                            m["texture_channels"] = {}
+
                         code = (
                             f'import bpy\n'
                             f'bpy.ops.object.select_all(action="DESELECT")\n'
@@ -2204,9 +2230,10 @@ async def asset_pipeline(
                     result["imported_to_blender"] = len(imported_names)
                     result["next_steps"] = [
                         "All variants imported to Blender in a grid layout.",
-                        "Pick the best variant, then run: asset_pipeline action=cleanup object_name=<name>",
+                        "Each model's 'texture_channels' key contains extracted PBR paths (albedo, orm, normal).",
+                        "Pick the best variant, then run: asset_pipeline action=cleanup object_name=<name> has_extracted_textures=true texture_channels=<model.texture_channels>",
                         "Or full pipeline: asset_pipeline action=full_pipeline object_name=<name>",
-                        "The AAA pipeline will: repair -> retopo -> UV -> PBR materials -> weathering -> quality gate.",
+                        "The AAA pipeline will: repair -> retopo -> UV -> wire extracted textures -> weathering -> quality gate.",
                     ]
 
                 return json.dumps(result, indent=2, default=str)
@@ -2862,7 +2889,12 @@ async def asset_pipeline(
         if not object_name:
             return "ERROR: 'object_name' is required for cleanup"
         runner = PipelineRunner(blender, settings)
-        result = await runner.cleanup_ai_model(object_name, poly_budget)
+        result = await runner.cleanup_ai_model(
+            object_name,
+            poly_budget,
+            has_extracted_textures=has_extracted_textures,
+            texture_channels=texture_channels,
+        )
         return await _with_screenshot(blender, result, capture_viewport)
 
     elif action == "generate_lods":
