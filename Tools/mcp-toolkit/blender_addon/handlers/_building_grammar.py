@@ -2429,12 +2429,94 @@ def _find_config_index(
     return None
 
 
+_INTERIOR_QUALITY_TIERS = {
+    "luxury": {
+        "furniture_multiplier": 1.3,
+        "clutter_multiplier": 1.5,
+        "swap_rules": {"barrel": "chest", "crate": "cabinet", "bench": "chair"},
+        "extra_items": [("candelabra", "corner", (0.4, 0.4), 1.2), ("rug", "center", (2.5, 1.8), 0.02)],
+    },
+    "standard": {
+        "furniture_multiplier": 1.0,
+        "clutter_multiplier": 1.0,
+        "swap_rules": {},
+        "extra_items": [],
+    },
+    "poor": {
+        "furniture_multiplier": 0.7,
+        "clutter_multiplier": 0.6,
+        "swap_rules": {"bookshelf": "shelf", "wardrobe": "crate", "candelabra": "torch_sconce"},
+        "extra_items": [],
+    },
+    "abandoned": {
+        "furniture_multiplier": 0.4,
+        "clutter_multiplier": 2.0,
+        "swap_rules": {"bed": "rug", "chair": "crate", "table": "barrel"},
+        "extra_items": [("skull_pile", "corner", (0.5, 0.5), 0.3)],
+    },
+    "ransacked": {
+        "furniture_multiplier": 0.5,
+        "clutter_multiplier": 2.5,
+        "swap_rules": {},
+        "extra_items": [],
+    },
+}
+
+_INTERIOR_OCCUPIED_STATES = {
+    "inhabited": {"damage_chance": 0.0, "rotation_jitter": 0.0},
+    "abandoned": {"damage_chance": 0.3, "rotation_jitter": 0.15},
+    "ransacked": {"damage_chance": 0.6, "rotation_jitter": 0.4},
+    "ruined": {"damage_chance": 0.8, "rotation_jitter": 0.6},
+}
+
+
+def _apply_interior_variant(
+    config: list[tuple[str, str, tuple[float, float], float]],
+    quality_tier: str,
+    occupied_state: str,
+    rng: random.Random,
+) -> list[tuple[str, str, tuple[float, float], float]]:
+    """Apply quality tier and occupied state modifiers to furniture config."""
+    tier = _INTERIOR_QUALITY_TIERS.get(quality_tier, _INTERIOR_QUALITY_TIERS["standard"])
+    state = _INTERIOR_OCCUPIED_STATES.get(occupied_state, _INTERIOR_OCCUPIED_STATES["inhabited"])
+
+    result = []
+    multiplier = tier["furniture_multiplier"]
+    swap_rules = tier["swap_rules"]
+
+    for item_type, placement, dims, height in config:
+        # Random chance to skip items based on multiplier
+        if multiplier < 1.0 and rng.random() > multiplier:
+            continue
+        # Apply swap rules (luxury upgrades / poverty downgrades)
+        swapped_type = swap_rules.get(item_type, item_type)
+        # Random chance to skip based on damage
+        if state["damage_chance"] > 0 and rng.random() < state["damage_chance"]:
+            continue
+        result.append((swapped_type, placement, dims, height))
+
+    # Duplicate items for luxury multiplier
+    if multiplier > 1.0:
+        extra_count = int((multiplier - 1.0) * len(config))
+        for _ in range(extra_count):
+            src = rng.choice(config)
+            result.append(src)
+
+    # Add tier-specific extra items
+    for extra in tier["extra_items"]:
+        result.append(extra)
+
+    return result
+
+
 def generate_interior_layout(
     room_type: str,
     width: float,
     depth: float,
     height: float = 3.0,
     seed: int = 0,
+    quality_tier: str = "standard",
+    occupied_state: str = "inhabited",
 ) -> list[dict]:
     """Generate spatially-aware furniture placement for a room type.
 
@@ -2444,12 +2526,18 @@ def generate_interior_layout(
       Phase 3: Place remaining wall/corner items with 0.3m wall clearance
       Phase 4: Enforce 1.0m door clearance corridor
 
+    Quality tiers: luxury, standard, poor, abandoned, ransacked
+    Occupied states: inhabited, abandoned, ransacked, ruined
+
     Returns list of dicts with: type, position (x,y,z), rotation, scale.
     """
     rng = random.Random(seed)
     config = _ROOM_CONFIGS.get(room_type, [])
     if not config:
         return []
+
+    # Apply variant modifiers for unique interiors
+    config = _apply_interior_variant(list(config), quality_tier, occupied_state, rng)
 
     placed: list[dict] = []
     occupied: list[tuple[float, float, float, float]] = []  # (cx, cy, sx, sy)

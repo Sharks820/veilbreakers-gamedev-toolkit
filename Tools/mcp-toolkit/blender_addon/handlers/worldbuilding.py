@@ -5167,6 +5167,19 @@ def handle_generate_building(params: dict) -> dict:
     stairs_steps = max(10, int(math.ceil(usable_height / 0.18)))
     stairs_direction = "straight" if usable_depth >= (stairs_steps * 0.28) + 1.0 else "spiral"
     stair_width = min(1.35, max(1.0, usable_width * 0.18))
+    # Determine interior quality based on building type/site for unique interiors
+    _quality_tiers = {
+        "forge": "poor", "warehouse": "poor", "barracks": "standard",
+        "inn": "standard", "shrine_minor": "standard", "shrine_major": "luxury",
+        "gatehouse": "standard", "rowhouse": "poor",
+        "abandoned_house": "abandoned", "ruined_fortress_tower": "ransacked",
+    }
+    _occupied_states = {
+        "abandoned_house": "abandoned", "ruined_fortress_tower": "ruined",
+    }
+    _interior_quality = _quality_tiers.get(preset_name, "standard")
+    _interior_state = _occupied_states.get(preset_name, "inhabited")
+
     for floor_idx in range(max(1, floors)):
         room_type = interior_room_types[min(floor_idx, len(interior_room_types) - 1)]
         room_name = f"{name}_Interior_{floor_idx}"
@@ -5177,6 +5190,8 @@ def handle_generate_building(params: dict) -> dict:
             "depth": usable_depth,
             "height": usable_height,
             "seed": rng.randint(0, 99999),
+            "quality_tier": _interior_quality,
+            "occupied_state": _interior_state,
         })
         room_obj = bpy.data.objects.get(room_name)
         if room_obj is not None:
@@ -5506,8 +5521,14 @@ def handle_generate_interior(params: dict) -> dict:
     depth = params.get("depth", 6)
     height = params.get("height", 3.0)
     seed = params.get("seed", 0)
+    quality_tier = params.get("quality_tier", "standard")
+    occupied_state = params.get("occupied_state", "inhabited")
 
-    layout = generate_interior_layout(room_type, width, depth, height, seed)
+    layout = generate_interior_layout(
+        room_type, width, depth, height, seed,
+        quality_tier=quality_tier,
+        occupied_state=occupied_state,
+    )
 
     # Create an empty as the room parent
     room_empty = bpy.data.objects.new(name, None)

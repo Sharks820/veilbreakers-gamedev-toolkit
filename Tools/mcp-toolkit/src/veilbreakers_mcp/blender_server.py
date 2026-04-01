@@ -2386,6 +2386,107 @@ async def asset_pipeline(
             return json.dumps(result, indent=2, default=str)
 
     elif action == "inspect_external_toolchain":
+
+    elif action == "generate_prop":
+        # Route ALL prop/furniture/vegetation generation through Tripo with
+        # curated dark fantasy prompts. Procedural fallback only when Tripo unavailable.
+        _PROP_PROMPTS = {
+            # --- Furniture & Indoor Props ---
+            "barrel": "medieval dark fantasy wooden barrel, iron bands, weathered oak staves, nail details, game-ready 3D model, PBR textures, clean topology",
+            "crate": "medieval dark fantasy wooden crate, rough planks, iron corner brackets, rope handles, game-ready 3D model, PBR textures",
+            "table": "medieval dark fantasy wooden tavern table, thick oak planks, carved legs, knife marks and mug rings, game-ready 3D model, PBR textures",
+            "chair": "medieval dark fantasy wooden chair, rough-hewn oak, worn leather seat, carved back, game-ready 3D model, PBR textures",
+            "bed": "medieval dark fantasy bed, heavy wood frame, straw mattress, woolen blanket, carved headboard, game-ready 3D model, PBR textures",
+            "bookshelf": "medieval dark fantasy bookshelf, dark wood, leather-bound tomes, scrolls, dust and cobwebs, game-ready 3D model, PBR textures",
+            "chest": "medieval dark fantasy treasure chest, iron-bound oak, heavy lock, ornate metalwork, game-ready 3D model, PBR textures",
+            "wardrobe": "medieval dark fantasy wardrobe, tall dark wood cabinet, iron hinges, carved panels, game-ready 3D model, PBR textures",
+            "shelf": "medieval dark fantasy wall shelf, rough timber brackets, potion bottles, candles, game-ready 3D model, PBR textures",
+            "candelabra": "medieval dark fantasy iron candelabra, multiple branches, dripping wax, ornate base, game-ready 3D model, PBR textures",
+            "chandelier": "medieval dark fantasy iron chandelier, circular frame, chains, candle holders, game-ready 3D model, PBR textures",
+            "anvil": "medieval dark fantasy blacksmith anvil, heavy cast iron, horn and face, hammer marks, soot stains, game-ready 3D model, PBR textures",
+            "forge": "medieval dark fantasy stone forge, brick chimney, bellows, glowing coals, iron tools, game-ready 3D model, PBR textures",
+            "altar": "dark fantasy ritual stone altar, carved runes, bloodstains, candle holders, obsidian inlays, game-ready 3D model, PBR textures",
+            "throne": "dark fantasy throne, carved stone and dark wood, iron accents, skulls, velvet cushion, game-ready 3D model, PBR textures",
+            "fireplace": "medieval dark fantasy stone fireplace, carved mantel, iron grate, glowing embers, soot marks, game-ready 3D model, PBR textures",
+            "cauldron": "dark fantasy iron cauldron, heavy tripod legs, bubbling contents, ladle, mystic symbols, game-ready 3D model, PBR textures",
+            "workbench": "medieval dark fantasy crafting workbench, heavy timber, vise, scattered tools, wood shavings, game-ready 3D model, PBR textures",
+            # --- Outdoor Props ---
+            "well": "medieval dark fantasy stone well, moss-covered walls, wooden bucket, rope pulley, iron frame, game-ready 3D model, PBR textures",
+            "cart": "medieval dark fantasy wooden cart, iron-rimmed wheels, worn planks, hay remnants, game-ready 3D model, PBR textures",
+            "market_stall": "medieval dark fantasy market stall, canvas awning, wooden counter, hanging wares, game-ready 3D model, PBR textures",
+            "signpost": "medieval dark fantasy wooden signpost, carved directional signs, iron nails, weathered wood, game-ready 3D model, PBR textures",
+            "campfire": "dark fantasy campfire, stone ring, burning logs, iron spit, scattered sparks, game-ready 3D model, PBR textures",
+            "brazier": "dark fantasy iron brazier, ornate legs, burning coals, warm glow, game-ready 3D model, PBR textures",
+            "gravestone": "dark fantasy gravestone, weathered stone, carved epitaph, moss and lichen, slightly tilted, game-ready 3D model, PBR textures",
+            "fence": "medieval dark fantasy wooden fence section, rough-hewn posts, iron nails, weathered and leaning, game-ready 3D model, PBR textures",
+            "lantern": "medieval dark fantasy hanging lantern, wrought iron frame, amber glass panes, flickering candle, chain, game-ready 3D model, PBR textures",
+            "torch_sconce": "medieval dark fantasy wall torch sconce, iron bracket, burning torch, smoke wisps, game-ready 3D model, PBR textures",
+            # --- Vegetation (HIGH PRIORITY - replace terrible procedural trees) ---
+            "tree_oak": "dark fantasy ancient oak tree, gnarled twisted trunk, thick bark, sprawling branches, dark green foliage, moss and lichen, game-ready 3D model, PBR textures, stylized",
+            "tree_dead": "dark fantasy dead tree, bare twisted branches, rotting bark, hollow trunk, dark atmosphere, game-ready 3D model, PBR textures",
+            "tree_pine": "dark fantasy dark pine tree, tall straight trunk, dense needle foliage, drooping branches, game-ready 3D model, PBR textures",
+            "tree_willow": "dark fantasy weeping willow tree, drooping vine-like branches, gnarled trunk, ethereal atmosphere, game-ready 3D model, PBR textures",
+            "tree_corrupted": "dark fantasy corrupted tree, twisted black bark, glowing purple veins, withered leaves, dark tendrils, game-ready 3D model, PBR textures",
+            "bush": "dark fantasy thorny bush, dark green leaves, tangled branches, berries, game-ready 3D model, PBR textures",
+            "fallen_log": "dark fantasy fallen log, moss-covered rotting wood, mushrooms growing, broken branches, game-ready 3D model, PBR textures",
+            "tree_stump": "dark fantasy tree stump, axe-cut top, growth rings visible, moss and fungi, game-ready 3D model, PBR textures",
+            "mushroom_cluster": "dark fantasy large mushroom cluster, glowing bioluminescent caps, varied sizes, forest floor base, game-ready 3D model, PBR textures",
+            "rock_formation": "dark fantasy rocky outcrop, layered stone, moss patches, dark lichen, cracked surfaces, game-ready 3D model, PBR textures",
+            # --- Dungeon Props ---
+            "prison_door": "dark fantasy prison cell door, heavy iron bars, rusted lock, stone frame, chains, game-ready 3D model, PBR textures",
+            "sarcophagus": "dark fantasy stone sarcophagus, ornate carved lid, ancient symbols, cracked marble, cobwebs, game-ready 3D model, PBR textures",
+            "torture_rack": "dark fantasy torture rack, dark wood frame, iron shackles, leather straps, bloodstains, game-ready 3D model, PBR textures",
+            "skull_pile": "dark fantasy skull pile, human and beast skulls, bones, dark candles, ritual arrangement, game-ready 3D model, PBR textures",
+        }
+
+        prop_type = object_name or "barrel"
+        prop_prompt = _PROP_PROMPTS.get(prop_type, f"dark fantasy {prop_type}, medieval style, weathered, game-ready 3D model, PBR textures, clean topology")
+        full_prompt = prompt or prop_prompt
+
+        studio_cookie = settings.tripo_session_cookie
+        studio_token = settings.tripo_studio_token
+        api_key = settings.tripo_api_key
+
+        if not (studio_cookie or studio_token or api_key):
+            return json.dumps({
+                "error": "No Tripo credentials configured. Set TRIPO_SESSION_COOKIE, TRIPO_STUDIO_TOKEN, or TRIPO_API_KEY.",
+                "fallback": f"Using procedural generator for '{prop_type}'. Set Tripo credentials for AAA quality.",
+                "prop_type": prop_type,
+            }, indent=2)
+
+        # Route to generate_3d with the prop prompt
+        if studio_cookie or studio_token:
+            gen = TripoStudioClient(
+                session_cookie=studio_cookie or None,
+                jwt_token=studio_token or None,
+            )
+            try:
+                if image_path:
+                    result = await gen.generate_from_image(image_path, output_dir)
+                else:
+                    result = await gen.generate_from_text(full_prompt, output_dir)
+                result["prop_type"] = prop_type
+                result["prompt_used"] = full_prompt
+                result["generation_method"] = "tripo_studio"
+                result["next_steps"] = [
+                    f"Pick best variant, then: asset_pipeline action=cleanup object_name=<name> has_extracted_textures=true",
+                    "Run game_check after cleanup to verify quality",
+                ]
+                return json.dumps(result, indent=2, default=str)
+            finally:
+                await gen.close()
+        else:
+            gen = TripoGenerator(api_key=api_key)
+            if image_path:
+                result = await gen.generate_from_image(image_path, output_dir)
+            else:
+                result = await gen.generate_from_text(full_prompt, output_dir)
+            result["prop_type"] = prop_type
+            result["prompt_used"] = full_prompt
+            result["generation_method"] = "tripo_api"
+            return json.dumps(result, indent=2, default=str)
+
+    elif action == "inspect_external_toolchain":
         result = await blender.send_command("toolchain_inspect_external", {
             "prefer_external": prefer_external,
             "review_lighting": review_lighting,
