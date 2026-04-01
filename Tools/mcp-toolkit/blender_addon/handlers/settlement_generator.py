@@ -2113,7 +2113,7 @@ def generate_concentric_districts(
         center=center,
         radius=radius,
         seed=seed,
-        settlement_points=anchor_points,
+        waypoint_count=num_anchors,
     )
 
     # Convert grammar road dicts to settlement_generator format
