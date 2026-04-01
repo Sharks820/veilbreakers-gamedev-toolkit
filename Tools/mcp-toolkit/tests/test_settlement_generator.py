@@ -15,6 +15,8 @@ from blender_addon.handlers.settlement_generator import (
     ROOM_FURNISHINGS,
     SETTLEMENT_TYPES,
     _ROOM_LIGHTS,
+    _BUILDING_ROOMS,
+    _BUILDING_FOOTPRINTS,
     _apply_building_variation,
     _compute_foundation_profile,
     _derive_settlement_profile,
@@ -1277,3 +1279,74 @@ class TestRoadCurbMaterialisation:
         assert abs(actual_span - expected_total) < 1e-4, (
             f"Vertex span={actual_span}, expected {expected_total}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Hearthvale settlement tests (Phase 38 -- MESH-13)
+# ---------------------------------------------------------------------------
+
+
+class TestHearthvale:
+    """Tests for the Hearthvale fortified castle-town settlement profile."""
+
+    def test_hearthvale_type_registered(self):
+        assert "hearthvale" in SETTLEMENT_TYPES
+        cfg = SETTLEMENT_TYPES["hearthvale"]
+        assert cfg["building_count"] == (14, 14)
+        assert cfg["has_walls"] is True
+        assert cfg["has_market"] is True
+        assert cfg["layout_pattern"] == "concentric_organic"
+        assert cfg.get("default_radius") == 65.0
+
+    def test_hearthvale_building_types_all_mapped(self):
+        """Every building type in the hearthvale config has room + footprint entries."""
+        cfg = SETTLEMENT_TYPES["hearthvale"]
+        for btype in cfg["building_types"]:
+            assert btype in _BUILDING_ROOMS, (
+                f"Building type '{btype}' missing from _BUILDING_ROOMS"
+            )
+            assert btype in _BUILDING_FOOTPRINTS, (
+                f"Building type '{btype}' missing from _BUILDING_FOOTPRINTS"
+            )
+
+    def test_hearthvale_generates_buildings(self):
+        """Concentric-organic path produces at least some buildings."""
+        result = generate_settlement("hearthvale", seed=3810)
+        buildings = result["buildings"]
+        assert len(buildings) >= 1, "Expected at least 1 building from hearthvale generation"
+
+    def test_hearthvale_has_perimeter(self):
+        """Perimeter walls are generated for the walled town."""
+        result = generate_settlement("hearthvale", seed=3810)
+        perimeter = result.get("perimeter", [])
+        assert len(perimeter) >= 1, "Expected perimeter elements for walled town"
+
+    def test_hearthvale_perimeter_has_gate(self):
+        """Perimeter includes at least one gate element."""
+        result = generate_settlement("hearthvale", seed=3810)
+        perimeter = result.get("perimeter", [])
+        gate_types = [p.get("type", "") for p in perimeter]
+        has_gate = any("gate" in gt.lower() for gt in gate_types)
+        assert has_gate, f"No gate in perimeter. Types: {gate_types}"
+
+    def test_hearthvale_has_roads(self):
+        """Concentric-organic path generates road network."""
+        result = generate_settlement("hearthvale", seed=3810)
+        roads = result.get("roads", [])
+        assert len(roads) >= 1, "Expected at least 1 road segment"
+
+    def test_hearthvale_has_metadata(self):
+        """Result contains expected metadata keys."""
+        result = generate_settlement("hearthvale", seed=3810)
+        meta = result.get("metadata", {})
+        assert "building_count" in meta
+        assert meta.get("layout_pattern") == "concentric_organic"
+        assert meta.get("has_walls") is True
+
+    def test_hearthvale_determinism(self):
+        """Same seed produces identical results."""
+        r1 = generate_settlement("hearthvale", seed=3810)
+        r2 = generate_settlement("hearthvale", seed=3810)
+        b1 = [(b["position"], b.get("type", "")) for b in r1["buildings"]]
+        b2 = [(b["position"], b.get("type", "")) for b in r2["buildings"]]
+        assert b1 == b2, "Two calls with same seed produced different buildings"

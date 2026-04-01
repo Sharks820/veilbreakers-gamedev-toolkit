@@ -4381,6 +4381,7 @@ async def blender_worldbuilding(
         "generate_overrun_variant",
         "generate_easter_egg",
         "prefetch_settlement_props",
+        "generate_hearthvale",
     ],
     # Common params (float to accommodate both grid dimensions and building dimensions)
     name: str | None = None,
@@ -4441,6 +4442,8 @@ async def blender_worldbuilding(
     # Prop prefetch params (Phase 36-02)
     prop_manifest: list | None = None,
     veil_pressure: float | None = None,
+    # Hearthvale params (Phase 38 -- MESH-13)
+    layout_brief: str | None = None,
     # Visual feedback
     capture_viewport: bool = True
 ):
@@ -4504,6 +4507,24 @@ async def blender_worldbuilding(
         if cell_size is not None:
             params["cell_size"] = cell_size
         result = await blender.send_command("world_generate_town", params)
+        return await _with_screenshot(blender, result, capture_viewport)
+
+    elif action == "generate_hearthvale":
+        params = {"name": name or "Hearthvale"}
+        if seed is not None:
+            params["seed"] = seed
+        if width is not None:
+            params["radius"] = float(width)
+        if layout_brief is not None:
+            params["layout_brief"] = layout_brief
+        else:
+            params["layout_brief"] = (
+                "fortified castle-town, winding cobblestone, market square at center, "
+                "radial streets from square, military quarter, commerce district"
+            )
+        if veil_pressure is not None:
+            params["veil_pressure"] = veil_pressure
+        result = await blender.send_command("world_generate_hearthvale", params)
         return await _with_screenshot(blender, result, capture_viewport)
 
     elif action == "generate_building":

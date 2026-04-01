@@ -208,6 +208,28 @@ SETTLEMENT_TYPES: dict[str, dict[str, Any]] = {
         "perimeter_props": ["wall_segment", "gate_large", "corner_tower"],
         "layout_pattern": "district",
     },
+    "hearthvale": {
+        "building_count": (14, 14),  # Exact -- no randomization
+        "has_walls": True,
+        "has_market": True,
+        "has_shrine": True,
+        "road_style": "cobblestone",
+        "building_types": [
+            "tavern",          # The Ember Hearth
+            "blacksmith",      # Forge
+            "temple",          # Shrine to the Old Gods
+            "town_hall",       # Civic center
+            "general_store",   # Merchant provisions
+            "apothecary",      # Potions and remedies
+            "bakery",          # Daily bread
+            "house", "house", "house", "house", "house",  # 5 houses
+            "guard_barracks",  # Town watch
+        ],
+        "prop_density": 0.7,
+        "perimeter_props": ["wall_segment", "portcullis_gate", "corner_tower"],
+        "layout_pattern": "concentric_organic",
+        "default_radius": 65.0,
+    },
 }
 
 
@@ -414,6 +436,16 @@ _BUILDING_ROOMS: dict[str, list[str]] = {
     "barracks": ["barracks", "barracks", "storage"],
     "watchtower": ["guard_post"],
     "supply_tent": ["storage"],
+    # Hearthvale building types (Phase 38 -- MESH-13)
+    "tavern": ["tavern", "tavern", "bedroom", "bedroom", "storage"],
+    "blacksmith": ["smithy", "smithy", "storage"],
+    "temple": ["shrine_room", "shrine_room", "storage"],
+    "town_hall": ["great_hall", "great_hall", "study", "storage"],
+    "general_store": ["market", "storage", "storage"],
+    "apothecary": ["study", "storage"],
+    "bakery": ["kitchen", "kitchen", "storage"],
+    "house": ["bedroom", "kitchen", "storage"],
+    "guard_barracks": ["barracks", "barracks", "guard_post", "storage"],
 }
 
 # Furniture bounding boxes (width, depth) for collision checks
@@ -569,6 +601,18 @@ _BUILDING_FOOTPRINTS: dict[str, tuple[float, float]] = {
     "barracks": (10.0, 8.0),
     "watchtower": (4.0, 4.0),
     "supply_tent": (5.0, 5.0),
+    # Hearthvale building types (Phase 38 -- MESH-13)
+    "tavern": (12.0, 10.0),
+    "blacksmith": (10.0, 8.0),
+    "temple": (14.0, 12.0),
+    "town_hall": (16.0, 12.0),
+    "general_store": (9.0, 7.0),
+    "apothecary": (8.0, 7.0),
+    "bakery": (8.0, 7.0),
+    "house": (8.0, 6.0),
+    "guard_barracks": (14.0, 10.0),
+    "manor": (14.0, 10.0),
+    "guild_hall": (12.0, 10.0),
 }
 
 
