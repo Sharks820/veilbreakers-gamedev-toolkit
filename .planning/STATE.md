@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: AAA Procedural City Production
-status: executing
-last_updated: "2026-04-01T00:36:14Z"
-last_activity: 2026-04-01 -- Phase 33 plan 01 complete (interior system)
+status: verifying
+last_updated: "2026-04-01T02:30:00.000Z"
+last_activity: 2026-04-01
 progress:
   total_phases: 9
-  completed_phases: 3
-  total_plans: 7
-  completed_plans: 6
+  completed_phases: 6
+  total_plans: 9
+  completed_plans: 9
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -19,14 +19,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** Phase 33 — interior-system
+**Current focus:** Phase 35 -- multi-backend-ai (COMPLETE)
 
 ## Current Position
 
-Phase: 33 (interior-system) — COMPLETE
+Phase: 35 (multi-backend-ai) — COMPLETE
 Plan: 1 of 1 COMPLETE
-Status: Phase 33 complete. Next: Phase 34 (Multi-biome Terrain)
-Last activity: 2026-04-01 -- Phase 33 plan 01 complete (interior system)
+Status: Phase complete — ready for verification
+Last activity: 2026-04-01
 
 ## Accumulated Context
 
@@ -54,7 +54,7 @@ Recent decisions affecting v6.0 work:
 ### v6.0 Deliverables
 
 **Branch:** feature/unified-code-reviewer-v5 (MERGED)
-**Status:** Executing Phase 33
+**Status:** Phase complete — ready for verification
 
 - Tripo Studio API client (v3.0, JWT auth, subscription credits)
 - Unified code reviewer v3 (210 rules, DeepAnalyzer, 0% FP, 82.3% confidence)
@@ -133,27 +133,27 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-03-31T13:33:20Z
-Completed: Phase 32 (Building System) -- all 6 tasks, 438 tests passing
-Next action: Continue to Phase 33 (Interior System) or Phase 30 execution
+Last session: 2026-04-01T02:30:00Z
+Completed: Phase 35 (Multi-backend AI) -- 5 tasks, 24 new tests, GLB texture pipeline complete
+Next action: Continue to Phase 36 (World Composer) or Phase 37 (Pipeline Integration)
 
-### Recent Work (2026-04-01 Phase 33 execution)
+### Recent Work (2026-04-01 Phase 35 execution)
 
 **Completed:**
 
-1. Spatial graphs + constraint solver — ROOM_SPATIAL_GRAPHS for 14+ room types with focal_points, clusters, wall_preferences
-2. Activity zones — ROOM_ACTIVITY_ZONES with get_zone_for_item / get_zone_bounds helpers
-3. Decorative clutter scatter — Poisson disk sampling, CLUTTER_POOLS (12 room types), 24 clutter generator mappings
-4. Lighting placement engine — LIGHTING_SCHEMAS for all 22 room types, color temperature 2700K-3500K
-5. 63 integration tests + clutter/lighting fully wired into handle_generate_interior
+1. GLB texture extractor (pygltflib + struct fallback) -- dual-backend parser for PBR channels
+2. Tripo post-processor -- delight + validate + score pipeline for downloaded GLB models
+3. Blender texture wiring handlers -- handle_load_extracted_textures + handle_mix_weathering_over_texture
+4. Pipeline blank-texture bug fix -- cleanup_ai_model routes to load_extracted_textures when flag set
+5. Quality gate -- 24 new tests pass, 18,576 pre-existing pass, 57 pre-existing failures confirmed out-of-scope
 
 **Key decisions:**
 
-- item_height parameter added to _check_collision and _door_corridor_clear so floor items (rugs < 0.1m) skip collision
-- _find_config_index hoisted above generate_interior_layout for correct call order
-- Clutter uses cube fallback for unmapped prop types (food_scrap, spilled_drink, etc.)
-- Lighting color temperature approximated as linear RGB blend (warm orange to cool white)
+- ORM channels split in Blender shader (Separate RGB node) not pre-split to disk -- avoids 3 extra files per model
+- albedo_delit_path takes precedence over albedo_path everywhere -- de-lighted version always used when available
+- post_process_tripo_model runs inside generate_3d loop non-fatally -- failure logged but import continues
+- cleanup action falls back to texture_create_pbr when texture_channels=None -- preserves backward compatibility
 
 ---
 *State initialized: 2026-03-30*
-*Last updated: 2026-03-31 -- Phase 32 complete, building system upgraded to AAA quality*
+*Last updated: 2026-04-01 -- Phase 35 complete, Tripo blank-texture bug fixed, full GLB texture pipeline*
