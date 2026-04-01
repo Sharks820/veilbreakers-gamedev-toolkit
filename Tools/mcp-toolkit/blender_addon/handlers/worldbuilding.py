@@ -17,6 +17,7 @@ from typing import Any
 
 import bpy
 import bmesh
+from mathutils import Vector
 
 from .procedural_materials import create_procedural_material
 from ._context import get_3d_context_override
@@ -25,6 +26,7 @@ from ._settlement_grammar import (
     CORRUPTION_DESCS,
     get_prop_prompt,
     generate_prop_manifest,
+    ring_for_position,
     _road_segment_mesh_spec_with_curbs,
 )
 
@@ -2579,6 +2581,180 @@ def _create_curve_path(
     if parent is not None:
         curve_obj.parent = parent
     return curve_obj
+
+
+def _create_road_with_curbs(
+    road_segment: dict,
+    terrain_name: str | None,
+    parent: Any | None,
+    base_name: str,
+    index: int,
+) -> Any | None:
+    """Create a road mesh with raised curb geometry and cobblestone PBR material.
+
+    Uses ``_road_segment_mesh_spec_with_curbs`` to generate vertex data, then
+    materialises it into a Blender mesh object with terrain height snapping
+    and a procedural cobblestone material.
+
+    Parameters
+    ----------
+    road_segment : dict
+        Road data with ``start``, ``end``, ``width`` keys.
+    terrain_name : str or None
+        Name of the terrain object for height sampling.  ``None`` skips
+        terrain snapping and uses mesh-spec Z values as-is.
+    parent : bpy.types.Object or None
+        Parent object for parenting the road mesh.
+    base_name : str
+        Settlement name prefix for the object name.
+    index : int
+        Road index for unique naming.
+
+    Returns
+    -------
+    bpy.types.Object or None
+        The created road object, or ``None`` on failure.
+    """
+    start_2d = road_segment.get("start")
+    end_2d = road_segment.get("end")
+    if not start_2d or not end_2d:
+        return None
+
+    sx, sy = start_2d[0], start_2d[1]
+    ex, ey = end_2d[0], end_2d[1]
+    width = float(road_segment.get("width", 4.0))
+
+    # Sample terrain height at endpoints (or use 0.0)
+    sz = _sample_scene_height(sx, sy, terrain_name) + 0.02 if terrain_name else 0.02
+    ez = _sample_scene_height(ex, ey, terrain_name) + 0.02 if terrain_name else 0.02
+
+    # Generate curb mesh spec
+    spec = _road_segment_mesh_spec_with_curbs(
+        start=(sx, sy, sz),
+        end=(ex, ey, ez),
+        width=width,
+    )
+
+    vertices = spec.get("vertices", [])
+    faces = spec.get("faces", [])
+    if not vertices or not faces:
+        logger.warning(
+            "Road curb spec returned empty geometry for %s road %d", base_name, index
+        )
+        return None
+
+    # Snap each vertex to terrain height if terrain is available
+    if terrain_name:
+        snapped_verts = []
+        for vx, vy, vz in vertices:
+            terrain_z = _sample_scene_height(vx, vy, terrain_name)
+            # Preserve the relative Z offset (curb height) above the terrain
+            base_z = _sample_scene_height(
+                (sx + ex) / 2.0, (sy + ey) / 2.0, terrain_name
+            )
+            z_offset = vz - (sz + (ez - sz) * 0.5)  # offset from road midpoint Z
+            snapped_z = terrain_z + 0.02 + max(0.0, vz - min(sz, ez))
+            # Simpler approach: keep the curb height offsets, adjust base to terrain
+            snapped_verts.append((vx, vy, terrain_z + 0.02 + (vz - sz)))
+        vertices = snapped_verts
+
+    # Create Blender mesh
+    obj_name = f"{base_name}_road_curb_{index}"
+    mesh = bpy.data.meshes.new(obj_name)
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+
+    road_obj = bpy.data.objects.new(obj_name, mesh)
+    bpy.context.collection.objects.link(road_obj)
+
+    if parent is not None:
+        road_obj.parent = parent
+
+    # Apply cobblestone PBR material
+    try:
+        mat = create_procedural_material(obj_name, "cobblestone")
+        if mat is not None:
+            mesh.materials.append(mat)
+    except (RuntimeError, TypeError, ValueError) as exc:
+        logger.warning(
+            "Failed to apply cobblestone material to %s: %s", obj_name, exc
+        )
+
+    return road_obj
+
+
+def _create_intersection_patch(
+    position: tuple[float, float],
+    size: float,
+    terrain_name: str | None,
+    parent: Any | None,
+    base_name: str,
+    index: int,
+) -> Any | None:
+    """Create a flat quad mesh at a road intersection with cobblestone material.
+
+    Parameters
+    ----------
+    position : tuple[float, float]
+        World-space (x, y) center of the intersection.
+    size : float
+        Side length of the square patch (typically ``max(widths) * 1.5``).
+    terrain_name : str or None
+        Name of the terrain object for height sampling.
+    parent : bpy.types.Object or None
+        Parent object.
+    base_name : str
+        Settlement name prefix.
+    index : int
+        Intersection index for unique naming.
+
+    Returns
+    -------
+    bpy.types.Object or None
+        The created intersection patch, or ``None`` on failure.
+    """
+    px, py = position[0], position[1]
+    pz = _sample_scene_height(px, py, terrain_name) + 0.03 if terrain_name else 0.03
+
+    half = size / 2.0
+    vertices = [
+        (px - half, py - half, pz),
+        (px + half, py - half, pz),
+        (px + half, py + half, pz),
+        (px - half, py + half, pz),
+    ]
+    faces = [(0, 1, 2, 3)]
+
+    # Snap corners to terrain if available
+    if terrain_name:
+        snapped = []
+        for vx, vy, vz in vertices:
+            tz = _sample_scene_height(vx, vy, terrain_name) + 0.03
+            snapped.append((vx, vy, tz))
+        vertices = snapped
+
+    obj_name = f"{base_name}_intersection_{index}"
+    mesh = bpy.data.meshes.new(obj_name)
+    mesh.from_pydata(vertices, [], faces)
+    mesh.update()
+
+    patch_obj = bpy.data.objects.new(obj_name, mesh)
+    bpy.context.collection.objects.link(patch_obj)
+
+    if parent is not None:
+        patch_obj.parent = parent
+
+    # Apply cobblestone PBR material
+    try:
+        mat = create_procedural_material(obj_name, "cobblestone")
+        if mat is not None:
+            mesh.materials.append(mat)
+    except (RuntimeError, TypeError, ValueError) as exc:
+        logger.warning(
+            "Failed to apply cobblestone material to %s: %s", obj_name, exc
+        )
+
+    return patch_obj
 
 
 def _create_bridge_span(
@@ -5764,6 +5940,166 @@ def handle_generate_location(params: dict) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Terrain-aligned prop materialization (Phase 36-02)
+# ---------------------------------------------------------------------------
+
+
+def _get_or_create_prop_collection(
+    settlement_name: str,
+    district: str,
+) -> bpy.types.Collection:
+    """Return (or create) a Blender collection for materialized props.
+
+    Organises props under ``{settlement_name}_Props`` with per-district
+    sub-collections such as ``{settlement_name}_Props_Market``.
+    """
+    root_name = f"{settlement_name}_Props"
+    root_col = bpy.data.collections.get(root_name)
+    if root_col is None:
+        root_col = bpy.data.collections.new(root_name)
+        bpy.context.scene.collection.children.link(root_col)
+
+    # Friendly district suffix
+    district_suffix = district.replace("_", " ").title().replace(" ", "")
+    sub_name = f"{settlement_name}_Props_{district_suffix}"
+    sub_col = bpy.data.collections.get(sub_name)
+    if sub_col is None:
+        sub_col = bpy.data.collections.new(sub_name)
+        root_col.children.link(sub_col)
+
+    return sub_col
+
+
+def _materialize_prop(
+    prop_spec: dict,
+    glb_path: str,
+    terrain_object: bpy.types.Object | None,
+    parent: bpy.types.Object | None,
+    settlement_name: str = "",
+    center: tuple[float, float] = (0.0, 0.0),
+    radius: float = 50.0,
+) -> bpy.types.Object | None:
+    """Import a GLB prop and snap it to the terrain surface with normal alignment.
+
+    Parameters
+    ----------
+    prop_spec : dict
+        Prop placement spec with ``position``, ``rotation_z``, ``prop_type``,
+        ``corruption_band``, and ``cache_key``.
+    glb_path : str
+        Absolute path to the ``.glb`` file to import.
+    terrain_object : bpy.types.Object or None
+        The terrain mesh to raycast against. When *None*, the prop is placed
+        at the raw ``position`` without surface snapping.
+    parent : bpy.types.Object or None
+        Empty that acts as the settlement root.
+    settlement_name : str
+        Used for collection naming.
+    center : (x, y)
+        Settlement center for district classification.
+    radius : float
+        Settlement radius.
+
+    Returns
+    -------
+    bpy.types.Object or None
+        The root imported object, or *None* on failure.
+    """
+    import os
+
+    if not os.path.isfile(glb_path):
+        logger.warning("GLB not found for prop %s: %s", prop_spec.get("prop_type"), glb_path)
+        return None
+
+    position = prop_spec.get("position", (0.0, 0.0, 0.0))
+    rotation_z = float(prop_spec.get("rotation_z", 0.0))
+
+    # --- Import GLB ---
+    try:
+        bpy.ops.import_scene.gltf(filepath=glb_path)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("GLB import failed for %s: %s", glb_path, exc)
+        return None
+
+    imported = list(bpy.context.selected_objects)
+    if not imported:
+        logger.warning("GLB import produced no objects: %s", glb_path)
+        return None
+
+    # Pick root (prefer MESH, fallback to first)
+    root = imported[0]
+    for obj in imported:
+        if obj.type == "MESH":
+            root = obj
+            break
+
+    # --- Position & rotation ---
+    pos = Vector((float(position[0]), float(position[1]), float(position[2]) if len(position) > 2 else 0.0))
+    root.location = pos
+    root.rotation_euler.z = rotation_z
+
+    # --- Terrain snap & normal alignment ---
+    if terrain_object is not None and terrain_object.type == "MESH":
+        try:
+            ray_origin = pos + Vector((0.0, 0.0, 50.0))
+            ray_dir = Vector((0.0, 0.0, -1.0))
+            # Raycast in terrain's local space
+            inv_mat = terrain_object.matrix_world.inverted()
+            local_origin = inv_mat @ ray_origin
+            local_dir = (inv_mat.to_3x3() @ ray_dir).normalized()
+
+            success, hit_loc, hit_normal, _ = terrain_object.ray_cast(local_origin, local_dir)
+
+            if success and hit_loc is not None:
+                world_hit = terrain_object.matrix_world @ hit_loc
+                root.location.z = world_hit.z + 0.01
+
+                # Align to surface normal
+                world_normal = (terrain_object.matrix_world.to_3x3() @ hit_normal).normalized()
+                up = Vector((0.0, 0.0, 1.0))
+                if world_normal.dot(up) < 0.999:
+                    rot_axis = up.cross(world_normal).normalized()
+                    rot_angle = up.angle(world_normal)
+                    from mathutils import Matrix
+                    align_mat = Matrix.Rotation(rot_angle, 4, rot_axis)
+                    root.rotation_euler = align_mat.to_euler()
+                    # Re-apply the desired Z rotation on top
+                    root.rotation_euler.z += rotation_z
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Terrain alignment failed for prop at %s: %s", pos, exc)
+
+    # --- Parenting ---
+    if parent is not None:
+        root.parent = parent
+        for obj in imported:
+            if obj != root:
+                obj.parent = root
+
+    # --- Collection organisation ---
+    if settlement_name:
+        district = ring_for_position(
+            (pos.x, pos.y), center, radius,
+        )
+        prop_col = _get_or_create_prop_collection(settlement_name, district)
+        for obj in imported:
+            # Link to prop collection, unlink from default scene collection
+            if obj.name not in prop_col.objects:
+                prop_col.objects.link(obj)
+            for col in list(obj.users_collection):
+                if col != prop_col:
+                    col.objects.unlink(obj)
+
+    logger.info(
+        "Materialized prop %s at (%.1f, %.1f, %.1f)",
+        prop_spec.get("prop_type", "unknown"),
+        root.location.x,
+        root.location.y,
+        root.location.z,
+    )
+    return root
+
+
 def handle_generate_settlement(params: dict) -> dict:
     """Generate a full settlement with geometry-rich roads, props, and lighting."""
     name = params.get("name", "Settlement")
@@ -5815,6 +6151,27 @@ def handle_generate_settlement(params: dict) -> dict:
             end = road.get("end")
             if not start or not end:
                 continue
+            road_width = float(road.get("width", 2.0))
+            road_style = road.get("style", "")
+
+            # Wide roads (cobblestone/stone, main roads, alleys >= 3m) get
+            # mesh geometry with raised curbs.  Narrow trails keep the
+            # lightweight curve-path representation.
+            use_curbs = (
+                road_style in ("cobblestone", "stone")
+                or road.get("is_main_road")
+                or road_width >= 3.0
+            )
+
+            if use_curbs:
+                road_obj = _create_road_with_curbs(
+                    road, terrain_name, parent, name, i,
+                )
+                if road_obj is not None:
+                    road_count += 1
+                    continue
+
+            # Fallback: curve-path for narrow trails / dirt paths
             sx, sy = start
             ex, ey = end
             mid_x = (sx + ex) / 2.0
@@ -5835,11 +6192,30 @@ def handle_generate_settlement(params: dict) -> dict:
                     (mid_x, mid_y, road_z1),
                     (ex, ey, road_z2),
                 ],
-                width=float(road.get("width", 2.0)),
+                width=road_width,
                 parent=parent,
             )
             _clear_material_slots(road_obj, context=f"settlement road {i}")
             road_count += 1
+
+        # Create intersection patches where roads meet
+        for j, isect in enumerate(settlement.get("intersections", [])):
+            isect_pos = isect.get("position")
+            if not isect_pos:
+                continue
+            # Size based on widest road width in settlement, fallback 4m
+            all_widths = [
+                float(r.get("width", 2.0)) for r in settlement.get("roads", [])
+            ]
+            isect_size = max(all_widths) * 1.5 if all_widths else 6.0
+            _create_intersection_patch(
+                position=isect_pos,
+                size=isect_size,
+                terrain_name=terrain_name,
+                parent=parent,
+                base_name=name,
+                index=j,
+            )
 
     building_count = 0
     if include_buildings:
@@ -5875,6 +6251,31 @@ def handle_generate_settlement(params: dict) -> dict:
             )
             if obj is not None:
                 prop_count += 1
+
+    # --- Materialize Tripo AI props from manifest (Phase 36-02) ---
+    prop_manifest = settlement.get("metadata", {}).get("prop_manifest", [])
+    if prop_manifest and include_props:
+        terrain_obj = bpy.data.objects.get(terrain_name) if terrain_name else None
+        s_center = center if center else (0.0, 0.0)
+        for prop_spec in prop_manifest:
+            cache_key = prop_spec.get("cache_key")
+            if isinstance(cache_key, (list, tuple)) and len(cache_key) == 2:
+                cache_key = (str(cache_key[0]), str(cache_key[1]))
+            else:
+                continue
+            glb_path = _PROP_CACHE.get(cache_key)
+            if glb_path:
+                result = _materialize_prop(
+                    prop_spec,
+                    glb_path,
+                    terrain_obj,
+                    parent,
+                    settlement_name=name,
+                    center=s_center,
+                    radius=radius,
+                )
+                if result is not None:
+                    prop_count += 1
 
     perimeter_count = 0
     if include_perimeter:

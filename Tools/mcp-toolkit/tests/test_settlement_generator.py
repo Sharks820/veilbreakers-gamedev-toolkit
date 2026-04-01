@@ -31,6 +31,9 @@ from blender_addon.handlers.settlement_generator import (
     generate_city_districts,
     generate_settlement,
 )
+from blender_addon.handlers._settlement_grammar import (
+    _road_segment_mesh_spec_with_curbs,
+)
 import random
 
 
@@ -1227,3 +1230,50 @@ class TestPropPrefetchInfrastructure:
             assert isinstance(ck, tuple)
             assert len(ck) == 2
             assert all(isinstance(s, str) for s in ck)
+
+
+# =========================================================================
+# Road curb geometry materialisation tests
+# =========================================================================
+
+
+class TestRoadCurbMaterialisation:
+    """Tests for road curb mesh spec used during settlement materialisation."""
+
+    def test_curb_verts_have_z_offset(self):
+        """Curb-top vertices are raised by curb_height (0.15m)."""
+        spec = _road_segment_mesh_spec_with_curbs(
+            start=(0, 0, 0), end=(10, 0, 0), width=4.0,
+            curb_height=0.15, gutter_width=0.3, resolution=1,
+        )
+        verts = spec["vertices"]
+        # 7 columns per cross-section; cols 1 and 5 are curb tops
+        assert len(verts) >= 7
+        first_row = verts[:7]
+        assert abs(first_row[1][2] - 0.15) < 1e-6, (
+            f"Curb col 1 Z={first_row[1][2]}, expected 0.15"
+        )
+        assert abs(first_row[5][2] - 0.15) < 1e-6, (
+            f"Curb col 5 Z={first_row[5][2]}, expected 0.15"
+        )
+
+    def test_road_with_curbs_total_width(self):
+        """Total mesh width covers road_width + 2 * gutter_width."""
+        width = 4.0
+        gutter = 0.3
+        spec = _road_segment_mesh_spec_with_curbs(
+            start=(0, 0, 0), end=(10, 0, 0), width=width,
+            curb_height=0.15, gutter_width=gutter, resolution=1,
+        )
+        expected_total = width + 2 * gutter
+        assert abs(spec["total_width"] - expected_total) < 1e-6, (
+            f"total_width={spec['total_width']}, expected {expected_total}"
+        )
+        # Also verify from actual vertex positions: first row leftmost vs rightmost
+        first_row = spec["vertices"][:7]
+        # Y positions encode the lateral offset (road along X axis)
+        y_vals = [v[1] for v in first_row]
+        actual_span = max(y_vals) - min(y_vals)
+        assert abs(actual_span - expected_total) < 1e-4, (
+            f"Vertex span={actual_span}, expected {expected_total}"
+        )
