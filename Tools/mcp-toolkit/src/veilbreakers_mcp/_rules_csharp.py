@@ -7,35 +7,15 @@ as Python dataclasses with regex patterns and guards.
 from __future__ import annotations
 import re
 from dataclasses import dataclass, field
-from enum import IntEnum
 from pathlib import Path
 from typing import Any, Callable, Optional
+from enum import IntEnum
+
+from veilbreakers_mcp._types import Category, FindingType, Severity
 
 # =============================================================================
-# Data Classes (defined locally - no external dependencies)
+# Data Classes
 # =============================================================================
-
-
-class Severity(IntEnum):
-    CRITICAL = 0
-    HIGH = 1
-    MEDIUM = 2
-    LOW = 3
-
-
-class Category(IntEnum):
-    Security = 0
-    Bug = 1
-    Performance = 2
-    Quality = 3
-    Unity = 4
-
-
-class FindingType(IntEnum):
-    ERROR = 0
-    BUG = 1
-    OPTIMIZATION = 2
-    STRENGTHENING = 3
 
 
 class Language(IntEnum):
