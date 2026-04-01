@@ -118,6 +118,7 @@ from .texture import (
     handle_bake_thickness_map,
     handle_channel_pack,
     handle_ensure_flat_albedo,
+    handle_load_extracted_textures,
 )
 from .pipeline_lod import handle_generate_lods
 from .lod_pipeline import handle_generate_lods as handle_generate_lod_chain
@@ -220,6 +221,7 @@ from .vertex_colors import (
 )
 from .weathering import (
     handle_apply_weathering,
+    handle_mix_weathering_over_texture,
 )
 from .terrain_materials import (
     handle_setup_terrain_biome,
@@ -767,6 +769,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "texture_bake_thickness": handle_bake_thickness_map,
     "texture_channel_pack": handle_channel_pack,
     "texture_ensure_flat_albedo": handle_ensure_flat_albedo,
+    "texture_load_extracted_textures": handle_load_extracted_textures,
     # Pipeline operations
     "pipeline_generate_lods": handle_generate_lods,
     "pipeline_generate_lod_chain": handle_generate_lod_chain,
@@ -915,6 +918,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "vertex_colors_auto_paint": handle_auto_paint_vertex_colors,
     # Weathering operations
     "weathering_apply": handle_apply_weathering,
+    "weathering_mix_over_texture": handle_mix_weathering_over_texture,
     # Terrain biome material operations
     "terrain_setup_biome": handle_setup_terrain_biome,
     "terrain_create_biome_material": handle_create_biome_terrain,

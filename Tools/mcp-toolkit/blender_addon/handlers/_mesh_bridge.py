@@ -887,16 +887,38 @@ def mesh_from_spec(
     # -- Blender path --
     bm = bmesh.new()
 
-    # Add vertices
-    bm_verts = [bm.verts.new(v) for v in verts]
+    # Add vertices with deduplication: weld coincident vertices from
+    # generators that create disconnected components at the same positions
+    _WELD_TOLERANCE = 0.005  # 5mm — covers mortar gaps in stone generators
+    _vert_dedup: dict[tuple[int, int, int], int] = {}
+    bm_verts: list[Any] = []
+    _remap: list[int] = []  # maps original index -> deduped index
+    for v in verts:
+        # Quantize to tolerance grid for fast lookup
+        key = (
+            round(v[0] / _WELD_TOLERANCE),
+            round(v[1] / _WELD_TOLERANCE),
+            round(v[2] / _WELD_TOLERANCE),
+        )
+        if key in _vert_dedup:
+            _remap.append(_vert_dedup[key])
+        else:
+            idx = len(bm_verts)
+            _vert_dedup[key] = idx
+            bm_verts.append(bm.verts.new(v))
+            _remap.append(idx)
     bm.verts.ensure_lookup_table()
 
-    # Add faces
+    # Add faces using remapped vertex indices
     for face_indices in faces:
         try:
-            bm.faces.new([bm_verts[i] for i in face_indices])
+            remapped = [_remap[i] for i in face_indices]
+            # Skip degenerate faces where dedup collapsed vertices
+            if len(set(remapped)) < 3:
+                continue
+            bm.faces.new([bm_verts[i] for i in remapped])
         except (ValueError, IndexError):
-            print(f"Warning: skipped degenerate face {face_indices}")
+            pass  # skip duplicate or degenerate faces
 
     # Process edge annotations from MeshSpec
     if sharp_edges or crease_edges:
