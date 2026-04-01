@@ -736,11 +736,12 @@ async def _enforce_world_quality(
     for mesh_name in mesh_targets:
         report["validated_meshes"] += 1  # type: ignore[operator]
         try:
-            game_ready = await blender.send_command(
+            game_ready_result = await blender.send_command(
                 "mesh_check_game_ready",
                 {"object_name": mesh_name, "poly_budget": poly_budget, "platform": "pc"},
             )
-            checks = game_ready.get("checks", {}) if isinstance(game_ready, dict) else {}
+            checks = game_ready_result.get("checks", {}) if isinstance(game_ready_result, dict) else {}
+            is_game_ready = bool(game_ready_result.get("game_ready", False)) if isinstance(game_ready_result, dict) else False
             has_material = bool(checks.get("materials", {}).get("passed", False))
             if not has_material:
                 await blender.send_command(
@@ -776,6 +777,23 @@ async def _enforce_world_quality(
                 {"object_name": mesh_name, "ratios": lod_ratios or [0.6, 0.3, 0.12]},
             )
             report["lod_generated"].append(mesh_name)  # type: ignore[append]
+
+            # Re-validate after fixes to catch assets that are STILL not game-ready
+            if not is_game_ready:
+                recheck = await blender.send_command(
+                    "mesh_check_game_ready",
+                    {"object_name": mesh_name, "poly_budget": poly_budget, "platform": "pc"},
+                )
+                if isinstance(recheck, dict) and not recheck.get("game_ready", False):
+                    _failed = [
+                        k for k, v in recheck.get("checks", {}).items()
+                        if isinstance(v, dict) and not v.get("passed", True)
+                    ]
+                    report["failures"].append({  # type: ignore[append]
+                        "object_name": mesh_name,
+                        "error": f"Still not game-ready after fixes: {', '.join(_failed)}",
+                        "failed_checks": _failed,
+                    })
         except (OSError, ConnectionError, TimeoutError, ValueError, RuntimeError, BlenderCommandError) as exc:
             report["failures"].append({"object_name": mesh_name, "error": str(exc)})  # type: ignore[append]
 
@@ -2368,6 +2386,107 @@ async def asset_pipeline(
             return json.dumps(result, indent=2, default=str)
 
     elif action == "inspect_external_toolchain":
+
+    elif action == "generate_prop":
+        # Route ALL prop/furniture/vegetation generation through Tripo with
+        # curated dark fantasy prompts. Procedural fallback only when Tripo unavailable.
+        _PROP_PROMPTS = {
+            # --- Furniture & Indoor Props ---
+            "barrel": "medieval dark fantasy wooden barrel, iron bands, weathered oak staves, nail details, game-ready 3D model, PBR textures, clean topology",
+            "crate": "medieval dark fantasy wooden crate, rough planks, iron corner brackets, rope handles, game-ready 3D model, PBR textures",
+            "table": "medieval dark fantasy wooden tavern table, thick oak planks, carved legs, knife marks and mug rings, game-ready 3D model, PBR textures",
+            "chair": "medieval dark fantasy wooden chair, rough-hewn oak, worn leather seat, carved back, game-ready 3D model, PBR textures",
+            "bed": "medieval dark fantasy bed, heavy wood frame, straw mattress, woolen blanket, carved headboard, game-ready 3D model, PBR textures",
+            "bookshelf": "medieval dark fantasy bookshelf, dark wood, leather-bound tomes, scrolls, dust and cobwebs, game-ready 3D model, PBR textures",
+            "chest": "medieval dark fantasy treasure chest, iron-bound oak, heavy lock, ornate metalwork, game-ready 3D model, PBR textures",
+            "wardrobe": "medieval dark fantasy wardrobe, tall dark wood cabinet, iron hinges, carved panels, game-ready 3D model, PBR textures",
+            "shelf": "medieval dark fantasy wall shelf, rough timber brackets, potion bottles, candles, game-ready 3D model, PBR textures",
+            "candelabra": "medieval dark fantasy iron candelabra, multiple branches, dripping wax, ornate base, game-ready 3D model, PBR textures",
+            "chandelier": "medieval dark fantasy iron chandelier, circular frame, chains, candle holders, game-ready 3D model, PBR textures",
+            "anvil": "medieval dark fantasy blacksmith anvil, heavy cast iron, horn and face, hammer marks, soot stains, game-ready 3D model, PBR textures",
+            "forge": "medieval dark fantasy stone forge, brick chimney, bellows, glowing coals, iron tools, game-ready 3D model, PBR textures",
+            "altar": "dark fantasy ritual stone altar, carved runes, bloodstains, candle holders, obsidian inlays, game-ready 3D model, PBR textures",
+            "throne": "dark fantasy throne, carved stone and dark wood, iron accents, skulls, velvet cushion, game-ready 3D model, PBR textures",
+            "fireplace": "medieval dark fantasy stone fireplace, carved mantel, iron grate, glowing embers, soot marks, game-ready 3D model, PBR textures",
+            "cauldron": "dark fantasy iron cauldron, heavy tripod legs, bubbling contents, ladle, mystic symbols, game-ready 3D model, PBR textures",
+            "workbench": "medieval dark fantasy crafting workbench, heavy timber, vise, scattered tools, wood shavings, game-ready 3D model, PBR textures",
+            # --- Outdoor Props ---
+            "well": "medieval dark fantasy stone well, moss-covered walls, wooden bucket, rope pulley, iron frame, game-ready 3D model, PBR textures",
+            "cart": "medieval dark fantasy wooden cart, iron-rimmed wheels, worn planks, hay remnants, game-ready 3D model, PBR textures",
+            "market_stall": "medieval dark fantasy market stall, canvas awning, wooden counter, hanging wares, game-ready 3D model, PBR textures",
+            "signpost": "medieval dark fantasy wooden signpost, carved directional signs, iron nails, weathered wood, game-ready 3D model, PBR textures",
+            "campfire": "dark fantasy campfire, stone ring, burning logs, iron spit, scattered sparks, game-ready 3D model, PBR textures",
+            "brazier": "dark fantasy iron brazier, ornate legs, burning coals, warm glow, game-ready 3D model, PBR textures",
+            "gravestone": "dark fantasy gravestone, weathered stone, carved epitaph, moss and lichen, slightly tilted, game-ready 3D model, PBR textures",
+            "fence": "medieval dark fantasy wooden fence section, rough-hewn posts, iron nails, weathered and leaning, game-ready 3D model, PBR textures",
+            "lantern": "medieval dark fantasy hanging lantern, wrought iron frame, amber glass panes, flickering candle, chain, game-ready 3D model, PBR textures",
+            "torch_sconce": "medieval dark fantasy wall torch sconce, iron bracket, burning torch, smoke wisps, game-ready 3D model, PBR textures",
+            # --- Vegetation (HIGH PRIORITY - replace terrible procedural trees) ---
+            "tree_oak": "dark fantasy ancient oak tree, gnarled twisted trunk, thick bark, sprawling branches, dark green foliage, moss and lichen, game-ready 3D model, PBR textures, stylized",
+            "tree_dead": "dark fantasy dead tree, bare twisted branches, rotting bark, hollow trunk, dark atmosphere, game-ready 3D model, PBR textures",
+            "tree_pine": "dark fantasy dark pine tree, tall straight trunk, dense needle foliage, drooping branches, game-ready 3D model, PBR textures",
+            "tree_willow": "dark fantasy weeping willow tree, drooping vine-like branches, gnarled trunk, ethereal atmosphere, game-ready 3D model, PBR textures",
+            "tree_corrupted": "dark fantasy corrupted tree, twisted black bark, glowing purple veins, withered leaves, dark tendrils, game-ready 3D model, PBR textures",
+            "bush": "dark fantasy thorny bush, dark green leaves, tangled branches, berries, game-ready 3D model, PBR textures",
+            "fallen_log": "dark fantasy fallen log, moss-covered rotting wood, mushrooms growing, broken branches, game-ready 3D model, PBR textures",
+            "tree_stump": "dark fantasy tree stump, axe-cut top, growth rings visible, moss and fungi, game-ready 3D model, PBR textures",
+            "mushroom_cluster": "dark fantasy large mushroom cluster, glowing bioluminescent caps, varied sizes, forest floor base, game-ready 3D model, PBR textures",
+            "rock_formation": "dark fantasy rocky outcrop, layered stone, moss patches, dark lichen, cracked surfaces, game-ready 3D model, PBR textures",
+            # --- Dungeon Props ---
+            "prison_door": "dark fantasy prison cell door, heavy iron bars, rusted lock, stone frame, chains, game-ready 3D model, PBR textures",
+            "sarcophagus": "dark fantasy stone sarcophagus, ornate carved lid, ancient symbols, cracked marble, cobwebs, game-ready 3D model, PBR textures",
+            "torture_rack": "dark fantasy torture rack, dark wood frame, iron shackles, leather straps, bloodstains, game-ready 3D model, PBR textures",
+            "skull_pile": "dark fantasy skull pile, human and beast skulls, bones, dark candles, ritual arrangement, game-ready 3D model, PBR textures",
+        }
+
+        prop_type = object_name or "barrel"
+        prop_prompt = _PROP_PROMPTS.get(prop_type, f"dark fantasy {prop_type}, medieval style, weathered, game-ready 3D model, PBR textures, clean topology")
+        full_prompt = prompt or prop_prompt
+
+        studio_cookie = settings.tripo_session_cookie
+        studio_token = settings.tripo_studio_token
+        api_key = settings.tripo_api_key
+
+        if not (studio_cookie or studio_token or api_key):
+            return json.dumps({
+                "error": "No Tripo credentials configured. Set TRIPO_SESSION_COOKIE, TRIPO_STUDIO_TOKEN, or TRIPO_API_KEY.",
+                "fallback": f"Using procedural generator for '{prop_type}'. Set Tripo credentials for AAA quality.",
+                "prop_type": prop_type,
+            }, indent=2)
+
+        # Route to generate_3d with the prop prompt
+        if studio_cookie or studio_token:
+            gen = TripoStudioClient(
+                session_cookie=studio_cookie or None,
+                jwt_token=studio_token or None,
+            )
+            try:
+                if image_path:
+                    result = await gen.generate_from_image(image_path, output_dir)
+                else:
+                    result = await gen.generate_from_text(full_prompt, output_dir)
+                result["prop_type"] = prop_type
+                result["prompt_used"] = full_prompt
+                result["generation_method"] = "tripo_studio"
+                result["next_steps"] = [
+                    f"Pick best variant, then: asset_pipeline action=cleanup object_name=<name> has_extracted_textures=true",
+                    "Run game_check after cleanup to verify quality",
+                ]
+                return json.dumps(result, indent=2, default=str)
+            finally:
+                await gen.close()
+        else:
+            gen = TripoGenerator(api_key=api_key)
+            if image_path:
+                result = await gen.generate_from_image(image_path, output_dir)
+            else:
+                result = await gen.generate_from_text(full_prompt, output_dir)
+            result["prop_type"] = prop_type
+            result["prompt_used"] = full_prompt
+            result["generation_method"] = "tripo_api"
+            return json.dumps(result, indent=2, default=str)
+
+    elif action == "inspect_external_toolchain":
         result = await blender.send_command("toolchain_inspect_external", {
             "prefer_external": prefer_external,
             "review_lighting": review_lighting,
@@ -2637,7 +2756,65 @@ async def asset_pipeline(
 
                 loc_result = await blender.send_command(handler, loc_params)
                 anchor_x, anchor_y = planned["anchor"]
-                anchor_z = await _sample_terrain_height(blender, terrain_name, anchor_x, anchor_y)
+
+                # Flatten terrain under building footprint before placement
+                # Sample corners to determine slope and correct height
+                loc_radius = float(planned.get("radius", 15.0))
+                corner_heights = []
+                for dx, dy in [(-loc_radius, -loc_radius), (loc_radius, -loc_radius),
+                               (-loc_radius, loc_radius), (loc_radius, loc_radius),
+                               (0.0, 0.0)]:
+                    ch = await _sample_terrain_height(blender, terrain_name, anchor_x + dx, anchor_y + dy)
+                    corner_heights.append(ch)
+
+                # Use the maximum corner height so building sits ON terrain, not IN it
+                anchor_z = max(corner_heights) if corner_heights else 0.0
+
+                # Flatten terrain in footprint radius via spline deform (if terrain exists)
+                if terrain_name:
+                    try:
+                        await blender.send_command("terrain_spline_deform", {
+                            "terrain_name": terrain_name,
+                            "points": [
+                                [anchor_x - loc_radius, anchor_y - loc_radius],
+                                [anchor_x + loc_radius, anchor_y - loc_radius],
+                                [anchor_x + loc_radius, anchor_y + loc_radius],
+                                [anchor_x - loc_radius, anchor_y + loc_radius],
+                            ],
+                            "mode": "flatten",
+                            "strength": 0.85,
+                            "falloff_distance": loc_radius * 0.4,
+                        })
+                    except Exception:
+                        pass  # Non-fatal: building still placed, just terrain not flattened
+
+                # Auto-compute foundation profile from terrain slope
+                _foundation_profile = None
+                if corner_heights and len(corner_heights) >= 5:
+                    _min_h = min(corner_heights[:4])
+                    _max_h = max(corner_heights[:4])
+                    _height_diff = _max_h - _min_h
+                    if _height_diff > 0.3:  # significant slope
+                        _foundation_profile = {
+                            "foundation_height": _height_diff + 0.2,
+                            "side_heights": {
+                                "front": max(0.0, anchor_z - corner_heights[0]),
+                                "back": max(0.0, anchor_z - corner_heights[2]),
+                                "left": max(0.0, anchor_z - corner_heights[0]),
+                                "right": max(0.0, anchor_z - corner_heights[1]),
+                            },
+                            "retaining_sides": [
+                                side for side, h in [
+                                    ("front", corner_heights[0]), ("back", corner_heights[2]),
+                                    ("left", corner_heights[0]), ("right", corner_heights[1]),
+                                ]
+                                if anchor_z - h > 0.5
+                            ],
+                            "stair_wall": "front",
+                            "stair_steps": max(2, int(_height_diff / 0.25)),
+                        }
+                        loc_params["foundation_profile"] = _foundation_profile
+
                 try:
                     await _position_generated_object(
                         blender,
@@ -2769,8 +2946,27 @@ async def asset_pipeline(
         if interior_results:
             _save_chkpt()  # checkpoint after interiors
 
+        # --- Step 10: Export heightmap for Unity import ---
+        heightmap_export_path = None
+        if terrain_name:
+            try:
+                _hm_dir = checkpoint_dir or "/tmp/veilbreakers_exports"
+                import os as _os_hm
+                _os_hm.makedirs(_hm_dir, exist_ok=True)
+                _hm_path = _os_hm.path.join(_hm_dir, f"{map_name}_heightmap.raw")
+                hm_result = await blender.send_command("env_export_heightmap", {
+                    "terrain_name": terrain_name,
+                    "filepath": _hm_path,
+                    "unity_compat": True,
+                    "flip_vertical": True,
+                })
+                if isinstance(hm_result, dict) and hm_result.get("filepath"):
+                    heightmap_export_path = hm_result["filepath"]
+                    steps_completed.append("heightmap_exported")
+            except Exception as e:
+                steps_failed.append({"step": "heightmap_export", "error": str(e)})
+
         # --- Build result ---
-        # Atmosphere presets for Unity next_steps
         quality_report = await _enforce_world_quality(
             blender,
             object_names=created_objects,
@@ -2787,12 +2983,15 @@ async def asset_pipeline(
             "interiors": interior_results,
             "budget_applied": budget,
             "quality_report": quality_report,
+            "heightmap_export_path": heightmap_export_path,
             "resumed_from_checkpoint": _CHKPT_LOADED,
             "checkpoint_dir": checkpoint_dir,
             "next_steps": [
-                "Review the generated city in Blender.",
+                "Review the generated map in Blender viewport (use contact_sheet for thorough review).",
                 "Run a hero-pass with Tripo only for standout props or landmark pieces.",
                 "Export only after the quality report has no remaining failures.",
+                f"Import heightmap to Unity: unity_scene action=setup_terrain heightmap_path={heightmap_export_path}" if heightmap_export_path else "Export heightmap manually: blender_environment action=export_heightmap",
+                "Run blender_mesh action=game_check on each building to verify geometry quality.",
             ],
         }
         return await _with_screenshot(blender, result, capture_viewport)
@@ -2834,8 +3033,17 @@ async def asset_pipeline(
             for _obj_name in _mp_objects:
                 try:
                     _chk = await blender.send_command("mesh_check_game_ready", {"object_name": _obj_name})
-                    if isinstance(_chk, dict) and _chk.get("issues"):
-                        _game_failures.append({"object": _obj_name, "issues": _chk["issues"]})
+                    if isinstance(_chk, dict) and not _chk.get("game_ready", False):
+                        _failed_checks = [
+                            k for k, v in _chk.get("checks", {}).items()
+                            if isinstance(v, dict) and not v.get("passed", True)
+                        ]
+                        _game_failures.append({
+                            "object": _obj_name,
+                            "game_ready": False,
+                            "failed_checks": _failed_checks,
+                            "summary": _chk.get("summary", "Unknown failure"),
+                        })
                 except Exception:
                     pass
 

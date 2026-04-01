@@ -370,9 +370,10 @@ def handle_generate_terrain(params: dict) -> dict:
     erosion = validated["erosion"]
     erosion_iters = validated["erosion_iterations"]
 
-    # Auto-scale erosion: minimum 50K droplets for visible river channels
-    if erosion in ("hydraulic", "both") and erosion_iters < 50000:
-        erosion_iters = max(50000, resolution * resolution // 5)
+    # Auto-scale erosion: minimum 150K droplets for AAA-quality river channels
+    # and natural-looking drainage (Skyrim/Valhalla uses 150K+ for visible features)
+    if erosion in ("hydraulic", "both") and erosion_iters < 150000:
+        erosion_iters = max(150000, resolution * resolution // 2)
 
     # Domain warp params (organic terrain features)
     warp_strength = params.get("warp_strength", 0.4)  # default organic
@@ -440,15 +441,31 @@ def handle_generate_terrain(params: dict) -> dict:
 
     bm.verts.ensure_lookup_table()
 
-    # Set vertex Z from heightmap
+    # Set vertex Z from heightmap using bilinear interpolation for smooth terrain
     for vert in bm.verts:
         u = (vert.co.x + terrain_size / 2.0) / terrain_size
         v = (vert.co.y + terrain_size / 2.0) / terrain_size
-        col_idx = int(u * (cols - 1))
-        row_idx = int(v * (rows - 1))
-        col_idx = max(0, min(col_idx, cols - 1))
-        row_idx = max(0, min(row_idx, rows - 1))
-        vert.co.z = float(heightmap[row_idx, col_idx]) * height_scale
+        # Continuous float coordinates in heightmap space
+        col_f = u * (cols - 1)
+        row_f = v * (rows - 1)
+        # Bilinear interpolation corners
+        c0 = max(0, min(int(col_f), cols - 2))
+        r0 = max(0, min(int(row_f), rows - 2))
+        c1 = c0 + 1
+        r1 = r0 + 1
+        # Fractional parts for interpolation weights
+        cf = col_f - c0
+        rf = row_f - r0
+        # Bilinear blend of 4 surrounding heightmap samples
+        h00 = float(heightmap[r0, c0])
+        h10 = float(heightmap[r0, c1])
+        h01 = float(heightmap[r1, c0])
+        h11 = float(heightmap[r1, c1])
+        h = (h00 * (1 - cf) * (1 - rf)
+             + h10 * cf * (1 - rf)
+             + h01 * (1 - cf) * rf
+             + h11 * cf * rf)
+        vert.co.z = h * height_scale
 
     bm.to_mesh(mesh)
     vertex_count = len(bm.verts)
@@ -719,10 +736,96 @@ def handle_generate_road(params: dict) -> dict:
     bm.to_mesh(mesh)
     bm.free()
 
+    # Generate visible road surface mesh with cobblestone material
+    road_mesh_name = f"{terrain_name}_Road"
+    terrain_obj = bpy.data.objects.get(terrain_name)
+    terrain_size = terrain_obj.dimensions.x if terrain_obj else 100.0
+    cell_size = terrain_size / max(side - 1, 1)
+
+    road_bm = bmesh.new()
+    road_uv = road_bm.loops.layers.uv.new("UVMap")
+    road_half_width = width * cell_size * 0.5
+
+    # Build road mesh as series of connected quads along the path
+    if len(path) >= 2:
+        prev_left = prev_right = None
+        for pi in range(len(path) - 1):
+            r0, c0 = path[pi]
+            r1, c1 = path[pi + 1]
+            # Convert grid coords to world coords
+            x0 = (c0 / max(side - 1, 1)) * terrain_size - terrain_size / 2
+            y0 = (r0 / max(side - 1, 1)) * terrain_size - terrain_size / 2
+            x1 = (c1 / max(side - 1, 1)) * terrain_size - terrain_size / 2
+            y1 = (r1 / max(side - 1, 1)) * terrain_size - terrain_size / 2
+            z0 = float(graded_flat[r0 * side + c0]) * height_scale + 0.03
+            z1 = float(graded_flat[r1 * side + c1]) * height_scale + 0.03
+
+            # Perpendicular direction for road width
+            dx, dy = x1 - x0, y1 - y0
+            length = max(math.sqrt(dx * dx + dy * dy), 0.01)
+            nx, ny = -dy / length * road_half_width, dx / length * road_half_width
+
+            v0 = road_bm.verts.new((x0 + nx, y0 + ny, z0))
+            v1 = road_bm.verts.new((x0 - nx, y0 - ny, z0))
+            v2 = road_bm.verts.new((x1 - nx, y1 - ny, z1))
+            v3 = road_bm.verts.new((x1 + nx, y1 + ny, z1))
+
+            if prev_left is not None and prev_right is not None:
+                # Connect to previous segment for continuous road
+                try:
+                    road_bm.faces.new([prev_left, prev_right, v1, v0])
+                except ValueError:
+                    pass
+
+            try:
+                face = road_bm.faces.new([v0, v1, v2, v3])
+                face.smooth = True
+            except ValueError:
+                pass
+            prev_left = v3
+            prev_right = v2
+
+    # Remove doubles and recalc normals
+    if road_bm.verts:
+        bmesh.ops.remove_doubles(road_bm, verts=road_bm.verts[:], dist=0.01)
+        bmesh.ops.recalc_face_normals(road_bm, faces=road_bm.faces[:])
+
+    road_mesh_data = bpy.data.meshes.new(road_mesh_name)
+    road_bm.to_mesh(road_mesh_data)
+    road_bm.free()
+    for poly in road_mesh_data.polygons:
+        poly.use_smooth = True
+
+    road_obj = bpy.data.objects.new(road_mesh_name, road_mesh_data)
+    bpy.context.collection.objects.link(road_obj)
+
+    # Apply cobblestone material
+    from .procedural_materials import create_material_from_library
+    try:
+        road_mat = create_material_from_library("cobblestone")
+        if road_mat:
+            road_mesh_data.materials.append(road_mat)
+    except Exception:
+        # Fallback: basic grey stone material
+        road_mat = bpy.data.materials.new(name="Road_Cobblestone")
+        road_mat.use_nodes = True
+        if road_mat.node_tree:
+            bsdf = road_mat.node_tree.nodes.get("Principled BSDF")
+            if bsdf:
+                bc = bsdf.inputs.get("Base Color")
+                if bc:
+                    bc.default_value = (0.25, 0.22, 0.18, 1.0)
+                rgh = bsdf.inputs.get("Roughness")
+                if rgh:
+                    rgh.default_value = 0.85
+        road_mesh_data.materials.append(road_mat)
+
     return {
         "name": terrain_name,
+        "road_mesh_name": road_obj.name,
         "path_length": len(path),
         "width": width,
+        "road_vertex_count": len(road_mesh_data.vertices),
     }
 
 
@@ -759,46 +862,97 @@ def handle_create_water(params: dict) -> dict:
             width = max(dims.x, width)
             depth = max(dims.y, depth)
 
-    # Create water plane
+    # Create water plane with proper subdivision for AAA wave displacement
+    # Resolution scales with water body size for performance
+    water_resolution = min(64, max(16, int(max(width, depth) / 4.0)))
     mesh = bpy.data.meshes.new(name)
     bm = bmesh.new()
 
     bmesh.ops.create_grid(
         bm,
-        x_segments=1,
-        y_segments=1,
+        x_segments=water_resolution,
+        y_segments=water_resolution,
         size=max(width, depth) / 2.0,
         calc_uvs=True,
     )
 
+    # Apply subtle procedural wave displacement for natural water surface
+    bm.verts.ensure_lookup_table()
+    water_half = max(width, depth) / 2.0
+    import math as _math_water
+    _wave_seed = hash(name) & 0xFFFF
+    for vert in bm.verts:
+        # Multi-octave wave displacement
+        wx = vert.co.x / water_half
+        wy = vert.co.y / water_half
+        wave1 = _math_water.sin(wx * 8.0 + _wave_seed * 0.1) * 0.04
+        wave2 = _math_water.sin(wy * 12.0 + wx * 5.0) * 0.025
+        wave3 = _math_water.sin((wx + wy) * 20.0) * 0.01
+        vert.co.z = wave1 + wave2 + wave3
+
+        # Shore fade: reduce waves near edges (shore blending)
+        edge_dist = 1.0 - max(abs(wx), abs(wy))
+        shore_fade = min(1.0, edge_dist * 4.0)  # fade in first 25% from edge
+        vert.co.z *= shore_fade
+
+    # Smooth shading for water
     bm.to_mesh(mesh)
     bm.free()
+    for poly in mesh.polygons:
+        poly.use_smooth = True
 
     obj = bpy.data.objects.new(name, mesh)
     obj.location = (0, 0, water_level)
     bpy.context.collection.objects.link(obj)
 
-    # Create/assign water material
+    # Create AAA water material with proper PBR properties
     mat = bpy.data.materials.get(material_name)
     if mat is None:
         mat = bpy.data.materials.new(name=material_name)
         mat.use_nodes = True
-        # Set transparent blue appearance
+        mat.use_backface_culling = False
+        mat.blend_method = "HASHED" if hasattr(mat, "blend_method") else None
         if mat.node_tree:
-            bsdf = mat.node_tree.nodes.get("Principled BSDF")
+            nodes = mat.node_tree.nodes
+            links = mat.node_tree.links
+            bsdf = nodes.get("Principled BSDF")
             if bsdf:
-                # Base color: dark blue
+                # Deep dark fantasy water color
                 base_color = bsdf.inputs.get("Base Color")
                 if base_color:
-                    base_color.default_value = (0.05, 0.15, 0.3, 1.0)
-                # Transmission
+                    base_color.default_value = (0.02, 0.08, 0.15, 1.0)
+                # High transmission for transparency
                 trans = bsdf.inputs.get("Transmission Weight") or bsdf.inputs.get("Transmission")
                 if trans:
-                    trans.default_value = 0.8
-                # Roughness
+                    trans.default_value = 0.85
+                # Low roughness for reflective water
                 rough = bsdf.inputs.get("Roughness")
                 if rough:
-                    rough.default_value = 0.1
+                    rough.default_value = 0.05
+                # IOR for water
+                ior = bsdf.inputs.get("IOR")
+                if ior:
+                    ior.default_value = 1.333
+                # Specular for water highlights
+                spec = bsdf.inputs.get("Specular IOR Level") or bsdf.inputs.get("Specular")
+                if spec:
+                    spec.default_value = 0.8
+
+                # Add procedural wave normal map
+                try:
+                    noise_tex = nodes.new("ShaderNodeTexNoise")
+                    noise_tex.inputs["Scale"].default_value = 25.0
+                    noise_tex.inputs["Detail"].default_value = 8.0
+                    noise_tex.inputs["Roughness"].default_value = 0.6
+                    bump_node = nodes.new("ShaderNodeBump")
+                    bump_node.inputs["Strength"].default_value = 0.15
+                    bump_node.inputs["Distance"].default_value = 0.02
+                    links.new(noise_tex.outputs["Fac"], bump_node.inputs["Height"])
+                    normal_input = bsdf.inputs.get("Normal")
+                    if normal_input:
+                        links.new(bump_node.outputs["Normal"], normal_input)
+                except Exception:
+                    pass  # Non-fatal: material still works without wave normals
     mesh.materials.append(mat)
 
     area = width * depth
@@ -807,6 +961,8 @@ def handle_create_water(params: dict) -> dict:
         "name": obj.name,
         "water_level": water_level,
         "area": area,
+        "water_resolution": water_resolution,
+        "vertex_count": water_resolution * water_resolution,
     }
 
 

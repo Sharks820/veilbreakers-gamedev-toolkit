@@ -65,13 +65,13 @@ _GRADE_ORDER = {"A": 5, "B": 4, "C": 3, "D": 2, "E": 1, "F": 0}
 def _compute_grade(metrics: dict) -> str:
     """Compute A-F topology grade from analysis metrics.
 
-    Grading thresholds from 02-RESEARCH.md (worst-first evaluation):
-      F: nm>20 or ngon%>25 or pole%>50 or loose>50
-      E: nm>5  or ngon%>10 or pole%>30 or loose>10
-      D: nm>0  or ngon%>5  or pole%>20 or loose>0 or tri%>40
-      C: ngon%>2 or pole%>10 or tri%>20
-      B: ngon%>0 or pole%>5  or tri%>10
-      A: everything else
+    Grading thresholds (worst-first evaluation):
+      F: nm>20 or ngon%>25 or pole%>50 or loose>50 or components>50 or degenerate>20
+      E: nm>5  or ngon%>10 or pole%>30 or loose>10 or components>20 or degenerate>10
+      D: nm>0  or ngon%>5  or pole%>20 or loose>0 or tri%>40 or components>5 or degenerate>0
+      C: ngon%>2 or pole%>10 or tri%>20 or components>2
+      B: ngon%>0 or pole%>5  or tri%>10 or components>1
+      A: everything else (single connected watertight mesh)
     """
     total_faces = max(metrics["face_count"], 1)
     total_verts = max(metrics["vertex_count"], 1)
@@ -80,17 +80,19 @@ def _compute_grade(metrics: dict) -> str:
     pole_pct = metrics["pole_count"] / total_verts * 100
     loose = metrics["loose_vertices"] + metrics["loose_edges"]
     tri_pct = metrics["tri_count"] / total_faces * 100
+    components = metrics.get("disconnected_components", 1)
+    degenerate = metrics.get("degenerate_faces", 0)
 
     # Grade from worst to best -- first failing threshold sets grade.
-    if nm > 20 or ngon_pct > 25 or pole_pct > 50 or loose > 50:
+    if nm > 20 or ngon_pct > 25 or pole_pct > 50 or loose > 50 or components > 50 or degenerate > 20:
         return "F"
-    if nm > 5 or ngon_pct > 10 or pole_pct > 30 or loose > 10:
+    if nm > 5 or ngon_pct > 10 or pole_pct > 30 or loose > 10 or components > 20 or degenerate > 10:
         return "E"
-    if nm > 0 or ngon_pct > 5 or pole_pct > 20 or loose > 0 or tri_pct > 40:
+    if nm > 0 or ngon_pct > 5 or pole_pct > 20 or loose > 0 or tri_pct > 40 or components > 5 or degenerate > 0:
         return "D"
-    if ngon_pct > 2 or pole_pct > 10 or tri_pct > 20:
+    if ngon_pct > 2 or pole_pct > 10 or tri_pct > 20 or components > 2:
         return "C"
-    if ngon_pct > 0 or pole_pct > 5 or tri_pct > 10:
+    if ngon_pct > 0 or pole_pct > 5 or tri_pct > 10 or components > 1:
         return "B"
     return "A"
 
@@ -115,6 +117,24 @@ def _list_issues(m: dict) -> list[str]:
         issues.append(
             f"{m['pole_count']} poles "
             f"({m['e_poles']} E-poles, {m['n_poles']} N-poles)"
+        )
+    components = m.get("disconnected_components", 1)
+    if components > 1:
+        issues.append(
+            f"{components} disconnected components "
+            "(geometry is not a single connected mesh — will cause gaps/floating parts)"
+        )
+    degenerate = m.get("degenerate_faces", 0)
+    if degenerate > 0:
+        issues.append(
+            f"{degenerate} degenerate/zero-area faces "
+            "(will cause shading artifacts and UV errors)"
+        )
+    if not m.get("is_watertight", True):
+        boundary = m.get("boundary_edges", 0)
+        issues.append(
+            f"Mesh is NOT watertight ({boundary} boundary edges) "
+            "— will cause light leaks and shadow artifacts in game engine"
         )
     return issues
 
@@ -1030,6 +1050,34 @@ def _analyze_mesh(obj: object) -> dict:
         # Boundary edges
         boundary_edges = [e for e in bm.edges if e.is_boundary]
 
+        # Disconnected component detection via flood-fill
+        disconnected_components = 0
+        if total_verts > 0:
+            visited = set()
+            for start_vert in bm.verts:
+                if start_vert.index in visited:
+                    continue
+                disconnected_components += 1
+                stack = [start_vert]
+                while stack:
+                    v = stack.pop()
+                    if v.index in visited:
+                        continue
+                    visited.add(v.index)
+                    for e in v.link_edges:
+                        other = e.other_vert(v)
+                        if other.index not in visited:
+                            stack.append(other)
+
+        # Zero-area / degenerate face detection
+        degenerate_faces = 0
+        for f in bm.faces:
+            if f.calc_area() < 1e-8:
+                degenerate_faces += 1
+
+        # Watertight check: mesh is watertight if zero boundary edges and zero non-manifold
+        is_watertight = len(boundary_edges) == 0 and len(non_manifold_edges) == 0
+
         # Edge flow: average face angle at edges with 2 linked faces
         edge_angles: list[float] = []
         for e in bm.edges:
@@ -1060,6 +1108,9 @@ def _analyze_mesh(obj: object) -> dict:
             sum(edge_angles) / max(len(edge_angles), 1), 1
         ),
         "max_edge_angle": round(max(edge_angles) if edge_angles else 0, 1),
+        "disconnected_components": disconnected_components,
+        "degenerate_faces": degenerate_faces,
+        "is_watertight": is_watertight,
     }
     metrics["grade"] = _compute_grade(metrics)
     metrics["issues"] = _list_issues(metrics)

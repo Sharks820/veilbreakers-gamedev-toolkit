@@ -442,24 +442,62 @@ def handle_generate_town(params: dict) -> dict:
             "wall_height": 3.6,
         }
 
-    # Materialize building plots as actual buildings instead of marker cubes.
+    # Materialize building plots with overlap prevention and road setback.
+    # Track occupied footprints to prevent buildings from intersecting.
+    _occupied_footprints: list[tuple[float, float, float, float]] = []  # (x_min, y_min, x_max, y_max)
+    _SETBACK = 1.5  # meters from plot edge for road clearance
+    _MIN_SEPARATION = 2.0  # minimum gap between buildings
+
     for i, plot in enumerate(town.building_plots):
         district = district_lookup.get(plot["district"], {})
         district_type = district.get("type", "residential")
         build_params = _structure_params(district_type, plot["size"], slot_index=i)
+
+        # Clamp building size to plot dimensions with setback
+        plot_w = max(5.6, plot["size"][0] * cell_size * 0.72 - _SETBACK * 2)
+        plot_d = max(5.6, plot["size"][1] * cell_size * 0.72 - _SETBACK * 2)
+        build_params["width"] = min(float(build_params.get("width", 10)), plot_w)
+        build_params["depth"] = min(float(build_params.get("depth", 8)), plot_d)
+
         structure_name = f"{name}_building_{i}"
         build_params.update({
             "name": structure_name,
             "seed": seed + i * 17,
         })
+
+        # Check overlap with existing buildings before generating
+        px, py = plot["position"]
+        bx = px * cell_size + _SETBACK
+        by = py * cell_size + _SETBACK
+        bw = float(build_params["width"])
+        bd = float(build_params["depth"])
+        candidate_box = (bx, by, bx + bw, by + bd)
+
+        _overlaps = False
+        for existing in _occupied_footprints:
+            if (candidate_box[0] < existing[2] + _MIN_SEPARATION and
+                    candidate_box[2] > existing[0] - _MIN_SEPARATION and
+                    candidate_box[1] < existing[3] + _MIN_SEPARATION and
+                    candidate_box[3] > existing[1] - _MIN_SEPARATION):
+                _overlaps = True
+                break
+
+        if _overlaps:
+            logger.debug("Skipping building %s at (%s,%s) - overlaps existing", structure_name, px, py)
+            continue
+
         handle_generate_building(build_params)
 
         building_obj = bpy.data.objects.get(structure_name)
         if building_obj is not None:
-            px, py = plot["position"]
-            building_obj.location = (px * cell_size, py * cell_size, 0.0)
-            building_obj.rotation_euler = (0.0, 0.0, 0.0)
+            building_obj.location = (bx, by, 0.0)
+            # Vary rotation for visual interest (face road)
+            import random as _rng_town
+            _rng_town.seed(seed + i)
+            rot_z = _rng_town.choice([0.0, math.pi * 0.5, math.pi, math.pi * 1.5])
+            building_obj.rotation_euler = (0.0, 0.0, rot_z)
             building_obj.parent = parent
+            _occupied_footprints.append(candidate_box)
             structure_count += 1
 
     # Turn landmarks into larger, more expressive anchor buildings.
