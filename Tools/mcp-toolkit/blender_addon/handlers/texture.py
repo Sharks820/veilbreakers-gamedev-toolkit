@@ -1754,3 +1754,80 @@ def handle_ensure_flat_albedo(params: dict) -> dict:
         "recommendation": recommendation,
         "image_path": image_path,
     }
+
+
+# ---------------------------------------------------------------------------
+# Detail Texture Handler
+# ---------------------------------------------------------------------------
+
+def handle_apply_detail_texture(params: dict) -> dict:
+    """Apply a close-up detail texture overlay to an object's material.
+
+    Inserts camera-distance-dependent noise overlay nodes (using
+    DETAIL_TEXTURE_TYPES presets from texture_quality) into the object's
+    active material node tree.
+
+    Params:
+        object_name (str): Target object name.
+        detail_type (str, default "stone_pores"): One of DETAIL_TEXTURE_TYPES keys.
+            Valid types: stone_pores, wood_grain, metal_brushed, fabric_weave,
+            leather_grain, rust_pitting, moss_micro, sand_grain, ice_crystal,
+            bark_texture, bone_surface, crystal_facets.
+        detail_scale (float, default 20.0): Texture tiling scale (1-100).
+        detail_strength (float, default 0.3): Normal/color influence (0-1).
+        blend_distance (float, default 5.0): Metres at which detail fades in (0.5-50).
+
+    Returns dict with status, object_name, detail_type, code_executed.
+    """
+    from .texture_quality import generate_detail_texture_setup_code, VALID_DETAIL_TYPES
+
+    object_name = params.get("object_name", "")
+    detail_type = params.get("detail_type", "stone_pores")
+    detail_scale = float(params.get("detail_scale", 20.0))
+    detail_strength = float(params.get("detail_strength", 0.3))
+    blend_distance = float(params.get("blend_distance", 5.0))
+
+    if not object_name:
+        raise ValueError("'object_name' is required")
+
+    if detail_type not in VALID_DETAIL_TYPES:
+        raise ValueError(
+            f"Unknown detail_type '{detail_type}'. "
+            f"Valid types: {sorted(VALID_DETAIL_TYPES)}"
+        )
+
+    obj = bpy.data.objects.get(object_name)
+    if obj is None:
+        return {"status": "error", "error": f"Object '{object_name}' not found"}
+
+    if obj.type != "MESH":
+        return {"status": "error", "error": f"Object '{object_name}' is not a mesh (type={obj.type})"}
+
+    # Generate and execute the detail texture setup code
+    code = generate_detail_texture_setup_code(
+        object_name=object_name,
+        detail_type=detail_type,
+        detail_scale=detail_scale,
+        detail_strength=detail_strength,
+        blend_distance=blend_distance,
+    )
+
+    try:
+        exec(compile(code, "<detail_texture_setup>", "exec"))  # noqa: S102
+        return {
+            "status": "success",
+            "object_name": object_name,
+            "detail_type": detail_type,
+            "detail_scale": detail_scale,
+            "detail_strength": detail_strength,
+            "blend_distance": blend_distance,
+            "code_executed": True,
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "object_name": object_name,
+            "detail_type": detail_type,
+            "error": str(exc),
+            "code_executed": False,
+        }
