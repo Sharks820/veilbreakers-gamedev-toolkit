@@ -119,6 +119,7 @@ from .texture import (
     handle_channel_pack,
     handle_ensure_flat_albedo,
     handle_load_extracted_textures,
+    handle_apply_detail_texture,
 )
 from .pipeline_lod import handle_generate_lods
 from .lod_pipeline import handle_generate_lods as handle_generate_lod_chain
@@ -771,6 +772,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "texture_channel_pack": handle_channel_pack,
     "texture_ensure_flat_albedo": handle_ensure_flat_albedo,
     "texture_load_extracted_textures": handle_load_extracted_textures,
+    "texture_apply_detail": handle_apply_detail_texture,
     # Pipeline operations
     "pipeline_generate_lods": handle_generate_lods,
     "pipeline_generate_lod_chain": handle_generate_lod_chain,
