@@ -2385,8 +2385,6 @@ async def asset_pipeline(
             result["prompt_used"] = full_prompt
             return json.dumps(result, indent=2, default=str)
 
-    elif action == "inspect_external_toolchain":
-
     elif action == "generate_prop":
         # Route ALL prop/furniture/vegetation generation through Tripo with
         # curated dark fantasy prompts. Procedural fallback only when Tripo unavailable.

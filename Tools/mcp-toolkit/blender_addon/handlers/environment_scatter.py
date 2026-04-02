@@ -777,9 +777,16 @@ def handle_create_breakable(params: dict) -> dict:
     intact_obj.parent = parent
     bpy.context.collection.objects.link(intact_obj)
 
-    # Apply intact material
+    # Apply intact material with proper color from scatter presets
     mat_intact = bpy.data.materials.new(name=f"mat_{prop_type}_intact")
     mat_intact.use_nodes = True
+    if mat_intact.node_tree:
+        _bsdf = mat_intact.node_tree.nodes.get("Principled BSDF")
+        if _bsdf:
+            _preset = _SCATTER_MATERIAL_PRESETS.get(prop_type, {})
+            _bc = _preset.get("base_color", (0.15, 0.13, 0.11, 1.0))
+            _bsdf.inputs["Base Color"].default_value = tuple(list(_bc)[:4])
+            _bsdf.inputs["Roughness"].default_value = float(_preset.get("roughness", 0.8))
     intact_mesh.materials.append(mat_intact)
 
     # Create destroyed version collection
@@ -825,9 +832,25 @@ def handle_create_breakable(params: dict) -> dict:
         deb_obj.parent = parent
         destroyed_coll.objects.link(deb_obj)
 
-    # Apply destroyed material
+    # Apply destroyed material with darker, damaged color
     mat_destroyed = bpy.data.materials.new(name=f"mat_{prop_type}_destroyed")
     mat_destroyed.use_nodes = True
+    if mat_destroyed.node_tree:
+        _bsdf_d = mat_destroyed.node_tree.nodes.get("Principled BSDF")
+        if _bsdf_d:
+            _preset_d = _SCATTER_MATERIAL_PRESETS.get(prop_type, {})
+            _bc_d = _preset_d.get("base_color", (0.15, 0.13, 0.11, 1.0))
+            # Destroyed: shift toward charred brown-gray, not just pitch black.
+            # Mix 70% original + 30% char color sRGB(60,50,40)->linear
+            _bsdf_d.inputs["Base Color"].default_value = (
+                _bc_d[0] * 0.7 + 0.046 * 0.3,
+                _bc_d[1] * 0.7 + 0.030 * 0.3,
+                _bc_d[2] * 0.7 + 0.021 * 0.3,
+                1.0,
+            )
+            _bsdf_d.inputs["Roughness"].default_value = min(
+                float(_preset_d.get("roughness", 0.8)) + 0.15, 1.0,
+            )
 
     return {
         "name": parent_name,
