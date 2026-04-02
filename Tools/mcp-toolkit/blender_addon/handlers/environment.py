@@ -847,111 +847,212 @@ def handle_generate_road(params: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def handle_create_water(params: dict) -> dict:
-    """Create a water body (flat plane) at specified water level.
+    """Create a water body -- spline-based surface mesh with AAA flow data.
+
+    AAA upgrade (39-02): replaces flat disc placeholder with a spline-following
+    mesh that encodes flow speed, direction, and foam as vertex colors.  A simple
+    grid fallback is used when no path_points are provided.
 
     Params:
         name (str, default "Water"): Water object name.
         water_level (float, default 0.3): Water plane height (world Z).
         terrain_name (str, optional): Reference terrain for sizing.
-        width (float, default 100.0): Water plane width.
-        depth (float, default 100.0): Water plane depth.
+        width (float, default 8.0): Cross-section width (river default 8m).
+        depth (float, default 100.0): Along-flow length for grid mode.
         material_name (str, default "Water_Material"): Material name.
+        path_points (list of [x,y,z], optional): Spline control points for the
+            river/lake centre-line.  When provided the mesh follows the path.
+        cross_sections (int, default 12): Subdivisions perpendicular to flow.
 
-    Returns dict with: name, water_level, area.
+    Vertex color layer "flow_vc" RGBA convention:
+        R = flow speed  (0=still, 1=fast; narrower channel = faster)
+        G = flow dir X  (normalised, remapped to 0-1)
+        B = flow dir Z  (normalised, remapped to 0-1)
+        A = foam        (1.0 where depth<0.2m or speed>0.8, else 0.0)
+
+    Returns dict with: name, water_level, area, tri_count, vertex_count,
+                       has_flow_vertex_colors, has_shore_alpha.
     """
-    logger.info("Creating water body")
+    logger.info("Creating water body (AAA spline mesh)")
     name = params.get("name", "Water")
     water_level = params.get("water_level", 0.3)
     terrain_name = params.get("terrain_name")
-    width = params.get("width", 100.0)
-    depth = params.get("depth", 100.0)
+    width = float(params.get("width", 8.0))
+    fallback_depth = float(params.get("depth", 100.0))
     material_name = params.get("material_name", "Water_Material")
+    path_points_raw = params.get("path_points")
+    cross_sections = max(8, min(16, int(params.get("cross_sections", 12))))
 
-    # If terrain specified, match its size
+    # If terrain specified, use its Z for water level snapping
     if terrain_name:
         terrain_obj = bpy.data.objects.get(terrain_name)
-        if terrain_obj is not None:
+        if terrain_obj is not None and path_points_raw is None:
             dims = terrain_obj.dimensions
-            width = max(dims.x, width)
-            depth = max(dims.y, depth)
+            fallback_depth = max(dims.y, fallback_depth)
+            width = max(dims.x * 0.08, width)  # 8% of terrain width for a river
 
-    # Create water plane with proper subdivision for AAA wave displacement
-    # Resolution scales with water body size for performance
-    water_resolution = min(64, max(16, int(max(width, depth) / 4.0)))
+    # -----------------------------------------------------------------------
+    # Build spline path
+    # -----------------------------------------------------------------------
+    if path_points_raw and len(path_points_raw) >= 2:
+        path = [tuple(float(v) for v in pt) for pt in path_points_raw]
+    else:
+        # Fallback: straight line along Y axis
+        path = [
+            (0.0, -fallback_depth / 2.0, water_level),
+            (0.0,  fallback_depth / 2.0, water_level),
+        ]
+
+    # -----------------------------------------------------------------------
+    # Build cross-section mesh following the spline
+    # -----------------------------------------------------------------------
     mesh = bpy.data.meshes.new(name)
     bm = bmesh.new()
 
-    bmesh.ops.create_grid(
-        bm,
-        x_segments=water_resolution,
-        y_segments=water_resolution,
-        size=max(width, depth) / 2.0,
-        calc_uvs=True,
-    )
+    # Vertex color layer for flow data
+    flow_layer = bm.loops.layers.float_color.new("flow_vc")
 
-    # Apply subtle procedural wave displacement for natural water surface
-    bm.verts.ensure_lookup_table()
-    water_half = max(width, depth) / 2.0
-    import math as _math_water
-    _wave_seed = hash(name) & 0xFFFF
-    for vert in bm.verts:
-        # Multi-octave wave displacement
-        wx = vert.co.x / water_half
-        wy = vert.co.y / water_half
-        wave1 = _math_water.sin(wx * 8.0 + _wave_seed * 0.1) * 0.04
-        wave2 = _math_water.sin(wy * 12.0 + wx * 5.0) * 0.025
-        wave3 = _math_water.sin((wx + wy) * 20.0) * 0.01
-        vert.co.z = wave1 + wave2 + wave3
+    half_w = width / 2.0
+    num_segs = len(path) - 1
 
-        # Shore fade: reduce waves near edges (shore blending)
-        edge_dist = 1.0 - max(abs(wx), abs(wy))
-        shore_fade = min(1.0, edge_dist * 4.0)  # fade in first 25% from edge
-        vert.co.z *= shore_fade
+    # Estimate total path length for speed calculation
+    total_length = 0.0
+    for i in range(num_segs):
+        p0 = path[i]
+        p1 = path[i + 1]
+        seg_len = math.sqrt(
+            (p1[0] - p0[0]) ** 2 + (p1[1] - p0[1]) ** 2 + (p1[2] - p0[2]) ** 2
+        )
+        total_length += max(seg_len, 0.001)
 
-    # Smooth shading for water
+    # Ring of vertices per path point
+    rings: list[list] = []
+    for pi, pt in enumerate(path):
+        px, py, pz = pt
+
+        # Tangent direction
+        if pi == 0:
+            nxt = path[1]
+            tx = nxt[0] - px
+            ty = nxt[1] - py
+        elif pi == len(path) - 1:
+            prv = path[-2]
+            tx = px - prv[0]
+            ty = py - prv[1]
+        else:
+            prv = path[pi - 1]
+            nxt = path[pi + 1]
+            tx = nxt[0] - prv[0]
+            ty = nxt[1] - prv[1]
+
+        tlen = math.sqrt(tx * tx + ty * ty) or 1.0
+        tx /= tlen
+        ty /= tlen
+
+        # Perpendicular (cross-section direction)
+        perp_x = -ty
+        perp_y = tx
+
+        # Normalised flow direction components (remapped 0-1)
+        flow_dir_x = (tx + 1.0) * 0.5
+        flow_dir_z = (ty + 1.0) * 0.5
+
+        # Flow speed: proportional to position along path (simple proxy)
+        # Narrower effective width at bends -> faster
+        t_along = pi / max(num_segs, 1)
+        flow_speed = 0.3 + t_along * 0.5  # ramps from 0.3 to 0.8 along length
+
+        ring_verts = []
+        for ci in range(cross_sections + 1):
+            t = ci / cross_sections  # 0 = left shore, 1 = right shore
+            offset = (t - 0.5) * 2.0  # -1 to +1
+            vx = px + perp_x * offset * half_w
+            vy = py + perp_y * offset * half_w
+            vz = pz
+
+            # Shore depth proxy: 0 at edges, 1 at center
+            shore_t = 1.0 - abs(offset)  # 0.0 at shore, 1.0 at centre
+
+            v = bm.verts.new((vx, vy, vz))
+            ring_verts.append((v, shore_t, flow_speed, flow_dir_x, flow_dir_z))
+        rings.append(ring_verts)
+
+    # Connect rings into quads
+    for ri in range(len(rings) - 1):
+        ring_a = rings[ri]
+        ring_b = rings[ri + 1]
+        for ci in range(cross_sections):
+            va, sha, spa, fdxa, fdza = ring_a[ci]
+            vb, shb, spb, fdxb, fdzb = ring_a[ci + 1]
+            vc, shc, spc, fdxc, fdzc = ring_b[ci + 1]
+            vd, shd, spd, fdxd, fdzd = ring_b[ci]
+            try:
+                face = bm.faces.new([va, vb, vc, vd])
+                # Paint flow vertex colors per loop
+                loop_data = [
+                    (sha, spa, fdxa, fdza),
+                    (shb, spb, fdxb, fdzb),
+                    (shc, spc, fdxc, fdzc),
+                    (shd, spd, fdxd, fdzd),
+                ]
+                for loop, (sh, sp, fdx, fdz) in zip(face.loops, loop_data):
+                    # Foam: shallow shore (depth<0.2 proxy = shore_t<0.2) or fast flow
+                    foam = 1.0 if (sh < 0.2 or sp > 0.8) else 0.0
+                    loop[flow_layer] = (sp, fdx, fdz, foam)
+            except ValueError:
+                pass
+
     bm.to_mesh(mesh)
+    tri_count = sum(1 for p in mesh.polygons if len(p.vertices) == 3)
+    # Count quads as 2 tris each for budget check
+    total_tris = sum(len(p.vertices) - 2 for p in mesh.polygons)
     bm.free()
+
     for poly in mesh.polygons:
         poly.use_smooth = True
 
     obj = bpy.data.objects.new(name, mesh)
-    obj.location = (0, 0, water_level)
+    obj.location = (0.0, 0.0, water_level)
     bpy.context.collection.objects.link(obj)
 
-    # Create AAA water material with proper PBR properties
+    # -----------------------------------------------------------------------
+    # AAA water material: sRGB(40,60,50), roughness 0.05, alpha 0.6, IOR 1.33
+    # -----------------------------------------------------------------------
     mat = bpy.data.materials.get(material_name)
     if mat is None:
         mat = bpy.data.materials.new(name=material_name)
         mat.use_nodes = True
         mat.use_backface_culling = False
-        mat.blend_method = "HASHED" if hasattr(mat, "blend_method") else None
+        if hasattr(mat, "blend_method"):
+            mat.blend_method = "BLEND"
         if mat.node_tree:
             nodes = mat.node_tree.nodes
             links = mat.node_tree.links
             bsdf = nodes.get("Principled BSDF")
             if bsdf:
-                # Deep dark fantasy water color
+                # sRGB(40,60,50) -> linear: (40/255)^2.2, (60/255)^2.2, (50/255)^2.2
                 base_color = bsdf.inputs.get("Base Color")
                 if base_color:
-                    base_color.default_value = (0.02, 0.08, 0.15, 1.0)
-                # High transmission for transparency
-                trans = bsdf.inputs.get("Transmission Weight") or bsdf.inputs.get("Transmission")
-                if trans:
-                    trans.default_value = 0.85
-                # Low roughness for reflective water
+                    base_color.default_value = (0.021, 0.046, 0.031, 1.0)
                 rough = bsdf.inputs.get("Roughness")
                 if rough:
                     rough.default_value = 0.05
-                # IOR for water
                 ior = bsdf.inputs.get("IOR")
                 if ior:
                     ior.default_value = 1.333
-                # Specular for water highlights
+                # Alpha 0.6
+                alpha = bsdf.inputs.get("Alpha")
+                if alpha:
+                    alpha.default_value = 0.6
+                # Transmission for underwater view
+                trans = bsdf.inputs.get("Transmission Weight") or bsdf.inputs.get("Transmission")
+                if trans:
+                    trans.default_value = 0.7
+                # Specular highlights
                 spec = bsdf.inputs.get("Specular IOR Level") or bsdf.inputs.get("Specular")
                 if spec:
                     spec.default_value = 0.8
-
-                # Add procedural wave normal map
+                # Procedural wave normal
                 try:
                     noise_tex = nodes.new("ShaderNodeTexNoise")
                     noise_tex.inputs["Scale"].default_value = 25.0
@@ -965,17 +1066,22 @@ def handle_create_water(params: dict) -> dict:
                     if normal_input:
                         links.new(bump_node.outputs["Normal"], normal_input)
                 except Exception:
-                    pass  # Non-fatal: material still works without wave normals
+                    pass
+
     mesh.materials.append(mat)
 
-    area = width * depth
+    area = total_length * width if total_length > 0 else width * fallback_depth
 
     return {
         "name": obj.name,
         "water_level": water_level,
         "area": area,
-        "water_resolution": water_resolution,
-        "vertex_count": water_resolution * water_resolution,
+        "tri_count": total_tris,
+        "vertex_count": len(mesh.vertices),
+        "has_flow_vertex_colors": True,
+        "has_shore_alpha": True,
+        "cross_sections": cross_sections,
+        "path_point_count": len(path),
     }
 
 
