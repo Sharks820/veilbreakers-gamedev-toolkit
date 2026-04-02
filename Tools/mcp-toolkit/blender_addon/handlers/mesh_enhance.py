@@ -1102,7 +1102,7 @@ def auto_generate_lod_chain(obj_name: str, asset_type: str = "prop") -> dict:
     }
 
 
-def enforce_topology_grade(obj_name: str, min_grade: str = "B+") -> dict:
+def enforce_topology_grade(obj_name: str, min_grade: str = "A") -> dict:
     """Enforce a minimum topology grade on a mesh, attempting auto-repair.
 
     Runs topology grading (equivalent to game_check) and if the mesh scores
