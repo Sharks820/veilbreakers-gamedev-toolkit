@@ -589,7 +589,7 @@ Plans:
 **Plans**: 4 plans
 Plans:
 - [x] 39-01-PLAN.md -- Foundation wiring + AAA visual verification protocol
-- [ ] 39-02-PLAN.md -- Terrain + water + vegetation overhaul
+- [x] 39-02-PLAN.md -- Terrain + water + vegetation overhaul
 - [x] 39-03-PLAN.md -- Castle + settlement + combat zones
 - [ ] 39-04-PLAN.md -- Performance optimization + final verification
 
@@ -635,7 +635,7 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 36. World Composer | v7.0 | 1/2 | In Progress|  |
 | 37. Pipeline Integration | v7.0 | 0/TBD | Not Started | - |
 | 38. Starter Town | v7.0 | 0/TBD | Not Started | - |
-| 39. AAA Map Quality Overhaul | v7.0 | 2/4 | In Progress|  |
+| 39. AAA Map Quality Overhaul | v7.0 | 3/4 | In Progress|  |
 
 ---
 *Roadmap created: 2026-03-18*
