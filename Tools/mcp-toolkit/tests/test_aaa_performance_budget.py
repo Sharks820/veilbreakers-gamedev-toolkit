@@ -117,92 +117,63 @@ def _make_bpy_stub() -> types.ModuleType:
     bpy.ops = types.SimpleNamespace(
         object=types.SimpleNamespace(mode_set=lambda **kw: None),
     )
-    bpy.types = types.SimpleNamespace(Object=object)
+    # Provide enough bpy.types stubs for handler imports to succeed
+    class _FakeType:
+        """Base class stub that can be subclassed by addon registration."""
+        pass
+
+    bpy.types = types.SimpleNamespace(
+        Object=_FakeType,
+        Operator=_FakeType,
+        Panel=_FakeType,
+        PropertyGroup=_FakeType,
+        AddonPreferences=_FakeType,
+        Mesh=_FakeType,
+        Material=_FakeType,
+        Scene=_FakeType,
+        Collection=_FakeType,
+        Image=_FakeType,
+        Light=_FakeType,
+        Camera=_FakeType,
+        Armature=_FakeType,
+    )
     return bpy
 
 
-# Always force-install our own stubs so test_aaa_materials.py MagicMock
-# contamination doesn't bleed into LOD chain / topology tests.
-_CLEAN_BPY = _make_bpy_stub()
-sys.modules["bpy"] = _CLEAN_BPY
-if "bmesh" not in sys.modules:
-    sys.modules["bmesh"] = types.ModuleType("bmesh")
-if "mathutils" not in sys.modules:
-    mu = types.ModuleType("mathutils")
-    mu.Vector = lambda v: v
-    mu.Matrix = object
-    sys.modules["mathutils"] = mu
+# Save original sys.modules state so we can restore after this module's tests.
+# This prevents our forceful module overrides from bleeding into other test files.
+_SAVED_MODULES: dict[str, types.ModuleType] = {}
 
-# Stub sub-dependencies that environment_scatter uses via relative imports.
-# Always force-install so terrain-vegetation test's empty stub doesn't bleed in.
-for _mod_name in [
-    "blender_addon.handlers._scatter_engine",
-    "blender_addon.handlers._mesh_bridge",
-]:
-    if True:  # unconditional — override any prior stub
-        _m = types.ModuleType(_mod_name)
+def _save_module(name: str) -> None:
+    if name in sys.modules:
+        _SAVED_MODULES[name] = sys.modules[name]
 
-        def _grid_poisson(w, h, min_dist=1.0, seed=0):
-            """Return a coarse grid of points to simulate Poisson disk output."""
-            step = max(min_dist, 5.0)
-            xs = np.arange(step / 2, w, step)
-            ys = np.arange(step / 2, h, step)
-            xv, yv = np.meshgrid(xs, ys)
-            pts = np.stack([xv.ravel(), yv.ravel()], axis=1)
-            return pts.astype(np.float64)
+def _restore_all_modules() -> None:
+    for name, mod in _SAVED_MODULES.items():
+        sys.modules[name] = mod
+    _SAVED_MODULES.clear()
 
-        _m.poisson_disk_sample = _grid_poisson
-        _m.biome_filter_points = lambda pts, *a, **kw: pts
-        _m.context_scatter = lambda *a, **kw: []
-        _m.generate_breakable_variants = lambda *a, **kw: {}
-        _m.VEGETATION_GENERATOR_MAP = {}
-        _m.PROP_GENERATOR_MAP = {}
-        _m.mesh_from_spec = lambda *a, **kw: None
-        sys.modules[_mod_name] = _m
+import atexit
+atexit.register(_restore_all_modules)
 
-# _terrain_noise shim
-_tn_name = "blender_addon.handlers._terrain_noise"
-if _tn_name not in sys.modules:
-    _tn = types.ModuleType(_tn_name)
-    _tn.compute_slope_map = lambda hm: np.zeros_like(hm)
-    sys.modules[_tn_name] = _tn
+# Save modules we're about to overwrite
+for _save_name in ["bpy", "bmesh", "mathutils",
+                    "blender_addon.handlers._scatter_engine",
+                    "blender_addon.handlers._mesh_bridge",
+                    "blender_addon.handlers._terrain_noise",
+                    "blender_addon.handlers.environment_scatter",
+                    "blender_addon.handlers.mesh_enhance"]:
+    _save_module(_save_name)
+
+# NOTE: conftest.py provides MagicMock-based bpy/bmesh/mathutils stubs.
+# We do NOT override sys.modules here — that caused test contamination.
 
 # ---------------------------------------------------------------------------
-# Load handler modules
+# Import handler modules normally (conftest stubs handle bpy/bmesh/mathutils)
 # ---------------------------------------------------------------------------
 
-_BASE = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "blender_addon", "handlers")
-)
-
-
-def _load_module(filename: str, module_name: str):
-    spec = importlib.util.spec_from_file_location(
-        module_name,
-        os.path.join(_BASE, filename),
-    )
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-# Remove any cached versions from other test files so our clean bpy stub is used
-for _cached_key in list(sys.modules.keys()):
-    if any(x in _cached_key for x in ("mesh_enhance", "environment_scatter", "_terrain_noise")):
-        del sys.modules[_cached_key]
-
-# Load terrain_noise first so scatter can import it
-terrain_noise = _load_module("_terrain_noise.py", "blender_addon.handlers._terrain_noise")
-sys.modules["blender_addon.handlers._terrain_noise"] = terrain_noise
-
-# Load handlers (fresh, using our clean bpy stub)
-_scatter_mod = _load_module(
-    "environment_scatter.py", "blender_addon.handlers.environment_scatter"
-)
-_mesh_enhance = _load_module(
-    "mesh_enhance.py", "blender_addon.handlers.mesh_enhance"
-)
+from blender_addon.handlers import mesh_enhance as _mesh_enhance
+from blender_addon.handlers import environment_scatter as _scatter_mod
 
 
 # ===========================================================================

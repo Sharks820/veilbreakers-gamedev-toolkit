@@ -629,10 +629,10 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 30. Mesh Foundation | v7.0 | 1/1 | Complete    | 2026-03-31 |
 | 31. Terrain & Environment | v7.0 | 3/3 | Complete   | 2026-03-31 |
 | 32. Building System | v7.0 | 1/1 | Complete    | 2026-03-31 |
-| 33. Interior System | v7.0 | 0/TBD | Not Started | - |
-| 34. Multi-biome Terrain | v7.0 | 0/TBD | Not Started | - |
+| 33. Interior System | v7.0 | 1/1 | Complete    | 2026-03-31 |
+| 34. Multi-biome Terrain | v7.0 | 1/1 | Complete    | 2026-03-31 |
 | 35. Multi-backend AI Integration | v7.0 | 1/1 | Complete   | 2026-04-01 |
-| 36. World Composer | v7.0 | 1/2 | In Progress|  |
+| 36. World Composer | v7.0 | 2/2 | Complete   | 2026-04-01 |
 | 37. Pipeline Integration | v7.0 | 0/TBD | Not Started | - |
 | 38. Starter Town | v7.0 | 0/TBD | Not Started | - |
 | 39. AAA Map Quality Overhaul | v7.0 | 4/4 | Complete   | 2026-04-02 |

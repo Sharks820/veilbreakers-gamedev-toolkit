@@ -651,9 +651,17 @@ def handle_setup_dark_fantasy_lighting(params: dict) -> dict:
     world.use_nodes = True
     if world.use_nodes and world.node_tree:
         bg_node = world.node_tree.nodes.get("Background")
-        if bg_node:
-            bg_node.inputs["Strength"].default_value = ambient
-            bg_node.inputs["Color"].default_value = preset["world_color"]
+        if bg_node is None:
+            # Fresh world node tree may only have an Output node — create Background.
+            bg_node = world.node_tree.nodes.new("ShaderNodeBackground")
+            bg_node.location = (0, 0)
+            out_node = world.node_tree.nodes.get("World Output") or world.node_tree.nodes.get("ShaderNodeOutputWorld")
+            if out_node is None:
+                out_node = world.node_tree.nodes.new("ShaderNodeOutputWorld")
+                out_node.location = (300, 0)
+            world.node_tree.links.new(bg_node.outputs["Background"], out_node.inputs["Surface"])
+        bg_node.inputs["Strength"].default_value = ambient
+        bg_node.inputs["Color"].default_value = preset["world_color"]
 
     mist = getattr(world, "mist_settings", None)
     if mist is not None:
@@ -1082,13 +1090,23 @@ def handle_render_contact_sheet(params: dict) -> dict:
         if world is None:
             world = bpy.data.worlds.new("_CS_Temp_World")
             bpy.context.scene.world = world
+            world.use_nodes = True
         if world.use_nodes and world.node_tree:
             bg_node = world.node_tree.nodes.get("Background")
-            if bg_node:
-                old_world_strength = bg_node.inputs["Strength"].default_value
-                old_world_color = tuple(bg_node.inputs["Color"].default_value)
-                bg_node.inputs["Strength"].default_value = 0.05
-                bg_node.inputs["Color"].default_value = (0.01, 0.01, 0.02, 1.0)
+            if bg_node is None:
+                # Freshly created world may lack a Background node — create one.
+                bg_node = world.node_tree.nodes.new("ShaderNodeBackground")
+                bg_node.location = (0, 0)
+                out_node = (world.node_tree.nodes.get("World Output")
+                            or world.node_tree.nodes.get("ShaderNodeOutputWorld"))
+                if out_node is None:
+                    out_node = world.node_tree.nodes.new("ShaderNodeOutputWorld")
+                    out_node.location = (300, 0)
+                world.node_tree.links.new(bg_node.outputs["Background"], out_node.inputs["Surface"])
+            old_world_strength = bg_node.inputs["Strength"].default_value
+            old_world_color = tuple(bg_node.inputs["Color"].default_value)
+            bg_node.inputs["Strength"].default_value = 0.05
+            bg_node.inputs["Color"].default_value = (0.01, 0.01, 0.02, 1.0)
 
     cam = bpy.data.objects.get("ContactSheet_Camera")
     if not cam:

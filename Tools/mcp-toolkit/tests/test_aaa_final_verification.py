@@ -431,46 +431,13 @@ class TestSettlementMarketAndDistricts(unittest.TestCase):
 class TestVegetationLeafCardsAndWind(unittest.TestCase):
     """AAA-MAP-05: Trees must use leaf card canopies with wind vertex colors."""
 
-    def _load_scatter(self):
-        """Load environment_scatter with minimal stubs."""
-        import numpy as np
-        bpy = types.ModuleType("bpy")
-        bpy.types = types.SimpleNamespace(Operator=object)
-        bpy.data = types.SimpleNamespace(
-            objects=types.SimpleNamespace(get=lambda n, d=None: None, new=lambda n, d=None: types.SimpleNamespace(name=n)),
-            meshes=types.SimpleNamespace(new=lambda n: types.SimpleNamespace(name=n, from_pydata=lambda *a: None, update=lambda: None, polygons=[], vertices=[], materials=[])),
-            collections=types.SimpleNamespace(new=lambda n: types.SimpleNamespace(name=n, objects=types.SimpleNamespace(link=lambda o: None))),
-        )
-        bpy.context = types.SimpleNamespace(
-            scene=types.SimpleNamespace(collection=types.SimpleNamespace(objects=types.SimpleNamespace(link=lambda o: None)))
-        )
-        bpy.ops = types.SimpleNamespace(object=types.SimpleNamespace(mode_set=lambda **kw: None))
-        sys.modules["bpy"] = bpy
-        for mod_name in ["blender_addon.handlers._scatter_engine", "blender_addon.handlers._mesh_bridge"]:
-            m = types.ModuleType(mod_name)
-            m.poisson_disk_sample = lambda w, h, min_dist=1.0, seed=0: np.zeros((0, 2))
-            m.biome_filter_points = lambda pts, *a, **kw: pts
-            m.context_scatter = lambda *a, **kw: []
-            m.generate_breakable_variants = lambda *a, **kw: {}
-            m.VEGETATION_GENERATOR_MAP = {}
-            m.PROP_GENERATOR_MAP = {}
-            m.mesh_from_spec = lambda *a, **kw: None
-            sys.modules[mod_name] = m
-        tn_name = "blender_addon.handlers._terrain_noise"
-        tn = types.ModuleType(tn_name)
-        tn.compute_slope_map = lambda hm: np.zeros_like(hm)
-        sys.modules[tn_name] = tn
-
-        base = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "blender_addon", "handlers"))
-        spec = importlib.util.spec_from_file_location("blender_addon.handlers.environment_scatter", os.path.join(base, "environment_scatter.py"))
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules["blender_addon.handlers.environment_scatter"] = mod
-        spec.loader.exec_module(mod)
-        return mod
+    # NOTE: conftest.py provides MagicMock-based bpy/bmesh/mathutils stubs.
+    # Direct import replaces the old _load_scatter() contamination pattern.
+    from blender_addon.handlers import environment_scatter as _scatter_mod
 
     def test_vegetation_leaf_card_function_exists(self):
         """AAA-MAP-05: create_leaf_card_tree must exist in environment_scatter."""
-        scatter = self._load_scatter()
+        scatter = self._scatter_mod
         self.assertTrue(
             hasattr(scatter, "create_leaf_card_tree"),
             "create_leaf_card_tree not found in environment_scatter"

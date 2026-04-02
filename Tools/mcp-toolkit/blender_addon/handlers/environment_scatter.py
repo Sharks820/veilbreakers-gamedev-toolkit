@@ -33,6 +33,8 @@ from ._scatter_engine import (
 )
 from ._terrain_noise import compute_slope_map
 from ._mesh_bridge import mesh_from_spec, VEGETATION_GENERATOR_MAP, PROP_GENERATOR_MAP
+from .vegetation_lsystem import generate_billboard_impostor
+from .lod_pipeline import generate_lod_chain
 
 
 # ---------------------------------------------------------------------------
@@ -400,6 +402,116 @@ def _create_vegetation_template(
     _assign_scatter_material(obj, veg_type)
 
     return obj
+
+
+# ---------------------------------------------------------------------------
+# Billboard LOD wiring
+# ---------------------------------------------------------------------------
+
+_BILLBOARD_LOD_VERTEX_THRESHOLD = 200
+"""Minimum vertex count for a tree template to receive a billboard LOD.
+
+Templates below this threshold are too simple to benefit from impostor LODs
+(e.g. placeholder low-poly trees used during early scatter passes).
+"""
+
+_TREE_VEG_TYPES = frozenset({"tree", "pine_tree", "dead_tree", "tree_twisted"})
+"""Vegetation types that are trees and should receive billboard LOD setup."""
+
+
+def _setup_billboard_lod(
+    template_obj: "bpy.types.Object",
+    veg_spec: "dict | None",
+    veg_type: str,
+    lod_near_dist: float = 30.0,
+) -> bool:
+    """Set up billboard LOD metadata on a tree template object.
+
+    Calls ``generate_billboard_impostor`` to produce the billboard mesh spec,
+    then stores the result as custom properties on *template_obj* so that
+    downstream export steps (and Unity LOD group setup) can read them.
+
+    This is the wiring between the vegetation scatter pipeline and the two
+    existing pure-logic functions:
+      - ``generate_billboard_impostor`` (vegetation_lsystem.py)
+      - ``generate_lod_chain`` (lod_pipeline.py)
+
+    Args:
+        template_obj: The Blender template object for the tree.
+        veg_spec: The MeshSpec dict returned by the generator (may be None for
+            fallback primitives). Used to estimate tree dimensions and to supply
+            vertices/faces to generate_lod_chain.
+        veg_type: The vegetation type key (e.g. "tree", "pine_tree").
+        lod_near_dist: Distance (metres) at which LOD switches from full mesh
+            to billboard. Default 30 m.
+
+    Returns:
+        True if billboard LOD was wired up, False if the template was skipped
+        (too few vertices or not a tree type).
+    """
+    if veg_type not in _TREE_VEG_TYPES:
+        return False
+
+    # Check vertex count on the template mesh
+    mesh_data = getattr(template_obj, "data", None)
+    if mesh_data is None or not hasattr(mesh_data, "vertices"):
+        return False
+    if len(mesh_data.vertices) < _BILLBOARD_LOD_VERTEX_THRESHOLD:
+        return False
+
+    # Estimate tree height/width from the bounding box of the template
+    bb_min_z = min(v.co.z for v in mesh_data.vertices)
+    bb_max_z = max(v.co.z for v in mesh_data.vertices)
+    bb_min_x = min(v.co.x for v in mesh_data.vertices)
+    bb_max_x = max(v.co.x for v in mesh_data.vertices)
+    bb_min_y = min(v.co.y for v in mesh_data.vertices)
+    bb_max_y = max(v.co.y for v in mesh_data.vertices)
+    tree_height = max(bb_max_z - bb_min_z, 0.5)
+    tree_width = max(
+        bb_max_x - bb_min_x,
+        bb_max_y - bb_min_y,
+        0.5,
+    )
+
+    # Generate the billboard impostor mesh spec (pure-logic, no bpy)
+    billboard_spec = generate_billboard_impostor({
+        "object_name": template_obj.name,
+        "height": tree_height,
+        "width": tree_width,
+        "impostor_type": "cross",
+        "num_views": 8,
+        "resolution": 256,
+    })
+
+    # Also generate the full LOD chain if we have vertex/face data from the
+    # procedural generator spec (pure-logic bookkeeping only)
+    if veg_spec is not None:
+        raw_verts = veg_spec.get("vertices", [])
+        raw_faces = veg_spec.get("faces", [])
+        if raw_verts and raw_faces:
+            generate_lod_chain(
+                {"vertices": raw_verts, "faces": raw_faces},
+                asset_type="vegetation",
+            )
+            # lod_chain is computed but not materialised into Blender objects
+            # here — the export pipeline reads the custom properties below to
+            # reconstruct the chain at export time.
+
+    # Store LOD metadata as custom properties on the template object.
+    # All scatter instances share the template's mesh data pointer; the custom
+    # properties live on the Object (not the Mesh) so each instance inherits
+    # them from the template at export time via the collection-instance lookup.
+    template_obj["lod_billboard_enabled"] = 1
+    template_obj["lod_0_dist_max"] = lod_near_dist          # full mesh: 0–30 m
+    template_obj["lod_1_dist_min"] = lod_near_dist          # billboard: 30 m+
+    template_obj["lod_billboard_type"] = billboard_spec["impostor_type"]
+    template_obj["lod_billboard_vertex_count"] = billboard_spec["vertex_count"]
+    template_obj["lod_billboard_face_count"] = billboard_spec["face_count"]
+    template_obj["lod_billboard_atlas_res"] = billboard_spec["atlas_resolution"]
+    template_obj["lod_billboard_tree_height"] = tree_height
+    template_obj["lod_billboard_tree_width"] = tree_width
+
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -1216,6 +1328,17 @@ def handle_scatter_vegetation(params: dict) -> dict:
     veg_types_needed = set(p["vegetation_type"] for p in placements)
     for vt in veg_types_needed:
         templates[vt] = _create_vegetation_template(vt, template_coll)
+
+    # Wire billboard LOD for tree templates that have sufficient geometry.
+    # Each template is created once and shared across all its instances; we
+    # annotate the template object with custom properties so that the export
+    # pipeline can set up a 2-level LOD group (LOD0: full mesh 0-30 m,
+    # LOD1: billboard impostor 30 m+) without needing per-instance data.
+    for vt, tmpl_obj in templates.items():
+        # The generator spec is not re-fetched here; pass None so
+        # _setup_billboard_lod falls back to bounding-box estimation.
+        # Vertex-count guard inside the helper keeps low-poly types out.
+        _setup_billboard_lod(tmpl_obj, veg_spec=None, veg_type=vt)
 
     # Create instances using collection instances
     scatter_coll_name = f"{terrain_name}_vegetation"

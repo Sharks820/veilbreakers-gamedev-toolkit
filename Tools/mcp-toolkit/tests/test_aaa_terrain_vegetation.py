@@ -22,12 +22,14 @@ import unittest
 
 import numpy as np
 
+# NOTE: conftest.py provides MagicMock-based bpy/bmesh/mathutils stubs.
+
 # ---------------------------------------------------------------------------
-# Minimal bpy / bmesh stubs so tests run without a live Blender instance
+# Rich bpy / bmesh stubs used by test methods (not installed into sys.modules)
 # ---------------------------------------------------------------------------
 
 def _make_bpy_stubs():
-    """Create minimal bpy and bmesh stubs."""
+    """Create minimal bpy and bmesh stubs (for reference / future use)."""
 
     # --- bmesh vertex / face types ---
 
@@ -183,75 +185,12 @@ def _make_bpy_stubs():
     return bpy_mod, bmesh_mod
 
 
-bpy_stub, bmesh_stub = _make_bpy_stubs()
-# Force-install our stubs so conftest's bare ModuleType stubs get replaced.
-# scatter_mod imports bpy/bmesh at module level; the stub must be in place
-# before _load_module() execs the handler source.
-sys.modules["bpy"] = bpy_stub
-sys.modules["bmesh"] = bmesh_stub
-sys.modules["bmesh.types"] = bmesh_stub.types
-
-
 # ---------------------------------------------------------------------------
-# Stub out heavy deps that the scatter module imports
+# Import handler modules normally (conftest stubs handle bpy/bmesh/mathutils)
 # ---------------------------------------------------------------------------
 
-def _stub_scatter_deps():
-    for mod_name in [
-        "blender_addon.handlers._scatter_engine",
-        "blender_addon.handlers._mesh_bridge",
-    ]:
-        if mod_name not in sys.modules:
-            m = types.ModuleType(mod_name)
-            # Provide minimal shims that scatter imports
-            m.poisson_disk_sample = lambda *a, **kw: np.empty((0, 2))
-            m.biome_filter_points = lambda pts, *a, **kw: pts
-            m.context_scatter = lambda *a, **kw: []
-            m.generate_breakable_variants = lambda *a, **kw: {}
-            m.VEGETATION_GENERATOR_MAP = {}
-            m.PROP_GENERATOR_MAP = {}
-            m.mesh_from_spec = lambda *a, **kw: None
-            sys.modules[mod_name] = m
-
-    # _terrain_noise shim: must succeed for the import to work
-    tn_name = "blender_addon.handlers._terrain_noise"
-    if tn_name not in sys.modules:
-        m = types.ModuleType(tn_name)
-        m.compute_slope_map = lambda hm: np.zeros_like(hm)
-        sys.modules[tn_name] = m
-
-
-_stub_scatter_deps()
-
-# Now import the real modules via their file paths
-import importlib.util
-import os
-
-_BASE = os.path.join(
-    os.path.dirname(__file__),
-    "..", "blender_addon", "handlers",
-)
-
-
-def _load_module(rel_path, module_name):
-    spec = importlib.util.spec_from_file_location(
-        module_name,
-        os.path.normpath(os.path.join(_BASE, rel_path)),
-    )
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-# Load _terrain_noise first (no bpy dependency)
-terrain_noise = _load_module("_terrain_noise.py", "blender_addon.handlers._terrain_noise")
-
-# Patch the compute_slope_map shim to use real implementation
-sys.modules["blender_addon.handlers._terrain_noise"] = terrain_noise
-
-# Load environment_scatter (depends on bpy and the stubs above)
-scatter_mod = _load_module("environment_scatter.py", "blender_addon.handlers.environment_scatter")
+from blender_addon.handlers import _terrain_noise as terrain_noise
+from blender_addon.handlers import environment_scatter as scatter_mod
 
 
 # ---------------------------------------------------------------------------

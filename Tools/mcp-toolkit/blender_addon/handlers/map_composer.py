@@ -1047,7 +1047,7 @@ def compose_world_map(
         "biome_distribution": dict[str, int]}``
     """
     if seed is None:
-        seed = random.randint(0, 2**31)
+        seed = random.Random().randint(0, 2**31)  # fresh OS-entropy instance; not global RNG
     rng = random.Random(seed)
 
     placed_pois: list[dict[str, Any]] = []
