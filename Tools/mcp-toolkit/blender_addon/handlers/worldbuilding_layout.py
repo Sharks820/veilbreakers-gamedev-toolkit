@@ -1359,3 +1359,592 @@ def generate_settlement_spec(
     base["template"] = template
 
     return base
+
+
+# ---------------------------------------------------------------------------
+# AAA Settlement Layout: Market Square + District Zoning (Plan 39-03)
+# ---------------------------------------------------------------------------
+
+
+def generate_market_square(
+    center: tuple[float, float] = (0.0, 0.0),
+    size: str = "medium",
+    road_intersections: list[tuple[float, float]] | None = None,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Generate a market square layout spec.
+
+    Parameters
+    ----------
+    center : (x, y) world-space center of the square.
+    size : "small" (400 m²), "medium" (900 m²), or "large" (2500 m²).
+    road_intersections : list of (x, y) positions of nearby road intersections
+        used to orient the square shape.
+    seed : random seed.
+
+    Returns
+    -------
+    dict with center, area, shape_verts, central_feature_type,
+    stall_count, stall_positions.
+    """
+    rng = random.Random(seed)
+
+    # Area targets per research spec
+    area_map = {"small": 400.0, "medium": 900.0, "large": 2500.0}
+    target_area = area_map.get(size, 900.0)
+
+    # Derive rectangle dimensions: roughly 1:1 to 1:2 aspect ratio
+    aspect = rng.uniform(0.65, 1.0)  # width / length ratio
+    length = math.sqrt(target_area / aspect)
+    width = target_area / length
+    actual_area = width * length
+
+    cx, cy = center
+
+    # Shape vertices (rectangular, clockwise from bottom-left)
+    half_w = width / 2.0
+    half_l = length / 2.0
+    shape_verts = [
+        (round(cx - half_w, 2), round(cy - half_l, 2)),
+        (round(cx + half_w, 2), round(cy - half_l, 2)),
+        (round(cx + half_w, 2), round(cy + half_l, 2)),
+        (round(cx - half_w, 2), round(cy + half_l, 2)),
+    ]
+
+    # Central feature: well, fountain, or market cross
+    central_feature_type = rng.choice(["well", "fountain", "market_cross"])
+    central_feature = {
+        "type": central_feature_type,
+        "position": (round(cx, 2), round(cy, 2)),
+    }
+    if central_feature_type == "well":
+        central_feature.update({"radius": 1.0, "height": 0.8})
+    elif central_feature_type == "fountain":
+        central_feature.update({"radius": 1.5, "height": 1.2, "basin_depth": 0.4})
+    else:  # market_cross
+        central_feature.update({"pillar_height": 3.0, "cross_width": 1.2})
+
+    # Stall placement: 3 m x 2 m stalls, 1 m spacing, along 2 long sides
+    # Stall count ~ floor(perimeter * 0.3 / 4)
+    perimeter = 2.0 * (width + length)
+    stall_count = max(2, int(perimeter * 0.3 / 4))
+    stall_spacing = 4.0  # 3 m stall + 1 m gap
+    stalls_per_side = max(1, int(length / stall_spacing))
+
+    stall_positions: list[dict[str, Any]] = []
+    for side_idx, sign in enumerate([-1, 1]):  # left and right sides
+        for i in range(stalls_per_side):
+            sx = round(cx + sign * (half_w + 1.5), 2)
+            sy = round(cy - half_l * 0.8 + i * stall_spacing, 2)
+            stall_positions.append({
+                "position": (sx, sy),
+                "width": 3.0,
+                "depth": 2.0,
+                "rotation": 0.0 if sign > 0 else math.pi,
+            })
+    # Trim to stall_count
+    stall_positions = stall_positions[:stall_count]
+    actual_stall_count = len(stall_positions)
+
+    return {
+        "center": (round(cx, 2), round(cy, 2)),
+        "area": round(actual_area, 1),
+        "width": round(width, 2),
+        "length": round(length, 2),
+        "shape_verts": shape_verts,
+        "central_feature_type": central_feature_type,
+        "central_feature": central_feature,
+        "stall_count": actual_stall_count,
+        "stall_positions": stall_positions,
+        "size_class": size,
+    }
+
+
+def assign_district_zones(
+    settlement_bounds: dict,
+    castle_pos: tuple[float, float] = (0.0, 0.0),
+    wall_positions: list[tuple[float, float]] | None = None,
+    road_network: list[dict] | None = None,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Assign district zones to a settlement using proximity rules.
+
+    Zone types (from research):
+    - market   : settlement center, near main road intersection
+    - residential : near castle (wealthy) and mid-ring (common)
+    - military : near outer walls (barracks, training yard)
+    - religious : near center (temple/church plot)
+    - slums    : outermost ring near/outside walls
+
+    Parameters
+    ----------
+    settlement_bounds : dict with ``min`` (x, y) and ``max`` (x, y).
+    castle_pos : (x, y) world-space position of the castle/keep.
+    wall_positions : list of (x, y) positions of wall segments.
+    road_network : list of road dicts with ``start`` and ``end`` positions.
+    seed : random seed.
+
+    Returns
+    -------
+    dict with ``zones``: list of
+        {type, seed_pos, area, building_density, polygon_verts, description}
+    """
+    rng = random.Random(seed)
+
+    bmin = settlement_bounds.get("min", (-50.0, -50.0))
+    bmax = settlement_bounds.get("max", (50.0, 50.0))
+    center_x = (bmin[0] + bmax[0]) / 2.0
+    center_y = (bmin[1] + bmax[1]) / 2.0
+    half_w = (bmax[0] - bmin[0]) / 2.0
+    half_h = (bmax[1] - bmin[1]) / 2.0
+    radius = min(half_w, half_h)
+
+    cx, cy = castle_pos
+
+    # Zone seed points placed according to proximity rules
+    zone_specs = [
+        {
+            "type": "market",
+            "description": "Commercial center, highest foot traffic",
+            # Near settlement center
+            "seed_pos": (
+                round(center_x + rng.uniform(-radius * 0.1, radius * 0.1), 2),
+                round(center_y + rng.uniform(-radius * 0.1, radius * 0.1), 2),
+            ),
+            "building_density": round(rng.uniform(0.80, 0.90), 2),
+            "zone_radius": round(radius * rng.uniform(0.18, 0.26), 2),
+        },
+        {
+            "type": "residential",
+            "description": "Wealthier homes near castle, common homes at mid-ring",
+            # Between castle and center
+            "seed_pos": (
+                round((cx + center_x) / 2.0 + rng.uniform(-radius * 0.05, radius * 0.05), 2),
+                round((cy + center_y) / 2.0 + rng.uniform(-radius * 0.05, radius * 0.05), 2),
+            ),
+            "building_density": round(rng.uniform(0.60, 0.80), 2),
+            "zone_radius": round(radius * rng.uniform(0.22, 0.32), 2),
+        },
+        {
+            "type": "military",
+            "description": "Barracks and training yards near outer walls",
+            # Near outer wall boundary
+            "seed_pos": (
+                round(center_x + radius * 0.6 * math.cos(rng.uniform(0, math.pi * 2)), 2),
+                round(center_y + radius * 0.6 * math.sin(rng.uniform(0, math.pi * 2)), 2),
+            ),
+            "building_density": round(rng.uniform(0.55, 0.70), 2),
+            "zone_radius": round(radius * rng.uniform(0.16, 0.24), 2),
+        },
+        {
+            "type": "religious",
+            "description": "Temple / church yard near settlement center",
+            # Near center, offset slightly from market
+            "seed_pos": (
+                round(center_x + radius * 0.2 * math.cos(rng.uniform(math.pi * 0.5, math.pi * 1.5)), 2),
+                round(center_y + radius * 0.2 * math.sin(rng.uniform(math.pi * 0.5, math.pi * 1.5)), 2),
+            ),
+            "building_density": round(rng.uniform(0.30, 0.55), 2),
+            "zone_radius": round(radius * rng.uniform(0.12, 0.20), 2),
+        },
+        {
+            "type": "slums",
+            "description": "Poor dwellings at settlement edge and outside walls",
+            # Outermost ring
+            "seed_pos": (
+                round(center_x + radius * 0.80 * math.cos(rng.uniform(math.pi * 1.2, math.pi * 2.0)), 2),
+                round(center_y + radius * 0.80 * math.sin(rng.uniform(math.pi * 1.2, math.pi * 2.0)), 2),
+            ),
+            "building_density": round(rng.uniform(0.40, 0.65), 2),
+            "zone_radius": round(radius * rng.uniform(0.18, 0.28), 2),
+        },
+    ]
+
+    zones: list[dict[str, Any]] = []
+    for zs in zone_specs:
+        zx, zy = zs["seed_pos"]
+        zr = zs["zone_radius"]
+        # Approximate polygon as 8-sided convex hull around seed point
+        poly_verts = []
+        segments = 8
+        for si in range(segments):
+            ang = 2.0 * math.pi * si / segments
+            jitter = rng.uniform(0.85, 1.15)
+            poly_verts.append((
+                round(zx + math.cos(ang) * zr * jitter, 2),
+                round(zy + math.sin(ang) * zr * jitter, 2),
+            ))
+        area = math.pi * zr * zr  # approximate
+        zones.append({
+            "type": zs["type"],
+            "description": zs["description"],
+            "seed_pos": zs["seed_pos"],
+            "area": round(area, 1),
+            "building_density": zs["building_density"],
+            "polygon_verts": poly_verts,
+            "zone_radius": zr,
+        })
+
+    return {"zones": zones}
+
+
+# ---------------------------------------------------------------------------
+# AAA Combat/Encounter: Concentric Castle + Encounter Zone (Plan 39-03)
+# ---------------------------------------------------------------------------
+
+
+def generate_concentric_castle_spec(
+    castle_radius: float = 40.0,
+    rings: int = 2,
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Generate a concentric castle specification (pure-logic, no bpy).
+
+    Parameters
+    ----------
+    castle_radius : outer wall radius in meters.
+    rings : number of concentric wall rings (2 or 3).
+    seed : random seed.
+
+    Returns
+    -------
+    dict with rings (list of wall ring specs), gatehouse, towers.
+    Each ring: {ring_index, radius, height, thickness, tower_positions}
+    """
+    rng = random.Random(seed)
+    rings = max(2, min(3, rings))
+
+    ring_radii_factors = [1.0, 0.7, 0.5]
+    ring_height_ranges = [(6.0, 8.0), (10.0, 12.0), (12.0, 16.0)]
+
+    ring_specs: list[dict[str, Any]] = []
+    for i in range(rings):
+        r = castle_radius * ring_radii_factors[i]
+        h_lo, h_hi = ring_height_ranges[i]
+        height = round(rng.uniform(h_lo, h_hi), 2)
+        thickness = round(rng.uniform(2.0, 3.0), 2)
+
+        # Tower spacing: every 25-40m around circumference
+        circumference = 2.0 * math.pi * r
+        tower_spacing = rng.uniform(25.0, 40.0)
+        tower_count = max(4, int(circumference / tower_spacing))
+        tower_diameter = round(rng.uniform(4.0, 8.0), 2)
+        tower_protrusion = 2.0  # meters beyond wall face
+
+        tower_positions = []
+        for ti in range(tower_count):
+            ang = 2.0 * math.pi * ti / tower_count
+            tx = round(math.cos(ang) * (r + tower_protrusion), 2)
+            ty = round(math.sin(ang) * (r + tower_protrusion), 2)
+            tower_positions.append({"position": (tx, ty), "diameter": tower_diameter})
+
+        # Material tones (outer ring darker, inner lighter per research)
+        if i == 0:
+            material_srgb = (90, 85, 75)  # dark granite outer
+        elif i == 1:
+            material_srgb = (135, 128, 118)  # mid granite
+        else:
+            material_srgb = (180, 170, 155)  # light granite inner
+
+        ring_specs.append({
+            "ring_index": i,
+            "radius": round(r, 2),
+            "height": height,
+            "thickness": thickness,
+            "tower_count": tower_count,
+            "tower_positions": tower_positions,
+            "tower_diameter": tower_diameter,
+            "material_srgb": material_srgb,
+        })
+
+    # Gatehouse on outer ring, facing south (main approach)
+    outer_r = castle_radius
+    gatehouse = _generate_gatehouse_spec(
+        position=(0.0, -outer_r),
+        rotation=0.0,
+        wall_height=ring_specs[0]["height"],
+        rng=rng,
+    )
+
+    return {
+        "castle_radius": castle_radius,
+        "rings": ring_specs,
+        "ring_count": rings,
+        "gatehouse": gatehouse,
+    }
+
+
+def _generate_gatehouse_spec(
+    position: tuple[float, float],
+    rotation: float,
+    wall_height: float,
+    rng: random.Random,
+) -> dict[str, Any]:
+    """Generate a gatehouse specification (pure-logic).
+
+    Returns dict with passage, flanking towers, portcullis, murder holes,
+    and arrow slits geometry specs.
+    """
+    passage_width = round(rng.uniform(3.0, 4.0), 2)
+    passage_depth = round(rng.uniform(8.0, 15.0), 2)
+    flanking_tower_height = round(wall_height + rng.uniform(2.0, 3.0), 2)
+    flanking_tower_diameter = round(rng.uniform(5.0, 6.0), 2)
+
+    # Portcullis bars: vertical iron bars
+    bar_count = max(6, int(passage_width / 0.15))
+    portcullis = {
+        "position": position,
+        "width": passage_width,
+        "height": round(wall_height * 0.85, 2),
+        "bar_count": bar_count,
+        "bar_diameter": 0.1,
+        "bar_spacing": 0.15,
+        "material_srgb": (135, 131, 126),
+        "metallic": 1.0,
+    }
+
+    # Murder holes in passage ceiling
+    murder_hole_count = rng.randint(4, 6)
+    murder_holes = []
+    for i in range(murder_hole_count):
+        mx = position[0]
+        my = round(position[1] + passage_depth * (i + 1) / (murder_hole_count + 1), 2)
+        murder_holes.append({"position": (mx, my), "size": (0.3, 0.3)})
+
+    # Arrow slits on flanking towers
+    arrow_slits_per_face = 3
+    flanking_towers = []
+    for side, sign in enumerate([-1, 1]):
+        tx = round(position[0] + sign * (passage_width / 2.0 + flanking_tower_diameter / 2.0), 2)
+        ty = round(position[1] + passage_depth / 2.0, 2)
+        slits = []
+        for si in range(arrow_slits_per_face):
+            slit_z = round(flanking_tower_height * (0.3 + 0.2 * si), 2)
+            slits.append({"width": 0.1, "height": 0.8, "z": slit_z})
+        flanking_towers.append({
+            "position": (tx, ty),
+            "diameter": flanking_tower_diameter,
+            "height": flanking_tower_height,
+            "arrow_slits": slits,
+        })
+
+    return {
+        "position": position,
+        "rotation": rotation,
+        "passage_width": passage_width,
+        "passage_depth": passage_depth,
+        "flanking_tower_height": flanking_tower_height,
+        "flanking_tower_diameter": flanking_tower_diameter,
+        "flanking_towers": flanking_towers,
+        "portcullis": portcullis,
+        "murder_holes": murder_holes,
+        "murder_hole_count": murder_hole_count,
+        "arrow_slits_per_tower_face": arrow_slits_per_face,
+    }
+
+
+def generate_encounter_zone_spec(
+    center: tuple[float, float] = (0.0, 0.0),
+    radius: float = 20.0,
+    patrol_type: str = "circuit",
+    density_tier: str = "moderate",
+    seed: int = 0,
+) -> dict[str, Any]:
+    """Generate a mob encounter zone specification (pure-logic, no bpy).
+
+    Parameters
+    ----------
+    center : (x, y) world center of the zone.
+    radius : zone radius in meters.
+    patrol_type : "circuit" | "figure_eight" | "sentry" | "wander"
+    density_tier : "sparse" | "light" | "moderate" | "heavy" | "swarm"
+    seed : random seed.
+
+    Returns
+    -------
+    dict with zone_id, center, radius, patrol_waypoints, spawn_points,
+    mob_count.
+    """
+    rng = random.Random(seed)
+    cx, cy = center
+
+    # Density tier → mob count ranges (from research)
+    density_mob_counts = {
+        "sparse": (1, 2),
+        "light": (3, 4),
+        "moderate": (5, 7),
+        "heavy": (8, 12),
+        "swarm": (13, 20),
+    }
+    mob_lo, mob_hi = density_mob_counts.get(density_tier, (5, 7))
+    mob_count = rng.randint(mob_lo, mob_hi)
+
+    # Waypoint patterns
+    waypoints: list[tuple[float, float, float]] = []
+
+    if patrol_type == "circuit":
+        # Waypoints around perimeter
+        wp_count = rng.randint(4, 8)
+        for i in range(wp_count):
+            ang = 2.0 * math.pi * i / wp_count + rng.uniform(-0.2, 0.2)
+            dist = radius * rng.uniform(0.7, 0.95)
+            wx = round(cx + math.cos(ang) * dist, 2)
+            wy = round(cy + math.sin(ang) * dist, 2)
+            waypoints.append((wx, wy, 0.0))
+
+    elif patrol_type == "figure_eight":
+        wp_count = rng.randint(6, 8)
+        loop_r = radius * 0.4
+        for i in range(wp_count):
+            t = 2.0 * math.pi * i / wp_count
+            # Lemniscate of Bernoulli approximation
+            wx = round(cx + loop_r * math.cos(t), 2)
+            wy = round(cy + loop_r * 0.6 * math.sin(2 * t), 2)
+            waypoints.append((wx, wy, 0.0))
+
+    elif patrol_type == "sentry":
+        # 2-3 waypoints near zone edge, back-and-forth
+        wp_count = rng.randint(2, 3)
+        base_ang = rng.uniform(0, math.pi * 2)
+        for i in range(wp_count):
+            ang = base_ang + (i - wp_count / 2.0) * 0.4
+            dist = radius * rng.uniform(0.75, 0.95)
+            wx = round(cx + math.cos(ang) * dist, 2)
+            wy = round(cy + math.sin(ang) * dist, 2)
+            waypoints.append((wx, wy, 0.0))
+
+    else:  # wander
+        wp_count = rng.randint(4, 8)
+        for _ in range(wp_count):
+            wx = round(cx + rng.uniform(-radius * 0.85, radius * 0.85), 2)
+            wy = round(cy + rng.uniform(-radius * 0.85, radius * 0.85), 2)
+            waypoints.append((wx, wy, 0.0))
+
+    zone_id = f"zone_{seed}_{patrol_type}"
+    spawn_point_names = [f"spawn_mob_{zone_id}_{i}" for i in range(mob_count)]
+
+    return {
+        "zone_id": zone_id,
+        "center": (round(cx, 2), round(cy, 2)),
+        "radius": radius,
+        "patrol_type": patrol_type,
+        "density_tier": density_tier,
+        "patrol_waypoints": waypoints,
+        "waypoint_count": len(waypoints),
+        "spawn_points": spawn_point_names,
+        "mob_count": mob_count,
+    }
+
+
+def validate_interior_pathability_spec(
+    room_specs: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Validate NPC pathability of building interior room specs (pure-logic).
+
+    Checks doorways, corridors, and NPC spawn point presence.
+
+    Parameters
+    ----------
+    room_specs : list of room dicts, each containing:
+        ``doorways``: list of {width, height, position}
+        ``corridors``: list of {width, position}
+        ``npc_spawns``: list of spawn point names
+
+    Returns
+    -------
+    dict with pathable, doorways (with passable flag), corridors,
+    blocked_count, spawn_points.
+    """
+    MIN_DOOR_WIDTH = 1.2
+    MIN_DOOR_HEIGHT = 2.2
+    MIN_CORRIDOR_WIDTH = 1.0
+
+    all_doorways: list[dict[str, Any]] = []
+    all_corridors: list[dict[str, Any]] = []
+    all_spawn_points: list[str] = []
+    blocked_count = 0
+
+    for room in room_specs:
+        for dw in room.get("doorways", []):
+            w = dw.get("width", 0.0)
+            h = dw.get("height", 0.0)
+            passable = (w >= MIN_DOOR_WIDTH) and (h >= MIN_DOOR_HEIGHT)
+            if not passable:
+                blocked_count += 1
+            all_doorways.append({
+                "pos": dw.get("position", (0.0, 0.0, 0.0)),
+                "width": w,
+                "height": h,
+                "passable": passable,
+            })
+
+        for cor in room.get("corridors", []):
+            w = cor.get("width", 0.0)
+            passable = w >= MIN_CORRIDOR_WIDTH
+            if not passable:
+                blocked_count += 1
+            all_corridors.append({
+                "pos": cor.get("position", (0.0, 0.0, 0.0)),
+                "width": w,
+                "passable": passable,
+            })
+
+        for sp in room.get("npc_spawns", []):
+            all_spawn_points.append(sp)
+
+    pathable = (blocked_count == 0) and len(all_spawn_points) >= len(room_specs)
+
+    return {
+        "pathable": pathable,
+        "doorways": all_doorways,
+        "corridors": all_corridors,
+        "blocked_count": blocked_count,
+        "spawn_points": all_spawn_points,
+        "room_count": len(room_specs),
+    }
+
+
+def generate_trim_sheet_uv_spec(
+    mesh_type: str = "wall",
+    atlas_size: int = 2048,
+) -> dict[str, Any]:
+    """Generate trim sheet UV band assignment spec (pure-logic).
+
+    Maps mesh surface types to pixel bands of a 2048x2048 trim atlas.
+
+    Atlas layout (Y pixel ranges):
+    - stone band  : Y 0-256    (wall surfaces)
+    - wood band   : Y 384-640  (wooden elements)
+    - roof band   : Y 1024-1280 (roof tiles)
+    - ground band : Y 1280-1408 (ground/foundation)
+
+    Parameters
+    ----------
+    mesh_type : "wall" | "wood" | "roof" | "ground"
+    atlas_size : atlas pixel dimension (default 2048)
+
+    Returns
+    -------
+    dict with atlas_size, uv_band (y_min, y_max in [0,1]),
+    band_pixel_range (y_min_px, y_max_px).
+    """
+    ATLAS_SIZE = atlas_size
+    BANDS = {
+        "wall":   (0, 256),
+        "stone":  (0, 256),
+        "wood":   (384, 640),
+        "roof":   (1024, 1280),
+        "ground": (1280, 1408),
+    }
+    key = mesh_type.lower().strip()
+    px_lo, px_hi = BANDS.get(key, BANDS["wall"])
+
+    uv_lo = px_lo / ATLAS_SIZE
+    uv_hi = px_hi / ATLAS_SIZE
+
+    return {
+        "atlas_size": ATLAS_SIZE,
+        "mesh_type": mesh_type,
+        "band_pixel_range": (px_lo, px_hi),
+        "uv_band": (round(uv_lo, 6), round(uv_hi, 6)),
+    }
