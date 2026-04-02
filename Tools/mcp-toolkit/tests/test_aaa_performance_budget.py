@@ -2,7 +2,7 @@
 
 AAA-MAP-10: Performance budget enforcement (<2M tris, <500 draw calls)
 AAA-MAP-11: LOD chains auto-generated for all asset types
-AAA-MAP-12: Topology grade B+ minimum enforced with auto-repair
+AAA-MAP-12: Topology grade A minimum enforced with auto-repair
 """
 
 from __future__ import annotations
@@ -454,7 +454,7 @@ class TestPerformanceBudgetSpec(unittest.TestCase):
 # ===========================================================================
 
 class TestTopologyGradeEnforcement(unittest.TestCase):
-    """AAA-MAP-12: Topology grade B+ minimum enforced with auto-repair."""
+    """AAA-MAP-12: Topology grade A minimum enforced with auto-repair."""
 
     @classmethod
     def setUpClass(cls):
@@ -491,7 +491,7 @@ class TestTopologyGradeEnforcement(unittest.TestCase):
 
     def test_topology_grade_enforcement_returns_dict(self):
         """enforce_topology_grade must return a dict with required keys."""
-        result = _mesh_enhance.enforce_topology_grade("TestMesh", "B+")
+        result = _mesh_enhance.enforce_topology_grade("TestMesh", "A")
         self.assertIsInstance(result, dict)
         required_keys = {"original_grade", "final_grade", "repaired", "meets_minimum", "issues"}
         for key in required_keys:
@@ -499,13 +499,13 @@ class TestTopologyGradeEnforcement(unittest.TestCase):
 
     def test_topology_auto_repair_flag(self):
         """enforce_topology_grade must report whether repair was attempted."""
-        result = _mesh_enhance.enforce_topology_grade("TestMesh", "B+")
+        result = _mesh_enhance.enforce_topology_grade("TestMesh", "A")
         self.assertIn("repaired", result)
         self.assertIsInstance(result["repaired"], bool)
 
     def test_topology_meets_minimum_field(self):
         """meets_minimum must be a bool."""
-        result = _mesh_enhance.enforce_topology_grade("TestMesh", "B+")
+        result = _mesh_enhance.enforce_topology_grade("TestMesh", "A")
         self.assertIsInstance(result["meets_minimum"], bool)
 
     def test_topology_grade_order(self):
