@@ -412,13 +412,13 @@ class TestComputeBiomeAssignments:
         assert np.all(biomes == 4)
 
     def test_mud_at_low_altitude(self):
-        """Low altitude, low slope -> mud (rule 3)."""
+        """Low altitude, low slope -> mud (rule 6)."""
         from blender_addon.handlers._terrain_noise import compute_biome_assignments
 
         hmap = np.full((8, 8), 0.1)  # Low altitude
         slope = np.full((8, 8), 5.0)  # Low slope
         biomes = compute_biome_assignments(hmap, slope)
-        # mud rule is index 6 (max_alt=0.15, max_slope=30)
+        # mud rule is index 6 (max_alt=0.15, max_slope=15)
         assert np.all(biomes == 6)
 
     def test_custom_biome_rules(self):

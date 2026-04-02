@@ -394,7 +394,8 @@ class TestClutterScatter:
         clutter = generate_clutter_layout("tavern", 8, 6, layout, seed=42)
         pool = set(CLUTTER_POOLS["tavern"])
         for item in clutter:
-            assert item["type"] in pool, f"Clutter '{item['type']}' not in tavern pool"
+            item_name = item.get("name", item.get("type"))
+            assert item_name in pool, f"Clutter '{item_name}' not in tavern pool"
 
     def test_clutter_in_room_bounds(self):
         """No clutter items should be outside room bounds."""
@@ -428,8 +429,8 @@ class TestClutterScatter:
         )
         layout = generate_interior_layout("tavern", 8, 6, seed=42)
         clutter = generate_clutter_layout("tavern", 8, 6, layout, seed=42)
-        surface_items = [c for c in clutter if c["surface_parent"] is not None]
-        floor_items = [c for c in clutter if c["surface_parent"] is None]
+        surface_items = [c for c in clutter if c["surface_parent"] not in (None, "floor")]
+        floor_items = [c for c in clutter if c["surface_parent"] in (None, "floor")]
         # Should have some of each (tavern has tables)
         assert len(surface_items) >= 1 or len(floor_items) >= 1
 
@@ -443,11 +444,11 @@ class TestClutterScatter:
             clutter = generate_clutter_layout(room_type, 8, 6, layout, seed=42)
             assert len(clutter) >= 5, f"'{room_type}' clutter count < 5"
 
-    def test_empty_pool_returns_empty(self):
-        """Room with no clutter pool returns empty list."""
+    def test_unknown_pool_uses_default(self):
+        """Room with no clutter pool uses default fallback pool."""
         from blender_addon.handlers._building_grammar import generate_clutter_layout
         clutter = generate_clutter_layout("nonexistent", 8, 6, [], seed=42)
-        assert clutter == []
+        assert len(clutter) >= 5, "Unknown room should use default pool"
 
 
 # ---------------------------------------------------------------------------
