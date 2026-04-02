@@ -2773,3 +2773,86 @@ BUILDING_QUALITY_GENERATORS = {
     "interior_trim": generate_interior_trim,
     "battlements": generate_battlements,
 }
+
+
+# ---------------------------------------------------------------------------
+# Trim Sheet UV Band Assignment (Plan 39-03)
+# ---------------------------------------------------------------------------
+
+# 2048x2048 shared trim sheet atlas layout:
+# stone band  : Y   0 – 256   (exterior wall stone)
+# wood band   : Y 384 – 640   (timber frames, doors, window surrounds)
+# roof band   : Y 1024 – 1280 (roof tiles / shingles)
+# ground band : Y 1280 – 1408 (foundation, cobble ground)
+
+TRIM_SHEET_ATLAS_SIZE = 2048
+TRIM_SHEET_BANDS: dict[str, tuple[int, int]] = {
+    "wall":   (0, 256),
+    "stone":  (0, 256),
+    "wood":   (384, 640),
+    "roof":   (1024, 1280),
+    "ground": (1280, 1408),
+}
+
+
+def get_trim_sheet_uv_band(surface_type: str) -> dict[str, Any]:
+    """Return UV band coordinates for a surface type in the trim sheet atlas.
+
+    Parameters
+    ----------
+    surface_type : "wall" | "stone" | "wood" | "roof" | "ground"
+
+    Returns
+    -------
+    dict with atlas_size, band_pixel_range (y_min_px, y_max_px),
+    uv_band (y_min_uv, y_max_uv in [0, 1]).
+    """
+    key = surface_type.lower().strip()
+    px_lo, px_hi = TRIM_SHEET_BANDS.get(key, TRIM_SHEET_BANDS["wall"])
+    inv = TRIM_SHEET_ATLAS_SIZE  # pixel → UV normalisation
+    return {
+        "atlas_size": TRIM_SHEET_ATLAS_SIZE,
+        "surface_type": surface_type,
+        "band_pixel_range": (px_lo, px_hi),
+        "uv_band": (px_lo / inv, px_hi / inv),
+    }
+
+
+def apply_trim_sheet_uvs(mesh_spec: MeshSpec) -> MeshSpec:
+    """Annotate a MeshSpec with trim sheet UV bands for each component.
+
+    Reads ``components`` list from the spec and assigns the correct
+    ``uv_band`` to each component based on its surface role.
+
+    This is a pure-logic annotation — the actual UV assignment happens in
+    the Blender handler that materialises the mesh.
+
+    Parameters
+    ----------
+    mesh_spec : MeshSpec returned by any building_quality generator.
+
+    Returns
+    -------
+    The same MeshSpec dict, augmented with ``trim_sheet_uvs`` mapping:
+    ``{component_name: {atlas_size, band_pixel_range, uv_band}}``.
+    """
+    components = mesh_spec.get("components", [])
+    uv_map: dict[str, Any] = {}
+
+    for comp in components:
+        comp_lower = comp.lower()
+        if any(k in comp_lower for k in ("wall", "stone", "battlement", "merlon", "arch", "parapet")):
+            uv_map[comp] = get_trim_sheet_uv_band("wall")
+        elif any(k in comp_lower for k in ("timber", "wood", "beam", "plank", "door", "window_surround")):
+            uv_map[comp] = get_trim_sheet_uv_band("wood")
+        elif any(k in comp_lower for k in ("roof", "tile", "shingle", "gable")):
+            uv_map[comp] = get_trim_sheet_uv_band("roof")
+        elif any(k in comp_lower for k in ("ground", "floor", "foundation", "cobble")):
+            uv_map[comp] = get_trim_sheet_uv_band("ground")
+        else:
+            # Default to wall/stone for unrecognised components
+            uv_map[comp] = get_trim_sheet_uv_band("wall")
+
+    mesh_spec["trim_sheet_uvs"] = uv_map
+    mesh_spec["trim_sheet_atlas_size"] = TRIM_SHEET_ATLAS_SIZE
+    return mesh_spec
