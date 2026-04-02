@@ -388,8 +388,8 @@ class TestComputeBiomeAssignments:
         hmap = np.full((8, 8), 0.9)  # High altitude
         slope = np.full((8, 8), 5.0)  # Low slope
         biomes = compute_biome_assignments(hmap, slope)
-        # Snow rule is index 0 (min_alt=0.8, max_slope=45)
-        assert np.all(biomes == 0)
+        # highland_scrub rule is index 2 (min_alt=0.7, max_alt=1.0, max_slope=35)
+        assert np.all(biomes == 2)
 
     def test_rock_at_steep_slope(self):
         """Steep slope cells should be assigned 'rock' (rule 1)."""
@@ -398,18 +398,18 @@ class TestComputeBiomeAssignments:
         hmap = np.full((8, 8), 0.5)  # Mid altitude
         slope = np.full((8, 8), 50.0)  # Steep slope
         biomes = compute_biome_assignments(hmap, slope)
-        # Rock rule is index 1 (min_slope=40, max_slope=90)
+        # rock rule is index 1 (min_slope=35, max_slope=55)
         assert np.all(biomes == 1)
 
     def test_dead_grass_at_mid_altitude(self):
-        """Mid altitude, moderate slope -> dead_grass (rule 2)."""
+        """Mid altitude, low slope -> grass (rule 4)."""
         from blender_addon.handlers._terrain_noise import compute_biome_assignments
 
         hmap = np.full((8, 8), 0.5)  # Mid altitude
         slope = np.full((8, 8), 10.0)  # Low slope
         biomes = compute_biome_assignments(hmap, slope)
-        # dead_grass rule is index 2 (min_alt=0.2, max_alt=0.8, max_slope=40)
-        assert np.all(biomes == 2)
+        # grass rule is index 4 (min_alt=0.15, max_alt=0.7, max_slope=15)
+        assert np.all(biomes == 4)
 
     def test_mud_at_low_altitude(self):
         """Low altitude, low slope -> mud (rule 3)."""
@@ -418,8 +418,8 @@ class TestComputeBiomeAssignments:
         hmap = np.full((8, 8), 0.1)  # Low altitude
         slope = np.full((8, 8), 5.0)  # Low slope
         biomes = compute_biome_assignments(hmap, slope)
-        # mud rule is index 3 (max_alt=0.2, max_slope=40)
-        assert np.all(biomes == 3)
+        # mud rule is index 6 (max_alt=0.15, max_slope=30)
+        assert np.all(biomes == 6)
 
     def test_custom_biome_rules(self):
         """Custom biome rules override defaults."""

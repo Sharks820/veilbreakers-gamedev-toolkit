@@ -220,19 +220,28 @@ def _lsystem_tree_generator(**kwargs: Any) -> MeshSpec:
     the dict-params interface of generate_lsystem_tree. Optionally merges
     leaf card geometry at branch tips when leaf_type is specified.
     """
-    # Extract leaf_type before passing params to L-system generator
+    # Extract leaf_type and canopy_style before passing params to L-system generator
     leaf_type = kwargs.pop("leaf_type", "broadleaf")
+    canopy_style = kwargs.pop("canopy_style", "veil_healthy")
 
     tree_result = generate_lsystem_tree(kwargs)
 
     # Build MeshSpec from L-system output
+    vertices = tree_result["vertices"]
+    faces = tree_result["faces"]
+    tree_type = kwargs.get("tree_type", "oak")
     spec: MeshSpec = {
-        "vertices": tree_result["vertices"],
-        "faces": tree_result["faces"],
+        "vertices": vertices,
+        "faces": faces,
+        "uvs": [],
         "metadata": {
+            "name": f"lsystem_tree_{tree_type}",
             "generator": "lsystem_tree",
-            "tree_type": kwargs.get("tree_type", "oak"),
+            "tree_type": tree_type,
+            "canopy_style": canopy_style,
             "category": "vegetation",
+            "poly_count": len(faces),
+            "vertex_count": len(vertices),
             **tree_result.get("metadata", {}),
         },
     }
@@ -274,13 +283,13 @@ def _lsystem_tree_generator(**kwargs: Any) -> MeshSpec:
 # ---------------------------------------------------------------------------
 
 VEGETATION_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any]]] = {
-    "tree": (_lsystem_tree_generator, {"tree_type": "oak", "iterations": 4, "leaf_type": "broadleaf"}),
-    "tree_healthy": (_lsystem_tree_generator, {"tree_type": "oak", "iterations": 4, "leaf_type": "broadleaf"}),
-    "tree_boundary": (_lsystem_tree_generator, {"tree_type": "birch", "iterations": 4, "leaf_type": "broadleaf"}),
-    "tree_blighted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine"}),
-    "tree_dead": (_lsystem_tree_generator, {"tree_type": "dead", "iterations": 4, "leaf_type": None}),
-    "tree_twisted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine"}),
-    "pine_tree": (_lsystem_tree_generator, {"tree_type": "pine", "iterations": 4, "leaf_type": "needle"}),
+    "tree": (_lsystem_tree_generator, {"tree_type": "oak", "iterations": 4, "leaf_type": "broadleaf", "canopy_style": "veil_healthy"}),
+    "tree_healthy": (_lsystem_tree_generator, {"tree_type": "oak", "iterations": 4, "leaf_type": "broadleaf", "canopy_style": "veil_healthy"}),
+    "tree_boundary": (_lsystem_tree_generator, {"tree_type": "birch", "iterations": 4, "leaf_type": "broadleaf", "canopy_style": "veil_boundary"}),
+    "tree_blighted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine", "canopy_style": "veil_blighted"}),
+    "tree_dead": (_lsystem_tree_generator, {"tree_type": "dead", "iterations": 4, "leaf_type": None, "canopy_style": "veil_blighted"}),
+    "tree_twisted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine", "canopy_style": "veil_boundary"}),
+    "pine_tree": (_lsystem_tree_generator, {"tree_type": "pine", "iterations": 4, "leaf_type": "needle", "canopy_style": "veil_healthy"}),
     "bush": (generate_shrub_mesh, {}),
     "shrub": (generate_shrub_mesh, {}),
     "grass": (generate_grass_clump_mesh, {}),
