@@ -977,10 +977,11 @@ def _scatter_pass(
                 continue
             scale = rng.uniform(0.8, 1.5)
             placements.append({
-                "position": (pos[0], pos[1]),
+                "position": (wx, wy),
                 "vegetation_type": "tree",
                 "rotation": rng.uniform(0, 360),
                 "scale": scale,
+                "gpu_instance": True,
             })
 
         for pos in bush_candidates:
@@ -995,10 +996,11 @@ def _scatter_pass(
             if rng.random() > density_factor * 1.1:
                 continue
             placements.append({
-                "position": (pos[0], pos[1]),
+                "position": (wx, wy),
                 "vegetation_type": "bush",
                 "rotation": rng.uniform(0, 360),
                 "scale": rng.uniform(0.5, 1.0),
+                "gpu_instance": True,
             })
 
     elif pass_type == "ground_cover":
@@ -1042,11 +1044,12 @@ def _scatter_pass(
             if rng.random() > density_factor:
                 continue
             placements.append({
-                "position": (pos[0], pos[1]),
+                "position": (wx, wy),
                 "vegetation_type": f"grass_{biome_grass}",
                 "rotation": rng.uniform(0, 360),
                 "scale": 1.0,
                 "biome": biome_grass,
+                "gpu_instance": True,
             })
 
     elif pass_type == "debris":
@@ -1069,11 +1072,12 @@ def _scatter_pass(
                 continue
             scale, size_class = _rock_size_from_power_law(rng)
             placements.append({
-                "position": (pos[0], pos[1]),
+                "position": (wx, wy),
                 "vegetation_type": "rock",
                 "rotation": rng.uniform(0, 360),
                 "scale": scale,
                 "size_class": size_class,
+                "gpu_instance": True,
             })
 
     return placements
