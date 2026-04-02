@@ -51,6 +51,7 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
         "metallic": 0.90,
         "roughness": 0.25,
         "roughness_variation": 0.15,
+        "anisotropic": 0.5,
         "description": "Refined steel, cleaner finish",
     },
     "silver": {
@@ -58,6 +59,7 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
         "metallic": 0.95,
         "roughness": 0.20,
         "emission": 0.02,
+        "anisotropic": 0.3,
         "description": "Bright silver, slight holy glow",
     },
     "gold": {
@@ -65,6 +67,7 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
         "metallic": 0.95,
         "roughness": 0.20,
         "coat_weight": 0.3,
+        "anisotropic": 0.4,
         "description": "Pure gold, ornate finish",
     },
     "mithril": {
@@ -73,12 +76,14 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
         "roughness": 0.10,
         "emission": 0.05,
         "emission_color": (0.6, 0.7, 0.9),
+        "anisotropic": 0.6,
         "description": "Elven mithril, blue-silver sheen",
     },
     "adamantine": {
         "base_color": (0.15, 0.15, 0.18),
         "metallic": 0.99,
         "roughness": 0.05,
+        "anisotropic": 0.7,
         "description": "Indestructible dark metal",
     },
     "obsidian": {
@@ -86,6 +91,7 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
         "metallic": 0.3,
         "roughness": 0.02,
         "coat_weight": 0.8,
+        "anisotropic": 0.2,
         "description": "Volcanic glass, razor sharp",
     },
     "dragonbone": {
@@ -99,6 +105,7 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
         "base_color": (0.73, 0.55, 0.36),
         "metallic": 0.92,
         "roughness": 0.35,
+        "anisotropic": 0.45,
         "description": "Ancient bronze-red alloy",
     },
     "void_touched": {
@@ -323,7 +330,7 @@ def apply_material_tier_to_equipment(
 
     # Forward optional properties
     for key in ("emission", "emission_color", "coat_weight", "subsurface",
-                "roughness_variation", "rust_amount"):
+                "roughness_variation", "rust_amount", "anisotropic"):
         if key in tier:
             material_params[key] = tier[key]
 
