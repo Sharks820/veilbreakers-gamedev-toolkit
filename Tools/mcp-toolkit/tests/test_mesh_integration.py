@@ -39,8 +39,9 @@ _UNMAPPED_FURNITURE_TYPES = {
     "armor_stand", "bar_counter", "bed", "bellows", "bucket",
     "bunk_bed", "coin_pile", "cooking_fire", "cot", "display_case",
     "distillation_apparatus", "fireplace", "footlocker", "herb_rack",
-    "iron_maiden", "map_display", "nightstand", "pew", "rack",
-    "safe", "throne", "tool_rack", "wardrobe", "weapon_rack",
+    "iron_maiden", "map_display", "nightstand", "painting", "pew",
+    "rack", "safe", "throne", "tool_rack", "trophy_mount",
+    "wardrobe", "weapon_rack",
 }
 
 

@@ -2851,24 +2851,21 @@ async def asset_pipeline(
                 if loc_type == "dungeon" and loc.get("floors"):
                     handler = "world_generate_multi_floor_dungeon"
 
-                loc_result = await blender.send_command(handler, loc_params)
                 anchor_x, anchor_y = planned["anchor"]
 
-                # Flatten terrain under building footprint before placement
-                # Sample corners to determine slope and correct height
+                # Compute foundation profile BEFORE generating building
                 loc_radius = float(planned.get("radius", 15.0))
                 corner_heights = []
-                for dx, dy in [(-loc_radius, -loc_radius), (loc_radius, -loc_radius),
-                               (-loc_radius, loc_radius), (loc_radius, loc_radius),
-                               (0.0, 0.0)]:
-                    ch = await _sample_terrain_height(blender, terrain_name, anchor_x + dx, anchor_y + dy)
-                    corner_heights.append(ch)
-
-                # Use the maximum corner height so building sits ON terrain, not IN it
-                anchor_z = max(corner_heights) if corner_heights else 0.0
-
-                # Flatten terrain in footprint radius via spline deform (if terrain exists)
+                anchor_z = 0.0
                 if terrain_name:
+                    for dx, dy in [(-loc_radius, -loc_radius), (loc_radius, -loc_radius),
+                                   (-loc_radius, loc_radius), (loc_radius, loc_radius),
+                                   (0.0, 0.0)]:
+                        ch = await _sample_terrain_height(blender, terrain_name, anchor_x + dx, anchor_y + dy)
+                        corner_heights.append(ch)
+                    anchor_z = max(corner_heights) if corner_heights else 0.0
+
+                    # Flatten terrain under building footprint
                     try:
                         await blender.send_command("terrain_spline_deform", {
                             "terrain_name": terrain_name,
@@ -2883,34 +2880,35 @@ async def asset_pipeline(
                             "falloff_distance": loc_radius * 0.4,
                         })
                     except Exception:
-                        pass  # Non-fatal: building still placed, just terrain not flattened
+                        pass  # Non-fatal
 
-                # Auto-compute foundation profile from terrain slope
-                _foundation_profile = None
-                if corner_heights and len(corner_heights) >= 5:
-                    _min_h = min(corner_heights[:4])
-                    _max_h = max(corner_heights[:4])
-                    _height_diff = _max_h - _min_h
-                    if _height_diff > 0.3:  # significant slope
-                        _foundation_profile = {
-                            "foundation_height": _height_diff + 0.2,
-                            "side_heights": {
-                                "front": max(0.0, anchor_z - corner_heights[0]),
-                                "back": max(0.0, anchor_z - corner_heights[2]),
-                                "left": max(0.0, anchor_z - corner_heights[0]),
-                                "right": max(0.0, anchor_z - corner_heights[1]),
-                            },
-                            "retaining_sides": [
-                                side for side, h in [
-                                    ("front", corner_heights[0]), ("back", corner_heights[2]),
-                                    ("left", corner_heights[0]), ("right", corner_heights[1]),
-                                ]
-                                if anchor_z - h > 0.5
-                            ],
-                            "stair_wall": "front",
-                            "stair_steps": max(2, int(_height_diff / 0.25)),
-                        }
-                        loc_params["foundation_profile"] = _foundation_profile
+                    # Auto-compute foundation profile from terrain slope
+                    if corner_heights and len(corner_heights) >= 5:
+                        _min_h = min(corner_heights[:4])
+                        _max_h = max(corner_heights[:4])
+                        _height_diff = _max_h - _min_h
+                        if _height_diff > 0.3:
+                            loc_params["foundation_profile"] = {
+                                "foundation_height": _height_diff + 0.2,
+                                "side_heights": {
+                                    "front": max(0.0, anchor_z - corner_heights[0]),
+                                    "back": max(0.0, anchor_z - corner_heights[2]),
+                                    "left": max(0.0, anchor_z - corner_heights[0]),
+                                    "right": max(0.0, anchor_z - corner_heights[1]),
+                                },
+                                "retaining_sides": [
+                                    side for side, h in [
+                                        ("front", corner_heights[0]), ("back", corner_heights[2]),
+                                        ("left", corner_heights[0]), ("right", corner_heights[1]),
+                                    ]
+                                    if anchor_z - h > 0.5
+                                ],
+                                "stair_wall": "front",
+                                "stair_steps": max(2, int(_height_diff / 0.25)),
+                            }
+
+                # Generate building WITH foundation profile included
+                loc_result = await blender.send_command(handler, loc_params)
 
                 try:
                     await _position_generated_object(
@@ -3021,28 +3019,29 @@ async def asset_pipeline(
             _save_chkpt()  # checkpoint after props
 
         # --- Step 9: Generate interiors for key buildings ---
+        interior_results = []
         if "interiors_generated" not in steps_completed:
-            interior_results = []
-        for loc in spec.get("locations", []):
-            if loc.get("interiors"):
-                for room_spec in loc["interiors"]:
-                    try:
-                        int_result = await blender.send_command("world_generate_linked_interior", {
-                            "name": f"{loc.get('name', 'Loc')}_Interior",
-                            "interior_rooms": room_spec.get("rooms", []),
-                            "door_positions": room_spec.get("doors", []),
-                            "seed": map_seed + 500,
-                        })
-                        interior_results.append({
-                            "location": loc.get("name"),
-                            "result": int_result if isinstance(int_result, dict) else str(int_result)[:200],
-                        })
-                        steps_completed.append(f"interior_{loc.get('name')}")
-                    except Exception as e:
-                        steps_failed.append({"step": f"interior_{loc.get('name')}", "error": str(e)})
+            for loc in spec.get("locations", []):
+                if loc.get("interiors"):
+                    for room_spec in loc["interiors"]:
+                        try:
+                            int_result = await blender.send_command("world_generate_linked_interior", {
+                                "name": f"{loc.get('name', 'Loc')}_Interior",
+                                "interior_rooms": room_spec.get("rooms", []),
+                                "door_positions": room_spec.get("doors", []),
+                                "seed": map_seed + 500,
+                            })
+                            interior_results.append({
+                                "location": loc.get("name"),
+                                "result": int_result if isinstance(int_result, dict) else str(int_result)[:200],
+                            })
+                            steps_completed.append(f"interior_{loc.get('name')}")
+                        except Exception as e:
+                            steps_failed.append({"step": f"interior_{loc.get('name')}", "error": str(e)})
 
-        if interior_results:
-            _save_chkpt()  # checkpoint after interiors
+            if interior_results:
+                steps_completed.append("interiors_generated")
+                _save_chkpt()  # checkpoint after interiors
 
         # --- Step 10: Export heightmap for Unity import ---
         heightmap_export_path = None
