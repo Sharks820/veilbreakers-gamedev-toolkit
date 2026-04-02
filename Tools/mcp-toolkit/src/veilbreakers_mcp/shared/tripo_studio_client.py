@@ -233,16 +233,20 @@ class TripoStudioClient:
             await asyncio.sleep(wait)
 
     async def _download_file(self, url: str, output_path: str) -> str:
-        """Download a model file to local path."""
-        client = await self._ensure_client()
-        async with client.stream("GET", url) as resp:
-            if resp.status_code >= 400:
-                raise RuntimeError(f"Download failed: {resp.status_code} {resp.reason_phrase}")
-            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-            with open(output_path, "wb") as f:
-                async for chunk in resp.aiter_bytes(chunk_size=1024 * 1024):
-                    if chunk:
-                        f.write(chunk)
+        """Download a model file to local path.
+
+        Uses a separate httpx client WITHOUT auth headers to avoid leaking
+        Bearer tokens to third-party CDN hosts.
+        """
+        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as download_client:
+            async with download_client.stream("GET", url) as resp:
+                if resp.status_code >= 400:
+                    raise RuntimeError(f"Download failed: {resp.status_code} {resp.reason_phrase}")
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+                with open(output_path, "wb") as f:
+                    async for chunk in resp.aiter_bytes(chunk_size=1024 * 1024):
+                        if chunk:
+                            f.write(chunk)
         validation = validate_generated_model_file(output_path)
         if not validation.get("valid", False):
             try:

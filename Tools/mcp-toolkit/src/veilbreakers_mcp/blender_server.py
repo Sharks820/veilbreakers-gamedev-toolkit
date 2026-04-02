@@ -2251,7 +2251,7 @@ async def asset_pipeline(
                     imported_names = []
                     for i, m in enumerate(verified):
                         px, py = positions[i % len(positions)]
-                        safe = m["path"].replace("\\", "/")
+                        safe = m["path"].replace("\\", "/").replace('"', '\\"')
 
                         # Post-process GLB: extract textures, delight, validate, score
                         glb_out_dir = str(
@@ -2312,12 +2312,64 @@ async def asset_pipeline(
                 await gen.close()
         elif api_key:
             gen = TripoGenerator(api_key=api_key)
-            if image_path:
-                result = await gen.generate_from_image(image_path, output_dir)
-            else:
-                result = await gen.generate_from_text(prompt, output_dir)
-            result["output_dir"] = output_dir
-            return json.dumps(result, indent=2, default=str)
+            try:
+                if image_path:
+                    result = await gen.generate_from_image(image_path, output_dir)
+                else:
+                    result = await gen.generate_from_text(prompt, output_dir)
+                result["output_dir"] = output_dir
+
+                # Post-process: extract textures, import into Blender (same as studio path)
+                model_path = result.get("model_path") or result.get("pbr_model_path")
+                if model_path and result.get("status") == "success":
+                    glb_out_dir = str(
+                        __import__("pathlib").Path(model_path).parent / "textures"
+                    )
+                    try:
+                        post_result = await post_process_tripo_model(
+                            model_path, glb_out_dir,
+                            asset_type=asset_type or "prop",
+                        )
+                        result["post_process"] = post_result
+                        result["texture_channels"] = post_result.get("channels", {})
+                        if post_result.get("albedo_delit"):
+                            result["texture_channels"]["albedo_delit"] = post_result["albedo_delit"]
+                    except Exception as exc:
+                        logger.debug(
+                            "Post-process failed for API-key model: %s", exc,
+                            exc_info=True,
+                        )
+                        result["texture_channels"] = {}
+
+                    safe = model_path.replace('\\', '/').replace('"', '\\"')
+                    code = (
+                        f'import bpy\n'
+                        f'bpy.ops.object.select_all(action="DESELECT")\n'
+                        f'existing = set(bpy.data.objects[:])\n'
+                        f'bpy.ops.import_scene.gltf(filepath="{safe}", merge_vertices=True)\n'
+                        f'new_objs = set(bpy.data.objects[:]) - existing\n'
+                        f'names = [o.name for o in new_objs if o.type == "MESH"]\n'
+                        f'names'
+                    )
+                    try:
+                        await blender.send_command("execute_code", {"code": code})
+                        result["imported_to_blender"] = 1
+                    except Exception as exc:
+                        logger.debug(
+                            "Failed to import API-key model into Blender: %s",
+                            exc, exc_info=True,
+                        )
+
+                    result["next_steps"] = [
+                        "Model imported to Blender with extracted textures.",
+                        "'texture_channels' key contains extracted PBR paths (albedo, orm, normal).",
+                        "Run cleanup: asset_pipeline action=cleanup object_name=<name> has_extracted_textures=true texture_channels=<texture_channels>",
+                        "Or full pipeline: asset_pipeline action=full_pipeline object_name=<name>",
+                    ]
+
+                return json.dumps(result, indent=2, default=str)
+            finally:
+                gen.close()
         else:
             return json.dumps({
                 "status": "unavailable",
@@ -2967,7 +3019,8 @@ async def asset_pipeline(
             _save_chkpt()  # checkpoint after props
 
         # --- Step 9: Generate interiors for key buildings ---
-        interior_results = []
+        if "interiors_generated" not in steps_completed:
+            interior_results = []
         for loc in spec.get("locations", []):
             if loc.get("interiors"):
                 for room_spec in loc["interiors"]:
@@ -3648,7 +3701,7 @@ async def asset_pipeline(
             ".obj": "wm.obj_import",
         }
         op = import_ops[ext]
-        safe_path = filepath.replace("\\", "/")
+        safe_path = filepath.replace("\\", "/").replace('"', '\\"')
         # Track new objects by comparing before/after
         import_code = (
             f'import bpy\n'
@@ -3704,7 +3757,7 @@ async def asset_pipeline(
         op = import_ops.get(ext)
         if not op:
             return f"ERROR: Unsupported format '{ext}'. Supported: .glb, .gltf, .fbx, .obj"
-        safe_path = filepath.replace("\\", "/")
+        safe_path = filepath.replace("\\", "/").replace('"', '\\"')
         import_code = (
             f'import bpy\n'
             f'existing = set(o.name for o in bpy.data.objects)\n'

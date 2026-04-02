@@ -114,6 +114,10 @@ def _save_image_from_struct(
     bv = buffer_views[bv_index]
     byte_offset = bv.get("byteOffset", 0)
     byte_length = bv.get("byteLength", 0)
+
+    if byte_length <= 0:
+        return None
+
     image_bytes = blob[byte_offset: byte_offset + byte_length]
 
     # Determine extension from MIME type or magic bytes
@@ -127,6 +131,11 @@ def _save_image_from_struct(
 
     path = os.path.join(out_dir, f"{name}{ext}")
     Path(path).write_bytes(image_bytes)
+
+    if os.path.getsize(path) == 0:
+        os.remove(path)
+        return None
+
     return path
 
 
@@ -156,6 +165,10 @@ def _save_image_from_pygltflib(
     bv = gltf.bufferViews[bv_index]
     byte_offset = bv.byteOffset or 0
     byte_length = bv.byteLength or 0
+
+    if byte_length <= 0:
+        return None
+
     image_bytes = blob[byte_offset: byte_offset + byte_length]
 
     mime = img.mimeType or ""
@@ -168,6 +181,11 @@ def _save_image_from_pygltflib(
 
     path = os.path.join(out_dir, f"{name}{ext}")
     Path(path).write_bytes(image_bytes)
+
+    if os.path.getsize(path) == 0:
+        os.remove(path)
+        return None
+
     return path
 
 
@@ -234,7 +252,12 @@ def extract_glb_textures(glb_path: str, out_dir: str) -> dict[str, str]:
 
 
 def _extract_with_pygltflib(glb_path: str, out_dir: str) -> dict[str, str]:
-    """Extract textures using the pygltflib library (primary path)."""
+    """Extract textures using the pygltflib library (primary path).
+
+    Iterates over ALL materials.  For single-material models the channel
+    names are unchanged.  For multi-material models the material index is
+    appended (``albedo_mat0``, ``albedo_mat1``).
+    """
     gltf = _pygltflib.GLTF2().load(glb_path)
     blob = gltf.binary_blob() or b""
 
@@ -243,59 +266,60 @@ def _extract_with_pygltflib(glb_path: str, out_dir: str) -> dict[str, str]:
     if not gltf.materials:
         return channel_map
 
-    mat = gltf.materials[0]
-    pbr = mat.pbrMetallicRoughness
+    multi = len(gltf.materials) > 1
 
-    orm_tex_index: Optional[int] = None
+    for mat_idx, mat in enumerate(gltf.materials):
+        suffix = f"_mat{mat_idx}" if multi else ""
+        pbr = mat.pbrMetallicRoughness
+        orm_tex_index: Optional[int] = None
 
-    # albedo
-    if pbr and pbr.baseColorTexture is not None:
-        img_idx = _resolve_texture_source_pygltflib(gltf, pbr.baseColorTexture.index)
-        if img_idx is not None:
-            p = _save_image_from_pygltflib(gltf, blob, img_idx, out_dir, "albedo")
-            if p:
-                channel_map["albedo"] = p
-
-    # orm (metallicRoughness)
-    if pbr and pbr.metallicRoughnessTexture is not None:
-        orm_tex_index = pbr.metallicRoughnessTexture.index
-        img_idx = _resolve_texture_source_pygltflib(gltf, orm_tex_index)
-        if img_idx is not None:
-            p = _save_image_from_pygltflib(gltf, blob, img_idx, out_dir, "orm")
-            if p:
-                channel_map["orm"] = p
-
-    # normal
-    if mat.normalTexture is not None:
-        img_idx = _resolve_texture_source_pygltflib(gltf, mat.normalTexture.index)
-        if img_idx is not None:
-            p = _save_image_from_pygltflib(gltf, blob, img_idx, out_dir, "normal")
-            if p:
-                channel_map["normal"] = p
-
-    # ao (only if separate from orm)
-    if mat.occlusionTexture is not None:
-        ao_tex_index = mat.occlusionTexture.index
-        if ao_tex_index != orm_tex_index:
-            img_idx = _resolve_texture_source_pygltflib(gltf, ao_tex_index)
+        if pbr and pbr.baseColorTexture is not None:
+            img_idx = _resolve_texture_source_pygltflib(gltf, pbr.baseColorTexture.index)
             if img_idx is not None:
-                p = _save_image_from_pygltflib(gltf, blob, img_idx, out_dir, "ao")
+                p = _save_image_from_pygltflib(gltf, blob, img_idx, out_dir, f"albedo{suffix}")
                 if p:
-                    channel_map["ao"] = p
+                    channel_map[f"albedo{suffix}"] = p
 
-    # emissive
-    if mat.emissiveTexture is not None:
-        img_idx = _resolve_texture_source_pygltflib(gltf, mat.emissiveTexture.index)
-        if img_idx is not None:
-            p = _save_image_from_pygltflib(gltf, blob, img_idx, out_dir, "emissive")
-            if p:
-                channel_map["emissive"] = p
+        if pbr and pbr.metallicRoughnessTexture is not None:
+            orm_tex_index = pbr.metallicRoughnessTexture.index
+            img_idx = _resolve_texture_source_pygltflib(gltf, orm_tex_index)
+            if img_idx is not None:
+                p = _save_image_from_pygltflib(gltf, blob, img_idx, out_dir, f"orm{suffix}")
+                if p:
+                    channel_map[f"orm{suffix}"] = p
+
+        if mat.normalTexture is not None:
+            img_idx = _resolve_texture_source_pygltflib(gltf, mat.normalTexture.index)
+            if img_idx is not None:
+                p = _save_image_from_pygltflib(gltf, blob, img_idx, out_dir, f"normal{suffix}")
+                if p:
+                    channel_map[f"normal{suffix}"] = p
+
+        if mat.occlusionTexture is not None:
+            ao_tex_index = mat.occlusionTexture.index
+            if ao_tex_index != orm_tex_index:
+                img_idx = _resolve_texture_source_pygltflib(gltf, ao_tex_index)
+                if img_idx is not None:
+                    p = _save_image_from_pygltflib(gltf, blob, img_idx, out_dir, f"ao{suffix}")
+                    if p:
+                        channel_map[f"ao{suffix}"] = p
+
+        if mat.emissiveTexture is not None:
+            img_idx = _resolve_texture_source_pygltflib(gltf, mat.emissiveTexture.index)
+            if img_idx is not None:
+                p = _save_image_from_pygltflib(gltf, blob, img_idx, out_dir, f"emissive{suffix}")
+                if p:
+                    channel_map[f"emissive{suffix}"] = p
 
     return channel_map
 
 
 def _extract_with_struct(glb_path: str, out_dir: str) -> dict[str, str]:
-    """Extract textures using the struct/JSON fallback path."""
+    """Extract textures using the struct/JSON fallback path.
+
+    Iterates over ALL materials.  For multi-material models the material
+    index is appended to channel names.
+    """
     gltf, blob = _read_glb_chunks(glb_path)
 
     channel_map: dict[str, str] = {}
@@ -303,10 +327,7 @@ def _extract_with_struct(glb_path: str, out_dir: str) -> dict[str, str]:
     if not materials:
         return channel_map
 
-    mat = materials[0]
-    pbr = mat.get("pbrMetallicRoughness", {}) or {}
-
-    orm_tex_index: Optional[int] = None
+    multi = len(materials) > 1
 
     def save(tex_info: dict | None, name: str) -> Optional[str]:
         if tex_info is None:
@@ -319,43 +340,43 @@ def _extract_with_struct(glb_path: str, out_dir: str) -> dict[str, str]:
             return None
         return _save_image_from_struct(gltf, blob, img_idx, out_dir, name)
 
-    # albedo
-    base_tex = pbr.get("baseColorTexture")
-    if base_tex:
-        p = save(base_tex, "albedo")
-        if p:
-            channel_map["albedo"] = p
+    for mat_idx, mat in enumerate(materials):
+        suffix = f"_mat{mat_idx}" if multi else ""
+        pbr = mat.get("pbrMetallicRoughness", {}) or {}
+        orm_tex_index: Optional[int] = None
 
-    # orm
-    mr_tex = pbr.get("metallicRoughnessTexture")
-    if mr_tex:
-        orm_tex_index = mr_tex.get("index")
-        p = save(mr_tex, "orm")
-        if p:
-            channel_map["orm"] = p
-
-    # normal
-    norm_tex = mat.get("normalTexture")
-    if norm_tex:
-        p = save(norm_tex, "normal")
-        if p:
-            channel_map["normal"] = p
-
-    # ao (separate from orm only)
-    ao_tex = mat.get("occlusionTexture")
-    if ao_tex:
-        ao_tex_index = ao_tex.get("index")
-        if ao_tex_index != orm_tex_index:
-            p = save(ao_tex, "ao")
+        base_tex = pbr.get("baseColorTexture")
+        if base_tex:
+            p = save(base_tex, f"albedo{suffix}")
             if p:
-                channel_map["ao"] = p
+                channel_map[f"albedo{suffix}"] = p
 
-    # emissive
-    em_tex = mat.get("emissiveTexture")
-    if em_tex:
-        p = save(em_tex, "emissive")
-        if p:
-            channel_map["emissive"] = p
+        mr_tex = pbr.get("metallicRoughnessTexture")
+        if mr_tex:
+            orm_tex_index = mr_tex.get("index")
+            p = save(mr_tex, f"orm{suffix}")
+            if p:
+                channel_map[f"orm{suffix}"] = p
+
+        norm_tex = mat.get("normalTexture")
+        if norm_tex:
+            p = save(norm_tex, f"normal{suffix}")
+            if p:
+                channel_map[f"normal{suffix}"] = p
+
+        ao_tex = mat.get("occlusionTexture")
+        if ao_tex:
+            ao_tex_index = ao_tex.get("index")
+            if ao_tex_index != orm_tex_index:
+                p = save(ao_tex, f"ao{suffix}")
+                if p:
+                    channel_map[f"ao{suffix}"] = p
+
+        em_tex = mat.get("emissiveTexture")
+        if em_tex:
+            p = save(em_tex, f"emissive{suffix}")
+            if p:
+                channel_map[f"emissive{suffix}"] = p
 
     return channel_map
 
