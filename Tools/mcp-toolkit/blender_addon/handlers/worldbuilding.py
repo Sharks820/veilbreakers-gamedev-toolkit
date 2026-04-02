@@ -21,6 +21,8 @@ from mathutils import Vector
 
 from .procedural_materials import create_procedural_material
 from ._context import get_3d_context_override
+from .building_quality import generate_battlements
+from .texture import handle_generate_wear_map
 from ._settlement_grammar import (
     PROP_PROMPTS,
     CORRUPTION_DESCS,
@@ -554,6 +556,12 @@ from .worldbuilding_layout import (
     generate_location_spec,
     generate_world_graph,
     _ops_to_mesh,
+    generate_market_square,
+    assign_district_zones,
+    generate_concentric_castle_spec,
+    generate_encounter_zone_spec,
+    validate_interior_pathability_spec,
+    generate_trim_sheet_uv_spec,
 )
 
 
@@ -5443,7 +5451,41 @@ def handle_generate_castle(params: dict) -> dict:
             _assign_procedural_material_recursive(fountain_obj, _material_for_castle_detail("fountain"))
         procedural_count += 1
 
-    result = _build_castle_result(name, spec, procedural_count)
+    # Wire generate_battlements() onto each wall top edge (4 sides)
+    # Research spec: merlon_width=0.5m, merlon_height=1.0m, gap_width=0.4m
+    battlement_count = 0
+    try:
+        wall_height_b = float(spec.get("wall_height", 6.0))
+        for side_idx, (sx, sy, angle) in enumerate([
+            (1, 0, 0),
+            (-1, 0, math.pi),
+            (0, 1, math.pi / 2),
+            (0, -1, -math.pi / 2),
+        ]):
+            batt_spec = generate_battlements(
+                wall_length=float(outer_size),
+                wall_height=wall_height_b,
+                wall_thickness=1.5,
+                merlon_style="squared",
+                has_machicolations=True,
+                has_arrow_loops=True,
+                seed=seed + side_idx,
+            )
+            batt_obj = mesh_from_spec(
+                batt_spec,
+                name=f"{name}_battlements_{side_idx}",
+                location=(sx * half, sy * half, wall_height_b),
+                rotation=(0, 0, angle),
+                collection=details_coll,
+                parent=obj,
+            )
+            if batt_obj is not None and not isinstance(batt_obj, dict):
+                _assign_procedural_material_recursive(batt_obj, "stone_fortified")
+            battlement_count += 1
+    except Exception as _batt_err:
+        logger.warning("Castle %s: battlements generation failed: %s", name, _batt_err)
+
+    result = _build_castle_result(name, spec, procedural_count + battlement_count)
     result["shell_weld_vertex_count"] = shell_weld_result["vertex_count"]
     result["shell_weld_face_count"] = shell_weld_result["face_count"]
     result["shell_weld_watertight"] = bool(shell_weld_result["watertight"])
@@ -5465,6 +5507,105 @@ def handle_generate_castle(params: dict) -> dict:
             name,
             "; ".join(result["geometry_issues"]),
         )
+
+    # Add concentric wall data to result for AAA multi-ring castle
+    concentric_rings = params.get("rings", 2)
+    concentric_spec = generate_concentric_castle_spec(
+        castle_radius=outer_size / 2.0,
+        rings=concentric_rings,
+        seed=seed,
+    )
+    result["concentric_rings"] = concentric_spec["ring_count"]
+    result["ring_specs"] = concentric_spec["rings"]
+    result["gatehouse"] = concentric_spec["gatehouse"]
+
+    return {"status": "success", "result": result}
+
+
+def handle_generate_encounter_zone(params: dict) -> dict:
+    """Generate a mob encounter zone with patrol waypoints and spawn points.
+
+    Params:
+        name: zone name (default "EncounterZone")
+        center: [x, y] world position (default [0, 0])
+        radius: zone radius in meters (default 20)
+        patrol_type: "circuit" | "figure_eight" | "sentry" | "wander" (default "circuit")
+        density_tier: "sparse" | "light" | "moderate" | "heavy" | "swarm" (default "moderate")
+        seed: random seed (default 0)
+    """
+    logger.info("Generating encounter zone")
+    name = params.get("name", "EncounterZone")
+    center_raw = params.get("center", [0.0, 0.0])
+    center = (float(center_raw[0]), float(center_raw[1]))
+    radius = float(params.get("radius", 20.0))
+    patrol_type = params.get("patrol_type", "circuit")
+    density_tier = params.get("density_tier", "moderate")
+    seed = params.get("seed", 0)
+
+    spec = generate_encounter_zone_spec(
+        center=center,
+        radius=radius,
+        patrol_type=patrol_type,
+        density_tier=density_tier,
+        seed=seed,
+    )
+
+    # Create zone parent empty
+    parent = bpy.data.objects.new(name, None)
+    parent.empty_display_type = "CIRCLE"
+    parent.empty_display_size = radius
+    parent.location = (center[0], center[1], 0.0)
+    bpy.context.collection.objects.link(parent)
+
+    # Create waypoint empties
+    for i, wp in enumerate(spec["patrol_waypoints"]):
+        wp_obj = bpy.data.objects.new(f"{name}_waypoint_{i}", None)
+        wp_obj.empty_display_type = "ARROWS"
+        wp_obj.empty_display_size = 0.5
+        wp_obj.location = (wp[0], wp[1], wp[2] if len(wp) > 2 else 0.0)
+        wp_obj.parent = parent
+        bpy.context.collection.objects.link(wp_obj)
+
+    # Create spawn point empties
+    for sp_name in spec["spawn_points"]:
+        sp_rng = random.Random(hash(sp_name))
+        sx = center[0] + sp_rng.uniform(-radius * 0.6, radius * 0.6)
+        sy = center[1] + sp_rng.uniform(-radius * 0.6, radius * 0.6)
+        sp_obj = bpy.data.objects.new(sp_name, None)
+        sp_obj.empty_display_type = "SPHERE"
+        sp_obj.empty_display_size = 0.4
+        sp_obj.location = (sx, sy, 0.0)
+        sp_obj.parent = parent
+        bpy.context.collection.objects.link(sp_obj)
+
+    return {
+        "status": "success",
+        "result": {
+            "name": name,
+            "zone_id": spec["zone_id"],
+            "center": spec["center"],
+            "radius": radius,
+            "patrol_type": patrol_type,
+            "density_tier": density_tier,
+            "waypoint_count": spec["waypoint_count"],
+            "spawn_count": len(spec["spawn_points"]),
+            "mob_count": spec["mob_count"],
+        },
+    }
+
+
+def handle_validate_interior_pathability(params: dict) -> dict:
+    """Validate NPC pathability of building interior rooms.
+
+    Params:
+        rooms: list of room dicts, each with:
+            doorways: list of {width, height, position}
+            corridors: list of {width, position}
+            npc_spawns: list of spawn point names
+    """
+    logger.info("Validating interior pathability")
+    rooms = params.get("rooms", [])
+    result = validate_interior_pathability_spec(rooms)
     return {"status": "success", "result": result}
 
 
@@ -6275,6 +6416,22 @@ def handle_generate_settlement(params: dict) -> dict:
                 index=j,
             )
 
+    # Building-type to wear age range mapping (research spec AAA_GAMEPLAY_AREA_DESIGN_SPECS)
+    _WEAR_AGE_BY_TYPE: dict[str, tuple[float, float]] = {
+        "tavern":      (0.3, 0.5),
+        "shop":        (0.3, 0.5),
+        "residential": (0.2, 0.4),
+        "house":       (0.2, 0.4),
+        "military":    (0.4, 0.6),
+        "barracks":    (0.4, 0.6),
+        "religious":   (0.5, 0.7),
+        "temple":      (0.5, 0.7),
+        "church":      (0.5, 0.7),
+        "slums":       (0.6, 0.8),
+        "ruin":        (0.7, 0.9),
+    }
+    _wear_rng = random.Random(seed + 999)
+
     building_count = 0
     if include_buildings:
         for i, building in enumerate(settlement.get("buildings", [])):
@@ -6289,6 +6446,18 @@ def handle_generate_settlement(params: dict) -> dict:
                 continue
             if _generate_location_building(name, building, seed, i, terrain_name, parent):
                 building_count += 1
+                # Apply procedural wear map based on building type age parameter
+                obj_name = f"{name}_building_{i}"
+                bld_obj = bpy.data.objects.get(obj_name)
+                if bld_obj is not None and bld_obj.type == "MESH":
+                    age_range = _WEAR_AGE_BY_TYPE.get(b_type, (0.2, 0.5))
+                    age = _wear_rng.uniform(age_range[0], age_range[1])
+                    try:
+                        handle_generate_wear_map({"object_name": obj_name, "age": age})
+                    except Exception as _wear_err:
+                        logger.debug(
+                            "Wear map skipped for %s: %s", obj_name, _wear_err
+                        )
 
     prop_count = 0
     if include_props:
