@@ -256,8 +256,24 @@ class TestLeafCardReplacesUVSphere(unittest.TestCase):
 
     def test_tree_name_contains_leafcard(self):
         """The tree object name should hint at leaf card construction."""
-        obj = scatter_mod.create_leaf_card_tree((0.0, 0.0, 0.0), seed=7)
-        self.assertIn("LeafCard", obj.name)
+        bpy_stub, bmesh_stub = _make_bpy_stubs()
+        import sys
+        orig_bpy = sys.modules.get("bpy")
+        orig_bmesh = sys.modules.get("bmesh")
+        sys.modules["bpy"] = bpy_stub
+        sys.modules["bmesh"] = bmesh_stub
+        scatter_mod.bpy = bpy_stub
+        scatter_mod.bmesh = bmesh_stub
+        try:
+            obj = scatter_mod.create_leaf_card_tree((0.0, 0.0, 0.0), seed=7)
+            self.assertIn("LeafCard", obj.name)
+        finally:
+            if orig_bpy is not None:
+                sys.modules["bpy"] = orig_bpy
+            if orig_bmesh is not None:
+                sys.modules["bmesh"] = orig_bmesh
+            scatter_mod.bpy = orig_bpy
+            scatter_mod.bmesh = orig_bmesh
 
 
 class TestWindVertexColorsRGBA(unittest.TestCase):
@@ -274,28 +290,49 @@ class TestWindVertexColorsRGBA(unittest.TestCase):
         layer = bm.verts.layers.float_color.get("wind_vc")
         self.assertIsNotNone(layer, "wind_vc layer should exist on grass card bmesh")
 
+    def _with_rich_stubs(self, fn):
+        """Run fn(bpy_stub, bmesh_stub) with rich stubs patched into scatter_mod."""
+        import sys
+        bpy_stub, bmesh_stub = _make_bpy_stubs()
+        orig_bpy = sys.modules.get("bpy")
+        orig_bmesh = sys.modules.get("bmesh")
+        sys.modules["bpy"] = bpy_stub
+        sys.modules["bmesh"] = bmesh_stub
+        scatter_mod.bpy = bpy_stub
+        scatter_mod.bmesh = bmesh_stub
+        try:
+            return fn()
+        finally:
+            if orig_bpy is not None:
+                sys.modules["bpy"] = orig_bpy
+            if orig_bmesh is not None:
+                sys.modules["bmesh"] = orig_bmesh
+            scatter_mod.bpy = orig_bpy
+            scatter_mod.bmesh = orig_bmesh
+
     def test_grass_card_tip_flutter_is_1(self):
         """Top vertices of a grass blade should have R (flutter) = 1.0."""
-        obj = scatter_mod._create_grass_card(biome="forest", seed=5)
-        bm = obj.data._bm
-        layer = bm.verts.layers.float_color.get("wind_vc")
-        self.assertIsNotNone(layer)
-        # Collect R channels across all vertices
-        r_values = [v[layer][0] for v in bm._verts]
-        # At least one vertex should have R=1.0 (tip)
-        self.assertTrue(any(abs(r - 1.0) < 0.01 for r in r_values),
-                        f"No tip vertex with R=1.0 found. R values: {r_values}")
+        def _run():
+            obj = scatter_mod._create_grass_card(biome="forest", seed=5)
+            bm = obj.data._bm
+            layer = bm.verts.layers.float_color.get("wind_vc")
+            self.assertIsNotNone(layer)
+            r_values = [v[layer][0] for v in bm._verts]
+            self.assertTrue(any(abs(r - 1.0) < 0.01 for r in r_values),
+                            f"No tip vertex with R=1.0 found. R values: {r_values}")
+        self._with_rich_stubs(_run)
 
     def test_grass_card_base_flutter_is_0(self):
         """Base vertices of a grass blade should have R (flutter) = 0.0."""
-        obj = scatter_mod._create_grass_card(biome="mountain", seed=3)
-        bm = obj.data._bm
-        layer = bm.verts.layers.float_color.get("wind_vc")
-        self.assertIsNotNone(layer)
-        r_values = [v[layer][0] for v in bm._verts]
-        # At least one vertex should have R=0.0 (base)
-        self.assertTrue(any(abs(r) < 0.01 for r in r_values),
-                        f"No base vertex with R=0.0 found. R values: {r_values}")
+        def _run():
+            obj = scatter_mod._create_grass_card(biome="mountain", seed=3)
+            bm = obj.data._bm
+            layer = bm.verts.layers.float_color.get("wind_vc")
+            self.assertIsNotNone(layer)
+            r_values = [v[layer][0] for v in bm._verts]
+            self.assertTrue(any(abs(r) < 0.01 for r in r_values),
+                            f"No base vertex with R=0.0 found. R values: {r_values}")
+        self._with_rich_stubs(_run)
 
     def test_tree_has_wind_vc_layer(self):
         """Tree mesh should have a wind_vc vertex color layer."""
@@ -310,14 +347,30 @@ class TestGrassCardTriCount(unittest.TestCase):
 
     def test_grass_card_has_3_to_6_tris(self):
         """_create_grass_card should produce 3-6 triangles per biome."""
-        for biome in scatter_mod._GRASS_BIOME_SPECS:
-            obj = scatter_mod._create_grass_card(biome=biome, seed=0)
-            bm = obj.data._bm
-            tri_count = _count_tri_faces(bm)
-            self.assertGreaterEqual(tri_count, 3,
-                f"Biome '{biome}': expected >= 3 tris, got {tri_count}")
-            self.assertLessEqual(tri_count, 12,
-                f"Biome '{biome}': expected <= 12 tris (generous for quads), got {tri_count}")
+        import sys
+        bpy_stub, bmesh_stub = _make_bpy_stubs()
+        orig_bpy = sys.modules.get("bpy")
+        orig_bmesh = sys.modules.get("bmesh")
+        sys.modules["bpy"] = bpy_stub
+        sys.modules["bmesh"] = bmesh_stub
+        scatter_mod.bpy = bpy_stub
+        scatter_mod.bmesh = bmesh_stub
+        try:
+            for biome in scatter_mod._GRASS_BIOME_SPECS:
+                obj = scatter_mod._create_grass_card(biome=biome, seed=0)
+                bm = obj.data._bm
+                tri_count = _count_tri_faces(bm)
+                self.assertGreaterEqual(tri_count, 3,
+                    f"Biome '{biome}': expected >= 3 tris, got {tri_count}")
+                self.assertLessEqual(tri_count, 12,
+                    f"Biome '{biome}': expected <= 12 tris (generous for quads), got {tri_count}")
+        finally:
+            if orig_bpy is not None:
+                sys.modules["bpy"] = orig_bpy
+            if orig_bmesh is not None:
+                sys.modules["bmesh"] = orig_bmesh
+            scatter_mod.bpy = orig_bpy
+            scatter_mod.bmesh = orig_bmesh
 
 
 class TestGrassBiomeVariants(unittest.TestCase):
