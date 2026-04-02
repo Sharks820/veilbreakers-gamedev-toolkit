@@ -165,8 +165,9 @@ def apply_theme_to_dungeon(
         A new dict combining the original layout with theme overlays.
         Original dict is not mutated.
     """
+    import copy
     theme = get_dungeon_theme(theme_name)
-    result = dict(dungeon_layout)
+    result = copy.deepcopy(dungeon_layout)
 
     # Apply theme metadata
     result["theme"] = theme_name

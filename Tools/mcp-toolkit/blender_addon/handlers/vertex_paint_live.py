@@ -245,7 +245,10 @@ def handle_vertex_paint(params: dict[str, Any]) -> dict[str, Any]:
         }
 
     paint_mode = params.get("paint_mode", "world")
-    color = tuple(params.get("color", [1.0, 1.0, 1.0, 1.0]))
+    color = list(params.get("color", [1.0, 1.0, 1.0, 1.0]))
+    while len(color) < 4:
+        color.append(1.0)
+    color = tuple(color[:4])
     blend_mode = params.get("blend_mode", "MIX")
     strength = float(params.get("strength", 1.0))
     layer_name = params.get("layer_name", "Col")

@@ -650,10 +650,13 @@ def _do_smooth(obj: Any) -> dict[str, Any]:
 def _do_uv_unwrap(obj: Any) -> dict[str, Any]:
     """Smart UV project re-unwrap."""
     bpy.context.view_layer.objects.active = obj
-    bpy.ops.object.mode_set(mode="EDIT")
-    bpy.ops.mesh.select_all(action="SELECT")
-    bpy.ops.uv.smart_project(angle_limit=66.0, island_margin=0.02)
-    bpy.ops.object.mode_set(mode="OBJECT")
+    try:
+        bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.uv.smart_project(angle_limit=66.0, island_margin=0.02)
+    finally:
+        if bpy.context.object and bpy.context.object.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
 
     return {"method": "smart_project", "angle_limit": 66.0}
 

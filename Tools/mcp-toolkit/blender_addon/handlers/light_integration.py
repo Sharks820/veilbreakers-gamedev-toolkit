@@ -247,20 +247,25 @@ def merge_nearby_lights(
             continue
 
         cluster = [i]
+        cluster_members = [lights[i]]
         used[i] = True
 
         for j in range(i + 1, len(lights)):
             if used[j]:
                 continue
-            pi = lights[i]["position"]
             pj = lights[j]["position"]
-            dist = math.sqrt(
-                (pi[0] - pj[0]) ** 2
-                + (pi[1] - pj[1]) ** 2
-                + (pi[2] - pj[2]) ** 2
+            # Check distance against ANY member in the cluster, not just the seed
+            close_to_cluster = any(
+                math.sqrt(
+                    (pj[0] - member["position"][0]) ** 2
+                    + (pj[1] - member["position"][1]) ** 2
+                    + (pj[2] - member["position"][2]) ** 2
+                ) < merge_distance
+                for member in cluster_members
             )
-            if dist < merge_distance:
+            if close_to_cluster:
                 cluster.append(j)
+                cluster_members.append(lights[j])
                 used[j] = True
 
         if len(cluster) == 1:

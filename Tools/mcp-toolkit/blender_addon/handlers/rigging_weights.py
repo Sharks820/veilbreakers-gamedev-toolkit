@@ -25,12 +25,15 @@ Pure-logic functions:
 
 from __future__ import annotations
 
+import logging
 import math
 
 import bpy
 from mathutils import Euler
 
 from ._context import get_3d_context_override
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -702,11 +705,14 @@ def handle_validate_rig(params: dict) -> dict:
 
     # Need edit mode to access bone rolls
     bpy.context.view_layer.objects.active = arm_obj
-    bpy.ops.object.mode_set(mode="EDIT")
-    for ebone in arm_obj.data.edit_bones:
-        bone_rolls[ebone.name] = ebone.roll
-        bone_parents[ebone.name] = ebone.parent.name if ebone.parent else None
-    bpy.ops.object.mode_set(mode="OBJECT")
+    try:
+        bpy.ops.object.mode_set(mode="EDIT")
+        for ebone in arm_obj.data.edit_bones:
+            bone_rolls[ebone.name] = ebone.roll
+            bone_parents[ebone.name] = ebone.parent.name if ebone.parent else None
+    finally:
+        if bpy.context.object and bpy.context.object.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
 
     report = _validate_rig_report(
         vertex_count,
@@ -786,6 +792,8 @@ def handle_fix_weights(params: dict) -> dict:
         elif operation == "mirror":
             direction = params.get("direction")
             use_mirror = direction == "left_to_right"
+            # flip_group_names=True: swap .L <-> .R naming after mirror
+            # The mirror direction is always from active side to opposite
             bpy.ops.object.vertex_group_mirror(
                 mirror_weights=True,
                 flip_group_names=use_mirror,
@@ -943,11 +951,19 @@ def handle_enforce_weight_limit(params: dict) -> dict:
 
     result = _enforce_weight_limit_pure(vertex_weights, max_influences)
 
-    # Apply back to mesh
+    # Build set of vertex group indices that were processed (bone groups only)
+    processed_group_indices = set()
+    for vw in vertex_weights:
+        for bone_name, _w in vw:
+            vg = mesh_obj.vertex_groups.get(bone_name)
+            if vg:
+                processed_group_indices.add(vg.index)
+
+    # Apply back to mesh — only clear processed (bone) groups, not all groups
     for vi, new_weights in enumerate(result["vertex_weights"]):
         v = mesh_data.vertices[vi]
-        # Clear all existing groups for this vertex
-        group_indices = [g.group for g in v.groups]
+        # Clear only the bone groups we extracted, preserving non-bone groups
+        group_indices = [g.group for g in v.groups if g.group in processed_group_indices]
         for gi in group_indices:
             mesh_obj.vertex_groups[gi].remove([vi])
         # Re-assign clamped weights
