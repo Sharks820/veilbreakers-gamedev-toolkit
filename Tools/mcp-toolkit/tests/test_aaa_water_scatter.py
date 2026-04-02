@@ -269,6 +269,7 @@ def _build_full_bpy_stubs():
 
 from blender_addon.handlers import _terrain_noise as terrain_noise
 auto_splat_terrain = terrain_noise.auto_splat_terrain
+from blender_addon.handlers import environment as _environment_mod
 from blender_addon.handlers.environment import handle_create_water
 
 
@@ -335,8 +336,17 @@ class TestWaterFlowVertexColors(unittest.TestCase):
         self.assertTrue(result.get("has_flow_vertex_colors"))
 
     def test_water_name_preserved(self):
-        result = handle_create_water({"name": "RiverSerpent"})
-        self.assertIn("RiverSerpent", result.get("name", ""))
+        bpy_stub, bmesh_stub = _build_full_bpy_stubs()
+        orig_bpy = _environment_mod.bpy
+        orig_bmesh = _environment_mod.bmesh
+        _environment_mod.bpy = bpy_stub
+        _environment_mod.bmesh = bmesh_stub
+        try:
+            result = handle_create_water({"name": "RiverSerpent"})
+            self.assertIn("RiverSerpent", result.get("name", ""))
+        finally:
+            _environment_mod.bpy = orig_bpy
+            _environment_mod.bmesh = orig_bmesh
 
 
 class TestWaterShoreAlphaGradient(unittest.TestCase):
@@ -389,9 +399,18 @@ class TestWaterTriBudget(unittest.TestCase):
             f"Spline water has {tri_count} tris (budget: 20K)")
 
     def test_vertex_count_positive(self):
-        result = handle_create_water({"name": "VertTest"})
-        vc = result.get("vertex_count", 0)
-        self.assertGreater(vc, 0, "Water mesh should have vertices")
+        bpy_stub, bmesh_stub = _build_full_bpy_stubs()
+        orig_bpy = _environment_mod.bpy
+        orig_bmesh = _environment_mod.bmesh
+        _environment_mod.bpy = bpy_stub
+        _environment_mod.bmesh = bmesh_stub
+        try:
+            result = handle_create_water({"name": "VertTest"})
+            vc = result.get("vertex_count", 0)
+            self.assertGreater(vc, 0, "Water mesh should have vertices")
+        finally:
+            _environment_mod.bpy = orig_bpy
+            _environment_mod.bmesh = orig_bmesh
 
 
 class TestWaterMaterialProperties(unittest.TestCase):

@@ -29,7 +29,8 @@ class TestValidateSetupWorldParams:
         result = _validate_setup_world_params({})
         assert result["environment_type"] == "COLOR"
         assert result["color"] == [0.05, 0.05, 0.05]
-        assert result["strength"] == 1.0
+        # Default strength is 0.3 (dark fantasy aesthetic — avoids washed-out look)
+        assert result["strength"] == 0.3
         assert result["use_nodes"] is True
 
     def test_valid_hdri_type(self):
