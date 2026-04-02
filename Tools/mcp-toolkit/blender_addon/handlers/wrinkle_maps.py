@@ -349,6 +349,7 @@ def generate_wrinkle_displacement_code(
 
     lines: list[str] = [
         "import bpy",
+        "import mathutils",
         "",
         f"obj = bpy.data.objects.get('{object_name}')",
         "if obj is None or obj.type != 'MESH':",
@@ -700,9 +701,9 @@ def _generate_layer_node_group_code(
     lines.append(f"g = grp_{group_index}")
     # Outputs
     lines.append(f"g_out = g.nodes.new('NodeGroupOutput')")
-    lines.append(f"g.outputs.new('NodeSocketColor', 'Color')")
-    lines.append(f"g.outputs.new('NodeSocketFloat', 'Roughness')")
-    lines.append(f"g.outputs.new('NodeSocketFloat', 'Metallic')")
+    lines.append(f"g.interface.new_socket(name='Color', socket_type='NodeSocketColor', in_out='OUTPUT')")
+    lines.append(f"g.interface.new_socket(name='Roughness', socket_type='NodeSocketFloat', in_out='OUTPUT')")
+    lines.append(f"g.interface.new_socket(name='Metallic', socket_type='NodeSocketFloat', in_out='OUTPUT')")
     # Color node
     lines.append(f"rgb_{group_index} = g.nodes.new('ShaderNodeRGB')")
     lines.append(f"rgb_{group_index}.outputs[0].default_value = {list(bc)}")
@@ -856,7 +857,8 @@ def handle_material_layer_stack(params: dict[str, Any]) -> dict[str, Any]:
 
         # Create Mix nodes for color, roughness, metallic
         lines.append(f"# Blend: {blend_mode} at opacity {opacity}")
-        lines.append(f"mix_color = nodes.new('ShaderNodeMixRGB')")
+        lines.append(f"mix_color = nodes.new('ShaderNodeMix')")
+        lines.append(f"mix_color.data_type = 'RGBA'")
         lines.append(f"mix_color.blend_type = '{blend_mode}'")
         lines.append(f"mix_color.inputs['Fac'].default_value = {opacity}")
         lines.append(f"mix_color.label = '{layer_name}_color_blend'")

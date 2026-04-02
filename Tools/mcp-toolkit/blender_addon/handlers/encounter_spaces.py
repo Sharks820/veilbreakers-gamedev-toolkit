@@ -65,7 +65,7 @@ ENCOUNTER_TEMPLATES: dict[str, dict[str, Any]] = {
             {"center": (0, 20, 0), "radius": 2.0, "type": "poison_gas"},
         ],
         "enemy_spawn_positions": "alternating_sides",
-        "flanking_positions": "alternating_alcoves",
+        "flanking_alcoves": "alternating_alcoves",
         "player_entry": (0, 0, 0),
         "player_exit": (0, 30, 0),
         "trigger_volume": {"center": (0, 15, 1.5), "size": (4, 30, 3)},
