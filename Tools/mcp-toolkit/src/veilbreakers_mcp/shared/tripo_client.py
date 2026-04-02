@@ -25,14 +25,13 @@ def _create_tripo_client(api_key: str):
     return tripo3d.TripoClient(api_key=api_key)
 
 
-async def _download_file(url: str, output_path: str) -> str:
+async def _download_file(url: str, output_path: str, max_retries: int = 3) -> str:
     """Download a model file from a Tripo3D HTTPS URL to a local path.
 
     Uses the tripo3d SDK's built-in download_file helper when available.
-    This must never succeed with an empty or corrupt file.
+    Retries with exponential backoff on transient failures.
 
-    Only HTTPS URLs from the Tripo3D CDN are expected. The URL originates
-    from the Tripo3D API response (not user input).
+    Only HTTPS URLs from the Tripo3D CDN are expected.
     """
 
     def _do_download() -> str:
@@ -45,17 +44,25 @@ async def _download_file(url: str, output_path: str) -> str:
             )
         return output_path
 
-    downloaded = await asyncio.to_thread(_do_download)
-    validation = validate_generated_model_file(downloaded)
-    if not validation.get("valid", False):
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
         try:
-            Path(downloaded).unlink(missing_ok=True)
-        except OSError:
-            pass
-        raise RuntimeError(
-            f"Downloaded model failed validation: {validation.get('error', 'unknown')}"
-        )
-    return downloaded
+            downloaded = await asyncio.to_thread(_do_download)
+            validation = validate_generated_model_file(downloaded)
+            if not validation.get("valid", False):
+                try:
+                    Path(downloaded).unlink(missing_ok=True)
+                except OSError:
+                    pass
+                raise RuntimeError(
+                    f"Downloaded model failed validation: {validation.get('error', 'unknown')}"
+                )
+            return downloaded
+        except Exception as exc:
+            last_exc = exc
+            if attempt < max_retries - 1:
+                await asyncio.sleep(2 ** attempt)
+    raise last_exc  # type: ignore[misc]
 
 
 class TripoGenerator:
@@ -111,80 +118,77 @@ class TripoGenerator:
                 "error": "tripo3d package not installed. Run: pip install tripo3d",
             }
 
-        client = _create_tripo_client(self.api_key)
-        try:
-            raw = client.text_to_model(
-                prompt=prompt,
-                texture=texture,
-                pbr=pbr,
-                model_version=model_version,
-            )
-            task_id = (await raw) if asyncio.iscoroutine(raw) else raw
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            client = _create_tripo_client(self.api_key)
+            try:
+                raw = client.text_to_model(
+                    prompt=prompt,
+                    texture=texture,
+                    pbr=pbr,
+                    model_version=model_version,
+                )
+                task_id = (await raw) if asyncio.iscoroutine(raw) else raw
 
-            raw2 = client.wait_for_task(
-                task_id,
-                timeout=timeout,
-                polling_interval=polling_interval,
-            )
-            task_result = (await raw2) if asyncio.iscoroutine(raw2) else raw2
+                raw2 = client.wait_for_task(
+                    task_id,
+                    timeout=timeout,
+                    polling_interval=polling_interval,
+                )
+                task_result = (await raw2) if asyncio.iscoroutine(raw2) else raw2
 
-            task_status = getattr(task_result, "status", None) or (
-                task_result.get("status") if isinstance(task_result, dict) else "unknown"
-            )
-            if task_status != "success":
-                return {
-                    "status": "failed",
-                    "error": f"Tripo3D task {task_id} ended with status: {task_status}",
+                task_status = getattr(task_result, "status", None) or (
+                    task_result.get("status") if isinstance(task_result, dict) else "unknown"
+                )
+                if task_status != "success":
+                    return {
+                        "status": "failed",
+                        "error": f"Tripo3D task {task_id} ended with status: {task_status}",
+                        "task_id": task_id,
+                    }
+
+                os.makedirs(output_dir, exist_ok=True)
+                result: dict = {
+                    "status": "success",
                     "task_id": task_id,
                 }
 
-            os.makedirs(output_dir, exist_ok=True)
-            result: dict = {
-                "status": "success",
-                "task_id": task_id,
-            }
+                output = getattr(task_result, "output", None) or (
+                    task_result.get("output") if isinstance(task_result, dict) else None
+                )
+                model_url = getattr(output, "model", None) if output else None
+                if model_url:
+                    model_path = str(Path(output_dir) / "model.glb")
+                    result["model_path"] = await _download_file(model_url, model_path)
 
-            # Download model file
-            output = getattr(task_result, "output", None) or (
-                task_result.get("output") if isinstance(task_result, dict) else None
-            )
-            model_url = getattr(output, "model", None) if output else None
-            if model_url:
-                model_path = str(Path(output_dir) / "model.glb")
-                result["model_path"] = await _download_file(model_url, model_path)
+                pbr_url = getattr(output, "pbr_model", None) if output else None
+                if pbr_url:
+                    pbr_path = str(Path(output_dir) / "model_pbr.glb")
+                    try:
+                        result["pbr_model_path"] = await _download_file(pbr_url, pbr_path)
+                    except RuntimeError as exc:
+                        result.setdefault("warnings", []).append(
+                            f"PBR model unavailable or invalid: {exc}"
+                        )
 
-            # Download PBR model if available
-            pbr_url = getattr(output, "pbr_model", None) if output else None
-            if pbr_url:
-                pbr_path = str(Path(output_dir) / "model_pbr.glb")
+                return result
+
+            except (ConnectionError, TimeoutError, OSError) as exc:
+                last_exc = exc
+                if attempt < 2:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                return {"status": "failed", "error": str(exc)}
+            except (ValueError, KeyError, RuntimeError) as exc:
+                return {"status": "failed", "error": str(exc)}
+            finally:
                 try:
-                    result["pbr_model_path"] = await _download_file(pbr_url, pbr_path)
-                except RuntimeError as exc:
-                    result.setdefault("warnings", []).append(
-                        f"PBR model unavailable or invalid: {exc}"
-                    )
-
-            return result
-
-        except (
-            ConnectionError,
-            TimeoutError,
-            OSError,
-            ValueError,
-            KeyError,
-            RuntimeError,
-        ) as exc:
-            return {
-                "status": "failed",
-                "error": str(exc),
-            }
-        finally:
-            try:
-                coro = client.close()
-                if asyncio.iscoroutine(coro):
-                    await coro
-            except (OSError, RuntimeError):
-                pass
+                    coro = client.close()
+                    if asyncio.iscoroutine(coro):
+                        await coro
+                except (OSError, RuntimeError):
+                    pass
+        return {"status": "failed", "error": str(last_exc)}
 
     async def generate_from_image(
         self,
@@ -223,75 +227,74 @@ class TripoGenerator:
                 "error": f"Image file not found: {image_path}",
             }
 
-        client = _create_tripo_client(self.api_key)
-        try:
-            raw = client.image_to_model(
-                image_path=image_path,
-                texture=texture,
-                pbr=pbr,
-                model_version=model_version,
-            )
-            task_id = (await raw) if asyncio.iscoroutine(raw) else raw
+        last_exc: Exception | None = None
+        for attempt in range(3):
+            client = _create_tripo_client(self.api_key)
+            try:
+                raw = client.image_to_model(
+                    image_path=image_path,
+                    texture=texture,
+                    pbr=pbr,
+                    model_version=model_version,
+                )
+                task_id = (await raw) if asyncio.iscoroutine(raw) else raw
 
-            raw2 = client.wait_for_task(
-                task_id,
-                timeout=timeout,
-                polling_interval=polling_interval,
-            )
-            task_result = (await raw2) if asyncio.iscoroutine(raw2) else raw2
+                raw2 = client.wait_for_task(
+                    task_id,
+                    timeout=timeout,
+                    polling_interval=polling_interval,
+                )
+                task_result = (await raw2) if asyncio.iscoroutine(raw2) else raw2
 
-            task_status = getattr(task_result, "status", None) or (
-                task_result.get("status") if isinstance(task_result, dict) else "unknown"
-            )
-            if task_status != "success":
-                return {
-                    "status": "failed",
-                    "error": f"Tripo3D task {task_id} ended with status: {task_status}",
+                task_status = getattr(task_result, "status", None) or (
+                    task_result.get("status") if isinstance(task_result, dict) else "unknown"
+                )
+                if task_status != "success":
+                    return {
+                        "status": "failed",
+                        "error": f"Tripo3D task {task_id} ended with status: {task_status}",
+                        "task_id": task_id,
+                    }
+
+                os.makedirs(output_dir, exist_ok=True)
+                result: dict = {
+                    "status": "success",
                     "task_id": task_id,
                 }
 
-            os.makedirs(output_dir, exist_ok=True)
-            result: dict = {
-                "status": "success",
-                "task_id": task_id,
-            }
+                output = getattr(task_result, "output", None) or (
+                    task_result.get("output") if isinstance(task_result, dict) else None
+                )
+                model_url = getattr(output, "model", None) if output else None
+                if model_url:
+                    model_path = str(Path(output_dir) / "model.glb")
+                    result["model_path"] = await _download_file(model_url, model_path)
 
-            output = getattr(task_result, "output", None) or (
-                task_result.get("output") if isinstance(task_result, dict) else None
-            )
-            model_url = getattr(output, "model", None) if output else None
-            if model_url:
-                model_path = str(Path(output_dir) / "model.glb")
-                result["model_path"] = await _download_file(model_url, model_path)
+                pbr_url = getattr(output, "pbr_model", None) if output else None
+                if pbr_url:
+                    pbr_path = str(Path(output_dir) / "model_pbr.glb")
+                    try:
+                        result["pbr_model_path"] = await _download_file(pbr_url, pbr_path)
+                    except RuntimeError as exc:
+                        result.setdefault("warnings", []).append(
+                            f"PBR model unavailable or invalid: {exc}"
+                        )
 
-            pbr_url = getattr(output, "pbr_model", None) if output else None
-            if pbr_url:
-                pbr_path = str(Path(output_dir) / "model_pbr.glb")
+                return result
+
+            except (ConnectionError, TimeoutError, OSError) as exc:
+                last_exc = exc
+                if attempt < 2:
+                    await asyncio.sleep(2 ** attempt)
+                    continue
+                return {"status": "failed", "error": str(exc)}
+            except (ValueError, KeyError, RuntimeError) as exc:
+                return {"status": "failed", "error": str(exc)}
+            finally:
                 try:
-                    result["pbr_model_path"] = await _download_file(pbr_url, pbr_path)
-                except RuntimeError as exc:
-                    result.setdefault("warnings", []).append(
-                        f"PBR model unavailable or invalid: {exc}"
-                    )
-
-            return result
-
-        except (
-            ConnectionError,
-            TimeoutError,
-            OSError,
-            ValueError,
-            KeyError,
-            RuntimeError,
-        ) as exc:
-            return {
-                "status": "failed",
-                "error": str(exc),
-            }
-        finally:
-            try:
-                coro = client.close()
-                if asyncio.iscoroutine(coro):
-                    await coro
-            except (OSError, ConnectionError):
-                pass
+                    coro = client.close()
+                    if asyncio.iscoroutine(coro):
+                        await coro
+                except (OSError, ConnectionError):
+                    pass
+        return {"status": "failed", "error": str(last_exc)}

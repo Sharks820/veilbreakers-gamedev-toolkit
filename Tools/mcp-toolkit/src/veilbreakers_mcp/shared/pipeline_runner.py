@@ -837,6 +837,8 @@ class PipelineRunner:
         visual_min_score: float = 55.0,
         export_format: str = "fbx",
         export_dir: str = ".",
+        has_extracted_textures: bool = False,
+        texture_channels: dict | None = None,
     ) -> dict:
         """Run the complete production pipeline on a Blender object.
 
@@ -908,7 +910,7 @@ class PipelineRunner:
                 }
                 op = import_ops.get(ext, "import_scene.gltf")
                 # Normalise path separators for Blender (always forward slashes)
-                safe_path = object_name.replace("\\", "/")
+                safe_path = object_name.replace("\\", "/").replace('"', '\\"')
                 import_code = (
                     f'_pre = set(o.name for o in bpy.data.objects)\n'
                     f'bpy.ops.{op}(filepath="{safe_path}")\n'
@@ -943,9 +945,16 @@ class PipelineRunner:
                 "vegetation": "vegetation",
             }
             _enhance_profile = _enhance_map.get(asset_type, "prop")
+            cleanup_kwargs = {
+                "enhance_profile": _enhance_profile,
+            }
+            if has_extracted_textures:
+                cleanup_kwargs["has_extracted_textures"] = True
+            if texture_channels:
+                cleanup_kwargs["texture_channels"] = texture_channels
             cleanup_result = await self.cleanup_ai_model(
                 name, poly_budget,
-                enhance_profile=_enhance_profile,
+                **cleanup_kwargs,
             )
             results["steps"]["cleanup"] = cleanup_result
             if cleanup_result.get("status") == "failed":
@@ -964,7 +973,7 @@ class PipelineRunner:
             await self._run_step(
                 "smart_material",
                 "material_create_procedural",
-                {"object_name": name, "preset": mat_name},
+                {"object_name": name, "material_key": mat_name, "name": f"{name}_{mat_name}"},
                 results,
                 steps_completed,
             )
@@ -1202,6 +1211,7 @@ class PipelineRunner:
             return result
 
         gen = None
+        gen_result = None
         try:
             if local_generation_attempted and local_generation_result and local_generation_result.get("status") == "success":
                 gen_result = local_generation_result
@@ -1214,10 +1224,13 @@ class PipelineRunner:
             else:
                 from veilbreakers_mcp.shared.tripo_client import TripoGenerator
                 gen = TripoGenerator(api_key=api_key)
-            if image_path:
-                gen_result = await gen.generate_from_image(image_path, output_dir)
-            else:
-                gen_result = await gen.generate_from_text(prompt, output_dir)
+            if gen_result is None and gen is not None:
+                if image_path:
+                    gen_result = await gen.generate_from_image(image_path, output_dir)
+                else:
+                    gen_result = await gen.generate_from_text(prompt, output_dir)
+            elif gen_result is None:
+                return {"status": "error", "error": "No generation backend available"}
             result["generation"] = gen_result if gen_result is not None else result["generation"]
 
             if gen_result.get("status") != "success":
