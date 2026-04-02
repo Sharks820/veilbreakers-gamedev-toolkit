@@ -25,6 +25,11 @@ from blender_addon.handlers._settlement_grammar import (
     ring_for_position,
     subdivide_block_to_lots,
 )
+from blender_addon.handlers._building_grammar import (
+    generate_interior_layout,
+    generate_clutter_layout,
+    generate_lighting_layout,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -2298,16 +2303,34 @@ def generate_concentric_districts(
                     "max": (bx + fp[0] / 2, by - fp[1] / 2 + (ri + 1) * room_height),
                 }
                 room_rng = random.Random(bld["unique_seed"] + ri + floor * 1000)
-                furnishings = _furnish_interior(room_rng, room_type, room_bounds)
+                room_seed = room_rng.randint(0, 2**31)
+                room_w = room_bounds["max"][0] - room_bounds["min"][0]
+                room_d = room_bounds["max"][1] - room_bounds["min"][1]
+                furnishings = generate_interior_layout(room_type, room_w, room_d, seed=room_seed)
                 for item in furnishings:
+                    item["position"][0] += room_bounds["min"][0]
+                    item["position"][1] += room_bounds["min"][1]
                     item["floor"] = floor
+                clutter = generate_clutter_layout(room_type, room_w, room_d, furnishings, seed=room_seed + 1)
+                for item in clutter:
+                    item["position"][0] += room_bounds["min"][0]
+                    item["position"][1] += room_bounds["min"][1]
+                    item["floor"] = floor
+                furnishings.extend(clutter)
                 room_furnishings.extend(furnishings)
-                light_rng = random.Random(bld["unique_seed"] + ri + floor * 2000)
-                room_lights = _place_interior_lights(
-                    light_rng, room_type, room_bounds,
-                    floor_index=floor, wall_height=wall_height,
+                base_z = floor * wall_height
+                room_lights = generate_lighting_layout(
+                    room_type, room_w, room_d, height=wall_height,
+                    furniture_items=furnishings, seed=room_seed + 2,
                 )
                 for lt in room_lights:
+                    px, py, pz = lt["position"]
+                    lt["position"] = (
+                        round(px + room_bounds["min"][0], 4),
+                        round(py + room_bounds["min"][1], 4),
+                        round(pz + base_z, 4),
+                    )
+                    lt["floor"] = floor
                     lt["building_index"] = idx
                 building_lights.extend(room_lights)
         if room_furnishings:
@@ -2407,7 +2430,7 @@ def generate_settlement(
     config = SETTLEMENT_TYPES[settlement_type]
 
     if seed is None:
-        seed = random.randint(0, 2**31)
+        seed = random.Random().randint(0, 2**31)  # fresh OS-entropy instance; not global RNG
     rng = random.Random(seed)
     layout_profile = _derive_settlement_profile(settlement_type, layout_brief, seed)
 
@@ -2526,16 +2549,34 @@ def generate_settlement(
                         "max": (bx + fp[0] / 2, by - fp[1] / 2 + (ri + 1) * room_height),
                     }
                     room_rng = random.Random(bld["unique_seed"] + ri + floor * 1000)
-                    furnishings = _furnish_interior(room_rng, room_type, room_bounds)
+                    room_seed = room_rng.randint(0, 2**31)
+                    room_w = room_bounds["max"][0] - room_bounds["min"][0]
+                    room_d = room_bounds["max"][1] - room_bounds["min"][1]
+                    furnishings = generate_interior_layout(room_type, room_w, room_d, seed=room_seed)
                     for item in furnishings:
+                        item["position"][0] += room_bounds["min"][0]
+                        item["position"][1] += room_bounds["min"][1]
                         item["floor"] = floor
+                    clutter = generate_clutter_layout(room_type, room_w, room_d, furnishings, seed=room_seed + 1)
+                    for item in clutter:
+                        item["position"][0] += room_bounds["min"][0]
+                        item["position"][1] += room_bounds["min"][1]
+                        item["floor"] = floor
+                    furnishings.extend(clutter)
                     room_furnishings.extend(furnishings)
-                    light_rng = random.Random(bld["unique_seed"] + ri + floor * 2000)
-                    room_lights = _place_interior_lights(
-                        light_rng, room_type, room_bounds,
-                        floor_index=floor, wall_height=wall_height,
+                    base_z = floor * wall_height
+                    room_lights = generate_lighting_layout(
+                        room_type, room_w, room_d, height=wall_height,
+                        furniture_items=furnishings, seed=room_seed + 2,
                     )
                     for lt in room_lights:
+                        px, py, pz = lt["position"]
+                        lt["position"] = (
+                            round(px + room_bounds["min"][0], 4),
+                            round(py + room_bounds["min"][1], 4),
+                            round(pz + base_z, 4),
+                        )
+                        lt["floor"] = floor
                         lt["building_index"] = idx
                     building_lights.extend(room_lights)
             if room_furnishings:
@@ -2656,23 +2697,37 @@ def generate_settlement(
                 room_rng = random.Random(
                     bld["unique_seed"] + ri + floor * 1000
                 )
-                furnishings = _furnish_interior(
-                    room_rng, room_type, room_bounds
-                )
-                # Tag each furniture item with its floor
+                room_seed = room_rng.randint(0, 2**31)
+                room_w = room_bounds["max"][0] - room_bounds["min"][0]
+                room_d = room_bounds["max"][1] - room_bounds["min"][1]
+                furnishings = generate_interior_layout(room_type, room_w, room_d, seed=room_seed)
                 for item in furnishings:
+                    item["position"][0] += room_bounds["min"][0]
+                    item["position"][1] += room_bounds["min"][1]
                     item["floor"] = floor
+                clutter = generate_clutter_layout(room_type, room_w, room_d, furnishings, seed=room_seed + 1)
+                for item in clutter:
+                    item["position"][0] += room_bounds["min"][0]
+                    item["position"][1] += room_bounds["min"][1]
+                    item["floor"] = floor
+                furnishings.extend(clutter)
+                # Tag each furniture item with its floor
                 room_furnishings.extend(furnishings)
 
                 # Place lights for this room on this floor
-                light_rng = random.Random(
-                    bld["unique_seed"] + ri + floor * 2000
-                )
-                room_lights = _place_interior_lights(
-                    light_rng, room_type, room_bounds,
-                    floor_index=floor, wall_height=wall_height,
+                base_z = floor * wall_height
+                room_lights = generate_lighting_layout(
+                    room_type, room_w, room_d, height=wall_height,
+                    furniture_items=furnishings, seed=room_seed + 2,
                 )
                 for lt in room_lights:
+                    px, py, pz = lt["position"]
+                    lt["position"] = (
+                        round(px + room_bounds["min"][0], 4),
+                        round(py + room_bounds["min"][1], 4),
+                        round(pz + base_z, 4),
+                    )
+                    lt["floor"] = floor
                     lt["building_index"] = idx
                 building_lights.extend(room_lights)
 

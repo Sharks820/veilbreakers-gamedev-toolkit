@@ -260,91 +260,16 @@ def _build_full_bpy_stubs():
     return bpy_mod, bmesh_mod
 
 
-bpy_stub, bmesh_stub = _build_full_bpy_stubs()
-sys.modules["bpy"] = bpy_stub
-sys.modules["bmesh"] = bmesh_stub
-sys.modules["bmesh.types"] = bmesh_stub.types
-
+# NOTE: conftest.py provides MagicMock-based bpy/bmesh/mathutils stubs.
+# _build_full_bpy_stubs() is kept as a definition only (not installed into sys.modules).
 
 # ---------------------------------------------------------------------------
-# Set up package hierarchy so relative imports work
+# Import handler modules normally (conftest stubs handle bpy/bmesh/mathutils)
 # ---------------------------------------------------------------------------
 
-_HANDLERS_PATH = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), "..", "blender_addon", "handlers")
-)
-
-# Create blender_addon.handlers as a proper package in sys.modules
-addon_pkg = types.ModuleType("blender_addon")
-addon_pkg.__path__ = [os.path.dirname(_HANDLERS_PATH)]
-addon_pkg.__package__ = "blender_addon"
-sys.modules.setdefault("blender_addon", addon_pkg)
-
-handlers_pkg = types.ModuleType("blender_addon.handlers")
-handlers_pkg.__path__ = [_HANDLERS_PATH]
-handlers_pkg.__package__ = "blender_addon.handlers"
-sys.modules["blender_addon.handlers"] = handlers_pkg
-
-
-def _load_handler(filename, module_name):
-    path = os.path.join(_HANDLERS_PATH, filename)
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    mod = importlib.util.module_from_spec(spec)
-    mod.__package__ = "blender_addon.handlers"
-    sys.modules[module_name] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-# --- Stub handler dependencies ---
-
-def _make_stub(full_name, **attrs):
-    m = types.ModuleType(full_name)
-    m.__package__ = "blender_addon.handlers"
-    for k, v in attrs.items():
-        setattr(m, k, v)
-    sys.modules[full_name] = m
-    return m
-
-
-_make_stub(
-    "blender_addon.handlers._scatter_engine",
-    poisson_disk_sample=lambda *a, **kw: np.empty((0, 2)),
-    biome_filter_points=lambda pts, *a, **kw: pts,
-    context_scatter=lambda *a, **kw: [],
-    generate_breakable_variants=lambda *a, **kw: {},
-)
-_make_stub(
-    "blender_addon.handlers._mesh_bridge",
-    post_boolean_cleanup=lambda *a, **kw: None,
-    mesh_from_spec=lambda *a, **kw: None,
-    VEGETATION_GENERATOR_MAP={},
-    PROP_GENERATOR_MAP={},
-)
-_make_stub(
-    "blender_addon.handlers._terrain_erosion",
-    apply_hydraulic_erosion=lambda *a, **kw: None,
-    apply_thermal_erosion=lambda *a, **kw: None,
-)
-for _dep in [
-    "blender_addon.handlers.mesh",
-    "blender_addon.handlers.environment_scatter",
-    "blender_addon.handlers.vegetation_system",
-    "blender_addon.handlers.building_generator",
-    "blender_addon.handlers.road_network",
-    "blender_addon.handlers.worldbuilding_layout",
-]:
-    _make_stub(_dep)
-
-# Load _terrain_noise first (pure numpy, no bpy)
-terrain_noise = _load_handler(
-    "_terrain_noise.py", "blender_addon.handlers._terrain_noise"
-)
+from blender_addon.handlers import _terrain_noise as terrain_noise
 auto_splat_terrain = terrain_noise.auto_splat_terrain
-
-# Load environment.py (uses bpy + terrain_noise)
-env_mod = _load_handler("environment.py", "blender_addon.handlers.environment")
-handle_create_water = env_mod.handle_create_water
+from blender_addon.handlers.environment import handle_create_water
 
 
 # ===========================================================================

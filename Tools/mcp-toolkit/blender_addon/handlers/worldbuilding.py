@@ -538,6 +538,8 @@ from ._mesh_bridge import (
     CASTLE_ELEMENT_MAP,
     DUNGEON_PROP_MAP,
     PROP_GENERATOR_MAP,
+    CATEGORY_MATERIAL_MAP,
+    get_material_for_category,
 )
 from .procedural_meshes import (
     generate_bridge_mesh,
@@ -1242,6 +1244,7 @@ def _wall_solid_box(
     px: float, py: float, pz: float,
     sx: float, sy: float, sz: float,
     material: str, role: str,
+    material_category: str = "",
 ) -> dict:
     """Create a standard solid box mesh spec (no openings). Pure-logic."""
     verts = [
@@ -1262,7 +1265,7 @@ def _wall_solid_box(
         (0, 3, 7, 4),  # left
         (1, 5, 6, 2),  # right
     ]
-    return {
+    result = {
         "type": "box",
         "vertices": verts,
         "faces": faces,
@@ -1271,6 +1274,9 @@ def _wall_solid_box(
         "material": material,
         "role": role,
     }
+    if material_category:
+        result["material_category"] = material_category
+    return result
 
 
 def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
@@ -1302,6 +1308,7 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
             size = op["size"]
             px, py, pz = pos[0], pos[1], pos[2]
             sx, sy, sz = size[0], size[1], size[2]
+            _mat_cat = op.get("material_category", "")
 
             # Check if this is a wall with openings
             if op.get("role") == "wall":
@@ -1318,6 +1325,10 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
                         material=op.get("material", "default"),
                         style=spec.style,
                     )
+                    # Stamp material_category onto each wall segment produced
+                    if _mat_cat:
+                        for ws in wall_specs:
+                            ws.setdefault("material_category", _mat_cat)
                     result.extend(wall_specs)
                     continue
 
@@ -1326,6 +1337,7 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
                 px, py, pz, sx, sy, sz,
                 material=op.get("material", "default"),
                 role=op.get("role", "unknown"),
+                material_category=_mat_cat,
             ))
 
         elif op_type == "cylinder":
@@ -1359,7 +1371,7 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
             faces.append(tuple(range(segments)))  # bottom cap
             faces.append(tuple(range(segments, 2 * segments)))  # top cap
 
-            result.append({
+            _cyl_dict: dict = {
                 "type": "cylinder",
                 "vertices": verts,
                 "faces": faces,
@@ -1367,7 +1379,11 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
                 "face_count": segments + 2,
                 "material": op.get("material", "default"),
                 "role": op.get("role", "unknown"),
-            })
+            }
+            _cyl_cat = op.get("material_category", "")
+            if _cyl_cat:
+                _cyl_dict["material_category"] = _cyl_cat
+            result.append(_cyl_dict)
 
         elif op_type == "tower":
             pos = op["position"]
@@ -1580,7 +1596,7 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
                 verts.extend(mv)
                 faces.extend(tuple(idx + offset for idx in face) for face in mf)
 
-            result.append({
+            _tower_dict: dict = {
                 "type": "tower",
                 "vertices": verts,
                 "faces": faces,
@@ -1590,7 +1606,11 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
                 "role": op.get("role", "unknown"),
                 "segments": segments,
                 "taper": taper,
-            })
+            }
+            _tower_cat = op.get("material_category", "")
+            if _tower_cat:
+                _tower_dict["material_category"] = _tower_cat
+            result.append(_tower_dict)
 
         elif op_type == "mesh_spec":
             # Full vertex/face data from building_quality generators.
@@ -1598,7 +1618,7 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
             mesh_verts = op.get("vertices", [])
             mesh_faces = op.get("faces", [])
             if mesh_verts and mesh_faces:
-                result.append({
+                _ms_dict: dict = {
                     "type": "mesh_spec",
                     "vertices": mesh_verts,
                     "faces": mesh_faces,
@@ -1606,7 +1626,11 @@ def _building_ops_to_mesh_spec(spec: BuildingSpec) -> list[dict]:
                     "face_count": len(mesh_faces),
                     "material": op.get("material", "default"),
                     "role": op.get("role", "detail"),
-                })
+                }
+                _ms_cat = op.get("material_category", "")
+                if _ms_cat:
+                    _ms_dict["material_category"] = _ms_cat
+                result.append(_ms_dict)
 
         elif op_type == "opening":
             # Convert opening to a recessed cutout box on the wall surface.
@@ -3713,6 +3737,7 @@ def _apply_site_profile_features(
         location: tuple[float, float, float],
         rotation: tuple[float, float, float] = (0.0, 0.0, 0.0),
         scale: tuple[float, float, float] = (1.0, 1.0, 1.0),
+        material_key: str = "rough_stone_wall",
     ) -> None:
         nonlocal feature_count
         obj = mesh_from_spec(
@@ -3724,6 +3749,7 @@ def _apply_site_profile_features(
             parent=parent,
         )
         if not isinstance(obj, dict):
+            _assign_procedural_material(obj, material_key)
             feature_count += 1
 
     def add_catalog_feature(
@@ -3758,6 +3784,7 @@ def _apply_site_profile_features(
                 "Buttress",
                 (x_pos, depth * (0.25 + 0.45 * idx), 0.0),
                 rotation=(0.0, 0.0, math.pi / 2.0 if idx == 0 else -math.pi / 2.0),
+                material_key="smooth_stone" if profile_key == "cliffside" else "rough_stone_wall",
             )
         add_catalog_feature(
             "archway",
@@ -3792,6 +3819,7 @@ def _apply_site_profile_features(
             "Bridgewalk",
             (width * 0.5, -max(2.5, depth * 0.28), 0.0),
             rotation=(math.pi / 2.0, 0.0, 0.0),
+            material_key="rough_stone_wall",
         )
         add_catalog_feature(
             "fence",
@@ -3803,6 +3831,7 @@ def _apply_site_profile_features(
 
     if profile_key in {"monastery", "market", "rural", "forgeyard"}:
         fence_style = "wooden_picket" if profile_key in {"rural", "market"} else "iron_wrought"
+        fence_mat = "rough_timber" if fence_style == "wooden_picket" else "iron_dark"
         fence_spec = generate_fence_mesh(
             length=max(width, depth) * 0.95,
             posts=max(4, int(max(width, depth) / 1.8)),
@@ -3813,12 +3842,14 @@ def _apply_site_profile_features(
             "FrontYard",
             (width * 0.5, -0.8, 0.0),
             rotation=(0.0, 0.0, 0.0),
+            material_key=fence_mat,
         )
         add_generated_mesh(
             fence_spec,
             "RearYard",
             (width * 0.5, depth + 0.8, 0.0),
             rotation=(0.0, 0.0, 0.0),
+            material_key=fence_mat,
         )
         if profile_key in {"monastery", "forgeyard"}:
             colonnade_spec = generate_column_row_mesh(
@@ -3831,6 +3862,7 @@ def _apply_site_profile_features(
                 "Colonnade",
                 (width * 0.5, depth + 1.3, 0.0),
                 rotation=(0.0, 0.0, 0.0),
+                material_key="smooth_stone",
             )
 
     if profile_key == "rural":
@@ -7712,6 +7744,13 @@ def handle_generate_landmark(params: dict) -> dict:
         obj = _create_mesh_object(f"{name}_structure", bm)
         obj.parent = parent
         obj.scale = (scale, scale, scale)
+        # Assign the dominant structural material via CATEGORY_MATERIAL_MAP.
+        # The merged mesh gets the style-appropriate "building" or "fortification"
+        # material as a base; per-element overrides are applied on feature meshes.
+        _struct_cat = "fortification" if base_style in ("fortress", "gothic") else "building"
+        _struct_mat_key = get_material_for_category(_struct_cat)
+        if _struct_mat_key:
+            _assign_procedural_material(obj, _struct_mat_key)
 
     # Unique features as separate meshes in a sub-collection
     if unique_feature_ops:
@@ -7743,6 +7782,12 @@ def handle_generate_landmark(params: dict) -> dict:
             f_obj = bpy.data.objects.new(f"{name}_{feat_name}", f_mesh)
             f_obj.parent = parent
             feat_coll.objects.link(f_obj)
+            # Auto-assign procedural material via CATEGORY_MATERIAL_MAP
+            _fms_cat = fms.get("material_category", "")
+            if _fms_cat:
+                _fms_mat_key = get_material_for_category(_fms_cat)
+                if _fms_mat_key:
+                    _assign_procedural_material(f_obj, _fms_mat_key)
 
     # Corruption material tint
     if corruption_level > 0:

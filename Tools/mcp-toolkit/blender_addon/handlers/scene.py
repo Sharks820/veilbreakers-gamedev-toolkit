@@ -62,7 +62,9 @@ def _validate_setup_world_params(params: dict) -> dict:
         if c < 0.0 or c > 1.0:
             raise ValueError(f"color[{i}] must be between 0 and 1, got {c}")
 
-    strength = params.get("strength", 1.0)
+    # Dark fantasy default: 0.3 avoids Blender's white-at-full-strength default
+    # which washes out the aesthetic when no explicit strength is provided.
+    strength = params.get("strength", 0.3)
     if not isinstance(strength, (int, float)):
         raise ValueError(f"strength must be a number, got {type(strength).__name__}")
     if strength < 0.0:

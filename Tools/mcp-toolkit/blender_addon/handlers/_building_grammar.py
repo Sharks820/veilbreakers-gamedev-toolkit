@@ -45,6 +45,116 @@ except ImportError:
     _QUALITY_AVAILABLE = False
 
 # ---------------------------------------------------------------------------
+# Material category helpers -- maps grammar roles/detail_types to the
+# CATEGORY_MATERIAL_MAP keys used by _mesh_bridge.get_material_for_category().
+# These are injected as "material_category" on every operation dict so that
+# downstream Blender object creation can auto-assign procedural materials
+# without hard-coding material keys inside the grammar.
+# ---------------------------------------------------------------------------
+
+# Mapping from detail_type string → material category
+_DETAIL_TYPE_MATERIAL_CATEGORY: dict[str, str] = {
+    # Timber / wood elements
+    "timber_post": "door",        # rough_timber via "door" category
+    "timber_rail": "door",
+    "timber_brace": "door",
+    "window_box": "door",
+    "woodpile": "door",
+    # Stone / fortification elements
+    "battlement": "fortification",
+    "battlement_arm": "fortification",
+    "buttress_arm": "fortification",
+    "buttress_pier": "fortification",
+    "machicolation_corbel": "fortification",
+    "machicolation_platform": "fortification",
+    "murder_hole": "fortification",
+    # Chimney / spire -- structural stone
+    "chimney_shaft": "structural",
+    "chimney_cap": "structural",
+    "spire_shaft": "structural",
+    "spire_tip": "structural",
+    # Gothic ornament -- stone
+    "gargoyle": "fortification",
+    "rose_window": "structural",
+    # Organic details -- vegetation
+    "vine_stem": "vegetation",
+    "vine_leaves": "vegetation",
+    "moss_patch": "vegetation",
+    "root_support": "vegetation",
+    "root_tip": "vegetation",
+    # Fallback for named detail_types that match high-level names
+    "timber_frame": "door",
+    "flying_buttress": "fortification",
+    "battlement": "fortification",
+    "machicolation": "fortification",
+    "spire": "structural",
+    "chimney": "structural",
+    "gargoyle": "fortification",
+    "rose_window": "structural",
+    "vine_growth": "vegetation",
+    "moss_patches": "vegetation",
+    "root_buttress": "vegetation",
+    "woodpile": "door",
+    "window_boxes": "door",
+}
+
+# Mapping from operation role → material category (fallback when detail_type absent)
+_ROLE_MATERIAL_CATEGORY: dict[str, str] = {
+    "wall": "building",
+    "floor_slab": "infrastructure",
+    "foundation": "structural",
+    "roof": "building",
+    "window": "structural",
+    "door": "door",
+    "detail": "structural",
+    "facade_plinth": "structural",
+    "facade_stringcourse": "structural",
+    "facade_cornice": "structural",
+    "facade_pilaster": "structural",
+    "facade_surround": "structural",
+    "facade_sill": "structural",
+    "facade_lintel": "structural",
+    "facade_buttress": "fortification",
+    "facade_awning": "door",
+    "facade_balcony": "structural",
+    "facade_chimney": "structural",
+    "curtain_wall": "fortification",
+    "tower": "fortification",
+    "gatehouse": "fortification",
+    "keep": "fortification",
+    "battlement": "fortification",
+    "parapet": "fortification",
+}
+
+
+def _get_op_material_category(op: dict) -> str:
+    """Derive the CATEGORY_MATERIAL_MAP key for a grammar operation.
+
+    Checks detail_type first (more specific), then falls back to role.
+    Defaults to "building" if neither maps to a known category.
+    """
+    detail_type = op.get("detail_type", "")
+    if detail_type and detail_type in _DETAIL_TYPE_MATERIAL_CATEGORY:
+        return _DETAIL_TYPE_MATERIAL_CATEGORY[detail_type]
+    role = op.get("role", "")
+    return _ROLE_MATERIAL_CATEGORY.get(role, "building")
+
+
+def _stamp_material_categories(ops: list[dict]) -> list[dict]:
+    """Stamp ``material_category`` on every operation that lacks it.
+
+    Mutates each dict in-place and returns the same list for convenience.
+    Call this before building a :class:`BuildingSpec` in every template
+    so that downstream Blender code can call ``get_material_for_category``
+    without re-deriving the category from role/detail_type.
+    """
+    for op in ops:
+        if "material_category" not in op:
+            op["material_category"] = _get_op_material_category(op)
+    return ops
+
+
+# ---------------------------------------------------------------------------
 # Style Configurations
 # ---------------------------------------------------------------------------
 
@@ -969,7 +1079,7 @@ def evaluate_building_grammar(
         footprint=(width, depth),
         floors=floors,
         style=style,
-        operations=ops,
+        operations=_stamp_material_categories(ops),
     )
 
 
@@ -1290,7 +1400,7 @@ def generate_castle_spec(
         footprint=(outer_size, outer_size),
         floors=3,
         style="fortress",
-        operations=ops,
+        operations=_stamp_material_categories(ops),
     )
 
 
@@ -1391,7 +1501,7 @@ def generate_tower_spec(
         footprint=(radius * 2, radius * 2),
         floors=floors,
         style="fortress",
-        operations=ops,
+        operations=_stamp_material_categories(ops),
     )
 
 
@@ -1492,7 +1602,7 @@ def generate_bridge_spec(
         footprint=(width, span),
         floors=1,
         style="fortress",
-        operations=ops,
+        operations=_stamp_material_categories(ops),
     )
 
 
@@ -1632,7 +1742,7 @@ def generate_fortress_spec(
         footprint=(size, size),
         floors=3,
         style="fortress",
-        operations=ops,
+        operations=_stamp_material_categories(ops),
     )
 
 
