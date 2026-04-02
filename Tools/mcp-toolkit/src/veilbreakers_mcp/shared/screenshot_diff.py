@@ -4,13 +4,17 @@ Uses Pillow to compute pixel-level differences between a reference image
 and a current image, highlighting changed regions in a diff overlay.
 
 Functions:
-    compare_screenshots  - Compare two screenshots, return match/diff stats
-    generate_diff_image  - Generate a highlighted diff image
+    compare_screenshots          - Compare two screenshots, return match/diff stats
+    generate_diff_image          - Generate a highlighted diff image
+    capture_regression_baseline  - Copy screenshots to a baseline directory
 """
 
 from __future__ import annotations
 
 import logging
+import os
+import shutil
+from pathlib import Path
 
 import numpy as np
 from PIL import Image, ImageChops
@@ -88,6 +92,46 @@ def compare_screenshots(
         "diff_image_path": diff_image_path,
         "reference_size": ref_size,
         "current_size": cur_size,
+    }
+
+
+def capture_regression_baseline(
+    screenshot_paths: list[str],
+    baseline_dir: str,
+) -> dict:
+    """Copy screenshots to a baseline directory for future regression comparisons.
+
+    Each screenshot is stored as ``baseline_{angle_id}.png`` using the order of
+    *screenshot_paths*.  Existing baselines for the same angle ID are silently
+    overwritten.
+
+    Args:
+        screenshot_paths: Ordered list of screenshot file paths (one per angle).
+        baseline_dir: Directory to store baseline images.  Created if absent.
+
+    Returns:
+        Dict with keys:
+            baseline_count (int): Number of files successfully copied.
+            baseline_dir (str): Absolute path to the baseline directory.
+            paths (list[str]): Absolute paths of each baseline file written.
+    """
+    baseline_dir_path = Path(baseline_dir)
+    baseline_dir_path.mkdir(parents=True, exist_ok=True)
+
+    written_paths: list[str] = []
+    for angle_id, src in enumerate(screenshot_paths):
+        if not os.path.isfile(src):
+            logger.warning("capture_regression_baseline: source not found: %s", src)
+            continue
+        dest = str(baseline_dir_path / f"baseline_{angle_id}.png")
+        shutil.copy2(src, dest)
+        written_paths.append(dest)
+        logger.debug("Baseline captured: %s -> %s", src, dest)
+
+    return {
+        "baseline_count": len(written_paths),
+        "baseline_dir": str(baseline_dir_path.resolve()),
+        "paths": written_paths,
     }
 
 

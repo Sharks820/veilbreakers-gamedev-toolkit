@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import os
+import shutil
 from pathlib import Path
 
 from PIL import Image, ImageFilter, ImageStat
@@ -101,6 +102,94 @@ def analyze_render_image(filepath: str) -> dict:
         result["issues"].append(str(exc))
 
     return result
+
+
+def aaa_verify_map(screenshot_paths: list[str], min_score: int = 60) -> dict:
+    """Multi-angle AAA visual verification protocol.
+
+    Scores each provided screenshot (one per camera angle, expect 10) against
+    a minimum quality threshold. Also runs two additional AAA-specific checks:
+
+    - Floating geometry detection: bottom 20% of image has mean brightness >200
+      (sky color where ground should be).
+    - Default material detection: image has very low color variance (std_dev < 8
+      across all channels), indicating a single gray/white default material.
+
+    Args:
+        screenshot_paths: List of file paths, one per camera angle.
+        min_score: Minimum per-angle score to pass (default 60).
+
+    Returns:
+        Dict with keys:
+            passed (bool): True if all angles pass.
+            total_score (float): Average score across all angles.
+            per_angle (list[dict]): [{angle_id, score, issues}] for each angle.
+            failed_angles (list[int]): Indices of angles that scored below min_score
+                or had critical quality flags.
+    """
+    per_angle: list[dict] = []
+    failed_angles: list[int] = []
+
+    for angle_id, path in enumerate(screenshot_paths):
+        base_result = analyze_render_image(path)
+        angle_issues = list(base_result.get("issues", []))
+
+        # --- AAA check 1: Floating geometry detection ---
+        # Check if bottom 20% of image has mean brightness > 200 (sky-colored ground)
+        if os.path.isfile(path):
+            try:
+                with Image.open(path) as img:
+                    rgb = img.convert("RGB")
+                    w, h = rgb.size
+                    bottom_20pct = rgb.crop((0, int(h * 0.80), w, h))
+                    stat = ImageStat.Stat(bottom_20pct)
+                    bottom_mean = sum(stat.mean) / 3.0
+                    if bottom_mean > 200.0:
+                        angle_issues.append("floating_geometry_suspected")
+            except (OSError, ValueError):
+                pass
+
+        # --- AAA check 2: Default material detection ---
+        # Very low color variance across all channels = single default material
+        if os.path.isfile(path):
+            try:
+                with Image.open(path) as img:
+                    rgb = img.convert("RGB")
+                    stat = ImageStat.Stat(rgb)
+                    avg_std = sum(stat.stddev) / 3.0
+                    if avg_std < 8.0:
+                        angle_issues.append("default_material_detected")
+            except (OSError, ValueError):
+                pass
+
+        angle_score = float(base_result.get("score", 0.0))
+
+        # An angle passes only if score >= min_score AND no AAA critical flags
+        angle_passed = (
+            angle_score >= min_score
+            and "default_material_detected" not in angle_issues
+            and "floating_geometry_suspected" not in angle_issues
+        )
+        if not angle_passed:
+            failed_angles.append(angle_id)
+
+        per_angle.append({
+            "angle_id": angle_id,
+            "score": round(angle_score, 3),
+            "issues": angle_issues,
+            "passed": angle_passed,
+        })
+
+    total_score = (
+        sum(a["score"] for a in per_angle) / len(per_angle) if per_angle else 0.0
+    )
+
+    return {
+        "passed": len(failed_angles) == 0,
+        "total_score": round(total_score, 3),
+        "per_angle": per_angle,
+        "failed_angles": failed_angles,
+    }
 
 
 def validate_render_screens(paths: list[str], min_score: float = 55.0) -> dict:

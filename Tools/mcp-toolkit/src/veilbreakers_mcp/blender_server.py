@@ -35,6 +35,8 @@ from veilbreakers_mcp.shared.fal_client import (
 from veilbreakers_mcp.shared.delight import delight_albedo
 from veilbreakers_mcp.shared.palette_validator import validate_palette as _validate_palette
 from veilbreakers_mcp.shared.tripo_post_processor import post_process_tripo_model
+from veilbreakers_mcp.shared.visual_validation import aaa_verify_map
+from veilbreakers_mcp.shared.screenshot_diff import compare_screenshots, capture_regression_baseline
 
 logger = logging.getLogger("veilbreakers_mcp")
 
@@ -2055,6 +2057,9 @@ async def asset_pipeline(
         "import_model", "import_and_process",
         # Map packaging (Phase 37 -- MESH-16)
         "generate_map_package",
+        # AAA visual verification (Phase 39 -- AAA-MAP-01)
+        "aaa_verify",
+        "screenshot_regression",
     ],
     # Common params
     object_name: str | None = None,
@@ -2128,6 +2133,12 @@ async def asset_pipeline(
     force_restart: bool = False,
     # Map package export params (generate_map_package)
     map_package_spec: dict | None = None,
+    # AAA verification params (aaa_verify / screenshot_regression)
+    angles: int = 10,
+    min_score: int = 60,
+    capture_baseline: bool = False,
+    baseline_dir: str | None = None,
+    current_screenshots: list[str] | None = None,
 ):
     """Asset pipeline -- 3D generation, map composition, interior building, processing, LODs, catalog, equipment. Use compose_map to build full maps (terrain+water+roads+locations+vegetation+atmosphere). Use compose_interior for walkable interiors (room shells+doors+furniture+props). Use generate_building for Tripo-powered architecture. Use generate_terrain_mesh for procedural terrain."""
     blender = get_blender_connection()
@@ -3109,6 +3120,116 @@ async def asset_pipeline(
                 f"Import FBX files into Unity Assets/Maps/{_mp_name}/",
                 "Run: unity_world action=setup_map_streaming with scene_hierarchy_json path",
             ],
+        }
+
+    elif action == "aaa_verify":
+        # Multi-angle AAA visual verification — renders 10 camera angles and scores each
+        import tempfile as _tempfile
+
+        # Camera angle definitions: (yaw_deg, pitch_deg, label)
+        _aaa_angles = [
+            (0,   0,  "front"),
+            (180, 0,  "back"),
+            (90,  0,  "left"),
+            (270, 0,  "right"),
+            (0,   90, "top"),
+            (45,  30, "ne_45"),
+            (135, 30, "nw_45"),
+            (225, 30, "sw_45"),
+            (315, 30, "se_45"),
+            (0,   5,  "ground_level"),
+        ]
+        _aaa_angles = _aaa_angles[:angles]
+
+        _tmp_dir = _tempfile.mkdtemp(prefix="aaa_verify_")
+        _screenshot_paths: list[str] = []
+
+        for _yaw, _pitch, _label in _aaa_angles:
+            _ss_path = os.path.join(_tmp_dir, f"aaa_{_label}.png")
+            try:
+                _render_result = await blender.send_command("render_angle", {
+                    "yaw": _yaw,
+                    "pitch": _pitch,
+                    "output_path": _ss_path,
+                })
+                # Fallback: use viewport screenshot if render_angle not available
+                if not os.path.isfile(_ss_path):
+                    _vp_result = await blender.send_command("viewport_screenshot", {
+                        "output_path": _ss_path,
+                    })
+            except Exception:
+                # If Blender command fails, skip this angle (path won't exist)
+                pass
+            _screenshot_paths.append(_ss_path)
+
+        # Filter to only paths that actually exist
+        _existing = [p for p in _screenshot_paths if os.path.isfile(p)]
+        if not _existing:
+            return json.dumps({
+                "status": "error",
+                "error": "No screenshots were captured — ensure Blender is connected",
+                "hint": "Run Blender with the VeilBreakers addon and try again",
+            })
+
+        _verify_result = aaa_verify_map(_existing, min_score=min_score)
+
+        _baseline_result = None
+        if capture_baseline:
+            _bdir = baseline_dir or os.path.join(_tmp_dir, "baselines")
+            _baseline_result = capture_regression_baseline(_existing, _bdir)
+
+        return {
+            "status": "success",
+            "verification": _verify_result,
+            "screenshots": _existing,
+            "baseline": _baseline_result,
+            "angle_labels": [lbl for _, _, lbl in _aaa_angles[:len(_existing)]],
+        }
+
+    elif action == "screenshot_regression":
+        # Compare current screenshots against stored baselines
+        if not baseline_dir:
+            return json.dumps({
+                "error": "baseline_dir is required for screenshot_regression",
+                "hint": "Run aaa_verify with capture_baseline=True first",
+            })
+        if not current_screenshots:
+            return json.dumps({
+                "error": "current_screenshots list is required for screenshot_regression",
+            })
+
+        _reg_results: list[dict] = []
+        _all_match = True
+        for _angle_id, _cur_path in enumerate(current_screenshots):
+            _ref_path = os.path.join(baseline_dir, f"baseline_{_angle_id}.png")
+            if not os.path.isfile(_ref_path):
+                _reg_results.append({
+                    "angle_id": _angle_id,
+                    "match": None,
+                    "error": f"Baseline not found: {_ref_path}",
+                })
+                continue
+            if not os.path.isfile(_cur_path):
+                _reg_results.append({
+                    "angle_id": _angle_id,
+                    "match": None,
+                    "error": f"Current screenshot not found: {_cur_path}",
+                })
+                continue
+            _cmp = compare_screenshots(_ref_path, _cur_path, threshold=0.01)
+            if not _cmp["match"]:
+                _all_match = False
+            _reg_results.append({
+                "angle_id": _angle_id,
+                **_cmp,
+            })
+
+        return {
+            "status": "success",
+            "all_match": _all_match,
+            "results": _reg_results,
+            "total_angles": len(current_screenshots),
+            "passed_angles": sum(1 for r in _reg_results if r.get("match") is True),
         }
 
     elif action == "compose_interior":
