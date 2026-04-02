@@ -752,6 +752,36 @@ async def _enforce_world_quality(
                 )
                 report["materials_fixed"].append(mesh_name)  # type: ignore[append]
 
+            # Check for smart_material_preset custom property and apply smart material if tagged
+            try:
+                preset_result = await blender.send_command(
+                    "execute_code",
+                    {"code": (
+                        f"import bpy\n"
+                        f"obj = bpy.data.objects.get('{mesh_name}')\n"
+                        f"result = obj.get('smart_material_preset', '') if obj else ''"
+                    )},
+                )
+                smart_preset = preset_result.get("result", "") if isinstance(preset_result, dict) else ""
+                if smart_preset:
+                    smart_code_result = await blender.send_command(
+                        "texture_smart_material_code",
+                        {
+                            "material_type": smart_preset,
+                            "object_name": mesh_name,
+                            "wear_intensity": 0.5,
+                            "dirt_intensity": 0.4,
+                            "moss_intensity": 0.3,
+                            "age": 0.5,
+                        },
+                    )
+                    if isinstance(smart_code_result, dict):
+                        code_str = smart_code_result.get("code", "")
+                        if code_str:
+                            await blender.send_command("execute_code", {"code": code_str})
+            except (OSError, ConnectionError, TimeoutError, ValueError, RuntimeError, BlenderCommandError):
+                pass
+
             uv_report = await blender.send_command(
                 "uv_analyze",
                 {"object_name": mesh_name, "texture_size": 1024},
@@ -2060,6 +2090,10 @@ async def asset_pipeline(
         # AAA visual verification (Phase 39 -- AAA-MAP-01)
         "aaa_verify",
         "screenshot_regression",
+        # Performance budget check (Phase 39 -- AAA-MAP-10)
+        "performance_check",
+        # LOD chain generation (Phase 39 -- AAA-MAP-11)
+        "generate_lod_chain",
     ],
     # Common params
     object_name: str | None = None,
@@ -3230,6 +3264,70 @@ async def asset_pipeline(
             "results": _reg_results,
             "total_angles": len(current_screenshots),
             "passed_angles": sum(1 for r in _reg_results if r.get("match") is True),
+        }
+
+    elif action == "performance_check":
+        # Performance budget check: triangle count and estimated draw calls
+        _pc_result = await blender.send_command("performance_budget_check", {})
+        _total_tris = _pc_result.get("total_tris", 0)
+        _mat_count = _pc_result.get("unique_material_count", 0)
+
+        # Per-category budgets (tris)
+        _CATEGORY_BUDGETS = {
+            "terrain":   200_000,
+            "buildings": 300_000,
+            "walls":     150_000,
+            "trees":     400_000,
+            "grass":     300_000,
+            "rocks":     200_000,
+            "water":      20_000,
+        }
+        _per_category = _pc_result.get("per_category", [])
+        _category_results = []
+        for _cat_name, _cat_budget in _CATEGORY_BUDGETS.items():
+            _cat_tris = next(
+                (c.get("tri_count", 0) for c in _per_category if c.get("type") == _cat_name),
+                0,
+            )
+            _category_results.append({
+                "type": _cat_name,
+                "tris": _cat_tris,
+                "budget": _cat_budget,
+                "within_budget": _cat_tris <= _cat_budget,
+            })
+
+        return {
+            "status": "success",
+            "total_tris": _total_tris,
+            "tri_budget_ok": _total_tris < 2_000_000,
+            "estimated_draw_calls": _mat_count,
+            "draw_call_budget_ok": _mat_count < 500,
+            "per_category": _category_results,
+            "summary": {
+                "passed": _total_tris < 2_000_000 and _mat_count < 500,
+                "tri_utilization_pct": round(_total_tris / 2_000_000 * 100, 1),
+                "draw_call_utilization_pct": round(_mat_count / 500 * 100, 1),
+            },
+        }
+
+    elif action == "generate_lod_chain":
+        # Auto-generate LOD chain for one or more objects
+        _lod_results = []
+        _target_objects = object_names or ([object_name] if object_name else [])
+        if not _target_objects:
+            return json.dumps({
+                "error": "object_name or object_names is required for generate_lod_chain",
+            })
+        for _lod_obj_name in _target_objects:
+            _lod_result = await blender.send_command("auto_generate_lod_chain", {
+                "obj_name": _lod_obj_name,
+                "asset_type": asset_type or "prop",
+            })
+            _lod_results.append(_lod_result)
+        return {
+            "status": "success",
+            "lod_chains": _lod_results,
+            "total_objects": len(_target_objects),
         }
 
     elif action == "compose_interior":
