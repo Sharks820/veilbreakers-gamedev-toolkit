@@ -24,6 +24,7 @@ import numpy as np
 
 import bpy
 import bmesh
+from mathutils import Vector as _mathutils_Vector
 
 from ._scatter_engine import (
     poisson_disk_sample,
@@ -1283,9 +1284,9 @@ def handle_scatter_vegetation(params: dict) -> dict:
         moisture_map=moisture_np,
     )
 
-    # Filter out placements that overlap with building footprints
+    # Filter out placements that overlap with building footprints or roads
     # Collect bounding boxes of all EMPTY-type objects (building parents) in scene
-    _building_zones: list[tuple[float, float, float, float]] = []
+    _exclusion_zones: list[tuple[float, float, float, float]] = []
     for _obj in bpy.data.objects:
         if _obj.type == "EMPTY" and _obj.children:
             # Estimate building footprint from children bounds
@@ -1299,20 +1300,30 @@ def handle_scatter_vegetation(params: dict) -> dict:
                     _min_y = min(_min_y, _loc.y - 3.0)
                     _max_y = max(_max_y, _loc.y + 3.0)
             if _min_x < float("inf"):
-                _building_zones.append((_min_x, _min_y, _max_x, _max_y))
+                _exclusion_zones.append((_min_x, _min_y, _max_x, _max_y))
 
-    if _building_zones:
+        # Also exclude road objects (with a buffer margin for natural clearance)
+        if _obj.type == "MESH" and ("road" in _obj.name.lower() or "_Road_" in _obj.name):
+            _bb = [_obj.matrix_world @ _mathutils_Vector(corner) for corner in _obj.bound_box]
+            _road_margin = 2.0  # meters buffer around road edges
+            _r_min_x = min(v.x for v in _bb) - _road_margin
+            _r_max_x = max(v.x for v in _bb) + _road_margin
+            _r_min_y = min(v.y for v in _bb) - _road_margin
+            _r_max_y = max(v.y for v in _bb) + _road_margin
+            _exclusion_zones.append((_r_min_x, _r_min_y, _r_max_x, _r_max_y))
+
+    if _exclusion_zones:
         terrain_half_bz = terrain_size / 2.0
         _filtered = []
         for p in placements:
             wx = p["position"][0] - terrain_half_bz
             wy = p["position"][1] - terrain_half_bz
-            _in_building = False
-            for bz_min_x, bz_min_y, bz_max_x, bz_max_y in _building_zones:
+            _in_excluded = False
+            for bz_min_x, bz_min_y, bz_max_x, bz_max_y in _exclusion_zones:
                 if bz_min_x <= wx <= bz_max_x and bz_min_y <= wy <= bz_max_y:
-                    _in_building = True
+                    _in_excluded = True
                     break
-            if not _in_building:
+            if not _in_excluded:
                 _filtered.append(p)
         placements = _filtered
 

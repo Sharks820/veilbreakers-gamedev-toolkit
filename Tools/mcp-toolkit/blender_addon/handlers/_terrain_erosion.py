@@ -266,33 +266,41 @@ def apply_thermal_erosion(
     for _iteration in range(iterations):
         delta = np.zeros_like(result)
 
-        for r in range(1, rows - 1):
-            for c in range(1, cols - 1):
-                h = result[r, c]
-                max_diff = 0.0
-                total_diff = 0.0
-                diffs: list[tuple[int, int, float]] = []
+        # Vectorized: process all 8 neighbors via padded array shifts
+        padded = np.pad(result, 1, mode='edge')
 
-                for dr, dc, dist in offsets:
-                    nr, nc = r + dr, c + dc
-                    nh = result[nr, nc]
-                    h_diff = (h - nh) / dist  # Slope (height diff per unit distance)
+        accumulated_max_diff = np.zeros_like(result)
+        accumulated_total_diff = np.zeros_like(result)
+        neighbor_excess: list[tuple[int, int, np.ndarray]] = []
 
-                    if h_diff > talus_threshold:
-                        actual_diff = h_diff - talus_threshold
-                        diffs.append((nr, nc, actual_diff))
-                        total_diff += actual_diff
-                        if actual_diff > max_diff:
-                            max_diff = actual_diff
+        for dr, dc, dist in offsets:
+            shifted = padded[1 + dr:1 + dr + rows, 1 + dc:1 + dc + cols]
+            slope = (result - shifted) / dist
+            excess = np.maximum(slope - talus_threshold, 0.0)
+            accumulated_total_diff += excess
+            accumulated_max_diff = np.maximum(accumulated_max_diff, excess)
+            neighbor_excess.append((dr, dc, excess))
 
-                if total_diff > 0:
-                    # Transfer material proportionally
-                    transfer = max_diff * 0.5  # Transfer half of max excess
-                    for nr, nc, d in diffs:
-                        fraction = d / total_diff
-                        amount = transfer * fraction
-                        delta[r, c] -= amount
-                        delta[nr, nc] += amount
+        has_transfer = accumulated_total_diff > 0
+        transfer = accumulated_max_diff * 0.5
+
+        for dr, dc, excess in neighbor_excess:
+            with np.errstate(divide='ignore', invalid='ignore'):
+                fraction = np.where(has_transfer, excess / accumulated_total_diff, 0.0)
+            amount = transfer * fraction * has_transfer
+
+            delta -= amount
+            # Shift amount into neighbor position
+            r_src_start = max(0, -dr)
+            r_src_end = min(rows, rows - dr)
+            c_src_start = max(0, -dc)
+            c_src_end = min(cols, cols - dc)
+            r_dst_start = max(0, dr)
+            c_dst_start = max(0, dc)
+            r_dst_end = r_dst_start + (r_src_end - r_src_start)
+            c_dst_end = c_dst_start + (c_src_end - c_src_start)
+            delta[r_dst_start:r_dst_end, c_dst_start:c_dst_end] += \
+                amount[r_src_start:r_src_end, c_src_start:c_src_end]
 
         result += delta
         result = np.clip(result, 0.0, 1.0)

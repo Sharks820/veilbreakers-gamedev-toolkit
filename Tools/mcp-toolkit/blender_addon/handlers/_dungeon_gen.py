@@ -223,18 +223,22 @@ def _carve_h_corridor(grid: np.ndarray, y: int, x1: int, x2: int) -> None:
     lo, hi = min(x1, x2), max(x1, x2)
     h, w = grid.shape
     for x in range(lo, hi + 1):
-        if 0 <= y < h and 0 <= x < w:
-            if grid[y, x] == 0:
-                grid[y, x] = 2  # corridor
+        for dy in range(2):  # 2 cells wide for combat clearance
+            yy = y + dy
+            if 0 <= yy < h and 0 <= x < w:
+                if grid[yy, x] == 0:
+                    grid[yy, x] = 2  # corridor
 
 
 def _carve_v_corridor(grid: np.ndarray, x: int, y1: int, y2: int) -> None:
     lo, hi = min(y1, y2), max(y1, y2)
     h, w = grid.shape
     for y in range(lo, hi + 1):
-        if 0 <= y < h and 0 <= x < w:
-            if grid[y, x] == 0:
-                grid[y, x] = 2  # corridor
+        for dx in range(2):  # 2 cells wide for combat clearance
+            xx = x + dx
+            if 0 <= y < h and 0 <= xx < w:
+                if grid[y, xx] == 0:
+                    grid[y, xx] = 2  # corridor
 
 
 # ---------------------------------------------------------------------------
@@ -416,8 +420,20 @@ def _assign_room_types(
             new_w = min(new_w, grid_width - boss.x)
         if grid_height > 0:
             new_h = min(new_h, grid_height - boss.y)
-        boss.width = max(new_w, boss.width)
-        boss.height = max(new_h, boss.height)
+
+        # Check overlap with other rooms before expanding
+        can_expand = True
+        expanded_candidate = Room(boss.x, boss.y, max(new_w, boss.width), max(new_h, boss.height))
+        for other_room in rooms:
+            if other_room is boss:
+                continue
+            if expanded_candidate.intersects(other_room):
+                can_expand = False
+                break
+
+        if can_expand:
+            boss.width = max(new_w, boss.width)
+            boss.height = max(new_h, boss.height)
 
         # Carve expanded floor tiles into grid so walls don't remain
         if grid is not None:
@@ -443,6 +459,25 @@ def _assign_room_types(
         for r in remaining_sorted:
             if rng.random() < 0.10:
                 r.room_type = "secret"
+
+    # Mark corridor entrances to secret rooms as breakable/hidden walls
+    if grid is not None:
+        for room in rooms:
+            if room.room_type != "secret":
+                continue
+            g_h, g_w = grid.shape
+            # Check horizontal edges (top and bottom of room)
+            for x in range(room.x, room.x2):
+                for edge_y in [room.y - 1, room.y2]:
+                    if 0 <= edge_y < g_h and 0 <= x < g_w and grid[edge_y, x] == 2:
+                        grid[edge_y, x] = 3  # hidden wall (breakable)
+                        break
+            # Check vertical edges (left and right of room)
+            for y in range(room.y, room.y2):
+                for edge_x in [room.x - 1, room.x2]:
+                    if 0 <= y < g_h and 0 <= edge_x < g_w and grid[y, edge_x] == 2:
+                        grid[y, edge_x] = 3  # hidden wall (breakable)
+                        break
 
 
 def _place_spawn_points(

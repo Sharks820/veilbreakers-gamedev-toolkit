@@ -736,6 +736,12 @@ def handle_generate_road(params: dict) -> dict:
     height_scale = heights.max() if heights.max() > 0 else 1.0
     heightmap = (heights / height_scale).reshape(side, side)
 
+    # Convert width from meters to grid cells if it looks like meters
+    terrain_scale = obj.dimensions.x if obj.dimensions.x > 0 else 100.0
+    cell_size = terrain_scale / max(side - 1, 1)
+    if width > 10:  # likely specified in meters, not cells
+        width = max(1, int(width / cell_size))
+
     path, graded = generate_road_path(
         heightmap, waypoints=waypoints,
         width=width, grade_strength=grade_strength, seed=seed,
@@ -813,9 +819,9 @@ def handle_generate_road(params: dict) -> dict:
     bpy.context.collection.objects.link(road_obj)
 
     # Apply cobblestone material
-    from .procedural_materials import create_material_from_library
+    from .procedural_materials import create_procedural_material
     try:
-        road_mat = create_material_from_library("cobblestone")
+        road_mat = create_procedural_material(road_mesh_name, "cobblestone_floor")
         if road_mat:
             road_mesh_data.materials.append(road_mat)
     except Exception:
@@ -957,10 +963,15 @@ def handle_create_water(params: dict) -> dict:
         flow_dir_x = (tx + 1.0) * 0.5
         flow_dir_z = (ty + 1.0) * 0.5
 
-        # Flow speed: proportional to position along path (simple proxy)
-        # Narrower effective width at bends -> faster
-        t_along = pi / max(num_segs, 1)
-        flow_speed = 0.3 + t_along * 0.5  # ramps from 0.3 to 0.8 along length
+        # Flow speed: terrain-aware based on channel slope
+        if pi > 0:
+            prev_pt = path[pi - 1]
+            dz = abs(pz - prev_pt[2])
+            dx_dist = math.sqrt((px - prev_pt[0]) ** 2 + (py - prev_pt[1]) ** 2)
+            slope = dz / max(dx_dist, 0.1)
+            flow_speed = min(1.0, 0.2 + slope * 3.0)
+        else:
+            flow_speed = 0.3
 
         ring_verts = []
         for ci in range(cross_sections + 1):
@@ -1231,9 +1242,13 @@ def handle_generate_multi_biome_world(params: dict) -> dict:
     )
 
     # --- 2. Generate base terrain mesh ---
+    # Determine terrain type from dominant biome instead of hardcoding "mountain"
+    dominant_biome = biomes[0] if biomes else (spec.biome_names[0] if spec.biome_names else "hills")
+    biome_preset = get_vb_biome_preset(dominant_biome)
+    base_terrain_type = biome_preset["terrain_type"] if biome_preset else "hills"
     terrain_params = {
         "name": name,
-        "terrain_type": "mountain",   # base heightmap type
+        "terrain_type": base_terrain_type,
         "resolution": width,
         "height_scale": params.get("height_scale", 80.0),
         "scale": world_size,
