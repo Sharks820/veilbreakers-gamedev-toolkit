@@ -555,17 +555,28 @@ def handle_auto_weight(params: dict) -> dict:
         method = "envelope"
         with bpy.context.temp_override(**ctx):
             bpy.ops.object.parent_set(type="ARMATURE_ENVELOPE")
+        logger.warning(
+            "Heat diffusion failed for %s — fell back to envelope weights. "
+            "Quality will be poor. Manual weight painting recommended.",
+            mesh_obj.name,
+        )
 
     # Gather vertex group info
     vgroups = [vg.name for vg in mesh_obj.vertex_groups]
 
-    return {
+    result = {
         "vertex_group_count": len(vgroups),
         "vertex_groups": vgroups,
         "method": method,
         "mesh": mesh_name,
         "armature": armature_name,
     }
+    if method == "envelope":
+        result["weight_method"] = "envelope_fallback"
+        result["quality_warning"] = (
+            "Envelope weights produce poor deformation. Manual painting needed."
+        )
+    return result
 
 
 def handle_test_deformation(params: dict) -> dict:

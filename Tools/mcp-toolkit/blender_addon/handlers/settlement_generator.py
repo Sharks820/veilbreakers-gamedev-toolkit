@@ -451,6 +451,8 @@ _BUILDING_ROOMS: dict[str, list[str]] = {
     "bakery": ["kitchen", "kitchen", "storage"],
     "house": ["bedroom", "kitchen", "storage"],
     "guard_barracks": ["barracks", "barracks", "guard_post", "storage"],
+    "manor": ["great_hall", "bedroom", "bedroom", "study", "storage", "kitchen"],
+    "guild_hall": ["great_hall", "study", "storage", "armory"],
 }
 
 # Furniture bounding boxes (width, depth) for collision checks
@@ -2293,14 +2295,21 @@ def generate_concentric_districts(
         bx, by = bld["position"]
         fp = bld.get("footprint", (6.0, 6.0))
         num_floors = bld.get("floors", 1)
-        room_height = fp[1] / max(len(rooms), 1)
         room_furnishings: list[dict[str, Any]] = []
         building_lights: list[dict[str, Any]] = []
+        # Distribute rooms across floors instead of duplicating all on every floor
+        rooms_per_floor: dict[int, list[tuple[int, str]]] = {}
+        for ri, room_type in enumerate(rooms):
+            floor_idx = ri % max(1, num_floors)
+            rooms_per_floor.setdefault(floor_idx, []).append((ri, room_type))
         for floor in range(max(1, num_floors)):
-            for ri, room_type in enumerate(rooms):
+            floor_rooms = rooms_per_floor.get(floor, [(0, rooms[0])] if rooms else [])
+            floor_room_count = max(len(floor_rooms), 1)
+            floor_room_height = fp[1] / floor_room_count
+            for local_ri, (ri, room_type) in enumerate(floor_rooms):
                 room_bounds = {
-                    "min": (bx - fp[0] / 2, by - fp[1] / 2 + ri * room_height),
-                    "max": (bx + fp[0] / 2, by - fp[1] / 2 + (ri + 1) * room_height),
+                    "min": (bx - fp[0] / 2, by - fp[1] / 2 + local_ri * floor_room_height),
+                    "max": (bx + fp[0] / 2, by - fp[1] / 2 + (local_ri + 1) * floor_room_height),
                 }
                 room_rng = random.Random(bld["unique_seed"] + ri + floor * 1000)
                 room_seed = room_rng.randint(0, 2**31)
@@ -2333,6 +2342,16 @@ def generate_concentric_districts(
                     lt["floor"] = floor
                     lt["building_index"] = idx
                 building_lights.extend(room_lights)
+            # Add staircase between floors (except top floor)
+            if floor < num_floors - 1:
+                stair_item = {
+                    "type": "stairs",
+                    "position": [fp[0] * 0.8, fp[1] * 0.5, 0.0],
+                    "rotation": 0.0,
+                    "scale": [1.0, 1.0, 1.0],
+                    "floor": floor,
+                }
+                room_furnishings.append(stair_item)
         if room_furnishings:
             interiors[idx] = room_furnishings
         all_lights.extend(building_lights)

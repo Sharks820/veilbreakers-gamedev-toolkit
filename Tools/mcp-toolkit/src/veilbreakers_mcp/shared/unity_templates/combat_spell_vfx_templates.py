@@ -286,7 +286,7 @@ _CS_PARTICLE_HELPER = '''
         var emission = ps.emission;
         emission.enabled = true;
         emission.SetBursts(new ParticleSystem.Burst[] {
-            new ParticleSystem.Burst(0f, (short)count)
+            new ParticleSystem.Burst(0f, (int)count)
         });
     }
 
@@ -295,7 +295,7 @@ _CS_PARTICLE_HELPER = '''
         if (_particleMat == null)
         {
             var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-            if (shader == null) shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            if (shader == null) shader = Shader.Find("Particles/Standard Unlit");
             _particleMat = new Material(shader);
             _particleMat.SetFloat("_Surface", 1f); // Transparent
             _particleMat.SetFloat("_Blend", 0f);   // Alpha
@@ -310,7 +310,7 @@ _CS_PARTICLE_HELPER = '''
         if (_additiveMat == null)
         {
             var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
-            if (shader == null) shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            if (shader == null) shader = Shader.Find("Particles/Standard Unlit");
             _additiveMat = new Material(shader);
             _additiveMat.SetFloat("_Surface", 1f); // Transparent
             _additiveMat.SetFloat("_Blend", 1f);   // Additive
@@ -361,7 +361,7 @@ def generate_spell_vfx_script(spell_type: str = "fireball") -> dict[str, Any]:
     if spell_type not in SPELL_CONFIGS:
         spell_type = "fireball"
 
-    sanitize_cs_identifier(spell_type)
+    spell_type = sanitize_cs_identifier(spell_type)
     spell_configs_block = _spell_configs_cs()
 
     script = f'''using UnityEngine;
@@ -1109,7 +1109,7 @@ def generate_monster_ability_vfx_script(ability_type: str = "breath_weapon") -> 
     if ability_type not in MONSTER_ABILITY_CONFIGS:
         ability_type = "breath_weapon"
 
-    sanitize_cs_identifier(ability_type)
+    ability_type = sanitize_cs_identifier(ability_type)
     ability_configs_block = _monster_ability_configs_cs()
     brand_primary_block = _brand_color_dict_cs("BrandPrimary", BRAND_PRIMARY_COLORS)
     brand_glow_block = _brand_color_dict_cs("BrandGlow", BRAND_GLOW_COLORS)

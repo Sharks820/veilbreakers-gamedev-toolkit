@@ -794,7 +794,7 @@ _CS_ARCHETYPE_SUMMON_CIRCLE = r'''
             ringGO.transform.rotation = Quaternion.Euler(90f, 0f, 0f);
             var ringPS = AddParticleSystem(ringGO, glow, runeCount, lifetime, 0.12f * scale);
             var ringEmit = ringPS.emission; ringEmit.rateOverTime = 0;
-            ringEmit.SetBursts(new[] { new ParticleSystem.Burst(0f, (short)runeCount) });
+            ringEmit.SetBursts(new[] { new ParticleSystem.Burst(0f, (int)runeCount) });
             var ringShape = ringPS.shape;
             ringShape.shapeType = ParticleSystemShapeType.Circle;
             ringShape.radius = radius; ringShape.radiusThickness = 0f;

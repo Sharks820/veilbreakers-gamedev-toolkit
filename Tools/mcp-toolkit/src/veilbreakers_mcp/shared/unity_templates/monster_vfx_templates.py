@@ -750,7 +750,7 @@ public class MonsterSignatureVFXController : MonoBehaviour
         if (config.BurstCount > 0)
         {{
             emission.SetBursts(new ParticleSystem.Burst[] {{
-                new ParticleSystem.Burst(0f, (short)(config.BurstCount * intensityMultiplier))
+                new ParticleSystem.Burst(0f, (int)(config.BurstCount * intensityMultiplier))
             }});
         }}
 
@@ -1208,7 +1208,7 @@ public class HybridBrandVFXController : MonoBehaviour
         if (config.BurstCount > 0)
         {{
             emission.SetBursts(new ParticleSystem.Burst[] {{
-                new ParticleSystem.Burst(0f, (short)config.BurstCount)
+                new ParticleSystem.Burst(0f, (int)config.BurstCount)
             }});
         }}
 
@@ -1844,7 +1844,7 @@ public class ExecuteThresholdVFXController : MonoBehaviour
 
         var emission = brandExecutePS.emission;
         emission.SetBursts(new ParticleSystem.Burst[] {{
-            new ParticleSystem.Burst(0f, (short)config.BurstCount)
+            new ParticleSystem.Burst(0f, (int)config.BurstCount)
         }});
 
         // Inward pull for drain-type brands

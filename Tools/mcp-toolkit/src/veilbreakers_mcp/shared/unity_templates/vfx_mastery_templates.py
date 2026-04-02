@@ -862,7 +862,7 @@ public class VB_ProjectileVFX_{safe_name} : MonoBehaviour
         if (burst)
         {{
             emission.SetBursts(new ParticleSystem.Burst[] {{
-                new ParticleSystem.Burst(0f, (short)rate)
+                new ParticleSystem.Burst(0f, (int)rate)
             }});
         }}
 
@@ -2234,7 +2234,7 @@ public class VB_HitVFX_{brand} : MonoBehaviour
         var emission = ps.emission;
         emission.rateOverTime = 0;
         emission.SetBursts(new ParticleSystem.Burst[] {{
-            new ParticleSystem.Burst(0f, (short)(burstParticleCount * magnitude))
+            new ParticleSystem.Burst(0f, (int)(burstParticleCount * magnitude))
         }});
 
         // Cone shape facing hit direction
@@ -2284,7 +2284,7 @@ public class VB_HitVFX_{brand} : MonoBehaviour
         var emission = ps.emission;
         emission.rateOverTime = 0;
         emission.SetBursts(new ParticleSystem.Burst[] {{
-            new ParticleSystem.Burst(0.05f, (short)(burstParticleCount * 0.3f * magnitude))
+            new ParticleSystem.Burst(0.05f, (int)(burstParticleCount * 0.3f * magnitude))
         }});
 
         var shape = ps.shape;

@@ -2704,7 +2704,7 @@ def _create_road_with_curbs(
 
     # Apply cobblestone PBR material
     try:
-        mat = create_procedural_material(obj_name, "cobblestone")
+        mat = create_procedural_material(obj_name, "cobblestone_floor")
         if mat is not None:
             mesh.materials.append(mat)
     except (RuntimeError, TypeError, ValueError) as exc:
@@ -2778,7 +2778,7 @@ def _create_intersection_patch(
 
     # Apply cobblestone PBR material
     try:
-        mat = create_procedural_material(obj_name, "cobblestone")
+        mat = create_procedural_material(obj_name, "cobblestone_floor")
         if mat is not None:
             mesh.materials.append(mat)
     except (RuntimeError, TypeError, ValueError) as exc:

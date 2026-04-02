@@ -234,7 +234,9 @@ def generate_vfx_animation_bridge_script() -> dict[str, Any]:
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+#if PRIME_TWEEN
 using PrimeTween;
+#endif
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -522,7 +524,9 @@ namespace VeilBreakers.VFX
                 {{
                     float duration = Mathf.Lerp(0.1f, 0.4f, intensity);
                     float strength = Mathf.Lerp(0.05f, 0.3f, intensity);
-                    Tween.ShakeCamera(cam, strength, duration);
+#if PRIME_TWEEN
+                    Tween.ShakeLocalPosition(cam.transform, strength: strength, duration: duration);
+#endif
                 }}
             }}
 
@@ -735,10 +739,14 @@ namespace VeilBreakers.VFX
             yield return new WaitForSecondsRealtime(duration);
 
             // Smoothly restore time scale
+#if PRIME_TWEEN
             Tween.Custom(0.02f, prevTimeScale, 0.08f,
                 onValueChange: val => Time.timeScale = val,
                 useUnscaledTime: true
             );
+#else
+            Time.timeScale = prevTimeScale;
+#endif
         }}
 
         // =================================================================

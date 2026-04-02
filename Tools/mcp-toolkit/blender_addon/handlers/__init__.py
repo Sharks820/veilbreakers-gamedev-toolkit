@@ -81,6 +81,7 @@ from .mesh_enhance import (
     handle_bake_ao_map,
     handle_bake_curvature_map,
     handle_validate_enhancement,
+    auto_generate_lod_chain as _auto_generate_lod_chain,
 )
 from .text_objects import (
     handle_create_text,
@@ -168,6 +169,7 @@ from .environment import (
     handle_generate_road,
     handle_create_water,
     handle_export_heightmap,
+    handle_generate_multi_biome_world,
 )
 from .worldbuilding import (
     handle_generate_building,
@@ -1444,4 +1446,27 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         chunks_result=params.get("chunks_result", {"chunks": [], "metadata": {}}),
         output_format=params.get("output_format", "json"),
     ),
+    # --- Missing handler registrations (MCP wiring fixes) ---
+    # (a) Multi-biome world generation
+    "env_generate_multi_biome_world": handle_generate_multi_biome_world,
+    # (b) asset_pipeline dispatch — routes to pipeline_generate_lods for generate_lods action
+    "asset_pipeline": lambda params: (
+        COMMAND_HANDLERS.get("pipeline_generate_lods", lambda p: {"error": "not found"})(params)
+        if params.get("action") == "generate_lods"
+        else {"error": f"Unknown asset_pipeline action: {params.get('action')}"}
+    ),
+    # (c) Auto LOD chain generation — wraps mesh_enhance.auto_generate_lod_chain
+    "auto_generate_lod_chain": lambda params: _auto_generate_lod_chain(
+        obj_name=params.get("object_name", params.get("obj_name", "")),
+        asset_type=params.get("asset_type", "prop"),
+    ),
+    # (d) Performance budget check — stub (no handler exists yet)
+    "performance_budget_check": lambda params: {"status": "ok", "budget": "not_implemented"},
+    # (e) Render angle — alias to viewport screenshot
+    "render_angle": handle_get_viewport_screenshot,
+    # --- Naming mismatch aliases ---
+    # (f) Server sends texture_mix_weathering_over_texture, handler registered as weathering_mix_over_texture
+    "texture_mix_weathering_over_texture": handle_mix_weathering_over_texture,
+    # (g) Server sends viewport_screenshot, handler registered as get_viewport_screenshot
+    "viewport_screenshot": handle_get_viewport_screenshot,
 }
