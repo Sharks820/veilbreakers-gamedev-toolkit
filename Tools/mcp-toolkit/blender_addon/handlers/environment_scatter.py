@@ -5,11 +5,19 @@ Provides 3 command handlers:
     collection instances for performance.
   - handle_scatter_props: Context-aware prop placement near tagged buildings.
   - handle_create_breakable: Generate intact + damaged variant pairs.
+
+AAA upgrades (39-02):
+  - Leaf card canopies (6-12 intersecting planes) replace UV sphere tree blobs
+  - 6-biome grass card system with wind vertex colors
+  - Multi-pass scatter: trees -> grass -> rocks with building exclusion
+  - Combat clearing generator (15-40m diameter with tree rings + entry paths)
+  - Rock power-law size distribution (70% small, 25% medium, 5% large)
 """
 
 from __future__ import annotations
 
 import math
+import random
 from typing import Any
 
 import numpy as np
@@ -392,6 +400,683 @@ def _create_vegetation_template(
     _assign_scatter_material(obj, veg_type)
 
     return obj
+
+
+# ---------------------------------------------------------------------------
+# AAA: Grass card biome specs
+# ---------------------------------------------------------------------------
+
+# sRGB -> linear: (v/255)^2.2
+_GRASS_BIOME_SPECS: dict[str, dict[str, Any]] = {
+    "prairie": {
+        "height_min": 0.5,
+        "height_max": 1.2,
+        # sRGB(140,160,60) -> linear
+        "color": (0.242, 0.349, 0.043, 1.0),
+    },
+    "forest": {
+        "height_min": 0.1,
+        "height_max": 0.3,
+        # sRGB(50,80,30) -> linear
+        "color": (0.031, 0.079, 0.013, 1.0),
+    },
+    "swamp": {
+        "height_min": 0.8,
+        "height_max": 2.0,
+        # sRGB(100,120,50) -> linear
+        "color": (0.118, 0.176, 0.031, 1.0),
+    },
+    "mountain": {
+        "height_min": 0.05,
+        "height_max": 0.15,
+        # sRGB(90,100,70) -> linear
+        "color": (0.089, 0.118, 0.058, 1.0),
+    },
+    "corrupted": {
+        "height_min": 0.3,
+        "height_max": 0.8,
+        # sRGB(30,25,35) -> linear
+        "color": (0.013, 0.010, 0.018, 1.0),
+    },
+    "dead": {
+        "height_min": 0.2,
+        "height_max": 0.5,
+        # sRGB(120,90,40) -> linear
+        "color": (0.196, 0.099, 0.021, 1.0),
+    },
+}
+
+# Biome density factors for Pass 1 (tree/bush scatter)
+_BIOME_DENSITY: dict[str, float] = {
+    "dark_forest": 0.8,
+    "corrupted_wasteland": 0.05,
+    "swamp": 0.5,
+    "mountain": 0.2,
+    "grassy_plains": 0.65,
+    "prairie": 0.65,
+    "forest": 0.8,
+    "dead": 0.3,
+    "default": 0.5,
+}
+
+
+# ---------------------------------------------------------------------------
+# AAA: Leaf card canopy helper
+# ---------------------------------------------------------------------------
+
+def _add_leaf_card_canopy(
+    bm: "bmesh.types.BMesh",
+    canopy_center: tuple[float, float, float],
+    canopy_radius: float,
+    num_planes: int,
+    rng: random.Random,
+) -> None:
+    """Add 6-12 intersecting leaf card planes to a bmesh for a tree canopy.
+
+    Planes are grouped as:
+    - 3 vertical planes at 0, 60, 120 degree intervals
+    - num_planes-3 angled planes at 30-45 degrees from vertical
+
+    Each plane is sized to canopy_radius and given a small random offset
+    (0-0.3m) for organic variety.
+
+    Wind vertex colors are painted:
+      R=flutter (1.0), G=random phase, B=amplitude gradient, A=0 (tips only)
+    """
+    cx, cy, cz = canopy_center
+    r = canopy_radius
+
+    # Ensure wind vertex color layer exists
+    wind_layer = bm.verts.layers.float_color.get("wind_vc")
+    if wind_layer is None:
+        wind_layer = bm.verts.layers.float_color.new("wind_vc")
+
+    planes_added = 0
+
+    # 3 vertical planes at 60-degree intervals
+    for i in range(3):
+        angle = math.radians(i * 60.0)
+        offset_x = rng.uniform(-0.3, 0.3)
+        offset_y = rng.uniform(-0.3, 0.3)
+        px = cx + offset_x
+        py = cy + offset_y
+
+        # Plane normal is horizontal (perpendicular to rotation angle)
+        nx = math.sin(angle)
+        ny = math.cos(angle)
+
+        # 4 corners of the plane: half-width along tangent, half-height along Z
+        tx = -ny
+        ty = nx
+        corners = [
+            (px + tx * r,  py + ty * r,  cz - r * 0.5),
+            (px - tx * r,  py - ty * r,  cz - r * 0.5),
+            (px - tx * r,  py - ty * r,  cz + r * 0.8),
+            (px + tx * r,  py + ty * r,  cz + r * 0.8),
+        ]
+        verts = [bm.verts.new(c) for c in corners]
+        phase = rng.random()
+        for vi, v in enumerate(verts):
+            # Bottom verts: lower amplitude; top verts: full flutter
+            height_t = vi // 2  # 0 for bottom row, 1 for top row
+            v[wind_layer] = (
+                float(height_t),   # R = flutter (1.0 at tips)
+                phase,             # G = per-cluster phase
+                height_t * 0.85,   # B = branch sway amplitude
+                0.0,               # A = trunk sway (0 for leaf tips, used at trunk)
+            )
+        try:
+            bm.faces.new(verts)
+        except ValueError:
+            pass
+        planes_added += 1
+
+    # Angled planes at 30-45 degrees from vertical
+    remaining = num_planes - 3
+    for i in range(remaining):
+        angle = math.radians(i * (360.0 / max(remaining, 1)) + 15.0)
+        tilt = math.radians(rng.uniform(30.0, 45.0))
+        offset_x = rng.uniform(-0.25, 0.25)
+        offset_y = rng.uniform(-0.25, 0.25)
+        px = cx + offset_x
+        py = cy + offset_y
+
+        # Tangent direction for the plane width
+        tx = math.cos(angle)
+        ty = math.sin(angle)
+        # Z contribution of tilt
+        tz_scale = math.cos(tilt)
+        plane_h = r * math.sin(tilt)
+
+        corners = [
+            (px + tx * r,  py + ty * r,  cz - plane_h * 0.4),
+            (px - tx * r,  py - ty * r,  cz - plane_h * 0.4),
+            (px - tx * r * tz_scale,  py - ty * r * tz_scale,  cz + plane_h * 0.8),
+            (px + tx * r * tz_scale,  py + ty * r * tz_scale,  cz + plane_h * 0.8),
+        ]
+        verts = [bm.verts.new(c) for c in corners]
+        phase = rng.random()
+        for vi, v in enumerate(verts):
+            height_t = vi // 2
+            v[wind_layer] = (
+                float(height_t),
+                phase,
+                height_t * 0.85,
+                0.0,
+            )
+        try:
+            bm.faces.new(verts)
+        except ValueError:
+            pass
+        planes_added += 1
+
+
+def create_leaf_card_tree(
+    position: tuple[float, float, float],
+    height: float = 5.0,
+    canopy_radius: float = 2.5,
+    num_planes: int = 8,
+    seed: int = 42,
+) -> "bpy.types.Object":
+    """Create a tree with a leaf card canopy (SpeedTree-style).
+
+    Replaces the UV sphere blob with 6-12 intersecting alpha planes.
+
+    Returns the created Blender object.
+    """
+    rng = random.Random(seed)
+    name = f"LeafCardTree_{seed}"
+
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+
+    # Trunk: simple tapered cylinder approximated as extruded polygon
+    trunk_radius = height * 0.06
+    trunk_segments = 6
+    trunk_verts_bottom = []
+    trunk_verts_top = []
+    for i in range(trunk_segments):
+        angle = math.radians(i * 360.0 / trunk_segments)
+        x = math.cos(angle) * trunk_radius
+        y = math.sin(angle) * trunk_radius
+        trunk_verts_bottom.append(bm.verts.new((position[0] + x, position[1] + y, position[2])))
+        trunk_verts_top.append(bm.verts.new((
+            position[0] + x * 0.7,
+            position[1] + y * 0.7,
+            position[2] + height * 0.55,
+        )))
+
+    # Trunk wind vertex colors: A=trunk_sway gradient
+    wind_layer = bm.verts.layers.float_color.new("wind_vc")
+    for v in trunk_verts_bottom:
+        v[wind_layer] = (0.0, 0.0, 0.0, 0.0)  # base: no sway
+    for v in trunk_verts_top:
+        v[wind_layer] = (0.0, 0.0, 0.2, 0.6)  # top of trunk: moderate sway
+
+    # Create trunk faces
+    for i in range(trunk_segments):
+        j = (i + 1) % trunk_segments
+        try:
+            bm.faces.new([
+                trunk_verts_bottom[i],
+                trunk_verts_bottom[j],
+                trunk_verts_top[j],
+                trunk_verts_top[i],
+            ])
+        except ValueError:
+            pass
+
+    # Canopy: leaf card planes
+    canopy_center = (
+        position[0],
+        position[1],
+        position[2] + height * 0.65,
+    )
+    num_planes_clamped = max(6, min(12, num_planes))
+    _add_leaf_card_canopy(bm, canopy_center, canopy_radius, num_planes_clamped, rng)
+
+    bm.to_mesh(mesh)
+    bm.free()
+
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)
+    return obj
+
+
+# ---------------------------------------------------------------------------
+# AAA: Grass card system
+# ---------------------------------------------------------------------------
+
+def _create_grass_card(
+    biome: str = "prairie",
+    seed: int = 0,
+    collection: "bpy.types.Collection | None" = None,
+) -> "bpy.types.Object":
+    """Create a single grass card mesh for the given biome.
+
+    Geometry: 1-3 quads with a V-bend for depth illusion (3-6 tris per tuft).
+    Wind vertex colors: R=1.0 at tips, G=random phase, B=0.5-1.0 gradient, A=0.
+
+    Returns the created Blender object.
+    """
+    rng = random.Random(seed)
+    spec = _GRASS_BIOME_SPECS.get(biome, _GRASS_BIOME_SPECS["prairie"])
+    height = rng.uniform(spec["height_min"], spec["height_max"])
+    color = spec["color"]
+
+    name = f"GrassCard_{biome}_{seed}"
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+
+    wind_layer = bm.verts.layers.float_color.new("wind_vc")
+    phase = rng.random()
+
+    # Main blade: 2 quads (V-bend at midpoint)
+    # Bottom quad
+    mid_z = height * 0.5
+    bend_offset = height * 0.08  # slight forward bend at midpoint
+    w = height * 0.18  # blade width proportional to height
+
+    v0 = bm.verts.new((-w, 0.0, 0.0))
+    v1 = bm.verts.new((w, 0.0, 0.0))
+    v2 = bm.verts.new((w * 0.6, bend_offset, mid_z))
+    v3 = bm.verts.new((-w * 0.6, bend_offset, mid_z))
+
+    # Top quad (tapers to a point-ish tip)
+    v4 = bm.verts.new((w * 0.15, bend_offset * 2, height))
+    v5 = bm.verts.new((-w * 0.15, bend_offset * 2, height))
+
+    # Wind colors: base=no flutter, mid=partial, tip=full
+    v0[wind_layer] = (0.0, phase, 0.0, 0.0)
+    v1[wind_layer] = (0.0, phase, 0.0, 0.0)
+    v2[wind_layer] = (0.5, phase, 0.55, 0.0)
+    v3[wind_layer] = (0.5, phase, 0.55, 0.0)
+    v4[wind_layer] = (1.0, phase, 1.0, 0.0)
+    v5[wind_layer] = (1.0, phase, 1.0, 0.0)
+
+    try:
+        bm.faces.new([v0, v1, v2, v3])
+    except ValueError:
+        pass
+    try:
+        bm.faces.new([v3, v2, v4, v5])
+    except ValueError:
+        pass
+
+    # Optional: second crossing blade rotated 60 degrees for volume
+    angle2 = math.radians(60.0)
+    cos_a, sin_a = math.cos(angle2), math.sin(angle2)
+    w2 = w * 0.85
+
+    def rot(x: float, y: float) -> tuple[float, float]:
+        return x * cos_a - y * sin_a, x * sin_a + y * cos_a
+
+    rx0, ry0 = rot(-w2, 0.0)
+    rx1, ry1 = rot(w2, 0.0)
+    rx2, ry2 = rot(w2 * 0.6, bend_offset)
+    rx3, ry3 = rot(-w2 * 0.6, bend_offset)
+    rx4, ry4 = rot(w2 * 0.15, bend_offset * 2)
+    rx5, ry5 = rot(-w2 * 0.15, bend_offset * 2)
+
+    phase2 = rng.random()
+    b0 = bm.verts.new((rx0, ry0, 0.0))
+    b1 = bm.verts.new((rx1, ry1, 0.0))
+    b2 = bm.verts.new((rx2, ry2, mid_z))
+    b3 = bm.verts.new((rx3, ry3, mid_z))
+    b4 = bm.verts.new((rx4, ry4, height))
+    b5 = bm.verts.new((rx5, ry5, height))
+
+    b0[wind_layer] = (0.0, phase2, 0.0, 0.0)
+    b1[wind_layer] = (0.0, phase2, 0.0, 0.0)
+    b2[wind_layer] = (0.5, phase2, 0.55, 0.0)
+    b3[wind_layer] = (0.5, phase2, 0.55, 0.0)
+    b4[wind_layer] = (1.0, phase2, 1.0, 0.0)
+    b5[wind_layer] = (1.0, phase2, 1.0, 0.0)
+
+    try:
+        bm.faces.new([b0, b1, b2, b3])
+    except ValueError:
+        pass
+    try:
+        bm.faces.new([b3, b2, b4, b5])
+    except ValueError:
+        pass
+
+    bm.to_mesh(mesh)
+    bm.free()
+
+    # Material
+    mat_name = f"mat_grass_{biome}"
+    mat = bpy.data.materials.get(mat_name)
+    if mat is None:
+        mat = bpy.data.materials.new(name=mat_name)
+        mat.use_nodes = True
+        if mat.node_tree:
+            bsdf = mat.node_tree.nodes.get("Principled BSDF")
+            if bsdf:
+                bsdf.inputs["Base Color"].default_value = color
+                if "Roughness" in bsdf.inputs:
+                    bsdf.inputs["Roughness"].default_value = 0.88
+    mesh.materials.append(mat)
+
+    obj = bpy.data.objects.new(name, mesh)
+    if collection is not None:
+        collection.objects.link(obj)
+    else:
+        bpy.context.collection.objects.link(obj)
+    return obj
+
+
+# ---------------------------------------------------------------------------
+# AAA: Rock power-law distribution
+# ---------------------------------------------------------------------------
+
+def _rock_size_from_power_law(rng: random.Random) -> tuple[float, str]:
+    """Sample a rock size using power-law distribution.
+
+    Returns (scale, size_class) where size_class is 'small', 'medium', 'large'.
+    Distribution: 70% small (0.1-0.3m), 25% medium (0.3-1.0m), 5% large (1.0-3.0m).
+    """
+    roll = rng.random()
+    if roll < 0.70:
+        return rng.uniform(0.1, 0.3), "small"
+    elif roll < 0.95:
+        return rng.uniform(0.3, 1.0), "medium"
+    else:
+        return rng.uniform(1.0, 3.0), "large"
+
+
+# ---------------------------------------------------------------------------
+# AAA: Combat clearing generator
+# ---------------------------------------------------------------------------
+
+def _generate_combat_clearing(
+    center: tuple[float, float, float],
+    diameter: float,
+    num_entries: int = 3,
+    seed: int = 42,
+) -> dict[str, Any]:
+    """Generate a combat clearing: circular area 15-40m diameter.
+
+    Creates a tree ring around the perimeter with num_entries gaps for paths.
+
+    Parameters
+    ----------
+    center : (x, y, z)
+        World position of clearing center.
+    diameter : float
+        Diameter in meters, clamped to [15, 40].
+    num_entries : int
+        Number of entry path gaps in the tree ring, clamped to [2, 4].
+    seed : int
+        Random seed.
+
+    Returns
+    -------
+    dict with keys: center, radius, entry_points, tree_positions,
+                    tree_count, cleared_area_m2
+    """
+    diameter = max(15.0, min(40.0, diameter))
+    radius = diameter / 2.0
+    num_entries = max(2, min(4, num_entries))
+    rng = random.Random(seed)
+    cx, cy, cz = center
+
+    # Entry path angles: evenly spaced with slight random offset
+    base_angle_step = 360.0 / num_entries
+    entry_angles = [
+        math.radians(i * base_angle_step + rng.uniform(-10.0, 10.0))
+        for i in range(num_entries)
+    ]
+
+    # Tree ring: trees at 3-5m spacing around circumference
+    tree_spacing = rng.uniform(3.0, 5.0)
+    circumference = 2.0 * math.pi * radius
+    num_trees_full = int(circumference / tree_spacing)
+    entry_gap_half_angle = math.asin(min(1.0, 2.0 / radius))  # ~2m half-gap
+
+    tree_positions = []
+    for i in range(num_trees_full):
+        angle = 2.0 * math.pi * i / num_trees_full
+        # Check if this angle is within an entry gap
+        in_gap = False
+        for ea in entry_angles:
+            diff = abs(angle - ea)
+            diff = min(diff, 2.0 * math.pi - diff)
+            if diff < entry_gap_half_angle:
+                in_gap = True
+                break
+        if not in_gap:
+            jitter_r = radius + rng.uniform(-0.5, 0.5)
+            tx = cx + math.cos(angle) * jitter_r
+            ty = cy + math.sin(angle) * jitter_r
+            tree_positions.append((tx, ty, cz))
+
+    # Entry path endpoints (outside the ring, 2m beyond edge)
+    entry_points = []
+    for ea in entry_angles:
+        ex = cx + math.cos(ea) * (radius + 2.0)
+        ey = cy + math.sin(ea) * (radius + 2.0)
+        entry_points.append((ex, ey, cz))
+
+    cleared_area = math.pi * radius * radius
+
+    return {
+        "center": center,
+        "radius": radius,
+        "entry_points": entry_points,
+        "tree_positions": tree_positions,
+        "tree_count": len(tree_positions),
+        "cleared_area_m2": cleared_area,
+    }
+
+
+# ---------------------------------------------------------------------------
+# AAA: Multi-pass scatter internal helper
+# ---------------------------------------------------------------------------
+
+def _scatter_pass(
+    heightmap: np.ndarray,
+    slope_map: np.ndarray,
+    terrain_size: float,
+    pass_type: str,
+    biome: str = "default",
+    seed: int = 0,
+    building_zones: "list[tuple[float, float, float, float]] | None" = None,
+    tree_positions: "list[tuple[float, float]] | None" = None,
+    combat_clearings: "list[dict] | None" = None,
+) -> list[dict[str, Any]]:
+    """Execute a single scatter pass (structure, ground_cover, or debris).
+
+    Parameters
+    ----------
+    heightmap : np.ndarray
+        Normalized 2D heightmap [0,1].
+    slope_map : np.ndarray
+        Slope in degrees.
+    terrain_size : float
+        World-space terrain size in meters.
+    pass_type : str
+        One of "structure" (trees/bushes), "ground_cover" (grass/flowers),
+        "debris" (rocks/sticks).
+    biome : str
+        Biome key for density lookup.
+    seed : int
+        Random seed.
+    building_zones : list of (min_x, min_y, max_x, max_y)
+        Axis-aligned bounding boxes to exclude.
+    tree_positions : list of (x, y)
+        Already-placed tree positions to avoid within 1m (for grass pass).
+    combat_clearings : list of clearing dicts
+        Reserved clearing areas.
+
+    Returns
+    -------
+    list of placement dicts with keys: position, vegetation_type, rotation, scale.
+    """
+    rng = random.Random(seed)
+    density_factor = _BIOME_DENSITY.get(biome, 0.5)
+    side = heightmap.shape[0]
+    terrain_half = terrain_size / 2.0
+
+    placements: list[dict[str, Any]] = []
+
+    if pass_type == "structure":
+        # Poisson disk: large trees (4-8m min distance), bushes (2-4m)
+        tree_candidates = poisson_disk_sample(terrain_size, terrain_size, 5.0, seed=seed)
+        bush_candidates = poisson_disk_sample(terrain_size, terrain_size, 2.5, seed=seed + 1)
+
+        def _sample_height_norm(pos: tuple[float, float]) -> float:
+            u = pos[0] / terrain_size
+            v = pos[1] / terrain_size
+            ci = int(u * (side - 1))
+            ri = int(v * (side - 1))
+            ci = max(0, min(ci, side - 1))
+            ri = max(0, min(ri, side - 1))
+            return float(heightmap[ri, ci])
+
+        def _sample_slope(pos: tuple[float, float]) -> float:
+            u = pos[0] / terrain_size
+            v = pos[1] / terrain_size
+            ci = int(u * (side - 1))
+            ri = int(v * (side - 1))
+            ci = max(0, min(ci, side - 1))
+            ri = max(0, min(ri, side - 1))
+            return float(slope_map[ri, ci])
+
+        def _in_building(wx: float, wy: float) -> bool:
+            if not building_zones:
+                return False
+            for bz in building_zones:
+                if bz[0] <= wx <= bz[2] and bz[1] <= wy <= bz[3]:
+                    return True
+            return False
+
+        def _in_clearing(wx: float, wy: float) -> bool:
+            if not combat_clearings:
+                return False
+            for cl in combat_clearings:
+                cx, cy = cl["center"][0], cl["center"][1]
+                if math.sqrt((wx - cx) ** 2 + (wy - cy) ** 2) < cl["radius"]:
+                    return True
+            return False
+
+        for pos in tree_candidates:
+            wx = pos[0] - terrain_half
+            wy = pos[1] - terrain_half
+            h = _sample_height_norm(pos)
+            sl = _sample_slope(pos)
+            if sl > 30.0 or h < 0.1 or h > 0.7:
+                continue
+            if _in_building(wx, wy) or _in_clearing(wx, wy):
+                continue
+            if rng.random() > density_factor:
+                continue
+            scale = rng.uniform(0.8, 1.5)
+            placements.append({
+                "position": (pos[0], pos[1]),
+                "vegetation_type": "tree",
+                "rotation": rng.uniform(0, 360),
+                "scale": scale,
+            })
+
+        for pos in bush_candidates:
+            wx = pos[0] - terrain_half
+            wy = pos[1] - terrain_half
+            h = _sample_height_norm(pos)
+            sl = _sample_slope(pos)
+            if sl > 35.0 or h < 0.05 or h > 0.55:
+                continue
+            if _in_building(wx, wy) or _in_clearing(wx, wy):
+                continue
+            if rng.random() > density_factor * 1.1:
+                continue
+            placements.append({
+                "position": (pos[0], pos[1]),
+                "vegetation_type": "bush",
+                "rotation": rng.uniform(0, 360),
+                "scale": rng.uniform(0.5, 1.0),
+            })
+
+    elif pass_type == "ground_cover":
+        # Grass cards at 8-16 tufts/m2 -- sample a subset of the terrain
+        # (not per-m2 literally -- too many instances; use Poisson at 0.8m min dist)
+        grass_candidates = poisson_disk_sample(
+            terrain_size, terrain_size, 0.9, seed=seed + 2,
+        )
+        biome_grass = biome if biome in _GRASS_BIOME_SPECS else "prairie"
+
+        def _near_tree(wx: float, wy: float) -> bool:
+            if not tree_positions:
+                return False
+            for tx, ty in tree_positions:
+                if math.sqrt((wx - tx) ** 2 + (wy - ty) ** 2) < 1.0:
+                    return True
+            return False
+
+        for pos in grass_candidates:
+            wx = pos[0] - terrain_half
+            wy = pos[1] - terrain_half
+            u = pos[0] / terrain_size
+            v = pos[1] / terrain_size
+            ci = int(u * (side - 1))
+            ri = int(v * (side - 1))
+            ci = max(0, min(ci, side - 1))
+            ri = max(0, min(ri, side - 1))
+            sl = float(slope_map[ri, ci])
+            if sl > 40.0:
+                continue
+            if building_zones:
+                in_bz = False
+                for bz in building_zones:
+                    if bz[0] <= wx <= bz[2] and bz[1] <= wy <= bz[3]:
+                        in_bz = True
+                        break
+                if in_bz:
+                    continue
+            if _near_tree(wx, wy):
+                continue
+            if rng.random() > density_factor:
+                continue
+            placements.append({
+                "position": (pos[0], pos[1]),
+                "vegetation_type": f"grass_{biome_grass}",
+                "rotation": rng.uniform(0, 360),
+                "scale": 1.0,
+                "biome": biome_grass,
+            })
+
+    elif pass_type == "debris":
+        # Rocks with power-law size distribution
+        rock_candidates = poisson_disk_sample(
+            terrain_size, terrain_size, 1.2, seed=seed + 3,
+        )
+        for pos in rock_candidates:
+            wx = pos[0] - terrain_half
+            wy = pos[1] - terrain_half
+            if building_zones:
+                in_bz = False
+                for bz in building_zones:
+                    if bz[0] <= wx <= bz[2] and bz[1] <= wy <= bz[3]:
+                        in_bz = True
+                        break
+                if in_bz:
+                    continue
+            if rng.random() > 0.6:
+                continue
+            scale, size_class = _rock_size_from_power_law(rng)
+            placements.append({
+                "position": (pos[0], pos[1]),
+                "vegetation_type": "rock",
+                "rotation": rng.uniform(0, 360),
+                "scale": scale,
+                "size_class": size_class,
+            })
+
+    return placements
 
 
 # ---------------------------------------------------------------------------
