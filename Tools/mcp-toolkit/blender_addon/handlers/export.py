@@ -72,6 +72,7 @@ def handle_export_gltf(params: dict) -> dict:
         "export_materials": "EXPORT",
         "export_colors": True,
         "export_image_format": "AUTO",
+        "export_yup": True,
     }
 
     if override:

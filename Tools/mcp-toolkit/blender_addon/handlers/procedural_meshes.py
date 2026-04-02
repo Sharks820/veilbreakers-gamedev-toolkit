@@ -140,12 +140,54 @@ def _auto_detect_sharp_edges(
     return sharp
 
 
+def _auto_generate_box_projection_uvs(
+    vertices: list[tuple[float, float, float]],
+) -> list[tuple[float, float]]:
+    """Generate per-vertex UV coordinates using box projection.
+
+    Maps each vertex to UV space based on its bounding box position.
+    Uses the dominant axis (largest bounding box extent) to select the
+    projection plane, producing reasonable UVs for any mesh shape.
+    """
+    if not vertices:
+        return []
+    v0 = vertices[0]
+    min_x = max_x = v0[0]
+    min_y = max_y = v0[1]
+    min_z = max_z = v0[2]
+    for v in vertices:
+        x, y, z = v[0], v[1], v[2]
+        if x < min_x: min_x = x
+        elif x > max_x: max_x = x
+        if y < min_y: min_y = y
+        elif y > max_y: max_y = y
+        if z < min_z: min_z = z
+        elif z > max_z: max_z = z
+
+    dx = max_x - min_x or 1.0
+    dy = max_y - min_y or 1.0
+    dz = max_z - min_z or 1.0
+
+    uvs: list[tuple[float, float]] = []
+    for v in vertices:
+        x, y, z = v[0], v[1], v[2]
+        # Normalized coordinates in bounding box
+        nx = (x - min_x) / dx
+        ny = (y - min_y) / dy
+        nz = (z - min_z) / dz
+        # Use XZ as primary UV plane (top-down), with Y as secondary
+        # This works well for most game assets (buildings, props, weapons)
+        uvs.append((nx, nz if dz > dy else ny))
+    return uvs
+
+
 def _make_result(
     name: str,
     vertices: list[tuple[float, float, float]],
     faces: list[tuple[int, ...]],
     uvs: list[tuple[float, float]] | None = None,
     sharp_angle: float = 35.0,
+    auto_uv: bool = True,
     **extra_meta: Any,
 ) -> MeshSpec:
     """Package vertices/faces into a standard mesh spec dict.
@@ -153,11 +195,20 @@ def _make_result(
     Automatically computes sharp edges by dihedral angle and embeds them
     in the MeshSpec for the Blender bridge to process.
 
+    If no UVs are provided and auto_uv is True, box-projection UVs are
+    generated automatically so every mesh exports with valid UV data.
+
     Args:
         sharp_angle: Dihedral angle threshold (degrees) for sharp edge
             detection. Edges sharper than this get marked. Set to 0 to
             disable auto-detection.
+        auto_uv: When True (default), auto-generate box-projection UVs
+            if no explicit UVs are provided.
     """
+    # Auto-generate UVs if none provided
+    if not uvs and auto_uv and vertices:
+        uvs = _auto_generate_box_projection_uvs(vertices)
+
     dims = _compute_dimensions(vertices)
     result: MeshSpec = {
         "vertices": vertices,

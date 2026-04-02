@@ -359,6 +359,54 @@ VB_BUILDING_PRESETS: dict[str, dict] = {
         "roof_style": "gable",
         "roof_material": "tile",
     },
+    "town_hall": {
+        "style": "medieval",
+        "floors": 2,
+        "width": 16.0, "depth": 12.0,
+        "wall_height": 5.0,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "large_arch"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "left", "floor": 1, "style": "square"},
+            {"type": "window", "wall": "right", "floor": 1, "style": "square"},
+            {"type": "window", "wall": "back", "floor": 1, "style": "square"},
+        ],
+        "props": ["banner", "table", "chair", "candelabra", "signpost"],
+        "roof_style": "gable",
+        "roof_material": "slate",
+    },
+    "apothecary": {
+        "style": "medieval",
+        "floors": 1,
+        "width": 8.0, "depth": 7.0,
+        "wall_height": 3.8,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "square"},
+        ],
+        "props": ["shelf", "barrel", "crate", "cauldron", "herb_rack"],
+        "roof_style": "gable",
+        "roof_material": "tile",
+    },
+    "bakery": {
+        "style": "medieval",
+        "floors": 1,
+        "width": 8.0, "depth": 7.0,
+        "wall_height": 3.6,
+        "has_roof": True,
+        "openings": [
+            {"type": "door", "wall": "front", "floor": 0, "style": "square"},
+            {"type": "window", "wall": "left", "floor": 0, "style": "large_rectangular"},
+            {"type": "window", "wall": "right", "floor": 0, "style": "square"},
+        ],
+        "props": ["barrel", "crate", "table", "shelf", "cooking_fire"],
+        "roof_style": "gable",
+        "roof_material": "tile",
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -2867,6 +2915,12 @@ def _generate_location_building(
         preset_name = "gatehouse"
     elif b_type in {"mausoleum", "catacomb"}:
         preset_name = "shrine_minor"
+    elif b_type == "town_hall":
+        preset_name = "town_hall"
+    elif b_type == "apothecary":
+        preset_name = "apothecary"
+    elif b_type == "bakery":
+        preset_name = "bakery"
 
     if b_type in {"castle", "fortress", "keep", "watchtower", "guard_tower", "ruined_tower"}:
         site_profile = "fortified"
@@ -2876,8 +2930,10 @@ def _generate_location_building(
         site_profile = "forgeyard"
     elif b_type in {"house", "cottage", "abandoned_house", "stable"}:
         site_profile = "rural"
-    elif b_type in {"tavern", "inn", "general_store", "market_stall"}:
+    elif b_type in {"tavern", "inn", "general_store", "market_stall", "bakery", "apothecary"}:
         site_profile = "market"
+    elif b_type == "town_hall":
+        site_profile = "fortified"
     elif b_type in {"warehouse", "dock", "boat_house", "harbor_dock"}:
         site_profile = "waterfront"
     elif b_type in {"mine_entrance", "command_tent", "lookout_post", "cave_entrance"}:

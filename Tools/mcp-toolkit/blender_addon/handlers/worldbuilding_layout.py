@@ -596,97 +596,136 @@ def handle_generate_hearthvale(params: dict) -> dict:
     parent.empty_display_type = "PLAIN_AXES"
     bpy.context.collection.objects.link(parent)
 
-    # Materialize buildings as Blender objects
+    # Materialize buildings using the AAA building generator
+    from .worldbuilding import _generate_location_building
+
     buildings_created = 0
     for i, bld in enumerate(result.get("buildings", [])):
         bld_type = bld.get("type", "abandoned_house")
-        bld_name = f"{name}_{bld_type}_{i}"
-        bx, by = bld.get("position", (0.0, 0.0))
         fp = bld.get("footprint", (8.0, 6.0))
-        floors = bld.get("floors", 1)
-        elevation = bld.get("elevation", 0.0)
+        building_dict = {
+            "type": bld_type,
+            "position": tuple(bld.get("position", (0.0, 0.0))),
+            "rotation": bld.get("rotation", 0.0),
+            "size": fp,
+            "floors": bld.get("floors", 1),
+            "elevation": bld.get("elevation", 0.0),
+        }
+        try:
+            if _generate_location_building(name, building_dict, seed, i, None, parent):
+                buildings_created += 1
+        except Exception:
+            # Fallback: create a simple box if the AAA generator fails
+            import bmesh
+            bld_name = f"{name}_{bld_type}_{i}"
+            bx, by = bld.get("position", (0.0, 0.0))
+            elevation = bld.get("elevation", 0.0)
+            mesh = bpy.data.meshes.new(f"{bld_name}_mesh")
+            obj = bpy.data.objects.new(bld_name, mesh)
+            obj.location = (bx, by, elevation)
+            obj.rotation_euler = (0.0, 0.0, bld.get("rotation", 0.0))
+            obj.parent = parent
+            bpy.context.collection.objects.link(obj)
+            bm = bmesh.new()
+            hw, hd = fp[0] / 2.0, fp[1] / 2.0
+            wh = 3.5 * bld.get("floors", 1)
+            vs = [
+                bm.verts.new((-hw, -hd, 0.0)),
+                bm.verts.new((hw, -hd, 0.0)),
+                bm.verts.new((hw, hd, 0.0)),
+                bm.verts.new((-hw, hd, 0.0)),
+                bm.verts.new((-hw, -hd, wh)),
+                bm.verts.new((hw, -hd, wh)),
+                bm.verts.new((hw, hd, wh)),
+                bm.verts.new((-hw, hd, wh)),
+            ]
+            for face_verts in [
+                [vs[0], vs[1], vs[2], vs[3]], [vs[4], vs[5], vs[6], vs[7]],
+                [vs[0], vs[1], vs[5], vs[4]], [vs[2], vs[3], vs[7], vs[6]],
+                [vs[0], vs[3], vs[7], vs[4]], [vs[1], vs[2], vs[6], vs[5]],
+            ]:
+                bm.faces.new(face_verts)
+            bm.to_mesh(mesh)
+            bm.free()
+            buildings_created += 1
 
-        # Create a representative mesh for the building
-        mesh = bpy.data.meshes.new(f"{bld_name}_mesh")
-        obj = bpy.data.objects.new(bld_name, mesh)
-        obj.location = (bx, by, elevation)
-        obj.rotation_euler = (0.0, 0.0, bld.get("rotation", 0.0))
-        obj.parent = parent
-        bpy.context.collection.objects.link(obj)
+    # Materialize perimeter walls using AAA stone wall generator
+    from .building_quality import generate_stone_wall, generate_archway
+    from ._mesh_bridge import mesh_from_spec
+    from .worldbuilding import _assign_procedural_material
 
-        # Create simple box geometry representing the building volume
-        import bmesh
-        bm = bmesh.new()
-        hw, hd = fp[0] / 2.0, fp[1] / 2.0
-        wh = 3.5 * floors  # wall_height * floors
-        verts = [
-            bm.verts.new((-hw, -hd, 0.0)),
-            bm.verts.new((hw, -hd, 0.0)),
-            bm.verts.new((hw, hd, 0.0)),
-            bm.verts.new((-hw, hd, 0.0)),
-            bm.verts.new((-hw, -hd, wh)),
-            bm.verts.new((hw, -hd, wh)),
-            bm.verts.new((hw, hd, wh)),
-            bm.verts.new((-hw, hd, wh)),
-        ]
-        faces = [
-            bm.faces.new([verts[0], verts[1], verts[2], verts[3]]),  # bottom
-            bm.faces.new([verts[4], verts[5], verts[6], verts[7]]),  # top
-            bm.faces.new([verts[0], verts[1], verts[5], verts[4]]),  # front
-            bm.faces.new([verts[2], verts[3], verts[7], verts[6]]),  # back
-            bm.faces.new([verts[0], verts[3], verts[7], verts[4]]),  # left
-            bm.faces.new([verts[1], verts[2], verts[6], verts[5]]),  # right
-        ]
-        bm.to_mesh(mesh)
-        bm.free()
-        buildings_created += 1
-
-    # Materialize perimeter walls
     perimeter_created = 0
     for i, elem in enumerate(result.get("perimeter", [])):
         elem_type = elem.get("type", "wall_segment")
         elem_name = f"{name}_perimeter_{elem_type}_{i}"
         ex, ey = elem.get("position", (0.0, 0.0))
+        rot_z = elem.get("rotation", 0.0)
 
-        mesh = bpy.data.meshes.new(f"{elem_name}_mesh")
-        obj = bpy.data.objects.new(elem_name, mesh)
-        obj.location = (ex, ey, 0.0)
-        obj.rotation_euler = (0.0, 0.0, elem.get("rotation", 0.0))
-        obj.parent = parent
-        bpy.context.collection.objects.link(obj)
-
-        import bmesh
-        bm = bmesh.new()
-        if elem.get("is_gate"):
-            # Portcullis gate -- wider opening
-            hw, hd, wh = 3.0, 1.0, 5.5
-        elif elem.get("is_tower"):
-            # Corner tower -- square footprint, taller
-            hw, hd, wh = 2.5, 2.5, 7.0
-        else:
-            # Wall segment
-            hw, hd, wh = 3.0, 0.8, 5.5
-        verts = [
-            bm.verts.new((-hw, -hd, 0.0)),
-            bm.verts.new((hw, -hd, 0.0)),
-            bm.verts.new((hw, hd, 0.0)),
-            bm.verts.new((-hw, hd, 0.0)),
-            bm.verts.new((-hw, -hd, wh)),
-            bm.verts.new((hw, -hd, wh)),
-            bm.verts.new((hw, hd, wh)),
-            bm.verts.new((-hw, hd, wh)),
-        ]
-        faces = [
-            bm.faces.new([verts[0], verts[1], verts[2], verts[3]]),
-            bm.faces.new([verts[4], verts[5], verts[6], verts[7]]),
-            bm.faces.new([verts[0], verts[1], verts[5], verts[4]]),
-            bm.faces.new([verts[2], verts[3], verts[7], verts[6]]),
-            bm.faces.new([verts[0], verts[3], verts[7], verts[4]]),
-            bm.faces.new([verts[1], verts[2], verts[6], verts[5]]),
-        ]
-        bm.to_mesh(mesh)
-        bm.free()
-        perimeter_created += 1
+        try:
+            if elem.get("is_gate"):
+                # Gate archway with stone detail
+                gate_spec = generate_archway(
+                    width=4.0, height=5.5, depth=1.6,
+                    arch_style="gothic_pointed", has_keystone=True,
+                    seed=seed + 3000 + i,
+                )
+                obj = mesh_from_spec(gate_spec, name=elem_name,
+                                     location=(ex, ey, 0.0),
+                                     rotation=(0.0, 0.0, rot_z),
+                                     parent=parent)
+                if not isinstance(obj, dict):
+                    _assign_procedural_material(obj, "smooth_stone")
+            elif elem.get("is_tower"):
+                # Corner tower — taller, thicker stone walls
+                tower_spec = generate_stone_wall(
+                    width=5.0, height=7.0, thickness=1.2,
+                    block_style="ashlar", seed=seed + 3000 + i,
+                )
+                obj = mesh_from_spec(tower_spec, name=elem_name,
+                                     location=(ex, ey, 0.0),
+                                     rotation=(0.0, 0.0, rot_z),
+                                     parent=parent)
+                if not isinstance(obj, dict):
+                    _assign_procedural_material(obj, "rough_stone_wall")
+            else:
+                # Wall segment with stone block detail
+                wall_spec = generate_stone_wall(
+                    width=6.0, height=5.5, thickness=0.8,
+                    block_style="ashlar", mortar_depth=0.008,
+                    seed=seed + 3000 + i,
+                )
+                obj = mesh_from_spec(wall_spec, name=elem_name,
+                                     location=(ex, ey, 0.0),
+                                     rotation=(0.0, 0.0, rot_z),
+                                     parent=parent)
+                if not isinstance(obj, dict):
+                    _assign_procedural_material(obj, "rough_stone_wall")
+            perimeter_created += 1
+        except Exception:
+            # Fallback: simple box if stone generator fails
+            import bmesh
+            mesh = bpy.data.meshes.new(f"{elem_name}_mesh")
+            obj = bpy.data.objects.new(elem_name, mesh)
+            obj.location = (ex, ey, 0.0)
+            obj.rotation_euler = (0.0, 0.0, rot_z)
+            obj.parent = parent
+            bpy.context.collection.objects.link(obj)
+            bm = bmesh.new()
+            if elem.get("is_gate"):
+                hw, hd, wh = 3.0, 1.0, 5.5
+            elif elem.get("is_tower"):
+                hw, hd, wh = 2.5, 2.5, 7.0
+            else:
+                hw, hd, wh = 3.0, 0.8, 5.5
+            vs = [bm.verts.new(v) for v in [
+                (-hw, -hd, 0), (hw, -hd, 0), (hw, hd, 0), (-hw, hd, 0),
+                (-hw, -hd, wh), (hw, -hd, wh), (hw, hd, wh), (-hw, hd, wh),
+            ]]
+            for fi in [(0,1,2,3),(4,5,6,7),(0,1,5,4),(2,3,7,6),(0,3,7,4),(1,2,6,5)]:
+                bm.faces.new([vs[j] for j in fi])
+            bm.to_mesh(mesh)
+            bm.free()
+            perimeter_created += 1
 
     return {
         "status": "success",

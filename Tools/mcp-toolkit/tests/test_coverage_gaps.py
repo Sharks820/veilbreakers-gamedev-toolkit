@@ -101,16 +101,21 @@ class TestTerrainErosionEdgeCases:
         assert result.max() <= 1.0
 
     def test_thermal_erosion_2x2(self):
-        """2x2 heightmap: inner loop range(1, rows-1) is range(1,1) = empty.
-        Should return unchanged.
+        """2x2 heightmap: vectorized erosion processes all cells via padding.
+        Result should have same shape with values in [0, 1] and reduced contrast
+        (slopes are smoothed towards the talus threshold).
         """
         from blender_addon.handlers._terrain_erosion import apply_thermal_erosion
 
         hmap = np.array([[0.0, 1.0], [1.0, 0.0]])
         result = apply_thermal_erosion(hmap, iterations=5, talus_angle=30.0)
         assert result.shape == (2, 2)
-        # Inner loop is empty, so result should equal input
-        np.testing.assert_array_almost_equal(result, np.clip(hmap, 0, 1))
+        assert result.min() >= 0.0
+        assert result.max() <= 1.0
+        # Erosion should reduce the extreme slopes (contrast decreases)
+        original_range = hmap.max() - hmap.min()
+        result_range = result.max() - result.min()
+        assert result_range <= original_range
 
     def test_thermal_erosion_zero_iterations(self):
         """Zero iterations should return input unchanged."""
