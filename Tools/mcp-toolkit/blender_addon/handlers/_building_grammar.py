@@ -3237,11 +3237,7 @@ def generate_clutter_layout(
         "candle_stub", "coin_pile", "dust_pile", "rock_small", "cloth_scrap",
         "wooden_cup", "bone_fragment",
     ]
-    pool = CLUTTER_POOLS.get(room_type)
-    if pool is None:
-        # Unknown room type with no pool: return empty
-        if room_type not in CLUTTER_POOLS:
-            return []
+    pool = CLUTTER_POOLS.get(room_type, _DEFAULT_POOL)
     if not pool:
         pool = _DEFAULT_POOL
 
@@ -3288,6 +3284,7 @@ def generate_clutter_layout(
                 item_type = rng.choice(pool)
                 scale_var = round(rng.uniform(0.85, 1.15), 4)
                 clutter.append({
+                    "type": item_type,
                     "name": item_type,
                     "position": [
                         round(surface["x"] - sw / 2 + px, 4),
@@ -3327,6 +3324,7 @@ def generate_clutter_layout(
             item_type = rng.choice(pool)
             scale_var = round(rng.uniform(0.85, 1.15), 4)
             clutter.append({
+                "type": item_type,
                 "name": item_type,
                 "position": [round(px, 4), round(py, 4), 0.0],
                 "rotation": (0.0, 0.0, round(rng.uniform(0, 2 * math.pi), 4)),
