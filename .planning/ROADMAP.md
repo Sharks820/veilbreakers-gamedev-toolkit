@@ -586,9 +586,14 @@ Plans:
   3. Fortification perimeter: wall sections with walkways, 2+ guard towers, main gate with portcullis geometry, at least 1 secret entrance (sewer/cave)
   4. Every building exterior and interior passes visual QA: contact sheet reviewed, no floating objects, no z-fighting, no missing faces, consistent material quality, prop density comparable to Skyrim
   5. Town exports to Unity as Addressables-ready package, loads in under 5 seconds on PC, maintains 60fps at 1080p with all buildings and terrain visible -- profiled via unity_performance action=profile_scene
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 39-01-PLAN.md -- Foundation wiring + AAA visual verification protocol
+- [ ] 39-02-PLAN.md -- Terrain + water + vegetation overhaul
+- [ ] 39-03-PLAN.md -- Castle + settlement + combat zones
+- [ ] 39-04-PLAN.md -- Performance optimization + final verification
 
-**Delivered:** TBD
+**Delivered:** TBD (4 plans created)
 
 ## Progress
 
@@ -630,6 +635,7 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 36. World Composer | v7.0 | 1/2 | In Progress|  |
 | 37. Pipeline Integration | v7.0 | 0/TBD | Not Started | - |
 | 38. Starter Town | v7.0 | 0/TBD | Not Started | - |
+| 39. AAA Map Quality Overhaul | v7.0 | 0/4 | Not Started | - |
 
 ---
 *Roadmap created: 2026-03-18*
