@@ -3663,6 +3663,31 @@ LIGHTING_SCHEMAS: dict[str, dict] = {
         "mandatory": ["torch_sconce", "torch_sconce"],
         "conditional": [],
     },
+    "manor": {
+        "mandatory": ["torch_sconce"],
+        "conditional": [
+            {"type": "candle", "trigger": "desk", "pos_rule": "surface:desk"},
+            {"type": "fireplace_light", "trigger": "fireplace", "pos_rule": "item:fireplace"},
+            {"type": "candle", "trigger": "candelabra", "pos_rule": "item:candelabra"},
+        ],
+    },
+    "guild_hall": {
+        "mandatory": ["torch_sconce"],
+        "conditional": [
+            {"type": "chandelier_light", "trigger": "chandelier", "pos_rule": "item:chandelier"},
+            {"type": "fireplace_light", "trigger": "fireplace", "pos_rule": "item:fireplace"},
+            {"type": "candle", "trigger": "long_table", "pos_rule": "surface:long_table"},
+        ],
+    },
+    "tavern_hall": {
+        "mandatory": ["torch_sconce"],
+        "conditional": [
+            {"type": "candle", "trigger": "table", "pos_rule": "surface:table"},
+            {"type": "fireplace_light", "trigger": "fireplace", "pos_rule": "item:fireplace"},
+            {"type": "candle", "trigger": "bar_counter", "pos_rule": "surface:bar_counter"},
+            {"type": "chandelier_light", "trigger": "chandelier", "pos_rule": "item:chandelier"},
+        ],
+    },
 }
 
 # Table-like furniture types that trigger candle placement

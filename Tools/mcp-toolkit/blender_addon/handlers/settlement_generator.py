@@ -729,9 +729,15 @@ def _place_buildings(
         _BUILDING_FLOORS = {
             "shrine_minor": 1, "shrine_major": 2, "ruined_fortress_tower": 3,
             "abandoned_house": 1, "forge": 1, "tent": 1, "lean_to": 1,
-            "campfire_area": 1, "cage": 1, "watchtower": 2, "barracks": 1,
+            "campfire_area": 1, "cage": 1, "watchtower": 2, "barracks": 2,
             "supply_tent": 1, "market_stall_cluster": 1,
-            "wizard_fortress": 3, "sorcery_school": 3,
+            "wizard_fortress": 3, "sorcery_school": 2,
+            # Hearthvale types
+            "tavern": 2, "inn": 2, "blacksmith": 1, "temple": 2,
+            "town_hall": 2, "general_store": 1, "apothecary": 1,
+            "bakery": 1, "house": 1, "guard_barracks": 2,
+            "manor": 2, "guild_hall": 2, "warehouse": 2,
+            "gatehouse": 2, "rowhouse": 2,
         }
         building = {
             "position": (round(target_pos[0], 2), round(target_pos[1], 2)),
@@ -1361,6 +1367,20 @@ _ROOM_LIGHTS: dict[str, list[tuple[str, tuple[float, float, float], float, float
     ],
     "guard_post": [
         ("guard_torch", (1.0, 0.55, 0.2), 0.6, 5.0, "point"),
+    ],
+    "study": [
+        ("desk_candle", (1.0, 0.9, 0.7), 0.6, 4.0, "point"),
+        ("wall_sconce", (1.0, 0.55, 0.2), 0.4, 3.5, "point"),
+    ],
+    "great_hall": [
+        ("chandelier_light", (1.0, 0.85, 0.6), 1.2, 10.0, "point"),
+        ("wall_torch_1", (1.0, 0.55, 0.2), 0.5, 5.0, "point"),
+        ("wall_torch_2", (1.0, 0.55, 0.2), 0.5, 5.0, "point"),
+        ("fireplace_glow", (1.0, 0.4, 0.1), 0.8, 6.0, "point"),
+    ],
+    "manor": [
+        ("chandelier_light", (1.0, 0.85, 0.6), 1.0, 8.0, "point"),
+        ("wall_sconce", (1.0, 0.55, 0.2), 0.4, 4.0, "point"),
     ],
 }
 
