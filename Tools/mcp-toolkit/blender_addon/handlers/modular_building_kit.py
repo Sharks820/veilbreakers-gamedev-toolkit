@@ -71,18 +71,45 @@ def _compute_dimensions(
     }
 
 
+
+def _auto_generate_uvs(
+    vertices: list[tuple[float, float, float]],
+) -> list[tuple[float, float]]:
+    """Generate fallback UVs via bounding-box XZ projection (0-1 range)."""
+    if not vertices:
+        return []
+    v0 = vertices[0]
+    min_x = max_x = v0[0]
+    min_z = max_z = v0[2]
+    for v in vertices:
+        if v[0] < min_x:
+            min_x = v[0]
+        elif v[0] > max_x:
+            max_x = v[0]
+        if v[2] < min_z:
+            min_z = v[2]
+        elif v[2] > max_z:
+            max_z = v[2]
+    inv_w = 1.0 / max(max_x - min_x, 1e-6)
+    inv_h = 1.0 / max(max_z - min_z, 1e-6)
+    return [((v[0] - min_x) * inv_w, (v[2] - min_z) * inv_h) for v in vertices]
+
 def _make_result(
     name: str,
     vertices: list[tuple[float, float, float]],
     faces: list[tuple[int, ...]],
+    uvs: list[tuple[float, float]] | None = None,
     style: str = "medieval",
     piece_type: str = "",
     **extra: Any,
 ) -> MeshSpec:
+    if not uvs and vertices:
+        uvs = _auto_generate_uvs(vertices)
     dims = _compute_dimensions(vertices)
     return {
         "vertices": vertices,
         "faces": faces,
+        "uvs": uvs or [],
         "metadata": {
             "name": name,
             "piece_type": piece_type,
@@ -150,17 +177,25 @@ def _box(
 
 
 def _merge_geometry(
-    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]],
-) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]:
-    """Merge multiple (verts, faces) tuples into one."""
+    parts: list[tuple],
+) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]], list[tuple[float, float]]]:
+    """Merge multiple (verts, faces) tuples into one, with auto-generated UVs."""
     all_verts: list[tuple[float, float, float]] = []
     all_faces: list[tuple[int, ...]] = []
-    for verts, faces in parts:
+    all_uvs: list[tuple[float, float]] = []
+    for part in parts:
+        verts = part[0]
+        faces = part[1]
+        uvs = part[2] if len(part) > 2 and part[2] else None
         offset = len(all_verts)
         all_verts.extend(verts)
+        if uvs is not None and len(uvs) == len(verts):
+            all_uvs.extend(uvs)
+        else:
+            all_uvs.extend(_auto_generate_uvs(verts))
         for f in faces:
             all_faces.append(tuple(i + offset for i in f))
-    return all_verts, all_faces
+    return all_verts, all_faces, all_uvs
 
 
 # ---------------------------------------------------------------------------
@@ -257,7 +292,7 @@ def _apply_style_detail(
     verts: list[tuple[float, float, float]],
     faces: list[tuple[int, ...]],
     width: float, height: float, thickness: float,
-) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]:
+) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]], list[tuple[float, float]]]:
     """Apply style-specific detail geometry to a wall piece."""
     if style == "medieval":
         return _add_timber_frame(verts, faces, width, height, thickness)
@@ -268,7 +303,7 @@ def _apply_style_detail(
     elif style == "organic":
         return _add_root_supports(verts, faces, width, height, thickness)
     # ruined: no extra detail (damage handles it)
-    return verts, faces
+    return verts, faces, _auto_generate_uvs(verts)
 
 
 # ---------------------------------------------------------------------------
@@ -286,7 +321,7 @@ def wall_solid(
     t = thickness if thickness > 0 else _get_thickness(style)
     verts, faces = _box(0.0, 0.0, 0.0, width, t, height)
     # Style details
-    verts, faces = _apply_style_detail(style, verts, faces, width, height, t)
+    verts, faces, *_ = _apply_style_detail(style, verts, faces, width, height, t)
     # Jitter
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
@@ -383,7 +418,7 @@ def wall_window(
     t = thickness if thickness > 0 else _get_thickness(style)
     ox, oz, ow, oh = _window_opening_params(style, width, height, window_style)
     verts, faces = _cut_opening(width, height, t, ox, oz, ow, oh)
-    verts, faces = _apply_style_detail(style, verts, faces, width, height, t)
+    verts, faces, *_ = _apply_style_detail(style, verts, faces, width, height, t)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"wall_window_{style}", verts, faces,
@@ -430,7 +465,7 @@ def wall_door(
     t = thickness if thickness > 0 else _get_thickness(style)
     ox, oz, ow, oh = _door_opening_params(style, width, height, door_style)
     verts, faces = _cut_opening(width, height, t, ox, oz, ow, oh)
-    verts, faces = _apply_style_detail(style, verts, faces, width, height, t)
+    verts, faces, *_ = _apply_style_detail(style, verts, faces, width, height, t)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"wall_door_{style}", verts, faces,
@@ -523,8 +558,8 @@ def wall_corner_inner(
     parts.append(_box(0.0, 0.0, 0.0, width, t, height))
     # Wall along Y axis (starts at the corner)
     parts.append(_box(0.0, t, 0.0, t, width - t, height))
-    verts, faces = _merge_geometry(parts)
-    verts, faces = _apply_style_detail(style, verts, faces, width, height, t)
+    verts, faces, uvs = _merge_geometry(parts)
+    verts, faces, *_ = _apply_style_detail(style, verts, faces, width, height, t)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"wall_corner_inner_{style}", verts, faces,
@@ -550,7 +585,7 @@ def wall_corner_outer(
     parts.append(_box(0.0, 0.0, 0.0, width + t, t, height))
     # Wall along Y axis
     parts.append(_box(width, t, 0.0, t, width, height))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"wall_corner_outer_{style}", verts, faces,
@@ -577,7 +612,7 @@ def wall_t_junction(
     # Perpendicular wall from center
     cx = width / 2 - t / 2
     parts.append(_box(cx, t, 0.0, t, width / 2, height))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"wall_t_junction_{style}", verts, faces,
@@ -607,7 +642,7 @@ def wall_end_cap(
     # End cap block (slightly wider for visual emphasis)
     cap_extra = 0.03
     parts.append(_box(seg_len, -cap_extra, 0.0, 0.05, t + 2 * cap_extra, height))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"wall_end_cap_{style}", verts, faces,
@@ -643,7 +678,7 @@ def floor_stone(
         y = iy * block_size
         if y > 0:
             parts.append(_box(0.0, y - 0.005, thickness, width, 0.01, ridge_h))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, 0.003, seed)
     return _make_result(
         "floor_stone", verts, faces,
@@ -676,7 +711,7 @@ def floor_wood(
         pz_offset = rng.uniform(-0.003, 0.003)
         pv, pf = _box(0.0, py, pz_offset, width, actual_pw, thickness)
         parts.append((pv, pf))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, 0.002, seed)
     return _make_result(
         "floor_wood", verts, faces,
@@ -922,7 +957,7 @@ def roof_flat(
     parts.append(_box(0.0, lip_t, thickness, lip_t, depth - 2 * lip_t, lip_h))
     # Right lip
     parts.append(_box(width - lip_t, lip_t, thickness, lip_t, depth - 2 * lip_t, lip_h))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, 0.003, seed)
     return _make_result(
         "roof_flat", verts, faces,
@@ -948,7 +983,7 @@ def roof_gutter(
     parts.append(_box(0.0, 0.0, 0.0, width, depth, thickness))
     # Lip at the outer edge (drip edge)
     parts.append(_box(0.0, depth - 0.02, -0.05, width, 0.02, 0.05 + thickness))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, 0.002, seed)
     return _make_result(
         "roof_gutter", verts, faces,
@@ -981,7 +1016,7 @@ def stair_straight(
         sy = i * step_d
         # Each step is a box
         parts.append(_box(0.0, sy, sz, width, step_d, step_h))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, 0.004, seed)
     return _make_result(
         "stair_straight", verts, faces,
@@ -1060,7 +1095,7 @@ def stair_spiral(
     col_faces.append(tuple(range(col_segs, 2 * col_segs)))
     parts.append((col_verts, col_faces))
 
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, 0.003, seed)
     return _make_result(
         "stair_spiral", verts, faces,
@@ -1140,7 +1175,7 @@ def door_single(
     handle_z = height * 0.45
     handle_side = 0.04
     parts.append(_box(width * 0.8, -0.02, handle_z, handle_side, 0.04, handle_side))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"door_single_{style}", verts, faces,
@@ -1176,7 +1211,7 @@ def door_double(
     handle_z = height * 0.45
     parts.append(_box(half - gap / 2 - 0.05, -0.02, handle_z, 0.03, 0.04, 0.03))
     parts.append(_box(half + gap / 2 + 0.02, -0.02, handle_z, 0.03, 0.04, 0.03))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"door_double_{style}", verts, faces,
@@ -1233,7 +1268,7 @@ def door_arched(
     parts.append(_box(-frame_w, -0.01, 0.0, frame_w, t + 0.02, rect_height))
     parts.append(_box(width, -0.01, 0.0, frame_w, t + 0.02, rect_height))
 
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"door_arched_{style}", verts, faces,
@@ -1268,7 +1303,7 @@ def window_small(
     parts.append(_box(frame_w, 0.0, height / 2 - 0.01, width - 2 * frame_w, d, 0.02))
     # Cross bar (vertical)
     parts.append(_box(width / 2 - 0.01, 0.0, frame_w, 0.02, d, height - 2 * frame_w))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"window_small_{style}", verts, faces,
@@ -1303,7 +1338,7 @@ def window_large(
     parts.append(_box(width / 2 - 0.01, 0.0, frame_w, 0.02, d, height - 2 * frame_w))
     # Sill (protruding ledge at bottom)
     parts.append(_box(-0.02, -0.04, -0.02, width + 0.04, d + 0.06, 0.02))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"window_large_{style}", verts, faces,
@@ -1378,7 +1413,7 @@ def window_pointed(
         arch_faces.append((b, b + 1, b + 2, b + 3))
     parts.append((arch_verts, arch_faces))
 
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"window_pointed_{style}", verts, faces,
@@ -1409,7 +1444,7 @@ def foundation_block(
     # Stepped lip at top
     lip_h = 0.05
     parts.append(_box(-0.03, -0.03, height - lip_h, width + 0.06, t + 0.06, lip_h))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"foundation_block_{style}", verts, faces,
@@ -1438,7 +1473,7 @@ def foundation_stepped(
         inset = si * 0.04
         parts.append(_box(inset, inset, si * step_h,
                           width - 2 * inset, t - 2 * inset, step_h))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"foundation_stepped_{style}", verts, faces,
@@ -1508,7 +1543,7 @@ def column_round(
     cf.append(tuple(range(segments, 2 * segments)))
     parts.append((cv, cf))
 
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"column_round_{style}", verts, faces,
@@ -1538,7 +1573,7 @@ def column_square(
     # Capital
     cap_w = width * 1.5
     parts.append(_box(-cap_w / 2, -cap_w / 2, height - base_h, cap_w, cap_w, base_h))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"column_square_{style}", verts, faces,
@@ -1575,7 +1610,7 @@ def column_cluster(
     parts.append(_box(-cap_r, -cap_r, height - 0.08, cap_r * 2, cap_r * 2, 0.08))
     # Shared base
     parts.append(_box(-cap_r, -cap_r, 0.0, cap_r * 2, cap_r * 2, 0.06))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"column_cluster_{style}", verts, faces,
@@ -1613,7 +1648,7 @@ def balcony_simple(
     bracket_h = 0.3
     for bx in [width * 0.2, width * 0.8]:
         parts.append(_box(bx - bracket_w / 2, 0.0, -bracket_h, bracket_w, depth * 0.6, bracket_h))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"balcony_simple_{style}", verts, faces,
@@ -1654,7 +1689,7 @@ def balcony_ornate(
         cx = width * cx_frac
         parts.append(_box(cx - 0.06, 0.0, -0.25, 0.12, depth * 0.5, 0.25))
         parts.append(_box(cx - 0.08, 0.0, -0.25, 0.16, depth * 0.3, 0.06))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"balcony_ornate_{style}", verts, faces,
@@ -1737,7 +1772,7 @@ def beam_cross(
     parts.append(_box(width / 2 - bw / 2, 0.0, 0.0, bw, bd, height))
     # Center cross point
     parts.append(_box(width / 2 - bw, 0.0, height / 2 - bw, bw * 2, bd, bw * 2))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"beam_cross_{style}", verts, faces,
@@ -1763,7 +1798,7 @@ def trim_baseboard(
     parts.append(_box(0.0, 0.0, 0.0, length, d, h))
     # Top lip (ogee profile approximation)
     parts.append(_box(0.0, -0.005, h, length, d + 0.005, lip_h))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"trim_baseboard_{style}", verts, faces,
@@ -1790,7 +1825,7 @@ def trim_crown(
     parts.append(_box(0.0, d, -0.02, length, d * 0.5, h + 0.02))
     # Small bead at bottom
     parts.append(_box(0.0, -0.005, -0.01, length, 0.01, 0.01))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"trim_crown_{style}", verts, faces,
@@ -1813,7 +1848,7 @@ def trim_corner(
     # L-shaped profile running vertically
     parts.append(_box(0.0, 0.0, 0.0, w, 0.02, height))
     parts.append(_box(-0.02, 0.0, 0.0, 0.02, w, height))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"trim_corner_{style}", verts, faces,
@@ -1846,7 +1881,7 @@ def chimney_stack(
                           cw - 2 * step_inset, cd - 2 * step_inset, 0.06))
     # Cap
     parts.append(_box(-0.04, -0.04, height, cw + 0.08, cd + 0.08, 0.05))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"chimney_stack_{style}", verts, faces,
@@ -1895,7 +1930,7 @@ def chimney_pot(
         i2 = (i + 1) % segments
         rf.append((i, i2, i2 + segments, i + segments))
     parts.append((rv, rf))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"chimney_pot_{style}", verts, faces,
@@ -1937,7 +1972,7 @@ def arch_round(
         ]
         bf = [(0, 1, 2, 3)]
         parts.append((bv, bf))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"arch_round_{style}", verts, faces,
@@ -1982,7 +2017,7 @@ def arch_pointed(
         rx1 = width - x1
         bv2 = [(rx0, 0.0, z0), (rx1, 0.0, z1), (rx1, t, z1), (rx0, t, z0)]
         parts.append((bv2, [(0, 1, 2, 3)]))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"arch_pointed_{style}", verts, faces,
@@ -2014,7 +2049,7 @@ def battlement_wall(
     while x + merlon_w <= width:
         parts.append(_box(x, 0.0, parapet_h, merlon_w, t, merlon_h))
         x += merlon_w + crenel_w
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"battlement_wall_{style}", verts, faces,
@@ -2046,7 +2081,7 @@ def battlement_tower(
         parts.append(_box(mx, 0.0, parapet_h, merlon_w, t, merlon_h))
     for my in [0.0, width - merlon_w]:
         parts.append(_box(0.0, my, parapet_h, t, merlon_w, merlon_h))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"battlement_tower_{style}", verts, faces,
@@ -2087,7 +2122,7 @@ def dormer_gable(
     ]
     tf = [(0, 1, 2), (5, 4, 3), (0, 3, 4, 1), (1, 4, 5, 2), (2, 5, 3, 0)]
     parts.append((tv, tf))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"dormer_gable_{style}", verts, faces,
@@ -2117,7 +2152,7 @@ def dormer_shed(
     parts.append(_box(0.0, 0.0, 0.0, width, t * 0.4, wall_h))
     # Roof slab (angled)
     parts.append(_box(0.0, 0.0, wall_h, width, depth + 0.1, 0.04))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"dormer_shed_{style}", verts, faces,
@@ -2145,7 +2180,7 @@ def awning_simple(
     bracket_h = 0.3
     for bx in [0.05, width - 0.05 - bracket_w]:
         parts.append(_box(bx, 0.0, -bracket_h, bracket_w, depth * 0.5, bracket_h))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"awning_simple_{style}", verts, faces,
@@ -2172,7 +2207,7 @@ def bracket_corbel(
     parts.append(_box(w * 0.15, d * 0.15, 0.0, w * 0.7, d * 0.7, height * 0.4))
     # Top platform
     parts.append(_box(-0.02, -0.02, height, w + 0.04, d + 0.04, 0.03))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"bracket_corbel_{style}", verts, faces,
@@ -2232,7 +2267,7 @@ def pillar_base(
     inset2 = width * 0.2
     parts.append(_box(inset2, inset2, h * 0.7,
                        width - 2 * inset2, width - 2 * inset2, h * 0.3))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"pillar_base_{style}", verts, faces,
@@ -2262,7 +2297,7 @@ def pillar_capital(
                        width - 2 * inset2, width - 2 * inset2, h * 0.3))
     # Wide top (supports beam/arch)
     parts.append(_box(0.0, 0.0, h * 0.7, width, width, h * 0.3))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"pillar_capital_{style}", verts, faces,
@@ -2298,7 +2333,7 @@ def bay_window(
     parts.append(_box(0.0, 0.0, 0.0, width, depth, 0.08))
     # Ceiling slab
     parts.append(_box(0.0, 0.0, height - 0.06, width, depth, 0.06))
-    verts, faces = _merge_geometry(parts)
+    verts, faces, uvs = _merge_geometry(parts)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"bay_window_{style}", verts, faces,

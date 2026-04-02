@@ -182,6 +182,7 @@ namespace VeilBreakers.VFX.Skills
         private Volume                 postVolume;
         private ChromaticAberration    chromAb;
         private Coroutine              activeRoutine;
+        private static readonly Collider[] _overlapBuffer = new Collider[64];
 
         // ---------------------------------------------------------------
         // Public API
@@ -213,6 +214,10 @@ namespace VeilBreakers.VFX.Skills
         private void OnDestroy()
         {{
             CleanupVisuals();
+            if (postVolume != null && postVolume.profile != null)
+            {{
+                DestroyImmediate(postVolume.profile);
+            }}
         }}
 
         // ---------------------------------------------------------------
@@ -600,11 +605,12 @@ namespace VeilBreakers.VFX.Skills
             out Vector3 target)
         {{
             target = Vector3.zero;
-            Collider[] hits = Physics.OverlapSphere(from, chainSearchRadius);
+            int hitCount = Physics.OverlapSphereNonAlloc(from, chainSearchRadius, _overlapBuffer);
             float bestDist = float.MaxValue;
             Collider best = null;
-            foreach (var hit in hits)
+            for (int _i = 0; _i < hitCount; _i++)
             {{
+                var hit = _overlapBuffer[_i];
                 if (exclude.Contains(hit)) continue;
                 // Look for anything tagged Enemy or with a Health component
                 if (!hit.CompareTag("Enemy") && hit.GetComponent<MonoBehaviour>() == null)
@@ -627,8 +633,9 @@ namespace VeilBreakers.VFX.Skills
 
         private void MarkNearbyAsHit(Vector3 pos, float radius, HashSet<Collider> set)
         {{
-            foreach (var c in Physics.OverlapSphere(pos, radius))
-                set.Add(c);
+            int nearCount = Physics.OverlapSphereNonAlloc(pos, radius, _overlapBuffer);
+            for (int _i = 0; _i < nearCount; _i++)
+                set.Add(_overlapBuffer[_i]);
         }}
 
         // ---------------------------------------------------------------
@@ -1389,6 +1396,7 @@ namespace VeilBreakers.VFX.Skills
         private ColorAdjustments    colorAdj;
         private Vignette            vignette;
         private Coroutine           activeRoutine;
+        private static readonly Collider[] _overlapBuffer = new Collider[64];
 
         // ---------------------------------------------------------------
         // Public API
@@ -1422,6 +1430,10 @@ namespace VeilBreakers.VFX.Skills
         {{
             if (riftCoreMat != null) Destroy(riftCoreMat);
             if (riftEdgeMat != null) Destroy(riftEdgeMat);
+            if (postVolume != null && postVolume.profile != null)
+            {{
+                DestroyImmediate(postVolume.profile);
+            }}
         }}
 
         // ---------------------------------------------------------------
@@ -1672,10 +1684,11 @@ namespace VeilBreakers.VFX.Skills
             shockwaveRing.Emit(40);
 
             // Tendrils reaching from rift to nearby enemies
-            Collider[] nearby = Physics.OverlapSphere(transform.position, shockwaveRadius);
+            int nearbyCount = Physics.OverlapSphereNonAlloc(transform.position, shockwaveRadius, _overlapBuffer);
             int tendrilIdx = 0;
-            foreach (var col in nearby)
+            for (int _ni = 0; _ni < nearbyCount; _ni++)
             {{
+                var col = _overlapBuffer[_ni];
                 if (tendrilIdx >= tendrils.Count) break;
                 if (col.CompareTag("Enemy") || col.GetComponentInParent<MonoBehaviour>() != null)
                 {{

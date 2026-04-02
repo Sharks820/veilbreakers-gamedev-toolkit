@@ -305,6 +305,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "detail_scale": 12.0,
         "wear_intensity": 0.4,
         "node_recipe": "metal",
+        "patina_color": (0.25, 0.45, 0.30, 1.0),
         "micro_normal_strength": 0.7,
         "meso_normal_strength": 0.3,
         "macro_normal_strength": 0.3,
@@ -701,27 +702,31 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "base_color": (0.40, 0.42, 0.44, 1.0),
         "roughness": 0.05,
         "roughness_variation": 0.02,
-        "metallic": 0.0,
+        "metallic": 0.05,
         "normal_strength": 0.1,
-        "detail_scale": 20.0,
-        "wear_intensity": 0.01,
-        "node_recipe": "stone",
-        "micro_normal_strength": 0.2,
-        "meso_normal_strength": 0.6,
-        "macro_normal_strength": 1.0,
+        "detail_scale": 4.0,
+        "wear_intensity": 0.0,
+        "node_recipe": "organic",
+        "transmission": 0.9,
+        "ior": 1.45,
+        "micro_normal_strength": 0.05,
+        "meso_normal_strength": 0.1,
+        "macro_normal_strength": 0.05,
     },
     "water_surface": {
-        "base_color": (0.05, 0.08, 0.12, 1.0),
+        "base_color": (0.032, 0.056, 0.08, 1.0),
         "roughness": 0.05,
-        "roughness_variation": 0.03,
+        "roughness_variation": 0.02,
         "metallic": 0.0,
-        "normal_strength": 0.6,
+        "normal_strength": 0.5,
         "detail_scale": 3.0,
         "wear_intensity": 0.0,
-        "node_recipe": "terrain",
-        "micro_normal_strength": 0.15,
+        "node_recipe": "organic",
+        "transmission": 0.7,
+        "ior": 1.333,
+        "micro_normal_strength": 0.3,
         "meso_normal_strength": 0.5,
-        "macro_normal_strength": 1.2,
+        "macro_normal_strength": 0.2,
     },
     "blood_splatter": {
         "base_color": _BLOOD_RED,
@@ -978,7 +983,7 @@ def build_stone_material(mat: Any, params: dict[str, Any]) -> None:
     mix_color = _add_node(tree, "ShaderNodeMixRGB", -400, 100,
                           "Color Variation")
     mix_color.blend_type = "OVERLAY"
-    mix_color.inputs["Fac"].default_value = 0.3
+    links.new(musgrave.outputs["Fac"], mix_color.inputs["Fac"])
     links.new(ramp_blocks.outputs["Color"], mix_color.inputs["Color1"])
     links.new(ramp_mortar.outputs["Color"], mix_color.inputs["Color2"])
 
@@ -1165,7 +1170,11 @@ def build_metal_material(mat: Any, params: dict[str, Any]) -> None:
     # -- Rusted/worn BSDF --
     bsdf_rust = _add_node(tree, "ShaderNodeBsdfPrincipled", 100, -200,
                           "Rust/Wear")
-    rust_color = (bc[0] * 0.6, bc[1] * 0.4, bc[2] * 0.3, 1.0)
+    patina_color = params.get("patina_color")
+    if patina_color:
+        rust_color = (patina_color[0], patina_color[1], patina_color[2], 1.0)
+    else:
+        rust_color = (bc[0] * 0.6, bc[1] * 0.4, bc[2] * 0.3, 1.0)
     bsdf_rust.inputs["Base Color"].default_value = rust_color
     bsdf_rust.inputs["Roughness"].default_value = min(1.0, params["roughness"] + 0.3)
     bsdf_rust.inputs["Metallic"].default_value = max(0.0, params["metallic"] - 0.5)
@@ -1257,6 +1266,13 @@ def build_organic_material(mat: Any, params: dict[str, Any]) -> None:
     transmission_input = _get_bsdf_input(bsdf, "Transmission Weight")
     if transmission_input is not None:
         transmission_input.default_value = params.get("transmission", 0.0)
+
+    # IOR for refractive materials (glass, water)
+    ior_val = params.get("ior")
+    if ior_val is not None:
+        ior_input = bsdf.inputs.get("IOR")
+        if ior_input is not None:
+            ior_input.default_value = ior_val
 
     # Coat weight for glossy organic surfaces (chitin carapace, polished wood)
     coat_input = _get_bsdf_input(bsdf, "Coat Weight")
@@ -1703,6 +1719,16 @@ def handle_create_procedural_material(params: dict[str, Any]) -> dict[str, Any]:
 
     name = params.get("name", material_key)
     mat = create_procedural_material(name, material_key)
+
+    # Assign material to object if object_name is provided
+    object_name = params.get("object_name")
+    if object_name and bpy is not None:
+        obj = bpy.data.objects.get(object_name)
+        if obj and hasattr(obj, "data") and hasattr(obj.data, "materials"):
+            if obj.data.materials:
+                obj.data.materials[0] = mat
+            else:
+                obj.data.materials.append(mat)
 
     node_count = len(mat.node_tree.nodes)
     recipe = MATERIAL_LIBRARY[material_key]["node_recipe"]

@@ -390,7 +390,7 @@ public class VB_ComboVFX_{safe_brand} : MonoBehaviour
         emission.enabled = true;
         emission.rateOverTime = 0f;
         emission.SetBursts(new ParticleSystem.Burst[] {{
-            new ParticleSystem.Burst(0f, (short)baseParticleCount)
+            new ParticleSystem.Burst(0f, (int)baseParticleCount)
         }});
 
         var shape = hitBurstPS.shape;
@@ -528,7 +528,7 @@ public class VB_ComboVFX_{safe_brand} : MonoBehaviour
 
         var emission = hitBurstPS.emission;
         emission.SetBursts(new ParticleSystem.Burst[] {{
-            new ParticleSystem.Burst(0f, (short)burstCount)
+            new ParticleSystem.Burst(0f, (int)burstCount)
         }});
 
         // Gradient: primary -> glow -> fade
@@ -1237,7 +1237,7 @@ public class ChannelVFXController : MonoBehaviour
         var emission = releasePS.emission;
         int burstCount = (int)(baseEmissionRate * releaseBurstMultiplier * (0.5f + intensityRatio));
         emission.SetBursts(new ParticleSystem.Burst[] {{
-            new ParticleSystem.Burst(0f, (short)Mathf.Clamp(burstCount, 20, 500))
+            new ParticleSystem.Burst(0f, (int)Mathf.Clamp(burstCount, 20, 500))
         }});
 
         var renderer = releasePS.GetComponent<ParticleSystemRenderer>();

@@ -130,7 +130,7 @@ _CS_PARTICLE_HELPER = '''
         var emission = ps.emission;
         emission.enabled = true;
         emission.SetBursts(new ParticleSystem.Burst[] {
-            new ParticleSystem.Burst(0f, (short)count)
+            new ParticleSystem.Burst(0f, (int)count)
         });
     }
 

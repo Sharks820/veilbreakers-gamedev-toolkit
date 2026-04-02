@@ -26,6 +26,28 @@ FaceList = list[tuple[int, ...]]
 VertList = list[Vec3]
 MonsterMeshResult = dict[str, Any]
 
+
+
+def _auto_generate_uvs(vertices):
+    """Generate fallback UVs via bounding-box XZ projection (0-1 range)."""
+    if not vertices:
+        return []
+    v0 = vertices[0]
+    min_x = max_x = v0[0]
+    min_z = max_z = v0[2]
+    for v in vertices:
+        if v[0] < min_x:
+            min_x = v[0]
+        elif v[0] > max_x:
+            max_x = v[0]
+        if v[2] < min_z:
+            min_z = v[2]
+        elif v[2] > max_z:
+            max_z = v[2]
+    inv_w = 1.0 / max(max_x - min_x, 1e-6)
+    inv_h = 1.0 / max(max_z - min_z, 1e-6)
+    return [((v[0] - min_x) * inv_w, (v[2] - min_z) * inv_h) for v in vertices]
+
 # ---------------------------------------------------------------------------
 # Brand feature definitions
 # ---------------------------------------------------------------------------
@@ -1822,6 +1844,7 @@ def generate_monster_body(
     return {
         "vertices": all_verts,
         "faces": all_faces,
+        "uvs": _auto_generate_uvs(all_verts),
         "body_type": body_type,
         "brand": brand,
         "scale": scale,

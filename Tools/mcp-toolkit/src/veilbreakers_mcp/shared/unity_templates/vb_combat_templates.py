@@ -135,7 +135,7 @@ def generate_player_combat_script(
     lines = []
     lines.append("using UnityEngine;")
     lines.append("using VeilBreakers.Combat;")
-    lines.append("using VeilBreakers.Core;")
+    lines.append("using VeilBreakers;")
     lines.append("using VeilBreakers.Systems;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
@@ -589,7 +589,7 @@ def _generate_turnbased_combat_script(
     lines = []
     lines.append("using UnityEngine;")
     lines.append("using VeilBreakers.Combat;")
-    lines.append("using VeilBreakers.Core;")
+    lines.append("using VeilBreakers;")
     lines.append("using VeilBreakers.Systems;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
@@ -753,7 +753,7 @@ def generate_ability_system_script(
     lines.append("using UnityEngine;")
     lines.append("using System.Collections.Generic;")
     lines.append("using VeilBreakers.Combat;")
-    lines.append("using VeilBreakers.Core;")
+    lines.append("using VeilBreakers;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
     lines.append("namespace " + _safe_namespace(namespace))
@@ -920,7 +920,7 @@ def generate_synergy_engine_script(
     lines = []
     lines.append("using UnityEngine;")
     lines.append("using VeilBreakers.Combat;")
-    lines.append("using VeilBreakers.Core;")
+    lines.append("using VeilBreakers;")
     lines.append("using VeilBreakers.Systems;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
@@ -1058,7 +1058,7 @@ def generate_corruption_gameplay_script(
     lines = []
     lines.append("using UnityEngine;")
     lines.append("using VeilBreakers.Combat;")
-    lines.append("using VeilBreakers.Core;")
+    lines.append("using VeilBreakers;")
     lines.append("using VeilBreakers.Systems;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
@@ -1232,7 +1232,7 @@ def generate_xp_leveling_script(
     """
     lines = []
     lines.append("using UnityEngine;")
-    lines.append("using VeilBreakers.Core;")
+    lines.append("using VeilBreakers;")
     lines.append("using VeilBreakers.Data;")
     lines.append("")
     lines.append("namespace " + _safe_namespace(namespace))
@@ -1441,7 +1441,7 @@ def generate_currency_system_script(
     lines = []
     lines.append("using UnityEngine;")
     lines.append("using System.Collections.Generic;")
-    lines.append("using VeilBreakers.Core;")
+    lines.append("using VeilBreakers;")
     lines.append("")
     lines.append("namespace " + _safe_namespace(namespace))
     lines.append("{")

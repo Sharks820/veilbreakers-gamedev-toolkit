@@ -515,14 +515,14 @@ def generate_defensive_buff_vfx_script(
     if buff_type not in DEFENSIVE_BUFF_CONFIGS:
         buff_type = "shield"
     cfg = DEFENSIVE_BUFF_CONFIGS[buff_type]
-    sanitize_cs_identifier(buff_type)
+    buff_type = sanitize_cs_identifier(buff_type)
     triggered_method = _build_secondary_method_defensive(buff_type, cfg)
     shape_code = _cs_shape_block(cfg["shape"])
 
     # Build the buff config dictionary as a C# initializer
     buff_entries: list[str] = []
     for bt, bc in DEFENSIVE_BUFF_CONFIGS.items():
-        sanitize_cs_identifier(bt)
+        bt = sanitize_cs_identifier(bt)
         buff_entries.append(
             f'            {{ "{bt}", new BuffConfig("{bc["display"]}", '
             f'{_fmt(bc["color"])}, {_fmt(bc["glow"])}, '
@@ -839,7 +839,7 @@ def generate_debuff_vfx_script(
     if debuff_type not in DEBUFF_CONFIGS:
         debuff_type = "expose"
     cfg = DEBUFF_CONFIGS[debuff_type]
-    sanitize_cs_identifier(debuff_type)
+    debuff_type = sanitize_cs_identifier(debuff_type)
     update_method = _build_debuff_update_method(debuff_type, cfg)
     shape_code = _cs_shape_block(cfg["shape"])
 

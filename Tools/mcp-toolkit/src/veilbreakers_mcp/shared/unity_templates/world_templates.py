@@ -834,7 +834,7 @@ def generate_terrain_detail_script(
     lines.append("                td.SetDetailLayer(0, 0, layerIdx, densityMap);")
     lines.append("            }")
     lines.append("")
-    lines.append('            Debug.Log($"[VeilBreakers] Painted {protoCount} detail layers at density {0}.");')
+    lines.append(f'            Debug.Log($"[VeilBreakers] Painted {{protoCount}} detail layers at density {paint_density}.");')
     lines.append("            terrain.Flush();")
     lines.append("")
     lines.append('            string json = $"{{ \\"status\\": \\"ok\\", \\"detail_layers\\": {protoCount} }}";')

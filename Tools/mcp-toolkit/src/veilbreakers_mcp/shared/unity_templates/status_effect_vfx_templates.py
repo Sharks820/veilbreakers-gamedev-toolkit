@@ -361,7 +361,7 @@ def generate_status_effect_controller_script(
     effect_type = effect_type.lower()
     if effect_type not in STATUS_EFFECTS:
         effect_type = "stun"
-    sanitize_cs_identifier(effect_type)
+    effect_type = sanitize_cs_identifier(effect_type)
 
     # Build config dictionary entries
     config_entries = ",\n".join(
@@ -376,7 +376,9 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+#if PRIME_TWEEN
 using PrimeTween;
+#endif
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -694,6 +696,7 @@ public class VB_StatusEffectVFXController : MonoBehaviour
     private void FadeEmission(ParticleSystem ps, float from, float to, float duration)
     {{
         if (ps == null) return;
+#if PRIME_TWEEN
         Tween.Custom(from, to, duration, val =>
         {{
             if (ps != null)
@@ -702,6 +705,7 @@ public class VB_StatusEffectVFXController : MonoBehaviour
                 emission.rateOverTime = val;
             }}
         }});
+#endif
     }}
 
     private float GetCurrentRate(ParticleSystem ps)
@@ -808,7 +812,7 @@ def generate_crowd_control_vfx_script(
     cc_type = cc_type.lower()
     if cc_type not in CC_TYPES:
         cc_type = "mass_stun"
-    sanitize_cs_identifier(cc_type)
+    cc_type = sanitize_cs_identifier(cc_type)
 
     # Build CC config dictionary entries
     cc_config_entries = ",\n".join(
@@ -822,7 +826,10 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+#if PRIME_TWEEN
 using PrimeTween;
+#endif
 #if UNITY_EDITOR
 using UnityEditor;
 #endif
@@ -992,7 +999,7 @@ public class VB_CrowdControlVFXController : MonoBehaviour
         emission.rateOverTime = 0f;
         emission.SetBursts(new ParticleSystem.Burst[]
         {{
-            new ParticleSystem.Burst(0f, (short)config.ringRate, (short)config.ringRate, 1, 0.01f)
+            new ParticleSystem.Burst(0f, (int)config.ringRate, (int)config.ringRate, 1, 0.01f)
         }});
 
         // Shape: ring
@@ -1049,7 +1056,7 @@ public class VB_CrowdControlVFXController : MonoBehaviour
         emission.rateOverTime = 0f;
         emission.SetBursts(new ParticleSystem.Burst[]
         {{
-            new ParticleSystem.Burst(0.15f, (short)(config.pillarRate / 2), (short)config.pillarRate, 3, 0.1f)
+            new ParticleSystem.Burst(0.15f, (int)(config.pillarRate / 2), (int)config.pillarRate, 3, 0.1f)
         }});
 
         // Shape: circle at radius edge for pillar locations
@@ -1165,6 +1172,7 @@ public class VB_CrowdControlVFXController : MonoBehaviour
         float expandDuration = Mathf.Min(duration * 0.4f, 0.8f);
 
         // Animate ring shape radius from 0 to target
+#if PRIME_TWEEN
         Tween.Custom(0.5f, targetRadius, expandDuration, val =>
         {{
             if (cc.ringPS != null)
@@ -1173,8 +1181,10 @@ public class VB_CrowdControlVFXController : MonoBehaviour
                 shape.radius = val;
             }}
         }}, Ease.OutQuad);
+#endif
 
         // Animate pillar circle radius to match
+#if PRIME_TWEEN
         Tween.Custom(0f, targetRadius * 0.8f, expandDuration * 0.8f, val =>
         {{
             if (cc.pillarPS != null)
@@ -1183,6 +1193,7 @@ public class VB_CrowdControlVFXController : MonoBehaviour
                 shape.radius = val;
             }}
         }}, Ease.OutCubic);
+#endif
 
         // Camera shake via impulse source if available
         TriggerScreenShake(config, targetRadius);
@@ -1194,7 +1205,8 @@ public class VB_CrowdControlVFXController : MonoBehaviour
         var impulseType = System.Type.GetType("Cinemachine.CinemachineImpulseSource, Unity.Cinemachine");
         if (impulseType == null) return;
 
-        var impulse = FindAnyObjectByType(impulseType) as Component;
+        var impulse = FindObjectsByType<Component>(FindObjectsSortMode.None)
+            .FirstOrDefault(c => impulseType.IsAssignableFrom(c.GetType()));
         if (impulse == null) return;
 
         var method = impulseType.GetMethod("GenerateImpulse", new System.Type[] {{ typeof(float) }});

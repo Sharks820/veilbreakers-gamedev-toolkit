@@ -57,6 +57,13 @@ _FBX_PRESETS: dict[str, dict] = {
     "monster": {
         "scale": 1.0,
         "mesh_compression": "Off",
+        "animation_type": "Generic",
+        "import_animation": True,
+        "optimize": True,
+    },
+    "humanoid_monster": {
+        "scale": 1.0,
+        "mesh_compression": "Off",
         "animation_type": "Humanoid",
         "import_animation": True,
         "optimize": True,

@@ -543,7 +543,7 @@ _CS_PARTICLE_HELPER = '''
         var emission = ps.emission;
         emission.enabled = true;
         emission.SetBursts(new ParticleSystem.Burst[] {
-            new ParticleSystem.Burst(0f, (short)count)
+            new ParticleSystem.Burst(0f, (int)count)
         });
     }
 
@@ -718,7 +718,7 @@ def generate_projectile_skill_vfx_script(skill_name: str = "void_bolt") -> dict[
     if skill_name not in PROJECTILE_CONFIGS:
         skill_name = "void_bolt"
 
-    sanitize_cs_identifier(skill_name)
+    skill_name = sanitize_cs_identifier(skill_name)
     proj_configs_block = _projectile_configs_cs()
     brand_primary_block = _brand_color_dict_cs("BrandPrimaryColors", BRAND_PRIMARY_COLORS)
     brand_glow_block = _brand_color_dict_cs("BrandGlowColors", BRAND_GLOW_COLORS)
@@ -1155,7 +1155,7 @@ def generate_ground_aoe_skill_vfx_script(skill_name: str = "eruption") -> dict[s
     if skill_name not in AOE_CONFIGS:
         skill_name = "eruption"
 
-    sanitize_cs_identifier(skill_name)
+    skill_name = sanitize_cs_identifier(skill_name)
     aoe_configs_block = _aoe_configs_cs()
     brand_primary_block = _brand_color_dict_cs("BrandPrimaryColors", BRAND_PRIMARY_COLORS)
     brand_glow_block = _brand_color_dict_cs("BrandGlowColors", BRAND_GLOW_COLORS)

@@ -36,9 +36,12 @@ from blender_addon.handlers.terrain_materials import height_blend
 # ---------------------------------------------------------------------------
 
 # Materials that should have SSS (organic + fabric with subsurface > 0)
+# Organic materials using transmission (glass, water) rely on transparency, not SSS.
 ORGANIC_MATERIALS = {
-    key: entry for key, entry in MATERIAL_LIBRARY.items()
+    key: entry
+    for key, entry in MATERIAL_LIBRARY.items()
     if entry.get("node_recipe") == "organic"
+    and entry.get("transmission", 0.0) == 0.0
 }
 
 FABRIC_MATERIALS_WITH_SSS = {

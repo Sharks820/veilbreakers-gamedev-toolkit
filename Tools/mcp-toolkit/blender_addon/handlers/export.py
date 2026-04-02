@@ -67,6 +67,11 @@ def handle_export_gltf(params: dict) -> dict:
         "filepath": filepath,
         "use_selection": selected_only,
         "export_apply": apply_modifiers,
+        "export_format": "GLB",
+        "export_tangents": True,
+        "export_materials": "EXPORT",
+        "export_colors": True,
+        "export_image_format": "AUTO",
     }
 
     if override:
