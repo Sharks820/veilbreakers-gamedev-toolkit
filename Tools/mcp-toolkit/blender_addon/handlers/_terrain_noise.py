@@ -1378,3 +1378,376 @@ def voronoi_biome_distribution(
     biome_weights = exp_vals / np.maximum(weight_sum, 1e-12)
 
     return biome_ids, biome_weights
+
+
+# ---------------------------------------------------------------------------
+# AAA: Ridged multifractal noise (39-02)
+# ---------------------------------------------------------------------------
+
+def ridged_multifractal(
+    x: float,
+    y: float,
+    octaves: int = 6,
+    lacunarity: float = 2.0,
+    gain: float = 0.5,
+    offset: float = 1.0,
+    seed: int = 42,
+) -> float:
+    """Ridged multifractal noise for sharp mountain ridges and crags.
+
+    Produces sharp ridgelines and mountain peaks by inverting and squaring
+    noise values, creating the high-frequency edges characteristic of craggy
+    dark-fantasy terrain.
+
+    Algorithm (Musgrave 1994):
+      for each octave:
+        noise = offset - abs(raw_noise)   # invert to get ridges
+        noise = noise * noise              # sharpen ridges
+        signal += noise * weight * amplitude
+        weight = clamp(noise * gain, 0, 1) # cascade: ridges reinforce
+
+    Parameters
+    ----------
+    x, y : float
+        Coordinates to evaluate.
+    octaves : int
+        Number of noise octaves (default 6 for good detail).
+    lacunarity : float
+        Frequency multiplier per octave (default 2.0).
+    gain : float
+        Controls ridge sharpness (0.5=standard, higher=sharper).
+    offset : float
+        Pedestal value; determines ridge height vs valley depth (default 1.0).
+    seed : int
+        Random seed for deterministic generation.
+
+    Returns
+    -------
+    float
+        Noise value in approximately [0, 1].
+    """
+    gen = _make_noise_generator(seed)
+    result = 0.0
+    amplitude = 0.5
+    frequency = 1.0
+    weight = 1.0
+    max_val = 0.0
+
+    for _ in range(octaves):
+        raw = gen.noise2(x * frequency, y * frequency)
+        signal = offset - abs(raw)
+        signal *= signal  # sharpen
+        signal *= weight
+        result += signal * amplitude
+        max_val += amplitude
+        # Cascade weight: ridges amplify neighboring ridges
+        weight = max(0.0, min(1.0, signal * gain))
+        amplitude *= gain
+        frequency *= lacunarity
+
+    # Normalize to [0, 1]
+    if max_val > 0.0:
+        result = result / max_val
+    return max(0.0, min(1.0, result))
+
+
+def ridged_multifractal_array(
+    xs: np.ndarray,
+    ys: np.ndarray,
+    octaves: int = 6,
+    lacunarity: float = 2.0,
+    gain: float = 0.5,
+    offset: float = 1.0,
+    seed: int = 42,
+) -> np.ndarray:
+    """Vectorized ridged multifractal noise over coordinate arrays.
+
+    Same algorithm as ``ridged_multifractal`` but operates on numpy arrays
+    for performance when generating full heightmaps.
+
+    Returns
+    -------
+    np.ndarray
+        Array of noise values in [0, 1], same shape as xs/ys.
+    """
+    gen = _make_noise_generator(seed)
+    result = np.zeros_like(xs, dtype=np.float64)
+    amplitude = 0.5
+    frequency = 1.0
+    weight = np.ones_like(xs, dtype=np.float64)
+    max_val = 0.0
+
+    for _ in range(octaves):
+        raw = gen.noise2_array(xs * frequency, ys * frequency)
+        signal = offset - np.abs(raw)
+        signal *= signal  # sharpen
+        signal *= weight
+        result += signal * amplitude
+        max_val += amplitude
+        # Cascade weight
+        weight = np.clip(signal * gain, 0.0, 1.0)
+        amplitude *= gain
+        frequency *= lacunarity
+
+    if max_val > 0.0:
+        result = result / max_val
+    return np.clip(result, 0.0, 1.0)
+
+
+def generate_heightmap_ridged(
+    width: int,
+    height: int,
+    scale: float = 100.0,
+    octaves: int = 6,
+    lacunarity: float = 2.0,
+    gain: float = 0.5,
+    offset: float = 1.0,
+    seed: int = 42,
+) -> np.ndarray:
+    """Generate a full heightmap using ridged multifractal noise.
+
+    Convenience wrapper around ``ridged_multifractal_array`` that builds
+    the coordinate grids and normalizes output to [0, 1].
+
+    Parameters
+    ----------
+    width, height : int
+        Dimensions of the output heightmap.
+    scale : float
+        Noise sampling scale (larger = smoother terrain features).
+    octaves, lacunarity, gain, offset : float
+        Ridged multifractal parameters.
+    seed : int
+        Random seed.
+
+    Returns
+    -------
+    np.ndarray
+        2D array of shape (height, width) with values in [0, 1].
+    """
+    x_coords = np.arange(width, dtype=np.float64) / scale
+    y_coords = np.arange(height, dtype=np.float64) / scale
+    xs, ys = np.meshgrid(x_coords, y_coords)
+
+    hmap = ridged_multifractal_array(
+        xs, ys,
+        octaves=octaves,
+        lacunarity=lacunarity,
+        gain=gain,
+        offset=offset,
+        seed=seed,
+    )
+
+    # Normalize to strict [0, 1]
+    hmin, hmax = hmap.min(), hmap.max()
+    if hmax - hmin > 1e-10:
+        hmap = (hmap - hmin) / (hmax - hmin)
+    return hmap
+
+
+def generate_heightmap_with_noise_type(
+    width: int,
+    height: int,
+    scale: float = 100.0,
+    seed: int = 42,
+    noise_type: str = "perlin",
+    terrain_type: str = "mountains",
+    blend_ratio: float = 0.5,
+    **kwargs: Any,
+) -> np.ndarray:
+    """Generate a heightmap with selectable noise algorithm.
+
+    Parameters
+    ----------
+    width, height : int
+        Heightmap dimensions.
+    scale : float
+        Noise frequency scale.
+    seed : int
+        Random seed.
+    noise_type : str
+        One of:
+        - "perlin" (default): Standard fBm Perlin/simplex noise.
+        - "ridged_multifractal": Sharp ridges and mountain crags.
+        - "hybrid": 50/50 blend of perlin and ridged_multifractal.
+    terrain_type : str
+        Preset key for perlin path (ignored for pure ridged).
+    blend_ratio : float
+        Mix factor for "hybrid" mode (0.0=pure perlin, 1.0=pure ridged).
+    **kwargs : Any
+        Additional keyword arguments forwarded to the generator.
+
+    Returns
+    -------
+    np.ndarray
+        2D heightmap in [0, 1].
+    """
+    if noise_type == "perlin":
+        return generate_heightmap(
+            width, height, scale=scale, seed=seed,
+            terrain_type=terrain_type, **kwargs,
+        )
+    elif noise_type == "ridged_multifractal":
+        return generate_heightmap_ridged(
+            width, height, scale=scale, seed=seed,
+            octaves=kwargs.get("octaves", 6),
+            lacunarity=kwargs.get("lacunarity", 2.0),
+            gain=kwargs.get("gain", 0.5),
+            offset=kwargs.get("offset", 1.0),
+        )
+    elif noise_type == "hybrid":
+        perlin = generate_heightmap(
+            width, height, scale=scale, seed=seed,
+            terrain_type=terrain_type,
+        )
+        ridged = generate_heightmap_ridged(
+            width, height, scale=scale, seed=seed,
+            octaves=kwargs.get("octaves", 6),
+        )
+        hmap = perlin * (1.0 - blend_ratio) + ridged * blend_ratio
+        hmin, hmax = hmap.min(), hmap.max()
+        if hmax - hmin > 1e-10:
+            hmap = (hmap - hmin) / (hmax - hmin)
+        return hmap
+    else:
+        raise ValueError(
+            f"Unknown noise_type '{noise_type}'. "
+            "Valid options: 'perlin', 'ridged_multifractal', 'hybrid'."
+        )
+
+
+# ---------------------------------------------------------------------------
+# AAA: Terrain auto-splatting (39-02)
+# ---------------------------------------------------------------------------
+
+def auto_splat_terrain(
+    heightmap: np.ndarray,
+    slope_map: np.ndarray | None = None,
+    water_proximity: np.ndarray | None = None,
+    biome: str = "default",
+) -> dict[str, Any]:
+    """Compute per-vertex splat weights from slope, height, curvature, moisture.
+
+    Implements research-backed rules:
+    - slope > 55 deg  -> cliff/rock (100%)
+    - slope 30-55 deg -> rock/gravel blend
+    - height > 0.7    -> mountain/snow
+    - moisture > 0.6 AND slope < 10 -> swamp/mud
+    - else            -> grass/dirt blend based on biome
+
+    Curvature modifies roughness:
+    - Convex edges (ridges): roughness -= 0.15
+    - Concave valleys: roughness += 0.20
+
+    Parameters
+    ----------
+    heightmap : np.ndarray
+        2D array of terrain heights in [0, 1].
+    slope_map : np.ndarray, optional
+        Pre-computed slope in degrees. Computed from heightmap if None.
+    water_proximity : np.ndarray, optional
+        Per-cell moisture value in [0, 1]. Higher = wetter. Computed from
+        height-based rainfall proxy if None.
+    biome : str
+        Biome hint for fallback material selection.
+
+    Returns
+    -------
+    dict with keys:
+        splat_weights : np.ndarray shape (H, W, 5)
+            Per-cell weights for [grass, rock, cliff, snow, mud] layers.
+        material_ids : np.ndarray shape (H, W)
+            Dominant material index per cell.
+        roughness_map : np.ndarray shape (H, W)
+            Per-cell roughness [0, 1] after curvature adjustment.
+        material_names : list of str
+            Names for each splat layer index.
+    """
+    if slope_map is None:
+        slope_map = compute_slope_map(heightmap)
+
+    rows, cols = heightmap.shape
+
+    # Moisture: combination of water_proximity (if given) and height-based
+    # rainfall (high altitude = more rain on windward side).
+    if water_proximity is not None:
+        moisture = np.clip(np.asarray(water_proximity, dtype=np.float64), 0.0, 1.0)
+    else:
+        # Simple height-based proxy: mid-altitude gets most rain
+        altitude_moisture = 1.0 - np.abs(heightmap - 0.4) * 2.5
+        moisture = np.clip(altitude_moisture, 0.0, 1.0)
+
+    # Curvature: Laplacian of heightmap (convex=positive, concave=negative)
+    # Use simple 3x3 discrete Laplacian
+    if rows >= 3 and cols >= 3:
+        padded = np.pad(heightmap, 1, mode="edge")
+        laplacian = (
+            padded[:-2, 1:-1]   # up
+            + padded[2:, 1:-1]  # down
+            + padded[1:-1, :-2] # left
+            + padded[1:-1, 2:]  # right
+            - 4.0 * heightmap
+        )
+    else:
+        laplacian = np.zeros_like(heightmap)
+
+    # Normalize curvature to [-1, 1]
+    curv_max = max(float(np.abs(laplacian).max()), 1e-8)
+    curvature = np.clip(laplacian / curv_max, -1.0, 1.0)
+
+    # Splat layer indices: 0=grass, 1=rock, 2=cliff, 3=snow, 4=mud
+    N_LAYERS = 5
+    splat = np.zeros((rows, cols, N_LAYERS), dtype=np.float64)
+    GRASS, ROCK, CLIFF, SNOW, MUD = 0, 1, 2, 3, 4
+
+    # Rule masks (vectorized)
+    cliff_mask = slope_map > 55.0
+    steep_mask = (slope_map >= 30.0) & (slope_map <= 55.0)
+    snow_mask = (heightmap > 0.7) & ~cliff_mask
+    swamp_mask = (moisture > 0.6) & (slope_map < 10.0) & ~cliff_mask & ~snow_mask
+    grass_mask = ~cliff_mask & ~steep_mask & ~snow_mask & ~swamp_mask
+
+    # Assign weights
+    splat[cliff_mask, CLIFF] = 1.0
+
+    # Rock/gravel blend on steep slopes
+    steep_rock_frac = np.clip((slope_map - 30.0) / 25.0, 0.0, 1.0)
+    splat[steep_mask, ROCK] = steep_rock_frac[steep_mask]
+    splat[steep_mask, GRASS] = 1.0 - steep_rock_frac[steep_mask]
+
+    splat[snow_mask, SNOW] = 1.0
+    splat[swamp_mask, MUD] = 1.0
+
+    # Grass/dirt blend based on moisture
+    grass_dirt_blend = np.clip(moisture - 0.2, 0.0, 1.0)
+    splat[grass_mask, GRASS] = grass_dirt_blend[grass_mask]
+    splat[grass_mask, ROCK] = (1.0 - grass_dirt_blend)[grass_mask]
+
+    # Normalize so weights sum to 1
+    weight_sum = splat.sum(axis=2, keepdims=True)
+    weight_sum = np.maximum(weight_sum, 1e-8)
+    splat /= weight_sum
+
+    # Dominant material
+    material_ids = np.argmax(splat, axis=2).astype(np.int32)
+
+    # Roughness: base from material, adjusted by curvature
+    base_roughness = np.where(
+        material_ids == CLIFF, 0.92,
+        np.where(material_ids == ROCK, 0.85,
+        np.where(material_ids == SNOW, 0.45,
+        np.where(material_ids == MUD, 0.55,
+        0.88)))  # grass default
+    )
+    # Laplacian sign: convex peak -> negative (center > neighbors),
+    # concave valley -> positive (center < neighbors).
+    # Convex ridges: smoother (wind erosion); concave valleys: rougher (debris).
+    roughness_adj = np.where(curvature < -0.1, -0.15, np.where(curvature > 0.1, 0.20, 0.0))
+    roughness_map = np.clip(base_roughness + roughness_adj, 0.0, 1.0)
+
+    return {
+        "splat_weights": splat,
+        "material_ids": material_ids,
+        "roughness_map": roughness_map,
+        "material_names": ["grass", "rock", "cliff", "snow", "mud"],
+    }
