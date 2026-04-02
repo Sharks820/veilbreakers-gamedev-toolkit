@@ -353,7 +353,7 @@ class TestFullAssetPipeline:
         calls = runner.blender.send_command.call_args_list
         mat_calls = [c for c in calls if c[0][0] == "material_create_procedural"]
         assert len(mat_calls) >= 1
-        assert mat_calls[0][0][1]["preset"] == "old_wood"
+        assert mat_calls[0][0][1]["material_key"] == "old_wood"
 
     def test_material_auto_character(self):
         runner = _make_runner()
@@ -361,7 +361,7 @@ class TestFullAssetPipeline:
         calls = runner.blender.send_command.call_args_list
         mat_calls = [c for c in calls if c[0][0] == "material_create_procedural"]
         assert len(mat_calls) >= 1
-        assert mat_calls[0][0][1]["preset"] == "worn_leather"
+        assert mat_calls[0][0][1]["material_key"] == "worn_leather"
 
     def test_material_auto_creature(self):
         runner = _make_runner()
@@ -369,7 +369,7 @@ class TestFullAssetPipeline:
         calls = runner.blender.send_command.call_args_list
         mat_calls = [c for c in calls if c[0][0] == "material_create_procedural"]
         assert len(mat_calls) >= 1
-        assert mat_calls[0][0][1]["preset"] == "chitin"
+        assert mat_calls[0][0][1]["material_key"] == "chitin"
 
     def test_material_auto_weapon(self):
         runner = _make_runner()
@@ -377,7 +377,7 @@ class TestFullAssetPipeline:
         calls = runner.blender.send_command.call_args_list
         mat_calls = [c for c in calls if c[0][0] == "material_create_procedural"]
         assert len(mat_calls) >= 1
-        assert mat_calls[0][0][1]["preset"] == "rusted_armor"
+        assert mat_calls[0][0][1]["material_key"] == "rusted_armor"
 
     def test_material_auto_building(self):
         runner = _make_runner()
@@ -385,7 +385,7 @@ class TestFullAssetPipeline:
         calls = runner.blender.send_command.call_args_list
         mat_calls = [c for c in calls if c[0][0] == "material_create_procedural"]
         assert len(mat_calls) >= 1
-        assert mat_calls[0][0][1]["preset"] == "dungeon_stone"
+        assert mat_calls[0][0][1]["material_key"] == "dungeon_stone"
 
     def test_material_auto_vegetation(self):
         runner = _make_runner()
@@ -393,7 +393,7 @@ class TestFullAssetPipeline:
         calls = runner.blender.send_command.call_args_list
         mat_calls = [c for c in calls if c[0][0] == "material_create_procedural"]
         assert len(mat_calls) >= 1
-        assert mat_calls[0][0][1]["preset"] == "bark"
+        assert mat_calls[0][0][1]["material_key"] == "bark"
 
     def test_material_explicit_preset(self):
         runner = _make_runner()
@@ -401,7 +401,7 @@ class TestFullAssetPipeline:
         calls = runner.blender.send_command.call_args_list
         mat_calls = [c for c in calls if c[0][0] == "material_create_procedural"]
         assert len(mat_calls) >= 1
-        assert mat_calls[0][0][1]["preset"] == "obsidian"
+        assert mat_calls[0][0][1]["material_key"] == "obsidian"
 
     # --- Rig logic ---
 

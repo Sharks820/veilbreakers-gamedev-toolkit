@@ -2094,6 +2094,8 @@ async def asset_pipeline(
         "performance_check",
         # LOD chain generation (Phase 39 -- AAA-MAP-11)
         "generate_lod_chain",
+        # Prop generation via Tripo (compose_map helper)
+        "generate_prop",
     ],
     # Common params
     object_name: str | None = None,

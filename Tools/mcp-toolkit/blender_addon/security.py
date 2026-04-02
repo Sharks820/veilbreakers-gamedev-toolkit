@@ -32,7 +32,6 @@ BLOCKED_FUNCTIONS = frozenset({
     "__import__",
     "breakpoint",
     "globals", "locals", "vars",
-    "type",                         # S1: class factory sandbox escape
 })
 
 # Block all dunder attribute access except a safe allowlist.

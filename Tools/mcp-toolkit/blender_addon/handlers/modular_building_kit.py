@@ -417,7 +417,7 @@ def wall_window(
     """Wall panel with window opening cut + sill + frame."""
     t = thickness if thickness > 0 else _get_thickness(style)
     ox, oz, ow, oh = _window_opening_params(style, width, height, window_style)
-    verts, faces = _cut_opening(width, height, t, ox, oz, ow, oh)
+    verts, faces, _uvs = _cut_opening(width, height, t, ox, oz, ow, oh)
     verts, faces, *_ = _apply_style_detail(style, verts, faces, width, height, t)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
@@ -464,7 +464,7 @@ def wall_door(
     """Wall panel with door opening + frame."""
     t = thickness if thickness > 0 else _get_thickness(style)
     ox, oz, ow, oh = _door_opening_params(style, width, height, door_style)
-    verts, faces = _cut_opening(width, height, t, ox, oz, ow, oh)
+    verts, faces, _uvs = _cut_opening(width, height, t, ox, oz, ow, oh)
     verts, faces, *_ = _apply_style_detail(style, verts, faces, width, height, t)
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
@@ -2536,7 +2536,7 @@ def assemble_building(
         all_parts.append((transformed, faces))
         piece_count += 1
 
-    merged_verts, merged_faces = _merge_geometry(all_parts)
+    merged_verts, merged_faces, _merged_uvs = _merge_geometry(all_parts)
     return _make_result(
         "assembled_building", merged_verts, merged_faces,
         style="mixed", piece_type="assembly",

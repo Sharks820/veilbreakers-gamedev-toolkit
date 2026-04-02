@@ -1,7 +1,7 @@
 """Procedural material node graph system for AAA dark fantasy materials.
 
 Replaces flat single-color Principled BSDF with real Blender shader node
-trees using Noise, Voronoi, Musgrave, Wave, Brick, and Bump nodes.
+trees using Noise, Voronoi, Wave, Brick, and Bump nodes.
 
 Provides:
   - MATERIAL_LIBRARY: 45+ named material presets (dark fantasy palette)
@@ -902,7 +902,7 @@ def build_stone_material(mat: Any, params: dict[str, Any]) -> None:
     Node graph structure:
       - Voronoi Texture (scale from detail_scale) -> ColorRamp -> block pattern
       - Noise Texture (scale 15) -> ColorRamp -> mortar / surface detail
-      - Musgrave Texture -> MixRGB with base color -> surface color variation
+      - Noise Texture (surface variation) -> MixRGB with base color -> surface color variation
       - Combined Noise -> Bump Node -> Normal input on Principled BSDF
       - Secondary Noise -> Multiply with roughness -> roughness variation
     """
@@ -972,18 +972,19 @@ def build_stone_material(mat: Any, params: dict[str, Any]) -> None:
     ramp_mortar.color_ramp.elements[1].color = (0.15, 0.13, 0.11, 1.0)
     links.new(noise_mortar.outputs["Fac"], ramp_mortar.inputs["Fac"])
 
-    # -- Musgrave Texture: Surface variation --
-    musgrave = _add_node(tree, "ShaderNodeTexMusgrave", -800, -400,
-                         "Surface Variation")
-    musgrave.inputs["Scale"].default_value = detail_scale * 2.0
-    musgrave.inputs["Detail"].default_value = 8.0
-    links.new(mapping.outputs["Vector"], musgrave.inputs["Vector"])
+    # -- Noise Texture: Surface variation (replaces deprecated Musgrave) --
+    surface_var = _add_node(tree, "ShaderNodeTexNoise", -800, -400,
+                            "Surface Variation")
+    surface_var.inputs["Scale"].default_value = detail_scale * 2.0
+    surface_var.inputs["Detail"].default_value = 8.0
+    surface_var.inputs["Roughness"].default_value = 0.7
+    links.new(mapping.outputs["Vector"], surface_var.inputs["Vector"])
 
     # -- MixRGB: Blend base color with surface variation --
     mix_color = _add_node(tree, "ShaderNodeMixRGB", -400, 100,
                           "Color Variation")
     mix_color.blend_type = "OVERLAY"
-    links.new(musgrave.outputs["Fac"], mix_color.inputs["Fac"])
+    links.new(surface_var.outputs["Fac"], mix_color.inputs["Fac"])
     links.new(ramp_blocks.outputs["Color"], mix_color.inputs["Color1"])
     links.new(ramp_mortar.outputs["Color"], mix_color.inputs["Color2"])
 
