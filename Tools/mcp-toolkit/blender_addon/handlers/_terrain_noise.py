@@ -265,37 +265,96 @@ TERRAIN_PRESETS: dict[str, dict[str, Any]] = {
 # ---------------------------------------------------------------------------
 
 BIOME_RULES: list[dict[str, Any]] = [
+    # Priority order: first matching rule wins.
+    # PBR values sourced from physicallybased.info + AAA reference tables.
+    # Colors are LINEAR (Blender native) — converted from sRGB via (sRGB/255)^2.2
     {
-        "name": "snow",
-        "material": "terrain_snow",
-        "min_alt": 0.8,
+        "name": "cliff_rock",
+        "material": "terrain_cliff_rock",
+        # Granite dark: sRGB (90, 85, 75) -> linear
+        "base_color": (0.089, 0.079, 0.063, 1.0),
+        "roughness": 0.82,
+        "min_alt": 0.0,
         "max_alt": 1.0,
-        "min_slope": 0.0,
-        "max_slope": 45.0,
+        "min_slope": 55.0,
+        "max_slope": 90.0,
     },
     {
         "name": "rock",
         "material": "terrain_rock",
+        # Granite light/weathered: sRGB (140, 130, 115) -> linear
+        "base_color": (0.242, 0.216, 0.177, 1.0),
+        "roughness": 0.85,
         "min_alt": 0.0,
         "max_alt": 1.0,
-        "min_slope": 40.0,
-        "max_slope": 90.0,
+        "min_slope": 35.0,
+        "max_slope": 55.0,
+    },
+    {
+        "name": "highland_scrub",
+        "material": "terrain_highland",
+        # Dark heather/scrub: sRGB (85, 95, 55) -> linear
+        "base_color": (0.079, 0.099, 0.037, 1.0),
+        "roughness": 0.92,
+        "min_alt": 0.7,
+        "max_alt": 1.0,
+        "min_slope": 0.0,
+        "max_slope": 35.0,
+    },
+    {
+        "name": "forest_floor",
+        "material": "terrain_forest",
+        # Dark forest floor moss/loam: sRGB (60, 75, 40) -> linear
+        "base_color": (0.046, 0.063, 0.021, 1.0),
+        "roughness": 0.93,
+        "min_alt": 0.3,
+        "max_alt": 0.7,
+        "min_slope": 15.0,
+        "max_slope": 35.0,
+    },
+    {
+        "name": "grass",
+        "material": "terrain_grass",
+        # Dark fantasy grass: sRGB (80, 110, 45) -> linear
+        "base_color": (0.069, 0.141, 0.027, 1.0),
+        "roughness": 0.90,
+        "min_alt": 0.15,
+        "max_alt": 0.7,
+        "min_slope": 0.0,
+        "max_slope": 15.0,
     },
     {
         "name": "dead_grass",
         "material": "terrain_dead_grass",
-        "min_alt": 0.2,
-        "max_alt": 0.8,
+        # Dried straw/dead vegetation: sRGB (130, 115, 70) -> linear
+        "base_color": (0.216, 0.177, 0.058, 1.0),
+        "roughness": 0.95,
+        "min_alt": 0.15,
+        "max_alt": 0.3,
         "min_slope": 0.0,
-        "max_slope": 40.0,
+        "max_slope": 20.0,
     },
     {
         "name": "mud",
         "material": "terrain_mud",
+        # Wet mud/earth: sRGB (95, 75, 50) -> linear
+        "base_color": (0.099, 0.063, 0.030, 1.0),
+        "roughness": 0.55,
         "min_alt": 0.0,
-        "max_alt": 0.2,
+        "max_alt": 0.15,
         "min_slope": 0.0,
-        "max_slope": 40.0,
+        "max_slope": 15.0,
+    },
+    {
+        "name": "dirt_path",
+        "material": "terrain_dirt",
+        # Packed earth/dirt: sRGB (115, 95, 65) -> linear
+        "base_color": (0.177, 0.099, 0.050, 1.0),
+        "roughness": 0.88,
+        "min_alt": 0.0,
+        "max_alt": 0.5,
+        "min_slope": 0.0,
+        "max_slope": 25.0,
     },
 ]
 

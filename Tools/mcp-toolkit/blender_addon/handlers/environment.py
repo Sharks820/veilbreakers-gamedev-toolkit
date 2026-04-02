@@ -567,13 +567,26 @@ def handle_paint_terrain(params: dict) -> dict:
 
     mesh = obj.data
 
-    # Create material slots
+    # Create material slots with proper Base Color from biome rules
     for rule in biome_rules:
         mat_name = rule.get("material", rule["name"])
         mat = bpy.data.materials.get(mat_name)
         if mat is None:
             mat = bpy.data.materials.new(name=mat_name)
             mat.use_nodes = True
+            # Apply base_color and roughness from rule if present
+            if mat.node_tree:
+                bsdf = mat.node_tree.nodes.get("Principled BSDF")
+                if bsdf:
+                    base_color = rule.get("base_color")
+                    if base_color:
+                        bc = list(base_color)
+                        while len(bc) < 4:
+                            bc.append(1.0)
+                        bsdf.inputs["Base Color"].default_value = tuple(bc[:4])
+                    roughness = rule.get("roughness")
+                    if roughness is not None:
+                        bsdf.inputs["Roughness"].default_value = roughness
         mesh.materials.append(mat)
 
     # Assign faces using bmesh
