@@ -5326,6 +5326,31 @@ def handle_generate_building(params: dict) -> dict:
                 pass
     result["meshes_repaired"] = repair_count
 
+    # Auto-apply weathering to all building mesh children based on quality tier
+    _weathering_preset_map = {
+        "luxury": "light",
+        "standard": "medium",
+        "poor": "heavy",
+        "abandoned": "ancient",
+        "ransacked": "heavy",
+    }
+    _auto_weathering_preset = _weathering_preset_map.get(_interior_quality, "medium")
+    weathering_applied_count = 0
+    for child_obj in parent.children_recursive:
+        if child_obj.type == "MESH" and child_obj.data is not None:
+            try:
+                from .weathering import handle_apply_weathering
+                handle_apply_weathering({
+                    "object_name": child_obj.name,
+                    "weathering_preset": _auto_weathering_preset,
+                    "seed": seed,
+                })
+                weathering_applied_count += 1
+            except Exception:
+                pass
+    result["weathering_preset"] = _auto_weathering_preset
+    result["weathering_applied_count"] = weathering_applied_count
+
     return {"status": "success", "result": result}
 
 
