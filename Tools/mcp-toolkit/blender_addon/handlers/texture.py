@@ -506,10 +506,34 @@ def handle_validate_texture(params: dict) -> dict:
     ):
         uv_coverage_pct = _estimate_uv_coverage(obj)
 
+    # Texel density estimation
+    texture_resolution = 0
+    for t in textures:
+        res = t.get("resolution", (0, 0))
+        if isinstance(res, (list, tuple)) and len(res) >= 2:
+            texture_resolution = max(texture_resolution, res[0], res[1])
+    texel_density = _estimate_texel_density(obj, texture_resolution, uv_coverage_pct)
+    texel_density_valid = texel_density <= 0.0 or (256.0 <= texel_density <= 2048.0)
+    texel_density_issues: list[str] = []
+    if texel_density > 0.0:
+        if texel_density < 256.0:
+            texel_density_issues.append(
+                f"Texel density {texel_density:.1f} px/m is below minimum 256 px/m — texture will appear blurry up close."
+            )
+            overall_valid = False
+        elif texel_density > 2048.0:
+            texel_density_issues.append(
+                f"Texel density {texel_density:.1f} px/m exceeds maximum 2048 px/m — texture resolution wasted."
+            )
+            overall_valid = False
+
     return {
         "object_name": object_name,
         "textures": textures,
         "uv_coverage_pct": round(uv_coverage_pct, 2),
+        "texel_density": round(texel_density, 2),
+        "texel_density_valid": texel_density_valid,
+        "texel_density_issues": texel_density_issues,
         "overall_valid": overall_valid,
     }
 
@@ -555,6 +579,53 @@ def _estimate_uv_coverage(obj: Any) -> float:
     # UV space is [0,1]x[0,1] = area 1.0
     # Coverage is total UV area (clamped to 100%)
     return min(total_uv_area * 100.0, 100.0)
+
+
+def _estimate_texel_density(obj: Any, texture_resolution: int, uv_coverage_pct: float) -> float:
+    """Estimate texel density in pixels per metre.
+
+    Uses the object's bounding box world-space dimensions to approximate the
+    surface area, then derives the effective world-space UV island size from
+    the UV coverage fraction.
+
+    Formula: texel_density = texture_resolution / uv_island_world_size
+    where uv_island_world_size = sqrt(bbox_surface_area * uv_coverage_fraction)
+
+    Returns 0.0 if inputs are insufficient for a meaningful estimate.
+    """
+    if texture_resolution <= 0:
+        return 0.0
+
+    if obj.type != "MESH" or obj.data is None:
+        return 0.0
+
+    # Bounding box dimensions in world space
+    try:
+        bbox = [obj.matrix_world @ __import__('mathutils').Vector(corner) for corner in obj.bound_box]
+        xs = [v.x for v in bbox]
+        ys = [v.y for v in bbox]
+        zs = [v.z for v in bbox]
+        dx = max(xs) - min(xs)
+        dy = max(ys) - min(ys)
+        dz = max(zs) - min(zs)
+    except Exception:
+        return 0.0
+
+    # Approximate surface area of bounding box (open box heuristic: 2*(ab+bc+ca))
+    bbox_surface_area = 2.0 * (dx * dy + dy * dz + dz * dx)
+    if bbox_surface_area <= 0.0:
+        return 0.0
+
+    # Scale by UV coverage fraction to get the world-space area the UVs map to
+    uv_fraction = max(0.0, min(1.0, uv_coverage_pct / 100.0))
+    if uv_fraction <= 0.0:
+        uv_fraction = 1.0  # Assume full coverage if no UV data
+
+    uv_island_world_size = math.sqrt(bbox_surface_area * uv_fraction)
+    if uv_island_world_size <= 0.0:
+        return 0.0
+
+    return float(texture_resolution) / uv_island_world_size
 
 
 # ---------------------------------------------------------------------------
