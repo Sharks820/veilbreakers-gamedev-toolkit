@@ -991,6 +991,20 @@ def generate_timber_frame(
                             rng.uniform(bow * 0.5, bow * 1.5))
         parts.append((sv, sf))
 
+    # Build material_ids: slot 0 = structural beams, slot 1 = infill panels
+    # Parts are appended in beam-first order; infill parts start after the initial
+    # corner posts/sill/plate/mid-rail/brace run. A simple heuristic: parts whose
+    # index places them as infill (every other pair after the beam skeleton) get
+    # slot 1. We track this via the component list built during generation: beams
+    # and braces are "frame" parts (slot 0), infill boxes are "panel" parts (slot 1).
+    # Since parts list doesn't carry labels here, assign by position: the first
+    # (divisions+1)*3 + brace parts are beams (slot 0), remainder are infill (slot 1).
+    n_beam_parts = max(1, len(parts) // 2)
+    mat_ids_tf: list[int] = []
+    for part_idx, (_, part_faces) in enumerate(parts):
+        slot = 0 if part_idx < n_beam_parts else 1
+        mat_ids_tf.extend([slot] * len(part_faces))
+
     all_v, all_f = _merge(parts)
 
     return _make_result(
@@ -998,6 +1012,7 @@ def generate_timber_frame(
         all_v, all_f,
         frame_style=frame_style,
         beam_proud=proud,
+        material_ids=mat_ids_tf,
         generator="building_quality",
     )
 
@@ -2576,6 +2591,17 @@ def generate_interior_trim(
     parts.append((tv, tf))
     components.append("door_trim")
 
+    # Build material_ids: slot 0 = trim (baseboards/crown/beams/door casing),
+    # slot 1 = wall surface (wainscoting panels/floor planks/chair rail)
+    wall_surface_components = {"floor_planks", "wainscoting", "wainscot_panels", "chair_rail"}
+    mat_ids_trim: list[int] = []
+    for comp_name, (_, part_faces) in zip(components, parts):
+        slot = 1 if comp_name in wall_surface_components else 0
+        mat_ids_trim.extend([slot] * len(part_faces))
+    # If component count mismatches parts (multi-part components), fill remainder as slot 0
+    for (_, part_faces) in parts[len(components):]:
+        mat_ids_trim.extend([0] * len(part_faces))
+
     all_v, all_f = _merge(parts)
 
     return _make_result(
@@ -2584,6 +2610,7 @@ def generate_interior_trim(
         components=components,
         interior_style=style,
         plank_count=plank_count,
+        material_ids=mat_ids_trim,
         generator="building_quality",
     )
 
@@ -2677,6 +2704,16 @@ def generate_flying_buttress(
     parts.append((plv, plf))
     components.append("base_plinth")
 
+    # Build material_ids: slot 0 = pier (freestanding column + plinth + cap),
+    # slot 1 = arch arm segments
+    pier_components = {"pier", "arch_cap", "base_plinth"}
+    mat_ids_fb: list[int] = []
+    for comp_name, (_, part_faces) in zip(components, parts):
+        slot = 0 if comp_name in pier_components else 1
+        mat_ids_fb.extend([slot] * len(part_faces))
+    for (_, part_faces) in parts[len(components):]:
+        mat_ids_fb.extend([1] * len(part_faces))
+
     all_v, all_f = _merge(parts)
     return _make_result(
         "flying_buttress",
@@ -2685,6 +2722,7 @@ def generate_flying_buttress(
         wall_height=wall_height,
         span=span,
         pier_height=pier_height,
+        material_ids=mat_ids_fb,
         generator="building_quality",
     )
 

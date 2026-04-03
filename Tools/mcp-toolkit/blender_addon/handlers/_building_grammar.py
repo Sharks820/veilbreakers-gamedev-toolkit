@@ -87,16 +87,12 @@ _DETAIL_TYPE_MATERIAL_CATEGORY: dict[str, str] = {
     # Fallback for named detail_types that match high-level names
     "timber_frame": "door",
     "flying_buttress": "fortification",
-    "battlement": "fortification",
     "machicolation": "fortification",
     "spire": "structural",
     "chimney": "structural",
-    "gargoyle": "fortification",
-    "rose_window": "structural",
     "vine_growth": "vegetation",
     "moss_patches": "vegetation",
     "root_buttress": "vegetation",
-    "woodpile": "door",
     "window_boxes": "door",
 }
 
@@ -2739,6 +2735,10 @@ def _wall_pref_to_ids(wall_pref: str, rng: random.Random) -> list[int]:
         return [2, 3] if rng.random() < 0.5 else [3, 2]
     elif wall_pref == "exterior":
         return [1, 2, 3]
+    elif wall_pref == "center_rows":
+        # Items with center_rows (e.g. chapel pews) are placed in rows along the
+        # room Y-axis by the caller; wall placement is not applicable.
+        return []
     else:  # "any"
         walls = [0, 1, 2, 3]
         rng.shuffle(walls)
