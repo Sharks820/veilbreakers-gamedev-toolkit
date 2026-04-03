@@ -739,8 +739,8 @@ def handle_generate_road(params: dict) -> dict:
     if not terrain_name:
         raise ValueError("'terrain_name' is required")
 
-    waypoints = [tuple(wp) for wp in params.get("waypoints", [(0, 0), (0, 0)])]
-    width = params.get("width", 3)
+    waypoints = [(int(wp[0]), int(wp[1])) for wp in params.get("waypoints", [(0, 0), (0, 0)])]
+    width = int(params.get("width", 3))
     grade_strength = params.get("grade_strength", 0.8)
     seed = params.get("seed", 0)
 
