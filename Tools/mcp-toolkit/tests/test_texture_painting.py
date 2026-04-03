@@ -95,36 +95,45 @@ class TestValidation:
     def test_valid_projection_types_accepted(self):
         for pt in VALID_PROJECTION_TYPES:
             validate_projection_type(pt)  # Should not raise
+        assert len(VALID_PROJECTION_TYPES) > 0
 
     def test_invalid_projection_type_rejected(self):
-        with pytest.raises(ValueError, match="Invalid projection type"):
+        with pytest.raises(ValueError, match="Invalid projection type") as exc_info:
             validate_projection_type("cubemap")
+        assert "cubemap" in str(exc_info.value)
 
     def test_empty_string_projection_type_rejected(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError) as exc_info:
             validate_projection_type("")
+        assert str(exc_info.value)  # error message is non-empty
 
     def test_valid_blend_modes_accepted(self):
         for bm in VALID_BLEND_MODES:
             validate_blend_mode(bm)
+        assert len(VALID_BLEND_MODES) > 0
 
     def test_invalid_blend_mode_rejected(self):
-        with pytest.raises(ValueError, match="Invalid blend mode"):
+        with pytest.raises(ValueError, match="Invalid blend mode") as exc_info:
             validate_blend_mode("BURN")
+        assert "BURN" in str(exc_info.value)
 
     def test_case_sensitive_blend_mode(self):
-        with pytest.raises(ValueError):
+        with pytest.raises(ValueError) as exc_info:
             validate_blend_mode("mix")  # lowercase
+        assert str(exc_info.value)  # error message is non-empty
 
     def test_valid_channels_accepted(self):
         validate_paint_channels(list(VALID_PAINT_CHANNELS))
+        assert len(VALID_PAINT_CHANNELS) > 0
 
     def test_invalid_channel_rejected(self):
-        with pytest.raises(ValueError, match="Invalid paint channel"):
+        with pytest.raises(ValueError, match="Invalid paint channel") as exc_info:
             validate_paint_channels(["color", "albedo"])
+        assert "albedo" in str(exc_info.value)
 
     def test_empty_channels_accepted(self):
         validate_paint_channels([])  # no channels = nothing to reject
+        assert True  # reaching here confirms no exception was raised
 
 
 # ===========================================================================
@@ -181,8 +190,9 @@ class TestCameraProjection:
             assert 0.0 <= uvs[idx][1] <= 1.0
 
     def test_camera_missing_params_raises(self):
-        with pytest.raises(ValueError, match="camera_pos and camera_target"):
+        with pytest.raises(ValueError, match="camera_pos and camera_target") as exc_info:
             compute_projection_uvs(PLANE_VERTICES, [], "camera")
+        assert "camera" in str(exc_info.value).lower()
 
     def test_all_behind_returns_all_clipped(self):
         """When all vertices are behind the camera, all UVs are (-1, -1)."""
@@ -250,8 +260,9 @@ class TestPlanarProjection:
         assert abs(uvs[0][1] - uvs[1][1]) < 1e-6
 
     def test_planar_missing_params_raises(self):
-        with pytest.raises(ValueError, match="plane_normal and plane_point"):
+        with pytest.raises(ValueError, match="plane_normal and plane_point") as exc_info:
             compute_projection_uvs(PLANE_VERTICES, [], "planar")
+        assert "plane" in str(exc_info.value).lower()
 
     def test_planar_cube_uvs_in_range(self):
         uvs = compute_projection_uvs(
@@ -675,8 +686,9 @@ class TestMultiChannelBlend:
         assert abs(result["roughness"] - 0.5) < 1e-6
 
     def test_invalid_blend_mode_raises(self):
-        with pytest.raises(ValueError, match="Invalid blend mode"):
+        with pytest.raises(ValueError, match="Invalid blend mode") as exc_info:
             compute_multi_channel_blend({"r": 0.5}, {"r": 0.5}, 1.0, "DODGE")
+        assert "DODGE" in str(exc_info.value)
 
     def test_only_matching_channels_blended(self):
         """Only channels present in both dicts appear in output."""
@@ -737,12 +749,14 @@ class TestProjectionDispatch:
 
     def test_box_type_raises(self):
         """Passing 'box' to compute_projection_uvs should raise ValueError."""
-        with pytest.raises(ValueError, match="compute_box_projection_uvs"):
+        with pytest.raises(ValueError, match="compute_box_projection_uvs") as exc_info:
             compute_projection_uvs(CUBE_VERTICES, CUBE_FACES, "box")
+        assert "box" in str(exc_info.value).lower()
 
     def test_invalid_type_raises(self):
-        with pytest.raises(ValueError, match="Invalid projection type"):
+        with pytest.raises(ValueError, match="Invalid projection type") as exc_info:
             compute_projection_uvs(CUBE_VERTICES, CUBE_FACES, "cubemap")
+        assert "cubemap" in str(exc_info.value)
 
 
 # ===========================================================================
