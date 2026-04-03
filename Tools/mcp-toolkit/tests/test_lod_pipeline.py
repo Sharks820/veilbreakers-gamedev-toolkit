@@ -730,8 +730,9 @@ class TestBillboardLOD:
         chain = generate_lod_chain(mesh_data, "vegetation")
         billboard_verts, _, _ = chain[-1]
 
-        z_values = [v[2] for v in billboard_verts]
-        assert all(abs(z - z_values[0]) < 1e-6 for z in z_values)
+        # WORLD-001: billboard is now vertical (XZ plane, facing +Y), so Y is constant
+        y_values = [v[1] for v in billboard_verts]
+        assert all(abs(y - y_values[0]) < 1e-6 for y in y_values)
 
     def test_billboard_spans_bounding_box(self):
         """Billboard quad width/height approximately matches the source mesh."""
@@ -744,14 +745,15 @@ class TestBillboardLOD:
         billboard_verts, _, _ = chain[-1]
 
         src_xs = [v[0] for v in verts]
-        src_ys = [v[1] for v in verts]
+        src_zs = [v[2] for v in verts]
         src_width = max(src_xs) - min(src_xs)
-        src_height = max(src_ys) - min(src_ys)
+        # WORLD-001: vertical billboard — height is Z span, not Y span
+        src_height = max(src_zs) - min(src_zs)
 
         bb_xs = [v[0] for v in billboard_verts]
-        bb_ys = [v[1] for v in billboard_verts]
+        bb_zs = [v[2] for v in billboard_verts]
         bb_width = max(bb_xs) - min(bb_xs)
-        bb_height = max(bb_ys) - min(bb_ys)
+        bb_height = max(bb_zs) - min(bb_zs)
 
         assert abs(bb_width - src_width) < 0.1
         assert abs(bb_height - src_height) < 0.1

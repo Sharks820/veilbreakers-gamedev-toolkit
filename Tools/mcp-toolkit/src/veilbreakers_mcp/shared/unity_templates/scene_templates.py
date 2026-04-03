@@ -356,7 +356,7 @@ def generate_lighting_setup_script(
     fog_color: list[float] | None = None,
     fog_density: float = 0.01,
     skybox_material: str = "",
-    time_of_day: str = "noon",
+    time_of_day: str = "dusk",  # STY-004: dark fantasy default
 ) -> str:
     """Generate C# editor script for scene lighting, fog, and post-processing.
 

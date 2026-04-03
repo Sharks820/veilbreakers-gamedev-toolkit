@@ -584,13 +584,20 @@ class TestBuildingGenerationCorrectness(unittest.TestCase):
             self.assertGreater(len(roofs), 0, f"No roof for {style_name}")
 
             roof = roofs[0]
-            # Roof position should be at -overhang (extends past origin)
-            self.assertAlmostEqual(
-                roof["position"][0], -expected_overhang, places=2,
-                msg=f"{style_name}: roof X start wrong",
-            )
-            # Roof size should be width + 2*overhang (box-type only)
-            if roof["type"] == "box":
+            if roof["type"] == "mesh_spec":
+                # ARCH-008/009: mesh_spec roofs use position [0,0,z]; generate_roof
+                # handles overhang internally (geometry starts at -half_w = -(w/2+overhang)).
+                # Position 0.0 is correct — overhang is embedded in the mesh geometry.
+                self.assertAlmostEqual(
+                    roof["position"][0], 0.0, places=2,
+                    msg=f"{style_name}: mesh_spec roof X origin wrong",
+                )
+            else:
+                # box-type roofs embed overhang via position offset
+                self.assertAlmostEqual(
+                    roof["position"][0], -expected_overhang, places=2,
+                    msg=f"{style_name}: roof X start wrong",
+                )
                 self.assertAlmostEqual(
                     roof["size"][0], width + 2 * expected_overhang, places=2,
                     msg=f"{style_name}: roof width wrong (doubled overhang?)",
