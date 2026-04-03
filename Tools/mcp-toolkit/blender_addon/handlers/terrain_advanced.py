@@ -618,9 +618,9 @@ def flatten_layers(
         elif layer.blend_mode == "SUBTRACT":
             result = result - lh
         elif layer.blend_mode == "MAX":
-            result = np.maximum(result, result + lh)
+            result = np.maximum(result, lh)
         elif layer.blend_mode == "MIN":
-            result = np.minimum(result, result + lh)
+            result = np.minimum(result, lh)
         elif layer.blend_mode == "MULTIPLY":
             # Multiply mode: lh values centered around 0, so 1+lh is multiplier
             result = result * (1.0 + lh)
@@ -850,7 +850,7 @@ def compute_erosion_brush(
                 elif erosion_type == "thermal":
                     # Thermal: excess slope material slides down
                     h = result[r, c]
-                    talus = 0.05 / max(brush_weight, 0.01)
+                    talus = 0.05  # constant talus angle; transfer already scales by brush_weight
                     for dr, dc_off in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                         nr, nc = r + dr, c + dc_off
                         if 0 <= nr < rows and 0 <= nc < cols:
@@ -866,7 +866,7 @@ def compute_erosion_brush(
                     delta[r, c] -= abs(noise) * brush_weight * 0.05
                     # Deposit downwind (positive X direction)
                     deposit_c = min(c + 1, cols - 1)
-                    delta[r, deposit_c] += abs(noise) * brush_weight * 0.03
+                    delta[r, deposit_c] += abs(noise) * brush_weight * 0.05
 
         result += delta
 
@@ -1529,3 +1529,129 @@ def flatten_multiple_zones(
             seed=zone.get("seed", 0),
         )
     return result
+
+
+def handle_terrain_flatten_zone(params: dict) -> dict:
+    """Flatten a circular/elliptical zone on a Blender terrain mesh for building placement.
+
+    Params:
+        object_name   : name of terrain mesh object in scene
+        center_x      : world-space X center of flatten zone
+        center_y      : world-space Y center of flatten zone
+        radius_x      : X radius of the zone
+        radius_y      : Y radius of the zone (defaults to radius_x)
+        target_height : Z height to flatten to (defaults to terrain mean)
+        blend_distance: transition width beyond radius (defaults to radius * 0.5)
+    """
+    try:
+        import bpy  # noqa: PLC0415
+        import numpy as np  # noqa: PLC0415
+    except ImportError:
+        return {"status": "error", "error": "handle_terrain_flatten_zone requires Blender context"}
+
+    obj_name = params.get("object_name", "")
+    obj = bpy.data.objects.get(obj_name) if obj_name else None
+    if obj is None or obj.type != "MESH":
+        return {"status": "error", "error": f"Object '{obj_name}' not found or not a mesh"}
+
+    mesh = obj.data
+    verts = mesh.vertices
+
+    if len(verts) == 0:
+        return {"status": "error", "error": "Mesh has no vertices"}
+
+    # Read vertex positions in world space
+    mat = obj.matrix_world
+    positions = np.array([mat @ v.co for v in verts], dtype=np.float64)  # (N, 3)
+
+    xs = positions[:, 0]
+    ys = positions[:, 1]
+    zs = positions[:, 2]
+
+    min_x, max_x = float(xs.min()), float(xs.max())
+    min_y, max_y = float(ys.min()), float(ys.max())
+    span_x = max(max_x - min_x, 1e-6)
+    span_y = max(max_y - min_y, 1e-6)
+
+    center_x = float(params.get("center_x", (min_x + max_x) * 0.5))
+    center_y = float(params.get("center_y", (min_y + max_y) * 0.5))
+    radius_x = float(params.get("radius_x", span_x * 0.1))
+    radius_y = float(params.get("radius_y", radius_x))
+    blend_distance = float(params.get("blend_distance", radius_x * 0.5))
+    target_height = params.get("target_height", None)
+
+    # Convert world radius to normalised heightmap fraction
+    norm_cx = (center_x - min_x) / span_x
+    norm_cy = (center_y - min_y) / span_y
+    norm_rx = radius_x / span_x
+    norm_ry = radius_y / span_y
+    norm_blend = blend_distance / min(span_x, span_y)
+
+    # Build a simple 2-D heightmap from vertex Z values
+    # Use a resolution proportional to vertex count
+    grid_res = max(32, int(len(verts) ** 0.5))
+
+    # Bin vertices into a grid (nearest-bin average)
+    grid = np.full((grid_res, grid_res), np.nan, dtype=np.float64)
+    col_idx = np.clip((xs - min_x) / span_x * (grid_res - 1), 0, grid_res - 1).astype(int)
+    row_idx = np.clip((ys - min_y) / span_y * (grid_res - 1), 0, grid_res - 1).astype(int)
+    counts = np.zeros((grid_res, grid_res), dtype=np.int32)
+    sums = np.zeros((grid_res, grid_res), dtype=np.float64)
+    np.add.at(sums, (row_idx, col_idx), zs)
+    np.add.at(counts, (row_idx, col_idx), 1)
+    mask_filled = counts > 0
+    grid[mask_filled] = sums[mask_filled] / counts[mask_filled]
+
+    # Fill NaN cells by column mean, then global mean
+    col_means = np.nanmean(grid, axis=0)
+    for c in range(grid_res):
+        nan_rows = np.isnan(grid[:, c])
+        if nan_rows.any():
+            grid[nan_rows, c] = col_means[c] if not np.isnan(col_means[c]) else float(np.nanmean(grid))
+
+    # Resolve target height
+    if target_height is None:
+        t_h_norm: float | None = None
+    else:
+        z_min, z_max = float(np.nanmin(grid)), float(np.nanmax(grid))
+        z_range = max(z_max - z_min, 1e-6)
+        t_h_norm = (float(target_height) - z_min) / z_range
+
+    # Apply the pure-logic flattener using normalised coordinates
+    flat_radius = (norm_rx + norm_ry) * 0.5
+    flat_blend = norm_blend
+    flattened_grid = flatten_terrain_zone(
+        grid,
+        center_x=norm_cx,
+        center_y=norm_cy,
+        radius=flat_radius,
+        target_height=t_h_norm,
+        blend_width=flat_blend,
+        seed=int(params.get("seed", 0)),
+    )
+
+    # Map flattened grid Z back to each vertex
+    z_min_new = float(np.nanmin(flattened_grid))
+    z_max_new = float(np.nanmax(flattened_grid))
+    z_range_new = max(z_max_new - z_min_new, 1e-6)
+
+    z_orig_min = float(np.nanmin(grid))
+    z_orig_max = float(np.nanmax(grid))
+    z_orig_range = max(z_orig_max - z_orig_min, 1e-6)
+
+    # Compute delta per vertex from grid change
+    orig_sample = grid[row_idx, col_idx]
+    flat_sample = flattened_grid[row_idx, col_idx]
+    delta_z = flat_sample - orig_sample
+
+    # Apply delta in local space (matrix_world inverse)
+    mat_inv = mat.inverted()
+    for i, v in enumerate(verts):
+        world_pos = mat @ v.co
+        world_pos.z += delta_z[i]
+        local_pos = mat_inv @ world_pos
+        v.co.z = local_pos.z
+
+    mesh.update()
+
+    return {"status": "ok", "object_name": obj_name, "vertices_modified": len(verts)}

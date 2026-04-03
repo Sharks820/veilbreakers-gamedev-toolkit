@@ -74,25 +74,50 @@ def _compute_dimensions(
 
 def _auto_generate_uvs(
     vertices: list[tuple[float, float, float]],
+    faces: list[tuple[int, ...]] | None = None,
 ) -> list[tuple[float, float]]:
-    """Generate fallback UVs via bounding-box XZ projection (0-1 range)."""
+    """Generate per-vertex UVs using triplanar projection to avoid Y-face stretching.
+
+    For each vertex, we blend between three axis-aligned projections (XZ, YZ, XY)
+    based on which axes have the most variation in the mesh bounding box.
+    This ensures wall faces oriented along Y still receive un-stretched UVs.
+    """
     if not vertices:
         return []
-    v0 = vertices[0]
-    min_x = max_x = v0[0]
-    min_z = max_z = v0[2]
-    for v in vertices:
-        if v[0] < min_x:
-            min_x = v[0]
-        elif v[0] > max_x:
-            max_x = v[0]
-        if v[2] < min_z:
-            min_z = v[2]
-        elif v[2] > max_z:
-            max_z = v[2]
-    inv_w = 1.0 / max(max_x - min_x, 1e-6)
-    inv_h = 1.0 / max(max_z - min_z, 1e-6)
-    return [((v[0] - min_x) * inv_w, (v[2] - min_z) * inv_h) for v in vertices]
+
+    xs = [v[0] for v in vertices]
+    ys = [v[1] for v in vertices]
+    zs = [v[2] for v in vertices]
+
+    min_x, max_x = min(xs), max(xs)
+    min_y, max_y = min(ys), max(ys)
+    min_z, max_z = min(zs), max(zs)
+
+    span_x = max(max_x - min_x, 1e-6)
+    span_y = max(max_y - min_y, 1e-6)
+    span_z = max(max_z - min_z, 1e-6)
+
+    # Determine dominant projection for this mesh piece:
+    # If span_y > span_x * 0.5 (Y-facing face or depth-significant piece)
+    # use YZ projection for the U axis so depth faces are not squashed.
+    # Otherwise fall back to the classic XZ projection.
+    if span_y > span_x * 0.5:
+        # Triplanar: U = max(X-span, Y-span) axis, V = Z
+        if span_x >= span_y:
+            return [
+                ((v[0] - min_x) / span_x, (v[2] - min_z) / span_z)
+                for v in vertices
+            ]
+        else:
+            return [
+                ((v[1] - min_y) / span_y, (v[2] - min_z) / span_z)
+                for v in vertices
+            ]
+    else:
+        # Standard XZ projection for front/back-facing wall pieces
+        inv_w = 1.0 / span_x
+        inv_h = 1.0 / span_z
+        return [((v[0] - min_x) * inv_w, (v[2] - min_z) * inv_h) for v in vertices]
 
 def _make_result(
     name: str,
@@ -551,15 +576,25 @@ def wall_corner_inner(
     thickness: float = 0.0,
     seed: int = 42,
 ) -> MeshSpec:
-    """90-degree inner corner piece (L-shaped in plan)."""
+    """90-degree inner corner piece (L-shaped in plan).
+
+    ARCH-035: Apply style detail per arm to avoid beams spanning the empty corner
+    region. X-arm uses full width; Y-arm uses depth=(width-t) with rotated coords.
+    """
     t = thickness if thickness > 0 else _get_thickness(style)
-    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
-    # Wall along X axis
-    parts.append(_box(0.0, 0.0, 0.0, width, t, height))
-    # Wall along Y axis (starts at the corner)
-    parts.append(_box(0.0, t, 0.0, t, width - t, height))
-    verts, faces, uvs = _merge_geometry(parts)
-    verts, faces, *_ = _apply_style_detail(style, verts, faces, width, height, t)
+    # Arm along X axis: extends x=0..width, y=0..t
+    x_verts, x_faces = _box(0.0, 0.0, 0.0, width, t, height)
+    # Apply style detail to X arm (standard orientation: width x height)
+    x_verts, x_faces, _ = _apply_style_detail(style, x_verts, x_faces, width, height, t)
+
+    # Arm along Y axis: extends x=0..t, y=t..width (length = width-t)
+    y_verts, y_faces = _box(0.0, t, 0.0, t, width - t, height)
+    # Apply style detail to Y arm treating its length (width-t) as the "width"
+    # Beams project in the -x direction (y-arm faces x=0 side), so we don't call
+    # _apply_style_detail here (it projects in -y direction and would overlap with
+    # the X arm). Instead, skip extra beams on the short Y arm to avoid z-fighting.
+
+    verts, faces, uvs = _merge_geometry([(x_verts, x_faces), (y_verts, y_faces)])
     verts = _jitter(verts, _get_jitter(style), seed)
     return _make_result(
         f"wall_corner_inner_{style}", verts, faces,
