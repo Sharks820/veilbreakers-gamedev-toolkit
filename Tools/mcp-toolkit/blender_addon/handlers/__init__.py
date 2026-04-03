@@ -34,6 +34,8 @@ from .viewport import (
     handle_setup_ground_plane,
     handle_auto_frame_camera,
     handle_run_quality_checks,
+    handle_interior_camera_shot,
+    handle_render_orthographic_views,
 )
 from .materials import (
     handle_material_create,
@@ -46,6 +48,7 @@ from .export import (
     handle_export_gltf,
 )
 from .execute import handle_execute_code
+from .prop_quality import handle_validate_prop_quality
 from .mesh import (
     handle_analyze_topology,
     handle_auto_repair,
@@ -396,6 +399,7 @@ from .terrain_advanced import (  # noqa: F401 -- Advanced terrain (gaps 44-48, 7
     apply_thermal_erosion,
     compute_stamp_heightmap,
     apply_stamp_to_heightmap,
+    handle_terrain_flatten_zone,  # ARCH-021
 )
 from .vegetation_lsystem import (  # noqa: F401 -- L-system vegetation pipeline
     generate_lsystem_tree,
@@ -711,6 +715,9 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "setup_ground_plane": handle_setup_ground_plane,
     "auto_frame_camera": handle_auto_frame_camera,
     "run_quality_checks": handle_run_quality_checks,
+    "interior_camera_shot": handle_interior_camera_shot,
+    "render_orthographic_views": handle_render_orthographic_views,
+    "validate_prop_quality": handle_validate_prop_quality,
     # Materials
     "material_create": handle_material_create,
     "material_assign": handle_material_assign,
@@ -1058,6 +1065,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "mesh_bisect": handle_bisect,
     "mesh_checkpoint": handle_mesh_checkpoint,
     # Advanced terrain operations (gaps 44-48, 75, 28, 30)
+    "terrain_flatten_zone": handle_terrain_flatten_zone,  # ARCH-021
     "terrain_spline_deform": handle_spline_deform,
     "terrain_layers": handle_terrain_layers,
     "terrain_erosion_paint": handle_erosion_paint,

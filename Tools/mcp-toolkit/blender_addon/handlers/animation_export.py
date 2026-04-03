@@ -790,9 +790,29 @@ def handle_extract_root_motion(params: dict) -> dict:
             fc_root_rz.keyframe_points[i].interpolation = "BEZIER"
 
     # Step 6: Place animation events at contact frames via pose_markers
-    # Detect foot contact by finding frames where foot bone Z is at local minima
+    # Detect foot contact by finding frames where foot bone Z is at local minima.
+    # RIG-011: Fall back to extremity bones for non-biped creatures (wings, tentacles, etc.)
     events_placed = 0
-    foot_bones = ["DEF-foot.L", "DEF-foot.R"]
+    _biped_foot_bones = ["DEF-foot.L", "DEF-foot.R"]
+    _non_biped_fallbacks = [
+        # Wing tips (bird, bat)
+        "DEF-wing_tip.L", "DEF-wing_tip.R",
+        # Tentacles (floating, blob)
+        "DEF-tentacle.001", "DEF-tentacle.002", "DEF-tentacle.003", "DEF-tentacle.004",
+        # Insect legs
+        "DEF-leg_front.L", "DEF-leg_front.R",
+        "DEF-leg_mid.L", "DEF-leg_mid.R",
+        "DEF-leg_rear.L", "DEF-leg_rear.R",
+        # Generic extremities
+        "DEF-toe.L", "DEF-toe.R",
+    ]
+
+    # Prefer biped feet; if none present on this rig, fall back to creature extremities
+    _candidate_bones = [b for b in _biped_foot_bones if armature_obj.pose.bones.get(b)]
+    if not _candidate_bones:
+        _candidate_bones = [b for b in _non_biped_fallbacks if armature_obj.pose.bones.get(b)]
+
+    foot_bones = _candidate_bones
     for foot_name in foot_bones:
         foot_pbone = armature_obj.pose.bones.get(foot_name)
         if not foot_pbone:
@@ -1255,6 +1275,11 @@ def handle_batch_export(params: dict) -> dict:
     naming = params.get("naming", "unity")
     action_filter = params.get("actions")
 
+    # EXP-012: add_leaf_bones only for Humanoid/biped avatar types
+    _HUMANOID_TYPES: frozenset = frozenset({"humanoid", "biped", "human", "character"})
+    avatar_type = (params.get("avatar_type") or "humanoid").lower()
+    add_leaf_bones = avatar_type in _HUMANOID_TYPES
+
     # Ensure output directory exists
     os.makedirs(output_dir, exist_ok=True)
 
@@ -1313,7 +1338,7 @@ def handle_batch_export(params: dict) -> dict:
                 "axis_up": "Y",
                 "primary_bone_axis": "Y",
                 "secondary_bone_axis": "X",
-                "add_leaf_bones": False,
+                "add_leaf_bones": add_leaf_bones,  # EXP-012: conditional per avatar type
                 "mesh_smooth_type": "FACE",
                 "use_tspace": True,
                 "use_armature_deform_only": True,

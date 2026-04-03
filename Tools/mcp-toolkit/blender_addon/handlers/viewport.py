@@ -173,11 +173,19 @@ def compute_light_position(
     return (x, y, z)
 
 
-def compute_camera_distance(dimensions: tuple[float, float, float]) -> float:
+def compute_camera_distance(
+    dimensions: tuple[float, float, float],
+    focal_length: float = BEAUTY_FOCAL_LENGTH,
+) -> float:
     """Compute camera distance from object dimensions using bounding sphere.
+
+    Longer focal lengths compress perspective and effectively bring the subject
+    closer, so we push the camera farther out proportionally to maintain correct
+    framing (distance scales with focal_length / reference 50mm).
 
     Args:
         dimensions: (width, height, depth) of the object.
+        focal_length: Lens focal length in mm (default 50mm).
 
     Returns:
         Camera distance (at least 2.0 units).
@@ -185,7 +193,8 @@ def compute_camera_distance(dimensions: tuple[float, float, float]) -> float:
     bounding_radius = math.sqrt(
         dimensions[0] ** 2 + dimensions[1] ** 2 + dimensions[2] ** 2
     ) / 2.0
-    distance = max(bounding_radius * BEAUTY_DISTANCE_FACTOR, 2.0)
+    focal_scale = focal_length / 50.0
+    distance = max(bounding_radius * BEAUTY_DISTANCE_FACTOR * focal_scale, 2.0)
     return distance
 
 
@@ -792,10 +801,11 @@ def handle_auto_frame_camera(params: dict) -> dict:
 
     elevation = params.get("elevation", BEAUTY_ELEVATION_DEG)
     focal_length = params.get("focal_length", BEAUTY_FOCAL_LENGTH)
+    azimuth = params.get("azimuth", 35.0)
 
-    # Calculate distance from object dimensions
+    # Calculate distance from object dimensions (accounts for focal length)
     dims = tuple(target.dimensions)
-    distance = compute_camera_distance(dims)
+    distance = compute_camera_distance(dims, focal_length)
     center = tuple(target.location)
 
     # Position camera
@@ -810,8 +820,8 @@ def handle_auto_frame_camera(params: dict) -> dict:
     cam_data.clip_start = 0.1
     cam_data.clip_end = max(distance * 10, 100.0)
 
-    # Position using spherical coords (front-right, elevated)
-    pos = compute_light_position(center, distance, 35.0, elevation)
+    # Position using spherical coords (parameterized azimuth + elevation)
+    pos = compute_light_position(center, distance, azimuth, elevation)
     cam.location = pos
 
     # Point at object center
@@ -829,6 +839,7 @@ def handle_auto_frame_camera(params: dict) -> dict:
         "distance": distance,
         "focal_length": focal_length,
         "elevation": elevation,
+        "azimuth": azimuth,
     }
 
 
@@ -1188,6 +1199,14 @@ def handle_render_contact_sheet(params: dict) -> dict:
         if eevee_state is not None:
             _restore_eevee_state(eevee_state)
 
+        # Remove ContactSheet_Camera from the scene to avoid polluting the outliner
+        cs_cam = bpy.data.objects.get("ContactSheet_Camera")
+        if cs_cam is not None:
+            cs_cam_data = cs_cam.data
+            bpy.data.objects.remove(cs_cam, do_unlink=True)
+            if cs_cam_data is not None:
+                bpy.data.cameras.remove(cs_cam_data)
+
     return {
         "paths": paths,
         "count": len(paths),
@@ -1237,4 +1256,167 @@ def handle_navigate_camera(params: dict) -> dict:
         "camera": cam.name,
         "position": list(cam.location),
         "target": target_pos,
+    }
+
+
+def handle_interior_camera_shot(params: dict) -> dict:
+    """Position camera at eye height (1.7 m) inside room bounds for interior preview.
+
+    Params:
+        object_name (str, optional): Object whose bounds define the room.
+        room_bounds (list[float], optional): [min_x, min_y, min_z, max_x, max_y, max_z].
+        eye_height (float): Camera height above floor (default 1.7 m).
+
+    Returns:
+        Dict with camera name, position, and look-at target.
+    """
+    from mathutils import Vector
+
+    eye_height = params.get("eye_height", 1.7)
+    room_bounds = params.get("room_bounds")
+    object_name = params.get("object_name")
+
+    # Derive bounds from object if not explicitly provided
+    if room_bounds is None and object_name:
+        target = bpy.data.objects.get(object_name)
+        if target is None:
+            raise ValueError(f"Object not found: {object_name}")
+        loc = target.location
+        dims = target.dimensions
+        room_bounds = [
+            loc.x - dims.x / 2, loc.y - dims.y / 2, loc.z,
+            loc.x + dims.x / 2, loc.y + dims.y / 2, loc.z + dims.z,
+        ]
+
+    if room_bounds is None or len(room_bounds) != 6:
+        raise ValueError("room_bounds must be [min_x, min_y, min_z, max_x, max_y, max_z]")
+
+    min_x, min_y, min_z, max_x, max_y, max_z = room_bounds
+    cx = (min_x + max_x) / 2.0
+    cy = (min_y + max_y) / 2.0
+
+    # Place camera at one-quarter into the room, looking toward center
+    cam_x = min_x + (max_x - min_x) * 0.25
+    cam_y = min_y + (max_y - min_y) * 0.25
+    cam_z = min_z + eye_height
+
+    cam = bpy.data.objects.get(BEAUTY_CAMERA_NAME)
+    if not cam:
+        cam_data = bpy.data.cameras.new(BEAUTY_CAMERA_NAME)
+        cam = bpy.data.objects.new(BEAUTY_CAMERA_NAME, cam_data)
+        bpy.context.scene.collection.objects.link(cam)
+
+    cam.data.lens = 24.0  # wide-angle for interiors
+    cam.data.clip_start = 0.1
+    cam.data.clip_end = 200.0
+    cam.location = Vector((cam_x, cam_y, cam_z))
+
+    look_at = Vector((cx, cy, cam_z))  # horizontal look toward room center
+    direction = look_at - cam.location
+    if direction.length > 0.001:
+        cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
+
+    bpy.context.scene.camera = cam
+
+    return {
+        "camera": BEAUTY_CAMERA_NAME,
+        "position": [cam_x, cam_y, cam_z],
+        "look_at": [cx, cy, cam_z],
+        "eye_height": eye_height,
+        "room_bounds": room_bounds,
+    }
+
+
+def handle_render_orthographic_views(params: dict) -> dict:
+    """Render four orthographic views: front, right, top, isometric.
+
+    Params:
+        object_name (str): Object to render (required).
+        resolution (list[int]): [width, height] per frame (default [512, 512]).
+
+    Returns:
+        Dict with paths list and count.
+    """
+    object_name = params.get("object_name")
+    if not object_name:
+        raise ValueError("object_name is required")
+
+    target = bpy.data.objects.get(object_name)
+    if not target:
+        raise ValueError(f"Object not found: {object_name}")
+
+    resolution = params.get("resolution", [512, 512])
+    from mathutils import Vector
+
+    center = target.location.copy()
+    dims = tuple(target.dimensions)
+    distance = compute_camera_distance(dims, focal_length=50.0) * 1.5
+
+    # Orthographic camera views: (azimuth_deg, elevation_deg, label)
+    _ORTHO_ANGLES = [
+        (0.0,   0.0,  "front"),
+        (90.0,  0.0,  "right"),
+        (0.0,  90.0,  "top"),
+        (45.0, 30.0,  "iso"),
+    ]
+
+    # Create/reuse a dedicated ortho camera
+    _ORTHO_CAM_NAME = "VB_Ortho_Camera"
+    ortho_cam = bpy.data.objects.get(_ORTHO_CAM_NAME)
+    if not ortho_cam:
+        ortho_data = bpy.data.cameras.new(_ORTHO_CAM_NAME)
+        ortho_cam = bpy.data.objects.new(_ORTHO_CAM_NAME, ortho_data)
+        bpy.context.scene.collection.objects.link(ortho_cam)
+
+    ortho_cam.data.type = "ORTHO"
+    largest_dim = max(dims) if dims else 1.0
+    ortho_cam.data.ortho_scale = largest_dim * 1.5
+
+    scene = bpy.context.scene
+    old_cam = scene.camera
+    old_x = scene.render.resolution_x
+    old_y = scene.render.resolution_y
+    old_filepath = scene.render.filepath
+    old_format = scene.render.image_settings.file_format
+
+    paths: list[str] = []
+    try:
+        scene.camera = ortho_cam
+        scene.render.resolution_x = resolution[0]
+        scene.render.resolution_y = resolution[1]
+        scene.render.image_settings.file_format = "PNG"
+
+        for i, (azimuth, elevation, label) in enumerate(_ORTHO_ANGLES):
+            pos = compute_light_position(
+                (center.x, center.y, center.z), distance, azimuth, elevation
+            )
+            ortho_cam.location = Vector(pos)
+            direction = Vector((center.x, center.y, center.z)) - ortho_cam.location
+            if direction.length > 0.001:
+                ortho_cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
+
+            path = _unique_temp_path(f"vb_ortho_{label}")
+            scene.render.filepath = path
+            bpy.ops.render.render(write_still=True)
+            paths.append(path)
+    finally:
+        scene.camera = old_cam
+        scene.render.resolution_x = old_x
+        scene.render.resolution_y = old_y
+        scene.render.filepath = old_filepath
+        scene.render.image_settings.file_format = old_format
+
+        # Clean up ortho camera
+        ortho_cam_obj = bpy.data.objects.get(_ORTHO_CAM_NAME)
+        if ortho_cam_obj is not None:
+            ortho_cam_data = ortho_cam_obj.data
+            bpy.data.objects.remove(ortho_cam_obj, do_unlink=True)
+            if ortho_cam_data is not None:
+                bpy.data.cameras.remove(ortho_cam_data)
+
+    return {
+        "paths": paths,
+        "count": len(paths),
+        "object_name": object_name,
+        "views": [label for _, _, label in _ORTHO_ANGLES],
     }

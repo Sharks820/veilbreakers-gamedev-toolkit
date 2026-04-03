@@ -346,10 +346,59 @@ def handle_generate_lods(params: dict) -> dict:
         if cleanup_vg:
             obj.vertex_groups.remove(cleanup_vg)
 
+    # EXP-002: Create a Unity LODGroup parent empty so Unity's FBX importer
+    # can automatically configure the LODGroup component.
+    # The empty is named "<BaseName>_LODGroup" and each LOD mesh is re-parented to it.
+    # Custom property "unity_lod_group" = True signals the Unity import script.
+    base_name = object_name  # may have been renamed to LOD0 already; use original
+    lod_group_name = f"{base_name}_LODGroup"
+
+    # Remove existing group empty if regenerating
+    existing_group = bpy.data.objects.get(lod_group_name)
+    if existing_group:
+        bpy.data.objects.remove(existing_group, do_unlink=True)
+
+    bpy.ops.object.empty_add(type="PLAIN_AXES", location=(0, 0, 0))
+    group_empty = bpy.context.active_object
+    group_empty.name = lod_group_name
+    group_empty["unity_lod_group"] = True
+    group_empty["lod_count"] = len(lods)
+
+    # Collect LOD objects and re-parent them under the group empty
+    for lod_info in lods:
+        lod_obj = bpy.data.objects.get(lod_info["name"])
+        if lod_obj is None:
+            continue
+        # Store LOD screen-size transition thresholds as custom props
+        # Unity reads these during FBX post-import via the import script
+        lod_obj["unity_lod_level"] = lod_info["lod_level"]
+        lod_obj["unity_lod_ratio"] = lod_info["ratio"]
+
+        # Re-parent to group empty, keeping world transform
+        saved_matrix = lod_obj.matrix_world.copy()
+        lod_obj.parent = group_empty
+        lod_obj.matrix_world = saved_matrix
+
+    # Place group empty in the same collections as the first LOD
+    lod0_obj = bpy.data.objects.get(lods[0]["name"]) if lods else None
+    if lod0_obj:
+        for col in lod0_obj.users_collection:
+            if group_empty.name not in col.objects:
+                col.objects.link(group_empty)
+        # Ensure group is not in default scene collection twice
+        scene_col = bpy.context.scene.collection
+        if group_empty.name in scene_col.objects and lod0_obj.users_collection:
+            scene_col.objects.unlink(group_empty)
+
     return {
         "source": object_name,
         "lod_count": len(lods),
+        "lod_group": lod_group_name,
         "silhouette_preserved": preserve_silhouette,
         "symmetry_used": use_symmetry,
         "lods": lods,
+        "next_steps": [
+            f"Import {lod_group_name}_LOD*.fbx into Unity",
+            "Unity will auto-detect LODGroup from parent empty naming convention",
+        ],
     }

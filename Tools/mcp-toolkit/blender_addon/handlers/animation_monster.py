@@ -499,9 +499,26 @@ _MONSTER_GENERATORS = {
 }
 
 
-def generate_monster_anim_keyframes(params: dict) -> list[Keyframe]:
-    """Dispatch to the appropriate monster animation generator."""
+def generate_monster_anim_keyframes(
+    params: dict,
+    bone_names: list[str] | None = None,
+) -> list[Keyframe]:
+    """Dispatch to the appropriate monster animation generator.
+
+    Args:
+        params: Validated params dict with anim_type, frame_count, intensity.
+        bone_names: If provided, filter output keyframes to only include bones
+            present in this list. Use to skip biped bones on non-biped creatures
+            (e.g. DEF-thigh on a serpent). (RIG-003)
+
+    Returns:
+        List of Keyframe namedtuples.
+    """
     anim_type = params["anim_type"]
     if anim_type not in _MONSTER_GENERATORS:
         raise ValueError(f"Unknown anim_type: {anim_type!r}")
-    return _MONSTER_GENERATORS[anim_type](params)
+    keyframes = _MONSTER_GENERATORS[anim_type](params)
+    if bone_names is not None:
+        bone_filter = set(bone_names)
+        keyframes = [kf for kf in keyframes if kf.bone_name in bone_filter]
+    return keyframes

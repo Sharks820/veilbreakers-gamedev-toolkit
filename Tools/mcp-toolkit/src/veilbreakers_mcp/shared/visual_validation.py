@@ -7,6 +7,7 @@ import os
 import shutil
 from pathlib import Path
 
+import numpy as np
 from PIL import Image, ImageFilter, ImageStat
 
 
@@ -52,7 +53,17 @@ def analyze_render_image(filepath: str) -> dict:
             color_spread = (std_r + std_g + std_b) / 3.0
             channel_balance = max(mean_r, mean_g, mean_b) - min(mean_r, mean_g, mean_b)
 
-            brightness_score = max(0.0, 100.0 - abs(gray_mean - 120.0) * 0.9)
+            # Dark-fantasy brightness scoring: ideal range 30–80 (not 120).
+            # Penalise anything above 80 or below 30, but allow naturally dark scenes.
+            _BRIGHT_LOW = 30.0
+            _BRIGHT_HIGH = 80.0
+            if gray_mean < _BRIGHT_LOW:
+                brightness_score = max(0.0, 100.0 - (_BRIGHT_LOW - gray_mean) * 2.0)
+            elif gray_mean > _BRIGHT_HIGH:
+                brightness_score = max(0.0, 100.0 - (gray_mean - _BRIGHT_HIGH) * 1.5)
+            else:
+                brightness_score = 100.0
+
             contrast_score = min(100.0, gray_std * 4.0)
             edge_score = min(100.0, edge_mean * 1.8)
             entropy_score = min(100.0, entropy * 18.0)
@@ -67,7 +78,7 @@ def analyze_render_image(filepath: str) -> dict:
             )
 
             issues: list[str] = []
-            if gray_mean < 28.0:
+            if gray_mean < 10.0:
                 issues.append("Image is too dark")
             if gray_mean > 235.0:
                 issues.append("Image is too bright")
@@ -82,6 +93,23 @@ def analyze_render_image(filepath: str) -> dict:
             if channel_balance < 4.0 and color_spread < 12.0:
                 issues.append("Image appears nearly monochrome")
 
+            # Magenta/missing-texture detection: pink pixels where R>200, G<50, B>200
+            magenta_fraction = 0.0
+            try:
+                rgb_arr = np.array(rgb, dtype=np.uint8)
+                magenta_mask = (
+                    (rgb_arr[:, :, 0] > 200)
+                    & (rgb_arr[:, :, 1] < 50)
+                    & (rgb_arr[:, :, 2] > 200)
+                )
+                magenta_fraction = float(magenta_mask.sum()) / max(magenta_mask.size, 1)
+                if magenta_fraction > 0.001:  # >0.1% of pixels are magenta
+                    issues.append(
+                        f"missing_texture_detected ({magenta_fraction * 100:.2f}% magenta pixels)"
+                    )
+            except Exception:
+                pass
+
             result["metrics"] = {
                 "brightness_mean": round(gray_mean, 3),
                 "brightness_stddev": round(gray_std, 3),
@@ -94,6 +122,7 @@ def analyze_render_image(filepath: str) -> dict:
                 "edge_score": round(edge_score, 3),
                 "entropy_score": round(entropy_score, 3),
                 "color_score": round(color_score, 3),
+                "magenta_fraction": round(magenta_fraction, 6),
             }
             result["issues"] = issues
             result["score"] = round(score, 3)

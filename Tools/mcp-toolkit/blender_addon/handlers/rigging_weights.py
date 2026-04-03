@@ -515,16 +515,17 @@ def handle_auto_weight(params: dict) -> dict:
     """Parent mesh to armature with automatic weight painting (RIG-07).
 
     Params:
-        mesh_name: Name of the mesh object.
+        mesh_name: Name of the mesh object. Also accepted as object_name (alias).
         armature_name: Name of the armature object.
 
     Returns dict with vertex_group_count, vertex_groups, method, mesh, armature.
     """
-    mesh_name = params.get("mesh_name")
+    # Accept object_name as alias for mesh_name (RIG-010)
+    mesh_name = params.get("mesh_name") or params.get("object_name")
     armature_name = params.get("armature_name")
 
     if not mesh_name:
-        raise ValueError("'mesh_name' is required")
+        raise ValueError("'mesh_name' (or 'object_name') is required")
     if not armature_name:
         raise ValueError("'armature_name' is required")
 
