@@ -929,8 +929,11 @@ class TestTool13BlenderAnimation:
         assert result["description"] == "raise arms"
 
     def test_validate_batch_export_params_valid(self):
+        import tempfile
+        from pathlib import Path
+        _tmp_anims = str(Path(tempfile.gettempdir()) / "anims")
         result = _validate_batch_export_params({
-            "output_dir": "/tmp/anims", "naming": "unity",
+            "output_dir": _tmp_anims, "naming": "unity",
         })
         assert result["valid"] is True
 

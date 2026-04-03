@@ -6,9 +6,13 @@ simulate BlenderConnection responses without a live Blender instance.
 """
 
 import asyncio
+import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+_TMP_UNITY_PROJECT = str(Path(tempfile.gettempdir()) / "UnityProject")
 
 from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner
 
@@ -197,7 +201,7 @@ class TestBlenderToUnityPipeline:
     def test_export_to_unity_project_path(self):
         runner = _make_runner()
         result = _run(runner.blender_to_unity_pipeline(
-            "Hero", unity_project_path="/tmp/UnityProject"
+            "Hero", unity_project_path=_TMP_UNITY_PROJECT
         ))
         assert "Assets" in result["fbx_path"]
         assert "Models" in result["fbx_path"]

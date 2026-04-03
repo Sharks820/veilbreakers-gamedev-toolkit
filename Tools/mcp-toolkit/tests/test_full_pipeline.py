@@ -63,9 +63,13 @@ def _make_visual_gate_images() -> list[str]:
 
 VISUAL_GATE_IMAGES = _make_visual_gate_images()
 
+_TMP_MODEL_GLB = str(Path(tempfile.gettempdir()) / "model.glb")
+_TMP_MODEL_PBR_GLB = str(Path(tempfile.gettempdir()) / "model_pbr.glb")
+_TMP_REF_PNG = str(Path(tempfile.gettempdir()) / "ref.png")
+
 VALID_MODEL_VALIDATION = {
     "valid": True,
-    "filepath": "/tmp/model.glb",
+    "filepath": _TMP_MODEL_GLB,
     "format": "glb",
     "checks": {
         "file_size": {"value": 2048, "passed": True},
@@ -685,8 +689,8 @@ class TestGenerateAndProcess:
             mock_gen = MagicMock()
             mock_gen.generate_from_text = AsyncMock(return_value={
                 "status": "success",
-                "model_path": "/tmp/model.glb",
-                "pbr_model_path": "/tmp/model_pbr.glb",
+                "model_path": _TMP_MODEL_GLB,
+                "pbr_model_path": _TMP_MODEL_PBR_GLB,
                 "task_id": "test-123",
             })
             MockTripo.return_value = mock_gen
@@ -716,12 +720,12 @@ class TestGenerateAndProcess:
             mock_gen = MagicMock()
             mock_gen.generate_from_image = AsyncMock(return_value={
                 "status": "success",
-                "model_path": "/tmp/model.glb",
+                "model_path": _TMP_MODEL_GLB,
                 "task_id": "test-456",
             })
             MockTripo.return_value = mock_gen
 
-            result = _run(runner.generate_and_process(image_path="/tmp/ref.png"))
+            result = _run(runner.generate_and_process(image_path=_TMP_REF_PNG))
 
         assert result["status"] == "success"
 
@@ -765,8 +769,8 @@ class TestGenerateAndProcess:
             mock_gen = MagicMock()
             mock_gen.generate_from_text = AsyncMock(return_value={
                 "status": "success",
-                "model_path": "/tmp/model.glb",
-                "pbr_model_path": "/tmp/model_pbr.glb",
+                "model_path": _TMP_MODEL_GLB,
+                "pbr_model_path": _TMP_MODEL_PBR_GLB,
                 "task_id": "test-789",
             })
             MockTripo.return_value = mock_gen
@@ -795,7 +799,7 @@ class TestGenerateAndProcess:
             mock_gen = MagicMock()
             mock_gen.generate_from_text = AsyncMock(return_value={
                 "status": "success",
-                "model_path": "/tmp/model.glb",
+                "model_path": _TMP_MODEL_GLB,
                 "task_id": "test-000",
             })
             MockTripo.return_value = mock_gen

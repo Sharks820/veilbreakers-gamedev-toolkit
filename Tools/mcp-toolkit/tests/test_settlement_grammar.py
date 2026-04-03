@@ -12,8 +12,15 @@ No bpy/bmesh required — pure logic.
 from __future__ import annotations
 
 import math
+import tempfile
+from pathlib import Path
 
 import pytest
+
+_TMPDIR = Path(tempfile.gettempdir())
+_TMP_LANTERN_GLB = str(_TMPDIR / "lantern.glb")
+_TMP_BENCH_GLB = str(_TMPDIR / "bench_weathered.glb")
+_TMP_CART_GLB = str(_TMPDIR / "cart_corrupt.glb")
 
 from blender_addon.handlers._settlement_grammar import (
     CORRUPTION_DESCS,
@@ -164,7 +171,7 @@ class TestPropCacheInfrastructure:
     def test_clear_prop_cache_empties_dict(self):
         """clear_prop_cache() must empty _PROP_CACHE."""
         from blender_addon.handlers import worldbuilding as wb
-        wb._PROP_CACHE[("lantern_post", "pristine")] = "/tmp/lantern.glb"
+        wb._PROP_CACHE[("lantern_post", "pristine")] = _TMP_LANTERN_GLB
         assert len(wb._PROP_CACHE) == 1
         wb.clear_prop_cache()
         assert len(wb._PROP_CACHE) == 0
@@ -178,10 +185,10 @@ class TestPropCacheInfrastructure:
     def test_get_or_generate_prop_uses_cache(self):
         """Second call with same key returns cached value without calling connection."""
         from blender_addon.handlers import worldbuilding as wb
-        wb._PROP_CACHE[("bench", "weathered")] = "/tmp/bench_weathered.glb"
+        wb._PROP_CACHE[("bench", "weathered")] = _TMP_BENCH_GLB
         result = wb._get_or_generate_prop("bench", "weathered", "some prompt", blender_connection=None)
         # Cache hit should still return value even without connection
-        assert result == "/tmp/bench_weathered.glb"
+        assert result == _TMP_BENCH_GLB
 
     def test_prefetch_town_props_returns_summary_dict(self):
         """prefetch_town_props returns dict keyed by (prop_type, corruption_band)."""
@@ -210,10 +217,10 @@ class TestPropCacheInfrastructure:
     def test_prefetch_town_props_uses_existing_cache(self):
         """prefetch_town_props returns cached paths without regenerating."""
         from blender_addon.handlers import worldbuilding as wb
-        wb._PROP_CACHE[("cart", "corrupted")] = "/tmp/cart_corrupt.glb"
+        wb._PROP_CACHE[("cart", "corrupted")] = _TMP_CART_GLB
         manifest = [{"cache_key": ("cart", "corrupted")}]
         result = wb.prefetch_town_props(manifest, veil_pressure=0.85, blender_connection=None)
-        assert result[("cart", "corrupted")] == "/tmp/cart_corrupt.glb"
+        assert result[("cart", "corrupted")] == _TMP_CART_GLB
 
     def test_prefetch_town_props_handles_invalid_cache_key(self):
         """prefetch_town_props handles unknown prop types gracefully."""

@@ -369,7 +369,7 @@ class TestComputeFlowMap:
 
     def test_dimensions_match(self):
         """Output arrays match input dimensions."""
-        hmap = np.random.rand(16, 16)
+        hmap = np.random.RandomState(42).rand(16, 16)
         result = compute_flow_map(hmap)
         fd = np.array(result["flow_direction"])
         fa = np.array(result["flow_accumulation"])
@@ -380,7 +380,7 @@ class TestComputeFlowMap:
 
     def test_flow_directions_in_valid_range(self):
         """Flow direction values are -1 to 7."""
-        hmap = np.random.rand(8, 8)
+        hmap = np.random.RandomState(42).rand(8, 8)
         result = compute_flow_map(hmap)
         fd = np.array(result["flow_direction"])
         assert fd.min() >= -1
@@ -388,7 +388,7 @@ class TestComputeFlowMap:
 
     def test_flow_accumulation_positive(self):
         """Flow accumulation is always >= 1."""
-        hmap = np.random.rand(8, 8)
+        hmap = np.random.RandomState(42).rand(8, 8)
         result = compute_flow_map(hmap)
         fa = np.array(result["flow_accumulation"])
         assert fa.min() >= 1.0

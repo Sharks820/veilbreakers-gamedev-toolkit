@@ -17,8 +17,13 @@ Mesh generator tests use the real bmesh module stub from conftest.
 """
 
 import math
+import tempfile
+from pathlib import Path
 
 import pytest
+
+_TMP_ICON = str(Path(tempfile.gettempdir()) / "icon.png")
+_TMP_X = str(Path(tempfile.gettempdir()) / "x.png")
 
 from blender_addon.handlers import equipment as equipment_module
 from blender_addon.handlers.equipment import (
@@ -368,10 +373,10 @@ class TestPreviewIcons:
     def test_valid_defaults(self):
         result = _validate_icon_params({
             "object_name": "Sword",
-            "output_path": "/tmp/icon.png",
+            "output_path": _TMP_ICON,
         })
         assert result["object_name"] == "Sword"
-        assert result["output_path"] == "/tmp/icon.png"
+        assert result["output_path"] == _TMP_ICON
         assert result["resolution"] == 256
         assert result["camera_distance"] == 2.0
         assert result["camera_angle"] == (30, 45, 0)
@@ -380,14 +385,14 @@ class TestPreviewIcons:
     def test_custom_resolution(self):
         result = _validate_icon_params({
             "object_name": "X",
-            "output_path": "/tmp/x.png",
+            "output_path": _TMP_X,
             "resolution": 512,
         })
         assert result["resolution"] == 512
 
     def test_missing_object_name_raises(self):
         with pytest.raises(ValueError, match="object_name is required"):
-            _validate_icon_params({"output_path": "/tmp/x.png"})
+            _validate_icon_params({"output_path": _TMP_X})
 
     def test_missing_output_path_raises(self):
         with pytest.raises(ValueError, match="output_path is required"):
@@ -397,7 +402,7 @@ class TestPreviewIcons:
         with pytest.raises(ValueError, match="object_name is required"):
             _validate_icon_params({
                 "object_name": "",
-                "output_path": "/tmp/x.png",
+                "output_path": _TMP_X,
             })
 
     def test_empty_output_path_raises(self):
@@ -411,14 +416,14 @@ class TestPreviewIcons:
         with pytest.raises(ValueError, match="resolution must be >= 16"):
             _validate_icon_params({
                 "object_name": "X",
-                "output_path": "/tmp/x.png",
+                "output_path": _TMP_X,
                 "resolution": 8,
             })
 
     def test_custom_camera_distance(self):
         result = _validate_icon_params({
             "object_name": "X",
-            "output_path": "/tmp/x.png",
+            "output_path": _TMP_X,
             "camera_distance": 5.0,
         })
         assert result["camera_distance"] == 5.0
@@ -426,7 +431,7 @@ class TestPreviewIcons:
     def test_custom_camera_angle(self):
         result = _validate_icon_params({
             "object_name": "X",
-            "output_path": "/tmp/x.png",
+            "output_path": _TMP_X,
             "camera_angle": (45, 90, 10),
         })
         assert result["camera_angle"] == (45, 90, 10)
@@ -435,7 +440,7 @@ class TestPreviewIcons:
         """camera_angle list is converted to tuple."""
         result = _validate_icon_params({
             "object_name": "X",
-            "output_path": "/tmp/x.png",
+            "output_path": _TMP_X,
             "camera_angle": [60, 30, 0],
         })
         assert result["camera_angle"] == (60, 30, 0)
@@ -444,7 +449,7 @@ class TestPreviewIcons:
     def test_background_alpha_opaque(self):
         result = _validate_icon_params({
             "object_name": "X",
-            "output_path": "/tmp/x.png",
+            "output_path": _TMP_X,
             "background_alpha": 1.0,
         })
         assert result["background_alpha"] == 1.0
@@ -452,7 +457,7 @@ class TestPreviewIcons:
     def test_resolution_cast_to_int(self):
         result = _validate_icon_params({
             "object_name": "X",
-            "output_path": "/tmp/x.png",
+            "output_path": _TMP_X,
             "resolution": "128",
         })
         assert result["resolution"] == 128
@@ -477,7 +482,7 @@ class TestPreviewIconSizing:
             raising=False,
         )
 
-        assert _estimate_icon_file_size("/tmp/icon.png") == 0
+        assert _estimate_icon_file_size(_TMP_ICON) == 0
 
 
 # ---------------------------------------------------------------------------
