@@ -76,8 +76,22 @@ def save_pipeline_checkpoint(
         "params_snapshot": state.get("params_snapshot", {}),
     }
 
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh, indent=2, default=str)
+    # Atomic write: write to temp file then rename to prevent corruption on crash
+    import tempfile
+    tmp_fd, tmp_path = tempfile.mkstemp(
+        dir=os.path.dirname(path), suffix=".tmp", prefix="ckpt_"
+    )
+    try:
+        with os.fdopen(tmp_fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, indent=2, default=str)
+        os.replace(tmp_path, path)  # atomic on all platforms
+    except Exception:
+        # Clean up temp file on failure
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
     return os.path.abspath(path)
 
@@ -178,7 +192,13 @@ def get_remaining_steps(
         Steps from *all_steps* not in ``checkpoint["steps_completed"]``.
     """
     completed = set(checkpoint.get("steps_completed", []))
-    return [s for s in all_steps if s not in completed]
+    # Also exclude failed steps to prevent infinite retry loops
+    failed_steps = {
+        entry["step"] if isinstance(entry, dict) else str(entry)
+        for entry in checkpoint.get("steps_failed", [])
+    }
+    skip = completed | failed_steps
+    return [s for s in all_steps if s not in skip]
 
 
 def derive_addressable_groups(

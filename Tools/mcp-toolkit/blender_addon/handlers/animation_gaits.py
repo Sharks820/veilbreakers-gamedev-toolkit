@@ -740,9 +740,10 @@ BIRD_RUN_CONFIG: dict = {
             "amplitude": 0.4, "phase": 0.0,
         },
         # BIRD uses upper_arm, not wing_upper (which is for DRAGON rigs)
+        # Wings flap in-phase (same direction) for balance, not alternating
         "DEF-upper_arm.L": {
             "channel": "rotation_euler", "axis": 0,
-            "amplitude": 0.25, "phase": math.pi,
+            "amplitude": 0.25, "phase": 0.0,
         },
         "DEF-upper_arm.R": {
             "channel": "rotation_euler", "axis": 0,

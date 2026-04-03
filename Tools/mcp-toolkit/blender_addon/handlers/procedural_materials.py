@@ -457,7 +457,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "base_color": (0.10, 0.12, 0.08, 1.0),
         "roughness": 0.40,
         "roughness_variation": 0.15,
-        "metallic": 0.1,
+        "metallic": 0.0,  # organic dielectric — must be 0.0
         "normal_strength": 1.2,
         "detail_scale": 15.0,
         "wear_intensity": 0.15,
@@ -747,7 +747,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "base_color": _CORRUPTION_PURPLE,
         "roughness": 0.55,
         "roughness_variation": 0.20,
-        "metallic": 0.1,
+        "metallic": 0.0,  # organic dielectric — must be 0.0
         "normal_strength": 1.0,
         "detail_scale": 6.0,
         "wear_intensity": 0.5,
