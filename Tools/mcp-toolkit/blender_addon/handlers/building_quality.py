@@ -723,12 +723,19 @@ def generate_stone_wall(
             z += ch + mortar_gap
             row += 1
 
+    # Build material_ids: part 0 = mortar base slab (slot 0), all block/corner parts = stone (slot 1)
+    mat_ids: list[int] = []
+    for part_idx, (_, part_faces) in enumerate(parts):
+        slot = 0 if part_idx == 0 else 1
+        mat_ids.extend([slot] * len(part_faces))
+
     all_v, all_f = _merge(parts)
 
     total_blocks = front_count + back_count
     return _make_result(
         f"stone_wall_{block_style}",
         all_v, all_f,
+        material_ids=mat_ids,
         block_style=block_style,
         block_count=total_blocks,
         mortar_depth=mortar_depth,
@@ -1107,6 +1114,12 @@ def generate_gothic_window(
             parts.append((sv, sf))
             components.append(f"shutter_{side}")
 
+    # Build material_ids: slot 0 = frame/jamb/sill (structural), slot 1 = tracery/voussoir/shutter (detail)
+    mat_ids_win: list[int] = []
+    for part_idx, (_, part_faces) in enumerate(parts):
+        slot = 0 if part_idx == 0 else 1
+        mat_ids_win.extend([slot] * len(part_faces))
+
     all_v, all_f = _merge(parts)
 
     # Check arch symmetry: mirror left/right of arch points
@@ -1123,6 +1136,7 @@ def generate_gothic_window(
         f"gothic_window_{style}",
         all_v, all_f,
         components=components,
+        material_ids=mat_ids_win,
         style=style,
         has_tracery=tracery,
         has_shutters=has_shutters,
@@ -1557,12 +1571,19 @@ def generate_roof(
                 parts.append((tv, [(0, 1, 2, 3)]))
         components.append("thatch_roll")
 
+    # Build material_ids: slot 0 = base structure, slot 1 = tiles/shingles/detail
+    mat_ids_roof: list[int] = []
+    for part_idx, (_, part_faces) in enumerate(parts):
+        slot = 0 if part_idx == 0 else 1
+        mat_ids_roof.extend([slot] * len(part_faces))
+
     all_v, all_f = _merge(parts)
 
     return _make_result(
         f"roof_{style}_{material}",
         all_v, all_f,
         components=components,
+        material_ids=mat_ids_roof,
         roof_style=style,
         material=material,
         pitch=pitch,
@@ -1783,12 +1804,19 @@ def generate_staircase(
             parts.append((rv, rf))
             components.append(f"rung_{si}")
 
+    # Build material_ids: slot 0 = tread/step faces, slot 1 = railing/riser detail
+    mat_ids_stair: list[int] = []
+    for part_idx, (_, part_faces) in enumerate(parts):
+        slot = 0 if part_idx == 0 else 1
+        mat_ids_stair.extend([slot] * len(part_faces))
+
     all_v, all_f = _merge(parts)
 
     return _make_result(
         f"staircase_{style}",
         all_v, all_f,
         components=components,
+        material_ids=mat_ids_stair,
         stair_style=style,
         step_count=step_count,
         has_railing=railing,
@@ -2087,12 +2115,19 @@ def generate_archway(
             parts.append((iv, iff))
         components.append("intrados")
 
+    # Build material_ids: slot 0 = jamb/wall structure, slot 1 = voussoir/keystone/intrados detail
+    mat_ids_arch: list[int] = []
+    for part_idx, (_, part_faces) in enumerate(parts):
+        slot = 0 if part_idx == 0 else 1
+        mat_ids_arch.extend([slot] * len(part_faces))
+
     all_v, all_f = _merge(parts)
 
     return _make_result(
         f"archway_{arch_style}",
         all_v, all_f,
         components=components,
+        material_ids=mat_ids_arch,
         arch_style=arch_style,
         has_keystone=has_keystone,
         voussoir_count=v_count,
@@ -2228,12 +2263,19 @@ def generate_chimney(
         parts.append((fv, ff))
     components.append("flashing")
 
+    # Build material_ids: slot 0 = shaft structure, slot 1 = cap/corbel/flashing detail
+    mat_ids_chimney: list[int] = []
+    for part_idx, (_, part_faces) in enumerate(parts):
+        slot = 0 if part_idx == 0 else 1
+        mat_ids_chimney.extend([slot] * len(part_faces))
+
     all_v, all_f = _merge(parts)
 
     return _make_result(
         f"chimney_{style}",
         all_v, all_f,
         components=components,
+        material_ids=mat_ids_chimney,
         chimney_style=style,
         has_cap=has_cap,
         generator="building_quality",
@@ -2744,12 +2786,19 @@ def generate_battlements(
                 parts.append((lv, lf))
         components.append("towers")
 
+    # Build material_ids: slot 0 = walkway/wall base, slot 1 = merlons/machicolations/arrow loops
+    mat_ids_batt: list[int] = []
+    for part_idx, (_, part_faces) in enumerate(parts):
+        slot = 0 if part_idx == 0 else 1
+        mat_ids_batt.extend([slot] * len(part_faces))
+
     all_v, all_f = _merge(parts)
 
     return _make_result(
         f"battlements_{merlon_style}",
         all_v, all_f,
         components=components,
+        material_ids=mat_ids_batt,
         merlon_style=merlon_style,
         merlon_count=merlon_count,
         has_machicolations=has_machicolations,
