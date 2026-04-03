@@ -526,28 +526,34 @@ class TestCodeGeneration:
     def test_humanoid_code_valid_python(self, gender, build):
         code = generate_skin_body_code(gender, build)
         try:
-            ast.parse(code)
+            tree = ast.parse(code)
         except SyntaxError as e:
             pytest.fail(f"{gender}_{build}: generated code has syntax error: {e}")
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     @pytest.mark.parametrize("monster_type", VALID_MONSTER_TYPES)
     def test_monster_code_valid_python(self, monster_type):
         code = generate_skin_monster_code(monster_type)
         try:
-            ast.parse(code)
+            tree = ast.parse(code)
         except SyntaxError as e:
             pytest.fail(f"{monster_type}: generated code has syntax error: {e}")
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     @pytest.mark.parametrize("monster_type", VALID_MONSTER_TYPES)
     @pytest.mark.parametrize("brand", ["IRON", "VOID", None])
     def test_monster_code_with_brand_valid(self, monster_type, brand):
         code = generate_skin_monster_code(monster_type, brand=brand)
         try:
-            ast.parse(code)
+            tree = ast.parse(code)
         except SyntaxError as e:
             pytest.fail(
                 f"{monster_type} brand={brand}: syntax error: {e}"
             )
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     def test_code_only_uses_allowed_imports(self):
         """Verify code only imports bpy, bmesh, math (allowed by sandbox)."""
@@ -688,14 +694,18 @@ class TestHandlers:
         result = handle_generate_skin_body({
             "gender": "male", "build": "heavy",
         })
-        ast.parse(result["code"])
+        tree = ast.parse(result["code"])
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     def test_handler_monster_code_is_parseable(self):
         result = handle_generate_character_body({
             "monster_type": "arachnid",
             "brand": "DREAD",
         })
-        ast.parse(result["code"])
+        tree = ast.parse(result["code"])
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
 
 # ---------------------------------------------------------------------------
@@ -746,16 +756,19 @@ class TestInputValidation:
     """Verify error handling for invalid inputs."""
 
     def test_invalid_gender_raises(self):
-        with pytest.raises(ValueError, match="Invalid gender"):
+        with pytest.raises(ValueError, match="Invalid gender") as exc_info:
             get_skeleton("nonbinary", "average")
+        assert "nonbinary" in str(exc_info.value)
 
     def test_invalid_build_raises(self):
-        with pytest.raises(ValueError, match="Invalid build"):
+        with pytest.raises(ValueError, match="Invalid build") as exc_info:
             get_skeleton("male", "muscular")
+        assert "muscular" in str(exc_info.value)
 
     def test_invalid_monster_type_raises(self):
-        with pytest.raises(ValueError, match="Invalid monster_type"):
+        with pytest.raises(ValueError, match="Invalid monster_type") as exc_info:
             get_monster_skeleton("dragon")
+        assert "dragon" in str(exc_info.value)
 
 
 # ---------------------------------------------------------------------------
