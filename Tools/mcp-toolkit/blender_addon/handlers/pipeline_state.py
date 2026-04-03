@@ -69,6 +69,7 @@ def save_pipeline_checkpoint(
         "updated_at": _now_iso(),
         "location_count": state.get("location_count", 0),
         "steps_completed": list(state.get("steps_completed", [])),
+        "steps_failed": list(state.get("steps_failed", [])),
         "created_objects": list(state.get("created_objects", [])),
         "location_results": list(state.get("location_results", [])),
         "interior_results": list(state.get("interior_results", [])),
