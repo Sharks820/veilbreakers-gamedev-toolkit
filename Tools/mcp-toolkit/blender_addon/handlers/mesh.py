@@ -3340,8 +3340,9 @@ def handle_custom_normals(params: dict) -> dict:
         if hasattr(mesh, "use_auto_smooth"):
             mesh.use_auto_smooth = True
             mesh.auto_smooth_angle = split_angle_rad
-        # Calculate split normals
-        mesh.calc_normals_split()
+        # Calculate split normals (removed in Blender 4.1+)
+        if hasattr(mesh, "calc_normals_split"):
+            mesh.calc_normals_split()
         return {
             "object_name": name,
             "operation": operation,

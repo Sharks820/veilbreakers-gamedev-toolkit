@@ -766,7 +766,8 @@ def _extract_mesh_data(obj: Any) -> dict[str, Any]:
     expected by all pure-logic weathering functions.
     """
     mesh = obj.data
-    mesh.calc_normals_split()
+    if hasattr(mesh, "calc_normals_split"):
+        mesh.calc_normals_split()
 
     vertices: list[tuple[float, float, float]] = [
         (v.co.x, v.co.y, v.co.z) for v in mesh.vertices

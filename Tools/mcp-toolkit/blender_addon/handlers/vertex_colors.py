@@ -377,8 +377,9 @@ def handle_auto_paint_vertex_colors(params: dict[str, Any]) -> dict[str, Any]:
 
     mesh = obj.data
 
-    # Ensure mesh data is up to date
-    mesh.calc_normals_split()
+    # Ensure mesh data is up to date (removed in Blender 4.1+)
+    if hasattr(mesh, "calc_normals_split"):
+        mesh.calc_normals_split()
 
     # Extract geometry data for pure-logic functions
     vertices = [(v.co.x, v.co.y, v.co.z) for v in mesh.vertices]

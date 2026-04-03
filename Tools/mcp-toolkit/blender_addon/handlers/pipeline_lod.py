@@ -91,8 +91,9 @@ def _compute_silhouette_vertex_group(
     """
     mesh = mesh_obj.data
 
-    # Ensure mesh has calculated normals and edge data
-    mesh.calc_normals_split()
+    # Ensure mesh has calculated normals and edge data (removed in Blender 4.1+)
+    if hasattr(mesh, "calc_normals_split"):
+        mesh.calc_normals_split()
 
     num_verts = len(mesh.vertices)
 
