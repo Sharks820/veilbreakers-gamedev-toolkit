@@ -2930,7 +2930,7 @@ async def asset_pipeline(
             "building": "world_generate_building",
             "boss_arena": "world_generate_boss_arena",
             "settlement": "world_generate_town",
-            "hearthvale": "world_generate_town",
+            "hearthvale": "world_generate_hearthvale",
             "interior": "world_generate_building",
         }
         for i, planned in enumerate(planned_locations):
