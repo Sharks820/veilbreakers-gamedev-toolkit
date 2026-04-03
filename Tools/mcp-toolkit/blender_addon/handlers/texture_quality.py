@@ -206,7 +206,7 @@ SMART_MATERIAL_PRESETS: dict[str, dict[str, Any]] = {
     "obsidian": {
         "category": "stone",
         "base_color": (0.04, 0.04, 0.06),
-        "metallic": 0.05,
+        "metallic": 0.0,  # dielectric stone — no metallic
         "roughness": 0.08,
         "edge_wear_color": (0.12, 0.11, 0.14),
         "edge_wear_roughness": 0.04,
@@ -495,7 +495,7 @@ SMART_MATERIAL_PRESETS: dict[str, dict[str, Any]] = {
     "chitin": {
         "category": "organic",
         "base_color": (0.08, 0.06, 0.04),
-        "metallic": 0.12,
+        "metallic": 0.0,  # dielectric organic — no metallic
         "roughness": 0.30,
         "edge_wear_color": (0.16, 0.13, 0.10),
         "edge_wear_roughness": 0.15,
@@ -563,7 +563,7 @@ SMART_MATERIAL_PRESETS: dict[str, dict[str, Any]] = {
     "ice": {
         "category": "special",
         "base_color": (0.32, 0.40, 0.48),
-        "metallic": 0.02,
+        "metallic": 0.0,  # dielectric — no metallic
         "roughness": 0.10,
         "edge_wear_color": (0.42, 0.50, 0.58),
         "edge_wear_roughness": 0.04,
@@ -584,7 +584,7 @@ SMART_MATERIAL_PRESETS: dict[str, dict[str, Any]] = {
     "crystal": {
         "category": "special",
         "base_color": (0.25, 0.15, 0.30),
-        "metallic": 0.05,
+        "metallic": 0.0,  # dielectric — no metallic
         "roughness": 0.05,
         "edge_wear_color": (0.35, 0.25, 0.40),
         "edge_wear_roughness": 0.02,
