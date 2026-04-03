@@ -259,14 +259,25 @@ def handle_export_fbx(params: dict) -> dict:
         "colors_type": "SRGB" if vertex_colors else "NONE",  # EXP-005/006 (Blender 4.x API)
         "use_custom_props": export_custom_props,  # EXP-008
         "path_mode": "COPY" if embed_textures else "AUTO",  # EXP-009
-        "embed_textures": embed_textures,  # EXP-009: must be True with COPY for actual embedding
     }
+    # EXP-009: embed_textures was removed in Blender 4.x (path_mode=COPY handles it).
+    # Try with it first for older Blender builds; silently drop on TypeError.
+    if embed_textures:
+        kwargs["embed_textures"] = True
 
-    if override:
-        with bpy.context.temp_override(**override):
-            bpy.ops.export_scene.fbx(**kwargs)
-    else:
-        bpy.ops.export_scene.fbx(**kwargs)
+    def _do_export(**kw):
+        if override:
+            with bpy.context.temp_override(**override):
+                bpy.ops.export_scene.fbx(**kw)
+        else:
+            bpy.ops.export_scene.fbx(**kw)
+
+    try:
+        _do_export(**kwargs)
+    except TypeError:
+        # embed_textures not accepted by this Blender version — drop and retry
+        kwargs.pop("embed_textures", None)
+        _do_export(**kwargs)
 
     return {
         "filepath": filepath,

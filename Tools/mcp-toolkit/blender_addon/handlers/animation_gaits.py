@@ -969,10 +969,12 @@ def get_gait_config(
         config["frame_count"] = frame_count
 
     # Filter to requested bones
+    # Keys may use "__" suffix notation (e.g. "DEF-spine__sway"); strip before matching.
     if bone_names is not None:
         bone_set = set(bone_names)
         config["bones"] = {
-            k: v for k, v in config["bones"].items() if k in bone_set
+            k: v for k, v in config["bones"].items()
+            if (k.split("__")[0] if "__" in k else k) in bone_set
         }
 
     return config
