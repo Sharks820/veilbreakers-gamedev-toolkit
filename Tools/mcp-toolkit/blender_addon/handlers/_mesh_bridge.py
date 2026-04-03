@@ -883,6 +883,20 @@ def mesh_from_spec(
     uvs = spec.get("uvs", [])
     sharp_edges = spec.get("sharp_edges", [])
     crease_edges = spec.get("crease_edges", [])
+    material_ids: list[int] = list(spec.get("material_ids", []))
+
+    # Validate material_ids: must be in range [0, num_slots-1]
+    if material_ids:
+        unique_slots = sorted(set(material_ids))
+        num_slots = len(unique_slots)
+        for fi, mid in enumerate(material_ids):
+            if mid < 0 or mid >= num_slots:
+                raise ValueError(
+                    f"mesh_from_spec: material_id {mid} at face {fi} is out of range "
+                    f"[0, {num_slots - 1}] for {num_slots} unique slot(s) in material_ids"
+                )
+    else:
+        num_slots = 1
 
     # -- Fallback for non-Blender environments (testing) --
     if not _HAS_BPY or not hasattr(bpy, "data"):
@@ -891,6 +905,8 @@ def mesh_from_spec(
             "vertex_count": len(verts),
             "face_count": len(faces),
             "smooth_shading": smooth_shading,
+            "material_slot_count": num_slots,
+            "face_material_ids": list(material_ids) if material_ids else [],
         }
 
     # -- Blender path --
