@@ -797,8 +797,9 @@ def handle_extract_root_motion(params: dict) -> dict:
     _non_biped_fallbacks = [
         # Wing tips (bird, bat)
         "DEF-wing_tip.L", "DEF-wing_tip.R",
-        # Tentacles (floating, blob)
-        "DEF-tentacle.001", "DEF-tentacle.002", "DEF-tentacle.003", "DEF-tentacle.004",
+        # Tentacles (floating rig: fl/fr/bl/br; amorphous rig: 1.L/1.R/2.L/2.R)
+        "DEF-tentacle_fl", "DEF-tentacle_fr", "DEF-tentacle_bl", "DEF-tentacle_br",
+        "DEF-tentacle_1.L", "DEF-tentacle_1.R", "DEF-tentacle_2.L", "DEF-tentacle_2.R",
         # Insect legs
         "DEF-leg_front.L", "DEF-leg_front.R",
         "DEF-leg_mid.L", "DEF-leg_mid.R",

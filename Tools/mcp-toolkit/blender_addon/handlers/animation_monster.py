@@ -180,7 +180,7 @@ def generate_spawn_broodling_keyframes(frame_count: int = 36, intensity: float =
             push_t = (frame - push_start) / (release - push_start) if release > push_start else 1.0
             strain = 0.1 * intensity * math.sin(push_t * 6 * math.pi) * (1 - push_t * 0.5)
             keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.3 * intensity + strain))
-            keyframes.append(Keyframe("DEF-spine", "scale", 1, frame, 1.15 * intensity))
+            keyframes.append(Keyframe("DEF-spine", "scale", 1, frame, 1.0 + 0.15 * intensity))
         else:
             # Release and recover
             recover_t = (frame - release) / (frame_count - release) if frame_count > release else 1.0
@@ -241,11 +241,16 @@ def generate_bloat_inflate_keyframes(frame_count: int = 30, intensity: float = 1
     return keyframes
 
 
-def generate_regurgitate_keyframes(frame_count: int = 24, intensity: float = 1.0) -> list[Keyframe]:
+def generate_regurgitate_keyframes(
+    frame_count: int = 24,
+    intensity: float = 1.0,
+    bone_names: list[str] | None = None,
+) -> list[Keyframe]:
     """Expulsion/vomit attack — heave forward, open jaw, project contents."""
     frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
     heave_end = int(0.4 * frame_count)
+    _has_jaw = bone_names is None or "DEF-jaw" in bone_names
 
     for frame in range(frame_count + 1):
         t = frame / frame_count
@@ -255,8 +260,9 @@ def generate_regurgitate_keyframes(frame_count: int = 24, intensity: float = 1.0
             # Body curls forward
             keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.5 * heave * intensity))
             keyframes.append(Keyframe("DEF-spine.002", "rotation_euler", 0, frame, 0.4 * heave * intensity))
-            # Jaw opens
-            keyframes.append(Keyframe("DEF-jaw", "rotation_euler", 0, frame, 0.6 * heave * intensity))
+            # Jaw opens (only on creatures with a jaw bone)
+            if _has_jaw:
+                keyframes.append(Keyframe("DEF-jaw", "rotation_euler", 0, frame, 0.6 * heave * intensity))
         else:
             recover_t = (frame - heave_end) / (frame_count - heave_end) if frame_count > heave_end else 1.0
             # Snap back with diminishing heaves
@@ -264,7 +270,8 @@ def generate_regurgitate_keyframes(frame_count: int = 24, intensity: float = 1.0
             shudder = 0.1 * math.sin(recover_t * 4 * math.pi) * (1 - recover_t) * intensity
             keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, recoil + shudder))
             keyframes.append(Keyframe("DEF-spine.002", "rotation_euler", 0, frame, recoil * 0.8))
-            keyframes.append(Keyframe("DEF-jaw", "rotation_euler", 0, frame, 0.3 * (1 - recover_t) * intensity))
+            if _has_jaw:
+                keyframes.append(Keyframe("DEF-jaw", "rotation_euler", 0, frame, 0.3 * (1 - recover_t) * intensity))
 
     return keyframes
 
@@ -357,18 +364,24 @@ def generate_boss_phase_transition_keyframes(frame_count: int = 60, intensity: f
     return keyframes
 
 
-def generate_gnaw_loop_keyframes(frame_count: int = 24, intensity: float = 1.0) -> list[Keyframe]:
+def generate_gnaw_loop_keyframes(
+    frame_count: int = 24,
+    intensity: float = 1.0,
+    bone_names: list[str] | None = None,
+) -> list[Keyframe]:
     """Continuous chewing/gnawing loop — jaw oscillation with head bob."""
     frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
+    _has_jaw = bone_names is None or "DEF-jaw" in bone_names
 
     for frame in range(frame_count + 1):
         t = frame / frame_count
         angle = t * 2 * math.pi
 
-        # Jaw rapid open/close
-        jaw = 0.4 * intensity * abs(math.sin(angle * 3))
-        keyframes.append(Keyframe("DEF-jaw", "rotation_euler", 0, frame, jaw))
+        # Jaw rapid open/close (only on creatures with a jaw bone)
+        if _has_jaw:
+            jaw = 0.4 * intensity * abs(math.sin(angle * 3))
+            keyframes.append(Keyframe("DEF-jaw", "rotation_euler", 0, frame, jaw))
         # Head bobs with chewing
         head_bob = 0.05 * intensity * math.sin(angle * 3 + math.pi / 4)
         keyframes.append(Keyframe("DEF-spine.004", "rotation_euler", 0, frame, head_bob))
@@ -446,10 +459,15 @@ def generate_plant_growth_keyframes(frame_count: int = 36, intensity: float = 1.
     return keyframes
 
 
-def generate_chorus_keyframes(frame_count: int = 48, intensity: float = 1.0) -> list[Keyframe]:
+def generate_chorus_keyframes(
+    frame_count: int = 48,
+    intensity: float = 1.0,
+    bone_names: list[str] | None = None,
+) -> list[Keyframe]:
     """Multi-body vocalization — spine segments ripple, jaw pulses, arms sway."""
     frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
+    _has_jaw = bone_names is None or "DEF-jaw" in bone_names
 
     for frame in range(frame_count + 1):
         t = frame / frame_count
@@ -462,9 +480,10 @@ def generate_chorus_keyframes(frame_count: int = 48, intensity: float = 1.0) -> 
             ripple = 0.06 * intensity * math.sin(angle * 3 + phase)
             keyframes.append(Keyframe(bone, "rotation_euler", 0, frame, ripple))
 
-        # Jaw pulse (rapid open/close like chanting)
-        jaw = 0.3 * intensity * abs(math.sin(angle * 4))
-        keyframes.append(Keyframe("DEF-jaw", "rotation_euler", 0, frame, jaw))
+        # Jaw pulse (rapid open/close like chanting; only on creatures with a jaw bone)
+        if _has_jaw:
+            jaw = 0.3 * intensity * abs(math.sin(angle * 4))
+            keyframes.append(Keyframe("DEF-jaw", "rotation_euler", 0, frame, jaw))
 
         # Arms sway in ritual pattern
         arm_sway = 0.2 * intensity * math.sin(angle * 2)
@@ -485,12 +504,12 @@ _MONSTER_GENERATORS = {
     "spawn_broodling": lambda p: generate_spawn_broodling_keyframes(p["frame_count"], p["intensity"]),
     "phase_shift": lambda p: generate_phase_shift_keyframes(p["frame_count"], p["intensity"]),
     "bloat_inflate": lambda p: generate_bloat_inflate_keyframes(p["frame_count"], p["intensity"]),
-    "regurgitate": lambda p: generate_regurgitate_keyframes(p["frame_count"], p["intensity"]),
+    "regurgitate": lambda p: generate_regurgitate_keyframes(p["frame_count"], p["intensity"], p.get("bone_names")),
     "entangle": lambda p: generate_entangle_keyframes(p["frame_count"], p["intensity"]),
     "boss_phase_transition": lambda p: generate_boss_phase_transition_keyframes(p["frame_count"], p["intensity"]),
-    "gnaw_loop": lambda p: generate_gnaw_loop_keyframes(p["frame_count"], p["intensity"]),
+    "gnaw_loop": lambda p: generate_gnaw_loop_keyframes(p["frame_count"], p["intensity"], p.get("bone_names")),
     "shadow_embrace": lambda p: generate_shadow_embrace_keyframes(p["frame_count"], p["intensity"]),
-    "chorus": lambda p: generate_chorus_keyframes(p["frame_count"], p["intensity"]),
+    "chorus": lambda p: generate_chorus_keyframes(p["frame_count"], p["intensity"], p.get("bone_names")),
     "plant_growth": lambda p: generate_plant_growth_keyframes(p["frame_count"], p["intensity"]),
     "bone_wall": lambda p: generate_plant_growth_keyframes(p["frame_count"], p["intensity"]),
     "parasitic_injection": lambda p: generate_entangle_keyframes(p["frame_count"], p["intensity"]),
