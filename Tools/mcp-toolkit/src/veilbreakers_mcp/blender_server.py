@@ -2713,6 +2713,7 @@ async def asset_pipeline(
                 "seed": map_seed,
                 "location_count": len(spec.get("locations", [])),
                 "steps_completed": steps_completed,
+                "steps_failed": steps_failed,  # BUG-CHKPT-02: persist failed steps
                 "created_objects": created_objects,
                 "location_results": location_results,
                 "interior_results": interior_results,
@@ -2868,16 +2869,16 @@ async def asset_pipeline(
                     # Flatten terrain under building footprint
                     try:
                         await blender.send_command("terrain_spline_deform", {
-                            "terrain_name": terrain_name,
-                            "points": [
-                                [anchor_x - loc_radius, anchor_y - loc_radius],
-                                [anchor_x + loc_radius, anchor_y - loc_radius],
-                                [anchor_x + loc_radius, anchor_y + loc_radius],
-                                [anchor_x - loc_radius, anchor_y + loc_radius],
+                            "object_name": terrain_name,
+                            "spline_points": [
+                                [anchor_x - loc_radius, anchor_y - loc_radius, anchor_z],
+                                [anchor_x + loc_radius, anchor_y - loc_radius, anchor_z],
+                                [anchor_x + loc_radius, anchor_y + loc_radius, anchor_z],
+                                [anchor_x - loc_radius, anchor_y + loc_radius, anchor_z],
                             ],
                             "mode": "flatten",
-                            "strength": 0.85,
-                            "falloff_distance": loc_radius * 0.4,
+                            "falloff": 0.85,
+                            "width": loc_radius * 0.4,
                         })
                     except Exception:
                         pass  # Non-fatal
@@ -3019,8 +3020,8 @@ async def asset_pipeline(
             _save_chkpt()  # checkpoint after props
 
         # --- Step 9: Generate interiors for key buildings ---
-        interior_results = []
         if "interiors_generated" not in steps_completed:
+            interior_results = []  # BUG-CHKPT-01: moved inside guard to preserve checkpoint data on resume
             for loc in spec.get("locations", []):
                 if loc.get("interiors"):
                     for room_spec in loc["interiors"]:
