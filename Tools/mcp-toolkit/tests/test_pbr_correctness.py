@@ -443,17 +443,17 @@ class TestMaterialIdsPresentInBuildingGenerators:
 
     def test_generate_battlements_has_material_ids(self) -> None:
         """generate_battlements() must return material_ids equal in length to faces."""
-        spec = generate_battlements(width=8.0, height=2.0, seed=42)
+        spec = generate_battlements(wall_length=8.0, wall_height=2.0, seed=42)
         self._assert_material_ids_match_faces(spec, "generate_battlements")
 
     def test_generate_staircase_has_material_ids(self) -> None:
         """generate_staircase() must return material_ids equal in length to faces."""
-        spec = generate_staircase(width=2.0, step_count=8, seed=42)
+        spec = generate_staircase(step_width=2.0, step_count=8, seed=42)
         self._assert_material_ids_match_faces(spec, "generate_staircase")
 
     def test_generate_chimney_has_material_ids(self) -> None:
         """generate_chimney() must return material_ids equal in length to faces."""
-        spec = generate_chimney(width=0.8, height=3.0, seed=42)
+        spec = generate_chimney(chimney_width=0.8, height=3.0, seed=42)
         self._assert_material_ids_match_faces(spec, "generate_chimney")
 
     def test_material_ids_key_exists_even_when_empty(self) -> None:
