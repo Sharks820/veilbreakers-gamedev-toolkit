@@ -111,8 +111,9 @@ class TestUnityEditor:
         assert "int supersizeFactor = 2" in cs
 
     def test_screenshot_rejects_bad_supersize(self):
-        with pytest.raises(ValueError, match="supersize"):
+        with pytest.raises(ValueError, match="supersize") as exc_info:
             generate_screenshot_script(supersize=0)
+        assert "supersize" in str(exc_info.value).lower()
 
     # -- console_logs --
 
@@ -139,8 +140,9 @@ class TestUnityEditor:
             assert len(cs) > 100
 
     def test_console_logs_rejects_bad_filter(self):
-        with pytest.raises(ValueError, match="filter_type"):
+        with pytest.raises(ValueError, match="filter_type") as exc_info:
             generate_console_log_script(filter_type="invalid")
+        assert "filter_type" in str(exc_info.value).lower() or "invalid" in str(exc_info.value).lower()
 
     # -- gemini_review --
 
@@ -160,11 +162,12 @@ class TestUnityEditor:
         assert "composition" in cs
 
     def test_gemini_review_rejects_empty_criteria(self):
-        with pytest.raises(ValueError, match="criteria"):
+        with pytest.raises(ValueError, match="criteria") as exc_info:
             generate_gemini_review_script(
                 screenshot_path="Screenshots/test.png",
                 criteria=[],
             )
+        assert "criteria" in str(exc_info.value).lower()
 
 
 # ---------------------------------------------------------------------------
@@ -223,8 +226,9 @@ class TestUnityVFX:
         assert "DamageVFX" in cs
 
     def test_brand_vfx_rejects_unknown(self):
-        with pytest.raises(ValueError, match="Unknown brand"):
+        with pytest.raises(ValueError, match="Unknown brand") as exc_info:
             generate_brand_vfx_script("NONEXISTENT")
+        assert "NONEXISTENT" in str(exc_info.value)
 
     # -- environmental VFX (all 5 types) --
 
@@ -236,8 +240,9 @@ class TestUnityVFX:
         assert "gravityModifier" in cs
 
     def test_environmental_vfx_rejects_unknown(self):
-        with pytest.raises(ValueError, match="Unknown effect_type"):
+        with pytest.raises(ValueError, match="Unknown effect_type") as exc_info:
             generate_environmental_vfx_script("blizzard")
+        assert "blizzard" in str(exc_info.value)
 
     # -- trail VFX --
 
@@ -318,8 +323,9 @@ class TestUnityVFX:
         assert "VeilBreakers_ScreenEffect_HealGlow" in cs2
 
     def test_screen_effect_rejects_unknown(self):
-        with pytest.raises(ValueError, match="Unknown effect_type"):
+        with pytest.raises(ValueError, match="Unknown effect_type") as exc_info:
             generate_screen_effect_script("freeze")
+        assert "freeze" in str(exc_info.value)
 
     # -- ability VFX --
 
@@ -657,8 +663,9 @@ class TestUnityUI:
         assert "#4a0e4e" in uss  # accent
 
     def test_uss_stylesheet_rejects_unknown_theme(self):
-        with pytest.raises(ValueError, match="Unknown theme"):
+        with pytest.raises(ValueError, match="Unknown theme") as exc_info:
             generate_uss_stylesheet(theme="light")
+        assert "light" in str(exc_info.value)
 
     # -- generate_responsive_test_script --
 
@@ -894,8 +901,9 @@ class TestUnityScene:
         assert "GetInterpolatedNormal" in cs
 
     def test_scatter_rejects_empty_prefabs(self):
-        with pytest.raises(ValueError, match="prefab_paths"):
+        with pytest.raises(ValueError, match="prefab_paths") as exc_info:
             generate_object_scatter_script(prefab_paths=[])
+        assert "prefab" in str(exc_info.value).lower()
 
     # -- lighting --
 
@@ -984,13 +992,14 @@ class TestUnityScene:
         assert "AddState" in cs
 
     def test_animator_rejects_empty_states(self):
-        with pytest.raises(ValueError, match="states"):
+        with pytest.raises(ValueError, match="states") as exc_info:
             generate_animator_controller_script(
                 name="Empty",
                 states=[],
                 transitions=[],
                 parameters=[],
             )
+        assert "state" in str(exc_info.value).lower()
 
     # -- avatar config --
 
@@ -1068,8 +1077,9 @@ class TestUnityScene:
         assert "MultiAimConstraint" in cs
 
     def test_rigging_rejects_empty_constraints(self):
-        with pytest.raises(ValueError, match="constraints"):
+        with pytest.raises(ValueError, match="constraints") as exc_info:
             generate_animation_rigging_script(rig_name="Empty", constraints=[])
+        assert "constraint" in str(exc_info.value).lower()
 
 
 # ---------------------------------------------------------------------------
@@ -1347,8 +1357,9 @@ class TestUnityPerformance:
         assert "0.1f" in cs
 
     def test_lod_setup_rejects_invalid_percentages(self):
-        with pytest.raises(ValueError, match="strictly descending"):
+        with pytest.raises(ValueError, match="strictly descending") as exc_info:
             generate_lod_setup_script(screen_percentages=[0.3, 0.5])  # ascending
+        assert "descending" in str(exc_info.value).lower()
 
     # -- lightmap bake --
 
