@@ -981,9 +981,13 @@ def get_gait_config(
 
 
 def _deep_copy_config(config: dict) -> dict:
-    """Return a shallow-enough copy of a config dict to allow mutation."""
+    """Return a deep-enough copy of a config dict to allow safe mutation."""
+    import copy
     result = dict(config)
-    result["bones"] = {k: dict(v) for k, v in config["bones"].items()}
+    result["bones"] = {
+        k: {bk: (copy.deepcopy(bv) if isinstance(bv, (list, dict)) else bv) for bk, bv in v.items()}
+        for k, v in config["bones"].items()
+    }
     return result
 
 
