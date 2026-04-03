@@ -101,7 +101,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 1.0,
     },
     "brick_wall": {
-        "base_color": (0.18, 0.12, 0.10, 1.0),
+        "base_color": (0.18, 0.13, 0.12, 1.0),  # desaturated: sat 44%->35%
         "roughness": 0.78,
         "roughness_variation": 0.10,
         "metallic": 0.0,
@@ -157,7 +157,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
     # Architecture -- Wood (5)
     # =======================================================================
     "rough_timber": {
-        "base_color": _AGED_WOOD_BASE,
+        "base_color": (0.14, 0.12, 0.09, 1.0),  # desaturated: was _AGED_WOOD_BASE (0.14,0.11,0.08) sat 43%->35%
         "roughness": 0.80,
         "roughness_variation": 0.12,
         "metallic": 0.0,
@@ -170,7 +170,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.6,
     },
     "polished_wood": {
-        "base_color": (0.18, 0.13, 0.09, 1.0),
+        "base_color": (0.18, 0.15, 0.12, 1.0),  # desaturated: sat 50%->35%
         "roughness": 0.30,
         "roughness_variation": 0.05,
         "metallic": 0.0,
@@ -184,7 +184,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.6,
     },
     "rotten_wood": {
-        "base_color": (0.10, 0.08, 0.05, 1.0),
+        "base_color": (0.10, 0.09, 0.07, 1.0),  # desaturated: sat 50%->35%
         "roughness": 0.95,
         "roughness_variation": 0.20,
         "metallic": 0.0,
@@ -197,7 +197,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.6,
     },
     "charred_wood": {
-        "base_color": (0.04, 0.03, 0.03, 1.0),
+        "base_color": (0.12, 0.09, 0.09, 1.0),  # raised value 4%->12% (min dark range)
         "roughness": 0.90,
         "roughness_variation": 0.15,
         "metallic": 0.0,
@@ -240,7 +240,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 1.0,
     },
     "thatch_roof": {
-        "base_color": (0.20, 0.16, 0.11, 1.0),
+        "base_color": (0.20, 0.17, 0.13, 1.0),  # desaturated: sat 45%->35%
         "roughness": 0.95,
         "roughness_variation": 0.10,
         "metallic": 0.0,
@@ -253,7 +253,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.5,
     },
     "wooden_shingles": {
-        "base_color": (0.16, 0.12, 0.08, 1.0),
+        "base_color": (0.16, 0.13, 0.10, 1.0),  # desaturated: sat 50%->35%
         "roughness": 0.82,
         "roughness_variation": 0.12,
         "metallic": 0.0,
@@ -273,7 +273,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "base_color": _IRON_METAL,
         "roughness": 0.65,
         "roughness_variation": 0.25,
-        "metallic": 0.85,
+        "metallic": 1.0,  # PBR: metals must be 1.0; rust shown via high roughness
         "normal_strength": 0.8,
         "detail_scale": 10.0,
         "wear_intensity": 0.6,
@@ -300,7 +300,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "base_color": _BRONZE_METAL,
         "roughness": 0.50,
         "roughness_variation": 0.15,
-        "metallic": 0.90,
+        "metallic": 1.0,  # PBR: metals must be 1.0; tarnish shown via roughness/patina
         "normal_strength": 0.5,
         "detail_scale": 12.0,
         "wear_intensity": 0.4,
@@ -314,7 +314,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "base_color": _IRON_METAL,
         "roughness": 0.55,
         "roughness_variation": 0.10,
-        "metallic": 0.95,
+        "metallic": 1.0,  # PBR: metals must be 1.0; use roughness/texture for wear variation
         "normal_strength": 0.6,
         "detail_scale": 15.0,
         "wear_intensity": 0.3,
@@ -343,7 +343,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
     # Organic -- Creature (6)
     # =======================================================================
     "monster_skin": {
-        "base_color": (0.18, 0.12, 0.10, 1.0),
+        "base_color": (0.18, 0.13, 0.12, 1.0),  # desaturated: sat 44%->35%
         "roughness": 0.65,
         "roughness_variation": 0.15,
         "metallic": 0.0,
@@ -377,7 +377,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.5,
     },
     "chitin_carapace": {
-        "base_color": (0.08, 0.06, 0.04, 1.0),
+        "base_color": (0.12, 0.10, 0.08, 1.0),  # raised val 8%->12%, desaturated sat 50%->35%
         "roughness": 0.30,
         "roughness_variation": 0.10,
         "metallic": 0.15,
@@ -394,7 +394,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.5,
     },
     "fur_base": {
-        "base_color": (0.15, 0.11, 0.08, 1.0),
+        "base_color": (0.15, 0.12, 0.10, 1.0),  # desaturated: sat 47%->33%
         "roughness": 0.90,
         "roughness_variation": 0.10,
         "metallic": 0.0,
@@ -428,7 +428,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.5,
     },
     "membrane": {
-        "base_color": (0.18, 0.10, 0.08, 1.0),
+        "base_color": (0.18, 0.13, 0.12, 1.0),  # desaturated: sat 56%->33%
         "roughness": 0.35,
         "roughness_variation": 0.12,
         "metallic": 0.0,
@@ -449,7 +449,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
     # Organic -- Vegetation (4)
     # =======================================================================
     "bark": {
-        "base_color": (0.12, 0.09, 0.06, 1.0),
+        "base_color": (0.12, 0.10, 0.08, 1.0),  # desaturated: sat 50%->33%
         "roughness": 0.88,
         "roughness_variation": 0.12,
         "metallic": 0.0,
@@ -462,7 +462,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.6,
     },
     "leaf": {
-        "base_color": (0.06, 0.10, 0.04, 1.0),
+        "base_color": (0.08, 0.10, 0.07, 1.0),  # desaturated: sat 60%->30%
         "roughness": 0.55,
         "roughness_variation": 0.10,
         "metallic": 0.0,
@@ -479,7 +479,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.5,
     },
     "moss": {
-        "base_color": _MOSS_GREEN,
+        "base_color": (0.09, 0.12, 0.08, 1.0),  # desaturated: was _MOSS_GREEN (0.08,0.12,0.06) sat 50%->33%
         "roughness": 0.92,
         "roughness_variation": 0.08,
         "metallic": 0.0,
@@ -495,7 +495,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.5,
     },
     "mushroom_cap": {
-        "base_color": (0.18, 0.13, 0.09, 1.0),
+        "base_color": (0.18, 0.15, 0.12, 1.0),  # desaturated: sat 50%->33%
         "roughness": 0.45,
         "roughness_variation": 0.12,
         "metallic": 0.0,
@@ -517,7 +517,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
     # Terrain (6)
     # =======================================================================
     "grass": {
-        "base_color": (0.06, 0.10, 0.04, 1.0),
+        "base_color": (0.08, 0.10, 0.07, 1.0),  # desaturated: sat 60%->30%
         "roughness": 0.85,
         "roughness_variation": 0.10,
         "metallic": 0.0,
@@ -530,7 +530,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 1.2,
     },
     "dirt": {
-        "base_color": (0.12, 0.09, 0.06, 1.0),
+        "base_color": (0.12, 0.10, 0.08, 1.0),  # desaturated: sat 50%->33%
         "roughness": 0.90,
         "roughness_variation": 0.12,
         "metallic": 0.0,
@@ -543,7 +543,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 1.2,
     },
     "mud": {
-        "base_color": (0.10, 0.07, 0.04, 1.0),
+        "base_color": (0.10, 0.08, 0.07, 1.0),  # desaturated: sat 60%->30%
         "roughness": 0.50,
         "roughness_variation": 0.20,
         "metallic": 0.0,
@@ -569,7 +569,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 1.2,
     },
     "sand": {
-        "base_color": (0.28, 0.24, 0.16, 1.0),
+        "base_color": (0.28, 0.25, 0.18, 1.0),  # desaturated: sat 43%->36%
         "roughness": 0.82,
         "roughness_variation": 0.08,
         "metallic": 0.0,
@@ -599,7 +599,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
     # Fabric (3)
     # =======================================================================
     "burlap_cloth": {
-        "base_color": (0.20, 0.16, 0.10, 1.0),
+        "base_color": (0.20, 0.17, 0.13, 1.0),  # desaturated: sat 50%->35%
         "roughness": 0.92,
         "roughness_variation": 0.05,
         "metallic": 0.0,
@@ -615,7 +615,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.5,
     },
     "leather": {
-        "base_color": (0.14, 0.10, 0.07, 1.0),
+        "base_color": (0.14, 0.11, 0.09, 1.0),  # desaturated: sat 50%->36%
         "roughness": 0.60,
         "roughness_variation": 0.12,
         "metallic": 0.0,
@@ -687,7 +687,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "base_color": (0.32, 0.40, 0.50, 1.0),
         "roughness": 0.10,
         "roughness_variation": 0.05,
-        "metallic": 0.05,
+        "metallic": 0.0,  # PBR: ice is dielectric, not metallic
         "normal_strength": 0.4,
         "detail_scale": 8.0,
         "wear_intensity": 0.02,
@@ -702,7 +702,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "base_color": (0.40, 0.42, 0.44, 1.0),
         "roughness": 0.05,
         "roughness_variation": 0.02,
-        "metallic": 0.05,
+        "metallic": 0.0,  # PBR: glass is dielectric, not metallic
         "normal_strength": 0.1,
         "detail_scale": 4.0,
         "wear_intensity": 0.0,
@@ -729,7 +729,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.2,
     },
     "blood_splatter": {
-        "base_color": _BLOOD_RED,
+        "base_color": (0.25, 0.17, 0.16, 1.0),  # desaturated: was _BLOOD_RED (0.25,0.03,0.02) sat 92%->36%
         "roughness": 0.40,
         "roughness_variation": 0.15,
         "metallic": 0.0,
