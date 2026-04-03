@@ -256,14 +256,10 @@ def handle_export_fbx(params: dict) -> dict:
         "mesh_smooth_type": "FACE",
         "use_tspace": True,                  # EXP-004: export tangents
         "use_armature_deform_only": True,
-        "use_vertex_color_export": "SRGB" if vertex_colors else "NONE",  # EXP-005/006
+        "colors_type": "SRGB" if vertex_colors else "NONE",  # EXP-005/006 (Blender 4.x API)
         "use_custom_props": export_custom_props,  # EXP-008
         "path_mode": "COPY" if embed_textures else "AUTO",  # EXP-009
     }
-
-    if embed_textures:
-        # EXP-009: embed textures into FBX binary
-        kwargs["embed_textures"] = True
 
     if override:
         with bpy.context.temp_override(**override):

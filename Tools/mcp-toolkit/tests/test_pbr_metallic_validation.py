@@ -67,17 +67,9 @@ _METAL_TIER_NAMES = [
     "orichalcum",
 ]
 
-# Known conductor violations: these should be 1.0 but aren't yet fixed.
-# Remove entries from this dict when the source values are corrected.
-_CONDUCTOR_VIOLATIONS = {
-    "iron":       0.85,   # BUG: should be 1.0 — rust/weathering is roughness, not metallic drop
-    "steel":      0.90,   # BUG: should be 1.0
-    "silver":     0.95,   # BUG: should be 1.0
-    "gold":       0.95,   # BUG: should be 1.0
-    "mithril":    0.98,   # BUG: should be 1.0
-    "adamantine": 0.99,   # BUG: should be 1.0
-    "orichalcum": 0.92,   # BUG: should be 1.0
-}
+# Conductor violations — all fixed in material_tiers.py (metallic=1.0 for all conductors).
+# Dict is empty; xfail guards in tests below are now dead code that pytest will skip over.
+_CONDUCTOR_VIOLATIONS: dict[str, float] = {}
 
 # These are labeled as metals in METAL_TIERS but are actually dielectrics
 # by their physical material type (volcanic glass, bone). They should be
@@ -87,22 +79,11 @@ _METAL_TIERS_DIELECTRIC_NAMES = [
     "dragonbone",  # bone material -- dielectric
 ]
 
-# Known dielectric violations in METAL_TIERS.
-_METAL_TIERS_DIELECTRIC_VIOLATIONS = {
-    "obsidian":   0.3,   # BUG: volcanic glass is dielectric, should be 0.0
-    "dragonbone": 0.4,   # BUG: bone is dielectric, should be 0.0
-}
+# Dielectric violations — all fixed in material_tiers.py (metallic=0.0 for obsidian/dragonbone).
+_METAL_TIERS_DIELECTRIC_VIOLATIONS: dict[str, float] = {}
 
-# Void-touched is a supernatural special-case: the current value (0.60)
-# is a PBR violation regardless of lore justification. It should be 1.0
-# (metal distorted by void) or 0.0 (non-metallic warped by magic), not 0.60.
-_METAL_TIERS_VIOLATIONS_EXPECTED = {
-    "void_touched",   # metallic=0.60 -- physically invalid blend
-    # All conductor violations are also known:
-    *_CONDUCTOR_VIOLATIONS.keys(),
-    # Dielectric violations are also known:
-    *_METAL_TIERS_DIELECTRIC_VIOLATIONS.keys(),
-}
+# void_touched is now metallic=0.0 (fixed). No remaining known violations.
+_METAL_TIERS_VIOLATIONS_EXPECTED: set[str] = set()
 
 
 @pytest.mark.parametrize("tier_name", _METAL_TIER_NAMES)
@@ -161,11 +142,8 @@ def test_metal_tiers_no_unknown_violations() -> None:
 # material_tiers.py -- WOOD_TIERS, LEATHER_TIERS, CLOTH_TIERS (all dielectrics)
 # ---------------------------------------------------------------------------
 
-# Known violations in wood/leather/cloth tiers.
-_WOOD_LEATHER_CLOTH_VIOLATIONS_EXPECTED = {
-    "ironwood",       # metallic=0.15 -- wood is a dielectric
-    "dragon_leather", # metallic=0.15 -- leather is a dielectric
-}
+# Wood/leather/cloth violations — all fixed in material_tiers.py (metallic=0.0).
+_WOOD_LEATHER_CLOTH_VIOLATIONS_EXPECTED: set[str] = set()
 
 
 @pytest.mark.parametrize("tier_name,tier_data", list(WOOD_TIERS.items()))
