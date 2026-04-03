@@ -131,9 +131,10 @@ class TestHashNoise2D:
 
     def test_output_range(self):
         """Output should be in [-1, 1]."""
+        rng = random.Random(42)
         for _ in range(100):
-            x = random.uniform(-100, 100)
-            y = random.uniform(-100, 100)
+            x = rng.uniform(-100, 100)
+            y = rng.uniform(-100, 100)
             v = _hash_noise_2d(x, y)
             assert -2.0 <= v <= 2.0  # allow small float overshoot
 

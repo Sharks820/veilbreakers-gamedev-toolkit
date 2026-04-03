@@ -7,6 +7,7 @@ or network required.
 from __future__ import annotations
 
 import os
+import tempfile
 from pathlib import Path
 from unittest import mock
 
@@ -22,10 +23,11 @@ from veilbreakers_mcp.shared.tripo_post_processor import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+_TMPDIR = Path(tempfile.gettempdir())
 _MOCK_CHANNELS_FULL = {
-    "albedo": "/tmp/textures/albedo.png",
-    "orm": "/tmp/textures/orm.png",
-    "normal": "/tmp/textures/normal.png",
+    "albedo": str(_TMPDIR / "textures" / "albedo.png"),
+    "orm": str(_TMPDIR / "textures" / "orm.png"),
+    "normal": str(_TMPDIR / "textures" / "normal.png"),
 }
 
 _PALETTE_PASSED = {"passed": True, "issues": [], "stats": {"mean_saturation": 0.3}}
@@ -124,8 +126,8 @@ async def test_post_process_skips_delight_when_no_albedo(tmp_path: Path) -> None
     (tmp_path / "model.glb").write_bytes(b"fake")
 
     channels_no_albedo = {
-        "orm": "/tmp/textures/orm.png",
-        "normal": "/tmp/textures/normal.png",
+        "orm": str(_TMPDIR / "textures" / "orm.png"),
+        "normal": str(_TMPDIR / "textures" / "normal.png"),
     }
     mock_files = {channels_no_albedo["orm"], channels_no_albedo["normal"]}
 

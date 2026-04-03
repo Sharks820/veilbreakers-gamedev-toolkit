@@ -6,9 +6,14 @@ command is dispatched (or the correct error is raised for unknown actions).
 """
 
 import json
+import tempfile
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+_TMP_TEST_FBX = str(Path(tempfile.gettempdir()) / "test.fbx")
+_TMP_IMG_PNG = str(Path(tempfile.gettempdir()) / "img.png")
 
 # ---------------------------------------------------------------------------
 # Mock BlenderConnection before importing blender_server
@@ -249,7 +254,7 @@ class TestBlenderExportDispatch:
         with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
             from veilbreakers_mcp.blender_server import blender_export
             result = await blender_export(
-                export_format="fbx", filepath="/tmp/test.fbx"
+                export_format="fbx", filepath=_TMP_TEST_FBX
             )
             mock_conn.send_command.assert_called()
 
@@ -291,7 +296,7 @@ class TestConceptArtDispatch:
             mock_pal.return_value = {"colors": ["#000"]}
             from veilbreakers_mcp.blender_server import concept_art
             result = await concept_art(
-                action="extract_palette", image_path="/tmp/img.png"
+                action="extract_palette", image_path=_TMP_IMG_PNG
             )
             mock_pal.assert_called_once()
 

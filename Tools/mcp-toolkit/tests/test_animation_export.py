@@ -15,9 +15,13 @@ All pure-logic -- no Blender required.
 """
 
 import sys
+import tempfile
 import types
+from pathlib import Path
 
 import pytest
+
+_TMP_EXPORTS = str(Path(tempfile.gettempdir()) / "exports")
 
 from blender_addon.handlers.animation_export import (
     MIXAMO_TO_RIGIFY,
@@ -257,7 +261,7 @@ class TestValidateBatchExportParams:
 
     def test_valid_params(self):
         result = _validate_batch_export_params({
-            "output_dir": "/tmp/exports",
+            "output_dir": _TMP_EXPORTS,
         })
         assert result["valid"] is True
 
@@ -272,7 +276,7 @@ class TestValidateBatchExportParams:
 
     def test_invalid_naming(self):
         result = _validate_batch_export_params({
-            "output_dir": "/tmp/exports",
+            "output_dir": _TMP_EXPORTS,
             "naming": "unreal",
         })
         assert result["valid"] is False
@@ -280,21 +284,21 @@ class TestValidateBatchExportParams:
 
     def test_valid_unity_naming(self):
         result = _validate_batch_export_params({
-            "output_dir": "/tmp/exports",
+            "output_dir": _TMP_EXPORTS,
             "naming": "unity",
         })
         assert result["valid"] is True
 
     def test_valid_raw_naming(self):
         result = _validate_batch_export_params({
-            "output_dir": "/tmp/exports",
+            "output_dir": _TMP_EXPORTS,
             "naming": "raw",
         })
         assert result["valid"] is True
 
     def test_empty_actions_list(self):
         result = _validate_batch_export_params({
-            "output_dir": "/tmp/exports",
+            "output_dir": _TMP_EXPORTS,
             "actions": [],
         })
         assert result["valid"] is False
@@ -302,7 +306,7 @@ class TestValidateBatchExportParams:
 
     def test_actions_not_list(self):
         result = _validate_batch_export_params({
-            "output_dir": "/tmp/exports",
+            "output_dir": _TMP_EXPORTS,
             "actions": "walk",
         })
         assert result["valid"] is False
@@ -310,14 +314,14 @@ class TestValidateBatchExportParams:
     def test_actions_none_is_valid(self):
         """actions=None means export all -- should be valid."""
         result = _validate_batch_export_params({
-            "output_dir": "/tmp/exports",
+            "output_dir": _TMP_EXPORTS,
             "actions": None,
         })
         assert result["valid"] is True
 
     def test_valid_actions_list(self):
         result = _validate_batch_export_params({
-            "output_dir": "/tmp/exports",
+            "output_dir": _TMP_EXPORTS,
             "actions": ["walk", "run", "idle"],
         })
         assert result["valid"] is True

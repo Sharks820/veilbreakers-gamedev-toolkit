@@ -6,9 +6,20 @@ on whether has_extracted_textures is set.  All Blender TCP calls are mocked.
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
 from unittest import mock
 
 import pytest
+
+_TMPDIR = Path(tempfile.gettempdir())
+_TMP_TEXTURES = str(_TMPDIR / "textures")
+_TMP_ALBEDO = str(_TMPDIR / "textures" / "albedo.png")
+_TMP_ALBEDO_DELIT = str(_TMPDIR / "textures" / "albedo_delit.png")
+_TMP_ORM = str(_TMPDIR / "textures" / "orm.png")
+_TMP_NORMAL = str(_TMPDIR / "textures" / "normal.png")
+_TMP_ALBEDO_FLAT = str(_TMPDIR / "albedo.png")
+_TMP_ORM_FLAT = str(_TMPDIR / "orm.png")
 
 from veilbreakers_mcp.shared.pipeline_runner import PipelineRunner
 
@@ -55,9 +66,9 @@ async def test_cleanup_calls_load_extracted_textures_when_flag_set():
     runner, blender = _make_runner()
 
     channels = {
-        "albedo": "/tmp/textures/albedo.png",
-        "orm": "/tmp/textures/orm.png",
-        "normal": "/tmp/textures/normal.png",
+        "albedo": _TMP_ALBEDO,
+        "orm": _TMP_ORM,
+        "normal": _TMP_NORMAL,
     }
 
     await runner.cleanup_ai_model(
@@ -85,9 +96,9 @@ async def test_cleanup_prefers_albedo_delit_path():
     runner, blender = _make_runner()
 
     channels = {
-        "albedo": "/tmp/textures/albedo.png",
-        "albedo_delit": "/tmp/textures/albedo_delit.png",
-        "orm": "/tmp/textures/orm.png",
+        "albedo": _TMP_ALBEDO,
+        "albedo_delit": _TMP_ALBEDO_DELIT,
+        "orm": _TMP_ORM,
     }
 
     await runner.cleanup_ai_model(
@@ -106,7 +117,7 @@ async def test_cleanup_prefers_albedo_delit_path():
     params = tex_calls[0].args[1]
     assert "albedo_delit_path" in params, "albedo_delit_path should be in params"
     assert "albedo_path" not in params, "raw albedo_path should NOT be sent when delit is present"
-    assert params["albedo_delit_path"] == "/tmp/textures/albedo_delit.png"
+    assert params["albedo_delit_path"] == _TMP_ALBEDO_DELIT
 
 
 # ---------------------------------------------------------------------------
@@ -139,7 +150,7 @@ async def test_cleanup_runs_all_standard_steps_with_extracted_textures():
     """cleanup_ai_model still runs repair, game_check, UV unwrap when using extracted textures."""
     runner, blender = _make_runner()
 
-    channels = {"albedo": "/tmp/albedo.png", "orm": "/tmp/orm.png"}
+    channels = {"albedo": _TMP_ALBEDO_FLAT, "orm": _TMP_ORM_FLAT}
 
     result = await runner.cleanup_ai_model(
         "MyProp",

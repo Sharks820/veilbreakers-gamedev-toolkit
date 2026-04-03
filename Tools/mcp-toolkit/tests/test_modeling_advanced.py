@@ -6,10 +6,14 @@ parameter validation -- no Blender/bpy required.
 """
 
 import math
+import tempfile
 import time
 import types
+from pathlib import Path
 
 import pytest
+
+_TMP_TEST_PNG = str(Path(tempfile.gettempdir()) / "test.png")
 
 
 # ---------------------------------------------------------------------------
@@ -725,7 +729,7 @@ class TestValidateAlphaStampParams:
                 result = validate_alpha_stamp_params({
                     "object_name": "Cube",
                     "pattern": pat,
-                    "custom_image_path": "/tmp/test.png",
+                    "custom_image_path": _TMP_TEST_PNG,
                 })
             else:
                 result = validate_alpha_stamp_params({

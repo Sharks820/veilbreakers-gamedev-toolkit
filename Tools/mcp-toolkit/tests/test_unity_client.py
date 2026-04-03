@@ -12,8 +12,12 @@ import asyncio
 import json
 import socket
 import struct
+import tempfile
 import threading
+from pathlib import Path
 from unittest.mock import MagicMock, patch
+
+_TMP_SHOT_PNG = str(Path(tempfile.gettempdir()) / "shot.png")
 
 import pytest
 
@@ -44,9 +48,9 @@ class TestUnityCommand:
         assert data["params"] == {}
 
     def test_params_serialization(self):
-        cmd = UnityCommand(type="screenshot", params={"path": "/tmp/shot.png", "supersize": 2})
+        cmd = UnityCommand(type="screenshot", params={"path": _TMP_SHOT_PNG, "supersize": 2})
         data = cmd.model_dump()
-        assert data["params"]["path"] == "/tmp/shot.png"
+        assert data["params"]["path"] == _TMP_SHOT_PNG
         assert data["params"]["supersize"] == 2
 
     def test_params_default_factory(self):
