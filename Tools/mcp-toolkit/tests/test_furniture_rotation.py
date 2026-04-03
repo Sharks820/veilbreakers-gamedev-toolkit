@@ -113,27 +113,22 @@ class TestWallItemsFaceRoomInterior:
             f"not the interior.\n" + "\n".join(failures)
         )
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_front_wall_faces_interior(self):
         """Items on the front wall (wall_id=0, y near 0) must face +Y (toward center)."""
         self._check_wall(0, "front wall y=0")
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_back_wall_faces_interior(self):
         """Items on the back wall (wall_id=1, y near depth) must face -Y (toward center)."""
         self._check_wall(1, "back wall y=depth")
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_left_wall_faces_interior(self):
         """Items on the left wall (wall_id=2, x near 0) must face +X (toward center)."""
         self._check_wall(2, "left wall x=0")
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_right_wall_faces_interior(self):
         """Items on the right wall (wall_id=3, x near width) must face -X (toward center)."""
         self._check_wall(3, "right wall x=width")
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_non_square_room_all_walls(self):
         """Rotation direction must be correct for a non-square (6 x 12) room."""
         from blender_addon.handlers._building_grammar import _pick_wall_position
@@ -222,35 +217,33 @@ class TestChairsFaceTableCluster:
             + "\n".join(failures)
         )
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_face_anchor_formula_produces_inward_facing(self):
-        """Directly validate the face_anchor rotation formula used in Phase 2.
+        """Validate the face_anchor rotation formula atan2(px-ax, py-ay) faces the anchor.
 
-        The formula `atan2(ay - py, ax - px) - pi/2` produces a forward
-        vector pointing AWAY from the anchor.  It must be `+ pi/2`.
+        With Blender's -Y forward convention, forward = (-sin(R), -cos(R)).
+        To face from (px,py) toward (ax,ay): R = atan2(px-ax, py-ay).
         """
-        # Simulate: anchor (table) at center, chair placed to the right.
+        # Use a diagonal position so the bug is clearly exposed
+        # (axis-aligned positions can accidentally pass both formulas).
         ax, ay = 4.0, 4.0   # anchor (table) position
-        px, py = 5.5, 4.0   # member (chair) position (to the right of table)
+        px, py = 5.5, 5.5   # member (chair) position (diagonal from table)
 
-        # Buggy formula (current code):
+        # Correct formula: atan2(px - ax, py - ay)
+        rot = math.atan2(px - ax, py - ay)
+        fwd = _forward_vector(rot)
+        dir_to_anchor = _normalize2((ax - px, ay - py))
+        dot = _dot2(fwd, dir_to_anchor)
+
+        assert dot > 0.9, (
+            f"face_anchor formula should face toward anchor but got dot={dot:.4f}"
+        )
+
+        # Verify OLD buggy formula (atan2(ay-py, ax-px) - pi/2) faces away.
         buggy_rot = math.atan2(ay - py, ax - px) - math.pi / 2
         buggy_fwd = _forward_vector(buggy_rot)
-        dir_to_anchor = _normalize2((ax - px, ay - py))
         buggy_dot = _dot2(buggy_fwd, dir_to_anchor)
-
-        # Correct formula:
-        correct_rot = math.atan2(ay - py, ax - px) + math.pi / 2
-        correct_fwd = _forward_vector(correct_rot)
-        correct_dot = _dot2(correct_fwd, dir_to_anchor)
-
-        # The buggy formula must be facing away (dot <= 0) — confirms the bug exists.
-        assert buggy_dot <= 0.0, (
-            f"Expected buggy formula to face away from anchor but got dot={buggy_dot:.4f}"
-        )
-        # The correct formula must face toward anchor (dot > 0).
-        assert correct_dot > 0.0, (
-            f"Correct formula should face toward anchor but got dot={correct_dot:.4f}"
+        assert buggy_dot < 0.1, (
+            f"Old buggy formula should face away but got dot={buggy_dot:.4f}"
         )
 
 
@@ -261,7 +254,6 @@ class TestChairsFaceTableCluster:
 class TestCornerItemsFaceRoomCenter:
     """Corner items must have rotations that face toward the room center, not hardcoded 0."""
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_corner_items_not_hardcoded_zero(self):
         """Corner items placed in each quadrant must not all have rotation=0.
 
@@ -406,7 +398,6 @@ class TestSettlementFurnishWallRotations:
                 )
         return failures
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_bedroom_wall_items_face_interior(self):
         """Bedroom wall items from _furnish_interior must face the room center."""
         items = self._run_furnish("bedroom", 0.0, 0.0, 8.0, 8.0)
@@ -419,7 +410,6 @@ class TestSettlementFurnishWallRotations:
             + "\n".join(failures)
         )
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_kitchen_wall_items_face_interior(self):
         """Kitchen wall items from _furnish_interior must face the room center."""
         items = self._run_furnish("kitchen", 2.0, 3.0, 10.0, 11.0)
@@ -432,7 +422,6 @@ class TestSettlementFurnishWallRotations:
             + "\n".join(failures)
         )
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_smithy_wall_items_face_interior(self):
         """Smithy wall items from _furnish_interior must face the room center."""
         items = self._run_furnish("smithy", 0.0, 0.0, 10.0, 12.0)
@@ -445,7 +434,6 @@ class TestSettlementFurnishWallRotations:
             + "\n".join(failures)
         )
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_multiple_seeds_all_walls_face_interior(self):
         """Multiple seeds and room types must all produce inward-facing wall items."""
         room_configs = [
@@ -473,7 +461,6 @@ class TestSettlementFurnishWallRotations:
             + (f"\n... and {len(all_failures) - 20} more" if len(all_failures) > 20 else "")
         )
 
-    @pytest.mark.xfail(reason="INT-001/INT-002: 180° rotation bug, fix in Phase 7", strict=True)
     def test_north_wall_item_rotation(self):
         """Item on the north wall (high Y) must face -Y (toward room interior).
 
@@ -490,11 +477,13 @@ class TestSettlementFurnishWallRotations:
         room_bounds = {"min": (0.0, 0.0), "max": (10.0, 10.0)}
         items = _furnish_interior(rng, "bedroom", room_bounds)
 
-        # Find items near the north wall (y close to ry_max=10.0).
+        # Find items near the north wall (y close to ry_max=10.0) but NOT
+        # near side walls (exclude items near x=0 or x=10 which are side-wall items).
         north_items = [
             i for i in items
             if isinstance(i.get("position"), (list, tuple))
-            and float(i["position"][1]) > 7.0  # within 3m of north wall
+            and float(i["position"][1]) > 8.0  # within 2m of north wall
+            and 2.0 < float(i["position"][0]) < 8.0  # not near side walls
         ]
 
         if not north_items:
@@ -503,10 +492,11 @@ class TestSettlementFurnishWallRotations:
         for item in north_items:
             rot = item["rotation"]
             fwd = _forward_vector(rot)
-            # From near y=10, room center y=5, direction to center is (0, -1).
-            # Forward vector must have negative Y component.
-            assert fwd[1] < 0.0, (
+            ix, iy = float(item["position"][0]), float(item["position"][1])
+            d2c = _dir_to_center(ix, iy, 5.0, 5.0)
+            dot = _dot2(fwd, d2c)
+            assert dot > 0.0, (
                 f"North-wall item '{item['type']}' rot={rot:.4f} "
                 f"has forward=({fwd[0]:.3f},{fwd[1]:.3f}), "
-                f"expected fwd.y < 0 (facing toward room interior)"
+                f"dot={dot:.4f}, expected facing toward room interior"
             )

@@ -2663,23 +2663,32 @@ def _pick_wall_position(
     wall_margin: float,
     rng: random.Random,
 ) -> tuple[float, float, float, float, float]:
-    """Return (x, y, rotation, effective_sx, effective_sy) for a wall placement."""
+    """Return (x, y, rotation, effective_sx, effective_sy) for a wall placement.
+
+    INT-001 fix: Blender convention is -Y forward.  Furniture placed against a
+    wall must FACE the room interior, so we rotate 180° from the wall normal:
+
+        wall 0 (front, y=0)   → face +Y → rotation = π
+        wall 1 (back, y=depth)→ face -Y → rotation = 0
+        wall 2 (left, x=0)    → face +X → rotation = -π/2
+        wall 3 (right, x=width)→ face -X → rotation = π/2
+    """
     if wall_id == 0:  # front wall (y=0)
         x = rng.uniform(sx / 2 + wall_margin, width - sx / 2 - wall_margin)
         y = sy / 2 + wall_margin
-        return x, y, 0.0, sx, sy
+        return x, y, math.pi, sx, sy
     elif wall_id == 1:  # back wall (y=depth)
         x = rng.uniform(sx / 2 + wall_margin, width - sx / 2 - wall_margin)
         y = depth - sy / 2 - wall_margin
-        return x, y, math.pi, sx, sy
+        return x, y, 0.0, sx, sy
     elif wall_id == 2:  # left wall (x=0)
         x = sy / 2 + wall_margin
         y = rng.uniform(sx / 2 + wall_margin, depth - sx / 2 - wall_margin)
-        return x, y, math.pi / 2, sy, sx
+        return x, y, -math.pi / 2, sy, sx
     else:  # right wall (x=width)
         x = width - sy / 2 - wall_margin
         y = rng.uniform(sx / 2 + wall_margin, depth - sx / 2 - wall_margin)
-        return x, y, -math.pi / 2, sy, sx
+        return x, y, math.pi / 2, sy, sx
 
 
 def _wall_pref_to_ids(wall_pref: str, rng: random.Random) -> list[int]:
@@ -3007,8 +3016,8 @@ def generate_interior_layout(
                 px = ax + math.cos(angle) * offset_dist
                 py = ay + math.sin(angle) * offset_dist
                 if face_anchor:
-                    # Rotate to face anchor center
-                    rot = math.atan2(ay - py, ax - px) - math.pi / 2
+                    # INT-003: face anchor — atan2(px-ax, py-ay) for -Y forward
+                    rot = math.atan2(px - ax, py - ay)
                 else:
                     rot = rng.uniform(-0.1, 0.1)
                 if (not _check_collision(px, py, msx, msy, occupied, item_height)
@@ -3078,6 +3087,7 @@ def generate_interior_layout(
         elif rule == "corner":
             corners = [0, 1, 2, 3]
             rng.shuffle(corners)
+            cx, cy = width / 2.0, depth / 2.0
             for corner in corners:
                 if corner == 0:
                     px, py = sx / 2 + wall_margin, sy / 2 + wall_margin
@@ -3088,7 +3098,8 @@ def generate_interior_layout(
                 else:
                     px, py = (width - sx / 2 - wall_margin,
                               depth - sy / 2 - wall_margin)
-                rot = 0.0
+                # INT-005: face room center — atan2(px-cx, py-cy) for -Y forward
+                rot = math.atan2(px - cx, py - cy)
                 if (not _check_collision(px, py, sx, sy, occupied,
                                          item_height)
                         and _in_bounds(px, py, sx, sy, width, depth)
@@ -3148,7 +3159,8 @@ def _generate_interior_layout_basic(
                 else:
                     px, py = (width - sx / 2 - wall_margin,
                               depth - sy / 2 - wall_margin)
-                rot = 0.0
+                # INT-005: face room center — atan2(px-cx, py-cy) for -Y forward
+                rot = math.atan2(px - width / 2.0, py - depth / 2.0)
                 esx, esy = sx, sy
             else:
                 px, py = width / 2, depth / 2
