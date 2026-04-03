@@ -111,7 +111,13 @@ class ElevenLabsAudioClient:
 
     @staticmethod
     def _retry_on_rate_limit(fn, *args, max_retries: int = 3, **kwargs) -> Any:
-        """Execute *fn* with exponential backoff on HTTP 429 rate-limit errors."""
+        """Execute *fn* with exponential backoff on HTTP 429 rate-limit errors.
+
+        MISC-003: This is a synchronous method and intentionally uses
+        ``time.sleep`` (not ``asyncio.sleep``).  The ElevenLabs SDK is
+        synchronous; callers must run this in a thread pool executor when
+        calling from async code (e.g. ``asyncio.get_event_loop().run_in_executor``).
+        """
         for attempt in range(max_retries + 1):
             try:
                 return fn(*args, **kwargs)

@@ -389,7 +389,10 @@ def run_roslynator(sln_path: str) -> list[ToolFinding]:
         return []
 
     import tempfile
-    output_path = tempfile.mktemp(suffix=".xml")
+    # MISC-008: use NamedTemporaryFile to avoid mktemp race condition.
+    # delete=False so roslynator can write to it after we close the handle.
+    with tempfile.NamedTemporaryFile(suffix=".xml", delete=False) as _tmp:
+        output_path = _tmp.name
 
     _run(
         [cmd, "analyze", sln_path,

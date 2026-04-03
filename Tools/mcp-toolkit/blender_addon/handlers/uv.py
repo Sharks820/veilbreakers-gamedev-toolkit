@@ -382,6 +382,8 @@ def handle_unwrap_xatlas(params: dict) -> dict:
     # Strategy: for each xatlas triangle, assign UVs to the corresponding
     # original polygon's loops by matching vertex indices.
     poly_vert_uv: dict[tuple[int, int], tuple[float, float]] = {}
+    # MISC-007: also build a plain vert->uv fallback dict (first UV seen per vertex)
+    vert_uv_fallback: dict[int, tuple[float, float]] = {}
     for tri_idx in range(len(indices) // 3):
         poly_idx = tri_to_poly[tri_idx]
         for k in range(3):
@@ -389,6 +391,7 @@ def handle_unwrap_xatlas(params: dict) -> dict:
             orig_vert_idx = int(vmapping[new_vert_idx])
             uv_val = (float(uvs[new_vert_idx][0]), float(uvs[new_vert_idx][1]))
             poly_vert_uv[(poly_idx, orig_vert_idx)] = uv_val
+            vert_uv_fallback.setdefault(orig_vert_idx, uv_val)
 
     # Apply UVs to bmesh loops
     for face in bm.faces:
@@ -397,20 +400,10 @@ def handle_unwrap_xatlas(params: dict) -> dict:
             if key in poly_vert_uv:
                 loop[uv_layer].uv = poly_vert_uv[key]
             else:
-                # Fallback: try any UV assigned to this vertex
-                for tri_idx_check, (pi, vi) in enumerate(
-                    (tp, int(vmapping[indices[ti * 3 + ki]]))
-                    for ti in range(len(indices) // 3)
-                    for ki in range(3)
-                    for tp in [tri_to_poly[ti]]
-                ):
-                    if vi == loop.vert.index:
-                        new_vi = indices[tri_idx_check // 1 * 3 + tri_idx_check % 3]
-                        loop[uv_layer].uv = (
-                            float(uvs[new_vi][0]),
-                            float(uvs[new_vi][1]),
-                        )
-                        break
+                # MISC-007: fallback via plain vert index lookup (fixed index math)
+                uv_fb = vert_uv_fallback.get(loop.vert.index)
+                if uv_fb is not None:
+                    loop[uv_layer].uv = uv_fb
 
     bm.to_mesh(mesh)
     mesh.update()

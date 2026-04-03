@@ -1,8 +1,19 @@
 import logging
+import os
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
+
+# MISC-006: Relative path defaults break when the process CWD is not the
+# project root (e.g. OneDrive sync processes, pytest, system services).
+# Resolve to absolute paths relative to this config file's own directory.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_PROJECT_ROOT = os.path.normpath(os.path.join(_HERE, "..", "..", ".."))
+_DEFAULT_DB_PATH = os.path.join(_PROJECT_ROOT, "assets.db")
+_DEFAULT_REALESRGAN = os.path.join(
+    _PROJECT_ROOT, "bin", "realesrgan-ncnn-vulkan", "realesrgan-ncnn-vulkan.exe"
+)
 
 
 class Settings(BaseSettings):
@@ -33,9 +44,9 @@ class Settings(BaseSettings):
     # fal.ai for concept art / image generation
     fal_key: str = ""
     # Real-ESRGAN binary path for texture upscaling
-    realesrgan_path: str = "bin/realesrgan-ncnn-vulkan/realesrgan-ncnn-vulkan.exe"
+    realesrgan_path: str = _DEFAULT_REALESRGAN
     # SQLite asset catalog database path
-    asset_catalog_db: str = "assets.db"
+    asset_catalog_db: str = _DEFAULT_DB_PATH
 
     # Unity project root path (for C# script generation)
     unity_project_path: str = ""

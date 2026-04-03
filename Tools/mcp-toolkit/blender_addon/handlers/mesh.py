@@ -1988,13 +1988,14 @@ def handle_boolean_op(params: dict) -> dict:
     bm = bmesh.new()
     try:
         bm.from_mesh(target.data)
-        # Remove doubles
+        # Remove doubles -- pass list snapshot (bm.verts[:]) not BMElemSeq
+        # to avoid crash when remove_doubles mutates the mesh during iteration
         doubles_result = bmesh.ops.remove_doubles(
-            bm, verts=bm.verts, dist=merge_distance
+            bm, verts=bm.verts[:], dist=merge_distance
         )
         doubles_removed = len(doubles_result.get("verts", []))
-        # Recalculate normals
-        bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+        # Recalculate normals -- same list-snapshot pattern for safety
+        bmesh.ops.recalc_face_normals(bm, faces=bm.faces[:])
         bm.to_mesh(target.data)
     finally:
         bm.free()

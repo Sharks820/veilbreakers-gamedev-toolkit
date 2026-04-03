@@ -15,6 +15,20 @@ import os
 from pathlib import Path
 from typing import Any
 
+_MIME_MAP: dict[str, str] = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".gif": "image/gif",
+    ".webp": "image/webp",
+}
+
+
+def _mime_for_path(image_path: str) -> str:
+    """Return MIME type based on file extension; defaults to image/png."""
+    ext = Path(image_path).suffix.lower()
+    return _MIME_MAP.get(ext, "image/png")
+
 
 class GeminiReviewClient:
     """Client for Gemini-powered visual quality review of screenshots.
@@ -101,7 +115,7 @@ class GeminiReviewClient:
         response = model.generate_content(
             [
                 review_prompt,
-                {"mime_type": "image/png", "data": image_data},
+                {"mime_type": _mime_for_path(image_path), "data": image_data},
             ]
         )
 
@@ -132,7 +146,7 @@ class GeminiReviewClient:
                         {"text": review_prompt},
                         {
                             "inline_data": {
-                                "mime_type": "image/png",
+                                "mime_type": _mime_for_path(image_path),
                                 "data": b64_image,
                             }
                         },

@@ -283,6 +283,7 @@ def compute_vegetation_placement(
     seed: int = 42,
     min_distance: float = 3.0,
     water_level: float = _DEFAULT_WATER_LEVEL,
+    exclusion_zones: list[dict] | None = None,
 ) -> list[dict[str, Any]]:
     """Compute vegetation placements for a biome on terrain geometry.
 
@@ -423,6 +424,18 @@ def compute_vegetation_placement(
         # Sample terrain at this position
         norm_h, slope_deg = _sample_terrain(wx, wy)
 
+        # PROP-004: Exclusion zone filter -- skip positions inside any
+        # axis-aligned rectangular exclusion zone (roads, buildings, etc.)
+        if exclusion_zones:
+            in_exclusion = False
+            for ez in exclusion_zones:
+                if (ez.get("min_x", -1e9) <= wx <= ez.get("max_x", 1e9)
+                        and ez.get("min_y", -1e9) <= wy <= ez.get("max_y", 1e9)):
+                    in_exclusion = True
+                    break
+            if in_exclusion:
+                continue
+
         # Water level filter: only applies when terrain has height variation
         # (flat terrain has all vertices at norm_h=0 which is a false positive)
         if has_height_variation and norm_h < water_level:
@@ -468,6 +481,7 @@ def compute_vegetation_placement(
             "style": selected_entry.get("style", "default"),
             "scale": scale,
             "rotation": rotation,
+            "category": selected_cat,  # PROP-003: needed for LOD chain tagging
         })
 
     return placements
@@ -651,6 +665,12 @@ def handle_scatter_biome_vegetation(params: dict) -> dict:
             colors on tree instances.
         water_level (float, default 0.05): Normalized height below which nothing
             is placed.
+        exclusion_zones (list of dict, optional): PROP-004 -- axis-aligned
+            rectangular zones where no vegetation is placed.  Each dict has
+            keys ``min_x``, ``min_y``, ``max_x``, ``max_y`` (world space).
+        lod_distances (list of float, optional): PROP-003 -- distance
+            thresholds for LOD0/LOD1/LOD2 custom-property tags on non-tree
+            instances.  Defaults to [15.0, 35.0, 60.0].
 
     Returns dict with: name, instance_count, vegetation_types, biome, season.
     """
@@ -675,6 +695,10 @@ def handle_scatter_biome_vegetation(params: dict) -> dict:
     season = params.get("season")
     bake_wind_colors = params.get("bake_wind_colors", False)
     water_level = params.get("water_level", _DEFAULT_WATER_LEVEL)
+    # PROP-004: exclusion zones (rectangular no-plant areas e.g. roads, buildings)
+    exclusion_zones: list[dict] = params.get("exclusion_zones") or []
+    # PROP-003: LOD distance thresholds for non-tree scatter objects
+    lod_distances: list[float] = params.get("lod_distances") or [15.0, 35.0, 60.0]
 
     obj = bpy.data.objects.get(terrain_name)
     if obj is None:
@@ -707,7 +731,7 @@ def handle_scatter_biome_vegetation(params: dict) -> dict:
         loc.y + half_y,
     )
 
-    # Compute placements
+    # Compute placements (PROP-004: pass exclusion zones through)
     placements = compute_vegetation_placement(
         terrain_vertices,
         terrain_faces,
@@ -717,6 +741,7 @@ def handle_scatter_biome_vegetation(params: dict) -> dict:
         seed=seed,
         min_distance=min_distance,
         water_level=water_level,
+        exclusion_zones=exclusion_zones,
     )
 
     # Cap instances
@@ -748,6 +773,16 @@ def handle_scatter_biome_vegetation(params: dict) -> dict:
         s = p["scale"]
         instance.scale = (s, s, s)
         instance.rotation_euler = (0, 0, math.radians(p["rotation"]))
+
+        # PROP-003: Tag LOD distances on non-tree instances as custom properties.
+        # Trees are handled by the wind/rig pipeline; rocks and ground cover need
+        # LOD chains so the engine can cull them at distance.
+        if p.get("category") != "trees":
+            _lod = list(lod_distances) + [0.0] * max(0, 3 - len(lod_distances))
+            instance["lod0_distance"] = float(_lod[0])
+            instance["lod1_distance"] = float(_lod[1])
+            instance["lod2_distance"] = float(_lod[2])
+            instance["lod_enabled"] = True
 
         scatter_coll.objects.link(instance)
 

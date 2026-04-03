@@ -272,7 +272,8 @@ class TestWorldGraph:
         assert isinstance(graph, WorldGraph)
 
     def test_node_count_matches_locations(self):
-        graph = generate_world_graph(self.LOCATIONS, seed=42)
+        # add_landmarks=False: test only input locations, not injected landmark nodes
+        graph = generate_world_graph(self.LOCATIONS, seed=42, add_landmarks=False)
         assert len(graph.nodes) == 5
 
     def test_graph_is_connected(self):
@@ -328,9 +329,11 @@ class TestWorldGraph:
         assert len(graph.edges) == 0
 
     def test_single_location(self):
+        # add_landmarks=False: verify single-node graph without injected landmarks
         graph = generate_world_graph(
             [{"name": "A", "type": "x", "position": (0, 0)}],
             seed=42,
+            add_landmarks=False,
         )
         assert len(graph.nodes) == 1
         assert len(graph.edges) == 0

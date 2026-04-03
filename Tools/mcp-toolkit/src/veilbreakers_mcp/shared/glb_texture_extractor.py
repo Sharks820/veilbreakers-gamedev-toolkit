@@ -53,32 +53,35 @@ _CHUNK_HEADER_SIZE = 8  # chunkLength(4) + chunkType(4)
 def _read_glb_chunks(glb_path: str) -> tuple[dict, bytes]:
     """Read the JSON descriptor and binary blob from a GLB file.
 
+    MISC-006: Reads the file header and each chunk header/body incrementally
+    rather than loading the entire file into memory with fh.read().
+
     Returns (gltf_dict, bin_blob).  Raises ValueError on malformed input.
     """
-    with open(glb_path, "rb") as fh:
-        data = fh.read()
-
-    if len(data) < _HEADER_SIZE:
-        raise ValueError(f"File too small to be a valid GLB: {glb_path}")
-
-    magic, _version, _total_length = struct.unpack_from("<III", data, 0)
-    if magic != _GLB_MAGIC:
-        raise ValueError(f"Not a valid GLB file (bad magic): {glb_path}")
-
-    offset = _HEADER_SIZE
     json_chunk_data: Optional[bytes] = None
     bin_chunk_data: bytes = b""
 
-    while offset + _CHUNK_HEADER_SIZE <= len(data):
-        chunk_length, chunk_type = struct.unpack_from("<II", data, offset)
-        offset += _CHUNK_HEADER_SIZE
-        chunk_body = data[offset: offset + chunk_length]
-        offset += chunk_length
+    with open(glb_path, "rb") as fh:
+        header = fh.read(_HEADER_SIZE)
+        if len(header) < _HEADER_SIZE:
+            raise ValueError(f"File too small to be a valid GLB: {glb_path}")
 
-        if chunk_type == _GLB_JSON_CHUNK_TYPE:
-            json_chunk_data = chunk_body
-        elif chunk_type == _GLB_BIN_CHUNK_TYPE:
-            bin_chunk_data = chunk_body
+        magic, _version, _total_length = struct.unpack_from("<III", header, 0)
+        if magic != _GLB_MAGIC:
+            raise ValueError(f"Not a valid GLB file (bad magic): {glb_path}")
+
+        while True:
+            chunk_header = fh.read(_CHUNK_HEADER_SIZE)
+            if len(chunk_header) < _CHUNK_HEADER_SIZE:
+                break
+            chunk_length, chunk_type = struct.unpack_from("<II", chunk_header, 0)
+            chunk_body = fh.read(chunk_length)
+
+            if chunk_type == _GLB_JSON_CHUNK_TYPE:
+                json_chunk_data = chunk_body
+            elif chunk_type == _GLB_BIN_CHUNK_TYPE:
+                bin_chunk_data = chunk_body
+            # Unknown chunk types are skipped per the GLB spec
 
     if json_chunk_data is None:
         raise ValueError(f"GLB has no JSON chunk: {glb_path}")

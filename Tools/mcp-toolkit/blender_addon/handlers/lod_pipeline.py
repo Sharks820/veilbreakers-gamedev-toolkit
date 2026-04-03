@@ -588,16 +588,18 @@ def generate_collision_mesh(
 def _generate_billboard_quad(
     vertices: list[tuple[float, float, float]],
 ) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]:
-    """Generate a billboard quad from the bounding box of the input mesh.
+    """Generate a vertical billboard quad from the bounding box of the input mesh.
 
-    The quad faces +Z, centered on the mesh centroid, sized to the
-    bounding box width and height.
+    WORLD-001: The quad is vertical (XZ plane), facing +Y, so it is visible
+    as a tree/foliage silhouette from the camera.  Width spans the X extent
+    of the mesh; height spans the Z extent.  Y is fixed at the mesh centroid.
 
     Returns:
         Tuple of (4 vertices, 1 quad face).
     """
     if not vertices:
-        return [(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)], [(0, 1, 2, 3)]
+        # Vertical default quad (XZ plane, facing +Y)
+        return [(0, 0, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1)], [(0, 1, 2, 3)]
 
     xs = [v[0] for v in vertices]
     ys = [v[1] for v in vertices]
@@ -605,19 +607,21 @@ def _generate_billboard_quad(
 
     cx = (min(xs) + max(xs)) / 2.0
     cy = (min(ys) + max(ys)) / 2.0
-    cz = (min(zs) + max(zs)) / 2.0
 
     half_w = (max(xs) - min(xs)) / 2.0
-    half_h = (max(ys) - min(ys)) / 2.0
-
     half_w = max(half_w, 0.01)
-    half_h = max(half_h, 0.01)
 
+    z_bot = min(zs)
+    z_top = max(zs)
+    if z_top - z_bot < 0.01:
+        z_top = z_bot + 0.01
+
+    # Vertical quad: bottom-left, bottom-right, top-right, top-left (XZ plane)
     quad_verts: list[tuple[float, float, float]] = [
-        (cx - half_w, cy - half_h, cz),
-        (cx + half_w, cy - half_h, cz),
-        (cx + half_w, cy + half_h, cz),
-        (cx - half_w, cy + half_h, cz),
+        (cx - half_w, cy, z_bot),
+        (cx + half_w, cy, z_bot),
+        (cx + half_w, cy, z_top),
+        (cx - half_w, cy, z_top),
     ]
     quad_faces: list[tuple[int, ...]] = [(0, 1, 2, 3)]
 

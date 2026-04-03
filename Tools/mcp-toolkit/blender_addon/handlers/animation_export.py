@@ -182,7 +182,7 @@ def _generate_timing_sidecar(
     data["source_action"] = action_name
     data["preset"] = matched
 
-    with open(sidecar_path, "w") as f:
+    with open(sidecar_path, "w", encoding="utf-8") as f:
         _json.dump(data, f, indent=2)
     return sidecar_path
 
