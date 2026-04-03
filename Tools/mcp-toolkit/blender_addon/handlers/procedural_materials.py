@@ -1271,7 +1271,7 @@ def build_metal_material(mat: Any, params: dict[str, Any]) -> None:
         rust_color = (bc[0] * 0.6, bc[1] * 0.4, bc[2] * 0.3, 1.0)
     bsdf_rust.inputs["Base Color"].default_value = rust_color
     bsdf_rust.inputs["Roughness"].default_value = min(1.0, params["roughness"] + 0.3)
-    bsdf_rust.inputs["Metallic"].default_value = max(0.0, params["metallic"] - 0.5)
+    bsdf_rust.inputs["Metallic"].default_value = 0.0  # Rust is always dielectric (PBR binary rule)
 
     # -- Noise: Rust pattern mask --
     noise_rust = _add_node(tree, "ShaderNodeTexNoise", -800, 0, "Rust Pattern")
