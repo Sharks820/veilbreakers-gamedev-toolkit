@@ -768,7 +768,7 @@ async def _enforce_world_quality(
             # Check for smart_material_preset custom property and apply smart material if tagged
             try:
                 # PIPE-037: sanitize mesh_name to prevent code injection
-                safe_mesh_name = mesh_name.replace("\\", "\\\\").replace("'", "\\'")
+                safe_mesh_name = mesh_name.replace("\\", "\\\\").replace("'", "\\'").replace("\n", "").replace("\r", "").replace("\0", "")
                 preset_result = await blender.send_command(
                     "execute_code",
                     {"code": (
@@ -1357,16 +1357,25 @@ async def blender_viewport(
             "room_bounds": room_bounds,
             "eye_height": 1.7,
         })
-        screenshot_bytes = await blender.capture_viewport_bytes()
-        resized = resize_screenshot(screenshot_bytes, max_size=max_size)
-        parts = [json.dumps(result, indent=2, default=str), Image(data=resized, format="png")]
+        parts: list = [json.dumps(result, indent=2, default=str)]
+        try:
+            screenshot_bytes = await blender.capture_viewport_bytes()
+            resized = resize_screenshot(screenshot_bytes, max_size=max_size)
+            parts.append(Image(data=resized, format="png"))
+        except (OSError, IOError, BlenderCommandError, ConnectionError) as e:
+            parts.append(f"[Screenshot capture failed: {e}]")
         return parts
 
     elif action == "quick_preview":
         # Fast 256 px preview — no beauty setup, minimal overhead
-        screenshot_bytes = await blender.capture_viewport_bytes()
-        resized = resize_screenshot(screenshot_bytes, max_size=256)
-        return Image(data=resized, format="png")
+        parts = []
+        try:
+            screenshot_bytes = await blender.capture_viewport_bytes()
+            resized = resize_screenshot(screenshot_bytes, max_size=256)
+            parts.append(Image(data=resized, format="png"))
+        except (OSError, IOError, BlenderCommandError, ConnectionError) as e:
+            parts.append(f"[Screenshot capture failed: {e}]")
+        return parts
 
     elif action == "orthographic_views":
         # Four orthographic renders: front / right / top / isometric

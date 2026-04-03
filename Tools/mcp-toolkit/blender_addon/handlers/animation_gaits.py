@@ -778,20 +778,20 @@ FLOATING_WALK_CONFIG: dict = {
             "channel": "rotation_euler", "axis": 1,
             "amplitude": 0.04, "phase": math.pi,
         },
-        # Tentacle trailing motion
-        "DEF-tentacle.001": {
+        # Tentacle trailing motion — names match FLOATING_BONES template
+        "DEF-tentacle_fl": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.2, "phase": 0.0,
         },
-        "DEF-tentacle.002": {
+        "DEF-tentacle_fr": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.2, "phase": math.pi / 2,
         },
-        "DEF-tentacle.003": {
+        "DEF-tentacle_bl": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.2, "phase": math.pi,
         },
-        "DEF-tentacle.004": {
+        "DEF-tentacle_br": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.2, "phase": 3 * math.pi / 2,
         },
@@ -818,19 +818,19 @@ FLOATING_RUN_CONFIG: dict = {
             "channel": "rotation_euler", "axis": 1,
             "amplitude": 0.08, "phase": math.pi,
         },
-        "DEF-tentacle.001": {
+        "DEF-tentacle_fl": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.35, "phase": 0.0,
         },
-        "DEF-tentacle.002": {
+        "DEF-tentacle_fr": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.35, "phase": math.pi / 2,
         },
-        "DEF-tentacle.003": {
+        "DEF-tentacle_bl": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.35, "phase": math.pi,
         },
-        "DEF-tentacle.004": {
+        "DEF-tentacle_br": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.35, "phase": 3 * math.pi / 2,
         },
@@ -1268,24 +1268,24 @@ ATTACK_CONFIGS: dict[str, dict] = {
             {  # Anticipation: tentacle coils back
                 "start_pct": 0.0, "end_pct": 0.2,
                 "bones": {
-                    "DEF-tentacle.001": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.8},
-                    "DEF-tentacle.002": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.6},
+                    "DEF-tentacle_fl": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.8},
+                    "DEF-tentacle_fr": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.6},
                     "DEF-spine.001": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.2},
                 },
             },
             {  # Strike: whip forward
                 "start_pct": 0.2, "end_pct": 0.5,
                 "bones": {
-                    "DEF-tentacle.001": {"channel": "rotation_euler", "axis": 0, "start_value": -0.8, "end_value": 1.0},
-                    "DEF-tentacle.002": {"channel": "rotation_euler", "axis": 0, "start_value": -0.6, "end_value": 0.8},
+                    "DEF-tentacle_fl": {"channel": "rotation_euler", "axis": 0, "start_value": -0.8, "end_value": 1.0},
+                    "DEF-tentacle_fr": {"channel": "rotation_euler", "axis": 0, "start_value": -0.6, "end_value": 0.8},
                     "DEF-spine.001": {"channel": "rotation_euler", "axis": 0, "start_value": -0.2, "end_value": 0.3},
                 },
             },
             {  # Recovery: tentacle retracts
                 "start_pct": 0.5, "end_pct": 1.0,
                 "bones": {
-                    "DEF-tentacle.001": {"channel": "rotation_euler", "axis": 0, "start_value": 1.0, "end_value": 0.0},
-                    "DEF-tentacle.002": {"channel": "rotation_euler", "axis": 0, "start_value": 0.8, "end_value": 0.0},
+                    "DEF-tentacle_fl": {"channel": "rotation_euler", "axis": 0, "start_value": 1.0, "end_value": 0.0},
+                    "DEF-tentacle_fr": {"channel": "rotation_euler", "axis": 0, "start_value": 0.8, "end_value": 0.0},
                     "DEF-spine.001": {"channel": "rotation_euler", "axis": 0, "start_value": 0.3, "end_value": 0.0},
                 },
             },

@@ -36,8 +36,8 @@ BLOB_SPINE_BONES: list[str] = [
 ]
 
 BLOB_PSEUDOPOD_BONES: list[str] = [
-    "DEF-tentacle.001", "DEF-tentacle.002",
-    "DEF-tentacle.003", "DEF-tentacle.004",
+    "DEF-tentacle_fl", "DEF-tentacle_fr",
+    "DEF-tentacle_bl", "DEF-tentacle_br",
 ]
 
 

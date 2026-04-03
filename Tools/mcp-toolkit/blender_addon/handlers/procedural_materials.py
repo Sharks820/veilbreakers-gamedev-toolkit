@@ -473,7 +473,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "base_color": (0.12, 0.10, 0.08, 1.0),  # raised val 8%->12%, desaturated sat 50%->35%
         "roughness": 0.30,
         "roughness_variation": 0.10,
-        "metallic": 0.15,
+        "metallic": 0.0,  # PBR: chitin is organic/dielectric, not a conductor
         "normal_strength": 1.0,
         "detail_scale": 10.0,
         "wear_intensity": 0.2,
@@ -822,7 +822,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "macro_normal_strength": 0.2,
     },
     "blood_splatter": {
-        "base_color": (0.25, 0.17, 0.16, 1.0),  # desaturated: was _BLOOD_RED (0.25,0.03,0.02) sat 92%->36%
+        "base_color": (0.25, 0.17, 0.16, 1.0),  # AAA palette: warmest red strictly under 40% sat cap (sat=36%)
         "roughness": 0.40,
         "roughness_variation": 0.15,
         "metallic": 0.0,
