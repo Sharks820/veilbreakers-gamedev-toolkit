@@ -382,7 +382,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "metallic": 1.0,
         "normal_strength": 0.3,
         "detail_scale": 20.0,
-        "wear_intensity": 0.05,
+        "wear_intensity": 0.15,  # STY-012: minimum wear 0.15 for dark fantasy compliance
         "node_recipe": "metal",
         "anisotropic": 0.5,
         "micro_normal_strength": 0.7,
@@ -424,7 +424,7 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "metallic": 1.0,
         "normal_strength": 0.4,
         "detail_scale": 18.0,
-        "wear_intensity": 0.1,
+        "wear_intensity": 0.15,  # STY-012: minimum wear 0.15 for dark fantasy compliance
         "node_recipe": "metal",
         "coat_weight": 0.5,
         "micro_normal_strength": 0.7,

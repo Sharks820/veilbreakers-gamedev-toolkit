@@ -485,8 +485,8 @@ class TestRainStaining:
         for v in mask:
             assert v == 0.0
 
-    def test_higher_vertices_more_staining(self):
-        """Higher vertices on a wall should have more rain staining (top-down flow)."""
+    def test_lower_vertices_more_staining(self):
+        """STY-014: Lower vertices accumulate more rain staining (runoff collects below ledges)."""
         mesh = _make_vertical_wall_mesh()
         mask = apply_rain_staining(mesh, strength=1.0)
         # Bottom row: z=0 (indices 0-3), top row: z=3 (indices 12-15)
@@ -494,7 +494,7 @@ class TestRainStaining:
         top = [mask[i] for i in range(12, 16)]
         bottom_avg = sum(bottom) / len(bottom)
         top_avg = sum(top) / len(top)
-        assert top_avg > bottom_avg, "Higher vertices should have more rain staining"
+        assert bottom_avg > top_avg, "Lower vertices should accumulate more rain staining (STY-014)"
 
 
 # ---------------------------------------------------------------------------

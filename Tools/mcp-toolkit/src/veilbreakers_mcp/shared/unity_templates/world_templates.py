@@ -1095,7 +1095,7 @@ def generate_2d_physics_script(
 
 
 def generate_time_of_day_preset_script(
-    preset_name: str = "noon",
+    preset_name: str = "dusk",  # STY-004: dark fantasy default
     custom_overrides: dict | None = None,
     apply_fog: bool = True,
     namespace: str = "VeilBreakers.WorldSystems",
@@ -2379,7 +2379,7 @@ def generate_dungeon_lighting_script(
         (editor_cs, runtime_cs) tuple.
     """
     if torch_color is None:
-        torch_color = [1.0, 0.7, 0.3, 1.0]
+        torch_color = [1.0, 0.42, 0.08, 1.0]  # STY-008: 2200K deep amber
     if fog_color is None:
         fog_color = [0.1, 0.08, 0.06]
     ns = _safe_namespace(namespace)

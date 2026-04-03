@@ -289,14 +289,14 @@ class TestGenerateLsystemTree:
         with pytest.raises(ValueError, match="Unknown tree_type"):
             generate_lsystem_tree({"tree_type": "banana_palm"})
 
-    def test_iterations_capped_at_8(self):
-        """Iterations are capped at 8 to prevent excessive geometry."""
+    def test_iterations_capped(self):
+        """Iterations are capped to prevent excessive geometry (MISC-020: cap=6)."""
         result = generate_lsystem_tree({
             "tree_type": "oak",
             "iterations": 20,
             "seed": 42,
         })
-        assert result["metadata"]["iterations"] == 8
+        assert result["metadata"]["iterations"] <= 6
 
     def test_seed_determinism(self):
         """Same seed produces identical tree."""

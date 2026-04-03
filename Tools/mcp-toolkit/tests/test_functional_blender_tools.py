@@ -208,9 +208,12 @@ class TestTool3BlenderMaterial:
 
 
 class TestTool4BlenderViewport:
-    """blender_viewport: screenshot, contact_sheet, set_shading, navigate."""
+    """blender_viewport: screenshot, contact_sheet, set_shading, navigate + extended."""
 
-    EXPECTED_ACTIONS = {"screenshot", "contact_sheet", "set_shading", "navigate"}
+    EXPECTED_ACTIONS = {
+        "screenshot", "contact_sheet", "set_shading", "navigate",
+        "quick_preview", "orthographic_views", "interior_shot",
+    }
 
     def test_function_exists_and_is_async(self):
         assert asyncio.iscoroutinefunction(blender_viewport)

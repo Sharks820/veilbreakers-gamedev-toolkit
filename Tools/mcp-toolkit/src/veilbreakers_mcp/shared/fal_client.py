@@ -43,7 +43,7 @@ except ImportError:
 
 def generate_concept_art(
     prompt: str,
-    style: str = "fantasy",
+    style: str = "dark fantasy, weathered Gothic medieval, desaturated",  # STY-002
     width: int = 1024,
     height: int = 1024,
     output_dir: str = ".",
@@ -68,23 +68,27 @@ def generate_concept_art(
             "message": "FAL_KEY not configured. Set fal_key to enable AI concept art generation.",
         }
 
-    # Ensure fal-client can find the key via its env var
-    prev_fal_key = os.environ.get("FAL_KEY")
-    os.environ["FAL_KEY"] = fal_key
-
     if not _FAL_AVAILABLE:
         return {
             "status": "unavailable",
             "message": "fal-client package not installed. Run: pip install fal-client",
         }
 
+    # MISC-001: set FAL_KEY only after availability check, inside try/finally
+    # to avoid a race where the env var is set but we return early without restoring
+    prev_fal_key = os.environ.get("FAL_KEY")
+    os.environ["FAL_KEY"] = fal_key
+
     try:
         styled_prompt = f"{style} style, {prompt}"
+        # STY-003: negative prompts to enforce dark fantasy aesthetic
+        negative_prompt = "bright, colorful, pristine, clean, modern, vibrant"
 
         result = _fal.subscribe(
             "fal-ai/flux/dev",
             arguments={
                 "prompt": styled_prompt,
+                "negative_prompt": negative_prompt,
                 "image_size": {"width": width, "height": height},
                 "num_images": 1,
             },

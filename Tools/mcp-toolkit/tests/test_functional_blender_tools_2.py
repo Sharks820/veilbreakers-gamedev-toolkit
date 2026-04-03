@@ -822,11 +822,14 @@ class TestTool13BlenderAnimation:
         assert max_frame == 24
 
     def test_attack_configs_has_8_types(self):
-        expected = {
+        # Core 8 required; extended types may be present
+        required = {
             "melee_swing", "thrust", "slam", "bite",
             "claw", "tail_whip", "wing_buffet", "breath_attack",
         }
-        assert set(ATTACK_CONFIGS.keys()) == expected
+        assert required.issubset(set(ATTACK_CONFIGS.keys())), (
+            f"Missing: {required - set(ATTACK_CONFIGS.keys())}"
+        )
 
     # -- generate_reaction_keyframes --
 

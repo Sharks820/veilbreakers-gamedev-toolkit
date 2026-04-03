@@ -37,16 +37,17 @@ from blender_addon.handlers.animation import (
 class TestConstants:
     """Test that handler constant sets match expected values."""
 
-    def test_valid_gaits_contains_all_five(self):
-        expected = {"biped", "quadruped", "hexapod", "arachnid", "serpent"}
-        assert VALID_GAITS == expected
+    def test_valid_gaits_contains_core_five(self):
+        # Core 5 gaits plus extended locomotion types added for advanced creatures
+        required = {"biped", "quadruped", "hexapod", "arachnid", "serpent"}
+        assert required.issubset(VALID_GAITS), f"Missing gaits: {required - VALID_GAITS}"
 
     def test_valid_speeds(self):
         assert VALID_SPEEDS == {"walk", "run", "trot", "canter", "gallop"}
         assert len(VALID_SPEEDS) == 5
 
     def test_valid_attack_types_count(self):
-        assert len(VALID_ATTACK_TYPES) == 8
+        assert len(VALID_ATTACK_TYPES) >= 8
 
     def test_valid_attack_types_has_melee_swing(self):
         assert "melee_swing" in VALID_ATTACK_TYPES
@@ -55,11 +56,12 @@ class TestConstants:
         assert "breath_attack" in VALID_ATTACK_TYPES
 
     def test_valid_attack_types_all_present(self):
-        expected = {
+        # Core 8 required; extended types may be present
+        required = {
             "melee_swing", "thrust", "slam", "bite",
             "claw", "tail_whip", "wing_buffet", "breath_attack",
         }
-        assert VALID_ATTACK_TYPES == expected
+        assert required.issubset(VALID_ATTACK_TYPES), f"Missing: {required - VALID_ATTACK_TYPES}"
 
     def test_valid_reaction_types(self):
         assert VALID_REACTION_TYPES == {"death", "hit", "spawn"}

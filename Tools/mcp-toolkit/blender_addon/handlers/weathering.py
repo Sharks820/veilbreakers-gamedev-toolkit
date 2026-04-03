@@ -384,7 +384,7 @@ def apply_dirt_accumulation(
 def apply_moss_growth(
     mesh_data: dict[str, Any],
     strength: float = 0.3,
-    direction: str = "bottom",
+    direction: str = "north",
 ) -> list[float]:
     """Compute per-vertex moss growth mask.
 
@@ -451,8 +451,15 @@ def apply_moss_growth(
         if direction == "bottom":
             height_moss = 1.0 - h  # More at bottom
         else:
-            # North-facing: use Y component instead
-            height_moss = 0.5  # Uniform if north-based
+            # North-facing: dot product of face normal Y-component against (0,1,0)
+            # Accumulate north-facing factor from adjacent face normals
+            north_sum = 0.0
+            for fi, face in enumerate(faces):
+                if vi in face and fi < len(face_normals):
+                    north_sum += max(0.0, face_normals[fi][1])  # Y component = north dot
+            north_count = vert_face_count[vi]
+            avg_north_facing = north_sum / north_count if north_count > 0 else 0.0
+            height_moss = max(0.0, avg_north_facing)
 
         # Noise for organic clumping
         noise = _simple_noise(*vertices[vi], seed=271) * 0.25
@@ -525,10 +532,10 @@ def apply_rain_staining(
             rain_mask.append(0.0)
             continue
 
-        # Height gradient: rain stains flow from top down
+        # Height gradient: rain stains accumulate below ledges (water runs off downward)
         h = _height_factor(vertices[vi][2], bbox_min[2], bbox_max[2])
-        # More staining at top (rain hits top first), streaks down
-        top_bias = h
+        # Darkest accumulation is BELOW ledges where runoff collects
+        top_bias = 1.0 - h
 
         # Streaky noise pattern (use X coordinate for vertical streaks)
         px = vertices[vi][0]

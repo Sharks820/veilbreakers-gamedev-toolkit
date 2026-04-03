@@ -849,12 +849,14 @@ class TestAttackKeyframes:
         # More frames = more keyframes
         assert len(kfs_48) > len(kfs_24)
 
-    def test_all_8_attack_configs_exist(self):
-        expected = {
+    def test_all_attack_configs_exist(self):
+        # Core 8 original configs plus extended monster attack types
+        required = {
             "melee_swing", "thrust", "slam", "bite",
             "claw", "tail_whip", "wing_buffet", "breath_attack",
         }
-        assert set(ATTACK_CONFIGS.keys()) == expected
+        actual = set(ATTACK_CONFIGS.keys())
+        assert required.issubset(actual), f"Missing attack configs: {required - actual}"
 
     def test_no_duplicate_keyframes_at_phase_boundaries(self):
         """Each (bone, channel, axis, frame) should appear at most once."""
