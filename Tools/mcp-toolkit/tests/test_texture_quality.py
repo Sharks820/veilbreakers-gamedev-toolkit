@@ -171,12 +171,14 @@ class TestComputeSmartMaterialParams:
         assert result["material_type"] == "dungeon_stone"
 
     def test_invalid_type_raises(self):
-        with pytest.raises(ValueError, match="Unknown smart material type"):
+        with pytest.raises(ValueError, match="Unknown smart material type") as exc_info:
             compute_smart_material_params("nonexistent_material")
+        assert "nonexistent_material" in str(exc_info.value)
 
     def test_invalid_environment_raises(self):
-        with pytest.raises(ValueError, match="environment must be"):
+        with pytest.raises(ValueError, match="environment must be") as exc_info:
             compute_smart_material_params("dungeon_stone", environment="space")
+        assert "space" in str(exc_info.value) or "environment" in str(exc_info.value)
 
     def test_age_zero_low_wear(self):
         """Age 0 should produce minimal wear/dirt."""
@@ -251,12 +253,14 @@ class TestTrimSheetLayout:
         assert "c" in layout["elements"]
 
     def test_empty_elements_raises(self):
-        with pytest.raises(ValueError, match="must not be empty"):
+        with pytest.raises(ValueError, match="must not be empty") as exc_info:
             compute_trim_sheet_layout([])
+        assert "empty" in str(exc_info.value).lower()
 
     def test_low_resolution_raises(self):
-        with pytest.raises(ValueError, match="resolution must be >= 64"):
+        with pytest.raises(ValueError, match="resolution must be >= 64") as exc_info:
             compute_trim_sheet_layout(["a"], 32)
+        assert "32" in str(exc_info.value) or "64" in str(exc_info.value)
 
     def test_uv_regions_within_01(self):
         """All UV regions must be within [0, 1]."""
@@ -352,11 +356,14 @@ class TestGenerateSmartMaterialCode:
     def test_valid_python(self):
         """Generated code must parse as valid Python."""
         code = generate_smart_material_code("dungeon_stone", "TestObj")
-        ast.parse(code)
+        tree = ast.parse(code)
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     def test_invalid_type_raises(self):
-        with pytest.raises(ValueError, match="Unknown smart material type"):
+        with pytest.raises(ValueError, match="Unknown smart material type") as exc_info:
             generate_smart_material_code("totally_fake_material")
+        assert "totally_fake_material" in str(exc_info.value)
 
     def test_aged_stone_alias(self):
         """'aged_stone' should alias to 'dungeon_stone'."""
@@ -398,7 +405,9 @@ class TestGenerateSmartMaterialCode:
     def test_all_types_generate_valid_python(self, mat_type: str):
         """Every preset must generate valid Python code."""
         code = generate_smart_material_code(mat_type, "TestObj", age=0.5)
-        ast.parse(code)
+        tree = ast.parse(code)
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     def test_wear_intensity_modulates_age(self):
         """Low age should produce lower effective wear."""
@@ -434,7 +443,9 @@ class TestGenerateTrimSheetCode:
 
     def test_valid_python(self):
         code = generate_trim_sheet_code("test_trim", 1024)
-        ast.parse(code)
+        tree = ast.parse(code)
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     def test_contains_sheet_name(self):
         code = generate_trim_sheet_code("my_custom_trim", 2048)
@@ -455,7 +466,9 @@ class TestGenerateMacroVariationCode:
 
     def test_valid_python(self):
         code = generate_macro_variation_code("Obj", 3.0, 0.03, 0.08)
-        ast.parse(code)
+        tree = ast.parse(code)
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     def test_contains_object_name(self):
         code = generate_macro_variation_code("CastleWall")
@@ -471,7 +484,9 @@ class TestGenerateMacroVariationCode:
         # Should contain clamped values, not the originals
         assert "999" not in code
         # value_shift gets clamped to 0.12
-        ast.parse(code)
+        tree = ast.parse(code)
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
 
 # =========================================================================
@@ -484,16 +499,21 @@ class TestGenerateDetailTextureCode:
 
     def test_valid_python(self):
         code = generate_detail_texture_setup_code("Obj", "stone_pores")
-        ast.parse(code)
+        tree = ast.parse(code)
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     def test_invalid_type_raises(self):
-        with pytest.raises(ValueError, match="Unknown detail type"):
+        with pytest.raises(ValueError, match="Unknown detail type") as exc_info:
             generate_detail_texture_setup_code("Obj", "nonexistent_detail")
+        assert "nonexistent_detail" in str(exc_info.value)
 
     @pytest.mark.parametrize("detail_type", sorted(DETAIL_TEXTURE_TYPES.keys()))
     def test_all_types_generate_valid_python(self, detail_type: str):
         code = generate_detail_texture_setup_code("Obj", detail_type)
-        ast.parse(code)
+        tree = ast.parse(code)
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     def test_contains_camera_distance(self):
         """Detail textures must use camera distance for LOD fading."""
@@ -528,16 +548,21 @@ class TestGenerateBakeMapCode:
 
     def test_valid_python_position(self):
         code = generate_bake_map_code("Obj", "position", 1024)
-        ast.parse(code)
+        tree = ast.parse(code)
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     def test_invalid_type_raises(self):
-        with pytest.raises(ValueError, match="Unknown bake map type"):
+        with pytest.raises(ValueError, match="Unknown bake map type") as exc_info:
             generate_bake_map_code("Obj", "invalid_map")
+        assert "invalid_map" in str(exc_info.value)
 
     @pytest.mark.parametrize("bake_type", sorted(BAKE_MAP_TYPES.keys()))
     def test_all_types_generate_valid_python(self, bake_type: str):
         code = generate_bake_map_code("Obj", bake_type, 512)
-        ast.parse(code)
+        tree = ast.parse(code)
+        assert isinstance(tree, ast.Module)
+        assert len(tree.body) > 0
 
     def test_uses_only_allowed_imports(self):
         code = generate_bake_map_code("Obj", "position")
