@@ -2381,7 +2381,7 @@ def generate_concentric_districts(
     radius: float,
     seed: int,
     veil_pressure: float = 0.0,
-    heightmap: list[list[float]] | None = None,
+    heightmap: Callable[[float, float], float] | None = None,
     wall_height: float = 3.5,
 ) -> dict[str, Any]:
     """Generate a medieval town using concentric ring zoning + OBB lot subdivision.
@@ -2500,6 +2500,7 @@ def generate_concentric_districts(
             "platform_elevation": foundation_profile["platform_elevation"],
             "foundation_profile": foundation_profile,
             "orientation_edge": lot.get("orientation_edge"),
+            "room_functions": _BUILDING_ROOMS.get(btype, []),
         }
         variation_rng2 = random.Random(seed ^ idx ^ 0xBEEF)
         bld = _apply_building_variation(variation_rng2, bld)

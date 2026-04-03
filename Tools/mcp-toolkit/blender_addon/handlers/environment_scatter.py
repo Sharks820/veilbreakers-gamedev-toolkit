@@ -265,15 +265,23 @@ def _terrain_height_sampler(terrain_obj: bpy.types.Object | None):
     bm.from_mesh(mesh)
     bm.verts.ensure_lookup_table()
     vert_count = len(bm.verts)
-    side = int(math.sqrt(vert_count))
-    if side < 2 or side * side != vert_count:
-        bm.free()
-        return None
+
+    # Detect actual grid dims by counting unique X and Y positions (handles non-square terrain)
+    xs = set(round(v.co.x, 3) for v in bm.verts)
+    ys = set(round(v.co.y, 3) for v in bm.verts)
+    cols, rows = len(xs), len(ys)
+    if cols * rows != vert_count or cols < 2 or rows < 2:
+        # Fallback: assume square grid
+        side = int(math.sqrt(vert_count))
+        if side < 2 or side * side != vert_count:
+            bm.free()
+            return None
+        rows, cols = side, side
 
     heights = np.array([v.co.z for v in bm.verts], dtype=np.float64)
     bm.free()
     height_max = heights.max() if heights.size and heights.max() > 0 else 1.0
-    heightmap = (heights / height_max).reshape(side, side)
+    heightmap = (heights / height_max).reshape(rows, cols)
     dims = terrain_obj.dimensions
     terrain_size = max(dims.x, dims.y, 1.0)
     half_size = terrain_size / 2.0
@@ -281,10 +289,10 @@ def _terrain_height_sampler(terrain_obj: bpy.types.Object | None):
     def _sample(world_x: float, world_y: float) -> float:
         u = (world_x + half_size) / terrain_size
         v = (world_y + half_size) / terrain_size
-        ci = int(u * (side - 1))
-        ri = int(v * (side - 1))
-        ci = max(0, min(ci, side - 1))
-        ri = max(0, min(ri, side - 1))
+        ci = int(u * (cols - 1))
+        ri = int(v * (rows - 1))
+        ci = max(0, min(ci, cols - 1))
+        ri = max(0, min(ri, rows - 1))
         return float(heightmap[ri, ci]) * height_max
 
     return _sample

@@ -1298,6 +1298,7 @@ def handle_interior_camera_shot(params: dict) -> dict:
     # Place camera at one-quarter into the room, looking toward center
     cam_x = min_x + (max_x - min_x) * 0.25
     cam_y = min_y + (max_y - min_y) * 0.25
+    eye_height = min(eye_height, max_z - min_z - 0.1)
     cam_z = min_z + eye_height
 
     cam = bpy.data.objects.get(BEAUTY_CAMERA_NAME)
