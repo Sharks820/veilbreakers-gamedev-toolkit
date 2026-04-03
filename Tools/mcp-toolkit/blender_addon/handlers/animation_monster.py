@@ -412,18 +412,18 @@ def generate_shadow_embrace_keyframes(frame_count: int = 36, intensity: float = 
             drain_t = (t - 0.3) / 0.4
             pulse = 0.05 * intensity * math.sin(drain_t * 6 * math.pi)
             for bone in ["DEF-spine", "DEF-spine.001"]:
-                keyframes.append(Keyframe(bone, "scale", 0, frame, 1.4 * intensity + pulse))
-                keyframes.append(Keyframe(bone, "scale", 2, frame, 1.4 * intensity + pulse))
-                keyframes.append(Keyframe(bone, "scale", 1, frame, 0.9 * intensity))
+                keyframes.append(Keyframe(bone, "scale", 0, frame, 1.0 + 0.4 * intensity + pulse))
+                keyframes.append(Keyframe(bone, "scale", 2, frame, 1.0 + 0.4 * intensity + pulse))
+                keyframes.append(Keyframe(bone, "scale", 1, frame, 1.0 - 0.1 * intensity))
         else:
             # Retract
             retract_t = (t - 0.7) / 0.3
             ease = retract_t * retract_t
             for bone in ["DEF-spine", "DEF-spine.001"]:
-                val = 1.4 * intensity * (1 - ease) + ease
+                val = (1.0 + 0.4 * intensity) * (1 - ease) + ease
                 keyframes.append(Keyframe(bone, "scale", 0, frame, val))
                 keyframes.append(Keyframe(bone, "scale", 2, frame, val))
-                keyframes.append(Keyframe(bone, "scale", 1, frame, 0.9 + 0.1 * ease))
+                keyframes.append(Keyframe(bone, "scale", 1, frame, (1.0 - 0.1 * intensity) + 0.1 * intensity * ease))
 
         # Arms reach outward
         arm_reach = min(1.0, t * 2) * intensity if t <= 0.7 else (1 - (t - 0.7) / 0.3) * intensity
@@ -444,7 +444,7 @@ def generate_plant_growth_keyframes(frame_count: int = 36, intensity: float = 1.
         y_growth = min(1.0, t * 1.5)  # reaches full height at 67%
         xz_growth = min(1.0, max(0, t * 2 - 0.5))  # starts filling at 25%
 
-        keyframes.append(Keyframe("DEF-spine", "scale", 1, frame, y_growth * intensity))
+        keyframes.append(Keyframe("DEF-spine", "scale", 1, frame, max(0.01, y_growth * intensity)))
         keyframes.append(Keyframe("DEF-spine", "scale", 0, frame, max(0.1, xz_growth * intensity)))
         keyframes.append(Keyframe("DEF-spine", "scale", 2, frame, max(0.1, xz_growth * intensity)))
 
