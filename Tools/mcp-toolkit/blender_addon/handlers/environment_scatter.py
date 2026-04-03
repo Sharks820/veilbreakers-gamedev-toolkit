@@ -1257,16 +1257,22 @@ def handle_scatter_vegetation(params: dict) -> dict:
     bm.verts.ensure_lookup_table()
 
     vert_count = len(bm.verts)
-    side = int(math.sqrt(vert_count))
-    if side < 2:
-        bm.free()
-        raise ValueError("Terrain mesh too small for scatter")
+    # Detect grid dims by counting unique positions (handles non-square terrain)
+    xs = set(round(v.co.x, 3) for v in bm.verts)
+    ys = set(round(v.co.y, 3) for v in bm.verts)
+    cols, rows = len(xs), len(ys)
+    if cols * rows != vert_count or cols < 2 or rows < 2:
+        side = int(math.sqrt(vert_count))
+        if side < 2 or side * side != vert_count:
+            bm.free()
+            raise ValueError("Terrain mesh too small or non-grid for scatter")
+        rows, cols = side, side
 
     heights = np.array([v.co.z for v in bm.verts])
     bm.free()
 
     height_max = heights.max() if heights.max() > 0 else 1.0
-    heightmap = (heights / height_max).reshape(side, side)
+    heightmap = (heights / height_max).reshape(rows, cols)
     slope_map = compute_slope_map(heightmap)
 
     # Determine terrain world-space size
@@ -1286,8 +1292,8 @@ def handle_scatter_vegetation(params: dict) -> dict:
         if moisture_np.shape != heightmap.shape:
             # Simple nearest-neighbor resize
             from numpy import round as np_round
-            y_idx = np.round(np.linspace(0, moisture_np.shape[0] - 1, side)).astype(int)
-            x_idx = np.round(np.linspace(0, moisture_np.shape[1] - 1, side)).astype(int)
+            y_idx = np.round(np.linspace(0, moisture_np.shape[0] - 1, rows)).astype(int)
+            x_idx = np.round(np.linspace(0, moisture_np.shape[1] - 1, cols)).astype(int)
             moisture_np = moisture_np[np.ix_(y_idx, x_idx)]
 
     # Filter through biome rules
