@@ -754,11 +754,13 @@ async def _enforce_world_quality(
 
             # Check for smart_material_preset custom property and apply smart material if tagged
             try:
+                # PIPE-037: sanitize mesh_name to prevent code injection
+                safe_mesh_name = mesh_name.replace("\\", "\\\\").replace("'", "\\'")
                 preset_result = await blender.send_command(
                     "execute_code",
                     {"code": (
                         f"import bpy\n"
-                        f"obj = bpy.data.objects.get('{mesh_name}')\n"
+                        f"obj = bpy.data.objects.get('{safe_mesh_name}')\n"
                         f"result = obj.get('smart_material_preset', '') if obj else ''"
                     )},
                 )
@@ -853,11 +855,13 @@ def _bounds_overlap(a: dict, b: dict, padding: float = 0.0) -> bool:
     a_max = a["bounds"]["max"]
     b_min = b["bounds"]["min"]
     b_max = b["bounds"]["max"]
+    # PIPE-023: padding adds required clearance between rooms.
+    # Positive padding means rooms must be further apart to NOT overlap.
     return not (
-        a_max[0] <= b_min[0] + padding
-        or b_max[0] <= a_min[0] + padding
-        or a_max[1] <= b_min[1] + padding
-        or b_max[1] <= a_min[1] + padding
+        a_max[0] + padding <= b_min[0]
+        or b_max[0] + padding <= a_min[0]
+        or a_max[1] + padding <= b_min[1]
+        or b_max[1] + padding <= a_min[1]
     )
 
 
@@ -2831,6 +2835,9 @@ async def asset_pipeline(
             "ruins": "world_generate_ruins",
             "building": "world_generate_building",
             "boss_arena": "world_generate_boss_arena",
+            "settlement": "world_generate_town",
+            "hearthvale": "world_generate_town",
+            "interior": "world_generate_building",
         }
         for i, planned in enumerate(planned_locations):
             loc = planned["source"]
@@ -3459,10 +3466,12 @@ async def asset_pipeline(
                 planned_room = room_bounds_by_name.get(room_name)
                 if planned_room is not None:
                     origin = planned_room["bounds"]["min"]
+                    # PIPE-017: Use floor Z from bounds (not hardcoded 0.0)
+                    floor_z = float(origin[2]) if len(origin) > 2 else 0.0
                     await _position_generated_object(
                         blender,
                         f"{int_name}_{room_name}",
-                        (origin[0], origin[1], 0.0),
+                        (origin[0], origin[1], floor_z),
                     )
                     steps_completed.append(f"room_positioned_{room_name}")
                 steps_completed.append(f"room_{room.get('name', i)}")
@@ -3490,13 +3499,15 @@ async def asset_pipeline(
 
         # --- Step 3: Add storytelling/narrative props to each room ---
         if spec.get("storytelling_density", 0) > 0:
-            for room in rooms:
+            for i, room in enumerate(rooms):
                 try:
                     await blender.send_command("env_add_storytelling_props", {
                         "target_interior": f"{int_name}_{room.get('name', 'room')}",
                         "room_type": room.get("type", "generic"),
                         "density_modifier": spec.get("storytelling_density", 0.5),
-                        "seed": int_seed + 100,
+                        "seed": int_seed + 100 + i,  # PIPE-021: unique seed per room
+                        "room_width": room.get("width", 6),   # PIPE-018: pass actual dims
+                        "room_depth": room.get("depth", 6),
                     })
                     steps_completed.append(f"props_{room.get('name')}")
                 except Exception as e:

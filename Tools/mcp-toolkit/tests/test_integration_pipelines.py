@@ -1806,7 +1806,6 @@ class TestComposeMapLocationHandlerCoverage(unittest.TestCase):
         handlers = self._get_loc_handlers_dict()
         self.assertIn("town", handlers, "'town' missing from _LOC_HANDLERS")
 
-    @pytest.mark.xfail(reason="MISC-018: _LOC_HANDLERS missing types, fix in Phase 10", strict=True)
     def test_loc_handlers_covers_settlement(self):
         """'settlement' must be handled.
 
@@ -1822,7 +1821,6 @@ class TestComposeMapLocationHandlerCoverage(unittest.TestCase):
             "Add: \"settlement\": \"world_generate_town\" (or dedicated handler).",
         )
 
-    @pytest.mark.xfail(reason="MISC-018: _LOC_HANDLERS missing types, fix in Phase 10", strict=True)
     def test_loc_handlers_covers_hearthvale(self):
         """'hearthvale' must be handled.
 
@@ -1840,7 +1838,6 @@ class TestComposeMapLocationHandlerCoverage(unittest.TestCase):
             "Add: \"hearthvale\": \"world_generate_town\" (or dedicated handler).",
         )
 
-    @pytest.mark.xfail(reason="MISC-018: _LOC_HANDLERS missing types, fix in Phase 10", strict=True)
     def test_loc_handlers_covers_interior(self):
         """'interior' must be handled or explicitly excluded with a clear error.
 

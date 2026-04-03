@@ -3244,23 +3244,32 @@ def _catalog_entry_for_type(item_type: str):
 
 
 def _normalize_scale(scale: Any) -> tuple[float, float, float]:
-    """Coerce a scalar or short iterable into a full XYZ scale triple."""
+    """Coerce a scalar or short iterable into a full XYZ scale triple.
+
+    Zero or near-zero components are replaced with 1.0 to prevent
+    invisible/degenerate geometry.
+    """
+    _MIN_SCALE = 0.001
+
+    def _safe(v: float) -> float:
+        return v if abs(v) >= _MIN_SCALE else 1.0
+
     if isinstance(scale, (int, float)):
-        s = float(scale)
+        s = _safe(float(scale))
         return (s, s, s)
     try:
         values = tuple(scale)
     except TypeError:
-        s = float(scale)
+        s = _safe(float(scale))
         return (s, s, s)
     if len(values) == 0:
         return (1.0, 1.0, 1.0)
     if len(values) == 1:
-        s = float(values[0])
+        s = _safe(float(values[0]))
         return (s, s, s)
     if len(values) == 2:
-        return (float(values[0]), float(values[1]), 1.0)
-    return (float(values[0]), float(values[1]), float(values[2]))
+        return (_safe(float(values[0])), _safe(float(values[1])), 1.0)
+    return (_safe(float(values[0])), _safe(float(values[1])), _safe(float(values[2])))
 
 
 def _spawn_catalog_object(

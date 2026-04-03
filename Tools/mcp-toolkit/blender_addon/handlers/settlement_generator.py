@@ -1287,7 +1287,7 @@ def _furnish_interior(
                     )
                     rot = -math.pi / 2
             else:
-                # Center placement
+                # Center placement — INT-004: face toward room center with variation
                 px = rng.uniform(
                     rx_min + center_margin + item_size[0] / 2,
                     rx_max - center_margin - item_size[0] / 2,
@@ -1296,7 +1296,9 @@ def _furnish_interior(
                     ry_min + center_margin + item_size[1] / 2,
                     ry_max - center_margin - item_size[1] / 2,
                 )
-                rot = rng.uniform(0, 2 * math.pi)
+                cx = (rx_min + rx_max) / 2.0
+                cy = (ry_min + ry_max) / 2.0
+                rot = math.atan2(px - cx, py - cy) + rng.uniform(-0.3, 0.3)
 
             # Collision check
             overlaps = False
