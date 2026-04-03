@@ -2850,6 +2850,8 @@ async def asset_pipeline(
         if water_cfg:
             # Rivers
             for i, river in enumerate(water_cfg.get("rivers", [])):
+                if f"river_{i}" in steps_completed:
+                    continue
                 try:
                     source = _map_point_to_terrain_cell(
                         river.get("source", [10, 10]),
@@ -2874,7 +2876,7 @@ async def asset_pipeline(
                     steps_failed.append({"step": f"river_{i}", "error": str(e)})
 
             # Water level (lakes/ocean)
-            if "water_level" in water_cfg:
+            if "water_level" in water_cfg and "water_plane" not in steps_completed:
                 try:
                     await blender.send_command("env_create_water", {
                         "name": f"{map_name}_Water",
@@ -3008,15 +3010,18 @@ async def asset_pipeline(
                             loc_params["foundation_profile"] = {
                                 "foundation_height": _height_diff + 0.2,
                                 "side_heights": {
-                                    "front": max(0.0, anchor_z - corner_heights[0]),
-                                    "back": max(0.0, anchor_z - corner_heights[2]),
-                                    "left": max(0.0, anchor_z - corner_heights[0]),
-                                    "right": max(0.0, anchor_z - corner_heights[1]),
+                                    # corners: [0]=(-r,-r), [1]=(+r,-r), [2]=(-r,+r), [3]=(+r,+r)
+                                    "front": max(0.0, anchor_z - min(corner_heights[0], corner_heights[1])),
+                                    "back":  max(0.0, anchor_z - min(corner_heights[2], corner_heights[3])),
+                                    "left":  max(0.0, anchor_z - min(corner_heights[0], corner_heights[2])),
+                                    "right": max(0.0, anchor_z - min(corner_heights[1], corner_heights[3])),
                                 },
                                 "retaining_sides": [
                                     side for side, h in [
-                                        ("front", corner_heights[0]), ("back", corner_heights[2]),
-                                        ("left", corner_heights[0]), ("right", corner_heights[1]),
+                                        ("front", min(corner_heights[0], corner_heights[1])),
+                                        ("back",  min(corner_heights[2], corner_heights[3])),
+                                        ("left",  min(corner_heights[0], corner_heights[2])),
+                                        ("right", min(corner_heights[1], corner_heights[3])),
                                     ]
                                     if anchor_z - h > 0.5
                                 ],
@@ -3059,34 +3064,36 @@ async def asset_pipeline(
         # --- Step 6: Biome paint ---
         biome = spec.get("biome")
         if biome:
-            try:
-                await blender.send_command("env_paint_terrain", {
-                    "name": terrain_name,
-                    "height_scale": terrain_cfg.get("height_scale", 20.0),
-                })
-                await blender.send_command("terrain_create_biome_material", {
-                    "biome_name": biome,
-                    "object_name": terrain_name,
-                })
-                steps_completed.append("biome_painted")
-            except Exception as e:
-                steps_failed.append({"step": "biome_paint", "error": str(e)})
+            if "biome_painted" not in steps_completed:
+                try:
+                    await blender.send_command("env_paint_terrain", {
+                        "name": terrain_name,
+                        "height_scale": terrain_cfg.get("height_scale", 20.0),
+                    })
+                    await blender.send_command("terrain_create_biome_material", {
+                        "biome_name": biome,
+                        "object_name": terrain_name,
+                    })
+                    steps_completed.append("biome_painted")
+                except Exception as e:
+                    steps_failed.append({"step": "biome_paint", "error": str(e)})
 
-            try:
-                await blender.send_command("setup_dark_fantasy_lighting", {
-                    "object_name": terrain_name,
-                    "preset": _lighting_preset_for_biome(biome),
-                })
-                steps_completed.append("lighting_ready")
-            except Exception as e:
-                steps_failed.append({"step": "lighting", "error": str(e)})
+            if "lighting_ready" not in steps_completed:
+                try:
+                    await blender.send_command("setup_dark_fantasy_lighting", {
+                        "object_name": terrain_name,
+                        "preset": _lighting_preset_for_biome(biome),
+                    })
+                    steps_completed.append("lighting_ready")
+                except Exception as e:
+                    steps_failed.append({"step": "lighting", "error": str(e)})
 
         if "biome_painted" in steps_completed or "lighting_ready" in steps_completed:
             _save_chkpt()  # checkpoint after biome+lighting
 
         # --- Step 7: Vegetation scatter ---
         veg_cfg = spec.get("vegetation", {})
-        if veg_cfg:
+        if veg_cfg and "vegetation_scattered" not in steps_completed:
             try:
                 veg_rules = _normalize_vegetation_rules(veg_cfg, str(biome or ""))
                 await blender.send_command("env_scatter_vegetation", {
@@ -3107,7 +3114,7 @@ async def asset_pipeline(
             _save_chkpt()  # checkpoint after vegetation
 
         # --- Step 8: Prop scatter ---
-        if spec.get("props", True):
+        if spec.get("props", True) and "props_scattered" not in steps_completed:
             try:
                 scatter_buildings = [
                     {
@@ -3118,17 +3125,19 @@ async def asset_pipeline(
                     for loc in location_results
                 ]
                 if not scatter_buildings:
-                    raise ValueError("No location anchors available for contextual prop scatter")
-                await blender.send_command("env_scatter_props", {
-                    "area_name": terrain_name,
-                    "buildings": scatter_buildings,
-                    "prop_density": round(
-                        float(spec.get("prop_density", 0.3)) * float(budget["prop_density_scale"]),
-                        4,
-                    ),
-                    "seed": map_seed + 400,
-                })
-                steps_completed.append("props_scattered")
+                    # No locations = wilderness map, skip contextual prop scatter gracefully
+                    steps_completed.append("props_scattered")
+                else:
+                    await blender.send_command("env_scatter_props", {
+                        "area_name": terrain_name,
+                        "buildings": scatter_buildings,
+                        "prop_density": round(
+                            float(spec.get("prop_density", 0.3)) * float(budget["prop_density_scale"]),
+                            4,
+                        ),
+                        "seed": map_seed + 400,
+                    })
+                    steps_completed.append("props_scattered")
             except Exception as e:
                 steps_failed.append({"step": "props", "error": str(e)})
 
@@ -3162,7 +3171,7 @@ async def asset_pipeline(
 
         # --- Step 10: Export heightmap for Unity import ---
         heightmap_export_path = None
-        if terrain_name:
+        if terrain_name and "heightmap_exported" not in steps_completed:
             try:
                 # MISC-009: use tempfile.gettempdir() instead of hardcoded /tmp/
                 import tempfile as _tempfile
