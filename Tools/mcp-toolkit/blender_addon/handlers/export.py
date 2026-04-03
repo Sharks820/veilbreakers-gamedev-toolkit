@@ -259,6 +259,7 @@ def handle_export_fbx(params: dict) -> dict:
         "colors_type": "SRGB" if vertex_colors else "NONE",  # EXP-005/006 (Blender 4.x API)
         "use_custom_props": export_custom_props,  # EXP-008
         "path_mode": "COPY" if embed_textures else "AUTO",  # EXP-009
+        "embed_textures": embed_textures,  # EXP-009: must be True with COPY for actual embedding
     }
 
     if override:

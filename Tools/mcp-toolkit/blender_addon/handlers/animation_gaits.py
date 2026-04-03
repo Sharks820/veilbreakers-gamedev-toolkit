@@ -702,12 +702,12 @@ BIRD_WALK_CONFIG: dict = {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.25, "phase": math.pi,
         },
-        # Micro-flap for balance while hopping
-        "DEF-wing_upper.L": {
+        # Micro-flap for balance while hopping (BIRD uses upper_arm, not wing_upper)
+        "DEF-upper_arm.L": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.15, "phase": 0.0,
         },
-        "DEF-wing_upper.R": {
+        "DEF-upper_arm.R": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.15, "phase": 0.0,
         },
@@ -739,11 +739,12 @@ BIRD_RUN_CONFIG: dict = {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.4, "phase": 0.0,
         },
-        "DEF-wing_upper.L": {
+        # BIRD uses upper_arm, not wing_upper (which is for DRAGON rigs)
+        "DEF-upper_arm.L": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.25, "phase": math.pi,
         },
-        "DEF-wing_upper.R": {
+        "DEF-upper_arm.R": {
             "channel": "rotation_euler", "axis": 0,
             "amplitude": 0.25, "phase": 0.0,
         },
