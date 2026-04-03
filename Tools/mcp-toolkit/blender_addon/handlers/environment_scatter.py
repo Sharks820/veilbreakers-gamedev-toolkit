@@ -720,7 +720,10 @@ def create_leaf_card_tree(
         )))
 
     # Trunk wind vertex colors: A=trunk_sway gradient
-    wind_layer = bm.verts.layers.float_color.new("wind_vc")
+    # WORLD-006: guard against duplicate layer creation
+    wind_layer = bm.verts.layers.float_color.get("wind_vc")
+    if wind_layer is None:
+        wind_layer = bm.verts.layers.float_color.new("wind_vc")
     for v in trunk_verts_bottom:
         v[wind_layer] = (0.0, 0.0, 0.0, 0.0)  # base: no sway
     for v in trunk_verts_top:
@@ -784,7 +787,10 @@ def _create_grass_card(
     mesh = bpy.data.meshes.new(name)
     bm = bmesh.new()
 
-    wind_layer = bm.verts.layers.float_color.new("wind_vc")
+    # WORLD-006: guard against duplicate layer creation
+    wind_layer = bm.verts.layers.float_color.get("wind_vc")
+    if wind_layer is None:
+        wind_layer = bm.verts.layers.float_color.new("wind_vc")
     phase = rng.random()
 
     # Main blade: 2 quads (V-bend at midpoint)
@@ -1289,18 +1295,27 @@ def handle_scatter_vegetation(params: dict) -> dict:
     _exclusion_zones: list[tuple[float, float, float, float]] = []
     for _obj in bpy.data.objects:
         if _obj.type == "EMPTY" and _obj.children:
-            # Estimate building footprint from children bounds
+            # ARCH-025: Estimate building footprint from actual mesh bounding box,
+            # then add a proportional clearance margin (half the diagonal, min 1.5m).
             _min_x = _min_y = float("inf")
             _max_x = _max_y = float("-inf")
             for _child in _obj.children:
                 if _child.type == "MESH":
-                    _loc = _child.matrix_world.translation
-                    _min_x = min(_min_x, _loc.x - 3.0)
-                    _max_x = max(_max_x, _loc.x + 3.0)
-                    _min_y = min(_min_y, _loc.y - 3.0)
-                    _max_y = max(_max_y, _loc.y + 3.0)
+                    _bb_corners = [_child.matrix_world @ _mathutils_Vector(c) for c in _child.bound_box]
+                    for _c in _bb_corners:
+                        _min_x = min(_min_x, _c.x)
+                        _max_x = max(_max_x, _c.x)
+                        _min_y = min(_min_y, _c.y)
+                        _max_y = max(_max_y, _c.y)
             if _min_x < float("inf"):
-                _exclusion_zones.append((_min_x, _min_y, _max_x, _max_y))
+                # Proportional margin: half the footprint diagonal, clamped 1.5–6.0m
+                _fp_w = max(_max_x - _min_x, 0.1)
+                _fp_d = max(_max_y - _min_y, 0.1)
+                _margin = max(1.5, min(6.0, ((_fp_w ** 2 + _fp_d ** 2) ** 0.5) * 0.25))
+                _exclusion_zones.append((
+                    _min_x - _margin, _min_y - _margin,
+                    _max_x + _margin, _max_y + _margin,
+                ))
 
         # Also exclude road objects (with a buffer margin for natural clearance)
         if _obj.type == "MESH" and ("road" in _obj.name.lower() or "_Road_" in _obj.name):

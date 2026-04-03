@@ -39,10 +39,12 @@ try:
         generate_roof,
         generate_gothic_window,
         generate_stone_wall,
+        generate_flying_buttress,  # ARCH-005
     )
     _QUALITY_AVAILABLE = True
 except ImportError:
     _QUALITY_AVAILABLE = False
+    generate_flying_buttress = None  # type: ignore[assignment]
 
 # ---------------------------------------------------------------------------
 # Material category helpers -- maps grammar roles/detail_types to the
@@ -783,6 +785,30 @@ def evaluate_building_grammar(
             "floor": floor_idx,
         })
 
+        # ARCH-030: Jettying — upper floors overhang the floor below for medieval/tudor.
+        # A jettied floor projects ~0.3m outward on front and back faces.
+        if floor_idx > 0 and style in ("medieval", "tudor"):
+            jetty = 0.30  # overhang amount
+            jetty_h = slab_cfg["thickness"] + 0.04  # exposed jetty beam band
+            # Front jetty beam
+            ops.append({
+                "type": "box",
+                "position": [-jetty, -jetty, floor_z - jetty_h],
+                "size": [width + 2 * jetty, t + jetty, jetty_h],
+                "material": "timber_frame",
+                "role": "jetty",
+                "floor": floor_idx,
+            })
+            # Back jetty beam
+            ops.append({
+                "type": "box",
+                "position": [-jetty, depth - t, floor_z - jetty_h],
+                "size": [width + 2 * jetty, t + jetty, jetty_h],
+                "material": "timber_frame",
+                "role": "jetty",
+                "floor": floor_idx,
+            })
+
         cumulative_z += h + slab_cfg["thickness"]
 
     # 4. Roof
@@ -797,9 +823,12 @@ def evaluate_building_grammar(
             # Map thatch/thatch_worn to "thatch", slate to "slate", else "tile"
             mat_key = roof_cfg["material"]
             roof_mat = "thatch" if "thatch" in mat_key else ("slate" if "slate" in mat_key else "tile")
+            # ARCH-008/009: Pass raw width/depth — generate_roof adds overhang internally
+            # via total_w = width + 2*overhang. Passing width+2*overhang would double it.
+            # Position at (0,0,roof_z): generate_roof's geometry starts at -overhang already.
             mesh = generate_roof(
-                width=width + 2 * overhang,
-                depth=depth + 2 * overhang,
+                width=width,
+                depth=depth,
                 pitch=float(roof_cfg["pitch"]),
                 style="gable",
                 material=roof_mat,
@@ -808,7 +837,7 @@ def evaluate_building_grammar(
             )
             ops.append({
                 "type": "mesh_spec",
-                "position": [-overhang, -overhang, roof_z],
+                "position": [0.0, 0.0, roof_z],
                 "material": roof_cfg["material"],
                 "role": "roof",
                 "roof_type": "gabled",
@@ -833,9 +862,10 @@ def evaluate_building_grammar(
         if _QUALITY_AVAILABLE:
             mat_key = roof_cfg["material"]
             roof_mat = "slate" if "slate" in mat_key else "tile"
+            # ARCH-008/009: same fix — pass raw dimensions, let generate_roof handle overhang
             mesh = generate_roof(
-                width=width + 2 * overhang,
-                depth=depth + 2 * overhang,
+                width=width,
+                depth=depth,
                 pitch=float(roof_cfg["pitch"]),
                 style="hip",
                 material=roof_mat,
@@ -844,7 +874,7 @@ def evaluate_building_grammar(
             )
             ops.append({
                 "type": "mesh_spec",
-                "position": [-overhang, -overhang, roof_z],
+                "position": [0.0, 0.0, roof_z],
                 "material": roof_cfg["material"],
                 "role": "roof",
                 "roof_type": "pointed",
@@ -999,7 +1029,7 @@ def evaluate_building_grammar(
     # For certain detail types, call building_quality generators to produce mesh_specs.
     _MESH_SPEC_GENERATORS: dict[str, str] = {
         "chimney":         "chimney",
-        "flying_buttress": "battlement",
+        "flying_buttress": "flying_buttress",   # ARCH-005: proper curved arch, not battlement
         "battlement":      "battlement",
         "machicolation":   "battlement",
         "timber_frame":    "timber_frame",
@@ -1032,6 +1062,14 @@ def evaluate_building_grammar(
                         width=width,
                         height=wall_cfg["height_per_floor"],
                         depth=depth,
+                        seed=seed,
+                    )
+                elif gen_key == "flying_buttress" and generate_flying_buttress is not None:
+                    # ARCH-005: smooth curved arch, placed at wall height
+                    mesh = generate_flying_buttress(
+                        wall_height=wall_cfg["height_per_floor"] * floors,
+                        span=min(width * 0.35, 3.0),
+                        pier_height=wall_cfg["height_per_floor"] * floors * 0.75,
                         seed=seed,
                     )
                 else:

@@ -3214,7 +3214,7 @@ async def asset_pipeline(
                     "map_name": "Thornveil",
                     "objects": ["Thornveil_Terrain", "Thornveil_Village"],
                     "locations": [{"name": "Village", "type": "town"}],
-                    "export_dir": "/tmp/exports",
+                    "export_dir": "C:/Users/YourName/exports",  # use absolute path
                     "generate_lods": True,
                 },
             }, indent=2)
@@ -3341,7 +3341,11 @@ async def asset_pipeline(
         ]
         _aaa_angles = _aaa_angles[:angles]
 
-        _tmp_dir = _tempfile.mkdtemp(prefix="aaa_verify_")
+        # MISC-015: use a stable named subdir (not mkdtemp) so screenshots
+        # persist for the caller. mkdtemp created a new dir on every call,
+        # leaking dirs that were never cleaned up.
+        _tmp_dir = os.path.join(_tempfile.gettempdir(), "vb_aaa_verify")
+        os.makedirs(_tmp_dir, exist_ok=True)
         _screenshot_paths: list[str] = []
 
         for _yaw, _pitch, _label in _aaa_angles:

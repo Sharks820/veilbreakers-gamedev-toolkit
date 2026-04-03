@@ -691,8 +691,10 @@ def generate_stone_wall(
     parts.append((back_v_3d, back_f))
 
     # 4. For ashlar/cyclopean: add corner interlocking stones
+    # ARCH-016: Inset corners by 1mm to avoid z-fighting with adjacent wall geometry.
     if block_style in ("ashlar", "cyclopean"):
         corner_depth = block_w * 0.6
+        _eps = 0.001  # 1mm inset to prevent z-fighting on shared faces
         z = 0.0
         row = 0
         while z < height:
@@ -703,21 +705,23 @@ def generate_stone_wall(
                 break
 
             # Left corner: alternate between long-on-front and long-on-side
+            # Even rows: quoin projects left of wall — offset by _eps so it doesn't
+            # start exactly at x=0 (which would co-planar-fight with adjacent wall).
             if row % 2 == 0:
-                cv, cf = _box(-corner_depth * 0.3, -mortar_depth, z,
-                              corner_depth * 0.3, thickness + mortar_depth * 2, ch)
+                cv, cf = _box(-corner_depth * 0.3 + _eps, -mortar_depth, z,
+                              corner_depth * 0.3 - _eps, thickness + mortar_depth * 2, ch)
             else:
-                cv, cf = _box(0.0, -mortar_depth, z,
-                              block_w * 0.3, thickness + mortar_depth * 2, ch)
+                cv, cf = _box(_eps, -mortar_depth, z,
+                              block_w * 0.3 - _eps, thickness + mortar_depth * 2, ch)
             parts.append((cv, cf))
 
-            # Right corner
+            # Right corner: inset from wall right edge to avoid co-planar z-fighting
             if row % 2 == 1:
-                cv, cf = _box(width, -mortar_depth, z,
-                              corner_depth * 0.3, thickness + mortar_depth * 2, ch)
+                cv, cf = _box(width + _eps, -mortar_depth, z,
+                              corner_depth * 0.3 - _eps, thickness + mortar_depth * 2, ch)
             else:
-                cv, cf = _box(width - block_w * 0.3, -mortar_depth, z,
-                              block_w * 0.3, thickness + mortar_depth * 2, ch)
+                cv, cf = _box(width - block_w * 0.3 + _eps, -mortar_depth, z,
+                              block_w * 0.3 - _eps, thickness + mortar_depth * 2, ch)
             parts.append((cv, cf))
 
             z += ch + mortar_gap
@@ -912,22 +916,79 @@ def generate_timber_frame(
             cv = [(v[0], v[1], tz) for v in cv]
             parts.append((cv, cf))
 
-    # === Back wall frame (offset by depth) ===
+    # === Back wall frame (offset by depth) — ARCH-004: full frame, not just sill/plate ===
+    back_y = depth - bd - proud
     # Sill
-    sv, sf = _box(0.0, depth - bd, 0.0, width, bd + proud, bw)
+    sv, sf = _bowed_box(0.0, back_y, 0.0, width, bd + proud, bw,
+                        rng.uniform(bow * 0.5, bow * 1.5))
     parts.append((sv, sf))
     # Wall plate
-    sv, sf = _box(0.0, depth - bd, height - bw, width, bd + proud, bw)
+    sv, sf = _bowed_box(0.0, back_y, height - bw, width, bd + proud, bw,
+                        rng.uniform(bow * 0.5, bow * 1.5))
     parts.append((sv, sf))
-
-    # === Side beams connecting front to back ===
-    # Bottom side beams
-    for sx in [0.0, width - bw]:
-        sv, sf = _box(sx, 0.0, 0.0, bw, depth, bw)
+    # Mid rail
+    sv, sf = _bowed_box(0.0, back_y, mid_z, width, bd + proud, bw,
+                        rng.uniform(bow * 0.5, bow * 1.5))
+    parts.append((sv, sf))
+    # Vertical posts
+    for pi in range(divisions + 1):
+        px = pi * (panel_width + bw)
+        sv, sf = _bowed_box(px, back_y, 0.0, bw, bd + proud, height,
+                            rng.uniform(bow * 0.5, bow * 1.5))
         parts.append((sv, sf))
-    # Top side beams
-    for sx in [0.0, width - bw]:
-        sv, sf = _box(sx, 0.0, height - bw, bw, depth, bw)
+    # Diagonal braces on back wall
+    if config["has_cross_brace"]:
+        brace_w2 = bw * 0.7
+        brace_d2 = bd * 0.7
+        for pi in range(divisions):
+            px = pi * (panel_width + bw) + bw
+            n_segs = 4
+            for si in range(n_segs):
+                t0 = si / n_segs
+                t1 = (si + 1) / n_segs
+                sx = px + t0 * panel_width
+                sz = bw + t0 * (mid_z - bw)
+                ex = px + t1 * panel_width
+                ez = bw + t1 * (mid_z - bw)
+                sv, sf = _box(sx, back_y, sz,
+                              max(ex - sx, 0.01), brace_d2, max(ez - sz, 0.01))
+                parts.append((sv, sf))
+
+    # === Left wall frame (x=0 side) — ARCH-004 ===
+    left_panel_h = (depth - 2 * bd) / max(1, divisions)
+    left_panel_w = (height - 2 * bw) / max(1, divisions)  # panels are vertical strips
+    # Horizontal rails
+    sv, sf = _bowed_box(0.0, 0.0, 0.0, bd + proud, depth, bw,
+                        rng.uniform(bow * 0.5, bow * 1.5))
+    parts.append((sv, sf))  # sill
+    sv, sf = _bowed_box(0.0, 0.0, height - bw, bd + proud, depth, bw,
+                        rng.uniform(bow * 0.5, bow * 1.5))
+    parts.append((sv, sf))  # plate
+    sv, sf = _bowed_box(0.0, 0.0, mid_z, bd + proud, depth, bw,
+                        rng.uniform(bow * 0.5, bow * 1.5))
+    parts.append((sv, sf))  # mid rail
+    # Vertical posts along depth
+    for pi in range(divisions + 1):
+        py = pi * (panel_width + bw)  # reuse panel_width for depth divisions
+        sv, sf = _bowed_box(0.0, py, 0.0, bd + proud, bw, height,
+                            rng.uniform(bow * 0.5, bow * 1.5))
+        parts.append((sv, sf))
+
+    # === Right wall frame (x=width side) — ARCH-004 ===
+    right_x = width - bd - proud
+    sv, sf = _bowed_box(right_x, 0.0, 0.0, bd + proud, depth, bw,
+                        rng.uniform(bow * 0.5, bow * 1.5))
+    parts.append((sv, sf))  # sill
+    sv, sf = _bowed_box(right_x, 0.0, height - bw, bd + proud, depth, bw,
+                        rng.uniform(bow * 0.5, bow * 1.5))
+    parts.append((sv, sf))  # plate
+    sv, sf = _bowed_box(right_x, 0.0, mid_z, bd + proud, depth, bw,
+                        rng.uniform(bow * 0.5, bow * 1.5))
+    parts.append((sv, sf))  # mid rail
+    for pi in range(divisions + 1):
+        py = pi * (panel_width + bw)
+        sv, sf = _bowed_box(right_x, py, 0.0, bd + proud, bw, height,
+                            rng.uniform(bow * 0.5, bow * 1.5))
         parts.append((sv, sf))
 
     all_v, all_f = _merge(parts)
@@ -1078,7 +1139,7 @@ def generate_gothic_window(
         parts.append((sv, sf))
         components.append("sill")
 
-    # Glass pane (thin transparent quad)
+    # Glass pane (thin transparent quad) — ARCH-002: tracked as slot 2 for amber emission
     glass_y = frame_depth * 0.5
     gv = [
         (-hw + frame_w, glass_y, 0.0),
@@ -1087,6 +1148,7 @@ def generate_gothic_window(
         (-hw + frame_w, glass_y, height * 0.7),
     ]
     gf = [(0, 1, 2, 3)]
+    _glass_pane_start_idx = len(parts)
     parts.append((gv, gf))
     components.append("glass_pane")
 
@@ -1114,10 +1176,18 @@ def generate_gothic_window(
             parts.append((sv, sf))
             components.append(f"shutter_{side}")
 
-    # Build material_ids: slot 0 = frame/jamb/sill (structural), slot 1 = tracery/voussoir/shutter (detail)
+    # Build material_ids:
+    #   slot 0 = frame/jamb/sill (structural stone/wood)
+    #   slot 1 = tracery/voussoir/shutter (decorative detail)
+    #   slot 2 = glass pane (amber emission, transparent) — ARCH-002
     mat_ids_win: list[int] = []
     for part_idx, (_, part_faces) in enumerate(parts):
-        slot = 0 if part_idx == 0 else 1
+        if part_idx == _glass_pane_start_idx:
+            slot = 2  # amber glass emission slot
+        elif part_idx == 0:
+            slot = 0  # frame
+        else:
+            slot = 1  # detail
         mat_ids_win.extend([slot] * len(part_faces))
 
     all_v, all_f = _merge(parts)
@@ -1156,7 +1226,7 @@ def generate_roof(
     depth: float = 5.0,
     pitch: float = 45.0,
     style: str = "gable",
-    material: str = "tile",
+    material: str = "slate",  # STY-009: dark fantasy default
     overhang: float = 0.3,
     seed: int = 42,
 ) -> MeshSpec:
@@ -1170,7 +1240,9 @@ def generate_roof(
     components: list[str] = []
 
     pitch_rad = math.radians(pitch)
-    ridge_height = (width / 2.0) * math.tan(pitch_rad)
+    # ridge_height must match the actual slope peak which uses half_w (includes overhang).
+    # Computed after total_w/half_w are known — placeholder updated below.
+    ridge_height = 0.0  # overwritten once half_w is known
 
     # Material-specific tile sizes
     tile_sizes = {
@@ -1189,6 +1261,9 @@ def generate_roof(
 
     total_w = width + 2 * overhang
     half_w = total_w / 2.0
+    # ARCH-011: ridge height must use half_w (accounts for overhang) so gable
+    # triangles reach the actual ridge line, not short by the overhang amount.
+    ridge_height = half_w * math.tan(pitch_rad)
 
     if style == "gable":
         # Two sloping surfaces meeting at ridge
@@ -1298,16 +1373,37 @@ def generate_roof(
             parts.append((gv, gf))
         components.append("gable_ends")
 
-        # Rafters (visible structural beams)
+        # Rafters (visible structural beams — angled to follow roof pitch)
+        # Each rafter runs from eave (z=0) to ridge (z=slope_rise) along the slope.
+        # We build them as thin quads following the slope rather than flat boxes.
+        cos_p_raf = math.cos(pitch_rad)
+        sin_p_raf = math.sin(pitch_rad)
         for ri in range(rafter_count):
             ry = -overhang + (ri + 0.5) * (depth + 2 * overhang) / rafter_count
-            # Left rafter
-            rv, rf = _box(-half_w, ry, 0.0, half_w, rafter_w, rafter_d)
-            # Angle it -- approximate with skewed top vertices
-            parts.append((rv, rf))
-            # Right rafter
-            rv, rf = _box(0.0, ry, 0.0, half_w, rafter_w, rafter_d)
-            parts.append((rv, rf))
+            # Left rafter: eave at x=-half_w,z=0 → ridge at x=0,z=slope_rise
+            for side, x_start, x_end in [
+                ("left",  -half_w, 0.0),
+                ("right",  half_w, 0.0),
+            ]:
+                dx = abs(x_end - x_start)
+                sign = 1.0 if side == "right" else -1.0
+                # Build rafter as a thin sloped box: 4-segment along slope
+                seg_count = 4
+                for si in range(seg_count):
+                    t0 = si / seg_count
+                    t1 = (si + 1) / seg_count
+                    # Along slope (0→half_w in X, 0→slope_rise in Z)
+                    sx0 = x_start + sign * t0 * dx
+                    sz0 = t0 * slope_rise
+                    sx1 = x_start + sign * t1 * dx
+                    sz1 = t1 * slope_rise
+                    seg_dx = abs(sx1 - sx0)
+                    seg_dz = abs(sz1 - sz0)
+                    seg_v, seg_f = _box(
+                        min(sx0, sx1), ry - rafter_w * 0.5, sz0,
+                        max(seg_dx, 0.01), rafter_w, max(seg_dz, 0.01),
+                    )
+                    parts.append((seg_v, seg_f))
         components.append("rafters")
 
     elif style == "hip":
@@ -2498,6 +2594,99 @@ def _linspace(start: float, stop: float, count: int) -> list[float]:
         return [start]
     step = (stop - start) / (count - 1)
     return [start + i * step for i in range(count)]
+
+
+# ===================================================================
+# GENERATOR 9b: Flying Buttress  (ARCH-005)
+# ===================================================================
+
+def generate_flying_buttress(
+    wall_height: float = 5.0,
+    span: float = 2.5,
+    pier_height: float = 4.0,
+    arch_segments: int = 8,
+    seed: int = 42,
+) -> MeshSpec:
+    """Gothic flying buttress — smooth curved arch from wall to outer pier.
+
+    The arch rises from the clerestory wall attachment point, curves outward
+    and downward to land on the top of a freestanding pier.
+
+    Components: arch_arm, pier, arch_cap, base_plinth
+    """
+    parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    components: list[str] = []
+
+    arm_w = 0.25   # arch arm width
+    arm_d = 0.30   # arch arm depth (into wall)
+    pier_w = 0.50
+    pier_d = 0.50
+
+    # Arch arm: parametric curve from (0, 0, wall_height) to (span, 0, pier_height)
+    # Use a quarter-ellipse with the apex slightly above the chord midpoint.
+    apex_rise = span * 0.35  # how far the arch bows upward at midpoint
+    attach_z = wall_height
+    land_z = pier_height
+
+    arch_pts_3d: list[tuple[float, float, float]] = []
+    for i in range(arch_segments + 1):
+        t = i / arch_segments
+        # Cubic bezier: P0=(0,attach_z) P1=(0,attach_z+apex_rise)
+        #               P2=(span,land_z+apex_rise*0.3) P3=(span,land_z)
+        p0x, p0z = 0.0, attach_z
+        p1x, p1z = span * 0.1, attach_z + apex_rise
+        p2x, p2z = span * 0.8, land_z + apex_rise * 0.3
+        p3x, p3z = span, land_z
+        bx = (1 - t)**3 * p0x + 3*(1-t)**2*t*p1x + 3*(1-t)*t**2*p2x + t**3*p3x
+        bz = (1 - t)**3 * p0z + 3*(1-t)**2*t*p1z + 3*(1-t)*t**2*p2z + t**3*p3z
+        arch_pts_3d.append((bx, 0.0, bz))
+
+    # Extrude arch curve into solid segments
+    for i in range(arch_segments):
+        ax0, _, az0 = arch_pts_3d[i]
+        ax1, _, az1 = arch_pts_3d[i + 1]
+        seg_dx = ax1 - ax0
+        seg_dz = az1 - az0
+        seg_len = math.sqrt(seg_dx**2 + seg_dz**2)
+        # Build segment as a small box aligned to the chord direction
+        sv, sf = _box(
+            ax0 - arm_w * 0.5, -arm_d * 0.5, az0 - arm_w * 0.5,
+            max(abs(seg_dx) + arm_w, arm_w),
+            arm_d,
+            max(abs(seg_dz) + arm_w * 0.5, arm_w),
+        )
+        parts.append((sv, sf))
+    components.append("arch_arm")
+
+    # Outer pier (freestanding column)
+    pv, pf = _box(span - pier_w * 0.5, -pier_d * 0.5, 0.0, pier_w, pier_d, pier_height)
+    parts.append((pv, pf))
+    components.append("pier")
+
+    # Pier cap (wider slab on top of pier)
+    cap_w = pier_w + 0.15
+    cap_d = pier_d + 0.10
+    cv, cf = _box(span - cap_w * 0.5, -cap_d * 0.5, pier_height, cap_w, cap_d, 0.12)
+    parts.append((cv, cf))
+    components.append("arch_cap")
+
+    # Base plinth for pier
+    pl_w = pier_w + 0.25
+    pl_d = pier_d + 0.20
+    plv, plf = _box(span - pl_w * 0.5, -pl_d * 0.5, -0.25, pl_w, pl_d, 0.25)
+    parts.append((plv, plf))
+    components.append("base_plinth")
+
+    all_v, all_f = _merge(parts)
+    return _make_result(
+        "flying_buttress",
+        all_v, all_f,
+        components=components,
+        wall_height=wall_height,
+        span=span,
+        pier_height=pier_height,
+        generator="building_quality",
+    )
 
 
 # ===================================================================

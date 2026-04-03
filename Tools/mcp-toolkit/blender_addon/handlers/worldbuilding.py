@@ -2606,7 +2606,25 @@ def _sample_scene_height(x: float, y: float, terrain_name: str | None) -> float:
             direction,
         )
         if hit and location is not None:
-            if terrain_name is None or hit_obj is None or hit_obj.name == terrain_name:
+            # ARCH-028: when terrain_name is given, ONLY accept hits on the terrain object.
+            # Accepting any hit object causes buildings/props to be placed at rooftop Z
+            # instead of terrain Z when another object is above the terrain at that XY.
+            if terrain_name is not None:
+                if hit_obj is not None and hit_obj.name == terrain_name:
+                    return float(location.z)
+                # terrain_name provided but hit a non-terrain object — keep raycasting
+                # by re-casting from slightly below the hit to find terrain underneath.
+                try:
+                    origin2 = Vector((x, y, float(location.z) - 0.001))
+                    hit2, loc2, _, _, obj2, _ = bpy.context.scene.ray_cast(
+                        depsgraph, origin2, direction,
+                    )
+                    if hit2 and loc2 is not None and obj2 is not None and obj2.name == terrain_name:
+                        return float(loc2.z)
+                except Exception:
+                    pass
+            else:
+                # No terrain name specified — accept any hit (legacy behaviour)
                 return float(location.z)
     except (AttributeError, RuntimeError, TypeError, ValueError) as exc:
         logger.debug(
@@ -2891,9 +2909,23 @@ def _generate_location_building(
     requested_width = max(5.6, size_x * 0.9)
     requested_depth = max(5.6, size_y * 0.9)
     foundation_profile = building.get("foundation_profile") if isinstance(building.get("foundation_profile"), dict) else None
-    platform_elevation = float(
-        building.get("platform_elevation", _sample_scene_height(px, py, terrain_name))
-    ) + 0.02
+    # ARCH-029: 5-point average height sampling for buildings — avoids placing on a
+    # local slope peak/trough by sampling centre + 4 corners and taking the minimum
+    # (so the building sits on the lowest corner, not floating above it).
+    if "platform_elevation" in building:
+        platform_elevation = float(building["platform_elevation"]) + 0.02
+    else:
+        half_sx = size_x * 0.4
+        half_sy = size_y * 0.4
+        sample_pts = [
+            (px, py),
+            (px - half_sx, py - half_sy),
+            (px + half_sx, py - half_sy),
+            (px - half_sx, py + half_sy),
+            (px + half_sx, py + half_sy),
+        ]
+        sampled = [_sample_scene_height(spx, spy, terrain_name) for spx, spy in sample_pts]
+        platform_elevation = min(sampled) + 0.02
 
     if b_type in {"castle", "fortress", "keep"}:
         preset_name = "gatehouse"
@@ -5414,7 +5446,8 @@ def handle_generate_building(params: dict) -> dict:
                 _rbm = bmesh.new()
                 _rbm.from_mesh(child_obj.data)
                 if _rbm.verts:
-                    bmesh.ops.remove_doubles(_rbm, verts=_rbm.verts[:], dist=0.005)
+                    # MISC-011: 0.005m (5mm) destroys small prop detail; use 0.0001m (0.1mm)
+                    bmesh.ops.remove_doubles(_rbm, verts=_rbm.verts[:], dist=0.0001)
                     bmesh.ops.recalc_face_normals(_rbm, faces=_rbm.faces[:])
                     _rbm.to_mesh(child_obj.data)
                     repair_count += 1
@@ -5468,6 +5501,7 @@ def handle_generate_castle(params: dict) -> dict:
     keep_size = params.get("keep_size", 12)
     tower_count = params.get("tower_count", 4)
     seed = params.get("seed", 0)
+    terrain_name: str | None = params.get("terrain_name", None)  # ARCH-022
 
     spec = generate_castle_spec(outer_size, keep_size, tower_count, seed)
 
@@ -5492,15 +5526,16 @@ def handle_generate_castle(params: dict) -> dict:
     half = outer_size / 2.0
     procedural_count = 0
 
-    # Gate at front center
+    # Gate at front center — ARCH-022: sample terrain so gate sits on slope, not Z=0
     gate_entry = CASTLE_ELEMENT_MAP.get("gate")
     if gate_entry is not None:
         gen_func, gen_kwargs = gate_entry
         gate_spec = gen_func(**gen_kwargs)
+        gate_z = _sample_scene_height(0.0, half, terrain_name)
         gate_obj = mesh_from_spec(
             gate_spec,
             name=f"{name}_gate",
-            location=(0, half, 0),
+            location=(0, half, gate_z),
             collection=details_coll,
             parent=obj,
         )
@@ -5529,10 +5564,12 @@ def handle_generate_castle(params: dict) -> dict:
                 else:
                     px, py = t, sy * half
                 ramp_spec = gen_func(**gen_kwargs)
+                # ARCH-022: sample terrain so ramparts sit on slope, not float at Z=0
+                ramp_z = _sample_scene_height(px, py, terrain_name)
                 ramp_obj = mesh_from_spec(
                     ramp_spec,
                     name=f"{name}_rampart_{side_idx}_{i}",
-                    location=(px, py, 0),
+                    location=(px, py, ramp_z),
                     rotation=(0, 0, angle),
                     collection=details_coll,
                     parent=obj,
@@ -6569,7 +6606,8 @@ def handle_generate_settlement(params: dict) -> dict:
             if _generate_location_building(name, building, seed, i, terrain_name, parent):
                 building_count += 1
                 # Apply procedural wear map based on building type age parameter
-                obj_name = f"{name}_building_{i}"
+                # STY-016: match actual creation name pattern: {name}_{b_type}_{index}
+                obj_name = f"{name}_{b_type}_{i}"
                 bld_obj = bpy.data.objects.get(obj_name)
                 if bld_obj is not None and bld_obj.type == "MESH":
                     age_range = _WEAR_AGE_BY_TYPE.get(b_type, (0.2, 0.5))
