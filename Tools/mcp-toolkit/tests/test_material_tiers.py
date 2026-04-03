@@ -192,7 +192,7 @@ class TestGetMaterialTier:
     def test_lookup_iron(self):
         tier = get_material_tier("metal", "iron")
         assert tier["base_color"] == (0.56, 0.57, 0.58)
-        assert tier["metallic"] == 0.85
+        assert tier["metallic"] == 1.0  # PBR: true metal must be 1.0 (was 0.85, a PBR bug)
 
     def test_lookup_oak(self):
         tier = get_material_tier("wood", "oak")
@@ -291,7 +291,7 @@ class TestApplyMaterialTier:
         assert result["object_name"] == "Sword_01"
         assert result["material_name"] == "Sword_01_metal_iron"
         assert result["base_color"] == (0.56, 0.57, 0.58)
-        assert result["metallic"] == 0.85
+        assert result["metallic"] == 1.0  # PBR: true metal must be 1.0 (rust via roughness)
         assert result["roughness"] == 0.60
 
     def test_forwards_emission(self):
@@ -323,7 +323,7 @@ class TestApplyMaterialTier:
         result = apply_material_tier_to_equipment(
             {"object_name": "Club"}, "wood", "ironwood"
         )
-        assert result["metallic"] == 0.15
+        assert result["metallic"] == 0.0  # PBR: wood is dielectric regardless of hardness
 
     def test_default_object_name(self):
         result = apply_material_tier_to_equipment({}, "leather", "rawhide")
