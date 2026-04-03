@@ -36,8 +36,8 @@ BLOB_SPINE_BONES: list[str] = [
 ]
 
 BLOB_PSEUDOPOD_BONES: list[str] = [
-    "DEF-pseudopod_1", "DEF-pseudopod_2",
-    "DEF-pseudopod_3", "DEF-pseudopod_4",
+    "DEF-tentacle.001", "DEF-tentacle.002",
+    "DEF-tentacle.003", "DEF-tentacle.004",
 ]
 
 

@@ -41,7 +41,7 @@ from .animation_gaits import (
 # ---------------------------------------------------------------------------
 
 VALID_GAITS: frozenset[str] = frozenset({
-    "biped", "quadruped", "hexapod", "arachnid", "serpent",
+    "biped", "quadruped", "hexapod", "arachnid", "serpent", "bird", "floating",
 })
 
 VALID_SPEEDS: frozenset[str] = frozenset({"walk", "run", "trot", "canter", "gallop"})
@@ -614,6 +614,14 @@ def handle_generate_fly(params: dict) -> dict:
     for bone_cfg in config["bones"].values():
         bone_cfg["amplitude"] *= glide_dampen
 
+    # Filter config to bones present on this armature (RIG-004)
+    def_bones = _get_armature_def_bones(armature_obj)
+    if def_bones:
+        config["bones"] = {
+            k: v for k, v in config["bones"].items()
+            if k.split("__")[0] in def_bones
+        }
+
     keyframes = generate_cycle_keyframes(config)
 
     tangent_type = params.get("tangent_type", DEFAULT_TANGENT_TYPE)
@@ -666,6 +674,14 @@ def handle_generate_idle(params: dict) -> dict:
     for bone_cfg in config["bones"].values():
         bone_cfg["amplitude"] *= breathing_intensity
 
+    # Filter config to bones present on this armature (RIG-004)
+    def_bones = _get_armature_def_bones(armature_obj)
+    if def_bones:
+        config["bones"] = {
+            k: v for k, v in config["bones"].items()
+            if k.split("__")[0] in def_bones
+        }
+
     keyframes = generate_cycle_keyframes(config)
 
     tangent_type = params.get("tangent_type", DEFAULT_TANGENT_TYPE)
@@ -708,7 +724,12 @@ def handle_generate_attack(params: dict) -> dict:
     frame_count = validated["frame_count"]
     intensity = validated["intensity"]
 
-    keyframes = generate_attack_keyframes(attack_type, frame_count, intensity)
+    # Filter keyframes to bones present on this armature (RIG-002/RIG-004)
+    def_bones = _get_armature_def_bones(armature_obj)
+    keyframes = generate_attack_keyframes(
+        attack_type, frame_count, intensity,
+        bone_names=def_bones or None,
+    )
 
     tangent_type = params.get("tangent_type", DEFAULT_TANGENT_TYPE)
     action_name = f"{object_name}_attack_{attack_type}"
@@ -766,8 +787,11 @@ def handle_generate_reaction(params: dict) -> dict:
     direction = validated["direction"]
     frame_count = validated["frame_count"]
 
+    # Filter keyframes to bones present on this armature (RIG-004)
+    def_bones = _get_armature_def_bones(armature_obj)
     keyframes = generate_reaction_keyframes(
         reaction_type, direction=direction, frame_count=frame_count,
+        bone_names=def_bones or None,
     )
 
     tangent_type = params.get("tangent_type", DEFAULT_TANGENT_TYPE)
@@ -821,6 +845,11 @@ def handle_generate_custom(params: dict) -> dict:
     frame_count = validated["frame_count"]
 
     keyframes = generate_custom_keyframes(description, frame_count)
+
+    # Filter keyframes to bones present on this armature (RIG-004)
+    def_bones_set = set(_get_armature_def_bones(armature_obj))
+    if def_bones_set:
+        keyframes = [kf for kf in keyframes if kf.bone_name in def_bones_set]
 
     tangent_type = params.get("tangent_type", DEFAULT_TANGENT_TYPE)
     action_name = f"{object_name}_custom"

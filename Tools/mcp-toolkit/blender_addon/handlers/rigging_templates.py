@@ -1373,12 +1373,21 @@ FLOATING_BONES: dict[str, dict] = {
         "parent": "spine",
         "rigify_type": "",
     },
-    # Head
     "spine.002": {
         "head": (0.0, 0.0, 0.8),
-        "tail": (0.0, 0.0, 0.95),
+        "tail": (0.0, 0.0, 0.88),
         "roll": 0.0,
         "parent": "spine.001",
+        "rigify_type": "",
+    },
+    # Upper body / head area — spine.003 and spine.004 give the
+    # animation system proper attachment points for tentacle reach
+    # and floating locomotion (DEF-spine.003 used by FLOATING_WALK_CONFIG).
+    "spine.003": {
+        "head": (0.0, 0.0, 0.88),
+        "tail": (0.0, 0.0, 0.95),
+        "roll": 0.0,
+        "parent": "spine.002",
         "rigify_type": "",
     },
     # Tentacle 1 (front-left)

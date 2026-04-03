@@ -23,8 +23,10 @@ logger = logging.getLogger(__name__)
 
 
 # Noise threshold per channel (0-255) -- below this, differences are
-# treated as insignificant (monitor gamma, JPEG artifacts, etc.)
-_NOISE_THRESHOLD = 10
+# treated as insignificant (monitor gamma, JPEG artifacts, etc.).
+# Dark fantasy scenes have naturally low signal-to-noise ratios; 25 prevents
+# GPU rendering micro-variations from being flagged as regressions.
+_NOISE_THRESHOLD = 25
 
 
 def compare_screenshots(

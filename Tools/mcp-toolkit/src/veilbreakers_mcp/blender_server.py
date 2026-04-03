@@ -111,12 +111,25 @@ atexit.register(_cleanup_connection)
 
 
 async def _with_screenshot(
-    blender: BlenderConnection, result: dict, capture: bool = True
+    blender: BlenderConnection,
+    result: dict,
+    capture: bool = True,
+    object_name: str | None = None,
 ) -> list:
-    """Return structured result + viewport screenshot for mutation tools."""
+    """Return structured result + viewport screenshot for mutation tools.
+
+    When *object_name* is provided the camera is auto-framed on that object
+    before the screenshot is taken (CAM-001 through CAM-007).
+    """
     parts: list = [json.dumps(result, indent=2, default=str)]
     if capture:
         try:
+            if object_name:
+                # Auto-frame camera on the object before capturing
+                try:
+                    await blender.send_command("auto_frame_camera", {"object_name": object_name})
+                except Exception as frame_err:
+                    logger.debug("Auto-frame failed for %s: %s", object_name, frame_err)
             screenshot_bytes = await blender.capture_viewport_bytes()
             parts.append(Image(data=screenshot_bytes, format="png"))
         except (OSError, IOError, BlenderCommandError, ConnectionError) as e:
@@ -1269,16 +1282,26 @@ async def blender_material(
 
 @mcp.tool()
 async def blender_viewport(
-    action: Literal["screenshot", "contact_sheet", "set_shading", "navigate"],
+    action: Literal[
+        "screenshot", "contact_sheet", "set_shading", "navigate",
+        "interior_shot", "quick_preview", "orthographic_views",
+    ],
     object_name: str | None = None,
     shading_type: str | None = None,
     camera_position: list[float] | None = None,
     camera_target: list[float] | None = None,
     angles: list[list[float]] | None = None,
     resolution: list[int] | None = None,
-    max_size: int = 1024
+    max_size: int = 1024,
+    room_bounds: list[float] | None = None,
 ):
-    """Visual verification and viewport control."""
+    """Visual verification and viewport control.
+
+    action=interior_shot  -- Eye-height (1.7 m) interior camera; supply room_bounds
+                             as [min_x, min_y, min_z, max_x, max_y, max_z].
+    action=quick_preview  -- Fast 256 px preview screenshot, no beauty setup.
+    action=orthographic_views -- Four orthographic shots (front/right/top/iso).
+    """
     blender = get_blender_connection()
 
     if action == "screenshot":
@@ -1324,6 +1347,47 @@ async def blender_viewport(
             "target": camera_target,
         })
         return await _with_screenshot(blender, result)
+
+    elif action == "interior_shot":
+        # Eye-height camera positioned inside room bounds
+        if not object_name and not room_bounds:
+            return "ERROR: 'object_name' or 'room_bounds' is required for interior_shot"
+        result = await blender.send_command("interior_camera_shot", {
+            "object_name": object_name,
+            "room_bounds": room_bounds,
+            "eye_height": 1.7,
+        })
+        screenshot_bytes = await blender.capture_viewport_bytes()
+        resized = resize_screenshot(screenshot_bytes, max_size=max_size)
+        parts = [json.dumps(result, indent=2, default=str), Image(data=resized, format="png")]
+        return parts
+
+    elif action == "quick_preview":
+        # Fast 256 px preview — no beauty setup, minimal overhead
+        screenshot_bytes = await blender.capture_viewport_bytes()
+        resized = resize_screenshot(screenshot_bytes, max_size=256)
+        return Image(data=resized, format="png")
+
+    elif action == "orthographic_views":
+        # Four orthographic renders: front / right / top / isometric
+        if not object_name:
+            return "ERROR: 'object_name' is required for orthographic_views"
+        result = await blender.send_command("render_orthographic_views", {
+            "object_name": object_name,
+            "resolution": resolution or [512, 512],
+        })
+        paths = result.get("paths", [])
+        if paths:
+            try:
+                sheet_bytes = compose_contact_sheet(paths)
+                return Image(data=sheet_bytes, format="png")
+            finally:
+                for p in paths:
+                    try:
+                        os.unlink(p)
+                    except OSError as exc:
+                        logger.debug("Failed to delete ortho temp file %s: %s", p, exc, exc_info=True)
+        return json.dumps(result, indent=2, default=str)
 
     return "Unknown action"
 
@@ -2232,6 +2296,11 @@ async def asset_pipeline(
         studio_token = settings.tripo_studio_token
         api_key = settings.tripo_api_key
 
+        # STY-001: enforce dark fantasy style on all AI-generated assets
+        _df_prefix = "dark fantasy medieval weathered Gothic, "
+        if not prompt.startswith(_df_prefix):
+            prompt = _df_prefix + prompt
+
         if studio_cookie or studio_token:
             from veilbreakers_mcp.shared.tripo_studio_client import TripoStudioClient
             gen = TripoStudioClient(
@@ -2313,7 +2382,8 @@ async def asset_pipeline(
                         "The AAA pipeline will: repair -> retopo -> UV -> wire extracted textures -> weathering -> quality gate.",
                     ]
 
-                return json.dumps(result, indent=2, default=str)
+                _imported_name = imported_names[0] if imported_names else None
+                return await _with_screenshot(blender, result, capture_viewport, _imported_name)
             finally:
                 await gen.close()
         elif api_key:
@@ -2373,7 +2443,8 @@ async def asset_pipeline(
                         "Or full pipeline: asset_pipeline action=full_pipeline object_name=<name>",
                     ]
 
-                return json.dumps(result, indent=2, default=str)
+                _api_imported = result.get("object_name")
+                return await _with_screenshot(blender, result, capture_viewport, _api_imported)
             finally:
                 gen.close()
         else:
@@ -2435,6 +2506,10 @@ async def asset_pipeline(
         style_mod = _STYLE_MODIFIERS.get(building_style, _STYLE_MODIFIERS["dark_fantasy"])
         size_hint = _SIZE_HINTS.get(building_size, _SIZE_HINTS["medium"])
         full_prompt = prompt or f"{base_prompt}, {style_mod}, {size_hint}, game-ready 3D model, clean topology"
+        # STY-001: enforce dark fantasy style prefix
+        _df_prefix = "dark fantasy medieval weathered Gothic, "
+        if not full_prompt.startswith(_df_prefix):
+            full_prompt = _df_prefix + full_prompt
 
         # Route to generate_3d with the composed prompt
         studio_cookie = settings.tripo_session_cookie
@@ -2475,7 +2550,8 @@ async def asset_pipeline(
                     "Pick the best variant, then run: asset_pipeline action=cleanup object_name=<name>",
                     "For terrain placement: use blender_environment action=scatter_props",
                 ]
-                return json.dumps(result, indent=2, default=str)
+                _bld_studio_name = result.get("object_name")
+                return await _with_screenshot(blender, result, capture_viewport, _bld_studio_name)
             finally:
                 await gen.close()
         else:
@@ -2486,7 +2562,8 @@ async def asset_pipeline(
                 result = await gen.generate_from_text(full_prompt, output_dir)
             result["building_type"] = bt
             result["prompt_used"] = full_prompt
-            return json.dumps(result, indent=2, default=str)
+            _bld_api_name = result.get("object_name")
+            return await _with_screenshot(blender, result, capture_viewport, _bld_api_name)
 
     elif action == "generate_prop":
         # Route ALL prop/furniture/vegetation generation through Tripo with
@@ -2543,6 +2620,10 @@ async def asset_pipeline(
         prop_type = object_name or "barrel"
         prop_prompt = _PROP_PROMPTS.get(prop_type, f"dark fantasy {prop_type}, medieval style, weathered, game-ready 3D model, PBR textures, clean topology")
         full_prompt = prompt or prop_prompt
+        # STY-001: enforce dark fantasy style prefix
+        _df_prefix = "dark fantasy medieval weathered Gothic, "
+        if not full_prompt.startswith(_df_prefix):
+            full_prompt = _df_prefix + full_prompt
 
         studio_cookie = settings.tripo_session_cookie
         studio_token = settings.tripo_studio_token
@@ -2573,7 +2654,8 @@ async def asset_pipeline(
                     f"Pick best variant, then: asset_pipeline action=cleanup object_name=<name> has_extracted_textures=true",
                     "Run game_check after cleanup to verify quality",
                 ]
-                return json.dumps(result, indent=2, default=str)
+                _prop_studio_name = result.get("object_name")
+                return await _with_screenshot(blender, result, capture_viewport, _prop_studio_name)
             finally:
                 await gen.close()
         else:
@@ -2585,7 +2667,8 @@ async def asset_pipeline(
             result["prop_type"] = prop_type
             result["prompt_used"] = full_prompt
             result["generation_method"] = "tripo_api"
-            return json.dumps(result, indent=2, default=str)
+            _prop_api_name = result.get("object_name")
+            return await _with_screenshot(blender, result, capture_viewport, _prop_api_name)
 
     elif action == "inspect_external_toolchain":
         result = await blender.send_command("toolchain_inspect_external", {
@@ -2873,22 +2956,39 @@ async def asset_pipeline(
                         corner_heights.append(ch)
                     anchor_z = max(corner_heights) if corner_heights else 0.0
 
-                    # Flatten terrain under building footprint
+                    # ARCH-021: Flatten terrain using flatten_terrain_zone (heightmap-aware)
+                    # with spline deform as fallback for non-heightmap terrain objects.
+                    _flatten_ok = False
                     try:
-                        await blender.send_command("terrain_spline_deform", {
+                        await blender.send_command("terrain_flatten_zone", {
                             "object_name": terrain_name,
-                            "spline_points": [
-                                [anchor_x - loc_radius, anchor_y - loc_radius, anchor_z],
-                                [anchor_x + loc_radius, anchor_y - loc_radius, anchor_z],
-                                [anchor_x + loc_radius, anchor_y + loc_radius, anchor_z],
-                                [anchor_x - loc_radius, anchor_y + loc_radius, anchor_z],
-                            ],
-                            "mode": "flatten",
-                            "falloff": 0.85,
-                            "width": loc_radius * 0.4,
+                            "center_x": anchor_x,
+                            "center_y": anchor_y,
+                            "radius_x": loc_radius,
+                            "radius_y": loc_radius,
+                            "target_height": anchor_z,
+                            "blend_distance": loc_radius * 0.5,
                         })
+                        _flatten_ok = True
                     except Exception:
-                        pass  # Non-fatal
+                        pass
+                    if not _flatten_ok:
+                        # Fallback: spline deform for non-heightmap terrain
+                        try:
+                            await blender.send_command("terrain_spline_deform", {
+                                "object_name": terrain_name,
+                                "spline_points": [
+                                    [anchor_x - loc_radius, anchor_y - loc_radius, anchor_z],
+                                    [anchor_x + loc_radius, anchor_y - loc_radius, anchor_z],
+                                    [anchor_x + loc_radius, anchor_y + loc_radius, anchor_z],
+                                    [anchor_x - loc_radius, anchor_y + loc_radius, anchor_z],
+                                ],
+                                "mode": "flatten",
+                                "falloff": 0.85,
+                                "width": loc_radius * 0.4,
+                            })
+                        except Exception:
+                            pass  # Non-fatal
 
                     # Auto-compute foundation profile from terrain slope
                     if corner_heights and len(corner_heights) >= 5:
@@ -3055,8 +3155,12 @@ async def asset_pipeline(
         heightmap_export_path = None
         if terrain_name:
             try:
-                _hm_dir = checkpoint_dir or "/tmp/veilbreakers_exports"
+                # MISC-009: use tempfile.gettempdir() instead of hardcoded /tmp/
+                import tempfile as _tempfile
                 import os as _os_hm
+                _hm_dir = checkpoint_dir or _os_hm.path.join(
+                    _tempfile.gettempdir(), "veilbreakers_exports"
+                )
                 _os_hm.makedirs(_hm_dir, exist_ok=True)
                 _hm_path = _os_hm.path.join(_hm_dir, f"{map_name}_heightmap.raw")
                 hm_result = await blender.send_command("env_export_heightmap", {
@@ -3513,6 +3617,36 @@ async def asset_pipeline(
                 except Exception as e:
                     steps_failed.append({"step": f"props_{room.get('name')}", "error": str(e)})
 
+        # --- Step 3b: Prop quality validation ---
+        prop_quality_results = []
+        for i, room in enumerate(rooms):
+            room_name = room.get("name", f"Room_{i}")
+            room_obj_name = f"{int_name}_{room_name}"
+            planned_room = room_bounds_by_name.get(room_name)
+            if planned_room is None:
+                continue
+            bounds = planned_room.get("bounds", {})
+            b_min = bounds.get("min", [0, 0, 0])
+            b_max = bounds.get("max", [0, 0, 0])
+            cx = (b_min[0] + b_max[0]) / 2.0
+            cy = (b_min[1] + b_max[1]) / 2.0
+            floor_z_val = float(b_min[2]) if len(b_min) > 2 else 0.0
+            try:
+                pq_result = await blender.send_command("validate_prop_quality", {
+                    "object_name": room_obj_name,
+                    "prop_type": room.get("type", "_default"),
+                    "floor_z": floor_z_val,
+                    "room_center": [cx, cy],
+                })
+                pq_result["room"] = room_name
+                prop_quality_results.append(pq_result)
+                if not pq_result.get("passed", True):
+                    steps_failed.append({"step": f"prop_quality_{room_name}", "issues": pq_result.get("issues", [])})
+                else:
+                    steps_completed.append(f"prop_quality_{room_name}")
+            except Exception as pq_err:
+                logger.debug("Prop quality check skipped for %s: %s", room_obj_name, pq_err)
+
         # --- Build Tripo prop generation queue ---
         tripo_queue = []
         if spec.get("generate_props_with_tripo", False):
@@ -3545,6 +3679,7 @@ async def asset_pipeline(
             "rooms_generated": room_results,
             "door_positions": planned_doors,
             "building_bounds": room_plan["building_bounds"],
+            "prop_quality": prop_quality_results,
             "tripo_prop_queue": tripo_queue[:20] if tripo_queue else [],
             "tripo_props_remaining": max(0, len(tripo_queue) - 20),
             "next_steps": [
@@ -3566,7 +3701,7 @@ async def asset_pipeline(
         if tripo_queue:
             result["next_steps"].insert(0, f"TRIPO QUEUE: {len(tripo_queue)} props to generate. Run each with: asset_pipeline action=generate_3d prompt='<prompt>'")
 
-        return json.dumps(result, indent=2, default=str)
+        return await _with_screenshot(blender, result, capture_viewport, int_name)
 
     elif action == "cleanup":
         if not object_name:
@@ -3859,7 +3994,7 @@ async def concept_art(
     action: Literal["generate", "extract_palette", "style_board", "silhouette_test"],
     # generate params
     prompt: str | None = None,
-    style: str = "fantasy",
+    style: str = "dark fantasy, weathered Gothic medieval, desaturated",  # STY-002
     width: int = 1024,
     height: int = 1024,
     output_dir: str = ".",
@@ -5279,17 +5414,17 @@ async def blender_quality(
             "wear_intensity": wear_intensity, "dirt_intensity": dirt_intensity,
             "age": age,
         })
-        return json.dumps(result, indent=2, default=str)
+        return await _with_screenshot(blender, result, capture_viewport, object_name)
     elif action == "trim_sheet":
         result = await blender.send_command("texture_trim_sheet_code", {
             "sheet_name": _style or "medieval_trim",
         })
-        return json.dumps(result, indent=2, default=str)
+        return await _with_screenshot(blender, result, capture_viewport, object_name)
     elif action == "macro_variation":
         result = await blender.send_command("texture_macro_variation_code", {
             "object_name": object_name or "target",
         })
-        return json.dumps(result, indent=2, default=str)
+        return await _with_screenshot(blender, result, capture_viewport, object_name)
 
     return "Unknown action"
 

@@ -679,6 +679,165 @@ IDLE_CONFIG: dict = {
 }
 
 
+# Bird: hopping walk on two legs with wing-balance micro-flaps.
+# Uses DEF-thigh.L/R for leg hop, DEF-wing_upper.L/R for balance beats.
+BIRD_WALK_CONFIG: dict = {
+    "name": "bird_walk",
+    "frame_count": 16,
+    "bones": {
+        # Hop: both legs push together (birds hop, not stride)
+        "DEF-thigh.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.35, "phase": 0.0,
+        },
+        "DEF-thigh.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.35, "phase": 0.0,  # in-phase for synchronized hop
+        },
+        "DEF-shin.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.25, "phase": math.pi,  # extend on push
+        },
+        "DEF-shin.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.25, "phase": math.pi,
+        },
+        # Micro-flap for balance while hopping
+        "DEF-wing_upper.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.15, "phase": 0.0,
+        },
+        "DEF-wing_upper.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.15, "phase": 0.0,
+        },
+        # Head bob (characteristic bird movement)
+        "DEF-spine.004__head_bob": {
+            "channel": "location", "axis": 1,
+            "amplitude": 0.04, "phase": 0.0,
+        },
+    },
+}
+
+BIRD_RUN_CONFIG: dict = {
+    "name": "bird_run",
+    "frame_count": 12,
+    "bones": {
+        "DEF-thigh.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.6, "phase": 0.0,
+        },
+        "DEF-thigh.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.6, "phase": math.pi,  # alternating stride when running
+        },
+        "DEF-shin.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.4, "phase": math.pi,
+        },
+        "DEF-shin.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.4, "phase": 0.0,
+        },
+        "DEF-wing_upper.L": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.25, "phase": math.pi,
+        },
+        "DEF-wing_upper.R": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.25, "phase": 0.0,
+        },
+        "DEF-spine.004__head_bob": {
+            "channel": "location", "axis": 1,
+            "amplitude": 0.07, "phase": 0.0,
+        },
+    },
+}
+
+
+# Floating: amorphous/ghost creatures with undulating spine and tentacles.
+# No leg bones — uses DEF-spine chain + DEF-tentacle bones for locomotion.
+FLOATING_WALK_CONFIG: dict = {
+    "name": "floating_walk",
+    "frame_count": 32,
+    "bones": {
+        # Spine undulation — slow, dreamlike bobbing
+        "DEF-spine": {
+            "channel": "location", "axis": 2,
+            "amplitude": 0.05, "phase": 0.0,
+        },
+        "DEF-spine.001": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.08, "phase": math.pi / 4,
+        },
+        "DEF-spine.002": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.06, "phase": math.pi / 2,
+        },
+        "DEF-spine.003": {
+            "channel": "rotation_euler", "axis": 1,
+            "amplitude": 0.04, "phase": math.pi,
+        },
+        # Tentacle trailing motion
+        "DEF-tentacle.001": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.2, "phase": 0.0,
+        },
+        "DEF-tentacle.002": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.2, "phase": math.pi / 2,
+        },
+        "DEF-tentacle.003": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.2, "phase": math.pi,
+        },
+        "DEF-tentacle.004": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.2, "phase": 3 * math.pi / 2,
+        },
+    },
+}
+
+FLOATING_RUN_CONFIG: dict = {
+    "name": "floating_run",
+    "frame_count": 20,
+    "bones": {
+        "DEF-spine": {
+            "channel": "location", "axis": 2,
+            "amplitude": 0.1, "phase": 0.0,
+        },
+        "DEF-spine.001": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.15, "phase": math.pi / 4,
+        },
+        "DEF-spine.002": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.12, "phase": math.pi / 2,
+        },
+        "DEF-spine.003": {
+            "channel": "rotation_euler", "axis": 1,
+            "amplitude": 0.08, "phase": math.pi,
+        },
+        "DEF-tentacle.001": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.35, "phase": 0.0,
+        },
+        "DEF-tentacle.002": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.35, "phase": math.pi / 2,
+        },
+        "DEF-tentacle.003": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.35, "phase": math.pi,
+        },
+        "DEF-tentacle.004": {
+            "channel": "rotation_euler", "axis": 0,
+            "amplitude": 0.35, "phase": 3 * math.pi / 2,
+        },
+    },
+}
+
+
 # ---------------------------------------------------------------------------
 # Gait config registry
 # ---------------------------------------------------------------------------
@@ -693,6 +852,8 @@ _GAIT_REGISTRY: dict[str, dict[str, dict]] = {
     "hexapod": {"walk": HEXAPOD_WALK_CONFIG, "run": HEXAPOD_RUN_CONFIG},
     "arachnid": {"walk": ARACHNID_WALK_CONFIG, "run": ARACHNID_RUN_CONFIG},
     "serpent": {"walk": SERPENT_WALK_CONFIG, "run": SERPENT_RUN_CONFIG},
+    "bird": {"walk": BIRD_WALK_CONFIG, "run": BIRD_RUN_CONFIG},
+    "floating": {"walk": FLOATING_WALK_CONFIG, "run": FLOATING_RUN_CONFIG},
 }
 
 
@@ -1064,6 +1225,72 @@ ATTACK_CONFIGS: dict[str, dict] = {
             },
         ],
     },
+    # Insect/arachnid: mandible strike. Uses DEF-thigh.L/R (first leg pair) as
+    # "arm" analogues for insect forelegs, plus spine lunge. Works on any
+    # hexapod/arachnid rig regardless of whether it has biped arm bones.
+    "mandible_strike": {
+        "name": "mandible_strike",
+        "phases": [
+            {  # Anticipation: rear up, forelegs raise
+                "start_pct": 0.0, "end_pct": 0.2,
+                "bones": {
+                    "DEF-spine": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.4},
+                    "DEF-spine.001": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.3},
+                    "DEF-thigh.L": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.8},
+                    "DEF-thigh.R": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.8},
+                },
+            },
+            {  # Strike: lunge forward, forelegs snap down
+                "start_pct": 0.2, "end_pct": 0.5,
+                "bones": {
+                    "DEF-spine": {"channel": "rotation_euler", "axis": 0, "start_value": -0.4, "end_value": 0.5},
+                    "DEF-spine.001": {"channel": "rotation_euler", "axis": 0, "start_value": -0.3, "end_value": 0.4},
+                    "DEF-thigh.L": {"channel": "rotation_euler", "axis": 0, "start_value": -0.8, "end_value": 0.6},
+                    "DEF-thigh.R": {"channel": "rotation_euler", "axis": 0, "start_value": -0.8, "end_value": 0.6},
+                },
+            },
+            {  # Recovery
+                "start_pct": 0.5, "end_pct": 1.0,
+                "bones": {
+                    "DEF-spine": {"channel": "rotation_euler", "axis": 0, "start_value": 0.5, "end_value": 0.0},
+                    "DEF-spine.001": {"channel": "rotation_euler", "axis": 0, "start_value": 0.4, "end_value": 0.0},
+                    "DEF-thigh.L": {"channel": "rotation_euler", "axis": 0, "start_value": 0.6, "end_value": 0.0},
+                    "DEF-thigh.R": {"channel": "rotation_euler", "axis": 0, "start_value": 0.6, "end_value": 0.0},
+                },
+            },
+        ],
+    },
+    # Floating/amorphous: tentacle lash. Uses DEF-tentacle bones which are
+    # present on floating and amorphous rig templates.
+    "tentacle_lash": {
+        "name": "tentacle_lash",
+        "phases": [
+            {  # Anticipation: tentacle coils back
+                "start_pct": 0.0, "end_pct": 0.2,
+                "bones": {
+                    "DEF-tentacle.001": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.8},
+                    "DEF-tentacle.002": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.6},
+                    "DEF-spine.001": {"channel": "rotation_euler", "axis": 0, "start_value": 0.0, "end_value": -0.2},
+                },
+            },
+            {  # Strike: whip forward
+                "start_pct": 0.2, "end_pct": 0.5,
+                "bones": {
+                    "DEF-tentacle.001": {"channel": "rotation_euler", "axis": 0, "start_value": -0.8, "end_value": 1.0},
+                    "DEF-tentacle.002": {"channel": "rotation_euler", "axis": 0, "start_value": -0.6, "end_value": 0.8},
+                    "DEF-spine.001": {"channel": "rotation_euler", "axis": 0, "start_value": -0.2, "end_value": 0.3},
+                },
+            },
+            {  # Recovery: tentacle retracts
+                "start_pct": 0.5, "end_pct": 1.0,
+                "bones": {
+                    "DEF-tentacle.001": {"channel": "rotation_euler", "axis": 0, "start_value": 1.0, "end_value": 0.0},
+                    "DEF-tentacle.002": {"channel": "rotation_euler", "axis": 0, "start_value": 0.8, "end_value": 0.0},
+                    "DEF-spine.001": {"channel": "rotation_euler", "axis": 0, "start_value": 0.3, "end_value": 0.0},
+                },
+            },
+        ],
+    },
 }
 
 
@@ -1075,6 +1302,7 @@ def generate_attack_keyframes(
     attack_type: str,
     frame_count: int = 24,
     intensity: float = 1.0,
+    bone_names: list[str] | None = None,
 ) -> list[Keyframe]:
     """Generate keyframes for an attack animation.
 
@@ -1089,6 +1317,9 @@ def generate_attack_keyframes(
         attack_type: One of the keys in ATTACK_CONFIGS.
         frame_count: Total number of frames for the attack.
         intensity: Multiplier for all values (0.5 = half, 2.0 = double).
+        bone_names: If provided, only generate keyframes for bones in this list.
+            Bones not present in the list are silently skipped. Use this to
+            avoid keyframing DEF-jaw on creatures that have no jaw bone.
 
     Returns:
         List of Keyframe namedtuples.
@@ -1102,6 +1333,7 @@ def generate_attack_keyframes(
             f"Valid types: {sorted(ATTACK_CONFIGS.keys())}"
         )
 
+    bone_filter: set[str] | None = set(bone_names) if bone_names else None
     config = ATTACK_CONFIGS[attack_type]
     frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
@@ -1117,6 +1349,10 @@ def generate_attack_keyframes(
             continue
 
         for bone_name, bone_cfg in phase["bones"].items():
+            # Skip bones not present on this creature's armature
+            if bone_filter is not None and bone_name not in bone_filter:
+                continue
+
             channel = bone_cfg["channel"]
             axis = bone_cfg["axis"]
             start_val = bone_cfg["start_value"] * intensity
@@ -1214,6 +1450,7 @@ def generate_reaction_keyframes(
     reaction_type: str,
     direction: str | None = None,
     frame_count: int = 24,
+    bone_names: list[str] | None = None,
 ) -> list[Keyframe]:
     """Generate keyframes for a reaction animation (death, hit, spawn).
 
@@ -1222,6 +1459,8 @@ def generate_reaction_keyframes(
         direction: For "hit" reactions: "front", "back", "left", "right".
             Ignored for other reaction types.
         frame_count: Total number of frames.
+        bone_names: If provided, only generate keyframes for bones in this list.
+            Bones not present in the list are silently skipped.
 
     Returns:
         List of Keyframe namedtuples.
@@ -1235,11 +1474,14 @@ def generate_reaction_keyframes(
             f"Valid types: {sorted(REACTION_CONFIGS.keys())}"
         )
 
+    bone_filter: set[str] | None = set(bone_names) if bone_names else None
     config = REACTION_CONFIGS[reaction_type]
     frame_count = max(1, frame_count)
     keyframes: list[Keyframe] = []
 
     for bone_name, bone_cfg in config["bones"].items():
+        if bone_filter is not None and bone_name not in bone_filter:
+            continue
         channel = bone_cfg["channel"]
         axis = bone_cfg.get("axis", 0)
         start_val = bone_cfg.get("start_value", 0.0)
@@ -1259,7 +1501,10 @@ def generate_reaction_keyframes(
     # For hit reactions, add directional torso rotation
     if reaction_type == "hit" and direction:
         dir_key = direction.lower()
-        if dir_key in _HIT_DIRECTION_MAP:
+        hit_bone = "DEF-spine.001"
+        if dir_key in _HIT_DIRECTION_MAP and (
+            bone_filter is None or hit_bone in bone_filter
+        ):
             channel, axis, magnitude = _HIT_DIRECTION_MAP[dir_key]
             # Quick snap to direction then recover
             for frame in range(frame_count + 1):
@@ -1270,7 +1515,7 @@ def generate_reaction_keyframes(
                 else:
                     value = magnitude * (1.0 - (t - 0.2) / 0.8)
                 keyframes.append(Keyframe(
-                    bone_name="DEF-spine.001",
+                    bone_name=hit_bone,
                     channel=channel,
                     axis=axis,
                     frame=frame,
