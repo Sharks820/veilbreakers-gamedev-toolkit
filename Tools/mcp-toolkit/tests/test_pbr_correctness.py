@@ -329,14 +329,22 @@ class TestDarkFantasyPaletteCompliance:
     """
 
     # Presets that are intentionally bright/saturated (supernaturals, gold, snow)
-    # or have design exceptions — excluded from strict palette check
+    # or have design exceptions — excluded from strict palette check.
+    # Metals are excluded because physically-based metal albedo is defined by
+    # the metal's actual reflectance (e.g., iron ~58%, steel ~64%, bronze ~73%)
+    # and cannot be darkened without breaking PBR correctness.
     _PALETTE_EXCLUSIONS = {
-        "gold_ornament",   # physically correct gold albedo — high value
-        "snow",            # bright white — value ~47% passes but listed for clarity
-        "ice_crystal",     # pale blue, supernatural
-        "lava_ember",      # fire — intentionally warm/bright
+        "gold_ornament",     # physically correct gold albedo — value 100%, SAT 43%
+        "snow",              # bright white — value ~47% passes but listed for clarity
+        "ice_crystal",       # pale blue, supernatural
+        "lava_ember",        # fire — intentionally warm/bright
         "corruption_overlay",  # supernatural purple emission
-        "water_surface",   # transparent, special
+        "water_surface",     # transparent, special
+        # Metals — physically-based albedo values; saturation/value not constrained
+        "rusted_iron",       # iron albedo: value ~58%
+        "polished_steel",    # steel albedo: value ~64%
+        "tarnished_bronze",  # bronze albedo: value ~73%
+        "chain_metal",       # iron albedo: value ~58%
     }
 
     @pytest.mark.parametrize(
@@ -344,6 +352,7 @@ class TestDarkFantasyPaletteCompliance:
         sorted(k for k in MATERIAL_LIBRARY if k not in {
             "gold_ornament", "snow", "ice_crystal", "lava_ember",
             "corruption_overlay", "water_surface",
+            "rusted_iron", "polished_steel", "tarnished_bronze", "chain_metal",
         }),
     )
     def test_base_color_saturation_under_40_percent(self, mat_key: str) -> None:
@@ -361,6 +370,7 @@ class TestDarkFantasyPaletteCompliance:
         sorted(k for k in MATERIAL_LIBRARY if k not in {
             "gold_ornament", "snow", "ice_crystal", "lava_ember",
             "corruption_overlay", "water_surface",
+            "rusted_iron", "polished_steel", "tarnished_bronze", "chain_metal",
         }),
     )
     def test_base_color_value_in_dark_range(self, mat_key: str) -> None:

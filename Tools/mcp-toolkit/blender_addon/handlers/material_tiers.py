@@ -40,7 +40,7 @@ _REQUIRED_KEYS = {"base_color", "roughness", "description"}
 METAL_TIERS: dict[str, dict[str, Any]] = {
     "iron": {
         "base_color": (0.56, 0.57, 0.58),
-        "metallic": 0.85,
+        "metallic": 1.0,  # PBR: true metal must be 1.0; rust shown via roughness/rust_amount
         "roughness": 0.60,
         "roughness_variation": 0.20,
         "rust_amount": 0.3,
@@ -48,7 +48,7 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
     },
     "steel": {
         "base_color": (0.63, 0.62, 0.64),
-        "metallic": 0.90,
+        "metallic": 1.0,  # PBR: true metal must be 1.0
         "roughness": 0.25,
         "roughness_variation": 0.15,
         "anisotropic": 0.5,
@@ -56,7 +56,7 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
     },
     "silver": {
         "base_color": (0.95, 0.93, 0.88),
-        "metallic": 0.95,
+        "metallic": 1.0,  # PBR: true metal must be 1.0
         "roughness": 0.20,
         "emission": 0.02,
         "anisotropic": 0.3,
@@ -64,7 +64,7 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
     },
     "gold": {
         "base_color": (1.0, 0.86, 0.57),
-        "metallic": 0.95,
+        "metallic": 1.0,  # PBR: true metal must be 1.0
         "roughness": 0.20,
         "coat_weight": 0.3,
         "anisotropic": 0.4,
@@ -72,7 +72,7 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
     },
     "mithril": {
         "base_color": (0.65, 0.70, 0.85),
-        "metallic": 0.98,
+        "metallic": 1.0,  # PBR: true metal must be 1.0
         "roughness": 0.10,
         "emission": 0.05,
         "emission_color": (0.6, 0.7, 0.9),
@@ -81,36 +81,36 @@ METAL_TIERS: dict[str, dict[str, Any]] = {
     },
     "adamantine": {
         "base_color": (0.15, 0.15, 0.18),
-        "metallic": 0.99,
+        "metallic": 1.0,  # PBR: true metal must be 1.0
         "roughness": 0.05,
         "anisotropic": 0.7,
         "description": "Indestructible dark metal",
     },
     "obsidian": {
         "base_color": (0.05, 0.05, 0.08),
-        "metallic": 0.3,
-        "roughness": 0.02,
+        "metallic": 0.0,  # PBR: volcanic glass is dielectric; use coat for reflectivity
+        "roughness": 0.04,  # raised from 0.02 (min physical roughness is ~0.04)
         "coat_weight": 0.8,
         "anisotropic": 0.2,
         "description": "Volcanic glass, razor sharp",
     },
     "dragonbone": {
         "base_color": (0.85, 0.80, 0.90),
-        "metallic": 0.4,
+        "metallic": 0.0,  # PBR: bone is organic/dielectric, not a conductor
         "roughness": 0.55,
         "subsurface": 0.05,
         "description": "Ancient dragon bone, blue-white marbling",
     },
     "orichalcum": {
         "base_color": (0.73, 0.55, 0.36),
-        "metallic": 0.92,
+        "metallic": 1.0,  # PBR: true metal must be 1.0
         "roughness": 0.35,
         "anisotropic": 0.45,
         "description": "Ancient bronze-red alloy",
     },
     "void_touched": {
         "base_color": (0.10, 0.05, 0.15),
-        "metallic": 0.60,
+        "metallic": 0.0,  # PBR: supernatural material — use emission for otherworldly look, not metallic blend
         "roughness": 0.30,
         "emission": 0.15,
         "emission_color": (0.3, 0.1, 0.5),
@@ -142,7 +142,7 @@ WOOD_TIERS: dict[str, dict[str, Any]] = {
     "ironwood": {
         "base_color": (0.35, 0.30, 0.28),
         "roughness": 0.50,
-        "metallic": 0.15,
+        "metallic": 0.0,  # PBR: wood is dielectric regardless of hardness; use roughness for density
         "description": "Metal-hard wood",
     },
     "living_wood": {
@@ -182,7 +182,7 @@ LEATHER_TIERS: dict[str, dict[str, Any]] = {
     "dragon_leather": {
         "base_color": (0.20, 0.15, 0.25),
         "roughness": 0.45,
-        "metallic": 0.15,
+        "metallic": 0.0,  # PBR: leather/hide is dielectric; use coat_weight for sheen
         "description": "Scale-patterned dragon hide",
     },
 }
