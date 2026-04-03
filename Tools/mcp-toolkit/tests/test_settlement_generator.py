@@ -429,8 +429,8 @@ class TestGenerateRoads:
         roads = _generate_roads(buildings, (0, 0), "cobblestone")
         # Build adjacency from road endpoints matching building positions
         positions = {b["position"] for b in buildings}
-        non_main = [r for r in roads if not r.get("is_main_road")]
-        # MST should have N-1 edges for N buildings
+        non_main = [r for r in roads if not r.get("is_main_road") and not r.get("is_loop_road")]
+        # MST should have N-1 edges for N buildings (loop-closure edges excluded)
         assert len(non_main) == len(buildings) - 1
 
 

@@ -659,6 +659,74 @@ def _angle_to(
     return math.atan2(to_pt[1] - from_pt[1], to_pt[0] - from_pt[0])
 
 
+def _nearest_road_angle(
+    pos: tuple[float, float],
+    roads: list[dict[str, Any]],
+    fallback_target: tuple[float, float],
+) -> float:
+    """CITY-002: Return angle to face the nearest road segment.
+
+    Finds the closest point on any road segment to ``pos`` and returns the
+    perpendicular angle (i.e. the building faces the road).  Falls back to
+    facing ``fallback_target`` when no roads are available yet.
+    """
+    if not roads:
+        return _angle_to(pos, fallback_target)
+
+    best_dist = float("inf")
+    best_angle = _angle_to(pos, fallback_target)
+
+    for road in roads:
+        sx, sy = road["start"]
+        ex, ey = road["end"]
+        # Closest point on segment to pos
+        dx, dy = ex - sx, ey - sy
+        seg_len_sq = dx * dx + dy * dy
+        if seg_len_sq < 1e-9:
+            cp = (sx, sy)
+        else:
+            t = max(0.0, min(1.0, ((pos[0] - sx) * dx + (pos[1] - sy) * dy) / seg_len_sq))
+            cp = (sx + t * dx, sy + t * dy)
+        d = _dist2d(pos, cp)
+        if d < best_dist:
+            best_dist = d
+            # Face toward road (perpendicular to road direction) — just face the closest point
+            best_angle = _angle_to(pos, cp)
+
+    return best_angle
+
+
+def _road_curve_controls(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    rng: random.Random,
+    curviness: float = 0.25,
+) -> list[tuple[float, float]]:
+    """CITY-001: Generate cubic Bezier control points for a smooth road curve.
+
+    Returns [start, cp1, cp2, end] as a list of 4 (x, y) tuples.
+    The control points are offset perpendicular to the road axis by a
+    fraction of the road length to produce gentle organic curves.
+    """
+    mx = (start[0] + end[0]) / 2.0
+    my = (start[1] + end[1]) / 2.0
+    dx = end[0] - start[0]
+    dy = end[1] - start[1]
+    length = math.sqrt(dx * dx + dy * dy) or 1.0
+    # Perpendicular unit vector
+    px, py = -dy / length, dx / length
+    offset = length * curviness * rng.uniform(-1.0, 1.0)
+    cp1 = (
+        round(start[0] + dx * 0.33 + px * offset * 0.5, 2),
+        round(start[1] + dy * 0.33 + py * offset * 0.5, 2),
+    )
+    cp2 = (
+        round(mx + px * offset, 2),
+        round(my + py * offset, 2),
+    )
+    return [start, cp1, cp2, end]
+
+
 # ---------------------------------------------------------------------------
 # Building placement
 # ---------------------------------------------------------------------------
@@ -713,18 +781,37 @@ def _place_buildings(
     spoke_count = int(config.get("spoke_count", max(3, min(6, count // 2 or 3))))
     terrace_count = int(config.get("terrace_count", 3))
 
+    # CITY-003: Per-district density variation — different layout patterns use
+    # different minimum gaps between buildings.
+    _PATTERN_GAP: dict[str, float] = {
+        "grid": 1.5,           # dense urban grid
+        "organic": 2.5,        # natural scatter — more breathing room
+        "circular": 2.0,       # moderate camp spacing
+        "district": 1.5,       # city district — tight urban
+        "radial_spokes": 2.0,
+        "concentric": 2.0,
+        "terraced": 1.8,
+        "waterfront_edge": 2.0,
+        "axial": 1.5,
+    }
+    _gap_margin = _PATTERN_GAP.get(pattern, 2.0)
+
     buildings: list[dict[str, Any]] = []
     occupied: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    # Roads are not yet built at placement time, but we maintain a growing
+    # list of provisional road stubs so late-placed buildings can orient to them.
+    _provisional_roads: list[dict[str, Any]] = []
 
     def _try_place(
         btype: str, target_pos: tuple[float, float]
     ) -> dict[str, Any] | None:
         fp = _BUILDING_FOOTPRINTS.get(btype, (6.0, 6.0))
-        # Check collisions with all already-placed buildings
+        # CITY-003: use per-district gap margin instead of fixed 2.0 m
         for opos, osize in occupied:
-            if _aabb_overlaps(target_pos, fp, opos, osize, margin=2.0):
+            if _aabb_overlaps(target_pos, fp, opos, osize, margin=_gap_margin):
                 return None
-        rotation = _angle_to(target_pos, center)
+        # CITY-002: face nearest already-placed provisional road; fall back to center
+        rotation = _nearest_road_angle(target_pos, _provisional_roads, center)
         # Look up floor count from building preset defaults
         _BUILDING_FLOORS = {
             "shrine_minor": 1, "shrine_major": 2, "ruined_fortress_tower": 3,
@@ -916,14 +1003,22 @@ def _generate_roads(
     buildings: list[dict[str, Any]],
     center: tuple[float, float],
     road_style: str,
+    seed: int = 0,
 ) -> list[dict[str, Any]]:
-    """Generate road segments connecting all buildings via MST.
+    """Generate road segments connecting all buildings via MST + loop roads.
+
+    CITY-001: Each segment includes ``control_points`` (4-point cubic Bezier)
+    for smooth organic curves instead of straight Bresenham lines.
+
+    CITY-006: After MST, add loop-closure edges so the network has redundant
+    paths (prevents pure tree topology).
 
     Also adds a main road from the settlement edge to the center.
 
     Each road segment:
     - start: (x, y)
     - end: (x, y)
+    - control_points: list of 4 (x, y) tuples (Bezier curve)
     - width: float
     - style: road style string
 
@@ -935,6 +1030,8 @@ def _generate_roads(
         Settlement center.
     road_style : str
         Road surface type (cobblestone, dirt_path, stone, none).
+    seed : int
+        RNG seed for curve control points.
 
     Returns
     -------
@@ -944,6 +1041,7 @@ def _generate_roads(
     if road_style == "none" or len(buildings) < 2:
         return []
 
+    rng = random.Random(seed)
     roads: list[dict[str, Any]] = []
     n = len(buildings)
     positions = [b["position"] for b in buildings]
@@ -958,6 +1056,7 @@ def _generate_roads(
     in_tree = [False] * n
     in_tree[0] = True
     mst_edges: list[tuple[int, int]] = []
+    edge_set: set[tuple[int, int]] = set()
 
     for _ in range(n - 1):
         best_i, best_j, best_d = -1, -1, float("inf")
@@ -972,6 +1071,7 @@ def _generate_roads(
         if best_j == -1:
             break
         mst_edges.append((best_i, best_j))
+        edge_set.add((min(best_i, best_j), max(best_i, best_j)))
         in_tree[best_j] = True
 
     # Width based on style
@@ -982,21 +1082,45 @@ def _generate_roads(
     }
     base_width = width_map.get(road_style, 2.0)
 
+    # CITY-001: emit MST edges with Bezier control points for smooth curves
     for i, j in mst_edges:
+        cps = _road_curve_controls(positions[i], positions[j], rng)
         roads.append({
             "start": positions[i],
             "end": positions[j],
+            "control_points": cps,
             "width": base_width,
             "style": road_style,
         })
 
+    # CITY-006: add loop-closure roads — connect pairs within 1.5× the MST
+    # average edge length that don't already have a direct edge.  This turns
+    # the pure tree into a looped street network.
+    if len(mst_edges) > 0:
+        avg_mst_dist = sum(dist_matrix[i][j] for i, j in mst_edges) / len(mst_edges)
+        loop_threshold = avg_mst_dist * 1.5
+        for i in range(n):
+            for j in range(i + 1, n):
+                key = (i, j)
+                if key in edge_set:
+                    continue
+                if dist_matrix[i][j] <= loop_threshold:
+                    # Add with ~30% probability to avoid too many cross-streets
+                    if rng.random() < 0.30:
+                        edge_set.add(key)
+                        cps = _road_curve_controls(positions[i], positions[j], rng, curviness=0.15)
+                        roads.append({
+                            "start": positions[i],
+                            "end": positions[j],
+                            "control_points": cps,
+                            "width": base_width * 0.8,  # slightly narrower side streets
+                            "style": road_style,
+                            "is_loop_road": True,
+                        })
+
     # Main road: from settlement edge toward center (closest building)
-    # Find the building closest to center
     closest_idx = min(range(n), key=lambda k: _dist2d(positions[k], center))
-    # Determine edge point: extend outward from center through the farthest building
-    farthest_idx = max(
-        range(n), key=lambda k: _dist2d(positions[k], center)
-    )
+    farthest_idx = max(range(n), key=lambda k: _dist2d(positions[k], center))
     far_pos = positions[farthest_idx]
     edge_angle = _angle_to(center, far_pos)
     farthest_dist = _dist2d(center, far_pos)
@@ -1004,15 +1128,113 @@ def _generate_roads(
         center[0] + math.cos(edge_angle) * (farthest_dist + 10.0),
         center[1] + math.sin(edge_angle) * (farthest_dist + 10.0),
     )
+    main_start = (round(edge_point[0], 2), round(edge_point[1], 2))
+    main_end = positions[closest_idx]
+    cps = _road_curve_controls(main_start, main_end, rng, curviness=0.1)
     roads.append({
-        "start": (round(edge_point[0], 2), round(edge_point[1], 2)),
-        "end": positions[closest_idx],
+        "start": main_start,
+        "end": main_end,
+        "control_points": cps,
         "width": base_width + 1.0,
         "style": road_style,
         "is_main_road": True,
     })
 
     return roads
+
+
+def _generate_alleys(
+    buildings: list[dict[str, Any]],
+    roads: list[dict[str, Any]],
+    rng: random.Random,
+) -> list[dict[str, Any]]:
+    """CITY-004: Generate narrow alley segments between adjacent building plots.
+
+    Alleys are placed between pairs of buildings that are close together but
+    do not already have a road connecting them.  Each alley is narrower than
+    a standard road and is flagged ``is_alley=True``.
+
+    Returns
+    -------
+    list of dict
+        Alley segment specifications (same schema as road segments).
+    """
+    alleys: list[dict[str, Any]] = []
+    if len(buildings) < 2:
+        return alleys
+
+    # Build a set of already-connected building pairs (from roads)
+    positions = [b["position"] for b in buildings]
+    connected: set[tuple[int, int]] = set()
+    for road in roads:
+        s, e = road["start"], road["end"]
+        for i, pi in enumerate(positions):
+            if _dist2d(pi, s) < 0.5:
+                for j, pj in enumerate(positions):
+                    if i != j and _dist2d(pj, e) < 0.5:
+                        connected.add((min(i, j), max(i, j)))
+
+    # Alley gap threshold: buildings within 6 m of each other get an alley
+    alley_threshold = 6.0
+    for i in range(len(buildings)):
+        for j in range(i + 1, len(buildings)):
+            key = (i, j)
+            if key in connected:
+                continue
+            d = _dist2d(positions[i], positions[j])
+            if d <= alley_threshold:
+                mid = (
+                    (positions[i][0] + positions[j][0]) / 2.0,
+                    (positions[i][1] + positions[j][1]) / 2.0,
+                )
+                cps = _road_curve_controls(positions[i], positions[j], rng, curviness=0.05)
+                alleys.append({
+                    "start": positions[i],
+                    "end": positions[j],
+                    "control_points": cps,
+                    "width": 1.0,
+                    "style": "dirt_path",
+                    "is_alley": True,
+                })
+
+    return alleys
+
+
+def _enforce_road_frontage(
+    buildings: list[dict[str, Any]],
+    roads: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """CITY-005: Tag buildings with their nearest road and frontage distance.
+
+    For each building, find the closest road segment and annotate the building
+    dict with ``nearest_road_dist`` (metres) and ``has_road_frontage`` (bool,
+    True when within 8 m of a road).  Buildings without frontage are flagged
+    so the caller can reposition or warn.
+
+    Returns the annotated buildings list (mutates in place and returns it).
+    """
+    for building in buildings:
+        pos = building["position"]
+        min_dist = float("inf")
+
+        for road in roads:
+            sx, sy = road["start"]
+            ex, ey = road["end"]
+            dx, dy = ex - sx, ey - sy
+            seg_len_sq = dx * dx + dy * dy
+            if seg_len_sq < 1e-9:
+                cp = (sx, sy)
+            else:
+                t = max(0.0, min(1.0, ((pos[0] - sx) * dx + (pos[1] - sy) * dy) / seg_len_sq))
+                cp = (sx + t * dx, sy + t * dy)
+            d = _dist2d(pos, cp)
+            if d < min_dist:
+                min_dist = d
+
+        building["nearest_road_dist"] = round(min_dist, 2)
+        building["has_road_frontage"] = min_dist <= 8.0
+
+    return buildings
 
 
 # ---------------------------------------------------------------------------
@@ -1980,7 +2202,13 @@ def generate_city_districts(
         # Generate local road grid within the district
         roads = _generate_roads(
             buildings, d_center, district_config["road_style"],
+            seed=seed + di * 7919,
         )
+        # CITY-004: add alleys between tightly-packed plots
+        alleys = _generate_alleys(buildings, roads, district_rng)
+        roads = roads + alleys
+        # CITY-005: annotate buildings with road frontage info
+        _enforce_road_frontage(buildings, roads)
 
         district_spec = {
             "district_type": dtype,
@@ -2694,7 +2922,12 @@ def generate_settlement(
         varied_buildings.append(varied)
 
     # 3. Generate roads
-    roads = _generate_roads(varied_buildings, center, effective_config["road_style"])
+    roads = _generate_roads(varied_buildings, center, effective_config["road_style"], seed=seed)
+    # CITY-004: add alleys between tightly-packed plots
+    alleys = _generate_alleys(varied_buildings, roads, rng)
+    roads = roads + alleys
+    # CITY-005: annotate buildings with road frontage info
+    _enforce_road_frontage(varied_buildings, roads)
 
     # 4. Scatter props
     props = _scatter_settlement_props(

@@ -1743,11 +1743,14 @@ def handle_setup_terrain_biome(params: dict[str, Any]) -> dict[str, Any]:
         if fi < len(mesh.polygons):
             mesh.polygons[fi].material_index = mat_idx + slot_offset
 
-    # Paint vertex colors
+    # Paint vertex colors — MISC-013: use color_attributes API (Blender 3.4+)
+    # mesh.vertex_colors is deprecated; color_attributes is the modern replacement.
     vc_layer_name = f"TerrainSplatmap_{biome_name}"
-    if vc_layer_name not in mesh.vertex_colors:
-        mesh.vertex_colors.new(name=vc_layer_name)
-    vc_layer = mesh.vertex_colors[vc_layer_name]
+    if vc_layer_name not in mesh.color_attributes:
+        mesh.color_attributes.new(
+            name=vc_layer_name, type="FLOAT_COLOR", domain="CORNER"
+        )
+    vc_layer = mesh.color_attributes[vc_layer_name]
 
     raw_colors = blend_terrain_vertex_colors(mesh_data, biome_name)
 
@@ -1755,7 +1758,7 @@ def handle_setup_terrain_biome(params: dict[str, Any]) -> dict[str, Any]:
     if corruption_level > 0.0:
         raw_colors = apply_corruption_tint(raw_colors, corruption_level)
 
-    # Write vertex colors per-loop (Blender stores colors per loop, not vertex)
+    # Write vertex colors per-loop (CORNER domain stores one value per loop)
     for poly in mesh.polygons:
         for li in poly.loop_indices:
             vi = mesh.loops[li].vertex_index

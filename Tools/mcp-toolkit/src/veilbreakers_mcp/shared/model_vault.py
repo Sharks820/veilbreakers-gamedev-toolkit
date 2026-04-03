@@ -205,6 +205,70 @@ class ModelVault:
                     paths.append(v["path"])
         return paths
 
+    def prune_old_generations(
+        self,
+        *,
+        keep_last: int = 200,
+        remove_missing_files: bool = True,
+    ) -> dict:
+        """MISC-008: Prune vault to prevent unbounded growth.
+
+        Removes entries whose model files are missing from disk (optional) and
+        keeps only the most recent ``keep_last`` generations.  Entries that
+        have a selected variant are never pruned regardless of age.
+
+        Args:
+            keep_last: Maximum number of generations to retain.
+            remove_missing_files: If True, also prune entries where ALL
+                variants have missing files (and none are selected).
+
+        Returns:
+            Dict with ``removed_missing`` and ``removed_old`` counts.
+        """
+        gens = self._data["generations"]
+        removed_missing = 0
+        removed_old = 0
+
+        if remove_missing_files:
+            surviving = []
+            for gen in gens:
+                any_selected = any(v.get("selected") for v in gen["variants"])
+                if any_selected:
+                    surviving.append(gen)
+                    continue
+                any_file_present = any(
+                    v.get("path") and os.path.exists(v["path"])
+                    for v in gen["variants"]
+                )
+                if any_file_present:
+                    surviving.append(gen)
+                else:
+                    removed_missing += 1
+                    logger.info(
+                        "Vault prune: removing %s (all files missing)",
+                        gen["generation_id"],
+                    )
+            gens = surviving
+
+        if len(gens) > keep_last:
+            # Keep selected entries plus the tail of the list (most recent)
+            selected = [g for g in gens if any(v.get("selected") for v in g["variants"])]
+            unselected = [g for g in gens if not any(v.get("selected") for v in g["variants"])]
+            keep_unselected = max(keep_last - len(selected), 0)
+            dropped = unselected[:-keep_unselected] if keep_unselected else unselected
+            removed_old = len(dropped)
+            gens = selected + unselected[-keep_unselected:] if keep_unselected else selected
+
+        self._data["generations"] = gens
+        if removed_missing or removed_old:
+            self._save()
+            logger.info(
+                "Vault pruned: %d missing-file entries, %d old entries removed",
+                removed_missing,
+                removed_old,
+            )
+        return {"removed_missing": removed_missing, "removed_old": removed_old}
+
     def verify_files(self) -> dict:
         """Check all vault entries and report missing files."""
         missing = []

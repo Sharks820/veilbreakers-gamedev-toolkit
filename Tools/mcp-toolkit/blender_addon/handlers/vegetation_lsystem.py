@@ -659,8 +659,10 @@ def generate_lsystem_tree(params: dict) -> dict:
     ring_segments = params.get("ring_segments", 6)
     do_roots = params.get("generate_roots", True)
 
-    # Cap iterations to prevent excessive geometry
-    iterations = max(1, min(iterations, 8))
+    # MISC-020: cap iterations to 6 (was 8); oak at 8 iterations produces
+    # ~4.7M verts which is unusable in a game scene. 6 iterations gives
+    # AAA-quality detail (~290K verts) while remaining real-time viable.
+    iterations = max(1, min(iterations, 6))
 
     # Expand L-system
     lstring = expand_lsystem(grammar["axiom"], grammar["rules"], iterations)

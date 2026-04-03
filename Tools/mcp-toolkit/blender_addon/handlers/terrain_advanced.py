@@ -30,6 +30,31 @@ Vec3 = tuple[float, float, float]
 
 
 # ---------------------------------------------------------------------------
+# Shared grid-dimension helper
+# ---------------------------------------------------------------------------
+
+def _detect_grid_dims(bm) -> tuple[int, int]:
+    """WORLD-004: Detect actual (rows, cols) of a terrain grid mesh.
+
+    Counts unique rounded X and Y coordinate positions to infer actual
+    grid width and height.  Robust for non-square terrain meshes where
+    ``int(math.sqrt(vert_count))`` would give wrong dimensions and cause
+    numpy reshape crashes.
+
+    Returns:
+        (rows, cols) tuple suitable for ``array.reshape(rows, cols)``.
+    """
+    xs = set(round(v.co.x, 3) for v in bm.verts)
+    ys = set(round(v.co.y, 3) for v in bm.verts)
+    cols, rows = len(xs), len(ys)
+    if cols * rows == len(bm.verts):
+        return rows, cols
+    # Fallback: assume square
+    side = max(2, int(math.sqrt(len(bm.verts))))
+    return side, side
+
+
+# ---------------------------------------------------------------------------
 # Cubic Bezier spline utilities (pure logic)
 # ---------------------------------------------------------------------------
 
@@ -733,9 +758,9 @@ def handle_terrain_layers(params: dict) -> dict:
             bm.from_mesh(obj.data)
             bm.verts.ensure_lookup_table()
 
-            # Build base heightmap from current mesh
-            res = max(2, int(math.sqrt(len(bm.verts))))
-            base = np.array([v.co.z for v in bm.verts]).reshape(res, -1)
+            # Build base heightmap from current mesh (WORLD-004: robust dims)
+            rows, cols = _detect_grid_dims(bm)
+            base = np.array([v.co.z for v in bm.verts]).reshape(rows, cols)
 
             merged = flatten_layers(base, layers)
             flat = merged.ravel()
@@ -912,8 +937,9 @@ def handle_erosion_paint(params: dict) -> dict:
         bm.from_mesh(obj.data)
         bm.verts.ensure_lookup_table()
 
-        res = max(2, int(math.sqrt(len(bm.verts))))
-        heightmap = np.array([v.co.z for v in bm.verts]).reshape(res, -1)
+        # WORLD-004: Detect actual grid dimensions (robust to non-square terrain)
+        rows, cols = _detect_grid_dims(bm)
+        heightmap = np.array([v.co.z for v in bm.verts]).reshape(rows, cols)
 
         dims = obj.dimensions
         terrain_size = (dims.x, dims.y)
@@ -1320,8 +1346,9 @@ def handle_terrain_stamp(params: dict) -> dict:
         bm.from_mesh(obj.data)
         bm.verts.ensure_lookup_table()
 
-        res = max(2, int(math.sqrt(len(bm.verts))))
-        heightmap = np.array([v.co.z for v in bm.verts]).reshape(res, -1)
+        # WORLD-004: Detect actual grid dimensions (robust to non-square terrain)
+        rows, cols = _detect_grid_dims(bm)
+        heightmap = np.array([v.co.z for v in bm.verts]).reshape(rows, cols)
 
         dims = obj.dimensions
         terrain_size = (dims.x, dims.y)

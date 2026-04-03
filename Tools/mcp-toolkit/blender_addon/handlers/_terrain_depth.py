@@ -580,6 +580,9 @@ def detect_cliff_edges(
     placements: list[dict[str, Any]] = []
     cell_to_world = terrain_size / max(rows, cols)
 
+    # TERR-001: Compute gradient once before loop (not per-cluster)
+    dy, dx = np.gradient(heightmap)
+
     for lid in range(label_id):
         cells = np.argwhere(labels == lid)
         if len(cells) < min_cluster_size:
@@ -603,7 +606,6 @@ def detect_cliff_edges(
         wz = float(heightmap[ri, ci])
 
         # Gradient direction at center (for rotation)
-        dy, dx = np.gradient(heightmap)
         grad_x = float(dx[ri, ci])
         grad_y = float(dy[ri, ci])
         face_angle = math.atan2(grad_y, grad_x)

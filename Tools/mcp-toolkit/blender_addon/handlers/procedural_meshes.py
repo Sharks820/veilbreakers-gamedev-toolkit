@@ -590,7 +590,7 @@ def _enhance_mesh_detail(
     vertices: list[tuple[float, float, float]],
     faces: list[tuple[int, ...]],
     *,
-    min_vertex_count: int = 500,
+    min_vertex_count: int = 100,  # MISC-012: was 500, which blows up small props
     bevel_offset: float = 0.015,
     sharp_angle_deg: float = 35.0,
 ) -> tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]:

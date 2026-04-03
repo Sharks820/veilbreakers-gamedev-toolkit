@@ -269,6 +269,45 @@ SURFACE_ZONES: dict[str, dict[str, Any]] = {
     "ceiling": {"z_range": (2.5, 3.0), "normal": (0, 0, -1)},
 }
 
+# ---------------------------------------------------------------------------
+# PROP-002: Functional relationship map
+#
+# Maps prop types to furniture types they should prefer to cluster near.
+# Props will be preferentially placed within FUNCTIONAL_BIAS_RADIUS metres
+# of their associated furniture piece.
+# ---------------------------------------------------------------------------
+
+FUNCTIONAL_RELATIONSHIPS: dict[str, list[str]] = {
+    # Crafting / workshop
+    "hammer": ["workbench", "anvil", "forge"],
+    "tongs": ["anvil", "forge"],
+    "chisel": ["workbench", "anvil"],
+    "saw": ["workbench"],
+    "nails": ["workbench", "anvil"],
+    "metal_scrap": ["anvil", "forge"],
+    "wood_shaving": ["workbench"],
+    # Kitchen / food
+    "plate": ["table", "counter", "kitchen_table"],
+    "food_item": ["table", "counter", "kitchen_table", "barrel"],
+    "bowl": ["table", "counter", "shelf", "kitchen_table"],
+    "mug": ["table", "counter", "bar_counter"],
+    "bottle": ["shelf", "bar_counter", "counter"],
+    "coin_pile": ["table", "counter", "chest"],
+    "candle": ["table", "desk", "shelf", "altar"],
+    # Study / desk
+    "book": ["desk", "bookshelf", "shelf"],
+    "quill_ink": ["desk"],
+    "scroll": ["desk", "shelf", "bookshelf"],
+    "potion_bottle": ["desk", "shelf", "alchemy_table"],
+    "mortar": ["alchemy_table", "desk"],
+    # Altar / ritual
+    "skull": ["altar", "pedestal"],
+    "ritual_candle": ["altar"],
+    "offering_bowl": ["altar", "pedestal"],
+}
+
+_FUNCTIONAL_BIAS_RADIUS = 1.2  # metres -- prefer to place within this range of related furniture
+
 
 # ---------------------------------------------------------------------------
 # Placement Engine
@@ -363,6 +402,94 @@ def _collides_with_furniture(
     return False
 
 
+def _furniture_surface_z(furn: dict[str, Any]) -> float:
+    """PROP-001: Return the top-surface Z of a furniture piece.
+
+    Uses position.z (base or centroid) + half height.  Falls back to
+    the ``table_surface`` zone default when height data is missing.
+    """
+    fp = furn.get("position", (0, 0, 0))
+    fs = furn.get("size", (1, 1, 1))
+    base_z = fp[2] if len(fp) > 2 else 0.0
+    height = fs[2] if len(fs) > 2 else fs[1] if len(fs) > 1 else 1.0
+    # position may be centroid (add half) or base (add full height).
+    # We check a "position_is_base" hint; default assumes centroid.
+    if furn.get("position_is_base", False):
+        return base_z + height + 0.01
+    return base_z + height / 2.0 + 0.01
+
+
+def _sample_furniture_surface(
+    zone_name: str,
+    furniture: list[dict[str, Any]],
+    rng: random.Random,
+    room_bounds: tuple,
+) -> tuple[float, float, float] | None:
+    """PROP-001: Pick a random XYZ position ON a furniture surface.
+
+    Filters furniture to types relevant for *zone_name* (table_surface →
+    tables/desks/counters; shelves → shelves/bookcases).  Returns None when
+    no matching furniture exists so the caller can fall back to the generic
+    Z-range approach.
+    """
+    _TABLE_TYPES = frozenset({
+        "table", "desk", "counter", "bar_counter", "kitchen_table",
+        "workbench", "altar", "pedestal", "alchemy_table", "anvil",
+    })
+    _SHELF_TYPES = frozenset({
+        "shelf", "bookshelf", "rack", "cabinet",
+    })
+
+    if zone_name == "table_surface":
+        candidates = [f for f in furniture if f.get("type", "table") in _TABLE_TYPES]
+    elif zone_name == "shelves":
+        candidates = [f for f in furniture if f.get("type", "shelf") in _SHELF_TYPES]
+    else:
+        return None
+
+    if not candidates:
+        return None
+
+    furn = rng.choice(candidates)
+    fp = furn.get("position", (0, 0, 0))
+    fs = furn.get("size", (1, 1, 1))
+
+    # Sample uniformly on the top surface with a small inset
+    inset = 0.05
+    half_x = max(fs[0] / 2.0 - inset, 0.0)
+    half_y = fs[1] / 2.0 - inset if len(fs) > 1 else fs[0] / 2.0 - inset
+    half_y = max(half_y, 0.0)
+
+    x = fp[0] + rng.uniform(-half_x, half_x)
+    y = fp[1] + rng.uniform(-half_y, half_y)
+    z = _furniture_surface_z(furn)
+
+    return x, y, z
+
+
+def _find_functional_anchor(
+    prop_type: str,
+    furniture: list[dict[str, Any]],
+) -> tuple[float, float] | None:
+    """PROP-002: Return XY of the nearest preferred furniture for *prop_type*.
+
+    Returns None if no relevant furniture exists or the prop has no
+    functional relationship defined.
+    """
+    related_types = FUNCTIONAL_RELATIONSHIPS.get(prop_type)
+    if not related_types:
+        return None
+
+    related_types_set = frozenset(related_types)
+    matches = [f for f in furniture if f.get("type", "") in related_types_set]
+    if not matches:
+        return None
+
+    # Return centroid of first match (deterministic; caller adds random offset)
+    fp = matches[0].get("position", (0, 0, 0))
+    return float(fp[0]), float(fp[1])
+
+
 def _compute_zone_z(
     zone: str,
     rng: random.Random,
@@ -444,8 +571,56 @@ def compute_detail_prop_placements(
                     scale_range, wall_position, rng,
                 )
                 placements.extend(wall_props)
+
+            elif zone_name in ("table_surface", "shelves"):
+                # PROP-001: Place props ON furniture surfaces, not at random XY.
+                # Sample directly from matching furniture top surfaces.
+                placed = 0
+                for _ in range(target_count * 10):  # up to 10 attempts per slot
+                    if placed >= target_count:
+                        break
+
+                    # Try to land on an actual piece of furniture
+                    surface_pos = _sample_furniture_surface(
+                        zone_name, furniture_positions, rng, room_bounds,
+                    )
+                    if surface_pos is not None:
+                        world_x, world_y, z = surface_pos
+                    else:
+                        # No matching furniture -- fall back to generic Z range
+                        world_x = rng.uniform(min_x, max_x)
+                        world_y = rng.uniform(min_y, max_y)
+                        z = _compute_zone_z(zone_name, rng)
+
+                    scale = rng.uniform(scale_range[0], scale_range[1])
+                    rotation = rng.uniform(0, 360)
+
+                    # PROP-002: Functional relationship bias -- if this prop has
+                    # a preferred furniture anchor, nudge position toward it.
+                    anchor = _find_functional_anchor(prop_type, furniture_positions)
+                    if anchor is not None:
+                        ax, ay = anchor
+                        # Blend 60% toward anchor within bias radius
+                        dx = ax - world_x
+                        dy = ay - world_y
+                        dist = math.sqrt(dx * dx + dy * dy)
+                        if dist > _FUNCTIONAL_BIAS_RADIUS:
+                            blend = _FUNCTIONAL_BIAS_RADIUS / max(dist, 0.001)
+                            world_x += dx * blend * 0.6
+                            world_y += dy * blend * 0.6
+
+                    placements.append({
+                        "type": prop_type,
+                        "position": (world_x, world_y, z),
+                        "rotation": rotation,
+                        "scale": scale,
+                        "zone": zone_name,
+                        "on_furniture": surface_pos is not None,
+                    })
+                    placed += 1
+
             else:
-                # Floor / table / shelf zones: 2D Poisson scatter
+                # Floor zone: 2D Poisson scatter, avoid furniture footprints
                 candidates = _poisson_disk_2d(
                     room_width, room_depth, min_dist, rng,
                 )
@@ -465,6 +640,23 @@ def compute_detail_prop_placements(
                     z = _compute_zone_z(zone_name, rng)
                     scale = rng.uniform(scale_range[0], scale_range[1])
                     rotation = rng.uniform(0, 360)
+
+                    # PROP-002: Functional bias for floor props too
+                    anchor = _find_functional_anchor(prop_type, furniture_positions)
+                    if anchor is not None:
+                        ax, ay = anchor
+                        dx = ax - world_x
+                        dy = ay - world_y
+                        dist = math.sqrt(dx * dx + dy * dy)
+                        if dist > _FUNCTIONAL_BIAS_RADIUS:
+                            blend = _FUNCTIONAL_BIAS_RADIUS / max(dist, 0.001)
+                            new_x = world_x + dx * blend * 0.4
+                            new_y = world_y + dy * blend * 0.4
+                            # Only apply if nudged position still avoids furniture
+                            if not _collides_with_furniture(
+                                new_x, new_y, furniture_positions
+                            ):
+                                world_x, world_y = new_x, new_y
 
                     placements.append({
                         "type": prop_type,

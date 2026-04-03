@@ -47,6 +47,31 @@ _VALID_TERRAIN_TYPES = frozenset(TERRAIN_PRESETS.keys())
 _VALID_EROSION_MODES = frozenset({"none", "hydraulic", "thermal", "both"})
 _MAX_RESOLUTION = 4096  # 8192 can OOM Blender; 4096 is practical AAA limit
 
+
+def _detect_grid_dims(bm) -> tuple[int, int]:
+    """WORLD-004: Detect actual (rows, cols) of a terrain grid mesh.
+
+    Counts unique rounded X and Y coordinate positions to infer actual
+    grid width and height.  This is robust for non-square terrain meshes
+    (e.g. 256×512) where ``int(math.sqrt(vert_count))`` would give wrong
+    dimensions and cause reshape crashes.
+
+    Falls back to sqrt-based square assumption only when coordinate
+    detection produces an inconsistent vertex count.
+
+    Returns:
+        (rows, cols) tuple suitable for ``array.reshape(rows, cols)``.
+    """
+    xs = set(round(v.co.x, 3) for v in bm.verts)
+    ys = set(round(v.co.y, 3) for v in bm.verts)
+    cols, rows = len(xs), len(ys)
+    if cols * rows == len(bm.verts):
+        return rows, cols
+    # Fallback: assume square
+    side = max(2, int(math.sqrt(len(bm.verts))))
+    return side, side
+
+
 # ---------------------------------------------------------------------------
 # VeilBreakers biome presets
 # ---------------------------------------------------------------------------
@@ -663,14 +688,13 @@ def handle_carve_river(params: dict) -> dict:
     bm.from_mesh(mesh)
     bm.verts.ensure_lookup_table()
 
-    # Determine grid dimensions from vertex count (assumes square grid)
-    vert_count = len(bm.verts)
-    side = int(math.sqrt(vert_count))
+    # WORLD-004: Detect actual grid dimensions (robust to non-square terrain)
+    rows, cols = _detect_grid_dims(bm)
 
     # Extract heights
     heights = np.array([v.co.z for v in bm.verts])
     height_scale = heights.max() if heights.max() > 0 else 1.0
-    heightmap = (heights / height_scale).reshape(side, side)
+    heightmap = (heights / height_scale).reshape(rows, cols)
 
     # Carve river
     path, carved = carve_river_path(
@@ -729,16 +753,16 @@ def handle_generate_road(params: dict) -> dict:
     bm.from_mesh(mesh)
     bm.verts.ensure_lookup_table()
 
-    vert_count = len(bm.verts)
-    side = int(math.sqrt(vert_count))
+    # WORLD-004: Detect actual grid dimensions (robust to non-square terrain)
+    rows, cols = _detect_grid_dims(bm)
 
     heights = np.array([v.co.z for v in bm.verts])
     height_scale = heights.max() if heights.max() > 0 else 1.0
-    heightmap = (heights / height_scale).reshape(side, side)
+    heightmap = (heights / height_scale).reshape(rows, cols)
 
     # Convert width from meters to grid cells if it looks like meters
     terrain_scale = obj.dimensions.x if obj.dimensions.x > 0 else 100.0
-    cell_size = terrain_scale / max(side - 1, 1)
+    cell_size = terrain_scale / max(cols - 1, 1)
     if width > 10:  # likely specified in meters, not cells
         width = max(1, int(width / cell_size))
 
@@ -759,7 +783,7 @@ def handle_generate_road(params: dict) -> dict:
     road_mesh_name = f"{terrain_name}_Road"
     terrain_obj = bpy.data.objects.get(terrain_name)
     terrain_size = terrain_obj.dimensions.x if terrain_obj else 100.0
-    cell_size = terrain_size / max(side - 1, 1)
+    cell_size = terrain_size / max(cols - 1, 1)
 
     road_bm = bmesh.new()
     road_uv = road_bm.loops.layers.uv.new("UVMap")
@@ -772,12 +796,12 @@ def handle_generate_road(params: dict) -> dict:
             r0, c0 = path[pi]
             r1, c1 = path[pi + 1]
             # Convert grid coords to world coords
-            x0 = (c0 / max(side - 1, 1)) * terrain_size - terrain_size / 2
-            y0 = (r0 / max(side - 1, 1)) * terrain_size - terrain_size / 2
-            x1 = (c1 / max(side - 1, 1)) * terrain_size - terrain_size / 2
-            y1 = (r1 / max(side - 1, 1)) * terrain_size - terrain_size / 2
-            z0 = float(graded_flat[r0 * side + c0]) * height_scale + 0.03
-            z1 = float(graded_flat[r1 * side + c1]) * height_scale + 0.03
+            x0 = (c0 / max(cols - 1, 1)) * terrain_size - terrain_size / 2
+            y0 = (r0 / max(rows - 1, 1)) * terrain_size - terrain_size / 2
+            x1 = (c1 / max(cols - 1, 1)) * terrain_size - terrain_size / 2
+            y1 = (r1 / max(rows - 1, 1)) * terrain_size - terrain_size / 2
+            z0 = float(graded_flat[r0 * cols + c0]) * height_scale + 0.03
+            z1 = float(graded_flat[r1 * cols + c1]) * height_scale + 0.03
 
             # Perpendicular direction for road width
             dx, dy = x1 - x0, y1 - y0
@@ -1132,8 +1156,8 @@ def handle_export_heightmap(params: dict) -> dict:
     bm.from_mesh(mesh)
     bm.verts.ensure_lookup_table()
 
-    vert_count = len(bm.verts)
-    side = int(math.sqrt(vert_count))
+    # WORLD-004: Detect actual grid dimensions (robust to non-square terrain)
+    rows, cols = _detect_grid_dims(bm)
 
     heights = np.array([v.co.z for v in bm.verts])
     bm.free()
@@ -1145,15 +1169,15 @@ def handle_export_heightmap(params: dict) -> dict:
     else:
         heightmap = np.zeros_like(heights)
 
-    heightmap = heightmap.reshape(side, side)
+    heightmap = heightmap.reshape(rows, cols)
 
-    # Unity compat: resize to nearest power-of-two + 1
+    # Unity compat: resize to nearest power-of-two + 1 (use cols as ref dimension)
     if unity_compat:
-        target = _nearest_pot_plus_1(side)
-        if target != side:
+        target = _nearest_pot_plus_1(cols)
+        if target != cols:
             # Simple nearest-neighbor resize
-            x_indices = np.round(np.linspace(0, side - 1, target)).astype(int)
-            y_indices = np.round(np.linspace(0, side - 1, target)).astype(int)
+            x_indices = np.round(np.linspace(0, cols - 1, target)).astype(int)
+            y_indices = np.round(np.linspace(0, rows - 1, target)).astype(int)
             heightmap = heightmap[np.ix_(y_indices, x_indices)]
 
     # Export

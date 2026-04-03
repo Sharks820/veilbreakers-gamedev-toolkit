@@ -2047,7 +2047,7 @@ def scan_project(
         # Atomic write: write to temp file, then rename
         temp_file = cache_file.with_suffix(".tmp")
         try:
-            with open(temp_file, "w") as f:
+            with open(temp_file, "w", encoding="utf-8") as f:
                 json.dump(cache, f, indent=2)
             temp_file.replace(cache_file)  # Atomic rename on Windows/Unix
         except (OSError, IOError):

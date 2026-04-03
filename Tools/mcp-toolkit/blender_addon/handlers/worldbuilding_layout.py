@@ -627,27 +627,32 @@ def handle_generate_hearthvale(params: dict) -> dict:
             obj.parent = parent
             bpy.context.collection.objects.link(obj)
             bm = bmesh.new()
-            hw, hd = fp[0] / 2.0, fp[1] / 2.0
-            wh = 3.5 * bld.get("floors", 1)
-            vs = [
-                bm.verts.new((-hw, -hd, 0.0)),
-                bm.verts.new((hw, -hd, 0.0)),
-                bm.verts.new((hw, hd, 0.0)),
-                bm.verts.new((-hw, hd, 0.0)),
-                bm.verts.new((-hw, -hd, wh)),
-                bm.verts.new((hw, -hd, wh)),
-                bm.verts.new((hw, hd, wh)),
-                bm.verts.new((-hw, hd, wh)),
-            ]
-            for face_verts in [
-                [vs[0], vs[1], vs[2], vs[3]], [vs[4], vs[5], vs[6], vs[7]],
-                [vs[0], vs[1], vs[5], vs[4]], [vs[2], vs[3], vs[7], vs[6]],
-                [vs[0], vs[3], vs[7], vs[4]], [vs[1], vs[2], vs[6], vs[5]],
-            ]:
-                bm.faces.new(face_verts)
-            bm.to_mesh(mesh)
-            bm.free()
-            buildings_created += 1
+            try:
+                hw, hd = fp[0] / 2.0, fp[1] / 2.0
+                # WORLD-005: use configurable floor_height (default 3.5 m)
+                floor_height = float(params.get("floor_height", 3.5))
+                wh = floor_height * bld.get("floors", 1)
+                vs = [
+                    bm.verts.new((-hw, -hd, 0.0)),
+                    bm.verts.new((hw, -hd, 0.0)),
+                    bm.verts.new((hw, hd, 0.0)),
+                    bm.verts.new((-hw, hd, 0.0)),
+                    bm.verts.new((-hw, -hd, wh)),
+                    bm.verts.new((hw, -hd, wh)),
+                    bm.verts.new((hw, hd, wh)),
+                    bm.verts.new((-hw, hd, wh)),
+                ]
+                for face_verts in [
+                    [vs[0], vs[1], vs[2], vs[3]], [vs[4], vs[5], vs[6], vs[7]],
+                    [vs[0], vs[1], vs[5], vs[4]], [vs[2], vs[3], vs[7], vs[6]],
+                    [vs[0], vs[3], vs[7], vs[4]], [vs[1], vs[2], vs[6], vs[5]],
+                ]:
+                    bm.faces.new(face_verts)
+                bm.to_mesh(mesh)
+                buildings_created += 1
+            finally:
+                # WORLD-007: always free bmesh even on exception
+                bm.free()
 
     # Materialize perimeter walls using AAA stone wall generator
     from .building_quality import generate_stone_wall, generate_archway
@@ -774,8 +779,16 @@ def generate_world_graph(
     locations: list[dict],
     target_distance: float = 105.0,
     seed: int = 0,
+    add_landmarks: bool = True,
+    world_bounds: tuple[float, float, float, float] = (-500.0, -500.0, 500.0, 500.0),
 ) -> WorldGraph:
     """Generate a connected world graph from location data (WORLD-04).
+
+    CITY-008: Optionally seeds natural landmarks (peaks, lakes, ancient ruins,
+    crossroads shrines) into the graph.  Landmarks are placed in gaps between
+    existing locations to give waypoint context to world navigation.  They are
+    tagged ``is_landmark=True`` so downstream systems can render them differently
+    from functional settlements.
 
     Uses proximity-based MST to ensure connectivity, then adds extra edges
     for loop paths.  Validates that edges approximate *target_distance*
@@ -789,6 +802,10 @@ def generate_world_graph(
         Target walking distance between connected POIs (default 105 m).
     seed : int
         Random seed.
+    add_landmarks : bool
+        If True, scatter natural landmark nodes into large empty regions.
+    world_bounds : tuple
+        (min_x, min_y, max_x, max_y) bounding box used when placing landmarks.
 
     Returns
     -------
@@ -796,6 +813,45 @@ def generate_world_graph(
         Graph with nodes and edges.
     """
     rng = random.Random(seed)
+
+    # CITY-008: generate landmark nodes for large empty regions
+    landmark_locs: list[dict] = []
+    if add_landmarks and locations:
+        _LANDMARK_TYPES = [
+            "ancient_ruins", "standing_stones", "mountain_peak",
+            "forest_shrine", "river_crossing", "cliff_overlook",
+            "haunted_tree", "burial_mound", "forgotten_well",
+        ]
+        min_x, min_y, max_x, max_y = world_bounds
+        # Place one landmark per ~3 locations, up to 6 max
+        landmark_count = min(6, max(1, len(locations) // 3))
+        placed_landmark_positions: list[tuple[float, float]] = [
+            (loc["position"][0], loc["position"][1]) for loc in locations
+        ]
+        for li in range(landmark_count):
+            best_pos: Optional[tuple[float, float]] = None
+            best_min_dist = 0.0
+            # Pick the position that maximises minimum distance from all existing nodes
+            for _ in range(30):
+                cx = rng.uniform(min_x * 0.8, max_x * 0.8)
+                cy = rng.uniform(min_y * 0.8, max_y * 0.8)
+                min_d = min(
+                    math.sqrt((cx - px) ** 2 + (cy - py) ** 2)
+                    for px, py in placed_landmark_positions
+                )
+                if min_d > best_min_dist:
+                    best_min_dist = min_d
+                    best_pos = (cx, cy)
+            if best_pos and best_min_dist > target_distance * 0.5:
+                ltype = rng.choice(_LANDMARK_TYPES)
+                lname = f"{ltype.replace('_', ' ').title()} {li + 1}"
+                placed_landmark_positions.append(best_pos)
+                landmark_locs.append({
+                    "name": lname,
+                    "type": ltype,
+                    "position": best_pos,
+                    "is_landmark": True,
+                })
 
     nodes = [
         WorldGraphNode(
@@ -805,6 +861,13 @@ def generate_world_graph(
         )
         for loc in locations
     ]
+    # Add landmark nodes (tagged so callers can distinguish them)
+    for lm in landmark_locs:
+        nodes.append(WorldGraphNode(
+            name=lm["name"],
+            location_type=lm["type"],
+            position=(lm["position"][0], lm["position"][1]),
+        ))
 
     if len(nodes) < 2:
         return WorldGraph(nodes=nodes, edges=[])
@@ -960,8 +1023,15 @@ def generate_location_spec(
     path_count: int = 3,
     poi_count: int = 2,
     seed: int = 0,
+    terrain_heightmap: Optional[Any] = None,
+    terrain_slope_threshold: float = 0.4,
 ) -> dict:
     """Generate a complete location specification (WORLD-01).
+
+    CITY-007: Now terrain-aware.  When ``terrain_heightmap`` is provided
+    (a callable ``(x, y) -> float``), buildings are placed only on flat areas
+    (slope < ``terrain_slope_threshold``).  Each building is annotated with
+    its terrain elevation.  High-slope positions are skipped during placement.
 
     Composes building placement + path routing + POI distribution into a
     single location spec.  Pure-logic, no bpy.
@@ -982,6 +1052,27 @@ def generate_location_spec(
             "size": terrain_size,
         },
     }
+
+    def _terrain_elevation(x: float, y: float) -> float:
+        """Sample heightmap if provided, else return 0."""
+        if terrain_heightmap is None:
+            return 0.0
+        try:
+            return float(terrain_heightmap(x, y))
+        except Exception:
+            return 0.0
+
+    def _terrain_slope(x: float, y: float, step: float = 1.0) -> float:
+        """Estimate terrain slope via finite differences.  Returns approximate
+        gradient magnitude.  Returns 0 when no heightmap provided."""
+        if terrain_heightmap is None:
+            return 0.0
+        h_c = _terrain_elevation(x, y)
+        h_e = _terrain_elevation(x + step, y)
+        h_n = _terrain_elevation(x, y + step)
+        gx = (h_e - h_c) / step
+        gy = (h_n - h_c) / step
+        return math.sqrt(gx * gx + gy * gy)
 
     # Building positions (avoid overlap using simple spacing)
     buildings: list[dict] = []
@@ -1011,9 +1102,12 @@ def generate_location_spec(
     building_types = _BUILDING_TYPES.get(location_type, ["building"])
 
     for i in range(building_count):
-        for attempt in range(50):
+        for attempt in range(100):
             bx = rng.uniform(-half * 0.7, half * 0.7)
             by = rng.uniform(-half * 0.7, half * 0.7)
+            # CITY-007: skip high-slope terrain positions
+            if _terrain_slope(bx, by) > terrain_slope_threshold:
+                continue
             # Check minimum spacing
             too_close = False
             for px, py in placed_positions:
@@ -1030,6 +1124,7 @@ def generate_location_spec(
                         round(rng.uniform(6.0, 12.0), 2),
                         round(rng.uniform(6.0, 10.0), 2),
                     ),
+                    "elevation": round(_terrain_elevation(bx, by), 3),
                 })
                 break
     spec["buildings"] = buildings
@@ -1430,12 +1525,13 @@ def generate_market_square(
 
     # Area targets per research spec
     area_map = {"small": 400.0, "medium": 900.0, "large": 2500.0}
-    target_area = area_map.get(size, 900.0)
+    # MISC-019: guard against ZeroDivisionError if area_map ever maps to 0
+    target_area = max(area_map.get(size, 900.0), 1.0)
 
     # Derive rectangle dimensions: roughly 1:1 to 1:2 aspect ratio
-    aspect = rng.uniform(0.65, 1.0)  # width / length ratio
-    length = math.sqrt(target_area / aspect)
-    width = target_area / length
+    _safe_aspect = max(rng.uniform(0.65, 1.0), 0.01)  # width / length ratio
+    length = math.sqrt(target_area / _safe_aspect)
+    width = target_area / max(length, 0.001)
     actual_area = width * length
 
     cx, cy = center
