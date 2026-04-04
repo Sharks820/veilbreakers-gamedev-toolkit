@@ -97,7 +97,7 @@
 - [x] **CITY-03**: Generate walkable interiors for key buildings (tavern, blacksmith, chapel, keep)
 - [x] **CITY-04**: Populate with environmental assets (vegetation, rocks, props, scatter)
 - [x] **CITY-05**: Use Tripo for city props, interior furnishing, and environmental assets
-- [ ] **CITY-06**: zai visual verification -- every area must score AAA or fix+regenerate until it does
+- [x] **CITY-06**: zai visual verification -- every area must score AAA or fix+regenerate until it does
 - [x] **CITY-07**: Full compose_map pipeline execution with all systems wired
 
 ## BRIDGE — Unity Integration
@@ -110,8 +110,8 @@
 
 - [x] **TEST-01**: All existing tests pass (19,850+ baseline)
 - [x] **TEST-02**: New tests for all fixed generators and wired systems
-- [ ] **TEST-03**: Visual regression -- zai before/after for each generator category
-- [ ] **TEST-04**: Opus verification scan after every phase -- follow-up rounds until CLEAN
+- [x] **TEST-03**: Visual regression -- zai before/after for each generator category
+- [x] **TEST-04**: Opus verification scan after every phase -- follow-up rounds until CLEAN
 
 ---
 
@@ -190,12 +190,12 @@
 | CITY-03 | Phase 48 | Complete |
 | CITY-04 | Phase 48 | Complete |
 | CITY-05 | Phase 48 | Complete |
-| CITY-06 | Phase 48 | Pending |
+| CITY-06 | Phase 48 | Complete |
 | CITY-07 | Phase 48 | Complete |
 | TEST-01 | Phase 39, 48 | Complete |
 | TEST-02 | Phase 47, 48 | Complete |
-| TEST-03 | Phase 43, 44, 48 | Pending |
-| TEST-04 | Phase 39-48 (all) | Pending |
+| TEST-03 | Phase 43, 44, 48 | Complete |
+| TEST-04 | Phase 39-48 (all) | Complete |
 
 **Coverage: 67/67 requirements mapped (100%)**
 
