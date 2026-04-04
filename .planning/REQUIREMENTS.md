@@ -92,7 +92,7 @@
 
 ## CITY — Starter City Generation & Verification
 
-- [ ] **CITY-01**: Generate full terrain with cliffs, waterfalls, rivers, multi-biome landscape
+- [x] **CITY-01**: Generate full terrain with cliffs, waterfalls, rivers, multi-biome landscape
 - [ ] **CITY-02**: Generate starter city (Hearthvale) with castle, walls, buildings, roads integrated into terrain
 - [ ] **CITY-03**: Generate walkable interiors for key buildings (tavern, blacksmith, chapel, keep)
 - [ ] **CITY-04**: Populate with environmental assets (vegetation, rocks, props, scatter)
@@ -185,7 +185,7 @@
 | BRIDGE-01 | Phase 47 | Pending |
 | BRIDGE-02 | Phase 47 | Pending |
 | BRIDGE-03 | Phase 47 | Pending |
-| CITY-01 | Phase 48 | Pending |
+| CITY-01 | Phase 48 | Complete |
 | CITY-02 | Phase 48 | Pending |
 | CITY-03 | Phase 48 | Pending |
 | CITY-04 | Phase 48 | Pending |
