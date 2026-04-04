@@ -415,3 +415,127 @@ class TestHeightBlend:
         """With minimal contrast, equal heights should blend to 0.5 * mask."""
         result = height_blend(0.5, 0.5, 1.0, blend_contrast=0.0)
         assert abs(result - 0.5) < 0.1
+
+
+# ===========================================================================
+# Test: CATEGORY_MATERIAL_MAP → MATERIAL_LIBRARY Coverage (MAT-01)
+# ===========================================================================
+
+
+class TestCategoryMaterialMapCoverage:
+    """Verify every CATEGORY_MATERIAL_MAP value exists in MATERIAL_LIBRARY."""
+
+    def test_all_category_map_values_exist_in_library(self):
+        """Every value in CATEGORY_MATERIAL_MAP must exist as a key in MATERIAL_LIBRARY."""
+        from blender_addon.handlers._mesh_bridge import CATEGORY_MATERIAL_MAP
+
+        missing = []
+        for category, material_key in CATEGORY_MATERIAL_MAP.items():
+            if material_key not in MATERIAL_LIBRARY:
+                missing.append(f"{category} -> {material_key}")
+        assert not missing, (
+            f"CATEGORY_MATERIAL_MAP values missing from MATERIAL_LIBRARY: {missing}"
+        )
+
+    def test_clothing_category_exists(self):
+        """Clothing category must be mapped for garment generators."""
+        from blender_addon.handlers._mesh_bridge import CATEGORY_MATERIAL_MAP
+
+        assert "clothing" in CATEGORY_MATERIAL_MAP, (
+            "CATEGORY_MATERIAL_MAP missing 'clothing' entry"
+        )
+
+
+# ===========================================================================
+# Test: Riggable Generators Have Category (MAT-01)
+# ===========================================================================
+
+
+class TestRiggableGeneratorsCategory:
+    """Verify riggable object generators set metadata.category."""
+
+    def test_door_has_category(self):
+        from blender_addon.handlers.riggable_objects import generate_door
+        spec = generate_door()
+        assert spec["metadata"]["category"] == "door"
+
+    def test_chain_has_category(self):
+        from blender_addon.handlers.riggable_objects import generate_chain
+        spec = generate_chain()
+        assert spec["metadata"]["category"] == "chain"
+
+    def test_flag_has_category(self):
+        from blender_addon.handlers.riggable_objects import generate_flag
+        spec = generate_flag()
+        assert spec["metadata"]["category"] == "flag"
+
+    def test_chest_has_category(self):
+        from blender_addon.handlers.riggable_objects import generate_chest
+        spec = generate_chest()
+        assert spec["metadata"]["category"] == "chest"
+
+    def test_drawbridge_has_category(self):
+        from blender_addon.handlers.riggable_objects import generate_drawbridge
+        spec = generate_drawbridge()
+        assert spec["metadata"]["category"] == "drawbridge"
+
+    def test_chandelier_has_category(self):
+        from blender_addon.handlers.riggable_objects import generate_chandelier
+        spec = generate_chandelier()
+        assert spec["metadata"]["category"] == "chandelier"
+
+    def test_cage_has_category(self):
+        from blender_addon.handlers.riggable_objects import generate_cage
+        spec = generate_cage()
+        assert spec["metadata"]["category"] == "cage"
+
+
+# ===========================================================================
+# Test: Creature Generators Have Category (MAT-01)
+# ===========================================================================
+
+
+class TestCreatureGeneratorsCategory:
+    """Verify creature anatomy generators set metadata.category."""
+
+    def test_quadruped_has_category(self):
+        from blender_addon.handlers.creature_anatomy import generate_quadruped
+        spec = generate_quadruped(species="wolf", size=0.5)
+        assert "metadata" in spec, "generate_quadruped must return metadata dict"
+        assert spec["metadata"]["category"] == "monster_body"
+
+    def test_fantasy_creature_has_category(self):
+        from blender_addon.handlers.creature_anatomy import generate_fantasy_creature
+        spec = generate_fantasy_creature(base_type="chimera", size=0.5)
+        assert "metadata" in spec, "generate_fantasy_creature must return metadata dict"
+        assert spec["metadata"]["category"] == "monster_body"
+
+
+# ===========================================================================
+# Test: Clothing Generators Have Category (MAT-01)
+# ===========================================================================
+
+
+class TestClothingGeneratorsCategory:
+    """Verify clothing generators set metadata.category."""
+
+    def test_tunic_has_category(self):
+        from blender_addon.handlers.clothing_system import generate_clothing
+        spec = generate_clothing("tunic", size=0.5)
+        assert "metadata" in spec, "generate_clothing must return metadata dict"
+        assert spec["metadata"]["category"] == "clothing"
+
+    def test_robe_has_category(self):
+        from blender_addon.handlers.clothing_system import generate_clothing
+        spec = generate_clothing("robe", size=0.5)
+        assert spec["metadata"]["category"] == "clothing"
+
+    def test_cloak_has_category(self):
+        from blender_addon.handlers.clothing_system import generate_clothing
+        spec = generate_clothing("cloak", size=0.5)
+        assert spec["metadata"]["category"] == "clothing"
+
+    def test_hood_has_category(self):
+        from blender_addon.handlers.clothing_system import generate_clothing
+        spec = generate_clothing("hood", size=0.5)
+        assert spec["metadata"]["category"] == "clothing"
