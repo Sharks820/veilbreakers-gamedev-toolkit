@@ -188,6 +188,7 @@ def _make_result(
         "material_regions": material_regions or {},
         "metadata": {
             "name": name,
+            "category": extra_meta.pop("category", "clothing"),
             "poly_count": len(faces),
             "vertex_count": len(vertices),
             "dimensions": dims,

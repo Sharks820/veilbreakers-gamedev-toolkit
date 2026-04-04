@@ -5809,6 +5809,10 @@ def handle_generate_ruins(params: dict) -> dict:
     bm = _spec_to_bmesh(damaged)
     obj = _create_mesh_object(name, bm)
 
+    # Wire procedural material (MAT-01)
+    if obj is not None:
+        _assign_procedural_material(obj, "rough_stone_wall")
+
     result = _build_ruins_result(name, damaged, style, damage_level)
     return {"status": "success", "result": result}
 
@@ -5895,6 +5899,8 @@ def handle_generate_interior(params: dict) -> dict:
             item_obj.rotation_euler = (0, 0, item["rotation"])
             item_obj.parent = room_empty
             bpy.context.collection.objects.link(item_obj)
+            # Wire procedural material for fallback cubes (MAT-01)
+            _assign_procedural_material(item_obj, "rough_timber")
 
         if not isinstance(item_obj, dict):
             item_obj["vb_room_type"] = room_type
@@ -5940,6 +5946,8 @@ def handle_generate_interior(params: dict) -> dict:
             c_obj.rotation_euler = (0, 0, c_item["rotation"])
             c_obj.parent = room_empty
             bpy.context.collection.objects.link(c_obj)
+            # Wire procedural material for fallback cubes (MAT-01)
+            _assign_procedural_material(c_obj, "rough_timber")
 
         if not isinstance(c_obj, dict):
             c_obj["vb_room_type"] = room_type
@@ -6019,6 +6027,9 @@ def handle_generate_modular_kit(params: dict) -> dict:
 
         obj = bpy.data.objects.new(piece_name, mesh)
         bpy.context.collection.objects.link(obj)
+
+        # Wire procedural material (MAT-01)
+        _assign_procedural_material(obj, "rough_stone_wall")
 
         # Store metadata as custom properties
         obj["cell_size"] = cell_size
@@ -7006,6 +7017,9 @@ def handle_generate_boss_arena(params: dict) -> dict:
     floor_obj.parent = parent
     bpy.context.collection.objects.link(floor_obj)
 
+    # Wire procedural material (MAT-01)
+    _assign_procedural_material(floor_obj, "cobblestone_floor")
+
     cover_count_actual = 0
     for i, cover in enumerate(spec["covers"]):
         if _create_boss_arena_cover(name, cover, seed, i, parent):
@@ -7289,6 +7303,9 @@ def handle_generate_multi_floor_dungeon(params: dict) -> dict:
         floor_obj = _ops_to_mesh(ops, floor_name)
         floor_obj.parent = parent
 
+        # Wire procedural material (MAT-01)
+        _assign_procedural_material(floor_obj, "rough_stone_wall")
+
         # Place procedural dungeon props for this floor
         prop_placements = generate_dungeon_prop_placements(
             layout, seed=seed + floor_idx * 100,
@@ -7385,6 +7402,9 @@ def handle_generate_encounter(params: dict) -> dict:
         parent,
     )
     floor.location.z = float(layout.get("bounds", {}).get("min", (0.0, 0.0, 0.0))[2])
+
+    # Wire procedural material (MAT-01)
+    _assign_procedural_material(floor, "cobblestone_floor")
 
     cover_count = 0
     cover_palette = ["pillar", "rock", "barricade", "pillar"]
@@ -7954,6 +7974,8 @@ def handle_generate_landmark(params: dict) -> dict:
             item_obj.rotation_euler = (0, 0, item["rotation"])
             item_obj.parent = room_empty
             bpy.context.collection.objects.link(item_obj)
+            # Wire procedural material for landmark furniture (MAT-01)
+            _assign_procedural_material(item_obj, "rough_timber")
 
     # Store landmark metadata on parent
     parent["landmark_name"] = landmark_name

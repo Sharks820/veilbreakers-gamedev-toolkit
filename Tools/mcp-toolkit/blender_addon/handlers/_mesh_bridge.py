@@ -486,6 +486,8 @@ CATEGORY_MATERIAL_MAP: dict[str, str] = {
     "key_item": "polished_wood",
     # Combat items -- rusted iron
     "combat_item": "rusted_iron",
+    # Clothing -- fabric cloth for garments
+    "clothing": "burlap_cloth",
     # Forest animals -- fur base
     "forest_animal": "fur_base",
     # Mountain animals -- fur base
