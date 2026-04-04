@@ -269,6 +269,48 @@ class TestHandlerReturnDictKeys:
 
 
 # ---------------------------------------------------------------------------
+# Tiled terrain parameter resolution
+# ---------------------------------------------------------------------------
+
+
+class TestResolveTerrainTileParams:
+    def test_defaults_compute_world_origin_and_center(self):
+        from blender_addon.handlers.environment import _resolve_terrain_tile_params
+
+        result = _resolve_terrain_tile_params({"tile_x": 1, "tile_y": 2})
+
+        assert result["tile_size"] == 256
+        assert result["resolution"] == 257
+        assert result["world_origin_x"] == 256.0
+        assert result["world_origin_y"] == 512.0
+        assert result["terrain_size"] == 256.0
+        assert result["object_location"] == (384.0, 640.0, 0.0)
+
+    def test_explicit_resolution_derives_tile_size(self):
+        from blender_addon.handlers.environment import _resolve_terrain_tile_params
+
+        result = _resolve_terrain_tile_params({
+            "tile_x": 3,
+            "tile_y": 4,
+            "resolution": 65,
+            "cell_size": 2.0,
+        })
+
+        assert result["tile_size"] == 64
+        assert result["resolution"] == 65
+        assert result["terrain_size"] == 128.0
+        assert result["world_origin_x"] == 384.0
+        assert result["world_origin_y"] == 512.0
+        assert result["object_location"] == (448.0, 576.0, 0.0)
+
+    def test_resolution_tile_size_mismatch_raises(self):
+        from blender_addon.handlers.environment import _resolve_terrain_tile_params
+
+        with pytest.raises(ValueError, match="resolution must equal tile_size"):
+            _resolve_terrain_tile_params({"tile_size": 64, "resolution": 63})
+
+
+# ---------------------------------------------------------------------------
 # _nearest_pot_plus_1 tests
 # ---------------------------------------------------------------------------
 
