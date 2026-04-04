@@ -20,6 +20,7 @@ All colors follow VeilBreakers dark fantasy palette rules:
 
 from __future__ import annotations
 
+import logging
 import math
 from typing import Any
 
@@ -34,6 +35,38 @@ from .procedural_materials import (
     _add_node,
     _get_bsdf_input,
 )
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Default biome -- used when biome param is missing or unknown
+# ---------------------------------------------------------------------------
+
+DEFAULT_BIOME = "thornwood_forest"
+
+
+def get_default_biome() -> str:
+    """Return the default biome name for terrain without explicit biome."""
+    return DEFAULT_BIOME
+
+
+def validate_castle_roughness() -> dict[str, Any]:
+    """Validate that all castle/fortification material definitions have non-zero roughness.
+
+    Returns dict with 'valid' bool and 'issues' list of problematic materials.
+    """
+    castle_keys = [
+        "rough_stone_wall", "smooth_stone", "stone_fortified",
+        "stone_heavy", "stone_slab", "stone_parapet",
+        "stone_dark", "brick_wall",
+    ]
+    issues: list[dict[str, Any]] = []
+    for key in castle_keys:
+        entry = MATERIAL_LIBRARY.get(key, {})
+        roughness = entry.get("roughness", 0.0)
+        if roughness < 0.3:
+            issues.append({"material": key, "roughness": roughness, "min_expected": 0.3})
+    return {"valid": len(issues) == 0, "issues": issues, "checked": len(castle_keys)}
 
 
 # ---------------------------------------------------------------------------
@@ -2063,10 +2096,11 @@ def create_biome_terrain_material(
     if bpy is None:
         raise RuntimeError("create_biome_terrain_material() requires bpy")
     if biome_name not in BIOME_PALETTES_V2:
-        raise ValueError(
-            f"Unknown biome: '{biome_name}'. "
-            f"Available: {sorted(BIOME_PALETTES_V2.keys())}"
+        logger.warning(
+            "Unknown biome '%s', falling back to '%s'. Available: %s",
+            biome_name, DEFAULT_BIOME, sorted(BIOME_PALETTES_V2.keys()),
         )
+        biome_name = DEFAULT_BIOME
     palette = BIOME_PALETTES_V2[biome_name]
     mat = bpy.data.materials.new(name=f"VB_Terrain_{biome_name}")
     mat.use_nodes = True
