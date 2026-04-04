@@ -1,6 +1,6 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
-**Updated:** 2026-04-04 (v10.0 Phase 46 planned)
+**Updated:** 2026-04-04 (v10.0 Phase 47 planned)
 **Updated:** 2026-03-31 (v7.0 planning in progress)
 
 ## Milestones
@@ -641,6 +641,7 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 44. Geometry Overhaul -- Props, Environments, Buildings | v10.0 | 0/4 | Complete    | 2026-04-04 |
 | 45. Data Safety & Integrity | v10.0 | 0/3 | Complete    | 2026-04-04 |
 | 46. Export Pipeline Completion | v10.0 | 0/3 | Planned | - |
+| 47. Unity Integration & Regression | v10.0 | 0/3 | Planned | - |
 
 ### v10.0 Total Quality: Zero Gaps Remaining (Phases 39-48)
 
@@ -709,6 +710,23 @@ Plans:
 - [ ] 46-02-PLAN.md -- New modules: collision generator, vegetation serializer, splatmap exporter
 - [ ] 46-03-PLAN.md -- Wire compose_map Steps 11-16 + integration tests
 
+
+### Phase 47: Unity Integration & Regression
+**Goal**: Add 16 missing Unity bridge handlers for real-time GameObject/component/scene operations, create a new unity_gameobject MCP tool, verify all 37 MCP tools function correctly, and confirm v8.0 fixes remain intact
+**Depends on**: Phase 46 (export pipeline)
+**Requirements**: BRIDGE-01, BRIDGE-02, BRIDGE-03, TEST-02, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. VBBridgeCommands.cs template generates 26 handlers (10 existing + 16 new) covering GameObject CRUD, component ops, scene queries, and utility operations
+  2. A new unity_gameobject MCP tool with 16 actions provides real-time bridge-only operations without recompile cycle
+  3. All 37 MCP tools (16 Blender + 22 Unity + 1 new) are importable with correct action parameters and handler registrations
+  4. All v8.0 fixes (camera, checkpoints, pipeline, materials, architecture, interiors, animation, export) verified intact via regression tests
+  5. Full test suite passes (19920+ baseline + new tests)
+**Plans**: 3 plans
+Plans:
+- [ ] 47-01-PLAN.md -- 16 new bridge handlers + unity_gameobject MCP tool
+- [ ] 47-02-PLAN.md -- Tool verification matrix + v8.0 regression tests
+- [ ] 47-03-PLAN.md -- Integration wiring + full phase gate
+
 ---
 *Roadmap created: 2026-03-18*
 *v2.0 phases added: 2026-03-19*
@@ -720,3 +738,4 @@ Plans:
 *v10.0 Phase 43 planned: 2026-04-04*
 *v10.0 Phase 45 planned: 2026-04-04*
 *v10.0 Phase 46 planned: 2026-04-04*
+*v10.0 Phase 47 planned: 2026-04-04*
