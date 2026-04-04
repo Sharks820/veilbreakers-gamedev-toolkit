@@ -93,10 +93,10 @@
 ## CITY — Starter City Generation & Verification
 
 - [x] **CITY-01**: Generate full terrain with cliffs, waterfalls, rivers, multi-biome landscape
-- [ ] **CITY-02**: Generate starter city (Hearthvale) with castle, walls, buildings, roads integrated into terrain
-- [ ] **CITY-03**: Generate walkable interiors for key buildings (tavern, blacksmith, chapel, keep)
-- [ ] **CITY-04**: Populate with environmental assets (vegetation, rocks, props, scatter)
-- [ ] **CITY-05**: Use Tripo for city props, interior furnishing, and environmental assets
+- [x] **CITY-02**: Generate starter city (Hearthvale) with castle, walls, buildings, roads integrated into terrain
+- [x] **CITY-03**: Generate walkable interiors for key buildings (tavern, blacksmith, chapel, keep)
+- [x] **CITY-04**: Populate with environmental assets (vegetation, rocks, props, scatter)
+- [x] **CITY-05**: Use Tripo for city props, interior furnishing, and environmental assets
 - [ ] **CITY-06**: zai visual verification -- every area must score AAA or fix+regenerate until it does
 - [x] **CITY-07**: Full compose_map pipeline execution with all systems wired
 
@@ -186,10 +186,10 @@
 | BRIDGE-02 | Phase 47 | Pending |
 | BRIDGE-03 | Phase 47 | Pending |
 | CITY-01 | Phase 48 | Complete |
-| CITY-02 | Phase 48 | Pending |
-| CITY-03 | Phase 48 | Pending |
-| CITY-04 | Phase 48 | Pending |
-| CITY-05 | Phase 48 | Pending |
+| CITY-02 | Phase 48 | Complete |
+| CITY-03 | Phase 48 | Complete |
+| CITY-04 | Phase 48 | Complete |
+| CITY-05 | Phase 48 | Complete |
 | CITY-06 | Phase 48 | Pending |
 | CITY-07 | Phase 48 | Complete |
 | TEST-01 | Phase 39, 48 | Complete |
