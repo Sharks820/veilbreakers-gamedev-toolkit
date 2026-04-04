@@ -590,7 +590,7 @@ Key docs:
 - **Interior spec missing critical data**: floor heights for multi-floor buildings, wall/ceiling thicknesses, vertical door constraints
 - **Door generation disconnected**: `generate_door_metadata()` creates doors at wall positions but DOES NOT verify they match actual building openings — doors could be placed outside building bounds
 - **Room spatial validation missing**: `align_rooms_to_building()` doesn't verify rooms fit within building bounds — can produce zero/negative room dimensions
-- **Internal room-to-room doorways missing**: only exterior doors generated, no connections between kitchen→bedroom within same building
+- **Internal room-to-room doorways not threaded through pipeline**: `_building_grammar.py` can generate same-floor internal doors, but `building_interior_binding` / compose pipeline only carry exterior door metadata forward
 - **Settlement scaling mismatch**: code has village=4-8 (plan says 15), city=20-40 (plan says 100+), no "hamlet" type at all
 - **NPC spawn points absent**: settlement generates buildings+props but no NPC markers (position, role, patrol area) — DEFERRED to future milestone
 - **Interior streaming metadata missing**: door_metadata produces interior_scene_name but no streaming volume bounds or loading zone trigger geometry for Unity
@@ -651,7 +651,7 @@ Not in any scatter system — these props are needed for a complete game world:
 - **Blender collections** — Don't persist between separate blender_execute calls within same session
 
 ### 16.11 Important Nuances Missing from Main Sections
-- **Material pipeline IS wired** through `handle_generate_multi_biome_world()` → `handle_create_biome_terrain()`. The current scene's grey materials suggest compose_map invoked a DIFFERENT code path or wrong parameters — not that materials are fundamentally broken
+- **Material pipeline IS partially wired** through `handle_generate_multi_biome_world()` → `handle_create_biome_terrain()`, but the live multi-biome call passes `name` while the handler reads `object_name` — material creation can succeed while assignment still fails
 - **Only 1 genuine duplicate** exists in entire codebase (two vegetation scatter functions). Everything else is proper layered architecture — we DON'T need to rip out duplicates
 - **Erosion auto-scales to 150K+ minimum droplets** not 1000 — the erosion IS already AAA quality, just needs to be verified it's actually invoked during generation
 - **A* road pathfinder** needs only a **quadratic steepness penalty** (not linear) to naturally produce switchback trails — small code change, huge visual impact
@@ -711,22 +711,317 @@ Before declaring any phase complete, verify ALL of these:
 - Auto-camera setup function — creates camera + light + forces camera view, called at start of every visual QA step
 - Render-to-file function — renders full resolution to disk bypassing 1024px viewport cap
 
+### 16.19 Additional Full-Codebase Deep Scan Findings (2026-04-04)
+- **`aaa_verify` can score stale screenshots** — `render_angle` / `viewport_screenshot` are aliases to the plain screenshot handler, yaw/pitch are ignored, the handler reads `filepath` not `output_path`, and old temp PNGs can be reused across runs
+- **`compose_interior` discards binding geometry** — `building_interior_binding.py` returns room positions and `building_bounds`, but `_plan_interior_rooms()` replans from width/depth only and recomputes bounds, so binding-generated spatial alignment is lost
+- **Multi-floor interior semantics not implemented in compose path** — examples advertise `below_ground`, `cellar`, `upstairs`, trapdoor, and staircase semantics, but composed room bounds and door defs remain effectively flat at Z=0
+- **Interior quality passes silently no-op** — `compose_interior` sends room root `EMPTY` objects into `mesh_enhance_geometry` and `validate_prop_quality`; both expect mesh data and skip
+- **`generate_map_package` group export is broken** — `derive_addressable_groups()` emits empty terrain/interiors groups, and `export_fbx` ignores `object_names`, so package exports are neither complete nor truly per-group
+- **Settlement interiors are lost in canonical pipeline** — `compose_map` only consumes `map_spec.locations[].interiors`, while `handle_generate_settlement()` reduces interior data to furnishing props and strips real interior payload from its return
+- **Linked interiors still fall back to fake 10x10 shells** — `compose_map` does not pass `building_exterior_bounds`, so `world_generate_linked_interior` uses its hardcoded fallback footprint
+- **`scene_hierarchy.json` is not map-scoped** — manifest generation iterates all `bpy.data.objects` and uses name-substring district tagging, so reused scenes can leak helpers and unrelated objects into package metadata
+- **`asset_pipeline action=performance_check` is a false capability** — MCP surface advertises it, but addon handler still returns `not_implemented`
+- **Canonical location routing still bypasses advanced settlement types** — compose routing cannot reach richer `settlement_generator.py` types such as `medieval_town`, `city`, `wizard_fortress`, `cliff_keep`, or district-heavy layouts
+- **Castle/world feature grounding remains incomplete** — drawbridge and fountain placement in castle flow still use hardcoded `Z=0`, and `handle_compose_world_map()` still places features with `pz = 0.0`
+- **Terrain material builder duplicates materials on repeated runs** — biome material creation always makes new `VB_Terrain_<biome>` materials instead of reusing existing ones
+- **`terrain_sculpt.py` world-space claim is false** — brush centers are evaluated against local vertex coordinates, so translated terrain sculpts the wrong area
+- **`terrain_advanced.py` layers / erosion / stamps still use local or square assumptions** — multiple handlers normalize against dimensions/grid indices rather than true world coordinates
+- **`handle_terrain_layers(add_layer)` still assumes square terrain** — layer sizing uses `sqrt(vertex_count)`, which breaks rectangular terrains
+- **`terrain_chunking.compute_terrain_chunks()` drops remainder rows/cols** — heightmaps whose dimensions are not divisible by `chunk_size` are silently truncated
+- **`terrain_sculpt.py` is not actually pure-logic/testable** — module imports `bpy` / `bmesh` at import time and has no direct terrain sculpt tests
+- **`env_scatter_vegetation` can crash on its normal success path** — `side` is defined only inside the square-grid fallback, then used unconditionally later for placement and normal alignment
+- **Scatter stack still assumes square, origin-centered terrain** — height sampling and vegetation placement use `max(dims.x, dims.y)` and ignore terrain object translation, so rectangular or moved terrains drift
+- **Road mesh materialization still warps on non-square terrain** — road generation uses X extent for both axes when converting mask/grid coordinates to world space
+- **`env_export_heightmap(unity_compat=True)` silently squashes rectangular terrains to square** — export size is chosen from columns only, then both axes are resampled to that square target
+- **`env_scatter_props` has an API wiring bug** — `area_name` is documented as the scatter/output area name but also used as the terrain object lookup key, so direct calls with a real area/collection name fall back to `Z=0`
+- **Test coverage still misses live Blender-side handler failures** — current scatter/export/terrain tests emphasize pure logic or square-only cases and do not exercise the canonical Blender handler path for these bugs
+- **Research index is incomplete for architecture/interiors/render/texturing** — `RESEARCH_INDEX.md` does not index several already-present architecture, interior, shader, castle-terrain, and texturing docs, so the research spine is narrower than the codebase scope
+- **No explicit render QA research phase** — today’s research set still lacks a defined 3D model/contact-sheet validation workflow for buildings, interiors, castles, props, and textured assets
+
 ---
 
-## SCORING METHODOLOGY (CORRECTED)
+## SCORING METHODOLOGY (CORRECTED — EVIDENCE-BASED)
 
 Previous scoring was based on CODE QUALITY — this is WRONG.
 Correct scoring must be based on VISUAL OUTPUT in Blender.
+**No philosophy. Count what you see.**
 
-| Score | Definition | Reference |
-|-------|-----------|-----------|
-| PLACEHOLDER | Flat untextured shapes, grey/white, no detail | 3D mockup / greybox |
-| BASIC | Correct general shape but flat materials, obviously procedural | First-pass blockout |
-| DECENT | Textured, some detail elements, but wouldn't pass studio review | Student project level |
-| GOOD | Proper materials, good detail, but missing wear/weathering/micro-detail | Indie game level |
-| AAA | Would ship in Elden Ring/Dark Souls/Skyrim | FromSoft/Bethesda level |
+| Score | Definition | Visual Test |
+|-------|-----------|-------------|
+| PLACEHOLDER | Untextured primitives, white/grey, <500 verts for small assets | Can you tell what it IS without being told? |
+| BASIC | Recognizable shape, 0 materials, no detail geometry | Does it have the right silhouette from 10m? |
+| DECENT | Has materials, some detail, but flat/repetitive | Would a player screenshot it? No. |
+| GOOD | PBR materials, edge wear, detail elements, correct proportions | Could this ship in an indie game? |
+| AAA | Weathered, story-telling detail, unique silhouette, full PBR | Would this pass FromSoft/Bethesda art review? |
 
-**Every score must be backed by:**
-1. Visual screenshot from Blender
-2. Named AAA game reference for comparison
-3. Specific gap list preventing higher score
+**Every score must include (NO ESSAYS):**
+1. Material count (0 = instant PLACEHOLDER/BASIC cap)
+2. Vertex count vs AAA reference range
+3. LIST of visible detail features (not code claims — what you SEE)
+4. LIST of missing features vs named AAA reference asset
+5. One-line verdict
+
+**zai prompt template for future scoring:**
+```
+Score this [asset type] as PLACEHOLDER/BASIC/DECENT/GOOD/AAA.
+Rules: NO essays. Answer ONLY these 5 lines:
+1. MATERIALS: [count] — [list what's visible: metal/wood/leather/none]
+2. DETAIL I CAN SEE: [bullet list of visible geometry features]
+3. DETAIL MISSING vs [specific AAA game asset]: [bullet list]
+4. PROPORTION CHECK: [correct/wrong — specifics]
+5. SCORE: [X] because [one reason]
+```
+
+---
+
+## 17. COMPLETE VISUAL VERIFICATION SCORECARD (2026-04-04)
+
+**Methodology:** Each generator called in clean Blender 5.0.1 scene, rendered at 1920x1080 with 3-point studio lighting via `blender_execute` (capture_viewport=false to avoid context bloat), saved to `C:/tmp/vb_visual_test/`, analyzed by zai AI art director against FromSoftware/Bethesda AAA standards.
+
+### 17.1 WEAPONS (6/6 tested)
+| Asset | Verts | Mats | zai Score | Key Finding |
+|-------|-------|------|-----------|-------------|
+| Sword | 586 | 0 | PLACEHOLDER | Disconnected hilt, blocky guard, no materials |
+| Axe | 325 | 0 | PLACEHOLDER | Paper-thin pancake head, 2D cutout |
+| Mace | 462 | 0 | BASIC | Some 3D form, undersized head |
+| Bow | 356 | 0 | PLACEHOLDER | Simple curve, string is a line |
+| Shield | 360 | 0 | PLACEHOLDER | Half-size (0.5m vs ~1m needed), flat, no heraldry |
+| Staff | 330 | 0 | PLACEHOLDER | Straight cylinder, no orb |
+
+### 17.2 ARMOR (3/3 tested)
+| Asset | Verts | Mats | zai Score | Key Finding |
+|-------|-------|------|-----------|-------------|
+| Pauldron | 289 | 0 | PLACEHOLDER | Generic curved plate, no material zones |
+| Chestplate | 347 | 0 | PLACEHOLDER | Simple rounded shape, no anatomical contour |
+| Gauntlet | 281 | 0 | PLACEHOLDER | Amorphous form, unarticulated fingers |
+
+### 17.3 CREATURES (2/7 work, 5 BROKEN)
+| Asset | Verts | Mats | zai Score | Key Finding |
+|-------|-------|------|-----------|-------------|
+| Fantasy (chimera) | 2552 | 0 | BASIC | Distinct silhouette, no anatomy/musculature |
+| Wolf (quadruped) | 2278 | 0 | BASIC | Generated UPSIDE DOWN, stick legs, smooth tubes |
+| creature_mouth | — | — | **CRASHED** | `'tuple' object has no attribute 'get'` |
+| creature_eyelid | — | — | **CRASHED** | Same error |
+| creature_paw | — | — | **CRASHED** | Same error |
+| creature_wing | — | — | **CRASHED** | Same error |
+| creature_serpent | — | — | **CRASHED** | Same error |
+
+### 17.4 RIGGABLE PROPS (10/10 tested)
+| Asset | Verts | Mats | zai Score | Key Finding |
+|-------|-------|------|-----------|-------------|
+| Chest | 102 | 0 | PLACEHOLDER | Rounded box, no iron banding, no lock |
+| Door | 72 | 0 | PLACEHOLDER | Flat slab, no handle/hinges, generated lying flat |
+| Chain | 576 | 0 | BASIC | Recognizable links but uniform, no rust/wear |
+| Flag | 205 | 0 | BASIC | Flat plane + pole, no heraldry, no cloth detail |
+| Chandelier | 2480 | 0 | BASIC | Ring frame with candle arms, no ornament |
+| Drawbridge | 208 | 0 | PLACEHOLDER | Flat planks, no hinge mechanism, no chains |
+| Rope Bridge | 1024 | 0 | PLACEHOLDER | Uniform posts, no sag/wear/rope braid |
+| Hanging Sign | 158 | 0 | PLACEHOLDER | Abstract panels, no carved lettering |
+| Windmill | 676 | 0 | BASIC | Tower + blades recognizable, thin/flat blades |
+| Cage | 916 | 0 | BASIC | Clean symmetric bars, no rust/dents/bending |
+
+### 17.5 CLOTHING (1/1 tested)
+| Asset | Verts | Mats | zai Score | Key Finding |
+|-------|-------|------|-----------|-------------|
+| Tunic (peasant) | 320 | 0 | BASIC | Generic primitive, not cloth-sim ready topology |
+
+### 17.6 VEGETATION (0/2 — BOTH BROKEN)
+| Asset | Verts | Mats | zai Score | Key Finding |
+|-------|-------|------|-----------|-------------|
+| vegetation_tree | ? | 0 | **BROKEN** | Returns raw vertex JSON, never creates Blender object |
+| vegetation_leaf_cards | 0 | 0 | **BROKEN** | 0 vertices, 0 cards generated |
+
+### 17.7 WORLDBUILDING (6/9 tested, 1 API crash, 2 Blender crash)
+| Asset | Verts | Mats | zai Score | Key Finding |
+|-------|-------|------|-----------|-------------|
+| Dungeon | 22152 | 0 | BASIC | Box rooms + hallways, 128x128m but only 3m tall, no environmental detail |
+| Cave | 15576 | 0 | BASIC | Blocky voxel layout, 126x122m but only 4m tall, no stalactites |
+| Building | 54246 | **11** | PLACEHOLDER | Most advanced generator — has walls/roof/windows but pristine white, no weathering |
+| Castle | 14357 | 1 | BASIC | Curtain walls + towers + keep, solid layout but flat white, generic merlons |
+| Ruins | 248 | 0 | PLACEHOLDER | Tiny wall fragments, 248 total verts |
+| Interior (tavern) | 2196 | 1 | BASIC | Room shell + box furniture (bar, fireplace, tables), sterile |
+| Modular Kit | 64 | 0 | PLACEHOLDER | 8 cubes (8 verts each), 260-piece system NOT generating |
+| Boss Arena | — | — | **CRASHED** | `cap_fill` keyword invalid — Blender 5.0 API break |
+| Town | — | — | **CRASHED BLENDER** | Crashes even at building_count=3, unstable handler |
+
+### 17.8 ENVIRONMENT (3/3 tested)
+| Asset | Verts | Mats | zai Score | Key Finding |
+|-------|-------|------|-----------|-------------|
+| Terrain | 4096 | 0 | PLACEHOLDER | White heightmap, no texturing, no micro-undulation |
+| Water | — | 1 | PLACEHOLDER | Flat blue plane, hard jagged shoreline, no waves/foam |
+| Road | — | 0 | **INVISIBLE** | path_length=1, painted on untextured terrain = invisible |
+
+### 17.9 AGGREGATE SCORES
+| Category | Tested | Working | PLACEHOLDER | BASIC | DECENT+ | BROKEN/CRASHED |
+|----------|--------|---------|-------------|-------|---------|-----------------|
+| Weapons | 6 | 6 | 5 | 1 | 0 | 0 |
+| Armor | 3 | 3 | 3 | 0 | 0 | 0 |
+| Creatures | 7 | 2 | 0 | 2 | 0 | **5** |
+| Props | 10 | 10 | 4 | 6 | 0 | 0 |
+| Clothing | 1 | 1 | 0 | 1 | 0 | 0 |
+| Vegetation | 2 | 0 | 0 | 0 | 0 | **2** |
+| Worldbuilding | 9 | 6 | 3 | 3 | 0 | **3** |
+| Environment | 3 | 2 | 2 | 0 | 0 | **1** |
+| **TOTAL** | **41** | **30** | **17** | **13** | **0** | **11** |
+
+**ZERO assets scored DECENT or higher.**
+
+### 17.10 UNIVERSAL FAILURES (confirmed across ALL generators)
+1. **ZERO MATERIALS on 90%+ of assets** — building (11 mats) and castle (1 mat) are sole exceptions
+2. **Material library (52 materials, 6 procedural generators) EXISTS but is NEVER CALLED** after mesh generation
+3. **No dark fantasy character on ANY asset** — everything is pristine white, zero wear/weathering/story
+4. **Orientation bugs** — wolf upside-down, door lying flat, shield horizontal
+5. **Geometry is BASIC at best** — simple primitives, no sculpt detail, no edge wear
+6. **Code claims don't match visual output** — variable names describe features that don't exist in mesh
+7. **Proportion bugs** — shield half-size, axe paper-thin, mace head undersized, dungeon/cave only 3-4m tall
+8. **260-piece modular kit generates 8 cubes** — the system exists but isn't wired
+9. **Both vegetation generators are non-functional** — tree returns raw data, leaf_cards generates nothing
+10. **5/7 creature part generators crash** with identical tuple error
+11. **Town generator crashes Blender** — even at minimum parameters
+12. **Boss arena uses deprecated Blender 5.0 API** — cap_fill keyword removed
+
+---
+
+## 18. AAA READINESS ASSESSMENT — DO WE HAVE WHAT WE NEED?
+
+### 18.1 READY (infrastructure exists, mostly wiring fixes)
+
+| System | Why Ready | What Exists | Fix Type | Effort |
+|--------|-----------|-------------|----------|--------|
+| **Terrain** | 8+ research docs, erosion is AAA quality, 14 biome palettes exist, HeightBlend node exists | Hydraulic/thermal erosion (auto-scales 150K+ droplets), BIOME_PALETTES_V2 (14 biomes x 4 layers), auto_assign_terrain_layers splatmap | Wire materials + HeightBlend + micro-undulation | MEDIUM |
+| **Water** | AAA spline-following code already written | handle_create_water (spline mesh + flow vertex colors), handle_carve_river (A* pathfinding), Lagarde wet-rock PBR formulas documented | Fix compose_map to call correct water function with correct params | LOW |
+| **Vegetation** | 15+ real mesh generators exist in code | VEGETATION_GENERATOR_MAP: L-system trees (4 species), shrubs, grass, mushrooms, rocks. BIOME_VEGETATION_SETS (14 biomes). Wind vertex colors. | Wire VEGETATION_GENERATOR_MAP into scatter, fix tree object creation | MEDIUM |
+| **Modular Kit** | 260-piece system fully coded | 52 core pieces x 5 styles (medieval/gothic/fortress/organic/ruined), generate_modular_piece() dispatch, assemble_building() | Wire into generation pipeline, fix generate_modular_kit handler | MEDIUM |
+| **Castle** | Settlement generator + modular kit exist but castle bypasses them | settlement_generator.py (15 types), modular building kit (260 pieces), road L-system, interior binding | Route castle through settlement_generator + modular kit instead of box generator | MEDIUM |
+| **Building** | Already most advanced generator (54K verts, 11 mats) | Rubble stone walls, gable roof, windows/doors, multi-floor, facade modules, chimney | Add weathering, wire modular kit for variety, improve materials | LOW-MEDIUM |
+
+### 18.2 PARTIALLY READY (code exists, needs significant work)
+
+| System | What Exists | What's Missing | Effort |
+|--------|-------------|----------------|--------|
+| **Dungeon/Cave** | BSP room generation, cave cellular automata, door/loot placement | Modular kit integration for walls, height variation (>3m!), environmental detail, rock meshes, materials | HIGH |
+| **Interior** | 14 room types, furniture placement, interior binding | Furniture quality (cubes→real meshes), material application, atmospheric props (candles, mugs, soot) | HIGH |
+| **Road** | MST network, A* pathfinder, switchback generation | Depends on terrain materials first, needs mesh materialization fix for non-square terrain | MEDIUM (blocked by terrain) |
+| **Weapons** | MATERIAL_LIBRARY (52 materials), PBR generators, attachment empties | Geometry needs 3-10x more verts, blade/guard/pommel shapes need redesign, material wiring | HIGH |
+| **Ruins** | Damage system concept, debris generation | Only 248 verts output — needs building generator as base + destruction algorithm | HIGH |
+
+### 18.3 NEEDS GEOMETRY REWRITE (research EXISTS — no missing docs)
+
+| System | What's Missing | Research That Covers It | Effort |
+|--------|---------------|------------------------|--------|
+| **Creatures** | 5/7 crash (tuple bug), anatomy = smooth tubes | TEXTURING_CHARACTERS_RESEARCH, AAA_TOOLS_CHARACTER_EDITING_RESEARCH, AAA_PROCEDURAL_QUALITY_RESEARCH (Rigify templates for 6 creature types, PBR standards, SSS) | HIGH |
+| **Armor** | Basic plates, no anatomical fit | TEXTURING_WEAPONS_ITEMS_RESEARCH, TEXTURING_CHARACTERS_RESEARCH (armor fitting with shape keys, modular assembly, PBR metallics) | HIGH |
+| **Clothing** | Generic shell, not cloth-sim ready | TEXTURING_CHARACTERS_RESEARCH, RIGGABLE_PHYSICS_MESH_QUALITY (cloth topology, wind physics, cloth-to-bone bake) | HIGH |
+| **Riggable Props** | Basic primitives | RIGGABLE_PHYSICS_MESH_QUALITY, TEXTURING_WEAPONS_ITEMS_RESEARCH (hinge rigging, constraint systems, deformable topology) | HIGH |
+
+### 18.4 RESEARCH COVERAGE (CORRECTED — 61 docs, ALL 14 categories covered)
+
+Previous assessment claimed 6 missing research docs. **This was WRONG.** Deep audit found 61 research documents (31 main + 28 phase-specific + 2 supplemental) covering ALL 14 generator categories:
+
+| Category | Coverage | Key Research Docs |
+|----------|----------|-------------------|
+| Terrain texturing | EXCELLENT | AAA_TERRAIN_TEXTURING, terrain_materials_shader, terrain_gaea, BIOME_VISUAL_REFERENCE_GUIDE |
+| Water systems | GOOD | WATER_ROCK_INTERACTION_DESIGN, terrain_opensource_algorithms, TERRAIN_FEATURE_VISUAL_DETAILS |
+| Vegetation/trees | GOOD | AAA_PROCEDURAL_QUALITY, BIOME_VISUAL_REFERENCE_GUIDE, terrain_unity_performance |
+| Castle/fortress | GOOD | castle_terrain_medieval_landscape, modular_building_kits, procedural_city_generation |
+| Medieval buildings | GOOD | modular_building_kits, TEXTURING_ENVIRONMENTS, procedural_city_generation |
+| Dungeon/cave | GOOD | CLIFF_CAVE_CANYON_DESIGN, castle_terrain_medieval_landscape |
+| Weapons | EXCELLENT | TEXTURING_WEAPONS_ITEMS, AAA_PROCEDURAL_QUALITY (PBR material-tier system, damage viz) |
+| Armor | EXCELLENT | TEXTURING_WEAPONS_ITEMS, TEXTURING_CHARACTERS (shape keys, weathering, PBR metallics) |
+| Creatures | EXCELLENT | TEXTURING_CHARACTERS, AAA_TOOLS_CHARACTER_EDITING (Rigify 6 types, SSS, animation) |
+| Riggable props | GOOD | RIGGABLE_PHYSICS_MESH_QUALITY (cloth sim, hinge rigging, wind physics) |
+| Clothing | GOOD | TEXTURING_CHARACTERS, RIGGABLE_PHYSICS_MESH_QUALITY (cloth topology, wrinkle maps) |
+| Interior design | GOOD | modular_building_kits, AI_INTERIOR_GENERATION, TEXTURING_ENVIRONMENTS |
+| Road/path | GOOD | SPLINE_TERRAIN_DEFORMATION, MOUNTAIN_PASS_CANYON_DESIGN, TERRAIN_TRANSITION |
+| Boss arena | GOOD | castle_terrain_medieval_landscape, terrain_lighting_atmosphere, CLIFF_CAVE_CANYON |
+
+**NO MISSING RESEARCH. We have everything we need. The problem is execution, not knowledge.**
+
+### 18.5 BOTTOM LINE
+
+**CAN we get to AAA?** Yes, for ALL categories. We have:
+- 61 research documents covering every generator category
+- 52 materials + 6 procedural generators (unwired)
+- 15+ vegetation generators (unwired)
+- 260-piece modular building kit (unwired)
+- AAA erosion system (already working)
+- AAA water spline system (wrong function called)
+- Settlement generator with 15 types (castle bypasses it)
+
+**Priority order for maximum visual impact:**
+1. **Wire material library** into ALL generators → every asset gets PBR (HIGHEST ROI)
+2. **Fix vegetation** → wire VEGETATION_GENERATOR_MAP (code exists)
+3. **Fix terrain materials** → wire 14 biome palettes + HeightBlend
+4. **Fix water** → call correct AAA handler
+5. **Wire modular kit** → 260 pieces for buildings/castles
+6. **Fix creature crashes** → tuple error likely one shared handler bug
+7. **Fix boss arena** → Blender 5.0 API (cap_fill → fill_type)
+8. **Fix town generator** → crashes Blender, needs stability investigation
+9. **Geometry overhaul** → weapons/armor/props need mesh redesign using existing research
+10. **Fix orientation bugs** → wolf upside-down, door flat, shield horizontal
+
+**What this means:** ~40% WIRING (connecting existing code), ~30% MATERIAL APPLICATION (calling existing generators), ~25% GEOMETRY REWRITE (redesigning meshes using existing research), ~5% BUG FIXES (API compat, crashes, tuple errors).
+
+---
+
+## 19. CROSS-SESSION FINDINGS (missing from previous sections)
+
+### 19.1 Foundational Rules (must be codified globally)
+
+| Rule | Detail | Source |
+|------|--------|--------|
+| **Coordinate system** | Z-up in Blender, Y-up in Unity. Conversion at EXPORT time ONLY. Never use Y for vertical in Blender code. | v5-v9 recurring bug |
+| **Furniture rotation** | R = atan2(px - tx, py - ty) — derived from Blender's -Y forward convention | v8 interior fix |
+| **Material creation** | When creating ANY Blender material, ALWAYS set Base Color. 6 sites found that create Principled BSDF without color. Use _assign_procedural_material() or create_material_from_library(). | v8 material color bug |
+| **Dark fantasy palette** | Saturation <40%, Value 10-50%. Weathering: moss on north-facing, stone darkening at base, rust patina, timber grain exposure. | Style reference |
+| **Smootherstep everywhere** | Replace ALL `(1 - t)` linear interpolation with `t * t * (3 - 2 * t)`. 35+ locations need this. Create ONE shared utility function. | v9 terrain audit |
+| **Safe placement** | Create `safe_place_object(x, y, terrain_name)` wrapper: _sample_scene_height() + water exclusion + bounds check. Replaces 42+ Z=0 hardcodings. | v9 systemic bugs |
+
+### 19.2 Data Loss Vulnerabilities
+
+| Bug | Impact | Location |
+|-----|--------|----------|
+| **Tripo texture overwrite** | cleanup() OVERWRITES embedded textures with BLANK IMAGES — silent asset corruption | Tripo pipeline cleanup function |
+| **Save data SAVE-02** | DeleteFile(oldSavePath) BEFORE replacement write completes — crash = permanent save loss | Unity save system |
+| **Checkpoint atomicity** | interior_results = [] wipe not inside checkpoint guard — no atomic writes via temp+rename | compose_interior pipeline |
+
+### 19.3 Integration & Capability Gaps
+
+| Gap | Detail | Impact |
+|-----|--------|--------|
+| **Code reviewer FP rate** | 69% false positive rate (976 FPs from BUG-25 ClassLevel scope). 7 root cause P-levels documented but not fixed. | Quality gate unreliable |
+| **Real-time Unity bridge** | Only 10 real-time commands, everything else generates scripts requiring recompile. Need 16+ CRUD/component operations. | Iteration speed |
+| **MCP permission blocks** | Tools denied during autonomous background agent execution | Automation blocker |
+| **Material auto-assignment** | 45+ procedural materials exist. Building grammar stamps material_category. mesh_from_spec needs to assign materials to faces. Integration gap. | All generators white |
+
+### 19.4 Quality Parameters
+
+| Parameter | Current | Required | Location |
+|-----------|---------|----------|----------|
+| Terrain erosion droplets | 1,000 | 50,000+ | _terrain_erosion.py (NOTE: v9 audit says auto-scales to 150K — VERIFY which is correct) |
+| Tree canopy | Sphere clusters | L-system branching | vegetation_system.py |
+| Branch ring segments | 6 | 8 (for closeup) | L-system tree generator |
+| L-system iterations | Hardcoded 4 | Should be 5 (dead trees: 7) | VEGETATION_GENERATOR_MAP |
+| Merlon dimensions | 0.6m wide / 0.8m tall | 1.2-1.5m wide / 0.9-2.1m tall (historical) | building_quality.py |
+| Chain tris/link | 288 | 80 | Chain generator |
+| Dungeon ceiling height | 3m | 6-8m minimum for dark fantasy | Dungeon generator |
+| Cave ceiling height | 4m | Variable 3-20m with stalactites | Cave generator |
+
+### 19.5 Tripo Studio Integration
+
+Reverse-engineered subscription API unlocks 8000/month free credits (vs pay-per-API):
+- Endpoints: /v2/web/ prefix
+- Auth: JWT with auto-refresh
+- Features: 4 variants per generation, balance tracking via /v2/web/user/profile/payment
+- This is THE integration method for Tripo — documented in project_tripo_studio_client memory
+
+### 19.6 Building Foundation System (added v8, must be preserved)
+
+5-point terrain sampling + flatten_terrain_zone + foundation mesh generation prevents floating buildings. This is an ARCHITECTURAL PATTERN for all future terrain-integrated structures.
+
+### 18.7 CONTEXT BLOAT SOLUTION (discovered during this audit)
+All MCP tools support `capture_viewport: false` parameter. Combined with render-to-disk via `blender_execute` + `zai analyze_image` for grading, this keeps ZERO images in conversation context. Use this workflow for all future visual QA:
+1. Generate with `capture_viewport: false`
+2. Render to disk: `bpy.ops.render.render(write_still=True)`
+3. Grade with `mcp__zai-mcp-server__analyze_image` (text-only response)
+4. Use `blender_viewport quick_preview` ONLY for camera framing verification
