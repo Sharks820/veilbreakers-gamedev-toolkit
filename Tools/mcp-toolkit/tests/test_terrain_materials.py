@@ -741,3 +741,69 @@ class TestMoistureAwareSplatmap:
         assert result_low[0] != result_high[0], (
             "Low and high moisture should produce different splatmap weights"
         )
+
+
+# ===========================================================================
+# Terrain material deduplication tests
+# ===========================================================================
+
+
+class TestTerrainMaterialDedup:
+    """Verify create_biome_terrain_material reuses existing materials."""
+
+    def test_biome_material_dedup(self):
+        """Calling create_biome_terrain_material twice returns same material (no .001 suffix)."""
+        from unittest.mock import MagicMock, patch, PropertyMock
+
+        mock_bpy = MagicMock()
+
+        # First call: materials.get returns None -> creates new
+        # Second call: materials.get returns existing -> reuses
+        mock_mat = MagicMock()
+        mock_mat.name = "VB_Terrain_thornwood_forest"
+        mock_mat.use_nodes = True
+        mock_tree = MagicMock()
+        mock_mat.node_tree = mock_tree
+        mock_nodes = MagicMock()
+        mock_tree.nodes = mock_nodes
+        mock_tree.links = MagicMock()
+
+        call_count = [0]
+
+        def mock_materials_get(name):
+            if call_count[0] == 0:
+                return None  # First call: not found
+            return mock_mat  # Second call: found
+
+        def mock_materials_new(name):
+            call_count[0] += 1
+            return mock_mat
+
+        mock_bpy.data.materials.get = mock_materials_get
+        mock_bpy.data.materials.new = mock_materials_new
+
+        with patch("blender_addon.handlers.terrain_materials.bpy", mock_bpy):
+            from blender_addon.handlers.terrain_materials import create_biome_terrain_material
+            # First call -- creates new
+            mat1 = create_biome_terrain_material("thornwood_forest")
+            # Second call -- should reuse existing
+            mat2 = create_biome_terrain_material("thornwood_forest")
+
+        # bpy.data.materials.new should only be called once
+        assert call_count[0] == 1, (
+            f"materials.new called {call_count[0]} times; expected 1 (dedup should prevent second call)"
+        )
+
+    def test_all_biome_palettes_have_nondefault_color(self):
+        """No biome palette layer should have the Blender default (0.8, 0.8, 0.8) base color."""
+        for biome, palette in BIOME_PALETTES_V2.items():
+            for layer_name, layer_def in palette.items():
+                bc = layer_def["base_color"]
+                is_default = (
+                    abs(bc[0] - 0.8) < 0.01
+                    and abs(bc[1] - 0.8) < 0.01
+                    and abs(bc[2] - 0.8) < 0.01
+                )
+                assert not is_default, (
+                    f"{biome}.{layer_name} has Blender default color (0.8, 0.8, 0.8)"
+                )
