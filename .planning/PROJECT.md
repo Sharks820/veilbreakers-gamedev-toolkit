@@ -63,28 +63,23 @@ v3.0 delivered (2026-03-21): COMPLETE
 - Houdini integration — too expensive, Blender Geometry Nodes covers procedural needs
 - Third-grade model generation — EXPLICITLY OUT (user requirement)
 
-## Current Milestone: v7.0 — AAA Procedural City Production (ACTIVE)
+## Current Milestone: v10.0 — Total Quality: Zero Gaps Remaining
 
-**Goal:** Transform VeilBreakers MCP Toolkit from placeholder-grade procedural generation to ultra-competitive AAA studio quality comparable to Skyrim/Fable/AC Valhalla. Build complete procedural city pipeline with walkable interiors, modular architecture, multi-biome terrain, intelligent prop placement, and AAA-quality environmental props. Implement visual-first AI workflow where every inch of generated geometry and material is inspectable without reimporting to Blender. No Hugging Face (8GB VRAM limit) — use Tripo pipeline exclusively. Deliver production-ready starter town for testing with full streaming, occlusion, and runtime systems.
+**Goal:** Close EVERY gap, bug, and finding from V9_MASTER_FINDINGS.md (sections 1-19, 700+ items). Transform every procedural generator from PLACEHOLDER/BASIC to AAA-grade visual quality. Wire all existing dead code, fix all broken generators, overhaul all mesh generation. Mandatory Opus verification scan after every phase — follow-up rounds until clean.
 
 **Target features:**
-- AAA procedural 3D models — Skyrim/Fable/Valhalla benchmark quality
-- High-level textures — AAA quality PBR textures
-- Interior mapping and furnishing — Complete interior systems
-- Intelligent building design — Storyline-aware, non-cookie-cutter architecture
-- Terrain/building mesh integration — Seamless blending, no gaps
-- High-level geometry — Clean edges, professional topology
-- High-level architectural design — AAA structural quality
-- City infrastructure mapping — Roads, paths, shops, complete mapping
-- Intelligent biome mapping — Corruption-aware, logical distribution
-- Effective biome meshing — Visual coherence across meshes
-- Performance-conscious assets — No model spam, optimized
-- Tripo pipeline utilization — Small/medium/large assets, furnishing upgrades
-- Starter town for testing — Functional, gameplay-ready location
-- Auto-compact workflow — Context management at 80%
-- GLM memory persistence — Save learnings across sessions
-- Clean commit workflow — After every bug/error scan
-- Deep research — AAA game techniques, software use cases
+- Wire material library (52 materials + 6 procedural generators) into ALL generators
+- Fix 11 broken/crashed generators (creatures, vegetation, boss arena, town)
+- Wire ALL dead code systems (260-piece modular kit, 15+ vegetation generators, AAA water splines, settlement generator, HeightBlend terrain, atmospheric volumes, light integration, coastline, MST roads)
+- Fix 42 Z=0 placement bugs + 35 smootherstep replacements + orientation bugs
+- Fix all Blender 5.0 API breaks + square-terrain assumptions (6+ files)
+- Geometry overhaul: weapons, armor, creatures, props, clothing, interiors, dungeons, caves, castles
+- Materials & dark fantasy: palette enforcement, weathering, roughness fixes, wet rock, curvature wear
+- Export pipeline: FBX, texture bake, LOD, collision, game_check, vegetation serialization, splatmap
+- Data safety: Tripo texture overwrite fix, checkpoint atomicity, compose_interior binding
+- Pipeline routing: compose_map wiring, castle→settlement, location handlers, smart planner
+
+**Verification protocol:** After EVERY phase: Opus scan → fix round if ANY bugs/gaps found → re-scan → repeat until CLEAN. Only then advance.
 
 ## Context
 
