@@ -741,3 +741,116 @@ class TestMoistureAwareSplatmap:
         assert result_low[0] != result_high[0], (
             "Low and high moisture should produce different splatmap weights"
         )
+
+
+# ===========================================================================
+# HeightBlend wiring into biome terrain material (Task 1)
+# ===========================================================================
+
+
+class TestHeightBlendWiring:
+    """Verify HeightBlend node group is wired into create_biome_terrain_material."""
+
+    def test_height_blend_wired_into_biome_material(self):
+        """create_biome_terrain_material must call _create_height_blend_group."""
+        from unittest.mock import patch
+
+        from blender_addon.handlers.terrain_materials import (
+            create_biome_terrain_material,
+        )
+
+        with patch(
+            "blender_addon.handlers.terrain_materials._create_height_blend_group"
+        ) as mock_hb:
+            mock_hb.return_value = "FakeHeightBlendGroup"
+            create_biome_terrain_material("thornwood_forest")
+            mock_hb.assert_called_once()
+
+    def test_height_blend_nodes_added_to_tree(self):
+        """Material node tree must contain ShaderNodeGroup nodes for HeightBlend."""
+        from unittest.mock import MagicMock, patch
+
+        from blender_addon.handlers.terrain_materials import (
+            create_biome_terrain_material,
+        )
+
+        # Track all _add_node calls
+        added_nodes: list[tuple] = []
+        original_add_node = None
+
+        # We need to capture what node types are created
+        with patch(
+            "blender_addon.handlers.terrain_materials._create_height_blend_group"
+        ) as mock_hb:
+            mock_hb.return_value = MagicMock(name="HeightBlendGroup")
+
+            with patch(
+                "blender_addon.handlers.terrain_materials._add_node"
+            ) as mock_add:
+                mock_add.return_value = MagicMock()
+                create_biome_terrain_material("thornwood_forest")
+
+                # Check that ShaderNodeGroup was used (for HeightBlend nodes)
+                group_calls = [
+                    c for c in mock_add.call_args_list
+                    if len(c[0]) >= 2 and c[0][1] == "ShaderNodeGroup"
+                ]
+                assert len(group_calls) >= 3, (
+                    f"Expected at least 3 ShaderNodeGroup nodes for HeightBlend "
+                    f"(one per layer transition), got {len(group_calls)}"
+                )
+
+    def test_height_blend_contrast_values(self):
+        """Each HeightBlend node's Blend_Contrast should be between 0.4 and 0.8."""
+        from unittest.mock import MagicMock, patch
+
+        from blender_addon.handlers.terrain_materials import (
+            create_biome_terrain_material,
+        )
+
+        hb_nodes: list[MagicMock] = []
+
+        def track_add_node(tree, node_type, x, y, label=""):
+            node = MagicMock()
+            node.node_type = node_type
+            node.label = label
+            if node_type == "ShaderNodeGroup":
+                # Track for later inspection
+                # Set up inputs dict to capture Blend_Contrast assignment
+                blend_contrast_input = MagicMock()
+                blend_contrast_input.default_value = None
+                inputs_dict = {"Blend_Contrast": blend_contrast_input,
+                               "Height_A": MagicMock(),
+                               "Height_B": MagicMock(),
+                               "Mask": MagicMock()}
+                node.inputs = inputs_dict
+                node.outputs = {"Result": MagicMock()}
+                hb_nodes.append(node)
+            else:
+                node.inputs = MagicMock()
+                node.outputs = MagicMock()
+            return node
+
+        with patch(
+            "blender_addon.handlers.terrain_materials._create_height_blend_group"
+        ) as mock_hb:
+            mock_hb.return_value = MagicMock(name="HeightBlendGroup")
+
+            with patch(
+                "blender_addon.handlers.terrain_materials._add_node",
+                side_effect=track_add_node,
+            ):
+                create_biome_terrain_material("thornwood_forest")
+
+        assert len(hb_nodes) >= 3, (
+            f"Expected at least 3 HeightBlend nodes, got {len(hb_nodes)}"
+        )
+        for node in hb_nodes:
+            val = node.inputs["Blend_Contrast"].default_value
+            assert val is not None, (
+                f"HeightBlend node '{node.label}' has no Blend_Contrast value set"
+            )
+            assert 0.4 <= val <= 0.8, (
+                f"HeightBlend '{node.label}' Blend_Contrast={val}, "
+                f"expected 0.4-0.8"
+            )
