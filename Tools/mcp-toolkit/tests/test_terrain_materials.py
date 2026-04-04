@@ -854,3 +854,121 @@ class TestHeightBlendWiring:
                 f"HeightBlend '{node.label}' Blend_Contrast={val}, "
                 f"expected 0.4-0.8"
             )
+
+
+# ===========================================================================
+# Default biome fallback + castle roughness validation (Task 2)
+# ===========================================================================
+
+
+class TestDefaultBiomeFallback:
+    """Verify unknown biome names fall back to default instead of crashing."""
+
+    def test_get_default_biome_returns_thornwood(self):
+        from blender_addon.handlers.terrain_materials import get_default_biome
+
+        assert get_default_biome() == "thornwood_forest"
+
+    def test_default_biome_constant_exists(self):
+        from blender_addon.handlers.terrain_materials import DEFAULT_BIOME
+
+        assert DEFAULT_BIOME == "thornwood_forest"
+
+    def test_unknown_biome_falls_back_no_crash(self):
+        """create_biome_terrain_material with unknown biome should NOT raise."""
+        from unittest.mock import patch
+
+        from blender_addon.handlers.terrain_materials import (
+            create_biome_terrain_material,
+        )
+
+        with patch(
+            "blender_addon.handlers.terrain_materials._create_height_blend_group"
+        ):
+            # This should NOT raise ValueError -- it should fall back
+            mat = create_biome_terrain_material("nonexistent_biome_xyz")
+            # Should return a material object (MagicMock in test)
+            assert mat is not None
+
+    def test_unknown_biome_logs_warning(self):
+        """Falling back to default biome should log a warning."""
+        import logging
+        from unittest.mock import patch
+
+        from blender_addon.handlers.terrain_materials import (
+            create_biome_terrain_material,
+        )
+
+        with patch(
+            "blender_addon.handlers.terrain_materials._create_height_blend_group"
+        ):
+            with patch(
+                "blender_addon.handlers.terrain_materials.logger"
+            ) as mock_logger:
+                create_biome_terrain_material("candy_land_biome")
+                mock_logger.warning.assert_called_once()
+                call_args = mock_logger.warning.call_args
+                assert "candy_land_biome" in str(call_args)
+
+    def test_known_biome_still_works(self):
+        """Existing biome names should continue to work."""
+        from unittest.mock import patch
+
+        from blender_addon.handlers.terrain_materials import (
+            create_biome_terrain_material,
+        )
+
+        with patch(
+            "blender_addon.handlers.terrain_materials._create_height_blend_group"
+        ):
+            # Should not raise
+            mat = create_biome_terrain_material("thornwood_forest")
+            assert mat is not None
+
+
+class TestCastleRoughnessValidation:
+    """Verify castle material roughness validation utility."""
+
+    def test_validate_castle_roughness_exists(self):
+        from blender_addon.handlers.terrain_materials import (
+            validate_castle_roughness,
+        )
+
+        result = validate_castle_roughness()
+        assert isinstance(result, dict)
+        assert "valid" in result
+        assert "issues" in result
+        assert "checked" in result
+
+    def test_validate_castle_roughness_all_valid(self):
+        from blender_addon.handlers.terrain_materials import (
+            validate_castle_roughness,
+        )
+
+        result = validate_castle_roughness()
+        assert result["valid"] is True
+        assert result["issues"] == []
+
+    def test_castle_materials_roughness_above_threshold(self):
+        """All castle-category materials must have roughness >= 0.3."""
+        from blender_addon.handlers.procedural_materials import MATERIAL_LIBRARY
+
+        castle_keys = [
+            "rough_stone_wall", "smooth_stone", "stone_fortified",
+            "stone_heavy", "stone_slab", "stone_parapet",
+            "stone_dark", "brick_wall",
+        ]
+        for key in castle_keys:
+            entry = MATERIAL_LIBRARY.get(key, {})
+            roughness = entry.get("roughness", 0.0)
+            assert roughness >= 0.3, (
+                f"Castle material '{key}' roughness={roughness}, expected >= 0.3"
+            )
+
+    def test_validate_castle_roughness_checked_count(self):
+        from blender_addon.handlers.terrain_materials import (
+            validate_castle_roughness,
+        )
+
+        result = validate_castle_roughness()
+        assert result["checked"] == 8
