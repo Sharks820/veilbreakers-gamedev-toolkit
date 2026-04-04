@@ -606,6 +606,94 @@ from .texture_quality import (  # noqa: F401 -- AAA texture quality pipeline
 
 
 # ---------------------------------------------------------------------------
+# Creature tuple -> MeshSpec adapter
+# ---------------------------------------------------------------------------
+
+
+def _creature_tuple_to_meshspec(
+    result: tuple,
+    name: str,
+    category: str = "creature",
+) -> dict:
+    """Convert a creature generator's raw tuple into a MeshSpec dict.
+
+    Creature generators (mouth, eyelid, paw, wing, serpent) return:
+        (vertices, faces, vertex_groups)            — 3-element tuple
+        (vertices, faces, vertex_groups, bones)     — 4-element tuple
+
+    This adapter wraps them into the dict format expected by
+    _build_quality_object / mesh_from_spec.
+    """
+    verts = result[0]
+    faces = result[1]
+    groups_raw = result[2]
+    groups = groups_raw if isinstance(groups_raw, dict) else {}
+
+    spec: dict[str, Any] = {
+        "vertices": verts,
+        "faces": faces,
+        "vertex_groups": groups,
+        "metadata": {
+            "category": category,
+            "name": name,
+            "vertex_count": len(verts),
+            "poly_count": len(faces),
+        },
+    }
+
+    if len(result) > 3:
+        spec["metadata"]["bones"] = result[3]
+
+    return spec
+
+
+# ---------------------------------------------------------------------------
+# Default branch tips helper for standalone leaf card generation
+# ---------------------------------------------------------------------------
+
+
+def _default_branch_tips(
+    count: int = 20,
+    spread: float = 3.0,
+    height: float = 5.0,
+    seed: int = 42,
+) -> list[dict]:
+    """Generate synthetic branch tip positions for standalone leaf card use.
+
+    When vegetation_leaf_cards is called without branch_tips (e.g. as a
+    standalone handler test), this provides plausible tip positions so the
+    generator can produce geometry instead of returning 0 vertices.
+    """
+    import math as _math
+    import random as _random
+
+    rng = _random.Random(seed)
+    tips: list[dict] = []
+
+    for _ in range(count):
+        px = rng.gauss(0, spread)
+        py = rng.gauss(0, spread)
+        pz = rng.uniform(height * 0.4, height)
+
+        dx = rng.gauss(0, 0.3)
+        dy = rng.gauss(0, 0.3)
+        dz = rng.uniform(0.5, 1.0)
+        length = _math.sqrt(dx * dx + dy * dy + dz * dz)
+        if length > 1e-12:
+            dx, dy, dz = dx / length, dy / length, dz / length
+
+        radius = rng.uniform(0.02, 0.08)
+
+        tips.append({
+            "position": (px, py, pz),
+            "direction": (dx, dy, dz),
+            "radius": radius,
+        })
+
+    return tips
+
+
+# ---------------------------------------------------------------------------
 # Quality mesh builder — converts pure-logic MeshSpec into a Blender object
 # with empties, vertex groups, and returns a JSON-serializable result dict.
 # ---------------------------------------------------------------------------
@@ -638,10 +726,14 @@ def _build_quality_object(
     # Detect if this is a weapon/vertically-oriented asset (blade along Y)
     # and rotate so blade points UP (Z axis) for game-ready orientation
     category = spec.get("metadata", {}).get("category", "")
+    vgroups = spec.get("vertex_groups", {})
     is_weapon = category == "weapon" or any(
-        k in spec.get("vertex_groups", {}) for k in ("blade", "shaft", "limb")
+        k in vgroups for k in ("blade", "shaft", "limb")
     )
-    rot = (-math.pi / 2, 0.0, 0.0) if is_weapon else (0.0, 0.0, 0.0)
+    is_shield = category == "armor" or any(
+        k in vgroups for k in ("boss", "grip_bar", "arm_strap")
+    )
+    rot = (-math.pi / 2, 0.0, 0.0) if (is_weapon or is_shield) else (0.0, 0.0, 0.0)
 
     obj = mesh_from_spec(spec, location=loc, rotation=rot)
 
@@ -1111,13 +1203,18 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         ),
     },
     # L-system vegetation pipeline
-    "vegetation_lsystem_tree": lambda params: generate_lsystem_tree(params),
-    "vegetation_leaf_cards": lambda params: generate_leaf_cards(
-        branch_tips=params.get("branch_tips", []),
+    "vegetation_lsystem_tree": lambda params: _build_quality_object(generate_lsystem_tree(params)),
+    "vegetation_leaf_cards": lambda params: _build_quality_object(generate_leaf_cards(
+        branch_tips=params.get("branch_tips") or _default_branch_tips(
+            count=params.get("tip_count", 20),
+            spread=params.get("spread", 3.0),
+            height=params.get("height", 5.0),
+            seed=params.get("seed", 42),
+        ),
         leaf_type=params.get("leaf_type", "broadleaf"),
         density=params.get("density", 0.8),
         seed=params.get("seed", 42),
-    ),
+    )),
     "vegetation_wind_colors": lambda params: bake_wind_vertex_colors(params),
     "vegetation_billboard": lambda params: generate_billboard_impostor(params),
     "vegetation_gpu_instancing": lambda params: prepare_gpu_instancing_export(params),
@@ -1260,42 +1357,55 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         edge_bevel=params.get("edge_bevel", 0.003),
         ornament_level=params.get("ornament_level", 2),
     )),
-    # AAA creature anatomy generators — build Blender objects from MeshSpec
-    "creature_mouth_interior": lambda params: _build_quality_object(generate_mouth_interior(
-        mouth_width=params.get("mouth_width", 0.1),
-        mouth_depth=params.get("mouth_depth", 0.12),
-        jaw_length=params.get("jaw_length", 0.15),
-        tooth_count=params.get("tooth_count", 20),
-        tooth_style=params.get("tooth_style", "carnivore"),
-        include_tongue=params.get("include_tongue", True),
+    # AAA creature anatomy generators — wrap tuple output in MeshSpec adapter
+    "creature_mouth_interior": lambda params: _build_quality_object(
+        _creature_tuple_to_meshspec(generate_mouth_interior(
+            mouth_width=params.get("mouth_width", 0.1),
+            mouth_depth=params.get("mouth_depth", 0.12),
+            jaw_length=params.get("jaw_length", 0.15),
+            tooth_count=params.get("tooth_count", 20),
+            tooth_style=params.get("tooth_style", "carnivore"),
+            include_tongue=params.get("include_tongue", True),
+            position=tuple(params.get("position", (0.0, 0.0, 0.0))),
+        ), "mouth_interior"),
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
-    ), position=tuple(params.get("position", (0.0, 0.0, 0.0)))),
-    "creature_eyelid_topology": lambda params: _build_quality_object(generate_eyelid_topology(
-        eye_radius=params.get("eye_radius", 0.015),
-        eye_position=tuple(params.get("eye_position", (0.0, 0.0, 0.0))),
-    )),
-    "creature_paw": lambda params: _build_quality_object(generate_paw(
-        paw_type=params.get("paw_type", "canine"),
-        toe_count=params.get("toe_count", 4),
-        include_pads=params.get("include_pads", True),
-        include_claws=params.get("include_claws", True),
-        size=params.get("size", 1.0),
+    ),
+    "creature_eyelid_topology": lambda params: _build_quality_object(
+        _creature_tuple_to_meshspec(generate_eyelid_topology(
+            eye_radius=params.get("eye_radius", 0.015),
+            eye_position=tuple(params.get("eye_position", (0.0, 0.0, 0.0))),
+        ), "eyelid_topology"),
+    ),
+    "creature_paw": lambda params: _build_quality_object(
+        _creature_tuple_to_meshspec(generate_paw(
+            paw_type=params.get("paw_type", "canine"),
+            toe_count=params.get("toe_count", 4),
+            include_pads=params.get("include_pads", True),
+            include_claws=params.get("include_claws", True),
+            size=params.get("size", 1.0),
+            position=tuple(params.get("position", (0.0, 0.0, 0.0))),
+        ), "paw"),
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
-    ), position=tuple(params.get("position", (0.0, 0.0, 0.0)))),
-    "creature_wing": lambda params: _build_quality_object(generate_wing(
-        wing_type=params.get("wing_type", "bat"),
-        wingspan=params.get("wingspan", 2.0),
-        include_membrane=params.get("include_membrane", True),
+    ),
+    "creature_wing": lambda params: _build_quality_object(
+        _creature_tuple_to_meshspec(generate_wing(
+            wing_type=params.get("wing_type", "bat"),
+            wingspan=params.get("wingspan", 2.0),
+            include_membrane=params.get("include_membrane", True),
+            position=tuple(params.get("position", (0.0, 0.0, 0.0))),
+        ), "wing"),
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
-    ), position=tuple(params.get("position", (0.0, 0.0, 0.0)))),
-    "creature_serpent_body": lambda params: _build_quality_object(generate_serpent_body(
-        length=params.get("length", 3.0),
-        max_radius=params.get("max_radius", 0.08),
-        segment_count=params.get("segment_count", 40),
-        head_style=params.get("head_style", "viper"),
-        include_hood=params.get("include_hood", False),
-        size=params.get("size", 1.0),
-    )),
+    ),
+    "creature_serpent_body": lambda params: _build_quality_object(
+        _creature_tuple_to_meshspec(generate_serpent_body(
+            length=params.get("length", 3.0),
+            max_radius=params.get("max_radius", 0.08),
+            segment_count=params.get("segment_count", 40),
+            head_style=params.get("head_style", "viper"),
+            include_hood=params.get("include_hood", False),
+            size=params.get("size", 1.0),
+        ), "serpent_body"),
+    ),
     "creature_quadruped": lambda params: _build_quality_object(generate_quadruped(
         species=params.get("species", "wolf"),
         size=params.get("size", 1.0),

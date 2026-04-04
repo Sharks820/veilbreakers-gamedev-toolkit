@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: AAA Procedural City Production
 status: executing
-last_updated: "2026-04-04T13:58:31.156Z"
-last_activity: 2026-04-04 -- Phase 41 execution started
+last_updated: "2026-04-04T14:12:53.976Z"
+last_activity: 2026-04-04 -- Phase 41-01 creature generator fixes complete
 progress:
   total_phases: 9
   completed_phases: 6
@@ -24,9 +24,9 @@ See: .planning/PROJECT.md (updated 2026-03-30)
 ## Current Position
 
 Phase: 41 (Broken Generator Fixes) — EXECUTING
-Plan: 1 of 3
+Plan: 1 of 3 (41-01 complete)
 Status: Executing Phase 41
-Last activity: 2026-04-04 -- Phase 41 execution started
+Last activity: 2026-04-04 -- 41-01 creature generator fixes complete
 
 ## Accumulated Context
 
@@ -54,7 +54,7 @@ Recent decisions affecting v6.0 work:
 ### v6.0 Deliverables
 
 **Branch:** feature/unified-code-reviewer-v5 (MERGED)
-**Status:** Executing Phase 41
+**Status:** Phase complete — ready for verification
 
 - Tripo Studio API client (v3.0, JWT auth, subscription credits)
 - Unified code reviewer v3 (210 rules, DeepAnalyzer, 0% FP, 82.3% confidence)
@@ -133,25 +133,27 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-04T13:55:06Z
-Completed: Phase 40 Plan 04 (material-texture-wiring verification) -- all MAT requirements verified, safe_place_object fix, 40-03 recovery
-Next action: Continue to Phase 41 (broken generator fixes) or subsequent phases
+Last session: 2026-04-04T14:12:53.971Z
+Completed: Phase 35 (Multi-backend AI) -- 5 tasks, 24 new tests, GLB texture pipeline complete
+Next action: Continue to Phase 36 (World Composer) or Phase 37 (Pipeline Integration)
 
-### Recent Work (2026-04-04 Phase 40 execution)
+### Recent Work (2026-04-01 Phase 35 execution)
 
 **Completed:**
 
-1. Plan 01: Material system foundations -- wet_rock, dark fantasy validator, terrain dedup, logged failures
-2. Plan 02: HeightBlend wiring + default biome fallback + castle roughness validation
-3. Plan 03: Generator material assignment wiring + weathering post-processing + normal chain
-4. Plan 04: Verification scan -- all 10 MAT requirements verified, safe_place_object fix, 40-03 recovery
+1. GLB texture extractor (pygltflib + struct fallback) -- dual-backend parser for PBR channels
+2. Tripo post-processor -- delight + validate + score pipeline for downloaded GLB models
+3. Blender texture wiring handlers -- handle_load_extracted_textures + handle_mix_weathering_over_texture
+4. Pipeline blank-texture bug fix -- cleanup_ai_model routes to load_extracted_textures when flag set
+5. Quality gate -- 24 new tests pass, 18,576 pre-existing pass, 57 pre-existing failures confirmed out-of-scope
 
 **Key decisions:**
 
-- safe_place_object uses pure-logic fallback with bounds/water_level rejection, bpy ray cast when available
-- Cherry-picked lost 40-03 commits that were not merged to master (material assignment + weathering wiring)
-- All 734 material tests pass, 19914 total tests pass, 4 pre-existing security test failures (out of scope)
+- ORM channels split in Blender shader (Separate RGB node) not pre-split to disk -- avoids 3 extra files per model
+- albedo_delit_path takes precedence over albedo_path everywhere -- de-lighted version always used when available
+- post_process_tripo_model runs inside generate_3d loop non-fatally -- failure logged but import continues
+- cleanup action falls back to texture_create_pbr when texture_channels=None -- preserves backward compatibility
 
 ---
 *State initialized: 2026-03-30*
-*Last updated: 2026-04-04 -- Phase 40 complete, all MAT requirements verified, 19914 tests passing*
+*Last updated: 2026-04-01 -- Phase 35 complete, Tripo blank-texture bug fixed, full GLB texture pipeline*
