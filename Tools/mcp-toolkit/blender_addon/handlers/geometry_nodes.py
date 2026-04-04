@@ -153,7 +153,7 @@ VALID_GN_NODE_TYPES: frozenset[str] = frozenset({
     # Texture / noise
     "ShaderNodeTexNoise",
     "ShaderNodeTexVoronoi",
-    "ShaderNodeTexMusgrave",
+    # ShaderNodeTexMusgrave removed -- merged into ShaderNodeTexNoise in Blender 4.1
     "ShaderNodeTexGradient",
     "ShaderNodeTexWave",
     "ShaderNodeTexWhiteNoise",

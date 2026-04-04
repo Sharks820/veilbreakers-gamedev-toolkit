@@ -424,6 +424,11 @@ def _build_location_generation_params(
         params["floors"] = location.get("floors", 2)
     elif loc_type == "boss_arena":
         params["arena_type"] = location.get("arena_type", "circular")
+    elif loc_type == "settlement":
+        params["settlement_type"] = location.get("settlement_type", "town")
+        params["radius"] = location.get("radius", 50.0)
+        if "center" in location:
+            params["center"] = location["center"]
     elif loc_type == "building":
         params["building_size"] = location.get("building_size", "medium")
         params["width"] = location.get("width", 12)
@@ -2929,7 +2934,7 @@ async def asset_pipeline(
             "ruins": "world_generate_ruins",
             "building": "world_generate_building",
             "boss_arena": "world_generate_boss_arena",
-            "settlement": "world_generate_town",
+            "settlement": "world_generate_settlement",
             "hearthvale": "world_generate_hearthvale",
             "interior": "world_generate_building",
         }
