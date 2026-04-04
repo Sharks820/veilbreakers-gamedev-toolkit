@@ -43,16 +43,16 @@
 ## WIRE — Dead Code Wiring
 
 - [ ] **WIRE-01**: Wire VEGETATION_GENERATOR_MAP (15+ real generators) replacing placeholder cubes
-- [ ] **WIRE-02**: Wire modular building kit (260 pieces, 52 core x 5 styles) into building/castle generation
+- [x] **WIRE-02**: Wire modular building kit (260 pieces, 52 core x 5 styles) into building/castle generation
 - [ ] **WIRE-03**: Wire settlement_generator (15 types) -- route castle through it instead of box generator
 - [ ] **WIRE-04**: Wire AAA water handler (spline-following mesh + flow vertex colors) correctly in compose_map
 - [ ] **WIRE-05**: Wire spline-terrain deformation for rivers and roads
 - [ ] **WIRE-06**: Wire L-system trees (4 species: oak/birch/twisted/dead) replacing lollipop meshes
-- [ ] **WIRE-07**: Wire interior binding (14 room types) into settlement generation
+- [x] **WIRE-07**: Wire interior binding (14 room types) into settlement generation
 - [ ] **WIRE-08**: Wire atmospheric volumes, light integration LIGHT_PROP_MAP, prop density/quality
-- [ ] **WIRE-09**: Wire coastline generator + 7 dead-code terrain features
+- [x] **WIRE-09**: Wire coastline generator + 7 dead-code terrain features
 - [ ] **WIRE-10**: Wire MST road network replacing simple paths
-- [ ] **WIRE-11**: Wire building_interior_binding.py (currently NOT IMPORTED in __init__.py)
+- [x] **WIRE-11**: Wire building_interior_binding.py (currently NOT IMPORTED in __init__.py)
 
 ## GEOM — Geometry Quality Overhaul
 
@@ -145,16 +145,16 @@
 | GEN-06 | Phase 41 | Pending |
 | GEN-07 | Phase 41 | Pending |
 | WIRE-01 | Phase 42 | Pending |
-| WIRE-02 | Phase 42 | Pending |
+| WIRE-02 | Phase 42 | Complete |
 | WIRE-03 | Phase 42 | Pending |
 | WIRE-04 | Phase 42 | Pending |
 | WIRE-05 | Phase 42 | Pending |
 | WIRE-06 | Phase 42 | Pending |
-| WIRE-07 | Phase 42 | Pending |
+| WIRE-07 | Phase 42 | Complete |
 | WIRE-08 | Phase 42 | Pending |
-| WIRE-09 | Phase 42 | Pending |
+| WIRE-09 | Phase 42 | Complete |
 | WIRE-10 | Phase 42 | Pending |
-| WIRE-11 | Phase 42 | Pending |
+| WIRE-11 | Phase 42 | Complete |
 | GEOM-01 | Phase 43 | Pending |
 | GEOM-02 | Phase 43 | Pending |
 | GEOM-03 | Phase 43 | Pending |
