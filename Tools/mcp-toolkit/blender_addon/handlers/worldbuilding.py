@@ -21,6 +21,7 @@ from mathutils import Vector
 
 from .procedural_materials import create_procedural_material
 from ._context import get_3d_context_override
+from ._shared_utils import safe_place_object
 from .building_quality import generate_battlements
 from .texture import handle_generate_wear_map
 from ._settlement_grammar import (
@@ -3132,6 +3133,8 @@ def _create_boss_arena_cover(
     px, py = cover["position"]
     radius = float(cover.get("radius", 1.0))
     cover_name = f"{base_name}_cover_{index}_{cover_type}"
+    _cover_loc = safe_place_object(px, py)
+    _cover_loc = _cover_loc if _cover_loc is not None else (px, py, 0.02)
 
     if cover_type == "pillar":
         spec = (PROP_GENERATOR_MAP.get("pillar") or DUNGEON_PROP_MAP.get("pillar"))
@@ -3139,7 +3142,7 @@ def _create_boss_arena_cover(
             return False
         gen_func, gen_kwargs = spec
         mesh_spec = gen_func(**gen_kwargs)
-        obj = mesh_from_spec(mesh_spec, name=cover_name, location=(px, py, 0.0), parent=parent)
+        obj = mesh_from_spec(mesh_spec, name=cover_name, location=_cover_loc, parent=parent)
         if isinstance(obj, dict):
             return False
         obj.scale = (radius * 1.2, radius * 1.2, max(1.6, radius * 2.0))
@@ -3151,7 +3154,7 @@ def _create_boss_arena_cover(
             return False
         gen_func, gen_kwargs = spec
         mesh_spec = gen_func(**gen_kwargs)
-        obj = mesh_from_spec(mesh_spec, name=cover_name, location=(px, py, 0.0), parent=parent)
+        obj = mesh_from_spec(mesh_spec, name=cover_name, location=_cover_loc, parent=parent)
         if isinstance(obj, dict):
             return False
         obj.scale = (radius * 1.4, radius * 1.0, radius * 1.1)
@@ -3167,7 +3170,7 @@ def _create_boss_arena_cover(
             block_variation=0.2,
             seed=seed + index * 13,
         )
-        obj = mesh_from_spec(mesh_spec, name=cover_name, location=(px, py, 0.0), parent=parent)
+        obj = mesh_from_spec(mesh_spec, name=cover_name, location=_cover_loc, parent=parent)
         return not isinstance(obj, dict)
 
     if cover_type == "statue":
@@ -3176,7 +3179,7 @@ def _create_boss_arena_cover(
             return False
         gen_func, gen_kwargs = spec
         mesh_spec = gen_func(**gen_kwargs)
-        obj = mesh_from_spec(mesh_spec, name=cover_name, location=(px, py, 0.0), parent=parent)
+        obj = mesh_from_spec(mesh_spec, name=cover_name, location=_cover_loc, parent=parent)
         if isinstance(obj, dict):
             return False
         obj.scale = (radius * 1.0, radius * 1.0, max(2.0, radius * 2.5))
@@ -3201,7 +3204,8 @@ def _create_hazard_disc(
     bm.to_mesh(mesh)
     bm.free()
     obj = bpy.data.objects.new(f"{base_name}_hazard_{index}_{hazard_type}", mesh)
-    obj.location = (px, py, 0.02)
+    _hazard_loc = safe_place_object(px, py)
+    obj.location = _hazard_loc if _hazard_loc is not None else (px, py, 0.02)
     obj.parent = parent
     bpy.context.collection.objects.link(obj)
     return True
@@ -3226,7 +3230,9 @@ def _create_fog_gate(
         has_keystone=True,
         seed=42,
     )
-    gate_obj = mesh_from_spec(arch, name=gate_name, location=(px, py, 0.0), parent=parent)
+    _gate_loc = safe_place_object(px, py)
+    _gate_loc = _gate_loc if _gate_loc is not None else (px, py, 0.02)
+    gate_obj = mesh_from_spec(arch, name=gate_name, location=_gate_loc, parent=parent)
     return not isinstance(gate_obj, dict)
 
 
@@ -5710,10 +5716,12 @@ def handle_generate_encounter_zone(params: dict) -> dict:
     )
 
     # Create zone parent empty
+    _terrain = params.get("terrain_name")
     parent = bpy.data.objects.new(name, None)
     parent.empty_display_type = "CIRCLE"
     parent.empty_display_size = radius
-    parent.location = (center[0], center[1], 0.0)
+    _zone_loc = safe_place_object(center[0], center[1], terrain_name=_terrain)
+    parent.location = _zone_loc if _zone_loc is not None else (center[0], center[1], 0.02)
     bpy.context.collection.objects.link(parent)
 
     # Create waypoint empties
@@ -5721,7 +5729,8 @@ def handle_generate_encounter_zone(params: dict) -> dict:
         wp_obj = bpy.data.objects.new(f"{name}_waypoint_{i}", None)
         wp_obj.empty_display_type = "ARROWS"
         wp_obj.empty_display_size = 0.5
-        wp_obj.location = (wp[0], wp[1], wp[2] if len(wp) > 2 else 0.0)
+        _wp_loc = safe_place_object(wp[0], wp[1], terrain_name=_terrain)
+        wp_obj.location = _wp_loc if _wp_loc is not None else (wp[0], wp[1], wp[2] if len(wp) > 2 else 0.02)
         wp_obj.parent = parent
         bpy.context.collection.objects.link(wp_obj)
 
@@ -5733,7 +5742,8 @@ def handle_generate_encounter_zone(params: dict) -> dict:
         sp_obj = bpy.data.objects.new(sp_name, None)
         sp_obj.empty_display_type = "SPHERE"
         sp_obj.empty_display_size = 0.4
-        sp_obj.location = (sx, sy, 0.0)
+        _sp_loc = safe_place_object(sx, sy, terrain_name=_terrain)
+        sp_obj.location = _sp_loc if _sp_loc is not None else (sx, sy, 0.02)
         sp_obj.parent = parent
         bpy.context.collection.objects.link(sp_obj)
 
@@ -6170,9 +6180,15 @@ def handle_generate_location(params: dict) -> dict:
     # Location dressing for readability and AAA silhouette variety.
     dressing_idx = 0
 
+    def _terrain_loc(px: float, py: float) -> tuple[float, float, float]:
+        """Sample terrain height for dressing placement, fallback to 0.02."""
+        _loc = safe_place_object(px, py, terrain_name=terrain_name)
+        return _loc if _loc is not None else (px, py, 0.02)
+
     def add_scene_prop(item_type: str, location: tuple[float, float, float], rotation: float = 0.0, scale: tuple[float, float, float] | None = None) -> None:
         nonlocal dressing_idx
-        if _spawn_catalog_object(name, item_type, dressing_idx, location, parent, rotation=rotation, scale=scale) is not None:
+        _loc = _terrain_loc(location[0], location[1])
+        if _spawn_catalog_object(name, item_type, dressing_idx, _loc, parent, rotation=rotation, scale=scale) is not None:
             dressing_idx += 1
 
     if location_type in {"village", "farmstead", "rural"}:
@@ -6185,7 +6201,7 @@ def handle_generate_location(params: dict) -> dict:
                 name,
                 {
                     "type": "farm_plot",
-                    "position": (px, py, 0.0),
+                    "position": _terrain_loc(px, py),
                     "rotation": angle,
                     "scale": (1.0, 1.0, 1.0),
                 },
@@ -6193,9 +6209,11 @@ def handle_generate_location(params: dict) -> dict:
                 parent,
             )
         for i in range(2):
+            _fx = terrain["size"] * (0.24 + 0.48 * i)
+            _fy = terrain["size"] * 0.28
             add_scene_prop(
                 "fence",
-                (terrain["size"] * (0.24 + 0.48 * i), terrain["size"] * 0.28, 0.0),
+                _terrain_loc(_fx, _fy),
                 rotation=0.0,
                 scale=(max(4.0, terrain["size"] * 0.16), 1.0, 1.0),
             )
@@ -6206,42 +6224,42 @@ def handle_generate_location(params: dict) -> dict:
             angle = (2.0 * math.pi * i / 4.0) + 0.2
             px = terrain["size"] * 0.5 + math.cos(angle) * camp_radius
             py = terrain["size"] * 0.5 + math.sin(angle) * camp_radius
-            add_scene_prop("tent", (px, py, 0.0), rotation=angle)
+            add_scene_prop("tent", _terrain_loc(px, py), rotation=angle)
         dressing_idx += _create_settlement_prop_cluster(
             name,
             {
                 "type": "campfire_area",
-                "position": (terrain["size"] * 0.5, terrain["size"] * 0.5, 0.0),
+                "position": _terrain_loc(terrain["size"] * 0.5, terrain["size"] * 0.5),
                 "rotation": 0.0,
                 "scale": (1.0, 1.0, 1.0),
             },
             dressing_idx + 10,
             parent,
         )
-        add_scene_prop("lookout_post", (terrain["size"] * 0.65, terrain["size"] * 0.52, 0.0), rotation=0.0)
-        add_scene_prop("hitching_post", (terrain["size"] * 0.42, terrain["size"] * 0.48, 0.0), rotation=0.0)
+        add_scene_prop("lookout_post", _terrain_loc(terrain["size"] * 0.65, terrain["size"] * 0.52), rotation=0.0)
+        add_scene_prop("hitching_post", _terrain_loc(terrain["size"] * 0.42, terrain["size"] * 0.48), rotation=0.0)
 
     elif location_type == "merchant_camp":
         dressing_idx += _create_settlement_prop_cluster(
             name,
             {
                 "type": "market_stall_cluster",
-                "position": (terrain["size"] * 0.5, terrain["size"] * 0.5, 0.0),
+                "position": _terrain_loc(terrain["size"] * 0.5, terrain["size"] * 0.5),
                 "rotation": 0.0,
                 "scale": (1.0, 1.0, 1.0),
             },
             dressing_idx + 20,
             parent,
         )
-        add_scene_prop("cart", (terrain["size"] * 0.64, terrain["size"] * 0.46, 0.0), rotation=0.2)
-        add_scene_prop("hitching_post", (terrain["size"] * 0.38, terrain["size"] * 0.42, 0.0), rotation=0.0)
-        add_scene_prop("lookout_post", (terrain["size"] * 0.59, terrain["size"] * 0.67, 0.0), rotation=0.0)
+        add_scene_prop("cart", _terrain_loc(terrain["size"] * 0.64, terrain["size"] * 0.46), rotation=0.2)
+        add_scene_prop("hitching_post", _terrain_loc(terrain["size"] * 0.38, terrain["size"] * 0.42), rotation=0.0)
+        add_scene_prop("lookout_post", _terrain_loc(terrain["size"] * 0.59, terrain["size"] * 0.67), rotation=0.0)
 
     elif location_type in {"wizard_fortress", "sorcery_school"}:
-        add_scene_prop("holy_symbol", (terrain["size"] * 0.5, terrain["size"] * 0.7, 0.0), rotation=0.0, scale=(1.4, 1.4, 1.4))
-        add_scene_prop("map_display", (terrain["size"] * 0.34, terrain["size"] * 0.64, 0.0), rotation=0.0, scale=(1.3, 1.0, 1.0))
-        add_scene_prop("candelabra", (terrain["size"] * 0.66, terrain["size"] * 0.62, 0.0), rotation=0.0, scale=(1.1, 1.1, 1.1))
-        add_scene_prop("pillar", (terrain["size"] * 0.5, terrain["size"] * 0.82, 0.0), rotation=0.0, scale=(1.2, 1.2, 2.0))
+        add_scene_prop("holy_symbol", _terrain_loc(terrain["size"] * 0.5, terrain["size"] * 0.7), rotation=0.0, scale=(1.4, 1.4, 1.4))
+        add_scene_prop("map_display", _terrain_loc(terrain["size"] * 0.34, terrain["size"] * 0.64), rotation=0.0, scale=(1.3, 1.0, 1.0))
+        add_scene_prop("candelabra", _terrain_loc(terrain["size"] * 0.66, terrain["size"] * 0.62), rotation=0.0, scale=(1.1, 1.1, 1.1))
+        add_scene_prop("pillar", _terrain_loc(terrain["size"] * 0.5, terrain["size"] * 0.82), rotation=0.0, scale=(1.2, 1.2, 2.0))
 
     elif location_type == "cliff_keep":
         _create_bridge_span(
@@ -6252,7 +6270,7 @@ def handle_generate_location(params: dict) -> dict:
             parent=parent,
             style="stone",
         )
-        add_scene_prop("fence", (terrain["size"] * 0.52, terrain["size"] * 0.74, 0.0), rotation=0.0, scale=(terrain["size"] * 0.18, 1.0, 1.0))
+        add_scene_prop("fence", _terrain_loc(terrain["size"] * 0.52, terrain["size"] * 0.74), rotation=0.0, scale=(terrain["size"] * 0.18, 1.0, 1.0))
 
     elif location_type == "river_castle":
         _create_bridge_span(
@@ -6263,22 +6281,22 @@ def handle_generate_location(params: dict) -> dict:
             parent=parent,
             style="stone",
         )
-        add_scene_prop("fence", (terrain["size"] * 0.52, terrain["size"] * 0.78, 0.0), rotation=0.0, scale=(terrain["size"] * 0.16, 1.0, 1.0))
+        add_scene_prop("fence", _terrain_loc(terrain["size"] * 0.52, terrain["size"] * 0.78), rotation=0.0, scale=(terrain["size"] * 0.16, 1.0, 1.0))
 
     elif location_type == "ruined_town":
         dressing_idx += _create_settlement_prop_cluster(
             name,
             {
                 "type": "battle_aftermath",
-                "position": (terrain["size"] * 0.48, terrain["size"] * 0.48, 0.0),
+                "position": _terrain_loc(terrain["size"] * 0.48, terrain["size"] * 0.48),
                 "rotation": 0.0,
                 "scale": (1.0, 1.0, 1.0),
             },
             dressing_idx + 30,
             parent,
         )
-        add_scene_prop("gravestone", (terrain["size"] * 0.62, terrain["size"] * 0.41, 0.0), rotation=0.0)
-        add_scene_prop("barricade", (terrain["size"] * 0.34, terrain["size"] * 0.36, 0.0), rotation=0.0)
+        add_scene_prop("gravestone", _terrain_loc(terrain["size"] * 0.62, terrain["size"] * 0.41), rotation=0.0)
+        add_scene_prop("barricade", _terrain_loc(terrain["size"] * 0.34, terrain["size"] * 0.36), rotation=0.0)
 
     # A simple hierarchy-friendly marker object for agents.
     bpy.context.view_layer.objects.active = parent
