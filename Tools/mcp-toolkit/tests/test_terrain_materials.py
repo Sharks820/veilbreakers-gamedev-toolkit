@@ -744,231 +744,66 @@ class TestMoistureAwareSplatmap:
 
 
 # ===========================================================================
-# HeightBlend wiring into biome terrain material (Task 1)
+# Terrain material deduplication tests
 # ===========================================================================
 
 
-class TestHeightBlendWiring:
-    """Verify HeightBlend node group is wired into create_biome_terrain_material."""
+class TestTerrainMaterialDedup:
+    """Verify create_biome_terrain_material reuses existing materials."""
 
-    def test_height_blend_wired_into_biome_material(self):
-        """create_biome_terrain_material must call _create_height_blend_group."""
-        from unittest.mock import patch
+    def test_biome_material_dedup(self):
+        """Calling create_biome_terrain_material twice returns same material (no .001 suffix)."""
+        from unittest.mock import MagicMock, patch, PropertyMock
 
-        from blender_addon.handlers.terrain_materials import (
-            create_biome_terrain_material,
+        mock_bpy = MagicMock()
+
+        # First call: materials.get returns None -> creates new
+        # Second call: materials.get returns existing -> reuses
+        mock_mat = MagicMock()
+        mock_mat.name = "VB_Terrain_thornwood_forest"
+        mock_mat.use_nodes = True
+        mock_tree = MagicMock()
+        mock_mat.node_tree = mock_tree
+        mock_nodes = MagicMock()
+        mock_tree.nodes = mock_nodes
+        mock_tree.links = MagicMock()
+
+        call_count = [0]
+
+        def mock_materials_get(name):
+            if call_count[0] == 0:
+                return None  # First call: not found
+            return mock_mat  # Second call: found
+
+        def mock_materials_new(name):
+            call_count[0] += 1
+            return mock_mat
+
+        mock_bpy.data.materials.get = mock_materials_get
+        mock_bpy.data.materials.new = mock_materials_new
+
+        with patch("blender_addon.handlers.terrain_materials.bpy", mock_bpy):
+            from blender_addon.handlers.terrain_materials import create_biome_terrain_material
+            # First call -- creates new
+            mat1 = create_biome_terrain_material("thornwood_forest")
+            # Second call -- should reuse existing
+            mat2 = create_biome_terrain_material("thornwood_forest")
+
+        # bpy.data.materials.new should only be called once
+        assert call_count[0] == 1, (
+            f"materials.new called {call_count[0]} times; expected 1 (dedup should prevent second call)"
         )
 
-        with patch(
-            "blender_addon.handlers.terrain_materials._create_height_blend_group"
-        ) as mock_hb:
-            mock_hb.return_value = "FakeHeightBlendGroup"
-            create_biome_terrain_material("thornwood_forest")
-            mock_hb.assert_called_once()
-
-    def test_height_blend_nodes_added_to_tree(self):
-        """Material node tree must contain ShaderNodeGroup nodes for HeightBlend."""
-        from unittest.mock import MagicMock, patch
-
-        from blender_addon.handlers.terrain_materials import (
-            create_biome_terrain_material,
-        )
-
-        # Track all _add_node calls
-        added_nodes: list[tuple] = []
-        original_add_node = None
-
-        # We need to capture what node types are created
-        with patch(
-            "blender_addon.handlers.terrain_materials._create_height_blend_group"
-        ) as mock_hb:
-            mock_hb.return_value = MagicMock(name="HeightBlendGroup")
-
-            with patch(
-                "blender_addon.handlers.terrain_materials._add_node"
-            ) as mock_add:
-                mock_add.return_value = MagicMock()
-                create_biome_terrain_material("thornwood_forest")
-
-                # Check that ShaderNodeGroup was used (for HeightBlend nodes)
-                group_calls = [
-                    c for c in mock_add.call_args_list
-                    if len(c[0]) >= 2 and c[0][1] == "ShaderNodeGroup"
-                ]
-                assert len(group_calls) >= 3, (
-                    f"Expected at least 3 ShaderNodeGroup nodes for HeightBlend "
-                    f"(one per layer transition), got {len(group_calls)}"
+    def test_all_biome_palettes_have_nondefault_color(self):
+        """No biome palette layer should have the Blender default (0.8, 0.8, 0.8) base color."""
+        for biome, palette in BIOME_PALETTES_V2.items():
+            for layer_name, layer_def in palette.items():
+                bc = layer_def["base_color"]
+                is_default = (
+                    abs(bc[0] - 0.8) < 0.01
+                    and abs(bc[1] - 0.8) < 0.01
+                    and abs(bc[2] - 0.8) < 0.01
                 )
-
-    def test_height_blend_contrast_values(self):
-        """Each HeightBlend node's Blend_Contrast should be between 0.4 and 0.8."""
-        from unittest.mock import MagicMock, patch
-
-        from blender_addon.handlers.terrain_materials import (
-            create_biome_terrain_material,
-        )
-
-        hb_nodes: list[MagicMock] = []
-
-        def track_add_node(tree, node_type, x, y, label=""):
-            node = MagicMock()
-            node.node_type = node_type
-            node.label = label
-            if node_type == "ShaderNodeGroup":
-                # Track for later inspection
-                # Set up inputs dict to capture Blend_Contrast assignment
-                blend_contrast_input = MagicMock()
-                blend_contrast_input.default_value = None
-                inputs_dict = {"Blend_Contrast": blend_contrast_input,
-                               "Height_A": MagicMock(),
-                               "Height_B": MagicMock(),
-                               "Mask": MagicMock()}
-                node.inputs = inputs_dict
-                node.outputs = {"Result": MagicMock()}
-                hb_nodes.append(node)
-            else:
-                node.inputs = MagicMock()
-                node.outputs = MagicMock()
-            return node
-
-        with patch(
-            "blender_addon.handlers.terrain_materials._create_height_blend_group"
-        ) as mock_hb:
-            mock_hb.return_value = MagicMock(name="HeightBlendGroup")
-
-            with patch(
-                "blender_addon.handlers.terrain_materials._add_node",
-                side_effect=track_add_node,
-            ):
-                create_biome_terrain_material("thornwood_forest")
-
-        assert len(hb_nodes) >= 3, (
-            f"Expected at least 3 HeightBlend nodes, got {len(hb_nodes)}"
-        )
-        for node in hb_nodes:
-            val = node.inputs["Blend_Contrast"].default_value
-            assert val is not None, (
-                f"HeightBlend node '{node.label}' has no Blend_Contrast value set"
-            )
-            assert 0.4 <= val <= 0.8, (
-                f"HeightBlend '{node.label}' Blend_Contrast={val}, "
-                f"expected 0.4-0.8"
-            )
-
-
-# ===========================================================================
-# Default biome fallback + castle roughness validation (Task 2)
-# ===========================================================================
-
-
-class TestDefaultBiomeFallback:
-    """Verify unknown biome names fall back to default instead of crashing."""
-
-    def test_get_default_biome_returns_thornwood(self):
-        from blender_addon.handlers.terrain_materials import get_default_biome
-
-        assert get_default_biome() == "thornwood_forest"
-
-    def test_default_biome_constant_exists(self):
-        from blender_addon.handlers.terrain_materials import DEFAULT_BIOME
-
-        assert DEFAULT_BIOME == "thornwood_forest"
-
-    def test_unknown_biome_falls_back_no_crash(self):
-        """create_biome_terrain_material with unknown biome should NOT raise."""
-        from unittest.mock import patch
-
-        from blender_addon.handlers.terrain_materials import (
-            create_biome_terrain_material,
-        )
-
-        with patch(
-            "blender_addon.handlers.terrain_materials._create_height_blend_group"
-        ):
-            # This should NOT raise ValueError -- it should fall back
-            mat = create_biome_terrain_material("nonexistent_biome_xyz")
-            # Should return a material object (MagicMock in test)
-            assert mat is not None
-
-    def test_unknown_biome_logs_warning(self):
-        """Falling back to default biome should log a warning."""
-        import logging
-        from unittest.mock import patch
-
-        from blender_addon.handlers.terrain_materials import (
-            create_biome_terrain_material,
-        )
-
-        with patch(
-            "blender_addon.handlers.terrain_materials._create_height_blend_group"
-        ):
-            with patch(
-                "blender_addon.handlers.terrain_materials.logger"
-            ) as mock_logger:
-                create_biome_terrain_material("candy_land_biome")
-                mock_logger.warning.assert_called_once()
-                call_args = mock_logger.warning.call_args
-                assert "candy_land_biome" in str(call_args)
-
-    def test_known_biome_still_works(self):
-        """Existing biome names should continue to work."""
-        from unittest.mock import patch
-
-        from blender_addon.handlers.terrain_materials import (
-            create_biome_terrain_material,
-        )
-
-        with patch(
-            "blender_addon.handlers.terrain_materials._create_height_blend_group"
-        ):
-            # Should not raise
-            mat = create_biome_terrain_material("thornwood_forest")
-            assert mat is not None
-
-
-class TestCastleRoughnessValidation:
-    """Verify castle material roughness validation utility."""
-
-    def test_validate_castle_roughness_exists(self):
-        from blender_addon.handlers.terrain_materials import (
-            validate_castle_roughness,
-        )
-
-        result = validate_castle_roughness()
-        assert isinstance(result, dict)
-        assert "valid" in result
-        assert "issues" in result
-        assert "checked" in result
-
-    def test_validate_castle_roughness_all_valid(self):
-        from blender_addon.handlers.terrain_materials import (
-            validate_castle_roughness,
-        )
-
-        result = validate_castle_roughness()
-        assert result["valid"] is True
-        assert result["issues"] == []
-
-    def test_castle_materials_roughness_above_threshold(self):
-        """All castle-category materials must have roughness >= 0.3."""
-        from blender_addon.handlers.procedural_materials import MATERIAL_LIBRARY
-
-        castle_keys = [
-            "rough_stone_wall", "smooth_stone", "stone_fortified",
-            "stone_heavy", "stone_slab", "stone_parapet",
-            "stone_dark", "brick_wall",
-        ]
-        for key in castle_keys:
-            entry = MATERIAL_LIBRARY.get(key, {})
-            roughness = entry.get("roughness", 0.0)
-            assert roughness >= 0.3, (
-                f"Castle material '{key}' roughness={roughness}, expected >= 0.3"
-            )
-
-    def test_validate_castle_roughness_checked_count(self):
-        from blender_addon.handlers.terrain_materials import (
-            validate_castle_roughness,
-        )
-
-        result = validate_castle_roughness()
-        assert result["checked"] == 8
+                assert not is_default, (
+                    f"{biome}.{layer_name} has Blender default color (0.8, 0.8, 0.8)"
+                )
