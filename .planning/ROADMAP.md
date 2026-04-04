@@ -1,6 +1,6 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
-**Updated:** 2026-04-04 (v10.0 Phase 43 planned)
+**Updated:** 2026-04-04 (v10.0 Phase 45 planned)
 **Updated:** 2026-03-31 (v7.0 planning in progress)
 
 ## Milestones
@@ -639,6 +639,7 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 39. AAA Map Quality Overhaul | v10.0 | 4/4 | Complete    | 2026-04-04 |
 | 43. Geometry Overhaul -- Weapons, Armor, Creatures | v10.0 | 0/5 | Planned | - |
 | 44. Geometry Overhaul -- Props, Environments, Buildings | v10.0 | 0/4 | Planned | - |
+| 45. Data Safety & Integrity | v10.0 | 0/3 | Planned | - |
 
 ### v10.0 Total Quality: Zero Gaps Remaining (Phases 39-48)
 
@@ -671,6 +672,24 @@ Plans:
 - [ ] 44-03-PLAN.md -- Castle wall thickness, merlons, gatehouse arch, building detail, clothing density, furniture quality
 - [ ] 44-04-PLAN.md -- Full test suite verification + human visual verification
 
+
+### Phase 45: Data Safety & Integrity
+**Goal**: Fix six data-loss and data-corruption bugs across the Tripo texture pipeline, compose_interior spatial planning, settlement scaling, and scene hierarchy export
+**Depends on**: Phase 39 (pipeline fixes)
+**Requirements**: SAFE-01, SAFE-02, SAFE-03, SAFE-04, SAFE-05, SAFE-06, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. Tripo-generated models retain embedded PBR textures after generate_and_process() pipeline
+  2. Pipeline checkpoint resume preserves partially-loaded interior_results
+  3. compose_interior uses pre-aligned binding geometry when available
+  4. Multi-floor rooms get correct Z offsets from floor field
+  5. Settlement generator honors building_count_override from map plan
+  6. emit_scene_hierarchy only includes map-scoped objects
+**Plans**: 3 plans
+Plans:
+- [ ] 45-01-PLAN.md -- Tripo texture overwrite fix + checkpoint atomicity fix
+- [ ] 45-02-PLAN.md -- Interior binding geometry + multi-floor Z + settlement scaling
+- [ ] 45-03-PLAN.md -- Scene hierarchy scoping + full test suite verification
+
 ---
 *Roadmap created: 2026-03-18*
 *v2.0 phases added: 2026-03-19*
@@ -680,3 +699,4 @@ Plans:
 *v7.0 planning started: 2026-03-31*
 *v10.0 Phase 44 planned: 2026-04-04*
 *v10.0 Phase 43 planned: 2026-04-04*
+*v10.0 Phase 45 planned: 2026-04-04*
