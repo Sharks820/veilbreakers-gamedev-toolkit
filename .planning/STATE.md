@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v7.0
 milestone_name: AAA Procedural City Production
-status: verifying
-last_updated: "2026-04-03T08:44:31.709Z"
-last_activity: 2026-04-03
+status: executing
+last_updated: "2026-04-04T14:12:53.976Z"
+last_activity: 2026-04-04 -- Phase 41-01 creature generator fixes complete
 progress:
   total_phases: 9
   completed_phases: 6
@@ -19,14 +19,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-30)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind
-**Current focus:** Phase 39 — aaa-map-quality-overhaul
+**Current focus:** Phase 41 — Broken Generator Fixes
 
 ## Current Position
 
-Phase: 39 (aaa-map-quality-overhaul) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-04-03
+Phase: 41 (Broken Generator Fixes) — EXECUTING
+Plan: 1 of 3 (41-01 complete)
+Status: Executing Phase 41
+Last activity: 2026-04-04 -- 41-01 creature generator fixes complete
 
 ## Accumulated Context
 
@@ -133,7 +133,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-04-03T08:44:31.704Z
+Last session: 2026-04-04T14:12:53.971Z
 Completed: Phase 35 (Multi-backend AI) -- 5 tasks, 24 new tests, GLB texture pipeline complete
 Next action: Continue to Phase 36 (World Composer) or Phase 37 (Pipeline Integration)
 
