@@ -1,6 +1,6 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
-**Updated:** 2026-04-04 (v10.0 Phase 43 planned)
+**Updated:** 2026-04-04 (v10.0 Phase 47 planned)
 **Updated:** 2026-03-31 (v7.0 planning in progress)
 
 ## Milestones
@@ -637,8 +637,12 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 37. Pipeline Integration | v7.0 | 0/TBD | Not Started | - |
 | 38. Starter Town | v7.0 | 0/TBD | Not Started | - |
 | 39. AAA Map Quality Overhaul | v10.0 | 4/4 | Complete    | 2026-04-04 |
-| 43. Geometry Overhaul -- Weapons, Armor, Creatures | v10.0 | 0/5 | Planned | - |
-| 44. Geometry Overhaul -- Props, Environments, Buildings | v10.0 | 0/4 | Planned | - |
+| 43. Geometry Overhaul -- Weapons, Armor, Creatures | v10.0 | 0/5 | Complete    | 2026-04-04 |
+| 44. Geometry Overhaul -- Props, Environments, Buildings | v10.0 | 0/4 | Complete    | 2026-04-04 |
+| 45. Data Safety & Integrity | v10.0 | 0/3 | Complete    | 2026-04-04 |
+| 46. Export Pipeline Completion | v10.0 | 0/3 | Complete    | 2026-04-04 |
+| 47. Unity Integration & Regression | v10.0 | 0/3 | Complete    | 2026-04-04 |
+| 48. Starter City Generation & Verification | v10.0 | 4/4 | Complete    | 2026-04-04 |
 
 ### v10.0 Total Quality: Zero Gaps Remaining (Phases 39-48)
 
@@ -671,6 +675,82 @@ Plans:
 - [ ] 44-03-PLAN.md -- Castle wall thickness, merlons, gatehouse arch, building detail, clothing density, furniture quality
 - [ ] 44-04-PLAN.md -- Full test suite verification + human visual verification
 
+
+### Phase 45: Data Safety & Integrity
+**Goal**: Fix six data-loss and data-corruption bugs across the Tripo texture pipeline, compose_interior spatial planning, settlement scaling, and scene hierarchy export
+**Depends on**: Phase 39 (pipeline fixes)
+**Requirements**: SAFE-01, SAFE-02, SAFE-03, SAFE-04, SAFE-05, SAFE-06, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. Tripo-generated models retain embedded PBR textures after generate_and_process() pipeline
+  2. Pipeline checkpoint resume preserves partially-loaded interior_results
+  3. compose_interior uses pre-aligned binding geometry when available
+  4. Multi-floor rooms get correct Z offsets from floor field
+  5. Settlement generator honors building_count_override from map plan
+  6. emit_scene_hierarchy only includes map-scoped objects
+**Plans**: 3 plans
+Plans:
+- [ ] 45-01-PLAN.md -- Tripo texture overwrite fix + checkpoint atomicity fix
+- [ ] 45-02-PLAN.md -- Interior binding geometry + multi-floor Z + settlement scaling
+- [ ] 45-03-PLAN.md -- Scene hierarchy scoping + full test suite verification
+
+
+### Phase 46: Export Pipeline Completion
+**Goal**: Wire all export pipeline steps into compose_map (game_check, texture bake, LOD generation, collision meshes, FBX per-group export), create new modules for vegetation instance serialization and splatmap-to-PNG export, and fix the aaa_verify stale screenshot bug and generate_map_package broken group export
+**Depends on**: Phase 39 (pipeline fixes), Phase 45 (data safety)
+**Requirements**: EXPORT-01, EXPORT-02, EXPORT-03, EXPORT-04, EXPORT-05, EXPORT-06, EXPORT-07, EXPORT-08, EXPORT-09, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. compose_map produces per-group FBX files via new Steps 11-16 (game_check, bake, LOD, collision, data export, FBX)
+  2. render_angle handler positions camera at specified yaw/pitch (not aliased to viewport screenshot)
+  3. derive_addressable_groups populates terrain and interior object lists
+  4. export_fbx supports object_names filter for per-group export
+  5. Vegetation instances serialized to Unity TreeInstance JSON with correct axis swap
+  6. Splatmap vertex colors rasterized to PNG at configurable resolution
+**Plans**: 3 plans
+Plans:
+- [ ] 46-01-PLAN.md -- Bug fixes: render_angle handler, addressable groups, export_fbx object_names
+- [ ] 46-02-PLAN.md -- New modules: collision generator, vegetation serializer, splatmap exporter
+- [ ] 46-03-PLAN.md -- Wire compose_map Steps 11-16 + integration tests
+
+
+### Phase 47: Unity Integration & Regression
+**Goal**: Add 16 missing Unity bridge handlers for real-time GameObject/component/scene operations, create a new unity_gameobject MCP tool, verify all 37 MCP tools function correctly, and confirm v8.0 fixes remain intact
+**Depends on**: Phase 46 (export pipeline)
+**Requirements**: BRIDGE-01, BRIDGE-02, BRIDGE-03, TEST-02, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. VBBridgeCommands.cs template generates 26 handlers (10 existing + 16 new) covering GameObject CRUD, component ops, scene queries, and utility operations
+  2. A new unity_gameobject MCP tool with 16 actions provides real-time bridge-only operations without recompile cycle
+  3. All 37 MCP tools (16 Blender + 22 Unity + 1 new) are importable with correct action parameters and handler registrations
+  4. All v8.0 fixes (camera, checkpoints, pipeline, materials, architecture, interiors, animation, export) verified intact via regression tests
+  5. Full test suite passes (19920+ baseline + new tests)
+**Plans**: 3 plans
+Plans:
+- [ ] 47-01-PLAN.md -- 16 new bridge handlers + unity_gameobject MCP tool
+- [ ] 47-02-PLAN.md -- Tool verification matrix + v8.0 regression tests
+- [ ] 47-03-PLAN.md -- Integration wiring + full phase gate
+
+
+### Phase 48: Starter City Generation & Final Verification
+**Goal**: Execute the full compose_map pipeline to generate the Hearthvale starter city in Blender (terrain, water, roads, settlement, castle, interiors, vegetation, Tripo props), then visually verify every area with zai and aaa_verify until AAA quality is confirmed
+**Depends on**: All prior phases (39-47)
+**Requirements**: CITY-01, CITY-02, CITY-03, CITY-04, CITY-05, CITY-06, CITY-07, TEST-01, TEST-02, TEST-03, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. Terrain mesh (250m, 256 resolution, erosion) with carved river, shaped water, and road network exists in Blender
+  2. Hearthvale settlement with 25+ buildings using modular kit pieces (not boxes) placed at terrain height
+  3. Castle with keep, curtain walls, towers, and gatehouse arch on elevated terrain
+  4. 4 walkable interiors (tavern, blacksmith, chapel, castle keep) with furniture and props
+  5. L-system vegetation scatter with no trees in water or on cliff faces
+  6. Tripo hero props generated (tavern sign, well, banner, altar, anvil) or procedural fallbacks
+  7. aaa_verify passes on 8+/10 angles with min_score >= 60
+  8. zai rates complete scene as DECENT or better (GOOD/AAA preferred)
+  9. All existing tests pass (19,920+ baseline)
+  10. Opus verification scan CLEAN (zero critical issues)
+**Plans**: 4 plans
+Plans:
+- [x] 48-01-PLAN.md -- Test baseline + pipeline readiness validation
+- [x] 48-02-PLAN.md -- Terrain + water + roads generation with zai verification
+- [x] 48-03-PLAN.md -- City + interiors + vegetation + Tripo props with zai verification
+- [x] 48-04-PLAN.md -- Full AAA verification loop + final human sign-off
+
 ---
 *Roadmap created: 2026-03-18*
 *v2.0 phases added: 2026-03-19*
@@ -680,3 +760,7 @@ Plans:
 *v7.0 planning started: 2026-03-31*
 *v10.0 Phase 44 planned: 2026-04-04*
 *v10.0 Phase 43 planned: 2026-04-04*
+*v10.0 Phase 45 planned: 2026-04-04*
+*v10.0 Phase 46 planned: 2026-04-04*
+*v10.0 Phase 47 planned: 2026-04-04*
+*v10.0 Phase 48 planned: 2026-04-04*
