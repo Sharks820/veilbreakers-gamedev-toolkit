@@ -24,6 +24,7 @@ from __future__ import annotations
 import math
 
 from .animation_gaits import Keyframe
+from ._shared_utils import smoothstep
 
 
 # ---------------------------------------------------------------------------
@@ -86,13 +87,14 @@ def generate_reassemble_keyframes(frame_count: int = 36, intensity: float = 1.0)
             if frame <= converge_start:
                 # Scattered state — parts floating apart
                 t = frame / converge_start if converge_start > 0 else 1.0
-                loc_x = scatter_dir * 0.2 * intensity * math.sin(i * 1.3) * (1 - t * 0.3)
-                loc_z = scatter_height * (1 - t * 0.2)
-                rot = 0.5 * intensity * scatter_dir * math.sin(t * 4 * math.pi) * (1 - t * 0.5)
+                st = smoothstep(t)
+                loc_x = scatter_dir * 0.2 * intensity * math.sin(i * 1.3) * (1 - st * 0.3)
+                loc_z = scatter_height * (1 - st * 0.2)
+                rot = 0.5 * intensity * scatter_dir * math.sin(t * 4 * math.pi) * (1 - st * 0.5)
             else:
                 # Converge to rest pose
                 conv_t = (frame - converge_start) / (frame_count - converge_start) if frame_count > converge_start else 1.0
-                ease = conv_t * conv_t * (3 - 2 * conv_t)  # smoothstep
+                ease = smoothstep(conv_t)
                 loc_x = scatter_dir * 0.2 * intensity * math.sin(i * 1.3) * (1 - ease)
                 loc_z = scatter_height * (1 - ease)
                 rot = 0.3 * intensity * scatter_dir * (1 - ease)
@@ -204,7 +206,7 @@ def generate_phase_shift_keyframes(frame_count: int = 16, intensity: float = 1.0
     for frame in range(frame_count + 1):
         if frame <= vanish_end:
             t = frame / vanish_end if vanish_end > 0 else 1.0
-            scale = max(0.01, 1.0 - t * t)
+            scale = max(0.01, 1.0 - smoothstep(t))
             flicker = 0.1 * math.sin(frame * 15) * (1 - t)
         elif frame <= appear_start:
             # Invisible/between phase
@@ -212,7 +214,7 @@ def generate_phase_shift_keyframes(frame_count: int = 16, intensity: float = 1.0
             flicker = 0.0
         else:
             t = (frame - appear_start) / (frame_count - appear_start) if frame_count > appear_start else 1.0
-            scale = 0.01 + 0.99 * t * t * (3 - 2 * t)
+            scale = 0.01 + 0.99 * smoothstep(t)
             flicker = 0.05 * math.sin(frame * 10) * (1 - t)
 
         keyframes.append(Keyframe("DEF-spine", "scale", 0, frame, scale))
