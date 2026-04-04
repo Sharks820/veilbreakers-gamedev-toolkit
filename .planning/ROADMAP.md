@@ -1,6 +1,6 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
-**Updated:** 2026-04-04 (v10.0 Phase 44 planned)
+**Updated:** 2026-04-04 (v10.0 Phase 43 planned)
 **Updated:** 2026-03-31 (v7.0 planning in progress)
 
 ## Milestones
@@ -637,9 +637,28 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 37. Pipeline Integration | v7.0 | 0/TBD | Not Started | - |
 | 38. Starter Town | v7.0 | 0/TBD | Not Started | - |
 | 39. AAA Map Quality Overhaul | v10.0 | 4/4 | Complete    | 2026-04-04 |
+| 43. Geometry Overhaul -- Weapons, Armor, Creatures | v10.0 | 0/5 | Planned | - |
 | 44. Geometry Overhaul -- Props, Environments, Buildings | v10.0 | 0/4 | Planned | - |
 
 ### v10.0 Total Quality: Zero Gaps Remaining (Phases 39-48)
+
+### Phase 43: Geometry Overhaul -- Weapons, Armor, Creatures
+**Goal**: Upgrade all weapon, armor, and creature generators from PLACEHOLDER/BASIC to DECENT+ quality by increasing vertex density 3-10x, adding anatomical/mechanical detail geometry, fixing orientation bugs, and fixing creature part dispatch crashes
+**Depends on**: Phase 39 (pipeline fixes)
+**Requirements**: GEOM-01, GEOM-02, GEOM-03, TEST-03, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. Every weapon generator (sword, axe, mace, bow, shield, staff) produces 1500-3500 verts with proper cross-sections, component junctions, and style-specific detail
+  2. Every armor generator (pauldron, chestplate, gauntlet) produces 1500-4000 verts with layered plates, anatomical contour, and articulated fingers on gauntlet
+  3. Every quadruped creature (wolf, bear, lion, horse, deer, boar, rat_giant) produces 4000-15000 verts with anatomical landmarks, correct Z-up orientation, and joint detail
+  4. Fantasy creatures (chimera, wyvern, basilisk, etc.) produce 8000-15000 verts with distinct multi-body junction geometry
+  5. All 5 crashed creature part generators (mouth, eyelid, paw, wing, serpent) work without tuple error and produce higher-density meshes
+**Plans**: 5 plans
+Plans:
+- [ ] 43-01-PLAN.md -- Test infrastructure + creature part dispatch fix
+- [ ] 43-02-PLAN.md -- Weapon geometry: sword, axe, mace
+- [ ] 43-03-PLAN.md -- Creature anatomy overhaul: quadruped + fantasy
+- [ ] 43-04-PLAN.md -- Weapon geometry: bow, shield, staff + all armor
+- [ ] 43-05-PLAN.md -- Final verification + visual checkpoint
 
 ### Phase 44: Geometry Overhaul -- Props, Environments, Buildings
 **Goal**: Upgrade all prop, environment, and building geometry from PLACEHOLDER/BASIC to DECENT+ quality by adding detail sub-geometry, fixing dimensional accuracy, and increasing vertex density for cloth simulation
@@ -660,3 +679,4 @@ Plans:
 *v3.0 shipped: 2026-03-21*
 *v7.0 planning started: 2026-03-31*
 *v10.0 Phase 44 planned: 2026-04-04*
+*v10.0 Phase 43 planned: 2026-04-04*
