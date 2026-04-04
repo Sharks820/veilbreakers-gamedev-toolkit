@@ -32,6 +32,7 @@ def apply_hydraulic_erosion(
     min_slope: float = 0.01,
     radius: int = 3,
     max_lifetime: int = 30,
+    height_range: float | None = None,
 ) -> np.ndarray:
     """Apply droplet-based hydraulic erosion to a heightmap.
 
@@ -41,7 +42,7 @@ def apply_hydraulic_erosion(
     Parameters
     ----------
     heightmap : np.ndarray
-        2D heightmap with values in [0, 1].
+        2D heightmap with arbitrary numeric values.
     iterations : int
         Number of droplets to simulate.
     seed : int
@@ -62,15 +63,22 @@ def apply_hydraulic_erosion(
         Erosion/deposition brush radius.
     max_lifetime : int
         Maximum steps per droplet before evaporation.
+    height_range : float | None
+        Optional world-height range for scaling ``min_slope``. When omitted,
+        the range is inferred from the input heightmap.
 
     Returns
     -------
     np.ndarray
-        Eroded heightmap, same shape, values clamped to [0, 1].
+        Eroded heightmap, same shape, clamped to the input value range.
     """
     result = heightmap.astype(np.float64).copy()
     rows, cols = result.shape
     rng = _random.Random(seed)
+    source_min = float(result.min()) if result.size else 0.0
+    source_max = float(result.max()) if result.size else 0.0
+    input_range = float(height_range) if height_range is not None else max(source_max - source_min, 1e-12)
+    effective_min_slope = min_slope * input_range if height_range is not None else min_slope
 
     for _ in range(iterations):
         # Spawn droplet at random position
@@ -144,7 +152,7 @@ def apply_hydraulic_erosion(
             h_diff = new_h - old_h
 
             # Sediment capacity
-            c = max(-h_diff, min_slope) * speed * water * capacity
+            c = max(-h_diff, effective_min_slope) * speed * water * capacity
 
             if sediment > c or h_diff > 0:
                 # Deposit sediment
@@ -173,7 +181,7 @@ def apply_hydraulic_erosion(
             if water < 0.001:
                 break
 
-    return np.clip(result, 0.0, 1.0)
+    return np.clip(result, source_min, source_max)
 
 
 def _deposit(
@@ -235,7 +243,7 @@ def apply_thermal_erosion(
     Parameters
     ----------
     heightmap : np.ndarray
-        2D heightmap with values in [0, 1].
+        2D heightmap with arbitrary numeric values.
     iterations : int
         Number of erosion passes.
     talus_angle : float
@@ -245,10 +253,12 @@ def apply_thermal_erosion(
     Returns
     -------
     np.ndarray
-        Eroded heightmap, same shape, values clamped to [0, 1].
+        Eroded heightmap, same shape, clamped to the input value range.
     """
     result = heightmap.astype(np.float64).copy()
     rows, cols = result.shape
+    source_min = float(result.min()) if result.size else 0.0
+    source_max = float(result.max()) if result.size else 0.0
 
     # Convert talus angle to height difference threshold
     # For adjacent cells at distance 1, tan(angle) = height_diff / 1
@@ -303,6 +313,6 @@ def apply_thermal_erosion(
                 amount[r_src_start:r_src_end, c_src_start:c_src_end]
 
         result += delta
-        result = np.clip(result, 0.0, 1.0)
+        result = np.clip(result, source_min, source_max)
 
     return result

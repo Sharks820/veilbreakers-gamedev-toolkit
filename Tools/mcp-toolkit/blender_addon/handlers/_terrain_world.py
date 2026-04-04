@@ -162,9 +162,9 @@ def erode_world_heightmap(
 ) -> dict[str, Any]:
     """Erode a world heightmap as a single region, then return metadata.
 
-    The current erosion backends still operate on normalized arrays, so this
-    wrapper normalizes the full world region once, applies erosion, and then
-    de-normalizes back into the source range.
+    The erosion backends operate on arbitrary numeric ranges. This wrapper
+    keeps the full world region intact, applies erosion in the source domain,
+    and returns the eroded world heightmap plus flow metadata.
     """
     hmap = np.asarray(heightmap, dtype=np.float64)
     if hmap.ndim != 2:
@@ -204,19 +204,20 @@ def erode_world_heightmap(
             "height_range": 0.0,
         }
 
-    normalized = (hmap - source_min) / height_range
+    eroded = hmap
 
     if hydraulic_iterations > 0:
-        normalized = apply_hydraulic_erosion(
-            normalized,
+        eroded = apply_hydraulic_erosion(
+            eroded,
             iterations=hydraulic_iterations,
             seed=seed,
+            height_range=height_range,
         )
 
     if thermal_iterations > 0:
-        normalized = np.asarray(
+        eroded = np.asarray(
             apply_thermal_erosion(
-                normalized,
+                eroded,
                 iterations=thermal_iterations,
                 talus_angle=talus_angle,
             ),
@@ -224,10 +225,10 @@ def erode_world_heightmap(
         )
 
     # Compute flow on the eroded world-region heightfield before splitting.
-    flow_map = compute_flow_map(normalized)
+    flow_map = compute_flow_map(eroded)
 
     return {
-        "heightmap": normalized * height_range + source_min,
+        "heightmap": eroded,
         "flow_map": flow_map,
         "source_min": source_min,
         "source_max": source_max,
