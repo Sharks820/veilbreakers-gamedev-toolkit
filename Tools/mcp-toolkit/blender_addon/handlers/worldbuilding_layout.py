@@ -31,6 +31,7 @@ from ._dungeon_gen import (
     generate_cave_map,
     generate_town_layout,
 )
+from ._shared_utils import safe_place_object
 
 logger = logging.getLogger(__name__)
 
@@ -490,7 +491,8 @@ def handle_generate_town(params: dict) -> dict:
 
         building_obj = bpy.data.objects.get(structure_name)
         if building_obj is not None:
-            building_obj.location = (bx, by, 0.0)
+            _placement = safe_place_object(bx, by, terrain_name=params.get("terrain_name"))
+            building_obj.location = _placement if _placement is not None else (bx, by, 0.02)
             # Vary rotation for visual interest (face road)
             import random as _rng_town
             _rng_town.seed(seed + i)
@@ -513,7 +515,8 @@ def handle_generate_town(params: dict) -> dict:
         lm_obj = bpy.data.objects.get(lm_name)
         if lm_obj is not None:
             lx, ly = landmark["position"]
-            lm_obj.location = (lx * cell_size, ly * cell_size, 0.0)
+            _lm_place = safe_place_object(lx * cell_size, ly * cell_size, terrain_name=params.get("terrain_name"))
+            lm_obj.location = _lm_place if _lm_place is not None else (lx * cell_size, ly * cell_size, 0.02)
             lm_obj.rotation_euler = (0.0, 0.0, 0.0)
             lm_obj.parent = parent
             structure_count += 1
@@ -665,6 +668,8 @@ def handle_generate_hearthvale(params: dict) -> dict:
         elem_name = f"{name}_perimeter_{elem_type}_{i}"
         ex, ey = elem.get("position", (0.0, 0.0))
         rot_z = elem.get("rotation", 0.0)
+        _perim_loc = safe_place_object(ex, ey, terrain_name=params.get("terrain_name"))
+        _perim_loc = _perim_loc if _perim_loc is not None else (ex, ey, 0.02)
 
         try:
             if elem.get("is_gate"):
@@ -675,7 +680,7 @@ def handle_generate_hearthvale(params: dict) -> dict:
                     seed=seed + 3000 + i,
                 )
                 obj = mesh_from_spec(gate_spec, name=elem_name,
-                                     location=(ex, ey, 0.0),
+                                     location=_perim_loc,
                                      rotation=(0.0, 0.0, rot_z),
                                      parent=parent)
                 if not isinstance(obj, dict):
@@ -687,7 +692,7 @@ def handle_generate_hearthvale(params: dict) -> dict:
                     block_style="ashlar", seed=seed + 3000 + i,
                 )
                 obj = mesh_from_spec(tower_spec, name=elem_name,
-                                     location=(ex, ey, 0.0),
+                                     location=_perim_loc,
                                      rotation=(0.0, 0.0, rot_z),
                                      parent=parent)
                 if not isinstance(obj, dict):
@@ -700,7 +705,7 @@ def handle_generate_hearthvale(params: dict) -> dict:
                     seed=seed + 3000 + i,
                 )
                 obj = mesh_from_spec(wall_spec, name=elem_name,
-                                     location=(ex, ey, 0.0),
+                                     location=_perim_loc,
                                      rotation=(0.0, 0.0, rot_z),
                                      parent=parent)
                 if not isinstance(obj, dict):
@@ -711,7 +716,7 @@ def handle_generate_hearthvale(params: dict) -> dict:
             import bmesh
             mesh = bpy.data.meshes.new(f"{elem_name}_mesh")
             obj = bpy.data.objects.new(elem_name, mesh)
-            obj.location = (ex, ey, 0.0)
+            obj.location = _perim_loc
             obj.rotation_euler = (0.0, 0.0, rot_z)
             obj.parent = parent
             bpy.context.collection.objects.link(obj)
