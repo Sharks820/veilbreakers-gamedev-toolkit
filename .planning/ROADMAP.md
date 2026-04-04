@@ -1,6 +1,6 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
-**Created:** 2026-03-18
+**Updated:** 2026-04-04 (v10.0 Phase 44 planned)
 **Updated:** 2026-03-31 (v7.0 planning in progress)
 
 ## Milestones
@@ -8,6 +8,7 @@
 - [x] **v1.0 Foundation & Full Pipeline** - Phases 1-8 (shipped 2026-03-19)
 - [x] **v2.0 Complete Unity Game Development Coverage** - Phases 9-17 (shipped 2026-03-21)
 - [x] **v3.0 AAA Mesh Quality + Professional Systems** - Phases 18-24 (shipped 2026-03-21)
+- [ ] **v10.0 Total Quality: Zero Gaps Remaining** - Phases 39-48 (in progress)
 - [ ] **v7.0 AAA Procedural City Production** - Phases 30-38 (planning in progress)
 
 ## Phases
@@ -635,7 +636,21 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 36. World Composer | v7.0 | 2/2 | Complete   | 2026-04-01 |
 | 37. Pipeline Integration | v7.0 | 0/TBD | Not Started | - |
 | 38. Starter Town | v7.0 | 0/TBD | Not Started | - |
-| 39. AAA Map Quality Overhaul | v7.0 | 4/4 | Complete    | 2026-04-04 |
+| 39. AAA Map Quality Overhaul | v10.0 | 4/4 | Complete    | 2026-04-04 |
+| 44. Geometry Overhaul -- Props, Environments, Buildings | v10.0 | 0/4 | Planned | - |
+
+### v10.0 Total Quality: Zero Gaps Remaining (Phases 39-48)
+
+### Phase 44: Geometry Overhaul -- Props, Environments, Buildings
+**Goal**: Upgrade all prop, environment, and building geometry from PLACEHOLDER/BASIC to DECENT+ quality by adding detail sub-geometry, fixing dimensional accuracy, and increasing vertex density for cloth simulation
+**Depends on**: Phase 43 (weapons/armor/creatures geometry), Phase 42 (dead code wiring)
+**Requirements**: GEOM-04, GEOM-05, GEOM-06, GEOM-07, GEOM-08, GEOM-09, GEOM-10, GEOM-11, GEOM-12, TEST-03, TEST-04
+**Plans**: 4 plans
+Plans:
+- [ ] 44-01-PLAN.md -- Prop detail geometry + chain optimization + flag cloth density
+- [ ] 44-02-PLAN.md -- Terrain micro-undulation, skirt, dungeon/cave height, stalactites, scree, smootherstep
+- [ ] 44-03-PLAN.md -- Castle wall thickness, merlons, gatehouse arch, building detail, clothing density, furniture quality
+- [ ] 44-04-PLAN.md -- Full test suite verification + human visual verification
 
 ---
 *Roadmap created: 2026-03-18*
@@ -644,3 +659,4 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 *v3.0 phases added: 2026-03-21*
 *v3.0 shipped: 2026-03-21*
 *v7.0 planning started: 2026-03-31*
+*v10.0 Phase 44 planned: 2026-04-04*
