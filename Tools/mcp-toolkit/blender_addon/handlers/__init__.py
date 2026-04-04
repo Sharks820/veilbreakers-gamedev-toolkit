@@ -1457,11 +1457,15 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     # --- Missing handler registrations (MCP wiring fixes) ---
     # (a) Multi-biome world generation
     "env_generate_multi_biome_world": handle_generate_multi_biome_world,
-    # (b) asset_pipeline dispatch — routes to pipeline_generate_lods for generate_lods action
+    # (b) asset_pipeline dispatch — routes actions to their pipeline handlers
     "asset_pipeline": lambda params: (
-        COMMAND_HANDLERS.get("pipeline_generate_lods", lambda p: {"error": "not found"})(params)
-        if params.get("action") == "generate_lods"
-        else {"error": f"Unknown asset_pipeline action: {params.get('action')}"}
+        {
+            "generate_lods": COMMAND_HANDLERS.get("pipeline_generate_lods", lambda p: {"error": "pipeline_generate_lods not found"}),
+            "generate_lod_chain": COMMAND_HANDLERS.get("pipeline_generate_lod_chain", lambda p: {"error": "pipeline_generate_lod_chain not found"}),
+        }.get(
+            params.get("action", ""),
+            lambda p: {"error": f"asset_pipeline action '{p.get('action')}' is handled by MCP server, not addon. Use blender_server.py routing."},
+        )(params)
     ),
     # (c) Auto LOD chain generation — wraps mesh_enhance.auto_generate_lod_chain
     "auto_generate_lod_chain": lambda params: _auto_generate_lod_chain(
