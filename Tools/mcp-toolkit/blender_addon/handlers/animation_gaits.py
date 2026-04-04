@@ -14,6 +14,8 @@ import math
 import re
 from typing import NamedTuple
 
+from ._shared_utils import smoothstep
+
 
 # ---------------------------------------------------------------------------
 # Core data type
@@ -1372,7 +1374,7 @@ def generate_attack_keyframes(
             frame_end_inclusive = end_frame + 1 if is_last_phase else end_frame
             for frame in range(start_frame, frame_end_inclusive):
                 t = (frame - start_frame) / phase_length if phase_length > 0 else 1.0
-                value = start_val + (end_val - start_val) * t
+                value = start_val + (end_val - start_val) * smoothstep(t)
                 keyframes.append(Keyframe(
                     bone_name=bone_name,
                     channel=channel,
@@ -1497,7 +1499,7 @@ def generate_reaction_keyframes(
 
         for frame in range(frame_count + 1):
             t = frame / frame_count
-            value = start_val + (end_val - start_val) * t
+            value = start_val + (end_val - start_val) * smoothstep(t)
             keyframes.append(Keyframe(
                 bone_name=bone_name,
                 channel=channel,
@@ -1519,9 +1521,9 @@ def generate_reaction_keyframes(
                 t = frame / frame_count
                 # Quick hit (peak at 20%) then recover
                 if t <= 0.2:
-                    value = magnitude * (t / 0.2)
+                    value = magnitude * smoothstep(t / 0.2)
                 else:
-                    value = magnitude * (1.0 - (t - 0.2) / 0.8)
+                    value = magnitude * (1.0 - smoothstep((t - 0.2) / 0.8))
                 keyframes.append(Keyframe(
                     bone_name=hit_bone,
                     channel=channel,
@@ -1658,9 +1660,9 @@ def generate_custom_keyframes(
                 t = local_frame / action_length if action_length > 0 else 1.0
                 # Bell curve: ramp up then back down
                 if t <= 0.5:
-                    value = magnitude * (t / 0.5)
+                    value = magnitude * smoothstep(t / 0.5)
                 else:
-                    value = magnitude * (1.0 - (t - 0.5) / 0.5)
+                    value = magnitude * (1.0 - smoothstep((t - 0.5) / 0.5))
                 keyframes.append(Keyframe(
                     bone_name=bone_name,
                     channel=channel,

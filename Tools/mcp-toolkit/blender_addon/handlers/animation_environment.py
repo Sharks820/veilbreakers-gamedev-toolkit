@@ -22,6 +22,7 @@ from __future__ import annotations
 import math
 
 from .animation_gaits import Keyframe
+from ._shared_utils import smoothstep
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +137,7 @@ def generate_door_slam_keyframes(
     for frame in range(frame_count + 1):
         if frame <= impact_frame:
             t = frame / impact_frame if impact_frame > 0 else 1.0
-            rot = angle_rad * (1.0 - t * t * t)  # fast close
+            rot = angle_rad * (1.0 - smoothstep(t))  # fast close
         else:
             bounce_t = (frame - impact_frame) / (frame_count - impact_frame) if frame_count > impact_frame else 1.0
             # Damped bounce
@@ -159,7 +160,7 @@ def generate_door_creak_keyframes(
     for frame in range(frame_count + 1):
         t = frame / frame_count
         # Step-wise opening with hesitation pauses
-        base = angle_rad * t
+        base = angle_rad * smoothstep(t)
         hesitation = 0.02 * angle_rad * math.sin(t * 8 * math.pi) * (1 - t)
         rot = base + hesitation
         keyframes.append(Keyframe(ENV_ROOT, "rotation_euler", 2, frame, rot))
@@ -182,7 +183,7 @@ def generate_gate_raise_keyframes(
     for frame in range(frame_count + 1):
         t = frame / frame_count
         # Chain-driven: slight jerkiness superimposed on smooth raise
-        smooth = height * t
+        smooth = height * smoothstep(t)
         jerk = 0.02 * height * math.sin(t * 12 * math.pi) * (1 - t)
         z = smooth + jerk
         keyframes.append(Keyframe(ENV_ROOT, "location", 2, frame, z))
@@ -202,7 +203,7 @@ def generate_gate_lower_keyframes(
     for frame in range(frame_count + 1):
         if frame <= drop_end:
             t = frame / drop_end if drop_end > 0 else 1.0
-            z = height * (1.0 - t * t)  # gravity acceleration
+            z = height * (1.0 - smoothstep(t))  # gravity acceleration
         else:
             bounce_t = (frame - drop_end) / (frame_count - drop_end) if frame_count > drop_end else 1.0
             z = 0.03 * height * math.sin(bounce_t * 4 * math.pi) * (1 - bounce_t)
@@ -223,7 +224,7 @@ def generate_drawbridge_keyframes(
     for frame in range(frame_count + 1):
         t = frame / frame_count
         # S-curve for controlled lowering
-        s_curve = t * t * (3 - 2 * t)
+        s_curve = smoothstep(t)
         rot = -angle_rad * s_curve
         # Slight chain wobble
         wobble = 0.01 * math.sin(t * 6 * math.pi) * (1 - t)
@@ -404,7 +405,7 @@ def generate_trap_trigger_keyframes(
     for frame in range(frame_count + 1):
         if frame <= snap_frame:
             t = frame / snap_frame if snap_frame > 0 else 1.0
-            rot = -0.8 * intensity * t * t * t  # cubic snap
+            rot = -0.8 * intensity * smoothstep(t)  # smooth snap
         else:
             settle_t = (frame - snap_frame) / (frame_count - snap_frame) if frame_count > snap_frame else 1.0
             rot = -0.8 * intensity * (1 - 0.1 * math.sin(settle_t * 3 * math.pi) * (1 - settle_t))
@@ -430,7 +431,7 @@ def generate_chest_open_keyframes(
     for frame in range(frame_count + 1):
         if frame <= open_end:
             t = frame / open_end if open_end > 0 else 1.0
-            ease_t = 1.0 - (1.0 - t) ** 2
+            ease_t = smoothstep(t)
             rot = -angle_rad * ease_t
         else:
             settle_t = (frame - open_end) / (frame_count - open_end) if frame_count > open_end else 1.0
@@ -452,7 +453,7 @@ def generate_lever_pull_keyframes(
 
     for frame in range(frame_count + 1):
         t = frame / frame_count
-        ease_t = t * t * (3 - 2 * t)  # S-curve
+        ease_t = smoothstep(t)
         rot = angle_rad * ease_t
         keyframes.append(Keyframe(ENV_ROOT, "rotation_euler", 0, frame, rot))
 
