@@ -367,11 +367,17 @@ def generate_heightmap(
     width: int,
     height: int,
     scale: float = 100.0,
+    world_origin_x: float = 0.0,
+    world_origin_y: float = 0.0,
+    cell_size: float = 1.0,
+    normalize: bool = True,
     octaves: int | None = None,
     persistence: float | None = None,
     lacunarity: float | None = None,
     seed: int = 0,
     terrain_type: str = "mountains",
+    world_center_x: float | None = None,
+    world_center_y: float | None = None,
     warp_strength: float = 0.0,
     warp_scale: float = 0.5,
 ) -> np.ndarray:
@@ -387,6 +393,14 @@ def generate_heightmap(
         Dimensions of the output heightmap.
     scale : float
         Noise sampling scale (larger = smoother terrain).
+    world_origin_x, world_origin_y : float
+        World-space coordinates of the tile's local origin.
+    cell_size : float
+        World-space size of one heightmap cell.
+    normalize : bool
+        If True, keep the legacy per-tile [0, 1] normalization. If False,
+        skip the final tile-local normalization and keep the deterministic
+        world-space value range.
     octaves, persistence, lacunarity : optional
         Override terrain preset values for fBm noise stacking.
     seed : int
@@ -402,7 +416,9 @@ def generate_heightmap(
     Returns
     -------
     np.ndarray
-        2D array of shape (height, width) with values in [0, 1].
+        2D array of shape (height, width). When ``normalize=True`` values are
+        in [0, 1]. When ``normalize=False`` values remain in the deterministic
+        world-space range produced by the noise stack.
     """
     if terrain_type not in TERRAIN_PRESETS:
         raise ValueError(
@@ -419,8 +435,8 @@ def generate_heightmap(
 
     # Build coordinate grids once (vectorised)
     # x varies along columns (axis 1), y varies along rows (axis 0)
-    x_coords = np.arange(width, dtype=np.float64) / scale   # shape (width,)
-    y_coords = np.arange(height, dtype=np.float64) / scale  # shape (height,)
+    x_coords = (np.arange(width, dtype=np.float64) * cell_size + world_origin_x) / scale
+    y_coords = (np.arange(height, dtype=np.float64) * cell_size + world_origin_y) / scale
     xs_base, ys_base = np.meshgrid(x_coords, y_coords)      # both (height, width)
 
     # Apply domain warping for organic, non-repetitive terrain features
@@ -450,20 +466,38 @@ def generate_heightmap(
         hmap /= max_val
 
     # Apply terrain preset shaping
-    hmap = _apply_terrain_preset(hmap, preset)
+    hmap = _apply_terrain_preset(
+        hmap,
+        preset,
+        normalize=normalize,
+        world_origin_x=world_origin_x,
+        world_origin_y=world_origin_y,
+        cell_size=cell_size,
+        world_center_x=world_center_x,
+        world_center_y=world_center_y,
+    )
 
-    # Normalize to [0, 1]
-    hmin, hmax = hmap.min(), hmap.max()
-    if hmax - hmin > 1e-10:
-        hmap = (hmap - hmin) / (hmax - hmin)
-    else:
-        hmap = np.zeros_like(hmap)
+    if normalize:
+        # Normalize to [0, 1]
+        hmin, hmax = hmap.min(), hmap.max()
+        if hmax - hmin > 1e-10:
+            hmap = (hmap - hmin) / (hmax - hmin)
+        else:
+            hmap = np.zeros_like(hmap)
 
     return hmap
 
 
 def _apply_terrain_preset(
-    hmap: np.ndarray, preset: dict[str, Any]
+    hmap: np.ndarray,
+    preset: dict[str, Any],
+    *,
+    normalize: bool = True,
+    world_origin_x: float = 0.0,
+    world_origin_y: float = 0.0,
+    cell_size: float = 1.0,
+    world_center_x: float | None = None,
+    world_center_y: float | None = None,
 ) -> np.ndarray:
     """Apply terrain-type post-processing to a raw noise heightmap."""
     post = preset.get("post_process", "none")
@@ -471,12 +505,15 @@ def _apply_terrain_preset(
     hmap = hmap * amp
 
     if post == "power":
-        # Normalize to [0,1] first, apply power curve, rescale
-        hmin, hmax = hmap.min(), hmap.max()
-        if hmax - hmin > 1e-10:
-            normalized = (hmap - hmin) / (hmax - hmin)
+        # Use a deterministic normalization contract.
+        if normalize:
+            hmin, hmax = hmap.min(), hmap.max()
+            if hmax - hmin > 1e-10:
+                normalized = (hmap - hmin) / (hmax - hmin)
+            else:
+                normalized = np.zeros_like(hmap)
         else:
-            normalized = np.zeros_like(hmap)
+            normalized = np.clip((hmap + 1.0) * 0.5, 0.0, 1.0)
         power = preset.get("power", 1.5)
         hmap = np.power(normalized, power)
 
@@ -495,7 +532,14 @@ def _apply_terrain_preset(
     elif post == "crater":
         # Volcanic crater: radial falloff with a dip in the center
         rows, cols = hmap.shape
-        cy, cx = rows / 2.0, cols / 2.0
+        if world_center_x is None:
+            cx = cols / 2.0
+        else:
+            cx = (world_center_x - world_origin_x) / max(cell_size, 1e-10)
+        if world_center_y is None:
+            cy = rows / 2.0
+        else:
+            cy = (world_center_y - world_origin_y) / max(cell_size, 1e-10)
         max_r = min(rows, cols) / 2.0
         crater_r = preset.get("crater_radius", 0.3) * max_r
         crater_depth = preset.get("crater_depth", 0.4)
@@ -523,16 +567,28 @@ def _apply_terrain_preset(
     elif post == "step":
         # Cliff step function: quantize heights into discrete levels
         step_count = preset.get("step_count", 5)
-        hmin, hmax = hmap.min(), hmap.max()
-        if hmax - hmin > 1e-10:
-            normalized = (hmap - hmin) / (hmax - hmin)
+        if normalize:
+            hmin, hmax = hmap.min(), hmap.max()
+            if hmax - hmin > 1e-10:
+                normalized = (hmap - hmin) / (hmax - hmin)
+            else:
+                normalized = np.zeros_like(hmap)
         else:
-            normalized = np.zeros_like(hmap)
+            normalized = np.clip((hmap + 1.0) * 0.5, 0.0, 1.0)
         stepped = np.floor(normalized * step_count) / step_count
         # Blend stepped with original for cliff edges
         hmap = stepped * 0.7 + normalized * 0.3
 
     return hmap
+
+
+def _theoretical_max_amplitude(octaves: int, persistence: float) -> float:
+    """Return the geometric-series amplitude bound for an fBm stack."""
+    if octaves <= 0:
+        return 0.0
+    if abs(1.0 - persistence) < 1e-12:
+        return float(octaves)
+    return (1.0 - persistence**octaves) / (1.0 - persistence)
 
 
 # ---------------------------------------------------------------------------
