@@ -59,6 +59,41 @@ class TestTerrainWorldFoundation:
             world[tile_size:tile_size + tile_size + 1, tile_size:tile_size + tile_size + 1],
         )
 
+    def test_erode_world_heightmap_preserves_seams(self):
+        from blender_addon.handlers._terrain_world import (
+            erode_world_heightmap,
+            extract_tile,
+            generate_world_heightmap,
+            validate_tile_seams,
+        )
+
+        tile_size = 20
+        world = generate_world_heightmap(
+            tile_size * 2 + 1,
+            tile_size * 2 + 1,
+            seed=21,
+            terrain_type="mountains",
+            normalize=False,
+        )
+
+        eroded = erode_world_heightmap(
+            world,
+            hydraulic_iterations=250,
+            thermal_iterations=10,
+            seed=21,
+        )["heightmap"]
+
+        tiles = {
+            (0, 0): extract_tile(eroded, 0, 0, tile_size),
+            (1, 0): extract_tile(eroded, 1, 0, tile_size),
+            (0, 1): extract_tile(eroded, 0, 1, tile_size),
+            (1, 1): extract_tile(eroded, 1, 1, tile_size),
+        }
+
+        result = validate_tile_seams(tiles)
+        assert result["seam_ok"] is True
+        assert result["max_edge_delta"] <= 1e-10
+
     def test_validate_tile_seams_reports_clean(self):
         from blender_addon.handlers._terrain_world import (
             extract_tile,
