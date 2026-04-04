@@ -1038,10 +1038,12 @@ def mesh_from_spec(
                         obj.data.materials[0] = mat
                     else:
                         obj.data.materials.append(mat)
-            except Exception:
-                # Graceful fallback: if procedural material creation fails,
-                # the object keeps its default material (no crash)
-                pass
+            except Exception as e:
+                import logging
+                logging.getLogger("veilbreakers.mesh_bridge").warning(
+                    "Material assignment failed for %s (category=%s, key=%s): %s",
+                    obj_name, category, material_key, e,
+                )
 
     return obj
 
