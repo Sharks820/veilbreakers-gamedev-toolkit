@@ -1,5 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
+**Created:** 2026-03-18
+**Updated:** 2026-04-04 (v10.0 Phase 41 planned)
 **Updated:** 2026-04-04 (v10.0 Phase 40 planned)
 **Updated:** 2026-04-04 (v10.0 Phase 39 Plan 01 complete)
 
@@ -644,6 +646,7 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 |-------|-----------|----------------|--------|-----------|
 | 39. Pipeline & Systemic Fixes | v10.0 | 1/5 | Executing | - |
 | 40. Material & Texture Wiring | v10.0 | 0/4 | Planned | - |
+| 41. Broken Generator Fixes | v10.0 | 0/3 | Planned | - |
 
 ---
 *Roadmap created: 2026-03-18*
@@ -654,3 +657,4 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 *v7.0 planning started: 2026-03-31*
 *v10.0 Phase 39 Plan 01 complete: 2026-04-04*
 *v10.0 Phase 40 planned: 2026-04-04*
+*v10.0 Phase 41 planned: 2026-04-04*
