@@ -1,7 +1,7 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
 **Created:** 2026-03-18
-**Updated:** 2026-04-04 (v10.0 roadmap created)
+**Updated:** 2026-04-04 (v10.0 roadmap created, Phase 39 planned)
 
 ## Milestones
 
@@ -287,7 +287,13 @@ Phases 30-38 were planned for v7.0 but superseded by the comprehensive v9.0 audi
   4. Grepping the entire Blender codebase for Y-axis vertical usage returns zero false positives -- all vertical operations use Z
   5. Rectangular terrain (non-square) generates correctly for heightmap export, road placement, scatter distribution, chunking, sculpt layers, and erosion
   6. Opus verification scan returns CLEAN (0 bugs/gaps found)
-**Plans**: TBD
+**Plans**: 5 plans
+Plans:
+- [ ] 39-01-PLAN.md — Utilities foundation (smoothstep, safe_place_object), dispatch fixes, deprecated API replacement
+- [ ] 39-02-PLAN.md — Z=0 hardcoded placement bulk replacement (42+ sites) and Y-axis vertical bug fixes
+- [ ] 39-03-PLAN.md — Smoothstep bulk replacement across 5 animation handler files (35 sites)
+- [ ] 39-04-PLAN.md — Smart planner wiring: merge compose_world_map into compose_map (ONE pipeline)
+- [ ] 39-05-PLAN.md — Rectangular terrain fixes (chunking, scatter, export, roads, sculpt) + full test validation
 
 ### Phase 40: Material & Texture Wiring
 **Goal**: Every procedural generator produces fully-textured assets with dark fantasy PBR materials instead of blank white meshes
@@ -406,7 +412,7 @@ Phases execute in numeric order: 39 → 40 → 41 → 42 → 43 → 44 → 45 �
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 39. Pipeline & Systemic Fixes | 0/TBD | Not started | - |
+| 39. Pipeline & Systemic Fixes | 0/5 | Planned | - |
 | 40. Material & Texture Wiring | 0/TBD | Not started | - |
 | 41. Broken Generator Fixes | 0/TBD | Not started | - |
 | 42. Dead Code Wiring | 0/TBD | Not started | - |
