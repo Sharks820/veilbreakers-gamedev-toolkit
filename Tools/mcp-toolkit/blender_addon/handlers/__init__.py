@@ -610,14 +610,28 @@ from .texture_quality import (  # noqa: F401 -- AAA texture quality pipeline
 # with empties, vertex groups, and returns a JSON-serializable result dict.
 # ---------------------------------------------------------------------------
 
-def _build_quality_object(spec: dict, position: tuple | None = None) -> dict:
+def _build_quality_object(
+    spec: dict,
+    position: tuple | None = None,
+    weathering_preset: str = "medium",
+) -> dict:
     """Build a Blender object from a MeshSpec dict.
 
     Creates the mesh via mesh_from_spec, attaches empties for attachment
-    points, assigns vertex groups, and returns a JSON-serializable summary.
+    points, assigns vertex groups, optionally applies weathering, and
+    returns a JSON-serializable summary.
+
+    Args:
+        spec: MeshSpec dict from a pure-logic generator.
+        position: World-space position (x, y, z).
+        weathering_preset: Weathering preset name ("light", "medium", "heavy",
+            "ancient", "corrupted") or "none" to skip. Default "medium".
     """
     import bpy
     import math
+    import logging
+
+    _logger = logging.getLogger(__name__)
 
     loc = tuple(position) if position else (0.0, 0.0, 0.0)
 
@@ -640,6 +654,17 @@ def _build_quality_object(spec: dict, position: tuple | None = None) -> dict:
         poly.use_smooth = True
 
     obj_name = obj.name
+
+    # Apply weathering post-processing (MAT-07)
+    if weathering_preset and weathering_preset != "none":
+        try:
+            from .weathering import handle_apply_weathering
+            handle_apply_weathering({
+                "object_name": obj.name,
+                "weathering_preset": weathering_preset,
+            })
+        except Exception as e:
+            _logger.warning("Weathering failed for %s: %s", obj.name, e)
 
     # Create empties for attachment points
     empties_data = spec.get("empties", {})
@@ -676,6 +701,8 @@ def _build_quality_object(spec: dict, position: tuple | None = None) -> dict:
         result["style"] = meta["style"]
     if "components" in spec:
         result["components"] = spec["components"]
+    if weathering_preset and weathering_preset != "none":
+        result["weathering_preset"] = weathering_preset
 
     return result
 

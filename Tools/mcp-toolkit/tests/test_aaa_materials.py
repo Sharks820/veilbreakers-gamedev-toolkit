@@ -21,6 +21,7 @@ import pytest
 from blender_addon.handlers.procedural_materials import (
     MATERIAL_LIBRARY,
     _build_normal_chain,
+    build_metal_material,
     build_organic_material,
     build_fabric_material,
     build_stone_material,
@@ -539,3 +540,119 @@ class TestClothingGeneratorsCategory:
         from blender_addon.handlers.clothing_system import generate_clothing
         spec = generate_clothing("hood", size=0.5)
         assert spec["metadata"]["category"] == "clothing"
+
+
+# ===========================================================================
+# Test: Weathering Presets Validation (MAT-07)
+# ===========================================================================
+
+
+class TestWeatheringPresets:
+    """Verify weathering presets are all valid with non-zero values."""
+
+    def test_all_required_presets_exist(self):
+        """WEATHERING_PRESETS must have light, medium, heavy, ancient, corrupted."""
+        from blender_addon.handlers.weathering import WEATHERING_PRESETS
+
+        required = {"light", "medium", "heavy", "ancient", "corrupted"}
+        actual = set(WEATHERING_PRESETS.keys())
+        missing = required - actual
+        assert not missing, f"Missing weathering presets: {missing}"
+
+    def test_presets_have_nonzero_edge_wear(self):
+        """Every preset must have edge_wear > 0 (the primary weathering effect)."""
+        from blender_addon.handlers.weathering import WEATHERING_PRESETS
+
+        for name, preset in WEATHERING_PRESETS.items():
+            assert "edge_wear" in preset, f"Preset '{name}' missing edge_wear"
+            assert preset["edge_wear"] > 0.0, (
+                f"Preset '{name}' has edge_wear=0 -- must be > 0"
+            )
+
+    def test_presets_have_dirt(self):
+        """Every preset must have a dirt accumulation value."""
+        from blender_addon.handlers.weathering import WEATHERING_PRESETS
+
+        for name, preset in WEATHERING_PRESETS.items():
+            assert "dirt" in preset, f"Preset '{name}' missing dirt key"
+
+    def test_presets_values_in_valid_range(self):
+        """All preset values must be in [0.0, 1.0]."""
+        from blender_addon.handlers.weathering import WEATHERING_PRESETS
+
+        for name, preset in WEATHERING_PRESETS.items():
+            for key, value in preset.items():
+                if isinstance(value, (int, float)):
+                    assert 0.0 <= value <= 1.0, (
+                        f"Preset '{name}' key '{key}' = {value} out of [0, 1]"
+                    )
+
+
+# ===========================================================================
+# Test: _build_quality_object Weathering Integration (MAT-07)
+# ===========================================================================
+
+
+class TestBuildQualityObjectWeathering:
+    """Verify _build_quality_object accepts weathering_preset parameter."""
+
+    def test_signature_accepts_weathering_preset(self):
+        """_build_quality_object must accept weathering_preset kwarg."""
+        import inspect
+        from blender_addon.handlers import _build_quality_object
+
+        sig = inspect.signature(_build_quality_object)
+        assert "weathering_preset" in sig.parameters, (
+            "_build_quality_object missing weathering_preset parameter"
+        )
+
+    def test_default_weathering_is_medium(self):
+        """Default weathering_preset should be 'medium'."""
+        import inspect
+        from blender_addon.handlers import _build_quality_object
+
+        sig = inspect.signature(_build_quality_object)
+        default = sig.parameters["weathering_preset"].default
+        assert default == "medium", (
+            f"Default weathering_preset is '{default}', expected 'medium'"
+        )
+
+
+# ===========================================================================
+# Test: All Material Builders Call _build_normal_chain (MAT-08)
+# ===========================================================================
+
+
+class TestMaterialBuildersNormalChain:
+    """Verify all 6 material builders call _build_normal_chain."""
+
+    def test_all_builders_produce_3_bump_nodes(self):
+        """Every builder must produce >= 3 bump nodes via _build_normal_chain."""
+        from blender_addon.handlers.procedural_materials import (
+            build_stone_material,
+            build_wood_material,
+            build_metal_material,
+            build_organic_material,
+            build_terrain_material,
+            build_fabric_material,
+        )
+
+        test_cases = [
+            (build_stone_material, "rough_stone_wall", "stone"),
+            (build_wood_material, "rough_timber", "wood"),
+            (build_metal_material, "rusted_iron", "metal"),
+            (build_organic_material, "monster_skin", "organic"),
+            (build_terrain_material, "grass", "terrain"),
+            (build_fabric_material, "burlap_cloth", "fabric"),
+        ]
+        for builder, key, recipe_name in test_cases:
+            mock_mat, created_nodes = _make_mock_mat()
+            params = dict(MATERIAL_LIBRARY[key])
+            builder(mock_mat, params)
+
+            bump_labels = [n.label for n in created_nodes
+                           if hasattr(n, "label") and "Bump" in n.label]
+            assert len(bump_labels) >= 3, (
+                f"Builder '{recipe_name}' ({key}) created {len(bump_labels)} "
+                f"bump nodes, expected >= 3: {bump_labels}"
+            )
