@@ -936,3 +936,42 @@ class TestVBDungeonPresets:
             )
             assert dungeon.num_floors == 2, f"Preset '{name}' failed dungeon generation"
             assert dungeon.total_rooms > 0, f"Preset '{name}' produced dungeon with no rooms"
+
+
+# ---------------------------------------------------------------------------
+# Boss arena cap_fill regression test (GEN-04)
+# ---------------------------------------------------------------------------
+
+
+class TestBossArenaCapFillRegression:
+    """Verify boss arena uses correct bmesh.ops.create_circle API (cap_fill)."""
+
+    def test_boss_arena_uses_cap_fill_not_cap_ends(self):
+        """bmesh.ops.create_circle uses cap_fill (not cap_ends). Regression guard.
+
+        cap_fill is the correct parameter for bmesh.ops.create_circle.
+        cap_ends is for bmesh.ops.create_cone. Using cap_ends on create_circle
+        would crash at runtime.
+        """
+        import pathlib
+
+        wb_path = pathlib.Path(__file__).resolve().parent.parent / (
+            "blender_addon" / pathlib.Path("handlers") / "worldbuilding.py"
+        )
+        source = wb_path.read_text(encoding="utf-8")
+
+        # Lines 3200, 3544, 6983 use bmesh.ops.create_circle with cap_fill=True
+        # This is correct -- cap_fill IS the right param for create_circle.
+        # cap_ends would be wrong (that's for create_cone).
+        assert "create_circle" in source, "worldbuilding.py should use create_circle"
+
+        # Count that all create_circle calls use cap_fill (the correct param)
+        import re
+        circle_calls = re.findall(r"create_circle\([^)]*\)", source, re.DOTALL)
+        for call in circle_calls:
+            assert "cap_fill" in call, (
+                f"create_circle call missing cap_fill: {call[:80]}"
+            )
+            assert "cap_ends" not in call, (
+                f"create_circle call wrongly uses cap_ends: {call[:80]}"
+            )
