@@ -827,3 +827,57 @@ class TestLsystemScatterIntegration:
                 f"PROP_GENERATOR_MAP['{key}'] uses {gen_func.__name__}, "
                 "expected L-system generator"
             )
+
+
+# ===================================================================
+# _default_branch_tips helper and standalone leaf_cards
+# ===================================================================
+
+
+class TestDefaultBranchTips:
+    """Test _default_branch_tips generates valid tip dicts for leaf_cards."""
+
+    def test_default_branch_tips_structure(self):
+        """_default_branch_tips returns list of dicts with required keys."""
+        from blender_addon.handlers import _default_branch_tips
+
+        tips = _default_branch_tips(count=10, spread=3.0, height=5.0, seed=42)
+        assert isinstance(tips, list)
+        assert len(tips) == 10
+        for tip in tips:
+            assert isinstance(tip, dict)
+            assert "position" in tip
+            assert "direction" in tip
+            assert "radius" in tip
+            assert len(tip["position"]) == 3
+            assert len(tip["direction"]) == 3
+            assert isinstance(tip["radius"], float)
+
+    def test_default_branch_tips_deterministic(self):
+        """Same seed produces identical tips."""
+        from blender_addon.handlers import _default_branch_tips
+
+        t1 = _default_branch_tips(count=5, seed=42)
+        t2 = _default_branch_tips(count=5, seed=42)
+        assert t1 == t2
+
+    def test_default_branch_tips_different_seeds(self):
+        """Different seeds produce different tips."""
+        from blender_addon.handlers import _default_branch_tips
+
+        t1 = _default_branch_tips(count=5, seed=42)
+        t2 = _default_branch_tips(count=5, seed=99)
+        assert t1 != t2
+
+    def test_leaf_cards_standalone_default_tips(self):
+        """generate_leaf_cards with _default_branch_tips produces >0 vertices."""
+        from blender_addon.handlers import _default_branch_tips
+
+        tips = _default_branch_tips(count=10, spread=3.0, height=5.0, seed=42)
+        result = generate_leaf_cards(
+            branch_tips=tips, leaf_type="broadleaf", density=0.8, seed=42,
+        )
+        assert result["vertex_count"] > 0, (
+            "Leaf cards with default branch tips should produce vertices"
+        )
+        assert result["cards_generated"] > 0

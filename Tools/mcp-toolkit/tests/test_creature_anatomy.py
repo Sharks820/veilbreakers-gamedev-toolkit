@@ -790,3 +790,78 @@ def test_wing_small_wingspan() -> None:
     """Small wingspan should still produce valid wing."""
     verts, faces, groups, bones = generate_wing(wing_type="bat", wingspan=0.5)
     validate_mesh(verts, faces, "wing/small")
+
+
+# ---------------------------------------------------------------------------
+# Test: _creature_tuple_to_meshspec adapter
+# ---------------------------------------------------------------------------
+
+
+class TestCreatureTupleToMeshSpec:
+    """Verify _creature_tuple_to_meshspec converts raw tuples to MeshSpec dicts."""
+
+    def test_mouth_interior_returns_meshspec(self) -> None:
+        """generate_mouth_interior tuple wrapped in adapter yields valid MeshSpec."""
+        from blender_addon.handlers import _creature_tuple_to_meshspec
+
+        raw = generate_mouth_interior(
+            mouth_width=0.1, mouth_depth=0.12, jaw_length=0.15,
+            tooth_count=20, tooth_style="carnivore",
+        )
+        assert isinstance(raw, tuple), "Expected tuple from generate_mouth_interior"
+        spec = _creature_tuple_to_meshspec(raw, "mouth_interior")
+        assert isinstance(spec, dict)
+        assert "vertices" in spec
+        assert "faces" in spec
+        assert "vertex_groups" in spec
+        assert "metadata" in spec
+        assert spec["metadata"]["category"] == "creature"
+        assert spec["metadata"]["name"] == "mouth_interior"
+        assert len(spec["vertices"]) > 0
+        assert len(spec["faces"]) > 0
+
+    def test_eyelid_returns_meshspec(self) -> None:
+        """generate_eyelid_topology tuple wrapped in adapter yields valid MeshSpec."""
+        from blender_addon.handlers import _creature_tuple_to_meshspec
+
+        raw = generate_eyelid_topology(eye_radius=0.015)
+        assert isinstance(raw, tuple)
+        spec = _creature_tuple_to_meshspec(raw, "eyelid_topology")
+        assert isinstance(spec, dict)
+        assert "vertices" in spec and "faces" in spec
+        assert len(spec["vertices"]) > 0
+
+    def test_paw_returns_meshspec(self) -> None:
+        """generate_paw tuple wrapped in adapter yields valid MeshSpec."""
+        from blender_addon.handlers import _creature_tuple_to_meshspec
+
+        raw = generate_paw(paw_type="canine", toe_count=4)
+        assert isinstance(raw, tuple)
+        spec = _creature_tuple_to_meshspec(raw, "paw")
+        assert isinstance(spec, dict)
+        assert "vertices" in spec and "faces" in spec
+        assert len(spec["vertices"]) > 0
+
+    def test_wing_returns_meshspec_with_bones(self) -> None:
+        """generate_wing 4-element tuple includes bones in metadata."""
+        from blender_addon.handlers import _creature_tuple_to_meshspec
+
+        raw = generate_wing(wing_type="bat", wingspan=2.0)
+        assert isinstance(raw, tuple) and len(raw) == 4
+        spec = _creature_tuple_to_meshspec(raw, "wing")
+        assert isinstance(spec, dict)
+        assert "vertices" in spec and "faces" in spec
+        assert "bones" in spec["metadata"]
+        assert len(spec["metadata"]["bones"]) > 0
+
+    def test_serpent_returns_meshspec_with_bones(self) -> None:
+        """generate_serpent_body 4-element tuple includes bones in metadata."""
+        from blender_addon.handlers import _creature_tuple_to_meshspec
+
+        raw = generate_serpent_body(segment_count=20)
+        assert isinstance(raw, tuple) and len(raw) == 4
+        spec = _creature_tuple_to_meshspec(raw, "serpent_body")
+        assert isinstance(spec, dict)
+        assert "vertices" in spec and "faces" in spec
+        assert "bones" in spec["metadata"]
+        assert len(spec["metadata"]["bones"]) > 0
