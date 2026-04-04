@@ -640,7 +640,7 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 43. Geometry Overhaul -- Weapons, Armor, Creatures | v10.0 | 0/5 | Complete    | 2026-04-04 |
 | 44. Geometry Overhaul -- Props, Environments, Buildings | v10.0 | 0/4 | Complete    | 2026-04-04 |
 | 45. Data Safety & Integrity | v10.0 | 0/3 | Complete    | 2026-04-04 |
-| 46. Export Pipeline Completion | v10.0 | 0/3 | Planned | - |
+| 46. Export Pipeline Completion | v10.0 | 0/3 | Complete    | 2026-04-04 |
 | 47. Unity Integration & Regression | v10.0 | 0/3 | Planned | - |
 | 48. Starter City Generation & Verification | v10.0 | 0/4 | Planned | - |
 
