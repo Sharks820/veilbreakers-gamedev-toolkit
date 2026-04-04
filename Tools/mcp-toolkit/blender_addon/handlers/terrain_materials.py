@@ -1556,26 +1556,33 @@ def _create_height_blend_group(name: str = "HeightBlend") -> Any:
     group_in = group.nodes.new("NodeGroupInput")
     group_in.location = (-600, 0)
 
-    # Create input sockets
-    group.inputs.new("NodeSocketFloat", "Height_A")
-    group.inputs.new("NodeSocketFloat", "Height_B")
-    group.inputs.new("NodeSocketFloat", "Mask")
-    group.inputs.new("NodeSocketFloat", "Blend_Contrast")
+    # Create input sockets (Blender 4.0+ interface API)
+    def _new_input(name: str, socket_type: str = "NodeSocketFloat", **kwargs):
+        if hasattr(group, "interface"):
+            item = group.interface.new_socket(name=name, in_out='INPUT', socket_type=socket_type)
+            for k, v in kwargs.items():
+                if hasattr(item, k):
+                    setattr(item, k, v)
+            return item
+        else:  # Blender < 4.0 fallback
+            sock = group.inputs.new(socket_type, name)
+            for k, v in kwargs.items():
+                if hasattr(sock, k):
+                    setattr(sock, k, v)
+            return sock
 
-    # Set defaults
-    group.inputs["Height_A"].default_value = 0.5
-    group.inputs["Height_B"].default_value = 0.5
-    group.inputs["Mask"].default_value = 0.5
-    group.inputs["Blend_Contrast"].default_value = 0.5
-    group.inputs["Mask"].min_value = 0.0
-    group.inputs["Mask"].max_value = 1.0
-    group.inputs["Blend_Contrast"].min_value = 0.0
-    group.inputs["Blend_Contrast"].max_value = 1.0
+    _new_input("Height_A", default_value=0.5)
+    _new_input("Height_B", default_value=0.5)
+    _new_input("Mask", default_value=0.5, min_value=0.0, max_value=1.0)
+    _new_input("Blend_Contrast", default_value=0.5, min_value=0.0, max_value=1.0)
 
     # -- Group Outputs --
     group_out = group.nodes.new("NodeGroupOutput")
     group_out.location = (400, 0)
-    group.outputs.new("NodeSocketFloat", "Result")
+    if hasattr(group, "interface"):
+        group.interface.new_socket(name="Result", in_out='OUTPUT', socket_type='NodeSocketFloat')
+    else:  # Blender < 4.0 fallback
+        group.outputs.new("NodeSocketFloat", "Result")
 
     # -- Math: Height_A - Height_B --
     subtract = group.nodes.new("ShaderNodeMath")
