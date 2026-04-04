@@ -25,6 +25,7 @@ from __future__ import annotations
 import math
 
 from .animation_gaits import Keyframe
+from ._shared_utils import smoothstep
 
 
 VALID_LOCOMOTION_TYPES: frozenset[str] = frozenset({
@@ -147,7 +148,7 @@ def generate_jump_takeoff_keyframes(frame_count: int = 10, intensity: float = 1.
             kfs.append(Keyframe("DEF-spine", "location", 2, frame, -0.1 * t * intensity))
         else:
             t = (frame - crouch_end) / (frame_count - crouch_end) if frame_count > crouch_end else 1.0
-            ease = t * t
+            ease = smoothstep(t)
             # Spring up
             kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.5 * (1 - ease) * intensity))
             kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.5 * (1 - ease) * intensity))
@@ -194,7 +195,7 @@ def generate_jump_land_keyframes(frame_count: int = 12, intensity: float = 1.0) 
             kfs.append(Keyframe("DEF-spine", "location", 2, frame, -0.15 * t * intensity))
         else:
             t = (frame - impact_end) / (frame_count - impact_end) if frame_count > impact_end else 1.0
-            ease = t * t * (3 - 2 * t)
+            ease = smoothstep(t)
             # Recover to standing
             kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.6 * (1 - ease) * intensity))
             kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.6 * (1 - ease) * intensity))
@@ -252,7 +253,7 @@ def generate_dodge_roll_keyframes(frame_count: int = 18, intensity: float = 1.0)
             kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 0.5 * intensity))
         else:
             recover_t = (frame - roll_end) / (frame_count - roll_end) if frame_count > roll_end else 1.0
-            ease = recover_t * recover_t * (3 - 2 * recover_t)
+            ease = smoothstep(recover_t)
             # Unfold to standing
             kfs.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, (0.8 + 2 * math.pi) * (1 - ease) * intensity))
             kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.6 * (1 - ease) * intensity))
@@ -328,7 +329,7 @@ def generate_knockdown_keyframes(frame_count: int = 24, intensity: float = 1.0) 
     for frame in range(frame_count + 1):
         if frame <= fall_end:
             t = frame / fall_end if fall_end > 0 else 1.0
-            ease = t * t  # accelerating fall
+            ease = smoothstep(t)  # accelerating fall
             kfs.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, 1.2 * ease * intensity))
             kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.5 * ease * intensity))
             kfs.append(Keyframe("DEF-spine", "location", 2, frame, -0.8 * ease * intensity))
@@ -373,7 +374,7 @@ def generate_getup_keyframes(frame_count: int = 24, intensity: float = 1.0) -> l
             kfs.append(Keyframe("DEF-shin.L", "rotation_euler", 0, frame, -0.7 * t * intensity))
         else:
             t = (frame - stand_start) / (frame_count - stand_start) if frame_count > stand_start else 1.0
-            ease = t * t * (3 - 2 * t)
+            ease = smoothstep(t)
             # Stand up
             kfs.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, 0.0))
             kfs.append(Keyframe("DEF-spine", "location", 2, frame, 0.0))
@@ -398,7 +399,7 @@ def generate_weapon_draw_keyframes(frame_count: int = 16, intensity: float = 1.0
             kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 1, frame, -0.1 * t * intensity))
         else:
             t = (frame - reach_end) / (frame_count - reach_end) if frame_count > reach_end else 1.0
-            ease = t * t * (3 - 2 * t)
+            ease = smoothstep(t)
             # Draw forward to ready position
             kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, (0.4 - 0.7 * ease) * intensity))
             kfs.append(Keyframe("DEF-forearm.R", "rotation_euler", 0, frame, (0.6 - 0.8 * ease) * intensity))
@@ -412,7 +413,7 @@ def generate_weapon_sheathe_keyframes(frame_count: int = 16, intensity: float = 
     kfs: list[Keyframe] = []
     for frame in range(frame_count + 1):
         t = frame / frame_count
-        ease = t * t * (3 - 2 * t)
+        ease = smoothstep(t)
         # Move arm to rest, reverse of draw
         kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -0.3 * (1 - ease) * intensity))
         kfs.append(Keyframe("DEF-forearm.R", "rotation_euler", 0, frame, -0.2 * math.sin(t * math.pi) * intensity))
@@ -548,7 +549,7 @@ def generate_plunge_attack_keyframes(fc: int = 16, i: float = 1.0) -> list[Keyfr
     kfs: list[Keyframe] = []
     for frame in range(fc + 1):
         t = frame / fc
-        ease = t * t * t
+        ease = smoothstep(t)
         kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -1.2 * ease * i))
         kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -1.2 * ease * i))
         kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.4 * ease * i))
@@ -624,7 +625,7 @@ def generate_mount_keyframes(fc: int = 24, i: float = 1.0) -> list[Keyframe]:
             kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.3 * t * i))
         else:
             t = (frame - swing) / (fc - swing) if fc > swing else 1.0
-            ease = t * t * (3 - 2 * t)
+            ease = smoothstep(t)
             kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 1, frame, 0.8 * (1 - ease) * i))
             kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.5 * ease * i))
             kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.5 * ease * i))
@@ -637,7 +638,7 @@ def generate_dismount_keyframes(fc: int = 20, i: float = 1.0) -> list[Keyframe]:
     kfs: list[Keyframe] = []
     for frame in range(fc + 1):
         t = frame / fc
-        ease = t * t * (3 - 2 * t)
+        ease = smoothstep(t)
         kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.5 * (1 - ease) * i))
         kfs.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.5 * (1 - ease) * i))
         kfs.append(Keyframe("DEF-spine", "location", 2, frame, 0.15 * math.sin(t * math.pi) * i))
@@ -659,7 +660,7 @@ def generate_pickup_keyframes(fc: int = 20, i: float = 1.0) -> list[Keyframe]:
             kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, 0.6 * t * i))
         else:
             t = (frame - bend) / (fc - bend) if fc > bend else 1.0
-            ease = t * t * (3 - 2 * t)
+            ease = smoothstep(t)
             kfs.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.5 * (1 - ease) * i))
             kfs.append(Keyframe("DEF-spine.002", "rotation_euler", 0, frame, 0.3 * (1 - ease) * i))
             kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * (1 - ease) * i))
@@ -709,7 +710,7 @@ def generate_ledge_climb_keyframes(fc: int = 24, i: float = 1.0) -> list[Keyfram
             kfs.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.6 * t * i))
         else:
             t = (frame - pull_end) / (fc - pull_end) if fc > pull_end else 1.0
-            ease = t * t * (3 - 2 * t)
+            ease = smoothstep(t)
             kfs.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -1.0 * (1 - ease) * i))
             kfs.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -1.0 * (1 - ease) * i))
             kfs.append(Keyframe("DEF-spine", "location", 2, frame, 0.5 * i))
