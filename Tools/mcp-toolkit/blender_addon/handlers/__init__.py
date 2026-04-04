@@ -255,6 +255,31 @@ from .terrain_features import (  # noqa: F401 -- terrain feature generators
     generate_waterfall,
     generate_cliff_face,
     generate_swamp_terrain,
+    generate_natural_arch,
+    generate_geyser,
+    generate_sinkhole,
+    generate_floating_rocks,
+    generate_ice_formation,
+    generate_lava_flow,
+)
+from .modular_building_kit import (  # noqa: F401 -- modular building kit (260 pieces)
+    generate_modular_piece,
+    assemble_building,
+    get_available_pieces,
+    STYLES as MODULAR_STYLES,
+)
+from .building_interior_binding import (  # noqa: F401 -- building-interior spatial binding
+    BUILDING_ROOM_MAP,
+    STYLE_MATERIAL_MAP,
+    get_interior_materials,
+    get_room_types_for_building,
+    align_rooms_to_building,
+    generate_door_metadata,
+    generate_interior_spec_from_building,
+)
+from .prop_density import (  # noqa: F401 -- prop density scatter system
+    ROOM_DENSITY_RULES,
+    compute_detail_prop_placements,
 )
 from .material_tiers import (  # noqa: F401 -- material tier system (EQ-040)
     METAL_TIERS,
@@ -1104,6 +1129,51 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         water_level=params.get("water_level", 0.3),
         hummock_count=params.get("hummock_count", 12),
         island_count=params.get("island_count", 4),
+        seed=params.get("seed", 42),
+    ),
+    # Terrain features v2 -- 6 additional generators (dead-code wiring)
+    "env_generate_natural_arch": lambda params: generate_natural_arch(
+        span_width=params.get("span_width", 8.0),
+        arch_height=params.get("arch_height", 6.0),
+        thickness=params.get("thickness", 2.0),
+        roughness=params.get("roughness", 0.3),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_geyser": lambda params: generate_geyser(
+        pool_radius=params.get("pool_radius", 3.0),
+        pool_depth=params.get("pool_depth", 0.5),
+        vent_height=params.get("vent_height", 1.0),
+        mineral_rim_width=params.get("mineral_rim_width", 0.8),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_sinkhole": lambda params: generate_sinkhole(
+        radius=params.get("radius", 5.0),
+        depth=params.get("depth", 8.0),
+        wall_roughness=params.get("wall_roughness", 0.5),
+        has_bottom_cave=params.get("has_bottom_cave", True),
+        rubble_density=params.get("rubble_density", 0.3),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_floating_rocks": lambda params: generate_floating_rocks(
+        count=params.get("count", 5),
+        base_height=params.get("base_height", 4.0),
+        max_size=params.get("max_size", 3.0),
+        chain_links=params.get("chain_links", 2),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_ice_formation": lambda params: generate_ice_formation(
+        width=params.get("width", 6.0),
+        height=params.get("height", 4.0),
+        depth=params.get("depth", 3.0),
+        stalactite_count=params.get("stalactite_count", 8),
+        ice_wall=params.get("ice_wall", True),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_lava_flow": lambda params: generate_lava_flow(
+        length=params.get("length", 30.0),
+        width=params.get("width", 4.0),
+        edge_crust_width=params.get("edge_crust_width", 1.0),
+        flow_segments=params.get("flow_segments", 20),
         seed=params.get("seed", 42),
     ),
     # World map generation (pure logic -- returns world map spec)
