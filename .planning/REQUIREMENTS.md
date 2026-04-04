@@ -92,13 +92,13 @@
 
 ## CITY — Starter City Generation & Verification
 
-- [ ] **CITY-01**: Generate full terrain with cliffs, waterfalls, rivers, multi-biome landscape
-- [ ] **CITY-02**: Generate starter city (Hearthvale) with castle, walls, buildings, roads integrated into terrain
-- [ ] **CITY-03**: Generate walkable interiors for key buildings (tavern, blacksmith, chapel, keep)
-- [ ] **CITY-04**: Populate with environmental assets (vegetation, rocks, props, scatter)
-- [ ] **CITY-05**: Use Tripo for city props, interior furnishing, and environmental assets
-- [ ] **CITY-06**: zai visual verification -- every area must score AAA or fix+regenerate until it does
-- [ ] **CITY-07**: Full compose_map pipeline execution with all systems wired
+- [x] **CITY-01**: Generate full terrain with cliffs, waterfalls, rivers, multi-biome landscape
+- [x] **CITY-02**: Generate starter city (Hearthvale) with castle, walls, buildings, roads integrated into terrain
+- [x] **CITY-03**: Generate walkable interiors for key buildings (tavern, blacksmith, chapel, keep)
+- [x] **CITY-04**: Populate with environmental assets (vegetation, rocks, props, scatter)
+- [x] **CITY-05**: Use Tripo for city props, interior furnishing, and environmental assets
+- [x] **CITY-06**: zai visual verification -- every area must score AAA or fix+regenerate until it does
+- [x] **CITY-07**: Full compose_map pipeline execution with all systems wired
 
 ## BRIDGE — Unity Integration
 
@@ -108,10 +108,10 @@
 
 ## TEST — Quality Assurance
 
-- [ ] **TEST-01**: All existing tests pass (19,850+ baseline)
-- [ ] **TEST-02**: New tests for all fixed generators and wired systems
-- [ ] **TEST-03**: Visual regression -- zai before/after for each generator category
-- [ ] **TEST-04**: Opus verification scan after every phase -- follow-up rounds until CLEAN
+- [x] **TEST-01**: All existing tests pass (19,850+ baseline)
+- [x] **TEST-02**: New tests for all fixed generators and wired systems
+- [x] **TEST-03**: Visual regression -- zai before/after for each generator category
+- [x] **TEST-04**: Opus verification scan after every phase -- follow-up rounds until CLEAN
 
 ---
 
@@ -185,17 +185,17 @@
 | BRIDGE-01 | Phase 47 | Pending |
 | BRIDGE-02 | Phase 47 | Pending |
 | BRIDGE-03 | Phase 47 | Pending |
-| CITY-01 | Phase 48 | Pending |
-| CITY-02 | Phase 48 | Pending |
-| CITY-03 | Phase 48 | Pending |
-| CITY-04 | Phase 48 | Pending |
-| CITY-05 | Phase 48 | Pending |
-| CITY-06 | Phase 48 | Pending |
-| CITY-07 | Phase 48 | Pending |
-| TEST-01 | Phase 39, 48 | Pending |
-| TEST-02 | Phase 47, 48 | Pending |
-| TEST-03 | Phase 43, 44, 48 | Pending |
-| TEST-04 | Phase 39-48 (all) | Pending |
+| CITY-01 | Phase 48 | Complete |
+| CITY-02 | Phase 48 | Complete |
+| CITY-03 | Phase 48 | Complete |
+| CITY-04 | Phase 48 | Complete |
+| CITY-05 | Phase 48 | Complete |
+| CITY-06 | Phase 48 | Complete |
+| CITY-07 | Phase 48 | Complete |
+| TEST-01 | Phase 39, 48 | Complete |
+| TEST-02 | Phase 47, 48 | Complete |
+| TEST-03 | Phase 43, 44, 48 | Complete |
+| TEST-04 | Phase 39-48 (all) | Complete |
 
 **Coverage: 67/67 requirements mapped (100%)**
 
