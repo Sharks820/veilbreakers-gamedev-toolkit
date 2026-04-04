@@ -1,133 +1,171 @@
-"""Shared utilities for Blender addon handlers.
+"""Shared placement and interpolation utilities for Blender handlers.
 
-Provides reusable helper functions used across multiple handler modules.
-This module must ONLY import from: bpy, bmesh, mathutils, math, logging,
-and the Python standard library. It must NOT import from other handler
-modules at the top level to avoid circular imports.
+Provides terrain-height-aware placement so objects are never placed at a
+hardcoded Z=0 regardless of underlying terrain topology.
+
+NO direct bpy usage at module level; bpy is imported lazily inside functions
+that need it so this module can be imported by tests without Blender.
 """
 
 from __future__ import annotations
 
 import logging
 import math
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    pass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Interpolation utilities
-# ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Interpolation helpers
+# ---------------------------------------------------------------------------
 
 def smoothstep(t: float) -> float:
-    """Hermite smoothstep for S-curve interpolation in [0, 1].
+    """Hermite smoothstep for S-curve interpolation.
 
-    Returns 0 for t<=0, 1 for t>=1, smooth ease-in-ease-out transition
-    between. Use instead of linear ``t`` for all terrain transitions and
-    animation blending.
-
-    Formula: 3t^2 - 2t^3
+    Returns 0 for *t* <= 0, 1 for *t* >= 1, and a smooth cubic curve
+    in between: ``3t^2 - 2t^3``.
     """
-    t = max(0.0, min(1.0, t))
+    t = max(0.0, min(1.0, float(t)))
     return t * t * (3.0 - 2.0 * t)
 
 
-def inverse_smoothstep(t: float) -> float:
-    """Inverse of Hermite smoothstep -- convert smoothed value back to linear.
+# ---------------------------------------------------------------------------
+# Terrain height sampling
+# ---------------------------------------------------------------------------
 
-    Uses the arcsine-based analytical inverse.  Returns 0 for t<=0,
-    1 for t>=1.
+def _find_terrain_object(terrain_name: str | None = None) -> Any:
+    """Resolve a Blender terrain mesh object by name or auto-detect.
+
+    Returns a ``bpy.types.Object`` or ``None``.
     """
-    t = max(0.0, min(1.0, t))
-    if t <= 0.0:
-        return 0.0
-    if t >= 1.0:
-        return 1.0
-    return 0.5 - math.sin(math.asin(1.0 - 2.0 * t) / 3.0)
+    try:
+        import bpy
+    except ImportError:
+        return None
+
+    if terrain_name:
+        obj = bpy.data.objects.get(terrain_name)
+        if obj is not None and obj.type == "MESH":
+            return obj
+
+    # Auto-detect: look for common terrain naming patterns
+    for name_pattern in ("Terrain", "terrain", "Ground", "ground"):
+        for obj in bpy.data.objects:
+            if obj.type == "MESH" and name_pattern in obj.name:
+                return obj
+
+    return None
 
 
-def lerp(a: float, b: float, t: float) -> float:
-    """Linear interpolation from *a* to *b* by factor *t* (clamped 0..1)."""
-    t = max(0.0, min(1.0, t))
-    return a + (b - a) * t
+def _sample_terrain_height(terrain_obj: Any, x: float, y: float) -> float | None:
+    """Sample terrain height at world (x, y) via closest-point projection.
 
+    Uses ``closest_point_on_mesh`` for accuracy.  Falls back to vertex
+    scan when the method is unavailable.
 
-def smooth_lerp(a: float, b: float, t: float) -> float:
-    """Smoothstep-interpolation from *a* to *b* by factor *t*.
-
-    Equivalent to ``lerp(a, b, smoothstep(t))``.
+    Returns the Z coordinate on the terrain surface, or ``None`` if
+    sampling fails.
     """
-    return lerp(a, b, smoothstep(t))
+    try:
+        import bpy  # noqa: F811
+        from mathutils import Vector
+    except ImportError:
+        return None
+
+    if terrain_obj is None or terrain_obj.type != "MESH" or terrain_obj.data is None:
+        return None
+
+    # Transform world coords to object-local space
+    local_point = terrain_obj.matrix_world.inverted() @ Vector((x, y, 1000.0))
+
+    # closest_point_on_mesh returns (result, location, normal, face_index)
+    try:
+        result, location, _normal, _face_idx = terrain_obj.closest_point_on_mesh(local_point)
+        if result:
+            world_loc = terrain_obj.matrix_world @ location
+            return float(world_loc.z)
+    except (RuntimeError, AttributeError):
+        pass
+
+    # Fallback: brute-force nearest vertex
+    try:
+        import bmesh
+
+        bm = bmesh.new()
+        bm.from_mesh(terrain_obj.data)
+        bm.verts.ensure_lookup_table()
+
+        best_z = None
+        best_dist2 = float("inf")
+        for v in bm.verts:
+            wv = terrain_obj.matrix_world @ v.co
+            d2 = (wv.x - x) ** 2 + (wv.y - y) ** 2
+            if d2 < best_dist2:
+                best_dist2 = d2
+                best_z = float(wv.z)
+        bm.free()
+        return best_z
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
-# Terrain placement utilities
+# Safe placement
 # ---------------------------------------------------------------------------
-
-
-def _get_sample_scene_height():
-    """Lazy-import ``_sample_scene_height`` from worldbuilding to avoid circular imports."""
-    from .worldbuilding import _sample_scene_height  # noqa: F811
-
-    return _sample_scene_height
-
 
 def safe_place_object(
     x: float,
     y: float,
-    terrain_name: str | None,
-    *,
+    terrain_name: str | None = None,
     water_level: float | None = None,
     bounds: tuple[float, float, float, float] | None = None,
     offset_z: float = 0.02,
 ) -> tuple[float, float, float] | None:
-    """Sample terrain height and validate placement.
-
-    Returns ``(x, y, z)`` if placement is valid, ``None`` if rejected.
-
-    Rejection reasons:
-    - Below *water_level* (when provided)
-    - Outside *bounds* rectangle ``(min_x, min_y, max_x, max_y)``
-    - No terrain hit (height sampling returns default 0.0 and no terrain_name)
-
-    The underlying ``_sample_scene_height`` is imported lazily from the
-    worldbuilding module to avoid circular imports at addon load time.
+    """Sample terrain height at *(x, y)* and return a valid placement coordinate.
 
     Parameters
     ----------
     x, y : float
-        World-space XY coordinates for placement.
-    terrain_name : str | None
-        Blender object name of the terrain mesh (passed to
-        ``_sample_scene_height`` for ARCH-028 terrain-only filtering).
-    water_level : float | None
-        If provided, placements below this Z are rejected.
-    bounds : tuple | None
-        ``(min_x, min_y, max_x, max_y)`` bounding rectangle.
+        World-space horizontal coordinates.
+    terrain_name : str or None
+        Name of the Blender terrain mesh object.  If ``None``, attempts
+        auto-detection.
+    water_level : float or None
+        If set, positions below this Z level are rejected (returns ``None``).
+        Useful for scatter passes that should not place vegetation underwater.
+    bounds : tuple or None
+        ``(min_x, min_y, max_x, max_y)`` placement boundary.  Returns
+        ``None`` if *(x, y)* is outside.
     offset_z : float
-        Small upward offset to prevent Z-fighting (default 0.02).
-    """
-    try:
-        _sample_height = _get_sample_scene_height()
-        z = _sample_height(x, y, terrain_name)
-    except Exception as exc:
-        logger.debug(
-            "safe_place_object: height sampling failed at (%.3f, %.3f): %s",
-            x,
-            y,
-            exc,
-        )
-        return None
+        Small upward offset to prevent z-fighting with the terrain surface.
+        Default 0.02 m.
 
+    Returns
+    -------
+    tuple[float, float, float] or None
+        ``(x, y, z)`` placement coordinate, or ``None`` if placement is
+        invalid (out of bounds, underwater, or terrain sampling failed with
+        no fallback).
+    """
+    # Bounds check
+    if bounds is not None:
+        min_x, min_y, max_x, max_y = bounds
+        if x < min_x or x > max_x or y < min_y or y > max_y:
+            return None
+
+    # Try to sample terrain height
+    terrain_obj = _find_terrain_object(terrain_name)
+    z = _sample_terrain_height(terrain_obj, x, y)
+
+    if z is None:
+        # No terrain found -- fall back to ground plane + offset
+        z = offset_z
+    else:
+        z = z + offset_z
+
+    # Water exclusion
     if water_level is not None and z < water_level:
         return None
 
-    if bounds is not None:
-        min_x, min_y, max_x, max_y = bounds
-        if not (min_x <= x <= max_x and min_y <= y <= max_y):
-            return None
-
-    return (x, y, z + offset_z)
+    return (x, y, z)
