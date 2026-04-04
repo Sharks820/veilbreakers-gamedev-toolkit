@@ -54,6 +54,26 @@ _STEEL_METAL = (0.63, 0.62, 0.64, 1.0)     # Physically-based steel reflectance
 
 
 # ---------------------------------------------------------------------------
+# Dark Fantasy Color Validator
+# ---------------------------------------------------------------------------
+
+
+def validate_dark_fantasy_color(r: float, g: float, b: float) -> tuple[float, float, float]:
+    """Clamp color to dark fantasy palette: saturation<0.40, value 10-50%.
+
+    Enforces VeilBreakers palette rules at runtime. Metallic reflectance
+    colors (gold, silver, etc.) should NOT be passed through this -- they
+    use physically-based F0 values that intentionally exceed palette limits.
+    """
+    import colorsys
+
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    s = min(s, 0.40)
+    v = max(0.10, min(v, 0.50))
+    return colorsys.hsv_to_rgb(h, s, v)
+
+
+# ---------------------------------------------------------------------------
 # Material Library -- 45+ named material presets
 # ---------------------------------------------------------------------------
 
@@ -685,6 +705,19 @@ MATERIAL_LIBRARY: dict[str, dict[str, Any]] = {
         "node_recipe": "terrain",
         "micro_normal_strength": 0.15,
         "meso_normal_strength": 0.5,
+        "macro_normal_strength": 1.2,
+    },
+    "wet_rock": {
+        "base_color": (0.10, 0.09, 0.08, 1.0),
+        "roughness": 0.15,
+        "roughness_variation": 0.08,
+        "metallic": 0.0,
+        "normal_strength": 1.6,
+        "detail_scale": 6.0,
+        "wear_intensity": 0.3,
+        "node_recipe": "stone",
+        "micro_normal_strength": 0.3,
+        "meso_normal_strength": 0.8,
         "macro_normal_strength": 1.2,
     },
 

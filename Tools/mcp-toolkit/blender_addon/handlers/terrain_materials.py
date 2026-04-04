@@ -2109,7 +2109,21 @@ def create_biome_terrain_material(
         )
         biome_name = DEFAULT_BIOME
     palette = BIOME_PALETTES_V2[biome_name]
-    mat = bpy.data.materials.new(name=f"VB_Terrain_{biome_name}")
+
+    # Dedup: reuse existing material to avoid VB_Terrain_thornwood_forest.001 etc.
+    mat_name = f"VB_Terrain_{biome_name}"
+    existing = bpy.data.materials.get(mat_name)
+    if existing is not None:
+        if object_name:
+            obj = bpy.data.objects.get(object_name)
+            if obj is not None and hasattr(obj.data, "materials"):
+                if obj.data.materials:
+                    obj.data.materials[0] = existing
+                else:
+                    obj.data.materials.append(existing)
+        return existing
+
+    mat = bpy.data.materials.new(name=mat_name)
     mat.use_nodes = True
     tree = mat.node_tree
     nodes = tree.nodes
