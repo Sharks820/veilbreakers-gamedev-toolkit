@@ -2082,6 +2082,7 @@ def create_biome_terrain_material(
     links.new(vcol_node.outputs["Color"], separate.inputs["Color"])
     layer_names = ["ground", "slope", "cliff", "special"]
     layer_bsdfs: list[Any] = []
+    noise_nodes: list[Any] = []
     for i, ln in enumerate(layer_names):
         lp = palette[ln]
         y = 400 - i * 300
@@ -2117,18 +2118,49 @@ def create_biome_terrain_material(
         links.new(noise.outputs["Fac"], bump.inputs["Height"])
         links.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
         layer_bsdfs.append(bsdf)
+        noise_nodes.append(noise)
+
+    # -- HeightBlend: height-based texture transitions between layers --
+    height_blend_group = _create_height_blend_group()
+
+    # Ground/Slope blend via HeightBlend
     mix_01 = _add_node(tree, "ShaderNodeMixShader", 200, 300, "Ground/Slope")
-    links.new(separate.outputs["Green"], mix_01.inputs["Fac"])
     links.new(layer_bsdfs[0].outputs["BSDF"], mix_01.inputs[1])
     links.new(layer_bsdfs[1].outputs["BSDF"], mix_01.inputs[2])
+
+    hb_01 = _add_node(tree, "ShaderNodeGroup", 0, 300, "HB Ground/Slope")
+    hb_01.node_tree = height_blend_group
+    links.new(noise_nodes[0].outputs["Fac"], hb_01.inputs["Height_A"])
+    links.new(noise_nodes[1].outputs["Fac"], hb_01.inputs["Height_B"])
+    links.new(separate.outputs["Green"], hb_01.inputs["Mask"])
+    hb_01.inputs["Blend_Contrast"].default_value = 0.6
+    links.new(hb_01.outputs["Result"], mix_01.inputs["Fac"])
+
+    # Ground-Slope / Cliff blend via HeightBlend
     mix_02 = _add_node(tree, "ShaderNodeMixShader", 500, 200, "Add Cliff")
-    links.new(separate.outputs["Blue"], mix_02.inputs["Fac"])
     links.new(mix_01.outputs["Shader"], mix_02.inputs[1])
     links.new(layer_bsdfs[2].outputs["BSDF"], mix_02.inputs[2])
+
+    hb_02 = _add_node(tree, "ShaderNodeGroup", 300, 200, "HB Mix/Cliff")
+    hb_02.node_tree = height_blend_group
+    links.new(noise_nodes[1].outputs["Fac"], hb_02.inputs["Height_A"])
+    links.new(noise_nodes[2].outputs["Fac"], hb_02.inputs["Height_B"])
+    links.new(separate.outputs["Blue"], hb_02.inputs["Mask"])
+    hb_02.inputs["Blend_Contrast"].default_value = 0.5
+    links.new(hb_02.outputs["Result"], mix_02.inputs["Fac"])
+
+    # Previous / Special blend via HeightBlend
     mix_03 = _add_node(tree, "ShaderNodeMixShader", 800, 100, "Add Special")
-    links.new(vcol_node.outputs["Alpha"], mix_03.inputs["Fac"])
     links.new(mix_02.outputs["Shader"], mix_03.inputs[1])
     links.new(layer_bsdfs[3].outputs["BSDF"], mix_03.inputs[2])
+
+    hb_03 = _add_node(tree, "ShaderNodeGroup", 600, 100, "HB Mix/Special")
+    hb_03.node_tree = height_blend_group
+    links.new(noise_nodes[2].outputs["Fac"], hb_03.inputs["Height_A"])
+    links.new(noise_nodes[3].outputs["Fac"], hb_03.inputs["Height_B"])
+    links.new(vcol_node.outputs["Alpha"], hb_03.inputs["Mask"])
+    hb_03.inputs["Blend_Contrast"].default_value = 0.5
+    links.new(hb_03.outputs["Result"], mix_03.inputs["Fac"])
     links.new(mix_03.outputs["Shader"], output.inputs["Surface"])
     if object_name:
         obj = bpy.data.objects.get(object_name)
