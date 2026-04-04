@@ -27,6 +27,7 @@ from __future__ import annotations
 import math
 
 from .animation_gaits import Keyframe
+from ._shared_utils import smoothstep
 
 
 # ---------------------------------------------------------------------------
@@ -567,9 +568,9 @@ def generate_defeat_collapse_keyframes(
             else:
                 fall_t = (t - 0.4) / 0.6
                 keyframes.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, 0.8 * fall_t * fall_t))
-                keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.6 * fall_t))
-            keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * t))
-            keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.3 * t))
+                keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, 0.6 * smoothstep(fall_t)))
+            keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * smoothstep(t)))
+            keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.3 * smoothstep(t)))
 
         elif style == "spasm":
             # Electric spasm then drop (SURGE)
@@ -648,10 +649,10 @@ def generate_defeat_collapse_keyframes(
                 ease = fall_t * fall_t
                 keyframes.append(Keyframe("DEF-spine", "rotation_euler", 0, frame, -0.5 + 1.3 * ease))
                 keyframes.append(Keyframe("DEF-spine.001", "rotation_euler", 0, frame, -0.4 + 1.0 * ease))
-            keyframes.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.3 * (1 - t)))
-            keyframes.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -0.3 * (1 - t)))
-            keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * t))
-            keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.3 * t))
+            keyframes.append(Keyframe("DEF-upper_arm.L", "rotation_euler", 0, frame, -0.3 * (1 - smoothstep(t))))
+            keyframes.append(Keyframe("DEF-upper_arm.R", "rotation_euler", 0, frame, -0.3 * (1 - smoothstep(t))))
+            keyframes.append(Keyframe("DEF-thigh.L", "rotation_euler", 0, frame, 0.3 * smoothstep(t)))
+            keyframes.append(Keyframe("DEF-thigh.R", "rotation_euler", 0, frame, 0.3 * smoothstep(t)))
 
         else:
             # Fallback generic collapse
