@@ -642,6 +642,7 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 45. Data Safety & Integrity | v10.0 | 0/3 | Complete    | 2026-04-04 |
 | 46. Export Pipeline Completion | v10.0 | 0/3 | Planned | - |
 | 47. Unity Integration & Regression | v10.0 | 0/3 | Planned | - |
+| 48. Starter City Generation & Verification | v10.0 | 0/4 | Planned | - |
 
 ### v10.0 Total Quality: Zero Gaps Remaining (Phases 39-48)
 
@@ -727,6 +728,29 @@ Plans:
 - [ ] 47-02-PLAN.md -- Tool verification matrix + v8.0 regression tests
 - [ ] 47-03-PLAN.md -- Integration wiring + full phase gate
 
+
+### Phase 48: Starter City Generation & Final Verification
+**Goal**: Execute the full compose_map pipeline to generate the Hearthvale starter city in Blender (terrain, water, roads, settlement, castle, interiors, vegetation, Tripo props), then visually verify every area with zai and aaa_verify until AAA quality is confirmed
+**Depends on**: All prior phases (39-47)
+**Requirements**: CITY-01, CITY-02, CITY-03, CITY-04, CITY-05, CITY-06, CITY-07, TEST-01, TEST-02, TEST-03, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. Terrain mesh (250m, 256 resolution, erosion) with carved river, shaped water, and road network exists in Blender
+  2. Hearthvale settlement with 25+ buildings using modular kit pieces (not boxes) placed at terrain height
+  3. Castle with keep, curtain walls, towers, and gatehouse arch on elevated terrain
+  4. 4 walkable interiors (tavern, blacksmith, chapel, castle keep) with furniture and props
+  5. L-system vegetation scatter with no trees in water or on cliff faces
+  6. Tripo hero props generated (tavern sign, well, banner, altar, anvil) or procedural fallbacks
+  7. aaa_verify passes on 8+/10 angles with min_score >= 60
+  8. zai rates complete scene as DECENT or better (GOOD/AAA preferred)
+  9. All existing tests pass (19,920+ baseline)
+  10. Opus verification scan CLEAN (zero critical issues)
+**Plans**: 4 plans
+Plans:
+- [ ] 48-01-PLAN.md -- Test baseline + pipeline readiness validation
+- [ ] 48-02-PLAN.md -- Terrain + water + roads generation with zai verification
+- [ ] 48-03-PLAN.md -- City + interiors + vegetation + Tripo props with zai verification
+- [ ] 48-04-PLAN.md -- Full AAA verification loop + final human sign-off
+
 ---
 *Roadmap created: 2026-03-18*
 *v2.0 phases added: 2026-03-19*
@@ -739,3 +763,4 @@ Plans:
 *v10.0 Phase 45 planned: 2026-04-04*
 *v10.0 Phase 46 planned: 2026-04-04*
 *v10.0 Phase 47 planned: 2026-04-04*
+*v10.0 Phase 48 planned: 2026-04-04*
