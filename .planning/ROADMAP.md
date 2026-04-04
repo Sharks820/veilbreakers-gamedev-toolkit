@@ -1,6 +1,6 @@
 # Roadmap: VeilBreakers GameDev Toolkit
 
-**Updated:** 2026-04-04 (v10.0 Phase 45 planned)
+**Updated:** 2026-04-04 (v10.0 Phase 46 planned)
 **Updated:** 2026-03-31 (v7.0 planning in progress)
 
 ## Milestones
@@ -640,6 +640,7 @@ Phases execute in numeric order. Decimal phases (e.g., 18.1) insert between thei
 | 43. Geometry Overhaul -- Weapons, Armor, Creatures | v10.0 | 0/5 | Planned | - |
 | 44. Geometry Overhaul -- Props, Environments, Buildings | v10.0 | 0/4 | Planned | - |
 | 45. Data Safety & Integrity | v10.0 | 0/3 | Planned | - |
+| 46. Export Pipeline Completion | v10.0 | 0/3 | Planned | - |
 
 ### v10.0 Total Quality: Zero Gaps Remaining (Phases 39-48)
 
@@ -690,6 +691,24 @@ Plans:
 - [ ] 45-02-PLAN.md -- Interior binding geometry + multi-floor Z + settlement scaling
 - [ ] 45-03-PLAN.md -- Scene hierarchy scoping + full test suite verification
 
+
+### Phase 46: Export Pipeline Completion
+**Goal**: Wire all export pipeline steps into compose_map (game_check, texture bake, LOD generation, collision meshes, FBX per-group export), create new modules for vegetation instance serialization and splatmap-to-PNG export, and fix the aaa_verify stale screenshot bug and generate_map_package broken group export
+**Depends on**: Phase 39 (pipeline fixes), Phase 45 (data safety)
+**Requirements**: EXPORT-01, EXPORT-02, EXPORT-03, EXPORT-04, EXPORT-05, EXPORT-06, EXPORT-07, EXPORT-08, EXPORT-09, TEST-04
+**Success Criteria** (what must be TRUE):
+  1. compose_map produces per-group FBX files via new Steps 11-16 (game_check, bake, LOD, collision, data export, FBX)
+  2. render_angle handler positions camera at specified yaw/pitch (not aliased to viewport screenshot)
+  3. derive_addressable_groups populates terrain and interior object lists
+  4. export_fbx supports object_names filter for per-group export
+  5. Vegetation instances serialized to Unity TreeInstance JSON with correct axis swap
+  6. Splatmap vertex colors rasterized to PNG at configurable resolution
+**Plans**: 3 plans
+Plans:
+- [ ] 46-01-PLAN.md -- Bug fixes: render_angle handler, addressable groups, export_fbx object_names
+- [ ] 46-02-PLAN.md -- New modules: collision generator, vegetation serializer, splatmap exporter
+- [ ] 46-03-PLAN.md -- Wire compose_map Steps 11-16 + integration tests
+
 ---
 *Roadmap created: 2026-03-18*
 *v2.0 phases added: 2026-03-19*
@@ -700,3 +719,4 @@ Plans:
 *v10.0 Phase 44 planned: 2026-04-04*
 *v10.0 Phase 43 planned: 2026-04-04*
 *v10.0 Phase 45 planned: 2026-04-04*
+*v10.0 Phase 46 planned: 2026-04-04*
