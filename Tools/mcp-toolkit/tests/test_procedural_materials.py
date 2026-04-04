@@ -35,6 +35,7 @@ from blender_addon.handlers.procedural_materials import (
     get_library_info,
     get_library_keys,
     handle_create_procedural_material,
+    validate_dark_fantasy_color,
 )
 
 
@@ -946,3 +947,77 @@ class TestAdvancedMaterialProperties:
             builder = GENERATORS[entry["node_recipe"]]
             builder(mat, entry)
             mat.node_tree.nodes.clear.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# wet_rock material tests
+# ---------------------------------------------------------------------------
+
+class TestWetRockMaterial:
+    """Verify wet_rock entry in MATERIAL_LIBRARY."""
+
+    def test_wet_rock_in_library(self):
+        """wet_rock key exists with correct PBR values."""
+        assert "wet_rock" in MATERIAL_LIBRARY
+        entry = MATERIAL_LIBRARY["wet_rock"]
+        assert entry["roughness"] <= 0.20, "Wet rock must have low roughness"
+        assert entry["node_recipe"] == "stone", "Wet rock uses stone recipe"
+
+    def test_wet_rock_darker_than_cliff(self):
+        """wet_rock base_color should be darker than cliff_rock."""
+        wet = MATERIAL_LIBRARY["wet_rock"]["base_color"]
+        cliff = MATERIAL_LIBRARY["cliff_rock"]["base_color"]
+        wet_brightness = sum(wet[:3]) / 3.0
+        cliff_brightness = sum(cliff[:3]) / 3.0
+        assert wet_brightness < cliff_brightness, (
+            f"wet_rock brightness {wet_brightness:.4f} should be < "
+            f"cliff_rock brightness {cliff_brightness:.4f}"
+        )
+
+    def test_wet_rock_roughness_lower_than_cliff(self):
+        """Wet rock should be smoother than dry cliff rock."""
+        assert MATERIAL_LIBRARY["wet_rock"]["roughness"] < MATERIAL_LIBRARY["cliff_rock"]["roughness"]
+
+
+# ---------------------------------------------------------------------------
+# Dark fantasy color validator tests
+# ---------------------------------------------------------------------------
+
+class TestDarkFantasyColorValidator:
+    """Verify validate_dark_fantasy_color utility."""
+
+    def test_clamps_saturated_red(self):
+        """Highly saturated red (0.8, 0.0, 0.0) gets saturation clamped below 0.40."""
+        import colorsys
+        r, g, b = validate_dark_fantasy_color(0.8, 0.0, 0.0)
+        _h, s, v = colorsys.rgb_to_hsv(r, g, b)
+        assert s <= 0.41, f"Saturation {s:.3f} should be <= 0.40 (with tolerance)"
+        assert 0.09 <= v <= 0.51, f"Value {v:.3f} should be in [0.10, 0.50]"
+
+    def test_dark_passthrough(self):
+        """Already-compliant dark color passes unchanged."""
+        r, g, b = validate_dark_fantasy_color(0.1, 0.1, 0.1)
+        assert abs(r - 0.1) < 0.01
+        assert abs(g - 0.1) < 0.01
+        assert abs(b - 0.1) < 0.01
+
+    def test_all_library_entries_pass_dark_fantasy(self):
+        """All MATERIAL_LIBRARY entries pass validation without clamping.
+
+        Metallic reflectance colors (gold, silver, bronze, etc.) are excluded
+        because they represent physically-based specular F0 values, not
+        diffuse environment colors.
+        """
+        import colorsys
+        # Metallic entries use physically-based reflectance values that
+        # intentionally exceed the dark fantasy palette constraints.
+        metallic_keys = {k for k, v in MATERIAL_LIBRARY.items() if v.get("metallic", 0.0) >= 0.5}
+        for key, entry in MATERIAL_LIBRARY.items():
+            if key in metallic_keys:
+                continue
+            bc = entry["base_color"]
+            r_out, g_out, b_out = validate_dark_fantasy_color(bc[0], bc[1], bc[2])
+            # Should be unchanged (within floating point tolerance)
+            assert abs(r_out - bc[0]) < 0.02, f"{key}: R changed {bc[0]:.3f} -> {r_out:.3f}"
+            assert abs(g_out - bc[1]) < 0.02, f"{key}: G changed {bc[1]:.3f} -> {g_out:.3f}"
+            assert abs(b_out - bc[2]) < 0.02, f"{key}: B changed {bc[2]:.3f} -> {b_out:.3f}"
