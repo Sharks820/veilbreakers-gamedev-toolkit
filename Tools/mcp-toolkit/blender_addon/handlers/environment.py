@@ -1,7 +1,9 @@
 """Environment handlers for terrain generation, biome painting, water, and export.
 
-Provides 6 command handlers:
+Provides terrain/environment command handlers:
   - handle_generate_terrain: Heightmap -> bmesh grid terrain mesh
+  - handle_generate_terrain_tile: World-space tiled terrain mesh
+  - handle_generate_world_terrain: Multi-tile world region generation
   - handle_paint_terrain: Slope/altitude biome rules -> material slot assignment
   - handle_carve_river: River channel carving along A* path
   - handle_generate_road: A-to-B road with proper grading
@@ -36,6 +38,12 @@ from ._terrain_noise import (
 from ._terrain_erosion import (
     apply_hydraulic_erosion,
     apply_thermal_erosion,
+)
+from ._terrain_world import (
+    erode_world_heightmap,
+    extract_tile,
+    generate_world_heightmap,
+    world_region_dimensions,
 )
 
 
@@ -292,6 +300,65 @@ def _validate_terrain_params(params: dict) -> dict:
     }
 
 
+def _resolve_terrain_tile_params(params: dict) -> dict[str, Any]:
+    """Validate and normalize tiled terrain generation parameters."""
+    tile_x = int(params.get("tile_x", 0))
+    tile_y = int(params.get("tile_y", 0))
+    cell_size = float(params.get("cell_size", 1.0))
+    if cell_size <= 0:
+        raise ValueError("cell_size must be positive")
+
+    tile_size = params.get("tile_size")
+    resolution = params.get("resolution")
+    if tile_size is None and resolution is None:
+        tile_size = 256
+        resolution = tile_size + 1
+    elif tile_size is None:
+        resolution = int(resolution)
+        tile_size = resolution - 1
+    elif resolution is None:
+        tile_size = int(tile_size)
+        resolution = tile_size + 1
+    else:
+        tile_size = int(tile_size)
+        resolution = int(resolution)
+        if resolution != tile_size + 1:
+            raise ValueError(
+                "resolution must equal tile_size + 1 for tiled terrain generation"
+            )
+
+    if tile_size < 1:
+        raise ValueError("tile_size must be positive")
+    if resolution < 2:
+        raise ValueError("resolution must be at least 2")
+
+    terrain_size = float(tile_size * cell_size)
+    world_origin_x = float(
+        params.get("world_origin_x", tile_x * terrain_size)
+    )
+    world_origin_y = float(
+        params.get("world_origin_y", tile_y * terrain_size)
+    )
+
+    name = params.get("name", f"Terrain_{tile_x}_{tile_y}")
+    return {
+        "name": name,
+        "tile_x": tile_x,
+        "tile_y": tile_y,
+        "tile_size": tile_size,
+        "resolution": resolution,
+        "cell_size": cell_size,
+        "world_origin_x": world_origin_x,
+        "world_origin_y": world_origin_y,
+        "terrain_size": terrain_size,
+        "object_location": (
+            world_origin_x + terrain_size / 2.0,
+            world_origin_y + terrain_size / 2.0,
+            0.0,
+        ),
+    }
+
+
 def _export_heightmap_raw(
     heightmap: np.ndarray,
     flip_vertical: bool = True,
@@ -329,6 +396,120 @@ def _export_heightmap_raw(
     hmap_u16 = (hmap * 65535).astype(np.uint16)
 
     return hmap_u16.tobytes()
+
+
+def _create_terrain_mesh_from_heightmap(
+    *,
+    name: str,
+    heightmap: np.ndarray,
+    terrain_size: float,
+    height_scale: float,
+    seed: int,
+    terrain_type: str,
+    object_location: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    cliff_overlays_enabled: bool = True,
+    cliff_threshold_deg: float = 60.0,
+) -> dict[str, Any]:
+    """Create a terrain mesh object from a heightmap and optional cliff overlays."""
+    rows, cols = heightmap.shape
+
+    mesh = bpy.data.meshes.new(name)
+    bm = bmesh.new()
+
+    bmesh.ops.create_grid(
+        bm,
+        x_segments=cols - 1,
+        y_segments=rows - 1,
+        size=terrain_size / 2.0,
+        calc_uvs=True,
+    )
+
+    bm.verts.ensure_lookup_table()
+
+    # Set vertex Z from heightmap using bilinear interpolation for smooth terrain
+    for vert in bm.verts:
+        u = (vert.co.x + terrain_size / 2.0) / terrain_size
+        v = (vert.co.y + terrain_size / 2.0) / terrain_size
+        col_f = u * (cols - 1)
+        row_f = v * (rows - 1)
+        c0 = max(0, min(int(col_f), cols - 2))
+        r0 = max(0, min(int(row_f), rows - 2))
+        c1 = c0 + 1
+        r1 = r0 + 1
+        cf = col_f - c0
+        rf = row_f - r0
+        h00 = float(heightmap[r0, c0])
+        h10 = float(heightmap[r0, c1])
+        h01 = float(heightmap[r1, c0])
+        h11 = float(heightmap[r1, c1])
+        h = (
+            h00 * (1 - cf) * (1 - rf)
+            + h10 * cf * (1 - rf)
+            + h01 * (1 - cf) * rf
+            + h11 * cf * rf
+        )
+        vert.co.z = h * height_scale
+
+    bm.to_mesh(mesh)
+    vertex_count = len(bm.verts)
+    bm.free()
+
+    if hasattr(mesh, "polygons"):
+        for poly in mesh.polygons:
+            poly.use_smooth = True
+
+    obj = bpy.data.objects.new(name, mesh)
+    obj.location = object_location
+    bpy.context.collection.objects.link(obj)
+
+    cliff_placements: list[dict[str, Any]] = []
+    if cliff_overlays_enabled:
+        from ._terrain_depth import detect_cliff_edges, generate_cliff_face_mesh
+
+        cliff_placements = detect_cliff_edges(
+            heightmap,
+            slope_threshold_deg=cliff_threshold_deg,
+            min_cluster_size=4,
+            terrain_size=terrain_size,
+        )
+        for i, cp in enumerate(cliff_placements):
+            cliff_mesh_spec = generate_cliff_face_mesh(
+                width=cp["width"],
+                height=cp["height"],
+                seed=seed + i + 1000,
+            )
+            cliff_mesh = bpy.data.meshes.new(f"{name}_Cliff_{i}")
+            cliff_bm = bmesh.new()
+            for vert_data in cliff_mesh_spec["vertices"]:
+                cliff_bm.verts.new(vert_data)
+            cliff_bm.verts.ensure_lookup_table()
+            for face_data in cliff_mesh_spec["faces"]:
+                try:
+                    cliff_bm.faces.new([cliff_bm.verts[vi] for vi in face_data])
+                except (ValueError, IndexError):
+                    pass
+            cliff_bm.to_mesh(cliff_mesh)
+            cliff_bm.free()
+
+            cliff_obj = bpy.data.objects.new(f"{name}_Cliff_{i}", cliff_mesh)
+            cliff_obj.location = (
+                cp["position"][0],
+                cp["position"][1],
+                cp["position"][2] * height_scale,
+            )
+            cliff_obj.rotation_euler = tuple(cp["rotation"])
+            bpy.context.collection.objects.link(cliff_obj)
+            cliff_obj.parent = obj
+
+    return {
+        "object": obj,
+        "name": obj.name,
+        "vertex_count": vertex_count,
+        "cliff_overlays": len(cliff_placements),
+        "terrain_size": terrain_size,
+        "object_location": tuple(obj.location),
+        "terrain_type": terrain_type,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -449,109 +630,27 @@ def handle_generate_terrain(params: dict) -> dict:
         else:
             moisture_map = np.zeros_like(heightmap)
 
-    # Convert heightmap to Blender mesh
     terrain_size = scale
-    rows, cols = heightmap.shape
-
-    mesh = bpy.data.meshes.new(name)
-    bm = bmesh.new()
-
-    bmesh.ops.create_grid(
-        bm,
-        x_segments=cols - 1,
-        y_segments=rows - 1,
-        size=terrain_size / 2.0,
-        calc_uvs=True,
+    terrain_result = _create_terrain_mesh_from_heightmap(
+        name=name,
+        heightmap=heightmap,
+        terrain_size=terrain_size,
+        height_scale=height_scale,
+        seed=seed,
+        terrain_type=terrain_type,
+        object_location=(0.0, 0.0, 0.0),
+        cliff_overlays_enabled=params.get("cliff_overlays", True),
+        cliff_threshold_deg=params.get("cliff_threshold_deg", 60.0),
     )
 
-    bm.verts.ensure_lookup_table()
-
-    # Set vertex Z from heightmap using bilinear interpolation for smooth terrain
-    for vert in bm.verts:
-        u = (vert.co.x + terrain_size / 2.0) / terrain_size
-        v = (vert.co.y + terrain_size / 2.0) / terrain_size
-        # Continuous float coordinates in heightmap space
-        col_f = u * (cols - 1)
-        row_f = v * (rows - 1)
-        # Bilinear interpolation corners
-        c0 = max(0, min(int(col_f), cols - 2))
-        r0 = max(0, min(int(row_f), rows - 2))
-        c1 = c0 + 1
-        r1 = r0 + 1
-        # Fractional parts for interpolation weights
-        cf = col_f - c0
-        rf = row_f - r0
-        # Bilinear blend of 4 surrounding heightmap samples
-        h00 = float(heightmap[r0, c0])
-        h10 = float(heightmap[r0, c1])
-        h01 = float(heightmap[r1, c0])
-        h11 = float(heightmap[r1, c1])
-        h = (h00 * (1 - cf) * (1 - rf)
-             + h10 * cf * (1 - rf)
-             + h01 * (1 - cf) * rf
-             + h11 * cf * rf)
-        vert.co.z = h * height_scale
-
-    bm.to_mesh(mesh)
-    vertex_count = len(bm.verts)
-    bm.free()
-    if hasattr(mesh, "polygons"):
-        for poly in mesh.polygons:
-            poly.use_smooth = True
-
-    obj = bpy.data.objects.new(name, mesh)
-    bpy.context.collection.objects.link(obj)
-
-    # Auto-generate cliff mesh overlays at steep edges (MESH-05)
-    cliff_overlays_enabled = params.get("cliff_overlays", True)
-    cliff_threshold = params.get("cliff_threshold_deg", 60.0)
-    cliff_placements = []
-    if cliff_overlays_enabled:
-        from ._terrain_depth import detect_cliff_edges, generate_cliff_face_mesh
-        cliff_placements = detect_cliff_edges(
-            heightmap,
-            slope_threshold_deg=cliff_threshold,
-            min_cluster_size=4,
-            terrain_size=terrain_size,
-        )
-        for i, cp in enumerate(cliff_placements):
-            cliff_mesh_spec = generate_cliff_face_mesh(
-                width=cp["width"],
-                height=cp["height"],
-                seed=seed + i + 1000,
-            )
-            # Create cliff mesh object in Blender
-            cliff_mesh = bpy.data.meshes.new(f"{name}_Cliff_{i}")
-            cliff_bm = bmesh.new()
-            for vert_data in cliff_mesh_spec["vertices"]:
-                cliff_bm.verts.new(vert_data)
-            cliff_bm.verts.ensure_lookup_table()
-            for face_data in cliff_mesh_spec["faces"]:
-                try:
-                    cliff_bm.faces.new(
-                        [cliff_bm.verts[vi] for vi in face_data]
-                    )
-                except (ValueError, IndexError):
-                    pass  # Skip degenerate faces
-            cliff_bm.to_mesh(cliff_mesh)
-            cliff_bm.free()
-
-            cliff_obj = bpy.data.objects.new(f"{name}_Cliff_{i}", cliff_mesh)
-            cliff_obj.location = (cp["position"][0], cp["position"][1],
-                                  cp["position"][2] * height_scale)
-            cliff_obj.rotation_euler = tuple(cp["rotation"])
-            bpy.context.collection.objects.link(cliff_obj)
-            # Parent cliff to terrain
-            cliff_obj.parent = obj
-
     result = {
-        "name": obj.name,
-        "vertex_count": vertex_count,
+        "name": terrain_result["name"],
+        "vertex_count": terrain_result["vertex_count"],
         "terrain_type": terrain_type,
         "resolution": resolution,
         "height_scale": height_scale,
         "erosion_applied": erosion_applied,
-        "cliff_overlays": len(cliff_placements),
+        "cliff_overlays": terrain_result["cliff_overlays"],
         "flatten_zones_applied": len(flatten_zones) if flatten_zones else 0,
         "has_moisture_map": moisture_map is not None,
     }
@@ -559,6 +658,243 @@ def handle_generate_terrain(params: dict) -> dict:
         result["biome_preset"] = biome_name
         result["scatter_rules"] = biome_preset.get("scatter_rules", [])
     return result
+
+
+# ---------------------------------------------------------------------------
+# Handler: generate_terrain_tile
+# ---------------------------------------------------------------------------
+
+def handle_generate_terrain_tile(params: dict) -> dict:
+    """Generate a single world-space terrain tile."""
+    logger.info("Generating tiled terrain")
+
+    resolved = _resolve_terrain_tile_params(params)
+    name = resolved["name"]
+    tile_x = resolved["tile_x"]
+    tile_y = resolved["tile_y"]
+    tile_size = resolved["tile_size"]
+    resolution = resolved["resolution"]
+    cell_size = resolved["cell_size"]
+    world_origin_x = resolved["world_origin_x"]
+    world_origin_y = resolved["world_origin_y"]
+    terrain_size = resolved["terrain_size"]
+    object_location = resolved["object_location"]
+
+    terrain_type = params.get("terrain_type", "mountains")
+    scale = float(params.get("scale", 100.0))
+    height_scale = float(params.get("height_scale", 20.0))
+    seed = int(params.get("seed", 0))
+    octaves = params.get("octaves")
+    persistence = params.get("persistence")
+    lacunarity = params.get("lacunarity")
+    erosion = params.get("erosion", "none")
+    erosion_iters = int(params.get("erosion_iterations", 5000))
+    warp_strength = float(params.get("warp_strength", 0.4))
+    warp_scale = float(params.get("warp_scale", 0.5))
+    world_center_x = params.get("world_center_x")
+    world_center_y = params.get("world_center_y")
+    cliff_overlays_enabled = bool(params.get("cliff_overlays", True))
+    cliff_threshold = float(params.get("cliff_threshold_deg", 60.0))
+    erosion_margin = max(0, int(params.get("erosion_margin", 0)))
+
+    world_width = tile_size + 1 + (2 * erosion_margin)
+    world_height = tile_size + 1 + (2 * erosion_margin)
+    padded_origin_x = world_origin_x - erosion_margin * cell_size
+    padded_origin_y = world_origin_y - erosion_margin * cell_size
+
+    heightmap = generate_world_heightmap(
+        width=world_width,
+        height=world_height,
+        scale=scale,
+        world_origin_x=padded_origin_x,
+        world_origin_y=padded_origin_y,
+        cell_size=cell_size,
+        seed=seed,
+        terrain_type=terrain_type,
+        normalize=False,
+        warp_strength=warp_strength,
+        warp_scale=warp_scale,
+        octaves=octaves,
+        persistence=persistence,
+        lacunarity=lacunarity,
+        world_center_x=world_center_x,
+        world_center_y=world_center_y,
+    )
+
+    erosion_applied = False
+    if erosion in ("hydraulic", "both"):
+        heightmap = erode_world_heightmap(
+            heightmap,
+            hydraulic_iterations=erosion_iters,
+            thermal_iterations=0,
+            seed=seed,
+        )["heightmap"]
+        erosion_applied = True
+    if erosion in ("thermal", "both"):
+        heightmap = erode_world_heightmap(
+            heightmap,
+            hydraulic_iterations=0,
+            thermal_iterations=max(erosion_iters // 50, 5),
+            seed=seed,
+        )["heightmap"]
+        erosion_applied = True
+
+    if erosion_margin > 0:
+        heightmap = heightmap[
+            erosion_margin : erosion_margin + tile_size + 1,
+            erosion_margin : erosion_margin + tile_size + 1,
+        ]
+
+    flatten_zones = params.get("flatten_zones", None)
+    if flatten_zones:
+        from .terrain_advanced import flatten_multiple_zones
+        heightmap = flatten_multiple_zones(heightmap, flatten_zones)
+
+    terrain_result = _create_terrain_mesh_from_heightmap(
+        name=name,
+        heightmap=heightmap,
+        terrain_size=terrain_size,
+        height_scale=height_scale,
+        seed=seed,
+        terrain_type=terrain_type,
+        object_location=object_location,
+        cliff_overlays_enabled=cliff_overlays_enabled,
+        cliff_threshold_deg=cliff_threshold,
+    )
+
+    return {
+        "name": terrain_result["name"],
+        "tile_x": tile_x,
+        "tile_y": tile_y,
+        "tile_size": tile_size,
+        "resolution": resolution,
+        "cell_size": cell_size,
+        "world_origin_x": world_origin_x,
+        "world_origin_y": world_origin_y,
+        "terrain_type": terrain_type,
+        "height_scale": height_scale,
+        "vertex_count": terrain_result["vertex_count"],
+        "cliff_overlays": terrain_result["cliff_overlays"],
+        "erosion_applied": erosion_applied,
+        "erosion_margin": erosion_margin,
+        "flatten_zones_applied": len(flatten_zones) if flatten_zones else 0,
+        "object_location": terrain_result["object_location"],
+        "terrain_size": terrain_size,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Handler: generate_world_terrain
+# ---------------------------------------------------------------------------
+
+def handle_generate_world_terrain(params: dict) -> dict:
+    """Generate a tiled world region and extract seamless terrain meshes."""
+    logger.info("Generating world terrain region")
+
+    name = params.get("name", "WorldTerrain")
+    tile_count_x = int(params.get("tile_count_x", 1))
+    tile_count_y = int(params.get("tile_count_y", 1))
+    tile_size = int(params.get("tile_size", params.get("resolution", 257) - 1))
+    if tile_size < 1:
+        raise ValueError("tile_size must be positive")
+    cell_size = float(params.get("cell_size", 1.0))
+    scale = float(params.get("scale", 100.0))
+    world_origin_x = float(params.get("world_origin_x", 0.0))
+    world_origin_y = float(params.get("world_origin_y", 0.0))
+    terrain_type = params.get("terrain_type", "mountains")
+    height_scale = float(params.get("height_scale", 20.0))
+    seed = int(params.get("seed", 0))
+    octaves = params.get("octaves")
+    persistence = params.get("persistence")
+    lacunarity = params.get("lacunarity")
+    erosion = params.get("erosion", "none")
+    erosion_iters = int(params.get("erosion_iterations", 5000))
+    warp_strength = float(params.get("warp_strength", 0.4))
+    warp_scale = float(params.get("warp_scale", 0.5))
+    world_center_x = params.get("world_center_x")
+    world_center_y = params.get("world_center_y")
+    cliff_overlays_enabled = bool(params.get("cliff_overlays", True))
+    cliff_threshold = float(params.get("cliff_threshold_deg", 60.0))
+
+    world_rows, world_cols = world_region_dimensions(
+        tile_count_x, tile_count_y, tile_size
+    )
+    heightmap = generate_world_heightmap(
+        width=world_cols,
+        height=world_rows,
+        scale=scale,
+        world_origin_x=world_origin_x,
+        world_origin_y=world_origin_y,
+        cell_size=cell_size,
+        seed=seed,
+        terrain_type=terrain_type,
+        normalize=False,
+        warp_strength=warp_strength,
+        warp_scale=warp_scale,
+        octaves=octaves,
+        persistence=persistence,
+        lacunarity=lacunarity,
+        world_center_x=world_center_x,
+        world_center_y=world_center_y,
+    )
+
+    erosion_applied = False
+    if erosion in ("hydraulic", "both") or erosion in ("thermal", "both"):
+        heightmap = erode_world_heightmap(
+            heightmap,
+            hydraulic_iterations=erosion_iters if erosion in ("hydraulic", "both") else 0,
+            thermal_iterations=max(erosion_iters // 50, 5) if erosion in ("thermal", "both") else 0,
+            seed=seed,
+        )["heightmap"]
+        erosion_applied = True
+
+    tiles: list[dict[str, Any]] = []
+    tile_world_size = tile_size * cell_size
+    for ty in range(tile_count_y):
+        for tx in range(tile_count_x):
+            tile_name = f"{name}_{tx}_{ty}"
+            tile_hmap = extract_tile(heightmap, tx, ty, tile_size)
+            tile_origin_x = world_origin_x + tx * tile_world_size
+            tile_origin_y = world_origin_y + ty * tile_world_size
+            tile_result = _create_terrain_mesh_from_heightmap(
+                name=tile_name,
+                heightmap=tile_hmap,
+                terrain_size=tile_world_size,
+                height_scale=height_scale,
+                seed=seed + (ty * tile_count_x) + tx,
+                terrain_type=terrain_type,
+                object_location=(
+                    tile_origin_x + tile_world_size / 2.0,
+                    tile_origin_y + tile_world_size / 2.0,
+                    0.0,
+                ),
+                cliff_overlays_enabled=cliff_overlays_enabled,
+                cliff_threshold_deg=cliff_threshold,
+            )
+            tiles.append({
+                "tile_x": tx,
+                "tile_y": ty,
+                "name": tile_result["name"],
+                "vertex_count": tile_result["vertex_count"],
+                "cliff_overlays": tile_result["cliff_overlays"],
+                "object_location": tile_result["object_location"],
+            })
+
+    return {
+        "name": name,
+        "tile_count_x": tile_count_x,
+        "tile_count_y": tile_count_y,
+        "tile_size": tile_size,
+        "cell_size": cell_size,
+        "terrain_type": terrain_type,
+        "height_scale": height_scale,
+        "seed": seed,
+        "world_origin_x": world_origin_x,
+        "world_origin_y": world_origin_y,
+        "erosion_applied": erosion_applied,
+        "tiles": tiles,
+        "tile_count": len(tiles),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -784,6 +1120,8 @@ def handle_generate_road(params: dict) -> dict:
     terrain_obj = bpy.data.objects.get(terrain_name)
     terrain_size = terrain_obj.dimensions.x if terrain_obj else 100.0
     cell_size = terrain_size / max(cols - 1, 1)
+    terrain_origin_x = terrain_obj.location.x if terrain_obj else 0.0
+    terrain_origin_y = terrain_obj.location.y if terrain_obj else 0.0
 
     road_bm = bmesh.new()
     road_uv = road_bm.loops.layers.uv.new("UVMap")
@@ -796,10 +1134,10 @@ def handle_generate_road(params: dict) -> dict:
             r0, c0 = path[pi]
             r1, c1 = path[pi + 1]
             # Convert grid coords to world coords
-            x0 = (c0 / max(cols - 1, 1)) * terrain_size - terrain_size / 2
-            y0 = (r0 / max(rows - 1, 1)) * terrain_size - terrain_size / 2
-            x1 = (c1 / max(cols - 1, 1)) * terrain_size - terrain_size / 2
-            y1 = (r1 / max(rows - 1, 1)) * terrain_size - terrain_size / 2
+            x0 = terrain_origin_x + (c0 / max(cols - 1, 1)) * terrain_size - terrain_size / 2
+            y0 = terrain_origin_y + (r0 / max(rows - 1, 1)) * terrain_size - terrain_size / 2
+            x1 = terrain_origin_x + (c1 / max(cols - 1, 1)) * terrain_size - terrain_size / 2
+            y1 = terrain_origin_y + (r1 / max(rows - 1, 1)) * terrain_size - terrain_size / 2
             z0 = float(graded_flat[r0 * cols + c0]) * height_scale + 0.03
             z1 = float(graded_flat[r1 * cols + c1]) * height_scale + 0.03
 
@@ -914,9 +1252,13 @@ def handle_create_water(params: dict) -> dict:
     cross_sections = max(8, min(16, int(params.get("cross_sections", 12))))
 
     # If terrain specified, use its Z for water level snapping
+    terrain_origin_x = 0.0
+    terrain_origin_y = 0.0
     if terrain_name:
         terrain_obj = bpy.data.objects.get(terrain_name)
         if terrain_obj is not None and path_points_raw is None:
+            terrain_origin_x = terrain_obj.location.x
+            terrain_origin_y = terrain_obj.location.y
             dims = terrain_obj.dimensions
             fallback_depth = max(dims.y, fallback_depth)
             width = max(dims.x * 0.08, width)  # 8% of terrain width for a river
@@ -929,8 +1271,8 @@ def handle_create_water(params: dict) -> dict:
     else:
         # Fallback: straight line along Y axis
         path = [
-            (0.0, -fallback_depth / 2.0, water_level),
-            (0.0,  fallback_depth / 2.0, water_level),
+            (terrain_origin_x, terrain_origin_y - fallback_depth / 2.0, water_level),
+            (terrain_origin_x, terrain_origin_y + fallback_depth / 2.0, water_level),
         ]
 
     # -----------------------------------------------------------------------

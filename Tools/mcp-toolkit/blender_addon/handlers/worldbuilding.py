@@ -3200,7 +3200,7 @@ def _create_hazard_disc(
     hazard_type = hazard["type"]
     mesh = bpy.data.meshes.new(f"{base_name}_hazard_{index}_{hazard_type}")
     bm = bmesh.new()
-    bmesh.ops.create_circle(bm, cap_ends=True, segments=24, radius=radius)
+    bmesh.ops.create_circle(bm, cap_fill=True, segments=24, radius=radius)
     bm.to_mesh(mesh)
     bm.free()
     obj = bpy.data.objects.new(f"{base_name}_hazard_{index}_{hazard_type}", mesh)
@@ -3547,7 +3547,7 @@ def _create_floor_plate(
     if shape == "circular" and "radius" in bounds:
         bmesh.ops.create_circle(
             bm,
-            cap_ends=True,
+            cap_fill=True,
             segments=48,
             radius=float(bounds["radius"]),
         )
@@ -7009,7 +7009,7 @@ def handle_generate_boss_arena(params: dict) -> dict:
 
     # Arena floor
     bm = bmesh.new()
-    bmesh.ops.create_circle(bm, cap_ends=True, segments=32, radius=diameter / 2)
+    bmesh.ops.create_circle(bm, cap_fill=True, segments=32, radius=diameter / 2)
     mesh = bpy.data.meshes.new(f"{name}_floor")
     bm.to_mesh(mesh)
     bm.free()

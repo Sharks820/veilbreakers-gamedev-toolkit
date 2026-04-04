@@ -167,6 +167,8 @@ from .animation_export import (
 )
 from .environment import (
     handle_generate_terrain,
+    handle_generate_terrain_tile,
+    handle_generate_world_terrain,
     handle_paint_terrain,
     handle_carve_river,
     handle_generate_road,
@@ -965,6 +967,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "anim_batch_export": handle_batch_export,
     # Environment operations
     "env_generate_terrain": handle_generate_terrain,
+    "env_generate_terrain_tile": handle_generate_terrain_tile,
+    "env_generate_world_terrain": handle_generate_world_terrain,
     "env_paint_terrain": handle_paint_terrain,
     "env_carve_river": handle_carve_river,
     "env_generate_road": handle_generate_road,
