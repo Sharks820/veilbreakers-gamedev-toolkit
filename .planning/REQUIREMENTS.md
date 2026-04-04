@@ -98,7 +98,7 @@
 - [ ] **CITY-04**: Populate with environmental assets (vegetation, rocks, props, scatter)
 - [ ] **CITY-05**: Use Tripo for city props, interior furnishing, and environmental assets
 - [ ] **CITY-06**: zai visual verification -- every area must score AAA or fix+regenerate until it does
-- [ ] **CITY-07**: Full compose_map pipeline execution with all systems wired
+- [x] **CITY-07**: Full compose_map pipeline execution with all systems wired
 
 ## BRIDGE — Unity Integration
 
@@ -108,8 +108,8 @@
 
 ## TEST — Quality Assurance
 
-- [ ] **TEST-01**: All existing tests pass (19,850+ baseline)
-- [ ] **TEST-02**: New tests for all fixed generators and wired systems
+- [x] **TEST-01**: All existing tests pass (19,850+ baseline)
+- [x] **TEST-02**: New tests for all fixed generators and wired systems
 - [ ] **TEST-03**: Visual regression -- zai before/after for each generator category
 - [ ] **TEST-04**: Opus verification scan after every phase -- follow-up rounds until CLEAN
 
@@ -191,9 +191,9 @@
 | CITY-04 | Phase 48 | Pending |
 | CITY-05 | Phase 48 | Pending |
 | CITY-06 | Phase 48 | Pending |
-| CITY-07 | Phase 48 | Pending |
-| TEST-01 | Phase 39, 48 | Pending |
-| TEST-02 | Phase 47, 48 | Pending |
+| CITY-07 | Phase 48 | Complete |
+| TEST-01 | Phase 39, 48 | Complete |
+| TEST-02 | Phase 47, 48 | Complete |
 | TEST-03 | Phase 43, 44, 48 | Pending |
 | TEST-04 | Phase 39-48 (all) | Pending |
 
