@@ -285,10 +285,12 @@ def _terrain_height_sampler(terrain_obj: bpy.types.Object | None):
     dims = terrain_obj.dimensions
     terrain_size = max(dims.x, dims.y, 1.0)
     half_size = terrain_size / 2.0
+    origin_x = float(terrain_obj.location.x)
+    origin_y = float(terrain_obj.location.y)
 
     def _sample(world_x: float, world_y: float) -> float:
-        u = (world_x + half_size) / terrain_size
-        v = (world_y + half_size) / terrain_size
+        u = (world_x - origin_x + half_size) / terrain_size
+        v = (world_y - origin_y + half_size) / terrain_size
         ci = int(u * (cols - 1))
         ri = int(v * (rows - 1))
         ci = max(0, min(ci, cols - 1))
@@ -1278,6 +1280,8 @@ def handle_scatter_vegetation(params: dict) -> dict:
     # Determine terrain world-space size
     dims = obj.dimensions
     terrain_size = max(dims.x, dims.y, 1.0)
+    terrain_origin_x = float(obj.location.x)
+    terrain_origin_y = float(obj.location.y)
 
     # Generate scatter points
     candidates = poisson_disk_sample(
@@ -1345,8 +1349,8 @@ def handle_scatter_vegetation(params: dict) -> dict:
         terrain_half_bz = terrain_size / 2.0
         _filtered = []
         for p in placements:
-            wx = p["position"][0] - terrain_half_bz
-            wy = p["position"][1] - terrain_half_bz
+            wx = p["position"][0] - terrain_half_bz + terrain_origin_x
+            wy = p["position"][1] - terrain_half_bz + terrain_origin_y
             _in_excluded = False
             for bz_min_x, bz_min_y, bz_max_x, bz_max_y in _exclusion_zones:
                 if bz_min_x <= wx <= bz_max_x and bz_min_y <= wy <= bz_max_y:
@@ -1400,16 +1404,16 @@ def handle_scatter_vegetation(params: dict) -> dict:
             f"{vt}_{veg_counts[vt]:04d}", template.data,
         )
         # Position: offset from terrain center
-        wx = p["position"][0] - terrain_half
-        wy = p["position"][1] - terrain_half
+        wx = p["position"][0] - terrain_half + terrain_origin_x
+        wy = p["position"][1] - terrain_half + terrain_origin_y
 
         # Sample terrain height at this position with bilinear interpolation
         u = p["position"][0] / terrain_size
         v = p["position"][1] / terrain_size
-        col_f = u * (side - 1)
-        row_f = v * (side - 1)
-        c0 = max(0, min(int(col_f), side - 2))
-        r0 = max(0, min(int(row_f), side - 2))
+        col_f = u * (cols - 1)
+        row_f = v * (rows - 1)
+        c0 = max(0, min(int(col_f), cols - 2))
+        r0 = max(0, min(int(row_f), rows - 2))
         c1, r1 = c0 + 1, r0 + 1
         cf, rf = col_f - c0, row_f - r0
         h00 = float(heightmap[r0, c0])
@@ -1423,7 +1427,7 @@ def handle_scatter_vegetation(params: dict) -> dict:
 
         # Align vegetation to terrain normal (slope-perpendicular placement)
         # Compute terrain normal from finite differences of heightmap
-        cell_size = terrain_size / max(side - 1, 1)
+        cell_size = terrain_size / max(max(rows, cols) - 1, 1)
         dzdx = (h10 - h00) * height_max / max(cell_size, 0.01)
         dzdy = (h01 - h00) * height_max / max(cell_size, 0.01)
         slope_pitch = math.atan2(-dzdy, 1.0)  # tilt around X

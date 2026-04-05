@@ -169,7 +169,11 @@ def _estimate_location_radius(location: dict) -> float:
     return 14.0
 
 
-def _normalize_map_point(position: list[float] | tuple[float, ...], terrain_size: float) -> tuple[float, float]:
+def _normalize_map_point(
+    position: list[float] | tuple[float, ...],
+    terrain_size: float,
+    terrain_location: tuple[float, float] | None = None,
+) -> tuple[float, float]:
     """Normalize user map positions into centered Blender-world coordinates."""
     if len(position) < 2:
         raise ValueError("Map position must contain at least two coordinates.")
@@ -177,6 +181,7 @@ def _normalize_map_point(position: list[float] | tuple[float, ...], terrain_size
     x = float(position[0])
     y = float(position[1])
     half = terrain_size / 2.0
+    origin_x, origin_y = terrain_location or (0.0, 0.0)
 
     # Heuristic: shift from 0..size space to centered (-half..+half) space.
     # We only shift when BOTH coords are in [0, size] AND at least one exceeds
@@ -184,7 +189,7 @@ def _normalize_map_point(position: list[float] | tuple[float, ...], terrain_size
     # already in centered space (e.g. (60,60) on size=100 should stay put).
     threshold = terrain_size * 0.6
     if 0.0 <= x <= terrain_size and 0.0 <= y <= terrain_size and (x > threshold or y > threshold):
-        return (x - half, y - half)
+        return (x - half + origin_x, y - half + origin_y)
     return (x, y)
 
 
@@ -193,9 +198,14 @@ def _map_point_to_terrain_cell(
     *,
     terrain_size: float,
     resolution: int,
+    terrain_location: tuple[float, float] | None = None,
 ) -> tuple[int, int]:
     """Convert a world-space map point into a terrain heightmap cell."""
-    x, y = _normalize_map_point(position, terrain_size)
+    x, y = float(position[0]), float(position[1])
+    if terrain_location is not None:
+        x -= terrain_location[0]
+        y -= terrain_location[1]
+    x, y = _normalize_map_point((x, y), terrain_size)
     half = terrain_size / 2.0
     side = max(2, int(resolution))
     row = int(round(((y + half) / max(terrain_size, 1e-6)) * (side - 1)))
@@ -209,6 +219,8 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
     """Assign non-overlapping terrain anchors to compose_map locations."""
     terrain_cfg = map_spec.get("terrain", {})
     terrain_size = float(terrain_cfg.get("size", 200.0))
+    terrain_location = tuple(terrain_cfg.get("location", (0.0, 0.0)))[:2]
+    terrain_origin_x, terrain_origin_y = terrain_location
     half = terrain_size / 2.0
     locations = list(map_spec.get("locations", []))
     placements: list[dict] = []
@@ -231,18 +243,23 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
         for i in range(count):
             angle = (2.0 * math.pi * i / count) + (ring_idx * 0.31)
             candidate_points.append((
-                round(math.cos(angle) * radius_x, 3),
-                round(math.sin(angle) * radius_y, 3),
+                round(math.cos(angle) * radius_x + terrain_origin_x, 3),
+                round(math.sin(angle) * radius_y + terrain_origin_y, 3),
             ))
-    candidate_points.append((0.0, 0.0))
+    candidate_points.append((terrain_origin_x, terrain_origin_y))
 
     for index, location in enumerate(locations):
         radius = _estimate_location_radius(location)
         requested = location.get("position")
         anchor: tuple[float, float] | None = None
+        explicit_world_anchor = False
 
         if isinstance(requested, (list, tuple)) and len(requested) >= 2:
-            anchor = _normalize_map_point(requested, terrain_size)
+            if terrain_cfg.get("location") is not None:
+                anchor = (float(requested[0]), float(requested[1]))
+                explicit_world_anchor = True
+            else:
+                anchor = _normalize_map_point(requested, terrain_size)
 
         if anchor is None:
             for candidate in candidate_points:
@@ -276,10 +293,24 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
                 0.0,
             )
 
-        clamped = (
-            max(-half + radius, min(half - radius, anchor[0])),
-            max(-half + radius, min(half - radius, anchor[1])),
-        )
+        if explicit_world_anchor:
+            clamped = anchor
+        else:
+            if terrain_cfg.get("location") is not None:
+                min_x = terrain_origin_x + radius
+                max_x = terrain_origin_x + terrain_size - radius
+                min_y = terrain_origin_y + radius
+                max_y = terrain_origin_y + terrain_size - radius
+            else:
+                min_x = -half + radius
+                max_x = half - radius
+                min_y = -half + radius
+                max_y = half - radius
+
+            clamped = (
+                max(min_x, min(max_x, anchor[0])),
+                max(min_y, min(max_y, anchor[1])),
+            )
         placements.append({
             "name": location.get("name", f"Location_{index}"),
             "type": location.get("type", "building"),
@@ -2771,6 +2802,7 @@ async def asset_pipeline(
         interior_results: list[dict] = []
         terrain_cfg = spec.get("terrain", {})
         terrain_size = float(terrain_cfg.get("size", 200.0))
+        terrain_location = tuple(terrain_cfg.get("location", (0.0, 0.0)))[:2]
         terrain_resolution = min(
             int(terrain_cfg.get("resolution", 256)),
             int(budget["terrain_resolution_cap"]),
@@ -2862,11 +2894,13 @@ async def asset_pipeline(
                         river.get("source", [10, 10]),
                         terrain_size=terrain_size,
                         resolution=terrain_resolution,
+                        terrain_location=terrain_location,
                     )
                     destination = _map_point_to_terrain_cell(
                         river.get("destination", [190, 190]),
                         terrain_size=terrain_size,
                         resolution=terrain_resolution,
+                        terrain_location=terrain_location,
                     )
                     await blender.send_command("env_carve_river", {
                         "terrain_name": terrain_name,
@@ -2906,6 +2940,7 @@ async def asset_pipeline(
                         waypoint,
                         terrain_size=terrain_size,
                         resolution=terrain_resolution,
+                        terrain_location=terrain_location,
                     ))
                     for waypoint in road.get("waypoints", [])
                     if isinstance(waypoint, (list, tuple)) and len(waypoint) >= 2

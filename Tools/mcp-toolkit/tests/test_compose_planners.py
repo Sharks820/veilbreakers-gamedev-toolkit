@@ -38,6 +38,15 @@ class TestMapPlacementPlanning:
         point = _map_point_to_terrain_cell((150.0, 50.0), terrain_size=200.0, resolution=201)
         assert point == (50, 150)
 
+    def test_map_point_to_terrain_cell_respects_terrain_location(self):
+        point = _map_point_to_terrain_cell(
+            (250.0, 150.0),
+            terrain_size=200.0,
+            resolution=201,
+            terrain_location=(100.0, 100.0),
+        )
+        assert point == (50, 150)
+
     def test_anchor_planner_keeps_locations_apart(self):
         placements = _plan_map_location_anchors({
             "terrain": {"size": 220.0},
@@ -66,6 +75,16 @@ class TestMapPlacementPlanning:
         })
 
         assert placements[0]["anchor"] == (40.0, -20.0)
+
+    def test_anchor_planner_respects_terrain_location(self):
+        placements = _plan_map_location_anchors({
+            "terrain": {"size": 200.0, "location": [100.0, 100.0]},
+            "locations": [
+                {"name": "Gate", "type": "building", "position": [140.0, 80.0]},
+            ],
+        })
+
+        assert placements[0]["anchor"] == (140.0, 80.0)
 
     def test_budget_defaults_to_balanced_pc_for_regular_region(self):
         budget = _resolve_map_generation_budget({

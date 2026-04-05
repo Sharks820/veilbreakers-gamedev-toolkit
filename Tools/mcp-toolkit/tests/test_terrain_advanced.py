@@ -304,6 +304,31 @@ class TestApplyLayerOperation:
         with pytest.raises(ValueError, match="Unknown operation"):
             apply_layer_operation(layer, "explode", (50.0, 50.0), 10.0)
 
+    def test_offset_origin_matches_centered_result(self):
+        """Offset terrain origin should behave like centered coordinates."""
+        centered = TerrainLayer("centered", 32, 32, "ADD", 1.0)
+        offset = TerrainLayer("offset", 32, 32, "ADD", 1.0)
+
+        apply_layer_operation(
+            centered,
+            "raise",
+            (50.0, 50.0),
+            15.0,
+            strength=1.0,
+            terrain_size=(100.0, 100.0),
+        )
+        apply_layer_operation(
+            offset,
+            "raise",
+            (150.0, 150.0),
+            15.0,
+            strength=1.0,
+            terrain_size=(100.0, 100.0),
+            terrain_origin=(100.0, 100.0),
+        )
+
+        np.testing.assert_allclose(offset.heights, centered.heights)
+
 
 class TestFlattenLayers:
     """Test layer flattening/merging."""
@@ -606,6 +631,29 @@ class TestApplyStampToHeightmap:
         )
         assert np.all(terrain == 0.0)
 
+    def test_stamp_respects_terrain_origin(self):
+        """Offset terrain origin should match centered stamp placement."""
+        terrain = np.zeros((32, 32), dtype=np.float64)
+        stamp = compute_stamp_heightmap("hill", 16)
+        centered = apply_stamp_to_heightmap(
+            terrain,
+            stamp,
+            (50.0, 50.0),
+            20.0,
+            height=5.0,
+            terrain_size=(100.0, 100.0),
+        )
+        offset = apply_stamp_to_heightmap(
+            terrain,
+            stamp,
+            (150.0, 150.0),
+            20.0,
+            height=5.0,
+            terrain_size=(100.0, 100.0),
+            terrain_origin=(100.0, 100.0),
+        )
+        np.testing.assert_allclose(offset, centered)
+
 
 # ===================================================================
 # Erosion brush
@@ -667,3 +715,25 @@ class TestComputeErosionBrush:
         _ = compute_erosion_brush(hmap, (50, 50), 20, "hydraulic",
                                   terrain_size=(100, 100))
         np.testing.assert_array_equal(hmap, original)
+
+    def test_offset_origin_matches_centered_result(self):
+        """Offset terrain origin should match centered brush placement."""
+        hmap = np.random.RandomState(42).rand(32, 32)
+        centered = compute_erosion_brush(
+            hmap,
+            (50.0, 50.0),
+            20.0,
+            "hydraulic",
+            iterations=3,
+            terrain_size=(100.0, 100.0),
+        )
+        offset = compute_erosion_brush(
+            hmap,
+            (150.0, 150.0),
+            20.0,
+            "hydraulic",
+            iterations=3,
+            terrain_size=(100.0, 100.0),
+            terrain_origin=(100.0, 100.0),
+        )
+        np.testing.assert_allclose(offset, centered)
