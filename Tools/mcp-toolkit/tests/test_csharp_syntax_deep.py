@@ -98,6 +98,7 @@ from veilbreakers_mcp.shared.unity_templates.ui_templates import (
 # ---------------------------------------------------------------------------
 from veilbreakers_mcp.shared.unity_templates.scene_templates import (
     generate_terrain_setup_script,
+    generate_tiled_terrain_setup_script,
     generate_object_scatter_script,
     generate_lighting_setup_script,
     generate_navmesh_bake_script,
@@ -445,6 +446,16 @@ ALL_GENERATORS: list[tuple[str, callable, str]] = [
             splatmap_layers=[
                 {"texture_path": "Assets/Textures/grass.png", "tiling": 15.0},
                 {"texture_path": "Assets/Textures/rock.png", "tiling": 10.0},
+            ],
+        ),
+        "cs",
+    ),
+    (
+        "scene/tiled_terrain",
+        lambda: generate_tiled_terrain_setup_script(
+            tiles=[
+                {"heightmap_path": "Assets/Terrain/tile_0.raw", "name": "Tile_0", "grid_x": 0, "grid_y": 0},
+                {"heightmap_path": "Assets/Terrain/tile_1.raw", "name": "Tile_1", "grid_x": 1, "grid_y": 0},
             ],
         ),
         "cs",

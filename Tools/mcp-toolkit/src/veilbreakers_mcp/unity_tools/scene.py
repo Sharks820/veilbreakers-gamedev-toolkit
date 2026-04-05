@@ -10,6 +10,7 @@ from veilbreakers_mcp.unity_tools._common import (
 
 from veilbreakers_mcp.shared.unity_templates.scene_templates import (
     generate_terrain_setup_script,
+    generate_tiled_terrain_setup_script,
     generate_object_scatter_script,
     generate_lighting_setup_script,
     generate_navmesh_bake_script,
@@ -26,7 +27,7 @@ from veilbreakers_mcp.shared.unity_templates.animation_templates import (
 
 
 # ---------------------------------------------------------------------------
-# Scene tool -- compound tool covering SCENE-01 through SCENE-07
+# Scene tool -- compound tool covering SCENE-01 through SCENE-07 plus SCENE-01b
 # ---------------------------------------------------------------------------
 
 
@@ -34,6 +35,7 @@ from veilbreakers_mcp.shared.unity_templates.animation_templates import (
 async def unity_scene(
     action: Literal[
         "setup_terrain",            # SCENE-01: terrain from heightmap + splatmaps
+        "setup_tiled_terrain",      # SCENE-01b: multi-tile terrain import
         "scatter_objects",          # SCENE-02: density-based object placement
         "setup_lighting",           # SCENE-03: directional light, fog, post-processing
         "bake_navmesh",             # SCENE-04: NavMesh with agent settings
@@ -50,6 +52,8 @@ async def unity_scene(
     terrain_size: list[float] | None = None,
     terrain_resolution: int = 513,
     splatmap_layers: list[dict] | None = None,
+    terrain_tiles: list[dict] | None = None,
+    tile_parent_name: str = "VB_TerrainRoot",
     # Scatter params
     prefab_paths: list[str] | None = None,
     density: float = 0.5,
@@ -100,6 +104,11 @@ async def unity_scene(
         if action == "setup_terrain":
             return await _handle_scene_setup_terrain(
                 heightmap_path, terrain_size, terrain_resolution, splatmap_layers
+            )
+        elif action == "setup_tiled_terrain":
+            return await _handle_scene_setup_tiled_terrain(
+                terrain_tiles, terrain_size, terrain_resolution, splatmap_layers,
+                tile_parent_name,
             )
         elif action == "scatter_objects":
             return await _handle_scene_scatter_objects(
@@ -183,6 +192,54 @@ async def _handle_scene_setup_terrain(
             "action": "setup_terrain",
             "script_path": abs_path,
             "heightmap_path": heightmap_path,
+            "terrain_size": list(size_tuple),
+            "resolution": terrain_resolution,
+            "next_steps": STANDARD_NEXT_STEPS,
+            "result_file": "Temp/vb_result.json",
+        },
+        indent=2,
+    )
+
+
+async def _handle_scene_setup_tiled_terrain(
+    terrain_tiles: list[dict] | None,
+    terrain_size: list[float] | None,
+    terrain_resolution: int,
+    splatmap_layers: list[dict] | None,
+    tile_parent_name: str,
+) -> str:
+    """Create a tiled terrain set from multiple heightmap tiles."""
+    if not terrain_tiles:
+        return json.dumps({
+            "status": "error",
+            "action": "setup_tiled_terrain",
+            "message": "terrain_tiles is required for setup_tiled_terrain action",
+        })
+
+    size_tuple = tuple(terrain_size) if terrain_size and len(terrain_size) == 3 else (1000, 600, 1000)
+
+    script = generate_tiled_terrain_setup_script(
+        tiles=terrain_tiles,
+        default_size=size_tuple,
+        default_resolution=terrain_resolution,
+        splatmap_layers=splatmap_layers,
+        parent_name=tile_parent_name,
+    )
+    script_path = "Assets/Editor/Generated/Scene/VeilBreakers_TiledTerrainSetup.cs"
+
+    try:
+        abs_path = _write_to_unity(script, script_path)
+    except ValueError as exc:
+        return json.dumps(
+            {"status": "error", "action": "setup_tiled_terrain", "message": str(exc)}
+        )
+
+    return json.dumps(
+        {
+            "status": "success",
+            "action": "setup_tiled_terrain",
+            "script_path": abs_path,
+            "tile_count": len(terrain_tiles),
             "terrain_size": list(size_tuple),
             "resolution": terrain_resolution,
             "next_steps": STANDARD_NEXT_STEPS,

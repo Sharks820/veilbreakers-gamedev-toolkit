@@ -612,6 +612,7 @@ from .terrain_chunking import (  # noqa: F401 -- Terrain chunking for streaming
     compute_chunk_lod,
     compute_streaming_distances,
     export_chunks_metadata,
+    validate_tile_seams,
 )
 from .texture_quality import (  # noqa: F401 -- AAA texture quality pipeline
     compute_smart_material_params,
@@ -1648,6 +1649,19 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         overlap=params.get("overlap", 1),
         lod_levels=params.get("lod_levels", 4),
         world_scale=params.get("world_scale", 1.0),
+        world_origin=tuple(params["world_origin"]) if params.get("world_origin") is not None else None,
+    ),
+    "terrain_validate_tile_seams": lambda params: validate_tile_seams(
+        tile_a=params.get("tile_a", []),
+        tile_b=params.get("tile_b", []),
+        direction=params.get("direction", "east"),
+        tolerance=params.get("tolerance", 1e-6),
+    ),
+    "env_validate_tile_seams": lambda params: validate_tile_seams(
+        tile_a=params.get("tile_a", []),
+        tile_b=params.get("tile_b", []),
+        direction=params.get("direction", "east"),
+        tolerance=params.get("tolerance", 1e-6),
     ),
     "terrain_chunk_lod": lambda params: compute_chunk_lod(
         heightmap_chunk=params.get("heightmap_chunk", []),

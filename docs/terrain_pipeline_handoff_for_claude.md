@@ -618,6 +618,12 @@ Changes:
 - Update `terrain_chunking.py:compute_terrain_chunks()` to accept pre-tiled world heightmaps with `world_origin` param
 - Ensure compose_map location anchors, flattening, scatter, and props honor tile/world origins
 
+Implemented in this branch:
+- `terrain_chunking.py` now accepts `world_origin` and exports it in chunk metadata
+- `terrain_validate_tile_seams` / `env_validate_tile_seams` now provide direct seam checks
+- `unity_scene` now supports `setup_tiled_terrain`
+- `generate_tiled_terrain_setup_script()` now emits neighbor wiring via `Terrain.SetNeighbors`
+
 ---
 
 ## 13. Required Tests

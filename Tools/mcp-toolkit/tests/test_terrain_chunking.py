@@ -9,6 +9,7 @@ from blender_addon.handlers.terrain_chunking import (
     compute_streaming_distances,
     compute_terrain_chunks,
     export_chunks_metadata,
+    validate_tile_seams,
 )
 
 
@@ -161,6 +162,19 @@ class TestComputeTerrainChunks:
         meta = result["metadata"]
         assert meta["chunk_world_size"] == 128.0
 
+    def test_world_origin_is_preserved(self):
+        hmap = _make_heightmap(64, 64)
+        result = compute_terrain_chunks(
+            hmap,
+            chunk_size=64,
+            world_scale=2.0,
+            world_origin=(512.0, 256.0),
+        )
+        meta = result["metadata"]
+        assert meta["world_origin"] == (512.0, 256.0)
+        chunk = result["chunks"][0]
+        assert chunk["bounds"] == (512.0, 256.0, 640.0, 384.0)
+
 
 # ---------------------------------------------------------------------------
 # Metadata export
@@ -192,3 +206,46 @@ class TestExportMetadata:
         assert len(data["chunks"]) == 4
         grid_positions = [(c["grid_x"], c["grid_y"]) for c in data["chunks"]]
         assert (0, 0) in grid_positions
+
+    def test_export_preserves_world_origin(self):
+        hmap = _make_heightmap(64, 64)
+        result = compute_terrain_chunks(
+            hmap,
+            chunk_size=64,
+            world_origin=(1024.0, 2048.0),
+        )
+        json_str = export_chunks_metadata(result)
+        data = json.loads(json_str)
+        assert tuple(data["terrain_metadata"]["world_origin"]) == (1024.0, 2048.0)
+
+
+class TestValidateTileSeams:
+    def test_east_west_tiles_match(self):
+        left = [
+            [0.0, 1.0, 2.0],
+            [3.0, 4.0, 5.0],
+            [6.0, 7.0, 8.0],
+        ]
+        right = [
+            [2.0, 9.0, 10.0],
+            [5.0, 11.0, 12.0],
+            [8.0, 13.0, 14.0],
+        ]
+        result = validate_tile_seams(left, right, direction="east")
+        assert result["match"] is True
+        assert result["sample_count"] == 3
+
+    def test_north_south_tiles_mismatch(self):
+        top = [
+            [0.0, 1.0, 2.0],
+            [3.0, 4.0, 5.0],
+            [6.0, 7.0, 8.0],
+        ]
+        bottom = [
+            [6.5, 7.0, 8.0],
+            [9.0, 10.0, 11.0],
+            [12.0, 13.0, 14.0],
+        ]
+        result = validate_tile_seams(top, bottom, direction="south", tolerance=0.1)
+        assert result["match"] is False
+        assert result["max_delta"] == 0.5

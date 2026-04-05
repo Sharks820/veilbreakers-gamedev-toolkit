@@ -1,4 +1,4 @@
-"""Functional test covering every Unity MCP tool and action (7 tools, 38 actions).
+"""Functional test covering every Unity MCP tool and action (7 tools, 39 actions).
 
 Since we cannot connect to a live Unity instance, this test verifies:
 1. Every tool function exists and is importable
@@ -12,17 +12,19 @@ Tools:
     2. unity_vfx      (10 actions)
     3. unity_audio    (10 actions)
     4. unity_ui       (5 actions)
-    5. unity_scene    (7 actions)
+    5. unity_scene    (8 actions)
     6. unity_gameplay (7 actions)
     7. unity_performance (5 actions)
 """
 
 from __future__ import annotations
 
+import json
 import os
 import struct
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -843,7 +845,7 @@ class TestUnityUI:
 
 
 # ---------------------------------------------------------------------------
-# Tool 5: unity_scene (7 actions)
+# Tool 5: unity_scene (8 actions)
 # ---------------------------------------------------------------------------
 
 from veilbreakers_mcp.shared.unity_templates.scene_templates import (
@@ -854,11 +856,12 @@ from veilbreakers_mcp.shared.unity_templates.scene_templates import (
     generate_navmesh_bake_script,
     generate_object_scatter_script,
     generate_terrain_setup_script,
+    generate_tiled_terrain_setup_script,
 )
 
 
 class TestUnityScene:
-    """Tool 5 -- unity_scene: 7 actions."""
+    """Tool 5 -- unity_scene: 8 actions."""
 
     # -- terrain --
 
@@ -884,6 +887,38 @@ class TestUnityScene:
         assert "2000" in cs
         assert "800" in cs
         assert "1025" in cs
+
+    def test_tiled_terrain_returns_string(self):
+        cs = generate_tiled_terrain_setup_script(
+            tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}]
+        )
+        assert isinstance(cs, str)
+
+    def test_tiled_terrain_has_parent(self):
+        cs = generate_tiled_terrain_setup_script(
+            tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}],
+            parent_name="VB_TerrainRoot",
+        )
+        assert "VB_TerrainRoot" in cs
+        assert "Setup Tiled Terrain" in cs
+        assert "SetNeighbors" in cs
+
+    @pytest.mark.asyncio
+    async def test_setup_tiled_terrain_action(self):
+        from veilbreakers_mcp.unity_tools import scene as scene_tool
+
+        with patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TiledTerrainSetup.cs"):
+            result = await scene_tool.unity_scene(
+                action="setup_tiled_terrain",
+                terrain_tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}],
+                terrain_size=[1000, 600, 1000],
+                terrain_resolution=513,
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "success"
+        assert data["action"] == "setup_tiled_terrain"
+        assert data["tile_count"] == 1
 
     # -- object scatter --
 
@@ -1576,6 +1611,7 @@ class TestAllImportsExist:
         from veilbreakers_mcp.shared.unity_templates import scene_templates
         fns = [
             "generate_terrain_setup_script",
+            "generate_tiled_terrain_setup_script",
             "generate_object_scatter_script",
             "generate_lighting_setup_script",
             "generate_navmesh_bake_script",

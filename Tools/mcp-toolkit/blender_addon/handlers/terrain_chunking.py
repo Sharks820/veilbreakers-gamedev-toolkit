@@ -133,6 +133,7 @@ def compute_terrain_chunks(
     overlap: int = 1,
     lod_levels: int = 4,
     world_scale: float = 1.0,
+    world_origin: tuple[float, float] | None = None,
 ) -> dict[str, Any]:
     """Split a terrain heightmap into streamable chunks with LOD.
 
@@ -150,6 +151,7 @@ def compute_terrain_chunks(
         lod_levels: Number of LOD levels per chunk.  LOD 0 is full
             resolution; each subsequent level halves the resolution.
         world_scale: Multiplier from heightmap samples to world units.
+        world_origin: Optional world-space origin of the heightmap region.
 
     Returns:
         Dict with:
@@ -169,6 +171,14 @@ def compute_terrain_chunks(
     total_cols = len(heightmap[0])
     if total_cols == 0:
         return {"chunks": [], "metadata": _empty_metadata()}
+
+    if world_origin is None:
+        origin_x, origin_y = 0.0, 0.0
+    else:
+        if len(world_origin) != 2:
+            raise ValueError("world_origin must be a 2-tuple of (x, y)")
+        origin_x = float(world_origin[0])
+        origin_y = float(world_origin[1])
 
     # Number of chunks in each direction
     grid_cols = max(1, total_cols // chunk_size)
@@ -200,10 +210,10 @@ def compute_terrain_chunks(
                 sub_heightmap.append(list(row))
 
             # World-space bounds (without overlap — the chunk's logical area)
-            min_x = gx * chunk_world_size
-            min_y = gy * chunk_world_size
-            max_x = (gx + 1) * chunk_world_size
-            max_y = (gy + 1) * chunk_world_size
+            min_x = origin_x + gx * chunk_world_size
+            min_y = origin_y + gy * chunk_world_size
+            max_x = origin_x + (gx + 1) * chunk_world_size
+            max_y = origin_y + (gy + 1) * chunk_world_size
 
             # Generate LOD levels
             lods: list[dict[str, Any]] = []
@@ -231,10 +241,10 @@ def compute_terrain_chunks(
                         "resolution": target_res if lod > 0 else (
                             len(sub_heightmap[0]) if sub_heightmap else 0
                         ),
-                        "heightmap": lod_hmap,
-                        "vertex_count": vert_count,
-                    }
-                )
+                    "heightmap": lod_hmap,
+                    "vertex_count": vert_count,
+                }
+            )
 
             if lods:
                 total_verts_lod0 += lods[0]["vertex_count"]
@@ -253,6 +263,7 @@ def compute_terrain_chunks(
                     "grid_y": gy,
                     "heightmap": sub_heightmap,
                     "bounds": (min_x, min_y, max_x, max_y),
+                    "world_origin": (origin_x, origin_y),
                     "lods": lods,
                     "neighbor_chunks": neighbors,
                 }
@@ -264,6 +275,7 @@ def compute_terrain_chunks(
         "total_chunks": len(chunks),
         "grid_size": (grid_cols, grid_rows),
         "chunk_world_size": chunk_world_size,
+        "world_origin": (origin_x, origin_y),
         "total_vertices_lod0": total_verts_lod0,
         "streaming_distance_lod": streaming_dist,
         "chunk_size_samples": chunk_size,
@@ -338,6 +350,82 @@ def export_chunks_metadata(
     return json.dumps(export_data, indent=2)
 
 
+def validate_tile_seams(
+    tile_a: list[list[float]],
+    tile_b: list[list[float]],
+    direction: str = "east",
+    tolerance: float = 1e-6,
+) -> dict[str, Any]:
+    """Validate that two adjacent tiles share matching seam samples.
+
+    Args:
+        tile_a: First tile heightmap.
+        tile_b: Adjacent tile heightmap.
+        direction: Relative direction of tile_b from tile_a.
+        tolerance: Maximum allowed absolute delta for a seam sample.
+
+    Returns:
+        Dict describing seam agreement.
+    """
+    if not tile_a or not tile_b or not tile_a[0] or not tile_b[0]:
+        return {
+            "match": False,
+            "direction": direction,
+            "sample_count": 0,
+            "max_delta": None,
+            "mean_delta": None,
+            "error": "empty tile input",
+        }
+
+    rows_a = len(tile_a)
+    cols_a = len(tile_a[0])
+    rows_b = len(tile_b)
+    cols_b = len(tile_b[0])
+
+    if direction in {"east", "west"}:
+        if rows_a != rows_b:
+            return {
+                "match": False,
+                "direction": direction,
+                "sample_count": 0,
+                "max_delta": None,
+                "mean_delta": None,
+                "error": "row count mismatch",
+            }
+        seam_pairs = [
+            (float(tile_a[row][cols_a - 1]), float(tile_b[row][0]))
+            for row in range(rows_a)
+        ]
+    elif direction in {"north", "south"}:
+        if cols_a != cols_b:
+            return {
+                "match": False,
+                "direction": direction,
+                "sample_count": 0,
+                "max_delta": None,
+                "mean_delta": None,
+                "error": "column count mismatch",
+            }
+        seam_pairs = [
+            (float(tile_a[rows_a - 1][col]), float(tile_b[0][col]))
+            for col in range(cols_a)
+        ]
+    else:
+        raise ValueError("direction must be one of: east, west, north, south")
+
+    deltas = [abs(a - b) for a, b in seam_pairs]
+    max_delta = max(deltas) if deltas else 0.0
+    mean_delta = sum(deltas) / len(deltas) if deltas else 0.0
+    return {
+        "match": max_delta <= tolerance,
+        "direction": direction,
+        "sample_count": len(deltas),
+        "max_delta": max_delta,
+        "mean_delta": mean_delta,
+        "tolerance": tolerance,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -349,6 +437,7 @@ def _empty_metadata() -> dict[str, Any]:
         "total_chunks": 0,
         "grid_size": (0, 0),
         "chunk_world_size": 0.0,
+        "world_origin": (0.0, 0.0),
         "total_vertices_lod0": 0,
         "streaming_distance_lod": {},
         "chunk_size_samples": 0,

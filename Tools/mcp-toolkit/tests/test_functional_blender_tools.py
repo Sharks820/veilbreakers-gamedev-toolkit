@@ -586,6 +586,19 @@ class TestCommandHandlersCompleteness:
         ):
             assert key in COMMAND_HANDLERS
 
+    def test_terrain_handlers_present(self):
+        for key in (
+            "terrain_compute_chunks",
+            "terrain_chunk_lod",
+            "terrain_streaming_distances",
+            "terrain_export_chunks_metadata",
+            "terrain_validate_tile_seams",
+            "env_validate_tile_seams",
+            "env_generate_terrain_tile",
+            "env_generate_world_terrain",
+        ):
+            assert key in COMMAND_HANDLERS, f"Missing terrain handler: {key}"
+
     def test_uv_handlers_present(self):
         for key in (
             "uv_analyze", "uv_unwrap_xatlas", "uv_unwrap_blender",
