@@ -1,0 +1,18 @@
+diff --git a/Tools/mcp-toolkit/tests/test_compose_planners.py b/Tools/mcp-toolkit/tests/test_compose_planners.py
+index 6c192fa..c27ff01 100644
+--- a/Tools/mcp-toolkit/tests/test_compose_planners.py
++++ b/Tools/mcp-toolkit/tests/test_compose_planners.py
+@@ -88,0 +89,13 @@ class TestMapPlacementPlanning:
++    def test_anchor_planner_clamps_explicit_world_positions_to_centered_bounds(self):
++        placements = _plan_map_location_anchors({
++            "terrain": {"size": 200.0, "location": [100.0, 100.0]},
++            "locations": [
++                {"name": "Outpost", "type": "building", "position": [260.0, -40.0]},
++            ],
++        })
++
++        ax, ay = placements[0]["anchor"]
++        radius = placements[0]["radius"]
++        assert ax == 200.0 - radius
++        assert ay == 0.0 + radius
++

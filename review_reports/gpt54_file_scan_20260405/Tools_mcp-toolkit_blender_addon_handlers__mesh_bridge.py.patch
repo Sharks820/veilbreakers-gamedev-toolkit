@@ -1,0 +1,6 @@
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py b/Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py
+index 6e57355..392e122 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py
+@@ -290,0 +291 @@ VEGETATION_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any
++    "dead_tree": (_lsystem_tree_generator, {"tree_type": "dead", "iterations": 4, "leaf_type": None, "canopy_style": "veil_blighted"}),

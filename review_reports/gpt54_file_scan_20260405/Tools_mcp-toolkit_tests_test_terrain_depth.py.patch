@@ -1,0 +1,35 @@
+diff --git a/Tools/mcp-toolkit/tests/test_terrain_depth.py b/Tools/mcp-toolkit/tests/test_terrain_depth.py
+index a19393e..8ce28c3 100644
+--- a/Tools/mcp-toolkit/tests/test_terrain_depth.py
++++ b/Tools/mcp-toolkit/tests/test_terrain_depth.py
+@@ -404,2 +404 @@ class TestDetectCliffEdges:
+-        # slopes (arctan(0.5) ~ 26 deg for a 1.0 drop across 1 cell with
+-        # central differences).
++        # slopes once converted into world-space spacing for a 100 m terrain.
+@@ -407 +406 @@ class TestDetectCliffEdges:
+-            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
++            hmap, slope_threshold_deg=5.0, min_cluster_size=2, terrain_size=100.0
+@@ -417 +416 @@ class TestDetectCliffEdges:
+-            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
++            hmap, slope_threshold_deg=5.0, min_cluster_size=2, terrain_size=100.0
+@@ -455 +454 @@ class TestDetectCliffEdges:
+-            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
++            hmap, slope_threshold_deg=5.0, min_cluster_size=2, terrain_size=100.0
+@@ -459,0 +459,17 @@ class TestDetectCliffEdges:
++
++    def test_detect_cliff_edges_accepts_rectangular_terrain_extent(self):
++        """Rectangular terrain extents should use independent width and height."""
++        hmap = np.full((32, 32), 1.0, dtype=np.float64)
++        hmap[:, 16:] = 0.0
++
++        placements = detect_cliff_edges(
++            hmap,
++            slope_threshold_deg=5.0,
++            min_cluster_size=2,
++            terrain_size=(160.0, 80.0),
++        )
++
++        assert len(placements) >= 1
++        for p in placements:
++            assert -80.0 <= p["position"][0] <= 80.0
++            assert -40.0 <= p["position"][1] <= 40.0

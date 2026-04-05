@@ -1,0 +1,24 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "b60ef90f6c5f32675cd639b5c9a769c654dd9c1ecb2a3d66afbd885ec572be64",
+  "generated_at": "2026-04-05T07:02:17.362788+00:00",
+  "min_agreement": 2,
+  "model_specific_findings": [],
+  "models": [
+    {
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}",
+      "finding_count": 0,
+      "findings": [],
+      "model": "gpt-5.4",
+      "provider": "openrouter",
+      "status": "error"
+    },
+    {
+      "finding_count": 0,
+      "findings": [],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "ok"
+    }
+  ]
+}

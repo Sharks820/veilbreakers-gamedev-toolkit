@@ -1,0 +1,158 @@
+{
+  "consensus_findings": [
+    {
+      "agreement": 1,
+      "confidence": 0.95,
+      "evidence": "+            cell_size=cell_size,",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.95,
+          "evidence": "+            cell_size=cell_size,",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_generate_terrain_tile",
+          "model": "gemini-3.1-flash-lite-preview",
+          "recommendation": "Ensure 'cell_size' is calculated (e.g., from terrain width and resolution) or extracted from 'params' before calling 'compute_world_splatmap_weights'. This appears to be a NameError regression in both 'handle_generate_terrain_tile' and 'handle_generate_world_terrain'.",
+          "severity": "Critical",
+          "title": "Undefined Variable 'cell_size' in Splatmap Generation"
+        }
+      ],
+      "function": "handle_generate_terrain_tile",
+      "key": "tools mcp toolkit blender addon handlers environment py handle generate terrain tile undefined variable cell size",
+      "models": [
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "recommendation": "Ensure 'cell_size' is calculated (e.g., from terrain width and resolution) or extracted from 'params' before calling 'compute_world_splatmap_weights'. This appears to be a NameError regression in both 'handle_generate_terrain_tile' and 'handle_generate_world_terrain'.",
+      "severity": "Critical",
+      "title": "Undefined Variable 'cell_size' in Splatmap Generation"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.9,
+      "evidence": "if params.get(\"tiled_world\") or params.get(\"use_global_height_range\"): return _resolve_height_range(params, heightmap)",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.9,
+          "evidence": "if params.get(\"tiled_world\") or params.get(\"use_global_height_range\"): return _resolve_height_range(params, heightmap)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "model": "gemini-3.1-flash-lite-preview",
+          "recommendation": "For tiled worlds, heightmaps must be normalized against a stable global vertical range to ensure height continuity at tile edges. '_resolve_height_range' currently falls back to the local min/max of the input 'heightmap', which will cause tiles with different elevation profiles to be stretched inconsistently when exported to 16-bit RAW.",
+          "severity": "High",
+          "title": "Height Normalization Breakage in Tiled World Export"
+        }
+      ],
+      "function": "_resolve_export_height_range",
+      "key": "tools mcp toolkit blender addon handlers environment py resolve export height range height normalization breakage in",
+      "models": [
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "recommendation": "For tiled worlds, heightmaps must be normalized against a stable global vertical range to ensure height continuity at tile edges. '_resolve_height_range' currently falls back to the local min/max of the input 'heightmap', which will cause tiles with different elevation profiles to be stretched inconsistently when exported to 16-bit RAW.",
+      "severity": "High",
+      "title": "Height Normalization Breakage in Tiled World Export"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.85,
+      "evidence": "heightmap = heights.reshape(rows, cols)",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.85,
+          "evidence": "heightmap = heights.reshape(rows, cols)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_export_heightmap",
+          "model": "gemini-3.1-flash-lite-preview",
+          "recommendation": "Reshaping flattened vertex data assumes Blender maintains a strict grid-aligned vertex order. This is brittle and will fail if the mesh has been sculpted, optimized, or had its topology modified. Use a ray-casting or bmesh-based grid sampler to extract height values from the mesh bounds safely.",
+          "severity": "Medium",
+          "title": "Brittle Grid Reshaping for Sculpted Terrain Meshes"
+        }
+      ],
+      "function": "handle_export_heightmap",
+      "key": "tools mcp toolkit blender addon handlers environment py handle export heightmap brittle grid reshaping for sculpted",
+      "models": [
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "recommendation": "Reshaping flattened vertex data assumes Blender maintains a strict grid-aligned vertex order. This is brittle and will fail if the mesh has been sculpted, optimized, or had its topology modified. Use a ray-casting or bmesh-based grid sampler to extract height values from the mesh bounds safely.",
+      "severity": "Medium",
+      "title": "Brittle Grid Reshaping for Sculpted Terrain Meshes"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.8,
+      "evidence": "min_x = terrain_origin_x - half + radius",
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+      "findings": [
+        {
+          "confidence": 0.8,
+          "evidence": "min_x = terrain_origin_x - half + radius",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "model": "gemini-3.1-flash-lite-preview",
+          "recommendation": "Ensure 'half' is explicitly defined in this scope. While it may be defined in the parent function, the reliance on center-origin calculations here without a local definition of 'half' (presumably terrain_size / 2) is risky and inconsistent with the previous corner-origin logic.",
+          "severity": "Medium",
+          "title": "Inconsistent Origin Handling in World Anchor Planning"
+        }
+      ],
+      "function": "_plan_map_location_anchors",
+      "key": "tools mcp toolkit src veilbreakers mcp blender server py plan map location anchors inconsistent origin handling",
+      "models": [
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "recommendation": "Ensure 'half' is explicitly defined in this scope. While it may be defined in the parent function, the reliance on center-origin calculations here without a local definition of 'half' (presumably terrain_size / 2) is risky and inconsistent with the previous corner-origin logic.",
+      "severity": "Medium",
+      "title": "Inconsistent Origin Handling in World Anchor Planning"
+    }
+  ],
+  "diff_sha256": "153fd25e8e0851325e21ce38611cdd70ff519cab2f28c94dd43e526f31a43705",
+  "generated_at": "2026-04-05T06:59:25.365463+00:00",
+  "min_agreement": 1,
+  "model_specific_findings": [],
+  "models": [
+    {
+      "finding_count": 4,
+      "findings": [
+        {
+          "confidence": 0.95,
+          "evidence": "+            cell_size=cell_size,",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_generate_terrain_tile",
+          "recommendation": "Ensure 'cell_size' is calculated (e.g., from terrain width and resolution) or extracted from 'params' before calling 'compute_world_splatmap_weights'. This appears to be a NameError regression in both 'handle_generate_terrain_tile' and 'handle_generate_world_terrain'.",
+          "severity": "Critical",
+          "title": "Undefined Variable 'cell_size' in Splatmap Generation"
+        },
+        {
+          "confidence": 0.9,
+          "evidence": "if params.get(\"tiled_world\") or params.get(\"use_global_height_range\"): return _resolve_height_range(params, heightmap)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "recommendation": "For tiled worlds, heightmaps must be normalized against a stable global vertical range to ensure height continuity at tile edges. '_resolve_height_range' currently falls back to the local min/max of the input 'heightmap', which will cause tiles with different elevation profiles to be stretched inconsistently when exported to 16-bit RAW.",
+          "severity": "High",
+          "title": "Height Normalization Breakage in Tiled World Export"
+        },
+        {
+          "confidence": 0.85,
+          "evidence": "heightmap = heights.reshape(rows, cols)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_export_heightmap",
+          "recommendation": "Reshaping flattened vertex data assumes Blender maintains a strict grid-aligned vertex order. This is brittle and will fail if the mesh has been sculpted, optimized, or had its topology modified. Use a ray-casting or bmesh-based grid sampler to extract height values from the mesh bounds safely.",
+          "severity": "Medium",
+          "title": "Brittle Grid Reshaping for Sculpted Terrain Meshes"
+        },
+        {
+          "confidence": 0.8,
+          "evidence": "min_x = terrain_origin_x - half + radius",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "recommendation": "Ensure 'half' is explicitly defined in this scope. While it may be defined in the parent function, the reliance on center-origin calculations here without a local definition of 'half' (presumably terrain_size / 2) is risky and inconsistent with the previous corner-origin logic.",
+          "severity": "Medium",
+          "title": "Inconsistent Origin Handling in World Anchor Planning"
+        }
+      ],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "ok"
+    }
+  ]
+}

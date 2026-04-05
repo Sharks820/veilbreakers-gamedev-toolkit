@@ -1,0 +1,81 @@
+{
+  "segments": [
+    {
+      "name": "environment_export_raw",
+      "file": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\environment.py",
+      "lines": [
+        368,
+        451
+      ],
+      "status": "error",
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}",
+      "result": ""
+    },
+    {
+      "name": "environment_export_range_helpers",
+      "file": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\environment.py",
+      "lines": [
+        482,
+        557
+      ],
+      "status": "error",
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}",
+      "result": ""
+    },
+    {
+      "name": "environment_road_mapping",
+      "file": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\environment.py",
+      "lines": [
+        1498,
+        1568
+      ],
+      "status": "error",
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}",
+      "result": ""
+    },
+    {
+      "name": "environment_export_callsite",
+      "file": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\environment.py",
+      "lines": [
+        1930,
+        1950
+      ],
+      "status": "error",
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}",
+      "result": ""
+    },
+    {
+      "name": "scatter_world_sampling_helpers",
+      "file": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\environment_scatter.py",
+      "lines": [
+        289,
+        436
+      ],
+      "status": "error",
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}",
+      "result": ""
+    },
+    {
+      "name": "scatter_filter_setup",
+      "file": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\environment_scatter.py",
+      "lines": [
+        1417,
+        1465
+      ],
+      "status": "error",
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}",
+      "result": ""
+    },
+    {
+      "name": "scatter_instance_mapping",
+      "file": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\Tools\\mcp-toolkit\\blender_addon\\handlers\\environment_scatter.py",
+      "lines": [
+        1500,
+        1605
+      ],
+      "status": "error",
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}",
+      "result": ""
+    }
+  ]
+}

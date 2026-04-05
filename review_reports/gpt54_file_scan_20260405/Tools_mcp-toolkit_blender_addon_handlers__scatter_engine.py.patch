@@ -1,0 +1,23 @@
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/_scatter_engine.py b/Tools/mcp-toolkit/blender_addon/handlers/_scatter_engine.py
+index 3cbfaf6..43a504d 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/_scatter_engine.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/_scatter_engine.py
+@@ -132,0 +133,2 @@ def biome_filter_points(
++    terrain_width: float | None = None,
++    terrain_depth: float | None = None,
+@@ -152 +154,6 @@ def biome_filter_points(
+-        World-space size of terrain for coordinate mapping.
++        Backward-compatible square terrain extent used when axis-specific
++        dimensions are not provided.
++    terrain_width : float | None
++        Optional world-space width of terrain for X coordinate mapping.
++    terrain_depth : float | None
++        Optional world-space depth of terrain for Y coordinate mapping.
+@@ -171,0 +179,2 @@ def biome_filter_points(
++    width = max(float(terrain_width if terrain_width is not None else terrain_size), 1e-9)
++    depth = max(float(terrain_depth if terrain_depth is not None else terrain_size), 1e-9)
+@@ -175,2 +184,2 @@ def biome_filter_points(
+-        u = x / terrain_size
+-        v = y / terrain_size
++        u = x / width
++        v = y / depth

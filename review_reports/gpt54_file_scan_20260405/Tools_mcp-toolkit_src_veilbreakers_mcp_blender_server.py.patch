@@ -1,0 +1,13 @@
+diff --git a/Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py b/Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py
+index 16ca76b..fcaed5d 100644
+--- a/Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py
++++ b/Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py
+@@ -297,4 +297,4 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
+-            min_x = terrain_origin_x + radius
+-            max_x = terrain_origin_x + terrain_size - radius
+-            min_y = terrain_origin_y + radius
+-            max_y = terrain_origin_y + terrain_size - radius
++            min_x = terrain_origin_x - half + radius
++            max_x = terrain_origin_x + half - radius
++            min_y = terrain_origin_y - half + radius
++            max_y = terrain_origin_y + half - radius

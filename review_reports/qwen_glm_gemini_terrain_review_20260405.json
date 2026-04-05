@@ -1,0 +1,349 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "d4dcacaade735f454ad8a172b2a4d368e01f19ba7da7f040435d88c2b35eddce",
+  "generated_at": "2026-04-05T06:37:12.982202+00:00",
+  "min_agreement": 2,
+  "model_specific_findings": [
+    {
+      "agreement": 1,
+      "confidence": 0.5,
+      "evidence": "heightmap = heights.reshape(rows, cols)\nexport_height_range = _resolve_export_height_range(params, heightmap)\n\n# Unity compat: resize to nearest power-of-two + 1 (use cols as ref dimension)\nif unity_compat:\n    ...\n    heightmap = heightmap[np.ix_(y_indices, x_indices)]\n\n# Export\nraw_bytes = _export_heightmap_raw(\n    heightmap,\n    flip_vertical=flip_vertical,\n    value_range=export_height_range,\n)",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.5,
+          "evidence": "heightmap = heights.reshape(rows, cols)\nexport_height_range = _resolve_export_height_range(params, heightmap)\n\n# Unity compat: resize to nearest power-of-two + 1 (use cols as ref dimension)\nif unity_compat:\n    ...\n    heightmap = heightmap[np.ix_(y_indices, x_indices)]\n\n# Export\nraw_bytes = _export_heightmap_raw(\n    heightmap,\n    flip_vertical=flip_vertical,\n    value_range=export_height_range,\n)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_export_heightmap",
+          "model": "glm-5.0-turbo",
+          "recommendation": "Previously the heights were normalized to [0,1] before the pow2 resize so interpolation was well-behaved. Now raw world-space heights are interpolated during resize, then exported with a shared range. If the export range is None (local mode), _export_heightmap_raw computes min/max from the resized array, which changes per-tile. If the export range is shared (tiled mode), values are correct but the resize interpolation still operates on unnormalized floats which may introduce precision issues. Restore normalization before resize, or ensure the resize path is explicitly tested with non-trivial height ranges.",
+          "severity": "High",
+          "title": "handle_export_heightmap no longer normalizes heights before potential resize, causing incorrect values after nearest-pow2 resize"
+        }
+      ],
+      "function": "handle_export_heightmap",
+      "key": "tools mcp toolkit blender addon handlers environment py handle export heightmap handle export heightmap no longer",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "Previously the heights were normalized to [0,1] before the pow2 resize so interpolation was well-behaved. Now raw world-space heights are interpolated during resize, then exported with a shared range. If the export range is None (local mode), _export_heightmap_raw computes min/max from the resized array, which changes per-tile. If the export range is shared (tiled mode), values are correct but the resize interpolation still operates on unnormalized floats which may introduce precision issues. Restore normalization before resize, or ensure the resize path is explicitly tested with non-trivial height ranges.",
+      "severity": "High",
+      "title": "handle_export_heightmap no longer normalizes heights before potential resize, causing incorrect values after nearest-pow2 resize"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "When params.get('height_range') is not None, the function calls _resolve_height_range(params, heightmap) which unconditionally returns the local min/max of the heightmap, completely ignoring the provided explicit range tuple.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "When params.get('height_range') is not None, the function calls _resolve_height_range(params, heightmap) which unconditionally returns the local min/max of the heightmap, completely ignoring the provided explicit range tuple.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Return the explicit range directly: return tuple(float(v) for v in height_range).",
+          "severity": "High",
+          "title": "Explicit height_range parameter ignored in export resolution"
+        }
+      ],
+      "function": "_resolve_export_height_range",
+      "key": "tools mcp toolkit blender addon handlers environment py resolve export height range explicit height range parameter",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Return the explicit range directly: return tuple(float(v) for v in height_range).",
+      "severity": "High",
+      "title": "Explicit height_range parameter ignored in export resolution"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "if (\n        params.get(\"height_range_min\") is not None\n        and params.get(\"height_range_max\") is not None\n    ):\n        return _resolve_height_range(params, heightmap)",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "if (\n        params.get(\"height_range_min\") is not None\n        and params.get(\"height_range_max\") is not None\n    ):\n        return _resolve_height_range(params, heightmap)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "model": "glm-5.0-turbo",
+          "recommendation": "When height_range_min and height_range_max are provided but height_range is not, _resolve_height_range will return None (since it looks for params[\"height_range\"]) and the function falls through to return None, silently ignoring the explicit min/max. Either pass (params[\"height_range_min\"], params[\"height_range_max\"]) directly or update _resolve_height_range to also check the separate keys.",
+          "severity": "High",
+          "title": "_resolve_export_height_range ignores explicit height_range_min/max values"
+        }
+      ],
+      "function": "_resolve_export_height_range",
+      "key": "tools mcp toolkit blender addon handlers environment py resolve export height range resolve export height range",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "When height_range_min and height_range_max are provided but height_range is not, _resolve_height_range will return None (since it looks for params[\"height_range\"]) and the function falls through to return None, silently ignoring the explicit min/max. Either pass (params[\"height_range_min\"], params[\"height_range_max\"]) directly or update _resolve_height_range to also check the separate keys.",
+      "severity": "High",
+      "title": "_resolve_export_height_range ignores explicit height_range_min/max values"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "heightmap is normalized to [0, 1] via heights / height_max, but compute_slope_map is called with cell_size=terrain_cell_size (world units). np.gradient will compute dz/dx where dz is in normalized units and dx is in world units, underestimating actual slopes by a factor of height_max.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "heightmap is normalized to [0, 1] via heights / height_max, but compute_slope_map is called with cell_size=terrain_cell_size (world units). np.gradient will compute dz/dx where dz is in normalized units and dx is in world units, underestimating actual slopes by a factor of height_max.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "handle_scatter_vegetation",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Pass heightmap * height_max to compute_slope_map, or scale cell_size by height_max, or compute the slope map before normalizing the heightmap.",
+          "severity": "High",
+          "title": "Slope calculation unit mismatch in vegetation scattering"
+        }
+      ],
+      "function": "handle_scatter_vegetation",
+      "key": "tools mcp toolkit blender addon handlers environment scatter py handle scatter vegetation slope calculation unit mismatch",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Pass heightmap * height_max to compute_slope_map, or scale cell_size by height_max, or compute the slope map before normalizing the heightmap.",
+      "severity": "High",
+      "title": "Slope calculation unit mismatch in vegetation scattering"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.5,
+      "evidence": "step_x = float(terrain_width) / max(cols - 1, 1)\nstep_y = float(terrain_height) / max(rows - 1, 1)\nreturn max(step_x, step_y, 1e-9)",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+      "findings": [
+        {
+          "confidence": 0.5,
+          "evidence": "step_x = float(terrain_width) / max(cols - 1, 1)\nstep_y = float(terrain_height) / max(rows - 1, 1)\nreturn max(step_x, step_y, 1e-9)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_terrain_cell_size_from_extent",
+          "model": "glm-5.0-turbo",
+          "recommendation": "Using max() means slope is computed with the larger spacing for both axes. On the axis with finer resolution this understates the true slope, potentially causing cliff/steep filters to miss steep areas. Consider returning a tuple (step_y, step_x) and updating compute_slope_map to accept anisotropic spacing, or document this as an intentional conservative approximation.",
+          "severity": "Medium",
+          "title": "_terrain_cell_size_from_extent returns max spacing which understates slope on the finer axis"
+        }
+      ],
+      "function": "_terrain_cell_size_from_extent",
+      "key": "tools mcp toolkit blender addon handlers environment scatter py terrain cell size from extent terrain cell",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "Using max() means slope is computed with the larger spacing for both axes. On the axis with finer resolution this understates the true slope, potentially causing cliff/steep filters to miss steep areas. Consider returning a tuple (step_y, step_x) and updating compute_slope_map to accept anisotropic spacing, or document this as an intentional conservative approximation.",
+      "severity": "Medium",
+      "title": "_terrain_cell_size_from_extent returns max spacing which understates slope on the finer axis"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.5,
+      "evidence": "cell_size = float(terrain_size) / max(max(rows, cols) - 1, 1)\nslope_map = compute_slope_map(heightmap, cell_size=cell_size)",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py",
+      "findings": [
+        {
+          "confidence": 0.5,
+          "evidence": "cell_size = float(terrain_size) / max(max(rows, cols) - 1, 1)\nslope_map = compute_slope_map(heightmap, cell_size=cell_size)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py",
+          "function": "detect_cliff_edges",
+          "model": "glm-5.0-turbo",
+          "recommendation": "For a non-square heightmap (e.g., 64x128), using max(rows, cols) underestimates cell size along one axis and overestimates along the other. np.gradient accepts separate spacings per axis: np.gradient(heightmap, dy, dx). Compute separate row_spacing and col_spacing from terrain_size/rows and terrain_size/cols (or from separate width/height if available) and pass both.",
+          "severity": "Medium",
+          "title": "Non-square terrain produces incorrect cell_size for slope calculations in detect_cliff_edges"
+        }
+      ],
+      "function": "detect_cliff_edges",
+      "key": "tools mcp toolkit blender addon handlers terrain depth py detect cliff edges non square terrain produces",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "For a non-square heightmap (e.g., 64x128), using max(rows, cols) underestimates cell size along one axis and overestimates along the other. np.gradient accepts separate spacings per axis: np.gradient(heightmap, dy, dx). Compute separate row_spacing and col_spacing from terrain_size/rows and terrain_size/cols (or from separate width/height if available) and pass both.",
+      "severity": "Medium",
+      "title": "Non-square terrain produces incorrect cell_size for slope calculations in detect_cliff_edges"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "The new test class only covers tiled_world=True and empty params. The branch handling the explicit height_range parameter is untested, which allowed the bug in _resolve_export_height_range to go unnoticed.",
+      "file": "Tools/mcp-toolkit/tests/test_environment_handlers.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "The new test class only covers tiled_world=True and empty params. The branch handling the explicit height_range parameter is untested, which allowed the bug in _resolve_export_height_range to go unnoticed.",
+          "file": "Tools/mcp-toolkit/tests/test_environment_handlers.py",
+          "function": "TestExportHeightRangeResolution",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Add a test case passing {'height_range': (0.0, 100.0)} and assert the function returns that exact tuple.",
+          "severity": "Medium",
+          "title": "Missing test coverage for explicit height_range branch"
+        }
+      ],
+      "function": "TestExportHeightRangeResolution",
+      "key": "tools mcp toolkit tests test environment handlers py testexportheightrangeresolution missing test coverage for explicit height range",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Add a test case passing {'height_range': (0.0, 100.0)} and assert the function returns that exact tuple.",
+      "severity": "Medium",
+      "title": "Missing test coverage for explicit height_range branch"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.5,
+      "evidence": "cell_size = float(terrain_size) / max(max(rows, cols) - 1, 1) uses the maximum dimension for both X and Y spacing. For rectangular heightmaps, this misrepresents the actual grid spacing in the smaller dimension.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py",
+      "findings": [
+        {
+          "confidence": 0.5,
+          "evidence": "cell_size = float(terrain_size) / max(max(rows, cols) - 1, 1) uses the maximum dimension for both X and Y spacing. For rectangular heightmaps, this misrepresents the actual grid spacing in the smaller dimension.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py",
+          "function": "detect_cliff_edges",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Calculate separate cell_size_x and cell_size_y, update compute_slope_map to accept per-axis spacing, or document the square-terrain assumption.",
+          "severity": "Low",
+          "title": "Cliff detection assumes square terrain for cell size"
+        }
+      ],
+      "function": "detect_cliff_edges",
+      "key": "tools mcp toolkit blender addon handlers terrain depth py detect cliff edges cliff detection assumes square",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Calculate separate cell_size_x and cell_size_y, update compute_slope_map to accept per-axis spacing, or document the square-terrain assumption.",
+      "severity": "Low",
+      "title": "Cliff detection assumes square terrain for cell size"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.25,
+      "evidence": "VEGETATION_KEYS = [\n    ...\n    \"tree_healthy\",\n    \"tree_boundary\",\n    \"tree_blighted\",\n    \"dead_tree\",\n    \"tree_twisted\",\n    ...",
+      "file": "Tools/mcp-toolkit/tests/test_mesh_bridge.py",
+      "findings": [
+        {
+          "confidence": 0.25,
+          "evidence": "VEGETATION_KEYS = [\n    ...\n    \"tree_healthy\",\n    \"tree_boundary\",\n    \"tree_blighted\",\n    \"dead_tree\",\n    \"tree_twisted\",\n    ...",
+          "file": "Tools/mcp-toolkit/tests/test_mesh_bridge.py",
+          "function": "TestVegetationGeneratorMap",
+          "model": "glm-5.0-turbo",
+          "recommendation": "The existing \"tree_dead\" key was not added to VEGETATION_KEYS. Since both \"tree_dead\" and \"dead_tree\" now exist as valid aliases pointing to identical generators, the test coverage gap is minor, but for completeness add \"tree_dead\" to the list.",
+          "severity": "Low",
+          "title": "VEGETATION_KEYS test list missing tree_dead after adding dead_tree alias"
+        }
+      ],
+      "function": "TestVegetationGeneratorMap",
+      "key": "tools mcp toolkit tests test mesh bridge py testvegetationgeneratormap vegetation keys test list missing tree dead",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "The existing \"tree_dead\" key was not added to VEGETATION_KEYS. Since both \"tree_dead\" and \"dead_tree\" now exist as valid aliases pointing to identical generators, the test coverage gap is minor, but for completeness add \"tree_dead\" to the list.",
+      "severity": "Low",
+      "title": "VEGETATION_KEYS test list missing tree_dead after adding dead_tree alias"
+    }
+  ],
+  "models": [
+    {
+      "finding_count": 4,
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "When params.get('height_range') is not None, the function calls _resolve_height_range(params, heightmap) which unconditionally returns the local min/max of the heightmap, completely ignoring the provided explicit range tuple.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "recommendation": "Return the explicit range directly: return tuple(float(v) for v in height_range).",
+          "severity": "High",
+          "title": "Explicit height_range parameter ignored in export resolution"
+        },
+        {
+          "confidence": 0.75,
+          "evidence": "heightmap is normalized to [0, 1] via heights / height_max, but compute_slope_map is called with cell_size=terrain_cell_size (world units). np.gradient will compute dz/dx where dz is in normalized units and dx is in world units, underestimating actual slopes by a factor of height_max.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "handle_scatter_vegetation",
+          "recommendation": "Pass heightmap * height_max to compute_slope_map, or scale cell_size by height_max, or compute the slope map before normalizing the heightmap.",
+          "severity": "High",
+          "title": "Slope calculation unit mismatch in vegetation scattering"
+        },
+        {
+          "confidence": 0.75,
+          "evidence": "The new test class only covers tiled_world=True and empty params. The branch handling the explicit height_range parameter is untested, which allowed the bug in _resolve_export_height_range to go unnoticed.",
+          "file": "Tools/mcp-toolkit/tests/test_environment_handlers.py",
+          "function": "TestExportHeightRangeResolution",
+          "recommendation": "Add a test case passing {'height_range': (0.0, 100.0)} and assert the function returns that exact tuple.",
+          "severity": "Medium",
+          "title": "Missing test coverage for explicit height_range branch"
+        },
+        {
+          "confidence": 0.5,
+          "evidence": "cell_size = float(terrain_size) / max(max(rows, cols) - 1, 1) uses the maximum dimension for both X and Y spacing. For rectangular heightmaps, this misrepresents the actual grid spacing in the smaller dimension.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py",
+          "function": "detect_cliff_edges",
+          "recommendation": "Calculate separate cell_size_x and cell_size_y, update compute_slope_map to accept per-axis spacing, or document the square-terrain assumption.",
+          "severity": "Low",
+          "title": "Cliff detection assumes square terrain for cell size"
+        }
+      ],
+      "model": "qwen/qwen3.6-plus:free",
+      "provider": "openrouter",
+      "status": "ok"
+    },
+    {
+      "finding_count": 5,
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "if (\n        params.get(\"height_range_min\") is not None\n        and params.get(\"height_range_max\") is not None\n    ):\n        return _resolve_height_range(params, heightmap)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "recommendation": "When height_range_min and height_range_max are provided but height_range is not, _resolve_height_range will return None (since it looks for params[\"height_range\"]) and the function falls through to return None, silently ignoring the explicit min/max. Either pass (params[\"height_range_min\"], params[\"height_range_max\"]) directly or update _resolve_height_range to also check the separate keys.",
+          "severity": "High",
+          "title": "_resolve_export_height_range ignores explicit height_range_min/max values"
+        },
+        {
+          "confidence": 0.5,
+          "evidence": "heightmap = heights.reshape(rows, cols)\nexport_height_range = _resolve_export_height_range(params, heightmap)\n\n# Unity compat: resize to nearest power-of-two + 1 (use cols as ref dimension)\nif unity_compat:\n    ...\n    heightmap = heightmap[np.ix_(y_indices, x_indices)]\n\n# Export\nraw_bytes = _export_heightmap_raw(\n    heightmap,\n    flip_vertical=flip_vertical,\n    value_range=export_height_range,\n)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_export_heightmap",
+          "recommendation": "Previously the heights were normalized to [0,1] before the pow2 resize so interpolation was well-behaved. Now raw world-space heights are interpolated during resize, then exported with a shared range. If the export range is None (local mode), _export_heightmap_raw computes min/max from the resized array, which changes per-tile. If the export range is shared (tiled mode), values are correct but the resize interpolation still operates on unnormalized floats which may introduce precision issues. Restore normalization before resize, or ensure the resize path is explicitly tested with non-trivial height ranges.",
+          "severity": "High",
+          "title": "handle_export_heightmap no longer normalizes heights before potential resize, causing incorrect values after nearest-pow2 resize"
+        },
+        {
+          "confidence": 0.5,
+          "evidence": "cell_size = float(terrain_size) / max(max(rows, cols) - 1, 1)\nslope_map = compute_slope_map(heightmap, cell_size=cell_size)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py",
+          "function": "detect_cliff_edges",
+          "recommendation": "For a non-square heightmap (e.g., 64x128), using max(rows, cols) underestimates cell size along one axis and overestimates along the other. np.gradient accepts separate spacings per axis: np.gradient(heightmap, dy, dx). Compute separate row_spacing and col_spacing from terrain_size/rows and terrain_size/cols (or from separate width/height if available) and pass both.",
+          "severity": "Medium",
+          "title": "Non-square terrain produces incorrect cell_size for slope calculations in detect_cliff_edges"
+        },
+        {
+          "confidence": 0.5,
+          "evidence": "step_x = float(terrain_width) / max(cols - 1, 1)\nstep_y = float(terrain_height) / max(rows - 1, 1)\nreturn max(step_x, step_y, 1e-9)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_terrain_cell_size_from_extent",
+          "recommendation": "Using max() means slope is computed with the larger spacing for both axes. On the axis with finer resolution this understates the true slope, potentially causing cliff/steep filters to miss steep areas. Consider returning a tuple (step_y, step_x) and updating compute_slope_map to accept anisotropic spacing, or document this as an intentional conservative approximation.",
+          "severity": "Medium",
+          "title": "_terrain_cell_size_from_extent returns max spacing which understates slope on the finer axis"
+        },
+        {
+          "confidence": 0.25,
+          "evidence": "VEGETATION_KEYS = [\n    ...\n    \"tree_healthy\",\n    \"tree_boundary\",\n    \"tree_blighted\",\n    \"dead_tree\",\n    \"tree_twisted\",\n    ...",
+          "file": "Tools/mcp-toolkit/tests/test_mesh_bridge.py",
+          "function": "TestVegetationGeneratorMap",
+          "recommendation": "The existing \"tree_dead\" key was not added to VEGETATION_KEYS. Since both \"tree_dead\" and \"dead_tree\" now exist as valid aliases pointing to identical generators, the test coverage gap is minor, but for completeness add \"tree_dead\" to the list.",
+          "severity": "Low",
+          "title": "VEGETATION_KEYS test list missing tree_dead after adding dead_tree alias"
+        }
+      ],
+      "model": "glm-5.0-turbo",
+      "provider": "glm",
+      "status": "ok"
+    },
+    {
+      "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 180.0 seconds",
+      "finding_count": 0,
+      "findings": [],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "error"
+    }
+  ]
+}

@@ -1,0 +1,70 @@
+[
+  {
+    "file": "Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py",
+    "chunk_index": 1,
+    "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01__mesh_bridge.py.json",
+    "consensus_findings": [],
+    "model_specific_findings": [
+      {
+        "agreement": 1,
+        "confidence": 0.75,
+        "evidence": "\"dead_tree\": (_lsystem_tree_generator, ...)",
+        "file": "Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py",
+        "findings": [
+          {
+            "confidence": 0.75,
+            "evidence": "\"dead_tree\": (_lsystem_tree_generator, ...)",
+            "file": "Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py",
+            "function": "VEGETATION_GENERATOR_MAP",
+            "model": "gemini-3.1-flash-lite-preview",
+            "recommendation": "Ensure that '_lsystem_tree_generator' is defined and imported in the current scope. If it is intended to be a new function, it must be implemented before being referenced in the map to prevent a NameError at runtime.",
+            "severity": "Critical",
+            "title": "Missing generator function reference"
+          }
+        ],
+        "function": "VEGETATION_GENERATOR_MAP",
+        "key": "tools mcp toolkit blender addon handlers mesh bridge py vegetation generator map missing generator function reference",
+        "models": [
+          "gemini-3.1-flash-lite-preview"
+        ],
+        "recommendation": "Ensure that '_lsystem_tree_generator' is defined and imported in the current scope. If it is intended to be a new function, it must be implemented before being referenced in the map to prevent a NameError at runtime.",
+        "severity": "Critical",
+        "title": "Missing generator function reference"
+      }
+    ]
+  },
+  {
+    "file": "Tools/mcp-toolkit/tests/test_terrain_noise.py",
+    "chunk_index": 1,
+    "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_test_terrain_noise.py.json",
+    "consensus_findings": [],
+    "model_specific_findings": [
+      {
+        "agreement": 1,
+        "confidence": 0.75,
+        "evidence": "hmap = np.tile(np.linspace(0, 1, 9), (9, 1))",
+        "file": "Tools/mcp-toolkit/tests/test_terrain_noise.py",
+        "findings": [
+          {
+            "confidence": 0.75,
+            "evidence": "hmap = np.tile(np.linspace(0, 1, 9), (9, 1))",
+            "file": "Tools/mcp-toolkit/tests/test_terrain_noise.py",
+            "function": "test_larger_cell_size_reduces_world_space_slope",
+            "model": "gemini-3.1-flash-lite-preview",
+            "recommendation": "Add 'import numpy as np' to the top of the file or within the test module scope to ensure the tests are executable.",
+            "severity": "High",
+            "title": "Missing NumPy import in test file"
+          }
+        ],
+        "function": "test_larger_cell_size_reduces_world_space_slope",
+        "key": "tools mcp toolkit tests test terrain noise py test larger cell size reduces world space slope",
+        "models": [
+          "gemini-3.1-flash-lite-preview"
+        ],
+        "recommendation": "Add 'import numpy as np' to the top of the file or within the test module scope to ensure the tests are executable.",
+        "severity": "High",
+        "title": "Missing NumPy import in test file"
+      }
+    ]
+  }
+]

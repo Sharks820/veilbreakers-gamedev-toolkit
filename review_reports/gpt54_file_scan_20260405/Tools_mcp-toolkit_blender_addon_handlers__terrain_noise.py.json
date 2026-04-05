@@ -1,0 +1,16 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "6ea82825f65b0ec1b7ff6919a30d7705caf8133a45f830a3fa8f77e8e2ae8278",
+  "generated_at": "2026-04-05T06:55:10.744384+00:00",
+  "min_agreement": 1,
+  "model_specific_findings": [],
+  "models": [
+    {
+      "finding_count": 0,
+      "findings": [],
+      "model": "openai/gpt-5.4",
+      "provider": "openrouter",
+      "status": "ok"
+    }
+  ]
+}

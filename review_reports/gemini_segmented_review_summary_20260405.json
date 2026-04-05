@@ -1,0 +1,31 @@
+{
+  "segments": [
+    {
+      "name": "terrain_core",
+      "saved_to": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gemini_terrain_core_review.json",
+      "consensus_count": 0,
+      "model_specific_count": 0,
+      "status": "error",
+      "finding_count": 0,
+      "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 180.0 seconds"
+    },
+    {
+      "name": "terrain_orchestration",
+      "saved_to": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gemini_terrain_orchestration_review.json",
+      "consensus_count": 4,
+      "model_specific_count": 0,
+      "status": "ok",
+      "finding_count": 4,
+      "error": null
+    },
+    {
+      "name": "terrain_tests",
+      "saved_to": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gemini_terrain_tests_review.json",
+      "consensus_count": 0,
+      "model_specific_count": 0,
+      "status": "error",
+      "finding_count": 0,
+      "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 180.0 seconds"
+    }
+  ]
+}

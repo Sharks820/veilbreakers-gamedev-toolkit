@@ -1,0 +1,187 @@
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/environment.py b/Tools/mcp-toolkit/blender_addon/handlers/environment.py
+index 926d9b9..714163f 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/environment.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/environment.py
+@@ -368,0 +369 @@ def _export_heightmap_raw(
++    value_range: tuple[float, float] | None = None,
+@@ -378 +379 @@ def _export_heightmap_raw(
+-        2D array with values in [0, 1].
++        2D array of height values.
+@@ -380,0 +382,3 @@ def _export_heightmap_raw(
++    value_range : tuple[float, float] | None
++        Optional shared export range ``(min, max)`` used to normalize heights.
++        When omitted, the input array's local min/max are used.
+@@ -390 +394,4 @@ def _export_heightmap_raw(
+-    hmin, hmax = hmap.min(), hmap.max()
++    if value_range is not None:
++        hmin, hmax = float(value_range[0]), float(value_range[1])
++    else:
++        hmin, hmax = float(hmap.min()), float(hmap.max())
+@@ -392 +399 @@ def _export_heightmap_raw(
+-        hmap = (hmap - hmin) / (hmax - hmin)
++        hmap = np.clip((hmap - hmin) / (hmax - hmin), 0.0, 1.0)
+@@ -432,0 +440 @@ def _export_world_tile_artifacts(
++    height_range: tuple[float, float] | None = None,
+@@ -440 +448,7 @@ def _export_world_tile_artifacts(
+-    heightmap_path.write_bytes(_export_heightmap_raw(heightmap, flip_vertical=flip_vertical))
++    heightmap_path.write_bytes(
++        _export_heightmap_raw(
++            heightmap,
++            flip_vertical=flip_vertical,
++            value_range=height_range,
++        )
++    )
+@@ -467,0 +482,68 @@ def _resolve_height_range(params: dict, heightmap: np.ndarray) -> tuple[float, f
++def _resolve_export_height_range(
++    params: dict,
++    heightmap: np.ndarray,
++) -> tuple[float, float] | None:
++    """Resolve an optional shared export range for heightmap RAW output."""
++    if params.get("tiled_world") or params.get("use_global_height_range"):
++        return _resolve_height_range(params, heightmap)
++
++    height_range = params.get("height_range")
++    if height_range is not None:
++        return _resolve_height_range(params, heightmap)
++
++    if (
++        params.get("height_range_min") is not None
++        and params.get("height_range_max") is not None
++    ):
++        return _resolve_height_range(params, heightmap)
++
++    return None
++
++
++def _terrain_grid_to_world_xy(
++    row: int,
++    col: int,
++    *,
++    rows: int,
++    cols: int,
++    terrain_size: float | None = None,
++    terrain_width: float | None = None,
++    terrain_height: float | None = None,
++    terrain_origin_x: float,
++    terrain_origin_y: float,
++) -> tuple[float, float]:
++    """Convert a terrain grid cell to a world-space XY position.
++
++    ``terrain_origin_*`` is the terrain object's world-space center.
++    """
++    if rows < 2 or cols < 2:
++        return terrain_origin_x, terrain_origin_y
++
++    width = float(terrain_width if terrain_width is not None else terrain_size if terrain_size is not None else 0.0)
++    height = float(terrain_height if terrain_height is not None else terrain_size if terrain_size is not None else 0.0)
++    width = max(width, 1e-9)
++    height = max(height, 1e-9)
++
++    x = terrain_origin_x + (col / max(cols - 1, 1)) * width - width * 0.5
++    y = terrain_origin_y + (row / max(rows - 1, 1)) * height - height * 0.5
++    return x, y
++
++
++def _resolve_water_path_points(
++    *,
++    path_points_raw: Any,
++    terrain_origin_x: float,
++    terrain_origin_y: float,
++    fallback_depth: float,
++    water_level: float,
++) -> list[tuple[float, float, float]]:
++    """Resolve explicit or fallback water spline points in world space."""
++    if path_points_raw and len(path_points_raw) >= 2:
++        return [tuple(float(v) for v in pt) for pt in path_points_raw]
++
++    return [
++        (terrain_origin_x, terrain_origin_y - fallback_depth / 2.0, water_level),
++        (terrain_origin_x, terrain_origin_y + fallback_depth / 2.0, water_level),
++    ]
++
++
+@@ -881,0 +964 @@ def handle_generate_terrain_tile(params: dict) -> dict:
++            cell_size=cell_size,
+@@ -929,0 +1013 @@ def handle_generate_terrain_tile(params: dict) -> dict:
++                height_range=height_range,
+@@ -1030,0 +1115 @@ def handle_generate_world_terrain(params: dict) -> dict:
++            cell_size=cell_size,
+@@ -1052,0 +1138 @@ def handle_generate_world_terrain(params: dict) -> dict:
++                    height_range=height_range,
+@@ -1420,2 +1506,5 @@ def handle_generate_road(params: dict) -> dict:
+-    terrain_scale = obj.dimensions.x if obj.dimensions.x > 0 else 100.0
+-    cell_size = terrain_scale / max(cols - 1, 1)
++    terrain_width = obj.dimensions.x if obj.dimensions.x > 0 else 100.0
++    terrain_height = obj.dimensions.y if obj.dimensions.y > 0 else terrain_width
++    cell_size_x = terrain_width / max(cols - 1, 1)
++    cell_size_y = terrain_height / max(rows - 1, 1)
++    cell_size = (cell_size_x + cell_size_y) * 0.5
+@@ -1441,2 +1530,5 @@ def handle_generate_road(params: dict) -> dict:
+-    terrain_size = terrain_obj.dimensions.x if terrain_obj else 100.0
+-    cell_size = terrain_size / max(cols - 1, 1)
++    terrain_width = terrain_obj.dimensions.x if terrain_obj and terrain_obj.dimensions.x > 0 else 100.0
++    terrain_height = terrain_obj.dimensions.y if terrain_obj and terrain_obj.dimensions.y > 0 else terrain_width
++    cell_size_x = terrain_width / max(cols - 1, 1)
++    cell_size_y = terrain_height / max(rows - 1, 1)
++    cell_size = (cell_size_x + cell_size_y) * 0.5
+@@ -1457,4 +1549,20 @@ def handle_generate_road(params: dict) -> dict:
+-            x0 = terrain_origin_x + (c0 / max(cols - 1, 1)) * terrain_size - terrain_size / 2
+-            y0 = terrain_origin_y + (r0 / max(rows - 1, 1)) * terrain_size - terrain_size / 2
+-            x1 = terrain_origin_x + (c1 / max(cols - 1, 1)) * terrain_size - terrain_size / 2
+-            y1 = terrain_origin_y + (r1 / max(rows - 1, 1)) * terrain_size - terrain_size / 2
++            x0, y0 = _terrain_grid_to_world_xy(
++                r0,
++                c0,
++                rows=rows,
++                cols=cols,
++                terrain_width=terrain_width,
++                terrain_height=terrain_height,
++                terrain_origin_x=terrain_origin_x,
++                terrain_origin_y=terrain_origin_y,
++            )
++            x1, y1 = _terrain_grid_to_world_xy(
++                r1,
++                c1,
++                rows=rows,
++                cols=cols,
++                terrain_width=terrain_width,
++                terrain_height=terrain_height,
++                terrain_origin_x=terrain_origin_x,
++                terrain_origin_y=terrain_origin_y,
++            )
+@@ -1589,8 +1697,7 @@ def handle_create_water(params: dict) -> dict:
+-    if path_points_raw and len(path_points_raw) >= 2:
+-        path = [tuple(float(v) for v in pt) for pt in path_points_raw]
+-    else:
+-        # Fallback: straight line along Y axis
+-        path = [
+-            (terrain_origin_x, terrain_origin_y - fallback_depth / 2.0, water_level),
+-            (terrain_origin_x, terrain_origin_y + fallback_depth / 2.0, water_level),
+-        ]
++    path = _resolve_water_path_points(
++        path_points_raw=path_points_raw,
++        terrain_origin_x=terrain_origin_x,
++        terrain_origin_y=terrain_origin_y,
++        fallback_depth=fallback_depth,
++        water_level=water_level,
++    )
+@@ -1827,8 +1934,2 @@ def handle_export_heightmap(params: dict) -> dict:
+-    # Normalize heights to [0, 1]
+-    hmin, hmax = heights.min(), heights.max()
+-    if hmax - hmin > 1e-10:
+-        heightmap = (heights - hmin) / (hmax - hmin)
+-    else:
+-        heightmap = np.zeros_like(heights)
+-
+-    heightmap = heightmap.reshape(rows, cols)
++    heightmap = heights.reshape(rows, cols)
++    export_height_range = _resolve_export_height_range(params, heightmap)
+@@ -1846 +1947,5 @@ def handle_export_heightmap(params: dict) -> dict:
+-    raw_bytes = _export_heightmap_raw(heightmap, flip_vertical=flip_vertical)
++    raw_bytes = _export_heightmap_raw(
++        heightmap,
++        flip_vertical=flip_vertical,
++        value_range=export_height_range,
++    )
+@@ -2062 +2166,0 @@ def _stable_seed_offset(label: str) -> int:
+-

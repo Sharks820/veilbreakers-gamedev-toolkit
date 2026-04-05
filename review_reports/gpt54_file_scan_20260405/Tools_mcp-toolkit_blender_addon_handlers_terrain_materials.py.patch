@@ -1,0 +1,9 @@
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py b/Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py
+index 81e54ca..29d3172 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py
+@@ -2101,0 +2102 @@ def compute_world_splatmap_weights(
++    cell_size: float = 1.0,
+@@ -2129 +2130 @@ def compute_world_splatmap_weights(
+-    slope_map = compute_slope_map(hmap)
++    slope_map = compute_slope_map(hmap, cell_size=cell_size)

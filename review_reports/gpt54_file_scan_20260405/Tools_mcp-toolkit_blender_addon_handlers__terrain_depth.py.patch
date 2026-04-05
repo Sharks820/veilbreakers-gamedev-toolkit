@@ -1,0 +1,50 @@
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py b/Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py
+index 882ad67..0564e97 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py
+@@ -521 +521 @@ def detect_cliff_edges(
+-    terrain_size: float = 100.0,
++    terrain_size: float | tuple[float, float] = 100.0,
+@@ -534 +534,2 @@ def detect_cliff_edges(
+-        terrain_size: World-space size of the terrain (for coordinate mapping).
++        terrain_size: World-space terrain extent. A scalar assumes a square
++            terrain; a 2-item tuple is interpreted as ``(width, height)``.
+@@ -546 +546,0 @@ def detect_cliff_edges(
+-    slope_map = compute_slope_map(heightmap)
+@@ -547,0 +548,14 @@ def detect_cliff_edges(
++    if isinstance(terrain_size, (tuple, list)):
++        if len(terrain_size) < 2:
++            raise ValueError("terrain_size tuple must contain width and height")
++        terrain_width = max(float(terrain_size[0]), 1e-9)
++        terrain_height = max(float(terrain_size[1]), 1e-9)
++    else:
++        terrain_width = terrain_height = max(float(terrain_size), 1e-9)
++
++    row_spacing = terrain_height / max(rows - 1, 1)
++    col_spacing = terrain_width / max(cols - 1, 1)
++    slope_map = compute_slope_map(
++        heightmap,
++        cell_size=(row_spacing, col_spacing),
++    )
+@@ -581,2 +594,0 @@ def detect_cliff_edges(
+-    cell_to_world = terrain_size / max(rows, cols)
+-
+@@ -584 +596 @@ def detect_cliff_edges(
+-    dy, dx = np.gradient(heightmap)
++    dy, dx = np.gradient(heightmap, row_spacing, col_spacing)
+@@ -600,2 +612,2 @@ def detect_cliff_edges(
+-        wx = (c_center / cols - 0.5) * terrain_size
+-        wy = (r_center / rows - 0.5) * terrain_size
++        wx = (c_center / max(cols - 1, 1) - 0.5) * terrain_width
++        wy = (r_center / max(rows - 1, 1) - 0.5) * terrain_height
+@@ -614 +626,3 @@ def detect_cliff_edges(
+-        width = (c_max - c_min + 1) * cell_to_world
++        width_x = (c_max - c_min + 1) * col_spacing
++        width_y = (r_max - r_min + 1) * row_spacing
++        width = max(width_x, width_y)
+@@ -620 +634,4 @@ def detect_cliff_edges(
+-        cliff_height = max(height_range * terrain_size * 0.1, 2.0)
++        cliff_height = max(
++            height_range * max(terrain_width, terrain_height) * 0.1,
++            2.0,
++        )

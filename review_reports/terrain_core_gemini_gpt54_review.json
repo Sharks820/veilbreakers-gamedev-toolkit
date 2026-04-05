@@ -1,0 +1,24 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "00b346e44bb135244e302352386a90b398bccf17e3a3b64931c7cfa3ce5134a4",
+  "generated_at": "2026-04-05T06:53:19.512066+00:00",
+  "min_agreement": 2,
+  "model_specific_findings": [],
+  "models": [
+    {
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 180 tokens, but can only afford 176. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}",
+      "finding_count": 0,
+      "findings": [],
+      "model": "gpt-5.4",
+      "provider": "openrouter",
+      "status": "error"
+    },
+    {
+      "finding_count": 0,
+      "findings": [],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "ok"
+    }
+  ]
+}

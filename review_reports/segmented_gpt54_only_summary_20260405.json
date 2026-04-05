@@ -1,0 +1,28 @@
+{
+  "segments": [
+    {
+      "name": "terrain_core_gpt54_only",
+      "patch_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_core_gpt54_only.patch",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_core_gpt54_only.txt",
+      "status": "error",
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Prompt tokens limit exceeded: 5862 > 1059. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}",
+      "result": ""
+    },
+    {
+      "name": "terrain_orchestration_gpt54_only",
+      "patch_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_orchestration_gpt54_only.patch",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_orchestration_gpt54_only.txt",
+      "status": "error",
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Prompt tokens limit exceeded: 3587 > 1059. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}",
+      "result": ""
+    },
+    {
+      "name": "terrain_tests_gpt54_only",
+      "patch_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_tests_gpt54_only.patch",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_tests_gpt54_only.txt",
+      "status": "error",
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Prompt tokens limit exceeded: 7351 > 1059. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}",
+      "result": ""
+    }
+  ]
+}

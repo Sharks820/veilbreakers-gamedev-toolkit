@@ -1,0 +1,61 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "97148872d101b70d1a706b7c526a950f3fa536dfaa39d7c88be68135a80637e9",
+  "generated_at": "2026-04-05T07:02:26.052315+00:00",
+  "min_agreement": 2,
+  "model_specific_findings": [
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "hmap = np.tile(np.linspace(0, 1, 9), (9, 1))",
+      "file": "Tools/mcp-toolkit/tests/test_terrain_noise.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "hmap = np.tile(np.linspace(0, 1, 9), (9, 1))",
+          "file": "Tools/mcp-toolkit/tests/test_terrain_noise.py",
+          "function": "test_larger_cell_size_reduces_world_space_slope",
+          "model": "gemini-3.1-flash-lite-preview",
+          "recommendation": "Add 'import numpy as np' to the top of the file or within the test module scope to ensure the tests are executable.",
+          "severity": "High",
+          "title": "Missing NumPy import in test file"
+        }
+      ],
+      "function": "test_larger_cell_size_reduces_world_space_slope",
+      "key": "tools mcp toolkit tests test terrain noise py test larger cell size reduces world space slope",
+      "models": [
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "recommendation": "Add 'import numpy as np' to the top of the file or within the test module scope to ensure the tests are executable.",
+      "severity": "High",
+      "title": "Missing NumPy import in test file"
+    }
+  ],
+  "models": [
+    {
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}",
+      "finding_count": 0,
+      "findings": [],
+      "model": "gpt-5.4",
+      "provider": "openrouter",
+      "status": "error"
+    },
+    {
+      "finding_count": 1,
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "hmap = np.tile(np.linspace(0, 1, 9), (9, 1))",
+          "file": "Tools/mcp-toolkit/tests/test_terrain_noise.py",
+          "function": "test_larger_cell_size_reduces_world_space_slope",
+          "recommendation": "Add 'import numpy as np' to the top of the file or within the test module scope to ensure the tests are executable.",
+          "severity": "High",
+          "title": "Missing NumPy import in test file"
+        }
+      ],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "ok"
+    }
+  ]
+}

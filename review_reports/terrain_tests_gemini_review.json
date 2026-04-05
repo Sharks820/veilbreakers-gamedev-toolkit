@@ -1,0 +1,17 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "ea49a83aeff695243151887ea9b5446de54f4006f93877629be45ebe109cf453",
+  "generated_at": "2026-04-05T07:03:19.720390+00:00",
+  "min_agreement": 1,
+  "model_specific_findings": [],
+  "models": [
+    {
+      "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 180.0 seconds",
+      "finding_count": 0,
+      "findings": [],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "error"
+    }
+  ]
+}

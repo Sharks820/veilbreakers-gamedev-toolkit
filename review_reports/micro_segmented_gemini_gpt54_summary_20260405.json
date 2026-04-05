@@ -1,0 +1,744 @@
+{
+  "files": [
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01__mesh_bridge.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 1,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 1,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_scatter_engine.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01__scatter_engine.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01__terrain_depth.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_02__terrain_depth.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01__terrain_noise.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_environment.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_02_environment.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 3,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_03_environment.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 4,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_04_environment.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 5,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_05_environment.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "The read operation timed out"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 6,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_06_environment.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "The read operation timed out"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 7,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_07_environment.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_environment_scatter.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_02_environment_scatter.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 3,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_03_environment_scatter.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 4,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_04_environment_scatter.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 5,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_05_environment_scatter.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 6,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_06_environment_scatter.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_terrain_materials.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_blender_server.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_compose_planners.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_test_compose_planners.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_environment_handlers.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_test_environment_handlers.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_02_test_environment_handlers.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 3,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_03_test_environment_handlers.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 4,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_04_test_environment_handlers.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_test_environment_scatter_handlers.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_02_test_environment_scatter_handlers.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_functional_unity_tools.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_test_functional_unity_tools.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_mesh_bridge.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_test_mesh_bridge.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_scatter_engine.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_test_scatter_engine.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_terrain_depth.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_test_terrain_depth.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        },
+        {
+          "chunk_index": 2,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_02_test_terrain_depth.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 0,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 0,
+              "error": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_terrain_noise.py",
+      "chunks": [
+        {
+          "chunk_index": 1,
+          "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\micro_01_test_terrain_noise.py.json",
+          "consensus_count": 0,
+          "model_specific_count": 1,
+          "models": [
+            {
+              "model": "gpt-5.4",
+              "status": "error",
+              "finding_count": 0,
+              "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}"
+            },
+            {
+              "model": "gemini-3.1-flash-lite-preview",
+              "status": "ok",
+              "finding_count": 1,
+              "error": null
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

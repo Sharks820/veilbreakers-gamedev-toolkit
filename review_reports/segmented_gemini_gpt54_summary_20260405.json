@@ -1,0 +1,67 @@
+{
+  "segments": [
+    {
+      "name": "terrain_core_gemini_gpt54",
+      "patch_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_core_gemini_gpt54.patch",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_core_gemini_gpt54_review.json",
+      "consensus_count": 0,
+      "model_specific_count": 0,
+      "models": [
+        {
+          "model": "gpt-5.4",
+          "status": "error",
+          "finding_count": 0,
+          "error": "OpenRouter API error 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 180 tokens, but can only afford 176. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}"
+        },
+        {
+          "model": "gemini-3.1-flash-lite-preview",
+          "status": "ok",
+          "finding_count": 0,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "terrain_orchestration_gemini_gpt54",
+      "patch_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_orchestration_gemini_gpt54.patch",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_orchestration_gemini_gpt54_review.json",
+      "consensus_count": 0,
+      "model_specific_count": 0,
+      "models": [
+        {
+          "model": "gpt-5.4",
+          "status": "error",
+          "finding_count": 0,
+          "error": "OpenRouter API error 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 180 tokens, but can only afford 176. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}"
+        },
+        {
+          "model": "gemini-3.1-flash-lite-preview",
+          "status": "ok",
+          "finding_count": 0,
+          "error": null
+        }
+      ]
+    },
+    {
+      "name": "terrain_tests_gemini_gpt54",
+      "patch_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_tests_gemini_gpt54.patch",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_tests_gemini_gpt54_review.json",
+      "consensus_count": 0,
+      "model_specific_count": 0,
+      "models": [
+        {
+          "model": "gpt-5.4",
+          "status": "error",
+          "finding_count": 0,
+          "error": "OpenRouter API error 402: {\"error\":{\"message\":\"This request requires more credits, or fewer max_tokens. You requested up to 180 tokens, but can only afford 176. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}"
+        },
+        {
+          "model": "gemini-3.1-flash-lite-preview",
+          "status": "ok",
+          "finding_count": 0,
+          "error": null
+        }
+      ]
+    }
+  ]
+}

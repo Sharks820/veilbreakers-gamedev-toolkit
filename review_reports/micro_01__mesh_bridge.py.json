@@ -1,0 +1,61 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "a1ab5752e104252be007651412e1e1d1534170f6ca97b1ce1c336457b6fe3b97",
+  "generated_at": "2026-04-05T06:55:36.802842+00:00",
+  "min_agreement": 2,
+  "model_specific_findings": [
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "\"dead_tree\": (_lsystem_tree_generator, ...)",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "\"dead_tree\": (_lsystem_tree_generator, ...)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py",
+          "function": "VEGETATION_GENERATOR_MAP",
+          "model": "gemini-3.1-flash-lite-preview",
+          "recommendation": "Ensure that '_lsystem_tree_generator' is defined and imported in the current scope. If it is intended to be a new function, it must be implemented before being referenced in the map to prevent a NameError at runtime.",
+          "severity": "Critical",
+          "title": "Missing generator function reference"
+        }
+      ],
+      "function": "VEGETATION_GENERATOR_MAP",
+      "key": "tools mcp toolkit blender addon handlers mesh bridge py vegetation generator map missing generator function reference",
+      "models": [
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "recommendation": "Ensure that '_lsystem_tree_generator' is defined and imported in the current scope. If it is intended to be a new function, it must be implemented before being referenced in the map to prevent a NameError at runtime.",
+      "severity": "Critical",
+      "title": "Missing generator function reference"
+    }
+  ],
+  "models": [
+    {
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Insufficient credits. This account never purchased credits. Make sure your key is on the correct account or org, and if so, purchase more at https://openrouter.ai/settings/credits\",\"code\":402}}",
+      "finding_count": 0,
+      "findings": [],
+      "model": "gpt-5.4",
+      "provider": "openrouter",
+      "status": "error"
+    },
+    {
+      "finding_count": 1,
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "\"dead_tree\": (_lsystem_tree_generator, ...)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py",
+          "function": "VEGETATION_GENERATOR_MAP",
+          "recommendation": "Ensure that '_lsystem_tree_generator' is defined and imported in the current scope. If it is intended to be a new function, it must be implemented before being referenced in the map to prevent a NameError at runtime.",
+          "severity": "Critical",
+          "title": "Missing generator function reference"
+        }
+      ],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "ok"
+    }
+  ]
+}

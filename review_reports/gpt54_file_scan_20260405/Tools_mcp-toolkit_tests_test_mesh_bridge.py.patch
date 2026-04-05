@@ -1,0 +1,8 @@
+diff --git a/Tools/mcp-toolkit/tests/test_mesh_bridge.py b/Tools/mcp-toolkit/tests/test_mesh_bridge.py
+index 535f1f5..4ab4633 100644
+--- a/Tools/mcp-toolkit/tests/test_mesh_bridge.py
++++ b/Tools/mcp-toolkit/tests/test_mesh_bridge.py
+@@ -135,0 +136 @@ VEGETATION_KEYS = [
++    "dead_tree",
+@@ -172,0 +174 @@ class TestVegetationGeneratorMap:
++        assert VEGETATION_GENERATOR_MAP["dead_tree"][1]["tree_type"] == "dead"
