@@ -600,7 +600,10 @@ def _theoretical_max_amplitude(octaves: int, persistence: float) -> float:
 # Slope map
 # ---------------------------------------------------------------------------
 
-def compute_slope_map(heightmap: np.ndarray) -> np.ndarray:
+def compute_slope_map(
+    heightmap: np.ndarray,
+    cell_size: float | tuple[float, float] = 1.0,
+) -> np.ndarray:
     """Compute slope in degrees from a heightmap.
 
     Uses numpy gradient to compute partial derivatives, then converts
@@ -610,6 +613,9 @@ def compute_slope_map(heightmap: np.ndarray) -> np.ndarray:
     ----------
     heightmap : np.ndarray
         2D heightmap array.
+    cell_size : float | tuple[float, float]
+        World-space sample spacing. A scalar applies to both axes. A 2-item
+        tuple is interpreted as ``(row_spacing, col_spacing)``.
 
     Returns
     -------
@@ -622,7 +628,15 @@ def compute_slope_map(heightmap: np.ndarray) -> np.ndarray:
     if rows < 2 or cols < 2:
         return np.zeros_like(heightmap)
 
-    dy, dx = np.gradient(heightmap)
+    if isinstance(cell_size, (tuple, list)):
+        if len(cell_size) < 2:
+            raise ValueError("cell_size tuple must contain row and column spacing")
+        row_spacing = max(float(cell_size[0]), 1e-9)
+        col_spacing = max(float(cell_size[1]), 1e-9)
+    else:
+        row_spacing = col_spacing = max(float(cell_size), 1e-9)
+
+    dy, dx = np.gradient(heightmap, row_spacing, col_spacing)
     magnitude = np.sqrt(dx ** 2 + dy ** 2)
     slope_rad = np.arctan(magnitude)
     slope_deg = np.degrees(slope_rad)

@@ -42,6 +42,18 @@ Optional overrides:
 - `review_consensus(diff, context, instructions, models, min_agreement, truth_path, save_dir)`
 - `review_history_summary(history_dir)`
 
+## How To Use It Well
+
+- Break large reviews into scoped segments before sending them to the models.
+- Prefer one subsystem or one coherent file group per review run, for example:
+  - terrain handlers
+  - Unity orchestration
+  - worldbuilding
+  - tests for one feature slice
+- Do not send an entire broad branch diff when it spans unrelated systems unless you also run segmented follow-up reviews.
+- Keep the context focused on the segment being reviewed and state the risk you care about most, such as correctness, regressions, missing wiring, or test gaps.
+- Use the consensus report as the merge step after segmented runs, not as a substitute for segmentation.
+
 Recommended review models:
 
 - OpenRouter default: `qwen/qwen3.6-plus:free`

@@ -133,6 +133,7 @@ VEGETATION_KEYS = [
     "tree_healthy",
     "tree_boundary",
     "tree_blighted",
+    "dead_tree",
     "tree_twisted",
     "bush",
     "grass",
@@ -170,6 +171,7 @@ class TestVegetationGeneratorMap:
     def test_thornwood_aliases_resolve_to_progression_tree_styles(self) -> None:
         assert VEGETATION_GENERATOR_MAP["tree_boundary"][1]["canopy_style"] == "veil_boundary"
         assert VEGETATION_GENERATOR_MAP["tree_blighted"][1]["canopy_style"] == "veil_blighted"
+        assert VEGETATION_GENERATOR_MAP["dead_tree"][1]["tree_type"] == "dead"
         assert VEGETATION_GENERATOR_MAP["tree_twisted"][1]["canopy_style"] == "veil_boundary"
 
 

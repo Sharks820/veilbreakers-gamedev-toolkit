@@ -288,6 +288,7 @@ VEGETATION_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any
     "tree_boundary": (_lsystem_tree_generator, {"tree_type": "birch", "iterations": 4, "leaf_type": "broadleaf", "canopy_style": "veil_boundary"}),
     "tree_blighted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine", "canopy_style": "veil_blighted"}),
     "tree_dead": (_lsystem_tree_generator, {"tree_type": "dead", "iterations": 4, "leaf_type": None, "canopy_style": "veil_blighted"}),
+    "dead_tree": (_lsystem_tree_generator, {"tree_type": "dead", "iterations": 4, "leaf_type": None, "canopy_style": "veil_blighted"}),
     "tree_twisted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine", "canopy_style": "veil_boundary"}),
     "pine_tree": (_lsystem_tree_generator, {"tree_type": "pine", "iterations": 4, "leaf_type": "needle", "canopy_style": "veil_healthy"}),
     "bush": (generate_shrub_mesh, {}),

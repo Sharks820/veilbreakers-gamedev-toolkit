@@ -294,10 +294,10 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
             )
 
         if terrain_cfg.get("location") is not None:
-            min_x = terrain_origin_x + radius
-            max_x = terrain_origin_x + terrain_size - radius
-            min_y = terrain_origin_y + radius
-            max_y = terrain_origin_y + terrain_size - radius
+            min_x = terrain_origin_x - half + radius
+            max_x = terrain_origin_x + half - radius
+            min_y = terrain_origin_y - half + radius
+            max_y = terrain_origin_y + half - radius
         else:
             min_x = -half + radius
             max_x = half - radius

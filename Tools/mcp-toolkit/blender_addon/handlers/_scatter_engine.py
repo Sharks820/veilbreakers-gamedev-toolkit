@@ -130,6 +130,8 @@ def biome_filter_points(
     slope_map: Any,  # np.ndarray
     rules: list[dict[str, Any]],
     terrain_size: float = 100.0,
+    terrain_width: float | None = None,
+    terrain_depth: float | None = None,
     seed: int = 0,
     max_tilt_angle: float = 90.0,
     moisture_map: Any | None = None,  # optional np.ndarray
@@ -149,7 +151,12 @@ def biome_filter_points(
         scale_range (tuple), density (0-1 probability of keeping).
         Optional per-rule keys: min_moisture, max_moisture (0-1).
     terrain_size : float
-        World-space size of terrain for coordinate mapping.
+        Backward-compatible square terrain extent used when axis-specific
+        dimensions are not provided.
+    terrain_width : float | None
+        Optional world-space width of terrain for X coordinate mapping.
+    terrain_depth : float | None
+        Optional world-space depth of terrain for Y coordinate mapping.
     seed : int
         Random seed for density and scale/rotation randomization.
     max_tilt_angle : float
@@ -169,11 +176,13 @@ def biome_filter_points(
     rng = random.Random(seed)
     placements: list[dict[str, Any]] = []
     rows, cols = heightmap.shape
+    width = max(float(terrain_width if terrain_width is not None else terrain_size), 1e-9)
+    depth = max(float(terrain_depth if terrain_depth is not None else terrain_size), 1e-9)
 
     for x, y in points:
         # Map world position to heightmap indices
-        u = x / terrain_size
-        v = y / terrain_size
+        u = x / width
+        v = y / depth
         col_idx = int(u * (cols - 1))
         row_idx = int(v * (rows - 1))
         col_idx = max(0, min(col_idx, cols - 1))

@@ -2099,6 +2099,7 @@ def compute_world_splatmap_weights(
     heightmap: list[list[float]] | np.ndarray,
     biome_name: str = DEFAULT_BIOME,
     *,
+    cell_size: float = 1.0,
     slope_flat_deg: float = 30.0,
     slope_cliff_deg: float = 60.0,
     special_low_pct: float = 0.15,
@@ -2126,7 +2127,7 @@ def compute_world_splatmap_weights(
         except ValueError:
             logger.warning("Unknown biome '%s' passed to compute_world_splatmap_weights", biome_name)
 
-    slope_map = compute_slope_map(hmap)
+    slope_map = compute_slope_map(hmap, cell_size=cell_size)
     if height_range is not None:
         z_min, z_max = float(height_range[0]), float(height_range[1])
         if z_max < z_min:

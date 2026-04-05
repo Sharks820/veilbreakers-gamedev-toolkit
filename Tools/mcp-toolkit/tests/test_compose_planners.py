@@ -86,6 +86,19 @@ class TestMapPlacementPlanning:
 
         assert placements[0]["anchor"] == (140.0, 80.0)
 
+    def test_anchor_planner_clamps_explicit_world_positions_to_centered_bounds(self):
+        placements = _plan_map_location_anchors({
+            "terrain": {"size": 200.0, "location": [100.0, 100.0]},
+            "locations": [
+                {"name": "Outpost", "type": "building", "position": [260.0, -40.0]},
+            ],
+        })
+
+        ax, ay = placements[0]["anchor"]
+        radius = placements[0]["radius"]
+        assert ax == 200.0 - radius
+        assert ay == 0.0 + radius
+
     def test_budget_defaults_to_balanced_pc_for_regular_region(self):
         budget = _resolve_map_generation_budget({
             "terrain": {"size": 220.0},
