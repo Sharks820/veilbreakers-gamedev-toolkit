@@ -48,12 +48,12 @@ def generate_cliff_face_mesh(
 ) -> MeshSpec:
     """Generate a curved vertical cliff face with noise displacement.
 
-    Creates a partial-cylinder surface standing upright (Y is vertical).
+    Creates a partial-cylinder surface standing upright (Z-up).
     Each grid vertex gets Gaussian noise displacement for natural rock look.
 
     Args:
         width: Horizontal extent of the cliff face.
-        height: Vertical extent (Y-axis).
+        height: Vertical extent (Z-axis).
         segments_horizontal: Grid subdivisions along width.
         segments_vertical: Grid subdivisions along height.
         noise_amplitude: Strength of random surface displacement.
@@ -77,19 +77,19 @@ def generate_cliff_face_mesh(
             y_frac = iy / seg_v
 
             x = (x_frac - 0.5) * width
-            y = y_frac * height
+            z = y_frac * height
 
             # Base concave curve (partial cylinder effect)
             base_curve = 0.3 * math.sin(x_frac * math.pi)
 
-            # Noise displacement in Z
+            # Noise displacement in Y (depth)
             noise = rng.gauss(0.0, noise_amplitude) * (
                 math.sin(x_frac * noise_scale * math.pi)
                 * math.sin(y_frac * noise_scale * math.pi)
                 + 0.5
             )
 
-            z = base_curve + noise
+            y = base_curve + noise
 
             vertices.append((x, y, z))
 
@@ -136,9 +136,9 @@ def generate_cave_entrance_mesh(
     Args:
         width: Width of the entrance opening.
         height: Height of the entrance opening (to top of arch).
-        depth: How far the tunnel extends into terrain (Z-axis).
+        depth: How far the tunnel extends into terrain (Y-axis).
         arch_segments: Number of segments in the semicircular arch.
-        terrain_edge_height: Y offset for terrain-level placement.
+        terrain_edge_height: Z offset for terrain-level placement.
         style: Visual style label.
         seed: Random seed for noise displacement.
 
@@ -150,8 +150,8 @@ def generate_cave_entrance_mesh(
     # The arch sits above rectangular sides. The straight sides go from
     # terrain_edge_height to the arch spring-line. The arch semicircle
     # then curves from spring-line up to the apex.
-    spring_y = terrain_edge_height + height * 0.5  # where the arch starts curving
-    apex_y = terrain_edge_height + height  # top of the arch
+    spring_z = terrain_edge_height + height * 0.5  # where the arch starts curving
+    apex_z = terrain_edge_height + height  # top of the arch
 
     parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
 
@@ -171,28 +171,28 @@ def generate_cave_entrance_mesh(
         # Left side bottom to spring-line
         side_segs = 3
         for si in range(side_segs + 1):
-            y_frac = si / side_segs
-            y = terrain_edge_height + y_frac * (spring_y - terrain_edge_height)
+            z_frac = si / side_segs
+            vz = terrain_edge_height + z_frac * (spring_z - terrain_edge_height)
             noise = rng.gauss(0.0, 0.05) if style == "natural" else 0.0
-            ring.append((-half_w + noise, y, z))
+            ring.append((-half_w + noise, z, vz))
 
         # Arch semicircle (left to right across the top)
         arch_radius = half_w
-        arch_center_y = spring_y
+        arch_center_z = spring_z
         for ai in range(1, arch_segments):
             angle = math.pi * ai / arch_segments  # 0 to pi
             x = -math.cos(angle) * arch_radius
-            y = arch_center_y + math.sin(angle) * (apex_y - spring_y)
+            vz = arch_center_z + math.sin(angle) * (apex_z - spring_z)
             noise_x = rng.gauss(0.0, 0.05) if style == "natural" else 0.0
-            noise_y = rng.gauss(0.0, 0.05) if style == "natural" else 0.0
-            ring.append((x + noise_x, y + noise_y, z))
+            noise_z = rng.gauss(0.0, 0.05) if style == "natural" else 0.0
+            ring.append((x + noise_x, z, vz + noise_z))
 
         # Right side spring-line down to bottom
         for si in range(side_segs, -1, -1):
-            y_frac = si / side_segs
-            y = terrain_edge_height + y_frac * (spring_y - terrain_edge_height)
+            z_frac = si / side_segs
+            vz = terrain_edge_height + z_frac * (spring_z - terrain_edge_height)
             noise = rng.gauss(0.0, 0.05) if style == "natural" else 0.0
-            ring.append((half_w + noise, y, z))
+            ring.append((half_w + noise, z, vz))
 
         profile_rings.append(ring)
 
@@ -269,10 +269,10 @@ def generate_biome_transition_mesh(
             z_frac = iz / segments
 
             x = (x_frac - 0.5) * zone_width
-            z = (z_frac - 0.5) * zone_depth
+            y = (z_frac - 0.5) * zone_depth
 
-            # Noise-displaced height for uneven ground
-            y = rng.gauss(0.0, 0.15) * (
+            # Noise-displaced height for uneven ground (Z is up in Blender)
+            z = rng.gauss(0.0, 0.15) * (
                 math.sin(x_frac * 3.0 * math.pi) * 0.5 + 0.5
             )
 
@@ -340,11 +340,11 @@ def generate_waterfall_mesh(
     step_height = height / steps
     half_w = width / 2.0
 
-    current_z = 0.0  # Each step pushes forward in Z
+    current_y = 0.0  # Each step pushes forward in Y (depth axis)
 
     for si in range(steps):
-        y_top = height - si * step_height
-        y_bottom = y_top - step_height
+        z_top = height - si * step_height
+        z_bottom = z_top - step_height
 
         # Slight random width variation per step
         w_var = rng.uniform(-0.1, 0.1)
@@ -356,19 +356,19 @@ def generate_waterfall_mesh(
 
         # Subdivide the ledge for non-uniform surface
         ledge_segs = 4
-        for lz in range(ledge_segs + 1):
+        for ly in range(ledge_segs + 1):
             for lx in range(ledge_segs + 1):
                 x_frac = lx / ledge_segs
-                z_frac = lz / ledge_segs
+                y_frac = ly / ledge_segs
                 x = (x_frac - 0.5) * 2.0 * sw
-                z = current_z + z_frac * step_depth
-                y_noise = rng.gauss(0.0, 0.02)
-                ledge_verts.append((x, y_top + y_noise, z))
+                y = current_y + y_frac * step_depth
+                z_noise = rng.gauss(0.0, 0.02)
+                ledge_verts.append((x, y, z_top + z_noise))
 
-        for lz in range(ledge_segs):
+        for ly in range(ledge_segs):
             for lx in range(ledge_segs):
                 row_w = ledge_segs + 1
-                v0 = lz * row_w + lx
+                v0 = ly * row_w + lx
                 v1 = v0 + 1
                 v2 = v0 + row_w + 1
                 v3 = v0 + row_w
@@ -380,14 +380,14 @@ def generate_waterfall_mesh(
         curtain_verts: list[tuple[float, float, float]] = []
         curtain_faces: list[tuple[int, ...]] = []
         curtain_segs = 4
-        z_front = current_z + step_depth
+        y_front = current_y + step_depth
 
         for cx_i in range(curtain_segs + 1):
             x_frac = cx_i / curtain_segs
             x = (x_frac - 0.5) * 2.0 * sw
             noise = rng.gauss(0.0, 0.03)
-            curtain_verts.append((x, y_top + noise, z_front))
-            curtain_verts.append((x, y_bottom + noise, z_front))
+            curtain_verts.append((x, y_front, z_top + noise))
+            curtain_verts.append((x, y_front, z_bottom + noise))
 
         for ci in range(curtain_segs):
             b = ci * 2
@@ -395,7 +395,7 @@ def generate_waterfall_mesh(
 
         parts.append((curtain_verts, curtain_faces))
 
-        current_z += step_depth
+        current_y += step_depth
 
     # Circular pool disk at the base
     pool_segs = 16
@@ -403,14 +403,14 @@ def generate_waterfall_mesh(
     pool_faces: list[tuple[int, ...]] = []
 
     # Center vertex
-    pool_y = height - steps * step_height  # bottom of cascade
-    pool_verts.append((0.0, pool_y - 0.05, current_z + pool_radius))
+    pool_z = height - steps * step_height  # bottom of cascade
+    pool_verts.append((0.0, current_y + pool_radius, pool_z - 0.05))
 
     for pi in range(pool_segs):
         angle = 2.0 * math.pi * pi / pool_segs
         px = math.cos(angle) * pool_radius
-        pz = current_z + pool_radius + math.sin(angle) * pool_radius
-        pool_verts.append((px, pool_y - 0.05 + rng.gauss(0.0, 0.01), pz))
+        py = current_y + pool_radius + math.sin(angle) * pool_radius
+        pool_verts.append((px, py, pool_z - 0.05 + rng.gauss(0.0, 0.01)))
 
     # Fan triangles from center
     for pi in range(pool_segs):
@@ -465,15 +465,15 @@ def generate_terrain_bridge_mesh(
     dy = ey - sy
     dz = ez - sz
 
-    # Compute span (horizontal distance, ignoring vertical)
-    horizontal_dist = math.sqrt(dx * dx + dz * dz)
+    # Compute span (horizontal distance in XY ground plane, Z-up)
+    horizontal_dist = math.sqrt(dx * dx + dy * dy)
     span = max(horizontal_dist, 1.0)  # avoid zero-length bridge
 
-    # Get base bridge mesh (centered at origin, spanning along Z axis)
+    # Get base bridge mesh (spans along Z axis, height on Y in procedural_meshes)
     base = generate_bridge_mesh(span=span, width=width, style=style)
 
-    # Compute rotation angle in XZ plane (yaw)
-    yaw = math.atan2(dx, dz)  # angle from Z-axis toward X-axis
+    # Compute rotation angle in XY plane (yaw around Z-axis)
+    yaw = math.atan2(dy, dx)  # angle from X-axis toward Y-axis
     cos_yaw = math.cos(yaw)
     sin_yaw = math.sin(yaw)
 
@@ -482,18 +482,20 @@ def generate_terrain_bridge_mesh(
     mid_y = (sy + ey) / 2.0
     mid_z = (sz + ez) / 2.0
 
-    # Transform vertices: rotate around Y-axis then translate
+    # Transform vertices: base bridge has span on Z, height on Y.
+    # Remap to Z-up: base_z -> horizontal span axis, base_y -> Z (height)
+    # Then rotate horizontal span in XY plane.
     transformed_verts: list[tuple[float, float, float]] = []
     for vx, vy, vz in base["vertices"]:
-        # The base bridge spans along Z from -span/2 to +span/2
-        # Rotate (vx, vz) by yaw around Y-axis
-        rx = vx * cos_yaw + vz * sin_yaw
-        rz = -vx * sin_yaw + vz * cos_yaw
+        # base_vz is span axis, base_vy is height -> becomes Z
+        # Rotate span (vz) into XY ground plane along direction of endpoints
+        rx = vz * cos_yaw - vx * sin_yaw
+        ry = vz * sin_yaw + vx * cos_yaw
 
-        # Translate to midpoint
+        # Translate; vy (base height) maps to Z (Blender vertical)
         tx = rx + mid_x
-        ty = vy + mid_y
-        tz = rz + mid_z
+        ty = ry + mid_y
+        tz = vy + mid_z
 
         transformed_verts.append((tx, ty, tz))
 

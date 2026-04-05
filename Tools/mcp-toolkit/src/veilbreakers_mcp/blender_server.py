@@ -5,6 +5,7 @@ import math
 import os
 import re
 import threading
+from pathlib import Path
 from collections import deque
 from typing import Literal, Any
 
@@ -826,6 +827,7 @@ async def _enforce_world_quality(
                     if isinstance(smart_code_result, dict):
                         code_str = smart_code_result.get("code", "")
                         if code_str:
+                            validate_code(code_str)
                             await blender.send_command("execute_code", {"code": code_str})
             except (OSError, ConnectionError, TimeoutError, ValueError, RuntimeError, BlenderCommandError):
                 pass
@@ -1142,9 +1144,11 @@ async def _sample_terrain_height(
     y: float,
 ) -> float:
     """Sample a terrain height in Blender via a safe raycast script."""
+    x, y = float(x), float(y)
+    if math.isnan(x) or math.isnan(y) or math.isinf(x) or math.isinf(y):
+        return 0.0
     # Validate terrain_name to prevent code injection
-    import re as _re
-    if not _re.match(r'^[A-Za-z0-9_\-. ]+$', terrain_name):
+    if not re.match(r'^[A-Za-z0-9_\-. ]+$', terrain_name):
         logger.warning("Invalid terrain_name rejected: %s", terrain_name)
         return 0.0
 
@@ -1240,6 +1244,7 @@ async def blender_object(
     blender = get_blender_connection()
 
     if action == "list":
+        # Alias for blender_scene list_objects — kept for convenience
         result = await blender.send_command("list_objects")
         return json.dumps(result, indent=2, default=str)
 
@@ -2306,23 +2311,23 @@ async def asset_pipeline(
         }
         if _vb3d and asset_type and asset_type in _asset_dirs:
             resolved_dir = str(
-                __import__("pathlib").Path(_vb3d) / _asset_dirs[asset_type]
+                Path(_vb3d) / _asset_dirs[asset_type]
             )
             # Use name subfolder if provided
             if name:
                 resolved_dir = str(
-                    __import__("pathlib").Path(resolved_dir) / name
+                    Path(resolved_dir) / name
                 )
             output_dir = resolved_dir
         elif output_dir == "." and _vb3d:
             # Fallback: use a known location inside the Unity project
             # so models don't get lost in the MCP server's CWD
             output_dir = str(
-                __import__("pathlib").Path(_vb3d) / "Assets/Art/3D_Models/Tripo_Downloads"
+                Path(_vb3d) / "Assets/Art/3D_Models/Tripo_Downloads"
             )
             if name:
                 output_dir = str(
-                    __import__("pathlib").Path(output_dir) / name
+                    Path(output_dir) / name
                 )
         elif output_dir == ".":
             # Last resort: use temp dir with timestamp so models are findable
@@ -2330,7 +2335,7 @@ async def asset_pipeline(
             import time
             ts = time.strftime("%Y%m%d_%H%M%S")
             output_dir = str(
-                __import__("pathlib").Path(tempfile.gettempdir()) / f"tripo_models_{ts}"
+                Path(tempfile.gettempdir()) / f"tripo_models_{ts}"
             )
 
         # Prefer studio (uses subscription credits), fall back to API key
@@ -2340,7 +2345,7 @@ async def asset_pipeline(
 
         # STY-001: enforce dark fantasy style on all AI-generated assets
         _df_prefix = "dark fantasy medieval weathered Gothic, "
-        if not prompt.startswith(_df_prefix):
+        if prompt and not prompt.startswith(_df_prefix):
             prompt = _df_prefix + prompt
 
         if studio_cookie or studio_token:
@@ -2372,7 +2377,7 @@ async def asset_pipeline(
 
                         # Post-process GLB: extract textures, delight, validate, score
                         glb_out_dir = str(
-                            __import__("pathlib").Path(m["path"]).parent
+                            Path(m["path"]).parent
                             / f"variant_{i+1}_textures"
                         )
                         try:
@@ -2441,7 +2446,7 @@ async def asset_pipeline(
                 model_path = result.get("model_path") or result.get("pbr_model_path")
                 if model_path and result.get("status") == "success":
                     glb_out_dir = str(
-                        __import__("pathlib").Path(model_path).parent / "textures"
+                        Path(model_path).parent / "textures"
                     )
                     try:
                         post_result = await post_process_tripo_model(
@@ -2569,9 +2574,9 @@ async def asset_pipeline(
         # Set output dir for buildings
         _vb3d = settings.unity_project_path
         if _vb3d:
-            output_dir = str(__import__("pathlib").Path(_vb3d) / "Assets/Art/3D_Models/Buildings")
+            output_dir = str(Path(_vb3d) / "Assets/Art/3D_Models/Buildings")
             if name:
-                output_dir = str(__import__("pathlib").Path(output_dir) / name)
+                output_dir = str(Path(output_dir) / name)
 
         if studio_cookie or studio_token:
             from veilbreakers_mcp.shared.tripo_studio_client import TripoStudioClient
@@ -2680,9 +2685,10 @@ async def asset_pipeline(
 
         # Route to generate_3d with the prop prompt
         if studio_cookie or studio_token:
+            from veilbreakers_mcp.shared.tripo_studio_client import TripoStudioClient
             gen = TripoStudioClient(
                 session_cookie=studio_cookie or None,
-                jwt_token=studio_token or None,
+                session_token=studio_token or None,
             )
             try:
                 if image_path:
@@ -2808,11 +2814,18 @@ async def asset_pipeline(
         # --- Checkpoint resume logic (Phase 37) ---
         _CHKPT_LOADED = False
         if checkpoint_dir:
-            from blender_addon.handlers.pipeline_state import (
-                load_pipeline_checkpoint as _load_chkpt,
-                validate_checkpoint_compatibility as _validate_chkpt,
-                delete_pipeline_checkpoint as _delete_chkpt,
-            )
+            try:
+                from blender_addon.handlers.pipeline_state import (
+                    load_pipeline_checkpoint as _load_chkpt,
+                    validate_checkpoint_compatibility as _validate_chkpt,
+                    delete_pipeline_checkpoint as _delete_chkpt,
+                )
+            except ImportError as _ps_err:
+                return json.dumps({
+                    "status": "error",
+                    "error": f"pipeline_state unavailable in MCP server process (bpy not installed): {_ps_err}",
+                    "hint": "Checkpoint/resume requires the Blender addon environment.",
+                })
             if force_restart:
                 _delete_chkpt(checkpoint_dir, map_name)
             elif resume:
@@ -2835,9 +2848,12 @@ async def asset_pipeline(
             """Persist current pipeline state to checkpoint file."""
             if not checkpoint_dir:
                 return
-            from blender_addon.handlers.pipeline_state import (
-                save_pipeline_checkpoint as _save_cp,
-            )
+            try:
+                from blender_addon.handlers.pipeline_state import (
+                    save_pipeline_checkpoint as _save_cp,
+                )
+            except ImportError:
+                return
             _save_cp(checkpoint_dir, {
                 "map_name": map_name,
                 "seed": map_seed,
@@ -3286,10 +3302,17 @@ async def asset_pipeline(
         _os.makedirs(_mp_export_dir, exist_ok=True)
         _os.makedirs(_os.path.join(_mp_export_dir, _mp_name), exist_ok=True)
 
-        from blender_addon.handlers.pipeline_state import (
-            derive_addressable_groups as _derive_groups,
-            emit_scene_hierarchy as _emit_hierarchy,
-        )
+        try:
+            from blender_addon.handlers.pipeline_state import (
+                derive_addressable_groups as _derive_groups,
+                emit_scene_hierarchy as _emit_hierarchy,
+            )
+        except ImportError as _ps_err:
+            return json.dumps({
+                "status": "error",
+                "error": f"pipeline_state unavailable in MCP server process (bpy not installed): {_ps_err}",
+                "hint": "generate_map_package requires the Blender addon environment.",
+            })
 
         # Step 1: Game-readiness check
         _game_failures = []
@@ -3416,10 +3439,10 @@ async def asset_pipeline(
                     _vp_result = await blender.send_command("viewport_screenshot", {
                         "output_path": _ss_path,
                     })
+                _screenshot_paths.append(_ss_path)
             except Exception:
                 # If Blender command fails, skip this angle (path won't exist)
                 pass
-            _screenshot_paths.append(_ss_path)
 
         # Filter to only paths that actually exist
         _existing = [p for p in _screenshot_paths if os.path.isfile(p)]
@@ -3587,6 +3610,7 @@ async def asset_pipeline(
         room_plan = _plan_interior_rooms(spec)
         planned_rooms = room_plan["rooms"]
         planned_doors = room_plan["doors"]
+        # TODO: add checkpoint support (parity with compose_map)
         steps_completed = []
         steps_failed = []
 

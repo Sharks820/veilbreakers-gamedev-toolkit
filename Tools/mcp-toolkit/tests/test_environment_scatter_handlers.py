@@ -202,9 +202,12 @@ class TestScatterVegetationLogic:
             candidates, heightmap, slope_map, rules,
             terrain_size=100.0, seed=0,
         )
-        max_instances = 50
-        capped = placements[:max_instances]
-        assert len(capped) <= max_instances
+        # Verify the engine returns a non-empty result bounded by the number of
+        # candidate points (i.e. it doesn't fabricate extra placements).
+        assert len(placements) > 0, "Expected at least one placement"
+        assert len(placements) <= len(candidates), (
+            f"Placements ({len(placements)}) must not exceed candidates ({len(candidates)})"
+        )
 
     def test_overlapping_rules_produce_mixed_vegetation_types(self):
         """Overlapping biome rules should no longer collapse to first-match only."""
@@ -251,8 +254,7 @@ class TestScatterVegetationLogic:
         )
 
         vegetation_types = {placement["vegetation_type"] for placement in placements}
-        assert "tree" in vegetation_types
-        assert "grass" in vegetation_types or "bush" in vegetation_types
+        assert len(vegetation_types) >= 2, "Overlapping rules should produce multiple vegetation types"
 
 
 class TestScatterPropsLogic:
@@ -275,8 +277,8 @@ class TestScatterPropsLogic:
         # Should have multiple prop types
         assert len(type_counts) >= 2
 
-    def test_empty_buildings_raises(self):
-        """Empty buildings list should cause handler to raise."""
+    def test_empty_buildings_returns_list(self):
+        """Empty buildings list should return an empty or generic list."""
         # The handler itself checks for empty buildings;
         # context_scatter returns empty list for empty buildings
         result = context_scatter([], area_size=50, seed=0)

@@ -13,6 +13,7 @@ tuples. Calling ``gen_func(**kwargs)`` produces a valid MeshSpec dict.
 from __future__ import annotations
 
 import math
+from collections import deque
 from typing import Any, Callable
 
 # ---------------------------------------------------------------------------
@@ -633,10 +634,10 @@ def post_boolean_cleanup(
     if clean_faces:
         visited = [False] * len(clean_faces)
         face_list = [list(f) for f in clean_faces]
-        queue = [0]
+        queue = deque([0])
         visited[0] = True
         while queue:
-            fi = queue.pop(0)
+            fi = queue.popleft()
             face = face_list[fi]
             n = len(face)
             for i in range(n):
@@ -854,6 +855,7 @@ def mesh_from_spec(
     parent: Any = None,
     smooth_shading: bool = True,
     auto_smooth_angle: float = 35.0,
+    weld_tolerance: float = 0.005,
 ) -> Any:
     """Convert a MeshSpec dict into a Blender mesh object.
 
@@ -881,6 +883,7 @@ def mesh_from_spec(
         parent: Blender object to set as parent.
         smooth_shading: Apply smooth shading to all faces (default True).
         auto_smooth_angle: Auto-smooth angle in degrees (default 35.0).
+        weld_tolerance: Distance threshold for vertex welding (default 0.005 = 5mm).
 
     Returns:
         bpy.types.Object when Blender is available, otherwise a dict
@@ -904,13 +907,12 @@ def mesh_from_spec(
 
     # Validate material_ids: must be in range [0, num_slots-1]
     if material_ids:
-        unique_slots = sorted(set(material_ids))
-        num_slots = len(unique_slots)
+        num_slots = len(set(material_ids))  # count of distinct slots declared
         for fi, mid in enumerate(material_ids):
             if mid < 0 or mid >= num_slots:
                 raise ValueError(
                     f"mesh_from_spec: material_id {mid} at face {fi} is out of range "
-                    f"[0, {num_slots - 1}] for {num_slots} unique slot(s) in material_ids"
+                    f"[0, {num_slots - 1}] for {num_slots} slot(s) in material_ids"
                 )
     else:
         num_slots = 1
@@ -931,16 +933,15 @@ def mesh_from_spec(
 
     # Add vertices with deduplication: weld coincident vertices from
     # generators that create disconnected components at the same positions
-    _WELD_TOLERANCE = 0.005  # 5mm — covers mortar gaps in stone generators
     _vert_dedup: dict[tuple[int, int, int], int] = {}
     bm_verts: list[Any] = []
     _remap: list[int] = []  # maps original index -> deduped index
     for v in verts:
         # Quantize to tolerance grid for fast lookup
         key = (
-            round(v[0] / _WELD_TOLERANCE),
-            round(v[1] / _WELD_TOLERANCE),
-            round(v[2] / _WELD_TOLERANCE),
+            round(v[0] / weld_tolerance),
+            round(v[1] / weld_tolerance),
+            round(v[2] / weld_tolerance),
         )
         if key in _vert_dedup:
             _remap.append(_vert_dedup[key])
@@ -1021,7 +1022,7 @@ def mesh_from_spec(
         # Auto-smooth: Blender 3.x has use_auto_smooth, 4.x uses sharp edges
         if hasattr(mesh_data, "use_auto_smooth"):
             mesh_data.use_auto_smooth = True
-            mesh_data.auto_smooth_angle = _math_radians(auto_smooth_angle)
+            mesh_data.auto_smooth_angle = math.radians(auto_smooth_angle)
 
     obj = bpy.data.objects.new(obj_name, mesh_data)
     obj.location = location
@@ -1064,7 +1065,3 @@ def mesh_from_spec(
 
     return obj
 
-
-def _math_radians(degrees: float) -> float:
-    """Convert degrees to radians (avoids importing math at module level)."""
-    return degrees * 3.141592653589793 / 180.0

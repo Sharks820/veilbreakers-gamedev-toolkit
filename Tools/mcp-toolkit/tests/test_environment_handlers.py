@@ -64,13 +64,6 @@ class TestValidateTerrainParams:
         result = _validate_terrain_params({"resolution": 4096})
         assert result["resolution"] == 4096
 
-    def test_resolution_4096_passes(self):
-        """Resolution 4096 passes validation (4096+ support)."""
-        from blender_addon.handlers.environment import _validate_terrain_params
-
-        result = _validate_terrain_params({"resolution": 4096})
-        assert result["resolution"] == 4096
-
     def test_default_erosion_iterations_5000(self):
         """Default erosion_iterations is 5000."""
         from blender_addon.handlers.environment import _validate_terrain_params

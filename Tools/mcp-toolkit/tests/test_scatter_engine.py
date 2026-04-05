@@ -428,7 +428,7 @@ class TestContextScatter:
         buildings = [{"type": "tavern", "position": (5, 5), "footprint": (4, 4)}]
         result = context_scatter(buildings, area_size=80, seed=42)
 
-        generic_types = {"rock", "log", "mushroom", "bush", "barrel"}
+        generic_types = {"rock", "bush", "crate", "barrel", "lantern"}
         far_props = []
         for p in result:
             dx = p["position"][0] - 5
