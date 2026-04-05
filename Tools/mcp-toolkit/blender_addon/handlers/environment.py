@@ -1660,10 +1660,10 @@ def handle_generate_multi_biome_world(params: dict) -> dict:
     # --- 5. Scatter vegetation per biome (if enabled) ---
     vegetation_total = 0
     if scatter_veg:
-        from .vegetation_system import handle_scatter_biome_vegetation
+        from .vegetation_system import scatter_biome_vegetation
         for biome_name in spec.biome_names:
             try:
-                veg_result = handle_scatter_biome_vegetation({
+                veg_result = scatter_biome_vegetation({
                     "terrain_name": name,
                     "biome_name": biome_name,
                     "min_distance": params.get("min_veg_distance", 4.0),

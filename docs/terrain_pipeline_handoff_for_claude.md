@@ -149,7 +149,6 @@ env_generate_terrain              env_paint_terrain
 env_carve_river                   env_generate_road
 env_create_water                  env_export_heightmap
 env_scatter_vegetation            env_scatter_props
-env_scatter_biome_vegetation  ← DELETE (cube handler)
 env_compute_road_network          env_generate_coastline
 env_generate_canyon               env_generate_waterfall
 env_generate_cliff_face           env_generate_swamp_terrain
@@ -221,18 +220,18 @@ Creates spline-following or fallback water mesh. Fallback path assumes centered 
 | System | File | What It Creates | Status |
 |--------|------|----------------|--------|
 | `handle_scatter_vegetation` | environment_scatter.py:1217 | Real meshes via VEGETATION_GENERATOR_MAP | GOOD — fix centered coords |
-| `handle_scatter_biome_vegetation` | vegetation_system.py:651 | ALWAYS cubes (line 765: `bmesh.ops.create_cube`) | BAD — delete |
+| `scatter_biome_vegetation` | vegetation_system.py:673 | Mesh-backed biome placements via `mesh_from_spec` | GOOD — keep as helper, not a command |
 
-**Resolution:** Delete `handle_scatter_biome_vegetation`. Migrate its only active caller (`handle_generate_multi_biome_world`) to use the good scatter path.
+**Resolution:** Keep `scatter_biome_vegetation` as the mesh-backed biome helper. Do not re-register the old cube command; migrate callers to the mesh-backed path.
 
 ### F. Multi-Biome Terrain Path (EASY TO FORGET)
 `blender_server.py → env_generate_multi_biome_world → environment.handle_generate_multi_biome_world`
 
 This is a SECOND full terrain generation orchestrator that:
-- Builds world spec with `_biome_grammar`
-- Calls `handle_generate_terrain`
-- Applies biome vertex colors/materials
-- Calls the **legacy cube vegetation handler**
+ - Builds world spec with `_biome_grammar`
+ - Calls `handle_generate_terrain`
+ - Applies biome vertex colors/materials
+ - Calls the mesh-backed biome vegetation helper
 
 **MUST be patched in the same branch as the vegetation cleanup**, or it silently breaks.
 
@@ -269,8 +268,8 @@ This is a THIRD terrain orchestration path that:
 - **Impact:** Cylinder roads appear even after mesh road system is fixed
 
 ### 2. Legacy cube vegetation handler
-- Registered as `env_scatter_biome_vegetation` in `__init__.py:1083`
-- Called by `handle_generate_multi_biome_world`
+- Legacy command removed from `__init__.py`
+- Current multi-biome path uses the mesh-backed vegetation helper
 - **Impact:** Cube vegetation appears from multi-biome path even after main scatter is fixed
 
 ### 3. Box/cube fallbacks hide failures
@@ -587,9 +586,9 @@ Tests:
 
 Changes:
 - Add 4 critical aliases to `VEGETATION_GENERATOR_MAP`: fern, moss, vine, dead_tree
-- Delete `handle_scatter_biome_vegetation()` from `vegetation_system.py` (keep pure logic at line 277)
-- Remove `env_scatter_biome_vegetation` registration from `__init__.py`
-- Patch `handle_generate_multi_biome_world()` to use `env_scatter_vegetation` instead of deleted handler
+- Keep the mesh-backed `scatter_biome_vegetation()` helper in `vegetation_system.py`
+- Keep the legacy cube vegetation command absent from `__init__.py`
+- Patch `handle_generate_multi_biome_world()` to use the mesh-backed biome helper and the good scatter path consistently
 
 Tests:
 - T6: Scatter on offset tile — vegetation at correct world positions
@@ -725,15 +724,15 @@ The real `opensimplex` library uses hash-based evaluation that does NOT repeat. 
 1. Builds world spec from `_biome_grammar.generate_world_map_spec()`
 2. Calls `handle_generate_terrain()` to create the mesh
 3. Applies Voronoi biome vertex colors and materials
-4. At **line 1321**, directly imports and calls `handle_scatter_biome_vegetation` (the cube handler)
+4. At **line 1321**, imports and calls `scatter_biome_vegetation` (the mesh-backed helper)
 
 ```python
 # environment.py:1321-1324
-from .vegetation_system import handle_scatter_biome_vegetation
-veg_result = handle_scatter_biome_vegetation({...})
+from .vegetation_system import scatter_biome_vegetation
+veg_result = scatter_biome_vegetation({...})
 ```
 
-This MUST be patched in Phase 6 when the cube handler is deleted. Replace with `handle_scatter_vegetation` from `environment_scatter.py`.
+This must remain aligned with the mesh-backed helper and the good scatter path. Do not reintroduce the removed cube handler.
 
 ### Gap 5: `safe_place_object` — Already World-Space Safe
 
