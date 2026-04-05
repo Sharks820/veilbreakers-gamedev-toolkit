@@ -37,10 +37,10 @@ Optional overrides:
 
 ## Tools
 
-- `review_diff(diff, context, instructions, model)`
-- `review_text(text, instructions, model)`
-- `review_consensus(diff, context, instructions, models, min_agreement, truth_path, save_dir)`
-- `review_history_summary(history_dir)`
+- `review_diff(diff, context, instructions, model, temperature, max_tokens)`
+- `review_text(text, instructions, model, temperature, max_tokens)`
+- `review_consensus(diff, context, instructions, models, min_agreement, truth_path, save_dir, temperature, max_tokens)`
+- `review_history_summary(history_dir, top_n)`
 
 ## How To Use It Well
 
