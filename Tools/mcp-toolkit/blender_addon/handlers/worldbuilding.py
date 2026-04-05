@@ -2656,33 +2656,6 @@ def _clear_material_slots(obj: Any, *, context: str) -> bool:
         return False
 
 
-def _create_curve_path(
-    name: str,
-    points: list[tuple[float, float, float]],
-    width: float,
-    parent: Any | None = None,
-) -> Any:
-    """Create a visible 3D road/path curve with beveled width."""
-    curve_data = bpy.data.curves.new(name, "CURVE")
-    curve_data.dimensions = "3D"
-    curve_data.fill_mode = "FULL"
-    curve_data.bevel_depth = max(0.03, width * 0.18)
-    curve_data.bevel_resolution = 2
-    curve_data.resolution_u = 12
-    curve_data.use_fill_caps = True
-
-    spline = curve_data.splines.new("POLY")
-    spline.points.add(max(0, len(points) - 1))
-    for i, pt in enumerate(points):
-        spline.points[i].co = (pt[0], pt[1], pt[2], 1.0)
-
-    curve_obj = bpy.data.objects.new(name, curve_data)
-    bpy.context.collection.objects.link(curve_obj)
-    if parent is not None:
-        curve_obj.parent = parent
-    return curve_obj
-
-
 def _materialize_road_path_meshes(
     base_name: str,
     road_label: str,
@@ -3563,16 +3536,6 @@ def _create_settlement_prop_cluster(
         return spawned
 
     return 0
-
-
-def _create_curve_from_points(
-    name: str,
-    points: list[tuple[float, float, float]],
-    width: float,
-    parent: Any,
-) -> Any:
-    """Create a visible path curve from point samples."""
-    return _create_curve_path(name, points, width=width, parent=parent)
 
 
 def _create_floor_plate(
@@ -5923,24 +5886,12 @@ def handle_generate_interior(params: dict) -> dict:
             )
             procedural_count += 1
         else:
-            # Fallback: cube for unmapped furniture types
-            item_bm = bmesh.new()
-            bmesh.ops.create_cube(item_bm, size=1.0)
-            for v in item_bm.verts:
-                v.co.x *= sx
-                v.co.y *= sy
-                v.co.z *= sz
-                v.co.z += sz / 2
-            item_mesh = bpy.data.meshes.new(item_name)
-            item_bm.to_mesh(item_mesh)
-            item_bm.free()
-            item_obj = bpy.data.objects.new(item_name, item_mesh)
-            item_obj.location = tuple(item["position"])
-            item_obj.rotation_euler = (0, 0, item["rotation"])
-            item_obj.parent = room_empty
-            bpy.context.collection.objects.link(item_obj)
-            # Wire procedural material for fallback cubes (MAT-01)
-            _assign_procedural_material(item_obj, "rough_timber")
+            logger.warning(
+                "No procedural furniture mesh for %s in room %s; skipping unmapped item",
+                item["type"],
+                room_type,
+            )
+            continue
 
         if not isinstance(item_obj, dict):
             item_obj["vb_room_type"] = room_type
@@ -5970,24 +5921,12 @@ def handle_generate_interior(params: dict) -> dict:
                 parent=room_empty,
             )
         else:
-            # Small cube fallback for unmapped clutter types
-            c_bm = bmesh.new()
-            bmesh.ops.create_cube(c_bm, size=1.0)
-            for v in c_bm.verts:
-                v.co.x *= csx
-                v.co.y *= csy
-                v.co.z *= csz
-                v.co.z += csz / 2
-            c_mesh = bpy.data.meshes.new(c_name)
-            c_bm.to_mesh(c_mesh)
-            c_bm.free()
-            c_obj = bpy.data.objects.new(c_name, c_mesh)
-            c_obj.location = tuple(c_item["position"])
-            c_obj.rotation_euler = (0, 0, c_item["rotation"])
-            c_obj.parent = room_empty
-            bpy.context.collection.objects.link(c_obj)
-            # Wire procedural material for fallback cubes (MAT-01)
-            _assign_procedural_material(c_obj, "rough_timber")
+            logger.warning(
+                "No procedural clutter mesh for %s in room %s; skipping unmapped item",
+                c_type,
+                room_type,
+            )
+            continue
 
         if not isinstance(c_obj, dict):
             c_obj["vb_room_type"] = room_type
