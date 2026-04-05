@@ -1466,8 +1466,9 @@ def _create_prop_template(
     """Create a template mesh for a prop type.
 
     Uses procedural mesh generators from PROP_GENERATOR_MAP when
-    available. Falls back to a scaled cube with a warning for unmapped
-    types so that scatter never silently produces featureless geometry.
+    available. Missing mappings are treated as a hard error so prop
+    wiring gaps are visible instead of being hidden by placeholder
+    geometry.
     """
     gen_entry = PROP_GENERATOR_MAP.get(prop_type)
     if gen_entry is not None:
@@ -1488,21 +1489,10 @@ def _create_prop_template(
         _assign_scatter_material(obj, prop_type)
         return obj
 
-    # Fallback: cube with warning for unmapped prop types
-    print(f"WARNING: No procedural generator for prop type '{prop_type}', "
-          f"using fallback cube. Add an entry to PROP_GENERATOR_MAP.")
-    mesh = bpy.data.meshes.new(f"_template_{prop_type}")
-    bm_fallback = bmesh.new()
-    bmesh.ops.create_cube(bm_fallback, size=0.5)
-    bm_fallback.to_mesh(mesh)
-    bm_fallback.free()
-
-    obj = bpy.data.objects.new(f"_template_{prop_type}", mesh)
-    collection.objects.link(obj)
-
-    _assign_scatter_material(obj, prop_type)
-
-    return obj
+    raise ValueError(
+        f"No procedural generator for prop type '{prop_type}'. "
+        "Add an entry to PROP_GENERATOR_MAP instead of falling back to a cube."
+    )
 
 
 def handle_scatter_props(params: dict) -> dict:
