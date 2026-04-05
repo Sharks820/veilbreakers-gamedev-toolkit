@@ -8,6 +8,7 @@ import pytest
 
 from veilbreakers_mcp.shared.unity_templates.scene_templates import (
     generate_terrain_setup_script,
+    generate_tiled_terrain_setup_script,
     generate_object_scatter_script,
     generate_lighting_setup_script,
     generate_navmesh_bake_script,
@@ -82,6 +83,50 @@ class TestGenerateTerrainSetupScript:
     def test_default_resolution(self):
         result = generate_terrain_setup_script("Assets/Terrain/heightmap.raw")
         assert "513" in result
+
+
+class TestGenerateTiledTerrainSetupScript:
+    """Tests for generate_tiled_terrain_setup_script()."""
+
+    def test_rejects_empty_tiles(self):
+        with pytest.raises(ValueError, match="tiles"):
+            generate_tiled_terrain_setup_script([])
+
+    def test_contains_tiled_menu_item(self):
+        result = generate_tiled_terrain_setup_script(
+            [{"heightmap_path": "Assets/Terrain/tile_0.raw", "grid_x": 0, "grid_y": 0}]
+        )
+        assert "Setup Tiled Terrain" in result
+        assert "VeilBreakers_TiledTerrainSetup" in result
+
+    def test_contains_tile_heightmap_paths(self):
+        result = generate_tiled_terrain_setup_script(
+            [
+                {"heightmap_path": "Assets/Terrain/tile_0.raw", "name": "Tile_0", "grid_x": 0, "grid_y": 0},
+                {"heightmap_path": "Assets/Terrain/tile_1.raw", "name": "Tile_1", "grid_x": 1, "grid_y": 0},
+            ]
+        )
+        assert "tile_0.raw" in result
+        assert "tile_1.raw" in result
+        assert "Tile_0" in result
+        assert "Tile_1" in result
+        assert "SetNeighbors" in result
+
+    def test_contains_tiled_parent_and_positions(self):
+        result = generate_tiled_terrain_setup_script(
+            [
+                {
+                    "heightmap_path": "Assets/Terrain/tile_0.raw",
+                    "grid_x": 0,
+                    "grid_y": 0,
+                    "position": [128.0, 0.0, 256.0],
+                }
+            ],
+            parent_name="VB_TerrainRoot",
+        )
+        assert "VB_TerrainRoot" in result
+        assert "128.0f" in result or "128f" in result
+        assert "256.0f" in result or "256f" in result
 
 
 # ---------------------------------------------------------------------------
