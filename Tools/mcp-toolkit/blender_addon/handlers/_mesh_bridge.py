@@ -292,6 +292,9 @@ VEGETATION_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any
     "pine_tree": (_lsystem_tree_generator, {"tree_type": "pine", "iterations": 4, "leaf_type": "needle", "canopy_style": "veil_healthy"}),
     "bush": (generate_shrub_mesh, {}),
     "shrub": (generate_shrub_mesh, {}),
+    "fern": (generate_shrub_mesh, {}),
+    "moss": (generate_grass_clump_mesh, {}),
+    "vine": (generate_root_mesh, {}),
     "grass": (generate_grass_clump_mesh, {}),
     "weed": (generate_grass_clump_mesh, {"blade_count": 9, "height": 0.5, "spread": 0.16, "width": 0.035}),
     "flower": (generate_mushroom_mesh, {"size": 0.28, "cap_style": "cluster"}),
@@ -301,6 +304,17 @@ VEGETATION_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any
     "mushroom": (generate_mushroom_mesh, {}),
     "mushroom_cluster": (generate_mushroom_mesh, {"cap_style": "cluster", "size": 0.34}),
     "root": (generate_root_mesh, {}),
+    "gravestone": (generate_gravestone_mesh, {}),
+    "crystal": (generate_corruption_crystal_mesh, {}),
+    "ember_plant": (generate_shrub_mesh, {}),
+    "frost_lichen": (generate_grass_clump_mesh, {}),
+    "tumbleweed": (generate_shrub_mesh, {}),
+    "dead_brush": (generate_shrub_mesh, {}),
+    "coastal_scrub": (generate_shrub_mesh, {}),
+    "sea_grass": (generate_grass_clump_mesh, {}),
+    "bioluminescent": (generate_mushroom_mesh, {}),
+    "surface_root": (generate_root_mesh, {}),
+    "mangrove_root": (generate_root_mesh, {}),
 }
 
 # ---------------------------------------------------------------------------

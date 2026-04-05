@@ -5,8 +5,8 @@ disk placement with slope/height filtering, wind vertex color computation for
 Unity shader integration, and seasonal material variants.
 
 All compute_* functions are pure-logic (no bpy/bmesh) for testability.
-The handle_scatter_biome_vegetation handler wires everything together with
-Blender scene creation.
+The biome vegetation materializer wires pure placement logic into Blender
+scene creation for world-generation callers.
 
 Biomes:
   - thornwood_forest: Mixed healthy-to-blighted forest edge progression
@@ -645,11 +645,35 @@ def get_seasonal_variant(
 
 
 # ---------------------------------------------------------------------------
-# Handler: scatter_biome_vegetation
+# Biome vegetation materializer
 # ---------------------------------------------------------------------------
 
-def handle_scatter_biome_vegetation(params: dict) -> dict:
-    """Scatter per-biome vegetation on terrain using quality placement.
+def _create_biome_vegetation_template(
+    vegetation_type: str,
+    collection: Any,
+) -> Any:
+    """Create a reusable mesh template for a biome vegetation type."""
+    from ._mesh_bridge import mesh_from_spec, resolve_generator
+
+    gen_entry = resolve_generator("vegetation", vegetation_type)
+    if gen_entry is None:
+        gen_entry = resolve_generator("prop", vegetation_type)
+    if gen_entry is None:
+        raise ValueError(f"No mesh generator found for vegetation type '{vegetation_type}'")
+
+    gen_func, gen_kwargs = gen_entry
+    spec = gen_func(**gen_kwargs)
+    return mesh_from_spec(
+        spec,
+        name=f"_template_{vegetation_type}",
+        collection=collection,
+    )
+
+
+def scatter_biome_vegetation(
+    params: dict,
+) -> dict:
+    """Materialize per-biome vegetation on terrain using quality placement.
 
     Combines biome vegetation sets with Poisson disk sampling, slope/height
     filtering, and optional wind vertex color baking.
@@ -674,12 +698,12 @@ def handle_scatter_biome_vegetation(params: dict) -> dict:
 
     Returns dict with: name, instance_count, vegetation_types, biome, season.
     """
-    # Import bpy only inside handler (not at module level for testability)
+    # Import bpy only inside materializer (not at module level for testability)
     try:
         import bpy
         import bmesh
     except ImportError as exc:
-        raise RuntimeError("handle_scatter_biome_vegetation requires Blender") from exc
+        raise RuntimeError("scatter_biome_vegetation requires Blender") from exc
 
     terrain_name = params.get("terrain_name")
     if not terrain_name:
@@ -753,21 +777,29 @@ def handle_scatter_biome_vegetation(params: dict) -> dict:
     scatter_coll = bpy.data.collections.new(scatter_coll_name)
     bpy.context.scene.collection.children.link(scatter_coll)
 
+    template_coll = bpy.data.collections.new(f"{scatter_coll_name}_templates")
+    bpy.context.scene.collection.children.link(template_coll)
+    templates: dict[str, Any] = {}
+
     veg_counts: dict[str, int] = {}
+
+    veg_types_needed = set(p["type"] for p in placements)
+    for veg_type in veg_types_needed:
+        templates[veg_type] = _create_biome_vegetation_template(veg_type, template_coll)
+        if veg_type == "tree":
+            _setup_billboard_lod(templates[veg_type], veg_spec=None, veg_type=veg_type)
 
     for p in placements:
         veg_key = f"{p['type']}_{p['style']}"
         veg_counts[veg_key] = veg_counts.get(veg_key, 0) + 1
 
-        # Create simple placeholder mesh (real meshes come from procedural generators)
-        placeholder_mesh = bpy.data.meshes.new(f"_veg_{veg_key}_{veg_counts[veg_key]:04d}")
-        instance_bm = bmesh.new()
-        bmesh.ops.create_cube(instance_bm, size=0.5)
-        instance_bm.to_mesh(placeholder_mesh)
-        instance_bm.free()
+        template = templates.get(p["type"])
+        if template is None:
+            continue
 
         instance = bpy.data.objects.new(
-            f"{veg_key}_{veg_counts[veg_key]:04d}", placeholder_mesh,
+            f"{veg_key}_{veg_counts[veg_key]:04d}",
+            template.data,
         )
         instance.location = p["position"]
         s = p["scale"]

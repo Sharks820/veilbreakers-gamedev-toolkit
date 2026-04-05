@@ -236,9 +236,6 @@ from .terrain_materials import (
     handle_setup_terrain_biome,
     handle_create_biome_terrain,
 )
-from .vegetation_system import (
-    handle_scatter_biome_vegetation,
-)
 from .addon_toolchain import (
     handle_inspect_external_toolchain,
     handle_configure_external_toolchain,
@@ -1084,7 +1081,6 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "terrain_setup_biome": handle_setup_terrain_biome,
     "terrain_create_biome_material": handle_create_biome_terrain,
     # Per-biome vegetation quality system
-    "env_scatter_biome_vegetation": handle_scatter_biome_vegetation,
     # External addon/toolchain inspection
     "toolchain_inspect_external": handle_inspect_external_toolchain,
     "toolchain_configure_external": handle_configure_external_toolchain,
