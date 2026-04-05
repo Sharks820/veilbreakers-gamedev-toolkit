@@ -1,0 +1,174 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "fb487370a5ef6970e3da198d4dbac54eefec86a7eb03efedded47ddc619879cd",
+  "generated_at": "2026-04-05T06:47:30.981281+00:00",
+  "min_agreement": 2,
+  "model_specific_findings": [
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "assert 0.0 <= p[\"position\"][0] <= terrain_width and assert 0.0 <= p[\"position\"][1] <= terrain_depth",
+      "file": "Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "assert 0.0 <= p[\"position\"][0] <= terrain_width and assert 0.0 <= p[\"position\"][1] <= terrain_depth",
+          "file": "Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py",
+          "function": "test_full_vegetation_pipeline",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Given the feature/terrain-world-foundation branch, the scatter engine likely now returns world-space coordinates. Update assertions to account for terrain origin offsets (e.g., terrain_origin_x, terrain_origin_y) or verify if local-space is still intended for this pipeline.",
+          "severity": "High",
+          "title": "Stale position bounds assertion assumes local-space coordinates"
+        }
+      ],
+      "function": "test_full_vegetation_pipeline",
+      "key": "tools mcp toolkit tests test environment scatter handlers py test full vegetation pipeline stale position bounds",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Given the feature/terrain-world-foundation branch, the scatter engine likely now returns world-space coordinates. Update assertions to account for terrain origin offsets (e.g., terrain_origin_x, terrain_origin_y) or verify if local-space is still intended for this pipeline.",
+      "severity": "High",
+      "title": "Stale position bounds assertion assumes local-space coordinates"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.5,
+      "evidence": "radius = placements[0][\"radius\"] assumes the planner returns a radius key in the placement dict.",
+      "file": "Tools/mcp-toolkit/tests/test_compose_planners.py",
+      "findings": [
+        {
+          "confidence": 0.5,
+          "evidence": "radius = placements[0][\"radius\"] assumes the planner returns a radius key in the placement dict.",
+          "file": "Tools/mcp-toolkit/tests/test_compose_planners.py",
+          "function": "test_anchor_planner_clamps_explicit_world_positions_to_centered_bounds",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Verify that _plan_map_location_anchors actually includes radius in its return payload. If not, compute expected radius from terrain size or adjust the test to match the actual return schema.",
+          "severity": "Medium",
+          "title": "Unverified dictionary key access in anchor planner test"
+        }
+      ],
+      "function": "test_anchor_planner_clamps_explicit_world_positions_to_centered_bounds",
+      "key": "tools mcp toolkit tests test compose planners py test anchor planner clamps explicit world positions to",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Verify that _plan_map_location_anchors actually includes radius in its return payload. If not, compute expected radius from terrain size or adjust the test to match the actual return schema.",
+      "severity": "Medium",
+      "title": "Unverified dictionary key access in anchor planner test"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.5,
+      "evidence": "The test patches internal helpers but does not mock bpy.context, bpy.ops, or other runtime Blender dependencies that handle_generate_multi_biome_world likely invokes.",
+      "file": "Tools/mcp-toolkit/tests/test_environment_handlers.py",
+      "findings": [
+        {
+          "confidence": 0.5,
+          "evidence": "The test patches internal helpers but does not mock bpy.context, bpy.ops, or other runtime Blender dependencies that handle_generate_multi_biome_world likely invokes.",
+          "file": "Tools/mcp-toolkit/tests/test_environment_handlers.py",
+          "function": "test_multi_biome_world_uses_mesh_backed_scatter_helper",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Add patch(\"bpy.context\") or mock the specific Blender API calls used by the handler to prevent AttributeError or RuntimeError in headless CI environments.",
+          "severity": "Medium",
+          "title": "Missing Blender context/API mocks in multi-biome world test"
+        }
+      ],
+      "function": "test_multi_biome_world_uses_mesh_backed_scatter_helper",
+      "key": "tools mcp toolkit tests test environment handlers py test multi biome world uses mesh backed scatter",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Add patch(\"bpy.context\") or mock the specific Blender API calls used by the handler to prevent AttributeError or RuntimeError in headless CI environments.",
+      "severity": "Medium",
+      "title": "Missing Blender context/API mocks in multi-biome world test"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.5,
+      "evidence": "assert coarse[2, 2][0] > fine[2, 2][0] and assert coarse[2, 2][1] < fine[2, 2][1] assumes the biome weight array has at least 2 channels.",
+      "file": "Tools/mcp-toolkit/tests/test_environment_handlers.py",
+      "findings": [
+        {
+          "confidence": 0.5,
+          "evidence": "assert coarse[2, 2][0] > fine[2, 2][0] and assert coarse[2, 2][1] < fine[2, 2][1] assumes the biome weight array has at least 2 channels.",
+          "file": "Tools/mcp-toolkit/tests/test_environment_handlers.py",
+          "function": "test_larger_cell_size_keeps_same_height_delta_less_cliff_like",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Add a guard or assertion for coarse.shape[-1] >= 2 before indexing, or use named channel indices/constants to prevent IndexError if biome configuration changes.",
+          "severity": "Low",
+          "title": "Hardcoded channel index assumption in splatmap weight test"
+        }
+      ],
+      "function": "test_larger_cell_size_keeps_same_height_delta_less_cliff_like",
+      "key": "tools mcp toolkit tests test environment handlers py test larger cell size keeps same height delta",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Add a guard or assertion for coarse.shape[-1] >= 2 before indexing, or use named channel indices/constants to prevent IndexError if biome configuration changes.",
+      "severity": "Low",
+      "title": "Hardcoded channel index assumption in splatmap weight test"
+    }
+  ],
+  "models": [
+    {
+      "finding_count": 4,
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "assert 0.0 <= p[\"position\"][0] <= terrain_width and assert 0.0 <= p[\"position\"][1] <= terrain_depth",
+          "file": "Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py",
+          "function": "test_full_vegetation_pipeline",
+          "recommendation": "Given the feature/terrain-world-foundation branch, the scatter engine likely now returns world-space coordinates. Update assertions to account for terrain origin offsets (e.g., terrain_origin_x, terrain_origin_y) or verify if local-space is still intended for this pipeline.",
+          "severity": "High",
+          "title": "Stale position bounds assertion assumes local-space coordinates"
+        },
+        {
+          "confidence": 0.5,
+          "evidence": "The test patches internal helpers but does not mock bpy.context, bpy.ops, or other runtime Blender dependencies that handle_generate_multi_biome_world likely invokes.",
+          "file": "Tools/mcp-toolkit/tests/test_environment_handlers.py",
+          "function": "test_multi_biome_world_uses_mesh_backed_scatter_helper",
+          "recommendation": "Add patch(\"bpy.context\") or mock the specific Blender API calls used by the handler to prevent AttributeError or RuntimeError in headless CI environments.",
+          "severity": "Medium",
+          "title": "Missing Blender context/API mocks in multi-biome world test"
+        },
+        {
+          "confidence": 0.5,
+          "evidence": "radius = placements[0][\"radius\"] assumes the planner returns a radius key in the placement dict.",
+          "file": "Tools/mcp-toolkit/tests/test_compose_planners.py",
+          "function": "test_anchor_planner_clamps_explicit_world_positions_to_centered_bounds",
+          "recommendation": "Verify that _plan_map_location_anchors actually includes radius in its return payload. If not, compute expected radius from terrain size or adjust the test to match the actual return schema.",
+          "severity": "Medium",
+          "title": "Unverified dictionary key access in anchor planner test"
+        },
+        {
+          "confidence": 0.5,
+          "evidence": "assert coarse[2, 2][0] > fine[2, 2][0] and assert coarse[2, 2][1] < fine[2, 2][1] assumes the biome weight array has at least 2 channels.",
+          "file": "Tools/mcp-toolkit/tests/test_environment_handlers.py",
+          "function": "test_larger_cell_size_keeps_same_height_delta_less_cliff_like",
+          "recommendation": "Add a guard or assertion for coarse.shape[-1] >= 2 before indexing, or use named channel indices/constants to prevent IndexError if biome configuration changes.",
+          "severity": "Low",
+          "title": "Hardcoded channel index assumption in splatmap weight test"
+        }
+      ],
+      "model": "qwen/qwen3.6-plus:free",
+      "provider": "openrouter",
+      "status": "ok"
+    },
+    {
+      "error": "The read operation timed out",
+      "finding_count": 0,
+      "findings": [],
+      "model": "glm-5.0-turbo",
+      "provider": "glm",
+      "status": "error"
+    },
+    {
+      "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 30.0 seconds",
+      "finding_count": 0,
+      "findings": [],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "error"
+    }
+  ]
+}

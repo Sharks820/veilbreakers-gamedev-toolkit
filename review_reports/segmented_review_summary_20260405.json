@@ -1,0 +1,82 @@
+{
+  "segments": [
+    {
+      "name": "terrain_core",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_core_review.json",
+      "consensus_count": 0,
+      "model_specific_count": 5,
+      "models": [
+        {
+          "model": "qwen/qwen3.6-plus:free",
+          "status": "ok",
+          "finding_count": 5,
+          "error": null
+        },
+        {
+          "model": "glm-5.0-turbo",
+          "status": "ok",
+          "finding_count": 0,
+          "error": null
+        },
+        {
+          "model": "gemini-3.1-flash-lite-preview",
+          "status": "error",
+          "finding_count": 0,
+          "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 30.0 seconds"
+        }
+      ]
+    },
+    {
+      "name": "terrain_orchestration",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_orchestration_review.json",
+      "consensus_count": 0,
+      "model_specific_count": 4,
+      "models": [
+        {
+          "model": "qwen/qwen3.6-plus:free",
+          "status": "error",
+          "finding_count": 0,
+          "error": "The read operation timed out"
+        },
+        {
+          "model": "glm-5.0-turbo",
+          "status": "ok",
+          "finding_count": 4,
+          "error": null
+        },
+        {
+          "model": "gemini-3.1-flash-lite-preview",
+          "status": "error",
+          "finding_count": 0,
+          "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 30.0 seconds"
+        }
+      ]
+    },
+    {
+      "name": "terrain_tests",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_tests_review.json",
+      "consensus_count": 0,
+      "model_specific_count": 4,
+      "models": [
+        {
+          "model": "qwen/qwen3.6-plus:free",
+          "status": "ok",
+          "finding_count": 4,
+          "error": null
+        },
+        {
+          "model": "glm-5.0-turbo",
+          "status": "error",
+          "finding_count": 0,
+          "error": "The read operation timed out"
+        },
+        {
+          "model": "gemini-3.1-flash-lite-preview",
+          "status": "error",
+          "finding_count": 0,
+          "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 30.0 seconds"
+        }
+      ]
+    }
+  ]
+}

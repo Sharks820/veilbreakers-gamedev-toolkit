@@ -1,0 +1,23 @@
+diff --git a/Tools/mcp-toolkit/tests/test_terrain_noise.py b/Tools/mcp-toolkit/tests/test_terrain_noise.py
+index be7af82..da2ae72 100644
+--- a/Tools/mcp-toolkit/tests/test_terrain_noise.py
++++ b/Tools/mcp-toolkit/tests/test_terrain_noise.py
+@@ -343,0 +344,18 @@ class TestComputeSlopeMap:
++    def test_larger_cell_size_reduces_world_space_slope(self):
++        """The same height delta over larger cells should read as a gentler slope."""
++        from blender_addon.handlers._terrain_noise import compute_slope_map
++
++        hmap = np.tile(np.linspace(0, 1, 9), (9, 1))
++        fine = compute_slope_map(hmap, cell_size=1.0)
++        coarse = compute_slope_map(hmap, cell_size=4.0)
++        assert coarse[4, 4] < fine[4, 4]
++
++    def test_axis_specific_cell_spacing_reduces_slope_on_that_axis(self):
++        """Tuple spacing should let rectangular terrain use different row/col spacing."""
++        from blender_addon.handlers._terrain_noise import compute_slope_map
++
++        hmap = np.tile(np.linspace(0, 1, 9)[:, None], (1, 9))
++        fine = compute_slope_map(hmap, cell_size=(1.0, 1.0))
++        stretched_rows = compute_slope_map(hmap, cell_size=(4.0, 1.0))
++        assert stretched_rows[4, 4] < fine[4, 4]
++

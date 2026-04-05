@@ -1,0 +1,158 @@
+{
+  "consensus_findings": [
+    {
+      "agreement": 1,
+      "confidence": 1.0,
+      "evidence": "The function falls back to `_resolve_height_range` when `tiled_world` is set, which in turn falls back to the local heightmap's min/max. This causes each tile to be normalized to its own local range [0, 1], creating height steps/seams at tile borders in Unity.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 1.0,
+          "evidence": "The function falls back to `_resolve_height_range` when `tiled_world` is set, which in turn falls back to the local heightmap's min/max. This causes each tile to be normalized to its own local range [0, 1], creating height steps/seams at tile borders in Unity.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "model": "gemini-3.1-flash-lite-preview",
+          "recommendation": "Enforce a requirement for a global `height_range` when `tiled_world` is active, or ensure the range is persisted/shared across tile export operations to maintain vertical alignment.",
+          "severity": "High",
+          "title": "Tiled Terrain Height Normalization Seam Risk"
+        }
+      ],
+      "function": "_resolve_export_height_range",
+      "key": "tools mcp toolkit blender addon handlers environment py resolve export height range tiled terrain height normalization",
+      "models": [
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "recommendation": "Enforce a requirement for a global `height_range` when `tiled_world` is active, or ensure the range is persisted/shared across tile export operations to maintain vertical alignment.",
+      "severity": "High",
+      "title": "Tiled Terrain Height Normalization Seam Risk"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.9,
+      "evidence": "Explicit `path_points_raw` are converted to tuples without verifying they contain the expected 3 components (X, Y, Z). Downstream mesh generation expecting 3D coordinates will fail if 2D points are provided.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.9,
+          "evidence": "Explicit `path_points_raw` are converted to tuples without verifying they contain the expected 3 components (X, Y, Z). Downstream mesh generation expecting 3D coordinates will fail if 2D points are provided.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_water_path_points",
+          "model": "gemini-3.1-flash-lite-preview",
+          "recommendation": "Validate that each input point has 3 components, or automatically pad 2D points with the `water_level` parameter to ensure 3D spline consistency.",
+          "severity": "Medium",
+          "title": "Missing Dimensionality Validation in Water Spline Path"
+        }
+      ],
+      "function": "_resolve_water_path_points",
+      "key": "tools mcp toolkit blender addon handlers environment py resolve water path points missing dimensionality validation in",
+      "models": [
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "recommendation": "Validate that each input point has 3 components, or automatically pad 2D points with the `water_level` parameter to ensure 3D spline consistency.",
+      "severity": "Medium",
+      "title": "Missing Dimensionality Validation in Water Spline Path"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.8,
+      "evidence": "The transition from `terrain_origin_x + radius` to `terrain_origin_x - half + radius` correctly handles centered origins but will shift anchor positions for any existing map specs that were tuned against the previous corner-based assumptions.",
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+      "findings": [
+        {
+          "confidence": 0.8,
+          "evidence": "The transition from `terrain_origin_x + radius` to `terrain_origin_x - half + radius` correctly handles centered origins but will shift anchor positions for any existing map specs that were tuned against the previous corner-based assumptions.",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "model": "gemini-3.1-flash-lite-preview",
+          "recommendation": "Audit existing world map specifications to ensure their 'location' and 'radius' parameters align with the new centered-origin coordinate math.",
+          "severity": "Medium",
+          "title": "Shifted Anchor Logic in World Planner"
+        }
+      ],
+      "function": "_plan_map_location_anchors",
+      "key": "tools mcp toolkit src veilbreakers mcp blender server py plan map location anchors shifted anchor logic",
+      "models": [
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "recommendation": "Audit existing world map specifications to ensure their 'location' and 'radius' parameters align with the new centered-origin coordinate math.",
+      "severity": "Medium",
+      "title": "Shifted Anchor Logic in World Planner"
+    },
+    {
+      "agreement": 1,
+      "confidence": 1.0,
+      "evidence": "The function manually checks for 'height_range' and 'height_range_min/max' keys before calling `_resolve_height_range`, which repeats the exact same key checks internally.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 1.0,
+          "evidence": "The function manually checks for 'height_range' and 'height_range_min/max' keys before calling `_resolve_height_range`, which repeats the exact same key checks internally.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "model": "gemini-3.1-flash-lite-preview",
+          "recommendation": "Simplify the logic to call `_resolve_height_range` directly or rely on a single unified resolution path to reduce code duplication.",
+          "severity": "Low",
+          "title": "Redundant Parameter Checks in Height Range Resolution"
+        }
+      ],
+      "function": "_resolve_export_height_range",
+      "key": "tools mcp toolkit blender addon handlers environment py resolve export height range redundant parameter checks in",
+      "models": [
+        "gemini-3.1-flash-lite-preview"
+      ],
+      "recommendation": "Simplify the logic to call `_resolve_height_range` directly or rely on a single unified resolution path to reduce code duplication.",
+      "severity": "Low",
+      "title": "Redundant Parameter Checks in Height Range Resolution"
+    }
+  ],
+  "diff_sha256": "153fd25e8e0851325e21ce38611cdd70ff519cab2f28c94dd43e526f31a43705",
+  "generated_at": "2026-04-05T06:59:31.708174+00:00",
+  "min_agreement": 1,
+  "model_specific_findings": [],
+  "models": [
+    {
+      "finding_count": 4,
+      "findings": [
+        {
+          "confidence": 1.0,
+          "evidence": "The function falls back to `_resolve_height_range` when `tiled_world` is set, which in turn falls back to the local heightmap's min/max. This causes each tile to be normalized to its own local range [0, 1], creating height steps/seams at tile borders in Unity.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "recommendation": "Enforce a requirement for a global `height_range` when `tiled_world` is active, or ensure the range is persisted/shared across tile export operations to maintain vertical alignment.",
+          "severity": "High",
+          "title": "Tiled Terrain Height Normalization Seam Risk"
+        },
+        {
+          "confidence": 0.9,
+          "evidence": "Explicit `path_points_raw` are converted to tuples without verifying they contain the expected 3 components (X, Y, Z). Downstream mesh generation expecting 3D coordinates will fail if 2D points are provided.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_water_path_points",
+          "recommendation": "Validate that each input point has 3 components, or automatically pad 2D points with the `water_level` parameter to ensure 3D spline consistency.",
+          "severity": "Medium",
+          "title": "Missing Dimensionality Validation in Water Spline Path"
+        },
+        {
+          "confidence": 0.8,
+          "evidence": "The transition from `terrain_origin_x + radius` to `terrain_origin_x - half + radius` correctly handles centered origins but will shift anchor positions for any existing map specs that were tuned against the previous corner-based assumptions.",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "recommendation": "Audit existing world map specifications to ensure their 'location' and 'radius' parameters align with the new centered-origin coordinate math.",
+          "severity": "Medium",
+          "title": "Shifted Anchor Logic in World Planner"
+        },
+        {
+          "confidence": 1.0,
+          "evidence": "The function manually checks for 'height_range' and 'height_range_min/max' keys before calling `_resolve_height_range`, which repeats the exact same key checks internally.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "recommendation": "Simplify the logic to call `_resolve_height_range` directly or rely on a single unified resolution path to reduce code duplication.",
+          "severity": "Low",
+          "title": "Redundant Parameter Checks in Height Range Resolution"
+        }
+      ],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "ok"
+    }
+  ]
+}

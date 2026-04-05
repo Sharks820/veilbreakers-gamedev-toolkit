@@ -1,0 +1,174 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "7118625dc058065edfefb7cb43867cd9bafeba098118b3437c008c92a9e677cf",
+  "generated_at": "2026-04-05T06:44:36.646503+00:00",
+  "min_agreement": 2,
+  "model_specific_findings": [
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "export_height_range = _resolve_export_height_range(params, heightmap) is called on line ~1919, before the Unity-compat resize block on lines ~1922-1929 that reassigns heightmap. The resize changes the actual pixel values (via indexing), but export_height_range still reflects the pre-resize array's min/max.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "export_height_range = _resolve_export_height_range(params, heightmap) is called on line ~1919, before the Unity-compat resize block on lines ~1922-1929 that reassigns heightmap. The resize changes the actual pixel values (via indexing), but export_height_range still reflects the pre-resize array's min/max.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_export_heightmap",
+          "model": "glm-5.0-turbo",
+          "recommendation": "Move the _resolve_export_height_range call (and the raw_bytes export) after the Unity-compat resize block so the range matches the actual data being serialized.",
+          "severity": "Critical",
+          "title": "Height range resolved before Unity resize, causing mismatch with exported RAW"
+        }
+      ],
+      "function": "handle_export_heightmap",
+      "key": "tools mcp toolkit blender addon handlers environment py handle export heightmap height range resolved before unity",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "Move the _resolve_export_height_range call (and the raw_bytes export) after the Unity-compat resize block so the range matches the actual data being serialized.",
+      "severity": "Critical",
+      "title": "Height range resolved before Unity resize, causing mismatch with exported RAW"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "When height_range_min/height_range_max are present, the function calls _resolve_height_range(params, heightmap) which computes range from the array, not from the provided explicit values. This makes the explicit parameters dead code and causes unexpected normalization when a user specifies an exact range.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "When height_range_min/height_range_max are present, the function calls _resolve_height_range(params, heightmap) which computes range from the array, not from the provided explicit values. This makes the explicit parameters dead code and causes unexpected normalization when a user specifies an exact range.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "model": "glm-5.0-turbo",
+          "recommendation": "When height_range_min and height_range_max are provided, return them directly (with float conversion) instead of delegating to _resolve_height_range which recomputes from the array.",
+          "severity": "High",
+          "title": "_resolve_export_height_range ignores explicit min/max values and always recomputes from heightmap"
+        }
+      ],
+      "function": "_resolve_export_height_range",
+      "key": "tools mcp toolkit blender addon handlers environment py resolve export height range resolve export height range",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "When height_range_min and height_range_max are provided, return them directly (with float conversion) instead of delegating to _resolve_height_range which recomputes from the array.",
+      "severity": "High",
+      "title": "_resolve_export_height_range ignores explicit min/max values and always recomputes from heightmap"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.5,
+      "evidence": "The old code explicitly normalized heights to [0,1] before export. The new code passes raw heights directly to _export_heightmap_raw, relying on value_range being non-None for normalization. If _resolve_export_height_range returns None (no tiled_world, no use_global_height_range, no height_range params), the function _export_heightmap_raw uses local min/max but the data was never pre-normalized\u2014this works but changes the contract: the old path always produced [0,1] data, now it depends on params.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.5,
+          "evidence": "The old code explicitly normalized heights to [0,1] before export. The new code passes raw heights directly to _export_heightmap_raw, relying on value_range being non-None for normalization. If _resolve_export_height_range returns None (no tiled_world, no use_global_height_range, no height_range params), the function _export_heightmap_raw uses local min/max but the data was never pre-normalized\u2014this works but changes the contract: the old path always produced [0,1] data, now it depends on params.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_export_heightmap",
+          "model": "glm-5.0-turbo",
+          "recommendation": "Verify that all callers of handle_export_heightmap provide appropriate range params, or add a default normalization pass when export_height_range is None to preserve backward compatibility.",
+          "severity": "Medium",
+          "title": "handle_export_heightmap no longer normalizes heights, breaking non-range callers"
+        }
+      ],
+      "function": "handle_export_heightmap",
+      "key": "tools mcp toolkit blender addon handlers environment py handle export heightmap handle export heightmap no longer",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "Verify that all callers of handle_export_heightmap provide appropriate range params, or add a default normalization pass when export_height_range is None to preserve backward compatibility.",
+      "severity": "Medium",
+      "title": "handle_export_heightmap no longer normalizes heights, breaking non-range callers"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.5,
+      "evidence": "if rows < 2 or cols < 2: return terrain_origin_x, terrain_origin_y silently collapses all grid coordinates to a single point for degenerate grids. If a caller passes a 1xN or Nx1 grid, every vertex maps to the origin with no error or warning.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.5,
+          "evidence": "if rows < 2 or cols < 2: return terrain_origin_x, terrain_origin_y silently collapses all grid coordinates to a single point for degenerate grids. If a caller passes a 1xN or Nx1 grid, every vertex maps to the origin with no error or warning.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_terrain_grid_to_world_xy",
+          "model": "glm-5.0-turbo",
+          "recommendation": "Raise a ValueError for degenerate grids rather than silently returning a single point, or at minimum log a warning so callers can detect the condition.",
+          "severity": "Medium",
+          "title": "_terrain_grid_to_world_xy returns origin for degenerate grids, masking upstream bugs"
+        }
+      ],
+      "function": "_terrain_grid_to_world_xy",
+      "key": "tools mcp toolkit blender addon handlers environment py terrain grid to world xy terrain grid to",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "Raise a ValueError for degenerate grids rather than silently returning a single point, or at minimum log a warning so callers can detect the condition.",
+      "severity": "Medium",
+      "title": "_terrain_grid_to_world_xy returns origin for degenerate grids, masking upstream bugs"
+    }
+  ],
+  "models": [
+    {
+      "error": "The read operation timed out",
+      "finding_count": 0,
+      "findings": [],
+      "model": "qwen/qwen3.6-plus:free",
+      "provider": "openrouter",
+      "status": "error"
+    },
+    {
+      "finding_count": 4,
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "export_height_range = _resolve_export_height_range(params, heightmap) is called on line ~1919, before the Unity-compat resize block on lines ~1922-1929 that reassigns heightmap. The resize changes the actual pixel values (via indexing), but export_height_range still reflects the pre-resize array's min/max.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_export_heightmap",
+          "recommendation": "Move the _resolve_export_height_range call (and the raw_bytes export) after the Unity-compat resize block so the range matches the actual data being serialized.",
+          "severity": "Critical",
+          "title": "Height range resolved before Unity resize, causing mismatch with exported RAW"
+        },
+        {
+          "confidence": 0.75,
+          "evidence": "When height_range_min/height_range_max are present, the function calls _resolve_height_range(params, heightmap) which computes range from the array, not from the provided explicit values. This makes the explicit parameters dead code and causes unexpected normalization when a user specifies an exact range.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_export_height_range",
+          "recommendation": "When height_range_min and height_range_max are provided, return them directly (with float conversion) instead of delegating to _resolve_height_range which recomputes from the array.",
+          "severity": "High",
+          "title": "_resolve_export_height_range ignores explicit min/max values and always recomputes from heightmap"
+        },
+        {
+          "confidence": 0.5,
+          "evidence": "if rows < 2 or cols < 2: return terrain_origin_x, terrain_origin_y silently collapses all grid coordinates to a single point for degenerate grids. If a caller passes a 1xN or Nx1 grid, every vertex maps to the origin with no error or warning.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_terrain_grid_to_world_xy",
+          "recommendation": "Raise a ValueError for degenerate grids rather than silently returning a single point, or at minimum log a warning so callers can detect the condition.",
+          "severity": "Medium",
+          "title": "_terrain_grid_to_world_xy returns origin for degenerate grids, masking upstream bugs"
+        },
+        {
+          "confidence": 0.5,
+          "evidence": "The old code explicitly normalized heights to [0,1] before export. The new code passes raw heights directly to _export_heightmap_raw, relying on value_range being non-None for normalization. If _resolve_export_height_range returns None (no tiled_world, no use_global_height_range, no height_range params), the function _export_heightmap_raw uses local min/max but the data was never pre-normalized\u2014this works but changes the contract: the old path always produced [0,1] data, now it depends on params.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_export_heightmap",
+          "recommendation": "Verify that all callers of handle_export_heightmap provide appropriate range params, or add a default normalization pass when export_height_range is None to preserve backward compatibility.",
+          "severity": "Medium",
+          "title": "handle_export_heightmap no longer normalizes heights, breaking non-range callers"
+        }
+      ],
+      "model": "glm-5.0-turbo",
+      "provider": "glm",
+      "status": "ok"
+    },
+    {
+      "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 30.0 seconds",
+      "finding_count": 0,
+      "findings": [],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "error"
+    }
+  ]
+}

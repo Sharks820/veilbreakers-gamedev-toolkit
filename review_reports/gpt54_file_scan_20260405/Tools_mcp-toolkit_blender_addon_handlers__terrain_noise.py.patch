@@ -1,0 +1,25 @@
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py b/Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py
+index 47fc24d..f3eb530 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py
+@@ -603 +603,4 @@ def _theoretical_max_amplitude(octaves: int, persistence: float) -> float:
+-def compute_slope_map(heightmap: np.ndarray) -> np.ndarray:
++def compute_slope_map(
++    heightmap: np.ndarray,
++    cell_size: float | tuple[float, float] = 1.0,
++) -> np.ndarray:
+@@ -612,0 +616,3 @@ def compute_slope_map(heightmap: np.ndarray) -> np.ndarray:
++    cell_size : float | tuple[float, float]
++        World-space sample spacing. A scalar applies to both axes. A 2-item
++        tuple is interpreted as ``(row_spacing, col_spacing)``.
+@@ -625 +631,9 @@ def compute_slope_map(heightmap: np.ndarray) -> np.ndarray:
+-    dy, dx = np.gradient(heightmap)
++    if isinstance(cell_size, (tuple, list)):
++        if len(cell_size) < 2:
++            raise ValueError("cell_size tuple must contain row and column spacing")
++        row_spacing = max(float(cell_size[0]), 1e-9)
++        col_spacing = max(float(cell_size[1]), 1e-9)
++    else:
++        row_spacing = col_spacing = max(float(cell_size), 1e-9)
++
++    dy, dx = np.gradient(heightmap, row_spacing, col_spacing)

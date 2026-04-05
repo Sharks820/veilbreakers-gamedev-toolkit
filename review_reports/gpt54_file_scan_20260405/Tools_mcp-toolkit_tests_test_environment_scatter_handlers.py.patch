@@ -1,0 +1,125 @@
+diff --git a/Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py b/Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py
+index dda2cbd..a86aebf 100644
+--- a/Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py
++++ b/Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py
+@@ -24,0 +25,99 @@ class TestScatterVegetationLogic:
++    def test_world_height_sampling_matches_centered_and_offset_tiles(self):
++        """World-space height sampling should be invariant to terrain center offsets."""
++        from blender_addon.handlers.environment_scatter import _sample_heightmap_world
++
++        heightmap = np.array(
++            [
++                [0.0, 0.25, 0.5],
++                [0.25, 0.5, 0.75],
++                [0.5, 0.75, 1.0],
++            ],
++            dtype=np.float64,
++        )
++
++        centered = _sample_heightmap_world(
++            heightmap,
++            height_scale=10.0,
++            world_x=25.0,
++            world_y=25.0,
++            terrain_width=100.0,
++            terrain_height=100.0,
++            terrain_origin_x=0.0,
++            terrain_origin_y=0.0,
++        )
++        offset = _sample_heightmap_world(
++            heightmap,
++            height_scale=10.0,
++            world_x=175.0,
++            world_y=225.0,
++            terrain_width=100.0,
++            terrain_height=100.0,
++            terrain_origin_x=150.0,
++            terrain_origin_y=200.0,
++        )
++
++        assert offset == pytest.approx(centered)
++
++    def test_world_height_sampling_respects_rectangular_terrain_extent(self):
++        """World-space sampling should map X and Y against their own terrain axes."""
++        from blender_addon.handlers.environment_scatter import _sample_heightmap_world
++
++        heightmap = np.array(
++            [
++                [0.0, 0.2, 0.4],
++                [0.3, 0.5, 0.7],
++                [0.6, 0.8, 1.0],
++            ],
++            dtype=np.float64,
++        )
++
++        sampled = _sample_heightmap_world(
++            heightmap,
++            height_scale=10.0,
++            world_x=50.0,
++            world_y=25.0,
++            terrain_width=200.0,
++            terrain_height=100.0,
++            terrain_origin_x=0.0,
++            terrain_origin_y=0.0,
++        )
++
++        assert sampled == pytest.approx(7.5)
++
++    def test_world_height_sampling_clamps_out_of_bounds(self):
++        """World-space sampling should clamp gracefully outside the terrain footprint."""
++        from blender_addon.handlers.environment_scatter import _sample_heightmap_world
++
++        heightmap = np.array(
++            [
++                [0.1, 0.2],
++                [0.3, 0.4],
++            ],
++            dtype=np.float64,
++        )
++
++        sampled = _sample_heightmap_world(
++            heightmap,
++            height_scale=20.0,
++            world_x=10_000.0,
++            world_y=10_000.0,
++            terrain_width=100.0,
++            terrain_height=100.0,
++            terrain_origin_x=0.0,
++            terrain_origin_y=0.0,
++        )
++
++        assert sampled == pytest.approx(8.0)
++
++    def test_terrain_cell_size_from_extent_uses_world_spacing(self):
++        from blender_addon.handlers.environment_scatter import _terrain_cell_size_from_extent
++
++        spacing = _terrain_cell_size_from_extent(
++            terrain_width=80.0,
++            terrain_height=120.0,
++            rows=5,
++            cols=9,
++        )
++
++        assert spacing == pytest.approx(30.0)
++
+@@ -28 +127,2 @@ class TestScatterVegetationLogic:
+-        terrain_size = 100.0
++        terrain_width = 120.0
++        terrain_depth = 60.0
+@@ -33 +133 @@ class TestScatterVegetationLogic:
+-            terrain_size, terrain_size, min_distance, seed=seed,
++            terrain_width, terrain_depth, min_distance, seed=seed,
+@@ -40 +140,4 @@ class TestScatterVegetationLogic:
+-        slope_map = compute_slope_map(heightmap)
++        slope_map = compute_slope_map(
++            heightmap,
++            cell_size=(terrain_depth / 63.0, terrain_width / 63.0),
++        )
+@@ -65 +168,3 @@ class TestScatterVegetationLogic:
+-            terrain_size=terrain_size, seed=seed,
++            terrain_width=terrain_width,
++            terrain_depth=terrain_depth,
++            seed=seed,
+@@ -78,0 +184,2 @@ class TestScatterVegetationLogic:
++            assert 0.0 <= p["position"][0] <= terrain_width
++            assert 0.0 <= p["position"][1] <= terrain_depth

@@ -1,0 +1,208 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "3c02d117f3a1ed9a9a444ee50959961f59a1f635c14af98b05a312dcb9b31616",
+  "generated_at": "2026-04-05T06:36:41.446306+00:00",
+  "min_agreement": 2,
+  "model_specific_findings": [
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "return max(step_x, step_y, 1e-9) collapses two distinct axis spacings into one. When passed to compute_slope_map, the larger spacing artificially flattens the gradient in the tighter axis, causing slope-dependent scattering/material rules to misfire on stretched terrains.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "return max(step_x, step_y, 1e-9) collapses two distinct axis spacings into one. When passed to compute_slope_map, the larger spacing artificially flattens the gradient in the tighter axis, causing slope-dependent scattering/material rules to misfire on stretched terrains.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_terrain_cell_size_from_extent",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Return a tuple (step_x, step_y) instead of a scalar, and thread it through to compute_slope_map. If a single scalar is strictly required by downstream APIs, document the limitation and consider using the geometric mean or requiring square grids.",
+          "severity": "High",
+          "title": "_terrain_cell_size_from_extent uses max() which masks aspect ratio and underestimates slope"
+        }
+      ],
+      "function": "_terrain_cell_size_from_extent",
+      "key": "tools mcp toolkit blender addon handlers environment scatter py terrain cell size from extent terrain cell",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Return a tuple (step_x, step_y) instead of a scalar, and thread it through to compute_slope_map. If a single scalar is strictly required by downstream APIs, document the limitation and consider using the geometric mean or requiring square grids.",
+      "severity": "High",
+      "title": "_terrain_cell_size_from_extent uses max() which masks aspect ratio and underestimates slope"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "dy, dx = np.gradient(heightmap, sample_spacing) applies a single scalar spacing to both axes. For non-square grids where dx != dy, this distorts partial derivatives and yields incorrect slope angles.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "dy, dx = np.gradient(heightmap, sample_spacing) applies a single scalar spacing to both axes. For non-square grids where dx != dy, this distorts partial derivatives and yields incorrect slope angles.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py",
+          "function": "compute_slope_map",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Update compute_slope_map to accept separate cell_size_x and cell_size_y parameters (or a tuple), and pass them as np.gradient(heightmap, dy_spacing, dx_spacing). Update all callers to compute and pass per-axis spacings.",
+          "severity": "High",
+          "title": "Isotropic spacing in np.gradient breaks slope calculation for rectangular terrains"
+        }
+      ],
+      "function": "compute_slope_map",
+      "key": "tools mcp toolkit blender addon handlers terrain noise py compute slope map isotropic spacing in np",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Update compute_slope_map to accept separate cell_size_x and cell_size_y parameters (or a tuple), and pass them as np.gradient(heightmap, dy_spacing, dx_spacing). Update all callers to compute and pass per-axis spacings.",
+      "severity": "High",
+      "title": "Isotropic spacing in np.gradient breaks slope calculation for rectangular terrains"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.5,
+      "evidence": "The docstring states terrain_origin_* is the world-space center, and the code uses local_x = world_x - terrain_origin_x + terrain_half. In Blender, obj.location is the object origin, which can be placed at a corner or arbitrary pivot. If not centered, UV mapping and height sampling will be offset, misplacing vegetation and materials.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+      "findings": [
+        {
+          "confidence": 0.5,
+          "evidence": "The docstring states terrain_origin_* is the world-space center, and the code uses local_x = world_x - terrain_origin_x + terrain_half. In Blender, obj.location is the object origin, which can be placed at a corner or arbitrary pivot. If not centered, UV mapping and height sampling will be offset, misplacing vegetation and materials.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_world_to_terrain_uv",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Compute the bounding box center explicitly from the mesh data (e.g., using obj.bound_box or obj.dimensions combined with obj.matrix_world) rather than relying on obj.location, or enforce and validate the center-origin contract at runtime.",
+          "severity": "Medium",
+          "title": "Height sampling assumes object origin is at geometric center"
+        }
+      ],
+      "function": "_world_to_terrain_uv",
+      "key": "tools mcp toolkit blender addon handlers environment scatter py world to terrain uv height sampling assumes",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Compute the bounding box center explicitly from the mesh data (e.g., using obj.bound_box or obj.dimensions combined with obj.matrix_world) rather than relying on obj.location, or enforce and validate the center-origin contract at runtime.",
+      "severity": "Medium",
+      "title": "Height sampling assumes object origin is at geometric center"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "cell_size = float(terrain_size) / max(max(rows, cols) - 1, 1) derives spacing from the maximum dimension and maximum resolution, completely ignoring the actual width/height ratio of the terrain grid.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "cell_size = float(terrain_size) / max(max(rows, cols) - 1, 1) derives spacing from the maximum dimension and maximum resolution, completely ignoring the actual width/height ratio of the terrain grid.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py",
+          "function": "detect_cliff_edges",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Align with the per-axis approach. Accept terrain_width and terrain_height as parameters, compute dx and dy explicitly, and pass them to compute_slope_map. Remove the max(rows, cols) heuristic.",
+          "severity": "Medium",
+          "title": "Inconsistent cell size formula in detect_cliff_edges ignores grid aspect ratio"
+        }
+      ],
+      "function": "detect_cliff_edges",
+      "key": "tools mcp toolkit blender addon handlers terrain depth py detect cliff edges inconsistent cell size formula",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Align with the per-axis approach. Accept terrain_width and terrain_height as parameters, compute dx and dy explicitly, and pass them to compute_slope_map. Remove the max(rows, cols) heuristic.",
+      "severity": "Medium",
+      "title": "Inconsistent cell size formula in detect_cliff_edges ignores grid aspect ratio"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.5,
+      "evidence": "hmap = np.asarray(heightmap, dtype=np.float64) is used without sanitization. If the input heightmap contains NaN or Inf values (common in procedural noise or failed raycasts), the weighted sum will produce NaN heights, causing instance.location to become invalid and potentially crashing downstream Blender operations.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+      "findings": [
+        {
+          "confidence": 0.5,
+          "evidence": "hmap = np.asarray(heightmap, dtype=np.float64) is used without sanitization. If the input heightmap contains NaN or Inf values (common in procedural noise or failed raycasts), the weighted sum will produce NaN heights, causing instance.location to become invalid and potentially crashing downstream Blender operations.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_sample_heightmap_world",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Add hmap = np.nan_to_num(hmap, nan=0.0, posinf=0.0, neginf=0.0) after conversion, or at least log a warning if np.any(~np.isfinite(hmap)) is true.",
+          "severity": "Low",
+          "title": "Bilinear interpolation propagates NaN/Inf heights silently"
+        }
+      ],
+      "function": "_sample_heightmap_world",
+      "key": "tools mcp toolkit blender addon handlers environment scatter py sample heightmap world bilinear interpolation propagates nan",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Add hmap = np.nan_to_num(hmap, nan=0.0, posinf=0.0, neginf=0.0) after conversion, or at least log a warning if np.any(~np.isfinite(hmap)) is true.",
+      "severity": "Low",
+      "title": "Bilinear interpolation propagates NaN/Inf heights silently"
+    }
+  ],
+  "models": [
+    {
+      "finding_count": 5,
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "dy, dx = np.gradient(heightmap, sample_spacing) applies a single scalar spacing to both axes. For non-square grids where dx != dy, this distorts partial derivatives and yields incorrect slope angles.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py",
+          "function": "compute_slope_map",
+          "recommendation": "Update compute_slope_map to accept separate cell_size_x and cell_size_y parameters (or a tuple), and pass them as np.gradient(heightmap, dy_spacing, dx_spacing). Update all callers to compute and pass per-axis spacings.",
+          "severity": "High",
+          "title": "Isotropic spacing in np.gradient breaks slope calculation for rectangular terrains"
+        },
+        {
+          "confidence": 0.75,
+          "evidence": "return max(step_x, step_y, 1e-9) collapses two distinct axis spacings into one. When passed to compute_slope_map, the larger spacing artificially flattens the gradient in the tighter axis, causing slope-dependent scattering/material rules to misfire on stretched terrains.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_terrain_cell_size_from_extent",
+          "recommendation": "Return a tuple (step_x, step_y) instead of a scalar, and thread it through to compute_slope_map. If a single scalar is strictly required by downstream APIs, document the limitation and consider using the geometric mean or requiring square grids.",
+          "severity": "High",
+          "title": "_terrain_cell_size_from_extent uses max() which masks aspect ratio and underestimates slope"
+        },
+        {
+          "confidence": 0.75,
+          "evidence": "cell_size = float(terrain_size) / max(max(rows, cols) - 1, 1) derives spacing from the maximum dimension and maximum resolution, completely ignoring the actual width/height ratio of the terrain grid.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py",
+          "function": "detect_cliff_edges",
+          "recommendation": "Align with the per-axis approach. Accept terrain_width and terrain_height as parameters, compute dx and dy explicitly, and pass them to compute_slope_map. Remove the max(rows, cols) heuristic.",
+          "severity": "Medium",
+          "title": "Inconsistent cell size formula in detect_cliff_edges ignores grid aspect ratio"
+        },
+        {
+          "confidence": 0.5,
+          "evidence": "The docstring states terrain_origin_* is the world-space center, and the code uses local_x = world_x - terrain_origin_x + terrain_half. In Blender, obj.location is the object origin, which can be placed at a corner or arbitrary pivot. If not centered, UV mapping and height sampling will be offset, misplacing vegetation and materials.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_world_to_terrain_uv",
+          "recommendation": "Compute the bounding box center explicitly from the mesh data (e.g., using obj.bound_box or obj.dimensions combined with obj.matrix_world) rather than relying on obj.location, or enforce and validate the center-origin contract at runtime.",
+          "severity": "Medium",
+          "title": "Height sampling assumes object origin is at geometric center"
+        },
+        {
+          "confidence": 0.5,
+          "evidence": "hmap = np.asarray(heightmap, dtype=np.float64) is used without sanitization. If the input heightmap contains NaN or Inf values (common in procedural noise or failed raycasts), the weighted sum will produce NaN heights, causing instance.location to become invalid and potentially crashing downstream Blender operations.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_sample_heightmap_world",
+          "recommendation": "Add hmap = np.nan_to_num(hmap, nan=0.0, posinf=0.0, neginf=0.0) after conversion, or at least log a warning if np.any(~np.isfinite(hmap)) is true.",
+          "severity": "Low",
+          "title": "Bilinear interpolation propagates NaN/Inf heights silently"
+        }
+      ],
+      "model": "qwen/qwen3.6-plus:free",
+      "provider": "openrouter",
+      "status": "ok"
+    },
+    {
+      "finding_count": 0,
+      "findings": [],
+      "model": "glm-5.0-turbo",
+      "provider": "glm",
+      "status": "ok"
+    },
+    {
+      "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 30.0 seconds",
+      "finding_count": 0,
+      "findings": [],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "error"
+    }
+  ]
+}

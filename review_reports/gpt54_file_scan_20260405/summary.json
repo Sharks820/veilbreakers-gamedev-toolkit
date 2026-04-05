@@ -1,0 +1,116 @@
+{
+  "files": [
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_blender_addon_handlers__mesh_bridge.py.json",
+      "status": "ok",
+      "finding_count": 0,
+      "error": null
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_scatter_engine.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_blender_addon_handlers__scatter_engine.py.json",
+      "status": "ok",
+      "finding_count": 0,
+      "error": null
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_blender_addon_handlers__terrain_depth.py.json",
+      "status": "ok",
+      "finding_count": 0,
+      "error": null
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_blender_addon_handlers__terrain_noise.py.json",
+      "status": "ok",
+      "finding_count": 0,
+      "error": null
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_blender_addon_handlers_environment.py.json",
+      "status": "error",
+      "finding_count": 0,
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Prompt tokens limit exceeded: 2376 > 1059. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}"
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_blender_addon_handlers_environment_scatter.py.json",
+      "status": "error",
+      "finding_count": 0,
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Prompt tokens limit exceeded: 2722 > 1059. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}"
+    },
+    {
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_blender_addon_handlers_terrain_materials.py.json",
+      "status": "ok",
+      "finding_count": 0,
+      "error": null
+    },
+    {
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_src_veilbreakers_mcp_blender_server.py.json",
+      "status": "ok",
+      "finding_count": 0,
+      "error": null
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_compose_planners.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_tests_test_compose_planners.py.json",
+      "status": "ok",
+      "finding_count": 0,
+      "error": null
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_environment_handlers.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_tests_test_environment_handlers.py.json",
+      "status": "error",
+      "finding_count": 0,
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Prompt tokens limit exceeded: 2606 > 1059. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}"
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_tests_test_environment_scatter_handlers.py.json",
+      "status": "error",
+      "finding_count": 0,
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Prompt tokens limit exceeded: 1378 > 1059. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}"
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_functional_unity_tools.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_tests_test_functional_unity_tools.py.json",
+      "status": "error",
+      "finding_count": 0,
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Prompt tokens limit exceeded: 1190 > 1059. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}"
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_mesh_bridge.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_tests_test_mesh_bridge.py.json",
+      "status": "ok",
+      "finding_count": 0,
+      "error": null
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_scatter_engine.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_tests_test_scatter_engine.py.json",
+      "status": "ok",
+      "finding_count": 0,
+      "error": null
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_terrain_depth.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_tests_test_terrain_depth.py.json",
+      "status": "ok",
+      "finding_count": 0,
+      "error": null
+    },
+    {
+      "file": "Tools/mcp-toolkit/tests/test_terrain_noise.py",
+      "report_path": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\gpt54_file_scan_20260405\\Tools_mcp-toolkit_tests_test_terrain_noise.py.json",
+      "status": "ok",
+      "finding_count": 0,
+      "error": null
+    }
+  ]
+}

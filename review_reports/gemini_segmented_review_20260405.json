@@ -1,0 +1,97 @@
+{
+  "segments": [
+    {
+      "name": "terrain_core_gemini",
+      "saved_to": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_core_gemini_review.json",
+      "consensus_count": 0,
+      "model_specific_count": 0,
+      "models": [
+        {
+          "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 180.0 seconds",
+          "finding_count": 0,
+          "findings": [],
+          "model": "gemini-3.1-flash-lite-preview",
+          "provider": "gemini",
+          "status": "error"
+        }
+      ]
+    },
+    {
+      "name": "terrain_orchestration_gemini",
+      "saved_to": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_orchestration_gemini_review.json",
+      "consensus_count": 5,
+      "model_specific_count": 0,
+      "models": [
+        {
+          "finding_count": 5,
+          "findings": [
+            {
+              "confidence": 0.75,
+              "evidence": "Variable 'cell_size' is passed as a keyword argument to 'compute_world_splatmap_weights' (line 964 and line 1115) but is not defined within the visible scope of these functions, nor is it extracted from the 'params' dictionary.",
+              "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+              "function": "handle_generate_terrain_tile",
+              "recommendation": "Define 'cell_size' before usage by extracting it from 'params' or calculating it from terrain dimensions and resolution, similar to the implementation in 'handle_generate_road'.",
+              "severity": "Critical",
+              "title": "Potential Runtime NameError: 'cell_size' undefined in terrain handlers"
+            },
+            {
+              "confidence": 0.75,
+              "evidence": "The function checks for the 'height_range' key in 'params' (line 486) but delegates resolution to '_resolve_height_range'. Per existing implementation context, '_resolve_height_range' only looks for individual 'height_range_min' and 'height_range_max' keys, meaning a provided tuple-based 'height_range' will be ignored in favor of local min/max fallback.",
+              "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+              "function": "_resolve_export_height_range",
+              "recommendation": "Update '_resolve_height_range' to correctly unpack the 'height_range' tuple if present, or handle the tuple extraction directly within '_resolve_export_height_range'.",
+              "severity": "High",
+              "title": "Incomplete 'height_range' Parameter Resolution"
+            },
+            {
+              "confidence": 0.5,
+              "evidence": "When 'tiled_world' is enabled (line 483), the code falls back to local min/max calculation via '_resolve_height_range' if global bounds are not explicitly provided. This results in each tile being normalized to its own local range, causing height discontinuities (seams) at tile boundaries when imported into Unity.",
+              "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+              "function": "_resolve_export_height_range",
+              "recommendation": "Enforce or calculate a global height range when 'tiled_world' is True to ensure consistent normalization across all exported terrain tiles.",
+              "severity": "Medium",
+              "title": "Tiled World Normalization Inconsistency"
+            },
+            {
+              "confidence": 0.75,
+              "evidence": "The 'cell_size' calculation logic, including terrain dimension fallbacks, is duplicated (lines 1503-1507 and lines 1527-1531) within the same function.",
+              "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+              "function": "handle_generate_road",
+              "recommendation": "Consolidate the 'cell_size' calculation to a single block at the start of the function and reuse the variable.",
+              "severity": "Low",
+              "title": "Redundant Cell Size Calculation in Road Handler"
+            },
+            {
+              "confidence": 0.5,
+              "evidence": "The 'fallback_depth' parameter is used to determine the Y-axis extent of the fallback water spline. In a 3D context, 'depth' typically refers to the Z-axis (height/bottom), making this usage semantically confusing compared to 'length' or 'extent'.",
+              "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+              "function": "_resolve_water_path_points",
+              "recommendation": "Rename the parameter to 'fallback_length' or 'fallback_extent' to better reflect its geometric function.",
+              "severity": "Low",
+              "title": "Confusing Parameter Usage: 'fallback_depth' for Spline Length"
+            }
+          ],
+          "model": "gemini-3.1-flash-lite-preview",
+          "provider": "gemini",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "name": "terrain_tests_gemini",
+      "saved_to": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_tests_gemini_review.json",
+      "consensus_count": 0,
+      "model_specific_count": 0,
+      "models": [
+        {
+          "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 180.0 seconds",
+          "finding_count": 0,
+          "findings": [],
+          "model": "gemini-3.1-flash-lite-preview",
+          "provider": "gemini",
+          "status": "error"
+        }
+      ]
+    }
+  ]
+}

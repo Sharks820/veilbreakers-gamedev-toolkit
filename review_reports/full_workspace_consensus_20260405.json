@@ -1,0 +1,664 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "3e36bbdd7bc7bf9fa2b6a6ad7e5ad521cb3727e3f1f2c8fe15f594fbf48949b7",
+  "generated_at": "2026-04-05T06:31:23.319550+00:00",
+  "min_agreement": 2,
+  "model_specific_findings": [
+    {
+      "agreement": 1,
+      "confidence": 0.85,
+      "evidence": "if erosion in (\"hydraulic\", \"both\") or erosion in (\"thermal\", \"both\"):",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.85,
+          "evidence": "if erosion in (\"hydraulic\", \"both\") or erosion in (\"thermal\", \"both\"):",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_generate_world_terrain",
+          "model": "glm-5.0-turbo",
+          "recommendation": "Change to `if erosion in (\"hydraulic\", \"thermal\", \"both\"):`. The current expression evaluates `erosion in (\"thermal\", \"both\")` for the second operand, so when erosion is \"hydraulic\" the condition short-circuits correctly, but the logic is misleading and fragile\u2014combine into a single set membership check.",
+          "severity": "Critical",
+          "title": "Erosion branch condition always true due to string 'in' tuple logic"
+        }
+      ],
+      "function": "handle_generate_world_terrain",
+      "key": "tools mcp toolkit blender addon handlers environment py handle generate world terrain erosion branch condition always",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "Change to `if erosion in (\"hydraulic\", \"thermal\", \"both\"):`. The current expression evaluates `erosion in (\"thermal\", \"both\")` for the second operand, so when erosion is \"hydraulic\" the condition short-circuits correctly, but the logic is misleading and fragile\u2014combine into a single set membership check.",
+      "severity": "Critical",
+      "title": "Erosion branch condition always true due to string 'in' tuple logic"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.8,
+      "evidence": "heightmap = heights.reshape(rows, cols)\\n    export_height_range = _resolve_export_height_range(params, heightmap)\\n    \u2026\\n    if unity_compat:\\n        heightmap = heightmap[np.ix_(y_indices, x_indices)]",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.8,
+          "evidence": "heightmap = heights.reshape(rows, cols)\\n    export_height_range = _resolve_export_height_range(params, heightmap)\\n    \u2026\\n    if unity_compat:\\n        heightmap = heightmap[np.ix_(y_indices, x_indices)]",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_export_heightmap",
+          "model": "glm-5.0-turbo",
+          "recommendation": "When `export_height_range` is None (non-tiled, non-global-range export) the old code normalized to [0,1] before resizing. Now the raw vertex Z values are passed directly to the resize path and then to `_export_heightmap_raw` which will use the post-resize local min/max. If the resize crops extreme values, the normalization range shifts. Restore pre-resize normalization or apply value_range before resizing when unity_compat is true.",
+          "severity": "High",
+          "title": "handle_export_heightmap no longer normalizes heights before resize, breaking Unity compat path"
+        }
+      ],
+      "function": "handle_export_heightmap",
+      "key": "tools mcp toolkit blender addon handlers environment py handle export heightmap handle export heightmap no longer",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "When `export_height_range` is None (non-tiled, non-global-range export) the old code normalized to [0,1] before resizing. Now the raw vertex Z values are passed directly to the resize path and then to `_export_heightmap_raw` which will use the post-resize local min/max. If the resize crops extreme values, the normalization range shifts. Restore pre-resize normalization or apply value_range before resizing when unity_compat is true.",
+      "severity": "High",
+      "title": "handle_export_heightmap no longer normalizes heights before resize, breaking Unity compat path"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.7,
+      "evidence": "The function computes cell_size and passes it to slope/erosion paths indirectly via detect_cliff_edges, but the standalone tile path never calls erode_world_heightmap. If erosion is later added to the tile path, the cell_size parameter will be missing and thermal erosion will use the default 1.0, producing wrong talus for large cell sizes.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.7,
+          "evidence": "The function computes cell_size and passes it to slope/erosion paths indirectly via detect_cliff_edges, but the standalone tile path never calls erode_world_heightmap. If erosion is later added to the tile path, the cell_size parameter will be missing and thermal erosion will use the default 1.0, producing wrong talus for large cell sizes.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_generate_terrain_tile",
+          "model": "glm-5.0-turbo",
+          "recommendation": "If tile-level erosion is intentionally omitted, document why. Otherwise, pass cell_size to any future erosion call in the tile handler to match the world-level contract.",
+          "severity": "High",
+          "title": "apply_thermal_erosion cell_size not threaded through handle_generate_terrain_tile"
+        }
+      ],
+      "function": "handle_generate_terrain_tile",
+      "key": "tools mcp toolkit blender addon handlers environment py handle generate terrain tile apply thermal erosion cell",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "If tile-level erosion is intentionally omitted, document why. Otherwise, pass cell_size to any future erosion call in the tile handler to match the world-level contract.",
+      "severity": "High",
+      "title": "apply_thermal_erosion cell_size not threaded through handle_generate_terrain_tile"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.9,
+      "evidence": "effective_min_slope = min_slope * max(input_range, 1e-12) replaces conditional min_slope * input_range if height_range is not None else min_slope. If height_range was None, the threshold was previously unscaled (min_slope), but is now multiplied by input_range, drastically altering erosion behavior for unbounded heightmaps.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_erosion.py",
+      "findings": [
+        {
+          "confidence": 0.9,
+          "evidence": "effective_min_slope = min_slope * max(input_range, 1e-12) replaces conditional min_slope * input_range if height_range is not None else min_slope. If height_range was None, the threshold was previously unscaled (min_slope), but is now multiplied by input_range, drastically altering erosion behavior for unbounded heightmaps.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_erosion.py",
+          "function": "apply_hydraulic_erosion",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Restore the original conditional logic or explicitly document that min_slope is now expected to be a dimensionless ratio that must always be scaled by the height range.",
+          "severity": "High",
+          "title": "Hydraulic erosion slope threshold scaling regression"
+        }
+      ],
+      "function": "apply_hydraulic_erosion",
+      "key": "tools mcp toolkit blender addon handlers terrain erosion py apply hydraulic erosion hydraulic erosion slope threshold",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Restore the original conditional logic or explicitly document that min_slope is now expected to be a dimensionless ratio that must always be scaled by the height range.",
+      "severity": "High",
+      "title": "Hydraulic erosion slope threshold scaling regression"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.95,
+      "evidence": "for r in range(hmap.shape[0]):\\n        for c in range(hmap.shape[1]):",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+      "findings": [
+        {
+          "confidence": 0.95,
+          "evidence": "for r in range(hmap.shape[0]):\\n        for c in range(hmap.shape[1]):",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+          "function": "compute_world_splatmap_weights",
+          "model": "glm-5.0-turbo",
+          "recommendation": "Vectorize the entire loop using NumPy array operations. The slope/height thresholds, moisture blending, and alpha channel logic can all be expressed as element-wise array operations. For a 1025\u00d71025 world heightmap this loop executes over 1M iterations in pure Python, causing severe runtime regressions in the world-terrain pipeline.",
+          "severity": "High",
+          "title": "Splatmap generation uses pure-Python loop over every pixel \u2014 O(rows*cols) scalar iteration"
+        }
+      ],
+      "function": "compute_world_splatmap_weights",
+      "key": "tools mcp toolkit blender addon handlers terrain materials py compute world splatmap weights splatmap generation uses",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "Vectorize the entire loop using NumPy array operations. The slope/height thresholds, moisture blending, and alpha channel logic can all be expressed as element-wise array operations. For a 1025\u00d71025 world heightmap this loop executes over 1M iterations in pure Python, causing severe runtime regressions in the world-terrain pipeline.",
+      "severity": "High",
+      "title": "Splatmap generation uses pure-Python loop over every pixel \u2014 O(rows*cols) scalar iteration"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.85,
+      "evidence": "elif biome_name not in BIOME_PALETTES_V2:\\n        \u2026\\n        raise ValueError(f\"Unknown biome '{biome_name}'\")",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+      "findings": [
+        {
+          "confidence": 0.85,
+          "evidence": "elif biome_name not in BIOME_PALETTES_V2:\\n        \u2026\\n        raise ValueError(f\"Unknown biome '{biome_name}'\")",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+          "function": "create_biome_terrain_material",
+          "model": "glm-5.0-turbo",
+          "recommendation": "The old behavior silently fell back to DEFAULT_BIOME. Any pipeline step that passes a biome name not yet in BIOME_PALETTES_V2 will now crash with an unhandled ValueError. Either restore the fallback for non-strict contexts, or ensure all callers validate biome names before reaching this function.",
+          "severity": "High",
+          "title": "create_biome_terrain_material now raises ValueError on unknown biome, breaking existing callers"
+        }
+      ],
+      "function": "create_biome_terrain_material",
+      "key": "tools mcp toolkit blender addon handlers terrain materials py create biome terrain material create biome terrain",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "The old behavior silently fell back to DEFAULT_BIOME. Any pipeline step that passes a biome name not yet in BIOME_PALETTES_V2 will now crash with an unhandled ValueError. Either restore the fallback for non-strict contexts, or ensure all callers validate biome names before reaching this function.",
+      "severity": "High",
+      "title": "create_biome_terrain_material now raises ValueError on unknown biome, breaking existing callers"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.95,
+      "evidence": "The if explicit_world_anchor: clamped = anchor branch was removed. All anchors are now unconditionally clamped to terrain bounds, which breaks placement of locations intentionally positioned outside the terrain or at exact world coordinates.",
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+      "findings": [
+        {
+          "confidence": 0.95,
+          "evidence": "The if explicit_world_anchor: clamped = anchor branch was removed. All anchors are now unconditionally clamped to terrain bounds, which breaks placement of locations intentionally positioned outside the terrain or at exact world coordinates.",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Reintroduce the explicit_world_anchor check or add a parameter to disable clamping when precise world placement is required.",
+          "severity": "High",
+          "title": "Removal of explicit world anchor bypass in location planning"
+        }
+      ],
+      "function": "_plan_map_location_anchors",
+      "key": "tools mcp toolkit src veilbreakers mcp blender server py plan map location anchors removal of explicit",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Reintroduce the explicit_world_anchor check or add a parameter to disable clamping when precise world placement is required.",
+      "severity": "High",
+      "title": "Removal of explicit world anchor bypass in location planning"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.9,
+      "evidence": "endpoint = f\"{base_url}/models/{model}:generateContent\"",
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/review_server.py",
+      "findings": [
+        {
+          "confidence": 0.9,
+          "evidence": "endpoint = f\"{base_url}/models/{model}:generateContent\"",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/review_server.py",
+          "function": "_invoke_gemini_api",
+          "model": "glm-5.0-turbo",
+          "recommendation": "The `model` parameter is the user-facing name (e.g. \"gemini-3.1-flash-lite-preview\") but the Gemini REST API expects the canonical model ID. Apply `_resolve_api_model(\"gemini\", model)` (or a Gemini-specific alias map) before constructing the endpoint URL. Currently this will 404 for any aliased model.",
+          "severity": "High",
+          "title": "Gemini API endpoint uses un-resolved model name, missing CLI alias mapping"
+        }
+      ],
+      "function": "_invoke_gemini_api",
+      "key": "tools mcp toolkit src veilbreakers mcp review server py invoke gemini api gemini api endpoint uses",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "The `model` parameter is the user-facing name (e.g. \"gemini-3.1-flash-lite-preview\") but the Gemini REST API expects the canonical model ID. Apply `_resolve_api_model(\"gemini\", model)` (or a Gemini-specific alias map) before constructing the endpoint URL. Currently this will 404 for any aliased model.",
+      "severity": "High",
+      "title": "Gemini API endpoint uses un-resolved model name, missing CLI alias mapping"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.9,
+      "evidence": "Changed terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}; to terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}.GetComponent<Terrain>();. Callers expecting GameObject references will now receive Terrain components, causing runtime type errors or missing component references.",
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py",
+      "findings": [
+        {
+          "confidence": 0.9,
+          "evidence": "Changed terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}; to terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}.GetComponent<Terrain>();. Callers expecting GameObject references will now receive Terrain components, causing runtime type errors or missing component references.",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py",
+          "function": "generate_tiled_terrain_setup_script",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Revert to storing the GameObject or explicitly document the type change and update downstream consumers.",
+          "severity": "High",
+          "title": "Breaking change in generated C# terrainMap value type"
+        }
+      ],
+      "function": "generate_tiled_terrain_setup_script",
+      "key": "tools mcp toolkit src veilbreakers mcp shared unity templates scene templates py generate tiled terrain setup",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Revert to storing the GameObject or explicitly document the type change and update downstream consumers.",
+      "severity": "High",
+      "title": "Breaking change in generated C# terrainMap value type"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.9,
+      "evidence": "tile = hmap[row_start:row_end, col_start:col_end, ...]\\n\u2026\\ntile_splat = extract_tile(world_splatmap, tx, ty, tile_size)",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.9,
+          "evidence": "tile = hmap[row_start:row_end, col_start:col_end, ...]\\n\u2026\\ntile_splat = extract_tile(world_splatmap, tx, ty, tile_size)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_generate_world_terrain",
+          "model": "glm-5.0-turbo",
+          "recommendation": "extract_tile was relaxed to accept ndim >= 2 and returns trailing dimensions. When a 3D splatmap (H, W, 4) is passed, validate_tile_seams receives 3D arrays but only inspects tile_a[0] and tile_b[0] (first channel). This means seam validation only checks one splat channel, giving a false 'passed' if other channels disagree.",
+          "severity": "Medium",
+          "title": "extract_tile now supports N-dimensional arrays but seam validation only compares 2D slices"
+        }
+      ],
+      "function": "handle_generate_world_terrain",
+      "key": "tools mcp toolkit blender addon handlers environment py handle generate world terrain extract tile now supports",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "extract_tile was relaxed to accept ndim >= 2 and returns trailing dimensions. When a 3D splatmap (H, W, 4) is passed, validate_tile_seams receives 3D arrays but only inspects tile_a[0] and tile_b[0] (first channel). This means seam validation only checks one splat channel, giving a false 'passed' if other channels disagree.",
+      "severity": "Medium",
+      "title": "extract_tile now supports N-dimensional arrays but seam validation only compares 2D slices"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.8,
+      "evidence": "isinstance(height_range, (list, tuple)) check rejects NumPy arrays. If a 2-element array is passed, it falls through to height_range_min/max checks and defaults to local min/max, ignoring the provided range.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.8,
+          "evidence": "isinstance(height_range, (list, tuple)) check rejects NumPy arrays. If a 2-element array is passed, it falls through to height_range_min/max checks and defaults to local min/max, ignoring the provided range.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_height_range",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Use hasattr(height_range, '__len__') and len(height_range) >= 2 or explicitly include np.ndarray in the type check.",
+          "severity": "Medium",
+          "title": "Height range resolution fails for NumPy array inputs"
+        }
+      ],
+      "function": "_resolve_height_range",
+      "key": "tools mcp toolkit blender addon handlers environment py resolve height range height range resolution fails for",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Use hasattr(height_range, '__len__') and len(height_range) >= 2 or explicitly include np.ndarray in the type check.",
+      "severity": "Medium",
+      "title": "Height range resolution fails for NumPy array inputs"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.8,
+      "evidence": "Replaced raise ValueError(...) with logger.warning(...) and a procedural cube fallback. Missing or misspelled prop types will no longer fail fast, potentially scattering placeholder geometry silently in production scenes.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+      "findings": [
+        {
+          "confidence": 0.8,
+          "evidence": "Replaced raise ValueError(...) with logger.warning(...) and a procedural cube fallback. Missing or misspelled prop types will no longer fail fast, potentially scattering placeholder geometry silently in production scenes.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_create_prop_template",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Keep the warning but add a strict mode flag, or raise an exception if the prop type is critical, to prevent silent degradation.",
+          "severity": "Medium",
+          "title": "Silent fallback to cube template hides missing prop definitions"
+        }
+      ],
+      "function": "_create_prop_template",
+      "key": "tools mcp toolkit blender addon handlers environment scatter py create prop template silent fallback to cube",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Keep the warning but add a strict mode flag, or raise an exception if the prop type is critical, to prevent silent degradation.",
+      "severity": "Medium",
+      "title": "Silent fallback to cube template hides missing prop definitions"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.85,
+      "evidence": "Uses nested Python for loops over hmap.shape[0] and hmap.shape[1] to compute RGBA weights. For standard 1024x1024 or 2048x2048 heightmaps, this incurs significant overhead (~1-4 seconds) compared to vectorized NumPy operations.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+      "findings": [
+        {
+          "confidence": 0.85,
+          "evidence": "Uses nested Python for loops over hmap.shape[0] and hmap.shape[1] to compute RGBA weights. For standard 1024x1024 or 2048x2048 heightmaps, this incurs significant overhead (~1-4 seconds) compared to vectorized NumPy operations.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+          "function": "compute_world_splatmap_weights",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Refactor the slope/height/moisture blending logic using NumPy vectorized operations (np.where, boolean masking, and array arithmetic) to improve performance.",
+          "severity": "Medium",
+          "title": "Unvectorized pixel loop in splatmap weight computation"
+        }
+      ],
+      "function": "compute_world_splatmap_weights",
+      "key": "tools mcp toolkit blender addon handlers terrain materials py compute world splatmap weights unvectorized pixel loop",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Refactor the slope/height/moisture blending logic using NumPy vectorized operations (np.where, boolean masking, and array arithmetic) to improve performance.",
+      "severity": "Medium",
+      "title": "Unvectorized pixel loop in splatmap weight computation"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "if terrain_cfg.get(\"location\") is not None:\\n            min_x = terrain_origin_x - half + radius\\n        else:\\n            \u2026\\n        clamped = (max(min_x, min(max_x, anchor[0])), \u2026",
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "if terrain_cfg.get(\"location\") is not None:\\n            min_x = terrain_origin_x - half + radius\\n        else:\\n            \u2026\\n        clamped = (max(min_x, min(max_x, anchor[0])), \u2026",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "model": "glm-5.0-turbo",
+          "recommendation": "The old code skipped clamping when `explicit_world_anchor` was truthy. The refactor removed that guard, so explicitly placed anchors are now clamped to the terrain bounds. If explicit anchors are meant to override placement (e.g., POIs outside terrain), restore the early-return path.",
+          "severity": "Medium",
+          "title": "Map anchor clamping still ignores explicit_world_anchor, always clamping"
+        }
+      ],
+      "function": "_plan_map_location_anchors",
+      "key": "tools mcp toolkit src veilbreakers mcp blender server py plan map location anchors map anchor clamping",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "The old code skipped clamping when `explicit_world_anchor` was truthy. The refactor removed that guard, so explicitly placed anchors are now clamped to the terrain bounds. If explicit anchors are meant to override placement (e.g., POIs outside terrain), restore the early-return path.",
+      "severity": "Medium",
+      "title": "Map anchor clamping still ignores explicit_world_anchor, always clamping"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.75,
+      "evidence": "Passes API key via x-goog-api-key header. The public generativelanguage.googleapis.com API expects the key as a ?key= query parameter. This may cause 401/403 authentication failures in standard environments.",
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/review_server.py",
+      "findings": [
+        {
+          "confidence": 0.75,
+          "evidence": "Passes API key via x-goog-api-key header. The public generativelanguage.googleapis.com API expects the key as a ?key= query parameter. This may cause 401/403 authentication failures in standard environments.",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/review_server.py",
+          "function": "_invoke_gemini_api",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Append ?key={api_key} to the endpoint URL or use the standard Authorization: Bearer header if using OAuth, per Google's official documentation.",
+          "severity": "Medium",
+          "title": "Non-standard API key header for Gemini REST endpoint"
+        }
+      ],
+      "function": "_invoke_gemini_api",
+      "key": "tools mcp toolkit src veilbreakers mcp review server py invoke gemini api non standard api key",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Append ?key={api_key} to the endpoint URL or use the standard Authorization: Bearer header if using OAuth, per Google's official documentation.",
+      "severity": "Medium",
+      "title": "Non-standard API key header for Gemini REST endpoint"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.8,
+      "evidence": "int alphaW = terrainData.alphamapWidth;\\n            int alphaH = terrainData.alphamapHeight;\\n            \u2026\\n            float[,,] alphamaps = new float[alphaH, alphaW, channels];",
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py",
+      "findings": [
+        {
+          "confidence": 0.8,
+          "evidence": "int alphaW = terrainData.alphamapWidth;\\n            int alphaH = terrainData.alphamapHeight;\\n            \u2026\\n            float[,,] alphamaps = new float[alphaH, alphaW, channels];",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py",
+          "function": "generate_terrain_setup_script",
+          "model": "glm-5.0-turbo",
+          "recommendation": "Unity's `alphamapWidth`/`alphamapHeight` may differ from the exported RAW dimensions if the terrain resolution is adjusted or if Unity internally resizes alphamaps. If the byte count in the RAW file doesn't match `alphaH * alphaW * channels`, the loop will read past the end or leave pixels unset. Add a bounds check on `byteIndex < rawBytes.Length` before the inner channel loop, and log a warning on size mismatch.",
+          "severity": "Medium",
+          "title": "Unity C# alphamap array dimensions may not match terrainData.alphamapTexture size"
+        }
+      ],
+      "function": "generate_terrain_setup_script",
+      "key": "tools mcp toolkit src veilbreakers mcp shared unity templates scene templates py generate terrain setup script",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "Unity's `alphamapWidth`/`alphamapHeight` may differ from the exported RAW dimensions if the terrain resolution is adjusted or if Unity internally resizes alphamaps. If the byte count in the RAW file doesn't match `alphaH * alphaW * channels`, the loop will read past the end or leave pixels unset. Add a bounds check on `byteIndex < rawBytes.Length` before the inner channel loop, and log a warning on size mismatch.",
+      "severity": "Medium",
+      "title": "Unity C# alphamap array dimensions may not match terrainData.alphamapTexture size"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.7,
+      "evidence": "_edge_vertices sorts edge vertices by orthogonal coordinate. If multiple vertices share the same coordinate (e.g., at corners or due to loose tolerance), zip pairs them arbitrarily, potentially causing Z-height averaging artifacts.",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+      "findings": [
+        {
+          "confidence": 0.7,
+          "evidence": "_edge_vertices sorts edge vertices by orthogonal coordinate. If multiple vertices share the same coordinate (e.g., at corners or due to loose tolerance), zip pairs them arbitrarily, potentially causing Z-height averaging artifacts.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_stitch_terrain_edges",
+          "model": "qwen/qwen3.6-plus:free",
+          "recommendation": "Implement a nearest-neighbor matching algorithm with a strict distance threshold instead of relying on sorted coordinate pairing.",
+          "severity": "Low",
+          "title": "Vertex sorting mismatch risk in terrain seam stitcher"
+        }
+      ],
+      "function": "handle_stitch_terrain_edges",
+      "key": "tools mcp toolkit blender addon handlers environment py handle stitch terrain edges vertex sorting mismatch risk",
+      "models": [
+        "qwen/qwen3.6-plus:free"
+      ],
+      "recommendation": "Implement a nearest-neighbor matching algorithm with a strict distance threshold instead of relying on sorted coordinate pairing.",
+      "severity": "Low",
+      "title": "Vertex sorting mismatch risk in terrain seam stitcher"
+    },
+    {
+      "agreement": 1,
+      "confidence": 0.95,
+      "evidence": "\"tree_dead\": (_lsystem_tree_generator, {\"tree_type\": \"dead\", \u2026}),\\n    \"dead_tree\": (_lsystem_tree_generator, {\"tree_type\": \"dead\", \u2026}),",
+      "file": "Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py",
+      "findings": [
+        {
+          "confidence": 0.95,
+          "evidence": "\"tree_dead\": (_lsystem_tree_generator, {\"tree_type\": \"dead\", \u2026}),\\n    \"dead_tree\": (_lsystem_tree_generator, {\"tree_type\": \"dead\", \u2026}),",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py",
+          "function": "VEGETATION_GENERATOR_MAP",
+          "model": "glm-5.0-turbo",
+          "recommendation": "Both keys map to identical generator configs. If the duplication is intentional for backward compatibility, add a comment. Otherwise, remove one alias to avoid confusion about which name is canonical.",
+          "severity": "Low",
+          "title": "Duplicate VEGETATION_GENERATOR_MAP entries for dead trees"
+        }
+      ],
+      "function": "VEGETATION_GENERATOR_MAP",
+      "key": "tools mcp toolkit blender addon handlers mesh bridge py vegetation generator map duplicate vegetation generator map",
+      "models": [
+        "glm-5.0-turbo"
+      ],
+      "recommendation": "Both keys map to identical generator configs. If the duplication is intentional for backward compatibility, add a comment. Otherwise, remove one alias to avoid confusion about which name is canonical.",
+      "severity": "Low",
+      "title": "Duplicate VEGETATION_GENERATOR_MAP entries for dead trees"
+    }
+  ],
+  "models": [
+    {
+      "finding_count": 8,
+      "findings": [
+        {
+          "confidence": 0.9,
+          "evidence": "effective_min_slope = min_slope * max(input_range, 1e-12) replaces conditional min_slope * input_range if height_range is not None else min_slope. If height_range was None, the threshold was previously unscaled (min_slope), but is now multiplied by input_range, drastically altering erosion behavior for unbounded heightmaps.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_erosion.py",
+          "function": "apply_hydraulic_erosion",
+          "recommendation": "Restore the original conditional logic or explicitly document that min_slope is now expected to be a dimensionless ratio that must always be scaled by the height range.",
+          "severity": "High",
+          "title": "Hydraulic erosion slope threshold scaling regression"
+        },
+        {
+          "confidence": 0.95,
+          "evidence": "The if explicit_world_anchor: clamped = anchor branch was removed. All anchors are now unconditionally clamped to terrain bounds, which breaks placement of locations intentionally positioned outside the terrain or at exact world coordinates.",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "recommendation": "Reintroduce the explicit_world_anchor check or add a parameter to disable clamping when precise world placement is required.",
+          "severity": "High",
+          "title": "Removal of explicit world anchor bypass in location planning"
+        },
+        {
+          "confidence": 0.9,
+          "evidence": "Changed terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}; to terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}.GetComponent<Terrain>();. Callers expecting GameObject references will now receive Terrain components, causing runtime type errors or missing component references.",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py",
+          "function": "generate_tiled_terrain_setup_script",
+          "recommendation": "Revert to storing the GameObject or explicitly document the type change and update downstream consumers.",
+          "severity": "High",
+          "title": "Breaking change in generated C# terrainMap value type"
+        },
+        {
+          "confidence": 0.85,
+          "evidence": "Uses nested Python for loops over hmap.shape[0] and hmap.shape[1] to compute RGBA weights. For standard 1024x1024 or 2048x2048 heightmaps, this incurs significant overhead (~1-4 seconds) compared to vectorized NumPy operations.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+          "function": "compute_world_splatmap_weights",
+          "recommendation": "Refactor the slope/height/moisture blending logic using NumPy vectorized operations (np.where, boolean masking, and array arithmetic) to improve performance.",
+          "severity": "Medium",
+          "title": "Unvectorized pixel loop in splatmap weight computation"
+        },
+        {
+          "confidence": 0.8,
+          "evidence": "isinstance(height_range, (list, tuple)) check rejects NumPy arrays. If a 2-element array is passed, it falls through to height_range_min/max checks and defaults to local min/max, ignoring the provided range.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "_resolve_height_range",
+          "recommendation": "Use hasattr(height_range, '__len__') and len(height_range) >= 2 or explicitly include np.ndarray in the type check.",
+          "severity": "Medium",
+          "title": "Height range resolution fails for NumPy array inputs"
+        },
+        {
+          "confidence": 0.75,
+          "evidence": "Passes API key via x-goog-api-key header. The public generativelanguage.googleapis.com API expects the key as a ?key= query parameter. This may cause 401/403 authentication failures in standard environments.",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/review_server.py",
+          "function": "_invoke_gemini_api",
+          "recommendation": "Append ?key={api_key} to the endpoint URL or use the standard Authorization: Bearer header if using OAuth, per Google's official documentation.",
+          "severity": "Medium",
+          "title": "Non-standard API key header for Gemini REST endpoint"
+        },
+        {
+          "confidence": 0.8,
+          "evidence": "Replaced raise ValueError(...) with logger.warning(...) and a procedural cube fallback. Missing or misspelled prop types will no longer fail fast, potentially scattering placeholder geometry silently in production scenes.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_create_prop_template",
+          "recommendation": "Keep the warning but add a strict mode flag, or raise an exception if the prop type is critical, to prevent silent degradation.",
+          "severity": "Medium",
+          "title": "Silent fallback to cube template hides missing prop definitions"
+        },
+        {
+          "confidence": 0.7,
+          "evidence": "_edge_vertices sorts edge vertices by orthogonal coordinate. If multiple vertices share the same coordinate (e.g., at corners or due to loose tolerance), zip pairs them arbitrarily, potentially causing Z-height averaging artifacts.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_stitch_terrain_edges",
+          "recommendation": "Implement a nearest-neighbor matching algorithm with a strict distance threshold instead of relying on sorted coordinate pairing.",
+          "severity": "Low",
+          "title": "Vertex sorting mismatch risk in terrain seam stitcher"
+        }
+      ],
+      "model": "qwen/qwen3.6-plus:free",
+      "provider": "openrouter",
+      "status": "ok"
+    },
+    {
+      "finding_count": 10,
+      "findings": [
+        {
+          "confidence": 0.85,
+          "evidence": "if erosion in (\"hydraulic\", \"both\") or erosion in (\"thermal\", \"both\"):",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_generate_world_terrain",
+          "recommendation": "Change to `if erosion in (\"hydraulic\", \"thermal\", \"both\"):`. The current expression evaluates `erosion in (\"thermal\", \"both\")` for the second operand, so when erosion is \"hydraulic\" the condition short-circuits correctly, but the logic is misleading and fragile\u2014combine into a single set membership check.",
+          "severity": "Critical",
+          "title": "Erosion branch condition always true due to string 'in' tuple logic"
+        },
+        {
+          "confidence": 0.95,
+          "evidence": "for r in range(hmap.shape[0]):\\n        for c in range(hmap.shape[1]):",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+          "function": "compute_world_splatmap_weights",
+          "recommendation": "Vectorize the entire loop using NumPy array operations. The slope/height thresholds, moisture blending, and alpha channel logic can all be expressed as element-wise array operations. For a 1025\u00d71025 world heightmap this loop executes over 1M iterations in pure Python, causing severe runtime regressions in the world-terrain pipeline.",
+          "severity": "High",
+          "title": "Splatmap generation uses pure-Python loop over every pixel \u2014 O(rows*cols) scalar iteration"
+        },
+        {
+          "confidence": 0.8,
+          "evidence": "heightmap = heights.reshape(rows, cols)\\n    export_height_range = _resolve_export_height_range(params, heightmap)\\n    \u2026\\n    if unity_compat:\\n        heightmap = heightmap[np.ix_(y_indices, x_indices)]",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_export_heightmap",
+          "recommendation": "When `export_height_range` is None (non-tiled, non-global-range export) the old code normalized to [0,1] before resizing. Now the raw vertex Z values are passed directly to the resize path and then to `_export_heightmap_raw` which will use the post-resize local min/max. If the resize crops extreme values, the normalization range shifts. Restore pre-resize normalization or apply value_range before resizing when unity_compat is true.",
+          "severity": "High",
+          "title": "handle_export_heightmap no longer normalizes heights before resize, breaking Unity compat path"
+        },
+        {
+          "confidence": 0.7,
+          "evidence": "The function computes cell_size and passes it to slope/erosion paths indirectly via detect_cliff_edges, but the standalone tile path never calls erode_world_heightmap. If erosion is later added to the tile path, the cell_size parameter will be missing and thermal erosion will use the default 1.0, producing wrong talus for large cell sizes.",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_generate_terrain_tile",
+          "recommendation": "If tile-level erosion is intentionally omitted, document why. Otherwise, pass cell_size to any future erosion call in the tile handler to match the world-level contract.",
+          "severity": "High",
+          "title": "apply_thermal_erosion cell_size not threaded through handle_generate_terrain_tile"
+        },
+        {
+          "confidence": 0.9,
+          "evidence": "endpoint = f\"{base_url}/models/{model}:generateContent\"",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/review_server.py",
+          "function": "_invoke_gemini_api",
+          "recommendation": "The `model` parameter is the user-facing name (e.g. \"gemini-3.1-flash-lite-preview\") but the Gemini REST API expects the canonical model ID. Apply `_resolve_api_model(\"gemini\", model)` (or a Gemini-specific alias map) before constructing the endpoint URL. Currently this will 404 for any aliased model.",
+          "severity": "High",
+          "title": "Gemini API endpoint uses un-resolved model name, missing CLI alias mapping"
+        },
+        {
+          "confidence": 0.85,
+          "evidence": "elif biome_name not in BIOME_PALETTES_V2:\\n        \u2026\\n        raise ValueError(f\"Unknown biome '{biome_name}'\")",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+          "function": "create_biome_terrain_material",
+          "recommendation": "The old behavior silently fell back to DEFAULT_BIOME. Any pipeline step that passes a biome name not yet in BIOME_PALETTES_V2 will now crash with an unhandled ValueError. Either restore the fallback for non-strict contexts, or ensure all callers validate biome names before reaching this function.",
+          "severity": "High",
+          "title": "create_biome_terrain_material now raises ValueError on unknown biome, breaking existing callers"
+        },
+        {
+          "confidence": 0.9,
+          "evidence": "tile = hmap[row_start:row_end, col_start:col_end, ...]\\n\u2026\\ntile_splat = extract_tile(world_splatmap, tx, ty, tile_size)",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_generate_world_terrain",
+          "recommendation": "extract_tile was relaxed to accept ndim >= 2 and returns trailing dimensions. When a 3D splatmap (H, W, 4) is passed, validate_tile_seams receives 3D arrays but only inspects tile_a[0] and tile_b[0] (first channel). This means seam validation only checks one splat channel, giving a false 'passed' if other channels disagree.",
+          "severity": "Medium",
+          "title": "extract_tile now supports N-dimensional arrays but seam validation only compares 2D slices"
+        },
+        {
+          "confidence": 0.75,
+          "evidence": "if terrain_cfg.get(\"location\") is not None:\\n            min_x = terrain_origin_x - half + radius\\n        else:\\n            \u2026\\n        clamped = (max(min_x, min(max_x, anchor[0])), \u2026",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "recommendation": "The old code skipped clamping when `explicit_world_anchor` was truthy. The refactor removed that guard, so explicitly placed anchors are now clamped to the terrain bounds. If explicit anchors are meant to override placement (e.g., POIs outside terrain), restore the early-return path.",
+          "severity": "Medium",
+          "title": "Map anchor clamping still ignores explicit_world_anchor, always clamping"
+        },
+        {
+          "confidence": 0.8,
+          "evidence": "int alphaW = terrainData.alphamapWidth;\\n            int alphaH = terrainData.alphamapHeight;\\n            \u2026\\n            float[,,] alphamaps = new float[alphaH, alphaW, channels];",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py",
+          "function": "generate_terrain_setup_script",
+          "recommendation": "Unity's `alphamapWidth`/`alphamapHeight` may differ from the exported RAW dimensions if the terrain resolution is adjusted or if Unity internally resizes alphamaps. If the byte count in the RAW file doesn't match `alphaH * alphaW * channels`, the loop will read past the end or leave pixels unset. Add a bounds check on `byteIndex < rawBytes.Length` before the inner channel loop, and log a warning on size mismatch.",
+          "severity": "Medium",
+          "title": "Unity C# alphamap array dimensions may not match terrainData.alphamapTexture size"
+        },
+        {
+          "confidence": 0.95,
+          "evidence": "\"tree_dead\": (_lsystem_tree_generator, {\"tree_type\": \"dead\", \u2026}),\\n    \"dead_tree\": (_lsystem_tree_generator, {\"tree_type\": \"dead\", \u2026}),",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py",
+          "function": "VEGETATION_GENERATOR_MAP",
+          "recommendation": "Both keys map to identical generator configs. If the duplication is intentional for backward compatibility, add a comment. Otherwise, remove one alias to avoid confusion about which name is canonical.",
+          "severity": "Low",
+          "title": "Duplicate VEGETATION_GENERATOR_MAP entries for dead trees"
+        }
+      ],
+      "model": "glm-5.0-turbo",
+      "provider": "glm",
+      "status": "ok"
+    },
+    {
+      "error": "Command '['cmd', '/c', 'gemini', '-p', '', '--output-format', 'text', '--model', 'gemini-3-flash-preview']' timed out after 180.0 seconds",
+      "finding_count": 0,
+      "findings": [],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "error"
+    }
+  ]
+}

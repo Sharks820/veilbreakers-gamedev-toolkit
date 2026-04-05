@@ -1,0 +1,17 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "0f66710bc86e14931ac788f40d370551a42e94dac34e9630301f83215f712280",
+  "generated_at": "2026-04-05T06:55:14.991333+00:00",
+  "min_agreement": 1,
+  "model_specific_findings": [],
+  "models": [
+    {
+      "error": "OpenRouter API error 402: {\"error\":{\"message\":\"Prompt tokens limit exceeded: 1378 > 1059. To increase, visit https://openrouter.ai/settings/credits and upgrade to a paid account\",\"code\":402,\"metadata\":{\"provider_name\":null}},\"user_id\":\"user_3BYikM0F7Ry0ek4KJLRGr1Gl39P\"}",
+      "finding_count": 0,
+      "findings": [],
+      "model": "openai/gpt-5.4",
+      "provider": "openrouter",
+      "status": "error"
+    }
+  ]
+}

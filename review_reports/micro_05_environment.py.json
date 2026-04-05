@@ -1,0 +1,24 @@
+{
+  "consensus_findings": [],
+  "diff_sha256": "6afc299043e30af87c52335f29513770854e0a3fdd8271c4b3bae51500e4818f",
+  "generated_at": "2026-04-05T06:58:49.793244+00:00",
+  "min_agreement": 2,
+  "model_specific_findings": [],
+  "models": [
+    {
+      "error": "The read operation timed out",
+      "finding_count": 0,
+      "findings": [],
+      "model": "gpt-5.4",
+      "provider": "openrouter",
+      "status": "error"
+    },
+    {
+      "finding_count": 0,
+      "findings": [],
+      "model": "gemini-3.1-flash-lite-preview",
+      "provider": "gemini",
+      "status": "ok"
+    }
+  ]
+}

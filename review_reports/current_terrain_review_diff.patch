@@ -1,0 +1,1034 @@
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py b/Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py
+index 6e57355..392e122 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/_mesh_bridge.py
+@@ -288,6 +288,7 @@ VEGETATION_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any
+     "tree_boundary": (_lsystem_tree_generator, {"tree_type": "birch", "iterations": 4, "leaf_type": "broadleaf", "canopy_style": "veil_boundary"}),
+     "tree_blighted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine", "canopy_style": "veil_blighted"}),
+     "tree_dead": (_lsystem_tree_generator, {"tree_type": "dead", "iterations": 4, "leaf_type": None, "canopy_style": "veil_blighted"}),
++    "dead_tree": (_lsystem_tree_generator, {"tree_type": "dead", "iterations": 4, "leaf_type": None, "canopy_style": "veil_blighted"}),
+     "tree_twisted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine", "canopy_style": "veil_boundary"}),
+     "pine_tree": (_lsystem_tree_generator, {"tree_type": "pine", "iterations": 4, "leaf_type": "needle", "canopy_style": "veil_healthy"}),
+     "bush": (generate_shrub_mesh, {}),
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py b/Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py
+index 882ad67..0385224 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/_terrain_depth.py
+@@ -543,8 +543,9 @@ def detect_cliff_edges(
+     """
+     from ._terrain_noise import compute_slope_map
+ 
+-    slope_map = compute_slope_map(heightmap)
+     rows, cols = heightmap.shape
++    cell_size = float(terrain_size) / max(max(rows, cols) - 1, 1)
++    slope_map = compute_slope_map(heightmap, cell_size=cell_size)
+ 
+     # Binary mask of steep cells
+     cliff_mask = slope_map > slope_threshold_deg
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py b/Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py
+index 47fc24d..1657735 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py
+@@ -600,7 +600,10 @@ def _theoretical_max_amplitude(octaves: int, persistence: float) -> float:
+ # Slope map
+ # ---------------------------------------------------------------------------
+ 
+-def compute_slope_map(heightmap: np.ndarray) -> np.ndarray:
++def compute_slope_map(
++    heightmap: np.ndarray,
++    cell_size: float = 1.0,
++) -> np.ndarray:
+     """Compute slope in degrees from a heightmap.
+ 
+     Uses numpy gradient to compute partial derivatives, then converts
+@@ -610,6 +613,9 @@ def compute_slope_map(heightmap: np.ndarray) -> np.ndarray:
+     ----------
+     heightmap : np.ndarray
+         2D heightmap array.
++    cell_size : float
++        World-space spacing between adjacent samples. Larger spacing lowers
++        the inferred slope for the same height delta.
+ 
+     Returns
+     -------
+@@ -622,7 +628,8 @@ def compute_slope_map(heightmap: np.ndarray) -> np.ndarray:
+     if rows < 2 or cols < 2:
+         return np.zeros_like(heightmap)
+ 
+-    dy, dx = np.gradient(heightmap)
++    sample_spacing = max(float(cell_size), 1e-9)
++    dy, dx = np.gradient(heightmap, sample_spacing)
+     magnitude = np.sqrt(dx ** 2 + dy ** 2)
+     slope_rad = np.arctan(magnitude)
+     slope_deg = np.degrees(slope_rad)
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/environment.py b/Tools/mcp-toolkit/blender_addon/handlers/environment.py
+index 926d9b9..484b297 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/environment.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/environment.py
+@@ -366,6 +366,7 @@ def _resolve_terrain_tile_params(params: dict) -> dict[str, Any]:
+ def _export_heightmap_raw(
+     heightmap: np.ndarray,
+     flip_vertical: bool = True,
++    value_range: tuple[float, float] | None = None,
+ ) -> bytes:
+     """Convert a heightmap to 16-bit little-endian RAW bytes.
+ 
+@@ -375,9 +376,12 @@ def _export_heightmap_raw(
+     Parameters
+     ----------
+     heightmap : np.ndarray
+-        2D array with values in [0, 1].
++        2D array of height values.
+     flip_vertical : bool
+         Flip rows for Unity coordinate system compatibility.
++    value_range : tuple[float, float] | None
++        Optional shared export range ``(min, max)`` used to normalize heights.
++        When omitted, the input array's local min/max are used.
+ 
+     Returns
+     -------
+@@ -387,9 +391,12 @@ def _export_heightmap_raw(
+     hmap = heightmap.astype(np.float64).copy()
+ 
+     # Normalize to [0, 1]
+-    hmin, hmax = hmap.min(), hmap.max()
++    if value_range is not None:
++        hmin, hmax = float(value_range[0]), float(value_range[1])
++    else:
++        hmin, hmax = float(hmap.min()), float(hmap.max())
+     if hmax - hmin > 1e-10:
+-        hmap = (hmap - hmin) / (hmax - hmin)
++        hmap = np.clip((hmap - hmin) / (hmax - hmin), 0.0, 1.0)
+     else:
+         hmap = np.zeros_like(hmap)
+ 
+@@ -430,6 +437,7 @@ def _export_world_tile_artifacts(
+     heightmap: np.ndarray,
+     splatmap: np.ndarray | None = None,
+     flip_vertical: bool = True,
++    height_range: tuple[float, float] | None = None,
+ ) -> dict[str, str]:
+     """Write world-tile RAW artifacts and return their file paths."""
+     output_dir = Path(export_dir)
+@@ -437,7 +445,13 @@ def _export_world_tile_artifacts(
+ 
+     result: dict[str, str] = {}
+     heightmap_path = output_dir / f"{tile_name}_heightmap.raw"
+-    heightmap_path.write_bytes(_export_heightmap_raw(heightmap, flip_vertical=flip_vertical))
++    heightmap_path.write_bytes(
++        _export_heightmap_raw(
++            heightmap,
++            flip_vertical=flip_vertical,
++            value_range=height_range,
++        )
++    )
+     result["heightmap_path"] = str(heightmap_path)
+ 
+     if splatmap is not None:
+@@ -465,6 +479,67 @@ def _resolve_height_range(params: dict, heightmap: np.ndarray) -> tuple[float, f
+     return float(hmap.min()), float(hmap.max())
+ 
+ 
++def _resolve_export_height_range(
++    params: dict,
++    heightmap: np.ndarray,
++) -> tuple[float, float] | None:
++    """Resolve an optional shared export range for heightmap RAW output."""
++    if params.get("tiled_world") or params.get("use_global_height_range"):
++        return _resolve_height_range(params, heightmap)
++
++    height_range = params.get("height_range")
++    if height_range is not None:
++        return _resolve_height_range(params, heightmap)
++
++    if (
++        params.get("height_range_min") is not None
++        and params.get("height_range_max") is not None
++    ):
++        return _resolve_height_range(params, heightmap)
++
++    return None
++
++
++def _terrain_grid_to_world_xy(
++    row: int,
++    col: int,
++    *,
++    rows: int,
++    cols: int,
++    terrain_size: float,
++    terrain_origin_x: float,
++    terrain_origin_y: float,
++) -> tuple[float, float]:
++    """Convert a terrain grid cell to a world-space XY position.
++
++    ``terrain_origin_*`` is the terrain object's world-space center.
++    """
++    if rows < 2 or cols < 2:
++        return terrain_origin_x, terrain_origin_y
++
++    x = terrain_origin_x + (col / max(cols - 1, 1)) * terrain_size - terrain_size * 0.5
++    y = terrain_origin_y + (row / max(rows - 1, 1)) * terrain_size - terrain_size * 0.5
++    return x, y
++
++
++def _resolve_water_path_points(
++    *,
++    path_points_raw: Any,
++    terrain_origin_x: float,
++    terrain_origin_y: float,
++    fallback_depth: float,
++    water_level: float,
++) -> list[tuple[float, float, float]]:
++    """Resolve explicit or fallback water spline points in world space."""
++    if path_points_raw and len(path_points_raw) >= 2:
++        return [tuple(float(v) for v in pt) for pt in path_points_raw]
++
++    return [
++        (terrain_origin_x, terrain_origin_y - fallback_depth / 2.0, water_level),
++        (terrain_origin_x, terrain_origin_y + fallback_depth / 2.0, water_level),
++    ]
++
++
+ def _estimate_tile_height_range(
+     terrain_type: str,
+     *,
+@@ -879,6 +954,7 @@ def handle_generate_terrain_tile(params: dict) -> dict:
+         splatmap = compute_world_splatmap_weights(
+             heightmap,
+             biome_name=biome_name,
++            cell_size=cell_size,
+             moisture_map=moisture_map,
+             height_range=height_range,
+         )
+@@ -927,6 +1003,7 @@ def handle_generate_terrain_tile(params: dict) -> dict:
+                 tile_name=name,
+                 heightmap=heightmap,
+                 splatmap=splatmap,
++                height_range=height_range,
+             )
+         )
+     return result
+@@ -1028,6 +1105,7 @@ def handle_generate_world_terrain(params: dict) -> dict:
+         world_splatmap = compute_world_splatmap_weights(
+             heightmap,
+             biome_name=biome_name,
++            cell_size=cell_size,
+             moisture_map=moisture_map,
+             height_range=height_range,
+         )
+@@ -1050,6 +1128,7 @@ def handle_generate_world_terrain(params: dict) -> dict:
+                     tile_name=tile_name,
+                     heightmap=tile_hmap,
+                     splatmap=tile_splat,
++                    height_range=height_range,
+                 )
+             tile_result = _create_terrain_mesh_from_heightmap(
+                 name=tile_name,
+@@ -1454,10 +1533,24 @@ def handle_generate_road(params: dict) -> dict:
+             r0, c0 = path[pi]
+             r1, c1 = path[pi + 1]
+             # Convert grid coords to world coords
+-            x0 = terrain_origin_x + (c0 / max(cols - 1, 1)) * terrain_size - terrain_size / 2
+-            y0 = terrain_origin_y + (r0 / max(rows - 1, 1)) * terrain_size - terrain_size / 2
+-            x1 = terrain_origin_x + (c1 / max(cols - 1, 1)) * terrain_size - terrain_size / 2
+-            y1 = terrain_origin_y + (r1 / max(rows - 1, 1)) * terrain_size - terrain_size / 2
++            x0, y0 = _terrain_grid_to_world_xy(
++                r0,
++                c0,
++                rows=rows,
++                cols=cols,
++                terrain_size=terrain_size,
++                terrain_origin_x=terrain_origin_x,
++                terrain_origin_y=terrain_origin_y,
++            )
++            x1, y1 = _terrain_grid_to_world_xy(
++                r1,
++                c1,
++                rows=rows,
++                cols=cols,
++                terrain_size=terrain_size,
++                terrain_origin_x=terrain_origin_x,
++                terrain_origin_y=terrain_origin_y,
++            )
+             z0 = float(graded_flat[r0 * cols + c0]) * height_scale + 0.03
+             z1 = float(graded_flat[r1 * cols + c1]) * height_scale + 0.03
+ 
+@@ -1586,14 +1679,13 @@ def handle_create_water(params: dict) -> dict:
+     # -----------------------------------------------------------------------
+     # Build spline path
+     # -----------------------------------------------------------------------
+-    if path_points_raw and len(path_points_raw) >= 2:
+-        path = [tuple(float(v) for v in pt) for pt in path_points_raw]
+-    else:
+-        # Fallback: straight line along Y axis
+-        path = [
+-            (terrain_origin_x, terrain_origin_y - fallback_depth / 2.0, water_level),
+-            (terrain_origin_x, terrain_origin_y + fallback_depth / 2.0, water_level),
+-        ]
++    path = _resolve_water_path_points(
++        path_points_raw=path_points_raw,
++        terrain_origin_x=terrain_origin_x,
++        terrain_origin_y=terrain_origin_y,
++        fallback_depth=fallback_depth,
++        water_level=water_level,
++    )
+ 
+     # -----------------------------------------------------------------------
+     # Build cross-section mesh following the spline
+@@ -1824,14 +1916,8 @@ def handle_export_heightmap(params: dict) -> dict:
+     heights = np.array([v.co.z for v in bm.verts])
+     bm.free()
+ 
+-    # Normalize heights to [0, 1]
+-    hmin, hmax = heights.min(), heights.max()
+-    if hmax - hmin > 1e-10:
+-        heightmap = (heights - hmin) / (hmax - hmin)
+-    else:
+-        heightmap = np.zeros_like(heights)
+-
+-    heightmap = heightmap.reshape(rows, cols)
++    heightmap = heights.reshape(rows, cols)
++    export_height_range = _resolve_export_height_range(params, heightmap)
+ 
+     # Unity compat: resize to nearest power-of-two + 1 (use cols as ref dimension)
+     if unity_compat:
+@@ -1843,7 +1929,11 @@ def handle_export_heightmap(params: dict) -> dict:
+             heightmap = heightmap[np.ix_(y_indices, x_indices)]
+ 
+     # Export
+-    raw_bytes = _export_heightmap_raw(heightmap, flip_vertical=flip_vertical)
++    raw_bytes = _export_heightmap_raw(
++        heightmap,
++        flip_vertical=flip_vertical,
++        value_range=export_height_range,
++    )
+ 
+     out_path = Path(filepath)
+     out_path.parent.mkdir(parents=True, exist_ok=True)
+@@ -2059,4 +2149,3 @@ def _compute_vertex_colors_for_biome_map(
+ def _stable_seed_offset(label: str) -> int:
+     """Return a deterministic, cross-process seed offset for string labels."""
+     return zlib.crc32(label.encode("utf-8")) & 0xFFFF
+-
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py b/Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py
+index 5f55cf1..60a677c 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py
+@@ -287,22 +287,106 @@ def _terrain_height_sampler(terrain_obj: bpy.types.Object | None):
+     heightmap = (heights / height_max).reshape(rows, cols)
+     dims = terrain_obj.dimensions
+     terrain_size = max(dims.x, dims.y, 1.0)
+-    half_size = terrain_size / 2.0
+     origin_x = float(terrain_obj.location.x)
+     origin_y = float(terrain_obj.location.y)
+ 
+     def _sample(world_x: float, world_y: float) -> float:
+-        u = (world_x - origin_x + half_size) / terrain_size
+-        v = (world_y - origin_y + half_size) / terrain_size
+-        ci = int(u * (cols - 1))
+-        ri = int(v * (rows - 1))
+-        ci = max(0, min(ci, cols - 1))
+-        ri = max(0, min(ri, rows - 1))
+-        return float(heightmap[ri, ci]) * height_max
++        return _sample_heightmap_world(
++            heightmap,
++            height_scale=height_max,
++            world_x=world_x,
++            world_y=world_y,
++            terrain_size=terrain_size,
++            terrain_origin_x=origin_x,
++            terrain_origin_y=origin_y,
++        )
+ 
+     return _sample
+ 
+ 
++def _world_to_terrain_uv(
++    world_x: float,
++    world_y: float,
++    *,
++    terrain_size: float,
++    terrain_origin_x: float,
++    terrain_origin_y: float,
++) -> tuple[float, float]:
++    """Convert world coordinates to normalized terrain UVs.
++
++    ``terrain_origin_*`` is the terrain object's world-space center.
++    """
++    if terrain_size <= 0:
++        raise ValueError("terrain_size must be positive")
++
++    terrain_half = terrain_size * 0.5
++    local_x = world_x - terrain_origin_x + terrain_half
++    local_y = world_y - terrain_origin_y + terrain_half
++    return local_x / terrain_size, local_y / terrain_size
++
++
++def _sample_heightmap_world(
++    heightmap: np.ndarray,
++    *,
++    height_scale: float,
++    world_x: float,
++    world_y: float,
++    terrain_size: float,
++    terrain_origin_x: float,
++    terrain_origin_y: float,
++) -> float:
++    """Sample a terrain heightmap at a world-space position using bilinear interpolation."""
++    hmap = np.asarray(heightmap, dtype=np.float64)
++    if hmap.ndim != 2:
++        raise ValueError("heightmap must be 2D")
++
++    rows, cols = hmap.shape
++    if rows == 0 or cols == 0:
++        return 0.0
++    if rows == 1 or cols == 1:
++        return float(hmap[0, 0]) * height_scale
++
++    u, v = _world_to_terrain_uv(
++        world_x,
++        world_y,
++        terrain_size=terrain_size,
++        terrain_origin_x=terrain_origin_x,
++        terrain_origin_y=terrain_origin_y,
++    )
++    u = max(0.0, min(u, 1.0))
++    v = max(0.0, min(v, 1.0))
++
++    col_f = u * (cols - 1)
++    row_f = v * (rows - 1)
++    c0 = max(0, min(int(col_f), cols - 2))
++    r0 = max(0, min(int(row_f), rows - 2))
++    c1, r1 = c0 + 1, r0 + 1
++    cf, rf = col_f - c0, row_f - r0
++
++    h00 = float(hmap[r0, c0])
++    h10 = float(hmap[r0, c1])
++    h01 = float(hmap[r1, c0])
++    h11 = float(hmap[r1, c1])
++    return (
++        h00 * (1 - cf) * (1 - rf)
++        + h10 * cf * (1 - rf)
++        + h01 * (1 - cf) * rf
++        + h11 * cf * rf
++    ) * height_scale
++
++
++def _terrain_cell_size_from_extent(
++    terrain_width: float,
++    terrain_height: float,
++    rows: int,
++    cols: int,
++) -> float:
++    """Return terrain grid spacing in world units for slope calculations."""
++    step_x = float(terrain_width) / max(cols - 1, 1)
++    step_y = float(terrain_height) / max(rows - 1, 1)
++    return max(step_x, step_y, 1e-9)
++
++
+ # ---------------------------------------------------------------------------
+ # Default biome vegetation rules
+ # ---------------------------------------------------------------------------
+@@ -1278,11 +1362,19 @@ def handle_scatter_vegetation(params: dict) -> dict:
+ 
+     height_max = heights.max() if heights.max() > 0 else 1.0
+     heightmap = (heights / height_max).reshape(rows, cols)
+-    slope_map = compute_slope_map(heightmap)
+ 
+     # Determine terrain world-space size
+     dims = obj.dimensions
+-    terrain_size = max(dims.x, dims.y, 1.0)
++    terrain_width = max(float(dims.x), 1.0)
++    terrain_height = max(float(dims.y), 1.0)
++    terrain_size = max(terrain_width, terrain_height, 1.0)
++    terrain_cell_size = _terrain_cell_size_from_extent(
++        terrain_width,
++        terrain_height,
++        rows,
++        cols,
++    )
++    slope_map = compute_slope_map(heightmap, cell_size=terrain_cell_size)
+     terrain_origin_x = float(obj.location.x)
+     terrain_origin_y = float(obj.location.y)
+ 
+@@ -1410,21 +1502,16 @@ def handle_scatter_vegetation(params: dict) -> dict:
+         wx = p["position"][0] - terrain_half + terrain_origin_x
+         wy = p["position"][1] - terrain_half + terrain_origin_y
+ 
+-        # Sample terrain height at this position with bilinear interpolation
+-        u = p["position"][0] / terrain_size
+-        v = p["position"][1] / terrain_size
+-        col_f = u * (cols - 1)
+-        row_f = v * (rows - 1)
+-        c0 = max(0, min(int(col_f), cols - 2))
+-        r0 = max(0, min(int(row_f), rows - 2))
+-        c1, r1 = c0 + 1, r0 + 1
+-        cf, rf = col_f - c0, row_f - r0
+-        h00 = float(heightmap[r0, c0])
+-        h10 = float(heightmap[r0, c1])
+-        h01 = float(heightmap[r1, c0])
+-        h11 = float(heightmap[r1, c1])
+-        wz = (h00 * (1 - cf) * (1 - rf) + h10 * cf * (1 - rf)
+-              + h01 * (1 - cf) * rf + h11 * cf * rf) * height_max
++        # Sample terrain height in world space so offset tiles use the same contract
++        wz = _sample_heightmap_world(
++            heightmap,
++            height_scale=height_max,
++            world_x=wx,
++            world_y=wy,
++            terrain_size=terrain_size,
++            terrain_origin_x=terrain_origin_x,
++            terrain_origin_y=terrain_origin_y,
++        )
+ 
+         instance.location = (wx, wy, wz)
+ 
+diff --git a/Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py b/Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py
+index 81e54ca..29d3172 100644
+--- a/Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py
++++ b/Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py
+@@ -2099,6 +2099,7 @@ def compute_world_splatmap_weights(
+     heightmap: list[list[float]] | np.ndarray,
+     biome_name: str = DEFAULT_BIOME,
+     *,
++    cell_size: float = 1.0,
+     slope_flat_deg: float = 30.0,
+     slope_cliff_deg: float = 60.0,
+     special_low_pct: float = 0.15,
+@@ -2126,7 +2127,7 @@ def compute_world_splatmap_weights(
+         except ValueError:
+             logger.warning("Unknown biome '%s' passed to compute_world_splatmap_weights", biome_name)
+ 
+-    slope_map = compute_slope_map(hmap)
++    slope_map = compute_slope_map(hmap, cell_size=cell_size)
+     if height_range is not None:
+         z_min, z_max = float(height_range[0]), float(height_range[1])
+         if z_max < z_min:
+diff --git a/Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py b/Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py
+index 16ca76b..fcaed5d 100644
+--- a/Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py
++++ b/Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py
+@@ -294,10 +294,10 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
+             )
+ 
+         if terrain_cfg.get("location") is not None:
+-            min_x = terrain_origin_x + radius
+-            max_x = terrain_origin_x + terrain_size - radius
+-            min_y = terrain_origin_y + radius
+-            max_y = terrain_origin_y + terrain_size - radius
++            min_x = terrain_origin_x - half + radius
++            max_x = terrain_origin_x + half - radius
++            min_y = terrain_origin_y - half + radius
++            max_y = terrain_origin_y + half - radius
+         else:
+             min_x = -half + radius
+             max_x = half - radius
+diff --git a/Tools/mcp-toolkit/tests/test_compose_planners.py b/Tools/mcp-toolkit/tests/test_compose_planners.py
+index 6c192fa..c27ff01 100644
+--- a/Tools/mcp-toolkit/tests/test_compose_planners.py
++++ b/Tools/mcp-toolkit/tests/test_compose_planners.py
+@@ -86,6 +86,19 @@ class TestMapPlacementPlanning:
+ 
+         assert placements[0]["anchor"] == (140.0, 80.0)
+ 
++    def test_anchor_planner_clamps_explicit_world_positions_to_centered_bounds(self):
++        placements = _plan_map_location_anchors({
++            "terrain": {"size": 200.0, "location": [100.0, 100.0]},
++            "locations": [
++                {"name": "Outpost", "type": "building", "position": [260.0, -40.0]},
++            ],
++        })
++
++        ax, ay = placements[0]["anchor"]
++        radius = placements[0]["radius"]
++        assert ax == 200.0 - radius
++        assert ay == 0.0 + radius
++
+     def test_budget_defaults_to_balanced_pc_for_regular_region(self):
+         budget = _resolve_map_generation_budget({
+             "terrain": {"size": 220.0},
+diff --git a/Tools/mcp-toolkit/tests/test_environment_handlers.py b/Tools/mcp-toolkit/tests/test_environment_handlers.py
+index 451aa14..1c44f13 100644
+--- a/Tools/mcp-toolkit/tests/test_environment_handlers.py
++++ b/Tools/mcp-toolkit/tests/test_environment_handlers.py
+@@ -225,6 +225,34 @@ class TestExportHeightmapRaw:
+         raw = _export_heightmap_raw(hmap, flip_vertical=True)
+         assert len(raw) == 64 * 64 * 2
+ 
++    def test_shared_value_range_preserves_world_scale(self):
++        """A shared export range should avoid per-tile renormalization."""
++        from blender_addon.handlers.environment import _export_heightmap_raw
++
++        hmap = np.array([[10.0, 20.0]], dtype=np.float64)
++        raw = _export_heightmap_raw(
++            hmap,
++            flip_vertical=False,
++            value_range=(0.0, 40.0),
++        )
++        values = struct.unpack("<2H", raw)
++        assert 16383 <= values[0] <= 16384
++        assert 32767 <= values[1] <= 32768
++
++    def test_shared_value_range_clamps_outside_bounds(self):
++        """Shared export range should clamp values outside the provided range."""
++        from blender_addon.handlers.environment import _export_heightmap_raw
++
++        hmap = np.array([[-5.0, 50.0]], dtype=np.float64)
++        raw = _export_heightmap_raw(
++            hmap,
++            flip_vertical=False,
++            value_range=(0.0, 40.0),
++        )
++        values = struct.unpack("<2H", raw)
++        assert values[0] == 0
++        assert values[1] == 65535
++
+ 
+ class TestExportSplatmapRaw:
+     """Test RAW splatmap export (pure logic, no file I/O)."""
+@@ -279,6 +307,24 @@ class TestWorldSplatmapWeights:
+ 
+         assert not np.allclose(local_weights[0, 1], shared_weights[0, 1])
+ 
++    def test_larger_cell_size_keeps_same_height_delta_less_cliff_like(self):
++        from blender_addon.handlers.terrain_materials import compute_world_splatmap_weights
++
++        hmap = np.tile(np.linspace(0.0, 1.0, 5), (5, 1))
++        fine = compute_world_splatmap_weights(
++            hmap,
++            biome_name="thornwood_forest",
++            cell_size=1.0,
++        )
++        coarse = compute_world_splatmap_weights(
++            hmap,
++            biome_name="thornwood_forest",
++            cell_size=4.0,
++        )
++
++        assert coarse[2, 2][0] > fine[2, 2][0]
++        assert coarse[2, 2][1] < fine[2, 2][1]
++
+ 
+ # ---------------------------------------------------------------------------
+ # Handler return dict structure tests
+@@ -378,6 +424,98 @@ class TestWorldTerrainGeneration:
+         assert result["tiles"][0]["heightmap_path"].endswith(".raw")
+         assert result["tiles"][0]["alphamap_path"].endswith(".raw")
+ 
++    def test_multi_biome_world_uses_mesh_backed_scatter_helper(self):
++        from blender_addon.handlers import environment as env_mod
++
++        class _ColorDatum:
++            def __init__(self):
++                self.color = None
++
++        class _ColorAttr:
++            def __init__(self, count):
++                self.data = [_ColorDatum() for _ in range(count)]
++
++        class _ColorAttributes:
++            def __init__(self):
++                self._attrs = {}
++
++            def get(self, name):
++                return self._attrs.get(name)
++
++            def new(self, name, type, domain):
++                attr = _ColorAttr(4)
++                self._attrs[name] = attr
++                return attr
++
++            def remove(self, attr):
++                for key, value in list(self._attrs.items()):
++                    if value is attr:
++                        del self._attrs[key]
++
++        class _Mesh:
++            def __init__(self):
++                self.color_attributes = _ColorAttributes()
++                self.vertices = [object(), object(), object(), object()]
++
++        class _Obj:
++            def __init__(self):
++                self.data = _Mesh()
++
++        class _Spec:
++            def __init__(self):
++                self.biome_names = ["thornwood_forest", "corrupted_swamp"]
++                self.biome_ids = np.array([[0, 1], [1, 0]], dtype=np.int32)
++                self.corruption_map = np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float64)
++                self.flatten_zones = [{"center": [0.0, 0.0], "radius": 10.0}]
++
++        fake_obj = _Obj()
++        scatter_calls = []
++
++        with patch.object(env_mod, "handle_generate_terrain", return_value={"vertex_count": 4}), \
++             patch.object(env_mod, "_compute_vertex_colors_for_biome_map", return_value=[(1.0, 0.0, 0.0, 1.0)] * 4), \
++             patch.object(env_mod.bpy.data.objects, "get", return_value=fake_obj), \
++             patch("blender_addon.handlers._biome_grammar.generate_world_map_spec", return_value=_Spec()), \
++             patch("blender_addon.handlers.terrain_materials.handle_create_biome_terrain", return_value={"status": "ok"}), \
++             patch("blender_addon.handlers.vegetation_system.scatter_biome_vegetation", side_effect=lambda params: scatter_calls.append(params) or {"instance_count": 3}):
++            result = env_mod.handle_generate_multi_biome_world(
++                {
++                    "name": "BiomeWorld",
++                    "width": 2,
++                    "height": 2,
++                    "world_size": 128.0,
++                    "scatter_vegetation": True,
++                    "seed": 7,
++                }
++            )
++
++        assert result["name"] == "BiomeWorld"
++        assert result["vegetation_count"] == 6
++        assert [call["biome_name"] for call in scatter_calls] == ["thornwood_forest", "corrupted_swamp"]
++
++
++class TestExportHeightRangeResolution:
++    def test_tiled_world_uses_shared_height_range(self):
++        from blender_addon.handlers.environment import _resolve_export_height_range
++
++        hmap = np.array([[10.0, 20.0], [30.0, 40.0]], dtype=np.float64)
++        result = _resolve_export_height_range(
++            {
++                "tiled_world": True,
++                "height_range": (0.0, 80.0),
++            },
++            hmap,
++        )
++
++        assert result == (0.0, 80.0)
++
++    def test_legacy_export_defaults_to_local_range(self):
++        from blender_addon.handlers.environment import _resolve_export_height_range
++
++        hmap = np.array([[10.0, 20.0], [30.0, 40.0]], dtype=np.float64)
++        result = _resolve_export_height_range({}, hmap)
++
++        assert result is None
++
+ 
+ # ---------------------------------------------------------------------------
+ # Tiled terrain parameter resolution
+@@ -421,6 +559,72 @@ class TestResolveTerrainTileParams:
+             _resolve_terrain_tile_params({"tile_size": 64, "resolution": 63})
+ 
+ 
++class TestTerrainWorldCoordinateHelpers:
++    def test_grid_to_world_xy_respects_center_offset(self):
++        from blender_addon.handlers.environment import _terrain_grid_to_world_xy
++
++        start = _terrain_grid_to_world_xy(
++            0,
++            0,
++            rows=3,
++            cols=3,
++            terrain_size=100.0,
++            terrain_origin_x=150.0,
++            terrain_origin_y=200.0,
++        )
++        center = _terrain_grid_to_world_xy(
++            1,
++            1,
++            rows=3,
++            cols=3,
++            terrain_size=100.0,
++            terrain_origin_x=150.0,
++            terrain_origin_y=200.0,
++        )
++        end = _terrain_grid_to_world_xy(
++            2,
++            2,
++            rows=3,
++            cols=3,
++            terrain_size=100.0,
++            terrain_origin_x=150.0,
++            terrain_origin_y=200.0,
++        )
++
++        assert start == (100.0, 150.0)
++        assert center == (150.0, 200.0)
++        assert end == (200.0, 250.0)
++
++    def test_resolve_water_path_points_defaults_to_offset_terrain_center(self):
++        from blender_addon.handlers.environment import _resolve_water_path_points
++
++        path = _resolve_water_path_points(
++            path_points_raw=None,
++            terrain_origin_x=320.0,
++            terrain_origin_y=640.0,
++            fallback_depth=100.0,
++            water_level=3.0,
++        )
++
++        assert path == [
++            (320.0, 590.0, 3.0),
++            (320.0, 690.0, 3.0),
++        ]
++
++    def test_resolve_water_path_points_preserves_explicit_points(self):
++        from blender_addon.handlers.environment import _resolve_water_path_points
++
++        path = _resolve_water_path_points(
++            path_points_raw=[[1, 2, 3], [4, 5, 6]],
++            terrain_origin_x=320.0,
++            terrain_origin_y=640.0,
++            fallback_depth=100.0,
++            water_level=3.0,
++        )
++
++        assert path == [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)]
++
++
+ # ---------------------------------------------------------------------------
+ # _nearest_pot_plus_1 tests
+ # ---------------------------------------------------------------------------
+diff --git a/Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py b/Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py
+index dda2cbd..ffb7e80 100644
+--- a/Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py
++++ b/Tools/mcp-toolkit/tests/test_environment_scatter_handlers.py
+@@ -22,6 +22,76 @@ from blender_addon.handlers._scatter_engine import (
+ class TestScatterVegetationLogic:
+     """Test the pure-logic path used by handle_scatter_vegetation."""
+ 
++    def test_world_height_sampling_matches_centered_and_offset_tiles(self):
++        """World-space height sampling should be invariant to terrain center offsets."""
++        from blender_addon.handlers.environment_scatter import _sample_heightmap_world
++
++        heightmap = np.array(
++            [
++                [0.0, 0.25, 0.5],
++                [0.25, 0.5, 0.75],
++                [0.5, 0.75, 1.0],
++            ],
++            dtype=np.float64,
++        )
++
++        centered = _sample_heightmap_world(
++            heightmap,
++            height_scale=10.0,
++            world_x=25.0,
++            world_y=25.0,
++            terrain_size=100.0,
++            terrain_origin_x=0.0,
++            terrain_origin_y=0.0,
++        )
++        offset = _sample_heightmap_world(
++            heightmap,
++            height_scale=10.0,
++            world_x=175.0,
++            world_y=225.0,
++            terrain_size=100.0,
++            terrain_origin_x=150.0,
++            terrain_origin_y=200.0,
++        )
++
++        assert offset == pytest.approx(centered)
++
++    def test_world_height_sampling_clamps_out_of_bounds(self):
++        """World-space sampling should clamp gracefully outside the terrain footprint."""
++        from blender_addon.handlers.environment_scatter import _sample_heightmap_world
++
++        heightmap = np.array(
++            [
++                [0.1, 0.2],
++                [0.3, 0.4],
++            ],
++            dtype=np.float64,
++        )
++
++        sampled = _sample_heightmap_world(
++            heightmap,
++            height_scale=20.0,
++            world_x=10_000.0,
++            world_y=10_000.0,
++            terrain_size=100.0,
++            terrain_origin_x=0.0,
++            terrain_origin_y=0.0,
++        )
++
++        assert sampled == pytest.approx(8.0)
++
++    def test_terrain_cell_size_from_extent_uses_world_spacing(self):
++        from blender_addon.handlers.environment_scatter import _terrain_cell_size_from_extent
++
++        spacing = _terrain_cell_size_from_extent(
++            terrain_width=80.0,
++            terrain_height=120.0,
++            rows=5,
++            cols=9,
++        )
++
++        assert spacing == pytest.approx(30.0)
++
+     def test_full_vegetation_pipeline(self):
+         """Poisson disk + biome filter produces valid placements."""
+         # Simulate what handle_scatter_vegetation does internally
+diff --git a/Tools/mcp-toolkit/tests/test_functional_unity_tools.py b/Tools/mcp-toolkit/tests/test_functional_unity_tools.py
+index c49170d..51f0803 100644
+--- a/Tools/mcp-toolkit/tests/test_functional_unity_tools.py
++++ b/Tools/mcp-toolkit/tests/test_functional_unity_tools.py
+@@ -936,6 +936,87 @@ class TestUnityScene:
+         assert data["action"] == "setup_tiled_terrain"
+         assert data["tile_count"] == 1
+ 
++    @pytest.mark.asyncio
++    async def test_setup_tiled_terrain_action_forwards_parent_and_layers(self):
++        from veilbreakers_mcp.unity_tools import scene as scene_tool
++
++        tiles = [
++            {
++                "heightmap_path": "Assets/Heightmaps/tile_0.raw",
++                "alphamap_path": "Assets/Heightmaps/tile_0_alphamap.raw",
++                "grid_x": 0,
++                "grid_y": 0,
++                "position": [128.0, 0.0, 256.0],
++            }
++        ]
++        layers = [
++            {"texture_path": "Assets/Textures/grass.png", "tiling": 10.0},
++            {"texture_path": "Assets/Textures/rock.png", "tiling": 5.0},
++        ]
++
++        with patch.object(scene_tool, "generate_tiled_terrain_setup_script", return_value="// generated tiled terrain") as gen_mock, \
++             patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TiledTerrainSetup.cs"):
++            result = await scene_tool.unity_scene(
++                action="setup_tiled_terrain",
++                terrain_tiles=tiles,
++                terrain_size=[512, 200, 512],
++                terrain_resolution=257,
++                splatmap_layers=layers,
++                tile_parent_name="TerrainRoot_Custom",
++            )
++
++        data = json.loads(result)
++        assert data["status"] == "success"
++        assert data["tile_count"] == 1
++        assert data["terrain_size"] == [512, 200, 512]
++        assert data["resolution"] == 257
++        gen_mock.assert_called_once_with(
++            tiles=tiles,
++            default_size=(512, 200, 512),
++            default_resolution=257,
++            splatmap_layers=layers,
++            parent_name="TerrainRoot_Custom",
++        )
++
++    @pytest.mark.asyncio
++    async def test_setup_tiled_terrain_action_uses_default_size_when_missing(self):
++        from veilbreakers_mcp.unity_tools import scene as scene_tool
++
++        tiles = [{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}]
++
++        with patch.object(scene_tool, "generate_tiled_terrain_setup_script", return_value="// generated tiled terrain") as gen_mock, \
++             patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TiledTerrainSetup.cs"):
++            result = await scene_tool.unity_scene(
++                action="setup_tiled_terrain",
++                terrain_tiles=tiles,
++            )
++
++        data = json.loads(result)
++        assert data["status"] == "success"
++        assert data["terrain_size"] == [1000, 600, 1000]
++        gen_mock.assert_called_once_with(
++            tiles=tiles,
++            default_size=(1000, 600, 1000),
++            default_resolution=513,
++            splatmap_layers=None,
++            parent_name="VB_TerrainRoot",
++        )
++
++    @pytest.mark.asyncio
++    async def test_setup_tiled_terrain_action_write_error_returns_error(self):
++        from veilbreakers_mcp.unity_tools import scene as scene_tool
++
++        with patch.object(scene_tool, "_write_to_unity", side_effect=ValueError("unsafe path")):
++            result = await scene_tool.unity_scene(
++                action="setup_tiled_terrain",
++                terrain_tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}],
++            )
++
++        data = json.loads(result)
++        assert data["status"] == "error"
++        assert data["action"] == "setup_tiled_terrain"
++        assert "unsafe path" in data["message"]
++
+     @pytest.mark.asyncio
+     async def test_setup_terrain_action_with_alphamap(self):
+         from veilbreakers_mcp.unity_tools import scene as scene_tool
+diff --git a/Tools/mcp-toolkit/tests/test_mesh_bridge.py b/Tools/mcp-toolkit/tests/test_mesh_bridge.py
+index 535f1f5..4ab4633 100644
+--- a/Tools/mcp-toolkit/tests/test_mesh_bridge.py
++++ b/Tools/mcp-toolkit/tests/test_mesh_bridge.py
+@@ -133,6 +133,7 @@ VEGETATION_KEYS = [
+     "tree_healthy",
+     "tree_boundary",
+     "tree_blighted",
++    "dead_tree",
+     "tree_twisted",
+     "bush",
+     "grass",
+@@ -170,6 +171,7 @@ class TestVegetationGeneratorMap:
+     def test_thornwood_aliases_resolve_to_progression_tree_styles(self) -> None:
+         assert VEGETATION_GENERATOR_MAP["tree_boundary"][1]["canopy_style"] == "veil_boundary"
+         assert VEGETATION_GENERATOR_MAP["tree_blighted"][1]["canopy_style"] == "veil_blighted"
++        assert VEGETATION_GENERATOR_MAP["dead_tree"][1]["tree_type"] == "dead"
+         assert VEGETATION_GENERATOR_MAP["tree_twisted"][1]["canopy_style"] == "veil_boundary"
+ 
+ 
+diff --git a/Tools/mcp-toolkit/tests/test_terrain_depth.py b/Tools/mcp-toolkit/tests/test_terrain_depth.py
+index a19393e..7506df9 100644
+--- a/Tools/mcp-toolkit/tests/test_terrain_depth.py
++++ b/Tools/mcp-toolkit/tests/test_terrain_depth.py
+@@ -401,10 +401,9 @@ class TestDetectCliffEdges:
+         hmap[:, 16:] = 0.0
+ 
+         # Use a low threshold since normalized heightmaps produce modest
+-        # slopes (arctan(0.5) ~ 26 deg for a 1.0 drop across 1 cell with
+-        # central differences).
++        # slopes once converted into world-space spacing for a 100 m terrain.
+         placements = detect_cliff_edges(
+-            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
++            hmap, slope_threshold_deg=5.0, min_cluster_size=2, terrain_size=100.0
+         )
+         assert len(placements) >= 1, "No cliff edges detected on steep heightmap"
+ 
+@@ -414,7 +413,7 @@ class TestDetectCliffEdges:
+         hmap[:, 16:] = 0.0
+ 
+         placements = detect_cliff_edges(
+-            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
++            hmap, slope_threshold_deg=5.0, min_cluster_size=2, terrain_size=100.0
+         )
+         assert len(placements) >= 1
+         p = placements[0]
+@@ -452,7 +451,7 @@ class TestDetectCliffEdges:
+         hmap[:, 16:] = 0.0
+ 
+         placements = detect_cliff_edges(
+-            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
++            hmap, slope_threshold_deg=5.0, min_cluster_size=2, terrain_size=100.0
+         )
+         for p in placements:
+             assert p["width"] > 0, f"Cliff width {p['width']} <= 0"
+diff --git a/Tools/mcp-toolkit/tests/test_terrain_noise.py b/Tools/mcp-toolkit/tests/test_terrain_noise.py
+index be7af82..37bab7b 100644
+--- a/Tools/mcp-toolkit/tests/test_terrain_noise.py
++++ b/Tools/mcp-toolkit/tests/test_terrain_noise.py
+@@ -341,6 +341,15 @@ class TestComputeSlopeMap:
+         # Interior cells should have non-trivial slope
+         assert slope[16, 16] > 0.5
+ 
++    def test_larger_cell_size_reduces_world_space_slope(self):
++        """The same height delta over larger cells should read as a gentler slope."""
++        from blender_addon.handlers._terrain_noise import compute_slope_map
++
++        hmap = np.tile(np.linspace(0, 1, 9), (9, 1))
++        fine = compute_slope_map(hmap, cell_size=1.0)
++        coarse = compute_slope_map(hmap, cell_size=4.0)
++        assert coarse[4, 4] < fine[4, 4]
++
+ 
+ # ---------------------------------------------------------------------------
+ # Biome assignment tests
