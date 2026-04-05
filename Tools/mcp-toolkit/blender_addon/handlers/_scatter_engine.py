@@ -48,6 +48,10 @@ def poisson_disk_sample(
     list of (x, y) tuples
         Points within the specified bounds.
     """
+    if width <= 0 or depth <= 0:
+        return []
+    if min_distance <= 0:
+        return []
     rng = random.Random(seed)
 
     cell_size = min_distance / math.sqrt(2)
@@ -270,35 +274,35 @@ PROP_AFFINITY: dict[str, list[tuple[str, float]]] = {
         ("bench", 0.2),
         ("mug", 0.15),
         ("lantern", 0.1),
-        ("crate", 0.1),
+        ("crate", 0.25),  # normalized: was 0.1, sum was 0.85 → adjusted to 0.25
     ],
     "dock": [
         ("crate", 0.3),
         ("rope_coil", 0.2),
         ("barrel", 0.15),
         ("anchor", 0.1),
-        ("lantern", 0.05),
+        ("lantern", 0.25),  # normalized: was 0.05, sum was 0.80 → adjusted to 0.25
     ],
     "blacksmith": [
         ("anvil", 0.2),
         ("weapon_rack", 0.2),
         ("coal_pile", 0.15),
         ("barrel", 0.1),
-        ("crate", 0.1),
+        ("crate", 0.35),  # normalized: was 0.1, sum was 0.75 → adjusted to 0.35
     ],
     "graveyard": [
         ("tombstone", 0.3),
         ("dead_tree", 0.15),
         ("lantern", 0.1),
         ("fence", 0.1),
-        ("pot", 0.05),
+        ("pot", 0.35),  # normalized: was 0.05, sum was 0.70 → adjusted to 0.35
     ],
     "market": [
         ("crate", 0.25),
         ("barrel", 0.2),
         ("cart", 0.15),
         ("bench", 0.1),
-        ("lantern", 0.1),
+        ("lantern", 0.30),  # normalized: was 0.1, sum was 0.80 → adjusted to 0.30
     ],
 }
 

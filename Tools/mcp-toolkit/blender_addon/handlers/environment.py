@@ -1118,7 +1118,7 @@ def handle_generate_world_terrain(params: dict) -> dict:
         )
 
     tiles: list[dict[str, Any]] = []
-    tile_heightmaps: dict[tuple[int, int], list[list[float]]] = {}
+    tile_heightmaps: dict[tuple[int, int], "np.ndarray"] = {}
     tile_world_size = tile_size * cell_size
     for ty in range(tile_count_y):
         for tx in range(tile_count_x):

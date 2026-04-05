@@ -396,7 +396,7 @@ class TestComputeBiomeAssignments:
         assert biomes.max() < len(BIOME_RULES)
 
     def test_snow_at_high_altitude(self):
-        """High altitude, low slope cells should be assigned 'snow' (rule 0)."""
+        """High altitude, low slope cells should be assigned 'highland_scrub' (rule 2)."""
         from blender_addon.handlers._terrain_noise import (
             BIOME_RULES,
             compute_biome_assignments,
@@ -420,7 +420,7 @@ class TestComputeBiomeAssignments:
         assert np.all(biomes == 1)
 
     def test_dead_grass_at_mid_altitude(self):
-        """Mid altitude, low slope -> grass (rule 4)."""
+        """Mid altitude, low slope -> dead_grass (rule 4)."""
         from blender_addon.handlers._terrain_noise import compute_biome_assignments
 
         hmap = np.full((8, 8), 0.5)  # Mid altitude

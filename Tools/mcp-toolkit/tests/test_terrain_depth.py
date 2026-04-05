@@ -94,24 +94,24 @@ class TestCliffFaceMesh:
 
     def test_vertices_span_requested_height(self):
         result = generate_cliff_face_mesh(height=15.0)
-        ys = [v[1] for v in result["vertices"]]
-        y_span = max(ys) - min(ys)
-        assert y_span >= 14.0, f"Y span {y_span} too small for height=15"
+        zs = [v[2] for v in result["vertices"]]
+        z_span = max(zs) - min(zs)
+        assert z_span >= 14.0, f"Z span {z_span} too small for height=15"
 
-    def test_vertical_geometry_y_span_over_10m(self):
-        """Cliff face must be vertical, not flat -- y-span > 10m."""
+    def test_vertical_geometry_z_span_over_10m(self):
+        """Cliff face must be vertical, not flat -- z-span > 10m (Z-up)."""
         result = generate_cliff_face_mesh()
-        ys = [v[1] for v in result["vertices"]]
-        y_span = max(ys) - min(ys)
-        assert y_span > 10.0, f"Cliff face y-span {y_span} <= 10m, not vertical"
+        zs = [v[2] for v in result["vertices"]]
+        z_span = max(zs) - min(zs)
+        assert z_span > 10.0, f"Cliff face z-span {z_span} <= 10m, not vertical"
 
     def test_different_seeds_different_vertices(self):
         r1 = generate_cliff_face_mesh(seed=42)
         r2 = generate_cliff_face_mesh(seed=99)
-        # At least some vertices should differ
+        # Noise displacement is on Y (depth axis in Z-up), so compare v[1]
         diffs = sum(
             1 for a, b in zip(r1["vertices"], r2["vertices"])
-            if abs(a[2] - b[2]) > 1e-6
+            if abs(a[1] - b[1]) > 1e-6
         )
         assert diffs > 0, "Different seeds produced identical geometry"
 
@@ -122,9 +122,9 @@ class TestCliffFaceMesh:
     def test_custom_dimensions(self):
         result = generate_cliff_face_mesh(width=30.0, height=25.0)
         xs = [v[0] for v in result["vertices"]]
-        ys = [v[1] for v in result["vertices"]]
+        zs = [v[2] for v in result["vertices"]]
         assert max(xs) - min(xs) >= 28.0
-        assert max(ys) - min(ys) >= 24.0
+        assert max(zs) - min(zs) >= 24.0
 
     def test_style_parameter(self):
         """Style parameter should be stored in metadata."""
@@ -155,9 +155,9 @@ class TestCaveEntranceMesh:
         """terrain_edge_height should shift the bottom edge."""
         r1 = generate_cave_entrance_mesh(terrain_edge_height=0.0)
         r2 = generate_cave_entrance_mesh(terrain_edge_height=5.0)
-        ys_1 = [v[1] for v in r1["vertices"]]
-        ys_2 = [v[1] for v in r2["vertices"]]
-        assert min(ys_2) > min(ys_1), "terrain_edge_height=5 should raise bottom"
+        zs_1 = [v[2] for v in r1["vertices"]]
+        zs_2 = [v[2] for v in r2["vertices"]]
+        assert min(zs_2) > min(zs_1), "terrain_edge_height=5 should raise bottom"
 
     def test_metadata_category_terrain_depth(self):
         result = generate_cave_entrance_mesh()
@@ -228,9 +228,10 @@ class TestBiomeTransitionMesh:
 
     def test_depth_matches_zone_depth(self):
         result = generate_biome_transition_mesh(zone_depth=20.0)
-        zs = [v[2] for v in result["vertices"]]
-        z_span = max(zs) - min(zs)
-        assert z_span >= 18.0, f"Z span {z_span} too small for zone_depth=20"
+        # zone_depth spans Y axis (depth) in Z-up convention
+        ys = [v[1] for v in result["vertices"]]
+        y_span = max(ys) - min(ys)
+        assert y_span >= 18.0, f"Y span {y_span} too small for zone_depth=20"
 
 
 # ---------------------------------------------------------------------------
@@ -247,10 +248,10 @@ class TestWaterfallMesh:
 
     def test_total_height_matches_requested(self):
         result = generate_waterfall_mesh(height=10.0)
-        ys = [v[1] for v in result["vertices"]]
-        y_span = max(ys) - min(ys)
-        # Should roughly cover the requested height
-        assert y_span >= 9.0, f"Y span {y_span} too small for height=10"
+        zs = [v[2] for v in result["vertices"]]
+        z_span = max(zs) - min(zs)
+        # Should roughly cover the requested height (Z-up)
+        assert z_span >= 9.0, f"Z span {z_span} too small for height=10"
 
     def test_at_least_3_cascade_steps(self):
         """Default steps=4, so cascade_steps in metadata should be >= 3."""
@@ -336,15 +337,15 @@ class TestTerrainBridgeMesh:
     def test_elevated_endpoints(self):
         """Bridge with elevated endpoints should still produce valid geometry."""
         result = generate_terrain_bridge_mesh(
-            start_pos=(0, 5, 0), end_pos=(10, 5, 0)
+            start_pos=(0, 0, 5), end_pos=(10, 0, 5)
         )
         validate_mesh_spec(result, "bridge_elevated")
-        ys = [v[1] for v in result["vertices"]]
-        # Deck surface should be near y=5, arch ribs may dip below
+        zs = [v[2] for v in result["vertices"]]
+        # Deck surface should be near z=5 (Z-up), arch ribs may dip below
         # but the mean should be close to the elevation
-        mean_y = sum(ys) / len(ys)
-        assert mean_y >= 3.0, f"Mean Y {mean_y} too low for y=5 elevation"
-        assert max(ys) >= 4.5, "Max Y should be near bridge elevation"
+        mean_z = sum(zs) / len(zs)
+        assert mean_z >= 3.0, f"Mean Z {mean_z} too low for z=5 elevation"
+        assert max(zs) >= 4.5, "Max Z should be near bridge elevation"
 
 
 # ---------------------------------------------------------------------------

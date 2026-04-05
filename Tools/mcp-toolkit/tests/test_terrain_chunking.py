@@ -259,3 +259,4 @@ class TestValidateTileSeams:
         result = validate_world_tile_seams(tiles)
         assert set(result.keys()) == {"seam_ok", "max_edge_delta", "issues", "tile_count"}
         assert result["tile_count"] == 2
+
