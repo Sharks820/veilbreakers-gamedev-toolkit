@@ -1,13 +1,13 @@
 {
   "mcpServers": {
-    "glm-review": {
+    "vb-review": {
       "type": "stdio",
       "command": "uv",
       "args": [
         "--directory",
         "C:/Users/Conner/OneDrive/Documents/veilbreakers-gamedev-toolkit/Tools/mcp-toolkit",
         "run",
-        "vb-glm-review-mcp"
+        "vb-review-mcp"
       ],
       "env": {
         "GLM_MODEL": "${GLM_MODEL}",
@@ -17,7 +17,13 @@
         "ZAI_BASE_URL": "${ZAI_BASE_URL}",
         "GLM_COMMAND": "${GLM_COMMAND}",
         "GLM_COMMAND_ARGS": "${GLM_COMMAND_ARGS}",
-        "GLM_TIMEOUT_SECONDS": "${GLM_TIMEOUT_SECONDS}"
+        "GLM_TIMEOUT_SECONDS": "${GLM_TIMEOUT_SECONDS}",
+        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
+        "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
+        "GEMINI_COMMAND": "${GEMINI_COMMAND}",
+        "GEMINI_MODEL": "${GEMINI_MODEL}",
+        "REVIEW_MODEL": "${REVIEW_MODEL}"
       }
     }
   }

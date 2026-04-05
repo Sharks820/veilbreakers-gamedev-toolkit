@@ -1,10 +1,10 @@
 {
-  "name": "glm-review",
+  "name": "vb-review",
   "version": "1.0.0",
   "description": "Expose GLM and Gemini reviewers as a Codex MCP plugin.",
   "mcpServers": "./.mcp.json",
   "interface": {
-    "displayName": "GLM Review",
+    "displayName": "VeilBreakers Code Review",
     "shortDescription": "Review diffs with GLM and Gemini",
     "longDescription": "Runs GLM and Gemini through a local MCP server for code review, gap analysis, regression checks, and lightweight scoring over time.",
     "developerName": "VeilBreakers",

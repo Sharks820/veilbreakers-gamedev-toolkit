@@ -3,7 +3,12 @@
     "vb-blender": {
       "type": "stdio",
       "command": "uv",
-      "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-blender-mcp"],
+      "args": [
+        "--directory",
+        "Tools/mcp-toolkit",
+        "run",
+        "vb-blender-mcp"
+      ],
       "env": {
         "BLENDER_PORT": "9876",
         "BLENDER_HOST": "localhost",
@@ -16,7 +21,12 @@
     "vb-unity": {
       "type": "stdio",
       "command": "uv",
-      "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-unity-mcp"],
+      "args": [
+        "--directory",
+        "Tools/mcp-toolkit",
+        "run",
+        "vb-unity-mcp"
+      ],
       "env": {
         "UNITY_PROJECT_PATH": "C:/Users/Conner/OneDrive/Documents/VeilBreakers3DCurrent",
         "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}",
@@ -26,7 +36,28 @@
     "vb-review": {
       "type": "stdio",
       "command": "uv",
-      "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-review-mcp"]
+      "args": [
+        "--directory",
+        "Tools/mcp-toolkit",
+        "run",
+        "vb-review-mcp"
+      ],
+      "env": {
+        "GLM_MODEL": "${GLM_MODEL}",
+        "GLM_API_KEY": "${GLM_API_KEY}",
+        "ZAI_API_KEY": "${ZAI_API_KEY}",
+        "GLM_BASE_URL": "${GLM_BASE_URL}",
+        "ZAI_BASE_URL": "${ZAI_BASE_URL}",
+        "GLM_COMMAND": "${GLM_COMMAND}",
+        "GLM_COMMAND_ARGS": "${GLM_COMMAND_ARGS}",
+        "GLM_TIMEOUT_SECONDS": "${GLM_TIMEOUT_SECONDS}",
+        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
+        "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
+        "GEMINI_COMMAND": "${GEMINI_COMMAND}",
+        "GEMINI_MODEL": "${GEMINI_MODEL}",
+        "REVIEW_MODEL": "${REVIEW_MODEL}"
+      }
     }
   }
 }
