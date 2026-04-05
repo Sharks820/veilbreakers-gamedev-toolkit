@@ -32,6 +32,7 @@ from ._settlement_grammar import (
     ring_for_position,
     _road_segment_mesh_spec_with_curbs,
 )
+from .road_network import _road_segment_mesh_spec as _road_segment_mesh_spec_flat
 
 logger = logging.getLogger(__name__)
 
@@ -2680,6 +2681,45 @@ def _create_curve_path(
     if parent is not None:
         curve_obj.parent = parent
     return curve_obj
+
+
+def _materialize_road_path_meshes(
+    base_name: str,
+    road_label: str,
+    points: list[tuple[float, float, float]],
+    width: float,
+    parent: Any | None,
+    *,
+    use_curbs: bool = False,
+    material_key: str = "dirt",
+) -> int:
+    """Create mesh road segments for a path of points.
+
+    The path is split into consecutive segments and each segment is
+    materialized as a mesh road strip. This keeps the road path editable
+    and removes the legacy curve-path dependency.
+    """
+    if len(points) < 2:
+        return 0
+
+    segment_builder = (
+        _road_segment_mesh_spec_with_curbs if use_curbs else _road_segment_mesh_spec_flat
+    )
+    created = 0
+    for seg_idx, (start, end) in enumerate(zip(points, points[1:])):
+        spec = segment_builder(start, end, width)
+        if not spec.get("vertices") or not spec.get("faces"):
+            continue
+        obj = mesh_from_spec(
+            spec,
+            name=f"{base_name}_{road_label}_seg_{seg_idx}",
+            parent=parent,
+        )
+        if not isinstance(obj, dict):
+            _assign_procedural_material(obj, material_key)
+        created += 1
+
+    return created
 
 
 def _create_road_with_curbs(
@@ -6119,7 +6159,7 @@ def handle_generate_location(params: dict) -> dict:
     }.get(location_type, "grass" if terrain_type in {"plains", "hills"} else "dirt")
     _assign_procedural_material(terrain_obj, terrain_material_key)
 
-    # Build roads as visible curves, fitted onto the generated terrain.
+    # Build roads as mesh strips, fitted onto the generated terrain.
     road_count = 0
     road_seed_rng = random.Random(seed + 17)
     for i, path in enumerate(spec["paths"]):
@@ -6141,8 +6181,16 @@ def handle_generate_location(params: dict) -> dict:
             (mid_x, mid_y, _sample_scene_height(mid_x, mid_y, terrain_name) + 0.03),
             (end[0], end[1], _sample_scene_height(end[0], end[1], terrain_name) + 0.02),
         ]
-        road_obj = _create_curve_path(f"{name}_road_{i}", road_points, width=width, parent=parent)
-        _clear_material_slots(road_obj, context=f"location road {i}")
+        use_curbs = width >= 3.0 or str(path.get("type", "")).lower() in {"main", "cobblestone", "stone"}
+        _materialize_road_path_meshes(
+            name,
+            f"road_{i}",
+            road_points,
+            width,
+            parent,
+            use_curbs=use_curbs,
+            material_key="cobblestone_floor" if use_curbs else "dirt",
+        )
         road_count += 1
 
     # Materialize buildings as actual geometry, grounded to the terrain.
@@ -6543,7 +6591,7 @@ def handle_generate_settlement(params: dict) -> dict:
 
             # Wide roads (cobblestone/stone, main roads, alleys >= 3m) get
             # mesh geometry with raised curbs.  Narrow trails keep the
-            # lightweight curve-path representation.
+            # lightweight mesh-backed path representation.
             use_curbs = (
                 road_style in ("cobblestone", "stone")
                 or road.get("is_main_road")
@@ -6558,7 +6606,7 @@ def handle_generate_settlement(params: dict) -> dict:
                     road_count += 1
                     continue
 
-            # Fallback: curve-path for narrow trails / dirt paths
+            # Fallback: mesh-backed path for narrow trails / dirt paths
             sx, sy = start
             ex, ey = end
             mid_x = (sx + ex) / 2.0
@@ -6572,17 +6620,19 @@ def handle_generate_settlement(params: dict) -> dict:
             road_z0 = _sample_scene_height(sx, sy, terrain_name) + 0.02
             road_z1 = _sample_scene_height(mid_x, mid_y, terrain_name) + 0.03
             road_z2 = _sample_scene_height(ex, ey, terrain_name) + 0.02
-            road_obj = _create_curve_path(
-                f"{name}_road_{i}",
+            _materialize_road_path_meshes(
+                name,
+                f"road_{i}",
                 [
                     (sx, sy, road_z0),
                     (mid_x, mid_y, road_z1),
                     (ex, ey, road_z2),
                 ],
-                width=road_width,
-                parent=parent,
+                road_width,
+                parent,
+                use_curbs=False,
+                material_key="dirt",
             )
-            _clear_material_slots(road_obj, context=f"settlement road {i}")
             road_count += 1
 
         # Create intersection patches where roads meet
@@ -6793,15 +6843,17 @@ def handle_compose_world_map(params: dict) -> dict:
                 points.append((float(pt[0]), float(pt[1]), float(pt[2])))
             else:
                 points.append((float(pt[0]), float(pt[1]), 0.02))
-        _create_curve_path(
-            f"{name}_road_{i}",
+        road_width = 3.2 if road.get("road_type") == "main" else 2.2 if road.get("road_type") == "shortcut" else 1.6
+        use_curbs = road.get("road_type") == "main"
+        _materialize_road_path_meshes(
+            name,
+            f"road_{i}",
             points,
-            width=3.2 if road.get("road_type") == "main" else 2.2 if road.get("road_type") == "shortcut" else 1.6,
-            parent=parent,
+            road_width,
+            parent,
+            use_curbs=use_curbs,
+            material_key="dirt",
         )
-        road_obj = bpy.data.objects.get(f"{name}_road_{i}")
-        if road_obj is not None:
-            _assign_procedural_material(road_obj, "dirt")
         road_count += 1
 
     poi_count = 0
