@@ -38,6 +38,11 @@ Three custom **MCP (Model Context Protocol) servers** that give Claude the capab
                   (bpy API)     Local Python Tools]   (C# Scripting)
 ```
 
+## Repository Layout
+
+The live implementation lives under `Tools/mcp-toolkit/`.
+The old root `asset-pipeline/` and `blender-gamedev/` scaffolds were removed during cleanup.
+
 ## MCP Servers
 
 ### 1. `blender-gamedev` - 3D Art + Animation Pipeline
