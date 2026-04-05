@@ -72,6 +72,21 @@ class TestGenerateTerrainSetupScript:
         assert "grass.png" in result
         assert "rock.png" in result
 
+    def test_alphamap_path_is_supported(self):
+        layers = [
+            {"texture_path": "Assets/Textures/grass.png", "tiling": 10.0},
+            {"texture_path": "Assets/Textures/rock.png", "tiling": 5.0},
+            {"texture_path": "Assets/Textures/dirt.png", "tiling": 8.0},
+            {"texture_path": "Assets/Textures/snow.png", "tiling": 12.0},
+        ]
+        result = generate_terrain_setup_script(
+            "Assets/Terrain/heightmap.raw",
+            splatmap_layers=layers,
+            alphamap_path="Assets/Terrain/tile_0_alphamap.raw",
+        )
+        assert "tile_0_alphamap.raw" in result
+        assert "File.Exists(alphamapPath)" in result
+
     def test_contains_menu_item(self):
         result = generate_terrain_setup_script("Assets/Terrain/heightmap.raw")
         assert '[MenuItem("VeilBreakers/' in result
@@ -112,6 +127,13 @@ class TestGenerateTiledTerrainSetupScript:
         assert "Tile_1" in result
         assert "SetNeighbors" in result
 
+    def test_uses_terrain_component_for_neighbor_map(self):
+        result = generate_tiled_terrain_setup_script(
+            [{"heightmap_path": "Assets/Terrain/tile_0.raw", "grid_x": 0, "grid_y": 0}]
+        )
+        assert "new Dictionary<string, Terrain>()" in result
+        assert ".GetComponent<Terrain>()" in result
+
     def test_contains_tiled_parent_and_positions(self):
         result = generate_tiled_terrain_setup_script(
             [
@@ -127,6 +149,27 @@ class TestGenerateTiledTerrainSetupScript:
         assert "VB_TerrainRoot" in result
         assert "128.0f" in result or "128f" in result
         assert "256.0f" in result or "256f" in result
+
+    def test_contains_tiled_alphamap_paths(self):
+        layers = [
+            {"texture_path": "Assets/Textures/grass.png", "tiling": 10.0},
+            {"texture_path": "Assets/Textures/rock.png", "tiling": 5.0},
+            {"texture_path": "Assets/Textures/dirt.png", "tiling": 8.0},
+            {"texture_path": "Assets/Textures/snow.png", "tiling": 12.0},
+        ]
+        result = generate_tiled_terrain_setup_script(
+            [
+                {
+                    "heightmap_path": "Assets/Terrain/tile_0.raw",
+                    "alphamap_path": "Assets/Terrain/tile_0_alphamap.raw",
+                    "grid_x": 0,
+                    "grid_y": 0,
+                }
+            ],
+            splatmap_layers=layers,
+        )
+        assert "tile_0_alphamap.raw" in result
+        assert "SetAlphamaps" in result
 
 
 # ---------------------------------------------------------------------------

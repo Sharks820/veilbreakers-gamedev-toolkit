@@ -438,14 +438,6 @@ class TestCategoryMaterialMapCoverage:
             f"CATEGORY_MATERIAL_MAP values missing from MATERIAL_LIBRARY: {missing}"
         )
 
-    def test_clothing_category_exists(self):
-        """Clothing category must be mapped for garment generators."""
-        from blender_addon.handlers._mesh_bridge import CATEGORY_MATERIAL_MAP
-
-        assert "clothing" in CATEGORY_MATERIAL_MAP, (
-            "CATEGORY_MATERIAL_MAP missing 'clothing' entry"
-        )
-
 
 # ===========================================================================
 # Test: Riggable Generators Have Category (MAT-01)

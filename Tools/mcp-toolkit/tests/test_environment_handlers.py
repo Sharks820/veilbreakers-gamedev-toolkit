@@ -5,6 +5,7 @@ handler return dict structure via pure-logic extraction.
 """
 
 import struct
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -225,6 +226,60 @@ class TestExportHeightmapRaw:
         assert len(raw) == 64 * 64 * 2
 
 
+class TestExportSplatmapRaw:
+    """Test RAW splatmap export (pure logic, no file I/O)."""
+
+    def test_returns_bytes(self):
+        from blender_addon.handlers.environment import _export_splatmap_raw
+
+        splat = np.zeros((2, 2, 4), dtype=np.float64)
+        splat[:, :, 0] = 1.0
+        raw = _export_splatmap_raw(splat, flip_vertical=False)
+        assert isinstance(raw, bytes)
+        assert len(raw) == 2 * 2 * 4
+
+    def test_normalizes_channels(self):
+        from blender_addon.handlers.environment import _export_splatmap_raw
+
+        splat = np.array(
+            [
+                [[2.0, 1.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0]],
+                [[0.25, 0.25, 0.25, 0.25], [1.0, 0.0, 0.0, 0.0]],
+            ]
+        )
+        raw = _export_splatmap_raw(splat, flip_vertical=False)
+        values = np.frombuffer(raw, dtype=np.uint8)
+        assert values.shape == (2 * 2 * 4,)
+        assert values.max() <= 255
+
+
+class TestWorldSplatmapWeights:
+    """World splatmap weighting should honor a shared height range."""
+
+    def test_shared_height_range_keeps_weights_stable(self):
+        from blender_addon.handlers.terrain_materials import compute_world_splatmap_weights
+
+        tile = np.array(
+            [
+                [0.0, 0.2],
+                [0.4, 0.6],
+            ],
+            dtype=np.float64,
+        )
+
+        local_weights = compute_world_splatmap_weights(
+            tile,
+            biome_name="thornwood_forest",
+        )
+        shared_weights = compute_world_splatmap_weights(
+            tile,
+            biome_name="thornwood_forest",
+            height_range=(0.0, 2.0),
+        )
+
+        assert not np.allclose(local_weights[0, 1], shared_weights[0, 1])
+
+
 # ---------------------------------------------------------------------------
 # Handler return dict structure tests
 # ---------------------------------------------------------------------------
@@ -266,6 +321,62 @@ class TestHandlerReturnDictKeys:
         assert arr.shape == (33 * 33,)
         assert arr.min() >= 0
         assert arr.max() <= 65535
+
+
+class TestWorldTerrainGeneration:
+    def test_world_terrain_reports_seam_validation(self):
+        from blender_addon.handlers import environment as env_mod
+
+        def _fake_world_heightmap(**kwargs):
+            return [
+                [0.0, 0.5, 1.0, 1.5, 2.0],
+                [0.0, 0.5, 1.0, 1.5, 2.0],
+                [0.0, 0.5, 1.0, 1.5, 2.0],
+            ]
+
+        def _fake_erode_world_heightmap(heightmap, **kwargs):
+            return {"heightmap": heightmap}
+
+        def _fake_create_mesh(**kwargs):
+            hmap = kwargs["heightmap"]
+            return {
+                "name": kwargs["name"],
+                "vertex_count": len(hmap) * len(hmap[0]),
+                "cliff_overlays": [],
+                "object_location": kwargs.get("object_location", (0.0, 0.0, 0.0)),
+            }
+
+        def _fake_export_world_tile_artifacts(**kwargs):
+            tile_name = kwargs["tile_name"]
+            return {
+                "heightmap_path": f"/tmp/{tile_name}.raw",
+                "alphamap_path": f"/tmp/{tile_name}.alphamap.raw",
+            }
+
+        with patch.object(env_mod, "generate_world_heightmap", side_effect=_fake_world_heightmap), \
+             patch.object(env_mod, "erode_world_heightmap", side_effect=_fake_erode_world_heightmap), \
+             patch.object(env_mod, "_create_terrain_mesh_from_heightmap", side_effect=_fake_create_mesh), \
+             patch.object(env_mod, "_export_world_tile_artifacts", side_effect=_fake_export_world_tile_artifacts):
+            result = env_mod.handle_generate_world_terrain({
+                "name": "WorldTerrain",
+                "tile_count_x": 2,
+                "tile_count_y": 1,
+                "tile_size": 2,
+                "cell_size": 1.0,
+                "scale": 100.0,
+                "terrain_type": "hills",
+                "seed": 7,
+                "erosion": "none",
+            })
+
+        assert result["tile_count"] == 2
+        assert result["seam_validation"]["passed"] is True
+        assert result["seam_validation"]["check_count"] == 1
+        assert result["tiles"][0]["grid_x"] == 0
+        assert result["tiles"][0]["grid_y"] == 0
+        assert result["tiles"][0]["height_range"] == [0.0, 2.0]
+        assert result["tiles"][0]["heightmap_path"].endswith(".raw")
+        assert result["tiles"][0]["alphamap_path"].endswith(".raw")
 
 
 # ---------------------------------------------------------------------------

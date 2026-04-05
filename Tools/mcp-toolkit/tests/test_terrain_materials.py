@@ -807,3 +807,13 @@ class TestTerrainMaterialDedup:
                 assert not is_default, (
                     f"{biome}.{layer_name} has Blender default color (0.8, 0.8, 0.8)"
                 )
+
+    def test_unknown_biome_raises(self):
+        from unittest.mock import MagicMock, patch
+
+        mock_bpy = MagicMock()
+        with patch("blender_addon.handlers.terrain_materials.bpy", mock_bpy):
+            from blender_addon.handlers.terrain_materials import create_biome_terrain_material
+
+            with pytest.raises(ValueError, match="Unknown biome"):
+                create_biome_terrain_material("not_a_real_biome")

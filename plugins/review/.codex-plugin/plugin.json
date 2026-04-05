@@ -1,0 +1,23 @@
+{
+  "name": "glm-review",
+  "version": "1.0.0",
+  "description": "Expose GLM and Gemini reviewers as a Codex MCP plugin.",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "GLM Review",
+    "shortDescription": "Review diffs with GLM and Gemini",
+    "longDescription": "Runs GLM and Gemini through a local MCP server for code review, gap analysis, regression checks, and lightweight scoring over time.",
+    "developerName": "VeilBreakers",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "defaultPrompt": [
+      "Review this diff for correctness and regressions.",
+      "Check this branch for stale wiring and missing tests.",
+      "Find continuity gaps in this code change.",
+      "Compare GLM and Gemini review quality on this diff."
+    ]
+  }
+}

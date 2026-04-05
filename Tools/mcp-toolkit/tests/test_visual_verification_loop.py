@@ -29,6 +29,8 @@ _src_root = _toolkit_root / "src"
 if str(_src_root) not in sys.path:
     sys.path.insert(0, str(_src_root))
 
+from veilbreakers_mcp.shared import visual_validation
+
 
 # ===========================================================================
 # AAA verification score thresholds
@@ -38,48 +40,33 @@ if str(_src_root) not in sys.path:
 class TestAAAVerifyScoreThreshold:
     """Validate aaa_verify min_score enforcement."""
 
-    def test_aaa_verify_score_threshold_default(self):
-        """Default min_score for aaa_verify should be 60."""
-        # The aaa_verify action uses min_score=60 as the Phase 48 threshold
-        min_score = 60
-        assert min_score == 60
-        # Scores below threshold should fail
-        assert 55 < min_score  # score of 55 fails
-        assert 65 >= min_score  # score of 65 passes
-
-    def test_aaa_verify_score_range(self):
-        """AAA scores must be in 0-100 range."""
-        for score in [0, 25, 50, 60, 75, 100]:
-            assert 0 <= score <= 100
-
-    def test_aaa_verify_passing_logic(self):
-        """8 out of 10 angles must pass for overall verification success."""
-        # Simulate 10 angle scores
+    def test_aaa_verify_marks_failed_angles_below_threshold(self, monkeypatch):
+        """aaa_verify_map reports exactly which angles miss the threshold."""
         scores = [72, 68, 55, 71, 80, 63, 58, 74, 66, 70]
-        min_score = 60
-        passing = sum(1 for s in scores if s >= min_score)
-        # 8 out of 10 pass (55 and 58 fail)
-        assert passing == 8
-        # Overall passes if >= 8/10
-        assert passing >= 8
+        paths = [f"angle_{idx}.png" for idx in range(len(scores))]
 
+        def _fake_analyze(path: str) -> dict:
+            idx = int(Path(path).stem.split("_")[-1])
+            return {"score": float(scores[idx]), "issues": []}
 
-class TestAAAVerifyAngleCount:
-    """Validate aaa_verify uses correct number of angles."""
+        monkeypatch.setattr(visual_validation, "analyze_render_image", _fake_analyze)
+        result = visual_validation.aaa_verify_map(paths, min_score=60)
 
-    def test_aaa_verify_angle_count(self):
-        """Phase 48 uses 10 verification angles for comprehensive coverage."""
-        angle_count = 10
-        assert angle_count == 10
+        assert len(result["per_angle"]) == 10
+        assert result["failed_angles"] == [2, 6]
+        assert result["passed"] is False
 
-    def test_aaa_verify_angles_cover_360_degrees(self):
-        """10 angles should distribute evenly around 360 degrees."""
-        angle_count = 10
-        step = 360 / angle_count
-        angles = [step * i for i in range(angle_count)]
-        assert len(angles) == 10
-        assert angles[0] == 0.0
-        assert angles[-1] == pytest.approx(324.0, abs=0.1)
+    def test_aaa_verify_fails_angles_with_critical_issues(self, monkeypatch):
+        """Critical AAA flags fail an angle even if its score is high."""
+        monkeypatch.setattr(
+            visual_validation,
+            "analyze_render_image",
+            lambda _path: {"score": 95.0, "issues": ["default_material_detected"]},
+        )
+        result = visual_validation.aaa_verify_map(["angle_0.png"], min_score=60)
+
+        assert result["failed_angles"] == [0]
+        assert result["per_angle"][0]["passed"] is False
 
 
 class TestScreenshotDirectory:

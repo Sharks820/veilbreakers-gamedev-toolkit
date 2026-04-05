@@ -15,6 +15,33 @@ from ._terrain_noise import generate_heightmap
 from .terrain_advanced import compute_flow_map
 
 
+def _sample_single_height(
+    world_x: float,
+    world_y: float,
+    *,
+    scale: float,
+    cell_size: float,
+    seed: int,
+    terrain_type: str,
+    normalize: bool,
+    **kwargs: Any,
+) -> float:
+    """Evaluate a single deterministic terrain sample without building a full window."""
+    sample = generate_heightmap(
+        1,
+        1,
+        scale=scale,
+        world_origin_x=world_x,
+        world_origin_y=world_y,
+        cell_size=cell_size,
+        seed=seed,
+        terrain_type=terrain_type,
+        normalize=normalize,
+        **kwargs,
+    )
+    return float(np.asarray(sample, dtype=np.float64)[0, 0])
+
+
 def sample_world_height(
     world_x: float,
     world_y: float,
@@ -29,6 +56,17 @@ def sample_world_height(
     **kwargs: Any,
 ) -> float:
     """Sample a deterministic height at a world coordinate."""
+    if width == 1 and height == 1:
+        return _sample_single_height(
+            world_x,
+            world_y,
+            scale=scale,
+            cell_size=cell_size,
+            seed=seed,
+            terrain_type=terrain_type,
+            normalize=normalize,
+            **kwargs,
+        )
     hmap = generate_world_heightmap(
         width=width,
         height=height,
@@ -87,19 +125,19 @@ def extract_tile(
     tile_y: int,
     tile_size: int,
 ) -> np.ndarray:
-    """Extract a tile from a world heightmap using shared edge vertices."""
+    """Extract a tile from a world array using shared edge vertices."""
     hmap = np.asarray(world_heightmap, dtype=np.float64)
-    if hmap.ndim != 2:
-        raise ValueError("world_heightmap must be a 2D array")
+    if hmap.ndim < 2:
+        raise ValueError("world_heightmap must have at least 2 dimensions")
 
     row_start = tile_y * tile_size
     col_start = tile_x * tile_size
     row_end = row_start + tile_size + 1
     col_end = col_start + tile_size + 1
 
-    tile = hmap[row_start:row_end, col_start:col_end]
+    tile = hmap[row_start:row_end, col_start:col_end, ...]
     expected = (tile_size + 1, tile_size + 1)
-    if tile.shape != expected:
+    if tile.shape[:2] != expected:
         raise ValueError(
             f"Tile ({tile_x}, {tile_y}) with size {tile_size} is out of bounds "
             f"for world heightmap shape {hmap.shape}; got {tile.shape}, expected {expected}."
@@ -159,6 +197,7 @@ def erode_world_heightmap(
     thermal_iterations: int = 0,
     seed: int = 0,
     talus_angle: float = 40.0,
+    cell_size: float = 1.0,
 ) -> dict[str, Any]:
     """Erode a world heightmap as a single region, then return metadata.
 
@@ -220,6 +259,7 @@ def erode_world_heightmap(
                 eroded,
                 iterations=thermal_iterations,
                 talus_angle=talus_angle,
+                cell_size=cell_size,
             ),
             dtype=np.float64,
         )

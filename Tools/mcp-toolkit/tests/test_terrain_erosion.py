@@ -155,8 +155,8 @@ class TestApplyThermalErosion:
 # ---------------------------------------------------------------------------
 
 
-class TestErosion50kVisibleChannels:
-    """Test that 50K droplet erosion produces visible channel depth."""
+class TestErosionHighIterationAndWorldUnits:
+    """Stress tests for high-iteration erosion and world-unit inputs."""
 
     def test_erosion_50k_visible_channels(self):
         """50K droplet erosion on 64x64 heightmap carves channels > 0.05 depth."""
@@ -189,7 +189,7 @@ class TestErosion50kVisibleChannels:
         assert eroded.min() >= hmap.min() - 1e-12
         assert eroded.max() <= hmap.max() + 1e-12
 
-    def test_world_unit_height_range_is_supported(self):
+    def test_hydraulic_world_unit_height_range_is_supported(self):
         """Hydraulic erosion supports arbitrary world-unit height ranges."""
         from blender_addon.handlers._terrain_erosion import apply_hydraulic_erosion
 
@@ -215,3 +215,13 @@ class TestErosion50kVisibleChannels:
         assert result.shape == hmap.shape
         assert result.min() >= hmap.min() - 1e-12
         assert result.max() <= hmap.max() + 1e-12
+
+    def test_thermal_cell_size_affects_world_space_threshold(self):
+        """Larger sample spacing should reduce talus transfer for the same height delta."""
+        from blender_addon.handlers._terrain_erosion import apply_thermal_erosion
+
+        hmap = np.zeros((9, 9), dtype=np.float64)
+        hmap[4, 4] = 1.0
+        fine = apply_thermal_erosion(hmap, iterations=8, talus_angle=35.0, cell_size=1.0)
+        coarse = apply_thermal_erosion(hmap, iterations=8, talus_angle=35.0, cell_size=4.0)
+        assert coarse[4, 4] >= fine[4, 4]

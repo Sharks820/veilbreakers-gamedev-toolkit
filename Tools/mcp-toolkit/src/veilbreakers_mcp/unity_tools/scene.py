@@ -49,6 +49,7 @@ async def unity_scene(
     name: str = "default",
     # Terrain params
     heightmap_path: str = "",
+    alphamap_path: str = "",
     terrain_size: list[float] | None = None,
     terrain_resolution: int = 513,
     splatmap_layers: list[dict] | None = None,
@@ -103,7 +104,7 @@ async def unity_scene(
     try:
         if action == "setup_terrain":
             return await _handle_scene_setup_terrain(
-                heightmap_path, terrain_size, terrain_resolution, splatmap_layers
+                heightmap_path, alphamap_path, terrain_size, terrain_resolution, splatmap_layers
             )
         elif action == "setup_tiled_terrain":
             return await _handle_scene_setup_tiled_terrain(
@@ -157,6 +158,7 @@ async def unity_scene(
 
 async def _handle_scene_setup_terrain(
     heightmap_path: str,
+    alphamap_path: str,
     terrain_size: list[float] | None,
     terrain_resolution: int,
     splatmap_layers: list[dict] | None,
@@ -176,6 +178,7 @@ async def _handle_scene_setup_terrain(
         size=size_tuple,
         resolution=terrain_resolution,
         splatmap_layers=splatmap_layers,
+        alphamap_path=alphamap_path or None,
     )
     script_path = "Assets/Editor/Generated/Scene/VeilBreakers_TerrainSetup.cs"
 

@@ -12,7 +12,9 @@ Coverage:
 
 from __future__ import annotations
 
+import ast
 import importlib
+import inspect
 import sys
 from pathlib import Path
 
@@ -232,39 +234,33 @@ class TestComposeInteriorSpec:
 class TestPipelineReadiness:
     """Verify compose_map pipeline dependencies are wired and importable."""
 
+    @staticmethod
+    def _compose_map_loc_handlers() -> dict[str, str]:
+        import veilbreakers_mcp.blender_server as blender_server
+
+        module = ast.parse(inspect.getsource(blender_server))
+        for node in ast.walk(module):
+            if not isinstance(node, ast.Assign):
+                continue
+            if not any(isinstance(target, ast.Name) and target.id == "_LOC_HANDLERS" for target in node.targets):
+                continue
+            if not isinstance(node.value, ast.Dict):
+                continue
+            handlers: dict[str, str] = {}
+            for key_node, value_node in zip(node.value.keys, node.value.values):
+                if isinstance(key_node, ast.Constant) and isinstance(value_node, ast.Constant):
+                    handlers[str(key_node.value)] = str(value_node.value)
+            return handlers
+        raise AssertionError("Could not find _LOC_HANDLERS assignment in blender_server")
+
     def test_loc_handlers_settlement_exists(self):
-        """_LOC_HANDLERS has a 'settlement' key routing to a generation handler."""
-        # We reconstruct _LOC_HANDLERS from the source since it's defined inline
-        # in the compose_map handler. Verify the handler map is consistent.
-        loc_handlers = {
-            "town": "world_generate_town",
-            "castle": "world_generate_castle",
-            "dungeon": "world_generate_dungeon",
-            "cave": "world_generate_cave",
-            "ruins": "world_generate_ruins",
-            "building": "world_generate_building",
-            "boss_arena": "world_generate_boss_arena",
-            "settlement": "world_generate_settlement",
-            "hearthvale": "world_generate_hearthvale",
-            "interior": "world_generate_building",
-        }
-        assert "settlement" in loc_handlers
+        """compose_map routes settlement locations to the settlement generator."""
+        loc_handlers = self._compose_map_loc_handlers()
         assert loc_handlers["settlement"] == "world_generate_settlement"
 
     def test_loc_handlers_castle_routes_to_castle(self):
-        """_LOC_HANDLERS['castle'] routes to world_generate_castle.
-
-        Note: Research warns this may produce box geometry instead of modular kit.
-        The handler exists but quality depends on Phase 42 wiring.
-        This test validates the routing exists -- visual verification is separate.
-        """
-        loc_handlers = {
-            "town": "world_generate_town",
-            "castle": "world_generate_castle",
-            "settlement": "world_generate_settlement",
-        }
-        assert "castle" in loc_handlers
-        # Castle handler exists -- quality is verified visually in Plan 02
+        """compose_map keeps castle routing pointed at the castle generator."""
+        loc_handlers = self._compose_map_loc_handlers()
         assert loc_handlers["castle"] == "world_generate_castle"
 
     def test_vegetation_generator_map_exists(self):
@@ -291,16 +287,13 @@ class TestPipelineReadiness:
             )
 
     def test_mst_road_network_exists(self):
-        """road_network module is importable with MST-related functions."""
-        road_net_path = _toolkit_root / "blender_addon" / "handlers" / "road_network.py"
-        assert road_net_path.exists(), (
-            f"road_network.py not found at {road_net_path}"
-        )
-        # Verify it contains MST or minimum spanning tree logic
-        content = road_net_path.read_text()
-        assert "mst" in content.lower() or "minimum_spanning" in content.lower() or "road" in content.lower(), (
-            "road_network.py does not contain MST/road network logic"
-        )
+        """road_network exposes a working MST helper used by road generation."""
+        from blender_addon.handlers.road_network import compute_mst_edges
+
+        waypoints = [(0.0, 0.0, 0.0), (10.0, 0.0, 0.0), (0.0, 10.0, 0.0)]
+        mst_edges = compute_mst_edges(waypoints)
+        assert len(mst_edges) == len(waypoints) - 1
+        assert all(len(edge) == 3 for edge in mst_edges)
 
     def test_compose_map_helper_functions_importable(self):
         """Key compose_map helper functions are importable from blender_server."""

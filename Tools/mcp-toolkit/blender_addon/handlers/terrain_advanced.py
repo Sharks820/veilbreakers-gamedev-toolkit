@@ -550,14 +550,17 @@ def apply_layer_operation(
 
     rows, cols = layer.heights.shape
     tw, td = terrain_size
+    # terrain_origin is the terrain object's world-space center, not its min corner.
     ox, oy = terrain_origin
+    min_x = ox - tw * 0.5
+    min_y = oy - td * 0.5
 
     if tw <= 0 or td <= 0:
         return 0
 
     # Convert world-space brush to grid-space
-    cx_grid = (center[0] - ox) / tw * cols
-    cy_grid = (center[1] - oy) / td * rows
+    cx_grid = (center[0] - min_x) / tw * cols
+    cy_grid = (center[1] - min_y) / td * rows
     r_grid_x = radius / tw * cols
     r_grid_y = radius / td * rows
 

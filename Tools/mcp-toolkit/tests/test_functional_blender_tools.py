@@ -596,6 +596,7 @@ class TestCommandHandlersCompleteness:
             "env_validate_tile_seams",
             "env_generate_terrain_tile",
             "env_generate_world_terrain",
+            "env_stitch_terrain_edges",
         ):
             assert key in COMMAND_HANDLERS, f"Missing terrain handler: {key}"
 

@@ -22,6 +22,7 @@ dependencies = [
 [project.scripts]
 vb-blender-mcp = "veilbreakers_mcp.blender_server:main"
 vb-unity-mcp = "veilbreakers_mcp.unity_server:main"
+vb-review-mcp = "veilbreakers_mcp.review_server:main"
 
 [dependency-groups]
 dev = [

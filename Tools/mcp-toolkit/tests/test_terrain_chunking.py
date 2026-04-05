@@ -11,6 +11,7 @@ from blender_addon.handlers.terrain_chunking import (
     export_chunks_metadata,
     validate_tile_seams,
 )
+from blender_addon.handlers._terrain_world import validate_tile_seams as validate_world_tile_seams
 
 
 # ---------------------------------------------------------------------------
@@ -249,3 +250,12 @@ class TestValidateTileSeams:
         result = validate_tile_seams(top, bottom, direction="south", tolerance=0.1)
         assert result["match"] is False
         assert result["max_delta"] == 0.5
+
+    def test_world_tile_validator_returns_region_summary_shape(self):
+        tiles = {
+            (0, 0): [[0.0, 1.0], [2.0, 3.0]],
+            (1, 0): [[1.0, 4.0], [3.0, 5.0]],
+        }
+        result = validate_world_tile_seams(tiles)
+        assert set(result.keys()) == {"seam_ok", "max_edge_delta", "issues", "tile_count"}
+        assert result["tile_count"] == 2

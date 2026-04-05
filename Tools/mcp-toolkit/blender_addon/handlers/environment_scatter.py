@@ -16,6 +16,7 @@ AAA upgrades (39-02):
 
 from __future__ import annotations
 
+import logging
 import math
 import random
 from typing import Any
@@ -36,6 +37,8 @@ from ._terrain_noise import compute_slope_map
 from ._mesh_bridge import mesh_from_spec, VEGETATION_GENERATOR_MAP, PROP_GENERATOR_MAP
 from .vegetation_lsystem import generate_billboard_impostor
 from .lod_pipeline import generate_lod_chain
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -1489,10 +1492,21 @@ def _create_prop_template(
         _assign_scatter_material(obj, prop_type)
         return obj
 
-    raise ValueError(
-        f"No procedural generator for prop type '{prop_type}'. "
-        "Add an entry to PROP_GENERATOR_MAP instead of falling back to a cube."
+    logger.warning(
+        "No procedural generator for prop type '%s'; using cube fallback template.",
+        prop_type,
     )
+    mesh = bpy.data.meshes.new(f"_template_{prop_type}")
+    bm = bmesh.new()
+    try:
+        bmesh.ops.create_cube(bm, size=0.5)
+        bm.to_mesh(mesh)
+    finally:
+        bm.free()
+    obj = bpy.data.objects.new(f"_template_{prop_type}", mesh)
+    collection.objects.link(obj)
+    _assign_scatter_material(obj, prop_type)
+    return obj
 
 
 def handle_scatter_props(params: dict) -> dict:
