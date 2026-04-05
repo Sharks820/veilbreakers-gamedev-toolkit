@@ -341,6 +341,24 @@ class TestComputeSlopeMap:
         # Interior cells should have non-trivial slope
         assert slope[16, 16] > 0.5
 
+    def test_larger_cell_size_reduces_world_space_slope(self):
+        """The same height delta over larger cells should read as a gentler slope."""
+        from blender_addon.handlers._terrain_noise import compute_slope_map
+
+        hmap = np.tile(np.linspace(0, 1, 9), (9, 1))
+        fine = compute_slope_map(hmap, cell_size=1.0)
+        coarse = compute_slope_map(hmap, cell_size=4.0)
+        assert coarse[4, 4] < fine[4, 4]
+
+    def test_axis_specific_cell_spacing_reduces_slope_on_that_axis(self):
+        """Tuple spacing should let rectangular terrain use different row/col spacing."""
+        from blender_addon.handlers._terrain_noise import compute_slope_map
+
+        hmap = np.tile(np.linspace(0, 1, 9)[:, None], (1, 9))
+        fine = compute_slope_map(hmap, cell_size=(1.0, 1.0))
+        stretched_rows = compute_slope_map(hmap, cell_size=(4.0, 1.0))
+        assert stretched_rows[4, 4] < fine[4, 4]
+
 
 # ---------------------------------------------------------------------------
 # Biome assignment tests

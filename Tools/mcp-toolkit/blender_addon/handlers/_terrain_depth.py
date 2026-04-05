@@ -518,7 +518,7 @@ def detect_cliff_edges(
     heightmap: np.ndarray,
     slope_threshold_deg: float = 60.0,
     min_cluster_size: int = 4,
-    terrain_size: float = 100.0,
+    terrain_size: float | tuple[float, float] = 100.0,
 ) -> list[dict[str, Any]]:
     """Find terrain regions where slope exceeds threshold for cliff overlay.
 
@@ -531,7 +531,8 @@ def detect_cliff_edges(
         slope_threshold_deg: Minimum slope in degrees to qualify as cliff.
         min_cluster_size: Minimum number of connected steep cells to form
             a cliff placement (filters noise).
-        terrain_size: World-space size of the terrain (for coordinate mapping).
+        terrain_size: World-space terrain extent. A scalar assumes a square
+            terrain; a 2-item tuple is interpreted as ``(width, height)``.
 
     Returns:
         List of cliff placement dicts, each containing:
@@ -543,8 +544,21 @@ def detect_cliff_edges(
     """
     from ._terrain_noise import compute_slope_map
 
-    slope_map = compute_slope_map(heightmap)
     rows, cols = heightmap.shape
+    if isinstance(terrain_size, (tuple, list)):
+        if len(terrain_size) < 2:
+            raise ValueError("terrain_size tuple must contain width and height")
+        terrain_width = max(float(terrain_size[0]), 1e-9)
+        terrain_height = max(float(terrain_size[1]), 1e-9)
+    else:
+        terrain_width = terrain_height = max(float(terrain_size), 1e-9)
+
+    row_spacing = terrain_height / max(rows - 1, 1)
+    col_spacing = terrain_width / max(cols - 1, 1)
+    slope_map = compute_slope_map(
+        heightmap,
+        cell_size=(row_spacing, col_spacing),
+    )
 
     # Binary mask of steep cells
     cliff_mask = slope_map > slope_threshold_deg
@@ -578,10 +592,8 @@ def detect_cliff_edges(
 
     # Extract placement info for each qualifying cluster
     placements: list[dict[str, Any]] = []
-    cell_to_world = terrain_size / max(rows, cols)
-
     # TERR-001: Compute gradient once before loop (not per-cluster)
-    dy, dx = np.gradient(heightmap)
+    dy, dx = np.gradient(heightmap, row_spacing, col_spacing)
 
     for lid in range(label_id):
         cells = np.argwhere(labels == lid)
@@ -597,8 +609,8 @@ def detect_cliff_edges(
         c_center = (c_min + c_max) / 2.0
 
         # Map to world coordinates: grid center -> world center
-        wx = (c_center / cols - 0.5) * terrain_size
-        wy = (r_center / rows - 0.5) * terrain_size
+        wx = (c_center / max(cols - 1, 1) - 0.5) * terrain_width
+        wy = (r_center / max(rows - 1, 1) - 0.5) * terrain_height
 
         # Height at center
         ri = int(np.clip(r_center, 0, rows - 1))
@@ -611,13 +623,18 @@ def detect_cliff_edges(
         face_angle = math.atan2(grad_y, grad_x)
 
         # Cliff dimensions from cluster extent
-        width = (c_max - c_min + 1) * cell_to_world
+        width_x = (c_max - c_min + 1) * col_spacing
+        width_y = (r_max - r_min + 1) * row_spacing
+        width = max(width_x, width_y)
         height_range = float(
             heightmap[cells[:, 0], cells[:, 1]].max()
             - heightmap[cells[:, 0], cells[:, 1]].min()
         )
         # Minimum cliff height based on cell count
-        cliff_height = max(height_range * terrain_size * 0.1, 2.0)
+        cliff_height = max(
+            height_range * max(terrain_width, terrain_height) * 0.1,
+            2.0,
+        )
 
         placements.append({
             "position": [wx, wy, wz],

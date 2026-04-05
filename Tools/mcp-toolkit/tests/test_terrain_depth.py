@@ -401,10 +401,9 @@ class TestDetectCliffEdges:
         hmap[:, 16:] = 0.0
 
         # Use a low threshold since normalized heightmaps produce modest
-        # slopes (arctan(0.5) ~ 26 deg for a 1.0 drop across 1 cell with
-        # central differences).
+        # slopes once converted into world-space spacing for a 100 m terrain.
         placements = detect_cliff_edges(
-            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
+            hmap, slope_threshold_deg=5.0, min_cluster_size=2, terrain_size=100.0
         )
         assert len(placements) >= 1, "No cliff edges detected on steep heightmap"
 
@@ -414,7 +413,7 @@ class TestDetectCliffEdges:
         hmap[:, 16:] = 0.0
 
         placements = detect_cliff_edges(
-            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
+            hmap, slope_threshold_deg=5.0, min_cluster_size=2, terrain_size=100.0
         )
         assert len(placements) >= 1
         p = placements[0]
@@ -452,8 +451,25 @@ class TestDetectCliffEdges:
         hmap[:, 16:] = 0.0
 
         placements = detect_cliff_edges(
-            hmap, slope_threshold_deg=10.0, min_cluster_size=2, terrain_size=100.0
+            hmap, slope_threshold_deg=5.0, min_cluster_size=2, terrain_size=100.0
         )
         for p in placements:
             assert p["width"] > 0, f"Cliff width {p['width']} <= 0"
             assert p["height"] > 0, f"Cliff height {p['height']} <= 0"
+
+    def test_detect_cliff_edges_accepts_rectangular_terrain_extent(self):
+        """Rectangular terrain extents should use independent width and height."""
+        hmap = np.full((32, 32), 1.0, dtype=np.float64)
+        hmap[:, 16:] = 0.0
+
+        placements = detect_cliff_edges(
+            hmap,
+            slope_threshold_deg=5.0,
+            min_cluster_size=2,
+            terrain_size=(160.0, 80.0),
+        )
+
+        assert len(placements) >= 1
+        for p in placements:
+            assert -80.0 <= p["position"][0] <= 80.0
+            assert -40.0 <= p["position"][1] <= 40.0

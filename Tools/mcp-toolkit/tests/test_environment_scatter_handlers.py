@@ -22,22 +22,125 @@ from blender_addon.handlers._scatter_engine import (
 class TestScatterVegetationLogic:
     """Test the pure-logic path used by handle_scatter_vegetation."""
 
+    def test_world_height_sampling_matches_centered_and_offset_tiles(self):
+        """World-space height sampling should be invariant to terrain center offsets."""
+        from blender_addon.handlers.environment_scatter import _sample_heightmap_world
+
+        heightmap = np.array(
+            [
+                [0.0, 0.25, 0.5],
+                [0.25, 0.5, 0.75],
+                [0.5, 0.75, 1.0],
+            ],
+            dtype=np.float64,
+        )
+
+        centered = _sample_heightmap_world(
+            heightmap,
+            height_scale=10.0,
+            world_x=25.0,
+            world_y=25.0,
+            terrain_width=100.0,
+            terrain_height=100.0,
+            terrain_origin_x=0.0,
+            terrain_origin_y=0.0,
+        )
+        offset = _sample_heightmap_world(
+            heightmap,
+            height_scale=10.0,
+            world_x=175.0,
+            world_y=225.0,
+            terrain_width=100.0,
+            terrain_height=100.0,
+            terrain_origin_x=150.0,
+            terrain_origin_y=200.0,
+        )
+
+        assert offset == pytest.approx(centered)
+
+    def test_world_height_sampling_respects_rectangular_terrain_extent(self):
+        """World-space sampling should map X and Y against their own terrain axes."""
+        from blender_addon.handlers.environment_scatter import _sample_heightmap_world
+
+        heightmap = np.array(
+            [
+                [0.0, 0.2, 0.4],
+                [0.3, 0.5, 0.7],
+                [0.6, 0.8, 1.0],
+            ],
+            dtype=np.float64,
+        )
+
+        sampled = _sample_heightmap_world(
+            heightmap,
+            height_scale=10.0,
+            world_x=50.0,
+            world_y=25.0,
+            terrain_width=200.0,
+            terrain_height=100.0,
+            terrain_origin_x=0.0,
+            terrain_origin_y=0.0,
+        )
+
+        assert sampled == pytest.approx(7.5)
+
+    def test_world_height_sampling_clamps_out_of_bounds(self):
+        """World-space sampling should clamp gracefully outside the terrain footprint."""
+        from blender_addon.handlers.environment_scatter import _sample_heightmap_world
+
+        heightmap = np.array(
+            [
+                [0.1, 0.2],
+                [0.3, 0.4],
+            ],
+            dtype=np.float64,
+        )
+
+        sampled = _sample_heightmap_world(
+            heightmap,
+            height_scale=20.0,
+            world_x=10_000.0,
+            world_y=10_000.0,
+            terrain_width=100.0,
+            terrain_height=100.0,
+            terrain_origin_x=0.0,
+            terrain_origin_y=0.0,
+        )
+
+        assert sampled == pytest.approx(8.0)
+
+    def test_terrain_cell_size_from_extent_uses_world_spacing(self):
+        from blender_addon.handlers.environment_scatter import _terrain_cell_size_from_extent
+
+        spacing = _terrain_cell_size_from_extent(
+            terrain_width=80.0,
+            terrain_height=120.0,
+            rows=5,
+            cols=9,
+        )
+
+        assert spacing == pytest.approx(30.0)
+
     def test_full_vegetation_pipeline(self):
         """Poisson disk + biome filter produces valid placements."""
         # Simulate what handle_scatter_vegetation does internally
-        terrain_size = 100.0
+        terrain_width = 120.0
+        terrain_depth = 60.0
         min_distance = 5.0
         seed = 42
 
         candidates = poisson_disk_sample(
-            terrain_size, terrain_size, min_distance, seed=seed,
+            terrain_width, terrain_depth, min_distance, seed=seed,
         )
         assert len(candidates) > 10
 
         # Create synthetic heightmap and slope map
         heightmap = np.random.RandomState(seed).random((64, 64))
         from blender_addon.handlers._terrain_noise import compute_slope_map
-        slope_map = compute_slope_map(heightmap)
+        slope_map = compute_slope_map(
+            heightmap,
+            cell_size=(terrain_depth / 63.0, terrain_width / 63.0),
+        )
 
         rules = [
             {
@@ -62,7 +165,9 @@ class TestScatterVegetationLogic:
 
         placements = biome_filter_points(
             candidates, heightmap, slope_map, rules,
-            terrain_size=terrain_size, seed=seed,
+            terrain_width=terrain_width,
+            terrain_depth=terrain_depth,
+            seed=seed,
         )
 
         # Should produce some placements
@@ -76,6 +181,8 @@ class TestScatterVegetationLogic:
             assert "scale" in p
             assert "rotation" in p
             assert 0 <= p["rotation"] <= 360
+            assert 0.0 <= p["position"][0] <= terrain_width
+            assert 0.0 <= p["position"][1] <= terrain_depth
 
     def test_max_instances_cap(self):
         """Placements can be capped at max_instances."""

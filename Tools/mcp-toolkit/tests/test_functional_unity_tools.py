@@ -937,6 +937,87 @@ class TestUnityScene:
         assert data["tile_count"] == 1
 
     @pytest.mark.asyncio
+    async def test_setup_tiled_terrain_action_forwards_parent_and_layers(self):
+        from veilbreakers_mcp.unity_tools import scene as scene_tool
+
+        tiles = [
+            {
+                "heightmap_path": "Assets/Heightmaps/tile_0.raw",
+                "alphamap_path": "Assets/Heightmaps/tile_0_alphamap.raw",
+                "grid_x": 0,
+                "grid_y": 0,
+                "position": [128.0, 0.0, 256.0],
+            }
+        ]
+        layers = [
+            {"texture_path": "Assets/Textures/grass.png", "tiling": 10.0},
+            {"texture_path": "Assets/Textures/rock.png", "tiling": 5.0},
+        ]
+
+        with patch.object(scene_tool, "generate_tiled_terrain_setup_script", return_value="// generated tiled terrain") as gen_mock, \
+             patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TiledTerrainSetup.cs"):
+            result = await scene_tool.unity_scene(
+                action="setup_tiled_terrain",
+                terrain_tiles=tiles,
+                terrain_size=[512, 200, 512],
+                terrain_resolution=257,
+                splatmap_layers=layers,
+                tile_parent_name="TerrainRoot_Custom",
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "success"
+        assert data["tile_count"] == 1
+        assert data["terrain_size"] == [512, 200, 512]
+        assert data["resolution"] == 257
+        gen_mock.assert_called_once_with(
+            tiles=tiles,
+            default_size=(512, 200, 512),
+            default_resolution=257,
+            splatmap_layers=layers,
+            parent_name="TerrainRoot_Custom",
+        )
+
+    @pytest.mark.asyncio
+    async def test_setup_tiled_terrain_action_uses_default_size_when_missing(self):
+        from veilbreakers_mcp.unity_tools import scene as scene_tool
+
+        tiles = [{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}]
+
+        with patch.object(scene_tool, "generate_tiled_terrain_setup_script", return_value="// generated tiled terrain") as gen_mock, \
+             patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TiledTerrainSetup.cs"):
+            result = await scene_tool.unity_scene(
+                action="setup_tiled_terrain",
+                terrain_tiles=tiles,
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "success"
+        assert data["terrain_size"] == [1000, 600, 1000]
+        gen_mock.assert_called_once_with(
+            tiles=tiles,
+            default_size=(1000, 600, 1000),
+            default_resolution=513,
+            splatmap_layers=None,
+            parent_name="VB_TerrainRoot",
+        )
+
+    @pytest.mark.asyncio
+    async def test_setup_tiled_terrain_action_write_error_returns_error(self):
+        from veilbreakers_mcp.unity_tools import scene as scene_tool
+
+        with patch.object(scene_tool, "_write_to_unity", side_effect=ValueError("unsafe path")):
+            result = await scene_tool.unity_scene(
+                action="setup_tiled_terrain",
+                terrain_tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}],
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "error"
+        assert data["action"] == "setup_tiled_terrain"
+        assert "unsafe path" in data["message"]
+
+    @pytest.mark.asyncio
     async def test_setup_terrain_action_with_alphamap(self):
         from veilbreakers_mcp.unity_tools import scene as scene_tool
 
