@@ -526,6 +526,7 @@ def apply_layer_operation(
     grid_width: int = 0,
     grid_height: int = 0,
     terrain_size: Vec2 = (100.0, 100.0),
+    terrain_origin: Vec2 = (0.0, 0.0),
     seed: int = 42,
 ) -> int:
     """Apply a brush operation to a terrain layer.
@@ -549,13 +550,14 @@ def apply_layer_operation(
 
     rows, cols = layer.heights.shape
     tw, td = terrain_size
+    ox, oy = terrain_origin
 
     if tw <= 0 or td <= 0:
         return 0
 
     # Convert world-space brush to grid-space
-    cx_grid = center[0] / tw * cols
-    cy_grid = center[1] / td * rows
+    cx_grid = (center[0] - ox) / tw * cols
+    cy_grid = (center[1] - oy) / td * rows
     r_grid_x = radius / tw * cols
     r_grid_y = radius / td * rows
 
@@ -741,10 +743,12 @@ def handle_terrain_layers(params: dict) -> dict:
         strength = float(params.get("strength", 1.0))
         dims = obj.dimensions
         terrain_size = (dims.x, dims.y)
+        terrain_origin = (obj.location.x, obj.location.y)
 
         affected = apply_layer_operation(
             target, operation, tuple(center[:2]), radius, strength,
             terrain_size=terrain_size,
+            terrain_origin=terrain_origin,
             seed=params.get("seed", 42),
         )
 
@@ -802,6 +806,7 @@ def compute_erosion_brush(
     iterations: int = 5,
     strength: float = 0.5,
     terrain_size: Vec2 = (100.0, 100.0),
+    terrain_origin: Vec2 = (0.0, 0.0),
     seed: int = 42,
 ) -> np.ndarray:
     """Apply erosion within a brush radius on a heightmap.
@@ -830,13 +835,14 @@ def compute_erosion_brush(
     result = heightmap.astype(np.float64).copy()
     rows, cols = result.shape
     tw, td = terrain_size
+    ox, oy = terrain_origin
 
     if tw <= 0 or td <= 0 or brush_radius <= 0:
         return result
 
     # Convert to grid space
-    cx = brush_center[0] / tw * cols
-    cy = brush_center[1] / td * rows
+    cx = (brush_center[0] - ox) / tw * cols
+    cy = (brush_center[1] - oy) / td * rows
     rx = brush_radius / tw * cols
     ry = brush_radius / td * rows
 
@@ -943,10 +949,11 @@ def handle_erosion_paint(params: dict) -> dict:
 
         dims = obj.dimensions
         terrain_size = (dims.x, dims.y)
+        terrain_origin = (obj.location.x, obj.location.y)
 
         eroded = compute_erosion_brush(
             heightmap, brush_center, brush_radius, erosion_type,
-            iterations, strength, terrain_size,
+            iterations, strength, terrain_size, terrain_origin,
         )
 
         flat = eroded.ravel()
@@ -1240,6 +1247,7 @@ def apply_stamp_to_heightmap(
     height: float = 1.0,
     falloff: float = 0.5,
     terrain_size: Vec2 = (100.0, 100.0),
+    terrain_origin: Vec2 = (0.0, 0.0),
 ) -> np.ndarray:
     """Apply a stamp heightmap onto a terrain heightmap.
 
@@ -1261,13 +1269,14 @@ def apply_stamp_to_heightmap(
     rows, cols = result.shape
     stamp_rows, stamp_cols = stamp.shape
     tw, td = terrain_size
+    ox, oy = terrain_origin
 
     if tw <= 0 or td <= 0 or radius <= 0:
         return result
 
     # Convert world-space to grid-space
-    cx = position[0] / tw * cols
-    cy = position[1] / td * rows
+    cx = (position[0] - ox) / tw * cols
+    cy = (position[1] - oy) / td * rows
     r_cells_x = radius / tw * cols
     r_cells_y = radius / td * rows
 
@@ -1352,9 +1361,10 @@ def handle_terrain_stamp(params: dict) -> dict:
 
         dims = obj.dimensions
         terrain_size = (dims.x, dims.y)
+        terrain_origin = (obj.location.x, obj.location.y)
 
         stamped = apply_stamp_to_heightmap(
-            heightmap, stamp, position, radius, height, falloff, terrain_size,
+            heightmap, stamp, position, radius, height, falloff, terrain_size, terrain_origin,
         )
 
         flat = stamped.ravel()
