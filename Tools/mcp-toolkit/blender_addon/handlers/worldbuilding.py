@@ -2688,8 +2688,9 @@ def _materialize_road_path_meshes(
             name=f"{base_name}_{road_label}_seg_{seg_idx}",
             parent=parent,
         )
-        if not isinstance(obj, dict):
-            _assign_procedural_material(obj, material_key)
+        if isinstance(obj, dict) or obj is None:
+            continue
+        _assign_procedural_material(obj, material_key)
         created += 1
 
     return created

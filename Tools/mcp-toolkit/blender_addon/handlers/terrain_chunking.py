@@ -367,7 +367,16 @@ def validate_tile_seams(
     Returns:
         Dict describing seam agreement.
     """
-    if not tile_a or not tile_b or not tile_a[0] or not tile_b[0]:
+    if len(tile_a) == 0 or len(tile_b) == 0:
+        return {
+            "match": False,
+            "direction": direction,
+            "sample_count": 0,
+            "max_delta": None,
+            "mean_delta": None,
+            "error": "empty tile input",
+        }
+    if len(tile_a[0]) == 0 or len(tile_b[0]) == 0:
         return {
             "match": False,
             "direction": direction,

@@ -24,6 +24,23 @@ The terrain must support **seamless tile expansion** — generating a new terrai
 
 ---
 
+## 1A. 2026-04-05 Checkpoint
+
+- Active branch for this work: `feature/terrain-world-foundation`
+- Reviewer MCP server was renamed to `review_server.py`; public tools are `review_diff`, `review_text`, `review_consensus`, and `review_history_summary`
+- Default reviewer lineup is now:
+  - OpenRouter: `qwen/qwen3.6-plus:free`
+  - Z.AI direct coding API: reviewer label `glm-5.0-turbo`, resolved API model `glm-5-turbo`
+  - Gemini CLI: `gemini-3.1-flash-lite-preview`
+- GLM provider uses `https://api.z.ai/api/coding/paas/v4`, not OpenRouter
+- Reviewer truth grading now preserves subtype detail for non-bug findings instead of collapsing everything into plain `other`
+- Local review artifacts from the terrain rerun live in `review_reports/`
+- Current verification checkpoint:
+  - `python -m pytest Tools/mcp-toolkit/tests/test_review_server.py -q` -> `17 passed`
+  - Large terrain/regression pass previously completed with `1115 passed`
+
+---
+
 ## 2. Architecture
 
 ```
@@ -621,6 +638,8 @@ Changes:
 Implemented in this branch:
 - `terrain_chunking.py` now accepts `world_origin` and exports it in chunk metadata
 - `terrain_validate_tile_seams` / `env_validate_tile_seams` now provide direct seam checks
+- `env_stitch_terrain_edges` now provides a fallback seam stitcher for already-authored meshes
+- `handle_generate_world_terrain()` now returns seam validation results for adjacent tiles
 - `unity_scene` now supports `setup_tiled_terrain`
 - `generate_tiled_terrain_setup_script()` now emits neighbor wiring via `Terrain.SetNeighbors`
 

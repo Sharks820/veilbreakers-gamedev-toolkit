@@ -1,0 +1,563 @@
+{
+  "branch": "feature/terrain-world-foundation",
+  "base": "origin/master",
+  "source_report": "C:\\Users\\Conner\\OneDrive\\Documents\\veilbreakers-gamedev-toolkit\\review_reports\\terrain_branch_20260404_rerun_raw.json",
+  "models": [
+    {
+      "model": "gemini-3.1-flash-lite-preview",
+      "total": 25,
+      "real": 4,
+      "other": 14,
+      "false_positive": 7,
+      "strict_accuracy": 0.16,
+      "useful_signal_rate": 0.72,
+      "other_breakdown": {
+        "cleanup": 2,
+        "design_concern": 2,
+        "maintainability": 1,
+        "performance": 1,
+        "test_brittleness": 5,
+        "test_maintainability": 3
+      },
+      "graded_findings": [
+        {
+          "title": "Grid coordinate conversion assumes corner origin",
+          "bucket": "terrain_core",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_advanced.py",
+          "function": "apply_layer_operation",
+          "severity": "High",
+          "category": "real",
+          "classification": "real_bug"
+        },
+        {
+          "title": "Material dedup logic prevents material updates",
+          "bucket": "terrain_core",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+          "function": "create_biome_terrain_material",
+          "severity": "Medium",
+          "category": "other",
+          "classification": "maintainability"
+        },
+        {
+          "title": "Inefficient height sampling in sample_world_height",
+          "bucket": "terrain_core",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_world.py",
+          "function": "sample_world_height",
+          "severity": "Medium",
+          "category": "other",
+          "classification": "performance"
+        },
+        {
+          "title": "Slope scaling inconsistency in hydraulic erosion",
+          "bucket": "terrain_core",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_erosion.py",
+          "function": "apply_hydraulic_erosion",
+          "severity": "Low",
+          "category": "real",
+          "classification": "real_bug"
+        },
+        {
+          "title": "Unused theoretical max amplitude helper",
+          "bucket": "terrain_core",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py",
+          "function": "_theoretical_max_amplitude",
+          "severity": "Low",
+          "category": "other",
+          "classification": "cleanup"
+        },
+        {
+          "title": "Inconsistent Error Handling for Missing Generators",
+          "bucket": "world_env",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_create_prop_template",
+          "severity": "Medium",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Missing terrain_name Propagation in Grounding Logic",
+          "bucket": "world_env",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/worldbuilding.py",
+          "function": "_create_boss_arena_cover",
+          "severity": "Low",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Feature Parity Regression in World Terrain Metadata",
+          "bucket": "world_env",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_generate_world_terrain",
+          "severity": "Medium",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Na\u00c3\u00afve Seed Calculation in Tiled World Loop",
+          "bucket": "world_env",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment.py",
+          "function": "handle_generate_world_terrain",
+          "severity": "Low",
+          "category": "other",
+          "classification": "design_concern"
+        },
+        {
+          "title": "Road Segment Mesh Continuity Concerns",
+          "bucket": "world_env",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/worldbuilding.py",
+          "function": "_materialize_road_path_meshes",
+          "severity": "Low",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Hard-coded Ray Height Limit in safe_place_object",
+          "bucket": "world_env",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_shared_utils.py",
+          "function": "safe_place_object",
+          "severity": "Low",
+          "category": "other",
+          "classification": "design_concern"
+        },
+        {
+          "title": "C# Compilation Error in Tiled Terrain Script",
+          "bucket": "runtime_integration",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py",
+          "function": "generate_tiled_terrain_setup_script",
+          "severity": "Critical",
+          "category": "real",
+          "classification": "real_bug"
+        },
+        {
+          "title": "World Offset Missing in _normalize_map_point Heuristic",
+          "bucket": "runtime_integration",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_normalize_map_point",
+          "severity": "High",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Potential Invalid Command 'world_generate_settlement'",
+          "bucket": "runtime_integration",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "asset_pipeline",
+          "severity": "High",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Explicit World Anchors Bypass Boundary Clamping",
+          "bucket": "runtime_integration",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "severity": "Medium",
+          "category": "real",
+          "classification": "real_bug"
+        },
+        {
+          "title": "Inconsistent Map Cell Lookup Logic",
+          "bucket": "runtime_integration",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_map_point_to_terrain_cell",
+          "severity": "Medium",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Inconsistent validate_tile_seams API and Return Formats",
+          "bucket": "terrain_tests",
+          "file": "Tools/mcp-toolkit/tests/test_terrain_chunking.py",
+          "function": "validate_tile_seams",
+          "severity": "Medium",
+          "category": "other",
+          "classification": "test_maintainability"
+        },
+        {
+          "title": "Misleading Test Naming in Erosion Suite",
+          "bucket": "terrain_tests",
+          "file": "Tools/mcp-toolkit/tests/test_terrain_erosion.py",
+          "function": "test_values_in_0_1_range",
+          "severity": "Low",
+          "category": "other",
+          "classification": "test_maintainability"
+        },
+        {
+          "title": "Unused Import in Material Deduplication Test",
+          "bucket": "terrain_tests",
+          "file": "Tools/mcp-toolkit/tests/test_terrain_materials.py",
+          "function": "test_biome_material_dedup",
+          "severity": "Low",
+          "category": "other",
+          "classification": "cleanup"
+        },
+        {
+          "title": "Redundant Category Existence Test",
+          "bucket": "terrain_tests",
+          "file": "Tools/mcp-toolkit/tests/test_aaa_materials.py",
+          "function": "TestCategoryMaterialMapCoverage.test_clothing_category_exists",
+          "severity": "Low",
+          "category": "other",
+          "classification": "test_maintainability"
+        },
+        {
+          "title": "Tautological assertions in visual verification tests",
+          "bucket": "integration_tests",
+          "file": "Tools/mcp-toolkit/tests/test_visual_verification_loop.py",
+          "function": "test_aaa_verify_score_threshold_default",
+          "severity": "High",
+          "category": "other",
+          "classification": "test_brittleness"
+        },
+        {
+          "title": "Decoupled location handler validation via local reconstruction",
+          "bucket": "integration_tests",
+          "file": "Tools/mcp-toolkit/tests/test_city_generation_integration.py",
+          "function": "test_loc_handlers_settlement_exists",
+          "severity": "High",
+          "category": "other",
+          "classification": "test_brittleness"
+        },
+        {
+          "title": "Brittle source-code-based API parameter verification",
+          "bucket": "integration_tests",
+          "file": "Tools/mcp-toolkit/tests/test_worldbuilding_handlers.py",
+          "function": "test_boss_arena_uses_cap_fill_not_cap_ends",
+          "severity": "Medium",
+          "category": "other",
+          "classification": "test_brittleness"
+        },
+        {
+          "title": "Hardcoded validation sets in integration tests",
+          "bucket": "integration_tests",
+          "file": "Tools/mcp-toolkit/tests/test_city_generation_integration.py",
+          "function": "test_compose_map_biome_is_valid",
+          "severity": "Medium",
+          "category": "other",
+          "classification": "test_brittleness"
+        },
+        {
+          "title": "Weak validation logic in MST road network test",
+          "bucket": "integration_tests",
+          "file": "Tools/mcp-toolkit/tests/test_city_generation_integration.py",
+          "function": "test_mst_road_network_exists",
+          "severity": "Low",
+          "category": "other",
+          "classification": "test_brittleness"
+        }
+      ]
+    },
+    {
+      "model": "qwen/qwen3.6-plus:free",
+      "total": 19,
+      "real": 4,
+      "other": 7,
+      "false_positive": 8,
+      "strict_accuracy": 0.21052631578947367,
+      "useful_signal_rate": 0.5789473684210527,
+      "other_breakdown": {
+        "design_concern": 1,
+        "intentional_behavior": 1,
+        "test_brittleness": 4,
+        "test_gap": 1
+      },
+      "graded_findings": [
+        {
+          "title": "Hardcoded [-1, 1] normalization assumption causes fBm clipping artifacts",
+          "bucket": "terrain_core",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py",
+          "function": "_apply_terrain_preset",
+          "severity": "High",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Thermal erosion talus threshold ignores cell_size for world-space heightmaps",
+          "bucket": "terrain_core",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_erosion.py",
+          "function": "apply_thermal_erosion",
+          "severity": "High",
+          "category": "real",
+          "classification": "real_bug"
+        },
+        {
+          "title": "Silent fallback to default biome masks invalid configuration",
+          "bucket": "terrain_core",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/terrain_materials.py",
+          "function": "create_biome_terrain_material",
+          "severity": "Medium",
+          "category": "other",
+          "classification": "design_concern"
+        },
+        {
+          "title": "Erosion functions return arbitrary ranges, breaking [0, 1] assertions",
+          "bucket": "terrain_core",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/_terrain_erosion.py",
+          "function": "apply_hydraulic_erosion, apply_thermal_erosion",
+          "severity": "Medium",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Incorrect heightmap UV calculation for offset terrains in vegetation scattering",
+          "bucket": "world_env",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "handle_scatter_vegetation",
+          "severity": "High",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Inaccurate road segment creation count on mesh generation failure",
+          "bucket": "world_env",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/worldbuilding.py",
+          "function": "_materialize_road_path_meshes",
+          "severity": "Low",
+          "category": "real",
+          "classification": "real_bug"
+        },
+        {
+          "title": "Hard failure on unmapped prop types may break existing biome/location specs",
+          "bucket": "world_env",
+          "file": "Tools/mcp-toolkit/blender_addon/handlers/environment_scatter.py",
+          "function": "_create_prop_template",
+          "severity": "Medium",
+          "category": "other",
+          "classification": "intentional_behavior"
+        },
+        {
+          "title": "C# compilation error due to type mismatch in terrain dictionary assignment",
+          "bucket": "runtime_integration",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py",
+          "function": "generate_tiled_terrain_setup_script",
+          "severity": "Critical",
+          "category": "real",
+          "classification": "real_bug"
+        },
+        {
+          "title": "Explicit world anchors bypass boundary clamping, risking out-of-bounds placement",
+          "bucket": "runtime_integration",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "severity": "High",
+          "category": "real",
+          "classification": "real_bug"
+        },
+        {
+          "title": "Inconsistent application of terrain location offset in coordinate normalization",
+          "bucket": "runtime_integration",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_normalize_map_point",
+          "severity": "Medium",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Missing test coverage for new tiled terrain setup and neighbor wiring logic",
+          "bucket": "runtime_integration",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/unity_tools/scene.py",
+          "function": "_handle_scene_setup_tiled_terrain",
+          "severity": "Medium",
+          "category": "other",
+          "classification": "test_gap"
+        },
+        {
+          "title": "Potential TypeError from unsupported kwargs in generate_heightmap",
+          "bucket": "terrain_tests",
+          "file": "Tools/mcp-toolkit/tests/test_terrain_tiling.py",
+          "function": "test_adjacent_tiles_share_edge_with_world_origin",
+          "severity": "Medium",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Potential TypeError from unsupported height_range kwarg in apply_hydraulic_erosion",
+          "bucket": "terrain_tests",
+          "file": "Tools/mcp-toolkit/tests/test_terrain_erosion.py",
+          "function": "test_world_unit_height_range_is_supported",
+          "severity": "Medium",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Saturation clamping validation bypassed for high-saturation materials",
+          "bucket": "terrain_tests",
+          "file": "Tools/mcp-toolkit/tests/test_procedural_materials.py",
+          "function": "test_all_library_entries_pass_dark_fantasy",
+          "severity": "Low",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Ambiguous bounds tuple format assumption in chunk metadata test",
+          "bucket": "terrain_tests",
+          "file": "Tools/mcp-toolkit/tests/test_terrain_chunking.py",
+          "function": "test_world_origin_is_preserved",
+          "severity": "Medium",
+          "category": "other",
+          "classification": "test_brittleness"
+        },
+        {
+          "title": "Hardcoded routing dictionary bypasses actual source verification",
+          "bucket": "integration_tests",
+          "file": "Tools/mcp-toolkit/tests/test_city_generation_integration.py",
+          "function": "test_loc_handlers_settlement_exists, test_loc_handlers_castle_routes_to_castle",
+          "severity": "Medium",
+          "category": "other",
+          "classification": "test_brittleness"
+        },
+        {
+          "title": "Tautological assertions in visual verification threshold tests",
+          "bucket": "integration_tests",
+          "file": "Tools/mcp-toolkit/tests/test_visual_verification_loop.py",
+          "function": "test_aaa_verify_score_threshold_default, test_aaa_verify_angle_count",
+          "severity": "Low",
+          "category": "other",
+          "classification": "test_brittleness"
+        },
+        {
+          "title": "Dispatch test passes empty payload risking false failures",
+          "bucket": "integration_tests",
+          "file": "Tools/mcp-toolkit/tests/test_wiring_integration.py",
+          "function": "test_dispatch_returns_dict",
+          "severity": "Medium",
+          "category": "false_positive",
+          "classification": "false_positive"
+        },
+        {
+          "title": "Brittle regex parsing for Python source code",
+          "bucket": "integration_tests",
+          "file": "Tools/mcp-toolkit/tests/test_worldbuilding_handlers.py",
+          "function": "test_boss_arena_uses_cap_fill_not_cap_ends",
+          "severity": "Low",
+          "category": "other",
+          "classification": "test_brittleness"
+        }
+      ]
+    },
+    {
+      "model": "nvidia/nemotron-3-super-120b-a12b:free",
+      "total": 0,
+      "real": 0,
+      "other": 0,
+      "false_positive": 0,
+      "strict_accuracy": null,
+      "useful_signal_rate": null,
+      "other_breakdown": {},
+      "graded_findings": []
+    }
+  ],
+  "consensus_findings": [
+    {
+      "key": "tools mcp toolkit src veilbreakers mcp shared unity templates scene templates py generate tiled terrain setup",
+      "title": "C# Compilation Error in Tiled Terrain Script",
+      "severity": "Critical",
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py",
+      "function": "generate_tiled_terrain_setup_script",
+      "evidence": "terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}; where terrainMap is defined as Dictionary<string, Terrain> but terrainObj is a GameObject.",
+      "recommendation": "Assign the Terrain component instead: terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}.GetComponent<Terrain>();",
+      "confidence": 1.0,
+      "models": [
+        "gemini-3.1-flash-lite-preview",
+        "qwen/qwen3.6-plus:free"
+      ],
+      "findings": [
+        {
+          "model": "gemini-3.1-flash-lite-preview",
+          "title": "C# Compilation Error in Tiled Terrain Script",
+          "severity": "Critical",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py",
+          "function": "generate_tiled_terrain_setup_script",
+          "evidence": "terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}; where terrainMap is defined as Dictionary<string, Terrain> but terrainObj is a GameObject.",
+          "recommendation": "Assign the Terrain component instead: terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}.GetComponent<Terrain>();",
+          "confidence": 1.0
+        },
+        {
+          "model": "qwen/qwen3.6-plus:free",
+          "title": "C# compilation error due to type mismatch in terrain dictionary assignment",
+          "severity": "Critical",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/shared/unity_templates/scene_templates.py",
+          "function": "generate_tiled_terrain_setup_script",
+          "evidence": "var terrainMap = new Dictionary<string, Terrain>(); ... terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}; where terrainObj{suffix} is a GameObject returned by Terrain.CreateTerrainGameObject().",
+          "recommendation": "Change the assignment to terrainMap[\"{grid_x},{grid_y}\"] = terrainObj{suffix}.GetComponent<Terrain>(); or change the dictionary type to Dictionary<string, GameObject> and extract the component when calling SetNeighbors.",
+          "confidence": 0.75
+        }
+      ],
+      "agreement": 2
+    },
+    {
+      "key": "tools mcp toolkit src veilbreakers mcp blender server py plan map location anchors explicit world anchors",
+      "title": "Explicit World Anchors Bypass Boundary Clamping",
+      "severity": "High",
+      "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+      "function": "_plan_map_location_anchors",
+      "evidence": "if explicit_world_anchor: clamped = anchor. This bypasses the subsequent safety logic that ensures location anchors stay within the physical bounds of the terrain.",
+      "recommendation": "Apply boundary clamping to explicit_world_anchor points as well, relative to the calculated min/max bounds of the terrain at its world location.",
+      "confidence": 1.0,
+      "models": [
+        "gemini-3.1-flash-lite-preview",
+        "qwen/qwen3.6-plus:free"
+      ],
+      "findings": [
+        {
+          "model": "gemini-3.1-flash-lite-preview",
+          "title": "Explicit World Anchors Bypass Boundary Clamping",
+          "severity": "Medium",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "evidence": "if explicit_world_anchor: clamped = anchor. This bypasses the subsequent safety logic that ensures location anchors stay within the physical bounds of the terrain.",
+          "recommendation": "Apply boundary clamping to explicit_world_anchor points as well, relative to the calculated min/max bounds of the terrain at its world location.",
+          "confidence": 1.0
+        },
+        {
+          "model": "qwen/qwen3.6-plus:free",
+          "title": "Explicit world anchors bypass boundary clamping, risking out-of-bounds placement",
+          "severity": "High",
+          "file": "Tools/mcp-toolkit/src/veilbreakers_mcp/blender_server.py",
+          "function": "_plan_map_location_anchors",
+          "evidence": "if explicit_world_anchor: clamped = anchor completely skips the min/max clamping logic, allowing locations to be placed outside the valid terrain bounds.",
+          "recommendation": "Apply the same clamping logic to explicit anchors, or at least validate that anchor falls within [min_x, max_x] and [min_y, max_y] before assignment.",
+          "confidence": 0.75
+        }
+      ],
+      "agreement": 2
+    },
+    {
+      "key": "tools mcp toolkit tests test worldbuilding handlers py test boss arena uses cap fill not cap",
+      "title": "Brittle source-code-based API parameter verification",
+      "severity": "Medium",
+      "file": "Tools/mcp-toolkit/tests/test_worldbuilding_handlers.py",
+      "function": "test_boss_arena_uses_cap_fill_not_cap_ends",
+      "evidence": "Uses re.findall on worldbuilding.py source text to verify create_circle parameters.",
+      "recommendation": "While direct execution tests are difficult without Blender, source analysis via regex is brittle. Use the 'ast' module for structural code analysis if execution is impossible, or mock the Blender API (bmesh) to verify function calls through standard unit testing patterns.",
+      "confidence": 1.0,
+      "models": [
+        "gemini-3.1-flash-lite-preview",
+        "qwen/qwen3.6-plus:free"
+      ],
+      "findings": [
+        {
+          "model": "gemini-3.1-flash-lite-preview",
+          "title": "Brittle source-code-based API parameter verification",
+          "severity": "Medium",
+          "file": "Tools/mcp-toolkit/tests/test_worldbuilding_handlers.py",
+          "function": "test_boss_arena_uses_cap_fill_not_cap_ends",
+          "evidence": "Uses re.findall on worldbuilding.py source text to verify create_circle parameters.",
+          "recommendation": "While direct execution tests are difficult without Blender, source analysis via regex is brittle. Use the 'ast' module for structural code analysis if execution is impossible, or mock the Blender API (bmesh) to verify function calls through standard unit testing patterns.",
+          "confidence": 1.0
+        },
+        {
+          "model": "qwen/qwen3.6-plus:free",
+          "title": "Brittle regex parsing for Python source code",
+          "severity": "Low",
+          "file": "Tools/mcp-toolkit/tests/test_worldbuilding_handlers.py",
+          "function": "test_boss_arena_uses_cap_fill_not_cap_ends",
+          "evidence": "Uses regex `r\"create_circle\\([^)]*\\)\"` to parse function calls. The `[^)]*` pattern stops at the first closing parenthesis, which will incorrectly truncate calls with nested parentheses, multi-line arguments, or complex expressions, leading to unreliable regression detection.",
+          "recommendation": "Use Python's `ast` module to parse the source file and inspect `Call` nodes for `create_circle`, reliably checking keyword arguments regardless of formatting or nesting.",
+          "confidence": 0.75
+        }
+      ],
+      "agreement": 2
+    }
+  ]
+}

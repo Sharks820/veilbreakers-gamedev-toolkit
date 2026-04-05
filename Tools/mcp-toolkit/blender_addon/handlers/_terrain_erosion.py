@@ -78,7 +78,7 @@ def apply_hydraulic_erosion(
     source_min = float(result.min()) if result.size else 0.0
     source_max = float(result.max()) if result.size else 0.0
     input_range = float(height_range) if height_range is not None else max(source_max - source_min, 1e-12)
-    effective_min_slope = min_slope * input_range if height_range is not None else min_slope
+    effective_min_slope = min_slope * max(input_range, 1e-12)
 
     for _ in range(iterations):
         # Spawn droplet at random position
@@ -234,6 +234,7 @@ def apply_thermal_erosion(
     heightmap: np.ndarray,
     iterations: int = 10,
     talus_angle: float = 40.0,
+    cell_size: float = 1.0,
 ) -> np.ndarray:
     """Apply thermal (talus) erosion to a heightmap.
 
@@ -249,6 +250,9 @@ def apply_thermal_erosion(
     talus_angle : float
         Maximum stable slope angle in degrees. Slopes steeper than this
         will shed material.
+    cell_size : float
+        World-space spacing between adjacent samples. Larger cells need a
+        proportionally larger height delta before talus transfer should occur.
 
     Returns
     -------
@@ -259,6 +263,7 @@ def apply_thermal_erosion(
     rows, cols = result.shape
     source_min = float(result.min()) if result.size else 0.0
     source_max = float(result.max()) if result.size else 0.0
+    sample_spacing = max(float(cell_size), 1e-9)
 
     # Convert talus angle to height difference threshold
     # For adjacent cells at distance 1, tan(angle) = height_diff / 1
@@ -285,7 +290,7 @@ def apply_thermal_erosion(
 
         for dr, dc, dist in offsets:
             shifted = padded[1 + dr:1 + dr + rows, 1 + dc:1 + dc + cols]
-            slope = (result - shifted) / dist
+            slope = (result - shifted) / (dist * sample_spacing)
             excess = np.maximum(slope - talus_threshold, 0.0)
             accumulated_total_diff += excess
             accumulated_max_diff = np.maximum(accumulated_max_diff, excess)

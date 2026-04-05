@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import math
 import struct
+import zlib
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,7 @@ from ._terrain_noise import (
     compute_biome_assignments,
     carve_river_path,
     generate_road_path,
+    _theoretical_max_amplitude,
     TERRAIN_PRESETS,
     BIOME_RULES,
 )
@@ -45,6 +47,8 @@ from ._terrain_world import (
     generate_world_heightmap,
     world_region_dimensions,
 )
+from .terrain_chunking import validate_tile_seams
+from .terrain_materials import compute_world_splatmap_weights
 
 
 # ---------------------------------------------------------------------------
@@ -398,6 +402,96 @@ def _export_heightmap_raw(
     return hmap_u16.tobytes()
 
 
+def _export_splatmap_raw(
+    splatmap: np.ndarray,
+    flip_vertical: bool = True,
+) -> bytes:
+    """Convert a 4-channel splatmap to 8-bit RGBA RAW bytes."""
+    weights = np.asarray(splatmap, dtype=np.float64).copy()
+    if weights.ndim != 3 or weights.shape[2] < 4:
+        raise ValueError("splatmap must be a 3D array with at least 4 channels")
+
+    rgba = weights[:, :, :4]
+    totals = rgba.sum(axis=2, keepdims=True)
+    rgba = np.divide(rgba, np.where(totals > 1e-9, totals, 1.0))
+    rgba = np.clip(rgba, 0.0, 1.0)
+
+    if flip_vertical:
+        rgba = np.flipud(rgba)
+
+    rgba_u8 = (rgba * 255).astype(np.uint8)
+    return rgba_u8.tobytes()
+
+
+def _export_world_tile_artifacts(
+    *,
+    export_dir: str | Path,
+    tile_name: str,
+    heightmap: np.ndarray,
+    splatmap: np.ndarray | None = None,
+    flip_vertical: bool = True,
+) -> dict[str, str]:
+    """Write world-tile RAW artifacts and return their file paths."""
+    output_dir = Path(export_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    result: dict[str, str] = {}
+    heightmap_path = output_dir / f"{tile_name}_heightmap.raw"
+    heightmap_path.write_bytes(_export_heightmap_raw(heightmap, flip_vertical=flip_vertical))
+    result["heightmap_path"] = str(heightmap_path)
+
+    if splatmap is not None:
+        alphamap_path = output_dir / f"{tile_name}_alphamap.raw"
+        alphamap_path.write_bytes(_export_splatmap_raw(splatmap, flip_vertical=flip_vertical))
+        result["alphamap_path"] = str(alphamap_path)
+
+    return result
+
+
+def _resolve_height_range(params: dict, heightmap: np.ndarray) -> tuple[float, float]:
+    """Resolve a consistent height range for splatmap normalization."""
+    hmap = np.asarray(heightmap, dtype=np.float64)
+    height_range = params.get("height_range")
+    if height_range is not None:
+        if isinstance(height_range, (list, tuple)) and len(height_range) >= 2:
+            return float(height_range[0]), float(height_range[1])
+        raise ValueError("height_range must be a 2-item sequence when provided")
+
+    height_range_min = params.get("height_range_min")
+    height_range_max = params.get("height_range_max")
+    if height_range_min is not None and height_range_max is not None:
+        return float(height_range_min), float(height_range_max)
+
+    return float(hmap.min()), float(hmap.max())
+
+
+def _estimate_tile_height_range(
+    terrain_type: str,
+    *,
+    octaves: int | None = None,
+    persistence: float | None = None,
+) -> tuple[float, float]:
+    """Estimate a deterministic height range for standalone tile exports."""
+    preset = TERRAIN_PRESETS.get(terrain_type, TERRAIN_PRESETS["mountains"])
+    octaves = int(octaves if octaves is not None else preset["octaves"])
+    persistence = float(
+        persistence if persistence is not None else preset["persistence"]
+    )
+    amplitude = _theoretical_max_amplitude(octaves, persistence)
+    amplitude *= float(preset.get("amplitude_scale", 1.0))
+    post = str(preset.get("post_process", "none"))
+
+    if post in ("power", "step"):
+        return (0.0, 1.0)
+    if post == "crater":
+        crater_depth = float(preset.get("crater_depth", 0.4))
+        return (-0.3 * amplitude - crater_depth, 0.7 + 0.3 * amplitude)
+    if post == "canyon":
+        ridge_strength = float(preset.get("ridge_strength", 0.7))
+        return (-amplitude * (1.0 - ridge_strength), 1.0)
+    return (-amplitude, amplitude)
+
+
 def _create_terrain_mesh_from_heightmap(
     *,
     name: str,
@@ -696,6 +790,13 @@ def handle_generate_terrain_tile(params: dict) -> dict:
     cliff_overlays_enabled = bool(params.get("cliff_overlays", True))
     cliff_threshold = float(params.get("cliff_threshold_deg", 60.0))
     erosion_margin = max(0, int(params.get("erosion_margin", 0)))
+    biome_name = params.get("biome_name", params.get("terrain_type", "thornwood_forest"))
+    export_splatmaps = bool(params.get("export_splatmaps", True))
+    export_root = Path(
+        params.get("export_dir")
+        or params.get("output_dir")
+        or Path("Temp") / "VB_TerrainExports" / name
+    )
 
     world_width = tile_size + 1 + (2 * erosion_margin)
     world_height = tile_size + 1 + (2 * erosion_margin)
@@ -750,6 +851,38 @@ def handle_generate_terrain_tile(params: dict) -> dict:
         from .terrain_advanced import flatten_multiple_zones
         heightmap = flatten_multiple_zones(heightmap, flatten_zones)
 
+    if "height_range" in params or (
+        "height_range_min" in params and "height_range_max" in params
+    ):
+        height_range = _resolve_height_range(params, heightmap)
+    else:
+        height_range = _estimate_tile_height_range(
+            terrain_type,
+            octaves=octaves,
+            persistence=persistence,
+        )
+
+    moisture_map = None
+    splatmap = None
+    if export_splatmaps:
+        from .terrain_advanced import compute_flow_map
+
+        flow_result = compute_flow_map(heightmap)
+        flow_acc = np.asarray(flow_result["flow_accumulation"], dtype=np.float64)
+        log_flow = np.log1p(flow_acc)
+        fa_max = float(log_flow.max())
+        if fa_max > 0:
+            moisture_map = log_flow / fa_max
+        else:
+            moisture_map = np.zeros_like(heightmap)
+
+        splatmap = compute_world_splatmap_weights(
+            heightmap,
+            biome_name=biome_name,
+            moisture_map=moisture_map,
+            height_range=height_range,
+        )
+
     terrain_result = _create_terrain_mesh_from_heightmap(
         name=name,
         heightmap=heightmap,
@@ -762,7 +895,7 @@ def handle_generate_terrain_tile(params: dict) -> dict:
         cliff_threshold_deg=cliff_threshold,
     )
 
-    return {
+    result = {
         "name": terrain_result["name"],
         "tile_x": tile_x,
         "tile_y": tile_y,
@@ -780,7 +913,23 @@ def handle_generate_terrain_tile(params: dict) -> dict:
         "flatten_zones_applied": len(flatten_zones) if flatten_zones else 0,
         "object_location": terrain_result["object_location"],
         "terrain_size": terrain_size,
+        "grid_x": tile_x,
+        "grid_y": tile_y,
+        "position": [world_origin_x, 0.0, world_origin_y],
+        "size": [terrain_size, height_scale, terrain_size],
+        "height_range": [height_range[0], height_range[1]],
+        "export_dir": str(export_root),
     }
+    if export_splatmaps:
+        result.update(
+            _export_world_tile_artifacts(
+                export_dir=export_root,
+                tile_name=name,
+                heightmap=heightmap,
+                splatmap=splatmap,
+            )
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -815,6 +964,13 @@ def handle_generate_world_terrain(params: dict) -> dict:
     world_center_y = params.get("world_center_y")
     cliff_overlays_enabled = bool(params.get("cliff_overlays", True))
     cliff_threshold = float(params.get("cliff_threshold_deg", 60.0))
+    biome_name = params.get("biome_name", params.get("terrain_type", "thornwood_forest"))
+    export_splatmaps = bool(params.get("export_splatmaps", True))
+    export_root = Path(
+        params.get("export_dir")
+        or params.get("output_dir")
+        or Path("Temp") / "VB_TerrainExports" / name
+    )
 
     world_rows, world_cols = world_region_dimensions(
         tile_count_x, tile_count_y, tile_size
@@ -839,23 +995,62 @@ def handle_generate_world_terrain(params: dict) -> dict:
     )
 
     erosion_applied = False
+    erosion_result: dict[str, Any] = {"heightmap": heightmap}
     if erosion in ("hydraulic", "both") or erosion in ("thermal", "both"):
-        heightmap = erode_world_heightmap(
+        erosion_result = erode_world_heightmap(
             heightmap,
             hydraulic_iterations=erosion_iters if erosion in ("hydraulic", "both") else 0,
             thermal_iterations=max(erosion_iters // 50, 5) if erosion in ("thermal", "both") else 0,
             seed=seed,
-        )["heightmap"]
+        )
+        heightmap = erosion_result["heightmap"]
         erosion_applied = True
 
+    height_range = _resolve_height_range(params, heightmap)
+
+    moisture_map = None
+    if export_splatmaps:
+        flow_map = erosion_result.get("flow_map")
+        if flow_map is None:
+            from .terrain_advanced import compute_flow_map
+
+            flow_map = compute_flow_map(heightmap)
+        flow_acc = np.asarray(flow_map["flow_accumulation"], dtype=np.float64)
+        log_flow = np.log1p(flow_acc)
+        fa_max = float(log_flow.max())
+        if fa_max > 0:
+            moisture_map = log_flow / fa_max
+        else:
+            moisture_map = np.zeros_like(heightmap)
+
+    world_splatmap = None
+    if export_splatmaps:
+        world_splatmap = compute_world_splatmap_weights(
+            heightmap,
+            biome_name=biome_name,
+            moisture_map=moisture_map,
+            height_range=height_range,
+        )
+
     tiles: list[dict[str, Any]] = []
+    tile_heightmaps: dict[tuple[int, int], list[list[float]]] = {}
     tile_world_size = tile_size * cell_size
     for ty in range(tile_count_y):
         for tx in range(tile_count_x):
             tile_name = f"{name}_{tx}_{ty}"
             tile_hmap = extract_tile(heightmap, tx, ty, tile_size)
+            tile_heightmaps[(tx, ty)] = tile_hmap
+            tile_splat = extract_tile(world_splatmap, tx, ty, tile_size) if world_splatmap is not None else None
             tile_origin_x = world_origin_x + tx * tile_world_size
             tile_origin_y = world_origin_y + ty * tile_world_size
+            export_paths: dict[str, str] = {}
+            if export_splatmaps:
+                export_paths = _export_world_tile_artifacts(
+                    export_dir=export_root,
+                    tile_name=tile_name,
+                    heightmap=tile_hmap,
+                    splatmap=tile_splat,
+                )
             tile_result = _create_terrain_mesh_from_heightmap(
                 name=tile_name,
                 heightmap=tile_hmap,
@@ -874,11 +1069,49 @@ def handle_generate_world_terrain(params: dict) -> dict:
             tiles.append({
                 "tile_x": tx,
                 "tile_y": ty,
+                "grid_x": tx,
+                "grid_y": ty,
                 "name": tile_result["name"],
                 "vertex_count": tile_result["vertex_count"],
                 "cliff_overlays": tile_result["cliff_overlays"],
                 "object_location": tile_result["object_location"],
+                "position": [tile_origin_x, 0.0, tile_origin_y],
+                "size": [tile_world_size, height_scale, tile_world_size],
+                "resolution": tile_size + 1,
+                "height_range": [height_range[0], height_range[1]],
+                **export_paths,
             })
+
+    seam_checks: list[dict[str, Any]] = []
+    for ty in range(tile_count_y):
+        for tx in range(tile_count_x):
+            current = tile_heightmaps[(tx, ty)]
+            if tx + 1 < tile_count_x:
+                east = tile_heightmaps[(tx + 1, ty)]
+                seam_checks.append(
+                    {
+                        "a": (tx, ty),
+                        "b": (tx + 1, ty),
+                        "direction": "east",
+                        "result": validate_tile_seams(current, east, direction="east"),
+                    }
+                )
+            if ty + 1 < tile_count_y:
+                south = tile_heightmaps[(tx, ty + 1)]
+                seam_checks.append(
+                    {
+                        "a": (tx, ty),
+                        "b": (tx, ty + 1),
+                        "direction": "south",
+                        "result": validate_tile_seams(current, south, direction="south"),
+                    }
+                )
+
+    seam_validation = {
+        "passed": all(check["result"]["match"] for check in seam_checks),
+        "check_count": len(seam_checks),
+        "checks": seam_checks,
+    }
 
     return {
         "name": name,
@@ -892,8 +1125,95 @@ def handle_generate_world_terrain(params: dict) -> dict:
         "world_origin_x": world_origin_x,
         "world_origin_y": world_origin_y,
         "erosion_applied": erosion_applied,
+        "export_dir": str(export_root),
         "tiles": tiles,
+        "terrain_tiles": tiles,
         "tile_count": len(tiles),
+        "seam_validation": seam_validation,
+    }
+
+
+def handle_stitch_terrain_edges(params: dict) -> dict:
+    """Fallback seam stitcher for adjacent Blender terrain meshes."""
+    terrain_a_name = params.get("terrain_a") or params.get("terrain_name_a")
+    terrain_b_name = params.get("terrain_b") or params.get("terrain_name_b")
+    if not terrain_a_name or not terrain_b_name:
+        raise ValueError("'terrain_a' and 'terrain_b' are required")
+
+    direction = params.get("direction", "east")
+    tolerance = float(params.get("tolerance", 1e-4))
+
+    obj_a = bpy.data.objects.get(terrain_a_name)
+    obj_b = bpy.data.objects.get(terrain_b_name)
+    if obj_a is None:
+        raise ValueError(f"Object not found: {terrain_a_name}")
+    if obj_b is None:
+        raise ValueError(f"Object not found: {terrain_b_name}")
+    if obj_a.type != "MESH" or obj_b.type != "MESH":
+        raise ValueError("terrain stitcher requires mesh objects")
+
+    def _edge_vertices(obj, edge: str) -> list[tuple[float, int]]:
+        mesh = obj.data
+        mesh.calc_loop_triangles()
+        xs = [v.co.x for v in mesh.vertices]
+        ys = [v.co.y for v in mesh.vertices]
+        if not xs or not ys:
+            return []
+        min_x, max_x = min(xs), max(xs)
+        min_y, max_y = min(ys), max(ys)
+        if edge in ("east", "right"):
+            axis_vals = [(v.co.y, idx) for idx, v in enumerate(mesh.vertices) if abs(v.co.x - max_x) <= tolerance]
+        elif edge in ("west", "left"):
+            axis_vals = [(v.co.y, idx) for idx, v in enumerate(mesh.vertices) if abs(v.co.x - min_x) <= tolerance]
+        elif edge in ("north", "top"):
+            axis_vals = [(v.co.x, idx) for idx, v in enumerate(mesh.vertices) if abs(v.co.y - max_y) <= tolerance]
+        elif edge in ("south", "bottom"):
+            axis_vals = [(v.co.x, idx) for idx, v in enumerate(mesh.vertices) if abs(v.co.y - min_y) <= tolerance]
+        else:
+            raise ValueError("direction must be east, west, north, or south")
+        return sorted(axis_vals, key=lambda item: item[0])
+
+    if direction in ("east", "west"):
+        edge_a = "east" if direction == "east" else "west"
+        edge_b = "west" if direction == "east" else "east"
+    else:
+        edge_a = "north" if direction == "north" else "south"
+        edge_b = "south" if direction == "north" else "north"
+
+    verts_a = _edge_vertices(obj_a, edge_a)
+    verts_b = _edge_vertices(obj_b, edge_b)
+    if len(verts_a) != len(verts_b):
+        raise ValueError("terrain edge vertex counts do not match")
+    if not verts_a:
+        return {
+            "status": "error",
+            "message": "no seam vertices found",
+            "direction": direction,
+        }
+
+    mesh_a = obj_a.data
+    mesh_b = obj_b.data
+    matched = 0
+    max_delta = 0.0
+    for (_, idx_a), (_, idx_b) in zip(verts_a, verts_b):
+        za = mesh_a.vertices[idx_a].co.z
+        zb = mesh_b.vertices[idx_b].co.z
+        delta = abs(za - zb)
+        max_delta = max(max_delta, delta)
+        avg = (za + zb) * 0.5
+        mesh_a.vertices[idx_a].co.z = avg
+        mesh_b.vertices[idx_b].co.z = avg
+        matched += 1
+
+    mesh_a.update()
+    mesh_b.update()
+    return {
+        "status": "success",
+        "terrain_a": terrain_a_name,
+        "terrain_b": terrain_b_name,
+        "direction": direction,
+        "matched_vertices": matched,
+        "max_delta": max_delta,
     }
 
 
@@ -1667,7 +1987,7 @@ def handle_generate_multi_biome_world(params: dict) -> dict:
                     "terrain_name": name,
                     "biome_name": biome_name,
                     "min_distance": params.get("min_veg_distance", 4.0),
-                    "seed": seed + (hash(biome_name) & 0xFFFF),
+                    "seed": seed + _stable_seed_offset(biome_name),
                     "max_instances": params.get("max_veg_instances", 2000),
                     "season": "corrupted" if corruption_level > 0.5 else None,
                     "bake_wind_colors": True,
@@ -1736,3 +2056,7 @@ def _compute_vertex_colors_for_biome_map(
         result_colors.append(tinted[0])
 
     return result_colors
+def _stable_seed_offset(label: str) -> int:
+    """Return a deterministic, cross-process seed offset for string labels."""
+    return zlib.crc32(label.encode("utf-8")) & 0xFFFF
+

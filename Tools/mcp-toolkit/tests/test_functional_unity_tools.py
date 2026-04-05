@@ -888,6 +888,21 @@ class TestUnityScene:
         assert "800" in cs
         assert "1025" in cs
 
+    def test_terrain_has_alphamap_path(self):
+        layers = [
+            {"texture_path": "Assets/Textures/grass.png", "tiling": 10.0},
+            {"texture_path": "Assets/Textures/rock.png", "tiling": 5.0},
+            {"texture_path": "Assets/Textures/dirt.png", "tiling": 8.0},
+            {"texture_path": "Assets/Textures/snow.png", "tiling": 12.0},
+        ]
+        cs = generate_terrain_setup_script(
+            heightmap_path="Assets/Heightmaps/test.raw",
+            splatmap_layers=layers,
+            alphamap_path="Assets/Heightmaps/test_alphamap.raw",
+        )
+        assert "test_alphamap.raw" in cs
+        assert "File.Exists(alphamapPath)" in cs
+
     def test_tiled_terrain_returns_string(self):
         cs = generate_tiled_terrain_setup_script(
             tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}]
@@ -902,6 +917,7 @@ class TestUnityScene:
         assert "VB_TerrainRoot" in cs
         assert "Setup Tiled Terrain" in cs
         assert "SetNeighbors" in cs
+        assert ".GetComponent<Terrain>()" in cs
 
     @pytest.mark.asyncio
     async def test_setup_tiled_terrain_action(self):
@@ -919,6 +935,31 @@ class TestUnityScene:
         assert data["status"] == "success"
         assert data["action"] == "setup_tiled_terrain"
         assert data["tile_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_setup_terrain_action_with_alphamap(self):
+        from veilbreakers_mcp.unity_tools import scene as scene_tool
+
+        layers = [
+            {"texture_path": "Assets/Textures/grass.png", "tiling": 10.0},
+            {"texture_path": "Assets/Textures/rock.png", "tiling": 5.0},
+            {"texture_path": "Assets/Textures/dirt.png", "tiling": 8.0},
+            {"texture_path": "Assets/Textures/snow.png", "tiling": 12.0},
+        ]
+
+        with patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TerrainSetup.cs"):
+            result = await scene_tool.unity_scene(
+                action="setup_terrain",
+                heightmap_path="Assets/Heightmaps/test.raw",
+                alphamap_path="Assets/Heightmaps/test_alphamap.raw",
+                splatmap_layers=layers,
+                terrain_size=[1000, 600, 1000],
+                terrain_resolution=513,
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "success"
+        assert data["action"] == "setup_terrain"
 
     # -- object scatter --
 

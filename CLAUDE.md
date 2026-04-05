@@ -11,7 +11,7 @@ Tools/mcp-toolkit/           # MCP server source
     unity_server.py          # 22 Unity compound tools
   blender_addon/             # Blender socket addon (handlers/)
   tests/                     # pytest suite
-.mcp.json                    # MCP server config (vb-blender, vb-unity)
+.mcp.json                    # MCP server config (vb-blender, vb-unity, vb-review)
 .planning/                   # Phase plans, research, state tracking
 ```
 
@@ -61,6 +61,7 @@ All agents (including GSD subagents) have access to these tools. **Prefer MCP to
 ### Game Development (VeilBreakers MCP)
 - **vb-blender** (16 tools): Direct Blender control via TCP. See `.claude/skills/vb-mcp-tools/SKILL.md`.
 - **vb-unity** (22 tools): Unity C# editor script generation. Always follow `next_steps`.
+- **vb-review** (4 tools): Multi-model code review via Gemini CLI plus OpenRouter. Use `review_consensus` for side-by-side reviewer runs and metrics.
 
 ### Tool Selection Priority
 1. **Context7** for library/framework questions (not raw web search)

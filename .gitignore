@@ -8,6 +8,8 @@ build/
 .eggs/
 *.egg
 .env
+.env.*
+pipeline.local.env
 .venv
 env/
 venv/

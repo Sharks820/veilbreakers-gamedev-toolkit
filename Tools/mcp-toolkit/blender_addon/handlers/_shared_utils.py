@@ -39,7 +39,7 @@ def safe_place_object(
     offset_z: float = 0.02,
     bounds: Optional[Tuple[float, float, float, float]] = None,
     water_level: Optional[float] = None,
-    ray_height: float = 500.0,
+    ray_height: float | None = None,
 ) -> Optional[Tuple[float, float, float]]:
     """Place an object at (x, y) with terrain-aware Z snapping.
 
@@ -65,7 +65,8 @@ def safe_place_object(
     water_level:
         If set, reject placements where the resolved Z is below this level.
     ray_height:
-        Height from which the downward ray is cast (default 500 m).
+        Height from which the downward ray is cast. When omitted, an adaptive
+        height is chosen from the terrain bounds or requested placement.
     """
     # --- Bounds check (pure logic, no bpy needed) ---
     if bounds is not None:
@@ -77,11 +78,22 @@ def safe_place_object(
     z = offset_z
 
     if _HAS_BPY:
-        origin = Vector((float(x), float(y), ray_height))
         direction = Vector((0.0, 0.0, -1.0))
         try:
+            terrain_obj = bpy.data.objects.get(terrain_name) if terrain_name else None
+            cast_height = ray_height
+            if cast_height is None:
+                cast_height = max(float(offset_z) + 500.0, 500.0)
+                if terrain_obj is not None:
+                    dims = getattr(terrain_obj, "dimensions", None)
+                    loc = getattr(terrain_obj, "location", None)
+                    if dims is not None and loc is not None:
+                        cast_height = max(
+                            cast_height,
+                            float(loc.z) + float(max(dims.x, dims.y, dims.z)) + 100.0,
+                        )
+            origin = Vector((float(x), float(y), float(cast_height)))
             if terrain_name:
-                terrain_obj = bpy.data.objects.get(terrain_name)
                 if terrain_obj is not None:
                     inv = terrain_obj.matrix_world.inverted()
                     local_origin = inv @ origin

@@ -22,6 +22,11 @@
         "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}",
         "GEMINI_API_KEY": "${GEMINI_API_KEY}"
       }
+    },
+    "vb-review": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-review-mcp"]
     }
   }
 }

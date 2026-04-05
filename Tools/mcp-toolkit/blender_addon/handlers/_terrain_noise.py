@@ -433,11 +433,16 @@ def generate_heightmap(
 
     gen = _make_noise_generator(seed)
 
-    # Build coordinate grids once (vectorised)
-    # x varies along columns (axis 1), y varies along rows (axis 0)
-    x_coords = (np.arange(width, dtype=np.float64) * cell_size + world_origin_x) / scale
-    y_coords = (np.arange(height, dtype=np.float64) * cell_size + world_origin_y) / scale
-    xs_base, ys_base = np.meshgrid(x_coords, y_coords)      # both (height, width)
+    # Build coordinate grids once (vectorised). For single-point sampling we avoid
+    # meshgrid allocation because sample_world_height hits this path frequently.
+    if width == 1 and height == 1:
+        xs_base = np.array([[world_origin_x / scale]], dtype=np.float64)
+        ys_base = np.array([[world_origin_y / scale]], dtype=np.float64)
+    else:
+        # x varies along columns (axis 1), y varies along rows (axis 0)
+        x_coords = (np.arange(width, dtype=np.float64) * cell_size + world_origin_x) / scale
+        y_coords = (np.arange(height, dtype=np.float64) * cell_size + world_origin_y) / scale
+        xs_base, ys_base = np.meshgrid(x_coords, y_coords)      # both (height, width)
 
     # Apply domain warping for organic, non-repetitive terrain features
     if warp_strength > 0.0:

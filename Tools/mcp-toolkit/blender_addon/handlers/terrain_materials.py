@@ -24,6 +24,8 @@ import logging
 import math
 from typing import Any
 
+import numpy as np
+
 try:
     import bpy
 except ImportError:
@@ -35,6 +37,7 @@ from .procedural_materials import (
     _add_node,
     _get_bsdf_input,
 )
+from ._terrain_noise import compute_slope_map
 
 logger = logging.getLogger(__name__)
 
@@ -2092,6 +2095,113 @@ def auto_assign_terrain_layers(
     return result
 
 
+def compute_world_splatmap_weights(
+    heightmap: list[list[float]] | np.ndarray,
+    biome_name: str = DEFAULT_BIOME,
+    *,
+    slope_flat_deg: float = 30.0,
+    slope_cliff_deg: float = 60.0,
+    special_low_pct: float = 0.15,
+    special_high_pct: float = 0.85,
+    moisture_map: Any = None,
+    height_range: tuple[float, float] | None = None,
+) -> np.ndarray:
+    """Compute a world-consistent RGBA splatmap from a full heightfield.
+
+    This is the tiled-world version of ``auto_assign_terrain_layers``. The
+    entire world region is evaluated in one pass so height and slope thresholds
+    stay consistent across tile boundaries.
+    """
+    hmap = np.asarray(heightmap, dtype=np.float64)
+    if hmap.ndim != 2:
+        raise ValueError("heightmap must be 2D")
+    if hmap.size == 0:
+        return np.zeros((*hmap.shape, 4), dtype=np.float64)
+
+    # Preserve biome validation for callers that pass an explicit biome name,
+    # but keep the weights generation itself biome-agnostic.
+    if biome_name:
+        try:
+            get_biome_palette(biome_name)
+        except ValueError:
+            logger.warning("Unknown biome '%s' passed to compute_world_splatmap_weights", biome_name)
+
+    slope_map = compute_slope_map(hmap)
+    if height_range is not None:
+        z_min, z_max = float(height_range[0]), float(height_range[1])
+        if z_max < z_min:
+            z_min, z_max = z_max, z_min
+    else:
+        z_min = float(hmap.min())
+        z_max = float(hmap.max())
+    z_range = z_max - z_min
+    if z_range < 1e-9:
+        height_pcts = np.full(hmap.shape, 0.5, dtype=np.float64)
+    else:
+        height_pcts = (hmap - z_min) / z_range
+
+    if moisture_map is not None:
+        mmap = np.asarray(moisture_map, dtype=np.float64)
+        if mmap.shape != hmap.shape:
+            raise ValueError("moisture_map must match heightmap shape")
+    else:
+        mmap = None
+
+    result = np.zeros((*hmap.shape, 4), dtype=np.float64)
+    for r in range(hmap.shape[0]):
+        for c in range(hmap.shape[1]):
+            angle = float(slope_map[r, c])
+            h_pct = float(height_pcts[r, c])
+
+            if angle < slope_flat_deg:
+                t = angle / slope_flat_deg if slope_flat_deg > 1e-9 else 0.0
+                red, green, blue = 1.0 - t, t, 0.0
+            elif angle < slope_cliff_deg:
+                span = slope_cliff_deg - slope_flat_deg
+                t = (angle - slope_flat_deg) / span if span > 1e-9 else 0.0
+                red, green, blue = 0.0, 1.0 - t, t
+            else:
+                red, green, blue = 0.0, 0.0, 1.0
+
+            if angle < slope_flat_deg and mmap is not None:
+                moisture = float(mmap[r, c])
+                if moisture > 0.7:
+                    red *= 1.2
+                    a_moisture = 0.15 * (moisture - 0.7) / 0.3
+                elif moisture < 0.3:
+                    red *= 0.7
+                    a_moisture = 0.1 * (0.3 - moisture) / 0.3
+                else:
+                    a_moisture = 0.0
+            else:
+                a_moisture = 0.0
+
+            alpha = 0.0
+            if h_pct < special_low_pct and special_low_pct > 1e-9:
+                alpha = 1.0 - (h_pct / special_low_pct)
+            elif h_pct > special_high_pct and special_high_pct < 1.0:
+                alpha = (h_pct - special_high_pct) / max(1.0 - special_high_pct, 1e-9)
+            alpha = max(0.0, min(1.0, alpha + a_moisture))
+
+            rgb_sum = red + green + blue
+            if rgb_sum > 0.0:
+                remaining = 1.0 - alpha
+                red = red / rgb_sum * remaining
+                green = green / rgb_sum * remaining
+                blue = blue / rgb_sum * remaining
+            else:
+                red = 0.0
+                green = 0.0
+                blue = 1.0 - alpha
+
+            result[r, c, 0] = max(0.0, min(1.0, red))
+            result[r, c, 1] = max(0.0, min(1.0, green))
+            result[r, c, 2] = max(0.0, min(1.0, blue))
+            result[r, c, 3] = alpha
+
+    return result
+
+
 def create_biome_terrain_material(
     biome_name: str,
     object_name: str | None = None,
@@ -2102,28 +2212,23 @@ def create_biome_terrain_material(
     """
     if bpy is None:
         raise RuntimeError("create_biome_terrain_material() requires bpy")
-    if biome_name not in BIOME_PALETTES_V2:
-        logger.warning(
-            "Unknown biome '%s', falling back to '%s'. Available: %s",
-            biome_name, DEFAULT_BIOME, sorted(BIOME_PALETTES_V2.keys()),
-        )
+    if not biome_name:
         biome_name = DEFAULT_BIOME
+    elif biome_name not in BIOME_PALETTES_V2:
+        logger.warning(
+            "Unknown biome '%s'. Available: %s",
+            biome_name,
+            sorted(BIOME_PALETTES_V2.keys()),
+        )
+        raise ValueError(f"Unknown biome '{biome_name}'")
     palette = BIOME_PALETTES_V2[biome_name]
 
-    # Dedup: reuse existing material to avoid VB_Terrain_thornwood_forest.001 etc.
+    # Reuse the canonical material slot, but always rebuild it so palette updates
+    # propagate to existing terrains instead of leaving stale node graphs behind.
     mat_name = f"VB_Terrain_{biome_name}"
-    existing = bpy.data.materials.get(mat_name)
-    if existing is not None:
-        if object_name:
-            obj = bpy.data.objects.get(object_name)
-            if obj is not None and hasattr(obj.data, "materials"):
-                if obj.data.materials:
-                    obj.data.materials[0] = existing
-                else:
-                    obj.data.materials.append(existing)
-        return existing
-
-    mat = bpy.data.materials.new(name=mat_name)
+    mat = bpy.data.materials.get(mat_name)
+    if mat is None:
+        mat = bpy.data.materials.new(name=mat_name)
     mat.use_nodes = True
     tree = mat.node_tree
     nodes = tree.nodes
@@ -2240,6 +2345,14 @@ def create_biome_terrain_material(
                     vi_idx = mesh.loops[li].vertex_index
                     w = weights[vi_idx]
                     vcol.data[li].color = (w[0], w[1], w[2], w[3])
+    if object_name:
+        obj = bpy.data.objects.get(object_name)
+        if obj is not None and hasattr(obj.data, "materials"):
+            if obj.data.materials:
+                obj.data.materials[0] = mat
+            else:
+                obj.data.materials.append(mat)
+
     return mat
 
 

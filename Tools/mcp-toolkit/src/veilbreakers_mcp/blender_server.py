@@ -293,24 +293,21 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
                 0.0,
             )
 
-        if explicit_world_anchor:
-            clamped = anchor
+        if terrain_cfg.get("location") is not None:
+            min_x = terrain_origin_x + radius
+            max_x = terrain_origin_x + terrain_size - radius
+            min_y = terrain_origin_y + radius
+            max_y = terrain_origin_y + terrain_size - radius
         else:
-            if terrain_cfg.get("location") is not None:
-                min_x = terrain_origin_x + radius
-                max_x = terrain_origin_x + terrain_size - radius
-                min_y = terrain_origin_y + radius
-                max_y = terrain_origin_y + terrain_size - radius
-            else:
-                min_x = -half + radius
-                max_x = half - radius
-                min_y = -half + radius
-                max_y = half - radius
+            min_x = -half + radius
+            max_x = half - radius
+            min_y = -half + radius
+            max_y = half - radius
 
-            clamped = (
-                max(min_x, min(max_x, anchor[0])),
-                max(min_y, min(max_y, anchor[1])),
-            )
+        clamped = (
+            max(min_x, min(max_x, anchor[0])),
+            max(min_y, min(max_y, anchor[1])),
+        )
         placements.append({
             "name": location.get("name", f"Location_{index}"),
             "type": location.get("type", "building"),
