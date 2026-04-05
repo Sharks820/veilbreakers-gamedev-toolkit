@@ -187,14 +187,10 @@ If you add new handler functions in `environment.py` or `worldbuilding.py`, foll
 ### P4-I9: Update pyproject.toml Version (0.5h)
 - Change `version = "0.1.0"` to `version = "3.1.0"`
 
-### P4-I10: Remove Legacy Directories (1h)
-- Check if `asset-pipeline/`, `blender-gamedev/`, `unity-enhanced/` exist at repo root
-- Verify they're not imported/referenced by any active code:
-  ```bash
-  grep -r "asset-pipeline\|blender-gamedev\|unity-enhanced" src/ blender_addon/ tests/
-  ```
-- If safe, delete them
-- If referenced, note in GAPS file
+### P4-I10: Remove Legacy Directories (done)
+- Legacy root scaffolds `asset-pipeline/` and `blender-gamedev/` were removed in `feature/terrain-world-foundation`
+- `unity-enhanced/` is not present in this checkout
+- Keep historical references only in archived planning docs
 
 ### P5-Q9: Terrain Generation at 4096+ (12h)
 **File:** `blender_addon/handlers/environment.py`
