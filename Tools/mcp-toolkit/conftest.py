@@ -1,8 +1,9 @@
 """Root conftest for mcp-toolkit tests.
 
-Adds the project root to sys.path so that `blender_addon` is importable,
-and provides a minimal bpy mock so handler modules that `import bpy` at the
-top level can be loaded in a test environment without Blender.
+Adds the project root and src root to sys.path so that `blender_addon` and
+`veilbreakers_mcp` are importable, and provides a minimal bpy mock so handler
+modules that `import bpy` at the top level can be loaded in a test environment
+without Blender.
 """
 
 import sys
@@ -14,6 +15,11 @@ from unittest.mock import MagicMock
 _project_root = str(Path(__file__).parent)
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
+
+# Add src so `veilbreakers_mcp` package is importable from the checkout.
+_src_root = str(Path(__file__).parent / "src")
+if _src_root not in sys.path:
+    sys.path.insert(0, _src_root)
 
 # Provide a minimal bpy stub so `import bpy` doesn't crash outside Blender.
 # Handlers that actually USE bpy will fail at runtime (guarded by @pytest.mark.blender),
