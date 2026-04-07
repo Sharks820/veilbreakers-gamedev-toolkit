@@ -53,25 +53,6 @@ def get_default_biome() -> str:
     return DEFAULT_BIOME
 
 
-def validate_castle_roughness() -> dict[str, Any]:
-    """Validate that all castle/fortification material definitions have non-zero roughness.
-
-    Returns dict with 'valid' bool and 'issues' list of problematic materials.
-    """
-    castle_keys = [
-        "rough_stone_wall", "smooth_stone", "stone_fortified",
-        "stone_heavy", "stone_slab", "stone_parapet",
-        "stone_dark", "brick_wall",
-    ]
-    issues: list[dict[str, Any]] = []
-    for key in castle_keys:
-        entry = MATERIAL_LIBRARY.get(key, {})
-        roughness = entry.get("roughness", 0.0)
-        if roughness < 0.3:
-            issues.append({"material": key, "roughness": roughness, "min_expected": 0.3})
-    return {"valid": len(issues) == 0, "issues": issues, "checked": len(castle_keys)}
-
-
 # ---------------------------------------------------------------------------
 # Required palette keys -- every biome must define these terrain zones
 # ---------------------------------------------------------------------------
@@ -924,6 +905,18 @@ BIOME_PALETTES: dict[str, dict[str, list[str]]] = {
         "water_edges": ["murky_green"],
     },
     "mountain_pass": {
+        "ground": ["gravel", "sparse_grass", "snow_patches"],
+        "slopes": ["exposed_rock", "ice"],
+        "cliffs": ["layered_sedimentary"],
+        "water_edges": ["frozen_edge"],
+    },
+    "mountain_pass_summer": {
+        "ground": ["gravel", "sparse_grass"],
+        "slopes": ["exposed_rock", "mossy_rock"],
+        "cliffs": ["layered_sedimentary"],
+        "water_edges": ["riverbank_grass"],
+    },
+    "mountain_pass_winter": {
         "ground": ["gravel", "sparse_grass", "snow_patches"],
         "slopes": ["exposed_rock", "ice"],
         "cliffs": ["layered_sedimentary"],
@@ -1867,10 +1860,22 @@ BIOME_PALETTES_V2: dict[str, dict[str, dict[str, Any]]] = {
         "special": {"base_color": (0.04, 0.08, 0.04, 1.0), "roughness": 0.15, "roughness_variation": 0.05, "metallic": 0.0, "normal_strength": 0.3, "detail_scale": 4.0, "wear_intensity": 0.1, "node_recipe": "terrain", "description": "Toxic pool surface (green emission, translucent)", "emission_color": (0.05, 0.25, 0.05, 1.0), "emission_strength": 0.8, "alpha": 0.6},
     },
     "mountain_pass": {
-        "ground": {"base_color": (0.14, 0.15, 0.12, 1.0), "roughness": 0.82, "roughness_variation": 0.12, "metallic": 0.0, "normal_strength": 0.7, "detail_scale": 10.0, "wear_intensity": 0.2, "node_recipe": "terrain", "description": "Gravel + sparse grass + snow patches"},
-        "slope": {"base_color": (0.16, 0.16, 0.18, 1.0), "roughness": 0.65, "roughness_variation": 0.10, "metallic": 0.0, "normal_strength": 0.9, "detail_scale": 7.0, "wear_intensity": 0.25, "node_recipe": "stone", "description": "Exposed rock + ice (cold gray, medium roughness)"},
+        "ground": {"base_color": (0.11, 0.14, 0.08, 1.0), "roughness": 0.82, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 0.8, "detail_scale": 11.0, "wear_intensity": 0.24, "node_recipe": "terrain", "description": "Alpine grass + gravel + damp earth pockets"},
+        "slope": {"base_color": (0.13, 0.15, 0.11, 1.0), "roughness": 0.74, "roughness_variation": 0.12, "metallic": 0.0, "normal_strength": 1.0, "detail_scale": 7.0, "wear_intensity": 0.28, "node_recipe": "stone", "description": "Mossed rock + lichen + exposed stone"},
         "cliff": {"base_color": (0.18, 0.16, 0.14, 1.0), "roughness": 0.88, "roughness_variation": 0.15, "metallic": 0.0, "normal_strength": 1.6, "detail_scale": 4.0, "wear_intensity": 0.4, "node_recipe": "stone", "description": "Layered sedimentary rock with cracks (warm gray)"},
-        "special": {"base_color": (0.45, 0.45, 0.48, 1.0), "roughness": 0.70, "roughness_variation": 0.08, "metallic": 0.0, "normal_strength": 0.3, "detail_scale": 10.0, "wear_intensity": 0.02, "node_recipe": "terrain", "description": "Snow accumulation (white, subsurface blue tint)", "subsurface_color": (0.35, 0.45, 0.55, 1.0), "subsurface_weight": 0.1},
+        "special": {"base_color": (0.34, 0.37, 0.33, 1.0), "roughness": 0.68, "roughness_variation": 0.10, "metallic": 0.0, "normal_strength": 0.35, "detail_scale": 9.0, "wear_intensity": 0.05, "node_recipe": "terrain", "description": "Snow remnants + wet alpine patches", "subsurface_color": (0.28, 0.34, 0.30, 1.0), "subsurface_weight": 0.04},
+    },
+    "mountain_pass_summer": {
+        "ground": {"base_color": (0.10, 0.15, 0.08, 1.0), "roughness": 0.84, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 0.75, "detail_scale": 12.0, "wear_intensity": 0.22, "node_recipe": "terrain", "description": "July alpine grass + gravel + damp dark soil"},
+        "slope": {"base_color": (0.12, 0.16, 0.11, 1.0), "roughness": 0.76, "roughness_variation": 0.12, "metallic": 0.0, "normal_strength": 1.05, "detail_scale": 7.0, "wear_intensity": 0.28, "node_recipe": "stone", "description": "Lichen-heavy rock + mossed switchback slopes"},
+        "cliff": {"base_color": (0.19, 0.17, 0.14, 1.0), "roughness": 0.89, "roughness_variation": 0.15, "metallic": 0.0, "normal_strength": 1.7, "detail_scale": 4.0, "wear_intensity": 0.42, "node_recipe": "stone", "description": "Layered cliff stone with warm sediment bands"},
+        "special": {"base_color": (0.09, 0.12, 0.07, 1.0), "roughness": 0.58, "roughness_variation": 0.08, "metallic": 0.0, "normal_strength": 0.42, "detail_scale": 10.0, "wear_intensity": 0.08, "node_recipe": "terrain", "description": "Wet riverbank grass + saturated alpine patches", "subsurface_color": (0.16, 0.20, 0.12, 1.0), "subsurface_weight": 0.03},
+    },
+    "mountain_pass_winter": {
+        "ground": {"base_color": (0.10, 0.12, 0.08, 1.0), "roughness": 0.84, "roughness_variation": 0.14, "metallic": 0.0, "normal_strength": 0.8, "detail_scale": 11.0, "wear_intensity": 0.24, "node_recipe": "terrain", "description": "Frozen gravel + sparse alpine grass"},
+        "slope": {"base_color": (0.14, 0.15, 0.13, 1.0), "roughness": 0.72, "roughness_variation": 0.10, "metallic": 0.0, "normal_strength": 1.0, "detail_scale": 7.0, "wear_intensity": 0.28, "node_recipe": "stone", "description": "Cold exposed rock + thin ice sheets"},
+        "cliff": {"base_color": (0.18, 0.17, 0.16, 1.0), "roughness": 0.88, "roughness_variation": 0.15, "metallic": 0.0, "normal_strength": 1.6, "detail_scale": 4.0, "wear_intensity": 0.4, "node_recipe": "stone", "description": "Layered cliff stone dusted with frost"},
+        "special": {"base_color": (0.36, 0.39, 0.40, 1.0), "roughness": 0.66, "roughness_variation": 0.10, "metallic": 0.0, "normal_strength": 0.35, "detail_scale": 9.0, "wear_intensity": 0.05, "node_recipe": "terrain", "description": "Snow shelves + slushy runoff pockets", "subsurface_color": (0.33, 0.37, 0.39, 1.0), "subsurface_weight": 0.05},
     },
     "ruined_fortress": {
         "ground": {"base_color": (0.13, 0.11, 0.09, 1.0), "roughness": 0.90, "roughness_variation": 0.15, "metallic": 0.0, "normal_strength": 1.2, "detail_scale": 6.0, "wear_intensity": 0.45, "node_recipe": "stone", "description": "Broken cobblestone + dirt + rubble"},
@@ -2095,6 +2100,22 @@ def auto_assign_terrain_layers(
     return result
 
 
+def _resolve_biome_palette_name(
+    biome_name: str,
+    season: str | None = None,
+) -> str:
+    """Resolve biome aliases and season-specific palette variants."""
+    resolved = biome_name or DEFAULT_BIOME
+    if resolved in BIOME_PALETTES_V2:
+        return resolved
+    if resolved == "mountain_pass":
+        if season == "summer":
+            return "mountain_pass_summer"
+        if season == "winter":
+            return "mountain_pass_winter"
+    return resolved
+
+
 def compute_world_splatmap_weights(
     heightmap: list[list[float]] | np.ndarray,
     biome_name: str = DEFAULT_BIOME,
@@ -2206,6 +2227,7 @@ def compute_world_splatmap_weights(
 def create_biome_terrain_material(
     biome_name: str,
     object_name: str | None = None,
+    season: str | None = None,
 ) -> Any:
     """Create a multi-layer terrain material with vertex-color splatmap blending.
 
@@ -2213,9 +2235,8 @@ def create_biome_terrain_material(
     """
     if bpy is None:
         raise RuntimeError("create_biome_terrain_material() requires bpy")
-    if not biome_name:
-        biome_name = DEFAULT_BIOME
-    elif biome_name not in BIOME_PALETTES_V2:
+    biome_name = _resolve_biome_palette_name(biome_name, season)
+    if biome_name not in BIOME_PALETTES_V2:
         logger.warning(
             "Unknown biome '%s'. Available: %s",
             biome_name,
@@ -2376,23 +2397,28 @@ def handle_create_biome_terrain(params: dict[str, Any]) -> dict[str, Any]:
     biome_name = params.get("biome_name")
     if not biome_name:
         return {"status": "error", "error": "'biome_name' is required."}
-    if biome_name not in BIOME_PALETTES_V2:
+    season = params.get("season")
+    resolved_biome_name = _resolve_biome_palette_name(biome_name, season)
+    if resolved_biome_name not in BIOME_PALETTES_V2:
         return {
             "status": "error",
             "error": f"Unknown biome: '{biome_name}'. "
                      f"Available: {sorted(BIOME_PALETTES_V2.keys())}",
         }
     object_name = params.get("object_name")
-    mat = create_biome_terrain_material(biome_name, object_name)
-    palette = BIOME_PALETTES_V2[biome_name]
+    mat = create_biome_terrain_material(biome_name, object_name, season=season)
+    palette = BIOME_PALETTES_V2[resolved_biome_name]
     layer_info = {ln: ld.get("description", "") for ln, ld in palette.items()}
     rd: dict[str, Any] = {
         "material_name": mat.name,
         "biome": biome_name,
+        "resolved_biome": resolved_biome_name,
         "layers": layer_info,
         "node_count": len(mat.node_tree.nodes),
         "splatmap_layer": "VB_TerrainSplatmap",
     }
+    if season:
+        rd["season"] = season
     if object_name:
         obj = bpy.data.objects.get(object_name)
         if obj is not None:

@@ -18,14 +18,14 @@ import math
 import random
 from typing import Any, Callable, Optional
 
-from blender_addon.handlers._settlement_grammar import (
+from ._settlement_grammar import (
     assign_buildings_to_lots,
     generate_prop_manifest,
     generate_road_network_organic,
     ring_for_position,
     subdivide_block_to_lots,
 )
-from blender_addon.handlers._building_grammar import (
+from ._building_grammar import (
     generate_interior_layout,
     generate_clutter_layout,
     generate_lighting_layout,

@@ -967,7 +967,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     # Environment operations
     "env_generate_terrain": handle_generate_terrain,
     "env_generate_terrain_tile": handle_generate_terrain_tile,
-    "env_generate_world_terrain": handle_generate_world_terrain,
+    "env_generate_world_terrain": handle_generate_world_terrain,  # DEPRECATED: use env_generate_terrain_tile per-tile workflow instead
     "env_stitch_terrain_edges": handle_stitch_terrain_edges,
     "env_paint_terrain": handle_paint_terrain,
     "env_carve_river": handle_carve_river,

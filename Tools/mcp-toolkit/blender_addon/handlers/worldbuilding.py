@@ -6073,7 +6073,7 @@ def handle_generate_location(params: dict) -> dict:
         "scale": terrain["size"],
         "height_scale": 16.0 if location_type in {"fortress", "dungeon_entrance", "mountain_pass", "wizard_fortress", "cliff_keep"} else 8.0,
         "erosion": "both" if location_type in {"fortress", "dungeon_entrance", "monastery", "mining_town", "wizard_fortress", "cliff_keep", "sorcery_school"} else "hydraulic",
-        "erosion_iterations": 1800 if location_type in {"fortress", "dungeon_entrance", "monastery", "wizard_fortress", "cliff_keep"} else 900,
+        "erosion_iterations": 5000 if location_type in {"fortress", "dungeon_entrance", "monastery", "wizard_fortress", "cliff_keep"} else 5000,
         "seed": seed,
     })
     terrain_status = terrain_result.get("status") if isinstance(terrain_result, dict) else None

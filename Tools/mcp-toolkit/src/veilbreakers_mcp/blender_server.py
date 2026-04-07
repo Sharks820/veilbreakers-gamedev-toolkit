@@ -132,6 +132,8 @@ async def _with_screenshot(
                 except Exception as frame_err:
                     logger.debug("Auto-frame failed for %s: %s", object_name, frame_err)
             screenshot_bytes = await blender.capture_viewport_bytes()
+            # Reduce screenshot payload to prevent 20MB API limit hits
+            screenshot_bytes = resize_screenshot(screenshot_bytes, max_size=512)
             parts.append(Image(data=screenshot_bytes, format="png"))
         except (OSError, IOError, BlenderCommandError, ConnectionError) as e:
             parts.append(f"[Screenshot capture failed: {e}]")
