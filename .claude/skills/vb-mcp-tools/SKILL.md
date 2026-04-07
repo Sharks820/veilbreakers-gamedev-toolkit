@@ -1,6 +1,23 @@
 # VeilBreakers MCP Tools Context
 
-You have access to 37 compound MCP tools (350+ actions) for game development:
+You have access to 37 compound MCP tools (350+ actions) for game development.
+
+## CRITICAL — READ BEFORE EDITING SCENES
+
+For ANY interactive 3D editing task (placing, modifying, cutting, building geometry):
+
+**You MUST follow [TERRAIN_EDITING_PROTOCOL.md](TERRAIN_EDITING_PROTOCOL.md)** — failsafe rules established after multi-hour sessions where math-based heuristics produced caves in mid-air, buildings inside cliffs, and waterfalls inside mountains. The protocol's six commandments:
+
+1. OBSERVE before you CALCULATE — never trust vertex math over what the user sees
+2. SYNC to the user's viewport — every screenshot uses their live view
+3. LOCK reference points — drop hidden empties, never recalculate
+4. REAL geometry, not visual trickery — boolean cuts, not painted vertex colors
+5. SMALLEST possible diff — one change at a time
+6. VERIFY placement — ray-cast before placing anything near a surface
+
+The protocol contains the `get_active_view_info()`, `classify_point()`, `distance_diagnostic()`, `boolean_preflight()` and `cut_cave()` helper functions that solve recurring failures.
+
+
 
 ## Blender (vb-blender) — 16 tools via TCP localhost:9876
 - **blender_object**: create/modify/delete/duplicate meshes

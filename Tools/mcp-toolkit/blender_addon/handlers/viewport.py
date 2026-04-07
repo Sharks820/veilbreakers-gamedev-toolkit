@@ -981,7 +981,7 @@ def handle_get_viewport_screenshot(params: dict) -> dict:
     Returns:
         Dict with filepath, dimensions, format.
     """
-    max_size = params.get("max_size", 1024)
+    max_size = params.get("max_size", 512)
     filepath = params.get("filepath") or _unique_temp_path("vb_screenshot")
     fmt = params.get("format", "PNG").upper()
     skip_beauty = params.get("skip_beauty", False)

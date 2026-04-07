@@ -107,6 +107,7 @@ class TestBiomePaletteStructure:
         "cemetery", "battlefield",
         "desert", "coastal", "grasslands", "mushroom_forest",
         "crystal_cavern", "deep_forest",
+        "mountain_pass_summer", "mountain_pass_winter",
     }
 
     NEW_BIOMES = {
@@ -115,7 +116,7 @@ class TestBiomePaletteStructure:
     }
 
     def test_all_14_biomes_present(self):
-        assert len(BIOME_PALETTES_V2) == 14
+        assert len(BIOME_PALETTES_V2) == 16
 
     def test_expected_biome_names(self):
         assert set(BIOME_PALETTES_V2.keys()) == self.EXPECTED_BIOMES
@@ -309,7 +310,7 @@ class TestV1PaletteNewBiomes:
                   "crystal_cavern", "deep_forest"]
 
     def test_v1_has_14_biomes(self):
-        assert len(BIOME_PALETTES) == 14
+        assert len(BIOME_PALETTES) == 16
 
     @pytest.mark.parametrize("biome_name", NEW_BIOMES)
     def test_new_biome_exists_in_v1(self, biome_name):

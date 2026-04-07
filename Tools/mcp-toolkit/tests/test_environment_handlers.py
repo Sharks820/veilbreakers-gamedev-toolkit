@@ -363,59 +363,12 @@ class TestHandlerReturnDictKeys:
 
 
 class TestWorldTerrainGeneration:
-    def test_world_terrain_reports_seam_validation(self):
+    def test_world_terrain_is_deprecated(self):
+        """handle_generate_world_terrain is deprecated in favor of per-tile."""
         from blender_addon.handlers import environment as env_mod
 
-        def _fake_world_heightmap(**kwargs):
-            return [
-                [0.0, 0.5, 1.0, 1.5, 2.0],
-                [0.0, 0.5, 1.0, 1.5, 2.0],
-                [0.0, 0.5, 1.0, 1.5, 2.0],
-            ]
-
-        def _fake_erode_world_heightmap(heightmap, **kwargs):
-            return {"heightmap": heightmap}
-
-        def _fake_create_mesh(**kwargs):
-            hmap = kwargs["heightmap"]
-            return {
-                "name": kwargs["name"],
-                "vertex_count": len(hmap) * len(hmap[0]),
-                "cliff_overlays": [],
-                "object_location": kwargs.get("object_location", (0.0, 0.0, 0.0)),
-            }
-
-        def _fake_export_world_tile_artifacts(**kwargs):
-            tile_name = kwargs["tile_name"]
-            return {
-                "heightmap_path": f"/tmp/{tile_name}.raw",
-                "alphamap_path": f"/tmp/{tile_name}.alphamap.raw",
-            }
-
-        with patch.object(env_mod, "generate_world_heightmap", side_effect=_fake_world_heightmap), \
-             patch.object(env_mod, "erode_world_heightmap", side_effect=_fake_erode_world_heightmap), \
-             patch.object(env_mod, "_create_terrain_mesh_from_heightmap", side_effect=_fake_create_mesh), \
-             patch.object(env_mod, "_export_world_tile_artifacts", side_effect=_fake_export_world_tile_artifacts):
-            result = env_mod.handle_generate_world_terrain({
-                "name": "WorldTerrain",
-                "tile_count_x": 2,
-                "tile_count_y": 1,
-                "tile_size": 2,
-                "cell_size": 1.0,
-                "scale": 100.0,
-                "terrain_type": "hills",
-                "seed": 7,
-                "erosion": "none",
-            })
-
-        assert result["tile_count"] == 2
-        assert result["seam_validation"]["passed"] is True
-        assert result["seam_validation"]["check_count"] == 1
-        assert result["tiles"][0]["grid_x"] == 0
-        assert result["tiles"][0]["grid_y"] == 0
-        assert result["tiles"][0]["height_range"] == [0.0, 2.0]
-        assert result["tiles"][0]["heightmap_path"].endswith(".raw")
-        assert result["tiles"][0]["alphamap_path"].endswith(".raw")
+        with pytest.raises(NotImplementedError, match="deprecated"):
+            env_mod.handle_generate_world_terrain({"name": "X"})
 
     def test_multi_biome_world_uses_mesh_backed_scatter_helper(self):
         from blender_addon.handlers import environment as env_mod

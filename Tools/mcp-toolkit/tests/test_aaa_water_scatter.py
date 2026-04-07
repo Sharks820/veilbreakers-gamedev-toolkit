@@ -198,17 +198,66 @@ def _build_full_bpy_stubs():
                     "Alpha": types.SimpleNamespace(default_value=1.0),
                     "IOR": types.SimpleNamespace(default_value=1.5),
                     "Transmission Weight": types.SimpleNamespace(default_value=0.0),
-                }
+                    "Specular IOR Level": types.SimpleNamespace(default_value=0.5),
+                    "Normal": types.SimpleNamespace(default_value=(0, 0, 0)),
+                },
+                outputs={"BSDF": types.SimpleNamespace()},
+                location=(0, 0),
             )
-            output_node = types.SimpleNamespace(inputs={})
+            output_node = types.SimpleNamespace(
+                inputs={"Surface": types.SimpleNamespace()},
+                outputs={},
+                location=(0, 0),
+            )
             nodes_store = {
                 "Principled BSDF": bsdf,
                 "Material Output": output_node,
             }
+            nodes_list = [bsdf, output_node]
+
+            def _nodes_get(n, _store=nodes_store):
+                return _store.get(n)
+
+            def _nodes_new(t, _list=nodes_list):
+                # Return type-appropriate stubs so handler key lookups work
+                if "Output" in t:
+                    node = types.SimpleNamespace(
+                        inputs={"Surface": types.SimpleNamespace()},
+                        outputs={},
+                        location=(0, 0),
+                    )
+                elif "Principled" in t:
+                    node = types.SimpleNamespace(
+                        inputs={
+                            "Base Color": types.SimpleNamespace(default_value=(0, 0, 0, 1)),
+                            "Roughness": types.SimpleNamespace(default_value=0.5),
+                            "Alpha": types.SimpleNamespace(default_value=1.0),
+                            "IOR": types.SimpleNamespace(default_value=1.5),
+                            "Transmission Weight": types.SimpleNamespace(default_value=0.0),
+                            "Specular IOR Level": types.SimpleNamespace(default_value=0.5),
+                            "Normal": types.SimpleNamespace(default_value=(0, 0, 0)),
+                        },
+                        outputs={"BSDF": types.SimpleNamespace()},
+                        location=(0, 0),
+                    )
+                else:
+                    node = types.SimpleNamespace(
+                        inputs={"Height": types.SimpleNamespace(), "Strength": types.SimpleNamespace(default_value=0.5), "Distance": types.SimpleNamespace(default_value=0.1), "Scale": types.SimpleNamespace(default_value=5.0), "Detail": types.SimpleNamespace(default_value=2.0), "Roughness": types.SimpleNamespace(default_value=0.5)},
+                        outputs={"Fac": types.SimpleNamespace(), "Normal": types.SimpleNamespace()},
+                        location=(0, 0),
+                    )
+                _list.append(node)
+                return node
+
+            def _nodes_clear(_store=nodes_store, _list=nodes_list):
+                _store.clear()
+                _list.clear()
+
             node_tree = types.SimpleNamespace(
                 nodes=types.SimpleNamespace(
-                    get=lambda n: nodes_store.get(n),
-                    new=lambda t: types.SimpleNamespace(inputs={}, outputs={}),
+                    get=_nodes_get,
+                    new=_nodes_new,
+                    clear=_nodes_clear,
                 ),
                 links=types.SimpleNamespace(new=lambda a, b: None),
             )
