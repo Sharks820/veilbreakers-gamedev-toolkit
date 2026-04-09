@@ -159,22 +159,27 @@ def is_in_frustum(
     dz = world_position[2] - cz
     fx, fy, fz = _unit(vantage.camera_direction)
     wux, wuy, wuz = _unit(vantage.camera_up)
+    # Forward-sign rejection is independent of the basis construction —
+    # compute it first so the degenerate (camera_up || forward) fallback
+    # still filters behind-camera points.
+    forward_precheck = fx * dx + fy * dy + fz * dz
+    if forward_precheck <= 1e-6:
+        return False
     # right = world_up × forward
     rx = wuy * fz - wuz * fy
     ry = wuz * fx - wux * fz
     rz = wux * fy - wuy * fx
     rn = math.sqrt(rx * rx + ry * ry + rz * rz)
     if rn < 1e-9:
-        # camera_up is parallel to forward — fall back to the AABB gate.
+        # camera_up is parallel to forward — we already rejected behind-camera
+        # points above; fall back to the AABB gate for in-front points.
         return True
     rx, ry, rz = rx / rn, ry / rn, rz / rn
     # view_up = forward × right  (orthonormal, right-handed)
     ux = fy * rz - fz * ry
     uy = fz * rx - fx * rz
     uz = fx * ry - fy * rx
-    forward = fx * dx + fy * dy + fz * dz
-    if forward <= 1e-6:
-        return False
+    forward = forward_precheck
     right = rx * dx + ry * dy + rz * dz
     up = ux * dx + uy * dy + uz * dz
     half_fov = 0.5 * float(vantage.fov)
