@@ -21,3 +21,4 @@ Thumbs.db
 node_modules/
 .claude/worktrees/
 Tools/mcp-toolkit/pytest-cache-files-*/
+Tools/mcp-toolkit/Temp/
