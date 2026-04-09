@@ -39,7 +39,12 @@ from .terrain_semantics import (
     TerrainMaskStack,
     TerrainPipelineState,
     UnknownPassError,
+    ValidationIssue,
 )
+
+
+def _make_gate_issue(code: str, severity: str, message: str) -> ValidationIssue:
+    return ValidationIssue(code=code, severity=severity, message=message)
 
 
 # ---------------------------------------------------------------------------
@@ -246,6 +251,37 @@ class TerrainPassController:
                 f"Pass '{pass_name}' declared produces_channels={definition.produces_channels} "
                 f"but did not populate {missing_outputs}"
             )
+
+        # Run quality gate if defined (§agent protocol rule 4)
+        if definition.quality_gate is not None and result.status == "ok":
+            gate = definition.quality_gate
+            try:
+                gate_issues = gate.check(result, self.state.mask_stack)
+            except Exception as exc:  # pragma: no cover — gate bugs must fail loudly
+                gate_issues = [
+                    # Construct ValidationIssue lazily to avoid a hard import loop
+                    _make_gate_issue(
+                        code=f"GATE_{gate.name.upper()}_CRASHED",
+                        severity="hard",
+                        message=f"quality gate {gate.name} raised: {exc!r}",
+                    )
+                ]
+            if gate_issues:
+                hard = [i for i in gate_issues if getattr(i, "severity", "") == "hard"]
+                if hard and gate.blocking:
+                    result.status = "failed"
+                    result.issues.extend(gate_issues)
+                else:
+                    result.status = "warning" if result.status == "ok" else result.status
+                    result.warnings.extend(gate_issues)
+
+        # Run visual validator (optional)
+        if definition.visual_validator is not None and result.status in ("ok", "warning"):
+            try:
+                signature = definition.visual_validator(self.state.mask_stack)
+                result.metrics.setdefault("visual_signature_bytes", len(signature or b""))
+            except Exception as exc:  # pragma: no cover
+                result.metrics["visual_signature_error"] = repr(exc)
 
         result.content_hash_after = self.state.mask_stack.compute_hash()
         self.state.record_pass(result)
