@@ -3623,15 +3623,664 @@ Status: **NOT_STARTED**
 
 ---
 
+## Addendum 1 — Gap Closure (2026-04-08 revision)
+
+This addendum closes gaps identified during the final completeness audit against:
+- `terrain_claude_master_plan_2026-04-07.md` (sections 5–27)
+- `terrain_branch_full_implementation_plan_2026-04-07.md` (sections L1–L2, M)
+- `terrain_aaa_implementation_guide.md` (sections 6–10)
+- `terrain_tool_bug_audit_2026-04-07.md` (bugs 1–17, especially #8, #12, #15, #16, #17)
+- Feedback memory: `feedback_v10_actual_visual_issues.md`, `feedback_visual_editing_protocol.md`, `feedback_waterfall_must_have_volume.md`, `feedback_blender_z_up.md`, `feedback_blender_crash_avoidance.md`, `feedback_screenshot_max_size.md`, `feedback_tripo_import_one_at_a_time.md`, `feedback_realtime_editing_scalability.md`, `feedback_aaa_quality_demand.md`, `feedback_visual_verify_quality.md`
+- The deep-dive themes A–K in the conversation history
+
+Everything below is binding and has the same authority as sections 1–41 above.
+
+---
+
+### Addendum 1.A — Bundle R — Protocol Enforcement & Runtime Safety (NEW)
+
+**Goal:** Turn the TERRAIN_EDITING_PROTOCOL documentation into runtime-enforced Python utilities, lock down Blender-specific stability rules, and gate every mutation behind scene understanding, viewport sync, and addon-version assertion.
+
+**Why it's a new bundle:** The original plan treated protocol enforcement as a property of the orchestrator. That was insufficient — protocol enforcement is cross-cutting across every handler that touches geometry, requires its own test suite, and absorbs the Blender-stability safety rules that don't belong in any other bundle. Gaps #1–#4 from the final audit all live here.
+
+**Estimated sessions:** 3
+**Score impact:** +0.3 (autonomy + validation pillars)
+**Parallel-safe with:** all bundles except A (depends on A orchestrator)
+**Prerequisites:** Bundle A
+
+#### 1.A.1 Modules delivered
+
+| Module | Path | Purpose |
+|---|---|---|
+| `terrain_protocol.py` | `handlers/terrain_protocol.py` | Runtime enforcement of TERRAIN_EDITING_PROTOCOL rules 1–7 |
+| `terrain_viewport_sync.py` | `handlers/terrain_viewport_sync.py` | User-viewport anchoring, "observe before calculate" helpers |
+| `terrain_reference_locks.py` | `handlers/terrain_reference_locks.py` | Named empty anchor lock/unlock + proximity assertions |
+| `terrain_addon_health.py` | `handlers/terrain_addon_health.py` | Addon version assertion, reload detection, handler registration integrity |
+| `terrain_blender_safety.py` | `handlers/terrain_blender_safety.py` | Z-up enforcement, screenshot max_size cap, boolean-op dense-mesh guard, Tripo batch serialization |
+| `terrain_scene_read.py` | `handlers/terrain_scene_read.py` | `capture_scene_read` handler that produces `TerrainSceneRead` snapshots |
+
+#### 1.A.2 `terrain_protocol.py` — the 7 enforced rules
+
+Rules from `.claude/skills/vb-mcp-tools/TERRAIN_EDITING_PROTOCOL.md` become callable decorators/guards:
+
+```python
+@enforce_protocol
+def handle_any_terrain_mutation(params: dict) -> dict:
+    """Any handler wrapped by @enforce_protocol must pass all 7 gates."""
+    ...
+
+class ProtocolGate:
+    """Each rule is a gate. Failing any gate raises ProtocolViolation."""
+
+    @staticmethod
+    def rule_1_observe_before_calculate(state: TerrainPipelineState) -> None:
+        """Assert a TerrainSceneRead was captured within the last N seconds
+        and matches the current scene hash."""
+
+    @staticmethod
+    def rule_2_sync_to_user_viewport(state: TerrainPipelineState) -> None:
+        """Assert Blender active viewport camera pose was read and cached
+        as the 'authoring vantage'. Any mutation beyond this vantage's
+        visible frustum must carry an explicit 'out_of_view_ok=True' flag."""
+
+    @staticmethod
+    def rule_3_lock_reference_empties(state: TerrainPipelineState) -> None:
+        """Assert every named anchor in intent.anchors has a matching Blender
+        empty whose world position matches within 0.01m tolerance.
+        Drift > tolerance = hard fail."""
+
+    @staticmethod
+    def rule_4_real_geometry_not_vertex_tricks(params: dict) -> None:
+        """Forbid vertex-color-only fakes for hero features. Cliffs, caves,
+        and waterfalls must land as actual mesh additions, not shader tricks."""
+
+    @staticmethod
+    def rule_5_smallest_diff_per_iteration(state: TerrainPipelineState) -> None:
+        """If the current pass modifies > N cells or > M objects without
+        an explicit 'bulk_edit=True' flag, hard-fail with a message
+        suggesting the user run a region-scoped pass instead."""
+
+    @staticmethod
+    def rule_6_surface_vs_interior_classification(params: dict) -> None:
+        """Every placed object must carry a placement_class tag:
+        surface|interior|above_surface|below_surface. Mis-classified
+        placements (e.g., cave_mouth tagged 'surface') hard-fail."""
+
+    @staticmethod
+    def rule_7_plugin_usage(params: dict) -> None:
+        """If the handler is a terrain mutation, assert the vb-blender
+        MCP plugin is registered and the addon version matches
+        TERRAIN_ADDON_MIN_VERSION."""
+```
+
+#### 1.A.3 `terrain_viewport_sync.py`
+
+```python
+@dataclass(frozen=True)
+class ViewportVantage:
+    """User's current Blender 3D viewport state, cached at scene read time."""
+    camera_position: Tuple[float, float, float]
+    camera_direction: Tuple[float, float, float]
+    camera_up: Tuple[float, float, float]
+    focal_point: Tuple[float, float, float]
+    fov: float
+    visible_bounds: BBox
+    captured_timestamp: float
+    view_matrix_hash: str
+
+def read_user_vantage() -> ViewportVantage: ...
+def assert_vantage_fresh(vantage: ViewportVantage, max_age_seconds: float = 300.0) -> None: ...
+def transform_world_to_vantage(
+    world_position: Tuple[float, float, float],
+    vantage: ViewportVantage,
+) -> Tuple[float, float, float]: ...
+def is_in_frustum(
+    world_position: Tuple[float, float, float],
+    vantage: ViewportVantage,
+) -> bool: ...
+```
+
+#### 1.A.4 `terrain_reference_locks.py`
+
+```python
+def lock_anchor(anchor: TerrainAnchor) -> None:
+    """Create/update a Blender empty with the anchor name, lock its
+    transform, and record its hash in the intent state."""
+
+def unlock_anchor(anchor_name: str) -> None: ...
+
+def assert_anchor_integrity(
+    anchor: TerrainAnchor,
+    *,
+    tolerance: float = 0.01,
+) -> None:
+    """Raise AnchorDrift if the Blender empty's world position has
+    drifted from the intent-recorded position beyond tolerance."""
+
+def assert_all_anchors_intact(
+    intent: TerrainIntentState,
+) -> List[AnchorDriftReport]: ...
+```
+
+#### 1.A.5 `terrain_addon_health.py`
+
+```python
+TERRAIN_ADDON_MIN_VERSION = (1, 0, 0)
+
+def assert_addon_loaded() -> None: ...
+def assert_addon_version_matches(min_version: Tuple[int, ...] = TERRAIN_ADDON_MIN_VERSION) -> None: ...
+def assert_handlers_registered(required: Sequence[str]) -> None: ...
+def detect_stale_addon() -> bool:
+    """Returns True if the loaded addon module differs from the
+    on-disk version (indicates needed reload)."""
+
+def force_addon_reload() -> None: ...
+```
+
+This closes **Gap #3 — Addon reload enforcement & integration testing** from the final audit. Code changes passing pytest don't prove real Blender execution hits the new path. `detect_stale_addon` + startup-time `assert_addon_version_matches` in the `TerrainPassController.__init__` catch this.
+
+#### 1.A.6 `terrain_blender_safety.py`
+
+Absorbs every Blender-specific stability rule from the feedback memory files into enforceable guards:
+
+```python
+# Z-up enforcement (feedback_blender_z_up.md)
+def assert_z_is_up(obj: bpy.types.Object) -> None:
+    """Raise CoordinateSystemError if the object's up axis is not Z."""
+
+def convert_y_up_to_z_up(
+    position: Tuple[float, float, float],
+    orientation: Tuple[float, float, float],
+) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+    """Convert Y-up coordinates to Z-up. Use at EVERY boundary that
+    imports from Y-up sources (e.g., GLTF, FBX with Y-up source)."""
+
+@guard_z_up
+def any_handler_that_sets_object_transform(...): ...
+
+# Screenshot max_size cap (feedback_screenshot_max_size.md)
+BLENDER_SCREENSHOT_MAX_SIZE = 507      # NEVER 1024; hard cap per feedback
+def clamp_screenshot_size(requested: int) -> int:
+    return min(max(64, requested), BLENDER_SCREENSHOT_MAX_SIZE)
+
+# Boolean-op dense mesh guard (feedback_blender_crash_avoidance.md)
+BOOLEAN_DENSE_MESH_VERT_LIMIT = 60000
+def assert_boolean_safe(cutter: bpy.types.Object, target: bpy.types.Object) -> None:
+    """Fail before calling any boolean op if either operand exceeds
+    BOOLEAN_DENSE_MESH_VERT_LIMIT. Require decimation first."""
+
+def decimate_to_safe_count(
+    obj: bpy.types.Object,
+    target_count: int = 30000,
+) -> None: ...
+
+def run_boolean_with_safety(
+    solver: str,
+    cutter: bpy.types.Object,
+    target: bpy.types.Object,
+) -> bpy.types.Object:
+    """Wrapper that decimates if needed and uses FAST solver on dense meshes."""
+
+# Tripo batch serialization (feedback_tripo_import_one_at_a_time.md)
+_TRIPO_IMPORT_LOCK = threading.Lock()
+def import_tripo_glb_serialized(glb_paths: Sequence[Path]) -> List[bpy.types.Object]:
+    """Import Tripo GLBs strictly serially, one per blender_execute call.
+    Batch imports CRASH Blender."""
+```
+
+#### 1.A.7 `terrain_scene_read.py`
+
+```python
+def capture_scene_read(
+    *,
+    reviewer: str,
+    focal_point_hint: Optional[Tuple[float, float, float]] = None,
+) -> TerrainSceneRead:
+    """Walk current Blender scene and produce a structured understanding
+    snapshot matching the §5.3 TerrainSceneRead contract. Required
+    before any mutation request."""
+```
+
+The captured snapshot must include:
+- All 10 TerrainSceneRead fields from §5.3
+- Current ViewportVantage
+- Active addon version
+- Current content hash of all terrain-related Blender objects
+- List of lockable anchors detected in the scene
+
+#### 1.A.8 Tests
+
+- `test_terrain_protocol.py` — 15+ tests covering each of the 7 gates (success + failure path per rule)
+- `test_terrain_viewport_sync.py` — 8+ tests
+- `test_terrain_reference_locks.py` — 10+ tests
+- `test_terrain_addon_health.py` — 8+ tests including stale-detection and reload
+- `test_terrain_blender_safety.py` — 12+ tests (Z-up, screenshot clamp, boolean safety, Tripo serialization)
+- `test_terrain_scene_read.py` — 6+ tests
+
+#### 1.A.9 Acceptance
+
+- [ ] All 6 modules from 1.A.1 created
+- [ ] 7 `ProtocolGate` rules implemented as callable guards
+- [ ] `@enforce_protocol` decorator wraps every terrain mutation handler
+- [ ] `capture_scene_read` handler produces valid `TerrainSceneRead`
+- [ ] `TerrainPassController.__init__` calls `assert_addon_version_matches`
+- [ ] `BLENDER_SCREENSHOT_MAX_SIZE = 507` enforced in every screenshot path
+- [ ] Tripo batch imports route through `import_tripo_glb_serialized`
+- [ ] Boolean ops check vert count before execution
+- [ ] Z-up converters called at every Y-up boundary
+- [ ] All 6 test files pass
+
+---
+
+### Addendum 1.B — Bundle-level supplements (additions to existing bundles)
+
+Each item below is a binding addition to the original bundle. Appendix D checklists in Addendum 1.D include these.
+
+#### 1.B.1 Bundle A supplements
+
+**Erosion mask preservation (from master plan §13 "The actual material fix"):**
+
+- [ ] `_terrain_erosion.py.apply_hydraulic_erosion_masks` must also populate:
+  - `sediment_accumulation_at_base` — float per cell, summed sediment dropped at cliff bases (defined as cells where slope drops > 40° within 3-cell radius)
+  - `pool_deepening_delta` — float per cell, extra depth carved at standing-water cells
+- [ ] Test `test_terrain_erosion_masks.py` must assert both channels populated and non-zero on a synthetic cliff-with-pool fixture
+
+**`_terrain_world.py` pass refactor additions:**
+
+- [ ] Include a `camera_priority_weight` parameter on `pass_macro_world` that biases macro landform placement toward a provided `camera_priority_zones: List[BBox]`. When set, macro forms within these zones get +0.3 to their macro_saliency score.
+- [ ] Every pass function must accept an optional `deterministic_seed_override: Optional[int]` parameter, default None, that bypasses `derive_pass_seed` for debugging and regression isolation
+
+#### 1.B.2 Bundle B supplements
+
+**Material system — Witcher 3 trick extensions (from master plan §14):**
+
+- [ ] `MaterialRuleSet` must support **height-based blending between channels**, not just linear masks. Each `MaterialChannel` gains a `height_blend_gamma: float = 1.0` field controlling exponent of blend ramp.
+- [ ] `MaterialRuleSet` must support **texel density coherency** — every material channel carries a `texel_density_m: float` (texels per world meter) and the validator checks coherency within 2× ratio across adjacent channels.
+- [ ] **Micro normals separate from displacement** — each `MaterialChannel` optionally references a `micro_normal_texture` that is applied in the shader independently from displacement, so bump detail does not inflate tri count.
+
+```python
+@dataclass
+class MaterialChannel:
+    # ... existing fields from §7.4 ...
+    height_blend_gamma: float = 1.0
+    texel_density_m: float = 64.0
+    micro_normal_texture: Optional[str] = None
+    micro_normal_strength: float = 0.8
+    respects_displacement: bool = True
+```
+
+**Cliff silhouette preservation:**
+
+- [ ] `validate_cliff_readability` must include a silhouette check: render the cliff from the current `ViewportVantage` (Bundle R) and assert the cliff occupies ≥ 8% of rendered pixel area for hero cliffs and ≥ 3% for secondary cliffs.
+
+#### 1.B.3 Bundle C supplements
+
+**3D volumetric waterfall hard contract (from `feedback_waterfall_must_have_volume.md`):**
+
+- [ ] `solve_waterfall_from_river` output must be a **3D tapered prism with rounded front**. Never a 2D plane. This is a hard contract enforced by `validate_waterfall_system`:
+  - Vertex count ≥ 48 per meter of drop (prism with rounded front)
+  - Aspect ratio: front curvature radius > 0.15 × width
+  - No coplanar front face (dot product of front face normals < 0.95 for ≥ 30% of front verts)
+- [ ] Add `WaterfallVolumetricProfile` dataclass specifying prism shape parameters
+- [ ] Add validator `validate_waterfall_volumetric(chain) -> List[ValidationIssue]`
+
+**Waterfall anchor screen-space region validation:**
+
+- [ ] When a `WaterfallChain` has a linked `TerrainAnchor` with `anchor_kind="waterfall_lip"`, `validate_waterfall_system` must additionally check that the rendered waterfall lip position falls within `anchor.radius` meters of the anchor position in the current `ViewportVantage`. Failing this test emits `WATERFALL_DRIFTED_FROM_ANCHOR`.
+
+**Waterfall split into functional objects (from master plan §12 Blender best practice):**
+
+- [ ] `build_waterfall_chain` produces separate named Blender objects:
+  - `WF_<id>_river_surface`
+  - `WF_<id>_sheet_volume` (the 3D prism)
+  - `WF_<id>_impact_pool`
+  - `WF_<id>_foam_layer`
+  - `WF_<id>_mist_volume`
+  - `WF_<id>_splash_particles` (if `has_particles=True`)
+  - `WF_<id>_wet_rock_material_zone`
+- [ ] Naming convention enforced by `validate_waterfall_system`
+
+#### 1.B.4 Bundle D supplements
+
+**`terrain_quality_profiles.py` as a full deliverable module (previously only mentioned in §35.3):**
+
+- [ ] Create `handlers/terrain_quality_profiles.py` as a dedicated module
+- [ ] Ship 4 preset profiles: `preview`, `production`, `hero_shot`, `aaa_open_world`
+- [ ] Profiles stored as JSON under `Tools/mcp-toolkit/presets/terrain/quality_profiles/`
+- [ ] Profile schema matches Appendix B.1 of this plan
+- [ ] Profile loader: `load_quality_profile(name: str) -> TerrainQualityProfile`
+- [ ] Profile inheritance: `production` extends `preview`, `hero_shot` extends `production`, `aaa_open_world` extends `hero_shot`
+- [ ] Live hot-reload via Bundle M `terrain_hot_reload.py`
+
+**Checkpoint extensions (from master plan §18):**
+
+- [ ] `terrain_checkpoints.py` must support `save_every_n_operations(n: int)` autosave mode in addition to `autosave_after_pass`
+- [ ] Preset lock: `lock_preset(name)` / `unlock_preset(name)` — locked presets raise `PresetLocked` on any mutation attempt
+- [ ] Checkpoint naming convention enforced: `terrain_<pass_num:02>_<pass_name>_<short_hash>.blend` (matches master plan example `terrain_01_macro.blend`)
+- [ ] Retention policy per profile: preview keeps 5, production keeps 20, hero_shot keeps 40, aaa_open_world keeps 80
+
+#### 1.B.5 Bundle E supplements
+
+**Full asset metadata tag taxonomy (from master plan §15):**
+
+- [ ] Required base tags (location):
+  - `cliff`, `riverbank`, `waterfall_base`, `cave_entrance`, `plateau`, `forest_floor`, `beach`, `wetland`, `alpine`, `cultivated`
+- [ ] Required role tags:
+  - `hero`, `support`, `filler`
+- [ ] Required size tags:
+  - `large` (> 3m bounding box), `medium` (0.5–3m), `small` (< 0.5m)
+- [ ] Required context tags:
+  - `silhouette_critical`, `foreground_only`, `mid_distance`, `background_fill`
+- [ ] `AssetMetadata` dataclass carrying all four tag categories
+- [ ] Validator: every asset ingested via Tripo / Quixel pipelines must have at least one tag in each category
+
+**Scatter rule extensions:**
+
+- [ ] `AssetContextRule` gains `scale_variance_by_role: float = 0.2` field — hero assets get lower variance (more iconic), filler higher variance (breakup)
+- [ ] `AssetContextRule` gains `camera_priority_weight: float = 0.0` — higher values bias placement toward the current `ViewportVantage` frustum
+- [ ] `place_assets_by_zone` consumes both new fields in its scoring function
+
+#### 1.B.6 Bundle F supplements
+
+**Cave carving workflow (from master plan §13):**
+
+- [ ] `carve_cave_volume` must follow the full pipeline:
+  1. Pick archetype
+  2. Define path/chamber
+  3. Carve volume (existing)
+  4. **Remesh / smooth** (new) — `bpy.ops.object.modifier_add(type='REMESH')` at voxel size from profile
+  5. **Re-break with rock pattern** (new) — apply stored rock displacement texture via displacement modifier
+  6. Build entrance lip (existing)
+  7. Add collapse debris (existing)
+  8. Add damp mask (existing)
+  9. **Add occlusion shelf** (new) — build an overhead shadow shelf mesh at cave mouth that occludes the transition
+  10. Validate readability (existing)
+
+- [ ] `build_cave_entrance_frame` supports two workflow modes:
+  - `workflow="procedural"` — current boolean-based
+  - `workflow="sculpt"` — for hero caves, uses Blender sculpt brushes applied to archetype template meshes; sculpt mode required for primary-tier caves
+
+- [ ] `CaveArchetypeSpec` gains `occlusion_shelf_depth: float = 0.0` and `sculpt_mode: bool = False` fields
+
+#### 1.B.7 Bundle G supplements
+
+**Banded noise advanced techniques (from master plan §12):**
+
+- [ ] `generate_banded_heightmap` adds:
+  - `anisotropic_breakup_strength: float = 0.0` parameter — directional-scale noise that breaks up obvious Perlin/Voronoi artifacts
+  - `anti_grain_smoothing: bool = True` parameter — low-frequency Gaussian smoothing to kill "pixel grain" artifact from noise octaves
+- [ ] Add `compute_anisotropic_breakup(base: np.ndarray, direction: Tuple[float, float], strength: float) -> np.ndarray` helper
+- [ ] Add `apply_anti_grain_smoothing(heightmap: np.ndarray, sigma: float = 0.8) -> np.ndarray` helper
+- [ ] Both applied to every band in `BandedHeightmap`, not just composite
+
+#### 1.B.8 Bundle N supplements
+
+**Terrain-semantic visual verification (closes Gap #2 from final audit, Bug Audit #8):**
+
+- [ ] `terrain_readability_bands.py` augmented with semantic checks on top of image stats:
+  - `check_cliff_silhouette_readability` — cliffs visible at 100m have discernible lip/face boundary
+  - `check_waterfall_chain_completeness` — every visible waterfall has rendered source + lip + pool + outflow
+  - `check_cave_framing_presence` — every visible cave has at least 2 framing rocks + damp signal
+  - `check_focal_composition` — focal point occupies rule-of-thirds intersection in ≥ 1 reviewed band
+- [ ] `run_readability_audit` calls all four semantic checks AND image-stat checks; hard fail on any terrain-semantic failure
+- [ ] Image-stat-only verification mode permanently deprecated
+
+#### 1.B.9 §33 (Unity Export Contract) supplements
+
+**Bit-depth precision contract:**
+
+- [ ] `heightmap.exr` must be **32-bit float**. 16-bit fallback permitted only when `quality_profile == "preview"`
+- [ ] `mask_stack.npz` channels preserve their source dtype (no silent downcasting)
+- [ ] `shadow_clipmap.exr` must be **32-bit float**
+- [ ] `splatmap.exr` minimum **16-bit per channel** for 4+ material channels
+- [ ] Manifest file must record bit depth per exported file: `{"bit_depth": 32, "channels": 1, "encoding": "float"}`
+
+**Attribute-driven geometry nodes contract:**
+
+- [ ] Every terrain mesh exported must carry these named attributes:
+  - `slope_angle` (float, per-vertex, radians)
+  - `flow_accumulation` (float, per-vertex, log)
+  - `wetness` (float, per-vertex, 0..1)
+  - `biome_id` (int, per-vertex)
+  - `cliff_mask` (bool, per-vertex)
+  - `protected_zone_id` (int, per-vertex, -1 = none)
+- [ ] Attributes are source-of-truth for Unity shader + geometry node consumption
+
+#### 1.B.10 §34 (Anti-patterns) additions
+
+New entries 16–25:
+
+- 16. **Skipping scene_read before mutation** — no terrain mutation may proceed without a fresh `TerrainSceneRead`. Enforced by `ProtocolGate.rule_1`.
+- 17. **Ignoring user viewport** — mutations must sync to the current `ViewportVantage` unless explicitly tagged `out_of_view_ok=True`.
+- 18. **Drifting anchors** — locked anchors may not be moved by any pass. Detected by `assert_anchor_integrity`.
+- 19. **Vertex-color fakes for hero features** — cliffs, caves, waterfalls must be real geometry. Forbidden by `ProtocolGate.rule_4`.
+- 20. **Bulk edits without flag** — any mutation touching > 2% of a tile or > 20 objects without `bulk_edit=True` is rejected.
+- 21. **Placement-class mismatch** — objects placed at a cave mouth tagged `surface` instead of `cave_entrance` are rejected.
+- 22. **Y-up coordinates** — Blender is Z-up. Any transform setter that uses Y as vertical is forbidden. Every Y-up boundary must call `convert_y_up_to_z_up`.
+- 23. **Screenshot max_size > 507** — clamped by `clamp_screenshot_size`. Never 1024.
+- 24. **Boolean ops on ≥ 60k vert meshes without decimation** — forbidden by `assert_boolean_safe`. Decimate cutter first.
+- 25. **Batch Tripo GLB imports** — must be serialized via `import_tripo_glb_serialized`. Batch crashes Blender.
+- 26. **2D plane waterfalls** — waterfalls must be 3D tapered prisms with rounded fronts. Enforced by `validate_waterfall_volumetric`.
+- 27. **Image-stat-only visual verification** — deprecated after Bundle N. Terrain-semantic checks required.
+- 28. **Addon stale execution** — `TerrainPassController` init calls `assert_addon_version_matches`; stale addons refuse to run passes.
+- 29. **Biome-coarse material assignment** — materials must consume slope/curvature/wetness/flow, not just biome id. (Already covered in Bundle B but reiterated as anti-pattern.)
+- 30. **Unscoped corrections** — correction requests must follow the "Failures: 1... 2... Fix only these" format and carry a region bounds.
+
+#### 1.B.11 §35 (Operational concerns) additions
+
+**Real-time edit → view → refine workflow (from `feedback_realtime_editing_scalability.md`):**
+
+- [ ] `terrain_live_preview.py` (Bundle M) must support **modular piece isolation** — edit a single hero feature (cliff, waterfall, cave) without re-running the whole pipeline
+- [ ] Edit scope derivation: given a hero feature id, automatically compute the minimum region bbox + affected passes
+- [ ] Piece cache: per-feature masks and geometry snapshots cached so regeneration of unrelated features is skipped
+- [ ] `edit_hero_feature(feature_id, mutations: List[Mutation])` orchestrates modular editing
+
+**Tile-based erosion policy (from master plan §18):**
+
+- [ ] Add `ErosionStrategy` enum: `EXACT` (full world erosion, expensive, deterministic), `TILED_PADDED` (per-tile with erosion margin padding, scalable, approximate)
+- [ ] `TerrainQualityProfile.erosion_strategy` field selects strategy
+- [ ] `preview` and `production` default to `TILED_PADDED`, `hero_shot` and `aaa_open_world` default to `EXACT`
+- [ ] Erosion margin padding size configurable per profile (default 16 cells, master plan's recommendation)
+
+**Splatmap GPU edge bleed prevention (from master plan §19):**
+
+- [ ] Splatmap export pads per-tile by 4 texels on every edge with copied edge color
+- [ ] Unity sampler reads with `clamp_to_edge` addressing
+- [ ] Validator checks border continuity between adjacent tiles' splatmaps within tolerance
+
+**Water channel layering (from master plan §12 Blender best practice):**
+
+- [ ] Water meshes split by function:
+  - Main flow layer (flat surface)
+  - Ripple layer (animated displacement)
+  - Localized turbulence patches (high-curvature zones at bends, pools)
+- [ ] Each is a separate object with distinct materials
+- [ ] Foam layer exists only at impact/turbulence zones, not globally
+
+---
+
+### Addendum 1.C — Updated scorecard
+
+Adding Bundle R and the supplements raises realistic ceiling from 8.7 to **8.8**. Bundle R contributes:
+
+- Autonomy / pass discipline: 9 → 9 (holds the line, but now actually enforced)
+- Validation depth: 9 → 9 (terrain-semantic checks close the image-stat gap)
+- Operational safety: new pillar, 9/10
+
+Total bundles: **18** (A–R). Total estimated sessions: **58–63** (was 55–60).
+
+---
+
+### Addendum 1.D — Supplemental compliance checklists
+
+Future sessions mark these in place.
+
+#### D.18 Bundle R — Protocol Enforcement & Runtime Safety
+
+- [ ] `terrain_protocol.py` created
+- [ ] `@enforce_protocol` decorator implemented
+- [ ] All 7 `ProtocolGate` rules implemented
+- [ ] `terrain_viewport_sync.py` created
+- [ ] `ViewportVantage` dataclass + `read_user_vantage` + `assert_vantage_fresh` + frustum helpers
+- [ ] `terrain_reference_locks.py` created
+- [ ] `lock_anchor` / `unlock_anchor` / `assert_anchor_integrity` / `assert_all_anchors_intact`
+- [ ] `terrain_addon_health.py` created
+- [ ] `assert_addon_version_matches` / `assert_handlers_registered` / `detect_stale_addon` / `force_addon_reload`
+- [ ] `TerrainPassController.__init__` calls `assert_addon_version_matches`
+- [ ] `terrain_blender_safety.py` created
+- [ ] Z-up enforcement (`assert_z_is_up`, `convert_y_up_to_z_up`, `@guard_z_up`)
+- [ ] Screenshot clamp (`BLENDER_SCREENSHOT_MAX_SIZE = 507`, `clamp_screenshot_size`)
+- [ ] Boolean safety (`assert_boolean_safe`, `decimate_to_safe_count`, `run_boolean_with_safety`)
+- [ ] Tripo serialization (`import_tripo_glb_serialized` with lock)
+- [ ] `terrain_scene_read.py` created
+- [ ] `capture_scene_read` handler produces valid `TerrainSceneRead`
+- [ ] 6 test files created, all passing
+
+Status: **NOT_STARTED**
+
+#### D.1 additions (Bundle A)
+
+- [ ] `apply_hydraulic_erosion_masks` populates `sediment_accumulation_at_base`
+- [ ] `apply_hydraulic_erosion_masks` populates `pool_deepening_delta`
+- [ ] `pass_macro_world` accepts `camera_priority_weight` parameter
+- [ ] Every pass function accepts `deterministic_seed_override` parameter
+- [ ] Regression tests for both new erosion channels
+
+#### D.2 additions (Bundle B)
+
+- [ ] `MaterialChannel.height_blend_gamma` field
+- [ ] `MaterialChannel.texel_density_m` field
+- [ ] `MaterialChannel.micro_normal_texture` + `micro_normal_strength` fields
+- [ ] Texel density coherency validator
+- [ ] `validate_cliff_readability` includes silhouette area check
+
+#### D.3 additions (Bundle C)
+
+- [ ] `WaterfallVolumetricProfile` dataclass
+- [ ] `validate_waterfall_volumetric` validator
+- [ ] Vertex count ≥ 48 per meter enforcement
+- [ ] Non-coplanar front face check
+- [ ] Anchor screen-space region validator
+- [ ] Waterfall split into 7 named functional objects
+
+#### D.4 additions (Bundle D)
+
+- [ ] `terrain_quality_profiles.py` dedicated module created
+- [ ] 4 preset JSON files shipped (preview / production / hero_shot / aaa_open_world)
+- [ ] Profile inheritance implemented
+- [ ] `save_every_n_operations` autosave mode
+- [ ] `lock_preset` / `unlock_preset` + `PresetLocked` exception
+- [ ] Checkpoint naming convention `terrain_<NN>_<pass>_<hash>.blend`
+- [ ] Retention policy per profile
+
+#### D.5 additions (Bundle E)
+
+- [ ] `AssetMetadata` dataclass with 4 tag categories
+- [ ] All 10 location tags defined
+- [ ] All 3 role tags defined
+- [ ] All 3 size tags defined
+- [ ] All 4 context tags defined
+- [ ] Asset ingestion validator enforces all 4 tag categories
+- [ ] `scale_variance_by_role` + `camera_priority_weight` on `AssetContextRule`
+- [ ] `place_assets_by_zone` consumes both new fields
+
+#### D.6 additions (Bundle F)
+
+- [ ] `carve_cave_volume` implements 10-step pipeline including remesh + re-break + occlusion shelf
+- [ ] `build_cave_entrance_frame` supports sculpt workflow for hero tier
+- [ ] `CaveArchetypeSpec.occlusion_shelf_depth` + `sculpt_mode` fields
+
+#### D.7 additions (Bundle G)
+
+- [ ] `generate_banded_heightmap` adds `anisotropic_breakup_strength`
+- [ ] `generate_banded_heightmap` adds `anti_grain_smoothing`
+- [ ] `compute_anisotropic_breakup` helper
+- [ ] `apply_anti_grain_smoothing` helper
+- [ ] Both applied to every band, not just composite
+
+#### D.14 additions (Bundle N)
+
+- [ ] `check_cliff_silhouette_readability`
+- [ ] `check_waterfall_chain_completeness`
+- [ ] `check_cave_framing_presence`
+- [ ] `check_focal_composition`
+- [ ] `run_readability_audit` calls all 4 semantic checks as hard gates
+- [ ] Image-stat-only verification deprecated
+
+#### §33 additions (Unity export)
+
+- [ ] `heightmap.exr` is 32-bit float in production+ profiles
+- [ ] `mask_stack.npz` preserves dtype
+- [ ] `shadow_clipmap.exr` is 32-bit float
+- [ ] `splatmap.exr` is 16-bit minimum
+- [ ] Manifest records per-file bit depth
+- [ ] Every terrain mesh exports 6 required named attributes
+
+#### §34 additions (anti-patterns)
+
+- [ ] Entries 16–30 added (see Addendum 1.B.10)
+
+#### §35 additions (operational)
+
+- [ ] Real-time edit → view → refine workflow in Bundle M
+- [ ] Modular piece isolation
+- [ ] Piece cache
+- [ ] `edit_hero_feature(feature_id, mutations)` orchestrator
+- [ ] `ErosionStrategy` enum with EXACT vs TILED_PADDED
+- [ ] Erosion margin padding per profile
+- [ ] Splatmap edge bleed padding (4-texel border)
+- [ ] Water channel layering (main flow, ripple, turbulence, foam)
+
+---
+
+### Addendum 1.E — Verification checklist (this addendum's completeness)
+
+This list confirms each identified gap is closed by Addendum 1. Every item must be ticked when the addendum is committed.
+
+- [x] **Gap 1 — Runtime protocol enforcement** → Bundle R, `terrain_protocol.py` + `ProtocolGate`
+- [x] **Gap 2 — Terrain-semantic visual verification** → Bundle N supplement 1.B.8
+- [x] **Gap 3 — Addon reload enforcement** → Bundle R, `terrain_addon_health.py`
+- [x] **Gap 4 — Viewport sync + reference locking** → Bundle R, `terrain_viewport_sync.py` + `terrain_reference_locks.py`
+- [x] **Gap 5 — Semantic mask consumer logic (materials)** → Bundle B supplement 1.B.2
+- [x] **Gap 6 — Terrain-aware scatter** → Bundle E supplement 1.B.5
+- [x] **Gap 7 — Flow analysis semantic outputs** → Bundle A supplement 1.B.1 (sediment accumulation, pool deepening)
+- [x] **Gap 8 — Real-time edit → view → refine modular workflow** → Bundle M extension 1.B.11
+- [x] **Gap 9 — 3D volumetric waterfall** → Bundle C supplement 1.B.3
+- [x] **Gap 10 — Tripo + dense mesh boolean safety** → Bundle R, `terrain_blender_safety.py`
+- [x] **Gap 11 — terrain_quality_profiles.py as dedicated module** → Bundle D supplement 1.B.4
+- [x] **Gap 12 — Noise anisotropic breakup + anti-grain smoothing** → Bundle G supplement 1.B.7
+- [x] **Gap 13 — Erosion sediment accumulation at bases + pool deepening** → Bundle A supplement 1.B.1
+- [x] **Gap 14 — Cave remesh / re-break / occlusion shelf / sculpt workflow** → Bundle F supplement 1.B.6
+- [x] **Gap 15 — Waterfall anchor screen-space region validation** → Bundle C supplement 1.B.3
+- [x] **Gap 16 — Material height-based blends + texel density + micro normals** → Bundle B supplement 1.B.2
+- [x] **Gap 17 — Full asset tag taxonomy** → Bundle E supplement 1.B.5
+- [x] **Gap 18 — Scatter scale variance + camera priority** → Bundle E supplement 1.B.5
+- [x] **Gap 19 — Checkpoint save every N + lock preset + naming** → Bundle D supplement 1.B.4
+- [x] **Gap 20 — Export bit-depth contract (16/32-bit)** → §33 supplement 1.B.9
+- [x] **Gap 21 — Attribute-driven geometry nodes export** → §33 supplement 1.B.9
+- [x] **Gap 22 — Water layer split (flow/ripple/turbulence)** → §35 supplement 1.B.11
+- [x] **Gap 23 — Camera-priority weighting in macro_world** → Bundle A supplement 1.B.1
+- [x] **Gap 24 — Z-up coordinate enforcement** → Bundle R, `terrain_blender_safety.py`
+- [x] **Gap 25 — Screenshot max_size 507 cap** → Bundle R, `terrain_blender_safety.py`
+- [x] **Gap 26 — Blender boolean dense-mesh crash avoidance** → Bundle R, `terrain_blender_safety.py`
+- [x] **Gap 27 — Large-world tiled erosion policy (EXACT vs TILED_PADDED)** → §35 supplement 1.B.11
+- [x] **Gap 28 — Splatmap GPU edge bleed padding** → §35 supplement 1.B.11
+- [x] **Gap 29 — Cliff silhouette area validator** → Bundle B supplement 1.B.2
+- [x] **Gap 30 — Anti-patterns 16–30** → §34 supplement 1.B.10
+
+All 30 gaps closed by this addendum.
+
+---
+
 ## End of Plan
 
-**Last updated:** 2026-04-08
-**Total bundles:** 17 (A–Q)
-**Estimated effort:** 55–60 focused sessions
+**Last updated:** 2026-04-08 (Addendum 1 — gap closure)
+**Total bundles:** 18 (A–R)
+**Estimated effort:** 58–63 focused sessions
 **Target score:** 8.6 / 10 AAA
-**Realistic ceiling:** 8.7 / 10 AAA
-**Hard cap:** ~8.8 without engine-side innovation
+**Realistic ceiling:** 8.8 / 10 AAA
+**Hard cap:** ~8.9 without engine-side innovation
 
-To execute: start with Bundle A as an atomic commit, then follow the execution sequence in §26. Update Appendix D checklists as work lands. Do not deviate from §5 contracts without revising this plan.
+To execute: start with Bundle A as an atomic commit, then follow the execution sequence in §26 (Bundle R slots in parallel with C/D/E after A). Update Appendix D + Addendum 1.D checklists as work lands. Do not deviate from §5 contracts or Addendum 1 supplements without revising this plan.
 
 This document is the single source of truth. When in doubt, this overrides other terrain docs.
