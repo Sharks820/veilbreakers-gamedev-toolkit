@@ -4944,16 +4944,166 @@ The plan now explicitly references every major item from:
 
 ---
 
+## Addendum 3 — Master plan §5 residual items (2026-04-08, third revision)
+
+After committing Addendum 2, a focused re-read of `terrain_claude_master_plan_2026-04-07.md` §§5.6–5.19 surfaced 8 more items that were not fully captured. Plus a user-flagged recurring bug pattern. All closed here.
+
+### 3.A — User-flagged persistent bug pattern (CRITICAL warning)
+
+**Scatter-layer altitude assumptions always survive refactors.** User feedback 2026-04-08: every time the terrain pipeline is refactored, the scatter layer silently retains `heights / heights.max()` or `altitude = center.z / height_scale` clamped to `[0,1]`. Negative-elevation lowlands (basins, wetlands, underwater valleys) collapse to zero and corrupt biome/slope/material decisions downstream.
+
+**Rule:** every refactor touching scatter MUST explicitly audit these conversions:
+
+- `environment_scatter.py` any `heights / heights.max()` or `altitude / height_scale` math
+- `environment.py` `paint_terrain_biomes` altitude clamp to `[0,1]`
+- Any new scatter/biome code added in Bundle E, J, O
+
+**Enforcement mechanism:** regression test `test_scatter_negative_elevation.py` generates a terrain with `min_height = -40m, max_height = 20m`, runs the full pipeline, and asserts:
+- Scatter placements exist in negative-elevation cells
+- Biome material at `z = -30m` is NOT the same as at `z = 0m`
+- Slope calculations use world-unit gradients, not normalized
+
+Added to Bundle A, E, J, O as a mandatory cross-cutting check. Will also be added to feedback memory.
+
+### 3.B — Master plan §5 residual items (8 gaps)
+
+#### 3.B.1 Distributed erosion with halos and seam blending (§5.6)
+
+Addendum 1 added `ErosionStrategy.EXACT` vs `ErosionStrategy.TILED_PADDED`. Addendum 3 adds a third mode: `TILED_DISTRIBUTED_HALO`.
+
+- Tiles eroded independently with overlap halos (typically 32-64 cells of shared region)
+- Halo regions blended between neighboring tiles after erosion (weighted average where overlap exists)
+- Scales to arbitrarily large worlds without single-machine memory cost
+- Validation: `validate_independent_erosion_seams(tiles)` asserts max seam delta after blend < tolerance
+
+Added to `Bundle M.erosion_strategy` supplement + Bundle A `ErosionStrategy` enum.
+
+#### 3.B.2 Large-world precision strategy (§5.7)
+
+- Adopt **floating-origin coordinate system** for worlds > 10 km
+- Keep generation in stable high-precision space (float64) until per-tile export
+- Support **camera/tile-relative rendering** — tiles carry origin offset; Unity receives tiles with offsets applied at render time, not authoring time
+- Contract: `TileTransform.origin_world` may be `float64`; export to Unity converts to `float32` relative to a **sector origin** (km-scale anchor), not world origin
+
+Added to Bundle A (`TileTransform` + `SectorOrigin` in `terrain_semantics.py`) + Bundle J (Unity export honors sector-relative coordinates).
+
+#### 3.B.3 Test file updates for broken-behavior encoding (§5.14)
+
+Specific files that currently assert broken behavior:
+
+- `test_aaa_visual_verification.py` — currently asserts `aaa_verify_map([])` passes. Addendum 1.B.8 changes the behavior; this file's assertions must flip to `passed=False`. Codex may have already updated it — verify.
+- `test_terrain_tiling.py` — verifies whole-world erode-then-split seams but NOT independent-adjacent-tile erosion with margins. Must add tests for `TILED_PADDED` and `TILED_DISTRIBUTED_HALO` modes.
+
+Added as Bundle A + Bundle M compliance items.
+
+#### 3.B.4 Performance budget stub is fake (§5.15)
+
+Current state: `__init__.py` registers `performance_budget_check` as `lambda params: {"status": "ok", "budget": "not_implemented"}`. `blender_server.py:performance_check` interprets missing totals as `0`, which false-passes.
+
+**Fix:** Bundle N supplement — real scene-wide performance collector:
+
+```python
+@dataclass
+class TerrainPerformanceReport:
+    triangle_count: Dict[str, int]      # {terrain, water, foliage, rock, cliff, ...}
+    instance_count: Dict[str, int]
+    material_count: int
+    draw_call_proxy: int
+    texture_memory_mb: float
+    within_budget: Dict[str, bool]
+    status: str  # "ok" | "over_budget" | "not_available"
+```
+
+- Count terrain/water/foliage/rock/cliff mesh budgets separately
+- Report actual triangle counts, instance counts, material counts
+- Return `not_available` when measurement genuinely isn't implemented — never fake `ok`
+- `test_performance_budget_no_false_ok.py` asserts stub-returning-ok path is dead
+
+Added to Bundle N compliance.
+
+#### 3.B.5 `apply_stamp_to_heightmap` stale terrain-origin contract (§5.16)
+
+`handle_terrain_stamp()` passes `terrain_origin=(obj.location.x, obj.location.y)` but the rest of the branch treats `obj.location` as the terrain **center** while `apply_stamp_to_heightmap()` converts with `(position - origin) / terrain_size` — which interprets `terrain_origin` as a **min corner**.
+
+**Fix (Bundle B):** unify on centered-terrain contract from Addendum 2.B.2 (`tile_transform.convention` explicit). Update runtime stamping AND pure-logic helpers AND `test_terrain_advanced.py` together in one commit. Never leave runtime/pure/tests in inconsistent states.
+
+Added to Bundle B compliance.
+
+#### 3.B.6 River/road broken world-height adapter (§5.17)
+
+`handle_carve_river()` and `handle_generate_road()` extract mesh heights and convert via `heightmap = heights / heights.max()`. World terrains with negative minima or shared world ranges don't fit this. Same pattern as the scatter-altitude bug (§3.A) but in path solvers.
+
+**Fix (Bundle C + Bundle A):**
+
+```python
+@dataclass
+class WorldHeightTransform:
+    world_min: float
+    world_max: float
+    world_range: float
+
+    def to_normalized(self, world_heights: np.ndarray) -> np.ndarray:
+        return (world_heights - self.world_min) / self.world_range
+
+    def from_normalized(self, normalized: np.ndarray) -> np.ndarray:
+        return normalized * self.world_range + self.world_min
+```
+
+- Path solvers (A*, road placement) operate on normalized `[0,1]` for math simplicity
+- But the adapter is explicit, reversible, and preserves signed elevations
+- Test: `test_river_negative_elevation.py` carves through terrain spanning `[-40, 20]` and asserts output heights preserve sign
+
+Added to Bundle A (`WorldHeightTransform` dataclass in `terrain_semantics.py`) + Bundle C (river/road use it).
+
+#### 3.B.7 Scatter/biome altitude zero-based assumption (§5.18)
+
+See §3.A above. This is the same bug class as 3.B.6 but in scatter/material code. Fix uses the same `WorldHeightTransform` adapter. Added to Bundle E acceptance criteria.
+
+**Files affected:**
+- `environment_scatter.py` — remove `heights / heights.max()`
+- `environment.py:paint_terrain_biomes` — use `WorldHeightTransform` instead of clamping `center.z / height_scale`
+
+#### 3.B.8 Tests protecting dead legacy workflows (§5.19)
+
+Tests that currently lock in legacy behavior:
+
+- `test_functional_blender_tools.py` (or wherever) asserts `env_generate_world_terrain` is registered as a functional command
+- Test files wire `env_generate_waterfall` standalone path as the intended public system
+
+**Fix:** Bundle A cleanup — these tests must flip to assert the new pass-based path. Legacy command tests become backwards-compatibility smoke tests (assert the wrapper still responds), not active-path tests.
+
+Added to Bundle A test migration compliance.
+
+---
+
+### 3.C — Final verification checklist (Addendum 3)
+
+- [x] **§3.A — Scatter-layer altitude assumptions persistent bug pattern** → Bundle A/E/J/O cross-cutting check + feedback memory entry
+- [x] **§5.6 — Distributed erosion with halos** → `TILED_DISTRIBUTED_HALO` mode added to ErosionStrategy
+- [x] **§5.7 — Large-world precision / floating-origin** → `SectorOrigin` in Bundle A, tile-relative Unity export in Bundle J
+- [x] **§5.14 — Tests encoding broken behavior** → explicit `test_aaa_visual_verification.py` and `test_terrain_tiling.py` updates
+- [x] **§5.15 — Performance budget stub** → Bundle N real collector with `TerrainPerformanceReport`
+- [x] **§5.16 — apply_stamp_to_heightmap origin contract** → Bundle B unified centered contract
+- [x] **§5.17 — River/road world-height adapter** → `WorldHeightTransform` in Bundle A, used by Bundle C
+- [x] **§5.18 — Scatter altitude zero-based assumption** → `WorldHeightTransform` in Bundle E
+- [x] **§5.19 — Tests protecting dead workflows** → Bundle A legacy test migration
+
+9 residual gaps closed. **Running total: 65 gaps closed across 3 addenda (30 + 26 + 9).**
+
+---
+
 ## End of Plan
 
-**Last updated:** 2026-04-08 (Addendum 2 — deeper gap closure)
+**Last updated:** 2026-04-08 (Addendum 3 — master plan residuals + user-flagged scatter altitude warning)
 **Total bundles:** 18 (A–R)
-**Estimated effort:** 60–65 focused sessions (updated for Addendum 2 scope)
+**Estimated effort:** 60–65 focused sessions
 **Target score:** 8.6 / 10 AAA
 **Realistic ceiling:** 8.8 / 10 AAA
 **Hard cap:** ~8.9 without engine-side innovation
-**Total gaps closed:** 56 (30 from Addendum 1 + 26 from Addendum 2)
+**Total gaps closed:** 65 (30 from Addendum 1 + 26 from Addendum 2 + 9 from Addendum 3)
 
-To execute: start with Bundle A as an atomic commit, then follow the execution sequence in §26 (Bundle R slots in parallel with C/D/E after A). Update Appendix D + Addendum 1.D + Addendum 2.L checklists as work lands. Do not deviate from §5 contracts, Addendum 1 supplements, or Addendum 2 contracts without revising this plan.
+To execute: start with Bundle A as an atomic commit, then follow the execution sequence in §26 (Bundle R slots in parallel with C/D/E after A). Update Appendix D + Addendum 1.D + Addendum 2.L + Addendum 3.C checklists as work lands. Do not deviate from §5 contracts, Addendum 1/2/3 supplements without revising this plan.
+
+**Known persistent bug pattern:** scatter-layer altitude assumptions survive refactors. Always audit `heights / heights.max()` and `altitude / height_scale` clamps when touching scatter/biome code. Regression test `test_scatter_negative_elevation.py` is the canary.
 
 This document is the single source of truth. When in doubt, this overrides other terrain docs.
