@@ -1,4 +1,4 @@
-"""Unit tests for scene management, render config, collection, and mesh data handlers.
+"""Unit tests for scene management, project save validation, render config, collection, and mesh data handlers.
 
 Tests the pure-logic validation functions for:
 - Scene/World: _validate_setup_world_params, _validate_add_light_params,
@@ -12,6 +12,71 @@ All tests are pure-logic (no Blender/bpy required).
 """
 
 import pytest
+
+
+# ---------------------------------------------------------------------------
+# Project save validation helpers
+# ---------------------------------------------------------------------------
+
+
+class TestProjectSaveValidation:
+    """Test Blender project save/verify parameter validation and file-status helpers."""
+
+    def test_validate_project_save_defaults(self):
+        from blender_addon.handlers.scene import _validate_project_save_params
+
+        result = _validate_project_save_params({})
+        assert result["filepath"] is None
+        assert result["incremental"] is False
+        assert result["copy"] is False
+        assert result["compress"] is True
+        assert result["verify"] is True
+        assert result["compute_hash"] is False
+
+    def test_validate_project_save_rejects_bad_filepath(self):
+        from blender_addon.handlers.scene import _validate_project_save_params
+
+        with pytest.raises(ValueError, match="filepath"):
+            _validate_project_save_params({"filepath": ""})
+
+    def test_validate_project_verify_defaults(self):
+        from blender_addon.handlers.scene import _validate_project_verify_params
+
+        result = _validate_project_verify_params({})
+        assert result["filepath"] is None
+        assert result["compute_hash"] is False
+        assert result["expect_current_file"] is False
+
+    def test_next_incremental_blend_path(self, tmp_path):
+        from blender_addon.handlers.scene import _next_incremental_blend_path
+
+        base = tmp_path / "terrain_pass.blend"
+        base.write_bytes(b"seed")
+        (tmp_path / "terrain_pass_v001.blend").write_bytes(b"seed")
+        next_path = _next_incremental_blend_path(str(base))
+        assert next_path.endswith("terrain_pass_v002.blend")
+
+    def test_build_project_file_status_missing(self, tmp_path):
+        from blender_addon.handlers.scene import _build_project_file_status
+
+        status = _build_project_file_status(str(tmp_path / "missing.blend"))
+        assert status["verified"] is False
+        assert status["reason"] == "file_missing"
+
+    def test_build_project_file_status_hash_and_current_file(self, tmp_path):
+        from blender_addon.handlers.scene import _build_project_file_status
+
+        filepath = tmp_path / "terrain_snapshot.blend"
+        filepath.write_bytes(b"BLENDER")
+        status = _build_project_file_status(
+            str(filepath),
+            compute_hash=True,
+            expect_current_file=True,
+            current_filepath=str(filepath),
+        )
+        assert status["verified"] is True
+        assert status["current_file_matches"] is True
+        assert len(status["sha256"]) == 64
 
 
 # ---------------------------------------------------------------------------
@@ -811,6 +876,8 @@ class TestCommandHandlerRegistration:
         from blender_addon.handlers import COMMAND_HANDLERS
 
         expected = [
+            "save_project",
+            "verify_project_save",
             "setup_world",
             "add_light",
             "add_camera",

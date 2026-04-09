@@ -363,12 +363,36 @@ class TestHandlerReturnDictKeys:
 
 
 class TestWorldTerrainGeneration:
-    def test_world_terrain_is_deprecated(self):
-        """handle_generate_world_terrain is deprecated in favor of per-tile."""
+    def test_world_terrain_wraps_tile_generation(self):
+        """handle_generate_world_terrain delegates to tiled generation for compatibility."""
         from blender_addon.handlers import environment as env_mod
 
-        with pytest.raises(NotImplementedError, match="deprecated"):
-            env_mod.handle_generate_world_terrain({"name": "X"})
+        with patch.object(env_mod, "handle_generate_terrain_tile", return_value={"name": "X", "tile_x": 0, "tile_y": 0}):
+            result = env_mod.handle_generate_world_terrain({"name": "X"})
+
+        assert result["name"] == "X"
+        assert result["deprecated_command"] is True
+        assert result["compatibility_mode"] == "world_to_tile_wrapper"
+
+    def test_world_terrain_can_wrap_multiple_tiles(self):
+        from blender_addon.handlers import environment as env_mod
+
+        with patch.object(env_mod, "handle_generate_terrain_tile", side_effect=lambda params: {
+            "name": params["name"],
+            "tile_x": params["tile_x"],
+            "tile_y": params["tile_y"],
+        }):
+            result = env_mod.handle_generate_world_terrain({
+                "name": "World",
+                "tiles_x": 2,
+                "tiles_y": 2,
+            })
+
+        assert result["tile_count"] == 4
+        assert result["deprecated_command"] is True
+        assert {(tile["tile_x"], tile["tile_y"]) for tile in result["tiles"]} == {
+            (0, 0), (1, 0), (0, 1), (1, 1),
+        }
 
     def test_multi_biome_world_uses_mesh_backed_scatter_helper(self):
         from blender_addon.handlers import environment as env_mod

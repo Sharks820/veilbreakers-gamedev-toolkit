@@ -1203,10 +1203,17 @@ async def _position_generated_object(
 
 @mcp.tool()
 async def blender_scene(
-    action: Literal["inspect", "clear", "configure", "list_objects"],
+    action: Literal["inspect", "clear", "configure", "list_objects", "save_project", "verify_project_save"],
     render_engine: str | None = None,
     fps: int | None = None,
-    unit_scale: float | None = None
+    unit_scale: float | None = None,
+    filepath: str | None = None,
+    incremental: bool = False,
+    copy: bool = False,
+    compress: bool = True,
+    verify: bool = True,
+    compute_hash: bool = False,
+    expect_current_file: bool = False,
 ):
     """Manage Blender scene state."""
     blender = get_blender_connection()
@@ -1228,6 +1235,27 @@ async def blender_scene(
         return await _with_screenshot(blender, result)
     elif action == "list_objects":
         result = await blender.send_command("list_objects")
+        return json.dumps(result, indent=2, default=str)
+    elif action == "save_project":
+        params = {
+            "incremental": incremental,
+            "copy": copy,
+            "compress": compress,
+            "verify": verify,
+            "compute_hash": compute_hash,
+        }
+        if filepath is not None:
+            params["filepath"] = filepath
+        result = await blender.send_command("save_project", params)
+        return json.dumps(result, indent=2, default=str)
+    elif action == "verify_project_save":
+        params = {
+            "compute_hash": compute_hash,
+            "expect_current_file": expect_current_file,
+        }
+        if filepath is not None:
+            params["filepath"] = filepath
+        result = await blender.send_command("verify_project_save", params)
         return json.dumps(result, indent=2, default=str)
     return "Unknown action"
 
@@ -3455,7 +3483,12 @@ async def asset_pipeline(
                 "hint": "Run Blender with the VeilBreakers addon and try again",
             })
 
-        _verify_result = aaa_verify_map(_existing, min_score=min_score)
+        _verify_result = aaa_verify_map(
+            _existing,
+            min_score=min_score,
+            required_angle_count=len(_aaa_angles),
+            angle_labels=[lbl for _, _, lbl in _aaa_angles],
+        )
 
         _baseline_result = None
         if capture_baseline:

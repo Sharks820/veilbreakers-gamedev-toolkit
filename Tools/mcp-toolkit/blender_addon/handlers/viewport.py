@@ -280,6 +280,48 @@ def _unique_temp_path(prefix: str, suffix: str = ".png") -> str:
     )
 
 
+def _resolve_output_path(params: dict, prefix: str) -> str:
+    """Resolve filepath/output_path aliases and ensure the parent directory exists."""
+    path = params.get("filepath") or params.get("output_path") or _unique_temp_path(prefix)
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+    return path
+
+
+def _scene_focus_target(target_name: str | None = None) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    """Return scene focus center and dimensions for review renders."""
+    from mathutils import Vector
+
+    target = bpy.data.objects.get(target_name) if target_name else bpy.context.view_layer.objects.active
+    if target is not None:
+        return tuple(target.location), tuple(target.dimensions)
+
+    bounds_min: Vector | None = None
+    bounds_max: Vector | None = None
+    for obj in bpy.context.scene.objects:
+        if obj.type in {"MESH", "CURVE", "SURFACE", "META", "FONT"} and not obj.hide_render:
+            for corner in obj.bound_box:
+                world_corner = obj.matrix_world @ Vector(corner)
+                bounds_min = world_corner.copy() if bounds_min is None else Vector((
+                    min(bounds_min.x, world_corner.x),
+                    min(bounds_min.y, world_corner.y),
+                    min(bounds_min.z, world_corner.z),
+                ))
+                bounds_max = world_corner.copy() if bounds_max is None else Vector((
+                    max(bounds_max.x, world_corner.x),
+                    max(bounds_max.y, world_corner.y),
+                    max(bounds_max.z, world_corner.z),
+                ))
+
+    if bounds_min is None or bounds_max is None:
+        return (0.0, 0.0, 0.0), (4.0, 4.0, 4.0)
+
+    center = (bounds_min + bounds_max) * 0.5
+    dims = bounds_max - bounds_min
+    return tuple(center), (max(dims.x, 1.0), max(dims.y, 1.0), max(dims.z, 1.0))
+
+
 # ---------------------------------------------------------------------------
 # State save/restore for beauty setup
 # ---------------------------------------------------------------------------
@@ -982,7 +1024,7 @@ def handle_get_viewport_screenshot(params: dict) -> dict:
         Dict with filepath, dimensions, format.
     """
     max_size = params.get("max_size", 512)
-    filepath = params.get("filepath") or _unique_temp_path("vb_screenshot")
+    filepath = _resolve_output_path(params, "vb_screenshot")
     fmt = params.get("format", "PNG").upper()
     skip_beauty = params.get("skip_beauty", False)
 
@@ -1027,6 +1069,135 @@ def handle_get_viewport_screenshot(params: dict) -> dict:
         "width": max_size,
         "height": max_size,
         "format": fmt.lower(),
+        "beauty_applied": not skip_beauty,
+    }
+
+
+def handle_render_angle(params: dict) -> dict:
+    """Render a deterministic camera angle around a target object or scene focus."""
+    from mathutils import Vector
+
+    yaw = float(params.get("yaw", 0.0))
+    pitch = float(params.get("pitch", 20.0))
+    max_size = int(params.get("max_size", 512))
+    fmt = params.get("format", "PNG").upper()
+    filepath = _resolve_output_path(params, "vb_render_angle")
+    skip_beauty = bool(params.get("skip_beauty", False))
+    target = params.get("target")
+    target_center, target_dims = _scene_focus_target(
+        params.get("object_name") or params.get("target_object")
+    )
+    if target is not None:
+        target_center = tuple(float(v) for v in target[:3])
+
+    distance = float(
+        params.get("distance")
+        or compute_camera_distance(target_dims, float(params.get("focal_length", BEAUTY_FOCAL_LENGTH)))
+    )
+    center = Vector(target_center)
+    camera_position = Vector(compute_light_position(target_center, distance, yaw, pitch))
+
+    viewport_state = None
+    eevee_state = None
+    temp_lights = []
+    old_world = bpy.context.scene.world
+    old_world_strength = None
+    old_world_color = None
+    temp_world = None
+
+    scene = bpy.context.scene
+    old_cam = scene.camera
+    old_filepath = scene.render.filepath
+    old_format = scene.render.image_settings.file_format
+    old_x = scene.render.resolution_x
+    old_y = scene.render.resolution_y
+
+    cam_data = bpy.data.cameras.new("VB_RenderAngle_Camera")
+    cam_data.lens = float(params.get("focal_length", BEAUTY_FOCAL_LENGTH))
+    cam = bpy.data.objects.new("VB_RenderAngle_Camera", cam_data)
+    bpy.context.scene.collection.objects.link(cam)
+
+    try:
+        if not skip_beauty:
+            viewport_state = _save_viewport_state()
+            eevee_state = _save_eevee_state()
+            _apply_viewport_shading()
+            _configure_eevee()
+
+            base_distance = max(
+                math.sqrt(target_dims[0] ** 2 + target_dims[1] ** 2 + target_dims[2] ** 2) / 2.0,
+                1.0,
+            )
+            for preset in (BEAUTY_KEY_LIGHT, BEAUTY_FILL_LIGHT, BEAUTY_RIM_LIGHT):
+                boosted = dict(preset)
+                boosted["energy"] = float(preset["energy"]) * 80.0
+                light_obj = _create_area_light(boosted, target_center, base_distance)
+                light_obj.name = f"_RA_Temp_{preset['name']}"
+                temp_lights.append(light_obj)
+
+            world = old_world
+            if world is None:
+                world = bpy.data.worlds.new("_RA_Temp_World")
+                bpy.context.scene.world = world
+                world.use_nodes = True
+                temp_world = world
+            if world.use_nodes and world.node_tree:
+                bg_node = world.node_tree.nodes.get("Background")
+                if bg_node is not None:
+                    old_world_strength = bg_node.inputs["Strength"].default_value
+                    old_world_color = tuple(bg_node.inputs["Color"].default_value)
+                    bg_node.inputs["Strength"].default_value = 0.05
+                    bg_node.inputs["Color"].default_value = (0.01, 0.01, 0.02, 1.0)
+
+        scene.camera = cam
+        scene.render.filepath = filepath
+        scene.render.image_settings.file_format = fmt
+        scene.render.resolution_x = max_size
+        scene.render.resolution_y = max_size
+
+        cam.location = camera_position
+        direction = center - cam.location
+        cam.rotation_euler = direction.to_track_quat("-Z", "Y").to_euler()
+        bpy.ops.render.render(write_still=True)
+    finally:
+        scene.camera = old_cam
+        scene.render.filepath = old_filepath
+        scene.render.image_settings.file_format = old_format
+        scene.render.resolution_x = old_x
+        scene.render.resolution_y = old_y
+
+        for light_obj in temp_lights:
+            light_data_ref = light_obj.data
+            bpy.data.objects.remove(light_obj, do_unlink=True)
+            if light_data_ref is not None:
+                bpy.data.lights.remove(light_data_ref)
+
+        cur_world = bpy.context.scene.world
+        if old_world_strength is not None and cur_world and cur_world.use_nodes and cur_world.node_tree:
+            bg_node = cur_world.node_tree.nodes.get("Background")
+            if bg_node is not None:
+                bg_node.inputs["Strength"].default_value = old_world_strength
+                bg_node.inputs["Color"].default_value = old_world_color
+        bpy.context.scene.world = old_world
+        if temp_world is not None:
+            bpy.data.worlds.remove(temp_world)
+
+        if viewport_state is not None:
+            _restore_viewport_state(viewport_state)
+        if eevee_state is not None:
+            _restore_eevee_state(eevee_state)
+
+        bpy.data.objects.remove(cam, do_unlink=True)
+        bpy.data.cameras.remove(cam_data)
+
+    return {
+        "filepath": filepath,
+        "width": max_size,
+        "height": max_size,
+        "format": fmt.lower(),
+        "yaw": yaw,
+        "pitch": pitch,
+        "target": list(target_center),
         "beauty_applied": not skip_beauty,
     }
 

@@ -3,6 +3,7 @@
 import json
 
 import pytest
+import numpy as np
 
 from blender_addon.handlers.terrain_chunking import (
     compute_chunk_lod,
@@ -257,6 +258,33 @@ class TestValidateTileSeams:
             (1, 0): [[1.0, 4.0], [3.0, 5.0]],
         }
         result = validate_world_tile_seams(tiles)
-        assert set(result.keys()) == {"seam_ok", "max_edge_delta", "issues", "tile_count"}
+        assert set(result.keys()) == {"seam_ok", "max_edge_delta", "issues", "tile_count", "channel_count"}
         assert result["tile_count"] == 2
 
+    def test_multichannel_tiles_report_per_channel_deltas(self):
+        left = [
+            [[0.0, 10.0], [1.0, 11.0]],
+            [[2.0, 12.0], [3.0, 13.0]],
+        ]
+        right = [
+            [[1.0, 11.0], [4.0, 14.0]],
+            [[3.0, 13.2], [5.0, 15.2]],
+        ]
+
+        result = validate_tile_seams(left, right, direction="east", tolerance=0.1)
+
+        assert result["match"] is False
+        assert result["sample_count"] == 2
+        assert result["channel_count"] == 2
+        assert result["per_channel_max_delta"] == [0.0, 0.1999999999999993]
+
+    def test_world_validator_accepts_multichannel_tiles(self):
+        tiles = {
+            (0, 0): np.array([[[0.0, 0.1], [1.0, 1.1]], [[2.0, 2.1], [3.0, 3.1]]], dtype=np.float64),
+            (1, 0): np.array([[[1.0, 1.1], [4.0, 4.1]], [[3.0, 3.1], [5.0, 5.1]]], dtype=np.float64),
+        }
+
+        result = validate_world_tile_seams(tiles)
+
+        assert result["seam_ok"] is True
+        assert result["channel_count"] == 2

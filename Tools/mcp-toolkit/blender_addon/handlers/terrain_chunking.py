@@ -20,6 +20,8 @@ import json
 import math
 from typing import Any
 
+import numpy as np
+
 
 # ---------------------------------------------------------------------------
 # LOD downsample
@@ -367,29 +369,51 @@ def validate_tile_seams(
     Returns:
         Dict describing seam agreement.
     """
-    if len(tile_a) == 0 or len(tile_b) == 0:
+    arr_a = np.asarray(tile_a, dtype=np.float64)
+    arr_b = np.asarray(tile_b, dtype=np.float64)
+
+    if arr_a.size == 0 or arr_b.size == 0:
         return {
             "match": False,
             "direction": direction,
             "sample_count": 0,
             "max_delta": None,
             "mean_delta": None,
+            "channel_count": 0,
+            "per_channel_max_delta": None,
+            "per_channel_mean_delta": None,
             "error": "empty tile input",
         }
-    if len(tile_a[0]) == 0 or len(tile_b[0]) == 0:
+    if arr_a.ndim < 2 or arr_b.ndim < 2:
         return {
             "match": False,
             "direction": direction,
             "sample_count": 0,
             "max_delta": None,
             "mean_delta": None,
-            "error": "empty tile input",
+            "channel_count": 0,
+            "per_channel_max_delta": None,
+            "per_channel_mean_delta": None,
+            "error": "tile input must have at least 2 dimensions",
         }
 
-    rows_a = len(tile_a)
-    cols_a = len(tile_a[0])
-    rows_b = len(tile_b)
-    cols_b = len(tile_b[0])
+    rows_a, cols_a = arr_a.shape[:2]
+    rows_b, cols_b = arr_b.shape[:2]
+    channel_shape_a = arr_a.shape[2:]
+    channel_shape_b = arr_b.shape[2:]
+
+    if channel_shape_a != channel_shape_b:
+        return {
+            "match": False,
+            "direction": direction,
+            "sample_count": 0,
+            "max_delta": None,
+            "mean_delta": None,
+            "channel_count": 0,
+            "per_channel_max_delta": None,
+            "per_channel_mean_delta": None,
+            "error": "channel shape mismatch",
+        }
 
     if direction in {"east", "west"}:
         if rows_a != rows_b:
@@ -401,10 +425,8 @@ def validate_tile_seams(
                 "mean_delta": None,
                 "error": "row count mismatch",
             }
-        seam_pairs = [
-            (float(tile_a[row][cols_a - 1]), float(tile_b[row][0]))
-            for row in range(rows_a)
-        ]
+        edge_a = arr_a[:, cols_a - 1, ...]
+        edge_b = arr_b[:, 0, ...]
     elif direction in {"north", "south"}:
         if cols_a != cols_b:
             return {
@@ -415,22 +437,28 @@ def validate_tile_seams(
                 "mean_delta": None,
                 "error": "column count mismatch",
             }
-        seam_pairs = [
-            (float(tile_a[rows_a - 1][col]), float(tile_b[0][col]))
-            for col in range(cols_a)
-        ]
+        edge_a = arr_a[rows_a - 1, :, ...]
+        edge_b = arr_b[0, :, ...]
     else:
         raise ValueError("direction must be one of: east, west, north, south")
 
-    deltas = [abs(a - b) for a, b in seam_pairs]
-    max_delta = max(deltas) if deltas else 0.0
-    mean_delta = sum(deltas) / len(deltas) if deltas else 0.0
+    delta = np.abs(edge_a - edge_b)
+    delta_samples = delta.reshape(delta.shape[0], -1)
+    per_channel_max = delta.max(axis=0)
+    per_channel_mean = delta.mean(axis=0)
+    max_delta = float(delta_samples.max()) if delta_samples.size else 0.0
+    mean_delta = float(delta_samples.mean()) if delta_samples.size else 0.0
+    channel_count = int(np.prod(channel_shape_a)) if channel_shape_a else 1
+
     return {
         "match": max_delta <= tolerance,
         "direction": direction,
-        "sample_count": len(deltas),
+        "sample_count": int(delta.shape[0]),
         "max_delta": max_delta,
         "mean_delta": mean_delta,
+        "channel_count": channel_count,
+        "per_channel_max_delta": np.asarray(per_channel_max).reshape(-1).tolist(),
+        "per_channel_mean_delta": np.asarray(per_channel_mean).reshape(-1).tolist(),
         "tolerance": tolerance,
     }
 

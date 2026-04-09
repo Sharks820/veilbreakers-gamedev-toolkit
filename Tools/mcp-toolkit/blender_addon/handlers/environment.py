@@ -50,6 +50,8 @@ from ._terrain_world import (
 # They remain available in _terrain_world for direct import if needed.
 from .terrain_chunking import validate_tile_seams
 from .terrain_materials import compute_world_splatmap_weights
+from .terrain_features import generate_waterfall
+from ._water_network import WaterNetwork
 
 
 # ---------------------------------------------------------------------------
@@ -1172,11 +1174,110 @@ def handle_generate_terrain_tile(params: dict) -> dict:
 # ---------------------------------------------------------------------------
 
 def handle_generate_world_terrain(params: dict) -> dict:
-    """DEPRECATED: Use handle_generate_terrain_tile for per-tile generation."""
-    raise NotImplementedError(
-        "handle_generate_world_terrain is deprecated. "
-        "Use handle_generate_terrain_tile for per-tile world generation."
+    """Compatibility wrapper over tile generation for legacy world-terrain callers."""
+    base_name = str(params.get("name", "WorldTerrain"))
+    start_tile_x = int(params.get("tile_x", params.get("start_tile_x", 0)))
+    start_tile_y = int(params.get("tile_y", params.get("start_tile_y", 0)))
+    tiles_x = max(1, int(params.get("tiles_x", params.get("world_tiles_x", 1))))
+    tiles_y = max(1, int(params.get("tiles_y", params.get("world_tiles_y", 1))))
+
+    tile_results: list[dict[str, Any]] = []
+    for offset_y in range(tiles_y):
+        for offset_x in range(tiles_x):
+            tile_x = start_tile_x + offset_x
+            tile_y = start_tile_y + offset_y
+            tile_params = dict(params)
+            tile_params["tile_x"] = tile_x
+            tile_params["tile_y"] = tile_y
+            if tiles_x > 1 or tiles_y > 1:
+                tile_params["name"] = f"{base_name}_{tile_x}_{tile_y}"
+            else:
+                tile_params["name"] = base_name
+            tile_results.append(handle_generate_terrain_tile(tile_params))
+
+    if len(tile_results) == 1:
+        result = dict(tile_results[0])
+        result["compatibility_mode"] = "world_to_tile_wrapper"
+        result["deprecated_command"] = True
+        return result
+
+    return {
+        "name": base_name,
+        "deprecated_command": True,
+        "compatibility_mode": "world_to_tile_wrapper",
+        "tile_count": len(tile_results),
+        "tiles_x": tiles_x,
+        "tiles_y": tiles_y,
+        "tiles": tile_results,
+    }
+
+
+def handle_generate_waterfall(params: dict) -> dict:
+    """Generate a waterfall from water-network context when available.
+
+    The legacy terrain-feature mesh generator remains as a compatibility
+    fallback, but public terrain-water authoring should supply a heightmap so
+    the waterfall is derived from hydrologic context.
+    """
+    heightmap_raw = params.get("heightmap")
+    if heightmap_raw is not None:
+        heightmap = np.asarray(heightmap_raw, dtype=np.float64)
+        if heightmap.ndim != 2:
+            raise ValueError("heightmap must be a 2D array")
+
+        tile_size = int(params.get("tile_size", max(min(heightmap.shape) - 1, 1)))
+        cell_size = float(params.get("cell_size", 1.0))
+        tile_x = int(params.get("tile_x", 0))
+        tile_y = int(params.get("tile_y", 0))
+        network = WaterNetwork.from_heightmap(
+            heightmap,
+            cell_size=cell_size,
+            world_origin_x=float(params.get("world_origin_x", 0.0)),
+            world_origin_y=float(params.get("world_origin_y", 0.0)),
+            tile_size=tile_size,
+            min_drainage_area=float(params.get("min_drainage_area", 500.0)),
+            river_threshold=float(params.get("river_threshold", 2000.0)),
+            lake_min_area=float(params.get("lake_min_area", 100.0)),
+            seed=int(params.get("seed", 42)),
+        )
+        features = network.get_tile_water_features(
+            tile_x,
+            tile_y,
+            tile_size=tile_size,
+            cell_size=cell_size,
+        )
+        waterfalls = features.get("waterfalls", [])
+        if not waterfalls:
+            raise ValueError("No waterfall candidates were detected in the supplied tile")
+
+        chosen = waterfalls[0]
+        fallback = generate_waterfall(
+            height=max(float(chosen["drop"]), 1.0),
+            width=max(float(chosen["width"]), 1.0),
+            pool_radius=max(float(params.get("pool_radius", chosen["width"] * 1.5)), 1.0),
+            num_steps=int(params.get("num_steps", 3)),
+            has_cave_behind=bool(params.get("has_cave_behind", True)),
+            seed=int(params.get("seed", 42)),
+        )
+        fallback["authoring_path"] = "water_network_derived"
+        fallback["waterfall_feature"] = chosen
+        fallback["waterfall_candidates"] = len(waterfalls)
+        return fallback
+
+    legacy = generate_waterfall(
+        height=params.get("height", 10.0),
+        width=params.get("width", 3.0),
+        pool_radius=params.get("pool_radius", 4.0),
+        num_steps=params.get("num_steps", 3),
+        has_cave_behind=params.get("has_cave_behind", True),
+        seed=params.get("seed", 42),
     )
+    legacy["authoring_path"] = "legacy_geometry_fallback"
+    legacy["warning"] = (
+        "env_generate_waterfall should be driven from heightmap/water-network "
+        "context; this call used legacy geometry fallback."
+    )
+    return legacy
 
 
 def handle_stitch_terrain_edges(params: dict) -> dict:

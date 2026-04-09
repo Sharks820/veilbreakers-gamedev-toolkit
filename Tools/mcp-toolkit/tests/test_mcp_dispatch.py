@@ -68,6 +68,43 @@ class TestBlenderSceneDispatch:
             result = await blender_scene(action="list_objects")
             mock_conn.send_command.assert_any_call("list_objects")
 
+    @pytest.mark.asyncio
+    async def test_save_project_dispatches(self):
+        mock_conn = _make_mock_connection()
+        with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
+            from veilbreakers_mcp.blender_server import blender_scene
+            result = await blender_scene(action="save_project", filepath="C:/tmp/test.blend")
+            mock_conn.send_command.assert_any_call(
+                "save_project",
+                {
+                    "filepath": "C:/tmp/test.blend",
+                    "incremental": False,
+                    "copy": False,
+                    "compress": True,
+                    "verify": True,
+                    "compute_hash": False,
+                },
+            )
+
+    @pytest.mark.asyncio
+    async def test_verify_project_save_dispatches(self):
+        mock_conn = _make_mock_connection()
+        with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
+            from veilbreakers_mcp.blender_server import blender_scene
+            result = await blender_scene(
+                action="verify_project_save",
+                filepath="C:/tmp/test.blend",
+                expect_current_file=True,
+            )
+            mock_conn.send_command.assert_any_call(
+                "verify_project_save",
+                {
+                    "filepath": "C:/tmp/test.blend",
+                    "compute_hash": False,
+                    "expect_current_file": True,
+                },
+            )
+
 
 # ---------------------------------------------------------------------------
 # blender_object dispatch

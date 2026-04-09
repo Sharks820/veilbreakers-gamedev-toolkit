@@ -60,14 +60,14 @@ def _get_source(func) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool 1: blender_scene (4 actions)
+# Tool 1: blender_scene (6 actions)
 # ---------------------------------------------------------------------------
 
 
 class TestTool1BlenderScene:
-    """blender_scene: inspect, clear, configure, list_objects."""
+    """blender_scene: inspect, clear, configure, list_objects, save_project, verify_project_save."""
 
-    EXPECTED_ACTIONS = {"inspect", "clear", "configure", "list_objects"}
+    EXPECTED_ACTIONS = {"inspect", "clear", "configure", "list_objects", "save_project", "verify_project_save"}
 
     def test_function_exists_and_is_async(self):
         assert asyncio.iscoroutinefunction(blender_scene)
@@ -94,6 +94,8 @@ class TestTool1BlenderScene:
             "clear": "clear_scene",
             "configure": "configure_scene",
             "list_objects": "list_objects",
+            "save_project": "save_project",
+            "verify_project_save": "verify_project_save",
         }
         for action, cmd_key in expected_commands.items():
             assert cmd_key in COMMAND_HANDLERS, (
