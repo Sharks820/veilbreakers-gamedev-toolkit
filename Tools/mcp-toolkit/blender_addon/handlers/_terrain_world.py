@@ -153,20 +153,22 @@ def validate_tile_seams(
     """Validate shared-edge equality for a set of extracted tiles."""
     issues: list[str] = []
     max_delta = 0.0
+    channel_count = 1
 
     for (tx, ty), tile in tiles.items():
         tile_arr = np.asarray(tile, dtype=np.float64)
-        if tile_arr.ndim != 2:
-            issues.append(f"tile ({tx}, {ty}) is not 2D")
+        if tile_arr.ndim < 2:
+            issues.append(f"tile ({tx}, {ty}) must have at least 2 dimensions")
             continue
+        channel_count = max(channel_count, int(np.prod(tile_arr.shape[2:]) or 1))
 
         east = tiles.get((tx + 1, ty))
         if east is not None:
             east_arr = np.asarray(east, dtype=np.float64)
-            if east_arr.shape != tile_arr.shape:
+            if east_arr.shape[:2] != tile_arr.shape[:2] or east_arr.shape[2:] != tile_arr.shape[2:]:
                 issues.append(f"tile ({tx}, {ty}) east neighbor shape mismatch")
             else:
-                delta = np.max(np.abs(tile_arr[:, -1] - east_arr[:, 0]))
+                delta = np.max(np.abs(tile_arr[:, -1, ...] - east_arr[:, 0, ...]))
                 max_delta = max(max_delta, float(delta))
                 if delta > atol:
                     issues.append(f"east seam mismatch at ({tx}, {ty}) -> ({tx + 1}, {ty}): {delta:.8f}")
@@ -174,10 +176,10 @@ def validate_tile_seams(
         north = tiles.get((tx, ty + 1))
         if north is not None:
             north_arr = np.asarray(north, dtype=np.float64)
-            if north_arr.shape != tile_arr.shape:
+            if north_arr.shape[:2] != tile_arr.shape[:2] or north_arr.shape[2:] != tile_arr.shape[2:]:
                 issues.append(f"tile ({tx}, {ty}) north neighbor shape mismatch")
             else:
-                delta = np.max(np.abs(tile_arr[-1, :] - north_arr[0, :]))
+                delta = np.max(np.abs(tile_arr[-1, :, ...] - north_arr[0, :, ...]))
                 max_delta = max(max_delta, float(delta))
                 if delta > atol:
                     issues.append(f"north seam mismatch at ({tx}, {ty}) -> ({tx}, {ty + 1}): {delta:.8f}")
@@ -187,6 +189,7 @@ def validate_tile_seams(
         "max_edge_delta": max_delta,
         "issues": issues,
         "tile_count": len(tiles),
+        "channel_count": channel_count,
     }
 
 

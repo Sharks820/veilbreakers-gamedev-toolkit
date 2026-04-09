@@ -172,7 +172,8 @@ def apply_hydraulic_erosion(
                 _erode_brush(result, ix, iy, erode_amount, radius, rows, cols)
 
             # Update speed and water
-            speed = math.sqrt(max(speed * speed + h_diff, 0.01))
+            normalized_h_diff = h_diff / max(input_range, 1e-12)
+            speed = math.sqrt(max(speed * speed + normalized_h_diff, 0.01))
             water *= (1 - evaporation)
 
             px = new_px

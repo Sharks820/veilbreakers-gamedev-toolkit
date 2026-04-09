@@ -7,6 +7,8 @@ from .scene import (
     handle_clear_scene,
     handle_configure_scene,
     handle_list_objects,
+    handle_save_project,
+    handle_verify_project_save,
     handle_setup_world,
     handle_add_light,
     handle_add_camera,
@@ -26,6 +28,7 @@ from .objects import (
 )
 from .viewport import (
     handle_get_viewport_screenshot,
+    handle_render_angle,
     handle_render_contact_sheet,
     handle_set_shading,
     handle_navigate_camera,
@@ -169,6 +172,7 @@ from .environment import (
     handle_generate_terrain,
     handle_generate_terrain_tile,
     handle_generate_world_terrain,
+    handle_generate_waterfall,
     handle_stitch_terrain_edges,
     handle_paint_terrain,
     handle_carve_river,
@@ -252,7 +256,6 @@ from .coastline import (  # noqa: F401 -- coastline terrain generation
 )
 from .terrain_features import (  # noqa: F401 -- terrain feature generators
     generate_canyon,
-    generate_waterfall,
     generate_cliff_face,
     generate_swamp_terrain,
     generate_natural_arch,
@@ -832,6 +835,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "clear_scene": handle_clear_scene,
     "configure_scene": handle_configure_scene,
     "list_objects": handle_list_objects,
+    "save_project": handle_save_project,
+    "verify_project_save": handle_verify_project_save,
     # Scene/World settings
     "setup_world": handle_setup_world,
     "add_light": handle_add_light,
@@ -1111,14 +1116,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         num_side_caves=params.get("num_side_caves", 3),
         seed=params.get("seed", 42),
     ),
-    "env_generate_waterfall": lambda params: generate_waterfall(
-        height=params.get("height", 10.0),
-        width=params.get("width", 3.0),
-        pool_radius=params.get("pool_radius", 4.0),
-        num_steps=params.get("num_steps", 3),
-        has_cave_behind=params.get("has_cave_behind", True),
-        seed=params.get("seed", 42),
-    ),
+    "env_generate_waterfall": handle_generate_waterfall,
     "env_generate_cliff_face": lambda params: generate_cliff_face(
         width=params.get("width", 20.0),
         height=params.get("height", 15.0),
@@ -1698,7 +1696,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     # (d) Performance budget check — stub (no handler exists yet)
     "performance_budget_check": lambda params: {"status": "ok", "budget": "not_implemented"},
     # (e) Render angle — alias to viewport screenshot
-    "render_angle": handle_get_viewport_screenshot,
+    "render_angle": handle_render_angle,
     # --- Naming mismatch aliases ---
     # (f) Server sends texture_mix_weathering_over_texture, handler registered as weathering_mix_over_texture
     "texture_mix_weathering_over_texture": handle_mix_weathering_over_texture,
