@@ -14,6 +14,7 @@ outside Blender.
 
 from __future__ import annotations
 
+import enum
 import hashlib
 import json
 from dataclasses import dataclass, field
@@ -30,6 +31,69 @@ from typing import (
 )
 
 import numpy as np
+
+
+# ---------------------------------------------------------------------------
+# Bundle A supplements (Addendum 1.B.1 + Addendum 2.A + Addendum 3)
+# ---------------------------------------------------------------------------
+
+
+class ErosionStrategy(enum.Enum):
+    """Erosion orchestration strategy (Addendum 3.B.1).
+
+    EXACT — erode full world heightmap, then split. Bit-exact seams.
+    TILED_PADDED — per-tile erosion with overlap margins.
+    TILED_DISTRIBUTED_HALO — distributed erosion with halo blending for
+        worlds too large to erode in a single pass.
+    """
+
+    EXACT = "exact"
+    TILED_PADDED = "tiled_padded"
+    TILED_DISTRIBUTED_HALO = "tiled_distributed_halo"
+
+
+@dataclass(frozen=True)
+class SectorOrigin:
+    """Km-scale anchor for floating-origin coordinate system (Addendum 3.B.2).
+
+    For worlds > 10 km, raw world coordinates lose float32 precision at
+    the render boundary. Sectors carry their own anchor so tile world
+    coordinates are stored relative to a nearby km-scale origin.
+    """
+
+    name: str
+    world_x_m: float
+    world_y_m: float
+
+
+@dataclass
+class WorldHeightTransform:
+    """Normalized ↔ world heights adapter (Addendum 3.B.6).
+
+    Path solvers (river A*, road placement) operate on ``[0, 1]`` heights
+    for math simplicity. This adapter makes the conversion explicit and
+    reversible so that signed/negative-elevation world heights round-trip
+    without collapsing to zero — the persistent scatter-altitude bug.
+    """
+
+    world_min: float
+    world_max: float
+    world_range: float = 0.0
+
+    def __post_init__(self) -> None:
+        rng = float(self.world_max) - float(self.world_min)
+        # Guard against degenerate/zero range — keep adapter usable.
+        self.world_range = rng if rng != 0.0 else 1.0
+        self.world_min = float(self.world_min)
+        self.world_max = float(self.world_max)
+
+    def to_normalized(self, world_heights: np.ndarray) -> np.ndarray:
+        arr = np.asarray(world_heights, dtype=np.float64)
+        return (arr - self.world_min) / self.world_range
+
+    def from_normalized(self, normalized: np.ndarray) -> np.ndarray:
+        arr = np.asarray(normalized, dtype=np.float64)
+        return arr * self.world_range + self.world_min
 
 
 # ---------------------------------------------------------------------------
@@ -206,6 +270,10 @@ class TerrainMaskStack:
     rock_hardness: Optional[np.ndarray] = None
     snow_line_factor: Optional[np.ndarray] = None
 
+    # Bundle A supplements (Addendum 1.B.1 erosion mask preservation)
+    sediment_accumulation_at_base: Optional[np.ndarray] = None
+    pool_deepening_delta: Optional[np.ndarray] = None
+
     # -- Unity integratable channels (AAA round-trip contract) --
     # Per-layer splatmap weights (Unity Terrain Layer alphamaps). Shape (H, W, L).
     splatmap_weights_layer: Optional[np.ndarray] = None
@@ -286,6 +354,9 @@ class TerrainMaskStack:
             "strata_orientation",
             "rock_hardness",
             "snow_line_factor",
+            # Bundle A supplements (Addendum 1.B.1)
+            "sediment_accumulation_at_base",
+            "pool_deepening_delta",
             # Unity-ready channels
             "splatmap_weights_layer",
             "heightmap_raw_u16",
@@ -317,6 +388,25 @@ class TerrainMaskStack:
             raise ValueError(
                 f"coordinate_system must be 'z-up' or 'y-up', got {self.coordinate_system!r}"
             )
+        # Addendum 2.A.1 tile-resolution contract:
+        # when tile_size > 0 the height field SHOULD be (tile_size + 1, tile_size + 1)
+        # (power-of-2+1 Unity-compatible shared-edge contract). Legacy callers
+        # created stacks with shape == (tile_size, tile_size); those are still
+        # accepted for backward compat, but a shape that matches neither is a bug.
+        # tile_size == 0 is allowed for non-tile mask stacks.
+        if self.tile_size and self.tile_size > 0:
+            ts = int(self.tile_size)
+            expected_new = (ts + 1, ts + 1)
+            expected_legacy = (ts, ts)
+            # Only enforce the square tile contract for square shapes — legacy
+            # non-tile mask stacks (e.g. rows != cols) are allowed through.
+            if h.shape[0] == h.shape[1] and h.shape not in (expected_new, expected_legacy):
+                raise ValueError(
+                    f"TerrainMaskStack height shape {h.shape} violates tile "
+                    f"resolution contract: tile_size={self.tile_size} requires "
+                    f"{expected_new} (new Addendum 2.A.1 contract) or "
+                    f"{expected_legacy} (legacy)."
+                )
 
     # -- core accessors -----------------------------------------------------
 
@@ -903,6 +993,9 @@ class UnknownPassError(KeyError):
 
 __all__ = [
     "BBox",
+    "ErosionStrategy",
+    "SectorOrigin",
+    "WorldHeightTransform",
     "HeroFeatureRef",
     "WaterfallChainRef",
     "HeroFeatureBudget",

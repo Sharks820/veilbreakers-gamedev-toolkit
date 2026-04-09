@@ -1,7 +1,7 @@
 bl_info = {
     "name": "VeilBreakers MCP Bridge",
     "author": "VeilBreakers",
-    "version": (0, 1, 0),
+    "version": (1, 0, 0),
     "blender": (4, 2, 0),
     "location": "View3D > Sidebar > VeilBreakers",
     "description": "MCP bridge for AI-driven game development",

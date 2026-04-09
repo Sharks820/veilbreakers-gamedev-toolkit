@@ -1,0 +1,11 @@
+{
+  "name": "aaa_open_world",
+  "extends": "hero_shot",
+  "erosion_iterations": 48,
+  "erosion_strategy": "hydraulic_thermal_wind",
+  "checkpoint_retention": 12,
+  "erosion_margin_cells": 32,
+  "splatmap_bit_depth": 16,
+  "heightmap_bit_depth": 32,
+  "shadow_clipmap_bit_depth": 16
+}
