@@ -4272,15 +4272,688 @@ All 30 gaps closed by this addendum.
 
 ---
 
+## Addendum 2 — Deeper Gap Closure (2026-04-08, second revision)
+
+After committing Addendum 1, a deeper audit against `docs/terrain_pipeline_handoff_for_claude.md` (994 lines, previously only partially read) and a full re-audit of `docs/terrain_tool_bug_audit_2026-04-07.md` surfaced 26 additional items. All are closed by Addendum 2.
+
+This addendum is binding with the same authority as sections 1–41 and Addendum 1.
+
+---
+
+### Addendum 2.A — Architectural contract clarifications
+
+These are non-negotiable mathematical and structural contracts the handoff doc enumerated but Addendum 1 did not explicitly pin.
+
+#### 2.A.1 Tile resolution contract
+
+- **Tile dimensions:** A tile heightmap is `(tile_size + 1) × (tile_size + 1)` cells, where `tile_size` is one of `{256, 512, 1024}` (power-of-2).
+- **Valid Unity-compatible tile sizes:** 257, 513, 1025 vertices per side (power-of-2+1).
+- **Shared edge vertices:** The last vertex column of `Tile(tx, ty)` and the first vertex column of `Tile(tx+1, ty)` sample the **same world coordinate** and therefore hold identical heights by construction. Same for rows between `Tile(tx, ty)` and `Tile(tx, ty+1)`.
+- **Corner sharing:** The `(tile_size, tile_size)` corner of `Tile(tx, ty)`, the `(0, tile_size)` corner of `Tile(tx+1, ty)`, the `(tile_size, 0)` corner of `Tile(tx, ty+1)`, and the `(0, 0)` corner of `Tile(tx+1, ty+1)` all sample the same world coordinate.
+- **This is why stitching is fallback-only:** with a deterministic world field + consistent normalization, seams match by construction. Stitching exists only for sub-mm FP artifacts, LOD mismatch, and import precision loss.
+
+Enforced in `TerrainMaskStack.__post_init__` by asserting `height.shape == (tile_size + 1, tile_size + 1)` when `tile_size` is set. Added to the dataclass contract in §5.1.
+
+#### 2.A.2 fBm theoretical max amplitude formula
+
+Global normalization constant for deterministic, per-tile-invariant height scaling:
+
+```python
+def theoretical_max_amplitude(persistence: float, octaves: int) -> float:
+    """Deterministic max amplitude for fBm normalization.
+
+    Per-tile [0,1] normalization breaks tiling because different tiles
+    sample different local maxima. Using this theoretical upper bound as
+    the global normalization constant makes height values identical across
+    tiles for the same world coordinate."""
+    if abs(persistence - 1.0) < 1e-10:
+        return float(octaves)
+    return (1.0 - persistence ** octaves) / (1.0 - persistence)
+```
+
+- Added to `Bundle G` (`_terrain_noise.py` refactor) as a required helper.
+- Every fBm-based generator must either call this or use the `world_unit` mode that bypasses normalization entirely.
+- Anti-pattern: per-tile `(h - h.min()) / (h.max() - h.min())` normalization is forbidden in any multi-tile code path.
+
+#### 2.A.3 Erode-before-split rationale
+
+Per-tile erosion with overlap margins cannot guarantee bit-exact seams because droplet random walks are independent per tile. Erode-before-split solves this deterministically:
+
+```
+generate_world_heightmap(full_region) -> world_hmap
+apply_flatten_zones(world_hmap)           # building foundations
+apply_canyon_river_carves(world_hmap)     # A* paths on world
+erode_world_heightmap(world_hmap)          # full region erosion
+compute_flow_map(world_hmap)               # drainage on full world
+detect_cliff_edges(world_hmap)             # cliff placement list
+
+for each tile (tx, ty):
+    tile_heightmap = extract_tile(world_hmap, tx, ty, tile_size)
+    tile_flow_map  = extract_tile(world_flow, tx, ty, tile_size)
+    # per-tile mesh, biome paint, cliff overlays, scatter
+```
+
+- Flow maps, moisture proxies, deposition masks, wetness masks, bank instability, talus, and cliff candidate masks are **all computed on the full world heightmap before tile split** and then extracted per-tile using the same `extract_tile` mechanism as heights.
+- Reason: flow, drainage, deposition all cross tile boundaries. Per-tile computation truncates drainage basins at tile edges.
+- Tests T1, T2, T3 from §2.H enforce this.
+
+#### 2.A.4 World expansion strategy
+
+When adding `Tile(2, 0)` to an existing `2×2` world:
+
+1. **Same seed + world-space noise = deterministic.** Regenerating the full `3×2` world heightmap produces bit-identical values in the original `2×2` region.
+2. **Erode-before-split requires re-eroding the expanded region.** The original 2×2 erosion result is NOT reusable because the new tile changes drainage patterns at the boundary.
+3. **Production approach:** regenerate + re-erode the full region every expansion. For a 10×10 world at 257 cells/tile (2570×2570 heightmap), this is ~5 seconds and is acceptable.
+4. **Optional optimization:** store pre-erosion world heightmap on disk, extend it in-place on expansion, and re-erode only. Or use overlap+blend in erosion for the new tiles only. These optimizations ship with Bundle M (iteration velocity) when the basic flow is stable.
+
+Added as `Bundle M.1.B.11` supplement.
+
+#### 2.A.5 Noise repeat distance
+
+The fallback Perlin implementation (`_PermTableNoise` in `_terrain_noise.py`) uses a 256-element permutation table with `& 255` wrapping. Noise **repeats every 256 grid cells**. At default `scale=100.0`, the repeat distance is `256 × scale = 25,600` world units (25.6 km).
+
+- For worlds ≤ 25 km, the repeat is invisible.
+- For worlds > 25 km: override `noise2_array()` in `_OpenSimplexWrapper` to use the real `opensimplex` backend (hash-based, never repeats), or increase the permutation table size.
+- Added to `Bundle G` acceptance: if `opensimplex` is installed, the banded noise pipeline must use it for `noise2_array`, not the PermTable fallback.
+
+#### 2.A.6 Erosion math scaling direction
+
+When removing the `np.clip(result, 0, 1)` from `apply_hydraulic_erosion`:
+
+- **`capacity`** (default 4.0) — DO NOT scale. Height differences grow automatically with `height_range`, so sediment carrying scales proportionally without adjustment.
+- **`min_slope`** (default 0.01) — SCALE by `height_range`. In `[0,1]` it was "1% of max height"; in world units it should become `0.01 × height_range` (e.g., 0.2 on a 20m terrain) to preserve the proportional threshold.
+
+```python
+def apply_hydraulic_erosion_masks(
+    heightmap: np.ndarray,
+    *,
+    height_range: Optional[float] = None,
+    capacity: float = 4.0,
+    min_slope: float = 0.01,
+    ...
+) -> ErosionMasks:
+    effective_min_slope = min_slope * height_range if height_range else min_slope
+    # capacity remains unchanged
+    ...
+```
+
+Pinned in `Bundle A` supplements (Addendum 2.D.1).
+
+#### 2.A.7 Canonical 12-step `handle_generate_world_terrain` sequence
+
+Binding execution order. Every implementation of the world-terrain orchestrator must follow this sequence:
+
+```
+1.  Parse params: tile_grid, cell_size, seed, terrain_type, intent state
+2.  Compute world region: total_samples_x = tile_grid_x * tile_size + 1
+3.  generate_world_heightmap() -> world heightmap in WORLD UNITS
+4.  Apply flatten zones on world heightmap (building foundations)
+5.  Apply canyon/river carving on world heightmap (A* paths)
+6.  erode_world_heightmap() -> eroded heightmap + ErosionMasks
+7.  compute_flow_map() on eroded world heightmap -> flow, drainage
+8.  detect_cliff_edges(), detect_cave_candidates(), detect_waterfall_lip_candidates()
+    on world heightmap -> candidate lists
+9.  FOR EACH tile (tx, ty):
+    9a. extract_tile(world_heightmap, tx, ty)
+    9b. extract_tile(world_flow_map, tx, ty)
+    9c. extract_tile(world_erosion_masks, tx, ty) for every mask channel
+    9d. create_terrain_tile_mesh() at world position
+    9e. paint_biome_materials() using world-space rules
+    9f. generate cliff overlay meshes at world positions
+    9g. scatter vegetation (world-space Poisson disk)
+    9h. scatter props (world-space context scatter)
+10. Generate road meshes in world space (span tiles)
+11. Generate water bodies in world space (span tiles)
+12. validate_tile_seams() on all adjacent pairs; return tile list + metadata
+```
+
+Steps 3–8 operate on the **full world heightmap** before splitting. Steps 9a–9h operate **per-tile**. Steps 10–11 operate in **world space across all tiles**. Step 12 is a hard gate.
+
+Added to `Bundle A` as a mandatory test: `test_terrain_world_orchestration.py` asserts this exact sequence on a 2×2 fixture.
+
+#### 2.A.8 "Generate Adjacent Tile" contract
+
+When a user generates `Tile(1, 0)` next to existing `Tile(0, 0)`, the pipeline must satisfy all 10 requirements:
+
+| Requirement | How it's met |
+|---|---|
+| Same heights at shared edge | Same seed + world-space noise → identical values at shared coordinates |
+| No per-tile normalization drift | `theoretical_max_amplitude()` global constant |
+| Connected erosion | Erode-before-split on full multi-tile region |
+| Consistent biome painting | World-space altitude/slope rules |
+| Continuous vegetation | World-space Poisson disk, same seed |
+| Roads can span tiles | World-space road network, mesh in world coords |
+| Rivers can span tiles | A* on world heightmap, carve before split |
+| No stitching needed | Correct contract → edges match by construction |
+| Compatible LOD | Shared edge vertices + skirts for mixed LOD |
+| Resolution matches Unity | Power-of-2+1 (257, 513, 1025) |
+
+Enforced by `test_adjacent_tile_contract.py` in Bundle A test suite.
+
+---
+
+### Addendum 2.B — Extended bug fix list
+
+#### 2.B.1 Bug #4 extended: ALL `[0,1]` clips in `terrain_advanced.py`
+
+Addendum 1 covered lines 896 and 1530. The bug audit lists four clip sites total:
+
+- `terrain_advanced.py:793` — must be audited and removed if clipping world-unit heights
+- `terrain_advanced.py:896` — `compute_erosion_brush` return clip (already in Bundle B)
+- `terrain_advanced.py:1483` — must be audited and removed if clipping world-unit heights
+- `terrain_advanced.py:1530` — `flatten_terrain_zone` return clip (already in Bundle B)
+
+Bundle B acceptance updated: all four sites audited; clips removed from world-unit paths; if an editing path genuinely requires normalized domain, wrap it with explicit normalize→edit→de-normalize steps.
+
+Extended consumer audit:
+
+- `handle_erosion_paint()` — builds a mesh-derived heightmap and feeds it through `compute_erosion_brush()`; must route through new contract
+- `handle_terrain_flatten_zone()` — used for building foundations; must honor world-unit heights
+- `flatten_multiple_zones()` — same requirement as above
+- Docstrings in `terrain_advanced.py` that describe heightmaps as "normalized `[0,1]`" must be updated to "world-unit meters"
+
+**Decision:** pick world-unit everywhere. The normalize-wrapper path is explicitly forbidden because it reintroduces per-region normalization state that violates determinism. If a legacy caller requires the old domain, that caller is migrated, not the helper.
+
+Added regression tests:
+
+- `test_terrain_advanced_world_units.py` — on every helper, assert world-unit heights pass through unchanged
+- `test_handle_erosion_paint_preserves_scale.py` — build a mesh with max height 47.3, run erosion paint, assert result max ≤ 47.3 within erosion tolerance
+- `test_flatten_multiple_zones_preserves_scale.py` — same for flatten zones
+
+#### 2.B.2 Bug #9: Metadata contract fix — `object_location` vs `position`
+
+Current state in `environment.py:1005, 1008, 1148, 1152` — the tile handler returns BOTH `object_location` (center of mesh) and `position` (min corner bounds). Downstream consumers have no way to know which to use.
+
+**Decision:** single canonical contract. Every tile handler must return:
+
+```python
+{
+    "tile_transform": {
+        "origin_world": [x, y, z],        # Blender object.location — authoritative
+        "min_corner_world": [x, y, z],    # bbox min in world coords
+        "max_corner_world": [x, y, z],    # bbox max in world coords
+        "tile_coords": [tile_x, tile_y],
+        "tile_size_world": float,          # cells * cell_size
+        "convention": "object_origin_at_min_corner",  # or "object_origin_at_center"
+    },
+    # ... rest of result ...
+}
+```
+
+- `tile_transform.origin_world` is the Blender `object.location` of the tile mesh. This is the **single source of truth** for "where is this tile in the world".
+- `min_corner_world` and `max_corner_world` are derived bbox values. Consumers use these for range queries but MUST NOT use them as the mesh origin.
+- `convention` makes the coordinate interpretation explicit so downstream tooling cannot guess.
+- Old `object_location` and `position` keys are removed in Bundle A. Backwards-compat shim in `environment.py` emits a deprecation warning if a caller asks for them.
+
+Added to Bundle A compliance (`§D.1 additions`).
+
+---
+
+### Addendum 2.C — Migration gaps (legacy code paths)
+
+The handoff doc enumerated dangerous legacy paths still active. These must be migrated or neutralized as part of the bundles that touch the affected files.
+
+#### 2.C.1 Legacy curve-road path (4 active callers, `worldbuilding.py`)
+
+Bundle R supplement (new): neutralize the curve-road path because it creates CURVE+bevel cylinders that look like pipe segments.
+
+- `worldbuilding.py:6144` — `handle_generate_location` roads → migrate to `_create_road_with_curbs`
+- `worldbuilding.py:6575` — `handle_generate_settlement` narrow road fallback → migrate to `_create_road_with_curbs`
+- `worldbuilding.py:6796` — `handle_compose_world_map` world map roads → migrate to `_create_road_with_curbs`
+- `worldbuilding.py:3535` — `_create_curve_from_points` wrapper → dead code, delete
+- Mark `_create_curve_path` with `@deprecated`; remove after all four callers migrated
+- Regression test: `test_worldbuilding_no_curve_roads.py` greps the module for `bpy.ops.curve.primitive_bezier_curve_add` and other curve-creation idioms, fails if any survive
+
+Added as Bundle R compliance item.
+
+#### 2.C.2 Box/cube fallbacks that hide failures
+
+Two fallback paths create 8-vertex cubes when generation raises, hiding regressions. Both removed:
+
+- `worldbuilding_layout.py:621-658` — Hearthvale building fallback → replace with explicit error logging + skip (never create a cube proxy)
+- `worldbuilding_layout.py:715-738` — Perimeter wall fallback → replace with explicit error logging + skip
+
+Rationale: silent fallbacks hide regressions. AAA validation requires failures to surface loudly, not masquerade as successes.
+
+Added as Bundle D compliance item (Bundle D owns validation / hard-fail philosophy).
+
+#### 2.C.3 Multi-biome path alignment
+
+`environment.py:1213 handle_generate_multi_biome_world` is a SECOND full terrain orchestrator that:
+
+1. Builds world spec from `_biome_grammar.generate_world_map_spec()`
+2. Calls `handle_generate_terrain()`
+3. Applies Voronoi biome vertex colors and materials
+4. At `environment.py:1321-1324`, imports and calls `scatter_biome_vegetation` (the mesh-backed helper)
+
+**Risk:** if Bundle A routes `handle_generate_terrain` through the new pipeline but leaves this multi-biome orchestrator untouched, the multi-biome path silently bypasses all new passes.
+
+**Action:** in Bundle A, `handle_generate_multi_biome_world` is refactored to call the new `TerrainPassController.run_pipeline()` with the biome grammar output as the `TerrainIntentState.biome_rules` field. Backwards compatibility maintained via a minimal pipeline: `macro_world → structural_masks → erosion → material_zoning → asset_population`.
+
+Regression test: `test_multi_biome_world_regression.py` asserts `handle_generate_multi_biome_world` still produces a valid scene and now populates the mask stack.
+
+Added as Bundle A compliance item.
+
+#### 2.C.4 Worldmap composer path (third orchestrator)
+
+`__init__.py:991` registers `world_compose_world_map` → `worldbuilding.handle_compose_world_map`. This is a THIRD terrain orchestration path. Not called from `compose_map` but callable directly via MCP.
+
+**Action:** low priority — this path is not in the main flow. Must be updated when curve-road migration (2.C.1) lands because it's one of the four curve-road callers. Otherwise no action required.
+
+Added as a Bundle R compliance note (not a hard item).
+
+---
+
+### Addendum 2.D — Vegetation type mapping
+
+The handoff doc identified 14 missing vegetation types in `VEGETATION_GENERATOR_MAP`. Four are critical (used by default biome rules), ten are deferred.
+
+#### 2.D.1 Critical aliases to add in Bundle A supplement
+
+Add to `VEGETATION_GENERATOR_MAP` in `_mesh_bridge.py`:
+
+| Type | Biome users | Map to |
+|---|---|---|
+| `fern` | thornwood_forest, deep_forest ground cover | `generate_shrub_mesh(size=0.3, branch_count=5)` |
+| `moss` | thornwood_forest, corrupted_swamp, 4+ biomes | `generate_grass_clump_mesh(blade_count=12, height=0.08, spread=0.2)` |
+| `vine` | thornwood_forest, corrupted_swamp | `generate_root_mesh(size=0.4)` |
+| `dead_tree` | `_TREE_VEG_TYPES` in environment_scatter.py | `_lsystem_tree_generator(tree_type="dead", iterations=4, leaf_type=None)` |
+
+#### 2.D.2 Deferred aliases (add when biomes are active)
+
+| Type | Biome | Map to |
+|---|---|---|
+| `gravestone` | cemetery | Custom mesh (not terrain scope — defer to asset pipeline) |
+| `ember_plant` | ashen_wastes | `generate_mushroom_mesh` variant |
+| `frost_lichen` | frozen_hollows | `generate_grass_clump_mesh` variant |
+| `tumbleweed` | desert | `generate_grass_clump_mesh` variant |
+| `crystal` | crystal_cavern | `generate_rock_mesh` variant |
+| `ivy_growth` | building overrun | defer — building scope |
+| `moss_patch` | building overrun | defer — building scope |
+| `vine_curtain` | building overrun | defer — building scope |
+| `root_intrusion` | building overrun | defer — building scope |
+| `fern_growth` | building overrun | defer — building scope |
+
+Added as Bundle A compliance item (4 critical aliases) and Bundle E deferred registry (10 deferred).
+
+---
+
+### Addendum 2.E — Terrain feature generator wiring
+
+The handoff doc noted **11 pure-logic feature generators** that return `MeshSpec` dicts but are NOT called by `compose_map`. Each needs explicit wiring in the pass-based pipeline.
+
+#### 2.E.1 Wire in this plan (mapped to bundles)
+
+| Generator | File:Line | Bundle | Pass |
+|---|---|---|---|
+| `generate_cliff_face()` | terrain_features.py:446 | B | `hero_features` + `structural_geometry` |
+| `generate_canyon()` | terrain_features.py:69 | B + H | morphology template (`canyon`) + heightmap carve before erosion |
+| `generate_waterfall()` | terrain_features.py:254 | C | `water_network` pass (fallback only; WaterNetwork-derived is primary) |
+| `generate_coastline()` | coastline.py:433 | I | `coastal` submodule |
+| `generate_cave_entrance_mesh()` | _terrain_depth.py:200 | F | `structural_geometry` pass |
+| `generate_natural_arch()` | terrain_features.py:? | H | morphology template (`natural_bridge`) |
+| `generate_swamp_terrain()` | terrain_features.py:? | O | `build_wetlands` |
+| `generate_geyser()` | terrain_features.py:? | O | `build_hot_springs` |
+| `generate_sinkhole()` | terrain_features.py:? | I | `terrain_karst` (sinkhole archetype) |
+| `generate_floating_rocks()` | terrain_features.py:? | Deferred | specialized fantasy biome, not AAA baseline |
+| `generate_ice_formation()` | terrain_features.py:? | I | glacial module extension |
+| `generate_lava_flow()` | terrain_features.py:? | Deferred | specialized biome |
+
+Every "wire in bundle X" item becomes a compliance checklist entry in that bundle's acceptance criteria.
+
+#### 2.E.2 MeshSpec return contract
+
+All 11 generators return:
+
+```python
+{
+    "mesh": {"vertices": [(x,y,z), ...], "faces": [(v0,v1,v2,...), ...]},
+    "materials": ["mat_name1", ...],
+    "material_indices": [0, 1, ...],
+    "vertex_count": int,
+    "face_count": int,
+    # Feature-specific keys: floor_path, side_caves, steps, pool, etc.
+}
+```
+
+All use **LOCAL coordinates** (origin at base/center). Callers MUST position in world space via `mesh_from_spec(spec, location=(world_x, world_y, world_z))`. This is the canonical pattern; any caller that bakes world coords into the MeshSpec is a bug.
+
+Added to Bundle A as a `contract invariant` — every feature generator wiring must use `mesh_from_spec` with explicit world location.
+
+---
+
+### Addendum 2.F — Centered-terrain assumptions (13 specific locations)
+
+The handoff doc enumerated 13 centered-terrain assumptions that must be fixed for offset tiles to work. Each is a specific line:line fix.
+
+#### 2.F.1 `environment.py` (3 locations)
+
+| Line | Code | Fix |
+|---|---|---|
+| 471 | `u = (vert.co.x + terrain_size / 2.0) / terrain_size` | Add `obj.location` awareness for UV on offset tiles |
+| 930-934 | Water fallback: `(0.0, -fallback_depth/2.0, water_level)` | Center fallback water on `terrain_obj.location` |
+| 1373-1374 | `nx = int((vx / world_size + 0.5) * cols)` in `_compute_vertex_colors_for_biome_map` | Subtract `obj.location` before mapping |
+
+#### 2.F.2 `environment_scatter.py` (4 locations)
+
+| Line | Code | Fix |
+|---|---|---|
+| 287-290 | `u = (world_x + half_size) / terrain_size` | Subtract `terrain_obj.location.x` |
+| 1050 | `terrain_half = terrain_size / 2.0` for Poisson disk | Add terrain location offset |
+| 1348-1349 | `wx = p["position"][0] - terrain_half_bz` | Add terrain location offset |
+| 1389-1403 | `terrain_half` used for instance positioning | Add `terrain_obj.location` to world position |
+
+#### 2.F.3 `terrain_advanced.py` (3 locations)
+
+| Line | Code | Fix |
+|---|---|---|
+| 742 | `terrain_size = (dims.x, dims.y)` for layer ops | Pass `obj.location` to brush/layer functions |
+| 944 | `terrain_size = (dims.x, dims.y)` for erosion brush | Adjust `brush_center` by subtracting `obj.location` |
+| 1353 | `terrain_size = (dims.x, dims.y)` for stamp | Adjust stamp position by subtracting `obj.location` |
+
+#### 2.F.4 `blender_server.py` (3 locations)
+
+| Line | Code | Fix |
+|---|---|---|
+| 179 | `half = terrain_size / 2.0` in `_normalize_map_point` | Add `terrain_location` parameter |
+| 199 | `(y + half) / terrain_size` in `_map_point_to_terrain_cell` | Account for terrain offset |
+| 212 | `half = terrain_size / 2.0` in `_plan_map_location_anchors` | Candidate positions need world offset |
+
+**Total: 13 centered-terrain assumptions.** Each becomes a compliance checklist entry in Bundle A with line number + expected fix.
+
+#### 2.F.5 Already-safe modules
+
+- `vegetation_system.py` — already offset-aware at line 724 via `obj.location`. No changes needed.
+- `_shared_utils.py` — `safe_place_object` at line 34 uses world-space raycasts. No changes needed.
+
+Documented in Bundle A as "do not touch — already correct."
+
+---
+
+### Addendum 2.G — Test migration plan
+
+The handoff doc identified 43 tests in 3 files with CRITICAL break risk when `[0,1]` assertions change. Plus 8 additional files with moderate/low risk.
+
+#### 2.G.1 CRITICAL break-risk tests (3 files, 43 tests)
+
+| Test file | Test count | Risk | Required fix |
+|---|---|---|---|
+| `test_terrain_erosion.py` | 9 | CRITICAL | `assert result.min() >= 0.0` and `result.max() <= 1.0` must become `height_range`-aware. Keep old tests passing via `normalize=True` backward-compat path; add new tests for world-unit domain. |
+| `test_terrain_noise.py` | 26 | CRITICAL | 8 `test_height_in_bounds` + 8 `test_slope_in_bounds` + 8 `test_biome_assignments` variants. When `normalize=True` (default), keep passing. Add NEW tests for `normalize=False`. DO NOT modify existing. |
+| `test_environment_handlers.py` | 50 | MODERATE-CRITICAL | RAW export tests assert 16-bit `[0, 65535]`. Add `tiled_mode` flag to export handler; `tiled_mode=False` preserves existing behavior; `tiled_mode=True` uses world-unit heights with global range. |
+
+#### 2.G.2 Moderate/low risk tests (8 files)
+
+| Test file | Tests | Risk | Reason |
+|---|---|---|---|
+| `test_terrain_flatten.py` | 8 | MODERATE | Blend thresholds may change at tile boundaries |
+| `test_scatter_engine.py` | 37 | LOW | Pure logic, no `[0,1]` assumption |
+| `test_terrain_chunking.py` | 13 | MODERATE | Chunk structure may need new fields |
+| `test_terrain_biome_voronoi.py` | 4 | LOW | Voronoi is position-independent |
+| `test_terrain_depth.py` | 23 | LOW | Feature generators are local-coordinate |
+| `test_aaa_terrain_vegetation.py` | 31 | LOW | Vegetation generators are independent |
+| `test_terrain_features_v2.py` | 21 | LOW | Feature generators local-coordinate |
+| `test_environment_scatter_handlers.py` | 15 | MODERATE | Scatter depends on heightmap |
+| `test_terrain_materials.py` | ? | LOW | Material setup is position-independent |
+| `test_road_coastline_terrain_features.py` | ? | MODERATE | Road/coastline may assume centered terrain |
+
+**Total existing terrain-related tests: ~238 across 12 files.** 43 (in 3 files) have critical break risk from world-unit migration.
+
+#### 2.G.3 Test migration rule
+
+Non-negotiable rule: **existing tests must continue to pass with the default path** (normalize=True, tiled_mode=False). Every new capability is added behind a new parameter or new function. Bundle A acceptance includes:
+
+```bash
+pytest Tools/mcp-toolkit/tests/ -q
+# must show the same passing count as 71e6451 baseline + new tests
+```
+
+Added to Bundle A as `test_regression_zero.py` — a meta-test that compares current passing-test count against the baseline stored in `.planning/test_baseline.json`. Fails if the count drops.
+
+---
+
+### Addendum 2.H — Unity scene template update
+
+`src/veilbreakers_mcp/shared/unity_templates/scene_templates.py` contains `generate_terrain_setup_script()` that generates Unity C# code with `terrain_size`, `terrain_resolution`, and `splatmap_layers` parameters. The template currently hardcodes a single-terrain assumption.
+
+#### 2.H.1 Required updates (Bundle J supplement)
+
+- Accept `tile_count_x`, `tile_count_y` parameters
+- Generate `Terrain.SetNeighbors()` calls for all adjacent tiles (8-neighborhood)
+- Use `TerrainData.SetHeightsDelayLOD()` for batch heightmap loading (avoids per-tile LOD rebuild)
+- Set `heightmapResolution` to power-of-2+1 (257, 513, 1025) matching Blender tile resolution
+- Generate `TerrainGroup` component for auto-connection
+- Emit splatmap alpha textures per tile with 4-texel edge-bleed padding (Addendum 1.B.11)
+- Emit mask stack sidecar JSON pointing to NPZ files
+
+Added as Bundle J `terrain_navmesh_export.py` + new `terrain_unity_terrain_template.py` module.
+
+#### 2.H.2 Status as of 2026-04-08
+
+Handoff doc §12 Phase 8 notes that `unity_scene setup_tiled_terrain` action and `generate_tiled_terrain_setup_script()` already emit `Terrain.SetNeighbors` wiring. Verify and extend in Bundle J — do not reinvent.
+
+Added to Bundle J compliance: check current state of `setup_tiled_terrain` action, extend with mask sidecar emission and splatmap padding.
+
+---
+
+### Addendum 2.I — worldbuilding_layout.py local-space generators
+
+Four pure-logic generators still emit positions relative to local bounds centered around `(-half, +half)`:
+
+- `worldbuilding_layout.py:1050 generate_location_spec()`
+- `worldbuilding_layout.py:1288 generate_easter_egg_spec()`
+- `worldbuilding_layout.py:1483 generate_settlement_spec()`
+- `worldbuilding_layout.py:1636 assign_district_zones()`
+
+**Status:** safe as standalone location/settlement generators. Local coordinates are correct for single-scene workflows.
+
+**Risk:** if `compose_map_tiled` or any tiled world orchestration consumes these outputs assuming they are already world coordinates, roads, props, district seeds, POIs, and hidden-path markers will be misaligned.
+
+**Decision:** keep these functions explicitly local. Every caller transforms outputs to world coordinates via `world_from_local(local_pos, origin)`. Bundle A adds a validator that greps call sites and asserts the world-conversion step is present.
+
+Affected regression tests:
+
+- `test_worldbuilding_v2.py`
+- `test_buildings_dungeonthemes_settlements.py`
+- `test_aaa_castle_settlement.py`
+- `test_worldbuilding_layout_handlers.py`
+
+Added as Bundle A compliance note + regression test requirement.
+
+---
+
+### Addendum 2.J — Canyon / waterfall / cliff dual-nature contract
+
+Several hero features require BOTH heightmap modification AND mesh decoration. Previously the plan treated these as single-pass operations. Clarified now:
+
+#### 2.J.1 Canyon
+
+- **Heightmap carving** (Pass 3 `hero_features` or Pass 4 `erosion` pre-step): use `handle_carve_river`-style A* path on world heightmap, lower vertex heights along path. Canyon is a wider/deeper river carve; increase width and depth parameters. Erosion then enhances the natural shape.
+- **Mesh decoration** (Pass 6 `structural_geometry`): call `generate_canyon()` → `MeshSpec` with floor path, side caves, weathered materials. Place via `mesh_from_spec` at world coordinates.
+- **Both are required.** Heightmap alone lacks visual detail. Mesh alone doesn't carve the terrain.
+
+#### 2.J.2 Waterfall
+
+- **Heightmap ledge carving** (Pass 5 `water_network`): deepen the impact pool at the waterfall base, carve the outflow channel downstream, mark the lip position.
+- **Mesh decoration** (Pass 6): build the 7 functional waterfall objects from Addendum 1.B.3 (river surface, sheet volume, impact pool, foam, mist, splash, wet rock zone).
+
+#### 2.J.3 Cliff
+
+- **Heightmap detection** (Pass 3): `build_cliff_candidate_mask` identifies steep clusters. No heightmap modification — cliffs are where terrain is already steep.
+- **Mesh overlay** (Pass 6): `carve_cliff_system` builds lip + face + ledge + talus meshes. These are overlays on the base terrain, not replacements.
+
+Added to Bundle B, C, F, H as a `dual-nature contract` acceptance item.
+
+---
+
+### Addendum 2.K — Commit strategy
+
+The handoff doc mandates one commit per phase with tests passing at every commit. Applied to this plan:
+
+#### 2.K.1 Rules
+
+1. Every bundle is at least one commit (may be multiple sub-commits within the bundle).
+2. Every commit must leave `pytest Tools/mcp-toolkit/tests/` passing at baseline or above.
+3. Every commit must include the compliance checklist update in Appendix D for the items it completes.
+4. Bundle A is an atomic merge — all sub-commits squash-merge to a single branch merge commit.
+5. Bundles B–Q may merge incrementally but each merge requires the preserve-list regression suite to pass.
+6. Force-pushes to `master` are forbidden. `feature/terrain-world-foundation` rebases are allowed between bundles.
+
+Added as operational rule in §35.
+
+---
+
+### Addendum 2.L — Updated compliance checklists
+
+#### D.1 additions (Bundle A, new)
+
+- [ ] `TerrainMaskStack.__post_init__` asserts `height.shape == (tile_size + 1, tile_size + 1)`
+- [ ] `theoretical_max_amplitude(persistence, octaves)` helper added to `_terrain_world.py`
+- [ ] Flow map, drainage, deposition, wetness, bank instability masks computed on FULL world heightmap before tile split
+- [ ] `extract_tile` works for 3D (per-channel) mask arrays same as heights
+- [ ] World expansion test: regenerate 3×2 from existing 2×2 produces bit-identical original region
+- [ ] Noise repeat distance audit — `_OpenSimplexWrapper.noise2_array` uses real opensimplex when available
+- [ ] `apply_hydraulic_erosion_masks` scales `min_slope` by `height_range`, does NOT scale `capacity`
+- [ ] 12-step `handle_generate_world_terrain` sequence implemented exactly per Addendum 2.A.7
+- [ ] `test_terrain_world_orchestration.py` verifies sequence on 2×2 fixture
+- [ ] `test_adjacent_tile_contract.py` covers all 10 "Generate Adjacent Tile" requirements
+- [ ] Metadata contract: tile handlers return `tile_transform` with `origin_world`, `min_corner_world`, `max_corner_world`, `convention`
+- [ ] Old `object_location` + `position` keys removed from tile handler returns, with backwards-compat shim + deprecation warning
+- [ ] 4 critical vegetation aliases added to `VEGETATION_GENERATOR_MAP`: `fern`, `moss`, `vine`, `dead_tree`
+- [ ] 13 centered-terrain assumptions fixed per Addendum 2.F (line-by-line)
+- [ ] `handle_generate_multi_biome_world` routes through new `TerrainPassController` and populates mask stack
+- [ ] `test_multi_biome_world_regression.py` asserts scene still valid after migration
+- [ ] `test_regression_zero.py` meta-test compares against `.planning/test_baseline.json`
+- [ ] `worldbuilding_layout.py` local-space generators documented as explicitly local; caller-side conversion asserted
+
+#### D.2 additions (Bundle B, new)
+
+- [ ] `terrain_advanced.py:793` audited and clip removed if present
+- [ ] `terrain_advanced.py:1483` audited and clip removed if present
+- [ ] `handle_erosion_paint` routes through world-unit contract
+- [ ] `handle_terrain_flatten_zone` routes through world-unit contract
+- [ ] `flatten_multiple_zones` routes through world-unit contract
+- [ ] `terrain_advanced.py` docstrings updated: no "normalized [0,1]" language
+- [ ] `test_terrain_advanced_world_units.py` passing
+- [ ] `test_handle_erosion_paint_preserves_scale.py` passing
+- [ ] `test_flatten_multiple_zones_preserves_scale.py` passing
+- [ ] Dual-nature contract for canyon: both heightmap carve + mesh decoration
+
+#### D.3 additions (Bundle C, new)
+
+- [ ] Dual-nature contract for waterfall: heightmap pool carve + mesh chain
+- [ ] Bugfix #9 regression test: tile metadata contract uses `tile_transform` dict only
+
+#### D.4 additions (Bundle D, new)
+
+- [ ] Hearthvale box fallback removed from `worldbuilding_layout.py:621-658`; replaced with explicit error logging
+- [ ] Perimeter box fallback removed from `worldbuilding_layout.py:715-738`; replaced with explicit error logging
+- [ ] `test_no_silent_cube_fallbacks.py` passing — asserts no cube fallbacks in settlement generation
+
+#### D.6 additions (Bundle F, new)
+
+- [ ] `generate_cave_entrance_mesh()` wired into Pass 6 `structural_geometry`
+- [ ] Dual-nature contract: cliff detection + mesh overlay
+
+#### D.8 additions (Bundle H, new)
+
+- [ ] Dual-nature contract for canyon morphology template
+- [ ] `generate_natural_arch()` wired into Bundle H morphology template (`natural_bridge`)
+
+#### D.9 additions (Bundle I, new)
+
+- [ ] `generate_sinkhole()` wired into `terrain_karst.py` sinkhole archetype
+- [ ] `generate_ice_formation()` wired into `terrain_glacial.py`
+- [ ] `generate_coastline()` wired into `coastline.py` extension
+- [ ] `test_strata_neighbor_consistency.py` passing
+
+#### D.10 additions (Bundle J, new)
+
+- [ ] Unity `setup_tiled_terrain` action verified to exist and extended with mask sidecar emission
+- [ ] Splatmap alpha textures emitted with 4-texel edge-bleed padding
+- [ ] Mask stack NPZ sidecar references included in Unity terrain setup output
+- [ ] `generate_terrain_setup_script()` updated with `tile_count_x`/`tile_count_y` parameters
+- [ ] 8-neighborhood `Terrain.SetNeighbors()` calls generated per tile
+
+#### D.15 additions (Bundle O, new)
+
+- [ ] `generate_swamp_terrain()` wired into `build_wetlands`
+- [ ] `generate_geyser()` wired into `build_hot_springs`
+
+#### D.18 additions (Bundle R, new)
+
+- [ ] Legacy curve-road migration: `worldbuilding.py:6144, 6575, 6796` routed through `_create_road_with_curbs`
+- [ ] `worldbuilding.py:3535 _create_curve_from_points` dead code deleted
+- [ ] `_create_curve_path` marked `@deprecated` with removal timeline
+- [ ] `test_worldbuilding_no_curve_roads.py` passing
+
+---
+
+### Addendum 2.M — Verification checklist (Addendum 2 completeness)
+
+All 26 gaps identified in the deeper audit are closed:
+
+- [x] **Gap 1 — Flow map world-level computation** → Addendum 2.A.3 + Bundle A §D.1
+- [x] **Gap 2 — World expansion strategy** → Addendum 2.A.4 + Bundle M §D.13
+- [x] **Gap 3 — Noise repeat distance (256-cell wrap)** → Addendum 2.A.5 + Bundle G §D.7
+- [x] **Gap 4 — Unity scene_templates.py tiled terrain C# generator** → Addendum 2.H + Bundle J §D.10
+- [x] **Gap 5 — Break-risk test files explicit list** → Addendum 2.G (3 critical files, 43 tests enumerated)
+- [x] **Gap 6 — Erosion capacity/min_slope scaling math** → Addendum 2.A.6 + Bundle A §D.1
+- [x] **Gap 7 — 12-step world terrain execution sequence** → Addendum 2.A.7 + Bundle A §D.1
+- [x] **Gap 8 — Canyon dual-nature (carve + mesh decoration)** → Addendum 2.J + Bundle B §D.2
+- [x] **Gap 9 — terrain_advanced.py extended consumer list** → Addendum 2.B.1 + Bundle B §D.2
+- [x] **Gap 10 — worldbuilding_layout.py local-space generators** → Addendum 2.I + Bundle A §D.1
+- [x] **Gap 11 — Legacy curve-road path 4 locations** → Addendum 2.C.1 + Bundle R §D.18
+- [x] **Gap 12 — Hearthvale box fallback removal** → Addendum 2.C.2 + Bundle D §D.4
+- [x] **Gap 13 — Perimeter box fallback removal** → Addendum 2.C.2 + Bundle D §D.4
+- [x] **Gap 14 — Missing vegetation types (fern, moss, vine, dead_tree)** → Addendum 2.D + Bundle A §D.1
+- [x] **Gap 15 — 13 centered-terrain assumptions** → Addendum 2.F + Bundle A §D.1
+- [x] **Gap 16 — 11 terrain feature generator wirings** → Addendum 2.E
+- [x] **Gap 17 — Tile resolution power-of-2+1 contract** → Addendum 2.A.1
+- [x] **Gap 18 — Theoretical max amplitude formula** → Addendum 2.A.2
+- [x] **Gap 19 — Shared edge vertex contract** → Addendum 2.A.1
+- [x] **Gap 20 — "Generate Adjacent Tile" 10-requirement contract** → Addendum 2.A.8
+- [x] **Gap 21 — Multi-biome path alignment** → Addendum 2.C.3
+- [x] **Gap 22 — World flow map per-tile extraction** → Addendum 2.A.3
+- [x] **Gap 23 — Commit strategy (one per phase, tests passing)** → Addendum 2.K
+- [x] **Gap 24 — Erode-before-split rationale documentation** → Addendum 2.A.3
+- [x] **Gap 25 — Bug #4 extended to lines 793 and 1483** → Addendum 2.B.1 + Bundle B §D.2
+- [x] **Gap 26 — Bug #9 metadata contract fix** → Addendum 2.B.2 + Bundle A §D.1
+
+All 26 gaps closed.
+
+---
+
+### Addendum 2.N — Running total
+
+Between Addendum 1 and Addendum 2, this plan now addresses:
+
+- 30 gaps from Addendum 1 (prior docs + feedback memory)
+- 26 gaps from Addendum 2 (handoff doc + bug audit deep re-read)
+- **56 total gaps closed** across the two addenda
+
+The plan now explicitly references every major item from:
+- `terrain_claude_master_plan_2026-04-07.md`
+- `terrain_branch_full_implementation_plan_2026-04-07.md`
+- `terrain_aaa_implementation_guide.md`
+- `terrain_tool_bug_audit_2026-04-07.md` (all 17 bugs)
+- `terrain_pipeline_handoff_for_claude.md` (all 13 gaps + architectural contracts)
+- Feedback memory files (Z-up, screenshot cap, waterfall volumetric, Tripo serialization, AAA quality demand)
+- User's original 500-line semantic plan message
+- The 71 themed items from the ultrathink deep dive
+
+---
+
 ## End of Plan
 
-**Last updated:** 2026-04-08 (Addendum 1 — gap closure)
+**Last updated:** 2026-04-08 (Addendum 2 — deeper gap closure)
 **Total bundles:** 18 (A–R)
-**Estimated effort:** 58–63 focused sessions
+**Estimated effort:** 60–65 focused sessions (updated for Addendum 2 scope)
 **Target score:** 8.6 / 10 AAA
 **Realistic ceiling:** 8.8 / 10 AAA
 **Hard cap:** ~8.9 without engine-side innovation
+**Total gaps closed:** 56 (30 from Addendum 1 + 26 from Addendum 2)
 
-To execute: start with Bundle A as an atomic commit, then follow the execution sequence in §26 (Bundle R slots in parallel with C/D/E after A). Update Appendix D + Addendum 1.D checklists as work lands. Do not deviate from §5 contracts or Addendum 1 supplements without revising this plan.
+To execute: start with Bundle A as an atomic commit, then follow the execution sequence in §26 (Bundle R slots in parallel with C/D/E after A). Update Appendix D + Addendum 1.D + Addendum 2.L checklists as work lands. Do not deviate from §5 contracts, Addendum 1 supplements, or Addendum 2 contracts without revising this plan.
 
 This document is the single source of truth. When in doubt, this overrides other terrain docs.
