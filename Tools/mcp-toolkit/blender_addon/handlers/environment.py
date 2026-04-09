@@ -1297,13 +1297,23 @@ def handle_run_terrain_pass(params: dict) -> dict:
     )
     region = _to_bbox(params.get("region"))
 
-    # Protected zones
+    # Protected zones — reject malformed entries early with a clear error.
     protected_zones: list[ProtectedZoneSpec] = []
-    for pz in params.get("protected_zones", []) or []:
+    for i, pz in enumerate(params.get("protected_zones", []) or []):
+        bounds_raw = pz.get("bounds")
+        if bounds_raw is None:
+            raise ValueError(
+                f"protected_zones[{i}]: 'bounds' is required (dict|list[4]|BBox)"
+            )
+        bounds = _to_bbox(bounds_raw)
+        if bounds is None:
+            raise ValueError(
+                f"protected_zones[{i}]: 'bounds' must resolve to a BBox, got {bounds_raw!r}"
+            )
         protected_zones.append(
             ProtectedZoneSpec(
-                zone_id=str(pz.get("zone_id", "unnamed")),
-                bounds=_to_bbox(pz.get("bounds")),
+                zone_id=str(pz.get("zone_id", f"zone_{i}")),
+                bounds=bounds,
                 kind=str(pz.get("kind", "generic")),
                 allowed_mutations=frozenset(pz.get("allowed_mutations", []) or []),
                 forbidden_mutations=frozenset(pz.get("forbidden_mutations", []) or []),

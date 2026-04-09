@@ -327,19 +327,27 @@ class TerrainPassController:
     def _save_checkpoint(self, pass_name: str, result: PassResult) -> TerrainCheckpoint:
         """Persist the current mask stack to ``checkpoint_dir``.
 
-        Geometry snapshots (Blender .blend files) are the responsibility
-        of the handler-side bridge — this controller is Blender-free so
-        it only snapshots the mask stack.
+        Populates Unity-export metadata (world_bounds, height range,
+        cell_size, coordinate system) so the checkpoint can round-trip
+        to a Unity importer without re-reading the mask stack.
         """
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_id = f"{pass_name}_{uuid.uuid4().hex[:8]}"
         mask_path = self.checkpoint_dir / f"{checkpoint_id}.npz"
-        self.state.mask_stack.to_npz(mask_path)
+        stack = self.state.mask_stack
+        stack.to_npz(mask_path)
 
         parent_id = (
             self.state.checkpoints[-1].checkpoint_id
             if self.state.checkpoints
             else None
+        )
+        world_tile_extent = float(stack.tile_size) * float(stack.cell_size)
+        world_bounds = BBox(
+            min_x=float(stack.world_origin_x),
+            min_y=float(stack.world_origin_y),
+            max_x=float(stack.world_origin_x) + world_tile_extent,
+            max_y=float(stack.world_origin_y) + world_tile_extent,
         )
         ckpt = TerrainCheckpoint(
             checkpoint_id=checkpoint_id,
@@ -348,9 +356,16 @@ class TerrainPassController:
             intent_hash=self.state.intent.intent_hash(),
             mask_stack_path=mask_path,
             geometry_snapshot_path=None,
-            content_hash=result.content_hash_after or self.state.mask_stack.compute_hash(),
+            content_hash=result.content_hash_after or stack.compute_hash(),
             parent_checkpoint_id=parent_id,
             metrics=dict(result.metrics),
+            world_bounds=world_bounds,
+            height_min_m=stack.height_min_m,
+            height_max_m=stack.height_max_m,
+            cell_size_m=float(stack.cell_size),
+            tile_size=int(stack.tile_size),
+            coordinate_system=stack.coordinate_system,
+            unity_export_schema_version=stack.unity_export_schema_version,
         )
         return ckpt
 
@@ -414,6 +429,9 @@ def register_default_passes() -> None:
             ),
             seed_namespace="structural_masks",
             requires_scene_read=False,
+            # Structural masks are always computed full-tile since slope /
+            # curvature / basin are global properties of the heightmap.
+            supports_region_scope=False,
         )
     )
     TerrainPassController.register_pass(

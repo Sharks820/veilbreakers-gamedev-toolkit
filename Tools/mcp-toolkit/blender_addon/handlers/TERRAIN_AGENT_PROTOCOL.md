@@ -14,7 +14,7 @@ regressions and will be rejected in code review.
 
 ---
 
-## 0. TL;DR — The Five Rules
+## 0. TL;DR — The Ten Rules
 
 1. **All mutating terrain operations route through `TerrainPassController`.**
    Never call `_terrain_erosion`, `_terrain_noise`, or any mesh builder
@@ -29,11 +29,33 @@ regressions and will be rejected in code review.
    `stack.set(channel, value, pass_name)`. **Discarding intermediate
    signals is the single worst anti-pattern in this codebase.**
 4. **Every pass is deterministic given the same seed.** Use
-   `derive_pass_seed(...)` — never `hash()`, never `random.random()` without
-   a seed, never `time.time()`.
+   `derive_pass_seed(intent.seed, namespace, tile_x, tile_y, region)` — never
+   `hash()`, never `random.random()` without a seed, never `time.time()`.
 5. **Every pass respects protected zones.** Either the orchestrator rejects
    the pass wholesale (zone fully covers target) or the pass masks out
    forbidden cells per-cell. No exceptions.
+6. **Z-UP, world-meter, always.** VeilBreakers is a Blender Z-up pipeline
+   and all `TerrainMaskStack.height` values are world meters along the
+   Z axis. `BBox.min_y/max_y` name the world-Y *ground* axis (the second
+   horizontal axis), not vertical — Blender mesh code must read
+   `bmesh_vert.co.z` for elevation. If you're unsure, print
+   `stack.coordinate_system`; it's `"z-up"` by contract.
+7. **Unity round-trip or it didn't happen.** Every new authored signal
+   MUST map to a Unity-consumable channel (splatmap layer, detail density,
+   navmesh area, LOD hint, etc.). See §8 for the channel → Unity
+   consumer table. If your new data doesn't have a Unity consumer, you
+   are NOT building an AAA pipeline — stop and design the consumer first.
+8. **`bmesh` for hot paths, `bpy.ops` only for user-initiated ops.**
+   `bpy.ops` triggers a scene update every call and serializes the pipeline.
+   Use bmesh for any mesh builder that processes more than a handful of
+   primitives. Destructive modifier stacks should be applied at export
+   time only — keep non-destructive during editing.
+9. **`blender_mesh game_check` before ANY export pass.** No FBX/GLB export
+   pass may ship without first running the game_check validator (poly
+   count, UV, normals, scale, pivot). Enforce as a quality gate.
+10. **`np.clip(..., 0, 1)` on world heights is a hard ban.** The only
+    legal clip is to quantize `heightmap_raw_u16` against `height_min_m`
+    / `height_max_m` for Unity `.raw` export.
 
 ---
 
@@ -188,7 +210,38 @@ for the exact invocation).
 
 ---
 
-## 7. When this protocol blocks you
+## 8. Unity-ready channel table
+
+Every mask channel below MUST be populated by some pass before the
+pipeline can legally produce a Unity-export artifact. If your pass is
+the natural owner of a channel, register it in `produces_channels` and
+the Unity import side will find it automatically.
+
+| Mask channel | Unity consumer | Notes |
+|---|---|---|
+| `height` (float64, meters) | `TerrainData.heightmapData` (source for u16 quantization) | world-Z up, world meters |
+| `heightmap_raw_u16` (uint16) | `TerrainData.heightmapResolution` + `.raw` import | quantized against `height_min_m` / `height_max_m` |
+| `splatmap_weights_layer` (H,W,L float32) | `TerrainData.SetAlphamaps` | L = number of terrain layers, sum-to-1 per cell |
+| `detail_density[type]` (dict of H,W float32) | `TerrainData.SetDetailLayer` | grass / foliage instance density per type |
+| `tree_instance_points` (N,5 float32) | `TerrainData.treeInstances` | (x,y,z,rot,prototype_id) |
+| `navmesh_area_id` (H,W int8) | NavMeshSurface area modifiers | walkable / unwalkable / jump / climb |
+| `physics_collider_mask` (H,W int8) | terrain collider cookie / mesh collider bake | solid / trigger / nocollide |
+| `lightmap_uv_chart_id` (H,W int32) | Progressive GPU lightmapper chart grouping | second UV channel |
+| `lod_bias` (H,W float32) | Addressables streaming priority | per-cell importance |
+| `ambient_occlusion_bake` (H,W float32) | material shader AO input | baked, not curvature |
+| `wind_field` (H,W,2 float32) | Shader Graph wind sampling | (wind_x, wind_y) |
+| `cloud_shadow` (H,W float32) | directional shadow mask cookie | 0..1 |
+| `traversability` (H,W float32) | AI pathing gradient + gameplay gating | 0..1 |
+| `gameplay_zone` (H,W int32) | gameplay trigger volumes | enum encoding |
+| `audio_reverb_class` (H,W int8) | Reverb Zone proxy | forest / cave / open / water |
+
+If you need a Unity channel that does not exist here: add the field to
+`TerrainMaskStack`, add the channel name to `_ARRAY_CHANNELS`, add a row
+to this table, and bump `unity_export_schema_version`.
+
+---
+
+## 9. When this protocol blocks you
 
 Don't silently bypass. Open a correction PR against this file with:
 - What you were trying to do
