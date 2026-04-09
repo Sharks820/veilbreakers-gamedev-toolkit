@@ -155,18 +155,37 @@ _TRIPO_IMPORT_LOCK = threading.Lock()
 _TRIPO_IMPORT_LOG: List[Path] = []
 
 
-def import_tripo_glb_serialized(glb_paths: Sequence[Path]) -> List[Path]:
+def import_tripo_glb_serialized(
+    glb_paths: Sequence[Path],
+    *,
+    require_exists: bool = True,
+) -> List[Path]:
     """Return ``glb_paths`` in order, holding a global lock for each.
 
+    Enforces two contracts (Addendum 1.A.6):
+      1. Path must exist on disk when ``require_exists=True`` (default).
+      2. Path must end in ``.glb`` or ``.gltf`` — anything else is rejected.
+      3. Exactly one import is in flight at any time, via a process-wide
+         lock (``_TRIPO_IMPORT_LOCK``).
+
     Real Blender would call ``bpy.ops.import_scene.gltf(filepath=...)``
-    inside the with-block. In headless mode we just verify path existence
-    and record the order — the contract is the serialization, not the
-    actual bpy call.
+    inside the with-block. Headless mode records the serialization order
+    and validated paths so tests can assert the contract.
     """
     out: List[Path] = []
     for p in glb_paths:
+        path = Path(p)
+        suffix = path.suffix.lower()
+        if suffix not in (".glb", ".gltf"):
+            raise ValueError(
+                f"import_tripo_glb_serialized: unsupported suffix {suffix!r} "
+                f"for {path!r}; expected .glb or .gltf"
+            )
+        if require_exists and not path.exists():
+            raise FileNotFoundError(
+                f"import_tripo_glb_serialized: missing file {path!r}"
+            )
         with _TRIPO_IMPORT_LOCK:
-            path = Path(p)
             out.append(path)
             _TRIPO_IMPORT_LOG.append(path)
     return out

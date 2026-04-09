@@ -182,8 +182,37 @@ def write_profile_jsons(root: Path) -> List[Path]:
 
     Returns the list of paths written. Idempotent — safe to call at
     import time in tests that need the JSON files on disk.
+
+    Rejects path-traversal and forbids writing outside either the
+    repo's ``Tools/mcp-toolkit/`` tree or a caller-supplied
+    ``tempfile.gettempdir()`` ancestor, so poisoned callers cannot
+    clobber unrelated filesystem state.
     """
-    root = Path(root)
+    import os
+    import tempfile
+
+    root = Path(root).resolve()
+    if ".." in str(root):
+        raise ValueError(f"write_profile_jsons: path traversal rejected: {root}")
+    tmp_root = Path(tempfile.gettempdir()).resolve()
+    this_file = Path(__file__).resolve()
+    # walk up to find Tools/mcp-toolkit ancestor
+    repo_root: Optional[Path] = None
+    for ancestor in this_file.parents:
+        if ancestor.name == "mcp-toolkit":
+            repo_root = ancestor
+            break
+    allowed_roots: List[Path] = [tmp_root]
+    if repo_root is not None:
+        allowed_roots.append(repo_root.resolve())
+    if not any(
+        str(root).startswith(str(allowed) + os.sep) or str(root) == str(allowed)
+        for allowed in allowed_roots
+    ):
+        raise ValueError(
+            f"write_profile_jsons: refusing to write outside sandbox. "
+            f"root={root} allowed={allowed_roots}"
+        )
     root.mkdir(parents=True, exist_ok=True)
     written: List[Path] = []
     for name in list_quality_profiles():
