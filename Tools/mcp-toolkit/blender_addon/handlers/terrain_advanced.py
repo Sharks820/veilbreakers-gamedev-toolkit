@@ -893,7 +893,18 @@ def compute_erosion_brush(
 
         result += delta
 
-    return np.clip(result, 0.0, 1.0)
+    # Preserve source height range instead of hard-clamping to [0, 1].
+    # The legacy clip silently crushed any world-unit heightmap (e.g. metres)
+    # whose values exceeded 1.0 — a persistent bug flagged in the ultra
+    # implementation plan (§7.5, Addendum 3.A). The correct behavior is to
+    # let erosion operate freely within the input's natural range and only
+    # scrub NaN/inf introduced by numerical drift.
+    src_min = float(np.nanmin(heightmap)) if heightmap.size else 0.0
+    src_max = float(np.nanmax(heightmap)) if heightmap.size else 1.0
+    if not np.isfinite(src_min) or not np.isfinite(src_max) or src_max <= src_min:
+        src_min, src_max = 0.0, max(src_min + 1.0, 1.0)
+    result = np.nan_to_num(result, nan=src_min, posinf=src_max, neginf=src_min)
+    return np.clip(result, src_min, src_max)
 
 
 def handle_erosion_paint(params: dict) -> dict:
@@ -1507,7 +1518,9 @@ def flatten_terrain_zone(
         seed: Random seed (reserved for future noise-based blend).
 
     Returns:
-        New heightmap with the flattened zone applied, clipped to [0, 1].
+        New heightmap with the flattened zone applied. Values are preserved in
+        the source heightmap's natural range (no forced normalization to [0,1])
+        so world-unit heightmaps are not silently crushed.
     """
     rows, cols = heightmap.shape
 
@@ -1519,15 +1532,31 @@ def flatten_terrain_zone(
     # Compute target height from average inside radius if not specified
     mask = dist < radius
     if target_height is None:
-        target_height = float(heightmap[mask].mean()) if mask.any() else 0.5
+        if mask.any():
+            target_height = float(heightmap[mask].mean())
+        else:
+            target_height = float(heightmap.mean()) if heightmap.size else 0.0
 
-    # Blend factor: 1.0 inside radius, smooth fade to 0.0 at radius+blend_width
+    # Blend factor: 1.0 inside radius, smooth fade to 0.0 at radius+blend_width.
+    # This blend mask is intentionally clamped to [0,1] — it is a weight, not
+    # a height — so the clip here is correct.
     blend = np.clip(1.0 - (dist - radius) / max(blend_width, 1e-6), 0.0, 1.0)
     # Smoothstep: 3t^2 - 2t^3 for C1 continuity (no step discontinuity)
     blend = blend * blend * (3.0 - 2.0 * blend)
 
     result = heightmap * (1.0 - blend) + target_height * blend
-    return np.clip(result, 0.0, 1.0)
+    # Preserve source height range — never hard-clamp to [0,1] which would
+    # silently destroy world-unit heightmaps (§7.5, Addendum 3.A).
+    src_min = float(np.nanmin(heightmap)) if heightmap.size else 0.0
+    src_max = float(np.nanmax(heightmap)) if heightmap.size else 1.0
+    # The flatten target may legitimately sit above the original max (e.g. when
+    # raising a plateau), so broaden the allowed range to include target_height.
+    lo = min(src_min, float(target_height))
+    hi = max(src_max, float(target_height))
+    if not np.isfinite(lo) or not np.isfinite(hi) or hi <= lo:
+        lo, hi = 0.0, max(lo + 1.0, 1.0)
+    result = np.nan_to_num(result, nan=lo, posinf=hi, neginf=lo)
+    return np.clip(result, lo, hi)
 
 
 def flatten_multiple_zones(

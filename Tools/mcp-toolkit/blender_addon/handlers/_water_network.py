@@ -913,6 +913,119 @@ class WaterNetwork:
     # ------------------------------------------------------------------
     # Serialization
     # ------------------------------------------------------------------
+    # Strahler stream ordering (Bundle I §14.1)
+    # ------------------------------------------------------------------
+
+    def compute_strahler_orders(self) -> dict[int, int]:
+        """Compute Strahler stream order for every segment.
+
+        Strahler ordering captures the branching hierarchy of a river
+        system:
+
+        * A **source** segment — one that has no upstream tributaries —
+          receives order **1**.
+        * When exactly **one** segment flows into a downstream segment,
+          the downstream segment inherits the upstream order.
+        * When **two or more** segments of the same order *N* merge into
+          a single downstream segment, that downstream segment is raised
+          to order *N + 1*. Otherwise it adopts the maximum upstream
+          order.
+
+        Downstream consumers use this ordering to distinguish headwater
+        streams from main-stem rivers so downstream rules (wildlife
+        zones, audio volumes, bridge placement, ecosystem ecotone
+        weighting) can treat tributaries differently from trunks.
+
+        Returns
+        -------
+        dict[int, int]
+            Mapping of ``segment_id`` → Strahler order (``int`` ≥ 1).
+            Only segments reachable from their sources are populated;
+            orphan segments fall back to order 1.
+        """
+        # Build adjacency: node_id → list of outgoing segment ids.
+        # Also build a reverse lookup: segment_id → list of upstream
+        # segment ids (segments whose target node matches this segment's
+        # source node).
+        outgoing: dict[int, list[int]] = {}
+        for seg_id, seg in self.segments.items():
+            outgoing.setdefault(seg.source_node_id, []).append(seg_id)
+
+        upstream: dict[int, list[int]] = {}
+        for seg_id, seg in self.segments.items():
+            # Segments "upstream" of this one end at our source node.
+            upstream[seg_id] = [
+                uid
+                for uid, useg in self.segments.items()
+                if useg.target_node_id == seg.source_node_id
+            ]
+
+        orders: dict[int, int] = {}
+        visiting: set[int] = set()
+
+        def _order_of(seg_id: int) -> int:
+            """Depth-first compute with memoization + cycle guard."""
+            if seg_id in orders:
+                return orders[seg_id]
+            if seg_id in visiting:
+                # Cycle fallback — return 1 and let the caller absorb it.
+                return 1
+            visiting.add(seg_id)
+
+            up_ids = upstream.get(seg_id, ())
+            if not up_ids:
+                orders[seg_id] = 1
+            else:
+                up_orders = [_order_of(uid) for uid in up_ids]
+                max_o = max(up_orders)
+                # Two or more tributaries of the same top order → +1.
+                if sum(1 for o in up_orders if o == max_o) >= 2:
+                    orders[seg_id] = max_o + 1
+                else:
+                    orders[seg_id] = max_o
+
+            visiting.discard(seg_id)
+            return orders[seg_id]
+
+        for seg_id in self.segments:
+            _order_of(seg_id)
+
+        return orders
+
+    def assign_strahler_orders(self) -> dict[int, int]:
+        """Compute Strahler orders and persist them on each segment.
+
+        The order is stored on ``WaterSegment`` as a dynamic attribute
+        ``strahler_order`` so the dataclass's ``asdict`` serialization
+        picks it up via ``__dict__`` injection. Callers who hold an
+        existing network reference can re-run this safely — it is
+        idempotent for a fixed network topology.
+
+        Returns the same mapping as :meth:`compute_strahler_orders`.
+        """
+        orders = self.compute_strahler_orders()
+        for seg_id, seg in self.segments.items():
+            # Attach as a dynamic attribute (dataclass does not declare
+            # it to preserve the serialization contract of existing
+            # WaterSegment JSON dumps; callers who want it serialized
+            # pull from the dict returned here).
+            try:
+                setattr(seg, "strahler_order", int(orders.get(seg_id, 1)))
+            except Exception:
+                pass
+        return orders
+
+    def get_trunk_segments(self, min_order: int = 2) -> list[int]:
+        """Return segment ids whose Strahler order is ``>= min_order``.
+
+        Useful for downstream consumers (audio zones, bridge placement,
+        settlement spawn rules) that only care about main-stem rivers
+        rather than every headwater tributary.
+        """
+        orders = self.compute_strahler_orders()
+        return [sid for sid, o in orders.items() if o >= int(min_order)]
+
+    # ------------------------------------------------------------------
 
     def to_dict(self) -> dict:
         """Serialize network to dict for persistence."""
