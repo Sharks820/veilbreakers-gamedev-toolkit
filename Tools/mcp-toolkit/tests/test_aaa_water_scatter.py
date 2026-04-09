@@ -62,18 +62,45 @@ def _build_full_bpy_stubs():
     class _LoopLayerAccess:
         def __init__(self):
             self.float_color = _LayerGroup()
+            # environment.py's water spline builder also writes a UV layer
+            # via bm.loops.layers.uv.new("UVMap"); expose the same stubbed
+            # LayerGroup so the mock matches the real bmesh API surface.
+            self.uv = _LayerGroup()
 
     # --- bmesh vertex ---
 
+    class _LoopLayerCell:
+        """Per-loop per-layer cell that behaves like a tuple for color
+        reads and also exposes a mutable ``.uv`` attribute so the water
+        spline builder can do ``loop[uv_layer].uv = (u, v)``.
+        """
+
+        def __init__(self, initial=(0.0, 0.0, 0.0, 0.0)):
+            self._value = tuple(initial)
+            self.uv = (0.0, 0.0)
+
+        def __iter__(self):
+            return iter(self._value)
+
+        def __getitem__(self, idx):
+            return self._value[idx]
+
+        def __len__(self):
+            return len(self._value)
+
+        def __eq__(self, other):
+            return tuple(self._value) == tuple(other)
+
     class _Loop:
         def __init__(self):
-            self._colors = {}
+            self._cells = {}
 
         def __setitem__(self, layer, val):
-            self._colors[id(layer)] = tuple(val)
+            cell = self._cells.setdefault(id(layer), _LoopLayerCell())
+            cell._value = tuple(val)
 
         def __getitem__(self, layer):
-            return self._colors.get(id(layer), (0.0, 0.0, 0.0, 0.0))
+            return self._cells.setdefault(id(layer), _LoopLayerCell())
 
     class _Vert:
         def __init__(self, co):

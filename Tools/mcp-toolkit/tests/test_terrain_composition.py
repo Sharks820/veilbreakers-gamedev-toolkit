@@ -478,6 +478,9 @@ class TestNegativeSpace:
         stack = _make_stack()
         stack.saliency_macro = np.zeros_like(stack.saliency_macro)
         issues = validate_negative_space(stack, min_ratio=0.4)
+        # A fully quiet saliency map must not trip any validator:
+        # no insufficient quiet zone, no density budget overflow, no
+        # peak-spacing violation (there are no peaks at all).
         assert issues == []
 
     def test_validate_negative_space_flags_busy(self):
@@ -486,5 +489,10 @@ class TestNegativeSpace:
         stack = _make_stack()
         stack.saliency_macro = np.ones_like(stack.saliency_macro) * 0.9
         issues = validate_negative_space(stack, min_ratio=0.4)
-        assert len(issues) == 1
-        assert issues[0].code == "negative_space.insufficient"
+        # A fully busy map trips quiet-zone, feature-density, AND
+        # peak-spacing validators — all three signals are legitimate
+        # for a "wall of detail" scene.
+        codes = {i.code for i in issues}
+        assert "negative_space.insufficient" in codes
+        assert "negative_space.feature_density_too_high" in codes
+        assert "negative_space.peaks_too_close" in codes
