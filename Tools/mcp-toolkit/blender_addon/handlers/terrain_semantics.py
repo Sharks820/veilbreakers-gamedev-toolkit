@@ -664,8 +664,40 @@ class TerrainCheckpoint:
 
 
 @dataclass
+class QualityGate:
+    """A declarative post-pass quality check.
+
+    The ``check`` callable runs after a pass completes successfully. It
+    receives the fresh ``PassResult`` and the mutated ``TerrainMaskStack``
+    and returns a list of ``ValidationIssue``. Any hard issue downgrades
+    the pass status to ``"failed"``; soft issues downgrade to ``"warning"``.
+
+    Use quality gates for visual-semantic checks that go beyond
+    "did the function return a value":
+        - cliffs: does every registered cliff have lip+face+ledges+talus?
+        - erosion: wetness mask populated in >= 5% of cells?
+        - materials: no single material dominates > 80% of the tile?
+        - waterfalls: each chain has lip → plunge → pool → outflow?
+
+    A gate is the mechanism by which AI agents enforce AAA quality.
+    If a gate does not exist, the quality is not enforced — write one.
+    """
+
+    name: str
+    check: Callable[["PassResult", "TerrainMaskStack"], List["ValidationIssue"]]
+    description: str = ""
+    blocking: bool = True  # if False, issues become warnings regardless of severity
+
+
+@dataclass
 class PassDefinition:
-    """Static metadata describing a pass: contracts + behavior flags."""
+    """Static metadata describing a pass: contracts + behavior flags.
+
+    This is the single source of enforcement for Rule 1 of the agent
+    protocol ("all mutating terrain operations route through
+    TerrainPassController"). Any code that wants to mutate terrain must
+    wrap itself in a PassDefinition and register it.
+    """
 
     name: str
     func: Callable[["TerrainPipelineState", Optional[BBox]], PassResult]
@@ -680,6 +712,16 @@ class PassDefinition:
     supports_region_scope: bool = True
     seed_namespace: str = ""
     requires_scene_read: bool = False
+
+    # Quality enforcement
+    quality_gate: Optional[QualityGate] = None
+    # Optional visual validator — a callable that given the mask stack
+    # returns a visual signature (e.g. a low-res thumbnail byte string)
+    # used by future bundles for visual-diff regression. Signature
+    # is stored on the mask stack after the pass.
+    visual_validator: Optional[Callable[["TerrainMaskStack"], bytes]] = None
+    # Short human-readable description for agent logs and protocol docs.
+    description: str = ""
 
 
 # ---------------------------------------------------------------------------
