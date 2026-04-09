@@ -607,9 +607,26 @@ def _export_world_tile_artifacts(
     return result
 
 
-def _resolve_height_range(params: dict, heightmap: np.ndarray) -> tuple[float, float]:
-    """Resolve a consistent height range for splatmap normalization."""
-    hmap = np.asarray(heightmap, dtype=np.float64)
+def _resolve_height_range(
+    params: dict,
+    heightmap: np.ndarray,
+    *,
+    allow_local_fallback: bool = True,
+) -> tuple[float, float] | None:
+    """Resolve a consistent height range for splatmap normalization.
+
+    Returns ``None`` when the caller did not provide an explicit range
+    and ``allow_local_fallback=False``. This is critical for tiled-world
+    exports: if every tile were allowed to fall back to its own local
+    min/max, each tile would normalize independently and produce visible
+    seams in Unity. Tiled exports must either supply an explicit world
+    range via ``height_range`` / ``height_range_min/max`` or accept that
+    this function will return ``None`` and force the caller to handle
+    the missing range deliberately.
+
+    Callers that want the legacy behavior (local min/max fallback) pass
+    ``allow_local_fallback=True`` (the default).
+    """
     height_range = params.get("height_range")
     if height_range is not None:
         if isinstance(height_range, (list, tuple)) and len(height_range) >= 2:
@@ -621,6 +638,12 @@ def _resolve_height_range(params: dict, heightmap: np.ndarray) -> tuple[float, f
     if height_range_min is not None and height_range_max is not None:
         return float(height_range_min), float(height_range_max)
 
+    if not allow_local_fallback:
+        return None
+
+    hmap = np.asarray(heightmap, dtype=np.float64)
+    if hmap.size == 0:
+        return 0.0, 1.0
     return float(hmap.min()), float(hmap.max())
 
 
@@ -628,21 +651,31 @@ def _resolve_export_height_range(
     params: dict,
     heightmap: np.ndarray,
 ) -> tuple[float, float] | None:
-    """Resolve an optional shared export range for heightmap RAW output."""
+    """Resolve an optional shared export range for heightmap RAW output.
+
+    Tiled worlds demand a SHARED range across all tiles so the exported
+    16-bit RAW heightmaps line up at Unity's tile boundaries. If the
+    caller set ``tiled_world`` / ``use_global_height_range`` without an
+    explicit range, we must NOT fall back to this tile's local min/max
+    — that is the root cause of the per-tile seam bug flagged by the
+    Gemini + GPT-5.4 consensus review.
+    """
     if params.get("tiled_world") or params.get("use_global_height_range"):
-        return _resolve_height_range(params, heightmap)
+        resolved = _resolve_height_range(
+            params, heightmap, allow_local_fallback=False
+        )
+        if resolved is None:
+            raise ValueError(
+                "tiled_world / use_global_height_range requires an explicit "
+                "'height_range' (or 'height_range_min' + 'height_range_max') "
+                "parameter. Falling back to per-tile min/max would normalize "
+                "each tile independently and create visible seams in Unity."
+            )
+        return resolved
 
-    height_range = params.get("height_range")
-    if height_range is not None:
-        return _resolve_height_range(params, heightmap)
-
-    if (
-        params.get("height_range_min") is not None
-        and params.get("height_range_max") is not None
-    ):
-        return _resolve_height_range(params, heightmap)
-
-    return None
+    # Non-tiled export path — only return an explicit range when one is
+    # present; otherwise the caller may skip height-range metadata.
+    return _resolve_height_range(params, heightmap, allow_local_fallback=False)
 
 
 def _terrain_grid_to_world_xy(
@@ -682,9 +715,38 @@ def _resolve_water_path_points(
     fallback_depth: float,
     water_level: float,
 ) -> list[tuple[float, float, float]]:
-    """Resolve explicit or fallback water spline points in world space."""
+    """Resolve explicit or fallback water spline points in world space.
+
+    Every returned point is a guaranteed 3-tuple (x, y, z). Explicit
+    ``path_points_raw`` entries may be supplied as 2D (x, y) pairs —
+    in which case Z is filled from ``water_level`` — or 3D (x, y, z)
+    triples. Any other arity raises ``ValueError`` so callers fail fast
+    rather than sending half-initialized tuples into downstream mesh
+    generation (Gemini consensus finding).
+    """
     if path_points_raw and len(path_points_raw) >= 2:
-        return [tuple(float(v) for v in pt) for pt in path_points_raw]
+        result: list[tuple[float, float, float]] = []
+        for i, pt in enumerate(path_points_raw):
+            try:
+                pt_seq = list(pt)
+            except TypeError as exc:
+                raise ValueError(
+                    f"path_points[{i}] is not iterable: {pt!r}"
+                ) from exc
+            if len(pt_seq) == 2:
+                x_val, y_val = float(pt_seq[0]), float(pt_seq[1])
+                z_val = float(water_level)
+            elif len(pt_seq) >= 3:
+                x_val = float(pt_seq[0])
+                y_val = float(pt_seq[1])
+                z_val = float(pt_seq[2])
+            else:
+                raise ValueError(
+                    f"path_points[{i}] must have 2 (x,y) or 3 (x,y,z) "
+                    f"components, got {len(pt_seq)}: {pt!r}"
+                )
+            result.append((x_val, y_val, z_val))
+        return result
 
     return [
         (terrain_origin_x, terrain_origin_y - fallback_depth / 2.0, water_level),
@@ -1086,11 +1148,14 @@ def handle_generate_terrain_tile(params: dict) -> dict:
         from .terrain_advanced import flatten_multiple_zones
         heightmap = flatten_multiple_zones(heightmap, flatten_zones)
 
-    if "height_range" in params or (
-        "height_range_min" in params and "height_range_max" in params
-    ):
-        height_range = _resolve_height_range(params, heightmap)
-    else:
+    # Ask _resolve_height_range without local fallback; fall back to the
+    # per-terrain-type estimator only when no explicit range was supplied.
+    # This is clean "single source of truth" for range resolution and fixes
+    # the duplicate key-presence check (Gemini consensus finding).
+    height_range = _resolve_height_range(
+        params, heightmap, allow_local_fallback=False
+    )
+    if height_range is None:
         height_range = _estimate_tile_height_range(
             terrain_type,
             octaves=octaves,
