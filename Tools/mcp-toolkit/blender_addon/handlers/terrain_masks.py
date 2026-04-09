@@ -145,20 +145,22 @@ def extract_ridge_mask(height: np.ndarray, cell_size: float) -> np.ndarray:
 def detect_basins(height: np.ndarray, min_area: int = 50) -> np.ndarray:
     """Label basins: cells that drain to the same local minimum.
 
-    Simple flood-fill approach: find all cells that are <= all 8 neighbors
-    (local minima), then grow each by pure numpy-based label propagation
-    on a small priority queue. Returns an int32 array of basin IDs
-    (0 = not assigned).
+    Pads with `+inf` so border cells are NOT trivially marked as minima
+    (fixes Bundle A round-1 border-bug). Uses `np.argsort(kind='stable')`
+    so tie-break order is reproducible across numpy builds.
 
+    Returns an int32 array of basin IDs (0 = unassigned).
     Basins smaller than ``min_area`` cells are cleared back to 0.
     """
     h = np.asarray(height, dtype=np.float64)
     if h.ndim != 2:
         raise ValueError(f"detect_basins requires 2D heightmap (got {h.shape})")
     rows, cols = h.shape
+    if rows < 3 or cols < 3:
+        return np.zeros_like(h, dtype=np.int32)
 
-    # Find strict local minima (ties OK; >= all neighbors)
-    padded = np.pad(h, 1, mode="edge")
+    # Pad with +inf so border cells cannot be spuriously marked as minima.
+    padded = np.pad(h, 1, mode="constant", constant_values=np.inf)
     is_min = np.ones_like(h, dtype=bool)
     for dr in (-1, 0, 1):
         for dc in (-1, 0, 1):
@@ -171,7 +173,7 @@ def detect_basins(height: np.ndarray, min_area: int = 50) -> np.ndarray:
     if not np.any(is_min):
         return labels
 
-    # Label seed minima with connected-component ids (8-connected)
+    # Connected-component label the seed minima (8-connected BFS)
     next_id = 1
     min_rows, min_cols = np.where(is_min)
     visited = np.zeros_like(h, dtype=bool)
@@ -179,11 +181,11 @@ def detect_basins(height: np.ndarray, min_area: int = 50) -> np.ndarray:
     for r0, c0 in zip(min_rows.tolist(), min_cols.tolist()):
         if visited[r0, c0]:
             continue
-        stack = [(r0, c0)]
+        bfs_stack = [(r0, c0)]
         seed_id = next_id
         next_id += 1
-        while stack:
-            r, c = stack.pop()
+        while bfs_stack:
+            r, c = bfs_stack.pop()
             if r < 0 or r >= rows or c < 0 or c >= cols:
                 continue
             if visited[r, c] or not is_min[r, c]:
@@ -194,41 +196,43 @@ def detect_basins(height: np.ndarray, min_area: int = 50) -> np.ndarray:
                 for dc in (-1, 0, 1):
                     if dr == 0 and dc == 0:
                         continue
-                    stack.append((r + dr, c + dc))
+                    bfs_stack.append((r + dr, c + dc))
 
-    # Grow each seed by BFS over descending-height watershed (simple).
-    # For Bundle A foundation, this approximation is sufficient: the goal
-    # is a basin-id channel, not perfect watershed partitioning.
-    # Grow outward from seeds until all cells have a label, using a
-    # simple iterative dilation weighted by descending height order.
+    # Iterative dilation: assign each unlabeled cell (in ascending-height
+    # order) the label of its lowest-height already-labeled neighbor.
+    # kind="stable" makes tie-break order deterministic across builds.
+    order = np.argsort(h, axis=None, kind="stable")
+    for _ in range(2):  # two passes handles edge cases where no labeled neighbor exists first time
+        any_changed = False
+        for flat_idx in order:
+            r = int(flat_idx // cols)
+            c = int(flat_idx % cols)
+            if labels[r, c] != 0:
+                continue
+            best_label = 0
+            best_h = np.inf
+            for dr in (-1, 0, 1):
+                for dc in (-1, 0, 1):
+                    if dr == 0 and dc == 0:
+                        continue
+                    nr = r + dr
+                    nc = c + dc
+                    if 0 <= nr < rows and 0 <= nc < cols:
+                        if labels[nr, nc] != 0 and h[nr, nc] < best_h:
+                            best_h = float(h[nr, nc])
+                            best_label = int(labels[nr, nc])
+            if best_label != 0:
+                labels[r, c] = best_label
+                any_changed = True
+        if not any_changed:
+            break
 
-    order = np.argsort(h, axis=None)
-    for flat_idx in order:
-        r = flat_idx // cols
-        c = flat_idx % cols
-        if labels[r, c] != 0:
-            continue
-        # Inherit label from lowest-height already-labeled neighbor
-        best_label = 0
-        best_h = np.inf
-        for dr in (-1, 0, 1):
-            for dc in (-1, 0, 1):
-                if dr == 0 and dc == 0:
-                    continue
-                nr = r + dr
-                nc = c + dc
-                if 0 <= nr < rows and 0 <= nc < cols:
-                    if labels[nr, nc] != 0 and h[nr, nc] < best_h:
-                        best_h = h[nr, nc]
-                        best_label = labels[nr, nc]
-        labels[r, c] = best_label
-
-    # Enforce min_area
+    # Enforce min_area — vectorized via np.isin (no Python per-label mask writes)
     if min_area > 1:
         unique, counts = np.unique(labels, return_counts=True)
-        for lbl, cnt in zip(unique.tolist(), counts.tolist()):
-            if lbl != 0 and cnt < min_area:
-                labels[labels == lbl] = 0
+        small = unique[(counts < min_area) & (unique != 0)]
+        if small.size:
+            labels = np.where(np.isin(labels, small), 0, labels).astype(np.int32)
 
     return labels
 

@@ -197,7 +197,18 @@ def apply_hydraulic_erosion_masks(
             wetness[iy, ix] += water
             drainage_count[iy, ix] += 1.0
 
-            skip_cell = hero_mask is not None and bool(hero_mask[iy, ix])
+            # Hero-exclusion: skip this droplet-cell if ANY of the 4
+            # bilinear-corner cells is inside a protected zone.
+            # Prevents erode/deposit from leaking into protected neighbors.
+            skip_cell = False
+            if hero_mask is not None:
+                if (
+                    bool(hero_mask[iy, ix])
+                    or bool(hero_mask[iy, min(ix + 1, cols - 1)])
+                    or bool(hero_mask[min(iy + 1, rows - 1), ix])
+                    or bool(hero_mask[min(iy + 1, rows - 1), min(ix + 1, cols - 1)])
+                ):
+                    skip_cell = True
 
             if sediment > c or h_diff > 0:
                 if h_diff > 0:

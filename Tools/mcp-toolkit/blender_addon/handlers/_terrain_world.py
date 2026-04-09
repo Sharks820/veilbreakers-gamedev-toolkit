@@ -463,11 +463,22 @@ def pass_erosion(
     inside ``region`` are mutated; cells outside are restored from the
     pre-pass height snapshot.
     """
+    # Lazy import to break circular dependency at module load
+    from .terrain_pipeline import derive_pass_seed
+
     t0 = time.perf_counter()
     stack = state.mask_stack
     intent = state.intent
 
-    seed = (intent.seed + 17) & 0xFFFFFFFF
+    # Use the protocol-mandated deterministic seed derivation so cross-tile
+    # runs produce DIFFERENT erosion patterns under the same intent seed.
+    seed = derive_pass_seed(
+        intent.seed,
+        "erosion",
+        stack.tile_x,
+        stack.tile_y,
+        region,
+    )
     profile = intent.erosion_profile or "temperate"
 
     profile_params = {

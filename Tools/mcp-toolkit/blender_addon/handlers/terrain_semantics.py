@@ -206,13 +206,44 @@ class TerrainMaskStack:
     rock_hardness: Optional[np.ndarray] = None
     snow_line_factor: Optional[np.ndarray] = None
 
+    # -- Unity integratable channels (AAA round-trip contract) --
+    # Per-layer splatmap weights (Unity Terrain Layer alphamaps). Shape (H, W, L).
+    splatmap_weights_layer: Optional[np.ndarray] = None
+    # 16-bit quantized heightmap for Unity .raw import. uint16 shape (H, W).
+    heightmap_raw_u16: Optional[np.ndarray] = None
+    # Navmesh area classification: walkable/unwalkable/jump/climb per cell.
+    navmesh_area_id: Optional[np.ndarray] = None
+    # Physics collider tag: solid / trigger / nocollide.
+    physics_collider_mask: Optional[np.ndarray] = None
+    # Lightmap UV chart grouping for Unity Progressive GPU lightmapper.
+    lightmap_uv_chart_id: Optional[np.ndarray] = None
+    # LOD bias + streaming priority per cell (Unity Addressables).
+    lod_bias: Optional[np.ndarray] = None
+    # Grass/foliage/detail density per type. dict[type] -> (H, W) float32.
+    detail_density: Optional[Dict[str, np.ndarray]] = None
+    # Tree instance spawn list. Stored as ndarray of shape (N, 5):
+    # (x, y, z, rot, prototype_id). Unity consumer: TerrainData.treeInstances.
+    tree_instance_points: Optional[np.ndarray] = None
+    # Baked ambient occlusion (not computed from curvature).
+    ambient_occlusion_bake: Optional[np.ndarray] = None
+
+    # -- World-unit scalar metadata (required for Unity .raw round-trip) --
+    height_min_m: Optional[float] = None
+    height_max_m: Optional[float] = None
+    # "z-up" or "y-up" — VeilBreakers pipeline is Z-UP end-to-end.
+    coordinate_system: str = "z-up"
+    # Semantic Unity export schema version for PR round-trip compatibility.
+    unity_export_schema_version: str = "1.0"
+
     # Versioning and provenance
     schema_version: str = "1.0"
     content_hash: Optional[str] = None
     dirty_channels: Set[str] = field(default_factory=set)
     populated_by_pass: Dict[str, str] = field(default_factory=dict)
 
-    # Set of channel names that are scalar ndarrays (not dict-of-ndarray)
+    # Set of channel names that are scalar ndarrays (not dict-of-ndarray).
+    # Used by compute_hash / to_npz / from_npz — any new ndarray field MUST
+    # be added here or it will be silently dropped on serialization.
     _ARRAY_CHANNELS: "Tuple[str, ...]" = field(
         init=False,
         repr=False,
@@ -255,6 +286,15 @@ class TerrainMaskStack:
             "strata_orientation",
             "rock_hardness",
             "snow_line_factor",
+            # Unity-ready channels
+            "splatmap_weights_layer",
+            "heightmap_raw_u16",
+            "navmesh_area_id",
+            "physics_collider_mask",
+            "lightmap_uv_chart_id",
+            "lod_bias",
+            "tree_instance_points",
+            "ambient_occlusion_bake",
         ),
     )
 
@@ -268,6 +308,15 @@ class TerrainMaskStack:
             )
         # Always track 'height' as populated at construction time
         self.populated_by_pass.setdefault("height", "__init__")
+        # Auto-populate world-unit height range if not already set
+        if self.height_min_m is None:
+            self.height_min_m = float(h.min()) if h.size else 0.0
+        if self.height_max_m is None:
+            self.height_max_m = float(h.max()) if h.size else 0.0
+        if self.coordinate_system not in ("z-up", "y-up"):
+            raise ValueError(
+                f"coordinate_system must be 'z-up' or 'y-up', got {self.coordinate_system!r}"
+            )
 
     # -- core accessors -----------------------------------------------------
 
@@ -314,15 +363,75 @@ class TerrainMaskStack:
                 f"TerrainMaskStack missing required channels: {missing}"
             )
 
+    # -- Unity export manifest -------------------------------------------------
+
+    UNITY_EXPORT_CHANNELS: Tuple[str, ...] = (
+        "height",
+        "splatmap_weights_layer",
+        "heightmap_raw_u16",
+        "navmesh_area_id",
+        "physics_collider_mask",
+        "lightmap_uv_chart_id",
+        "lod_bias",
+        "tree_instance_points",
+        "ambient_occlusion_bake",
+        "wind_field",
+        "cloud_shadow",
+        "traversability",
+        "gameplay_zone",
+        "audio_reverb_class",
+    )
+
+    def unity_export_manifest(self) -> Dict[str, Any]:
+        """Return a dict describing everything Unity needs to round-trip this tile.
+
+        Consumed by a future ``unity_export`` pass (Bundle K/N). Every
+        Unity-visible contract lives here — if you add a new Unity-ready
+        channel, update ``UNITY_EXPORT_CHANNELS`` AND this manifest so the
+        Unity-side importer knows to look for it.
+        """
+        populated: Dict[str, Any] = {}
+        for ch in self.UNITY_EXPORT_CHANNELS:
+            arr = self.get(ch)
+            if arr is None:
+                continue
+            arr_np = np.asarray(arr)
+            populated[ch] = {
+                "dtype": str(arr_np.dtype),
+                "shape": list(arr_np.shape),
+                "populated_by_pass": self.populated_by_pass.get(ch),
+            }
+        # Per-type detail layers (dict channel)
+        if self.detail_density:
+            populated["detail_density"] = {
+                k: {"dtype": str(np.asarray(v).dtype), "shape": list(np.asarray(v).shape)}
+                for k, v in self.detail_density.items()
+            }
+        return {
+            "schema_version": self.unity_export_schema_version,
+            "coordinate_system": self.coordinate_system,
+            "tile_size": self.tile_size,
+            "cell_size_m": float(self.cell_size),
+            "world_origin_x_m": float(self.world_origin_x),
+            "world_origin_y_m": float(self.world_origin_y),
+            "tile_x": self.tile_x,
+            "tile_y": self.tile_y,
+            "height_min_m": float(self.height_min_m) if self.height_min_m is not None else None,
+            "height_max_m": float(self.height_max_m) if self.height_max_m is not None else None,
+            "world_tile_extent_m": float(self.tile_size) * float(self.cell_size),
+            "populated_channels": populated,
+            "content_hash": self.content_hash or self.compute_hash(),
+        }
+
     # -- hashing ------------------------------------------------------------
 
     def compute_hash(self) -> str:
         """Deterministic content hash across all populated channels.
 
         Uses SHA-256 over channel name, dtype, shape, and raw bytes. The
-        hash also covers the coordinate contract (tile coords + origin)
-        so two stacks with identical signals but different locations do
-        not collide.
+        hash covers the coordinate contract (tile coords + origin),
+        Unity-export scalar metadata (height_min/max, coordinate_system,
+        unity_export_schema_version), and every populated channel.
         """
         hasher = hashlib.sha256()
         header = json.dumps(
@@ -334,6 +443,10 @@ class TerrainMaskStack:
                 "world_origin_y": float(self.world_origin_y),
                 "tile_x": self.tile_x,
                 "tile_y": self.tile_y,
+                "height_min_m": float(self.height_min_m) if self.height_min_m is not None else None,
+                "height_max_m": float(self.height_max_m) if self.height_max_m is not None else None,
+                "coordinate_system": self.coordinate_system,
+                "unity_export_schema_version": self.unity_export_schema_version,
             },
             sort_keys=True,
         ).encode("utf-8")
@@ -656,6 +769,17 @@ class TerrainCheckpoint:
     content_hash: str
     parent_checkpoint_id: Optional[str] = None
     metrics: Dict[str, Any] = field(default_factory=dict)
+
+    # Unity-ready round-trip metadata — needed to reconstruct a tile's
+    # world-space contract without re-reading the mask stack.
+    world_bounds: Optional[BBox] = None
+    height_min_m: Optional[float] = None
+    height_max_m: Optional[float] = None
+    cell_size_m: Optional[float] = None
+    tile_size: Optional[int] = None
+    coordinate_system: str = "z-up"
+    unity_export_schema_version: str = "1.0"
+    splatmap_layer_ids: Tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------
