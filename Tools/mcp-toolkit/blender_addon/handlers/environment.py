@@ -1212,6 +1212,216 @@ def handle_generate_world_terrain(params: dict) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Bundle A handler: run_terrain_pass
+# ---------------------------------------------------------------------------
+
+
+def handle_run_terrain_pass(params: dict) -> dict:
+    """Run a registered terrain pass via ``TerrainPassController``.
+
+    Required params:
+        pass_name (str)  — name of a registered pass (e.g. "macro_world")
+        tile_size (int)  — cells per tile edge
+        cell_size (float)
+        seed (int)
+
+    Optional params:
+        tile_x (int=0), tile_y (int=0)
+        world_origin_x (float=0.0), world_origin_y (float=0.0)
+        region_bounds (dict|list) — BBox for the intent region
+        region (dict|list) — BBox for scoped execution
+        protected_zones (list[dict])
+        scene_read (dict)  — presence signals that scene-read requirement is met
+        height (list[list[float]]|np.ndarray) — optional pre-built heightmap
+        terrain_type (str), scale (float) — for generating initial height
+        erosion_profile (str)
+        pipeline (list[str]) — pass sequence (default: all 4 Bundle A passes)
+        pass_name=... with pipeline=None runs a single pass
+
+    Returns:
+        dict with ``ok``, ``results`` (list of PassResult dicts),
+        ``content_hash``, ``populated_channels``.
+    """
+    # Local imports to avoid circular dependency at module load.
+    from . import _terrain_world as _tw
+    from .terrain_pipeline import TerrainPassController, register_default_passes
+    from .terrain_semantics import (
+        BBox,
+        ProtectedZoneSpec,
+        TerrainIntentState,
+        TerrainMaskStack,
+        TerrainPipelineState,
+        TerrainSceneRead,
+    )
+
+    # Ensure default passes are registered
+    if not TerrainPassController.PASS_REGISTRY:
+        register_default_passes()
+
+    tile_size = int(params.get("tile_size", 64))
+    cell_size = float(params.get("cell_size", 1.0))
+    seed = int(params.get("seed", 0))
+    tile_x = int(params.get("tile_x", 0))
+    tile_y = int(params.get("tile_y", 0))
+    world_origin_x = float(params.get("world_origin_x", 0.0))
+    world_origin_y = float(params.get("world_origin_y", 0.0))
+
+    # Resolve region bounds
+    def _to_bbox(value: Any) -> Optional[BBox]:
+        if value is None:
+            return None
+        if isinstance(value, BBox):
+            return value
+        if isinstance(value, dict):
+            return BBox(
+                min_x=float(value["min_x"]),
+                min_y=float(value["min_y"]),
+                max_x=float(value["max_x"]),
+                max_y=float(value["max_y"]),
+            )
+        if isinstance(value, (list, tuple)) and len(value) == 4:
+            return BBox(
+                min_x=float(value[0]),
+                min_y=float(value[1]),
+                max_x=float(value[2]),
+                max_y=float(value[3]),
+            )
+        raise ValueError(f"region bounds must be dict|list[4]|BBox, got {type(value)}")
+
+    region_bounds = _to_bbox(params.get("region_bounds")) or BBox(
+        min_x=world_origin_x,
+        min_y=world_origin_y,
+        max_x=world_origin_x + tile_size * cell_size,
+        max_y=world_origin_y + tile_size * cell_size,
+    )
+    region = _to_bbox(params.get("region"))
+
+    # Protected zones
+    protected_zones: list[ProtectedZoneSpec] = []
+    for pz in params.get("protected_zones", []) or []:
+        protected_zones.append(
+            ProtectedZoneSpec(
+                zone_id=str(pz.get("zone_id", "unnamed")),
+                bounds=_to_bbox(pz.get("bounds")),
+                kind=str(pz.get("kind", "generic")),
+                allowed_mutations=frozenset(pz.get("allowed_mutations", []) or []),
+                forbidden_mutations=frozenset(pz.get("forbidden_mutations", []) or []),
+                description=str(pz.get("description", "")),
+            )
+        )
+
+    # Scene read (accept any non-None value as satisfying the requirement)
+    scene_read_raw = params.get("scene_read")
+    scene_read: Optional[TerrainSceneRead] = None
+    if scene_read_raw is not None:
+        scene_read = TerrainSceneRead(
+            timestamp=float(scene_read_raw.get("timestamp", 0.0)),
+            major_landforms=tuple(scene_read_raw.get("major_landforms", ()) or ()),
+            focal_point=tuple(scene_read_raw.get("focal_point", (0.0, 0.0, 0.0))),
+            hero_features_present=tuple(),
+            hero_features_missing=tuple(scene_read_raw.get("hero_features_missing", ()) or ()),
+            waterfall_chains=tuple(),
+            cave_candidates=tuple(),
+            protected_zones_in_region=tuple(z.zone_id for z in protected_zones),
+            edit_scope=region or region_bounds,
+            success_criteria=tuple(scene_read_raw.get("success_criteria", ()) or ()),
+            reviewer=str(scene_read_raw.get("reviewer", "unknown")),
+        )
+
+    # Build or accept heightmap
+    height_raw = params.get("height")
+    if height_raw is not None:
+        height = np.asarray(height_raw, dtype=np.float64)
+    else:
+        from ._terrain_noise import generate_heightmap
+
+        height = np.asarray(
+            generate_heightmap(
+                tile_size + 1,
+                tile_size + 1,
+                scale=float(params.get("scale", 100.0)),
+                world_origin_x=world_origin_x,
+                world_origin_y=world_origin_y,
+                cell_size=cell_size,
+                seed=seed,
+                terrain_type=str(params.get("terrain_type", "mountains")),
+                normalize=False,
+            ),
+            dtype=np.float64,
+        )
+
+    mask_stack = TerrainMaskStack(
+        tile_size=tile_size,
+        cell_size=cell_size,
+        world_origin_x=world_origin_x,
+        world_origin_y=world_origin_y,
+        tile_x=tile_x,
+        tile_y=tile_y,
+        height=height,
+    )
+
+    intent = TerrainIntentState(
+        seed=seed,
+        region_bounds=region_bounds,
+        tile_size=tile_size,
+        cell_size=cell_size,
+        protected_zones=tuple(protected_zones),
+        erosion_profile=str(params.get("erosion_profile", "temperate")),
+        scene_read=scene_read,
+    )
+
+    state = TerrainPipelineState(intent=intent, mask_stack=mask_stack)
+    controller = TerrainPassController(state)
+
+    pass_name = params.get("pass_name")
+    pipeline = params.get("pipeline")
+
+    if pipeline is None and pass_name is None:
+        pipeline = ["macro_world", "structural_masks", "erosion", "validation_minimal"]
+
+    if pipeline is not None:
+        results = controller.run_pipeline(
+            pass_sequence=list(pipeline),
+            region=region,
+            checkpoint=bool(params.get("checkpoint", False)),
+        )
+    else:
+        results = [
+            controller.run_pass(
+                str(pass_name),
+                region=region,
+                checkpoint=bool(params.get("checkpoint", False)),
+            )
+        ]
+
+    def _serialize(pr) -> dict:
+        return {
+            "pass_name": pr.pass_name,
+            "status": pr.status,
+            "duration_seconds": pr.duration_seconds,
+            "produced_channels": list(pr.produced_channels),
+            "consumed_channels": list(pr.consumed_channels),
+            "metrics": pr.metrics,
+            "seed_used": pr.seed_used,
+            "content_hash_before": pr.content_hash_before,
+            "content_hash_after": pr.content_hash_after,
+            "issues": [
+                {"code": i.code, "severity": i.severity, "message": i.message}
+                for i in pr.issues
+            ],
+        }
+
+    return {
+        "ok": all(r.status == "ok" for r in results),
+        "results": [_serialize(r) for r in results],
+        "content_hash": mask_stack.compute_hash(),
+        "populated_channels": sorted(mask_stack.populated_by_pass.keys()),
+        "tile_x": tile_x,
+        "tile_y": tile_y,
+    }
+
+
 def handle_generate_waterfall(params: dict) -> dict:
     """Generate a waterfall from water-network context when available.
 

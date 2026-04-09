@@ -173,6 +173,7 @@ from .environment import (
     handle_generate_terrain_tile,
     handle_generate_world_terrain,
     handle_generate_waterfall,
+    handle_run_terrain_pass,
     handle_stitch_terrain_edges,
     handle_paint_terrain,
     handle_carve_river,
@@ -973,6 +974,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "env_generate_terrain": handle_generate_terrain,
     "env_generate_terrain_tile": handle_generate_terrain_tile,
     "env_generate_world_terrain": handle_generate_world_terrain,  # DEPRECATED: use env_generate_terrain_tile per-tile workflow instead
+    "env_run_terrain_pass": handle_run_terrain_pass,
     "env_stitch_terrain_edges": handle_stitch_terrain_edges,
     "env_paint_terrain": handle_paint_terrain,
     "env_carve_river": handle_carve_river,
