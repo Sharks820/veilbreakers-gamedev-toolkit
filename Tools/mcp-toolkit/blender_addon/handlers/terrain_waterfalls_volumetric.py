@@ -165,8 +165,11 @@ def validate_waterfall_volumetric(
         )
         return issues
 
+    # Spec: a front-vertex normal is "non-coplanar" when its raw dot product
+    # with the mean-front-normal is < 0.95. `abs()` would treat backfacing
+    # coplanar normals (dot ≈ -1) as curved, which is wrong.
     n = len(front_normals_cos)
-    non_coplanar = sum(1 for c in front_normals_cos if abs(float(c)) <= 0.98)
+    non_coplanar = sum(1 for c in front_normals_cos if float(c) < 0.95)
     frac = non_coplanar / n
     if frac < profile.min_non_coplanar_front_fraction:
         issues.append(
@@ -185,7 +188,10 @@ def validate_waterfall_volumetric(
             )
         )
 
-    if profile.front_curvature_radius_ratio < 0.0:
+    # Spec (Bundle C §3.2): rounded front requires curvature radius ratio
+    # >= 0.15 × width. Negative is always invalid; [0.0, 0.15) is a flat front.
+    min_curvature = 0.15
+    if profile.front_curvature_radius_ratio < min_curvature:
         issues.append(
             ValidationIssue(
                 code="WATERFALL_CURVATURE_RATIO_INVALID",
@@ -193,7 +199,8 @@ def validate_waterfall_volumetric(
                 affected_feature="waterfall",
                 message=(
                     f"front_curvature_radius_ratio="
-                    f"{profile.front_curvature_radius_ratio} must be >= 0"
+                    f"{profile.front_curvature_radius_ratio} must be >= "
+                    f"{min_curvature} (0.15 × width per Bundle C §3.2)"
                 ),
             )
         )

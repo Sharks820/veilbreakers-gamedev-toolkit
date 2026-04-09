@@ -411,18 +411,20 @@ def test_preset_lock_roundtrip():
 
 
 def test_enforce_retention_policy_deletes_oldest(tmp_path: Path):
-    profile = PRODUCTION_PROFILE  # retention=4
-    for i in range(10):
+    # Per Addendum 1.B.4 production profile keeps 20 most-recent checkpoints.
+    profile = PRODUCTION_PROFILE
+    total = profile.checkpoint_retention + 6
+    for i in range(total):
         p = tmp_path / f"terrain_{i:02d}_macro_{i:08x}.blend"
         p.write_text("data")
         # Stagger mtime so ordering is deterministic
-        os_time = time.time() - (10 - i)
+        os_time = time.time() - (total - i)
         import os
         os.utime(p, (os_time, os_time))
     deleted = enforce_retention_policy(tmp_path, profile)
-    assert len(deleted) == 6  # 10 - 4 retention
+    assert len(deleted) == 6
     remaining = sorted(tmp_path.iterdir())
-    assert len(remaining) == 4
+    assert len(remaining) == profile.checkpoint_retention
 
 
 def test_enforce_retention_policy_under_limit_noop(tmp_path: Path):
