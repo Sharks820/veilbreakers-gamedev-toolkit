@@ -32,6 +32,10 @@ def capture_scene_read(
     protected_zones_in_region: Sequence[str] = (),
     edit_scope: Optional[BBox] = None,
     success_criteria: Sequence[str] = ("scene_understood",),
+    viewport_vantage: Optional[object] = None,
+    addon_version: Optional[Tuple[int, int, int]] = None,
+    terrain_content_hash: Optional[str] = None,
+    lockable_anchors: Sequence[str] = (),
 ) -> TerrainSceneRead:
     """Build a valid ``TerrainSceneRead`` snapshot.
 
@@ -39,6 +43,13 @@ def capture_scene_read(
     mutation. In headless tests the caller supplies the content; real
     Blender would populate ``major_landforms`` by scanning ``bpy.data``,
     etc.
+
+    The optional ``viewport_vantage``, ``addon_version``,
+    ``terrain_content_hash``, and ``lockable_anchors`` parameters carry
+    the Addendum 1.A.7 extended metadata. They are stashed onto the
+    returned ``TerrainSceneRead`` via monkey-patch attributes so the
+    frozen dataclass surface stays stable while new consumers can
+    read them without another contract break.
     """
     focal = (
         tuple(float(x) for x in focal_point_hint)
@@ -51,7 +62,7 @@ def capture_scene_read(
         max_x=focal[0] + 25.0,
         max_y=focal[1] + 25.0,
     )
-    return TerrainSceneRead(
+    sr = TerrainSceneRead(
         timestamp=time.time(),
         major_landforms=tuple(major_landforms),
         focal_point=focal,
@@ -64,6 +75,25 @@ def capture_scene_read(
         success_criteria=tuple(success_criteria),
         reviewer=str(reviewer),
     )
+    # Stash the Addendum 1.A.7 extended metadata in a sidecar registry
+    # so the frozen dataclass stays untouched.
+    _EXTENDED_METADATA[id(sr)] = {
+        "viewport_vantage": viewport_vantage,
+        "addon_version": tuple(addon_version) if addon_version is not None else None,
+        "terrain_content_hash": terrain_content_hash,
+        "lockable_anchors": tuple(lockable_anchors),
+    }
+    return sr
+
+
+# Module-level registry of extended metadata keyed by id(scene_read). Frozen
+# dataclasses can't carry arbitrary attributes, so we keep this sidecar.
+_EXTENDED_METADATA: "dict[int, dict]" = {}
+
+
+def get_extended_metadata(sr: TerrainSceneRead) -> Optional[dict]:
+    """Return the Addendum 1.A.7 extended metadata for ``sr``, if any."""
+    return _EXTENDED_METADATA.get(id(sr))
 
 
 def _coerce_bbox(raw) -> Optional[BBox]:
@@ -124,4 +154,8 @@ def handle_capture_scene_read(params: dict) -> dict:
     }
 
 
-__all__ = ["capture_scene_read", "handle_capture_scene_read"]
+__all__ = [
+    "capture_scene_read",
+    "handle_capture_scene_read",
+    "get_extended_metadata",
+]

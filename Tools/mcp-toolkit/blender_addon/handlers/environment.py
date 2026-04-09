@@ -1382,6 +1382,37 @@ def handle_run_terrain_pass(params: dict) -> dict:
     )
 
     state = TerrainPipelineState(intent=intent, mask_stack=mask_stack)
+
+    # --- Protocol enforcement (Bundle R, Addendum 1.A.2) -------------------
+    # Every production mutation handler MUST route through ProtocolGate.
+    # Callers that cannot attach a full scene/vantage (unit tests, CLI dev
+    # runs) opt out via ``enforce_protocol=False`` in params.
+    if bool(params.get("enforce_protocol", False)):
+        from .terrain_protocol import ProtocolGate, ProtocolViolation
+
+        try:
+            ProtocolGate.rule_1_observe_before_calculate(state)
+            ProtocolGate.rule_2_sync_to_user_viewport(
+                state,
+                out_of_view_ok=bool(params.get("out_of_view_ok", True)),
+            )
+            ProtocolGate.rule_3_lock_reference_empties(state)
+            ProtocolGate.rule_4_real_geometry_not_vertex_tricks(params)
+            ProtocolGate.rule_5_smallest_diff_per_iteration(
+                state,
+                cells_affected=int(params.get("cells_affected", 0)),
+                objects_affected=int(params.get("objects_affected", 0)),
+                bulk_edit=bool(params.get("bulk_edit", True)),
+            )
+            ProtocolGate.rule_6_surface_vs_interior_classification(params)
+            ProtocolGate.rule_7_plugin_usage(params)
+        except ProtocolViolation as exc:
+            return {
+                "ok": False,
+                "error": "protocol_violation",
+                "message": str(exc),
+            }
+
     controller = TerrainPassController(state)
 
     pass_name = params.get("pass_name")

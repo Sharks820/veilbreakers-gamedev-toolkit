@@ -731,7 +731,9 @@ def test_tripo_serialized_preserves_order():
 
     clear_tripo_import_log()
     paths = [Path(f"mock_{i}.glb") for i in range(5)]
-    result = import_tripo_glb_serialized(paths)
+    # Paths don't exist in the unit-test sandbox; exercise the
+    # serialization contract without the existence check.
+    result = import_tripo_glb_serialized(paths, require_exists=False)
     log = get_tripo_import_log()
     assert [str(p) for p in result] == [str(p) for p in paths]
     assert len(log) == 5
