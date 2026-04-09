@@ -255,12 +255,13 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
         radius = _estimate_location_radius(location)
         requested = location.get("position")
         anchor: tuple[float, float] | None = None
-        explicit_world_anchor = False
 
         if isinstance(requested, (list, tuple)) and len(requested) >= 2:
             if terrain_cfg.get("location") is not None:
+                # Explicit world-space anchor. The clamp block below still
+                # runs — it uses world-space bounds when terrain_cfg.location
+                # is set — so the caller cannot escape the terrain footprint.
                 anchor = (float(requested[0]), float(requested[1]))
-                explicit_world_anchor = True
             else:
                 anchor = _normalize_map_point(requested, terrain_size)
 
@@ -4101,6 +4102,147 @@ async def asset_pipeline(
         return json.dumps(result, indent=2, default=str)
 
     return "Unknown action"
+
+
+# ---------------------------------------------------------------------------
+# Compound tool: terrain_pipeline (Bundle A-O orchestrator, plan §31)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def terrain_pipeline(
+    action: Literal[
+        "run_pass",
+        "run_pipeline",
+        "list_passes",
+        "list_bundles",
+        "rollback",
+        "list_checkpoints",
+    ],
+    # Core execution params
+    pass_name: str | None = None,
+    pipeline: list[str] | None = None,
+    tile_size: int = 64,
+    cell_size: float = 1.0,
+    seed: int = 0,
+    tile_x: int = 0,
+    tile_y: int = 0,
+    world_origin_x: float = 0.0,
+    world_origin_y: float = 0.0,
+    # Optional scoping + safety
+    region_bounds: dict | list | None = None,
+    region: dict | list | None = None,
+    protected_zones: list[dict] | None = None,
+    scene_read: dict | None = None,
+    checkpoint: bool = False,
+    enforce_protocol: bool = False,
+    out_of_view_ok: bool = True,
+    # Initial heightmap (optional)
+    height: list | None = None,
+    terrain_type: str = "mountains",
+    scale: float = 100.0,
+    erosion_profile: str = "temperate",
+    # Rollback
+    checkpoint_id: str | None = None,
+) -> str:
+    """AAA terrain pipeline orchestrator (Bundle A-O).
+
+    Actions:
+        * ``run_pass`` — Execute a single registered pass against the
+          ``TerrainPassController``. Supply ``pass_name``.
+        * ``run_pipeline`` — Execute an ordered list of passes. If
+          ``pipeline`` is omitted the default Bundle A sequence
+          (macro_world → structural_masks → erosion → validation_minimal)
+          runs.
+        * ``list_passes`` — Enumerate every pass currently registered
+          with the controller (each bundle registers its own).
+        * ``list_bundles`` — Report which Bundle A-O registrars loaded
+          successfully at addon startup.
+        * ``rollback`` — Restore the terrain mask stack to a previously
+          saved checkpoint; supply ``checkpoint_id``.
+        * ``list_checkpoints`` — Enumerate checkpoints currently stored
+          under ``.planning/terrain_checkpoints/``.
+
+    The tool is intentionally thin — it delegates to ``handle_run_terrain_pass``
+    (the ``env_run_terrain_pass`` command handler) which owns intent
+    construction, pass sequencing, and result serialization.
+    """
+    blender = get_blender_connection()
+
+    if action == "list_passes":
+        code = (
+            "from blender_addon.handlers.terrain_pipeline import TerrainPassController\n"
+            "names = sorted(TerrainPassController.PASS_REGISTRY.keys())\n"
+            "names"
+        )
+        result = await blender.send_command("execute_code", {"code": code})
+        return json.dumps({"passes": result}, indent=2, default=str)
+
+    if action == "list_bundles":
+        code = (
+            "from blender_addon.handlers import LOADED_TERRAIN_BUNDLES\n"
+            "list(LOADED_TERRAIN_BUNDLES)"
+        )
+        result = await blender.send_command("execute_code", {"code": code})
+        return json.dumps({"bundles": result}, indent=2, default=str)
+
+    if action == "list_checkpoints":
+        code = (
+            "from blender_addon.handlers.terrain_checkpoints import list_checkpoints\n"
+            "list_checkpoints()"
+        )
+        result = await blender.send_command("execute_code", {"code": code})
+        return json.dumps({"checkpoints": result}, indent=2, default=str)
+
+    if action == "rollback":
+        if not checkpoint_id:
+            return "ERROR: 'checkpoint_id' is required for rollback"
+        code = (
+            "from blender_addon.handlers.terrain_checkpoints import rollback_to\n"
+            f"rollback_to({checkpoint_id!r})"
+        )
+        result = await blender.send_command("execute_code", {"code": code})
+        return json.dumps(result, indent=2, default=str)
+
+    # run_pass / run_pipeline — build the handler params and dispatch via
+    # the already-registered "env_run_terrain_pass" command handler.
+    if action not in ("run_pass", "run_pipeline"):
+        return f"ERROR: unknown action '{action}'"
+
+    params: dict[str, Any] = {
+        "tile_size": int(tile_size),
+        "cell_size": float(cell_size),
+        "seed": int(seed),
+        "tile_x": int(tile_x),
+        "tile_y": int(tile_y),
+        "world_origin_x": float(world_origin_x),
+        "world_origin_y": float(world_origin_y),
+        "terrain_type": terrain_type,
+        "scale": float(scale),
+        "erosion_profile": erosion_profile,
+        "checkpoint": bool(checkpoint),
+        "enforce_protocol": bool(enforce_protocol),
+        "out_of_view_ok": bool(out_of_view_ok),
+    }
+    if region_bounds is not None:
+        params["region_bounds"] = region_bounds
+    if region is not None:
+        params["region"] = region
+    if protected_zones is not None:
+        params["protected_zones"] = protected_zones
+    if scene_read is not None:
+        params["scene_read"] = scene_read
+    if height is not None:
+        params["height"] = height
+
+    if action == "run_pass":
+        if not pass_name:
+            return "ERROR: 'pass_name' is required for run_pass"
+        params["pass_name"] = pass_name
+    else:  # run_pipeline
+        params["pipeline"] = pipeline  # None → default Bundle A sequence
+
+    result = await blender.send_command("env_run_terrain_pass", params)
+    return json.dumps(result, indent=2, default=str)
 
 
 # ---------------------------------------------------------------------------
