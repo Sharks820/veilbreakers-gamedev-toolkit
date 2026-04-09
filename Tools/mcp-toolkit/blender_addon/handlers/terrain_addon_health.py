@@ -79,17 +79,24 @@ def assert_addon_loaded() -> None:
 
 def assert_addon_version_matches(
     min_version: Tuple[int, ...] = TERRAIN_ADDON_MIN_VERSION,
+    *,
+    allow_missing: bool = False,
 ) -> None:
     """Raise ``AddonVersionMismatch`` if the on-disk addon is below min_version.
 
-    Missing bl_info is considered a mismatch — fail loudly rather than
-    letting a pass run against an unknown addon.
+    Missing ``bl_info`` is a hard-fail by default per Addendum 1.A.5: an addon
+    tree with no declared version is treated as version mismatch. Tests that
+    intentionally run against a stripped tree may pass ``allow_missing=True``.
     """
     version = _read_bl_info_version()
     if version is None:
-        # No bl_info in tree — treat as OK in headless tests rather than blocking
-        # the entire pipeline. Real Blender will use the live module version.
-        return
+        if allow_missing:
+            return
+        raise AddonVersionMismatch(
+            f"terrain addon at {_addon_init_path()} has no bl_info['version']; "
+            f"required >= {min_version}. Missing bl_info is a hard-fail — "
+            "pass allow_missing=True explicitly if this is intentional."
+        )
     if tuple(version) < tuple(min_version):
         raise AddonVersionMismatch(
             f"terrain addon version {version} < required {min_version}. "

@@ -66,13 +66,46 @@ def capture_scene_read(
     )
 
 
+def _coerce_bbox(raw) -> Optional[BBox]:
+    if raw is None:
+        return None
+    if isinstance(raw, BBox):
+        return raw
+    if isinstance(raw, dict):
+        return BBox(
+            min_x=float(raw.get("min_x", 0.0)),
+            min_y=float(raw.get("min_y", 0.0)),
+            max_x=float(raw.get("max_x", 0.0)),
+            max_y=float(raw.get("max_y", 0.0)),
+        )
+    if isinstance(raw, (list, tuple)) and len(raw) == 4:
+        mn_x, mn_y, mx_x, mx_y = raw
+        return BBox(float(mn_x), float(mn_y), float(mx_x), float(mx_y))
+    return None
+
+
 def handle_capture_scene_read(params: dict) -> dict:
-    """MCP-style handler that wraps ``capture_scene_read`` for the bridge."""
+    """MCP-style handler that wraps ``capture_scene_read`` for the bridge.
+
+    Passes through the full parameter surface from Addendum 1.A.7 so
+    bridge callers can produce a full-fidelity ``TerrainSceneRead`` with
+    hero feature refs, waterfall chains, cave candidates, protected
+    zones, and an explicit edit scope.
+    """
     sr = capture_scene_read(
         reviewer=str(params.get("reviewer", "unknown")),
         focal_point_hint=params.get("focal_point"),
         major_landforms=tuple(params.get("major_landforms", ()) or ()),
+        hero_features_present=tuple(params.get("hero_features_present", ()) or ()),
         hero_features_missing=tuple(params.get("hero_features_missing", ()) or ()),
+        waterfall_chains=tuple(params.get("waterfall_chains", ()) or ()),
+        cave_candidates=tuple(
+            tuple(c) for c in (params.get("cave_candidates", ()) or ())
+        ),
+        protected_zones_in_region=tuple(
+            params.get("protected_zones_in_region", ()) or ()
+        ),
+        edit_scope=_coerce_bbox(params.get("edit_scope")),
         success_criteria=tuple(params.get("success_criteria", ("scene_understood",))),
     )
     return {
@@ -81,7 +114,13 @@ def handle_capture_scene_read(params: dict) -> dict:
         "reviewer": sr.reviewer,
         "focal_point": list(sr.focal_point),
         "major_landforms": list(sr.major_landforms),
+        "hero_features_present_count": len(sr.hero_features_present),
+        "hero_features_missing": list(sr.hero_features_missing),
+        "waterfall_chains_count": len(sr.waterfall_chains),
+        "cave_candidates_count": len(sr.cave_candidates),
+        "protected_zones_in_region": list(sr.protected_zones_in_region),
         "edit_scope": list(sr.edit_scope.to_tuple()),
+        "success_criteria": list(sr.success_criteria),
     }
 
 

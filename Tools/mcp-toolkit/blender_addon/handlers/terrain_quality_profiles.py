@@ -16,6 +16,8 @@ from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .terrain_semantics import ErosionStrategy
+
 
 # ---------------------------------------------------------------------------
 # Profile dataclass
@@ -34,8 +36,8 @@ class TerrainQualityProfile:
 
     name: str
     erosion_iterations: int = 8
-    erosion_strategy: str = "hydraulic"
-    checkpoint_retention: int = 4
+    erosion_strategy: ErosionStrategy = ErosionStrategy.TILED_PADDED
+    checkpoint_retention: int = 20
     erosion_margin_cells: int = 8
     splatmap_bit_depth: int = 8
     heightmap_bit_depth: int = 16
@@ -45,14 +47,19 @@ class TerrainQualityProfile:
 
 # ---------------------------------------------------------------------------
 # Built-in profiles
+#
+# Numeric values per Addendum 1.B.4:
+#   checkpoint_retention: 5 / 20 / 40 / 80
+#   erosion_strategy:    TILED_PADDED for preview+production;
+#                        EXACT for hero_shot+aaa_open_world (bit-exact seams).
 # ---------------------------------------------------------------------------
 
 
 PREVIEW_PROFILE = TerrainQualityProfile(
     name="preview",
     erosion_iterations=2,
-    erosion_strategy="hydraulic_fast",
-    checkpoint_retention=2,
+    erosion_strategy=ErosionStrategy.TILED_PADDED,
+    checkpoint_retention=5,
     erosion_margin_cells=4,
     splatmap_bit_depth=8,
     heightmap_bit_depth=16,
@@ -63,8 +70,8 @@ PREVIEW_PROFILE = TerrainQualityProfile(
 PRODUCTION_PROFILE = TerrainQualityProfile(
     name="production",
     erosion_iterations=8,
-    erosion_strategy="hydraulic",
-    checkpoint_retention=4,
+    erosion_strategy=ErosionStrategy.TILED_PADDED,
+    checkpoint_retention=20,
     erosion_margin_cells=8,
     splatmap_bit_depth=8,
     heightmap_bit_depth=16,
@@ -75,8 +82,8 @@ PRODUCTION_PROFILE = TerrainQualityProfile(
 HERO_SHOT_PROFILE = TerrainQualityProfile(
     name="hero_shot",
     erosion_iterations=24,
-    erosion_strategy="hydraulic_thermal",
-    checkpoint_retention=8,
+    erosion_strategy=ErosionStrategy.EXACT,
+    checkpoint_retention=40,
     erosion_margin_cells=16,
     splatmap_bit_depth=16,
     heightmap_bit_depth=32,
@@ -87,8 +94,8 @@ HERO_SHOT_PROFILE = TerrainQualityProfile(
 AAA_OPEN_WORLD_PROFILE = TerrainQualityProfile(
     name="aaa_open_world",
     erosion_iterations=48,
-    erosion_strategy="hydraulic_thermal_wind",
-    checkpoint_retention=12,
+    erosion_strategy=ErosionStrategy.EXACT,
+    checkpoint_retention=80,
     erosion_margin_cells=32,
     splatmap_bit_depth=16,
     heightmap_bit_depth=32,
@@ -122,12 +129,14 @@ def _merge_with_parent(
     value. ``checkpoint_retention``, ``erosion_iterations``, bit depths
     are all "higher = better" and use max().
     """
+    # For the erosion strategy, child always wins (EXACT can downgrade to
+    # TILED_PADDED only when explicitly overridden).
     return TerrainQualityProfile(
         name=child.name,
         erosion_iterations=max(
             child.erosion_iterations, parent.erosion_iterations
         ),
-        erosion_strategy=child.erosion_strategy or parent.erosion_strategy,
+        erosion_strategy=child.erosion_strategy,
         checkpoint_retention=max(
             child.checkpoint_retention, parent.checkpoint_retention
         ),
@@ -179,8 +188,14 @@ def write_profile_jsons(root: Path) -> List[Path]:
     written: List[Path] = []
     for name in list_quality_profiles():
         profile = _BUILTIN_PROFILES[name]
+        payload = asdict(profile)
+        # ErosionStrategy is an Enum — serialize as its .value string
+        if isinstance(payload.get("erosion_strategy"), ErosionStrategy):
+            payload["erosion_strategy"] = payload["erosion_strategy"].value
+        elif hasattr(profile.erosion_strategy, "value"):
+            payload["erosion_strategy"] = profile.erosion_strategy.value
         out = root / f"{name}.json"
-        out.write_text(json.dumps(asdict(profile), indent=2))
+        out.write_text(json.dumps(payload, indent=2))
         written.append(out)
     return written
 

@@ -139,9 +139,51 @@ def is_in_frustum(
     world_position: Tuple[float, float, float],
     vantage: ViewportVantage,
 ) -> bool:
-    """Conservative AABB check against the vantage's visible bounds."""
+    """True when ``world_position`` is in front of the camera AND inside
+    the horizontal+vertical half-angles implied by ``vantage.fov`` (radians).
+
+    This is a real frustum test (not just an XY AABB): points behind the
+    camera are rejected via the forward-axis sign, and points outside
+    the FOV cone are rejected via right/up angular bounds. The XY AABB
+    is kept as an outer conservative gate so very distant points still
+    fail fast.
+    """
     x, y, _z = world_position
-    return vantage.visible_bounds.contains_point(x, y)
+    if not vantage.visible_bounds.contains_point(x, y):
+        return False
+    # Build an orthonormal view basis from the (possibly non-orthogonal)
+    # stored camera_up: right = world_up × forward, view_up = forward × right.
+    cx, cy, cz = vantage.camera_position
+    dx = world_position[0] - cx
+    dy = world_position[1] - cy
+    dz = world_position[2] - cz
+    fx, fy, fz = _unit(vantage.camera_direction)
+    wux, wuy, wuz = _unit(vantage.camera_up)
+    # right = world_up × forward
+    rx = wuy * fz - wuz * fy
+    ry = wuz * fx - wux * fz
+    rz = wux * fy - wuy * fx
+    rn = math.sqrt(rx * rx + ry * ry + rz * rz)
+    if rn < 1e-9:
+        # camera_up is parallel to forward — fall back to the AABB gate.
+        return True
+    rx, ry, rz = rx / rn, ry / rn, rz / rn
+    # view_up = forward × right  (orthonormal, right-handed)
+    ux = fy * rz - fz * ry
+    uy = fz * rx - fx * rz
+    uz = fx * ry - fy * rx
+    forward = fx * dx + fy * dy + fz * dz
+    if forward <= 1e-6:
+        return False
+    right = rx * dx + ry * dy + rz * dz
+    up = ux * dx + uy * dy + uz * dz
+    half_fov = 0.5 * float(vantage.fov)
+    tan_h = math.tan(half_fov)
+    if abs(right) > forward * tan_h:
+        return False
+    if abs(up) > forward * tan_h:
+        return False
+    return True
 
 
 __all__ = [
