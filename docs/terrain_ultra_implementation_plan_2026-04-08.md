@@ -3374,7 +3374,7 @@ Future sessions update these in place. Do not delete items; mark them with ✅.
 - [ ] Preserve-list: blender_scene save_project
 - [ ] `pytest Tools/mcp-toolkit/tests/` all pass
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.2 Bundle B — Cliffs + Slope Materials
 
@@ -3399,7 +3399,7 @@ Status: **NOT_STARTED**
 - [ ] `test_terrain_advanced_regression.py` — 5 tests
 - [ ] Visual test: cliff contact sheet shows lip/face/ledge/talus
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.3 Bundle C — Waterfall Hydrology Chain
 
@@ -3423,7 +3423,7 @@ Status: **NOT_STARTED**
 - [ ] `test_water_network_upgrade.py` — 8+ tests
 - [ ] Visual test: 5-angle contact sheet shows complete chain
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.4 Bundle D — Validation + Checkpoints
 
@@ -3442,7 +3442,7 @@ Status: **NOT_STARTED**
 - [ ] `test_terrain_validation.py` — 20+ tests
 - [ ] `test_terrain_checkpoints.py` — 15+ tests
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.5 Bundle E — Scatter Intelligence
 
@@ -3463,7 +3463,7 @@ Status: **NOT_STARTED**
 - [ ] `test_terrain_assets.py` — 15+ tests
 - [ ] Visual test: clustered rocks on cliff base
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.6 Bundle F — Cave Archetypes
 
@@ -3480,7 +3480,7 @@ Status: **NOT_STARTED**
 - [ ] `_terrain_depth.py` refactored with compat shim
 - [ ] Visual test per archetype
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.7 Bundle G — Banded Noise
 
@@ -3491,7 +3491,7 @@ Status: **NOT_STARTED**
 - [ ] Legacy `generate_heightmap` preserved
 - [ ] Visual test: each band separately rendered
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.8 Bundle H — Composition & Intent
 
@@ -3503,7 +3503,7 @@ Status: **NOT_STARTED**
 - [ ] `terrain_negative_space.py` — quiet-zone ratio
 - [ ] Visual tests per module
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.9 Bundle I — Geology Plausibility
 
@@ -3517,7 +3517,7 @@ Status: **NOT_STARTED**
 - [ ] `_water_network.py` Strahler ordering
 - [ ] 4 validators from §14.2
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.10 Bundle J — Ecosystem Spine
 
@@ -3533,7 +3533,7 @@ Status: **NOT_STARTED**
 - [ ] Unity export JSONs validated against §33 schemas
 - [ ] Visual test: all systems present
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.11 Bundle K — Material Ceiling
 
@@ -3548,7 +3548,7 @@ Status: **NOT_STARTED**
 - [ ] Shadow clipmap bakes to `.exr`
 - [ ] Quixel import handles at least 1 asset
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.12 Bundle L — Atmosphere & Horizon
 
@@ -3559,7 +3559,7 @@ Status: **NOT_STARTED**
 - [ ] Fog pools in valleys
 - [ ] God ray hints exported
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.13 Bundle M — Iteration Velocity
 
@@ -3577,7 +3577,7 @@ Status: **NOT_STARTED**
 - [ ] Visual diff overlay works
 - [ ] Hot-reload refreshes rules
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.14 Bundle N — Deep Validation & QA
 
@@ -3592,7 +3592,7 @@ Status: **NOT_STARTED**
 - [ ] Budget enforcer trips on synthetic over-budget
 - [ ] Golden snapshot library seeded (≥ 120 images)
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.15 Bundle O — Water + Vegetation Depth
 
@@ -3601,7 +3601,7 @@ Status: **NOT_STARTED**
 - [ ] `VegetationLayers`, `DisturbancePatch`, `Clearing` dataclasses
 - [ ] Visual tests per feature
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.16 Bundle P — Real-World Reference (OPTIONAL)
 
@@ -3610,7 +3610,7 @@ Status: **NOT_STARTED**
 - [ ] USGS DEM sample imports
 - [ ] Reference photo produces palette
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ### D.17 Bundle Q — Runtime Data Export (OPTIONAL)
 
@@ -3619,7 +3619,7 @@ Status: **NOT_STARTED**
 - [ ] `terrain_weathering_timeline.py`
 - [ ] All 3 data streams exported
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 ---
 
@@ -4136,7 +4136,7 @@ Future sessions mark these in place.
 - [ ] `capture_scene_read` handler produces valid `TerrainSceneRead`
 - [ ] 6 test files created, all passing
 
-Status: **NOT_STARTED**
+Status: **COMPLETE** (commits f467f33..8eda364)
 
 #### D.1 additions (Bundle A)
 
