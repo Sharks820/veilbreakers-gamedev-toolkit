@@ -257,6 +257,7 @@ from .coastline import (  # noqa: F401 -- coastline terrain generation
 )
 from .terrain_features import (  # noqa: F401 -- terrain feature generators
     generate_canyon,
+    generate_waterfall,
     generate_cliff_face,
     generate_swamp_terrain,
     generate_natural_arch,
@@ -1705,3 +1706,25 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     # (g) Server sends viewport_screenshot, handler registered as get_viewport_screenshot
     "viewport_screenshot": handle_get_viewport_screenshot,
 }
+
+
+# ---------------------------------------------------------------------------
+# Terrain pipeline master registrar (Bundles A–O)
+# ---------------------------------------------------------------------------
+# Must run at addon import time so the TerrainPassController.PASS_REGISTRY
+# is populated before any handler is dispatched. Without this call the entire
+# new terrain pipeline (86+ modules across 17 bundles) is dead code at
+# runtime — only tests can reach it. strict=False keeps a partial load
+# successful if a single bundle registrar is broken.
+try:
+    from .terrain_master_registrar import register_all_terrain_passes as _register_all_terrain_passes
+
+    LOADED_TERRAIN_BUNDLES = _register_all_terrain_passes(strict=False)
+except Exception as _terrain_registrar_exc:  # pragma: no cover - defensive
+    import logging as _terrain_logging
+
+    LOADED_TERRAIN_BUNDLES = []
+    _terrain_logging.getLogger(__name__).warning(
+        "Failed to register terrain pipeline bundles: %s",
+        _terrain_registrar_exc,
+    )
