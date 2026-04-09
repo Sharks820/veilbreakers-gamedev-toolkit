@@ -137,7 +137,16 @@ def handle_capture_scene_read(params: dict) -> dict:
         ),
         edit_scope=_coerce_bbox(params.get("edit_scope")),
         success_criteria=tuple(params.get("success_criteria", ("scene_understood",))),
+        viewport_vantage=params.get("viewport_vantage"),
+        addon_version=(
+            tuple(params.get("addon_version"))
+            if params.get("addon_version") is not None
+            else None
+        ),
+        terrain_content_hash=params.get("terrain_content_hash"),
+        lockable_anchors=tuple(params.get("lockable_anchors", ()) or ()),
     )
+    extended = get_extended_metadata(sr) or {}
     return {
         "ok": True,
         "timestamp": sr.timestamp,
@@ -151,6 +160,14 @@ def handle_capture_scene_read(params: dict) -> dict:
         "protected_zones_in_region": list(sr.protected_zones_in_region),
         "edit_scope": list(sr.edit_scope.to_tuple()),
         "success_criteria": list(sr.success_criteria),
+        "addon_version": (
+            list(extended["addon_version"])
+            if extended.get("addon_version") is not None
+            else None
+        ),
+        "terrain_content_hash": extended.get("terrain_content_hash"),
+        "lockable_anchors": list(extended.get("lockable_anchors", ())),
+        "has_viewport_vantage": extended.get("viewport_vantage") is not None,
     }
 
 
