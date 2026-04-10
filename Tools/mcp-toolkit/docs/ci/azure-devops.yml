@@ -1,0 +1,23 @@
+trigger: none
+pr:
+  - "*"
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+  - checkout: self
+  - task: UsePythonVersion@0
+    inputs:
+      versionSpec: "3.12"
+  - script: pip install -e Tools/mcp-toolkit
+    displayName: Install reviewer
+  - script: vb-review . --scope production --profile general --output reviewer-report.json
+    displayName: Run reviewer
+  - script: |
+      python - <<'PY'
+      import json, sys
+      report = json.load(open("reviewer-report.json", "r", encoding="utf-8"))
+      sys.exit(1 if report["critical"] or report["high"] else 0)
+      PY
+    displayName: Fail on serious findings
