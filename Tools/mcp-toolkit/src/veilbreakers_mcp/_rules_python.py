@@ -773,6 +773,131 @@ def _check_regex_in_loop(
     return False
 
 
+def _check_path_traversal(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    if not re.search(
+        r"\b(user|request|input|param|query|path|filename|file_path)\b",
+        line,
+        re.IGNORECASE,
+    ):
+        return False
+    window = "\n".join(all_lines[max(0, idx - 3) : min(len(all_lines), idx + 4)])
+    return not re.search(
+        r"(resolve\(|normpath\(|safe_join|Path\s*\([^)]*\)\.resolve)",
+        window,
+    )
+
+
+def _check_ssrf_request(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    if re.search(r'["\']https?://', line):
+        return False
+    if not re.search(r"\b(url|uri|endpoint|host)\b", line, re.IGNORECASE):
+        return False
+    window = "\n".join(all_lines[max(0, idx - 3) : min(len(all_lines), idx + 4)])
+    return not re.search(
+        r"(allowlist|whitelist|trusted_hosts|approved_hosts)",
+        window,
+        re.IGNORECASE,
+    )
+
+
+def _check_async_lock_await(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    if "await " not in line:
+        return False
+    await_indent = len(line) - len(line.lstrip())
+    for j in range(idx - 1, max(-1, idx - 8), -1):
+        candidate = all_lines[j]
+        if re.search(r"^\s*(async\s+with|with)\s+.*\b(?:lock|Lock)\b.*:", candidate):
+            lock_indent = len(candidate) - len(candidate.lstrip())
+            return lock_indent < await_indent
+    return False
+
+
+def _check_unlocked_global_mutation(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    match = re.search(r"^\s*global\s+(\w+)", line)
+    if not match:
+        return False
+    global_name = match.group(1)
+    window = "\n".join(all_lines[idx : min(len(all_lines), idx + 8)])
+    if re.search(r"(lock|Lock|RLock|threading\.)", window):
+        return False
+    return bool(
+        re.search(
+            rf"\b{re.escape(global_name)}(\s*\[[^\]]+\]\s*=|\.append\s*\(|\.extend\s*\(|\.update\s*\(|\.add\s*\()",
+            window,
+        )
+    )
+
+
+def _check_gather_without_error_collection(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    if "return_exceptions" in line:
+        return False
+    window = "\n".join(all_lines[max(0, idx - 3) : idx + 1])
+    return "try:" not in window
+
+
+def _check_popen_without_wait(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    assigned = re.search(r"(\w+)\s*=\s*subprocess\.Popen\s*\(", line)
+    if not assigned:
+        return True
+    proc_name = assigned.group(1)
+    window = "\n".join(all_lines[idx + 1 : min(len(all_lines), idx + 10)])
+    return not re.search(rf"\b{re.escape(proc_name)}\.(communicate|wait)\s*\(", window)
+
+
+def _check_optional_result_without_none_check(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    match = re.search(
+        r"^\s*(\w+)\s*=\s*[\w\.]*(find|get|lookup|resolve|maybe|optional|try)\w*\s*\(",
+        line,
+        re.IGNORECASE,
+    )
+    if not match:
+        return False
+    var_name = match.group(1)
+    for candidate in all_lines[idx + 1 : min(len(all_lines), idx + 6)]:
+        if re.search(rf"\bif\s+{re.escape(var_name)}\s+is\s+None\b", candidate):
+            return False
+        if re.search(rf"\bassert\s+{re.escape(var_name)}\s+is\s+not\s+None\b", candidate):
+            return False
+        if re.search(rf"\b{re.escape(var_name)}(\.|\[)", candidate):
+            return True
+    return False
+
+
 # =========================================================================
 #  Known patterns for AST analysis
 # =========================================================================
@@ -885,7 +1010,7 @@ def create_rules() -> list[Any]:
             description="eval() usage -- arbitrary code execution risk",
             fix="Replace with ast.literal_eval() or redesign.",
             pattern=re.compile(r"\beval\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"literal_eval"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"literal_eval"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -898,7 +1023,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(
                 r"(os\.system\s*\(|subprocess\.\w+\([^)]*shell\s*=\s*True)"
             ),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -909,7 +1034,7 @@ def create_rules() -> list[Any]:
             description="pickle.load on untrusted data -- arbitrary code execution",
             fix="Use json, msgpack, or safer format.",
             pattern=re.compile(r"pickle\.(load|loads)\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -920,7 +1045,7 @@ def create_rules() -> list[Any]:
             description="f-string in SQL/shell command -- injection risk",
             fix="For SQL: cursor.execute('SELECT * FROM t WHERE id = %s', (user_id,)). For shell: subprocess.run(['cmd', arg], shell=False).",
             pattern=re.compile(r'(execute|run|system|popen)\s*\(\s*f["\']'),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -933,7 +1058,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(r"\bexec\s*\("),
             anti_patterns=_compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"^\s*#",
                     r"^\s*\w+\s*=\s*",
                     r"def\s+\w+\s*\([^)]*exec",
@@ -951,7 +1076,7 @@ def create_rules() -> list[Any]:
             description="Mutable default argument -- shared across calls",
             fix="Change 'def f(items=[])' to 'def f(items=None):', then 'items = items if items is not None else []' in the body.",
             pattern=re.compile(r"def\s+\w+\s*\([^)]*=\s*(\[\]|\{\}|set\(\))"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -962,7 +1087,7 @@ def create_rules() -> list[Any]:
             description="Bare except: catches SystemExit, KeyboardInterrupt",
             fix="Replace 'except:' with 'except Exception:' at minimum, or 'except (ValueError, KeyError):' for specific types.",
             pattern=re.compile(r"^\s*except\s*:"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -975,7 +1100,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(r"(?<!\bwith\s)\bopen\s*\("),
             anti_patterns=_compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"^\s*#",
                     r"\bwith\b",
                     r"Image\.open",
@@ -997,7 +1122,7 @@ def create_rules() -> list[Any]:
                 r"^\s*(for|while)\b.*re\.(compile|match|search|findall|sub)\s*\("
             ),
             anti_patterns=_compile_anti(
-                [r"#\s*VB-IGNORE", r"re\.compile.*\n\s*(for|while)"]
+                [r"#\\s*(?:VB|REVIEW)-IGNORE", r"re\.compile.*\n\s*(for|while)"]
             ),
             layer="hard_correctness",
             requires_context=False,
@@ -1015,7 +1140,7 @@ def create_rules() -> list[Any]:
             description="Comparing with None using == instead of 'is None'",
             fix="Use 'is None' or 'is not None'.",
             pattern=re.compile(r"[!=]=\s*None\b"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="semantic",
             requires_context=False,
             finding_type=FindingType.STRENGTHENING,
@@ -1027,7 +1152,7 @@ def create_rules() -> list[Any]:
             description="datetime.now() without timezone -- ambiguous",
             fix="Use datetime.now(tz=timezone.utc).",
             pattern=re.compile(r"datetime\.now\s*\(\s*\)"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="semantic",
             requires_context=False,
             finding_type=FindingType.STRENGTHENING,
@@ -1040,7 +1165,7 @@ def create_rules() -> list[Any]:
             description="dict.get() with mutable default -- mutated result is shared",
             fix="Use dict.get(key) with None check, then create mutable separately.",
             pattern=re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             guard=_check_mutable_get,
             layer="semantic",
             requires_context=False,
@@ -1053,7 +1178,7 @@ def create_rules() -> list[Any]:
             description="Class with __del__ -- unpredictable GC, prevents ref cycle collection",
             fix="Use context managers or weakref.finalize.",
             pattern=re.compile(r"def\s+__del__\s*\(\s*self"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="semantic",
             requires_context=False,
             finding_type=FindingType.STRENGTHENING,
@@ -1066,7 +1191,7 @@ def create_rules() -> list[Any]:
             description="Thread without daemon=True -- may prevent clean shutdown",
             fix="Set daemon=True or join before exit.",
             pattern=re.compile(r"Thread\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"daemon"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"daemon"]),
             layer="semantic",
             requires_context=False,
         ),
@@ -1082,7 +1207,7 @@ def create_rules() -> list[Any]:
             fix="Use math.isclose(a, b) or abs(a - b) < epsilon.",
             pattern=re.compile(r"(?<!\w)(==|!=)\s*(?!0\.0\b)\d+\.\d+"),
             anti_patterns=_compile_anti([
-                r"#\s*VB-IGNORE", r"^\s*#",
+                r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#",
                 r"\bnp\.", r"\.astype\s*\(", r"asarray",
                 r"dtype\s*=",
             ]),
@@ -1097,7 +1222,7 @@ def create_rules() -> list[Any]:
             description="Re-raising exception without chain -- loses traceback",
             fix="Use 'raise NewException (...) from original_exc' to preserve the traceback chain.",
             pattern=re.compile(r"raise\s+\w+\([^)]*\)\s*$"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"\bfrom\s+\w+"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"\bfrom\s+\w+"]),
             guard=lambda line, a, i, ctx=None: _is_inside_except(line, a, i, ctx),
             layer="semantic",
             requires_context=False,
@@ -1114,7 +1239,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(r"except\s+Exception\s*(?:as|\s*:)"),
             anti_patterns=_compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"# broad catch intentional",
                     r"logger\.exception",
                     r"mcp\.tool",
@@ -1152,7 +1277,7 @@ def create_rules() -> list[Any]:
                 r"^\s*(list|dict|set|str|int|float|bool|tuple|type|id|input|filter|map|zip|range|len|sum|min|max|any|all|sorted|reversed|hash|next|iter|open|print|format|bytes|object|super)\s*=\s*"
             ),
             anti_patterns=_compile_anti(
-                [r"#\s*VB-IGNORE", r"typing", r"import"]
+                [r"#\\s*(?:VB|REVIEW)-IGNORE", r"typing", r"import"]
             ),
             guard=_check_shadow_builtin,
             layer="semantic",
@@ -1168,7 +1293,7 @@ def create_rules() -> list[Any]:
             description="Lambda in loop captures loop variable by reference -- late binding bug",
             fix="Capture with default arg: lambda x, i=i: ... or use functools.partial.",
             pattern=re.compile(r"for\s+(\w+)\s+in\b"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             guard=_check_late_binding,
             layer="semantic",
             requires_context=False,
@@ -1187,7 +1312,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(
                 r"^\s*_[a-zA-Z]\w*\s*=\s*\w+[\w.]*\s*\("
             ),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             guard=_check_discarded_assignment,
             layer="semantic",
             requires_context=False,
@@ -1205,7 +1330,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(
                 r":\s*(Dict|List|Set|dict|list|set)\b[^=]*=\s*field\s*\("
             ),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             guard=_check_frozen_mutable_field,
             layer="semantic",
             requires_context=False,
@@ -1224,7 +1349,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(
                 r"^\s*(self|state|ctx)\.rollback\s*\("
             ),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             guard=_check_validator_self_rollback,
             layer="semantic",
             requires_context=False,
@@ -1243,7 +1368,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(
                 r"^\s*if\s+[\w.()]*fallback[\w]*\s*:\s*(#.*)?$"
             ),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             guard=_check_fallback_before_primary,
             layer="semantic",
             requires_context=False,
@@ -1258,7 +1383,7 @@ def create_rules() -> list[Any]:
             description="re.match/search/findall without compile for repeated pattern",
             fix="Compile pattern once with re.compile() and reuse.",
             pattern=re.compile(r"re\.(match|search|findall|sub|split)\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"re\.compile"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"re\.compile"]),
             guard=_check_regex_in_loop,
             layer="semantic",
             requires_context=False,
@@ -1272,7 +1397,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(r"\.read\s*\(\s*\)"),
             anti_patterns=_compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"^\s*#",
                     r'"rb"',
                     r"BytesIO",
@@ -1300,7 +1425,7 @@ def create_rules() -> list[Any]:
             description="Hardcoded file path -- not portable",
             fix="Use pathlib.Path or os.path.join with configurable base.",
             pattern=re.compile(r"""['"](?:/[a-z]+/|[A-Z]:\\\\)[^'"]{3,}['"]"""),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="heuristic",
             requires_context=False,
             finding_type=FindingType.STRENGTHENING,
@@ -1313,7 +1438,7 @@ def create_rules() -> list[Any]:
             fix="Replace 'assert x > 0' with 'if x <= 0: raise ValueError(\"x must be positive\")'.",
             pattern=re.compile(r"^\s*assert\s+(?!.*#\s*nosec)"),
             anti_patterns=_compile_anti(
-                [r"#\s*VB-IGNORE", r"#\s*nosec", r"test_|_test\.py"]
+                [r"#\\s*(?:VB|REVIEW)-IGNORE", r"#\s*nosec", r"test_|_test\.py"]
             ),
             layer="heuristic",
             requires_context=False,
@@ -1330,7 +1455,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(
                 r"os\.path\.(join|exists|isfile|isdir|basename|dirname|splitext)\s*\("
             ),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="heuristic",
             requires_context=False,
             confidence=72,
@@ -1343,7 +1468,7 @@ def create_rules() -> list[Any]:
             description="Deeply nested function (3+ indent levels) — hard to test and maintain",
             fix="Extract inner function to module level or class method for better testability.",
             pattern=re.compile(r"^\s{12,}def\s+\w+\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer="heuristic",
             requires_context=False,
             confidence=85,
@@ -1356,7 +1481,7 @@ def create_rules() -> list[Any]:
             description="Star import pollutes namespace — imported names are unknown to readers and tools",
             fix="Replace with explicit imports: from X import ClassA, func_b, CONST_C.",
             pattern=re.compile(r"from\s+\S+\s+import\s+\*"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer="heuristic",
             requires_context=False,
             confidence=92,
@@ -1369,7 +1494,7 @@ def create_rules() -> list[Any]:
             description="Global variable mutation — makes function behavior depend on hidden state",
             fix="Pass the value as a function parameter, or encapsulate in a class with clear ownership.",
             pattern=re.compile(r"^\s+global\s+\w+"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer="heuristic",
             requires_context=False,
             confidence=78,
@@ -1437,6 +1562,125 @@ def create_rules() -> list[Any]:
             finding_type=FindingType.STRENGTHENING,
             confidence=90,
         ),
+        # ---- GENERAL WEB / CONCURRENCY / RESOURCE RULES ----
+        Rule(
+            id="PY-SEC-08",
+            severity=Severity.HIGH,
+            category=Category.Security,
+            description="User-controlled path reaches filesystem operation without normalization",
+            fix="Resolve against a trusted base directory and reject paths that escape it.",
+            pattern=re.compile(r"\b(open|Path|os\.path\.join)\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"resolve\(", r"normpath\("]),
+            guard=_check_path_traversal,
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-SEC-09",
+            severity=Severity.HIGH,
+            category=Category.Security,
+            description="requests call uses a user-controlled URL/host -- possible SSRF",
+            fix="Allowlist destinations or resolve against a trusted service catalog before issuing the request.",
+            pattern=re.compile(r"requests\.(get|post|put|delete|request)\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r'["\']https?://']),
+            guard=_check_ssrf_request,
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-SEC-10",
+            severity=Severity.HIGH,
+            category=Category.Security,
+            description="render_template_string with dynamic input -- server-side template injection risk",
+            fix="Render a static template file and pass user data as context variables instead.",
+            pattern=re.compile(r"render_template_string\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r'["\']\s*\)']),
+            layer="hard_correctness",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-COR-20",
+            severity=Severity.HIGH,
+            category=Category.Bug,
+            description="await while holding a threading lock -- can deadlock or starve peers",
+            fix="Release the lock before awaiting, or switch to an asyncio-compatible lock.",
+            pattern=re.compile(r"\bawait\b"),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
+            guard=_check_async_lock_await,
+            layer="hard_correctness",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-COR-21",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="Function mutates shared global state without an obvious lock",
+            fix="Protect the shared mutable global with a lock or move the state behind a synchronized owner object.",
+            pattern=re.compile(r"^\s*global\s+\w+"),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
+            guard=_check_unlocked_global_mutation,
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-COR-22",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="asyncio.gather without return_exceptions or local error collection",
+            fix="Pass return_exceptions=True or wrap the gather call in explicit exception handling.",
+            pattern=re.compile(r"asyncio\.gather\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"return_exceptions\s*="]),
+            guard=_check_gather_without_error_collection,
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-PERF-04",
+            severity=Severity.LOW,
+            category=Category.Performance,
+            description="logger call uses f-string -- string is formatted even when the log level is disabled",
+            fix="Use lazy logger formatting: logger.error('value=%s', value).",
+            pattern=re.compile(r"logger\.(debug|info|warning|error|exception|critical)\s*\(\s*f[\"']"),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
+            layer="heuristic",
+            requires_context=False,
+            finding_type=FindingType.OPTIMIZATION,
+        ),
+        Rule(
+            id="PY-RES-08",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="subprocess.Popen result is never waited or communicated -- child process may leak",
+            fix="Call communicate()/wait() or use subprocess.run() when streaming is not required.",
+            pattern=re.compile(r"subprocess\.Popen\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"subprocess\.run\s*\("]),
+            guard=_check_popen_without_wait,
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-RES-09",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="requests call without timeout -- network hang can block the worker indefinitely",
+            fix="Pass an explicit timeout=(connect, read) or timeout=<seconds>.",
+            pattern=re.compile(r"requests\.(get|post|put|delete|request)\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"timeout\s*="]),
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-COR-23",
+            severity=Severity.LOW,
+            category=Category.Bug,
+            description="Result from an Optional-style helper is dereferenced without a nearby None check",
+            fix="Check for None explicitly before dereferencing the result.",
+            pattern=re.compile(r"^\s*\w+\s*=\s*[\w\.]*(find|get|lookup|resolve|maybe|optional|try)\w*\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
+            guard=_check_optional_result_without_none_check,
+            layer="heuristic",
+            requires_context=False,
+        ),
         # ==================================================================
         #  BLENDER-SPECIFIC RULES (Phase 6)
         # ==================================================================
@@ -1448,7 +1692,7 @@ def create_rules() -> list[Any]:
             fix="Wrap in try/finally with bpy.ops.ed.undo_push(message='action_name')",
             pattern=re.compile(r"bpy\.ops\.\w+\.\w+\s*\("),
             anti_patterns=_compile_anti([
-                r"#\s*VB-IGNORE",
+                r"#\\s*(?:VB|REVIEW)-IGNORE",
                 r"undo_push",
                 r"bpy\.ops\.ed\.undo",
                 r"def\s+handle_",  # Addon handler functions have MCP-level undo management
@@ -1465,7 +1709,7 @@ def create_rules() -> list[Any]:
             fix="Use try/except/finally to ensure cleanup: bpy.data.objects.remove(obj) on error.",
             pattern=re.compile(r"bpy\.data\.(objects|meshes|materials)\.new\s*\("),
             anti_patterns=_compile_anti([
-                r"#\s*VB-IGNORE", r"\.remove\s*\(", r"try:", r"finally:",
+                r"#\\s*(?:VB|REVIEW)-IGNORE", r"\.remove\s*\(", r"try:", r"finally:",
                 r"def\s+handle_",  # MCP handler dispatch-level cleanup
                 r"handlers/",  # Addon handler modules
             ]),
@@ -1481,7 +1725,7 @@ def create_rules() -> list[Any]:
             description="Creating UV layer without checking if exists -- duplicate layers",
             fix="Check 'if not mesh.uv_layers:' before creating new UV layer.",
             pattern=re.compile(r"\.uv_layers\.new\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"if\s+not\s+.*uv_layers"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"if\s+not\s+.*uv_layers"]),
             layer="semantic",
             requires_context=False,
         ),
@@ -1492,7 +1736,7 @@ def create_rules() -> list[Any]:
             description="Accessing material.node_tree.nodes without use_nodes=True",
             fix="Set material.use_nodes = True before accessing node_tree.nodes.",
             pattern=re.compile(r"\.node_tree\.nodes"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"\.use_nodes"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"\.use_nodes"]),
             anti_radius=30,  # Check wider radius for use_nodes setup/check
             layer="semantic",
             requires_context=False,
@@ -1504,7 +1748,7 @@ def create_rules() -> list[Any]:
             description="asyncio.create_task without await or tracking -- 'Task was never retrieved' warning",
             fix="Store task: 'task = asyncio.create_task(coro())' or await immediately.",
             pattern=re.compile(r"asyncio\.create_task\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"=\s*asyncio\.create_task", r"await\s+asyncio\.create_task"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"=\s*asyncio\.create_task", r"await\s+asyncio\.create_task"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -1564,7 +1808,7 @@ def create_rules() -> list[Any]:
             description="Empty exception handler silently swallows errors -- should log or rethrow",
             fix="Add logging: 'except Exception as exc: logger.warning(\"...\", exc)'",
             pattern=re.compile(r"except\s+Exception\s*:\s*pass"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"intentional", r"graceful"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"intentional", r"graceful"]),
             anti_radius=5,
             layer="semantic",
             requires_context=False,
@@ -1578,7 +1822,7 @@ def create_rules() -> list[Any]:
             description="Global variable mutation -- consider dependency injection or singleton pattern",
             fix="Use class-level state, dependency injection, or documented singleton pattern",
             pattern=re.compile(r"^\s*global\s+\w+"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"singleton", r"cache"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"singleton", r"cache"]),
             anti_radius=10,
             layer="heuristic",
             requires_context=False,
@@ -1965,6 +2209,13 @@ PYTHON_GUARD_FUNCTIONS: dict[str, Callable] = {
     "_check_shadow_builtin": _check_shadow_builtin,
     "_check_concatenation_in_loop": _check_concatenation_in_loop,
     "_check_regex_in_loop": _check_regex_in_loop,
+    "_check_path_traversal": _check_path_traversal,
+    "_check_ssrf_request": _check_ssrf_request,
+    "_check_async_lock_await": _check_async_lock_await,
+    "_check_unlocked_global_mutation": _check_unlocked_global_mutation,
+    "_check_gather_without_error_collection": _check_gather_without_error_collection,
+    "_check_popen_without_wait": _check_popen_without_wait,
+    "_check_optional_result_without_none_check": _check_optional_result_without_none_check,
 }
 
 
@@ -1992,3 +2243,4 @@ __all__ = [
 
 # Create the rules list on module import
 RULES: list[Any] = create_rules()
+

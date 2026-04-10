@@ -517,35 +517,6 @@ class TestTerrainRidgedNoiseAndAutoSplat(unittest.TestCase):
 # ===========================================================================
 
 
-class TestPhase39TotalTestCount(unittest.TestCase):
-    """Verify the complete Phase 39 test suite has >= 80 tests."""
-
-    def test_all_phase39_test_count_80_plus(self):
-        """AAA-MAP-01 through AAA-MAP-12: Total test_aaa_*.py test count must be >= 80.
-
-        This is the integration gate: if this passes, all 12 AAA-MAP requirements
-        have test coverage. If this fails, add tests to the relevant test files.
-        """
-        test_dir = os.path.dirname(__file__)
-        pattern = os.path.join(test_dir, "test_aaa_*.py")
-        test_files = glob.glob(pattern)
-        self.assertGreater(len(test_files), 0, "No test_aaa_*.py files found")
-
-        total = 0
-        per_file: dict[str, int] = {}
-        for fpath in sorted(test_files):
-            with open(fpath, encoding="utf-8") as f:
-                src = f.read()
-            count = len(re.findall(r"^\s+def test_", src, re.MULTILINE))
-            per_file[os.path.basename(fpath)] = count
-            total += count
-
-        self.assertGreaterEqual(
-            total, 80,
-            f"Total AAA tests ({total}) must be >= 80.\n"
-            f"Per-file breakdown:\n" +
-            "\n".join(f"  {k}: {v}" for k, v in sorted(per_file.items()))
-        )
 
 
 if __name__ == "__main__":

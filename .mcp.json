@@ -12,10 +12,10 @@
       "env": {
         "BLENDER_PORT": "9876",
         "BLENDER_HOST": "localhost",
-        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}",
-        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
-        "TRIPO_API_KEY": "${TRIPO_API_KEY}",
-        "FAL_KEY": "${FAL_KEY}"
+        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY:-}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY:-}",
+        "TRIPO_API_KEY": "${TRIPO_API_KEY:-}",
+        "FAL_KEY": "${FAL_KEY:-}"
       }
     },
     "vb-unity": {
@@ -29,8 +29,8 @@
       ],
       "env": {
         "UNITY_PROJECT_PATH": "C:/Users/Conner/OneDrive/Documents/VeilBreakers3DCurrent",
-        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY}",
-        "GEMINI_API_KEY": "${GEMINI_API_KEY}"
+        "ELEVENLABS_API_KEY": "${ELEVENLABS_API_KEY:-}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY:-}"
       }
     },
     "vb-review": {
@@ -43,20 +43,20 @@
         "vb-review-mcp"
       ],
       "env": {
-        "GLM_MODEL": "${GLM_MODEL}",
-        "GLM_API_KEY": "${GLM_API_KEY}",
-        "ZAI_API_KEY": "${ZAI_API_KEY}",
-        "GLM_BASE_URL": "${GLM_BASE_URL}",
-        "ZAI_BASE_URL": "${ZAI_BASE_URL}",
-        "GLM_COMMAND": "${GLM_COMMAND}",
-        "GLM_COMMAND_ARGS": "${GLM_COMMAND_ARGS}",
-        "GLM_TIMEOUT_SECONDS": "${GLM_TIMEOUT_SECONDS}",
-        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}",
-        "GEMINI_API_KEY": "${GEMINI_API_KEY}",
-        "GOOGLE_API_KEY": "${GOOGLE_API_KEY}",
-        "GEMINI_COMMAND": "${GEMINI_COMMAND}",
-        "GEMINI_MODEL": "${GEMINI_MODEL}",
-        "REVIEW_MODEL": "${REVIEW_MODEL}"
+        "GLM_MODEL": "${GLM_MODEL:-}",
+        "GLM_API_KEY": "${GLM_API_KEY:-}",
+        "ZAI_API_KEY": "${ZAI_API_KEY:-}",
+        "GLM_BASE_URL": "${GLM_BASE_URL:-}",
+        "ZAI_BASE_URL": "${ZAI_BASE_URL:-}",
+        "GLM_COMMAND": "${GLM_COMMAND:-}",
+        "GLM_COMMAND_ARGS": "${GLM_COMMAND_ARGS:-}",
+        "GLM_TIMEOUT_SECONDS": "${GLM_TIMEOUT_SECONDS:-}",
+        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY:-}",
+        "GEMINI_API_KEY": "${GEMINI_API_KEY:-}",
+        "GOOGLE_API_KEY": "${GOOGLE_API_KEY:-}",
+        "GEMINI_COMMAND": "${GEMINI_COMMAND:-}",
+        "GEMINI_MODEL": "${GEMINI_MODEL:-}",
+        "REVIEW_MODEL": "${REVIEW_MODEL:-}"
       }
     }
   }

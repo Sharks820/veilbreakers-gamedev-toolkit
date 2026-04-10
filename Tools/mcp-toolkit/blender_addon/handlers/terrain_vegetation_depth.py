@@ -583,7 +583,7 @@ def register_vegetation_depth_pass() -> None:
             name="vegetation_depth",
             func=pass_vegetation_depth,
             requires_channels=("height",),
-            produces_channels=(),  # detail_density is a dict channel, not in produces
+            produces_channels=("detail_density",),
             seed_namespace="vegetation_depth",
             requires_scene_read=True,
             description="Bundle O — 4-layer vegetation stratification.",

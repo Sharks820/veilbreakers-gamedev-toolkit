@@ -351,36 +351,6 @@ class TestComputeVegetationPlacement:
         )
         assert result == []
 
-    def test_water_level_filtering(self):
-        """Vertices below water level should have no vegetation."""
-        # Create terrain with low spots
-        verts = []
-        normals = []
-        for j in range(10):
-            for i in range(10):
-                x = i * 10.0
-                y = j * 10.0
-                # First row at water level (z=0), rest at normal height
-                z = 0.0 if j == 0 else 5.0
-                verts.append((x, y, z))
-                normals.append((0.0, 0.0, 1.0))
-
-        faces = []
-        for j in range(9):
-            for i in range(9):
-                idx = j * 10 + i
-                faces.append((idx, idx + 1, idx + 11, idx + 10))
-
-        placements = compute_vegetation_placement(
-            verts, faces, normals, "corrupted_swamp",
-            (0, 0, 90, 90), seed=42, water_level=0.1,
-        )
-        # No placements should be at y near 0 (the low row)
-        for p in placements:
-            _px, py, _pz = p["position"]
-            # Placements near the first row (y < 5) should be rare/absent
-            # because those vertices are at water level
-
     def test_all_biomes_produce_placements(self):
         """Every biome produces at least some placements on flat terrain."""
         verts, faces, normals, bounds = _make_flat_terrain(size=200.0, resolution=20)

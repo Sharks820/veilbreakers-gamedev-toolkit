@@ -536,6 +536,12 @@ def test_pass_vegetation_depth_populates_detail_density():
         assert detail[key].dtype == np.float32
 
 
+def test_vegetation_depth_registration_declares_detail_density_output():
+    register_bundle_o_passes()
+    definition = TerrainPassController.get_pass("vegetation_depth")
+    assert "detail_density" in definition.produces_channels
+
+
 def test_pass_vegetation_depth_region_scope_leaves_outside_unchanged():
     register_bundle_o_passes()
     state = _make_state(rows=32, cols=32)

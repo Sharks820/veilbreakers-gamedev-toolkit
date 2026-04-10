@@ -400,6 +400,13 @@ def test_pass_populates_detail_density(stack, intent):
         assert arr.dtype == np.float32
 
 
+def test_scatter_registration_declares_detail_density_output():
+    from blender_addon.handlers.terrain_pipeline import TerrainPassController
+
+    definition = TerrainPassController.get_pass("scatter_intelligent")
+    assert "detail_density" in definition.produces_channels
+
+
 def test_pass_unity_ready_shape(stack, intent):
     """Explicit Unity contract check: tree_instance_points is (N, 5)."""
     state = TerrainPipelineState(intent=intent, mask_stack=stack)

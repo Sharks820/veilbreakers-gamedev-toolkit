@@ -27,7 +27,7 @@ class Category(IntEnum):
     Bug = 1
     Performance = 2
     Quality = 3
-    Unity = 4  # C#-specific; Python rules leave this unused
+    Framework = 4  # Domain/framework-specific rules such as Unity/Blender
 
 
 class FindingType(IntEnum):

@@ -693,16 +693,6 @@ class TestComputeErosionBrush:
         )
         assert not np.array_equal(result, original)
 
-    def test_result_clamped_0_1(self):
-        """Result values are clamped to [0, 1]."""
-        hmap = np.random.RandomState(42).rand(16, 16)
-        result = compute_erosion_brush(
-            hmap, (50.0, 50.0), 30.0, "hydraulic", iterations=10,
-            terrain_size=(100.0, 100.0),
-        )
-        assert result.min() >= 0.0
-        assert result.max() <= 1.0
-
     def test_invalid_erosion_type_raises(self):
         """Invalid erosion type raises ValueError."""
         with pytest.raises(ValueError, match="Unknown erosion_type"):

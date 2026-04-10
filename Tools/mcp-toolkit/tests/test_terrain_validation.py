@@ -371,6 +371,16 @@ def test_channel_dtypes_ok():
     assert validate_channel_dtypes(stack, _make_intent(stack)) == []
 
 
+def test_channel_dtypes_accepts_semantic_mask_kinds():
+    from blender_addon.handlers.terrain_validation import validate_channel_dtypes
+
+    stack = _make_stack()
+    stack.ridge = np.zeros(stack.height.shape, dtype=bool)
+    stack.basin = np.zeros(stack.height.shape, dtype=np.int32)
+
+    assert validate_channel_dtypes(stack, _make_intent(stack)) == []
+
+
 def test_channel_dtypes_fails_wrong_kind():
     from blender_addon.handlers.terrain_validation import validate_channel_dtypes
 

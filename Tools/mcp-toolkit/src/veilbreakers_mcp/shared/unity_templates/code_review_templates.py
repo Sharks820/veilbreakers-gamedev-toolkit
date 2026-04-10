@@ -4,7 +4,7 @@ Single EditorWindow scans .cs (Assets/) and .py (toolkit path) with:
 - Pre-classified line contexts (Cold/HotPath/Comment/String/Editor/Attribute)
 - Anti-pattern suppression arrays on every rule (<1% false positive target)
 - Language tabs (All / C# / Python), severity/category filters, search, JSON export
-- Double-click to open, right-click VB-IGNORE, progress bar with delayCall batching
+- Double-click to open, right-click REVIEW-IGNORE, progress bar with delayCall batching
 
 Exports:
     generate_code_reviewer_script  -- unified C# EditorWindow (~1800 lines)
@@ -501,28 +501,28 @@ namespace VeilBreakers.Editor.CodeReview
                 "GetComponent<T>() in Update/LateUpdate/FixedUpdate -- cache in Awake/Start",
                 "Cache the component reference in a field during Awake() or Start().",
                 @"GetComponent\s*<",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"(Awake|Start|OnEnable)\s*\(", @"private\s+\w+\s+_\w+\s*=\s*GetComponent", @"/Editor/" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"(Awake|Start|OnEnable)\s*\(", @"private\s+\w+\s+_\w+\s*=\s*GetComponent", @"/Editor/" }),
 
             new ReviewRule("BUG-02", Severity.CRITICAL, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Camera.main in Update -- calls FindGameObjectWithTag internally",
                 "Cache Camera.main in a field during Start().",
                 @"Camera\.main",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"_\w*(cam|camera)\w*\s*=\s*Camera\.main" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"_\w*(cam|camera)\w*\s*=\s*Camera\.main" }),
 
             new ReviewRule("BUG-03", Severity.CRITICAL, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "FindObjectOfType in Update -- O(n) scene scan every frame",
                 "Cache the result in Start() or use a singleton/service locator pattern.",
                 @"FindObjectOfType\s*[<(]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("BUG-04", Severity.HIGH, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Heap allocation (new List/Dictionary/HashSet) inside Update",
                 "Pre-allocate collections as fields and Clear() them in Update instead.",
                 @"new\s+(List|Dictionary|HashSet|Queue|Stack|LinkedList)\s*<",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\.Clear\s*\(\s*\)" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\.Clear\s*\(\s*\)" }),
 
             // BUG-05 FP fix: Only flag string concat with + if BOTH sides are string expressions
             new ReviewRule("BUG-05", Severity.HIGH, Category.Bug, Language.CSharp,
@@ -530,14 +530,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "String concatenation with + in Update -- allocates new string each frame",
                 "Use StringBuilder, string.Format, or interpolation cached outside the loop.",
                 @"(?:""[^""]*""\s*\+\s*(?:""|\w+\.ToString|\w+\s*\+\s*""))|(?:\w+\.ToString\s*\(\s*\)\s*\+\s*"")",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"const\s+string", @"StringBuilder" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"const\s+string", @"StringBuilder" }),
 
             new ReviewRule("BUG-06", Severity.CRITICAL, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "GameObject.Find() in Update -- string-based scene search every frame",
                 "Cache the reference in Start() or Awake().",
                 @"GameObject\.Find\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("BUG-07", Severity.MEDIUM, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
@@ -545,7 +545,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Cache transform.position/rotation in a local variable.",
                 @"transform\.(position|rotation)\s*[;=\.\[].*transform\.(position|rotation)",
                 RegexOptions.Singleline,
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"var\s+\w+\s*=\s*transform\.(position|rotation)" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"var\s+\w+\s*=\s*transform\.(position|rotation)" }),
 
             // BUG-08: forward guard -- only flag if code continues after Destroy
             new ReviewRule("BUG-08", Severity.HIGH, Category.Bug, Language.CSharp,
@@ -553,7 +553,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Accessing member after Destroy(gameObject) -- object is destroyed",
                 "Add 'return;' after Destroy(gameObject) or ensure no member access follows.",
                 @"Destroy\s*\(\s*gameObject\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     for (int j = i + 1; j < Math.Min(i + 4, all.Length); j++) {
@@ -570,14 +570,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Missing null check after GetComponent -- may return null",
                 "Always null-check the result of GetComponent before use.",
                 @"=\s*GetComponent\s*<[^>]+>\s*\(\s*\)\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"if\s*\(\s*\w+\s*[!=]=\s*null", @"Debug\.(Log|Assert)", @"\?\." }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"if\s*\(\s*\w+\s*[!=]=\s*null", @"Debug\.(Log|Assert)", @"\?\." }),
 
             new ReviewRule("BUG-10", Severity.MEDIUM, Category.Bug, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "'is null' on UnityEngine.Object -- Unity overloads == for destroyed object check",
                 "Use '== null' instead of 'is null' for Unity objects.",
                 @"\bis\s+null\b",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"System\.", @"struct\s",
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"System\.", @"struct\s",
                                      @"string\s", @"List<", @"Dictionary<", @"I[A-Z]\w+\s" },
                 confidence: 55,
                 reasoning: "'is null' is correct for plain C# objects, strings, interfaces, and generics. Only wrong when used on UnityEngine.Object subclasses where == null checks for destroyed objects."),
@@ -588,7 +588,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "async void method -- exceptions are silently swallowed",
                 "Use async Task/UniTask instead; only async void for event handlers.",
                 @"async\s+void\s+(?!On[A-Z]|Start|Awake|Handle|Button_|Btn_)\w+\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"ICommand", @"EventHandler" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"ICommand", @"EventHandler" }),
 
             // BUG-12 FP fix: Only flag if result NOT stored AND name suggests infinite loop
             new ReviewRule("BUG-12", Severity.MEDIUM, Category.Bug, Language.CSharp,
@@ -596,7 +596,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Coroutine started but never stopped -- potential memory leak",
                 "Store the Coroutine reference and StopCoroutine in OnDisable/OnDestroy.",
                 @"StartCoroutine\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"=\s*StartCoroutine", @"StopCoroutine", @"StopAllCoroutines" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"=\s*StartCoroutine", @"StopCoroutine", @"StopAllCoroutines" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     // Only flag if name suggests infinite: Loop, Repeat, Continuous, Forever
@@ -608,7 +608,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "new WaitForSeconds() allocated every yield -- cache as a field",
                 "Declare a WaitForSeconds field and reuse it.",
                 @"yield\s+return\s+new\s+WaitForSeconds\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             // BUG-14 removed: duplicate of UNITY-18 (SendMessage/BroadcastMessage)
 
@@ -617,7 +617,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Collision callback detected -- verify Rigidbody setup semantically",
                 "Confirm at least one participating object has the required Rigidbody setup in scene/prefab data.",
                 @"void\s+(OnTriggerEnter|OnCollisionEnter|OnTriggerEnter2D|OnCollisionEnter2D)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 type: FindingType.Strengthening,
                 confidence: 35,
                 reasoning: "Method presence alone cannot prove whether Rigidbody requirements are satisfied. This needs prefab or scene-level semantic inspection."),
@@ -627,7 +627,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Physics cast without LayerMask -- verify intent semantically",
                 "Use a LayerMask when broad collision queries are unintended; keep unmasked casts only when explicitly required.",
                 @"Physics\d*\.Raycast\s*\([^)]*\)\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"(LayerMask|layerMask|layer)" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"(LayerMask|layerMask|layer)" },
                 type: FindingType.Strengthening,
                 confidence: 40,
                 reasoning: "Unmasked raycasts are often intentional for broad queries. Correctness depends on gameplay and layer design, not syntax alone."),
@@ -637,7 +637,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Time.deltaTime in FixedUpdate -- use Time.fixedDeltaTime",
                 "Replace with Time.fixedDeltaTime or omit (already fixed step).",
                 @"Time\.deltaTime",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => InFixedUpdate(line, all, i, ctx)),
 
             new ReviewRule("BUG-18", Severity.LOW, Category.Bug, Language.CSharp,
@@ -645,7 +645,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Empty Unity lifecycle method -- still called, wasting CPU",
                 "Remove empty lifecycle methods entirely.",
                 @"void\s+(Update|Start|Awake|LateUpdate|FixedUpdate|OnGUI|OnAnimatorMove)\s*\(\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => ctx[i] != LineContext.Comment && BodyLength(all, i) <= 2),
 
             new ReviewRule("BUG-19", Severity.LOW, Category.Performance, Language.CSharp,
@@ -653,7 +653,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "foreach in hot path -- verify collection/runtime semantics",
                 "Use for loop with index instead.",
                 @"foreach\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Span<", @"ReadOnlySpan<" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Span<", @"ReadOnlySpan<" },
                 type: FindingType.Optimization,
                 confidence: 50,
                 reasoning: "Modern Unity (2021+) with .NET Standard 2.1 does not allocate enumerators for List<T> and arrays in foreach. Only a concern on older Mono backend or custom IEnumerable types."),
@@ -663,35 +663,35 @@ namespace VeilBreakers.Editor.CodeReview
                 "Debug.Log in production code -- wrap in #if UNITY_EDITOR or [Conditional]",
                 "Use #if UNITY_EDITOR or [Conditional(\"UNITY_EDITOR\")] wrapper.",
                 @"Debug\.(Log|LogWarning|LogError|LogException)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"#if\s+UNITY_EDITOR", @"\[Conditional" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"#if\s+UNITY_EDITOR", @"\[Conditional" }),
 
             new ReviewRule("BUG-21", Severity.HIGH, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Resources.Load at runtime without caching -- disk I/O each call",
                 "Cache the loaded resource or use Addressables.",
                 @"Resources\.Load\s*[<(]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"_\w+\s*=\s*Resources\.Load" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"_\w+\s*=\s*Resources\.Load" }),
 
             new ReviewRule("BUG-22", Severity.MEDIUM, Category.Bug, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Instantiate without parent transform -- world-space recalculation",
                 "Pass a parent transform as the second argument.",
                 @"Instantiate\s*\(\s*[^,)]+\s*\)\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\.SetParent", @"\.transform\.parent" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\.SetParent", @"\.transform\.parent" }),
 
             new ReviewRule("BUG-23", Severity.CRITICAL, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "AddComponent in Update loop -- creates components every frame",
                 "Move AddComponent to initialization or one-time event.",
                 @"\.AddComponent\s*[<(]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("BUG-24", Severity.LOW, Category.Bug, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.Runtime,
                 "Private field missing [SerializeField] but preceded by [Tooltip]/[Header]",
                 "Add [SerializeField] to private fields visible in Inspector.",
                 @"private\s+\w+\s+\w+\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\[SerializeField\]", @"\[HideInInspector\]", @"static|const|readonly" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\[SerializeField\]", @"\[HideInInspector\]", @"static|const|readonly" },
                 guard: (line, all, i, ctx) => {
                     return i > 0 && (all[i-1].Contains("[Tooltip") || all[i-1].Contains("[Header"));
                 }),
@@ -702,7 +702,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Public Inspector field -- verify encapsulation intent semantically",
                 "Use [SerializeField] private instead of public for Inspector fields.",
                 @"^\s+public\s+(?!static|const|readonly|override|virtual|abstract|event|delegate|class|struct|enum|interface)\w+\s+\w+\s*[;=]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @":\s*ScriptableObject", @":\s*SOBase", @"\[System\.Serializable\]" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @":\s*ScriptableObject", @":\s*SOBase", @"\[System\.Serializable\]" },
                 guard: (line, all, i, ctx) => {
                     for (int j = i; j >= 0; j--)
                     {
@@ -722,42 +722,42 @@ namespace VeilBreakers.Editor.CodeReview
                 "Comparing tag with == instead of CompareTag() -- allocates string",
                 "Use gameObject.CompareTag(\"tag\") instead.",
                 @"\.tag\s*==\s*""",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("BUG-27", Severity.MEDIUM, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Vector3.Distance in loop -- use sqrMagnitude to avoid sqrt",
                 "Use (a - b).sqrMagnitude < threshold * threshold.",
                 @"Vector\d\.Distance\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"sqrMagnitude" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"sqrMagnitude" }),
 
             new ReviewRule("BUG-28", Severity.HIGH, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "LINQ in Update -- allocates iterators, closures, temp collections",
                 "Replace LINQ with manual loops in hot paths.",
                 @"\.\s*(Where|Select|OrderBy|GroupBy|Any|All|First|Last|Count|Sum|Min|Max|ToList|ToArray|ToDictionary)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("BUG-29", Severity.MEDIUM, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Animator.StringToHash not cached -- recalculates hash every call",
                 "Declare static readonly int fields for animator hashes.",
                 @"Animator\.StringToHash\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"static\s+readonly\s+int" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"static\s+readonly\s+int" }),
 
             new ReviewRule("BUG-30", Severity.MEDIUM, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "material property creating runtime instance -- use sharedMaterial or MPB",
                 "Use renderer.sharedMaterial or MaterialPropertyBlock.",
                 @"\.\s*material\s*[\.=](?!s)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"sharedMaterial", @"MaterialPropertyBlock" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"sharedMaterial", @"MaterialPropertyBlock" }),
 
             new ReviewRule("BUG-31", Severity.LOW, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Null-conditional ?. or ?? may bypass Unity destroyed-object semantics",
                 "Use explicit == null check: Unity overloads == to detect destroyed objects.",
                 @"\b\w+\s*(\?\.|(\?\?))",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"System\.\w+", @"string\?", @"int\?" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"System\.\w+", @"string\?", @"int\?" },
                 guard: (line, all, i, ctx) => {
                     return ctx[i] != LineContext.Comment && Regex.IsMatch(line, @"(Component|GameObject|Transform|Renderer|Collider|Rigidbody|Camera|Light|MonoBehaviour)\s");
                 },
@@ -770,14 +770,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "GetComponentInChildren/InParent in Update -- cache it",
                 "Cache in Awake/Start. Traverses entire hierarchy.",
                 @"GetComponent(InChildren|InParent)\s*[<(]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"_\w+\s*=\s*GetComponent" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"_\w+\s*=\s*GetComponent" }),
 
             new ReviewRule("BUG-33", Severity.CRITICAL, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "FindWithTag/FindGameObjectsWithTag in Update -- O(n) scene scan",
                 "Cache in Start() or use a registry pattern.",
                 @"(FindWithTag|FindGameObjectsWithTag)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             // BUG-34: Dictionary serialization (Unity can't serialize Dictionary)
             new ReviewRule("BUG-34", Severity.MEDIUM, Category.Bug, Language.CSharp,
@@ -785,7 +785,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Dictionary<K,V> in [Serializable] class -- Unity cannot serialize dictionaries",
                 "Use a List<SerializableKeyValue> wrapper or ISerializationCallbackReceiver.",
                 @"\bDictionary\s*<",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"ISerializationCallbackReceiver", @"SerializationCallback", @"JsonConvert" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"ISerializationCallbackReceiver", @"SerializationCallback", @"JsonConvert" },
                 guard: (line, all, i, ctx) => {
                     // Only flag if inside a [Serializable] or [SerializeField] context
                     for (int j = Math.Max(0, i - 10); j < i; j++)
@@ -800,7 +800,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "yield return 0 -- boxes int to object; use yield return null",
                 "Replace 'yield return 0' with 'yield return null' to avoid boxing allocation.",
                 @"yield\s+return\s+0\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             // BUG-36: Input polling in FixedUpdate (misses input frames)
             new ReviewRule("BUG-36", Severity.HIGH, Category.Bug, Language.CSharp,
@@ -808,7 +808,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Input.GetKey/GetButton in FixedUpdate -- misses input on frames without physics step",
                 "Read input in Update(), store in a field, apply in FixedUpdate().",
                 @"Input\.(GetKey|GetKeyDown|GetKeyUp|GetButton|GetButtonDown|GetButtonUp|GetMouseButton|GetMouseButtonDown)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"void\s+Update" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"void\s+Update" },
                 guard: (line, all, i, ctx) => InFixedUpdate(line, all, i, ctx)),
 
             // BUG-37: ConfigureAwait(false) in Unity (breaks SynchronizationContext)
@@ -817,7 +817,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "ConfigureAwait(false) in Unity -- Unity has single-threaded sync context",
                 "Remove .ConfigureAwait(false); Unity automatically returns to main thread.",
                 @"\.ConfigureAwait\s*\(\s*false\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"#if\s+UNITY_EDITOR", @"/Editor/" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"#if\s+UNITY_EDITOR", @"/Editor/" }),
 
             // BUG-38: Texture2D created without Destroy (native memory leak)
             new ReviewRule("BUG-38", Severity.HIGH, Category.Bug, Language.CSharp,
@@ -825,7 +825,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "new Texture2D() without Destroy -- leaks native GPU memory",
                 "Call Destroy(texture) when no longer needed, or use a texture pool.",
                 @"new\s+Texture2D\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Destroy\s*\(", @"DestroyImmediate", @"Object\.Destroy",
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Destroy\s*\(", @"DestroyImmediate", @"Object\.Destroy",
                                      @"_texture\s*=\s*new\s+Texture2D" },
                 antiRadius: 15),
 
@@ -835,7 +835,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "new RenderTexture() without Release -- leaks native GPU memory",
                 "Call rt.Release() and Destroy(rt) in cleanup, or use RenderTexture.GetTemporary/ReleaseTemporary.",
                 @"new\s+RenderTexture\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\.Release\s*\(\)", @"ReleaseTemporary", @"Destroy\s*\(" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\.Release\s*\(\)", @"ReleaseTemporary", @"Destroy\s*\(" },
                 antiRadius: 20),
 
             // BUG-40: DontDestroyOnLoad(this) instead of DontDestroyOnLoad(gameObject)
@@ -844,7 +844,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "DontDestroyOnLoad(this) -- should use DontDestroyOnLoad(gameObject)",
                 "Pass gameObject instead of this to ensure the entire GameObject persists.",
                 @"DontDestroyOnLoad\s*\(\s*this\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 confidence: 90),
 
             // ---- PERFORMANCE (1-22) ----
@@ -854,14 +854,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Boxing value type to object -- causes GC allocation",
                 "Use generics or overloaded methods to avoid boxing.",
                 @"\(\s*object\s*\)\s*\w+",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("PERF-02", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Closure allocation in lambda/delegate in hot path",
                 "Capture in a struct or pass via static method + state parameter.",
                 @"=>\s*\{?[^}]*\b(this|[a-z_]\w*)\b",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"static\s+(void|bool|int)",
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"static\s+(void|bool|int)",
                                      @"static\s*\(", @"static\s*\w+\s*=>" },
                 type: FindingType.Optimization,
                 confidence: 50,
@@ -872,63 +872,63 @@ namespace VeilBreakers.Editor.CodeReview
                 "Large struct passed by value -- consider in/ref parameter",
                 "Use 'in' for readonly pass or 'ref' for mutable pass.",
                 @"\(\s*(Matrix4x4|Bounds|RaycastHit|ContactPoint|NavMeshHit)\s+\w+\s*[,)]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\bin\b", @"\bref\b" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\bin\b", @"\bref\b" }),
 
             new ReviewRule("PERF-04", Severity.LOW, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Unbounded List.Add without Capacity pre-allocation",
                 "Set list.Capacity or use new List<T>(expectedSize).",
                 @"new\s+List\s*<[^>]+>\s*\(\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Capacity\s*=" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Capacity\s*=" }),
 
             new ReviewRule("PERF-05", Severity.LOW, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "String.Format in hot path -- use cached StringBuilder",
                 "Use StringBuilder.AppendFormat or pre-allocated string ops.",
                 @"[Ss]tring\.Format\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("PERF-06", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Texture2D.GetPixel/SetPixel per-pixel -- use bulk API",
                 "Use GetPixels32()/SetPixels32() for bulk pixel ops.",
                 @"\.(GetPixel|SetPixel)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"GetPixels32|SetPixels32" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"GetPixels32|SetPixels32" }),
 
             new ReviewRule("PERF-07", Severity.HIGH, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Mesh property in loop -- each access copies entire array",
                 "Cache mesh.vertices/normals/etc in a local array before the loop.",
                 @"mesh\.(vertices|normals|uv|tangents|colors|triangles)\b",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"var\s+\w+\s*=\s*mesh\." }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"var\s+\w+\s*=\s*mesh\." }),
 
             new ReviewRule("PERF-08", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Physics cast without maxDistance -- scans to infinity",
                 "Always specify a maxDistance parameter.",
                 @"Physics\d*\.(Raycast|SphereCast|CapsuleCast|BoxCast)\s*\(\s*[^,]+\s*,\s*[^,]+\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("PERF-09", Severity.LOW, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Mathf.Pow(x, 2) -- use x * x for simple multiply",
                 "Use x * x instead of Mathf.Pow(x, 2f).",
                 @"Mathf\.Pow\s*\([^,]+,\s*2\.?0?f?\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("PERF-10", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Camera.main.ScreenToWorldPoint in Update without cache",
                 "Cache Camera.main in Start().",
                 @"Camera\.main\.Screen",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"_\w*(cam|camera)\s*=" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"_\w*(cam|camera)\s*=" }),
 
             new ReviewRule("PERF-11", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Nested for loops O(n^2) -- consider spatial hashing or early exit",
                 "Use spatial partitioning, break/continue, or reduce inner loop.",
                 @"for\s*\([^)]+\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"break\s*;" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"break\s*;" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] != LineContext.HotPath) return false;
                     // Check if there's another for loop within 8 lines after this one
@@ -944,7 +944,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "SetParent without worldPositionStays=false",
                 "Pass false as second argument if world position preservation unneeded.",
                 @"\.SetParent\s*\(\s*[^,)]+\s*\)\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 type: FindingType.Optimization,
                 confidence: 45,
                 reasoning: "worldPositionStays=true (the default) is often the intended behavior to preserve world position during reparenting. Passing false changes the object's world position, which may break gameplay. Only a perf concern in tight loops."),
@@ -954,21 +954,21 @@ namespace VeilBreakers.Editor.CodeReview
                 "ParticleSystem collision on all layers -- use collision LayerMask",
                 "Set the collision LayerMask to only needed layers.",
                 @"collisionModule\.(enabled\s*=\s*true|collidesWith)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"LayerMask" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"LayerMask" }),
 
             new ReviewRule("PERF-14", Severity.LOW, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Light shadow casting on all objects -- use culling mask",
                 "Set the light's culling mask to limit shadow-casting layers.",
                 @"\.shadows\s*=\s*LightShadows\.(Soft|Hard)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"cullingMask" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"cullingMask" }),
 
             new ReviewRule("PERF-15", Severity.LOW, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "AudioSource spatialBlend 0 but using distance attenuation",
                 "Set spatialBlend to 1 for 3D or remove rolloff settings.",
                 @"spatialBlend\s*=\s*0",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 type: FindingType.Optimization,
                 confidence: 45,
                 reasoning: "spatialBlend=0 is correct for 2D audio (UI sounds, music). Only problematic if distance attenuation is also configured."),
@@ -978,35 +978,35 @@ namespace VeilBreakers.Editor.CodeReview
                 "new NavMeshPath() in hot path -- allocates each call",
                 "Reuse a NavMeshPath instance.",
                 @"new\s+NavMeshPath\s*\(\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"_\w+\s*=\s*new\s+NavMeshPath" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"_\w+\s*=\s*new\s+NavMeshPath" }),
 
             new ReviewRule("PERF-17", Severity.HIGH, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "ForceUpdateCanvases() called -- very expensive",
                 "Let Unity batch canvas updates naturally.",
                 @"ForceUpdateCanvases\s*\(\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("PERF-18", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "LayoutRebuilder.ForceRebuildLayoutImmediate every frame",
                 "Only rebuild when content changes, then disable LayoutGroup.",
                 @"LayoutRebuilder\.ForceRebuildLayoutImmediate\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("PERF-19", Severity.LOW, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "SetActive toggling in hot path -- consider CanvasGroup.alpha",
                 "Use CanvasGroup.alpha or disable MeshRenderer for frequent toggles.",
                 @"\.SetActive\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"CanvasGroup" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"CanvasGroup" }),
 
             new ReviewRule("PERF-20", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Multiple cameras rendering -- ensure proper culling/depth",
                 "Reduce camera count or use stacking with optimized clear flags.",
                 @"new\s+.*Camera\b.*enabled\s*=\s*true|Camera\.allCameras",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 confidence: 40,
                 reasoning: "First branch 'new...Camera...enabled=true' is too loose and matches many unrelated patterns. Camera.allCameras is a valid query. Only a concern when multiple cameras render simultaneously without proper culling."),
 
@@ -1015,14 +1015,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Use NonAlloc physics API to avoid array allocation every frame",
                 "Replace RaycastAll with RaycastNonAlloc, OverlapSphere with OverlapSphereNonAlloc.",
                 @"Physics\.(RaycastAll|SphereCastAll|CapsuleCastAll|BoxCastAll|OverlapSphere|OverlapBox|OverlapCapsule)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"NonAlloc" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"NonAlloc" }),
 
             new ReviewRule("PERF-22", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Setting material properties in Update creates Material instances -- use MPB",
                 "Use renderer.GetPropertyBlock()/SetPropertyBlock().",
                 @"\.\s*material\s*\.\s*Set(Color|Float|Int|Vector|Texture|Matrix)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"MaterialPropertyBlock", @"sharedMaterial" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"MaterialPropertyBlock", @"sharedMaterial" }),
 
             // PERF-23: ToLower/ToUpper for string comparison
             new ReviewRule("PERF-23", Severity.MEDIUM, Category.Performance, Language.CSharp,
@@ -1030,7 +1030,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "ToLower()/ToUpper() for comparison -- allocates new string",
                 "Use string.Equals(a, b, StringComparison.OrdinalIgnoreCase) instead.",
                 @"\.(ToLower|ToUpper|ToLowerInvariant|ToUpperInvariant)\s*\(\s*\)\s*(==|!=|\.Equals|\.Contains|\.StartsWith)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"StringComparison\.(Ordinal|InvariantCulture)IgnoreCase" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"StringComparison\.(Ordinal|InvariantCulture)IgnoreCase" }),
 
             // (PERF-24 removed: duplicate of BUG-28)
             // (PERF-25 removed: duplicate of BUG-21)
@@ -1043,21 +1043,21 @@ namespace VeilBreakers.Editor.CodeReview
                 "System.IO.File operation without path validation -- path traversal risk",
                 "Validate and sanitize file paths; reject '..' and absolute paths from user input.",
                 @"System\.IO\.(File|Directory)\.(Read|Write|Delete|Move|Copy|Create|Open|Append)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Application\.(dataPath|persistentDataPath|streamingAssetsPath)", @"/Editor/" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Application\.(dataPath|persistentDataPath|streamingAssetsPath)", @"/Editor/" }),
 
             new ReviewRule("SEC-02", Severity.CRITICAL, Category.Security, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Process.Start -- command injection risk",
                 "Never pass user input to Process.Start; whitelist allowed commands.",
                 @"Process\.Start\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"#if\s+UNITY_EDITOR" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"#if\s+UNITY_EDITOR" }),
 
             new ReviewRule("SEC-03", Severity.HIGH, Category.Security, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "JsonUtility.FromJson on untrusted input -- validate schema",
                 "Validate deserialized object fields and reject unexpected values.",
                 @"JsonUtility\.FromJson\s*[<(]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("SEC-04", Severity.HIGH, Category.Security, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
@@ -1065,21 +1065,21 @@ namespace VeilBreakers.Editor.CodeReview
                 "Encrypt sensitive data or use a secure store.",
                 @"PlayerPrefs\.(SetString|SetInt|SetFloat)\s*\(\s*""(password|token|key|secret|credential|auth)",
                 RegexOptions.IgnoreCase,
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("SEC-05", Severity.MEDIUM, Category.Security, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "HTTP URL (non-HTTPS) -- data in plaintext",
                 "Use HTTPS URLs for all network requests.",
                 @"(""http://|UnityWebRequest\.Get\s*\(\s*""http://)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"localhost", @"127\.0\.0\.1" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"localhost", @"127\.0\.0\.1" }),
 
             new ReviewRule("SEC-06", Severity.CRITICAL, Category.Security, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "CompileAssemblyFromSource -- arbitrary code execution",
                 "Never compile user-provided code at runtime.",
                 @"(CompileAssemblyFrom|CSharpCodeProvider|CodeDomProvider)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("SEC-07", Severity.CRITICAL, Category.Security, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
@@ -1087,7 +1087,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Use parameterized queries.",
                 @"(SELECT|INSERT|UPDATE|DELETE)\s+.*""\s*\+\s*\w+",
                 RegexOptions.IgnoreCase,
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"@""", @"Parameters\.(Add|AddWithValue)" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"@""", @"Parameters\.(Add|AddWithValue)" }),
 
             new ReviewRule("SEC-08", Severity.CRITICAL, Category.Security, Language.CSharp,
                 RuleScope.FileLevel, FileFilter.All,
@@ -1095,30 +1095,30 @@ namespace VeilBreakers.Editor.CodeReview
                 "Store in environment variables or secure vault.",
                 @"(api[_-]?key|password|secret|token|credential)\s*=\s*""[^""]{8,}""",
                 RegexOptions.IgnoreCase,
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"placeholder|example|test|dummy|TODO", @"\.env|config\." }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"placeholder|example|test|dummy|TODO", @"\.env|config\." }),
 
             new ReviewRule("SEC-09", Severity.HIGH, Category.Security, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Resources.Load with user-provided path -- directory traversal",
                 "Whitelist allowed resource paths.",
                 @"Resources\.Load\s*\(\s*\w+\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"const\s+string", @"nameof\s*\(", @"Resources\.Load\s*\(\s*""" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"const\s+string", @"nameof\s*\(", @"Resources\.Load\s*\(\s*""" }),
 
             new ReviewRule("SEC-10", Severity.HIGH, Category.Security, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Application.OpenURL with dynamic URL -- URL injection",
                 "Validate and whitelist URLs.",
                 @"Application\.OpenURL\s*\(\s*[^"")\s]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             // ---- UNITY-SPECIFIC (1-17) ----
 
-            new ReviewRule("UNITY-01", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-01", Severity.HIGH, Category.Framework, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.Runtime,
                 "MonoBehaviour constructor -- use Awake()/Start() instead",
                 "Unity manages MonoBehaviour lifecycle; use Awake/Start.",
                 @"\bpublic\s+\w+\s*\(\s*\)\s*\{",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"ScriptableObject", @"struct\s" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"ScriptableObject", @"struct\s" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     for (int j = i; j >= Math.Max(0, i - 50); j--)
@@ -1126,12 +1126,12 @@ namespace VeilBreakers.Editor.CodeReview
                     return false;
                 }),
 
-            new ReviewRule("UNITY-02", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-02", Severity.HIGH, Category.Framework, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.Runtime,
                 "ScriptableObject constructor -- use OnEnable or CreateInstance",
                 "Use ScriptableObject.CreateInstance<T>() and OnEnable.",
                 @"\bpublic\s+\w+\s*\(\s*\)\s*\{",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"MonoBehaviour" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"MonoBehaviour" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     for (int j = i; j >= Math.Max(0, i - 50); j--)
@@ -1139,12 +1139,12 @@ namespace VeilBreakers.Editor.CodeReview
                     return false;
                 }),
 
-            new ReviewRule("UNITY-03", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-03", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Accessing .gameObject/.transform near Destroy(gameObject) -- potential use-after-destroy",
                 "Add 'return;' after Destroy(gameObject) or null-check before accessing destroyed object's members.",
                 @"\.(gameObject|transform)\b",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"if\s*\(\s*\w+\s*!=\s*null", @"return\s*;" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"if\s*\(\s*\w+\s*!=\s*null", @"return\s*;" },
                 confidence: 50, priority: 55,
                 reasoning: "Heuristic: flags .gameObject/.transform within 3 lines after Destroy(gameObject). Cannot verify the access targets the same object. Review manually.",
                 guard: (line, all, i, ctx) => {
@@ -1154,19 +1154,19 @@ namespace VeilBreakers.Editor.CodeReview
                     return false;
                 }),
 
-            new ReviewRule("UNITY-04", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-04", Severity.HIGH, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "DontDestroyOnLoad without singleton duplicate check",
                 "Add: if (Instance != null) { Destroy(gameObject); return; }",
                 @"DontDestroyOnLoad\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Instance\s*!=\s*null", @"Destroy\(gameObject\)" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Instance\s*!=\s*null", @"Destroy\(gameObject\)" }),
 
-            new ReviewRule("UNITY-05", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-05", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "GetComponent in Awake/Start without [RequireComponent]",
                 "Add [RequireComponent(typeof(T))] to guarantee the component exists.",
                 @"GetComponent\s*<(\w+)>\s*\(\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\[RequireComponent", @"TryGetComponent" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\[RequireComponent", @"TryGetComponent" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     for (int j = i; j >= Math.Max(0, i - 20); j--)
@@ -1177,28 +1177,28 @@ namespace VeilBreakers.Editor.CodeReview
                     return false;
                 }),
 
-            new ReviewRule("UNITY-06", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-06", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Invoke/InvokeRepeating with string method name",
                 "Use Coroutines, async/await, or direct method references.",
                 @"\.(Invoke|InvokeRepeating)\s*\(\s*""",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
-            new ReviewRule("UNITY-07", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-07", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Scene loaded without additive mode may leak DontDestroyOnLoad objects",
                 "Use LoadSceneMode.Additive or clean up persistent objects.",
                 @"SceneManager\.LoadScene\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Additive" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Additive" },
                 confidence: 40,
                 reasoning: "Single-mode scene loading is the Unity default and correct in most cases. Only a concern with DontDestroyOnLoad objects."),
 
-            new ReviewRule("UNITY-08", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-08", Severity.HIGH, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Event += without matching -= -- memory leak if subscriber outlives publisher",
                 "Add -= unsubscribe in OnDisable() or OnDestroy().",
                 @"\w+\.\w+\s*\+=\s*\w+\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\+=\s*\d", @"\+=\s*""" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\+=\s*\d", @"\+=\s*""" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     // Must be member.Event += Handler pattern, not arithmetic
@@ -1213,27 +1213,27 @@ namespace VeilBreakers.Editor.CodeReview
                     return true;
                 }),
 
-            new ReviewRule("UNITY-09", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-09", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Editor-only API outside #if UNITY_EDITOR block",
                 "Wrap EditorApplication/AssetDatabase/etc. in #if UNITY_EDITOR.",
                 @"(EditorApplication|AssetDatabase|EditorUtility|Selection|Undo|PrefabUtility|SerializedObject|SerializedProperty)\.",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"#if\s+UNITY_EDITOR" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"#if\s+UNITY_EDITOR" },
                 guard: (line, all, i, ctx) => ctx[i] != LineContext.EditorBlock && ctx[i] != LineContext.Comment),
 
-            new ReviewRule("UNITY-10", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-10", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.Runtime,
                 "Serializing interface or abstract type -- Unity serializer cannot handle",
                 "Use concrete type or ISerializationCallbackReceiver.",
                 @"\[SerializeField\]\s*(private|protected|public)?\s*(I[A-Z]\w+|abstract\s+\w+)\s+\w+",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"SerializeReference" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"SerializeReference" }),
 
-            new ReviewRule("UNITY-11", Severity.LOW, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-11", Severity.LOW, Category.Framework, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.Runtime,
                 "Large array in ScriptableObject -- consider Addressables",
                 "Use Addressables or split data into smaller chunks.",
                 @"\[\]\s+\w+\s*=\s*new\s+\w+\[(?:[5-9]\d{2,}|\d{4,})\]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     for (int j = i; j >= Math.Max(0, i - 30); j--)
@@ -1241,12 +1241,12 @@ namespace VeilBreakers.Editor.CodeReview
                     return false;
                 }),
 
-            new ReviewRule("UNITY-12", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-12", Severity.HIGH, Category.Framework, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.Runtime,
                 "Missing OnDisable/OnDestroy unsubscribe -- memory leak",
                 "Always -= from events in OnDisable or OnDestroy.",
                 @"\+=\s*\w+\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     bool inLifecycle = false;
@@ -1261,12 +1261,12 @@ namespace VeilBreakers.Editor.CodeReview
                     return true;
                 }),
 
-            new ReviewRule("UNITY-13", Severity.LOW, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-13", Severity.LOW, Category.Framework, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.Runtime,
                 "Awake execution order dependency without [DefaultExecutionOrder]",
                 "Add [DefaultExecutionOrder(N)] to control initialization order.",
                 @"void\s+Awake\s*\(\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\[DefaultExecutionOrder" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\[DefaultExecutionOrder" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     // Check if Awake body references other objects (FindObjectOfType, Instance, GetComponent)
@@ -1278,12 +1278,12 @@ namespace VeilBreakers.Editor.CodeReview
                     return false;
                 }),
 
-            new ReviewRule("UNITY-14", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-14", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.Runtime,
                 "Static field in MonoBehaviour -- shared across instances",
                 "Use instance fields or a dedicated static manager.",
                 @"static\s+(?!readonly|void|bool|int|float|string|event|Action|Func|delegate)\w+\s+\w+",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Instance", @"Singleton", @"const\s" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Instance", @"Singleton", @"const\s" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     for (int j = i; j >= Math.Max(0, i - 50); j--)
@@ -1291,19 +1291,19 @@ namespace VeilBreakers.Editor.CodeReview
                     return false;
                 }),
 
-            new ReviewRule("UNITY-15", Severity.LOW, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-15", Severity.LOW, Category.Framework, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.Runtime,
                 "Singleton MonoBehaviour missing [DisallowMultipleComponent]",
                 "Add [DisallowMultipleComponent].",
                 @"static\s+\w+\s+Instance\s*[{;=]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\[DisallowMultipleComponent" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\[DisallowMultipleComponent" }),
 
-            new ReviewRule("UNITY-16", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-16", Severity.HIGH, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "GetComponent/Destroy in OnValidate -- fails during prefab import",
                 "Wrap in #if UNITY_EDITOR and use EditorApplication.delayCall.",
                 @"(GetComponent|Destroy|DestroyImmediate)\s*[<(]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"EditorApplication\.delayCall", @"#if\s+UNITY_EDITOR" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"EditorApplication\.delayCall", @"#if\s+UNITY_EDITOR" },
                 guard: (line, all, i, ctx) => {
                     for (int j = i; j >= 0; j--) {
                         if (Regex.IsMatch(all[j], @"void\s+OnValidate\s*\(")) return ctx[i] != LineContext.Comment;
@@ -1312,36 +1312,36 @@ namespace VeilBreakers.Editor.CodeReview
                     return false;
                 }),
 
-            new ReviewRule("UNITY-17", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-17", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.Runtime,
                 "OnGUI called every frame -- consider UI Toolkit",
                 "For runtime UI prefer UI Toolkit or Canvas.",
                 @"void\s+OnGUI\s*\(\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"/Editor/" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"/Editor/" }),
 
             // UNITY-18: SendMessage -- slow reflection-based call
-            new ReviewRule("UNITY-18", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-18", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "SendMessage/BroadcastMessage -- slow reflection, no compile-time safety",
                 "Use direct method calls, C# events, or a message bus interface.",
                 @"\b(SendMessage|BroadcastMessage|SendMessageUpwards)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"/Editor/" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"/Editor/" }),
 
             // UNITY-19: Shader.Find at runtime (fragile, fails in builds)
-            new ReviewRule("UNITY-19", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-19", Severity.HIGH, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Shader.Find() at runtime -- returns null if shader not in Always Included list",
                 "Serialize shader references or load from Resources/Addressables.",
                 @"Shader\.Find\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"/Editor/", @"#if\s+UNITY_EDITOR" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"/Editor/", @"#if\s+UNITY_EDITOR" }),
 
             // UNITY-20: Material leak from .material property access
-            new ReviewRule("UNITY-20", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-20", Severity.HIGH, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Accessing .material creates an instance -- must Destroy() it manually",
                 "Use .sharedMaterial for read, or track/destroy instanced materials.",
                 @"(?<!\bshared)\bmaterial\s*\.\s*(color|mainTexture|shader|renderQueue)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"sharedMaterial", @"MaterialPropertyBlock", @"Destroy\s*\(\s*\w*[Mm]at" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"sharedMaterial", @"MaterialPropertyBlock", @"Destroy\s*\(\s*\w*[Mm]at" },
                 antiRadius: 10),
 
             // ---- CODE QUALITY (1-23) ----
@@ -1351,7 +1351,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Method exceeds 50 lines -- consider extracting sub-methods",
                 "Break long methods into smaller, well-named helpers.",
                 @"(void|int|float|bool|string|var|Task|IEnumerator)\s+\w+\s*\([^)]*\)\s*\{",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => ctx[i] != LineContext.Comment && BodyLength(all, i) > 50),
 
             new ReviewRule("QUAL-02", Severity.LOW, Category.Quality, Language.CSharp,
@@ -1359,14 +1359,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Excessive nesting depth (>4 levels) -- flatten with early returns",
                 "Use guard clauses, early returns, or extract nested logic.",
                 @"^\s{20,}(if|for|while|foreach|switch)\b",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("QUAL-03", Severity.LOW, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Magic number in code -- use a named constant",
                 "Define a const or static readonly field.",
                 @"[=<>+\-*/]\s*(?<![.0-9])((?:[2-9]\d{2,}|\d{4,})(?:\.\d+)?f?)\s*[;,)\]}]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"const\s", @"readonly\s", @"(Color|Vector|Rect|new\s+\w+\[)" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"const\s", @"readonly\s", @"(Color|Vector|Rect|new\s+\w+\[)" }),
 
             // QUAL-04 FP fix: skip override methods, interface implementations
             new ReviewRule("QUAL-04", Severity.LOW, Category.Quality, Language.CSharp,
@@ -1374,7 +1374,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Missing XML documentation on public method",
                 "Add /// <summary> documentation to public API methods.",
                 @"^\s+public\s+\S+\s+\w+\s*\([^)]*\)\s*\{?$",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"///", @"override\s+", @"^\s+public\s+\S+\s+\w+\s*\([^)]*\)\s*=>" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"///", @"override\s+", @"^\s+public\s+\S+\s+\w+\s*\([^)]*\)\s*=>" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     if (line.Contains("override ") || line.Contains("abstract ")) return false;
@@ -1388,14 +1388,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Inconsistent naming -- private fields should use _camelCase",
                 "Follow Unity C# conventions: _camelCase for private.",
                 @"private\s+\w+\s+([A-Z]\w+)\s*[;=]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"const\s", @"static\s", @"readonly\s", @"event\s" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"const\s", @"static\s", @"readonly\s", @"event\s" }),
 
             new ReviewRule("QUAL-06", Severity.LOW, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Empty catch block swallows exception silently",
                 "At minimum log the exception.",
                 @"catch\s*(\([^)]*\))?\s*\{\s*\}",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"// intentionally empty" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"// intentionally empty" }),
 
             new ReviewRule("QUAL-07", Severity.LOW, Category.Quality, Language.CSharp,
                 RuleScope.FileLevel, FileFilter.All,
@@ -1410,7 +1410,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Unused using directive",
                 "Remove unused using statements.",
                 @"^using\s+\w+(\.\w+)*\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     var m = Regex.Match(line, @"using\s+([\w.]+)\s*;");
                     if (!m.Success) return false;
@@ -1428,14 +1428,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Complex boolean condition (>3 operators) -- extract to named variable",
                 "Extract complex conditions into a descriptive bool variable.",
                 @"if\s*\(.*?(&&|\|\|).*?(&&|\|\|).*?(&&|\|\|)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("QUAL-10", Severity.LOW, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Switch statement missing default case",
                 "Add a default case (even just throwing ArgumentOutOfRangeException).",
                 @"switch\s*\([^)]+\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     // Scan forward to find if switch body has a default case
@@ -1454,42 +1454,42 @@ namespace VeilBreakers.Editor.CodeReview
                 "Non-sealed custom exception -- seal to prevent unintended inheritance",
                 "Mark custom exception classes as sealed.",
                 @"class\s+\w+Exception\s*:",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"sealed\s" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"sealed\s" }),
 
             new ReviewRule("QUAL-12", Severity.MEDIUM, Category.Quality, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.All,
                 "Mutable static collection -- thread safety risk",
                 "Use Concurrent* or make readonly with immutable contents.",
                 @"static\s+(List|Dictionary|HashSet|Queue|Stack)\s*<",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"readonly\s", @"Concurrent" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"readonly\s", @"Concurrent" }),
 
             new ReviewRule("QUAL-13", Severity.HIGH, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "lock(this) or lock(typeof(...)) -- use dedicated lock object",
                 "Use: private readonly object _lock = new object();",
                 @"lock\s*\(\s*(this|typeof\s*\()",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("QUAL-14", Severity.MEDIUM, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "IDisposable not disposed -- use 'using' statement",
                 "Wrap in 'using' block or call Dispose() in finally/OnDestroy.",
                 @"new\s+(StreamReader|StreamWriter|FileStream|BinaryReader|BinaryWriter|HttpClient|WebClient|MemoryStream|UnityWebRequest)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"using\s+(var|\()", @"\.Dispose\s*\(" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"using\s+(var|\()", @"\.Dispose\s*\(" }),
 
             new ReviewRule("QUAL-15", Severity.LOW, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Null check on value type -- value types cannot be null",
                 "Remove null check on value types.",
                 @"(int|float|double|bool|byte|char|long|short|Vector[234]|Quaternion|Color|Rect|Bounds)\s+\w+.*==\s*null",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\?" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\?" }),
 
             new ReviewRule("QUAL-16", Severity.LOW, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Dead code after return/break/continue/throw",
                 "Remove unreachable statements.",
                 @"(return\s+[^;]+;|break\s*;|continue\s*;|throw\s+[^;]+;)\s*$",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"#(else|elif|endif)" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"#(else|elif|endif)" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     // Check if next non-empty line has code (not } or #directive)
@@ -1509,7 +1509,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "God class (>800 lines) -- consider splitting",
                 "Split large classes into focused, single-responsibility classes.",
                 @"class\s+\w+",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"partial\s+class" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"partial\s+class" },
                 guard: (line, all, i, ctx) => ctx[i] != LineContext.Comment && BodyLength(all, i) > 800),
 
             new ReviewRule("QUAL-18", Severity.LOW, Category.Quality, Language.CSharp,
@@ -1517,42 +1517,42 @@ namespace VeilBreakers.Editor.CodeReview
                 "Boxing in string interpolation -- call .ToString() explicitly",
                 "Call .ToString() on value types in interpolation.",
                 @"\$""[^""]*\{(?!.*\.ToString)[^}]*\}",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("QUAL-19", Severity.LOW, Category.Quality, Language.CSharp,
                 RuleScope.FileLevel, FileFilter.All,
                 "#region used -- prefer smaller, focused classes",
                 "Extract #region contents into separate classes.",
                 @"#region\b",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("QUAL-20", Severity.LOW, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Catch block only rethrows -- remove redundant try/catch",
                 "Remove or add logging/cleanup.",
                 @"catch\s*\([^)]*\)\s*\{\s*throw\s*;\s*\}",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("QUAL-21", Severity.LOW, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "String.Equals without StringComparison",
                 "Use StringComparison.Ordinal or OrdinalIgnoreCase.",
                 @"\.Equals\s*\(\s*""",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"StringComparison" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"StringComparison" }),
 
             new ReviewRule("QUAL-22", Severity.MEDIUM, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Nested ternary operator -- hard to read",
                 "Replace with if/else or switch expression.",
                 @"\?[^;:]*\?[^;]*:",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("QUAL-23", Severity.LOW, Category.Quality, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Parameter count >5 -- consider parameter object",
                 "Group related parameters into a struct/class.",
                 @"(void|int|float|bool|string|Task|IEnumerator|\w+)\s+\w+\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     var m = Regex.Match(line, @"\(([^)]*)\)");
@@ -1568,7 +1568,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "yield return inside try block -- not supported in C# coroutines (pre-C# 8)",
                 "Move yield return outside the try block, or use async/await with UniTask.",
                 @"yield\s+return",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     // Check if we're inside a try block by looking for try { above
@@ -1588,14 +1588,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Static event/Action field -- persists across scene loads, leaks subscribers",
                 "Clear static events in [RuntimeInitializeOnLoadMethod] or use instance events.",
                 @"static\s+(event\s+\w+|Action|Action<|UnityAction|UnityEvent)\s+\w+",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"RuntimeInitializeOnLoadMethod", @"= null", @"= delegate" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"RuntimeInitializeOnLoadMethod", @"= null", @"= delegate" }),
 
             new ReviewRule("BUG-43", Severity.MEDIUM, Category.Bug, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Float comparison with == or != -- use Mathf.Approximately for floating-point",
                 "Use Mathf.Approximately(a, b) or Mathf.Abs(a - b) < epsilon.",
                 @"(==|!=)\s*\d+\.\d+f?",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Approximately", @"epsilon", @"Mathf\.Abs", @"== 0f", @"== 1f", @"!= 0f" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Approximately", @"epsilon", @"Mathf\.Abs", @"== 0f", @"== 1f", @"!= 0f" },
                 confidence: 55, priority: 40,
                 reasoning: "Float equality comparisons are often intentional for sentinel values (0f, 1f, -1f). Only a real bug when comparing computed results."),
 
@@ -1604,7 +1604,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Assigning to transform.position.x/y/z -- does nothing (struct copy)",
                 "Store position in local var, modify, then assign back: var p = transform.position; p.x = val; transform.position = p;",
                 @"transform\.(position|localPosition|rotation|localRotation|eulerAngles|localEulerAngles)\.\w+\s*[+\-*/]?=",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 confidence: 95, priority: 90),
 
             new ReviewRule("BUG-45", Severity.MEDIUM, Category.Bug, Language.CSharp,
@@ -1612,7 +1612,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "AddForce without ForceMode -- defaults to ForceMode.Force (mass-dependent)",
                 "Specify ForceMode explicitly: ForceMode.Impulse for instant, ForceMode.VelocityChange for mass-independent.",
                 @"\.AddForce\s*\([^)]*\)\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"ForceMode" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"ForceMode" },
                 confidence: 55, priority: 30,
                 reasoning: "ForceMode.Force is the default and is often correct for continuous forces. Only a concern when code expects instant impulse behavior. Review the physics intent."),
 
@@ -1623,7 +1623,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Coroutine with no yield return -- runs synchronously, not as coroutine",
                 "Add at least one yield return statement, or convert to a regular method.",
                 @"IEnumerator\s+\w+\s*\([^)]*\)\s*\{",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"yield\s+return", @"yield\s+break" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"yield\s+return", @"yield\s+break" },
                 antiRadius: 30,
                 confidence: 60, priority: 65,
                 reasoning: "An IEnumerator method without yield statements compiles but runs entirely in one frame. This defeats the purpose of a coroutine. However, it may be an incomplete implementation or a method that delegates to another coroutine."),
@@ -1633,7 +1633,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Destroy() on a component removes only the component, not the GameObject",
                 "Use Destroy(gameObject) to remove the entire GameObject, or Destroy(component) intentionally.",
                 @"Destroy\s*\(\s*(?:this|GetComponent)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"gameObject" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"gameObject" },
                 confidence: 55, priority: 50,
                 reasoning: "Destroy(this) removes only the MonoBehaviour component, leaving the GameObject alive. This is sometimes intentional (removing one script), but often a mistake when the developer meant to destroy the whole object."),
 
@@ -1642,7 +1642,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Infinite while(true) loop without yield/break/return in coroutine",
                 "Add yield return null or yield return new WaitForSeconds() inside the loop.",
                 @"while\s*\(\s*true\s*\)\s*\{",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"yield\s+return", @"yield\s+break", @"break\s*;", @"return\s*;" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"yield\s+return", @"yield\s+break", @"break\s*;", @"return\s*;" },
                 antiRadius: 15),
 
             // (BUG-50 removed: confidence 40, pattern matches namespaces/transform.position.x -- too many false positives)
@@ -1654,7 +1654,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "String.Contains without StringComparison -- culture-sensitive by default",
                 "Use string.Contains(value, StringComparison.Ordinal) for culture-invariant comparison.",
                 @"\.Contains\s*\(\s*""[^""]*""\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"StringComparison", @"Ordinal" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"StringComparison", @"Ordinal" },
                 confidence: 50, priority: 20,
                 reasoning: "String.Contains without StringComparison uses culture-sensitive comparison which is slower but correct for UI text. For internal string matching, Ordinal is faster and safer."),
 
@@ -1663,14 +1663,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Transform.Find in hot path -- string-based child lookup every frame",
                 "Cache the child Transform reference in Start() or Awake().",
                 @"\.Find\s*\(\s*""[^""]*""\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"_\w+\s*=\s*\w+\.Find" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"_\w+\s*=\s*\w+\.Find" }),
 
             new ReviewRule("PERF-28", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Multiple GetComponent calls for same type -- cache once",
                 "Call GetComponent<T>() once in Awake/Start and store the reference.",
                 @"GetComponent\s*<(\w+)>\s*\(\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     var m = Regex.Match(line, @"GetComponent\s*<(\w+)>");
@@ -1688,14 +1688,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Enum.HasFlag causes boxing allocation -- use bitwise check",
                 "Use (flags & MyEnum.Value) != 0 instead of flags.HasFlag(MyEnum.Value).",
                 @"\.HasFlag\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("PERF-30", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Instantiate in a loop without object pooling -- high GC pressure",
                 "Use an ObjectPool<T> or custom pool to recycle instances.",
                 @"Instantiate\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"ObjectPool", @"pool\." },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"ObjectPool", @"pool\." },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     // Check if inside a for/foreach/while loop
@@ -1709,65 +1709,65 @@ namespace VeilBreakers.Editor.CodeReview
                 "new List<T>(list) copies entire list -- use AddRange or pass as IReadOnlyList",
                 "If you only need to read, pass IReadOnlyList<T> or use .AsReadOnly().",
                 @"new\s+List\s*<[^>]+>\s*\(\s*\w+\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 confidence: 45, priority: 15,
                 reasoning: "Copying a list is sometimes necessary for thread safety or modification isolation. Only an issue if the copy is used read-only. Check if the original could be passed by reference instead."),
 
             // ---- ADDITIONAL UNITY (21-30) ----
 
-            new ReviewRule("UNITY-21", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-21", Severity.HIGH, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Rigidbody.MovePosition/MoveRotation outside FixedUpdate -- jerky movement",
                 "Call Rigidbody.MovePosition only in FixedUpdate for smooth physics movement.",
                 @"(MovePosition|MoveRotation)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"FixedUpdate" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"FixedUpdate" },
                 confidence: 60, priority: 60,
                 reasoning: "MovePosition/MoveRotation should be called in FixedUpdate for smooth physics. However, they are valid in Update for kinematic rigidbodies. Check the Rigidbody.isKinematic setting."),
 
             // UNITY-22 removed: raycastTarget=true is intentional code, ~100% FP rate
 
-            new ReviewRule("UNITY-23", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-23", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "TMP_Text.text assigned in Update -- allocates string every frame",
                 "Cache the string or use TMP_Text.SetText() with zero-alloc overloads.",
                 @"\.text\s*=\s*[^;]+;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"SetText", @"(Start|Awake|OnEnable|Initialize|Init)\s*\(" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"SetText", @"(Start|Awake|OnEnable|Initialize|Init)\s*\(" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     return ctx[i] == LineContext.HotPath && (line.Contains("TMP_") || line.Contains("TextMeshPro") || line.Contains("tmpText"));
                 }),
 
-            new ReviewRule("UNITY-24", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-24", Severity.HIGH, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "NavMeshAgent.SetDestination without IsOnNavMesh check -- may throw",
                 "Check agent.isOnNavMesh before calling SetDestination.",
                 @"\.SetDestination\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"isOnNavMesh", @"IsOnNavMesh" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"isOnNavMesh", @"IsOnNavMesh" }),
 
-            new ReviewRule("UNITY-25", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-25", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "ScriptableObject field modified at runtime -- shared across all references",
                 "Clone the SO at runtime: Instantiate(mySO) or use a runtime data copy.",
                 @"(?:_\w+SO|_\w+Data|_\w+Config)\s*\.\s*\w+\s*[+\-*/]?=",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Instantiate", @"ScriptableObject\.CreateInstance" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Instantiate", @"ScriptableObject\.CreateInstance" },
                 confidence: 45, priority: 55,
                 reasoning: "Modifying ScriptableObject fields at runtime changes them for ALL references (including in the Editor, persisting across play sessions). This is often a critical bug, but the naming pattern match is heuristic -- verify the field is on a ScriptableObject."),
 
-            new ReviewRule("UNITY-26", Severity.LOW, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-26", Severity.LOW, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Addressables.LoadAssetAsync without tracking handle for release",
                 "Store the AsyncOperationHandle and call Addressables.Release(handle) when done.",
                 @"Addressables\.(LoadAssetAsync|InstantiateAsync)\s*[<(]",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"=\s*Addressables\.", @"\.Release\s*\(" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"=\s*Addressables\.", @"\.Release\s*\(" },
                 confidence: 65, priority: 50,
                 reasoning: "Addressables require explicit release to free memory. If the handle is not stored, it cannot be released later. However, if the asset is needed for the app lifetime, not releasing is acceptable."),
 
-            new ReviewRule("UNITY-27", Severity.MEDIUM, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-27", Severity.MEDIUM, Category.Framework, Language.CSharp,
                 RuleScope.ClassLevel, FileFilter.Runtime,
                 "MonoBehaviour with both Update and FixedUpdate -- potential input/physics confusion",
                 "Ensure input is read in Update and physics applied in FixedUpdate. Don't mix.",
                 @"void\s+Update\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     // Only flag if same class also has FixedUpdate AND reads input in FixedUpdate
@@ -1791,7 +1791,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Method has >10 conditional branches -- high cyclomatic complexity",
                 "Extract branches into strategy pattern or separate methods.",
                 @"(void|int|float|bool|string|var|Task|IEnumerator)\s+\w+\s*\([^)]*\)\s*\{",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     int end = i + BodyLength(all, i);
@@ -1809,7 +1809,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Method modifies class state AND returns a value -- side effect + return is confusing",
                 "Separate into a query method (returns value) and command method (modifies state).",
                 @"(public|internal)\s+(?!void|static|override|abstract)\w+\s+\w+\s*\([^)]*\)\s*\{",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Get\w+\s*\(", @"Is\w+\s*\(", @"Has\w+\s*\(", @"Can\w+\s*\(", @"Try\w+\s*\(" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Get\w+\s*\(", @"Is\w+\s*\(", @"Has\w+\s*\(", @"Can\w+\s*\(", @"Try\w+\s*\(" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     int end = Math.Min(i + 30, all.Length);
@@ -1830,7 +1830,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Catch block logs error but continues execution -- may leave object in invalid state",
                 "Consider if the method should return/throw after logging, or add state cleanup.",
                 @"catch\s*\([^)]*\)\s*\{[^}]*Debug\.Log(Error|Exception)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"return\s*;", @"throw\s*;", @"break\s*;" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"return\s*;", @"throw\s*;", @"break\s*;" },
                 type: FindingType.Strengthening,
                 confidence: 55, priority: 40,
                 reasoning: "Logging an error and continuing is sometimes correct (graceful degradation), but can mask bugs by leaving the system in a partially-failed state. Verify the method handles the failure case properly after the catch."),
@@ -1840,7 +1840,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "File exceeds 500 lines -- consider splitting into partial classes or modules",
                 "Split large files into focused, single-responsibility files.",
                 @"^using\s+",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"partial\s+class" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"partial\s+class" },
                 guard: (line, all, i, ctx) => i == 0 && all.Length > 500,
                 type: FindingType.Strengthening),
 
@@ -1849,7 +1849,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Multiple return statements with different types of null handling",
                 "Standardize on returning null, empty collection, or using TryXxx pattern.",
                 @"return\s+null\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     // Find enclosing method and check for mixed returns
@@ -1872,14 +1872,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Reflection used to invoke methods -- bypasses access control",
                 "Avoid reflection on user-controlled type/method names. Whitelist allowed types.",
                 @"(MethodInfo|Type)\.\w*Invoke\s*\(|(Type\.GetType|Assembly\.GetType)\s*\(\s*\w+",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"#if\s+UNITY_EDITOR" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"#if\s+UNITY_EDITOR" }),
 
             new ReviewRule("SEC-12", Severity.HIGH, Category.Security, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "WWW class used (deprecated) -- use UnityWebRequest with certificate validation",
                 "Replace WWW with UnityWebRequest and implement certificate validation.",
                 @"\bWWW\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("SEC-13", Severity.MEDIUM, Category.Security, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
@@ -1887,7 +1887,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Use conditional compilation or log level checks for sensitive data logging.",
                 @"Debug\.Log\w*\s*\(\s*\$?"".*?(password|token|key|secret|credential|auth|session)",
                 RegexOptions.IgnoreCase,
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"#if\s+(UNITY_EDITOR|DEBUG)" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"#if\s+(UNITY_EDITOR|DEBUG)" }),
 
             // ---- GAME-SPECIFIC: ANIMATION ----
 
@@ -1896,35 +1896,35 @@ namespace VeilBreakers.Editor.CodeReview
                 "Animator parameter set with string -- use cached StringToHash ID",
                 "Declare: static readonly int hashParam = Animator.StringToHash(\"Param\"); then use the hash.",
                 @"\.(SetTrigger|SetBool|SetFloat|SetInteger|GetBool|GetFloat|GetInteger|ResetTrigger)\s*\(\s*""[^""]+""",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"StringToHash" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"StringToHash" }),
 
             new ReviewRule("GAME-02", Severity.HIGH, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "AudioSource.PlayClipAtPoint creates hidden GameObject -- use audio pool",
                 "Implement an AudioPool or use a pooled AudioSource.PlayOneShot() instead.",
                 @"AudioSource\.PlayClipAtPoint\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("GAME-03", Severity.HIGH, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "RectTransform property animated in Update -- dirties entire Canvas, forces rebuild",
                 "Split UI into static and dynamic Canvases. Use CanvasGroup.alpha for fading.",
                 @"(rectTransform|RectTransform)\.(sizeDelta|anchoredPosition|localPosition|offsetMin|offsetMax)\s*=",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"CanvasGroup", @"DOTween", @"PrimeTween" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"CanvasGroup", @"DOTween", @"PrimeTween" }),
 
             new ReviewRule("GAME-04", Severity.HIGH, Category.Bug, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "ParticleSystem.main struct copy -- modifying returned copy has no effect",
                 "Store in local variable first: var main = ps.main; main.startSpeed = val;",
                 @"(\w+\.)?(particleSystem|GetComponent\s*<\s*ParticleSystem\s*>\s*\(\s*\))\.main\.\w+\s*=",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"var\s+\w+\s*=.*\.main" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"var\s+\w+\s*=.*\.main" }),
 
             new ReviewRule("GAME-05", Severity.HIGH, Category.Bug, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "ParticleSystem.Play() called every frame without isPlaying check",
                 "Guard with: if (!ps.isPlaying) ps.Play();",
                 @"\.Play\s*\(\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"isPlaying", @"if\s*\(" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"isPlaying", @"if\s*\(" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] != LineContext.HotPath) return false;
                     return line.Contains("particle") || line.Contains("Particle") || line.Contains("ps.") || line.Contains("_ps.");
@@ -1935,14 +1935,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Async Task in MonoBehaviour without CancellationToken -- orphaned task after Destroy",
                 "Pass destroyCancellationToken or this.GetCancellationTokenOnDestroy().",
                 @"async\s+(Task|UniTask)\s+\w+\s*\([^)]*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"CancellationToken", @"destroyCancellationToken", @"GetCancellationTokenOnDestroy" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"CancellationToken", @"destroyCancellationToken", @"GetCancellationTokenOnDestroy" }),
 
             new ReviewRule("GAME-07", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Rigidbody.velocity direct assignment -- use AddForce with ForceMode.VelocityChange",
                 "Use rb.AddForce(velocity, ForceMode.VelocityChange) for physics-correct velocity changes.",
                 @"\.\s*velocity\s*=\s*(?!Vector3\.zero)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"isKinematic", @"kinematic" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"isKinematic", @"kinematic" },
                 confidence: 55, priority: 40,
                 reasoning: "Direct velocity assignment is sometimes valid for kinematic rigidbodies or teleportation. For physics-driven movement, AddForce is preferred for proper collision detection."),
 
@@ -1951,7 +1951,7 @@ namespace VeilBreakers.Editor.CodeReview
                 ".Count() LINQ method on List/Array -- use .Count/.Length property instead",
                 "Use collection.Count (List) or array.Length directly -- O(1) vs O(n).",
                 @"\.(Count|Any|All)\s*\(\s*\)",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\.Length\b", @"\.Count\b(?!\s*\()" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\.Length\b", @"\.Count\b(?!\s*\()" },
                 guard: (line, all, i, ctx) => ctx[i] == LineContext.HotPath),
 
             new ReviewRule("GAME-09", Severity.HIGH, Category.Bug, Language.CSharp,
@@ -1959,14 +1959,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "SendWebRequest() without yield/await -- fire-and-forget web request, result never observed",
                 "Use: yield return request.SendWebRequest(); or await request.SendWebRequest();",
                 @"\.SendWebRequest\s*\(\s*\)\s*;",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"yield\s+return", @"await\s" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"yield\s+return", @"await\s" }),
 
             new ReviewRule("GAME-10", Severity.MEDIUM, Category.Bug, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "SetTrigger in Update without state check -- causes trigger queue buildup",
                 "Check animator state first: if (!animator.GetCurrentAnimatorStateInfo(0).IsName(\"Attack\"))",
                 @"\.SetTrigger\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"GetCurrentAnimatorStateInfo", @"IsInTransition" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"GetCurrentAnimatorStateInfo", @"IsInTransition" },
                 guard: (line, all, i, ctx) => ctx[i] == LineContext.HotPath),
 
             // ---- CRITICAL MISSING RULES (from Opus review) ----
@@ -1976,14 +1976,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "BinaryFormatter is a critical security vulnerability -- arbitrary code execution via deserialization",
                 "Use JSON (JsonUtility, Newtonsoft), MessagePack, or a custom binary serializer.",
                 @"BinaryFormatter",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("TWEEN-01", Severity.HIGH, Category.Bug, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "DOTween/PrimeTween not killed in OnDestroy -- tween continues on destroyed object",
                 "Kill tweens in OnDestroy: transform.DOKill() or Tween.Kill().",
                 @"\.(DOFade|DOScale|DOMove|DORotate|DOColor|DOLocalMove|DOAnchorPos|DOSizeDelta|DOPunchScale|DOShakePosition)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\.DOKill\s*\(", @"\.Kill\s*\(", @"DOTween\.Kill", @"OnDestroy" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\.DOKill\s*\(", @"\.Kill\s*\(", @"DOTween\.Kill", @"OnDestroy" },
                 antiRadius: 30),
 
             new ReviewRule("THREAD-01", Severity.CRITICAL, Category.Bug, Language.CSharp,
@@ -1991,14 +1991,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Task.Run creates thread pool thread -- cannot access Unity API from background thread",
                 "Use UniTask.RunOnThreadPool with SwitchToMainThread, or use coroutines.",
                 @"Task\.Run\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"#if\s+UNITY_EDITOR", @"/Editor/" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"#if\s+UNITY_EDITOR", @"/Editor/" }),
 
             new ReviewRule("ITER-01", Severity.HIGH, Category.Bug, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Modifying collection during iteration -- InvalidOperationException",
                 "Collect items to remove in a separate list, then remove after the loop.",
                 @"\.Remove\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\.ToList\s*\(\s*\)", @"for\s*\(\s*int" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\.ToList\s*\(\s*\)", @"for\s*\(\s*int" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     for (int j = Math.Max(0, i - 10); j < i; j++)
@@ -2013,21 +2013,21 @@ namespace VeilBreakers.Editor.CodeReview
                 "StartCoroutine with string method name -- no compile-time safety, uses reflection",
                 "Use StartCoroutine(MethodName()) with IEnumerator return value.",
                 @"StartCoroutine\s*\(\s*""[^""]*""",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("BUG-52", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "new WaitUntil/WaitWhile allocated every yield -- cache as field",
                 "Declare a WaitUntil/WaitWhile field and reuse it.",
                 @"yield\s+return\s+new\s+Wait(Until|While)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"_wait\w+\s*=\s*new\s+Wait(Until|While)" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"_wait\w+\s*=\s*new\s+Wait(Until|While)" }),
 
             new ReviewRule("BUG-53", Severity.HIGH, Category.Bug, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "Sprite.Create() without Destroy -- leaks native memory",
                 "Call Destroy(sprite) when no longer needed, or pool created sprites.",
                 @"Sprite\.Create\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Destroy\s*\(", @"DestroyImmediate", @"Object\.Destroy",
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Destroy\s*\(", @"DestroyImmediate", @"Object\.Destroy",
                                      @"_sprite\s*=\s*Sprite\.Create" },
                 antiRadius: 15),
 
@@ -2036,23 +2036,23 @@ namespace VeilBreakers.Editor.CodeReview
                 "Animator.enabled = false resets state machine -- use speed = 0 to pause",
                 "Set animator.speed = 0f to pause. Only disable Animator in OnDisable/OnDestroy.",
                 @"animator\w*\.enabled\s*=\s*false",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\.speed\s*=\s*0", @"OnDisable", @"OnDestroy" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\.speed\s*=\s*0", @"OnDisable", @"OnDestroy" }),
 
             new ReviewRule("BUILD-01", Severity.CRITICAL, Category.Bug, Language.CSharp,
                 RuleScope.FileLevel, FileFilter.Runtime,
                 "using UnityEditor outside #if UNITY_EDITOR -- causes build failure",
                 "Wrap in #if UNITY_EDITOR / #endif or move to Editor/ folder.",
                 @"^using\s+UnityEditor",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"#if\s+UNITY_EDITOR", @"/Editor/" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"#if\s+UNITY_EDITOR", @"/Editor/" }),
 
             // ---- UNITY DOCS GAP RULES ----
 
-            new ReviewRule("UNITY-28", Severity.HIGH, Category.Unity, Language.CSharp,
+            new ReviewRule("UNITY-28", Severity.HIGH, Category.Framework, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "NativeArray/NativeContainer not Disposed -- leaks unmanaged memory, Unity logs error",
                 "Call .Dispose() in OnDestroy, use Allocator.Temp (auto-disposes at frame end), or wrap in using statement.",
                 @"new\s+Native(Array|List|HashSet|HashMap|Queue|Stack|MultiHashMap)\s*<",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\.Dispose\s*\(", @"using\s+var", @"using\s*\(", @"Allocator\.Temp\b" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\.Dispose\s*\(", @"using\s+var", @"using\s*\(", @"Allocator\.Temp\b" },
                 antiRadius: 20),
 
             new ReviewRule("UNITY-31", Severity.CRITICAL, Category.Bug, Language.CSharp,
@@ -2060,7 +2060,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Unity Object created in field initializer -- runs on loading thread, crashes in release builds",
                 "Move to Awake() or Start(). Field initializers run on the loading thread where Unity APIs are unavailable.",
                 @"=\s*new\s+(GameObject|Texture2D|Material|Mesh|RenderTexture|Sprite|ComputeBuffer)\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     // Only flag field-level initializers (not inside methods)
@@ -2077,21 +2077,21 @@ namespace VeilBreakers.Editor.CodeReview
                 "Manual GC.Collect() causes frame hitch -- let Unity manage garbage collection timing",
                 "Remove GC.Collect(). Only acceptable during loading screens with GC.WaitForPendingFinalizers().",
                 @"GC\.Collect\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"loading", @"Loading", @"SceneManager", @"#if\s+UNITY_EDITOR" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"loading", @"Loading", @"SceneManager", @"#if\s+UNITY_EDITOR" }),
 
             new ReviewRule("PERF-36", Severity.MEDIUM, Category.Performance, Language.CSharp,
                 RuleScope.HotPath, FileFilter.Runtime,
                 "Shader.PropertyToID not cached -- recalculates string hash every call",
                 "Cache: static readonly int _PropID = Shader.PropertyToID(\"_PropName\"); then use _PropID.",
                 @"Shader\.PropertyToID\s*\(",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"static\s+readonly\s+int", @"static\s+int" }),
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"static\s+readonly\s+int", @"static\s+int" }),
 
             new ReviewRule("BUG-55", Severity.HIGH, Category.Bug, Language.CSharp,
                 RuleScope.AnyMethod, FileFilter.Runtime,
                 "await in OnDestroy/OnDisable -- continuation runs after object destruction, NullReferenceException",
                 "Use destroyCancellationToken (Unity 2023+) or avoid async in teardown. Move cleanup to synchronous code.",
                 @"await\s+",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"destroyCancellationToken", @"CancellationToken" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"destroyCancellationToken", @"CancellationToken" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     for (int j = i; j >= Math.Max(0, i - 15); j--)
@@ -2107,7 +2107,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Accumulating eulerAngles causes gimbal lock and 0/360 wrapping artifacts",
                 "Use transform.Rotate(delta) or accumulate in a Vector3 field, then apply: transform.rotation = Quaternion.Euler(accum);",
                 @"\.eulerAngles\s*\+=",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"Quaternion\.Euler", @"Rotate\s*\(" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"Quaternion\.Euler", @"Rotate\s*\(" },
                 confidence: 65, priority: 60,
                 reasoning: "eulerAngles += is almost always wrong due to gimbal lock. However, some 2D games safely use z-axis-only rotation this way."),
 
@@ -2116,7 +2116,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "UnityWebRequest downloadHandler accessed without checking .result -- silent failure on network errors",
                 "Check: if (request.result == UnityWebRequest.Result.Success) before accessing .downloadHandler.text/data.",
                 @"\.downloadHandler\.(text|data|bytes)\b",
-                antiPatterns: new[]{ @"//\s*VB-IGNORE", @"\.result\s*[!=]=", @"\.isNetworkError", @"\.isHttpError", @"ConnectionError", @"ProtocolError", @"Success" },
+                antiPatterns: new[]{ @"//\\s*(?:VB|REVIEW)-IGNORE", @"\.result\s*[!=]=", @"\.isNetworkError", @"\.isHttpError", @"ConnectionError", @"ProtocolError", @"Success" },
                 antiRadius: 10)
         };
 
@@ -2132,28 +2132,28 @@ namespace VeilBreakers.Editor.CodeReview
                 "eval() usage -- arbitrary code execution risk",
                 "Replace with ast.literal_eval() or redesign.",
                 @"\beval\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"literal_eval" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"literal_eval" }),
 
             new ReviewRule("PY-SEC-02", Severity.CRITICAL, Category.Security, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "os.system() or subprocess with shell=True -- command injection",
                 "Use subprocess.run() with list args and shell=False.",
                 @"(os\.system\s*\(|subprocess\.\w+\([^)]*shell\s*=\s*True)",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" }),
 
             new ReviewRule("PY-SEC-03", Severity.CRITICAL, Category.Security, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "pickle.load on untrusted data -- arbitrary code execution",
                 "Use json, msgpack, or safer format.",
                 @"pickle\.(load|loads)\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" }),
 
             new ReviewRule("PY-SEC-04", Severity.HIGH, Category.Security, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "f-string in SQL/shell command -- injection risk",
                 "Use parameterized queries or subprocess with list args.",
                 @"(execute|run|system|popen)\s*\(\s*f[""']",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" }),
 
             // PY-SEC-05 FP fix: skip constant assignments and default parameters
             new ReviewRule("PY-SEC-05", Severity.HIGH, Category.Security, Language.Python,
@@ -2161,21 +2161,21 @@ namespace VeilBreakers.Editor.CodeReview
                 "exec() usage -- arbitrary code execution",
                 "Avoid exec(); refactor to safe alternatives.",
                 @"\bexec\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"^\s*\w+\s*=\s*", @"def\s+\w+\s*\([^)]*exec" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"^\s*\w+\s*=\s*", @"def\s+\w+\s*\([^)]*exec" }),
 
             new ReviewRule("PY-SEC-06", Severity.MEDIUM, Category.Security, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Hardcoded file path -- not portable",
                 "Use pathlib.Path or os.path.join with configurable base.",
                 @"['""](?:/[a-z]+/|[A-Z]:\\\\)[^'""]{3,}['""]",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" }),
 
             new ReviewRule("PY-SEC-07", Severity.HIGH, Category.Security, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "assert for input validation -- stripped with -O",
                 "Use if/raise ValueError for validation.",
                 @"^\s*assert\s+(?!.*#\s*nosec)",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"#\s*nosec", @"test_|_test\.py" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"#\s*nosec", @"test_|_test\.py" }),
 
             // ---- CORRECTNESS ----
             new ReviewRule("PY-COR-01", Severity.HIGH, Category.Bug, Language.Python,
@@ -2183,28 +2183,28 @@ namespace VeilBreakers.Editor.CodeReview
                 "Mutable default argument -- shared across calls",
                 "Use None as default, create mutable inside function body.",
                 @"def\s+\w+\s*\([^)]*=\s*(\[\]|\{\}|set\(\))",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" }),
 
             new ReviewRule("PY-COR-02", Severity.HIGH, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Bare except: catches SystemExit, KeyboardInterrupt",
                 "Catch specific exceptions: except ValueError, except Exception as e.",
                 @"^\s*except\s*:",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("PY-COR-03", Severity.MEDIUM, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Comparing with None using == instead of 'is None'",
                 "Use 'is None' or 'is not None'.",
                 @"[!=]=\s*None\b",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" }),
 
             new ReviewRule("PY-COR-04", Severity.MEDIUM, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "open() without context manager -- file may not close",
                 "Use 'with open(...) as f:'.",
                 @"(?<!\bwith\s)\bopen\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"\bwith\b",
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"\bwith\b",
                     @"Image\.open", @"BytesIO", @"PIL" }),
 
             new ReviewRule("PY-COR-05", Severity.LOW, Category.Bug, Language.Python,
@@ -2212,7 +2212,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "datetime.now() without timezone -- ambiguous",
                 "Use datetime.now(tz=timezone.utc).",
                 @"datetime\.now\s*\(\s*\)",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" }),
 
             // PY-COR-06 FP fix: only flag if result is actually mutated, not just read
             new ReviewRule("PY-COR-06", Severity.MEDIUM, Category.Bug, Language.Python,
@@ -2220,7 +2220,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "dict.get() with mutable default -- mutated result is shared",
                 "Use dict.get(key) with None check, then create mutable separately.",
                 @"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" },
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" },
                 guard: (line, all, i, ctx) => {
                     // If the .get() result is consumed read-only on the same line, skip
                     if (Regex.IsMatch(line, @"\blen\s*\(.*\.get\s*\(") ||
@@ -2252,21 +2252,21 @@ namespace VeilBreakers.Editor.CodeReview
                 "Class with __del__ -- unpredictable GC, prevents ref cycle collection",
                 "Use context managers or weakref.finalize instead.",
                 @"def\s+__del__\s*\(\s*self",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" }),
 
             new ReviewRule("PY-COR-08", Severity.MEDIUM, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Thread without daemon=True -- may prevent clean shutdown",
                 "Set daemon=True or join before exit.",
                 @"Thread\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"daemon" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"daemon" }),
 
             new ReviewRule("PY-COR-09", Severity.LOW, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "json.loads without error handling",
                 "Wrap in try/except json.JSONDecodeError.",
                 @"json\.loads?\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"except.*JSON",
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"except.*JSON",
                     @"\btry\s*:", @"\bexcept\b", @"JSONDecodeError" },
                 antiRadius: 30),
 
@@ -2275,14 +2275,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "Float equality comparison -- use math.isclose",
                 "Use math.isclose(a, b) or abs(a - b) < epsilon.",
                 @"(?<!\w)(==|!=)\s*\d+\.\d+",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" }),
 
             new ReviewRule("PY-COR-11", Severity.MEDIUM, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Re-raising exception without chain -- loses traceback",
                 "Use 'raise X(...) from e'.",
                 @"raise\s+\w+\([^)]*\)\s*$",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"\bfrom\s+\w+" },
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"\bfrom\s+\w+" },
                 guard: (line, all, i, ctx) => {
                     for (int j = Math.Max(0, i - 5); j < i; j++)
                         if (all[j].Contains("except")) return true;
@@ -2294,7 +2294,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Exception type too broad -- catches bugs with expected errors",
                 "Catch specific exceptions.",
                 @"except\s+Exception\s*(?:as|\s*:)",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"# broad catch intentional",
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"# broad catch intentional",
                     @"logger\.exception", @"mcp\.tool", @"return\s+json\.dumps" },
                 antiRadius: 10,
                 guard: (line, all, i, ctx) => {
@@ -2323,7 +2323,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Variable shadows built-in name (list, dict, set, type, id, etc.)",
                 "Choose a different variable name: items, mapping, group, etc.",
                 @"^\s*(list|dict|set|str|int|float|bool|tuple|type|id|input|filter|map|zip|range|len|sum|min|max|any|all|sorted|reversed|hash|next|iter|open|print|format|bytes|object|super|property|staticmethod|classmethod)\s*=\s*",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"typing", @"import" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"typing", @"import" }),
 
             // PY-COR-15: Late binding closure in loop
             new ReviewRule("PY-COR-15", Severity.HIGH, Category.Bug, Language.Python,
@@ -2331,7 +2331,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Lambda in loop captures loop variable by reference -- late binding bug",
                 "Capture with default arg: lambda x, i=i: ... or use functools.partial.",
                 @"for\s+(\w+)\s+in\b",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" },
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     var m = System.Text.RegularExpressions.Regex.Match(line, @"for\s+(\w+)\s+in\b");
@@ -2352,7 +2352,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "String concatenation in loop -- O(n^2)",
                 "Collect parts in list, ''.join(parts) after loop.",
                 @"\w+\s*\+=\s*['""]",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" },
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" },
                 guard: (line, all, i, ctx) => {
                     if (ctx[i] == LineContext.Comment) return false;
                     // Only flag if inside a for/while loop (check preceding lines)
@@ -2367,7 +2367,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "re.match/search/findall without compile for repeated pattern",
                 "Compile pattern once with re.compile() and reuse.",
                 @"re\.(match|search|findall|sub|split)\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"re\.compile" },
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"re\.compile" },
                 guard: (line, all, i, ctx) => {
                     // Only flag if inside a loop (for/while in preceding 5 lines)
                     for (int j = Math.Max(0, i - 5); j < i; j++)
@@ -2380,7 +2380,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Large file .read() without chunking -- may exhaust memory",
                 "Use chunked reading: for line in file, or file.read(chunk_size).",
                 @"\.read\s*\(\s*\)",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"""rb""", @"BytesIO", @"img_bytes", @"image_data",
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"""rb""", @"BytesIO", @"img_bytes", @"image_data",
                     @"base64", @"encoding=""utf-8""", @"\.read_text\s*\(" }),
 
             // ---- STYLE ----
@@ -2389,28 +2389,28 @@ namespace VeilBreakers.Editor.CodeReview
                 "os.path usage instead of pathlib.Path",
                 "Use pathlib.Path (Python 3.4+).",
                 @"os\.path\.(join|exists|isfile|isdir|basename|dirname|splitext)\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" }),
 
             new ReviewRule("PY-STY-02", Severity.LOW, Category.Quality, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Nested function definitions over 3 levels",
                 "Extract inner functions to module level or class methods.",
                 @"^\s{12,}def\s+\w+\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("PY-STY-03", Severity.LOW, Category.Quality, Language.Python,
                 RuleScope.FileLevel, FileFilter.All,
                 "Star import (from X import *) -- namespace pollution",
                 "Import specific names: from X import a, b, c.",
                 @"from\s+\S+\s+import\s+\*",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE" }),
 
             new ReviewRule("PY-STY-04", Severity.LOW, Category.Quality, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Global variable mutation",
                 "Pass as parameters or use a class.",
                 @"^\s+global\s+\w+",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE" }),
 
             // PY-STY-05 through PY-STY-08 are AST-only, handled in DeepPythonAnalyzer
             new ReviewRule("PY-STY-05", Severity.LOW, Category.Quality, Language.Python,
@@ -2449,14 +2449,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "asyncio.run() inside already-running event loop -- raises RuntimeError",
                 "Use 'await' inside async functions or nest_asyncio.apply().",
                 @"asyncio\.run\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"nest_asyncio" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"nest_asyncio" }),
 
             new ReviewRule("PY-COR-17", Severity.MEDIUM, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "os.environ mutation at module scope -- side effect on import",
                 "Set environment variables in main() or a setup function, not at import time.",
                 @"os\.environ\[",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"def\s+\w+", @"if\s+__name__" },
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"def\s+\w+", @"if\s+__name__" },
                 guard: (line, all, i, ctx) => {
                     // Only flag if at module level (not indented beyond class/function)
                     return !line.TrimStart().StartsWith("def ") && line == line.TrimStart();
@@ -2467,7 +2467,7 @@ namespace VeilBreakers.Editor.CodeReview
                 "Exception caught and logged but not re-raised -- silently swallowed",
                 "Re-raise with 'raise' or 'raise X from e' after logging.",
                 @"except\s+\w+",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"\braise\b", @"return\s" },
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"\braise\b", @"return\s" },
                 guard: (line, all, i, ctx) => {
                     // Check if the except block has logging but no raise
                     for (int j = i + 1; j < Math.Min(all.Length, i + 5); j++)
@@ -2486,14 +2486,14 @@ namespace VeilBreakers.Editor.CodeReview
                 "sys.exit() in library code -- should only be in __main__ scripts",
                 "Raise SystemExit or a custom exception instead of calling sys.exit() directly.",
                 @"sys\.exit\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"__main__" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"__main__" }),
 
             new ReviewRule("PY-COR-20", Severity.LOW, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "Mixed pathlib and os.path -- use one consistently",
                 "Standardize on pathlib.Path for all path operations.",
                 @"os\.path\.\w+",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#" },
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#" },
                 guard: (line, all, i, ctx) => {
                     // Only flag if file also uses pathlib
                     for (int j = 0; j < all.Length; j++)
@@ -2510,21 +2510,21 @@ namespace VeilBreakers.Editor.CodeReview
                 "subprocess.run() without check=True -- shell errors swallowed silently",
                 "Add check=True to raise CalledProcessError on failure.",
                 @"subprocess\.run\s*\(",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"check\s*=\s*(True|False)" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"check\s*=\s*(True|False)" }),
 
             new ReviewRule("PY-COR-21", Severity.HIGH, Category.Bug, Language.Python,
                 RuleScope.ClassLevel, FileFilter.All,
                 "Mutable default in dataclass field -- shared across instances",
                 "Use field(default_factory=list) instead of field: list = [].",
                 @"^\s+\w+\s*:\s*(list|dict|set)\s*=\s*(\[\]|\{\}|set\(\))",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"default_factory" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"default_factory" }),
 
             new ReviewRule("PY-COR-22", Severity.MEDIUM, Category.Bug, Language.Python,
                 RuleScope.AnyMethod, FileFilter.All,
                 "logging.error(msg, exc) loses stack trace -- use logging.exception()",
                 "Use logging.exception('msg') or logger.error('msg', exc_info=True).",
                 @"log(ger|ging)\.(error|warning)\s*\([^)]*,\s*\w*(err|exc|ex)\w*\s*\)",
-                antiPatterns: new[]{ @"#\s*VB-IGNORE", @"^\s*#", @"exc_info" }),
+                antiPatterns: new[]{ @"#\\s*(?:VB|REVIEW)-IGNORE", @"^\s*#", @"exc_info" }),
         };
     }
 
@@ -2798,7 +2798,7 @@ namespace VeilBreakers.Editor.CodeReview
                     string key = sub.Source + "+=" + sub.Handler;
                     if (!disableKeys.Contains(key) && !allUnsubKeys.Contains(key))
                         issues.Add(new ReviewIssue { RuleId = "DEEP-01", Severity = Severity.HIGH,
-                            Category = Category.Unity, Lang = Language.CSharp, FilePath = filePath,
+                            Category = Category.Framework, Lang = Language.CSharp, FilePath = filePath,
                             Line = sub.Line + 1, Confidence = 90, Priority = 85,
                             Type = FindingType.Bug,
                             Description = $"Event '{sub.Source} += {sub.Handler}' in OnEnable without matching -= in OnDisable in {cls.Name}",
@@ -2821,7 +2821,7 @@ namespace VeilBreakers.Editor.CodeReview
                     string key = sub.Source + "+=" + sub.Handler;
                     if (!destroyKeys.Contains(key) && !allUnsubKeys.Contains(key))
                         issues.Add(new ReviewIssue { RuleId = "DEEP-01", Severity = Severity.HIGH,
-                            Category = Category.Unity, Lang = Language.CSharp, FilePath = filePath,
+                            Category = Category.Framework, Lang = Language.CSharp, FilePath = filePath,
                             Line = sub.Line + 1, Confidence = 85, Priority = 80,
                             Type = FindingType.Bug,
                             Description = $"Event '{sub.Source} += {sub.Handler}' in {initMethod} without matching -= in OnDestroy in {cls.Name}",
@@ -2840,7 +2840,7 @@ namespace VeilBreakers.Editor.CodeReview
                     string key = sub.Source + "+=" + sub.Handler;
                     if (!allUnsubKeys.Contains(key))
                         issues.Add(new ReviewIssue { RuleId = "DEEP-01", Severity = Severity.HIGH,
-                            Category = Category.Unity, Lang = Language.CSharp, FilePath = filePath,
+                            Category = Category.Framework, Lang = Language.CSharp, FilePath = filePath,
                             Line = sub.Line + 1, Confidence = 80, Priority = 75,
                             Type = FindingType.Bug,
                             Description = $"Event '{sub.Source} += {sub.Handler}' in {kvp.Key} never unsubscribed in {cls.Name}",
@@ -2916,7 +2916,7 @@ namespace VeilBreakers.Editor.CodeReview
                     // Check if ANY coroutine field exists (class stores coroutine refs elsewhere)
                     if (cls.StoredCoroutineFields.Count > 0) continue;
                     issues.Add(new ReviewIssue { RuleId = "DEEP-05", Severity = Severity.MEDIUM,
-                        Category = Category.Unity, Lang = Language.CSharp, FilePath = filePath,
+                        Category = Category.Framework, Lang = Language.CSharp, FilePath = filePath,
                         Line = cr.Line + 1, Confidence = 75, Priority = 55,
                         Type = FindingType.Bug,
                         Description = $"StartCoroutine('{cr.CoroutineName}') result not stored -- cannot be stopped individually",
@@ -3218,9 +3218,9 @@ namespace VeilBreakers.Editor.CodeReview
         SortCol _sortCol = SortCol.Severity;
         bool _sortAsc = true;
 
-        // Ignore / VB-IGNORE
-        static readonly Regex CsIgnoreRx = new Regex(@"//\s*VB-IGNORE:\s*([\w,-]+)", RegexOptions.Compiled);
-        static readonly Regex PyIgnoreRx = new Regex(@"#\s*VB-IGNORE:\s*([\w,-]+)", RegexOptions.Compiled);
+        // Ignore / REVIEW-IGNORE
+        static readonly Regex CsIgnoreRx = new Regex(@"//\\s*(?:VB|REVIEW)-IGNORE:\s*([\w,-]+)", RegexOptions.Compiled);
+        static readonly Regex PyIgnoreRx = new Regex(@"#\\s*(?:VB|REVIEW)-IGNORE:\s*([\w,-]+)", RegexOptions.Compiled);
 
         // Python toolkit path (configurable)
         string _pythonToolkitPath = "";
@@ -3471,7 +3471,7 @@ namespace VeilBreakers.Editor.CodeReview
                 int idx = issue.Line - 1;
                 if (idx >= 0 && idx < lines.Count)
                 {
-                    lines[idx] = lines[idx].TrimEnd() + $" // VB-IGNORE: {issue.RuleId}";
+                    lines[idx] = lines[idx].TrimEnd() + $" // REVIEW-IGNORE: {issue.RuleId}";
                     File.WriteAllLines(fullPath, lines, Encoding.UTF8);
                     AssetDatabase.Refresh();
                 }
@@ -3483,7 +3483,7 @@ namespace VeilBreakers.Editor.CodeReview
                 int idx = issue.Line - 1;
                 if (idx >= 0 && idx < lines.Count)
                 {
-                    lines[idx] = lines[idx].TrimEnd() + $"  # VB-IGNORE: {issue.RuleId}";
+                    lines[idx] = lines[idx].TrimEnd() + $"  # REVIEW-IGNORE: {issue.RuleId}";
                     File.WriteAllLines(issue.FilePath, lines, Encoding.UTF8);
                 }
             }
@@ -3743,7 +3743,7 @@ namespace VeilBreakers.Editor.CodeReview
 
                 for (int i = 0; i < lines.Length; i++)
                 {
-                    if (lines[i].Contains("VB-IGNORE")) continue;
+                    if (lines[i].Contains("REVIEW-IGNORE")) continue;
 
                     // Scope check via pre-classified context
                     if (!ReviewRules.MatchesScope(contexts[i], rule.Scope)) continue;
@@ -3892,7 +3892,7 @@ namespace VeilBreakers.Editor.CodeReview
 
                 for (int i = 0; i < lines.Length; i++)
                 {
-                    if (lines[i].Contains("VB-IGNORE")) continue;
+                    if (lines[i].Contains("REVIEW-IGNORE")) continue;
                     if (pyCtx[i] == LineContext.Comment || pyCtx[i] == LineContext.StringLiteral) continue;
 
                     // Fast literal pre-filter before regex
@@ -4359,45 +4359,45 @@ RULES: list[Rule] = [
          "eval() usage -- arbitrary code execution risk",
          "Replace with ast.literal_eval() or redesign.",
          re.compile(r"\beval\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"literal_eval"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"literal_eval"])),
 
     Rule("PY-SEC-02", Severity.CRITICAL, Category.Security,
          "os.system() or subprocess with shell=True -- command injection",
          "Use subprocess.run() with list args and shell=False.",
          re.compile(r"(os\.system\s*\(|subprocess\.\w+\([^)]*shell\s*=\s*True)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"])),
 
     Rule("PY-SEC-03", Severity.CRITICAL, Category.Security,
          "pickle.load on untrusted data -- arbitrary code execution",
          "Use json, msgpack, or safer format.",
          re.compile(r"pickle\.(load|loads)\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"])),
 
     Rule("PY-SEC-04", Severity.HIGH, Category.Security,
          "f-string in SQL/shell command -- injection risk",
          "For SQL: cursor.execute('SELECT * FROM t WHERE id = %s', (user_id,)). For shell: subprocess.run(['cmd', arg], shell=False).",
          re.compile(r'(execute|run|system|popen)\s*\(\s*f["\']'),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"])),
 
     # PY-SEC-05: skip constant assignments and default parameters
     Rule("PY-SEC-05", Severity.HIGH, Category.Security,
          "exec() usage -- arbitrary code execution",
          "Replace with getattr(module, name)() for dynamic dispatch, or a dict mapping names to callables.",
          re.compile(r"\bexec\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"^\s*\w+\s*=\s*", r"def\s+\w+\s*\([^)]*exec"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"^\s*\w+\s*=\s*", r"def\s+\w+\s*\([^)]*exec"])),
 
     Rule("PY-SEC-06", Severity.MEDIUM, Category.Security,
          "Hardcoded file path -- not portable",
          "Use pathlib.Path or os.path.join with configurable base.",
          re.compile(r"""['"](?:/[a-z]+/|[A-Z]:\\\\)[^'"]{3,}['"]"""),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-SEC-07", Severity.HIGH, Category.Security,
          "assert for input validation -- stripped with -O",
          "Replace 'assert x > 0' with 'if x <= 0: raise ValueError(\"x must be positive\")'.",
          re.compile(r"^\s*assert\s+(?!.*#\s*nosec)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"#\s*nosec", r"test_|_test\.py"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"#\s*nosec", r"test_|_test\.py"]),
          confidence=65,
          reasoning="Cannot distinguish input validation from internal invariant checks."),
 
@@ -4406,33 +4406,33 @@ RULES: list[Rule] = [
          "Mutable default argument -- shared across calls",
          "Change 'def f(items=[])' to 'def f(items=None):', then 'items = items if items is not None else []' in the body.",
          re.compile(r"def\s+\w+\s*\([^)]*=\s*(\[\]|\{\}|set\(\))"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"])),
 
     Rule("PY-COR-02", Severity.HIGH, Category.Bug,
          "Bare except: catches SystemExit, KeyboardInterrupt",
          "Replace 'except:' with 'except Exception:' at minimum, or 'except (ValueError, KeyError):' for specific types.",
          re.compile(r"^\s*except\s*:"),
-         _compile_anti([r"#\s*VB-IGNORE"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"])),
 
     Rule("PY-COR-03", Severity.MEDIUM, Category.Bug,
          "Comparing with None using == instead of 'is None'",
          "Use 'is None' or 'is not None'.",
          re.compile(r"[!=]=\s*None\b"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-COR-04", Severity.MEDIUM, Category.Bug,
          "open() without context manager -- file may not close",
          "Use 'with open(...) as f:'.",
          re.compile(r"(?<!\bwith\s)\bopen\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"\bwith\b",
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"\bwith\b",
                         r"Image\.open", r"BytesIO", r"PIL"])),
 
     Rule("PY-COR-05", Severity.LOW, Category.Bug,
          "datetime.now() without timezone -- ambiguous",
          "Use datetime.now(tz=timezone.utc).",
          re.compile(r"datetime\.now\s*\(\s*\)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          finding_type=FindingType.STRENGTHENING),
 
     # PY-COR-06: only flag if result is mutated, not just read
@@ -4440,7 +4440,7 @@ RULES: list[Rule] = [
          "dict.get() with mutable default -- mutated result is shared",
          "Use dict.get(key) with None check, then create mutable separately.",
          re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          guard=_check_mutable_get,
          confidence=88),
 
@@ -4448,7 +4448,7 @@ RULES: list[Rule] = [
          "Class with __del__ -- unpredictable GC, prevents ref cycle collection",
          "Use context managers or weakref.finalize.",
          re.compile(r"def\s+__del__\s*\(\s*self"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          finding_type=FindingType.STRENGTHENING,
          confidence=85),
 
@@ -4456,13 +4456,13 @@ RULES: list[Rule] = [
          "Thread without daemon=True -- may prevent clean shutdown",
          "Set daemon=True or join before exit.",
          re.compile(r"Thread\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"daemon"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"daemon"])),
 
     Rule("PY-COR-09", Severity.LOW, Category.Bug,
          "json.loads/load without error handling — crashes on malformed input",
          "Wrap in try/except json.JSONDecodeError to handle corrupt JSON gracefully.",
          re.compile(r"json\.loads?\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"except.*JSON",
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"except.*JSON",
                         r"\btry\s*:", r"\bexcept\b"]),
          confidence=68,
          anti_radius=10),
@@ -4471,13 +4471,13 @@ RULES: list[Rule] = [
          "Float equality comparison -- use math.isclose",
          "Use math.isclose(a, b) or abs(a - b) < epsilon.",
          re.compile(r"(?<!\w)(==|!=)\s*\d+\.\d+"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"])),
 
     Rule("PY-COR-11", Severity.MEDIUM, Category.Bug,
          "Re-raising exception without chain -- loses traceback",
          "Use 'raise NewException(...) from original_exc' to preserve the traceback chain.",
          re.compile(r"raise\s+\w+\([^)]*\)\s*$"),
-         _compile_anti([r"#\s*VB-IGNORE", r"\bfrom\s+\w+"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"\bfrom\s+\w+"]),
          guard=lambda line, a, i: _is_inside_except(line, a, i),
          finding_type=FindingType.STRENGTHENING,
          confidence=72),
@@ -4486,7 +4486,7 @@ RULES: list[Rule] = [
          "Exception type too broad -- catches bugs with expected errors",
          "Replace 'except Exception' with specific types: 'except (ValueError, KeyError, TypeError):' matching actual failure modes.",
          re.compile(r"except\s+Exception\s*(?:as|\s*:)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"# broad catch intentional",
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"# broad catch intentional",
                         r"logger\.exception", r"mcp\.tool", r"return\s+json\.dumps"]),
          anti_radius=10,
          guard=lambda line, a, i: not any(
@@ -4507,7 +4507,7 @@ RULES: list[Rule] = [
          "Variable shadows built-in name (list, dict, set, type, id, etc.) — may break code that needs the built-in later",
          "Rename: items instead of list, mapping instead of dict, obj_type instead of type, obj_id instead of id.",
          re.compile(r"^\s*(list|dict|set|str|int|float|bool|tuple|type|id|input|filter|map|zip|range|len|sum|min|max|any|all|sorted|reversed|hash|next|iter|open|print|format|bytes|object|super)\s*=\s*"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"typing", r"import"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"typing", r"import"]),
          guard=lambda line, a, i: (
              # Skip keyword arguments (line ends with , or ) — inside function call)
              not line.rstrip().endswith(",")
@@ -4522,7 +4522,7 @@ RULES: list[Rule] = [
          "Lambda in loop captures loop variable by reference -- late binding bug",
          "Capture with default arg: lambda x, i=i: ... or use functools.partial.",
          re.compile(r"for\s+(\w+)\s+in\b"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          guard=lambda line, a, i: _check_late_binding(line, a, i),
          confidence=92),
 
@@ -4531,7 +4531,7 @@ RULES: list[Rule] = [
          "String concatenation in loop -- O(n^2)",
          "Collect parts in list, ''.join(parts) after loop.",
          re.compile(r"\w+\s*\+=\s*['\"]"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#",
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#",
                         r"\bstring\b", r"\bvar\b", r"\bint\b",
                         r"\.Count\b", r"\.Length\b", r"//\s"]),
          guard=lambda line, a, i: any(
@@ -4543,7 +4543,7 @@ RULES: list[Rule] = [
          "re.match/search/findall without compile for repeated pattern",
          "Compile pattern once with re.compile() and reuse.",
          re.compile(r"re\.(match|search|findall|sub|split)\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"re\.compile"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"re\.compile"]),
          guard=lambda line, a, i: any(
              re.search(r"^\s*(for|while)\b", a[j])
              for j in range(max(0, i - 5), i))),
@@ -4552,7 +4552,7 @@ RULES: list[Rule] = [
          "Large file .read() without chunking -- may exhaust memory",
          "Use chunked reading: for line in file, or file.read(chunk_size).",
          re.compile(r"\.read\s*\(\s*\)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r'"rb"', r"BytesIO",
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r'"rb"', r"BytesIO",
                         r"img_bytes", r"image_data", r"base64",
                         r'encoding="utf-8"', r"\.read_text\s*\("]),
          confidence=55,
@@ -4563,7 +4563,7 @@ RULES: list[Rule] = [
          "os.path usage — consider pathlib.Path for cleaner path handling",
          "Replace os.path.join(a, b) with Path(a) / b. pathlib is more readable and handles cross-platform paths.",
          re.compile(r"os\.path\.(join|exists|isfile|isdir|basename|dirname|splitext)\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          confidence=72,
          finding_type=FindingType.STRENGTHENING),
 
@@ -4571,7 +4571,7 @@ RULES: list[Rule] = [
          "Deeply nested function (3+ indent levels) — hard to test and maintain",
          "Extract inner function to module level or class method for better testability.",
          re.compile(r"^\s{12,}def\s+\w+\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
          confidence=85,
          finding_type=FindingType.STRENGTHENING),
 
@@ -4579,7 +4579,7 @@ RULES: list[Rule] = [
          "Star import pollutes namespace — imported names are unknown to readers and tools",
          "Replace with explicit imports: from X import ClassA, func_b, CONST_C.",
          re.compile(r"from\s+\S+\s+import\s+\*"),
-         _compile_anti([r"#\s*VB-IGNORE"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
          confidence=92,
          finding_type=FindingType.STRENGTHENING),
 
@@ -4587,7 +4587,7 @@ RULES: list[Rule] = [
          "Global variable mutation — makes function behavior depend on hidden state",
          "Pass the value as a function parameter, or encapsulate in a class with clear ownership.",
          re.compile(r"^\s+global\s+\w+"),
-         _compile_anti([r"#\s*VB-IGNORE"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
          confidence=78,
          finding_type=FindingType.STRENGTHENING),
 
@@ -4864,7 +4864,7 @@ def scan_file(filepath: str) -> list[Issue]:
 
     # Build suppressed set
     suppressed: set[str] = set()
-    ignore_rx = re.compile(r"#\s*VB-IGNORE:\s*([\w,-]+)")
+    ignore_rx = re.compile(r"#\\s*(?:VB|REVIEW)-IGNORE:\s*([\w,-]+)")
     for line in lines:
         m = ignore_rx.search(line)
         if m:
@@ -4878,7 +4878,7 @@ def scan_file(filepath: str) -> list[Issue]:
         if "SENTINEL" in rule.pattern.pattern:
             continue
         for i, line in enumerate(lines):
-            if "VB-IGNORE" in line:
+            if "REVIEW-IGNORE" in line:
                 continue
             if _is_comment(line) or in_tq[i]:
                 continue
@@ -5064,7 +5064,9 @@ if __name__ == "__main__":
         "next_steps": [
             "Run: python vb_python_reviewer.py <path> --output report.json",
             "Use --severity HIGH to filter out low-priority style issues",
-            "Add # VB-IGNORE: RULE_ID to suppress specific false positives",
+            "Add # REVIEW-IGNORE: RULE_ID to suppress specific false positives",
             "Integrate into CI: python vb_python_reviewer.py src/ -o report.json",
         ],
     }
+
+
