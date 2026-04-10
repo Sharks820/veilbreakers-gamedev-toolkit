@@ -96,8 +96,8 @@ def _cs_write_only_fields(
     )
     fields: dict[str, int] = {}
     for i, line in enumerate(src_text.splitlines(), 1):
-        # Respect VB-IGNORE suppression
-        if "VB-IGNORE" in line:
+        # Respect legacy and current suppression directives.
+        if "VB-IGNORE" in line or "REVIEW-IGNORE" in line:
             continue
         m = field_pat.search(line)
         if m and "const " not in line and "static readonly " not in line and "event " not in line:

@@ -5,6 +5,7 @@ from pathlib import Path
 from veilbreakers_mcp._context_engine import ContextEngine
 from veilbreakers_mcp import vb_code_reviewer as reviewer
 from veilbreakers_mcp._tool_runner import ToolFinding, _map_ruff_severity
+from veilbreakers_mcp._types import Category
 
 
 def test_reexport_import_is_not_flagged_unused(tmp_path):
@@ -230,3 +231,211 @@ def test_production_scan_keeps_real_ruff_correctness_findings(monkeypatch, tmp_p
 
     assert report["total_issues"] == 1
     assert report["issues"][0]["rule_id"] == "RUFF-F821"
+
+
+def test_general_profile_treats_non_vb_python_files_as_production(tmp_path):
+    src_dir = tmp_path / "arbitrary_app"
+    src_dir.mkdir()
+    file_path = src_dir / "demo.py"
+    file_path.write_text("result = eval(user_input)\n", encoding="utf-8")
+
+    report = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+
+    assert any("PY-SEC-01" in issue["rule_id"] for issue in report["issues"])
+
+
+def test_general_profile_excludes_unity_only_csharp_rules(tmp_path):
+    csharp_path = tmp_path / "Runtime.cs"
+    csharp_path.write_text(
+        "using UnityEditor;\n"
+        "public class Demo { }\n",
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_csharp_file(
+        str(csharp_path), None, review_scope="production", profile="general"
+    )
+
+    assert not any(issue.rule_id == "BUILD-01" for issue in issues)
+
+
+def test_unity_profile_includes_unity_only_csharp_rules(tmp_path):
+    csharp_path = tmp_path / "Runtime.cs"
+    csharp_path.write_text(
+        "using UnityEditor;\n"
+        "public class Demo { }\n",
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_csharp_file(
+        str(csharp_path), None, review_scope="production", profile="unity"
+    )
+
+    assert any(issue.rule_id == "BUILD-01" for issue in issues)
+
+
+def test_blender_profile_retains_blender_python_rules(tmp_path):
+    python_path = tmp_path / "build_mesh.py"
+    python_path.write_text(
+        "def build_mesh(name):\n"
+        "    mesh = bpy.data.meshes.new(name)\n"
+        "    obj = bpy.data.objects.new(name, mesh)\n"
+        "    bpy.context.collection.objects.link(obj)\n"
+        "    return obj\n",
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_python_file(
+        str(python_path), None, review_scope="strict", profile="blender"
+    )
+
+    assert any(issue.rule_id == "BLE-02" for issue in issues)
+
+
+def test_review_ignore_alias_suppresses_python_rule(tmp_path):
+    file_path = tmp_path / "demo.py"
+    file_path.write_text(
+        "# REVIEW-IGNORE: PY-SEC-01\n"
+        "result = eval(user_input)\n",
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_python_file(str(file_path), None, review_scope="production")
+
+    assert not any(issue.rule_id == "PY-SEC-01" for issue in issues)
+
+
+def test_review_ignore_alias_suppresses_csharp_rule(tmp_path):
+    file_path = tmp_path / "demo.cs"
+    file_path.write_text(
+        "using UnityEditor; // REVIEW-IGNORE\n"
+        "public class Demo { }\n",
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_csharp_file(
+        str(file_path), None, review_scope="production", profile="unity"
+    )
+
+    assert not any(issue.rule_id == "BUILD-01" for issue in issues)
+
+
+def test_framework_category_name_replaces_unity_name():
+    assert Category.Framework.name == "Framework"
+
+
+def test_display_path_uses_scan_root_relative_path(tmp_path):
+    root = tmp_path / "repo"
+    target = root / "src" / "module" / "demo.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("pass\n", encoding="utf-8")
+
+    display = reviewer._display_path(str(target), [str(root)])
+
+    assert display == "src/module/demo.py"
+
+
+def test_parse_unified_diff_extracts_added_line_ranges(tmp_path):
+    diff_text = (
+        "diff --git a/src/demo.py b/src/demo.py\n"
+        "--- a/src/demo.py\n"
+        "+++ b/src/demo.py\n"
+        "@@ -1,1 +4,2 @@\n"
+        "+result = eval(user_input)\n"
+        "+print(result)\n"
+    )
+
+    changed = reviewer._parse_unified_diff(diff_text, base_dir=str(tmp_path))
+
+    expected = str((tmp_path / "src" / "demo.py").resolve()).replace("\\", "/")
+    assert changed == {expected: [(4, 5)]}
+
+
+def test_changed_ranges_filter_out_unchanged_findings(tmp_path):
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "demo.py"
+    file_path.write_text(
+        "result = eval(user_input)\n"
+        "print('safe')\n"
+        "exec(code_string)\n",
+        encoding="utf-8",
+    )
+
+    changed = {str(file_path.resolve()).replace("\\", "/"): [(1, 1)]}
+    report = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        changed_ranges=changed,
+        build_context=False,
+    )
+
+    assert report["total_issues"] == 1
+    assert "PY-SEC-01" in report["issues"][0]["rule_id"]
+
+
+def test_embedded_csharp_template_is_classified_as_csharp():
+    lines = [
+        'script = f"""',
+        "using UnityEngine;",
+        "public class Demo { void Run() { } }",
+        '"""',
+    ]
+
+    classified = reviewer._classify_embedded_language(lines)
+
+    assert classified == ["csharp", "csharp", "csharp", "csharp"]
+
+
+def test_embedded_csharp_template_does_not_trigger_python_rules(tmp_path):
+    file_path = tmp_path / "template.py"
+    file_path.write_text(
+        'script = f"""\n'
+        "using System;\n"
+        "public class Demo { void Run() { eval(code); } }\n"
+        '"""\n',
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_python_file(
+        str(file_path), None, review_scope="production", profile="general"
+    )
+
+    assert not issues
+
+
+def test_scan_stdin_content_python():
+    report = reviewer._scan_stdin_content(
+        "result = eval(user_input)\n",
+        lang="py",
+        review_scope="production",
+        profile="general",
+    )
+
+    assert report["total_issues"] == 1
+    assert report["issues"][0]["file"] == "<stdin>"
+    assert "PY-SEC-01" in report["issues"][0]["rule_id"]
+
+
+def test_scan_stdin_content_csharp():
+    report = reviewer._scan_stdin_content(
+        "using System.Threading.Tasks;\n"
+        "public class Bad {\n"
+        "    public void Run(Task<int> work) {\n"
+        "        var value = work.Result;\n"
+        "    }\n"
+        "}\n",
+        lang="cs",
+        review_scope="production",
+        profile="general",
+    )
+
+    assert any("CS-COR-06" in issue["rule_id"] for issue in report["issues"])

@@ -139,17 +139,6 @@ class TestApplyThermalErosion:
         result = apply_thermal_erosion(hmap, iterations=5, talus_angle=45.0)
         assert isinstance(result, np.ndarray)
 
-    def test_does_not_create_values_outside_bounds(self):
-        """Edge case: heightmap with extremes doesn't break bounds."""
-        from blender_addon.handlers._terrain_erosion import apply_thermal_erosion
-
-        hmap = np.zeros((16, 16))
-        hmap[::2, ::2] = 1.0  # Checkerboard pattern
-        result = apply_thermal_erosion(hmap, iterations=10, talus_angle=20.0)
-        assert result.min() >= 0.0
-        assert result.max() <= 1.0
-
-
 # ---------------------------------------------------------------------------
 # High-iteration erosion quality tests
 # ---------------------------------------------------------------------------

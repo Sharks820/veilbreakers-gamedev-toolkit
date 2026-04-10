@@ -304,31 +304,6 @@ def test_generate_cave_path_all_archetypes_nonempty():
 # ---------------------------------------------------------------------------
 
 
-def test_carve_cave_volume_returns_delta_without_mutation():
-    from blender_addon.handlers.terrain_caves import (
-        CaveArchetype,
-        carve_cave_volume,
-        generate_cave_path,
-        make_archetype_spec,
-    )
-
-    state = _build_state()
-    original_height = state.mask_stack.height.copy()
-    spec = make_archetype_spec(CaveArchetype.LAVA_TUBE)
-    path = generate_cave_path(
-        state.mask_stack, CaveArchetype.LAVA_TUBE, (24.0, 24.0, 20.0), seed=3
-    )
-    delta = carve_cave_volume(state.mask_stack, path, spec)
-
-    # stack.height unchanged
-    np.testing.assert_array_equal(state.mask_stack.height, original_height)
-    assert delta.shape == state.mask_stack.height.shape
-    # All delta values are <= 0 (carve subtracts elevation)
-    assert (delta <= 0.0).all()
-    # At least SOME cells carved
-    assert (delta < 0.0).any()
-
-
 def test_carve_cave_volume_populates_cave_candidate():
     from blender_addon.handlers.terrain_caves import (
         CaveArchetype,

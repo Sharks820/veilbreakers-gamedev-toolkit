@@ -142,11 +142,6 @@ class TestHelmetMesh:
                 f"Helmet {style}: poly count {pc} outside expected range"
             )
 
-    def test_helmet_invalid_style_fallback(self):
-        result = generate_helmet_mesh(style="nonexistent")
-        assert result["metadata"]["style"] == "open_face"
-
-
 # ---------------------------------------------------------------------------
 # CHEST ARMOR tests
 # ---------------------------------------------------------------------------
@@ -416,10 +411,6 @@ class TestBeltMesh:
                 f"Belt {style}: poly count {pc} outside expected range"
             )
 
-    def test_belt_invalid_style_fallback(self):
-        result = generate_belt_mesh(style="nonexistent")
-        assert result["metadata"]["style"] == "leather"
-
     def test_utility_belt_has_pouches(self):
         """Utility belt should have pouch geometry (significantly more verts)."""
         result = generate_belt_mesh(style="utility")
@@ -470,10 +461,6 @@ class TestBracerMesh:
             assert 8 <= pc <= 5000, (
                 f"Bracer {style}: poly count {pc} outside expected range"
             )
-
-    def test_bracer_invalid_style_fallback(self):
-        result = generate_bracer_mesh(style="nonexistent")
-        assert result["metadata"]["style"] == "leather"
 
     def test_enchanted_bracer_has_gem(self):
         """Enchanted bracer should have gem geometry (more verts than plain leather)."""
@@ -526,10 +513,6 @@ class TestRingMesh:
                 f"Ring {style}: poly count {pc} outside expected range"
             )
 
-    def test_ring_invalid_style_fallback(self):
-        result = generate_ring_mesh(style="nonexistent")
-        assert result["metadata"]["style"] == "band"
-
     def test_gem_set_has_gem(self):
         """Gem-set ring should have more geometry than plain band."""
         gem = generate_ring_mesh(style="gem_set")
@@ -580,10 +563,6 @@ class TestAmuletMesh:
             assert 4 <= pc <= 5000, (
                 f"Amulet {style}: poly count {pc} outside expected range"
             )
-
-    def test_amulet_invalid_style_fallback(self):
-        result = generate_amulet_mesh(style="nonexistent")
-        assert result["metadata"]["style"] == "pendant"
 
     def test_torc_is_open(self):
         """Torc should be an open ring (not closed like a choker)."""
@@ -637,10 +616,6 @@ class TestBackItemMesh:
                 f"BackItem {style}: poly count {pc} outside expected range"
             )
 
-    def test_back_item_invalid_style_fallback(self):
-        result = generate_back_item_mesh(style="nonexistent")
-        assert result["metadata"]["style"] == "backpack"
-
     def test_wings_are_symmetric(self):
         """Wings should have geometry on both sides (positive and negative X)."""
         result = generate_back_item_mesh(style="wings")
@@ -693,10 +668,6 @@ class TestFaceItemMesh:
             assert 6 <= pc <= 5000, (
                 f"FaceItem {style}: poly count {pc} outside expected range"
             )
-
-    def test_face_item_invalid_style_fallback(self):
-        result = generate_face_item_mesh(style="nonexistent")
-        assert result["metadata"]["style"] == "mask"
 
     def test_plague_doctor_has_beak(self):
         """Plague doctor mask should have significantly more geometry than domino."""

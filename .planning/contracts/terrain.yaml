@@ -1,0 +1,446 @@
+# VeilBreakers Terrain Pipeline Contract
+# Generated: 2026-04-09 from registrar + 4-agent code extraction
+# Purpose: Machine-readable source of truth for terrain pipeline.
+#          Every claimed function MUST exist in code with >5 LOC body.
+#          Every produces_channel MUST be written to by the pass.
+#          Status is HONEST — "partial" means known stubs/bugs exist.
+#
+# Schema: bundle → passes[] → {name, file, reads[], mutates[], loc, is_stub, known_bugs[]}
+#         bundle → helpers[] → {name, file, returns, status}
+#
+# Validation: scripts/honesty_lint.py cross-checks this against real code.
+
+metadata:
+  version: "1.0"
+  generated: "2026-04-09"
+  registrar: "blender_addon/handlers/terrain_master_registrar.py"
+  total_bundles: 18
+  registered_bundles: 15
+  total_passes: 31
+  total_stubs: 0
+  dead_code_exporters: 6
+
+# ===========================================================================
+# Bundle A — Foundation (4 passes, all REAL)
+# ===========================================================================
+bundle_a:
+  name: "Foundation"
+  description: "Heightmap generation, structural masks, erosion, minimal validation"
+  registrar_entry: "terrain_pipeline.register_default_passes"
+  status: "complete"
+  passes:
+    - name: "pass_macro_world"
+      file: "_terrain_world.py:367"
+      reads: ["stack.height"]
+      mutates: []
+      loc: 25
+      is_stub: false
+
+    - name: "pass_structural_masks"
+      file: "_terrain_world.py:414"
+      reads: ["stack.height", "stack.cell_size"]
+      mutates: ["slope", "curvature", "concavity", "convexity", "ridge", "basin", "saliency_macro"]
+      loc: 22
+      is_stub: false
+
+    - name: "pass_erosion"
+      file: "_terrain_world.py:455"
+      reads: ["stack.height", "stack.hero_exclusion", "intent.erosion_profile", "intent.protected_zones"]
+      mutates: ["height", "erosion_amount", "deposition_amount", "wetness", "drainage", "bank_instability", "talus"]
+      loc: 97
+      is_stub: false
+
+    - name: "pass_validation_minimal"
+      file: "_terrain_world.py:587"
+      reads: ["stack.height", "stack.slope", "stack.curvature", "stack.wetness", "stack.drainage"]
+      mutates: []
+      loc: 30
+      is_stub: false
+
+# ===========================================================================
+# Bundle B — Cliffs + Materials (2 passes, REAL)
+# ===========================================================================
+bundle_b:
+  name: "Cliffs + Materials"
+  description: "Cliff geometry, slope-driven materials, splatmap generation"
+  registrar_entries:
+    - "terrain_cliffs.register_bundle_b_passes"
+    - "terrain_materials_v2.register_bundle_b_material_passes"
+  status: "complete"
+  passes:
+    - name: "pass_cliffs"
+      file: "terrain_cliffs.py:552"
+      reads: ["stack.slope", "stack.saliency_macro", "stack.ridge", "stack.hero_exclusion", "stack.height", "intent.protected_zones"]
+      mutates: ["cliff_candidate"]
+      loc: 70
+      is_stub: false
+      note: "insert_hero_cliff_meshes is a stub helper (records intent only, no bmesh geometry)"
+
+    - name: "pass_materials"
+      file: "terrain_materials_v2.py:269"
+      reads: ["stack.slope", "stack.height", "stack.curvature", "stack.wetness", "stack.splatmap_weights_layer"]
+      mutates: ["splatmap_weights_layer", "material_weights"]
+      loc: 55
+      is_stub: false
+
+# ===========================================================================
+# Bundle C — Waterfall Hydrology (1 pass, REAL but broken)
+# ===========================================================================
+bundle_c:
+  name: "Waterfall Hydrology"
+  description: "Water network, waterfall placement, pool/outflow computation"
+  registrar_entry: "terrain_waterfalls.register_bundle_c_passes"
+  status: "broken"
+  passes:
+    - name: "pass_waterfalls"
+      file: "terrain_waterfalls.py:592"
+      reads: ["stack.height", "stack.drainage", "stack.water_surface"]
+      mutates: ["waterfall_lip_candidate", "foam", "mist", "wet_rock"]
+      loc: 80
+      is_stub: false
+      known_bugs:
+        - "P0-004: pool/outflow height deltas computed but NEVER applied to stack.height"
+        - "carve_impact_pool() and build_outflow_channel() return deltas but pass never calls them"
+
+# ===========================================================================
+# Bundle D — Validation + Checkpoints (1 pass + 10 validators)
+# ===========================================================================
+bundle_d:
+  name: "Validation + Checkpoints"
+  description: "Pipeline validation gates, checkpoint save/restore"
+  registrar_entry: "terrain_validation.register_bundle_d_passes"
+  status: "partial"
+  passes:
+    - name: "pass_validation_full"
+      file: "terrain_validation.py:670"
+      reads: ["all populated channels via 10 validators"]
+      mutates: []
+      loc: 30
+      is_stub: false
+      known_bugs:
+        - "P0-002: validate_unity_export_ready hard-fails without opt-out hint in default pipeline"
+  validators:
+    - { name: "validate_height_finite", line: 142, severity: "hard" }
+    - { name: "validate_height_range", line: 171, severity: "hard" }
+    - { name: "validate_slope_distribution", line: 217, severity: "hard/info" }
+    - { name: "validate_protected_zones_untouched", line: 257, severity: "hard/info" }
+    - { name: "validate_tile_seam_continuity", line: 294, severity: "hard/soft" }
+    - { name: "validate_erosion_mass_conservation", line: 348, severity: "soft/info" }
+    - { name: "validate_hero_feature_placement", line: 393, severity: "hard/info" }
+    - { name: "validate_material_coverage", line: 457, severity: "hard/soft" }
+    - { name: "validate_channel_dtypes", line: 528, severity: "hard" }
+    - { name: "validate_unity_export_ready", line: 552, severity: "hard/info" }
+
+# ===========================================================================
+# Bundle E — Scatter Intelligence (1 pass, REAL)
+# ===========================================================================
+bundle_e:
+  name: "Scatter Intelligence"
+  description: "Procedural object scatter, vegetation placement, density control"
+  registrar_entry: "terrain_assets.register_bundle_e_passes"
+  status: "partial"
+  passes:
+    - name: "pass_scatter_intelligent"
+      file: "terrain_assets.py:790"
+      reads: ["stack.height", "stack.slope", "stack.wetness", "stack.cliff_candidate", "stack.waterfall_lip_candidate", "stack.cave_candidate", "intent.protected_zones"]
+      mutates: ["tree_instance_points", "detail_density"]
+      loc: 94
+      is_stub: false
+      known_bugs:
+        - "P0-009: environment_scatter.py not imported or referenced — separate code path"
+
+# ===========================================================================
+# Bundle F — Cave Archetypes (1 pass, REAL but broken delta)
+# ===========================================================================
+bundle_f:
+  name: "Cave Archetypes"
+  description: "Cave path generation, volume carving, damp mask, archetype system"
+  registrar_entry: "terrain_caves.register_bundle_f_passes"
+  status: "broken"
+  passes:
+    - name: "pass_caves"
+      file: "terrain_caves.py:759"
+      reads: ["stack.height", "stack.slope", "stack.wetness", "stack.basin", "stack.concavity", "stack.cave_candidate", "stack.wet_rock", "intent.scene_read.cave_candidates"]
+      mutates: ["cave_candidate", "wet_rock"]
+      loc: 120
+      is_stub: false
+      known_bugs:
+        - "P0-008: _delta = carve_cave_volume() discarded — caves have zero geometric depression"
+        - "P0-008b: _damp = generate_damp_mask() discard is cosmetically wasteful but HARMLESS (writes to stack internally)"
+
+# ===========================================================================
+# Bundle G — Banded Noise (1 pass, REAL)
+# ===========================================================================
+bundle_g:
+  name: "Banded Noise"
+  description: "4 re-composable frequency bands for terrain shaping"
+  registrar_entry: "terrain_banded.register_bundle_g_passes"
+  status: "complete"
+  passes:
+    - name: "pass_banded_macro"
+      file: "terrain_banded.py:457"
+      reads: ["stack.height.shape", "stack.world_origin_x", "stack.world_origin_y", "stack.cell_size", "intent.seed", "intent.noise_profile"]
+      mutates: ["height"]
+      loc: 97
+      is_stub: false
+      note: "5th band (warp_band) is informational only — not used in composition"
+
+# ===========================================================================
+# Bundle H — Composition & Intent (2 passes + 4 unwired libraries)
+# ===========================================================================
+bundle_h:
+  name: "Composition & Intent"
+  description: "Saliency refinement + framing. Morphology/hierarchy/rhythm/negative_space are LIBRARY ONLY."
+  registrar_entries:
+    - "terrain_saliency.register_saliency_pass"
+    - "terrain_framing.register_framing_pass"
+  status: "partial"
+  passes:
+    - name: "pass_saliency_refine"
+      file: "terrain_saliency.py:245"
+      reads: ["stack.saliency_macro", "stack.height", "intent.composition_hints.vantages"]
+      mutates: ["saliency_macro"]
+      loc: 55
+      is_stub: false
+
+    - name: "pass_framing"
+      file: "terrain_framing.py:87"
+      reads: ["stack.height", "intent.composition_hints.vantages", "intent.composition_hints.framing_clearance_m", "intent.hero_feature_specs"]
+      mutates: ["height"]
+      loc: 60
+      is_stub: false
+
+  unwired_libraries:
+    - { name: "terrain_morphology.py", loc: 236, purpose: "MorphologyTemplate + 30 landform templates", note: "No pass function, no registration" }
+    - { name: "terrain_hierarchy.py", loc: 173, purpose: "FeatureTier classification + budget enforcement", note: "No pass function, no registration" }
+    - { name: "terrain_rhythm.py", loc: 193, purpose: "Feature spacing analysis + Lloyd relaxation", note: "No pass function, no registration" }
+    - { name: "terrain_negative_space.py", loc: 297, purpose: "Quiet zone ratio + saliency peak detection", note: "No pass function, no registration" }
+
+  known_bugs:
+    - "P0-016: 4 composition modules (899 LOC) are real implementations but completely unwired from pipeline"
+    - "P0-001: MorphologyTemplate frozen=True with Dict default — hash() crash"
+
+# ===========================================================================
+# Bundle I — Geology Plausibility (5 passes, all REAL)
+# ===========================================================================
+bundle_i:
+  name: "Geology Plausibility"
+  description: "Stratigraphy, glacial, wind erosion, coastline, karst"
+  registrar_entry: "terrain_geology_validator.register_bundle_i_passes"
+  status: "complete"
+  passes:
+    - name: "pass_stratigraphy"
+      file: "terrain_stratigraphy.py:257"
+      reads: ["height"]
+      mutates: ["rock_hardness", "strata_orientation"]
+      loc: 36
+      is_stub: false
+      note: "apply_differential_erosion exists but never called"
+
+    - name: "pass_glacial"
+      file: "terrain_glacial.py:204"
+      reads: ["height", "slope"]
+      mutates: ["snow_line_factor", "height (conditional)"]
+      loc: 54
+      is_stub: false
+      note: "scatter_moraines exists but never called"
+
+    - name: "pass_wind_erosion"
+      file: "terrain_wind_erosion.py:143"
+      reads: ["height", "rock_hardness"]
+      mutates: ["height"]
+      loc: 55
+      is_stub: false
+
+    - name: "pass_coastline"
+      file: "coastline.py:670"
+      reads: ["height", "rock_hardness"]
+      mutates: ["tidal", "height (conditional)"]
+      loc: 48
+      is_stub: false
+
+    - name: "pass_karst"
+      file: "terrain_karst.py:178"
+      reads: ["height", "rock_hardness"]
+      mutates: ["height"]
+      loc: 44
+      is_stub: false
+
+# ===========================================================================
+# Bundle J — Ecosystem Spine (9 passes, all REAL)
+# ===========================================================================
+bundle_j:
+  name: "Ecosystem Spine"
+  description: "Audio zones, wildlife, gameplay zones, wind field, cloud shadow, decals, navmesh, ecotones, heightmap U16 prep"
+  registrar_entry: "terrain_bundle_j.register_bundle_j_passes"
+  status: "complete"
+  passes:
+    - { name: "pass_prepare_heightmap_raw_u16", file: "terrain_unity_export.py:54", reads: ["height"], mutates: ["heightmap_raw_u16"], loc: 24, is_stub: false }
+    - { name: "pass_audio_zones", file: "terrain_audio_zones.py:139", reads: ["height", "slope", "curvature", "water_surface", "wetness", "cave_candidate"], mutates: ["audio_reverb_class"], loc: 44, is_stub: false }
+    - { name: "pass_wildlife_zones", file: "terrain_wildlife_zones.py:216", reads: ["height", "slope", "biome_id", "water_surface", "wetness"], mutates: ["wildlife_affinity"], loc: 45, is_stub: false }
+    - { name: "pass_gameplay_zones", file: "terrain_gameplay_zones.py:122", reads: ["height", "slope", "curvature", "basin", "cave_candidate", "intent.hero_feature_specs"], mutates: ["gameplay_zone"], loc: 31, is_stub: false }
+    - { name: "pass_wind_field", file: "terrain_wind_field.py:113", reads: ["height", "ridge", "basin"], mutates: ["wind_field"], loc: 35, is_stub: false }
+    - { name: "pass_cloud_shadow", file: "terrain_cloud_shadow.py:84", reads: ["height"], mutates: ["cloud_shadow"], loc: 34, is_stub: false }
+    - { name: "pass_decals", file: "terrain_decal_placement.py:121", reads: ["height", "slope", "wetness", "curvature", "erosion_amount", "basin", "ridge", "gameplay_zone", "traversability"], mutates: ["decal_density"], loc: 33, is_stub: false }
+    - { name: "pass_navmesh", file: "terrain_navmesh_export.py:175", reads: ["height", "slope", "cliff_candidate", "waterfall_lip_candidate", "water_surface", "bank_instability", "talus", "hero_exclusion"], mutates: ["navmesh_area_id", "traversability"], loc: 34, is_stub: false }
+    - { name: "pass_ecotones", file: "terrain_ecotone_graph.py:141", reads: ["height", "biome_id"], mutates: ["traversability"], loc: 36, is_stub: false }
+
+# ===========================================================================
+# Bundle K — Material Ceiling (6 passes, REAL but 3 dead exporters)
+# ===========================================================================
+bundle_k:
+  name: "Material Ceiling"
+  description: "Stochastic shader, macro color, multiscale breakup, shadow clipmap, roughness driver, Quixel ingest"
+  registrar_entry: "terrain_bundle_k.register_bundle_k_passes"
+  status: "partial"
+  passes:
+    - { name: "pass_stochastic_shader", file: "terrain_stochastic_shader.py:151", reads: ["height", "roughness_variation"], mutates: ["roughness_variation"], loc: 56, is_stub: false }
+    - { name: "pass_macro_color", file: "terrain_macro_color.py:118", reads: ["height", "biome_id", "wetness", "snow_line_factor"], mutates: ["macro_color"], loc: 31, is_stub: false }
+    - { name: "pass_multiscale_breakup", file: "terrain_multiscale_breakup.py:84", reads: ["height", "roughness_variation"], mutates: ["roughness_variation"], loc: 48, is_stub: false }
+    - { name: "pass_shadow_clipmap", file: "terrain_shadow_clipmap_bake.py:157", reads: ["height"], mutates: ["cloud_shadow"], loc: 53, is_stub: false }
+    - { name: "pass_roughness_driver", file: "terrain_roughness_driver.py:82", reads: ["height", "wetness", "erosion_amount", "deposition_amount", "ambient_occlusion_bake", "roughness_variation"], mutates: ["roughness_variation"], loc: 31, is_stub: false }
+    - { name: "pass_quixel_ingest", file: "terrain_quixel_ingest.py:166", reads: ["height", "intent.quixel_assets"], mutates: ["splatmap_weights_layer"], loc: 55, is_stub: false }
+  dead_code_exporters:
+    - { name: "export_unity_shader_template", file: "terrain_stochastic_shader.py:119", note: "Never called by pass" }
+    - { name: "export_shadow_clipmap_exr", file: "terrain_shadow_clipmap_bake.py:122", note: "Writes .npy not EXR; never called" }
+    - { name: "export_god_ray_hints_json", file: "terrain_god_ray_hints.py:196", note: "Moved to Bundle L; never called" }
+
+# ===========================================================================
+# Bundle L — Atmosphere & Horizon (3 passes, all REAL)
+# ===========================================================================
+bundle_l:
+  name: "Atmosphere & Horizon"
+  description: "Horizon LOD, fog masks, god ray hints"
+  registrar_entry: "terrain_bundle_l.register_bundle_l_passes"
+  status: "partial"
+  passes:
+    - { name: "pass_horizon_lod", file: "terrain_horizon_lod.py:170", reads: ["height"], mutates: ["lod_bias"], loc: 58, is_stub: false, note: "build_horizon_skybox_mask exists but never called" }
+    - { name: "pass_fog_masks", file: "terrain_fog_masks.py:143", reads: ["height", "wetness"], mutates: ["mist"], loc: 42, is_stub: false }
+    - { name: "pass_god_ray_hints", file: "terrain_god_ray_hints.py:216", reads: ["height", "cloud_shadow", "cave_candidate", "waterfall_lip_candidate"], mutates: [], loc: 40, is_stub: false, note: "Produces hints as side-effect metadata only; export_god_ray_hints_json never called" }
+
+# ===========================================================================
+# Bundle M — Iteration Velocity (no registered passes, utility only)
+# ===========================================================================
+bundle_m:
+  name: "Iteration Velocity"
+  description: "Hot reload, live preview, iteration metrics — extension modules"
+  registrar_entry: null
+  status: "utility"
+  passes: []
+  utility_modules:
+    - { file: "terrain_iteration_metrics.py", purpose: "Pipeline timing, cache hits/misses, speedup factor (target 5x)", status: "functional" }
+    - { file: "terrain_live_preview.py", purpose: "Interactive editing session with DirtyTracker + MaskCache + diff modes", status: "functional" }
+    - { file: "terrain_hot_reload.py", purpose: "mtime-based hot-reload of biome/material rule modules", status: "functional" }
+
+# ===========================================================================
+# Bundle N — Deep Validation & QA (0 passes registered, 6 QA utility modules)
+# ===========================================================================
+bundle_n:
+  name: "Deep Validation & QA"
+  description: "Determinism CI, readability bands, budget enforcer, golden snapshots, review ingest, telemetry"
+  registrar_entry: "terrain_bundle_n.register_bundle_n_passes"
+  status: "complete"
+  note: "Registrar validates imports but registers ZERO mutating passes. All functionality via direct imports."
+  passes: []
+  qa_modules:
+    - { file: "terrain_determinism_ci.py", purpose: "Re-run pipeline N times with same seed, assert bit-identical hashes", status: "functional" }
+    - { file: "terrain_readability_bands.py", purpose: "5-band visual readability scoring (silhouette/volume/value/texture/color)", status: "functional" }
+    - { file: "terrain_budget_enforcer.py", purpose: "Per-tile AAA ship budget (hero density, tri count, materials, scatter, npz MB)", status: "functional" }
+    - { file: "terrain_golden_snapshots.py", purpose: "Canonical reference tile hash library for regression testing", status: "functional" }
+    - { file: "terrain_review_ingest.py", purpose: "Parse external review JSON into ReviewFinding, fold into intent", status: "functional" }
+    - { file: "terrain_telemetry_dashboard.py", purpose: "NDJSON telemetry log with per-tile/per-pass aggregation", status: "functional" }
+
+# ===========================================================================
+# Bundle O — Water + Vegetation Depth (2 passes, both ignore most helpers)
+# ===========================================================================
+bundle_o:
+  name: "Water + Vegetation Depth"
+  description: "Water variant detection, vegetation depth analysis"
+  registrar_entry: "terrain_bundle_o.register_bundle_o_passes"
+  status: "broken"
+  passes:
+    - name: "pass_water_variants"
+      file: "terrain_water_variants.py"
+      reads: ["height", "slope", "wetness"]
+      mutates: ["water_surface", "wetness"]
+      loc: 50
+      is_stub: false
+      known_bugs:
+        - "P0-021: Ignores ALL 8 variant detectors (braided channels, estuary, karst springs, perched lakes, hot springs, wetlands, seasonal state). Only does generic inverse-depth wetness."
+      dead_helpers: ["generate_braided_channels", "detect_estuary", "detect_karst_springs", "detect_perched_lakes", "detect_hot_springs", "detect_wetlands", "apply_seasonal_water_state"]
+
+    - name: "pass_vegetation_depth"
+      file: "terrain_vegetation_depth.py"
+      reads: ["height", "slope", "wetness", "wind_field"]
+      mutates: ["detail_density"]
+      loc: 40
+      is_stub: false
+      known_bugs:
+        - "P0-022: Only calls compute_vegetation_layers (1/7 helpers). Ignores disturbance patches, clearings, fallen logs, edge effects, cultivated zones, allelopathic exclusion."
+      dead_helpers: ["detect_disturbance_patches", "place_clearings", "place_fallen_logs", "apply_edge_effects", "apply_cultivated_zones", "apply_allelopathic_exclusion"]
+
+# ===========================================================================
+# Bundle P — DEM Import (utility, not registered)
+# ===========================================================================
+bundle_p:
+  name: "DEM Import"
+  description: "Import real-world elevation data from various formats"
+  registrar_entry: null
+  status: "broken"
+  passes: []
+  utility_modules:
+    - { file: "terrain_dem_import.py", purpose: "Import DEM tiles" }
+  known_bugs:
+    - "P0-014: only reads .npy; silently returns synthetic noise on .tif/.hgt/.img"
+
+# ===========================================================================
+# Bundle Q — Runtime Data (utility, not registered)
+# ===========================================================================
+bundle_q:
+  name: "Runtime Data"
+  description: "Checkpoints extension, golden snapshots, telemetry dashboard"
+  registrar_entry: null
+  status: "utility"
+  passes: []
+  utility_modules:
+    - { file: "terrain_checkpoints_ext.py", purpose: "Extended checkpoint save/restore" }
+    - { file: "terrain_golden_snapshots.py", purpose: "Golden reference snapshots for regression testing" }
+    - { file: "terrain_telemetry_dashboard.py", purpose: "Performance telemetry collection" }
+
+# ===========================================================================
+# Bundle R — World Math (utility, not registered)
+# ===========================================================================
+bundle_r:
+  name: "World Math"
+  description: "World-space coordinate math, unit conversions, spatial queries"
+  registrar_entry: null
+  status: "complete"
+  passes: []
+  utility_modules:
+    - { file: "terrain_world_math.py", purpose: "World-unit coordinate transforms, height conversions" }
+
+# ===========================================================================
+# Cross-cutting known bugs (affect multiple bundles)
+# ===========================================================================
+cross_cutting_bugs:
+  - { id: "P0-001", description: "TerrainIntentState/HeroFeatureSpec frozen+mutable Dict — hash() crash", files: ["terrain_semantics.py:669", "terrain_semantics.py:743"], affects: ["bundle_h"] }
+  - { id: "P0-001b", description: "MorphologyTemplate frozen+mutable Dict — hash() crash", files: ["terrain_morphology.py:31"], affects: ["bundle_h"] }
+  - { id: "P0-007", description: "PassDAG.execute_parallel is serial under coarse lock", files: ["terrain_pass_dag.py:99-147"], affects: ["all"] }
+  - { id: "P0-024", description: "No Blender Z-up to Unity Y-up axis swap on export", files: ["terrain_unity_export.py:155-175"], affects: ["bundle_d", "bundle_j"] }
+  - { id: "P0-025", description: "export_unity_manifest schema incompatible with validator", files: ["terrain_unity_export.py"], affects: ["bundle_d", "bundle_k"] }
+  - { id: "P0-026", description: "Master registrar silently drops missing bundles", files: ["terrain_master_registrar.py:45-56"], affects: ["all"] }
+  - { id: "P0-029", description: "heightmap_bit_depth=16 conflicts with UnityExportContract=32", files: ["terrain_quality_profiles.py", "terrain_unity_export_contracts.py"], affects: ["bundle_d"] }
+  - { id: "P0-031", description: "Dead autosave chain: wrong arity + bare except swallow", files: ["terrain_checkpoints.py"], affects: ["bundle_d", "bundle_q"] }
+
+# ===========================================================================
+# Dead code summary (tested but never called by any pass)
+# ===========================================================================
+dead_code_exporters:
+  - { func: "export_unity_shader_template", file: "terrain_stochastic_shader.py:119", owner: "bundle_k" }
+  - { func: "export_shadow_clipmap_exr", file: "terrain_shadow_clipmap_bake.py:122", owner: "bundle_k" }
+  - { func: "export_god_ray_hints_json", file: "terrain_god_ray_hints.py:196", owner: "bundle_l" }
+  - { func: "build_horizon_skybox_mask", file: "terrain_horizon_lod.py:99", owner: "bundle_l" }
+  - { func: "apply_differential_erosion", file: "terrain_stratigraphy.py:195", owner: "bundle_i" }
+  - { func: "scatter_moraines", file: "terrain_glacial.py:122", owner: "bundle_i" }
+  - { func: "export_navmesh_json", file: "terrain_navmesh_export.py", owner: "bundle_j" }
+  - { func: "auto_sculpt_around_feature", file: "terrain_saliency.py:124", owner: "bundle_h" }

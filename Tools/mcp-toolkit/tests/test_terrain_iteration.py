@@ -401,6 +401,81 @@ def test_pass_dag_execute_parallel_runs_all():
         assert "erosion" in names
 
 
+def test_pass_dag_from_registry_rejects_unknown_pass_names():
+    from blender_addon.handlers.terrain_pass_dag import PassDAG, PassDAGError
+
+    with pytest.raises(PassDAGError, match="missing_pass"):
+        PassDAG.from_registry(["macro_world", "missing_pass"])
+
+
+def test_pass_dag_execute_parallel_propagates_worker_failures():
+    from blender_addon.handlers.terrain_pass_dag import PassDAG
+    from blender_addon.handlers.terrain_pipeline import TerrainPassController
+    from blender_addon.handlers.terrain_semantics import PassDefinition, PassResult
+
+    def _explode(state, region):
+        raise RuntimeError("boom")
+
+    TerrainPassController.register_pass(
+        PassDefinition(
+            name="explode_wave",
+            func=_explode,
+            requires_channels=(),
+            produces_channels=(),
+            seed_namespace="explode_wave",
+        )
+    )
+
+    state = _build_state(tile_size=24)
+    controller = TerrainPassController(state)
+    dag = PassDAG.from_registry(["macro_world", "explode_wave"])
+
+    with pytest.raises(RuntimeError, match="boom"):
+        dag.execute_parallel(controller, max_workers=2, checkpoint=False)
+
+
+def test_pass_dag_execute_parallel_is_actually_parallel_for_independent_passes():
+    from blender_addon.handlers.terrain_pass_dag import PassDAG
+    from blender_addon.handlers.terrain_pipeline import TerrainPassController
+    from blender_addon.handlers.terrain_semantics import PassDefinition, PassResult
+
+    def _sleepy(name: str):
+        def _inner(state, region):
+            time.sleep(0.2)
+            return PassResult(pass_name=name, status="ok", duration_seconds=0.0)
+
+        return _inner
+
+    TerrainPassController.register_pass(
+        PassDefinition(
+            name="sleep_wave_a",
+            func=_sleepy("sleep_wave_a"),
+            requires_channels=(),
+            produces_channels=(),
+            seed_namespace="sleep_wave_a",
+        )
+    )
+    TerrainPassController.register_pass(
+        PassDefinition(
+            name="sleep_wave_b",
+            func=_sleepy("sleep_wave_b"),
+            requires_channels=(),
+            produces_channels=(),
+            seed_namespace="sleep_wave_b",
+        )
+    )
+
+    state = _build_state(tile_size=24)
+    controller = TerrainPassController(state)
+    dag = PassDAG.from_registry(["sleep_wave_a", "sleep_wave_b"])
+
+    t0 = time.perf_counter()
+    dag.execute_parallel(controller, max_workers=2, checkpoint=False)
+    elapsed = time.perf_counter() - t0
+
+    assert elapsed < 0.35, f"independent wave serialized unexpectedly: {elapsed:.3f}s"
+
+
 # ===========================================================================
 # 20. Hot reload
 # ===========================================================================

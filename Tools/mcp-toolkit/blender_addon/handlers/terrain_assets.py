@@ -870,7 +870,7 @@ def pass_scatter_intelligent(
         pass_name="scatter_intelligent",
         status=status,
         duration_seconds=time.perf_counter() - t0,
-        produced_channels=("tree_instance_points",),
+        produced_channels=("tree_instance_points", "detail_density"),
         consumed_channels=("height",),
         metrics={
             "num_asset_types": len(placements),
@@ -895,7 +895,7 @@ def register_bundle_e_passes() -> None:
             name="scatter_intelligent",
             func=pass_scatter_intelligent,
             requires_channels=("height",),
-            produces_channels=("tree_instance_points",),
+            produces_channels=("tree_instance_points", "detail_density"),
             seed_namespace="scatter_intelligent",
             requires_scene_read=True,
             may_modify_geometry=False,
