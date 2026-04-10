@@ -221,6 +221,51 @@ class TestGenerateSettlement:
 
 
 # =========================================================================
+# building_count_override (SAFE-05)
+# =========================================================================
+
+
+class TestBuildingCountOverride:
+    """Tests for building_count_override parameter."""
+
+    def test_building_count_override_respected(self):
+        """Passing building_count_override forces exact building count."""
+        result = generate_settlement("village", seed=42, building_count_override=15)
+        assert len(result["buildings"]) == 15, (
+            f"Expected 15 buildings with override, got {len(result['buildings'])}"
+        )
+
+    def test_building_count_override_none_uses_default(self):
+        """Without override, village uses default range (4-8)."""
+        result = generate_settlement("village", seed=42)
+        count = len(result["buildings"])
+        # Village default is (4, 8) but density_bias may adjust it
+        assert 3 <= count <= 12, f"Village building count {count} outside expected range"
+
+    def test_building_count_override_does_not_mutate_global(self):
+        """Override should NOT mutate the SETTLEMENT_TYPES global."""
+        original = SETTLEMENT_TYPES["village"]["building_count"]
+        generate_settlement("village", seed=42, building_count_override=20)
+        assert SETTLEMENT_TYPES["village"]["building_count"] == original, \
+            "building_count_override mutated global SETTLEMENT_TYPES"
+
+    def test_build_location_params_passes_count(self):
+        """_build_location_generation_params forwards building_count to override."""
+        from veilbreakers_mcp.blender_server import _build_location_generation_params
+
+        location = {
+            "type": "settlement",
+            "name": "TestVillage",
+            "settlement_type": "village",
+            "building_count": 25,
+        }
+        params = _build_location_generation_params(
+            location, map_spec={"seed": 42}, map_seed=42, index=0,
+        )
+        assert params.get("building_count_override") == 25
+
+
+# =========================================================================
 # _place_buildings
 # =========================================================================
 

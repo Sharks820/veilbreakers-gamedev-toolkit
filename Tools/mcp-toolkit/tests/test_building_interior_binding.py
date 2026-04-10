@@ -279,3 +279,110 @@ class TestGenerateInteriorSpec:
         floors = {r.get("position", (0, 0, 0))[2] for r in spec["rooms"]}
         # Castle should have ground floor and at least one other floor
         assert len(floors) >= 2
+
+
+# ---------------------------------------------------------------------------
+# _plan_interior_rooms tests (SAFE-03 + SAFE-04)
+# ---------------------------------------------------------------------------
+
+
+class TestPlanInteriorRooms:
+    """Tests for _plan_interior_rooms pre-computed bounds and floor-aware Z."""
+
+    def test_plan_interior_rooms_uses_precomputed_bounds(self):
+        """SAFE-03: When all rooms have bounds+position, return them verbatim."""
+        from veilbreakers_mcp.blender_server import _plan_interior_rooms
+
+        rooms = [
+            {
+                "name": "hall",
+                "type": "tavern_hall",
+                "width": 8.0, "depth": 7.0, "height": 3.5,
+                "bounds": {"min": (0.0, 0.0, 0.0), "max": (8.0, 7.0, 3.5)},
+                "position": (0.0, 0.0, 0.0),
+            },
+            {
+                "name": "kitchen",
+                "type": "kitchen",
+                "width": 5.0, "depth": 5.0, "height": 3.5,
+                "bounds": {"min": (8.0, 1.0, 0.0), "max": (13.0, 6.0, 3.5)},
+                "position": (8.0, 1.0, 0.0),
+            },
+        ]
+        spec = {"rooms": rooms, "doors": []}
+        result = _plan_interior_rooms(spec)
+
+        assert len(result["rooms"]) == 2
+        # Bounds should be verbatim from input, not replanned
+        assert result["rooms"][0]["bounds"] == rooms[0]["bounds"]
+        assert result["rooms"][1]["bounds"] == rooms[1]["bounds"]
+
+    def test_plan_interior_rooms_multi_floor_z_offsets(self):
+        """SAFE-04: Rooms with floor field get correct Z offsets."""
+        from veilbreakers_mcp.blender_server import _plan_interior_rooms
+
+        rooms = [
+            {"name": "cellar", "type": "storage", "width": 6.0, "depth": 6.0, "height": 3.5, "floor": -1},
+            {"name": "main", "type": "hall", "width": 6.0, "depth": 6.0, "height": 3.5, "floor": 0},
+            {"name": "bedroom", "type": "bedroom", "width": 6.0, "depth": 6.0, "height": 3.5, "floor": 1},
+        ]
+        doors = [
+            {"from": "cellar", "to": "main"},
+            {"from": "main", "to": "bedroom"},
+        ]
+        spec = {"rooms": rooms, "doors": doors}
+        result = _plan_interior_rooms(spec)
+
+        # Verify Z offsets: floor * height
+        z_values = {}
+        for room in result["rooms"]:
+            z_values[room["name"]] = room["bounds"]["min"][2]
+
+        assert z_values["cellar"] == pytest.approx(-3.5, abs=0.01), "cellar (floor=-1) should be at Z=-3.5"
+        assert z_values["main"] == pytest.approx(0.0, abs=0.01), "main (floor=0) should be at Z=0.0"
+        assert z_values["bedroom"] == pytest.approx(3.5, abs=0.01), "bedroom (floor=1) should be at Z=3.5"
+
+    def test_plan_interior_rooms_mixed_no_bounds(self):
+        """When some rooms lack bounds, fall through to replanning logic."""
+        from veilbreakers_mcp.blender_server import _plan_interior_rooms
+
+        rooms = [
+            {
+                "name": "hall",
+                "type": "hall",
+                "width": 8.0, "depth": 7.0, "height": 3.5,
+                "bounds": {"min": (0, 0, 0), "max": (8, 7, 3.5)},
+                "position": (0, 0, 0),
+            },
+            {
+                "name": "kitchen",
+                "type": "kitchen",
+                "width": 5.0, "depth": 5.0, "height": 3.5,
+                # No bounds or position -- triggers replan path
+            },
+        ]
+        spec = {"rooms": rooms, "doors": []}
+        result = _plan_interior_rooms(spec)
+
+        # Should still produce valid output via replanning
+        assert len(result["rooms"]) == 2
+        # The kitchen should NOT have the precomputed bounds from hall
+        # (it went through replanning, so kitchen gets placed by the algorithm)
+        kitchen = [r for r in result["rooms"] if r["name"] == "kitchen"][0]
+        assert "bounds" in kitchen
+
+    def test_plan_interior_rooms_fallback_z_uses_floor(self):
+        """In replanning path, candidate_bounds uses floor field for Z."""
+        from veilbreakers_mcp.blender_server import _plan_interior_rooms
+
+        rooms = [
+            {"name": "ground", "type": "hall", "width": 6.0, "depth": 6.0, "height": 3.5, "floor": 0},
+            {"name": "upper", "type": "bedroom", "width": 6.0, "depth": 6.0, "height": 3.5, "floor": 1},
+        ]
+        doors = [{"from": "ground", "to": "upper"}]
+        spec = {"rooms": rooms, "doors": doors}
+        result = _plan_interior_rooms(spec)
+
+        upper = [r for r in result["rooms"] if r["name"] == "upper"][0]
+        assert upper["bounds"]["min"][2] == pytest.approx(3.5, abs=0.01), \
+            "upper room (floor=1) should have Z min at 3.5"
