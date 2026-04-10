@@ -39,6 +39,20 @@ class TestResult:
     reason: str = ""
 
 
+ASSERT_METHODS = {
+    "assertEqual", "assertNotEqual", "assertTrue", "assertFalse",
+    "assertIs", "assertIsNot", "assertIsNone", "assertIsNotNone",
+    "assertIn", "assertNotIn", "assertIsInstance", "assertNotIsInstance",
+    "assertRaises", "assertRaisesRegex", "assertAlmostEqual", "assertGreater",
+    "assertLess", "assertGreaterEqual", "assertLessEqual", "assertRegex",
+    "assertCountEqual", "assertListEqual", "assertDictEqual",
+    "assertSequenceEqual", "assertSetEqual", "assertTupleEqual",
+    "assert_called", "assert_called_once", "assert_called_with",
+    "assert_called_once_with", "assert_not_called",
+}
+RAISES_CONTEXT_METHODS = {"raises", "assertRaises", "assertRaisesRegex"}
+
+
 # ---------------------------------------------------------------------------
 # Assert analysis helpers
 # ---------------------------------------------------------------------------
@@ -123,49 +137,124 @@ def _get_method_name(call: ast.Call) -> str:
     return ""
 
 
-def _is_assert_node(node: ast.AST) -> bool:
-    """Check if a node is any kind of assertion."""
+def _is_raises_context(node: ast.AST) -> bool:
+    """Check if a node is a pytest/unittest exception assertion context manager."""
+    if not isinstance(node, (ast.With, ast.AsyncWith)):
+        return False
+    for item in node.items:
+        context_expr = item.context_expr
+        if isinstance(context_expr, ast.Call):
+            method = _get_method_name(context_expr)
+            if method in RAISES_CONTEXT_METHODS:
+                return True
+    return False
+
+
+def _is_direct_assert_node(node: ast.AST) -> bool:
+    """Check if a node is any direct assertion in the current function body."""
     if isinstance(node, ast.Assert):
+        return True
+    if _is_raises_context(node):
         return True
     if isinstance(node, ast.Expr) and isinstance(node.value, ast.Call):
         method = _get_method_name(node.value)
-        assert_methods = {
-            "assertEqual", "assertNotEqual", "assertTrue", "assertFalse",
-            "assertIs", "assertIsNot", "assertIsNone", "assertIsNotNone",
-            "assertIn", "assertNotIn", "assertIsInstance", "assertNotIsInstance",
-            "assertRaises", "assertAlmostEqual", "assertGreater", "assertLess",
-            "assertGreaterEqual", "assertLessEqual", "assertRegex",
-            "assertCountEqual", "assertListEqual", "assertDictEqual",
-            "assertSequenceEqual", "assertSetEqual", "assertTupleEqual",
-            "assert_called", "assert_called_once", "assert_called_with",
-            "assert_called_once_with", "assert_not_called",
-        }
-        # Also catch pytest-style: with pytest.raises(...)
-        if method in assert_methods:
-            return True
-        if method == "raises":
+        if method in ASSERT_METHODS:
             return True
     return False
+
+
+def _collect_top_level_functions(
+    tree: ast.Module,
+) -> Dict[str, ast.FunctionDef | ast.AsyncFunctionDef]:
+    """Collect top-level helper functions defined in a test module."""
+    functions: Dict[str, ast.FunctionDef | ast.AsyncFunctionDef] = {}
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            functions[node.name] = node
+    return functions
+
+
+def _helper_has_real_assertions(
+    helper_name: str,
+    helpers: Dict[str, ast.FunctionDef | ast.AsyncFunctionDef],
+    memo: Dict[str, bool],
+    stack: Set[str],
+) -> bool:
+    """Return True when a helper contains meaningful assertions."""
+    if helper_name in memo:
+        return memo[helper_name]
+    if helper_name in stack:
+        return False
+
+    helper = helpers[helper_name]
+    next_stack = set(stack)
+    next_stack.add(helper_name)
+
+    for node in ast.walk(helper):
+        if _is_direct_assert_node(node):
+            if not _is_tautological_assert(node) and not _is_shallow_assert(node):
+                memo[helper_name] = True
+                return True
+            continue
+
+        if isinstance(node, ast.Call):
+            called_name = _get_method_name(node)
+            if called_name in helpers and called_name not in next_stack:
+                if _helper_has_real_assertions(called_name, helpers, memo, next_stack):
+                    memo[helper_name] = True
+                    return True
+
+    memo[helper_name] = False
+    return False
+
+
+def _collect_real_assertion_helpers(tree: ast.Module) -> Set[str]:
+    """Collect helper functions whose bodies enforce meaningful assertions."""
+    helpers = _collect_top_level_functions(tree)
+    memo: Dict[str, bool] = {}
+    real_helpers: Set[str] = set()
+
+    for helper_name in helpers:
+        if _helper_has_real_assertions(helper_name, helpers, memo, set()):
+            real_helpers.add(helper_name)
+
+    return real_helpers
+
+
+def _is_real_assertion_helper_call(node: ast.AST, real_helpers: Set[str]) -> bool:
+    """Check if a node calls a local helper with meaningful assertions."""
+    return (
+        isinstance(node, ast.Expr)
+        and isinstance(node.value, ast.Call)
+        and _get_method_name(node.value) in real_helpers
+    )
 
 
 # ---------------------------------------------------------------------------
 # Test function classification
 # ---------------------------------------------------------------------------
 
-def classify_test(func: ast.FunctionDef) -> Tuple[str, str]:
+def classify_test(
+    func: ast.FunctionDef | ast.AsyncFunctionDef,
+    real_assertion_helpers: Optional[Set[str]] = None,
+) -> Tuple[str, str]:
     """Classify a test function. Returns (classification, reason)."""
     assert_nodes: List[ast.AST] = []
+    helper_real_count = 0
+    real_assertion_helpers = real_assertion_helpers or set()
 
     for node in ast.walk(func):
-        if _is_assert_node(node):
+        if _is_direct_assert_node(node):
             assert_nodes.append(node)
+        elif _is_real_assertion_helper_call(node, real_assertion_helpers):
+            helper_real_count += 1
 
-    if not assert_nodes:
+    if not assert_nodes and helper_real_count == 0:
         return TestClass.SHALLOW, "no assertions found"
 
     tautological_count = 0
     shallow_count = 0
-    real_count = 0
+    real_count = helper_real_count
 
     for node in assert_nodes:
         if _is_tautological_assert(node):
@@ -175,7 +264,7 @@ def classify_test(func: ast.FunctionDef) -> Tuple[str, str]:
         else:
             real_count += 1
 
-    total = len(assert_nodes)
+    total = len(assert_nodes) + helper_real_count
 
     # All tautological
     if tautological_count == total:
@@ -214,9 +303,11 @@ def scan_file(filepath: str) -> List[TestResult]:
         print(f"WARNING: Cannot parse {filepath}: {exc}", file=sys.stderr)
         return results
 
+    real_assertion_helpers = _collect_real_assertion_helpers(tree)
+
     for node in ast.walk(tree):
         if is_test_function(node):
-            classification, reason = classify_test(node)
+            classification, reason = classify_test(node, real_assertion_helpers)
             results.append(TestResult(
                 file=filepath,
                 name=node.name,

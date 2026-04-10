@@ -817,15 +817,13 @@ class TestComputeBoneMappingAuto:
         source = ["CompletelyUnique_A"]
         target = ["TotallyDifferent_B"]
         result = compute_bone_mapping_auto(source, target)
-        # With substring matching off (too short or no containment), may be empty
-        assert isinstance(result, dict)
+        assert result == {}
 
     def test_substring_containment(self):
         source = ["LeftUpperArm"]
         target = ["DEF-upperarm.L"]
         result = compute_bone_mapping_auto(source, target)
-        # "upperarm" is contained in both after normalization
-        assert len(result) >= 0  # May or may not match depending on side
+        assert result == {"LeftUpperArm": "DEF-upperarm.L"}
 
     def test_preserves_all_source_bones_possible(self):
         source = ["Hips", "Spine", "Head"]
@@ -988,8 +986,7 @@ class TestComputeContactPhases:
             h = max(0.0, math.sin(i * math.pi / 12.0) * 0.3)
             heights.append((i, h))
         phases = compute_contact_phases(heights, ground=0.0, threshold=0.02)
-        # Should have contact at start and end of cycle where sin is ~0
-        assert len(phases) >= 1
+        assert phases == [(0, 0), (12, 23)]
 
     def test_negative_ground_height(self):
         heights = [(0, -1.0), (1, -1.0), (2, 0.0)]
