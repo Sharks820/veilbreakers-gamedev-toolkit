@@ -233,6 +233,100 @@ def test_production_scan_keeps_real_ruff_correctness_findings(monkeypatch, tmp_p
     assert report["issues"][0]["rule_id"] == "RUFF-F821"
 
 
+def test_scan_project_runs_ast_on_regex_clean_csharp_file(monkeypatch, tmp_path):
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "Demo.cs"
+    file_path.write_text("public class Demo { }\n", encoding="utf-8")
+
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(reviewer, "CACHE_DIR", str(cache_dir))
+
+    from veilbreakers_mcp import _ast_analyzer as ast_analyzer
+    from veilbreakers_mcp import _tool_runner as tool_runner
+
+    monkeypatch.setattr(
+        tool_runner,
+        "available_tools",
+        lambda: {"ruff": False, "opengrep": False, "mypy": False, "dotnet": False, "ast-grep": False},
+    )
+    monkeypatch.setattr(ast_analyzer, "is_available", lambda: True)
+    monkeypatch.setattr(
+        ast_analyzer,
+        "analyze_csharp",
+        lambda filepath, _src: [
+            ast_analyzer.ASTFinding(
+                rule_id="AST-CS-03",
+                file=filepath,
+                line=1,
+                description="foreach mutation",
+                fix="Iterate over a copy",
+                severity="CRITICAL",
+                confidence=95,
+            )
+        ],
+    )
+    monkeypatch.setattr(ast_analyzer, "analyze_python", lambda _filepath, _src: [])
+
+    report = reviewer.scan_project(
+        [str(src_dir)],
+        lang="cs",
+        review_scope="strict",
+        profile="general",
+        build_context=False,
+    )
+
+    assert report["ast_findings"] == 1
+    assert any(issue["rule_id"] == "AST-CS-03" for issue in report["issues"])
+
+
+def test_production_scan_keeps_hard_ast_findings(monkeypatch, tmp_path):
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "Demo.cs"
+    file_path.write_text("public class Demo { }\n", encoding="utf-8")
+
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(reviewer, "CACHE_DIR", str(cache_dir))
+
+    from veilbreakers_mcp import _ast_analyzer as ast_analyzer
+    from veilbreakers_mcp import _tool_runner as tool_runner
+
+    monkeypatch.setattr(
+        tool_runner,
+        "available_tools",
+        lambda: {"ruff": False, "opengrep": False, "mypy": False, "dotnet": False, "ast-grep": False},
+    )
+    monkeypatch.setattr(ast_analyzer, "is_available", lambda: True)
+    monkeypatch.setattr(
+        ast_analyzer,
+        "analyze_csharp",
+        lambda filepath, _src: [
+            ast_analyzer.ASTFinding(
+                rule_id="AST-CS-04",
+                file=filepath,
+                line=1,
+                description="async void hazard",
+                fix="Use Task instead",
+                severity="HIGH",
+                confidence=88,
+            )
+        ],
+    )
+    monkeypatch.setattr(ast_analyzer, "analyze_python", lambda _filepath, _src: [])
+
+    report = reviewer.scan_project(
+        [str(src_dir)],
+        lang="cs",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+
+    assert report["ast_findings"] == 1
+    assert any(issue["rule_id"] == "AST-CS-04" for issue in report["issues"])
+
+
 def test_general_profile_treats_non_vb_python_files_as_production(tmp_path):
     src_dir = tmp_path / "arbitrary_app"
     src_dir.mkdir()
