@@ -125,8 +125,8 @@ class TestGenerateSettlement:
     def test_custom_radius(self):
         small = generate_settlement("outpost", seed=42, radius=20.0)
         large = generate_settlement("outpost", seed=42, radius=100.0)
-        assert small["buildings"]
-        assert large["buildings"]
+        assert len(small["buildings"]) > 0
+        assert len(large["buildings"]) > 0
         small_max_dist = max(_dist2d(b["position"], (0, 0)) for b in small["buildings"])
         large_max_dist = max(_dist2d(b["position"], (0, 0)) for b in large["buildings"])
         assert len(small["buildings"]) == len(large["buildings"])
