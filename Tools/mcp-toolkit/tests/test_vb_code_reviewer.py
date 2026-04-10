@@ -4,6 +4,7 @@ from pathlib import Path
 
 from veilbreakers_mcp._context_engine import ContextEngine
 from veilbreakers_mcp import vb_code_reviewer as reviewer
+from veilbreakers_mcp._tool_runner import ToolFinding, _map_ruff_severity
 
 
 def test_reexport_import_is_not_flagged_unused(tmp_path):
@@ -155,3 +156,77 @@ def test_strengthening_noise_curation_keeps_bug_signal():
 
     assert sum(1 for issue in curated if issue["rule_id"] == "PY-STY-07") == 1
     assert any(issue["rule_id"] == "PY-COR-12" for issue in curated)
+
+
+def test_map_ruff_severity_demotes_style_noise_but_keeps_real_bugs():
+    assert _map_ruff_severity("F401") == "LOW"
+    assert _map_ruff_severity("E402") == "LOW"
+    assert _map_ruff_severity("F821") == "HIGH"
+    assert _map_ruff_severity("S603") == "HIGH"
+
+
+def test_production_scan_hides_style_only_ruff_findings(monkeypatch, tmp_path):
+    src_dir = tmp_path / "src" / "veilbreakers_mcp"
+    src_dir.mkdir(parents=True)
+    file_path = src_dir / "demo.py"
+    file_path.write_text("import os\n", encoding="utf-8")
+
+    from veilbreakers_mcp import _tool_runner as tool_runner
+
+    monkeypatch.setattr(
+        tool_runner,
+        "available_tools",
+        lambda: {"ruff": True, "opengrep": False, "mypy": False, "dotnet": False, "ast-grep": False},
+    )
+    monkeypatch.setattr(
+        tool_runner,
+        "run_ruff",
+        lambda files: [
+            ToolFinding(
+                tool="ruff",
+                rule_id="RUFF-F401",
+                file=str(file_path.resolve()),
+                line=1,
+                description="unused import",
+                severity="LOW",
+            )
+        ],
+    )
+
+    report = reviewer.scan_project([str(src_dir)], lang="py", review_scope="production", build_context=False)
+
+    assert report["total_issues"] == 0
+
+
+def test_production_scan_keeps_real_ruff_correctness_findings(monkeypatch, tmp_path):
+    src_dir = tmp_path / "src" / "veilbreakers_mcp"
+    src_dir.mkdir(parents=True)
+    file_path = src_dir / "demo.py"
+    file_path.write_text("value = missing_name\n", encoding="utf-8")
+
+    from veilbreakers_mcp import _tool_runner as tool_runner
+
+    monkeypatch.setattr(
+        tool_runner,
+        "available_tools",
+        lambda: {"ruff": True, "opengrep": False, "mypy": False, "dotnet": False, "ast-grep": False},
+    )
+    monkeypatch.setattr(
+        tool_runner,
+        "run_ruff",
+        lambda files: [
+            ToolFinding(
+                tool="ruff",
+                rule_id="RUFF-F821",
+                file=str(file_path.resolve()),
+                line=1,
+                description="undefined name `missing_name`",
+                severity="HIGH",
+            )
+        ],
+    )
+
+    report = reviewer.scan_project([str(src_dir)], lang="py", review_scope="production", build_context=False)
+
+    assert report["total_issues"] == 1
+    assert report["issues"][0]["rule_id"] == "RUFF-F821"

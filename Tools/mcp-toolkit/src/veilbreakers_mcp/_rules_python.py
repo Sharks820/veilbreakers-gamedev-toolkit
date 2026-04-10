@@ -118,6 +118,74 @@ def _active_code(
     return not _is_comment(line) and not _in_string_literal(line)
 
 
+def _has_blender_cleanup_in_scope(
+    line: str, all_lines: list[str], idx: int, _context: Optional[dict] = None
+) -> bool:
+    """Return True only when a Blender allocation still looks unprotected.
+
+    BLE-02 used to look only a few lines around the allocation, which caused
+    false positives when cleanup or protection lived later in the same function.
+    This guard scans the surrounding function body for a cleanup call or an
+    enclosing try/finally-style protection block before emitting a finding.
+    """
+    current_indent = len(line) - len(line.lstrip())
+
+    # Walk backward to find the current function boundary.
+    func_start = 0
+    for j in range(idx, -1, -1):
+        stripped = all_lines[j].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(all_lines[j]) - len(all_lines[j].lstrip())
+        if indent < current_indent and stripped.startswith(("def ", "async def ")):
+            func_start = j
+            break
+
+    func_indent = len(all_lines[func_start]) - len(all_lines[func_start].lstrip()) if func_start < len(all_lines) else 0
+
+    # Walk forward until the function ends.
+    func_end = len(all_lines)
+    for j in range(idx + 1, len(all_lines)):
+        stripped = all_lines[j].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(all_lines[j]) - len(all_lines[j].lstrip())
+        if indent <= func_indent and not stripped.startswith(("elif ", "else:", "except ", "finally:")):
+            func_end = j
+            break
+
+    cleanup_markers = (
+        ".remove(",
+        "remove(obj",
+        "remove(mesh",
+        "remove(mat",
+        "remove(material",
+        "remove(cliff_obj",
+        "remove(cliff_mesh",
+    )
+    for j in range(idx + 1, func_end):
+        candidate = all_lines[j]
+        stripped = candidate.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if any(marker in candidate for marker in cleanup_markers):
+            return False
+        if stripped.startswith("finally:"):
+            return False
+
+    # If the allocation already lives under a try block inside the same function,
+    # assume the surrounding control flow is intentionally managing cleanup.
+    for j in range(idx - 1, func_start - 1, -1):
+        stripped = all_lines[j].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(all_lines[j]) - len(all_lines[j].lstrip())
+        if indent < current_indent and stripped.startswith("try:"):
+            return False
+
+    return True
+
+
 def _match_is_in_string(line: str, match_pos: int) -> bool:
     """Return True if match_pos falls inside a quoted string on this line."""
     in_single = False
@@ -255,6 +323,192 @@ def _check_late_binding(
     return False
 
 
+def _check_discarded_assignment(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    """PY-COR-16 guard: `_name = func()` where _name is never referenced again.
+
+    Catches the terrain_caves.py:821 pattern where a function return value
+    that the caller must apply (delta, mask, patch) is silently discarded
+    because the author used an underscore prefix thinking it was "unused".
+    """
+    m = re.match(r"^(\s*)(_[a-zA-Z]\w*)\s*=\s*(\w+[\w.]*)\s*\(", line)
+    if not m:
+        return False
+    indent_str = m.group(1)
+    var_name = m.group(2)
+    # Bare `_ = ...` is explicit discard, accept it
+    if var_name == "_":
+        return False
+    # Module-level assignment (indent 0) — skip, this is a private module constant
+    # that is referenced by name elsewhere in the module.
+    if len(indent_str) == 0:
+        return False
+    # UPPER_SNAKE_CASE indicates a constant, not a discarded value
+    if var_name[1:].isupper() or re.match(r"_[A-Z][A-Z0-9_]*$", var_name):
+        return False
+    # Skip if the function name itself is clearly a side-effect setter
+    func_name = m.group(3).split(".")[-1]
+    side_effect_prefixes = ("set", "apply", "update", "mark", "register", "emit", "log", "print", "write", "save", "push", "append", "add_", "insert", "remove", "delete", "clear", "reset")
+    if func_name.lower().startswith(side_effect_prefixes):
+        return False
+    # Look ahead for ANY read of var_name in the enclosing function scope
+    base_indent = len(line) - len(line.lstrip())
+    for j in range(idx + 1, min(len(all_lines), idx + 120)):
+        lookahead = all_lines[j]
+        stripped = lookahead.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        this_indent = len(lookahead) - len(lookahead.lstrip())
+        # Left the function scope
+        if this_indent < base_indent and stripped.startswith(("def ", "class ", "@")):
+            break
+        # Reference counts as read; assignment to same name does not
+        if re.search(rf"(?<![\.\w]){re.escape(var_name)}\b", lookahead):
+            # Exclude left-hand-side reassignment `_name = ...`
+            if re.match(rf"^\s*{re.escape(var_name)}\s*=\s*[^=]", lookahead):
+                continue
+            return False  # read found, not discarded
+    return True
+
+
+def _check_frozen_mutable_field(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    """PY-COR-17 guard: field line is inside a `@dataclass(frozen=True)` class.
+
+    Walks backward from the current line to find the enclosing class definition;
+    fires only if a `@dataclass(frozen=True)` decorator precedes it.
+    """
+    field_indent = len(line) - len(line.lstrip())
+    # Walk backward within the same indentation band
+    for j in range(idx - 1, max(0, idx - 80), -1):
+        prev = all_lines[j]
+        stripped = prev.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        prev_indent = len(prev) - len(prev.lstrip())
+        # Found a class header at an outer indent
+        if prev_indent < field_indent and stripped.startswith("class "):
+            # Scan the 1-4 lines above the class for a frozen=True decorator
+            for k in range(max(0, j - 4), j):
+                if re.search(r"@dataclass\s*\([^)]*frozen\s*=\s*True", all_lines[k]):
+                    return True
+            return False
+    return False
+
+
+def _check_validator_self_rollback(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    """PY-COR-18 guard: rollback() call is inside a function named validate_*.
+
+    Walks backward to find the enclosing `def validate_...(`. Validators should
+    report, not rollback; rollback is the orchestrator's decision.
+    """
+    call_indent = len(line) - len(line.lstrip())
+    for j in range(idx - 1, max(0, idx - 200), -1):
+        prev = all_lines[j]
+        stripped = prev.lstrip()
+        if not stripped:
+            continue
+        prev_indent = len(prev) - len(prev.lstrip())
+        if prev_indent < call_indent and stripped.startswith("def "):
+            m = re.match(r"def\s+(\w+)", stripped)
+            if m and m.group(1).startswith("validate"):
+                return True
+            return False
+    return False
+
+
+def _check_fallback_before_primary(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    """PY-COR-19 guard: fallback branch contains an early `return`, and the
+    enclosing function has more code after the block (implying that trailing
+    code is the *real* primary check, now unreachable when fallback is true).
+    """
+    if "fallback" not in line.lower():
+        return False
+    # Skip if `fallback` is just a local variable (RHS of assignment or function arg)
+    stripped_line = line.lstrip()
+    if re.match(r"(\w+\s*=\s*.*fallback|if\s+fallback\s*:)", stripped_line):
+        # `if fallback:` where fallback is a variable — not the bug pattern.
+        # The bug pattern is `if obj.xxx_fallback:` (attribute flag) or
+        # `if camera.basis_fallback:` (flag indicating fallback mode).
+        if re.match(r"if\s+\w+\s*:", stripped_line):
+            return False  # bare `if fallback:` — just a variable
+    if_indent = len(line) - len(line.lstrip())
+    # 0. Check if a peer-scope `return` already ran BEFORE this if-block
+    # (meaning primary already had its chance — this fallback is legitimately second).
+    for j in range(idx - 1, max(0, idx - 30), -1):
+        prev = all_lines[j]
+        ps = prev.lstrip()
+        if not ps or ps.startswith("#"):
+            continue
+        prev_indent = len(prev) - len(prev.lstrip())
+        if prev_indent < if_indent and ps.startswith("def "):
+            break
+        if prev_indent == if_indent and ps.startswith("return "):
+            return False  # primary already returned above — fallback is correctly second
+    # 1. Confirm the next non-empty line at indent > if_indent is a `return`
+    block_has_return = False
+    block_end = idx + 1
+    for j in range(idx + 1, min(len(all_lines), idx + 15)):
+        nxt = all_lines[j]
+        stripped = nxt.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        this_indent = len(nxt) - len(nxt.lstrip())
+        if this_indent <= if_indent:
+            block_end = j
+            break
+        if re.match(r"return\b", stripped):
+            block_has_return = True
+    if not block_has_return:
+        return False
+    # 2. Find enclosing def indent
+    fn_indent = -1
+    for j in range(idx - 1, max(0, idx - 200), -1):
+        prev = all_lines[j]
+        stripped = prev.lstrip()
+        if not stripped:
+            continue
+        prev_indent = len(prev) - len(prev.lstrip())
+        if prev_indent < if_indent and stripped.startswith("def "):
+            fn_indent = prev_indent
+            break
+    if fn_indent < 0:
+        return False
+    # 3. After the if-block, look for ANY further code at if_indent
+    # (same scope as the fallback) inside the same function.
+    for j in range(block_end, min(len(all_lines), idx + 200)):
+        nxt = all_lines[j]
+        stripped = nxt.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        this_indent = len(nxt) - len(nxt.lstrip())
+        # Left the function entirely
+        if this_indent <= fn_indent:
+            return False
+        # Same-scope code (peer statements) found — fallback returned before primary
+        if this_indent == if_indent:
+            return True
+    return False
+
+
 def _check_broad_except_silent(
     line: str,
     all_lines: list[str],
@@ -265,8 +519,70 @@ def _check_broad_except_silent(
 
     Only fires when broad except silently swallows the exception without
     proper logging, error propagation, or deliberate fallback handling.
+
+    Suppression 1 (2026-04-09): enclosing function named _safe_*/_try_*/_probe_*
+    Suppression 2 (2026-04-09): trailing/adjacent intent comment (non-fatal, best-effort, etc.)
+    Suppression 3 (2026-04-09): fallback-flag pattern (ok = False; try; ok = True; except: pass)
+    Suppression 4 (2026-04-09): `continue` in for-loop best-effort pattern
     """
     except_indent = len(line) - len(line.lstrip())
+
+    # --- Suppression 1: sentinel-return function contracts ---
+    for j in range(idx - 1, max(0, idx - 200), -1):
+        prev = all_lines[j]
+        stripped = prev.lstrip()
+        if not stripped:
+            continue
+        prev_indent = len(prev) - len(prev.lstrip())
+        if prev_indent < except_indent and stripped.startswith("def "):
+            fn_m = re.match(r"def\s+(\w+)", stripped)
+            if fn_m:
+                fn_name = fn_m.group(1)
+                if fn_name.startswith(("_safe_", "_try_", "_probe_")) or fn_name.endswith("_or_none"):
+                    return False
+            break
+
+    # --- Suppression 2: intent comments on pass/continue/return lines ---
+    _intent_rx = re.compile(
+        r"#.*(non[- ]?fatal|best[- ]?effort|fallback|non[- ]?critical|optional|"
+        r"pragma:\s*no cover|intentional|fall[- ]?through|best effort|non.critical|"
+        r"enhancement is non|skip|ignore)",
+        re.IGNORECASE,
+    )
+    for j in range(idx, min(len(all_lines), idx + 6)):
+        if _intent_rx.search(all_lines[j]):
+            return False
+
+    # --- Suppression 3: fallback-flag pattern ---
+    # Look backward for `*_ok = False` within 8 lines before the `try:` for this except
+    try_line_idx = None
+    for j in range(idx - 1, max(0, idx - 30), -1):
+        stripped = all_lines[j].lstrip()
+        if stripped.startswith("try:") or stripped.startswith("try "):
+            try_line_idx = j
+            break
+    if try_line_idx is not None:
+        for j in range(max(0, try_line_idx - 8), try_line_idx):
+            if re.search(r"\w+_ok\s*=\s*False", all_lines[j]):
+                return False
+
+    # --- Suppression 4: continue in for-loop best-effort ---
+    for j in range(idx + 1, min(len(all_lines), idx + 6)):
+        stripped = all_lines[j].lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        this_indent = len(all_lines[j]) - len(all_lines[j].lstrip())
+        if this_indent <= except_indent:
+            break
+        if stripped == "continue":
+            # Verify we're inside a for loop by walking backward
+            for k in range(idx - 1, max(0, idx - 40), -1):
+                for_stripped = all_lines[k].lstrip()
+                for_indent = len(all_lines[k]) - len(all_lines[k].lstrip())
+                if for_indent < except_indent and for_stripped.startswith(("for ", "while ")):
+                    return False
+            break
+
     # Look ahead in the except block for meaningful handling
     for j in range(idx + 1, min(len(all_lines), idx + 15)):
         line_j = all_lines[j]
@@ -621,6 +937,7 @@ def create_rules() -> list[Any]:
                     r"^\s*#",
                     r"^\s*\w+\s*=\s*",
                     r"def\s+\w+\s*\([^)]*exec",
+                    r"#\s*noqa",  # Author already triaged via ruff/flake8 suppression
                 ]
             ),
             layer="hard_correctness",
@@ -753,36 +1070,25 @@ def create_rules() -> list[Any]:
             layer="semantic",
             requires_context=False,
         ),
-        Rule(
-            id="PY-COR-09",
-            severity=Severity.LOW,
-            category=Category.Bug,
-            description="json.loads/load without error handling — crashes on malformed input",
-            fix="Wrap in try/except json.JSONDecodeError to handle corrupt JSON gracefully.",
-            pattern=re.compile(r"json\.loads?\s*\("),
-            anti_patterns=_compile_anti(
-                [
-                    r"#\s*VB-IGNORE",
-                    r"except.*JSON",
-                    r"\btry\s*:",
-                    r"\bexcept\b",
-                ]
-            ),
-            anti_radius=20,
-            layer="semantic",
-            requires_context=False,
-            confidence=68,
-        ),
+        # PY-COR-09: DELETED 2026-04-09 — 0% precision (7 findings, all FP).
+        # Every hit was a loader/parser function where raising on corrupt input
+        # is the correct behavior. Rule's premise ("wrap json.load in try/except")
+        # contradicts the codebase's correct error-surfacing style.
         Rule(
             id="PY-COR-10",
             severity=Severity.LOW,
             category=Category.Bug,
             description="Float equality comparison -- use math.isclose",
             fix="Use math.isclose(a, b) or abs(a - b) < epsilon.",
-            pattern=re.compile(r"(?<!\w)(==|!=)\s*\d+\.\d+"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            pattern=re.compile(r"(?<!\w)(==|!=)\s*(?!0\.0\b)\d+\.\d+"),
+            anti_patterns=_compile_anti([
+                r"#\s*VB-IGNORE", r"^\s*#",
+                r"\bnp\.", r"\.astype\s*\(", r"asarray",
+                r"dtype\s*=",
+            ]),
             layer="semantic",
             requires_context=False,
+            reasoning="Exempt == 0.0/!= 0.0 (idiomatic zero-guard) and numpy array contexts (mask ops).",
         ),
         Rule(
             id="PY-COR-11",
@@ -867,6 +1173,82 @@ def create_rules() -> list[Any]:
             layer="semantic",
             requires_context=False,
             confidence=92,
+        ),
+        # PY-COR-16: Discarded assignment -- `_name = func()` where name is never read
+        # Catches terrain_caves.py:821 `_delta = carve_cave_volume(...)` class of bug:
+        # underscore-prefixed var assigned from a function call that returns data the
+        # caller is supposed to apply; the discard silently drops the delta.
+        Rule(
+            id="PY-COR-16",
+            severity=Severity.CRITICAL,
+            category=Category.Bug,
+            description="Discarded return value: underscore-prefixed variable assigned from function call but never read",
+            fix="If the return value is needed (delta, mask, array), remove the underscore prefix and apply it. If truly unused, use bare `_` or call the function as a statement.",
+            pattern=re.compile(
+                r"^\s*_[a-zA-Z]\w*\s*=\s*\w+[\w.]*\s*\("
+            ),
+            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            guard=_check_discarded_assignment,
+            layer="semantic",
+            requires_context=False,
+            confidence=88,
+            reasoning="Terrain audit P0: pass_caves discarded carve_cave_volume delta, zero geometry output.",
+        ),
+        # PY-COR-17: Frozen dataclass with mutable default field
+        # Catches terrain_semantics.py:669,743 TerrainIntentState/HeroFeatureSpec crash
+        Rule(
+            id="PY-COR-17",
+            severity=Severity.CRITICAL,
+            category=Category.Bug,
+            description="Frozen dataclass with mutable collection field (Dict/List/Set) -- hash() raises TypeError",
+            fix="Use frozenset/tuple/Mapping, or remove frozen=True, or use default_factory=tuple with a conversion in __post_init__.",
+            pattern=re.compile(
+                r":\s*(Dict|List|Set|dict|list|set)\b[^=]*=\s*field\s*\("
+            ),
+            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            guard=_check_frozen_mutable_field,
+            layer="semantic",
+            requires_context=False,
+            confidence=90,
+            reasoning="Terrain audit P0: frozen=True + Dict field crashes hash() at runtime the moment the instance enters a set.",
+        ),
+        # PY-COR-18: Self-rollback in validator
+        # Catches terrain_validation.py validate_* methods that call rollback on
+        # channels the pipeline itself produces, causing auto-rollback on every run.
+        Rule(
+            id="PY-COR-18",
+            severity=Severity.HIGH,
+            category=Category.Bug,
+            description="Validator method calls self.rollback()/state.rollback() on failure path -- may rollback producers' own output",
+            fix="Validators should report errors and return False/raise. Rollback is the orchestrator's decision, not the validator's.",
+            pattern=re.compile(
+                r"^\s*(self|state|ctx)\.rollback\s*\("
+            ),
+            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            guard=_check_validator_self_rollback,
+            layer="semantic",
+            requires_context=False,
+            confidence=82,
+            reasoning="Terrain audit P0: validate_unity_export_ready auto-rolled-back every real pipeline run.",
+        ),
+        # PY-COR-19: Fallback branch returns before primary check
+        # Catches terrain_frustum is_in_frustum style bug where a fallback-ok path
+        # returns before the primary-ok path is evaluated.
+        Rule(
+            id="PY-COR-19",
+            severity=Severity.HIGH,
+            category=Category.Bug,
+            description="Fallback branch returns True/ok before primary check runs -- reverses intent",
+            fix="Reorder: primary check first, fallback only when primary is unavailable or inconclusive.",
+            pattern=re.compile(
+                r"^\s*if\s+[\w.()]*fallback[\w]*\s*:\s*(#.*)?$"
+            ),
+            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            guard=_check_fallback_before_primary,
+            layer="semantic",
+            requires_context=False,
+            confidence=72,
+            reasoning="Terrain audit P0: is_in_frustum basis-fallback returned before forward-sign check.",
         ),
         # ---- PERFORMANCE ----
         Rule(
@@ -1082,8 +1464,14 @@ def create_rules() -> list[Any]:
             description="bpy.data.objects.new/meshes.new without cleanup on error path",
             fix="Use try/except/finally to ensure cleanup: bpy.data.objects.remove(obj) on error.",
             pattern=re.compile(r"bpy\.data\.(objects|meshes|materials)\.new\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"\.remove\s*\(", r"try:", r"finally:"]),
-            layer="semantic",  # Real resource leak if handler crashes mid-execution
+            anti_patterns=_compile_anti([
+                r"#\s*VB-IGNORE", r"\.remove\s*\(", r"try:", r"finally:",
+                r"def\s+handle_",  # MCP handler dispatch-level cleanup
+                r"handlers/",  # Addon handler modules
+            ]),
+            anti_radius=50,  # Raised from 12: function-level cleanup is normal
+            guard=_has_blender_cleanup_in_scope,
+            layer="heuristic",  # Demoted 2026-04-09: 85% FP at semantic, ~15% precision
             requires_context=False,
         ),
         Rule(
@@ -1104,8 +1492,8 @@ def create_rules() -> list[Any]:
             description="Accessing material.node_tree.nodes without use_nodes=True",
             fix="Set material.use_nodes = True before accessing node_tree.nodes.",
             pattern=re.compile(r"\.node_tree\.nodes"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"use_nodes\s*=\s*True"]),
-            anti_radius=30,  # Check wider radius for use_nodes setup
+            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"\.use_nodes"]),
+            anti_radius=30,  # Check wider radius for use_nodes setup/check
             layer="semantic",
             requires_context=False,
         ),
@@ -1152,17 +1540,9 @@ def create_rules() -> list[Any]:
             requires_context=False,
         ),
 
-        # Division by zero guard with max() is fragile
-        Rule(
-            id="PY-RES-03",
-            severity=Severity.MEDIUM,
-            category=Category.Bug,
-            description="Division with max() guard -- verify zero/negative edge cases are handled",
-            fix="Add explicit check: if divisor <= 0: return default or raise ValueError",
-            pattern=re.compile(r"/\s*max\s*\(\s*\w+\s*,\s*[\d.]+\s*\)"),
-            layer="semantic",
-            requires_context=False,
-        ),
+        # PY-RES-03: DELETED 2026-04-09 — 100% FP rate (48 findings, all correct
+        # defensive max() zero-guards flagged as bugs). Rule contradicts the
+        # defensive-coding idiom it claims to promote.
 
         # Mutable default with truthy empty check
         Rule(

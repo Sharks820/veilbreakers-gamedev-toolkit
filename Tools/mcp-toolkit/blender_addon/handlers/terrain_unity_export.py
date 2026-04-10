@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
-from .terrain_semantics import TerrainMaskStack
+from .terrain_semantics import BBox, PassDefinition, PassResult, TerrainMaskStack, TerrainPipelineState
 
 
 # Channels we ship as standalone binaries.
@@ -49,6 +49,48 @@ def _quantize_heightmap(stack: TerrainMaskStack) -> np.ndarray:
     norm = (h - lo) / span
     norm = np.clip(norm, 0.0, 1.0)
     return (norm * 65535.0 + 0.5).astype(np.uint16)
+
+
+def pass_prepare_heightmap_raw_u16(
+    state: TerrainPipelineState,
+    region: Optional[BBox],
+) -> PassResult:
+    """Populate the Unity-ready uint16 heightmap channel inside the pass DAG."""
+    t0 = time.perf_counter()
+    stack = state.mask_stack
+    arr = _quantize_heightmap(stack)
+    stack.set("heightmap_raw_u16", arr, "prepare_heightmap_raw_u16")
+
+    return PassResult(
+        pass_name="prepare_heightmap_raw_u16",
+        status="ok",
+        duration_seconds=time.perf_counter() - t0,
+        consumed_channels=("height",),
+        produced_channels=("heightmap_raw_u16",),
+        metrics={
+            "dtype": str(arr.dtype),
+            "shape": list(arr.shape),
+            "min": int(arr.min()) if arr.size else 0,
+            "max": int(arr.max()) if arr.size else 0,
+            "region_scoped": region is not None,
+        },
+    )
+
+
+def register_bundle_j_heightmap_u16_pass() -> None:
+    from .terrain_pipeline import TerrainPassController
+
+    TerrainPassController.register_pass(
+        PassDefinition(
+            name="prepare_heightmap_raw_u16",
+            func=pass_prepare_heightmap_raw_u16,
+            requires_channels=("height",),
+            produces_channels=("heightmap_raw_u16",),
+            seed_namespace="prepare_heightmap_raw_u16",
+            requires_scene_read=False,
+            description="Bundle J: quantize world heightmap into Unity-ready uint16 channel",
+        )
+    )
 
 
 def export_unity_manifest(
@@ -305,4 +347,8 @@ def _decals_json(stack: TerrainMaskStack) -> Dict[str, Any]:
     return {"schema_version": "1.0", "decals": decals}
 
 
-__all__ = ["export_unity_manifest"]
+__all__ = [
+    "pass_prepare_heightmap_raw_u16",
+    "register_bundle_j_heightmap_u16_pass",
+    "export_unity_manifest",
+]

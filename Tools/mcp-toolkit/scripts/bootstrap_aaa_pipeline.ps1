@@ -1,5 +1,5 @@
 param(
-    [string]$BlenderExe = "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe",
+    [string]$BlenderExe = "",
     [string]$StableFast3DPath = "$HOME\veilbreakers-tools\stable-fast-3d",
     [string]$EnvOut = "$PSScriptRoot\..\pipeline.local.env",
     [switch]$InstallBlenderExtensions,
@@ -8,13 +8,53 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Resolve-BlenderExe {
+    param(
+        [string]$RequestedPath
+    )
+
+    if ($RequestedPath -and (Test-Path $RequestedPath)) {
+        return (Resolve-Path $RequestedPath).Path
+    }
+
+    $candidates = @(
+        "$env:LOCALAPPDATA\Programs\blender-4.5.3-windows-x64\blender.exe",
+        "$env:LOCALAPPDATA\Programs\blender-4.5.2-windows-x64\blender.exe",
+        "$env:LOCALAPPDATA\Programs\blender-4.5.1-windows-x64\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
+        "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe"
+    )
+
+    foreach ($candidate in $candidates) {
+        if (Test-Path $candidate) {
+            return (Resolve-Path $candidate).Path
+        }
+    }
+
+    throw "Blender executable not found. Install Blender 4.5 LTS or pass -BlenderExe explicitly."
+}
+
+function Get-BlenderMajorMinor {
+    param(
+        [string]$ExePath
+    )
+
+    $version = & $ExePath --background --factory-startup --python-expr "import bpy; print(f'{bpy.app.version[0]}.{bpy.app.version[1]}')"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Unable to query Blender version from '$ExePath'."
+    }
+
+    return ($version | Select-Object -Last 1).Trim()
+}
+
+$BlenderExe = Resolve-BlenderExe -RequestedPath $BlenderExe
+$BlenderVersionLine = Get-BlenderMajorMinor -ExePath $BlenderExe
+
 Write-Host "VeilBreakers AAA 3D pipeline bootstrap"
 Write-Host "Blender executable: $BlenderExe"
+Write-Host "Blender version line: $BlenderVersionLine"
 Write-Host "Stable Fast 3D path: $StableFast3DPath"
-
-if (-not (Test-Path $BlenderExe)) {
-    throw "Blender executable not found at '$BlenderExe'."
-}
 
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     throw "git is required but was not found on PATH."
@@ -52,7 +92,6 @@ $manifest = @"
     {"name": "A.N.T. Landscape", "module": "antlandscape", "source": "https://extensions.blender.org/add-ons/antlandscape/", "role": "procedural terrain blockouts"},
     {"name": "SRTM Terrain Importer", "module": "srtm_terrain_importer", "source": "https://extensions.blender.org/add-ons/srtm-terrain-importer/", "role": "real-world terrain import"},
     {"name": "Archimesh", "module": "archimesh", "source": "https://extensions.blender.org/add-ons/archimesh/", "role": "architecture and interior blockout"},
-    {"name": "Bonsai", "module": "bonsai", "source": "https://extensions.blender.org/add-ons/bonsai/", "role": "room semantics, walls, doors, slabs, and BIM-style interiors"},
     {"name": "WFC 3D Generator", "module": "wfc_3d_generator", "source": "https://extensions.blender.org/add-ons/wfc-3d-generator/", "role": "non-repeating procedural layout variation"},
     {"name": "Bagapie", "module": "Bagapie", "source": "https://extensions.blender.org/add-ons/bagapie/", "role": "scatter, ivy, random arrays, and architecture helpers"},
     {"name": "Secret Paint", "module": "secret_paint", "source": "https://extensions.blender.org/add-ons/secret-paint/", "role": "paint-driven scatter and placement workflows"},
@@ -92,7 +131,7 @@ Write-Host "Wrote Blender add-on manifest: $manifestPath"
 
 if ($InstallBlenderExtensions) {
     $extModules = @(
-        "terrainmixer","antlandscape","srtm_terrain_importer","archimesh","bonsai",
+        "terrainmixer","antlandscape","srtm_terrain_importer","archimesh",
         "wfc_3d_generator","Bagapie","secret_paint","ucupaint","rmKit","rmKit_uv",
         "univ","mio3_uv","texel_density_checker","EdgeFlow","looptools","bool_tool",
         "Modifier_List_Fork","Non_Destructive_Primitives","lod_gen",
@@ -103,7 +142,8 @@ if ($InstallBlenderExtensions) {
 }
 
 if ($InstallGitAddons) {
-    $addonDir = Join-Path $env:APPDATA "Blender Foundation\Blender\5.0\scripts\addons"
+    $addonDir = Join-Path $env:APPDATA "Blender Foundation\Blender\$BlenderVersionLine\scripts\addons"
+    New-Item -ItemType Directory -Path $addonDir -Force | Out-Null
     $gitAddons = @(
         @{ Repo = "https://github.com/nortikin/sverchok"; Dir = "sverchok" },
         @{ Repo = "https://github.com/BlenderKit/BlenderKit"; Dir = "BlenderKit" },

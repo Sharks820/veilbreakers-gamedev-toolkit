@@ -10,7 +10,8 @@ Pure Python + numpy. Threading is stdlib.
 
 from __future__ import annotations
 
-import threading
+import copy
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Sequence, Set
 
 from .terrain_pipeline import TerrainPassController
@@ -19,6 +20,40 @@ from .terrain_semantics import PassDefinition, PassResult
 
 class PassDAGError(RuntimeError):
     """Raised when the dependency graph is cyclic or unresolvable."""
+
+
+def _merge_pass_outputs(
+    target_controller: TerrainPassController,
+    source_result: PassResult,
+) -> PassResult:
+    """Merge a worker pass result back into the shared controller state."""
+    definition = target_controller.get_pass(source_result.pass_name)
+    target_stack = target_controller.state.mask_stack
+    source_stack = source_result.metrics.pop("_worker_mask_stack", None)
+
+    if source_stack is None:
+        raise PassDAGError(
+            f"Worker for pass '{source_result.pass_name}' returned no mask stack snapshot"
+        )
+
+    for channel in definition.produces_channels:
+        if not hasattr(source_stack, channel):
+            raise PassDAGError(
+                f"Pass '{source_result.pass_name}' declared unknown channel '{channel}'"
+            )
+        setattr(target_stack, channel, copy.deepcopy(getattr(source_stack, channel)))
+        if getattr(source_stack, channel) is not None:
+            target_stack.populated_by_pass[channel] = source_result.pass_name
+        target_stack.dirty_channels.discard(channel)
+
+    target_stack.height_min_m = source_stack.height_min_m
+    target_stack.height_max_m = source_stack.height_max_m
+    target_stack.content_hash = None
+
+    source_result.content_hash_after = target_stack.compute_hash()
+    target_controller.state.record_pass(source_result)
+
+    return source_result
 
 
 class PassDAG:
@@ -38,7 +73,12 @@ class PassDAG:
         if pass_names is None:
             defs = list(registry.values())
         else:
-            defs = [registry[n] for n in pass_names if n in registry]
+            missing = [n for n in pass_names if n not in registry]
+            if missing:
+                raise PassDAGError(
+                    f"Unknown passes requested for DAG construction: {missing}"
+                )
+            defs = [registry[n] for n in pass_names]
         return cls(defs)
 
     @property
@@ -105,13 +145,13 @@ class PassDAG:
     ) -> List[PassResult]:
         """Execute all passes grouped by wave.
 
-        NOTE: Within a wave passes may share the same mask stack. For
-        deterministic correctness with shared-state numpy ops we serialize
-        writes via a lock. Parallelism benefit comes from GIL-releasing
-        numpy kernels inside each pass.
+        Each pass in a wave executes against a deep-copied pipeline state,
+        then its declared output channels are merged back into the shared
+        controller state in deterministic name order. This preserves actual
+        concurrency without allowing worker threads to race on a shared
+        ``TerrainMaskStack``.
         """
         results: List[PassResult] = []
-        lock = threading.Lock()
 
         for wave in self.parallel_waves():
             if len(wave) == 1:
@@ -120,29 +160,35 @@ class PassDAG:
                 continue
 
             wave_results: Dict[str, PassResult] = {}
-            threads: List[threading.Thread] = []
 
-            def _runner(pname: str) -> None:
-                with lock:
-                    r = controller.run_pass(pname, checkpoint=checkpoint)
-                wave_results[pname] = r
+            def _runner(pname: str) -> PassResult:
+                worker_state = copy.deepcopy(controller.state)
+                worker_controller = TerrainPassController(
+                    worker_state,
+                    checkpoint_dir=controller.checkpoint_dir,
+                )
+                result = worker_controller.run_pass(pname, checkpoint=False)
+                result.metrics["_worker_mask_stack"] = worker_controller.state.mask_stack
+                return result
 
-            # Simple thread fanout, bounded by max_workers
-            active: List[threading.Thread] = []
-            for pname in wave:
-                t = threading.Thread(target=_runner, args=(pname,), daemon=True)
-                t.start()
-                active.append(t)
-                threads.append(t)
-                if len(active) >= max(1, int(max_workers)):
-                    for a in active:
-                        a.join()
-                    active = []
-            for a in active:
-                a.join()
-            for pname in wave:
-                if pname in wave_results:
-                    results.append(wave_results[pname])
+            with ThreadPoolExecutor(
+                max_workers=max(1, min(int(max_workers), len(wave)))
+            ) as executor:
+                future_to_name = {
+                    executor.submit(_runner, pname): pname
+                    for pname in wave
+                }
+                for future in as_completed(future_to_name):
+                    pname = future_to_name[future]
+                    wave_results[pname] = future.result()
+
+            for pname in sorted(wave):
+                merged = _merge_pass_outputs(controller, wave_results[pname])
+                if checkpoint and merged.status == "ok":
+                    ckpt = controller._save_checkpoint(pname, merged)
+                    merged.checkpoint_path = str(ckpt.mask_stack_path)
+                    controller.state.checkpoints.append(ckpt)
+                results.append(merged)
 
         return results
 

@@ -290,6 +290,24 @@ _TOOL_REPUTATION: dict[str, float] = {
     "ast-grep": 0.87,  # Structural pattern matching - good but not perfect
 }
 
+_RUFF_HARD_BUG_CODES = frozenset({
+    "E902",
+    "E999",
+    "F821",
+    "F822",
+    "F823",
+    "F831",
+})
+
+_RUFF_HEURISTIC_CODES = frozenset({
+    "E402",
+    "E701",
+    "E741",
+    "F401",
+    "F541",
+    "F841",
+})
+
 
 def _semantic_fingerprint(issue: Issue) -> frozenset[str]:
     """Extract semantic fingerprint for cross-tool correlation.
@@ -2254,17 +2272,27 @@ def scan_project(
             python_file_set = set(python_files)
             csharp_file_set = set(csharp_files)
 
-            # Layer assignment: production scope elevates critical/high findings
-            # to hard_correctness so they survive scope filtering
-            _is_production = review_scope == "production"
-            def _tool_layer(tf) -> str:
-                """Map tool finding severity to appropriate layer."""
-                if _is_production:
-                    # In production, only critical/high findings from tools survive
-                    if tf.severity in ("CRITICAL", "HIGH"):
-                        return LAYER_HARD_CORRECTNESS
-                    return LAYER_SEMANTIC  # Still collected, not shown
-                return LAYER_SEMANTIC
+            def _classify_tool_finding(tf) -> tuple[str, str]:
+                """Return (layer, category) for an external-tool finding."""
+                rule_id = str(getattr(tf, "rule_id", "") or "").upper()
+                severity = str(getattr(tf, "severity", "") or "").upper()
+
+                if rule_id.startswith("RUFF-"):
+                    code = rule_id[5:]
+                    if code in _RUFF_HEURISTIC_CODES:
+                        return (LAYER_HEURISTIC, "Quality")
+                    if code in _RUFF_HARD_BUG_CODES or code.startswith("S") or code.startswith("B9"):
+                        if review_scope == "production" and severity in {"CRITICAL", "HIGH"}:
+                            return (LAYER_HARD_CORRECTNESS, "Bug")
+                        return (LAYER_SEMANTIC, "Bug")
+                    return (LAYER_SEMANTIC, "Quality")
+
+                if review_scope == "production":
+                    if severity in {"CRITICAL", "HIGH"}:
+                        return (LAYER_HARD_CORRECTNESS, "Bug")
+                    return (LAYER_SEMANTIC, "Bug")
+
+                return (LAYER_SEMANTIC, "Bug")
 
             # Context sharing: Generate context hints for cross-file analysis
             # This helps OpenGrep and other tools understand variable flow across files
@@ -2297,10 +2325,16 @@ rules:
                 except Exception:
                     context_rules_dir = ""
 
-            def _merge_tool_finding(tf, *, allowed_files: set[str], category: str, layer: str = LAYER_SEMANTIC, source_tool: str):
+            def _merge_tool_finding(tf, *, allowed_files: set[str], source_tool: str):
                 nonlocal tool_findings
                 normalized_file = _normalize_path(tf.file)
                 if normalized_file not in allowed_files:
+                    return
+                layer, category = _classify_tool_finding(tf)
+                # Gate: don't merge heuristic findings into advisory/production scans
+                # (prevents heuristic ruff noise from adopting a semantic layer via merge)
+                allowed = SCOPE_TO_LAYERS.get(review_scope, {LAYER_HARD_CORRECTNESS})
+                if layer not in allowed:
                     return
                 _merge(Issue(
                     rule_id=tf.rule_id,
@@ -2317,20 +2351,19 @@ rules:
             # Python primary analyzer (runs in all scopes including production)
             if python_files and avail.get("ruff"):
                 for tf in run_ruff(python_files):
-                    _merge_tool_finding(tf, allowed_files=python_file_set, category="Quality",
-                                        layer=_tool_layer(tf), source_tool="ruff")
+                    _merge_tool_finding(tf, allowed_files=python_file_set, source_tool="ruff")
                 tools_used.append("ruff")
 
             # OpenGrep: advisory+ only (expensive, taint analysis)
             if review_scope in ("advisory", "strict") and python_files and avail.get("opengrep"):
                 for tf in run_opengrep(python_files, rules_dir=context_rules_dir):
-                    _merge_tool_finding(tf, allowed_files=python_file_set, category="Bug", source_tool="opengrep")
+                    _merge_tool_finding(tf, allowed_files=python_file_set, source_tool="opengrep")
                 tools_used.append("opengrep")
 
             # Python strict-only typing pass
             if review_scope == "strict" and python_files and avail.get("mypy"):
                 for tf in run_mypy(python_files):
-                    _merge_tool_finding(tf, allowed_files=python_file_set, category="Bug", source_tool="mypy")
+                    _merge_tool_finding(tf, allowed_files=python_file_set, source_tool="mypy")
                 tools_used.append("mypy")
 
             # C# primary analyzer (runs in all scopes including production)
@@ -2338,23 +2371,21 @@ rules:
             if csharp_files and avail.get("dotnet"):
                 for sln in _find_solution_candidates(paths)[:1]:
                     for tf in run_dotnet_analyzers(sln):
-                        _merge_tool_finding(tf, allowed_files=csharp_file_set, category="Bug",
-                                            layer=_tool_layer(tf), source_tool="dotnet-analyzers")
+                        _merge_tool_finding(tf, allowed_files=csharp_file_set, source_tool="dotnet-analyzers")
                     tools_used.append("dotnet-analyzers")
                     ran_csharp_primary = True
                     break
 
             if review_scope in ("advisory", "strict") and csharp_files and avail.get("opengrep"):
                 for tf in run_opengrep(csharp_files, rules_dir=context_rules_dir):
-                    _merge_tool_finding(tf, allowed_files=csharp_file_set, category="Bug", source_tool="opengrep")
+                    _merge_tool_finding(tf, allowed_files=csharp_file_set, source_tool="opengrep")
                 tools_used.append("opengrep")
 
             # C# structural fallback (runs in all scopes including production)
             if csharp_files and not ran_csharp_primary and avail.get("ast-grep"):
                 for filepath in csharp_files:
                     for tf in run_ast_grep(filepath, "csharp"):
-                        _merge_tool_finding(tf, allowed_files=csharp_file_set, category="Bug",
-                                            layer=_tool_layer(tf), source_tool="ast-grep")
+                        _merge_tool_finding(tf, allowed_files=csharp_file_set, source_tool="ast-grep")
                 tools_used.append("ast-grep")
 
             tools_used = list(dict.fromkeys(tools_used))
@@ -2674,6 +2705,22 @@ Examples:
         default=0,
         help="Minimum confidence to report (0-100)",
     )
+    parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Emit compact JSON findings for agent consumption.",
+    )
+    parser.add_argument(
+        "--max-findings",
+        type=int,
+        default=0,
+        help="Limit returned findings to the highest-priority N entries.",
+    )
+    parser.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="Emit counts only, without individual findings.",
+    )
     args = parser.parse_args()
 
     target = Path(args.path)
@@ -2733,6 +2780,35 @@ Examples:
     report["semantic"] = layer_counts.get(LAYER_SEMANTIC, 0)
     report["heuristic"] = layer_counts.get(LAYER_HEURISTIC, 0)
 
+    sev_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    filtered_issues = sorted(
+        filtered_issues,
+        key=lambda entry: (
+            sev_order.get(entry.get("severity", "LOW"), 9),
+            -int(entry.get("confidence", 0)),
+            str(entry.get("file", "")),
+            int(entry.get("line", 0)),
+        ),
+    )
+    if args.max_findings > 0:
+        filtered_issues = filtered_issues[: args.max_findings]
+
+    if args.summary_only:
+        report["issues"] = []
+    elif args.compact:
+        report["issues"] = [
+            {
+                "id": issue.get("rule_id", ""),
+                "s": str(issue.get("severity", ""))[:1],
+                "l": f"{Path(str(issue.get('file', ''))).name}:{issue.get('line', 0)}",
+                "d": issue.get("description", ""),
+                "f": str(issue.get("fix", ""))[:80],
+            }
+            for issue in filtered_issues
+        ]
+    else:
+        report["issues"] = filtered_issues
+
     output = json.dumps(report, indent=2)
 
     if args.output:
@@ -2742,8 +2818,11 @@ Examples:
             file=sys.stderr,
         )
     else:
-        # Human-readable console output
-        _print_human_report(filtered_issues, report)
+        if args.compact or args.summary_only:
+            print(output)
+        else:
+            # Human-readable console output
+            _print_human_report(filtered_issues, report)
 
     has_serious = any(i["severity"] in ("CRITICAL", "HIGH") for i in filtered_issues)
     sys.exit(1 if has_serious else 0)

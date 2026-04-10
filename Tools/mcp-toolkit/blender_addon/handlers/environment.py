@@ -18,7 +18,7 @@ import math
 import struct
 import zlib
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -1320,8 +1320,12 @@ def handle_run_terrain_pass(params: dict) -> dict:
         height (list[list[float]]|np.ndarray) — optional pre-built heightmap
         terrain_type (str), scale (float) — for generating initial height
         erosion_profile (str)
-        pipeline (list[str]) — pass sequence (default: all 4 Bundle A passes)
+        pipeline (list[str]) — pass sequence
         pass_name=... with pipeline=None runs a single pass
+
+    Default behavior:
+        - with ``scene_read``: ``macro_world -> structural_masks -> erosion -> validation_minimal``
+        - without ``scene_read``: ``macro_world -> structural_masks -> validation_minimal``
 
     Returns:
         dict with ``ok``, ``results`` (list of PassResult dicts),
@@ -1329,7 +1333,8 @@ def handle_run_terrain_pass(params: dict) -> dict:
     """
     # Local imports to avoid circular dependency at module load.
     from . import _terrain_world as _tw
-    from .terrain_pipeline import TerrainPassController, register_default_passes
+    from .terrain_master_registrar import register_all_terrain_passes
+    from .terrain_pipeline import TerrainPassController
     from .terrain_semantics import (
         BBox,
         ProtectedZoneSpec,
@@ -1339,9 +1344,19 @@ def handle_run_terrain_pass(params: dict) -> dict:
         TerrainSceneRead,
     )
 
-    # Ensure default passes are registered
-    if not TerrainPassController.PASS_REGISTRY:
-        register_default_passes()
+    requested_pipeline = params.get("pipeline")
+    requested_passes = list(requested_pipeline) if requested_pipeline is not None else []
+    if not requested_passes:
+        requested_passes = [str(params.get("pass_name", "macro_world"))]
+
+    # Ensure all requested passes are registered even for direct callers
+    # importing this module without the handlers package side effects.
+    missing_passes = [
+        pass_name for pass_name in requested_passes
+        if pass_name not in TerrainPassController.PASS_REGISTRY
+    ]
+    if missing_passes or not TerrainPassController.PASS_REGISTRY:
+        register_all_terrain_passes(strict=False)
 
     tile_size = int(params.get("tile_size", 64))
     cell_size = float(params.get("cell_size", 1.0))
@@ -1502,12 +1517,27 @@ def handle_run_terrain_pass(params: dict) -> dict:
     pass_name = params.get("pass_name")
     pipeline = params.get("pipeline")
 
+    composition_hints = params.get("composition_hints") or {}
+    unity_export_opt_out = bool(composition_hints.get("unity_export_opt_out", False))
+
     if pipeline is None and pass_name is None:
-        pipeline = ["macro_world", "structural_masks", "erosion", "validation_minimal"]
+        pipeline = ["macro_world", "structural_masks", "validation_minimal"]
+        if scene_read is not None:
+            pipeline.insert(2, "erosion")
+
+    if pipeline is not None:
+        pipeline = list(pipeline)
+        if (
+            "validation_full" in pipeline
+            and not unity_export_opt_out
+            and "prepare_heightmap_raw_u16" not in pipeline
+        ):
+            insert_at = pipeline.index("validation_full")
+            pipeline.insert(insert_at, "prepare_heightmap_raw_u16")
 
     if pipeline is not None:
         results = controller.run_pipeline(
-            pass_sequence=list(pipeline),
+            pass_sequence=pipeline,
             region=region,
             checkpoint=bool(params.get("checkpoint", False)),
         )

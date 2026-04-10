@@ -179,6 +179,40 @@ def test_py_comprehension_for_not_flagged_late_binding(tmp_path):
     assert not any(i.rule_id == "PY-COR-15" for i in issues)
 
 
+def test_py_blender_allocation_with_late_cleanup_not_flagged(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text(
+        "def build_mesh(name):\n"
+        "    mesh = bpy.data.meshes.new(name)\n"
+        "    obj = bpy.data.objects.new(name, mesh)\n"
+        "    try:\n"
+        "        bpy.context.collection.objects.link(obj)\n"
+        "        return obj\n"
+        "    except Exception:\n"
+        "        bpy.data.objects.remove(obj)\n"
+        "        bpy.data.meshes.remove(mesh)\n"
+        "        raise\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="advisory")
+    assert not any(i.rule_id == "BLE-02" for i in issues)
+
+
+def test_py_blender_allocation_without_cleanup_is_flagged(tmp_path):
+    p = tmp_path / "bad.py"
+    p.write_text(
+        "def build_mesh(name):\n"
+        "    mesh = bpy.data.meshes.new(name)\n"
+        "    obj = bpy.data.objects.new(name, mesh)\n"
+        "    bpy.context.collection.objects.link(obj)\n"
+        "    return obj\n",
+        encoding="utf-8",
+    )
+    # BLE-02 demoted to heuristic (2026-04-09: 85% FP in handlers); strict scope fires
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert any(i.rule_id == "BLE-02" for i in issues)
+
+
 # =========================================================================
 # C# True Positives — code that MUST be flagged
 # =========================================================================

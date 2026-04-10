@@ -158,6 +158,8 @@ def _build_review_messages(
         "You are a meticulous senior code reviewer. "
         "Review the diff for correctness, regressions, wiring mistakes, stale assumptions, "
         "missing tests, and seam/continuity issues. "
+        "Do not report speculative issues. Verify the code path from the provided diff/context, "
+        "and check whether nearby or later code in the same change already handles the concern. "
         "Return only concrete findings ordered by severity. "
         "If no issues are found, return exactly 'No findings.'."
     )
@@ -184,6 +186,8 @@ def _build_structured_review_messages(
     system_prompt = (
         "You are a meticulous senior code reviewer. "
         "Return valid JSON only. "
+        "Do not report speculative issues. Verify the code path from the provided diff/context, "
+        "and check whether nearby or later code in the same change already handles the concern. "
         "Respond with a JSON array of finding objects. "
         "Each object must include: "
         "title, severity, file, function, evidence, recommendation, confidence. "
@@ -688,6 +692,9 @@ def _normalize_finding_key(finding: dict[str, Any]) -> str:
         str(finding.get("function") or "").lower(),
         str(finding.get("title") or "").lower(),
     ]
+    line_value = finding.get("line")
+    if isinstance(line_value, int) and line_value > 0:
+        pieces.append(str(line_value))
     combined = " ".join(piece for piece in pieces if piece).strip()
     combined = re.sub(r"[^a-z0-9]+", " ", combined)
     combined = re.sub(r"\s+", " ", combined).strip()
@@ -788,7 +795,10 @@ def _load_truth_findings(truth_path: str) -> list[dict[str, Any]]:
     path = Path(truth_path)
     if not path.exists():
         raise FileNotFoundError(f"Truth file does not exist: {truth_path}")
-    data = json.loads(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"Truth file contains invalid JSON: {truth_path}") from exc
     if isinstance(data, dict):
         findings = data.get("findings", [])
     else:

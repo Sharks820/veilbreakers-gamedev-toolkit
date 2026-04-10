@@ -18,10 +18,20 @@ class TestReviewServer:
 
         assert messages[0]["role"] == "system"
         assert "code reviewer" in messages[0]["content"]
+        assert "Do not report speculative issues" in messages[0]["content"]
         assert messages[1]["role"] == "user"
         assert "terrain continuity export" in messages[1]["content"]
         assert "focus on seams" in messages[1]["content"]
         assert "diff --git a/foo b/foo" in messages[1]["content"]
+
+    def test_load_truth_findings_rejects_invalid_json(self, tmp_path):
+        from veilbreakers_mcp.review_server import _load_truth_findings
+
+        truth_file = tmp_path / "truth.json"
+        truth_file.write_text("{not-json", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="invalid JSON"):
+            _load_truth_findings(str(truth_file))
 
     def test_extract_completion_text_handles_string_content(self):
         from veilbreakers_mcp.review_server import _extract_completion_text
