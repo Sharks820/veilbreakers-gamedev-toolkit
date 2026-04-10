@@ -50,7 +50,15 @@ The CLI emits JSON with this stable top-level shape:
 
 Notes:
 - `issues` may be compacted or empty when `--compact` or `--summary-only` is used.
+- `patches` and `total_patches` are present when `--fix` is used. Each patch entry includes `file`, `rule_ids`, `applied`, `backup_file`, and a unified `diff`.
 - `scan_roots` is relative-display metadata for humans and agents.
 - `layer` is one of `hard_correctness`, `semantic`, or `heuristic`.
 - `category` is one of `Security`, `Bug`, `Performance`, `Quality`, or `Framework`.
 - `finding_type` is one of `ERROR`, `BUG`, `OPTIMIZATION`, or `STRENGTHENING`.
+
+Example fix invocation:
+
+```bash
+vb-review . --scope production --profile general --fix
+vb-review some_file.py --scope advisory --profile general --fix --apply
+```

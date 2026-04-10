@@ -178,6 +178,7 @@ class Rule:
     file_filter: str = "All"  # C# only: "Runtime", "EditorOnly", "All"
     inside_pattern: Optional[re.Pattern] = None
     not_inside_pattern: Optional[re.Pattern] = None
+    auto_fix: Optional[Callable[..., Any]] = None
 
     def __post_init__(self):
         if self.confidence < 0:
@@ -429,6 +430,9 @@ class Issue:
         if isinstance(rule_config, (int, float)):
             multiplier = rule_config
             priority_penalty = 0
+        elif rule_config is None:
+            multiplier = 1.0
+            priority_penalty = 0
         else:
             # New format: {multiplier, skip_patterns, priority_penalty, threshold_adjustments}
             multiplier = rule_config.get("multiplier", 1.0)
@@ -464,6 +468,29 @@ class Issue:
             base_confidence = max(20, base_confidence - priority_penalty)
 
         self.adjusted_confidence = max(20, min(99, int(base_confidence * multiplier)))
+
+
+def _issue_from_dict(data: dict[str, Any]) -> Issue:
+    """Rehydrate cached or serialized issue payloads into Issue objects."""
+    issue = Issue(
+        rule_id=str(data.get("rule_id", "")),
+        severity=str(data.get("severity", "LOW")),
+        category=str(data.get("category", "Quality")),
+        file=str(data.get("file", "")),
+        line=int(data.get("line", 0)),
+        description=str(data.get("description", "")),
+        fix=str(data.get("fix", "")),
+        matched_text=str(data.get("matched_text", "")),
+        finding_type=str(data.get("finding_type", "BUG")),
+        confidence=int(data.get("confidence", 75)),
+        priority=int(data.get("priority", 50)),
+        reasoning=str(data.get("reasoning", "")),
+        layer=str(data.get("layer", LAYER_HARD_CORRECTNESS)),
+        requires_context=bool(data.get("requires_context", False)),
+        profile=str(data.get("profile", "general")),
+    )
+    issue.adjusted_confidence = int(data.get("adjusted_confidence", issue.confidence))
+    return issue
 
 
 # =========================================================================
@@ -2104,6 +2131,187 @@ def _line_in_changed_ranges(
     return any(start <= line <= end for start, end in ranges)
 
 
+def _cache_key(filepath: str, *, lang: str, review_scope: str, profile: str) -> str:
+    """Build a cache key that keeps scan modes isolated from each other."""
+    return f"{_normalize_path(filepath)}|lang={lang}|scope={review_scope}|profile={profile}"
+
+
+def _find_rule_with_autofix(issue: dict[str, Any], profile: str) -> Any | None:
+    rule_ids = [part.strip() for part in str(issue.get("rule_id", "")).split(",")]
+    is_python = str(issue.get("file", "")).endswith(".py") or issue.get("file") == "<stdin>"
+    rules = _get_python_rules_for_profile(profile) if is_python else _get_local_csharp_rules(profile)
+    for rule_id in rule_ids:
+        for rule in rules:
+            if getattr(rule, "id", "") == rule_id and getattr(rule, "auto_fix", None):
+                return rule
+    return None
+
+
+def _detect_newline(content: str) -> str:
+    if "\r\n" in content:
+        return "\r\n"
+    return "\n"
+
+
+def _python_import_present(lines: list[str], import_stmt: str) -> bool:
+    if import_stmt == "import ast":
+        return any(
+            re.match(r"^\s*(import\s+ast\b|from\s+ast\s+import\b)", line)
+            for line in lines
+        )
+    if import_stmt == "import math":
+        return any(
+            re.match(r"^\s*(import\s+math\b|from\s+math\s+import\b)", line)
+            for line in lines
+        )
+    if import_stmt == "from pathlib import Path":
+        return any(re.match(r"^\s*from\s+pathlib\s+import\s+.*\bPath\b", line) for line in lines)
+    return import_stmt in lines
+
+
+def _python_import_insertion_index(lines: list[str]) -> int:
+    idx = 0
+    if idx < len(lines) and lines[idx].startswith("#!"):
+        idx += 1
+    if idx < len(lines) and re.match(r"^#.*coding[:=]\s*[-\w.]+", lines[idx]):
+        idx += 1
+    if idx < len(lines):
+        stripped = lines[idx].lstrip()
+        if stripped.startswith(('"""', "'''")):
+            quote = stripped[:3]
+            idx += 1
+            while idx < len(lines):
+                if quote in lines[idx]:
+                    idx += 1
+                    break
+                idx += 1
+    last_import = idx
+    while last_import < len(lines) and (
+        not lines[last_import].strip()
+        or re.match(r"^\s*(from\s+\S+\s+import|import\s+\S+)", lines[last_import])
+    ):
+        last_import += 1
+    return last_import
+
+
+def _apply_text_edits(
+    lines: list[str], edits: list[dict[str, Any]]
+) -> list[str]:
+    updated = list(lines)
+    for edit in sorted(edits, key=lambda entry: (int(entry["start"]), int(entry["end"])), reverse=True):
+        replacement = [str(line) for line in edit.get("replacement", [])]
+        updated[int(edit["start"]) : int(edit["end"])] = replacement
+    return updated
+
+
+def _build_fix_report(
+    issues: list[dict[str, Any]],
+    *,
+    profile: str,
+    apply: bool = False,
+) -> dict[str, Any]:
+    patches: list[dict[str, Any]] = []
+    by_file: dict[str, list[dict[str, Any]]] = {}
+    for issue in issues:
+        filepath = str(issue.get("file", ""))
+        if not filepath or filepath == "<stdin>":
+            continue
+        by_file.setdefault(filepath, []).append(issue)
+
+    for filepath, file_issues in sorted(by_file.items()):
+        path = Path(filepath)
+        if not path.exists():
+            continue
+        original = path.read_text(encoding="utf-8")
+        newline = _detect_newline(original)
+        lines = original.splitlines()
+        collected_edits: list[dict[str, Any]] = []
+        required_imports: set[str] = set()
+
+        for issue in sorted(file_issues, key=lambda entry: int(entry.get("line", 0))):
+            rule = _find_rule_with_autofix(issue, profile)
+            if not rule:
+                continue
+            line_idx = max(0, int(issue.get("line", 1)) - 1)
+            if line_idx >= len(lines):
+                continue
+            fix_result = rule.auto_fix(lines[line_idx], lines, line_idx)
+            if not fix_result:
+                continue
+            new_edits = list(fix_result.get("edits", []))
+            if any(
+                not (
+                    int(candidate["end"]) <= int(existing["start"])
+                    or int(candidate["start"]) >= int(existing["end"])
+                )
+                for candidate in new_edits
+                for existing in collected_edits
+            ):
+                continue
+            collected_edits.extend(new_edits)
+            required_imports.update(fix_result.get("imports", []))
+
+        if not collected_edits and not required_imports:
+            continue
+
+        missing_imports = [
+            import_stmt
+            for import_stmt in sorted(required_imports)
+            if not _python_import_present(lines, import_stmt)
+        ]
+        if missing_imports and filepath.endswith(".py"):
+            insert_at = _python_import_insertion_index(lines)
+            import_block = [*missing_imports]
+            if insert_at < len(lines) and lines[insert_at].strip():
+                import_block.append("")
+            collected_edits.append(
+                {"start": insert_at, "end": insert_at, "replacement": import_block}
+            )
+
+        if not collected_edits:
+            continue
+
+        updated_lines = _apply_text_edits(lines, collected_edits)
+        new_content = newline.join(updated_lines)
+        if original.endswith(("\n", "\r\n")):
+            new_content += newline
+        diff_text = "".join(
+            __import__("difflib").unified_diff(
+                original.splitlines(keepends=True),
+                new_content.splitlines(keepends=True),
+                fromfile=filepath,
+                tofile=filepath,
+            )
+        )
+        if not diff_text:
+            continue
+
+        backup_file = None
+        if apply:
+            backup_path = path.with_name(f"{path.name}.bak")
+            backup_path.write_text(original, encoding="utf-8")
+            path.write_text(new_content, encoding="utf-8")
+            backup_file = str(backup_path)
+
+        patches.append(
+            {
+                "file": filepath,
+                "rule_ids": sorted(
+                    {
+                        issue["rule_id"]
+                        for issue in file_issues
+                        if _find_rule_with_autofix(issue, profile)
+                    }
+                ),
+                "applied": apply,
+                "backup_file": backup_file,
+                "diff": diff_text,
+            }
+        )
+
+    return {"total_patches": len(patches), "patches": patches}
+
+
 def _find_solution_candidates(paths: list[str]) -> list[str]:
     """Find nearby .sln files for C# analyzer runs."""
     candidates: list[str] = []
@@ -2352,11 +2560,17 @@ def scan_project(
     for filepath in files:
         # Smart incremental: Check cache for unchanged files (60-80% reduction)
         file_hash = _file_hash(filepath)
-        if file_hash and filepath in cache and file_hash == cache.get(filepath, {}).get("hash", ""):
+        cache_key = _cache_key(
+            filepath, lang=lang, review_scope=review_scope, profile=profile
+        )
+        if file_hash and cache_key in cache and file_hash == cache.get(cache_key, {}).get("hash", ""):
             # File unchanged - use cached findings
-            cached_data = cache[filepath]
+            cached_data = cache[cache_key]
             if cached_data:
-                all_issues.extend(cached_data.get("issues", []))
+                all_issues.extend(
+                    _issue_from_dict(issue_dict)
+                    for issue_dict in cached_data.get("issues", [])
+                )
                 continue  # Skip scanning this file
         if filepath not in explicit_file_targets and not _should_scan_file(
             filepath, lang, review_scope=review_scope, profile=profile,
@@ -2567,13 +2781,15 @@ rules:
         # context_rules_dir_obj cleans up automatically when exiting context
 
     # Smart incremental: Store scan results in cache before returning
-    if cache:
-        for filepath in set(scannable_files):  # Cache only files we actually scanned
-            cache[filepath] = {
-                "hash": _file_hash(filepath),
-                "timestamp": __import__("time").time(),
-                "issues": [asdict(i) for i in all_issues if i.file == filepath],
-            }
+    for filepath in set(scannable_files):  # Cache only files we actually scanned
+        cache_key = _cache_key(
+            filepath, lang=lang, review_scope=review_scope, profile=profile
+        )
+        cache[cache_key] = {
+            "hash": _file_hash(filepath),
+            "timestamp": __import__("time").time(),
+            "issues": [asdict(i) for i in all_issues if i.file == filepath],
+        }
 
     # 6. Generate report
     if changed_ranges:
@@ -2593,7 +2809,7 @@ rules:
     report["tools_used"] = tools_used
 
     # Smart incremental: Save cache before return
-    if cache:
+    if scannable_files or cache:
         _save_cache()
 
     return report
@@ -2750,8 +2966,6 @@ def _build_agent_brief(issues: list[Issue], scope: str, sev_counts: dict[str, in
 
     idx = 0
     for filepath, file_issues in by_file.items():
-        short = _display_path(filepath)
-
         for issue in file_issues:
             idx += 1
             icon = _SEV_ICON.get(issue.severity, "[?]")
@@ -2912,7 +3126,24 @@ Examples:
         action="store_true",
         help="Read source code from stdin instead of scanning files. Requires --lang py or --lang cs.",
     )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Emit mechanical patch suggestions for rules that support auto-fix.",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply auto-fix patches in place and write .bak backups. Requires --fix.",
+    )
     args = parser.parse_args()
+
+    if args.apply and not args.fix:
+        print("Error: --apply requires --fix", file=sys.stderr)
+        sys.exit(2)
+    if args.apply and args.stdin:
+        print("Error: --apply is not supported with --stdin", file=sys.stderr)
+        sys.exit(2)
 
     target = Path(args.path)
     if not args.stdin and not target.exists():
@@ -3021,6 +3252,28 @@ Examples:
     else:
         report["issues"] = filtered_issues
 
+    has_serious = any(i["severity"] in ("CRITICAL", "HIGH") for i in filtered_issues)
+
+    if args.fix:
+        fix_report = _build_fix_report(
+            filtered_issues,
+            profile=args.profile,
+            apply=args.apply,
+        )
+        report["patches"] = fix_report["patches"]
+        report["total_patches"] = fix_report["total_patches"]
+        report["issues"] = []
+        output = json.dumps(report, indent=2)
+        if args.output:
+            Path(args.output).write_text(output, encoding="utf-8")
+            print(
+                f"Report written to {args.output} ({fix_report['total_patches']} patches)",
+                file=sys.stderr,
+            )
+        else:
+            print(output)
+        sys.exit(0 if fix_report["total_patches"] else 1 if has_serious else 0)
+
     output = json.dumps(report, indent=2)
 
     if args.output:
@@ -3036,7 +3289,6 @@ Examples:
             # Human-readable console output
             _print_human_report(filtered_issues, report)
 
-    has_serious = any(i["severity"] in ("CRITICAL", "HIGH") for i in filtered_issues)
     sys.exit(1 if has_serious else 0)
 
 

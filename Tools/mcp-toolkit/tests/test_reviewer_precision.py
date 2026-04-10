@@ -55,6 +55,13 @@ def test_py_requests_without_timeout_detected(tmp_path):
     assert any(i.rule_id == "PY-RES-09" for i in issues)
 
 
+def test_py_path_traversal_detected(tmp_path):
+    p = tmp_path / "bad.py"
+    p.write_text("def load(user_path):\n    return open(user_path).read()\n", encoding="utf-8")
+    issues = reviewer.scan_python_file(str(p), None, review_scope="advisory")
+    assert any(i.rule_id == "PY-SEC-08" for i in issues)
+
+
 def test_py_logger_fstring_detected(tmp_path):
     p = tmp_path / "bad.py"
     p.write_text(
@@ -101,6 +108,33 @@ def test_py_lambda_late_binding_detected(tmp_path):
     assert any(i.rule_id == "PY-COR-15" for i in issues)
 
 
+def test_py_discarded_assignment_reused_after_nested_def_not_flagged(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text(
+        "def demo(flag):\n"
+        "    _ast_ok = flag()\n"
+        "    def helper():\n"
+        "        return _ast_ok\n"
+        "    return helper()\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert not any(i.rule_id == "PY-COR-16" for i in issues)
+
+
+def test_py_discarded_assignment_reused_later_not_flagged(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text(
+        "def demo(flag):\n"
+        "    _late_value = flag()\n"
+        + "".join("    # spacer\n" for _ in range(130))
+        + "    return _late_value\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert not any(i.rule_id == "PY-COR-16" for i in issues)
+
+
 # =========================================================================
 # Python True Negatives — code that must NOT be flagged
 # =========================================================================
@@ -117,6 +151,31 @@ def test_py_requests_with_timeout_not_flagged(tmp_path):
     p.write_text("import requests\nrequests.get(service_url, timeout=5)\n", encoding="utf-8")
     issues = reviewer.scan_python_file(str(p), None, review_scope="advisory")
     assert not any(i.rule_id == "PY-RES-09" for i in issues)
+
+
+def test_py_path_metadata_lookup_not_flagged_as_traversal(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text(
+        "from pathlib import Path\n"
+        "def demo(filepath):\n"
+        "    return Path(filepath).name\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert not any(i.rule_id == "PY-SEC-08" for i in issues)
+
+
+def test_py_urlopen_not_misclassified_as_path_traversal(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text(
+        "import urllib.request\n"
+        "def fetch(request):\n"
+        "    with urllib.request.urlopen(request, timeout=5) as response:\n"
+        "        return response.read()\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert not any(i.rule_id == "PY-SEC-08" for i in issues)
 
 
 def test_py_optional_result_with_none_check_not_flagged(tmp_path):

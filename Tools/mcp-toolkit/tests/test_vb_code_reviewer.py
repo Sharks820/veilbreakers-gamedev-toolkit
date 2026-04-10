@@ -439,3 +439,159 @@ def test_scan_stdin_content_csharp():
     )
 
     assert any("CS-COR-06" in issue["rule_id"] for issue in report["issues"])
+
+
+def test_fix_report_generates_eval_patch_with_import(tmp_path):
+    file_path = tmp_path / "demo.py"
+    file_path.write_text("result = eval(user_input)\n", encoding="utf-8")
+
+    report = reviewer.scan_project(
+        [str(file_path)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+    fix_report = reviewer._build_fix_report(report["issues"], profile="general")
+
+    assert fix_report["total_patches"] == 1
+    diff_text = fix_report["patches"][0]["diff"]
+    assert "+import ast" in diff_text
+    assert "+result = ast.literal_eval(user_input)" in diff_text
+
+
+def test_fix_apply_rewrites_file_and_creates_backup(tmp_path):
+    file_path = tmp_path / "demo.py"
+    file_path.write_text("value = thing == None\n", encoding="utf-8")
+
+    report = reviewer.scan_project(
+        [str(file_path)],
+        lang="py",
+        review_scope="advisory",
+        profile="general",
+        build_context=False,
+    )
+    fix_report = reviewer._build_fix_report(
+        report["issues"], profile="general", apply=True
+    )
+
+    assert fix_report["total_patches"] == 1
+    assert file_path.read_text(encoding="utf-8") == "value = thing is None\n"
+    backup_path = file_path.with_name("demo.py.bak")
+    assert backup_path.exists()
+    assert backup_path.read_text(encoding="utf-8") == "value = thing == None\n"
+
+
+def test_fix_report_handles_mutable_default_argument(tmp_path):
+    file_path = tmp_path / "demo.py"
+    file_path.write_text(
+        "def build(items=[]):\n"
+        "    items.append(1)\n"
+        "    return items\n",
+        encoding="utf-8",
+    )
+
+    report = reviewer.scan_project(
+        [str(file_path)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+    fix_report = reviewer._build_fix_report(report["issues"], profile="general")
+
+    assert fix_report["total_patches"] == 1
+    diff_text = fix_report["patches"][0]["diff"]
+    assert "+def build(items=None):" in diff_text
+    assert "+    if items is None:" in diff_text
+    assert "+        items = []" in diff_text
+
+
+def test_scan_project_persists_and_reuses_issue_cache(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(reviewer, "CACHE_DIR", str(cache_dir))
+
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "demo.py"
+    file_path.write_text("result = eval(user_input)\n", encoding="utf-8")
+
+    first = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+    cache_file = cache_dir / "reviewer_cache.json"
+
+    assert first["total_issues"] == 1
+    assert cache_file.exists()
+
+    second = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+
+    assert second["total_issues"] == 1
+    assert "PY-SEC-01" in second["issues"][0]["rule_id"]
+
+
+def test_fix_report_rewrites_csharp_where_count(tmp_path):
+    file_path = tmp_path / "Bad.cs"
+    file_path.write_text(
+        "using System.Linq;\n"
+        "public class Bad {\n"
+        "    public int Run(int[] values) { return values.Where(v => v > 0).Count(); }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    report = reviewer.scan_project(
+        [str(file_path)],
+        lang="cs",
+        review_scope="strict",
+        profile="general",
+        build_context=False,
+    )
+    fix_report = reviewer._build_fix_report(report["issues"], profile="general")
+
+    assert fix_report["total_patches"] == 1
+    assert ".Count(v => v > 0)" in fix_report["patches"][0]["diff"]
+
+
+def test_cache_keeps_production_and_strict_runs_isolated(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(reviewer, "CACHE_DIR", str(cache_dir))
+
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "demo.py"
+    file_path.write_text(
+        "import logging\n"
+        "logger = logging.getLogger(__name__)\n"
+        "value = 1\n"
+        "logger.error(f'value={value}')\n",
+        encoding="utf-8",
+    )
+
+    production = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+    strict = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="strict",
+        profile="general",
+        build_context=False,
+    )
+
+    assert production["total_issues"] == 0
+    assert any(issue["rule_id"] == "PY-PERF-04" for issue in strict["issues"])
