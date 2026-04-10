@@ -19,6 +19,10 @@ import numpy as np
 from .terrain_semantics import BBox, PassDefinition, PassResult, TerrainMaskStack, TerrainPipelineState
 
 
+# Profiles that require 32-bit float heightmap precision.
+_PRODUCTION_PLUS_PROFILES = frozenset({"hero_shot", "aaa_open_world"})
+
+
 # Channels we ship as standalone binaries.
 _BINARY_CHANNELS = (
     "heightmap_raw_u16",
@@ -49,6 +53,29 @@ def _quantize_heightmap(stack: TerrainMaskStack) -> np.ndarray:
     norm = (h - lo) / span
     norm = np.clip(norm, 0.0, 1.0)
     return (norm * 65535.0 + 0.5).astype(np.uint16)
+
+
+def _export_heightmap(heightmap: np.ndarray, bit_depth: int = 16) -> np.ndarray:
+    """Export heightmap at specified bit depth.
+
+    bit_depth=16: uint16 (legacy, 0-65535 quantized)
+    bit_depth=32: float32 (production+, preserves world-unit values)
+    """
+    if bit_depth >= 32:
+        return heightmap.astype(np.float32)
+    # Legacy uint16 quantization
+    h = np.asarray(heightmap, dtype=np.float64)
+    h_min, h_max = float(h.min()), float(h.max())
+    h_range = max(h_max - h_min, 1e-10)
+    normalized = (h - h_min) / h_range
+    return (normalized * 65535).astype(np.uint16)
+
+
+def _bit_depth_for_profile(profile: Optional[str]) -> int:
+    """Return heightmap bit depth for the given export profile."""
+    if profile in _PRODUCTION_PLUS_PROFILES:
+        return 32
+    return 16
 
 
 def pass_prepare_heightmap_raw_u16(
@@ -96,8 +123,16 @@ def register_bundle_j_heightmap_u16_pass() -> None:
 def export_unity_manifest(
     stack: TerrainMaskStack,
     output_dir: Path,
+    profile: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Write a Unity-consumable export bundle to ``output_dir``.
+
+    Args:
+        stack: Populated terrain mask stack.
+        output_dir: Target directory for all export artifacts.
+        profile: Export quality profile. ``"hero_shot"`` and
+            ``"aaa_open_world"`` use 32-bit float heightmaps;
+            all others default to uint16.
 
     Produces:
         manifest.json               — file inventory + schema version (§33.1)
@@ -117,26 +152,40 @@ def export_unity_manifest(
     """
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    hm_bit_depth = _bit_depth_for_profile(profile)
 
     # Ensure heightmap_raw_u16 is populated so Unity has a clean .raw to ingest.
+    # For production+ profiles we export the full-precision float32 heightmap
+    # via _export_heightmap; legacy profiles keep the uint16 quantisation.
     if stack.heightmap_raw_u16 is None:
-        stack.set(
-            "heightmap_raw_u16",
-            _quantize_heightmap(stack),
-            "unity_export",
-        )
+        if hm_bit_depth >= 32 and stack.height is not None:
+            stack.set(
+                "heightmap_raw_u16",
+                _export_heightmap(stack.height, bit_depth=hm_bit_depth),
+                "unity_export",
+            )
+        else:
+            stack.set(
+                "heightmap_raw_u16",
+                _quantize_heightmap(stack),
+                "unity_export",
+            )
 
     files: Dict[str, Dict[str, Any]] = {}
 
     def _write_npy(channel: str, arr: np.ndarray) -> None:
         target = output_dir / f"{channel}.npy"
-        np.save(target, np.asarray(arr))
+        arr_np = np.asarray(arr)
+        np.save(target, arr_np)
+        # Derive bit depth from numpy dtype itemsize (bytes -> bits).
+        dtype_bit_depth = arr_np.dtype.itemsize * 8
         files[target.name] = {
             "sha256": _sha256(target),
             "size": int(target.stat().st_size),
-            "dtype": str(np.asarray(arr).dtype),
-            "shape": list(np.asarray(arr).shape),
+            "dtype": str(arr_np.dtype),
+            "shape": list(arr_np.shape),
             "channel": channel,
+            "bit_depth": dtype_bit_depth,
         }
 
     for ch in _BINARY_CHANNELS:
@@ -208,6 +257,8 @@ def export_unity_manifest(
         "coordinate_system": stack.coordinate_system,
         "generation_timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "generator_version": "bundle_j_v1.0",
+        "profile": profile or "default",
+        "heightmap_bit_depth": hm_bit_depth,
         "files": files,
         "populated_channels": list(stack.populated_by_pass.keys()),
         "determinism_hash": determinism_hash,
@@ -351,4 +402,6 @@ __all__ = [
     "pass_prepare_heightmap_raw_u16",
     "register_bundle_j_heightmap_u16_pass",
     "export_unity_manifest",
+    "_export_heightmap",
+    "_bit_depth_for_profile",
 ]
