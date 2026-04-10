@@ -175,6 +175,7 @@ class CaveStructure:
     path_world: List[Tuple[float, float, float]] = field(default_factory=list)
     interior_mask: Optional[np.ndarray] = None
     damp_mask: Optional[np.ndarray] = None
+    height_delta: Optional[np.ndarray] = None
     entrance_frame: Optional[Dict] = None
     debris_points: List[Tuple[float, float, float]] = field(default_factory=list)
     tier: str = "secondary"
@@ -818,7 +819,7 @@ def pass_caves(
         path = generate_cave_path(stack, archetype, ent, cave_seed)
 
         # Carve (delta, not mutation) + update cave_candidate
-        _delta = carve_cave_volume(stack, path, spec)
+        delta = carve_cave_volume(stack, path, spec)
 
         # Apply protected mask to cave_candidate after carve
         cc = np.asarray(stack.get("cave_candidate"), dtype=bool)
@@ -828,7 +829,7 @@ def pass_caves(
         # Framing + debris + damp
         frame = build_cave_entrance_frame(stack, ent, spec)
         debris = scatter_collapse_debris(stack, path, spec, cave_seed)
-        _damp = generate_damp_mask(stack, path, spec)
+        damp = generate_damp_mask(stack, path, spec)
 
         cave = CaveStructure(
             cave_id=f"cave_{state.tile_x}_{state.tile_y}_{idx:02d}",
@@ -837,7 +838,8 @@ def pass_caves(
             entrance_world_pos=tuple(ent),
             path_world=list(path),
             interior_mask=None,
-            damp_mask=None,
+            damp_mask=damp,
+            height_delta=delta,
             entrance_frame=frame,
             debris_points=debris,
             tier="hero" if idx == 0 else "secondary",
@@ -857,6 +859,14 @@ def pass_caves(
         # Validate this entrance
         issues.extend(validate_cave_entrance(frame, stack))
 
+    # Accumulate height deltas from all caves into a single channel.
+    # Per the pass contract we do NOT mutate stack.height — we record intent.
+    accumulated_delta = np.zeros_like(stack.height, dtype=np.float32)
+    for cave in caves:
+        if cave.height_delta is not None:
+            accumulated_delta += cave.height_delta
+    stack.set("cave_height_delta", accumulated_delta, "caves")
+
     hard_issues = [i for i in issues if i.is_hard()]
     status = "ok" if not hard_issues else "warning"
 
@@ -865,7 +875,7 @@ def pass_caves(
         status=status,
         duration_seconds=time.perf_counter() - t0,
         consumed_channels=("height", "slope", "basin", "wetness"),
-        produced_channels=("cave_candidate", "wet_rock"),
+        produced_channels=("cave_candidate", "wet_rock", "cave_height_delta"),
         metrics={
             "cave_count": len(caves),
             "hero_cave_count": sum(1 for c in caves if c.tier == "hero"),

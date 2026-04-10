@@ -230,7 +230,9 @@ class TerrainMaskStack:
     # Hero candidate masks (Pass 3)
     cliff_candidate: Optional[np.ndarray] = None
     cave_candidate: Optional[np.ndarray] = None
+    cave_height_delta: Optional[np.ndarray] = None
     waterfall_lip_candidate: Optional[np.ndarray] = None
+    waterfall_pool_delta: Optional[np.ndarray] = None
     hero_exclusion: Optional[np.ndarray] = None
 
     # Erosion-derived masks (Pass 4)
@@ -327,7 +329,9 @@ class TerrainMaskStack:
             "saliency_macro",
             "cliff_candidate",
             "cave_candidate",
+            "cave_height_delta",
             "waterfall_lip_candidate",
+            "waterfall_pool_delta",
             "hero_exclusion",
             "erosion_amount",
             "deposition_amount",

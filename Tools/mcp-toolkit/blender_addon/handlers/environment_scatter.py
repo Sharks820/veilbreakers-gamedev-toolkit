@@ -283,8 +283,10 @@ def _terrain_height_sampler(terrain_obj: bpy.types.Object | None):
 
     heights = np.array([v.co.z for v in bm.verts], dtype=np.float64)
     bm.free()
-    height_max = heights.max() if heights.size and heights.max() > 0 else 1.0
-    heightmap = (heights / height_max).reshape(rows, cols)
+    height_min = heights.min() if heights.size else 0.0
+    height_max = heights.max() if heights.size else 1.0
+    height_range = max(height_max - height_min, 1e-6)
+    heightmap = ((heights - height_min) / height_range).reshape(rows, cols)
     dims = terrain_obj.dimensions
     terrain_width = max(float(dims.x), 1.0)
     terrain_height = max(float(dims.y), 1.0)
@@ -1413,8 +1415,10 @@ def handle_scatter_vegetation(params: dict) -> dict:
     heights = np.array([v.co.z for v in bm.verts])
     bm.free()
 
-    height_max = heights.max() if heights.max() > 0 else 1.0
-    heightmap = (heights / height_max).reshape(rows, cols)
+    height_min = float(heights.min()) if heights.size else 0.0
+    height_max = float(heights.max()) if heights.size else 1.0
+    height_range = max(height_max - height_min, 1e-6)
+    heightmap = ((heights - height_min) / height_range).reshape(rows, cols)
 
     # Determine terrain world-space size
     dims = obj.dimensions

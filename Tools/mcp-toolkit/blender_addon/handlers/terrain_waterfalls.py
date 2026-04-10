@@ -636,6 +636,12 @@ def pass_waterfalls(
             continue
         chains.append(chain)
 
+    # 3b. Accumulate pool/outflow height deltas (non-destructive)
+    pool_delta = np.zeros(h_shape, dtype=np.float64)
+    for chain in chains:
+        pool_delta += carve_impact_pool(stack, chain)
+        pool_delta += build_outflow_channel(stack, chain)
+
     # 4. Accumulate foam + mist masks across chains
     foam = np.zeros(h_shape, dtype=np.float32)
     mist = np.zeros(h_shape, dtype=np.float32)
@@ -664,7 +670,11 @@ def pass_waterfalls(
         scoped = np.zeros_like(wet_rock)
         scoped[r_slice, c_slice] = wet_rock[r_slice, c_slice]
         wet_rock = scoped
+        scoped = np.zeros_like(pool_delta)
+        scoped[r_slice, c_slice] = pool_delta[r_slice, c_slice]
+        pool_delta = scoped
 
+    stack.set("waterfall_pool_delta", pool_delta.astype(np.float32), "waterfalls")
     stack.set("waterfall_lip_candidate", lip_mask, "waterfalls")
     stack.set("foam", foam, "waterfalls")
     stack.set("mist", mist, "waterfalls")
@@ -681,6 +691,7 @@ def pass_waterfalls(
         consumed_channels=("height",),
         produced_channels=(
             "waterfall_lip_candidate",
+            "waterfall_pool_delta",
             "foam",
             "mist",
             "wet_rock",
