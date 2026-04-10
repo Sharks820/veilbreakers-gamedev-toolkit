@@ -70,6 +70,7 @@ class Rule:
     not_inside_pattern: Optional[re.Pattern] = None
     fast_check: Optional[str] = None
     language: Language = Language.CSharp
+    auto_fix: Optional[Callable[..., Any]] = None
 
 
 # =============================================================================
@@ -618,6 +619,7 @@ def _create_rule(
     guard: Optional[Callable] = None,
     layer: str = "hard_correctness",
     flags: int = 0,
+    auto_fix: Optional[Callable[..., Any]] = None,
 ) -> Rule:
     """Helper to create a rule with auto-computed confidence/priority."""
     if confidence < 0:
@@ -660,6 +662,7 @@ def _create_rule(
         scope=scope,
         file_filter=file_filter,
         language=Language.CSharp,
+        auto_fix=auto_fix,
     )
 
 

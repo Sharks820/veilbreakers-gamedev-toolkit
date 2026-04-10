@@ -48,6 +48,7 @@ class Rule:
     reasoning: Optional[str] = None
     layer: str = "hard_correctness"
     requires_context: bool = False
+    auto_fix: Optional[Callable[..., Any]] = None
 
     def __post_init__(self):
         if self.confidence < 0:
@@ -109,6 +110,150 @@ def _in_string_literal(line: str) -> bool:
     """Check if line starts with a string literal."""
     stripped = line.lstrip()
     return stripped.startswith(("'", '"', "b'", 'b"', "f'", 'f"', "r'", 'r"'))
+
+
+def _docstring_insertion_index(lines: list[str], start_idx: int) -> int:
+    """Return the first safe line index after an opening function docstring."""
+    if start_idx >= len(lines):
+        return start_idx
+    stripped = lines[start_idx].lstrip()
+    quote_match = re.match(r'^[rubfRUBF]*("""|\'\'\'|"|\')', stripped)
+    if not quote_match:
+        return start_idx
+    quote = quote_match.group(1)
+    if quote in ('"', "'"):
+        return start_idx + 1
+    if stripped.count(quote) >= 2 and stripped != quote:
+        return start_idx + 1
+    for idx in range(start_idx + 1, len(lines)):
+        if quote in lines[idx]:
+            return idx + 1
+    return start_idx
+
+
+def _autofix_eval(line: str, _all_lines: list[str], idx: int) -> dict[str, Any] | None:
+    if "ast.literal_eval" in line:
+        return None
+    replaced = re.sub(r"\beval\s*\(", "ast.literal_eval(", line, count=1)
+    if replaced == line:
+        return None
+    return {
+        "edits": [{"start": idx, "end": idx + 1, "replacement": [replaced]}],
+        "imports": ["import ast"],
+    }
+
+
+def _autofix_mutable_default(
+    line: str, all_lines: list[str], idx: int
+) -> dict[str, Any] | None:
+    match = re.search(
+        r"^(?P<indent>\s*)def\s+(?P<name>\w+)\s*\((?P<params>.*)\)\s*:\s*$", line
+    )
+    if not match:
+        return None
+    params = match.group("params")
+    default_match = re.search(
+        r"(?P<param>\w+)\s*=\s*(?P<default>\[\]|\{\}|set\(\))", params
+    )
+    if not default_match:
+        return None
+    if idx + 1 < len(all_lines):
+        next_line = all_lines[idx + 1].lstrip()
+        if re.match(r'^[rubfRUBF]*("""|\'\'\'|"|\')', next_line):
+            return None
+    param_name = default_match.group("param")
+    default_value = default_match.group("default")
+    new_params = (
+        params[: default_match.start()]
+        + f"{param_name}=None"
+        + params[default_match.end() :]
+    )
+    new_def_line = f"{match.group('indent')}def {match.group('name')}({new_params}):"
+    body_indent = f"{match.group('indent')}    "
+    insert_at = _docstring_insertion_index(all_lines, idx + 1)
+    return {
+        "edits": [
+            {"start": idx, "end": idx + 1, "replacement": [new_def_line]},
+            {
+                "start": insert_at,
+                "end": insert_at,
+                "replacement": [
+                    f"{body_indent}if {param_name} is None:",
+                    f"{body_indent}    {param_name} = {default_value}",
+                ],
+            },
+        ]
+    }
+
+
+def _autofix_none_comparison(
+    line: str, _all_lines: list[str], idx: int
+) -> dict[str, Any] | None:
+    replaced = re.sub(r"==\s*None\b", "is None", line)
+    replaced = re.sub(r"!=\s*None\b", "is not None", replaced)
+    if replaced == line:
+        return None
+    return {
+        "edits": [{"start": idx, "end": idx + 1, "replacement": [replaced]}]
+    }
+
+
+def _autofix_float_equality(
+    line: str, _all_lines: list[str], idx: int
+) -> dict[str, Any] | None:
+    stripped = line.strip()
+    comment = ""
+    if " #" in stripped:
+        stripped, comment = stripped.split(" #", 1)
+        comment = f"  #{comment}"
+    prefix = ""
+    suffix = ""
+    expr = stripped
+    for keyword in ("if ", "elif ", "while ", "return ", "assert "):
+        if expr.startswith(keyword):
+            prefix = keyword
+            expr = expr[len(keyword) :]
+            break
+    if expr.endswith(":"):
+        expr = expr[:-1].rstrip()
+        suffix = ":"
+    match = re.match(
+        r"(?P<left>.+?)\s*(?P<op>==|!=)\s*(?P<right>\d+\.\d+)\s*$", expr
+    )
+    if not match:
+        return None
+    left = match.group("left").strip()
+    right = match.group("right")
+    replacement_expr = f"math.isclose({left}, {right})"
+    if match.group("op") == "!=":
+        replacement_expr = f"not {replacement_expr}"
+    leading = line[: len(line) - len(line.lstrip())]
+    replaced = f"{leading}{prefix}{replacement_expr}{suffix}{comment}"
+    if replaced == line:
+        return None
+    return {
+        "edits": [{"start": idx, "end": idx + 1, "replacement": [replaced]}],
+        "imports": ["import math"],
+    }
+
+
+def _autofix_pathlib_join(
+    line: str, _all_lines: list[str], idx: int
+) -> dict[str, Any] | None:
+    match = re.search(r"os\.path\.join\((?P<args>[^()]*)\)", line)
+    if not match:
+        return None
+    args = [arg.strip() for arg in match.group("args").split(",") if arg.strip()]
+    if len(args) < 2:
+        return None
+    path_expr = " / ".join([f"Path({args[0]})", *args[1:]])
+    replaced = f"{line[: match.start()]}{path_expr}{line[match.end() :]}"
+    if replaced == line:
+        return None
+    return {
+        "edits": [{"start": idx, "end": idx + 1, "replacement": [replaced]}],
+        "imports": ["from pathlib import Path"],
+    }
 
 
 def _active_code(
@@ -355,17 +500,13 @@ def _check_discarded_assignment(
     side_effect_prefixes = ("set", "apply", "update", "mark", "register", "emit", "log", "print", "write", "save", "push", "append", "add_", "insert", "remove", "delete", "clear", "reset")
     if func_name.lower().startswith(side_effect_prefixes):
         return False
-    # Look ahead for ANY read of var_name in the enclosing function scope
-    base_indent = len(line) - len(line.lstrip())
-    for j in range(idx + 1, min(len(all_lines), idx + 120)):
+    # Look ahead for ANY read of var_name in subsequent code.
+    # Nested helpers still count as a legitimate use, so don't stop at inner defs.
+    for j in range(idx + 1, min(len(all_lines), idx + 200)):
         lookahead = all_lines[j]
         stripped = lookahead.lstrip()
         if not stripped or stripped.startswith("#"):
             continue
-        this_indent = len(lookahead) - len(lookahead.lstrip())
-        # Left the function scope
-        if this_indent < base_indent and stripped.startswith(("def ", "class ", "@")):
-            break
         # Reference counts as read; assignment to same name does not
         if re.search(rf"(?<![\.\w]){re.escape(var_name)}\b", lookahead):
             # Exclude left-hand-side reassignment `_name = ...`
@@ -779,8 +920,20 @@ def _check_path_traversal(
     idx: int,
     _context: Optional[dict] = None,
 ) -> bool:
+    if re.search(
+        r"Path\s*\([^)]*\)\.(name|suffix|stem|parent|parts|exists|is_file|is_dir)\b",
+        line,
+    ):
+        return False
+    if "__file__" in line or re.search(r"\bcwd\s*=", line):
+        return False
     if not re.search(
-        r"\b(user|request|input|param|query|path|filename|file_path)\b",
+        r"(\bopen\s*\(|read_text\s*\(|write_text\s*\(|read_bytes\s*\(|write_bytes\s*\(|unlink\s*\(|mkdir\s*\(|rename\s*\(|replace\s*\(|os\.path\.join\s*\()",
+        line,
+    ):
+        return False
+    if not re.search(
+        r"\b(?:(?:user|request|input|param|query|upload|download|save|truth|history)[A-Za-z0-9_]*(?:path|file|filename|dir)?|file_path)\b",
         line,
         re.IGNORECASE,
     ):
@@ -1013,6 +1166,7 @@ def create_rules() -> list[Any]:
             anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"literal_eval"]),
             layer="hard_correctness",
             requires_context=False,
+            auto_fix=_autofix_eval,
         ),
         Rule(
             id="PY-SEC-02",
@@ -1079,6 +1233,7 @@ def create_rules() -> list[Any]:
             anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="hard_correctness",
             requires_context=False,
+            auto_fix=_autofix_mutable_default,
         ),
         Rule(
             id="PY-COR-02",
@@ -1144,6 +1299,7 @@ def create_rules() -> list[Any]:
             layer="semantic",
             requires_context=False,
             finding_type=FindingType.STRENGTHENING,
+            auto_fix=_autofix_none_comparison,
         ),
         Rule(
             id="PY-COR-05",
@@ -1214,6 +1370,7 @@ def create_rules() -> list[Any]:
             layer="semantic",
             requires_context=False,
             reasoning="Exempt == 0.0/!= 0.0 (idiomatic zero-guard) and numpy array contexts (mask ops).",
+            auto_fix=_autofix_float_equality,
         ),
         Rule(
             id="PY-COR-11",
@@ -1460,6 +1617,7 @@ def create_rules() -> list[Any]:
             requires_context=False,
             confidence=72,
             finding_type=FindingType.STRENGTHENING,
+            auto_fix=_autofix_pathlib_join,
         ),
         Rule(
             id="PY-STY-02",
@@ -1569,8 +1727,12 @@ def create_rules() -> list[Any]:
             category=Category.Security,
             description="User-controlled path reaches filesystem operation without normalization",
             fix="Resolve against a trusted base directory and reject paths that escape it.",
-            pattern=re.compile(r"\b(open|Path|os\.path\.join)\s*\("),
-            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"resolve\(", r"normpath\("]),
+            pattern=re.compile(
+                r"(\bopen\s*\(|Path\s*\([^)]*\)\.(read_text|write_text|read_bytes|write_bytes|open|unlink|mkdir|rename|replace)\s*\(|os\.path\.join\s*\()"
+            ),
+            anti_patterns=_compile_anti(
+                [r"#\\s*(?:VB|REVIEW)-IGNORE", r"resolve\(", r"normpath\(", r"__file__"]
+            ),
             guard=_check_path_traversal,
             layer="semantic",
             requires_context=False,

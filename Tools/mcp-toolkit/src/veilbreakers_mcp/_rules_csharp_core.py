@@ -84,6 +84,25 @@ def _captured_scoped_dependency(
     return False
 
 
+def _autofix_where_count(
+    line: str, _all_lines: list[str], idx: int
+) -> dict[str, object] | None:
+    match = re.search(
+        r"\.Where\s*\((?P<predicate>[^)]*)\)\.Count\s*\(\s*\)", line
+    )
+    if not match:
+        return None
+    predicate = match.group("predicate").strip()
+    replaced = (
+        f"{line[:match.start()]}.Count({predicate}){line[match.end():]}"
+    )
+    if replaced == line:
+        return None
+    return {
+        "edits": [{"start": idx, "end": idx + 1, "replacement": [replaced]}]
+    }
+
+
 RULES.extend(
     [
         _create_rule(
@@ -166,6 +185,7 @@ RULES.extend(
             finding_type=FindingType.OPTIMIZATION,
             anti_patterns=[r"//\s*(?:VB|REVIEW)-IGNORE"],
             layer="heuristic",
+            auto_fix=_autofix_where_count,
         ),
         _create_rule(
             "CS-COR-05",
