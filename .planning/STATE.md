@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
-milestone: v10.0
-milestone_name: "Total Quality: Zero Gaps Remaining"
-status: complete
-last_updated: "2026-04-05"
-last_activity: 2026-04-05
+milestone: v7.0
+milestone_name: "AAA Procedural City Production"
+status: in_progress
+last_updated: "2026-04-09"
+last_activity: 2026-04-09
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 39
-  completed_plans: 39
+  total_phases: 8
+  completed_phases: 4
+  total_plans: 35
+  completed_plans: 20
 ---
 
 # Project State: VeilBreakers GameDev Toolkit
@@ -19,62 +19,68 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-04)
 
 **Core value:** Every tool returns structured validation data and visual proof so Claude never works blind.
-**Current focus:** v10.0 COMPLETE — all 10 phases executed
+**Current focus:** v7.0 Phase execution + Quality Infrastructure
 
 ## Current Position
 
-Phase: All complete (39-48)
-Plan: All 39 plans executed
-Status: Milestone v10.0 COMPLETE
-Last activity: 2026-04-05 — All phases executed overnight
+Phase: 37 complete, 38 Task 1 complete, 43-47 in execution
+Plan: Phase execution + CODEX_WORK_SCOPE quality infrastructure
+Status: Autonomous execution in progress
+Last activity: 2026-04-09 — Phase 37 pipeline integration + quality infra
 
-Progress: [██████████] 100%
+Progress: [█████░░░░░] 50%
 
-## v10.0 Phase Summary
+## v7.0 Remaining Phase Summary
 
-| Phase | Name | Plans | Status |
-|-------|------|-------|--------|
-| 39 | Pipeline & Systemic Fixes | 5 | ✅ Complete |
-| 40 | Material & Texture Wiring | 4 | ✅ Complete |
-| 41 | Broken Generator Fixes | 3 | ✅ Complete |
-| 42 | Dead Code Wiring | 5 | ✅ Complete |
-| 43 | Geometry — Weapons/Armor/Creatures | 5 | ✅ Complete |
-| 44 | Geometry — Props/Environments/Buildings | 4 | ✅ Complete |
-| 45 | Data Safety & Integrity | 3 | ✅ Complete |
-| 46 | Export Pipeline Completion | 3 | ✅ Complete |
-| 47 | Unity Integration & Regression | 3 | ✅ Complete |
-| 48 | Starter City Generation | 4 | ✅ Complete |
+| Phase | Name | Status |
+|-------|------|--------|
+| 30 | Mesh Foundation | ✅ Verified passed |
+| 37 | Pipeline Integration | ✅ Complete (5 tasks, 13 new tests) |
+| 38 | Starter Town | ⏳ Task 1 done (code), Tasks 2-5 need Blender |
+| 43 | Geometry - Weapons/Armor/Creatures | ⏳ Agent executing |
+| 44 | Geometry - Props/Environments | ⏳ Agent executing |
+| 45 | Data Safety & Integrity | ⏳ Agent executing |
+| 46 | Export Pipeline Completion | ⏳ Agent executing |
+| 47 | Unity Integration & Regression | ⏳ Agent executing |
 
-## Hearthvale City (Generated in Blender)
+## Quality Infrastructure (CODEX_WORK_SCOPE)
 
-- Terrain: 65,536 vertices, 256x256, hydraulic erosion (8000 iterations)
-- 4 biome materials, 2 rivers, water plane at Z=2.5, 2 roads
-- Settlement: 15 buildings, castle (43 pieces), ruins
-- 4 walkable interiors (tavern, blacksmith, chapel, keep)
-- 137 vegetation instances, 5 hero props
-- **Total: 1,040 objects | 511,473 vertices | 586 materials**
-- Quality: DECENT (8/10 AAA angles pass, avg score 61.8)
-- Visual renders: C:/tmp/vb_visual_test/
+| Block | Item | Status |
+|-------|------|--------|
+| A1 | Terrain contract YAML | ✅ Complete |
+| A2 | Quality lint (L2) | ✅ Complete, verified |
+| A3 | Honesty lint (L4) | ✅ Complete, verified |
+| A4 | Contract test generator (L3) | ⏳ Agent executing |
+| A5 | Integration gate (L6) | ✅ 13 tests, all pass |
+| A6 | Test substance lint (L5) | ✅ Complete, 87% real ratio |
+| A7 | Pre-flight briefer (L1) | ✅ Complete, verified |
+| A8 | CLAUDE.md + hooks | ✅ CLAUDE.md updated |
+| A9 | Headless Blender gates | ⏭ Deferred (needs Blender) |
+| B1-B10 | Reviewer ship prep | ✅ All complete |
+| D1-D9 | Ship-critical gaps | ✅ All complete |
+
+## Test Baseline
+
+- 20,932+ tests passing (growing with each phase)
+- 2 skipped, 1 xfailed
+- Reviewer: 16 findings (advisory), 1 CRITICAL (known frozen+mutable, annotated)
 
 ## Accumulated Context
 
-### Key Decisions (v10.0)
-- ONE active pipeline — compose_world_map merged into compose_map
-- smootherstep() and safe_place_object() shared utilities created
-- Material library wired into ALL generators post-mesh
-- VEGETATION_GENERATOR_MAP replaces cube placeholders
-- Modular building kit (260 pieces) wired into building/castle generation
-- Settlement generator routes castle through 15-type system
-- 16 new Unity bridge handlers for real-time operations
-- Dark fantasy palette enforced (Saturation <40%, Value 10-50%)
+### Key Decisions (v7.0 quality session)
+- 7-layer defense-in-depth quality system implemented
+- Reviewer FP cut from 508 to 16 findings (97% noise reduction)
+- 13 bug-ratifying tests deleted (never lock bugs as features)
+- frozen+mutable Dict fields annotated as safe (callers read-only)
+- Integration gate tests run without Blender (pure Python pipeline)
 
 ### Prior Milestone Context
-- v8.0: 750+ fixes, 19,850 tests, camera/materials/architecture/export
-- v9.0 RESEARCH: 53-agent audit, V9_MASTER_FINDINGS.md (700+ items)
-- Visual audit: 41 generators tested, 0 scored DECENT+ before v10.0
+- v10.0 COMPLETE: 39 phases, Hearthvale city (1040 objects, 511K verts)
+- v8.0: 750+ fixes, 19,850 tests
+- Terrain audit: 31 P0 bugs found, quality infra built to prevent recurrence
 
 ## Session Continuity
 
-Last session: 2026-04-05
-Stopped at: v10.0 milestone complete — all phases executed
-Resume: Review visual renders, push remaining 2/10 angles to AAA
+Last session: 2026-04-09
+Stopped at: Autonomous execution — phases 43-47 agents running
+Resume: Check agent results, commit, run reviewer, push
