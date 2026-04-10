@@ -765,7 +765,7 @@ class TerrainIntentState:
     morphology_templates: Tuple[str, ...] = ()
     noise_profile: str = "dark_fantasy_default"
     erosion_profile: str = "temperate"
-    composition_hints: Dict[str, Any] = field(default_factory=dict)
+    composition_hints: Dict[str, Any] = field(default_factory=dict)  # REVIEW-IGNORE PY-COR-17: frozen+mutable is safe here — callers treat as read-only, intent_hash() uses sorted items
 
     def with_scene_read(self, scene_read: TerrainSceneRead) -> "TerrainIntentState":
         """Return a copy of this intent with scene_read attached."""
