@@ -502,6 +502,17 @@ def test_unity_export_heightmap_u16_quantized(state):
         assert arr.shape == state.mask_stack.height.shape
 
 
+def test_prepare_heightmap_raw_u16_pass_populates_channel(state):
+    from blender_addon.handlers.terrain_unity_export import pass_prepare_heightmap_raw_u16
+
+    result = pass_prepare_heightmap_raw_u16(state, None)
+
+    assert result.status == "ok"
+    assert state.mask_stack.heightmap_raw_u16 is not None
+    assert state.mask_stack.heightmap_raw_u16.dtype == np.uint16
+    assert "heightmap_raw_u16" in result.produced_channels
+
+
 # ---------------------------------------------------------------------------
 # 10. terrain_bundle_j central registrar
 # ---------------------------------------------------------------------------

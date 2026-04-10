@@ -32,6 +32,8 @@ All tools use a **compound pattern**: one tool name per domain, `action` param s
 4. **Game readiness**: Run `blender_mesh` action=`game_check` before export. Run `unity_performance` action=`profile_scene` after setup.
 5. **Use seeds** for reproducible environment/worldbuilding generation.
 6. **Batch when possible**: `asset_pipeline` action=`batch_process`, `blender_animation` action=`batch_export`.
+7. **For terrain/world work, inspect the live Blender toolchain first.** Call `asset_pipeline` with `action="inspect_external_toolchain"` and prefer `agent_contract.workflow_presets.terrain_unity_ready_free` as the default free Unity-ready terrain workflow on this PC.
+8. **Do not infer addon availability from installed files alone.** Use the returned `agent_contract.selection`, `workflow_presets`, `warnings`, and `blender_runtime` fields as the source of truth for active Blender capabilities.
 
 ## Available MCP Tools & Plugins (USE THESE)
 

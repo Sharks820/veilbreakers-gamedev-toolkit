@@ -1771,7 +1771,7 @@ def handle_setup_terrain_biome(params: dict[str, Any]) -> dict[str, Any]:
             obj.data.materials.append(mat)
 
     # Assign material indices to faces (offset by pre-existing slots)
-    slot_offset = len(obj.material_slots) - len(all_keys)
+    slot_offset = len(obj.material_slots) - len(mat_keys)
     if slot_offset < 0:
         slot_offset = 0
     material_indices = assign_terrain_materials_by_slope(mesh_data, biome_name)

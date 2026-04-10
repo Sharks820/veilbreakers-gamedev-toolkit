@@ -14,7 +14,7 @@ regressions and will be rejected in code review.
 
 ---
 
-## 0. TL;DR — The Ten Rules
+## 0. TL;DR — The Eleven Rules
 
 1. **All mutating terrain operations route through `TerrainPassController`.**
    Never call `_terrain_erosion`, `_terrain_noise`, or any mesh builder
@@ -56,6 +56,10 @@ regressions and will be rejected in code review.
 10. **`np.clip(..., 0, 1)` on world heights is a hard ban.** The only
     legal clip is to quantize `heightmap_raw_u16` against `height_min_m`
     / `height_max_m` for Unity `.raw` export.
+11. **Read the live Blender toolchain contract before planning terrain tooling.**
+    Agents must query `asset_pipeline action=inspect_external_toolchain`
+    and prefer `agent_contract.workflow_presets.terrain_unity_ready_free`
+    unless the user explicitly requests a different pipeline.
 
 ---
 
@@ -86,6 +90,22 @@ from blender_addon.handlers.terrain_masks import compute_base_masks
 ```
 
 If your file is in `handlers/` you use relative imports (`.terrain_semantics`).
+
+## 1A. Required toolchain read before terrain execution
+
+Before choosing addons, export paths, or recommended pass sequences, query the
+live external toolchain contract and treat it as authoritative.
+
+- Call `asset_pipeline` with `action="inspect_external_toolchain"`
+- Read `agent_contract.selection` for active capabilities
+- Read `agent_contract.workflow_presets.terrain_unity_ready_free` for the
+  default free Unity-ready terrain workflow on this PC
+- Read `blender_runtime` to distinguish recommended production Blender from
+  experimental installs
+- Treat `warnings` and `disabled_but_installed` as capability constraints, not
+  as optional noise
+
+Do not assume an addon is usable just because its files exist on disk.
 
 ## 2. Anatomy of a compliant pass
 

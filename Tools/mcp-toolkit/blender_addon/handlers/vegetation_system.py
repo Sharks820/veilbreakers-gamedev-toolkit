@@ -782,6 +782,7 @@ def scatter_biome_vegetation(
     templates: dict[str, Any] = {}
 
     veg_counts: dict[str, int] = {}
+    from .environment_scatter import _setup_billboard_lod
 
     veg_types_needed = set(p["type"] for p in placements)
     for veg_type in veg_types_needed:

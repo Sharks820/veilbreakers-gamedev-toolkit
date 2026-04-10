@@ -26,12 +26,14 @@ from . import (
     terrain_ecotone_graph,
     terrain_gameplay_zones,
     terrain_navmesh_export,
+    terrain_unity_export,
     terrain_wildlife_zones,
     terrain_wind_field,
 )
 
 
 BUNDLE_J_PASSES = (
+    "prepare_heightmap_raw_u16",
     "audio_zones",
     "wildlife_zones",
     "gameplay_zones",
@@ -44,7 +46,8 @@ BUNDLE_J_PASSES = (
 
 
 def register_bundle_j_passes() -> None:
-    """Register all eight Bundle J passes on the TerrainPassController."""
+    """Register all Bundle J passes on the TerrainPassController."""
+    terrain_unity_export.register_bundle_j_heightmap_u16_pass()
     terrain_audio_zones.register_bundle_j_audio_zones_pass()
     terrain_wildlife_zones.register_bundle_j_wildlife_zones_pass()
     terrain_gameplay_zones.register_bundle_j_gameplay_zones_pass()

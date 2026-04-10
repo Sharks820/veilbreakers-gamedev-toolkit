@@ -222,13 +222,21 @@ def _map_severity(sev: str) -> str:
 def _map_ruff_severity(code: str) -> str:
     if not code:
         return "MEDIUM"
-    prefix = code[0] if code else ""
-    # E=error, W=warning, F=pyflakes, B=bugbear, S=security
-    if prefix in ("E", "F"):
+    normalized = code.upper()
+    prefix = normalized[0]
+    if normalized in {"E402", "E701", "E741", "F401", "F541", "F841"}:
+        return "LOW"
+    if prefix == "S":
         return "HIGH"
-    if prefix in ("S", "B"):
+    if normalized.startswith("B9"):
         return "HIGH"
-    return "MEDIUM"
+    if normalized in {"E902", "E999", "F821", "F822", "F823", "F831"}:
+        return "HIGH"
+    if prefix in ("F", "B"):
+        return "MEDIUM"
+    if prefix in ("E", "W"):
+        return "LOW"
+    return "LOW"
 
 
 # =============================================================================
