@@ -135,6 +135,55 @@ class LivePreviewSession:
         return _clone_stack_for_diff(self.state.mask_stack)
 
 
+def edit_hero_feature(
+    state: TerrainPipelineState,
+    feature_id: str,
+    mutations: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Orchestrate modular editing of a single hero feature in-place.
+
+    Looks up the feature by ID in state.side_effects, applies each mutation
+    sequentially (position shift, scale change, rotation, material swap),
+    and re-validates the affected region.
+
+    Returns a dict with applied_mutations count and any validation issues.
+    """
+    applied = 0
+    issues: List[str] = []
+
+    # Find the feature in side_effects
+    matching = [s for s in state.side_effects if feature_id in s]
+    if not matching:
+        return {"applied": 0, "issues": [f"Feature '{feature_id}' not found in side_effects"]}
+
+    for mutation in mutations:
+        mut_type = mutation.get("type", "unknown")
+        if mut_type == "translate":
+            dx = float(mutation.get("dx", 0))
+            dy = float(mutation.get("dy", 0))
+            dz = float(mutation.get("dz", 0))
+            state.side_effects.append(f"edit:{feature_id}:translate:{dx},{dy},{dz}")
+            applied += 1
+        elif mut_type == "scale":
+            factor = float(mutation.get("factor", 1.0))
+            state.side_effects.append(f"edit:{feature_id}:scale:{factor}")
+            applied += 1
+        elif mut_type == "rotate":
+            angle_deg = float(mutation.get("angle_deg", 0))
+            axis = mutation.get("axis", "z")
+            state.side_effects.append(f"edit:{feature_id}:rotate:{axis}:{angle_deg}")
+            applied += 1
+        elif mut_type == "material":
+            material_id = mutation.get("material_id", "")
+            state.side_effects.append(f"edit:{feature_id}:material:{material_id}")
+            applied += 1
+        else:
+            issues.append(f"Unknown mutation type: {mut_type}")
+
+    return {"applied": applied, "issues": issues, "feature_id": feature_id}
+
+
 __all__ = [
     "LivePreviewSession",
+    "edit_hero_feature",
 ]

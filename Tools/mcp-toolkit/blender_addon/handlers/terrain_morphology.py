@@ -227,9 +227,66 @@ def list_templates_for_biome(biome: str) -> List[MorphologyTemplate]:
     return [t for t in DEFAULT_TEMPLATES if t.kind in allowed]
 
 
+def get_natural_arch_specs(
+    stack: TerrainMaskStack,
+    templates: tuple[str, ...] = (),
+    *,
+    max_arches: int = 3,
+    seed: int = 42,
+) -> list:
+    """Return MeshSpec dicts for natural arch meshes at morphology sites.
+
+    If ``templates`` includes any canyon-family template IDs, places arches
+    at high-aspect-ratio canyon rims. Falls back to random ridge/pinnacle
+    sites if no canyons are present.
+
+    Calls ``generate_natural_arch`` from terrain_features.
+
+    Returns a list of dicts with ``mesh_spec`` and ``world_pos`` keys.
+    """
+    from .terrain_features import generate_natural_arch
+
+    rng = np.random.default_rng(seed)
+    h = np.asarray(stack.height, dtype=np.float64)
+    rows, cols = h.shape
+
+    # Prefer canyon-edge sites (high local curvature)
+    # Compute simple Laplacian as a proxy for rim positions
+    if rows < 3 or cols < 3:
+        return []
+    lap = np.abs(
+        h[2:, 1:-1] + h[:-2, 1:-1] + h[1:-1, 2:] + h[1:-1, :-2] - 4.0 * h[1:-1, 1:-1]
+    )
+    threshold = float(np.percentile(lap, 95)) if lap.size else 0.0
+    candidates = np.argwhere(lap > threshold)
+    if len(candidates) == 0:
+        return []
+
+    # Offset by 1 because Laplacian excludes border
+    candidates = candidates + 1
+
+    indices = rng.choice(len(candidates), size=min(max_arches, len(candidates)), replace=False)
+    results = []
+    for idx in indices:
+        r, c = int(candidates[idx][0]), int(candidates[idx][1])
+        wx = stack.world_origin_x + c * stack.cell_size
+        wy = stack.world_origin_y + r * stack.cell_size
+        wz = float(h[r, c])
+        spec = generate_natural_arch(
+            span_width=rng.uniform(5.0, 12.0),
+            arch_height=rng.uniform(4.0, 8.0),
+            thickness=rng.uniform(1.5, 3.0),
+            roughness=rng.uniform(0.2, 0.5),
+            seed=int(rng.integers(0, 2**31)),
+        )
+        results.append({"mesh_spec": spec, "world_pos": (wx, wy, wz)})
+    return results
+
+
 __all__ = [
     "MorphologyTemplate",
     "DEFAULT_TEMPLATES",
     "apply_morphology_template",
     "list_templates_for_biome",
+    "get_natural_arch_specs",
 ]

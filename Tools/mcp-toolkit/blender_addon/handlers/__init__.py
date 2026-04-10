@@ -270,6 +270,9 @@ from .terrain_features import (  # noqa: F401 -- terrain feature generators
     generate_ice_formation,
     generate_lava_flow,
 )
+from ._terrain_depth import (  # noqa: F401 -- cave entrance mesh generator
+    generate_cave_entrance_mesh,
+)
 from .modular_building_kit import (  # noqa: F401 -- modular building kit (260 pieces)
     generate_modular_piece,
     assemble_building,
@@ -1191,6 +1194,15 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         stalactite_count=params.get("stalactite_count", 8),
         ice_wall=params.get("ice_wall", True),
         seed=params.get("seed", 42),
+    ),
+    "env_generate_cave_entrance": lambda params: generate_cave_entrance_mesh(
+        width=params.get("width", 4.0),
+        height=params.get("height", 4.0),
+        depth=params.get("depth", 3.0),
+        arch_segments=params.get("arch_segments", 12),
+        terrain_edge_height=params.get("terrain_edge_height", 0.0),
+        style=params.get("style", "natural"),
+        seed=params.get("seed", 0),
     ),
     "env_generate_lava_flow": lambda params: generate_lava_flow(
         length=params.get("length", 30.0),
