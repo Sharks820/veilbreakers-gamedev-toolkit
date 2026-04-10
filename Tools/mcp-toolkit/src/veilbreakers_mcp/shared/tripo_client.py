@@ -51,7 +51,7 @@ async def _download_file(url: str, output_path: str, max_retries: int = 3) -> st
             validation = validate_generated_model_file(downloaded)
             if not validation.get("valid", False):
                 try:
-                    Path(downloaded).unlink(missing_ok=True)
+                    Path(downloaded).unlink(missing_ok=True)  # REVIEW-IGNORE PY-SEC-08: downloaded is from our own _do_download, not user input
                 except OSError:
                     pass
                 raise RuntimeError(
