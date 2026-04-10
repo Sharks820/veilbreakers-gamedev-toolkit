@@ -48,6 +48,10 @@ def poisson_disk_sample(
     list of (x, y) tuples
         Points within the specified bounds.
     """
+    if width <= 0 or depth <= 0:
+        return []
+    if min_distance <= 0:
+        return []
     rng = random.Random(seed)
 
     cell_size = min_distance / math.sqrt(2)
@@ -130,6 +134,8 @@ def biome_filter_points(
     slope_map: Any,  # np.ndarray
     rules: list[dict[str, Any]],
     terrain_size: float = 100.0,
+    terrain_width: float | None = None,
+    terrain_depth: float | None = None,
     seed: int = 0,
     max_tilt_angle: float = 90.0,
     moisture_map: Any | None = None,  # optional np.ndarray
@@ -149,7 +155,12 @@ def biome_filter_points(
         scale_range (tuple), density (0-1 probability of keeping).
         Optional per-rule keys: min_moisture, max_moisture (0-1).
     terrain_size : float
-        World-space size of terrain for coordinate mapping.
+        Backward-compatible square terrain extent used when axis-specific
+        dimensions are not provided.
+    terrain_width : float | None
+        Optional world-space width of terrain for X coordinate mapping.
+    terrain_depth : float | None
+        Optional world-space depth of terrain for Y coordinate mapping.
     seed : int
         Random seed for density and scale/rotation randomization.
     max_tilt_angle : float
@@ -169,11 +180,13 @@ def biome_filter_points(
     rng = random.Random(seed)
     placements: list[dict[str, Any]] = []
     rows, cols = heightmap.shape
+    width = max(float(terrain_width if terrain_width is not None else terrain_size), 1e-9)
+    depth = max(float(terrain_depth if terrain_depth is not None else terrain_size), 1e-9)
 
     for x, y in points:
         # Map world position to heightmap indices
-        u = x / terrain_size
-        v = y / terrain_size
+        u = x / width
+        v = y / depth
         col_idx = int(u * (cols - 1))
         row_idx = int(v * (rows - 1))
         col_idx = max(0, min(col_idx, cols - 1))
@@ -261,35 +274,35 @@ PROP_AFFINITY: dict[str, list[tuple[str, float]]] = {
         ("bench", 0.2),
         ("mug", 0.15),
         ("lantern", 0.1),
-        ("crate", 0.1),
+        ("crate", 0.25),  # normalized: was 0.1, sum was 0.85 → adjusted to 0.25
     ],
     "dock": [
         ("crate", 0.3),
         ("rope_coil", 0.2),
         ("barrel", 0.15),
         ("anchor", 0.1),
-        ("lantern", 0.05),
+        ("lantern", 0.25),  # normalized: was 0.05, sum was 0.80 → adjusted to 0.25
     ],
     "blacksmith": [
         ("anvil", 0.2),
         ("weapon_rack", 0.2),
         ("coal_pile", 0.15),
         ("barrel", 0.1),
-        ("crate", 0.1),
+        ("crate", 0.35),  # normalized: was 0.1, sum was 0.75 → adjusted to 0.35
     ],
     "graveyard": [
         ("tombstone", 0.3),
         ("dead_tree", 0.15),
         ("lantern", 0.1),
         ("fence", 0.1),
-        ("pot", 0.05),
+        ("pot", 0.35),  # normalized: was 0.05, sum was 0.70 → adjusted to 0.35
     ],
     "market": [
         ("crate", 0.25),
         ("barrel", 0.2),
         ("cart", 0.15),
         ("bench", 0.1),
-        ("lantern", 0.1),
+        ("lantern", 0.30),  # normalized: was 0.1, sum was 0.80 → adjusted to 0.30
     ],
 }
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import math
 
 from veilbreakers_mcp.blender_server import (
@@ -16,7 +17,9 @@ from veilbreakers_mcp.blender_server import (
     _should_validate_world_mesh,
     _world_quality_family,
     _world_quality_prefixes,
+    asset_pipeline,
 )
+from blender_addon.handlers.pipeline_state import get_remaining_steps
 
 
 def _distance(a: tuple[float, float], b: tuple[float, float]) -> float:
@@ -36,6 +39,15 @@ class TestMapPlacementPlanning:
 
     def test_map_point_to_terrain_cell_converts_unsigned_space(self):
         point = _map_point_to_terrain_cell((150.0, 50.0), terrain_size=200.0, resolution=201)
+        assert point == (50, 150)
+
+    def test_map_point_to_terrain_cell_respects_terrain_location(self):
+        point = _map_point_to_terrain_cell(
+            (250.0, 150.0),
+            terrain_size=200.0,
+            resolution=201,
+            terrain_location=(100.0, 100.0),
+        )
         assert point == (50, 150)
 
     def test_anchor_planner_keeps_locations_apart(self):
@@ -66,6 +78,29 @@ class TestMapPlacementPlanning:
         })
 
         assert placements[0]["anchor"] == (40.0, -20.0)
+
+    def test_anchor_planner_respects_terrain_location(self):
+        placements = _plan_map_location_anchors({
+            "terrain": {"size": 200.0, "location": [100.0, 100.0]},
+            "locations": [
+                {"name": "Gate", "type": "building", "position": [140.0, 80.0]},
+            ],
+        })
+
+        assert placements[0]["anchor"] == (140.0, 80.0)
+
+    def test_anchor_planner_clamps_explicit_world_positions_to_centered_bounds(self):
+        placements = _plan_map_location_anchors({
+            "terrain": {"size": 200.0, "location": [100.0, 100.0]},
+            "locations": [
+                {"name": "Outpost", "type": "building", "position": [260.0, -40.0]},
+            ],
+        })
+
+        ax, ay = placements[0]["anchor"]
+        radius = placements[0]["radius"]
+        assert ax == 200.0 - radius
+        assert ay == 0.0 + radius
 
     def test_budget_defaults_to_balanced_pc_for_regular_region(self):
         budget = _resolve_map_generation_budget({
@@ -215,3 +250,40 @@ class TestInteriorPlanning:
         assert len(plan["doors"]) == 1
         assert plan["doors"][0]["facing"] == "south"
         assert plan["building_bounds"]["max"][0] > plan["building_bounds"]["min"][0]
+
+
+class TestComposeMapCheckpointParams:
+    """Verify checkpoint/resume params are wired into asset_pipeline (Task 2)."""
+
+    def test_compose_map_checkpoint_params_accepted(self):
+        """asset_pipeline signature accepts checkpoint_dir, resume, force_restart
+        without TypeError -- these are keyword params with defaults."""
+        sig = inspect.signature(asset_pipeline)
+        param_names = set(sig.parameters.keys())
+        assert "checkpoint_dir" in param_names
+        assert "resume" in param_names
+        assert "force_restart" in param_names
+        # Verify defaults so callers need not supply them
+        assert sig.parameters["checkpoint_dir"].default is None
+        assert sig.parameters["resume"].default is False
+        assert sig.parameters["force_restart"].default is False
+
+    def test_resume_skips_completed_steps_in_state(self):
+        """get_remaining_steps correctly filters out already-completed steps,
+        which is the core logic used by compose_map to skip work on resume."""
+        all_steps = [
+            "scene_cleared",
+            "terrain_generated",
+            "water_plane",
+            "roads",
+            "locations",
+            "vegetation_scattered",
+        ]
+        checkpoint = {
+            "steps_completed": ["scene_cleared", "terrain_generated", "water_plane"],
+        }
+        remaining = get_remaining_steps(checkpoint, all_steps)
+        assert remaining == ["roads", "locations", "vegetation_scattered"]
+        # Verify no completed step leaks through
+        for completed in checkpoint["steps_completed"]:
+            assert completed not in remaining

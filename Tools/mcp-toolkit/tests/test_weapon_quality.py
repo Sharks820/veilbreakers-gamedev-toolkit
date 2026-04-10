@@ -44,6 +44,26 @@ QUALITY_GENERATORS = _mod.QUALITY_GENERATORS
 
 
 # ---------------------------------------------------------------------------
+# Reference dimension ranges (real-world measurements in metres)
+# ---------------------------------------------------------------------------
+
+WEAPON_REFERENCE_DIMENSIONS = {
+    "longsword": {"total_length": (0.95, 1.20), "blade_width": (0.045, 0.070),
+                  "guard_width": (0.18, 0.28), "grip_length": (0.18, 0.25)},
+    "greatsword": {"total_length": (1.3, 1.6), "blade_width": (0.06, 0.10)},
+    "battle_axe": {"total_length": (0.7, 1.0), "head_width": (0.15, 0.25)},
+    "round_shield": {"diameter": (0.50, 1.00), "boss_height": (0.05, 0.10)},
+    "kite_shield": {"height": (0.80, 1.20), "width": (0.50, 0.70)},
+}
+
+ARMOR_REFERENCE_DIMENSIONS = {
+    "pauldron": {"width": (0.15, 0.22), "height": (0.12, 0.18)},
+    "chestplate": {"width": (0.35, 0.45), "height": (0.40, 0.55)},
+    "gauntlet": {"length": (0.25, 0.35), "width": (0.10, 0.14)},
+}
+
+
+# ---------------------------------------------------------------------------
 # Validation helpers
 # ---------------------------------------------------------------------------
 
@@ -727,3 +747,99 @@ class TestCrossCutting:
                 assert len(set(face)) == len(face), (
                     f"{gen_name}: face {fi} has duplicate indices: {face}"
                 )
+
+
+# ---------------------------------------------------------------------------
+# AAA VERTEX-COUNT THRESHOLD TESTS (xfail until geometry overhaul)
+# ---------------------------------------------------------------------------
+
+class TestAAAThresholds:
+    """AAA vertex count thresholds -- xfail until geometry overhaul completes."""
+
+    @pytest.mark.xfail(reason="GEOM-01: sword needs 2000-3000 verts", strict=False)
+    def test_sword_aaa_verts(self):
+        result = generate_quality_sword(style="longsword")
+        validate_mesh_spec(result, "sword_aaa", min_verts=1500)
+
+    @pytest.mark.xfail(reason="GEOM-01: axe needs 1500-2500 verts", strict=False)
+    def test_axe_aaa_verts(self):
+        result = generate_quality_axe(style="battle_axe")
+        validate_mesh_spec(result, "axe_aaa", min_verts=1000)
+
+    @pytest.mark.xfail(reason="GEOM-01: mace needs 1500-2500 verts", strict=False)
+    def test_mace_aaa_verts(self):
+        result = generate_quality_mace(style="flanged")
+        validate_mesh_spec(result, "mace_aaa", min_verts=1500)
+
+    @pytest.mark.xfail(reason="GEOM-01: bow needs 1000-2000 verts", strict=False)
+    def test_bow_aaa_verts(self):
+        result = generate_quality_bow(style="longbow")
+        validate_mesh_spec(result, "bow_aaa", min_verts=1000)
+
+    @pytest.mark.xfail(reason="GEOM-01: shield needs 1500-2500 verts", strict=False)
+    def test_shield_aaa_verts(self):
+        result = generate_quality_shield(style="round")
+        validate_mesh_spec(result, "shield_aaa", min_verts=1500)
+
+    @pytest.mark.xfail(reason="GEOM-01: staff needs 1000-2000 verts", strict=False)
+    def test_staff_aaa_verts(self):
+        result = generate_quality_staff(style="gnarled")
+        validate_mesh_spec(result, "staff_aaa", min_verts=1000)
+
+    @pytest.mark.xfail(reason="GEOM-02: pauldron needs 1500-2500 verts", strict=False)
+    def test_pauldron_aaa_verts(self):
+        result = generate_quality_pauldron()
+        validate_mesh_spec(result, "pauldron_aaa", min_verts=1200)
+
+    @pytest.mark.xfail(reason="GEOM-02: chestplate needs 2000-4000 verts", strict=False)
+    def test_chestplate_aaa_verts(self):
+        result = generate_quality_chestplate()
+        validate_mesh_spec(result, "chestplate_aaa", min_verts=2000)
+
+    @pytest.mark.xfail(reason="GEOM-02: gauntlet needs 1500-2500 verts", strict=False)
+    def test_gauntlet_aaa_verts(self):
+        result = generate_quality_gauntlet()
+        validate_mesh_spec(result, "gauntlet_aaa", min_verts=1500)
+
+
+# ---------------------------------------------------------------------------
+# WEAPON DIMENSION REFERENCE TESTS
+# ---------------------------------------------------------------------------
+
+class TestWeaponDimensions:
+    """Verify weapon dimensions match real-world reference ranges."""
+
+    def test_longsword_total_length(self):
+        result = generate_quality_sword(style="longsword")
+        dims = result["metadata"]["dimensions"]
+        total = dims["height"]  # Y is length axis in weapon_quality.py
+        ref = WEAPON_REFERENCE_DIMENSIONS["longsword"]["total_length"]
+        assert ref[0] <= total <= ref[1], (
+            f"Longsword length {total:.3f}m outside reference {ref}"
+        )
+
+    def test_round_shield_diameter(self):
+        result = generate_quality_shield(style="round")
+        dims = result["metadata"]["dimensions"]
+        diameter = max(dims["width"], dims["depth"])
+        ref = WEAPON_REFERENCE_DIMENSIONS["round_shield"]["diameter"]
+        assert ref[0] <= diameter <= ref[1], (
+            f"Round shield diameter {diameter:.3f}m outside reference {ref}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# GAUNTLET ARTICULATION TESTS
+# ---------------------------------------------------------------------------
+
+class TestGauntletArticulation:
+    """Gauntlet must have articulated fingers."""
+
+    @pytest.mark.xfail(reason="GEOM-02: gauntlet needs finger vertex groups", strict=False)
+    def test_gauntlet_has_finger_groups(self):
+        result = generate_quality_gauntlet()
+        groups = result.get("vertex_groups", {})
+        finger_groups = [k for k in groups if "finger" in k.lower()]
+        assert len(finger_groups) >= 5, (
+            f"Gauntlet has {len(finger_groups)} finger groups, need >= 5"
+        )

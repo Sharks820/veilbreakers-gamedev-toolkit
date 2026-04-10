@@ -202,12 +202,30 @@ class TestAaaVerifyMap:
         assert result["per_angle"][0]["passed"] is False
 
     def test_empty_path_list(self):
-        """aaa_verify_map handles empty list gracefully."""
+        """aaa_verify_map hard-fails when no screenshots are supplied."""
         from veilbreakers_mcp.shared.visual_validation import aaa_verify_map
         result = aaa_verify_map([])
         assert result["total_score"] == 0.0
-        assert result["passed"] is True  # no angles = no failures
+        assert result["passed"] is False
         assert result["failed_angles"] == []
+        assert "No screenshots supplied" in result["issues"][0]
+
+    def test_missing_required_angles_fails(self, tmp_path):
+        """aaa_verify_map reports missing required angles explicitly."""
+        from veilbreakers_mcp.shared.visual_validation import aaa_verify_map
+
+        p = str(tmp_path / "angle_0.png")
+        _make_rich_image(p)
+        result = aaa_verify_map(
+            [p],
+            min_score=10,
+            required_angle_count=3,
+            angle_labels=["front", "back", "top"],
+        )
+
+        assert result["passed"] is False
+        assert result["missing_angles"] == ["back", "top"]
+        assert result["failed_angles"] == [1, 2]
 
 
 # ---------------------------------------------------------------------------

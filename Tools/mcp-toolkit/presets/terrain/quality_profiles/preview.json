@@ -1,0 +1,11 @@
+{
+  "name": "preview",
+  "extends": null,
+  "erosion_iterations": 2,
+  "erosion_strategy": "hydraulic_fast",
+  "checkpoint_retention": 2,
+  "erosion_margin_cells": 4,
+  "splatmap_bit_depth": 8,
+  "heightmap_bit_depth": 16,
+  "shadow_clipmap_bit_depth": 8
+}

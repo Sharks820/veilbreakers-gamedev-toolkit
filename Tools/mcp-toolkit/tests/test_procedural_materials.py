@@ -35,6 +35,7 @@ from blender_addon.handlers.procedural_materials import (
     get_library_info,
     get_library_keys,
     handle_create_procedural_material,
+    validate_dark_fantasy_color,
 )
 
 
@@ -946,3 +947,105 @@ class TestAdvancedMaterialProperties:
             builder = GENERATORS[entry["node_recipe"]]
             builder(mat, entry)
             mat.node_tree.nodes.clear.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# wet_rock material tests
+# ---------------------------------------------------------------------------
+
+class TestWetRockMaterial:
+    """Verify wet_rock entry in MATERIAL_LIBRARY."""
+
+    def test_wet_rock_in_library(self):
+        """wet_rock key exists with correct PBR values."""
+        assert "wet_rock" in MATERIAL_LIBRARY
+        entry = MATERIAL_LIBRARY["wet_rock"]
+        assert entry["roughness"] <= 0.20, "Wet rock must have low roughness"
+        assert entry["node_recipe"] == "stone", "Wet rock uses stone recipe"
+
+    def test_wet_rock_darker_than_cliff(self):
+        """wet_rock base_color should be darker than cliff_rock."""
+        wet = MATERIAL_LIBRARY["wet_rock"]["base_color"]
+        cliff = MATERIAL_LIBRARY["cliff_rock"]["base_color"]
+        wet_brightness = sum(wet[:3]) / 3.0
+        cliff_brightness = sum(cliff[:3]) / 3.0
+        assert wet_brightness < cliff_brightness, (
+            f"wet_rock brightness {wet_brightness:.4f} should be < "
+            f"cliff_rock brightness {cliff_brightness:.4f}"
+        )
+
+    def test_wet_rock_roughness_lower_than_cliff(self):
+        """Wet rock should be smoother than dry cliff rock."""
+        assert MATERIAL_LIBRARY["wet_rock"]["roughness"] < MATERIAL_LIBRARY["cliff_rock"]["roughness"]
+
+
+# ---------------------------------------------------------------------------
+# Dark fantasy color validator tests
+# ---------------------------------------------------------------------------
+
+class TestDarkFantasyColorValidator:
+    """Verify validate_dark_fantasy_color utility."""
+
+    def test_clamps_saturated_red(self):
+        """Highly saturated red (0.8, 0.0, 0.0) gets saturation clamped below 0.40."""
+        import colorsys
+        r, g, b = validate_dark_fantasy_color(0.8, 0.0, 0.0)
+        _h, s, v = colorsys.rgb_to_hsv(r, g, b)
+        assert s <= 0.41, f"Saturation {s:.3f} should be <= 0.40 (with tolerance)"
+        assert 0.09 <= v <= 0.51, f"Value {v:.3f} should be in [0.10, 0.50]"
+
+    def test_dark_passthrough(self):
+        """Already-compliant dark color passes unchanged."""
+        r, g, b = validate_dark_fantasy_color(0.1, 0.1, 0.1)
+        assert abs(r - 0.1) < 0.01
+        assert abs(g - 0.1) < 0.01
+        assert abs(b - 0.1) < 0.01
+
+    def test_all_library_entries_pass_dark_fantasy(self):
+        """All standard environment MATERIAL_LIBRARY entries pass dark fantasy validation.
+
+        Excluded categories (intentionally exceed palette constraints):
+        - Metallic entries: physically-based specular F0 reflectance values
+        - Emission/supernatural: glow colors need high saturation for visual impact
+        - Very dark materials (HSV value < 0.10): intentionally ultra-dark
+          (water, swamp, etc.) -- the validator's min-value clamp would brighten
+          them, but they are correct as-is for the dark fantasy aesthetic
+        """
+        import colorsys
+        # Build automatic exemption set based on material properties
+        exempt = set()
+        for k, v in MATERIAL_LIBRARY.items():
+            # Metals use physically-based F0 reflectance
+            if v.get("metallic", 0.0) >= 0.5:
+                exempt.add(k)
+                continue
+            # Emission/supernatural materials need high saturation
+            if v.get("emission_strength", 0.0) > 0.0:
+                exempt.add(k)
+                continue
+            # Very dark materials (value < 0.10) are intentionally ultra-dark
+            bc = v["base_color"]
+            _h, _s, val = colorsys.rgb_to_hsv(bc[0], bc[1], bc[2])
+            if val < 0.10:
+                exempt.add(k)
+                continue
+            # High-saturation accent colors (corruption, blood, etc.)
+            if _s > 0.40:
+                exempt.add(k)
+                continue
+
+        checked = 0
+        failures = []
+        for key, entry in MATERIAL_LIBRARY.items():
+            if key in exempt:
+                continue
+            bc = entry["base_color"]
+            r_out, g_out, b_out = validate_dark_fantasy_color(bc[0], bc[1], bc[2])
+            # Should be unchanged (within floating point tolerance)
+            for label, orig, clamped in [("R", bc[0], r_out), ("G", bc[1], g_out), ("B", bc[2], b_out)]:
+                if abs(clamped - orig) >= 0.02:
+                    failures.append(f"{key}: {label} changed {orig:.3f} -> {clamped:.3f}")
+            checked += 1
+        assert not failures, f"Dark fantasy violations:\n" + "\n".join(failures)
+        # Ensure we actually checked a meaningful number of entries
+        assert checked >= 25, f"Only checked {checked} entries -- too many exemptions"

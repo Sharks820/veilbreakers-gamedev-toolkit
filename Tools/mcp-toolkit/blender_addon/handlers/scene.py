@@ -16,7 +16,9 @@ Provides:
 
 from __future__ import annotations
 
+import hashlib
 import math
+from pathlib import Path
 
 import bpy
 
@@ -327,6 +329,132 @@ def _validate_set_visibility_params(params: dict) -> dict:
     }
 
 
+def _validate_project_save_params(params: dict) -> dict:
+    """Validate and normalize Blender project save parameters."""
+    filepath = params.get("filepath")
+    if filepath is not None:
+        if not isinstance(filepath, str) or not filepath.strip():
+            raise ValueError("filepath must be a non-empty string when provided")
+        filepath = filepath.strip()
+
+    incremental = params.get("incremental", False)
+    if not isinstance(incremental, bool):
+        raise ValueError(f"incremental must be a boolean, got {type(incremental).__name__}")
+
+    copy = params.get("copy", False)
+    if not isinstance(copy, bool):
+        raise ValueError(f"copy must be a boolean, got {type(copy).__name__}")
+
+    compress = params.get("compress", True)
+    if not isinstance(compress, bool):
+        raise ValueError(f"compress must be a boolean, got {type(compress).__name__}")
+
+    verify = params.get("verify", True)
+    if not isinstance(verify, bool):
+        raise ValueError(f"verify must be a boolean, got {type(verify).__name__}")
+
+    compute_hash = params.get("compute_hash", False)
+    if not isinstance(compute_hash, bool):
+        raise ValueError(f"compute_hash must be a boolean, got {type(compute_hash).__name__}")
+
+    return {
+        "filepath": filepath,
+        "incremental": incremental,
+        "copy": copy,
+        "compress": compress,
+        "verify": verify,
+        "compute_hash": compute_hash,
+    }
+
+
+def _validate_project_verify_params(params: dict) -> dict:
+    """Validate and normalize Blender project save verification parameters."""
+    filepath = params.get("filepath")
+    if filepath is not None:
+        if not isinstance(filepath, str) or not filepath.strip():
+            raise ValueError("filepath must be a non-empty string when provided")
+        filepath = filepath.strip()
+
+    compute_hash = params.get("compute_hash", False)
+    if not isinstance(compute_hash, bool):
+        raise ValueError(f"compute_hash must be a boolean, got {type(compute_hash).__name__}")
+
+    expect_current_file = params.get("expect_current_file", False)
+    if not isinstance(expect_current_file, bool):
+        raise ValueError(
+            f"expect_current_file must be a boolean, got {type(expect_current_file).__name__}"
+        )
+
+    return {
+        "filepath": filepath,
+        "compute_hash": compute_hash,
+        "expect_current_file": expect_current_file,
+    }
+
+
+def _next_incremental_blend_path(filepath: str) -> str:
+    """Return the next available numbered .blend path."""
+    path = Path(filepath)
+    stem = path.stem
+    suffix = path.suffix or ".blend"
+    parent = path.parent
+    counter = 1
+    while True:
+        candidate = parent / f"{stem}_v{counter:03d}{suffix}"
+        if not candidate.exists():
+            return str(candidate)
+        counter += 1
+
+
+def _sha256_file(filepath: str) -> str:
+    """Compute SHA-256 for a file on disk."""
+    digest = hashlib.sha256()
+    with open(filepath, "rb") as f:
+        while True:
+            chunk = f.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _build_project_file_status(
+    filepath: str,
+    *,
+    compute_hash: bool = False,
+    expect_current_file: bool = False,
+    current_filepath: str = "",
+) -> dict:
+    """Build a verification record for a saved .blend file."""
+    path = Path(filepath)
+    exists = path.exists()
+    info = {
+        "filepath": str(path),
+        "exists": exists,
+        "is_blend_file": path.suffix.lower() == ".blend",
+        "current_blend_filepath": current_filepath or "",
+    }
+    if not exists:
+        info["verified"] = False
+        info["reason"] = "file_missing"
+        return info
+
+    stat = path.stat()
+    info["size_bytes"] = stat.st_size
+    info["modified_time_ns"] = stat.st_mtime_ns
+    info["verified"] = stat.st_size > 0
+    if stat.st_size <= 0:
+        info["reason"] = "file_empty"
+    if expect_current_file:
+        info["current_file_matches"] = str(path) == (current_filepath or "")
+        if not info["current_file_matches"]:
+            info["verified"] = False
+            info["reason"] = "current_file_mismatch"
+    if compute_hash and info["verified"]:
+        info["sha256"] = _sha256_file(str(path))
+    return info
+
+
 # ---------------------------------------------------------------------------
 # Blender handlers (require bpy at runtime)
 # ---------------------------------------------------------------------------
@@ -351,6 +479,9 @@ def handle_get_scene_info(params: dict) -> dict:
         "frame_start": scene.frame_start,
         "frame_end": scene.frame_end,
         "unit_scale": scene.unit_settings.scale_length,
+        "current_blend_filepath": bpy.data.filepath,
+        "project_is_saved": bool(getattr(bpy.data, "is_saved", False)),
+        "has_unsaved_changes": bool(getattr(bpy.data, "is_dirty", False)),
     }
 
 
@@ -360,6 +491,73 @@ def handle_clear_scene(params: dict) -> dict:
     for obj in list(bpy.data.objects):
         bpy.data.objects.remove(obj, do_unlink=True)
     return {"cleared": True, "objects_removed": count}
+
+
+def handle_save_project(params: dict) -> dict:
+    """Save the current Blender project to disk and optionally verify it."""
+    validated = _validate_project_save_params(params)
+    current_filepath = bpy.data.filepath
+    target_filepath = validated["filepath"] or current_filepath
+    if not target_filepath:
+        raise ValueError("filepath is required when the current project has not been saved yet")
+
+    if validated["incremental"]:
+        target_filepath = _next_incremental_blend_path(target_filepath)
+
+    target_path = Path(target_filepath)
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    pre_exists = target_path.exists()
+
+    if current_filepath and Path(current_filepath) == target_path and not validated["copy"]:
+        result_code = bpy.ops.wm.save_mainfile(check_existing=False, compress=validated["compress"])
+    else:
+        result_code = bpy.ops.wm.save_as_mainfile(
+            filepath=str(target_path),
+            check_existing=False,
+            copy=validated["copy"],
+            compress=validated["compress"],
+        )
+
+    current_after = bpy.data.filepath
+    result = {
+        "action": "save_project",
+        "filepath": str(target_path),
+        "result_code": list(result_code),
+        "used_incremental_path": validated["incremental"],
+        "copy_only": validated["copy"],
+        "overwrote_existing": pre_exists,
+        "current_blend_filepath": current_after,
+        "has_unsaved_changes": bool(getattr(bpy.data, "is_dirty", False)),
+    }
+    if validated["verify"]:
+        result["verification"] = _build_project_file_status(
+            str(target_path),
+            compute_hash=validated["compute_hash"],
+            expect_current_file=not validated["copy"],
+            current_filepath=current_after,
+        )
+    return result
+
+
+def handle_verify_project_save(params: dict) -> dict:
+    """Verify that a .blend file exists on disk and matches the active file when requested."""
+    validated = _validate_project_verify_params(params)
+    current_filepath = bpy.data.filepath
+    target_filepath = validated["filepath"] or current_filepath
+    if not target_filepath:
+        raise ValueError("filepath is required when there is no current Blender project filepath")
+
+    status = _build_project_file_status(
+        target_filepath,
+        compute_hash=validated["compute_hash"],
+        expect_current_file=validated["expect_current_file"],
+        current_filepath=current_filepath,
+    )
+    return {
+        "action": "verify_project_save",
+        "verified": status.get("verified", False),
+        "status": status,
+    }
 
 
 def handle_configure_scene(params: dict) -> dict:

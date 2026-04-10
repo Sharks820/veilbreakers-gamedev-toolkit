@@ -38,6 +38,11 @@ Three custom **MCP (Model Context Protocol) servers** that give Claude the capab
                   (bpy API)     Local Python Tools]   (C# Scripting)
 ```
 
+## Repository Layout
+
+The live implementation lives under `Tools/mcp-toolkit/`.
+The old root `asset-pipeline/` and `blender-gamedev/` scaffolds were removed during cleanup.
+
 ## MCP Servers
 
 ### 1. `blender-gamedev` - 3D Art + Animation Pipeline
@@ -117,14 +122,8 @@ pip install -r requirements.txt
 
 ## Project Status
 
-**Phase 1: Foundation** - IN PROGRESS
-- [ ] FastMCP server skeleton
-- [ ] Blender socket bridge addon
-- [ ] Mesh analysis tools
-- [ ] Contact sheet rendering
-- [ ] Deformation testing
-
-See [MASTERPLAN.md](docs/MASTERPLAN.md) for full roadmap.
+The active implementation and terrain cleanup plan lives in [docs/terrain_pipeline_handoff_for_claude.md](docs/terrain_pipeline_handoff_for_claude.md).
+Historical roadmaps and audits have been moved under `docs/archive/legacy-roadmaps/` to keep the live docs root unambiguous.
 
 ## Built For
 

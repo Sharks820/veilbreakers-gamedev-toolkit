@@ -10,6 +10,7 @@ the Python MCP server can read back the outcome after execution.
 
 Exports:
     generate_terrain_setup_script        -- SCENE-01: heightmap terrain with splatmaps
+    generate_tiled_terrain_setup_script  -- SCENE-01b: tiled terrain with neighbor wiring
     generate_object_scatter_script       -- SCENE-02: density-based object scattering
     generate_lighting_setup_script       -- SCENE-03: lighting, fog, post-processing
     generate_navmesh_bake_script         -- SCENE-04: NavMesh bake with agent settings
@@ -77,18 +78,21 @@ def generate_terrain_setup_script(
     size: tuple[float, float, float] = (1000, 600, 1000),
     resolution: int = 513,
     splatmap_layers: list[dict] | None = None,
+    alphamap_path: str | None = None,
 ) -> str:
     """Generate C# editor script that creates terrain from a RAW heightmap.
 
     Creates TerrainData with configurable resolution and size, reads a RAW
     heightmap, sets heights, optionally configures splatmap layers, and
-    creates a Terrain GameObject.
+    creates a Terrain GameObject. If ``alphamap_path`` is provided, the
+    generated script will load a Blender-exported RAW RGBA alphamap.
 
     Args:
         heightmap_path: Path to the RAW heightmap file (relative to Unity project).
         size: Terrain size as (width, height, length).
         resolution: Heightmap resolution (e.g. 513, 1025).
         splatmap_layers: Optional list of dicts with "texture_path" and "tiling".
+        alphamap_path: Optional RAW RGBA splatmap path relative to the Unity project.
 
     Returns:
         Complete C# source string.
@@ -108,16 +112,68 @@ def generate_terrain_setup_script(
             layer{i}.tileSize = new Vector2({tiling}f, {tiling}f);
             terrainLayers[{i}] = layer{i};"""
 
-        splatmap_code = f"""
+        layer_block = f"""
             // Splatmap layer configuration
             var terrainLayers = new TerrainLayer[{len(splatmap_layers)}];
             {layer_loads}
-            terrainData.terrainLayers = terrainLayers;
+            terrainData.terrainLayers = terrainLayers;"""
 
+        if alphamap_path:
+            if len(splatmap_layers) != 4:
+                raise ValueError("alphamap_path requires exactly 4 splatmap layers")
+            safe_alphamap_path = sanitize_cs_string(alphamap_path)
+            splatmap_code = layer_block + f"""
+            // Load RAW RGBA alphamap weights exported from Blender
+            string alphamapPath = Path.Combine(Application.dataPath, "{safe_alphamap_path}".Replace("Assets/", ""));
+            if (File.Exists(alphamapPath))
+            {{
+                byte[] rawBytes = File.ReadAllBytes(alphamapPath);
+                int alphaW = terrainData.alphamapWidth;
+                int alphaH = terrainData.alphamapHeight;
+                int channels = {len(splatmap_layers)};
+                float[,,] alphamaps = new float[alphaH, alphaW, channels];
+                int byteIndex = 0;
+                for (int ay = 0; ay < alphaH; ay++)
+                {{
+                    for (int ax = 0; ax < alphaW; ax++)
+                    {{
+                        float total = 0f;
+                        for (int c = 0; c < channels; c++)
+                        {{
+                            float value = 0f;
+                            if (byteIndex < rawBytes.Length)
+                            {{
+                                value = rawBytes[byteIndex] / 255f;
+                                byteIndex++;
+                            }}
+                            alphamaps[ay, ax, c] = value;
+                            total += value;
+                        }}
+                        if (total <= 0f)
+                        {{
+                            alphamaps[ay, ax, 0] = 1f;
+                        }}
+                        else
+                        {{
+                            for (int c = 0; c < channels; c++)
+                            {{
+                                alphamaps[ay, ax, c] /= total;
+                            }}
+                        }}
+                    }}
+                }}
+                terrainData.SetAlphamaps(0, 0, alphamaps);
+            }}
+            else
+            {{
+                Debug.LogWarning("[VeilBreakers] Alphamap not found at: " + alphamapPath + ". Using default terrain layers.");
+            }}"""
+        else:
+            splatmap_code = layer_block + f"""
             // Set default alphamaps (first layer covers everything)
             int alphaW = terrainData.alphamapWidth;
             int alphaH = terrainData.alphamapHeight;
-            float[,,] alphamaps = new float[alphaW, alphaH, {len(splatmap_layers)}];
+            float[,,] alphamaps = new float[alphaH, alphaW, {len(splatmap_layers)}];
             for (int ay = 0; ay < alphaH; ay++)
                 for (int ax = 0; ax < alphaW; ax++)
                     alphamaps[ay, ax, 0] = 1f;
@@ -190,7 +246,239 @@ public static class VeilBreakers_TerrainSetup
         {{
             string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"setup_terrain\\", \\"message\\": \\"" + ex.Message.Replace("\\"", "\\\\\\"") + "\\"}}";
             File.WriteAllText("Temp/vb_result.json", json);
-            Debug.LogError("[VeilBreakers] Terrain setup failed: " + ex.Message);
+        Debug.LogError("[VeilBreakers] Terrain setup failed: " + ex.Message);
+        }}
+    }}
+}}
+'''
+
+
+def generate_tiled_terrain_setup_script(
+    tiles: list[dict],
+    default_size: tuple[float, float, float] = (1000, 600, 1000),
+    default_resolution: int = 513,
+    splatmap_layers: list[dict] | None = None,
+    parent_name: str = "VB_TerrainRoot",
+) -> str:
+    """Generate C# editor script that creates a tiled terrain set.
+
+    Each tile definition should provide:
+      - heightmap_path: RAW heightmap path relative to the Unity project
+      - grid_x / grid_y: tile grid coordinates for seam linking
+      - name: optional terrain object name
+      - position: optional world-space position [x, y, z]
+      - size: optional terrain size [x, y, z]
+      - resolution: optional heightmap resolution
+      - alphamap_path: optional RAW RGBA splatmap path relative to the Unity project
+
+    Args:
+        tiles: Tile definition dictionaries.
+        default_size: Fallback TerrainData.size for tiles that omit size.
+        default_resolution: Fallback heightmap resolution for tiles that omit it.
+        splatmap_layers: Optional shared terrain layers applied to every tile.
+        parent_name: Name of the parent GameObject that contains all tiles.
+
+    Returns:
+        Complete C# source string.
+    """
+    if not tiles:
+        raise ValueError("tiles must not be empty")
+
+    safe_parent_name = sanitize_cs_string(parent_name)
+
+    tile_blocks = []
+    tile_names = []
+    for index, tile in enumerate(tiles):
+        heightmap_path = tile.get("heightmap_path")
+        if not heightmap_path:
+            raise ValueError(f"tiles[{index}].heightmap_path is required")
+        grid_x = tile.get("grid_x")
+        grid_y = tile.get("grid_y")
+        if grid_x is None or grid_y is None:
+            raise ValueError(f"tiles[{index}].grid_x and tiles[{index}].grid_y are required")
+        grid_x = int(grid_x)
+        grid_y = int(grid_y)
+        safe_heightmap_path = sanitize_cs_string(heightmap_path)
+        tile_name = tile.get("name", f"VB_Terrain_{index}")
+        safe_tile_name = sanitize_cs_string(tile_name)
+        tile_names.append(safe_tile_name)
+        size = tuple(tile.get("size", default_size))
+        resolution = int(tile.get("resolution", default_resolution))
+        suffix = str(index)
+        position = tile.get(
+            "position",
+            [grid_x * size[0], 0.0, grid_y * size[2]],
+        )
+        alphamap_path = tile.get("alphamap_path")
+        if alphamap_path and not splatmap_layers:
+            raise ValueError("alphamap_path requires splatmap_layers")
+        asset_path = sanitize_cs_string(
+            tile.get("asset_path", f"Assets/Terrain/Generated/{safe_tile_name}_TerrainData.asset")
+        )
+        splatmap_code = ""
+        if splatmap_layers:
+            layer_loads = ""
+            for i, layer in enumerate(splatmap_layers):
+                tex_path = sanitize_cs_string(layer.get("texture_path", ""))
+                tiling = layer.get("tiling", 15.0)
+                layer_loads += f"""
+            var tile{suffix}Tex{i} = AssetDatabase.LoadAssetAtPath<Texture2D>("{tex_path}");
+            var tile{suffix}Layer{i} = new TerrainLayer();
+            tile{suffix}Layer{i}.diffuseTexture = tile{suffix}Tex{i};
+            tile{suffix}Layer{i}.tileSize = new Vector2({tiling}f, {tiling}f);
+            tile{suffix}Layers[{i}] = tile{suffix}Layer{i};"""
+
+            splatmap_code = f"""
+            var tile{suffix}Layers = new TerrainLayer[{len(splatmap_layers)}];
+            {layer_loads}
+            terrainData{suffix}.terrainLayers = tile{suffix}Layers;"""
+
+            if alphamap_path:
+                if len(splatmap_layers) != 4:
+                    raise ValueError("alphamap_path requires exactly 4 splatmap layers")
+                safe_alphamap_path = sanitize_cs_string(alphamap_path)
+                splatmap_code += f"""
+            string tile{suffix}AlphamapPath = Path.Combine(Application.dataPath, "{safe_alphamap_path}".Replace("Assets/", ""));
+            if (File.Exists(tile{suffix}AlphamapPath))
+            {{
+                byte[] rawBytes{suffix} = File.ReadAllBytes(tile{suffix}AlphamapPath);
+                int tile{suffix}AlphaW = terrainData{suffix}.alphamapWidth;
+                int tile{suffix}AlphaH = terrainData{suffix}.alphamapHeight;
+                int tile{suffix}Channels = {len(splatmap_layers)};
+                float[,,] tile{suffix}Alphamaps = new float[tile{suffix}AlphaH, tile{suffix}AlphaW, tile{suffix}Channels];
+                int tile{suffix}ByteIndex = 0;
+                for (int ay = 0; ay < tile{suffix}AlphaH; ay++)
+                {{
+                    for (int ax = 0; ax < tile{suffix}AlphaW; ax++)
+                    {{
+                        float tile{suffix}Total = 0f;
+                        for (int c = 0; c < tile{suffix}Channels; c++)
+                        {{
+                            float value = 0f;
+                            if (tile{suffix}ByteIndex < rawBytes{suffix}.Length)
+                            {{
+                                value = rawBytes{suffix}[tile{suffix}ByteIndex] / 255f;
+                                tile{suffix}ByteIndex++;
+                            }}
+                            tile{suffix}Alphamaps[ay, ax, c] = value;
+                            tile{suffix}Total += value;
+                        }}
+                        if (tile{suffix}Total <= 0f)
+                        {{
+                            tile{suffix}Alphamaps[ay, ax, 0] = 1f;
+                        }}
+                        else
+                        {{
+                            for (int c = 0; c < tile{suffix}Channels; c++)
+                            {{
+                                tile{suffix}Alphamaps[ay, ax, c] /= tile{suffix}Total;
+                            }}
+                        }}
+                    }}
+                }}
+                terrainData{suffix}.SetAlphamaps(0, 0, tile{suffix}Alphamaps);
+            }}
+            else
+            {{
+                Debug.LogWarning("[VeilBreakers] Alphamap not found at: " + tile{suffix}AlphamapPath + ". Using default terrain layers.");
+            }}"""
+            else:
+                splatmap_code += f"""
+            int tile{suffix}AlphaW = terrainData{suffix}.alphamapWidth;
+            int tile{suffix}AlphaH = terrainData{suffix}.alphamapHeight;
+            float[,,] tile{suffix}Alphamaps = new float[tile{suffix}AlphaH, tile{suffix}AlphaW, {len(splatmap_layers)}];
+            for (int ay = 0; ay < tile{suffix}AlphaH; ay++)
+                for (int ax = 0; ax < tile{suffix}AlphaW; ax++)
+                    tile{suffix}Alphamaps[ay, ax, 0] = 1f;
+            terrainData{suffix}.SetAlphamaps(0, 0, tile{suffix}Alphamaps);"""
+        tile_blocks.append(f"""
+            // Tile {index}: {safe_tile_name}
+            var terrainData{suffix} = new TerrainData();
+            terrainData{suffix}.heightmapResolution = {resolution};
+            terrainData{suffix}.size = new Vector3({size[0]}f, {size[1]}f, {size[2]}f);
+
+            string heightmapPath{suffix} = Path.Combine(Application.dataPath, "{safe_heightmap_path}".Replace("Assets/", ""));
+            if (File.Exists(heightmapPath{suffix}))
+            {{
+                byte[] rawBytes{suffix} = File.ReadAllBytes(heightmapPath{suffix});
+                int res{suffix} = {resolution};
+                float[,] heights{suffix} = new float[res{suffix}, res{suffix}];
+                int byteIndex{suffix} = 0;
+                for (int y = 0; y < res{suffix}; y++)
+                {{
+                    for (int x = 0; x < res{suffix}; x++)
+                    {{
+                        if (byteIndex{suffix} + 1 < rawBytes{suffix}.Length)
+                        {{
+                            ushort value = (ushort)(rawBytes{suffix}[byteIndex{suffix}] | (rawBytes{suffix}[byteIndex{suffix} + 1] << 8));
+                            heights{suffix}[y, x] = value / 65535f;
+                            byteIndex{suffix} += 2;
+                        }}
+                    }}
+                }}
+                terrainData{suffix}.SetHeights(0, 0, heights{suffix});
+            }}
+            else
+            {{
+                Debug.LogWarning("[VeilBreakers] Heightmap not found at: " + heightmapPath{suffix} + ". Creating flat terrain tile.");
+            }}
+            {splatmap_code}
+
+            var terrainObj{suffix} = Terrain.CreateTerrainGameObject(terrainData{suffix});
+            terrainObj{suffix}.name = "{safe_tile_name}";
+            terrainObj{suffix}.transform.SetParent(parent.transform, false);
+            terrainObj{suffix}.transform.position = new Vector3({position[0]}f, {position[1]}f, {position[2]}f);
+
+            if (!AssetDatabase.IsValidFolder("Assets/Terrain/Generated"))
+            {{
+                Directory.CreateDirectory(Path.Combine(Application.dataPath, "..", "Assets/Terrain/Generated"));
+                AssetDatabase.Refresh();
+            }}
+            AssetDatabase.CreateAsset(terrainData{suffix}, "{asset_path}");
+            terrainMap["{grid_x},{grid_y}"] = terrainObj{suffix}.GetComponent<Terrain>();
+            tileNames.Add("{safe_tile_name}");""")
+
+    return f'''using UnityEngine;
+using UnityEditor;
+using System.IO;
+using System.Collections.Generic;
+
+public static class VeilBreakers_TiledTerrainSetup
+{{
+    [MenuItem("VeilBreakers/Scene/Setup Tiled Terrain")]
+    public static void Execute()
+    {{
+        try
+        {{
+            var parent = new GameObject("{safe_parent_name}");
+            var tileNames = new List<string>();
+            var terrainMap = new Dictionary<string, Terrain>();
+            {''.join(tile_blocks)}
+
+            foreach (var pair in terrainMap)
+            {{
+                var keyParts = pair.Key.Split(',');
+                int gx = int.Parse(keyParts[0]);
+                int gy = int.Parse(keyParts[1]);
+                Terrain left = terrainMap.ContainsKey($"{{gx - 1}},{{gy}}") ? terrainMap[$"{{gx - 1}},{{gy}}"] : null;
+                Terrain top = terrainMap.ContainsKey($"{{gx}},{{gy + 1}}") ? terrainMap[$"{{gx}},{{gy + 1}}"] : null;
+                Terrain right = terrainMap.ContainsKey($"{{gx + 1}},{{gy}}") ? terrainMap[$"{{gx + 1}},{{gy}}"] : null;
+                Terrain bottom = terrainMap.ContainsKey($"{{gx}},{{gy - 1}}") ? terrainMap[$"{{gx}},{{gy - 1}}"] : null;
+                pair.Value.SetNeighbors(left, top, right, bottom);
+                pair.Value.Flush();
+            }}
+
+            AssetDatabase.SaveAssets();
+
+            string json = "{{\\"status\\": \\"success\\", \\"action\\": \\"setup_tiled_terrain\\", \\"tile_count\\": {len(tiles)}, \\"tile_names\\": \\"" + string.Join(",", tileNames) + "\\"}}";
+            File.WriteAllText("Temp/vb_result.json", json);
+            Debug.Log("[VeilBreakers] Tiled terrain setup completed.");
+        }}
+        catch (System.Exception ex)
+        {{
+            string json = "{{\\"status\\": \\"error\\", \\"action\\": \\"setup_tiled_terrain\\", \\"message\\": \\"" + ex.Message.Replace("\\"", "\\\\\\"") + "\\"}}";
+            File.WriteAllText("Temp/vb_result.json", json);
+            Debug.LogError("[VeilBreakers] Tiled terrain setup failed: " + ex.Message);
         }}
     }}
 }}

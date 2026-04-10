@@ -226,6 +226,7 @@ def handle_export_fbx(params: dict) -> dict:
     embed_textures = params.get("embed_textures", False)  # EXP-009
     export_custom_props = params.get("export_custom_props", True)  # EXP-008
     add_leaf_bones = _should_add_leaf_bones(params)  # EXP-012
+    object_names = params.get("object_names")  # EXPORT-09: per-object filter
 
     os.makedirs(os.path.dirname(os.path.abspath(filepath)), exist_ok=True)
 
@@ -240,6 +241,15 @@ def handle_export_fbx(params: dict) -> dict:
 
     # EXP-008: validate custom properties before export
     custom_props_summary = _export_custom_properties()
+
+    # EXPORT-09: Select specific objects for per-group export
+    if object_names:
+        bpy.ops.object.select_all(action='DESELECT')
+        for name in object_names:
+            obj = bpy.data.objects.get(name)
+            if obj:
+                obj.select_set(True)
+        selected_only = True  # Force selected_only when filtering
 
     override = get_3d_context_override()
     # Unity-optimized FBX settings
@@ -294,6 +304,7 @@ def handle_export_fbx(params: dict) -> dict:
         "custom_props_detail": custom_props_summary,
         "collision_meshes_renamed": collision_renamed,  # EXP-003
         "uv2_layers_fixed": uv2_modified,               # EXP-007
+        "object_names_filter": object_names,             # EXPORT-09
     }
 
 

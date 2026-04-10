@@ -20,6 +20,8 @@ import json
 import math
 from typing import Any
 
+import numpy as np
+
 
 # ---------------------------------------------------------------------------
 # LOD downsample
@@ -133,6 +135,7 @@ def compute_terrain_chunks(
     overlap: int = 1,
     lod_levels: int = 4,
     world_scale: float = 1.0,
+    world_origin: tuple[float, float] | None = None,
 ) -> dict[str, Any]:
     """Split a terrain heightmap into streamable chunks with LOD.
 
@@ -150,6 +153,7 @@ def compute_terrain_chunks(
         lod_levels: Number of LOD levels per chunk.  LOD 0 is full
             resolution; each subsequent level halves the resolution.
         world_scale: Multiplier from heightmap samples to world units.
+        world_origin: Optional world-space origin of the heightmap region.
 
     Returns:
         Dict with:
@@ -169,6 +173,14 @@ def compute_terrain_chunks(
     total_cols = len(heightmap[0])
     if total_cols == 0:
         return {"chunks": [], "metadata": _empty_metadata()}
+
+    if world_origin is None:
+        origin_x, origin_y = 0.0, 0.0
+    else:
+        if len(world_origin) != 2:
+            raise ValueError("world_origin must be a 2-tuple of (x, y)")
+        origin_x = float(world_origin[0])
+        origin_y = float(world_origin[1])
 
     # Number of chunks in each direction
     grid_cols = max(1, total_cols // chunk_size)
@@ -200,10 +212,10 @@ def compute_terrain_chunks(
                 sub_heightmap.append(list(row))
 
             # World-space bounds (without overlap — the chunk's logical area)
-            min_x = gx * chunk_world_size
-            min_y = gy * chunk_world_size
-            max_x = (gx + 1) * chunk_world_size
-            max_y = (gy + 1) * chunk_world_size
+            min_x = origin_x + gx * chunk_world_size
+            min_y = origin_y + gy * chunk_world_size
+            max_x = origin_x + (gx + 1) * chunk_world_size
+            max_y = origin_y + (gy + 1) * chunk_world_size
 
             # Generate LOD levels
             lods: list[dict[str, Any]] = []
@@ -231,10 +243,10 @@ def compute_terrain_chunks(
                         "resolution": target_res if lod > 0 else (
                             len(sub_heightmap[0]) if sub_heightmap else 0
                         ),
-                        "heightmap": lod_hmap,
-                        "vertex_count": vert_count,
-                    }
-                )
+                    "heightmap": lod_hmap,
+                    "vertex_count": vert_count,
+                }
+            )
 
             if lods:
                 total_verts_lod0 += lods[0]["vertex_count"]
@@ -253,6 +265,7 @@ def compute_terrain_chunks(
                     "grid_y": gy,
                     "heightmap": sub_heightmap,
                     "bounds": (min_x, min_y, max_x, max_y),
+                    "world_origin": (origin_x, origin_y),
                     "lods": lods,
                     "neighbor_chunks": neighbors,
                 }
@@ -264,6 +277,7 @@ def compute_terrain_chunks(
         "total_chunks": len(chunks),
         "grid_size": (grid_cols, grid_rows),
         "chunk_world_size": chunk_world_size,
+        "world_origin": (origin_x, origin_y),
         "total_vertices_lod0": total_verts_lod0,
         "streaming_distance_lod": streaming_dist,
         "chunk_size_samples": chunk_size,
@@ -338,6 +352,117 @@ def export_chunks_metadata(
     return json.dumps(export_data, indent=2)
 
 
+def validate_tile_seams(
+    tile_a: list[list[float]],
+    tile_b: list[list[float]],
+    direction: str = "east",
+    tolerance: float = 1e-6,
+) -> dict[str, Any]:
+    """Validate that two adjacent tiles share matching seam samples.
+
+    Args:
+        tile_a: First tile heightmap.
+        tile_b: Adjacent tile heightmap.
+        direction: Relative direction of tile_b from tile_a.
+        tolerance: Maximum allowed absolute delta for a seam sample.
+
+    Returns:
+        Dict describing seam agreement.
+    """
+    arr_a = np.asarray(tile_a, dtype=np.float64)
+    arr_b = np.asarray(tile_b, dtype=np.float64)
+
+    if arr_a.size == 0 or arr_b.size == 0:
+        return {
+            "match": False,
+            "direction": direction,
+            "sample_count": 0,
+            "max_delta": None,
+            "mean_delta": None,
+            "channel_count": 0,
+            "per_channel_max_delta": None,
+            "per_channel_mean_delta": None,
+            "error": "empty tile input",
+        }
+    if arr_a.ndim < 2 or arr_b.ndim < 2:
+        return {
+            "match": False,
+            "direction": direction,
+            "sample_count": 0,
+            "max_delta": None,
+            "mean_delta": None,
+            "channel_count": 0,
+            "per_channel_max_delta": None,
+            "per_channel_mean_delta": None,
+            "error": "tile input must have at least 2 dimensions",
+        }
+
+    rows_a, cols_a = arr_a.shape[:2]
+    rows_b, cols_b = arr_b.shape[:2]
+    channel_shape_a = arr_a.shape[2:]
+    channel_shape_b = arr_b.shape[2:]
+
+    if channel_shape_a != channel_shape_b:
+        return {
+            "match": False,
+            "direction": direction,
+            "sample_count": 0,
+            "max_delta": None,
+            "mean_delta": None,
+            "channel_count": 0,
+            "per_channel_max_delta": None,
+            "per_channel_mean_delta": None,
+            "error": "channel shape mismatch",
+        }
+
+    if direction in {"east", "west"}:
+        if rows_a != rows_b:
+            return {
+                "match": False,
+                "direction": direction,
+                "sample_count": 0,
+                "max_delta": None,
+                "mean_delta": None,
+                "error": "row count mismatch",
+            }
+        edge_a = arr_a[:, cols_a - 1, ...]
+        edge_b = arr_b[:, 0, ...]
+    elif direction in {"north", "south"}:
+        if cols_a != cols_b:
+            return {
+                "match": False,
+                "direction": direction,
+                "sample_count": 0,
+                "max_delta": None,
+                "mean_delta": None,
+                "error": "column count mismatch",
+            }
+        edge_a = arr_a[rows_a - 1, :, ...]
+        edge_b = arr_b[0, :, ...]
+    else:
+        raise ValueError("direction must be one of: east, west, north, south")
+
+    delta = np.abs(edge_a - edge_b)
+    delta_samples = delta.reshape(delta.shape[0], -1)
+    per_channel_max = delta.max(axis=0)
+    per_channel_mean = delta.mean(axis=0)
+    max_delta = float(delta_samples.max()) if delta_samples.size else 0.0
+    mean_delta = float(delta_samples.mean()) if delta_samples.size else 0.0
+    channel_count = int(np.prod(channel_shape_a)) if channel_shape_a else 1
+
+    return {
+        "match": max_delta <= tolerance,
+        "direction": direction,
+        "sample_count": int(delta.shape[0]),
+        "max_delta": max_delta,
+        "mean_delta": mean_delta,
+        "channel_count": channel_count,
+        "per_channel_max_delta": np.asarray(per_channel_max).reshape(-1).tolist(),
+        "per_channel_mean_delta": np.asarray(per_channel_mean).reshape(-1).tolist(),
+        "tolerance": tolerance,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
@@ -349,6 +474,7 @@ def _empty_metadata() -> dict[str, Any]:
         "total_chunks": 0,
         "grid_size": (0, 0),
         "chunk_world_size": 0.0,
+        "world_origin": (0.0, 0.0),
         "total_vertices_lod0": 0,
         "streaming_distance_lod": {},
         "chunk_size_samples": 0,

@@ -14,6 +14,10 @@
       "env": {
         "UNITY_PROJECT_PATH": ""
       }
+    },
+    "vb-review": {
+      "command": "uv",
+      "args": ["--directory", "Tools/mcp-toolkit", "run", "vb-review-mcp"]
     }
   }
 }

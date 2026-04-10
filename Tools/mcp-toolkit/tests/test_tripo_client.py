@@ -32,6 +32,8 @@ class TestTripoGeneratorFromText:
         mock_client.close = MagicMock()
 
         with patch(
+            "veilbreakers_mcp.shared.tripo_client._TRIPO_AVAILABLE", True,
+        ), patch(
             "veilbreakers_mcp.shared.tripo_client._create_tripo_client",
             return_value=mock_client,
         ), patch(
@@ -70,6 +72,8 @@ class TestTripoGeneratorFromText:
 
         model_path = str(tmp_path / "model.glb")
         with patch(
+            "veilbreakers_mcp.shared.tripo_client._TRIPO_AVAILABLE", True,
+        ), patch(
             "veilbreakers_mcp.shared.tripo_client._create_tripo_client",
             return_value=mock_client,
         ), patch(
@@ -100,6 +104,8 @@ class TestTripoGeneratorFromText:
         mock_client.close = MagicMock()
 
         with patch(
+            "veilbreakers_mcp.shared.tripo_client._TRIPO_AVAILABLE", True,
+        ), patch(
             "veilbreakers_mcp.shared.tripo_client._create_tripo_client",
             return_value=mock_client,
         ):

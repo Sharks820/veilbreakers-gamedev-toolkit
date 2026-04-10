@@ -1274,11 +1274,38 @@ class PipelineRunner:
             )
             return result
 
+        # --- Extract textures before pipeline (SAFE-01) ---
+        extracted_channels: dict = {}
+        has_extracted_textures = False
+        try:
+            from veilbreakers_mcp.shared.tripo_post_processor import post_process_tripo_model
+            post_result = await post_process_tripo_model(
+                model_path,
+                str(Path(output_dir) / "textures"),
+                asset_type=asset_type,
+            )
+            extracted_channels = post_result.get("channels", {})
+            if post_result.get("albedo_delit"):
+                extracted_channels["albedo_delit"] = post_result["albedo_delit"]
+            has_extracted_textures = bool(extracted_channels)
+            result["generation"]["texture_extraction"] = {
+                "channels": list(extracted_channels.keys()),
+                "score": post_result.get("channel_score", 0),
+                "has_extracted_textures": has_extracted_textures,
+            }
+        except Exception as tex_exc:  # noqa: BLE001
+            logger.warning("Texture extraction failed (non-fatal): %s", tex_exc)
+            result.setdefault("warnings", []).append(
+                f"Texture extraction failed (non-fatal): {tex_exc}"
+            )
+
         # --- Run full pipeline on the downloaded model ---
         pipeline_result = await self.full_asset_pipeline(
             object_name=model_path,
             asset_type=asset_type,
             export_dir=pipeline_kwargs.pop("export_dir", output_dir),
+            has_extracted_textures=has_extracted_textures,
+            texture_channels=extracted_channels if extracted_channels else None,
             **pipeline_kwargs,
         )
         result["pipeline"] = pipeline_result

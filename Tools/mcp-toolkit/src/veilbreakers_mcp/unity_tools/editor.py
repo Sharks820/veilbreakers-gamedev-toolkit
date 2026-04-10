@@ -13,6 +13,7 @@ from typing import Literal
 from veilbreakers_mcp.unity_tools._common import (
     mcp, settings, logger,
     _write_to_unity, STANDARD_NEXT_STEPS,
+    _try_bridge,
 )
 from veilbreakers_mcp.shared.unity_templates._cs_sanitize import sanitize_cs_identifier
 
@@ -28,42 +29,7 @@ from veilbreakers_mcp.shared.gemini_client import GeminiReviewClient
 from veilbreakers_mcp.shared.unity_client import UnityConnection, UnityCommandError
 
 
-# ---------------------------------------------------------------------------
-# TCP Bridge helpers -- direct communication with Unity Editor
-# ---------------------------------------------------------------------------
-
-async def _try_bridge(command: str, params: dict | None = None, retries: int = 2) -> dict | None:
-    """Try to execute a command via the VBBridge TCP connection.
-
-    Returns the result dict on success, or None if the bridge is not
-    available (falls back to script generation).  Retries on transient
-    connection failures (e.g., bridge momentarily busy after play mode).
-    """
-    import asyncio
-
-    last_exc = None
-    for attempt in range(retries):
-        try:
-            conn = UnityConnection(timeout=30)
-            result = await conn.send_command(command, params or {})
-            return result
-        except UnityCommandError:
-            # Command-level error (not transient) -- don't retry
-            raise
-        except (ConnectionError, OSError, TimeoutError) as exc:
-            last_exc = exc
-            logger.debug(
-                "VBBridge attempt %d/%d for '%s' failed: %s",
-                attempt + 1, retries, command, exc,
-            )
-            if attempt < retries - 1:
-                await asyncio.sleep(0.5)
-        except Exception as exc:
-            logger.debug("VBBridge unexpected error for '%s': %s", command, exc)
-            return None
-
-    logger.debug("VBBridge unavailable for '%s' after %d attempts: %s", command, retries, last_exc)
-    return None
+# _try_bridge imported from _common.py (canonical location)
 
 
 

@@ -25,8 +25,10 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 import re
 import sys
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -64,14 +66,24 @@ except ImportError:
 
 try:
     from veilbreakers_mcp._rules_csharp import (
-        RULES as CSHARP_RULES,
-        DEEP_CHECKS as CSHARP_DEEP_CHECKS,
         CSharpLineClassifier as CSharpLineClassifierImp,
     )
 except ImportError:
-    CSHARP_RULES = []
-    CSHARP_DEEP_CHECKS = {}
     CSharpLineClassifierImp = None  # Will use local implementation
+
+try:
+    from veilbreakers_mcp._rules_csharp_core import RULES as CSHARP_CORE_RULES
+except ImportError:
+    CSHARP_CORE_RULES = []
+
+try:
+    from veilbreakers_mcp._rules_csharp_unity import (
+        RULES as CSHARP_UNITY_RULES,
+        DEEP_CHECKS as CSHARP_UNITY_DEEP_CHECKS,
+    )
+except ImportError:
+    CSHARP_UNITY_RULES = []
+    CSHARP_UNITY_DEEP_CHECKS = {}
 
 # Type alias for runtime use
 CSharpLineClassifierType = CSharpLineClassifierImp if CSharpLineClassifierImp else None
@@ -82,6 +94,10 @@ CSharpLineClassifierType = CSharpLineClassifierImp if CSharpLineClassifierImp el
 
 REVIEW_SCOPE_CHOICES = ("production", "advisory", "strict")
 LANG_CHOICES = ("auto", "py", "cs")
+PROFILE_CHOICES = ("general", "unity", "blender", "all")
+IGNORE_TOKEN_PATTERN = r"(?:VB|REVIEW)-IGNORE"
+PY_IGNORE_DIRECTIVE_RE = re.compile(rf"#\s*{IGNORE_TOKEN_PATTERN}:\s*([\w,-]+)")
+CS_IGNORE_DIRECTIVE_RE = re.compile(rf"//\s*{IGNORE_TOKEN_PATTERN}")
 DEFAULT_SKIP_DIRS = frozenset(
     {
         ".venv",
@@ -162,6 +178,7 @@ class Rule:
     file_filter: str = "All"  # C# only: "Runtime", "EditorOnly", "All"
     inside_pattern: Optional[re.Pattern] = None
     not_inside_pattern: Optional[re.Pattern] = None
+    auto_fix: Optional[Callable[..., Any]] = None
 
     def __post_init__(self):
         if self.confidence < 0:
@@ -290,6 +307,24 @@ _TOOL_REPUTATION: dict[str, float] = {
     "ast-grep": 0.87,  # Structural pattern matching - good but not perfect
 }
 
+_RUFF_HARD_BUG_CODES = frozenset({
+    "E902",
+    "E999",
+    "F821",
+    "F822",
+    "F823",
+    "F831",
+})
+
+_RUFF_HEURISTIC_CODES = frozenset({
+    "E402",
+    "E701",
+    "E741",
+    "F401",
+    "F541",
+    "F841",
+})
+
 
 def _semantic_fingerprint(issue: Issue) -> frozenset[str]:
     """Extract semantic fingerprint for cross-tool correlation.
@@ -340,6 +375,7 @@ class Issue:
     # New fields for unified reviewer
     layer: str = LAYER_HARD_CORRECTNESS
     requires_context: bool = False
+    profile: str = "general"
     # Reliability-weighted confidence for final output
     adjusted_confidence: int = 75
 
@@ -394,6 +430,9 @@ class Issue:
         if isinstance(rule_config, (int, float)):
             multiplier = rule_config
             priority_penalty = 0
+        elif rule_config is None:
+            multiplier = 1.0
+            priority_penalty = 0
         else:
             # New format: {multiplier, skip_patterns, priority_penalty, threshold_adjustments}
             multiplier = rule_config.get("multiplier", 1.0)
@@ -431,6 +470,47 @@ class Issue:
         self.adjusted_confidence = max(20, min(99, int(base_confidence * multiplier)))
 
 
+def _issue_from_dict(data: dict[str, Any]) -> Issue:
+    """Rehydrate cached or serialized issue payloads into Issue objects."""
+    issue = Issue(
+        rule_id=str(data.get("rule_id", "")),
+        severity=str(data.get("severity", "LOW")),
+        category=str(data.get("category", "Quality")),
+        file=str(data.get("file", "")),
+        line=int(data.get("line", 0)),
+        description=str(data.get("description", "")),
+        fix=str(data.get("fix", "")),
+        matched_text=str(data.get("matched_text", "")),
+        finding_type=str(data.get("finding_type", "BUG")),
+        confidence=int(data.get("confidence", 75)),
+        priority=int(data.get("priority", 50)),
+        reasoning=str(data.get("reasoning", "")),
+        layer=str(data.get("layer", LAYER_HARD_CORRECTNESS)),
+        requires_context=bool(data.get("requires_context", False)),
+        profile=str(data.get("profile", "general")),
+    )
+    issue.adjusted_confidence = int(data.get("adjusted_confidence", issue.confidence))
+    return issue
+
+
+_AST_HARD_RULE_IDS = frozenset({
+    "AST-CS-03",
+    "AST-CS-04",
+})
+
+
+def _ast_issue_layer(rule_id: str) -> str:
+    """Map AST findings to reviewer layers.
+
+    Structural C# runtime hazards stay in the production gate. Lower-confidence
+    structural hygiene findings remain semantic so strict/advisory can surface
+    them without polluting ship-blocking output.
+    """
+    if rule_id in _AST_HARD_RULE_IDS:
+        return LAYER_HARD_CORRECTNESS
+    return LAYER_SEMANTIC
+
+
 # =========================================================================
 # HELPER FUNCTIONS
 # =========================================================================
@@ -463,7 +543,10 @@ def _is_temp_path(filepath: str) -> bool:
     )
 
 
-def _is_production_code_path(filepath: str) -> bool:
+def _is_production_code_path(filepath: str, profile: str = "all") -> bool:
+    if profile == "general":
+        return not _is_test_path(filepath) and not _is_temp_path(filepath)
+
     normalized = _normalize_path(filepath).lower()
     return (
         normalized.startswith("src/veilbreakers_mcp/")
@@ -480,17 +563,20 @@ def _should_scan_file(
     lang: str,
     *,
     review_scope: str = "production",
+    profile: str = "all",
     include_tests: bool = False,
     include_temp: bool = False,
 ) -> bool:
     if review_scope not in REVIEW_SCOPE_CHOICES:
         raise ValueError(f"Unknown review_scope: {review_scope}")
+    if profile not in PROFILE_CHOICES:
+        raise ValueError(f"Unknown profile: {profile}")
     if not include_tests and _is_test_path(filepath):
         return False
     if not include_temp and _is_temp_path(filepath):
         return False
     if review_scope == "production":
-        return _is_production_code_path(filepath)
+        return _is_production_code_path(filepath, profile=profile)
     return True
 
 
@@ -510,6 +596,29 @@ def _should_emit_rule(rule: Rule, review_scope: str) -> bool:
 
 def _compile_anti(patterns: list[str]) -> list[re.Pattern]:
     return [re.compile(p) for p in patterns]
+
+
+def _line_has_ignore_marker(line: str) -> bool:
+    return "VB-IGNORE" in line or "REVIEW-IGNORE" in line
+
+
+def _display_path(filepath: str, scan_roots: list[str] | None = None) -> str:
+    normalized = filepath.replace("\\", "/")
+    if scan_roots:
+        file_abs = os.path.abspath(filepath)
+        candidates: list[str] = []
+        for root in scan_roots:
+            try:
+                root_abs = os.path.abspath(root)
+                common = os.path.commonpath([file_abs, root_abs])
+            except ValueError:
+                continue
+            if common == root_abs:
+                rel = os.path.relpath(file_abs, root_abs).replace("\\", "/")
+                candidates.append(rel)
+        if candidates:
+            return min(candidates, key=len)
+    return normalized
 
 
 def _suppressed_by_anti(
@@ -796,7 +905,7 @@ def _get_local_python_rules() -> list[Rule]:
             "eval() usage -- arbitrary code execution risk",
             "Replace with ast.literal_eval() or redesign.",
             re.compile(r"\beval\s*\("),
-            _compile_anti([r"#\s*VB-IGNORE", r"literal_eval"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"literal_eval"]),
             layer=LAYER_HARD_CORRECTNESS,
         ),
         Rule(
@@ -806,7 +915,7 @@ def _get_local_python_rules() -> list[Rule]:
             "os.system() or subprocess with shell=True -- command injection",
             "Use subprocess.run() with list args and shell=False.",
             re.compile(r"(os\.system\s*\(|subprocess\.\w+\([^)]*shell\s*=\s*True)"),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer=LAYER_HARD_CORRECTNESS,
         ),
         Rule(
@@ -816,7 +925,7 @@ def _get_local_python_rules() -> list[Rule]:
             "pickle.load on untrusted data -- arbitrary code execution",
             "Use json, msgpack, or safer format.",
             re.compile(r"pickle\.(load|loads)\s*\("),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer=LAYER_HARD_CORRECTNESS,
         ),
         Rule(
@@ -826,7 +935,7 @@ def _get_local_python_rules() -> list[Rule]:
             "f-string in SQL/shell command -- injection risk",
             "Use parameterized queries or subprocess list args.",
             re.compile(r'(execute|run|system|popen)\s*\(\s*f["\']'),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer=LAYER_HARD_CORRECTNESS,
         ),
         Rule(
@@ -838,7 +947,7 @@ def _get_local_python_rules() -> list[Rule]:
             re.compile(r"\bexec\s*\("),
             _compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"^\s*#",
                     r"^\s*\w+\s*=\s*",
                     r"def\s+\w+\s*\([^)]*exec",
@@ -853,7 +962,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Hardcoded file path -- not portable",
             "Use pathlib.Path or os.path.join with configurable base.",
             re.compile(r"""['"](?:/[a-z]+/|[A-Z]:\\\\)[^'"]{3,}['"]"""),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer=LAYER_SEMANTIC,
         ),
         Rule(
@@ -863,7 +972,7 @@ def _get_local_python_rules() -> list[Rule]:
             "assert for input validation -- stripped with -O",
             "Replace with explicit validation: if x <= 0: raise ValueError(...).",
             re.compile(r"^\s*assert\s+(?!.*#\s*nosec)"),
-            _compile_anti([r"#\s*VB-IGNORE", r"#\s*nosec", r"test_|_test\.py"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"#\s*nosec", r"test_|_test\.py"]),
             layer=LAYER_HARD_CORRECTNESS,
             confidence=65,
         ),
@@ -874,7 +983,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Mutable default argument -- shared across calls",
             "Change to: def f(items=None): items = items if items is not None else []",
             re.compile(r"def\s+\w+\s*\([^)]*=\s*(\[\]|\{\}|set\(\))"),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer=LAYER_HARD_CORRECTNESS,
         ),
         Rule(
@@ -884,7 +993,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Bare except: catches SystemExit, KeyboardInterrupt",
             "Replace 'except:' with 'except Exception:' or specific types.",
             re.compile(r"^\s*except\s*:"),
-            _compile_anti([r"#\s*VB-IGNORE"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer=LAYER_HARD_CORRECTNESS,
         ),
         Rule(
@@ -894,7 +1003,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Comparing with None using == instead of 'is None'",
             "Use 'is None' or 'is not None'.",
             re.compile(r"[!=]=\s*None\b"),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer=LAYER_SEMANTIC,
         ),
         Rule(
@@ -906,7 +1015,7 @@ def _get_local_python_rules() -> list[Rule]:
             re.compile(r"(?<!\bwith\s)\bopen\s*\("),
             _compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"^\s*#",
                     r"\bwith\b",
                     r"Image\.open",
@@ -923,7 +1032,7 @@ def _get_local_python_rules() -> list[Rule]:
             "datetime.now() without timezone -- ambiguous",
             "Use datetime.now(tz=timezone.utc).",
             re.compile(r"datetime\.now\s*\(\s*\)"),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer=LAYER_HEURISTIC,
         ),
         Rule(
@@ -933,7 +1042,7 @@ def _get_local_python_rules() -> list[Rule]:
             "dict.get() with mutable default -- mutated result is shared",
             "Use dict.get(key) with None check, then create mutable separately.",
             re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             guard=_check_mutable_get,
             layer=LAYER_SEMANTIC,
             confidence=88,
@@ -945,7 +1054,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Class with __del__ -- unpredictable GC, prevents ref cycle collection",
             "Use context managers or weakref.finalize.",
             re.compile(r"def\s+__del__\s*\(\s*self"),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer=LAYER_SEMANTIC,
             confidence=85,
         ),
@@ -956,7 +1065,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Thread without daemon=True -- may prevent clean shutdown",
             "Set daemon=True or join before exit.",
             re.compile(r"Thread\s*\("),
-            _compile_anti([r"#\s*VB-IGNORE", r"daemon"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"daemon"]),
             layer=LAYER_HARD_CORRECTNESS,
         ),
         Rule(
@@ -968,7 +1077,7 @@ def _get_local_python_rules() -> list[Rule]:
             re.compile(r"json\.loads?\s*\("),
             _compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"^\s*#",
                     r"except.*JSON",
                     r"\btry\s*:",
@@ -986,7 +1095,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Float equality comparison -- use math.isclose",
             "Use math.isclose(a, b) or abs(a - b) < epsilon.",
             re.compile(r"(?<!\w)(==|!=)\s*\d+\.\d+"),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer=LAYER_HEURISTIC,
         ),
         Rule(
@@ -996,7 +1105,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Re-raising exception without chain -- loses traceback",
             "Use 'raise NewException(...) from original_exc'.",
             re.compile(r"raise\s+\w+\([^)]*\)\s*$"),
-            _compile_anti([r"#\s*VB-IGNORE", r"\bfrom\s+\w+"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"\bfrom\s+\w+"]),
             guard=lambda line, a, i: _is_inside_except(line, a, i),
             layer=LAYER_SEMANTIC,
             confidence=72,
@@ -1010,7 +1119,7 @@ def _get_local_python_rules() -> list[Rule]:
             re.compile(r"except\s+Exception\s*(?:as|\s*:)"),
             _compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"# broad catch intentional",
                     r"logger\.(exception|error|warning|critical)",
                     r"mcp\.tool",
@@ -1032,7 +1141,7 @@ def _get_local_python_rules() -> list[Rule]:
             re.compile(
                 r"^\s*(list|dict|set|str|int|float|bool|tuple|type|id|input|filter|map|zip|range|len|sum|min|max|any|all|sorted|reversed|hash|next|iter|open|print|format|bytes|object|super)\s*=\s*"
             ),
-            _compile_anti([r"#\s*VB-IGNORE", r"typing", r"import"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"typing", r"import"]),
             guard=lambda line, a, i: (
                 not line.rstrip().endswith(",")
                 and not line.rstrip().endswith(")")
@@ -1048,7 +1157,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Lambda in loop captures loop variable by reference -- late binding bug",
             "Capture with default arg: lambda x, i=i: ... or use functools.partial.",
             re.compile(r"for\s+(\w+)\s+in\b"),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             guard=lambda line, a, i: _check_late_binding(line, a, i),
             layer=LAYER_HARD_CORRECTNESS,
             confidence=92,
@@ -1062,7 +1171,7 @@ def _get_local_python_rules() -> list[Rule]:
             re.compile(r"\w+\s*\+=\s*['\"]"),
             _compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"^\s*#",
                     r"\bstring\b",
                     r"\bvar\b",
@@ -1084,7 +1193,7 @@ def _get_local_python_rules() -> list[Rule]:
             "re.match/search/findall without compile for repeated pattern",
             "Compile pattern once with re.compile() and reuse.",
             re.compile(r"re\.(match|search|findall|sub|split)\s*\("),
-            _compile_anti([r"#\s*VB-IGNORE", r"re\.compile"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"re\.compile"]),
             guard=lambda line, a, i: any(
                 re.search(r"^\s*(for|while)\b", a[j]) for j in range(max(0, i - 5), i)
             ),
@@ -1099,7 +1208,7 @@ def _get_local_python_rules() -> list[Rule]:
             re.compile(r"\.read\s*\(\s*\)"),
             _compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"^\s*#",
                     r'"rb"',
                     r"BytesIO",
@@ -1122,7 +1231,7 @@ def _get_local_python_rules() -> list[Rule]:
             re.compile(
                 r"os\.path\.(join|exists|isfile|isdir|basename|dirname|splitext)\s*\("
             ),
-            _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer=LAYER_HEURISTIC,
             confidence=72,
         ),
@@ -1133,7 +1242,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Deeply nested function (3+ indent levels) — hard to test and maintain",
             "Extract inner function to module level or class method.",
             re.compile(r"^\s{12,}def\s+\w+\s*\("),
-            _compile_anti([r"#\s*VB-IGNORE"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer=LAYER_HEURISTIC,
             confidence=85,
         ),
@@ -1144,7 +1253,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Star import pollutes namespace",
             "Replace with explicit imports: from X import ClassA, func_b.",
             re.compile(r"from\s+\S+\s+import\s+\*"),
-            _compile_anti([r"#\s*VB-IGNORE"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer=LAYER_HEURISTIC,
             confidence=92,
         ),
@@ -1155,7 +1264,7 @@ def _get_local_python_rules() -> list[Rule]:
             "Global variable mutation — makes function behavior depend on hidden state",
             "Pass the value as a function parameter, or encapsulate in a class.",
             re.compile(r"^\s+global\s+\w+"),
-            _compile_anti([r"#\s*VB-IGNORE"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer=LAYER_HEURISTIC,
             confidence=78,
         ),
@@ -1219,15 +1328,28 @@ def _get_local_python_rules() -> list[Rule]:
     return RULES
 
 
+def _get_python_rules_for_profile(profile: str) -> list[Rule]:
+    rules = _get_local_python_rules()
+    if profile in ("general", "unity"):
+        return [rule for rule in rules if not rule.id.startswith("BLE-")]
+    return rules
+
+
 # =========================================================================
 # LOCAL C# RULES (fallback if _rules_csharp not available)
 # =========================================================================
 
 
-def _get_local_csharp_rules() -> list[Any]:
+def _get_local_csharp_rules(profile: str = "general") -> list[Any]:
     """Return C# rules if module not available."""
-    if CSHARP_RULES:
-        return CSHARP_RULES
+    if profile == "general" and CSHARP_CORE_RULES:
+        return list(CSHARP_CORE_RULES)
+    if profile == "unity" and (CSHARP_CORE_RULES or CSHARP_UNITY_RULES):
+        return [*CSHARP_CORE_RULES, *CSHARP_UNITY_RULES]
+    if profile == "blender" and CSHARP_CORE_RULES:
+        return list(CSHARP_CORE_RULES)
+    if profile == "all" and (CSHARP_CORE_RULES or CSHARP_UNITY_RULES):
+        return [*CSHARP_CORE_RULES, *CSHARP_UNITY_RULES]
 
     # Define local C# rules (subset for fallback)
     RULES: list[Any] = [
@@ -1267,7 +1389,7 @@ def _get_local_csharp_rules() -> list[Any]:
             re.compile(
                 r"(?:Update|OnGUI)\s*\(\s*\)[^}]*\.(?:Where|Select|ToList|ToArray|FirstOrDefault)\s*\("
             ),
-            _compile_anti([r"#\s*VB-IGNORE"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer=LAYER_SEMANTIC,
             scope="HotPath",
         ),
@@ -1281,7 +1403,7 @@ def _get_local_csharp_rules() -> list[Any]:
                 r"(?:password|apikey|api_key|secret|token)\s*=\s*[\"'][^\"']+[\"']",
                 re.IGNORECASE,
             ),
-            _compile_anti([r"#\s*VB-IGNORE", r"//\s*TODO", r"example", r"placeholder"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"//\s*TODO", r"example", r"placeholder"]),
             layer=LAYER_HARD_CORRECTNESS,
             file_filter="Runtime",
         ),
@@ -1294,27 +1416,27 @@ def _get_local_csharp_rules() -> list[Any]:
             re.compile(
                 r"(?:ExecuteQuery|ExecuteNonQuery|SqlCommand)\s*\([^)]*\+[^)]*\)"
             ),
-            _compile_anti([r"#\s*VB-IGNORE", r"Parameters\.Add"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"Parameters\.Add"]),
             layer=LAYER_HARD_CORRECTNESS,
         ),
         Rule(
             "UNITY-01",
             Severity.HIGH,
-            Category.Unity,
+            Category.Framework,
             "Destroy() called with non-null second argument -- incorrect API",
             "Use Destroy(gameObject) or DestroyImmediate(gameObject).",
             re.compile(r"Destroy\s*\([^,]+,\s*(?!null)"),
-            _compile_anti([r"#\s*VB-IGNORE"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer=LAYER_HARD_CORRECTNESS,
         ),
         Rule(
             "UNITY-02",
             Severity.MEDIUM,
-            Category.Unity,
+            Category.Framework,
             "Coroutines with yield return null in Update",
             "Use StartCoroutine() instead of yield return null in Update.",
             re.compile(r"void\s+Update\s*\(\s*\)[^}]*yield\s+return\s+null"),
-            _compile_anti([r"#\s*VB-IGNORE"]),
+            _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer=LAYER_SEMANTIC,
             scope="HotPath",
         ),
@@ -1332,29 +1454,46 @@ def _get_local_csharp_rules() -> list[Any]:
     return RULES
 
 
+def _get_csharp_deep_checks(profile: str) -> dict[str, dict]:
+    if profile in ("unity", "all"):
+        return dict(CSHARP_UNITY_DEEP_CHECKS)
+    return {}
+
+
 # =========================================================================
 # AST ANALYSIS FOR PYTHON
 # =========================================================================
 
 
-def _is_in_triple_quote(lines: list[str]) -> list[bool]:
-    """Pre-classify lines inside triple-quoted strings."""
+def _classify_embedded_language(lines: list[str]) -> list[str | None]:
+    """Classify triple-quoted blocks so embedded C# templates can be skipped safely."""
     _TDQ = chr(34) * 3
     _TSQ = chr(39) * 3
     _TQ_START = re.compile(r"(?:=\s*)?[brufBRUF]{0,2}(?:" + _TSQ + "|" + _TDQ + ")")
-    in_tq = [False] * len(lines)
+    _CSHARP_MARKERS = re.compile(
+        r"\b(using|namespace|public|private|protected|internal|class|struct|interface|void|async|Task)\b|;"
+    )
+    embedded_lang: list[str | None] = [None] * len(lines)
     inside = False
     open_quote = ""
+    block_start = 0
+
+    def _mark_block(end_idx: int) -> None:
+        block_text = "\n".join(lines[block_start : end_idx + 1])
+        lang = "csharp" if len(_CSHARP_MARKERS.findall(block_text)) >= 2 else "string"
+        for j in range(block_start, end_idx + 1):
+            embedded_lang[j] = lang
+
     for i, line in enumerate(lines):
         stripped = line.strip()
         if inside:
-            in_tq[i] = True
             if open_quote in stripped:
+                _mark_block(i)
                 inside = False
                 open_quote = ""
             continue
         if _TQ_START.search(stripped):
-            in_tq[i] = True
+            block_start = i
             dq_count = stripped.count(_TDQ)
             sq_count = stripped.count(_TSQ)
             if dq_count > 0 and sq_count > 0:
@@ -1374,7 +1513,9 @@ def _is_in_triple_quote(lines: list[str]) -> list[bool]:
             elif sq_count % 2 == 1:
                 inside = True
                 open_quote = _TSQ
-    return in_tq
+            else:
+                _mark_block(i)
+    return embedded_lang
 
 
 def _ast_analyze_python(
@@ -1595,10 +1736,11 @@ def scan_python_file(
     filepath: str,
     context: Optional[ContextEngineType],
     review_scope: str = "production",
+    profile: str = "all",
 ) -> list[Issue]:
     """Scan a Python file with regex rules + AST pass."""
     issues: list[Issue] = []
-    rules = _get_local_python_rules()
+    rules = _get_python_rules_for_profile(profile)
 
     try:
         with open(filepath, "r", encoding="utf-8", errors="replace") as f:
@@ -1612,13 +1754,12 @@ def scan_python_file(
     for line in lines:
         line_offsets.append(cursor)
         cursor += len(line) + 1  # +1 for the newline character
-    in_tq = _is_in_triple_quote(lines)
+    embedded_lang = _classify_embedded_language(lines)
 
     # Build suppressed set
     suppressed: set[str] = set()
-    ignore_rx = re.compile(r"#\s*VB-IGNORE:\s*([\w,-]+)")
     for line in lines:
-        m = ignore_rx.search(line)
+        m = PY_IGNORE_DIRECTIVE_RE.search(line)
         if m:
             for rid in m.group(1).split(","):
                 suppressed.add(rid.strip())
@@ -1645,9 +1786,9 @@ def scan_python_file(
             continue
 
         for i, line in enumerate(lines):
-            if "VB-IGNORE" in line:
+            if _line_has_ignore_marker(line):
                 continue
-            if _is_comment(line, "py") or in_tq[i]:
+            if _is_comment(line, "py") or embedded_lang[i]:
                 continue
 
             m = rule.pattern.search(line)
@@ -1694,6 +1835,7 @@ def scan_python_file(
                     reasoning=rule.reasoning or "",
                     layer=rule.layer,
                     requires_context=rule.requires_context,
+                    profile=profile,
                 )
             )
 
@@ -1701,6 +1843,7 @@ def scan_python_file(
     ast_issues = _ast_analyze_python(filepath, content, review_scope)
     for issue in ast_issues:
         if issue.rule_id not in suppressed:
+            issue.profile = profile
             issues.append(issue)
 
     return issues
@@ -1710,10 +1853,12 @@ def scan_csharp_file(
     filepath: str,
     context: Optional[ContextEngineType],
     review_scope: str = "production",
+    profile: str = "all",
 ) -> list[Issue]:
     """Scan a C# file with line classification + regex + DEEP rules."""
     issues: list[Issue] = []
-    rules = _get_local_csharp_rules()
+    rules = _get_local_csharp_rules(profile)
+    deep_checks = _get_csharp_deep_checks(profile)
 
     try:
         with open(filepath, "r", encoding="utf-8", errors="replace") as f:
@@ -1840,13 +1985,13 @@ def scan_csharp_file(
                     reasoning=rule.reasoning or "",
                     layer=rule.layer,
                     requires_context=rule.requires_context,
+                    profile=profile,
                 )
             )
 
     # Pass 2: DEEP rules (if available)
-    if review_scope != "production" and CSHARP_DEEP_CHECKS:
-        _vb_ignore_re = re.compile(r"//\s*VB-IGNORE")
-        for rule_id, deep_spec in CSHARP_DEEP_CHECKS.items():
+    if review_scope != "production" and deep_checks:
+        for rule_id, deep_spec in deep_checks.items():
             check_fn = (
                 deep_spec.get("check") if isinstance(deep_spec, dict) else deep_spec
             )
@@ -1856,15 +2001,15 @@ def scan_csharp_file(
             if not isinstance(deep_findings, list):
                 continue
             for finding in deep_findings:
-                # Respect VB-IGNORE suppression on the reported line (or +-1 lines for comment-above)
+                # Respect ignore suppression on the reported line (or +-1 lines for comment-above)
                 fline = finding.get("line", 1)
                 suppressed = False
                 for check_ln in range(max(1, fline - 1), min(len(lines) + 1, fline + 2)):
-                    if check_ln <= len(lines) and _vb_ignore_re.search(lines[check_ln - 1]):
+                    if check_ln <= len(lines) and CS_IGNORE_DIRECTIVE_RE.search(lines[check_ln - 1]):
                         rid = rule_id
-                        # Only suppress if VB-IGNORE mentions this rule or is unqualified
+                        # Only suppress if the directive mentions this rule or is unqualified
                         line_text = lines[check_ln - 1]
-                        if rid in line_text or "VB-IGNORE" in line_text:
+                        if rid in line_text or _line_has_ignore_marker(line_text):
                             suppressed = True
                             break
                 if suppressed:
@@ -1882,6 +2027,7 @@ def scan_csharp_file(
                         priority=finding.get("priority", 75),
                         layer=LAYER_SEMANTIC,
                         requires_context=True,
+                        profile=profile,
                     )
                 )
 
@@ -1917,6 +2063,271 @@ def collect_files(
                         continue
                     files.append(_normalize_path(str(f.resolve())))
     return files
+
+
+def _scan_stdin_content(
+    content: str,
+    *,
+    lang: str,
+    review_scope: str,
+    profile: str,
+) -> dict:
+    suffix = ".py" if lang == "py" else ".cs"
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=suffix, encoding="utf-8", delete=False
+    ) as handle:
+        handle.write(content)
+        tmp_path = handle.name
+
+    try:
+        if lang == "py":
+            issues = scan_python_file(tmp_path, None, review_scope, profile)
+        else:
+            issues = scan_csharp_file(tmp_path, None, review_scope, profile)
+        for issue in issues:
+            issue.file = "<stdin>"
+        report = generate_report(issues, review_scope)
+        report["files_scanned"] = 1
+        report["files_collected"] = 1
+        report["scan_roots"] = ["<stdin>"]
+        report["context_available"] = False
+        report["ast_findings"] = 0
+        report["tool_findings"] = 0
+        report["tools_used"] = []
+        return report
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+
+def _parse_unified_diff(
+    diff_text: str, *, base_dir: str | None = None
+) -> dict[str, list[tuple[int, int]]]:
+    """Parse unified diff text into changed-line ranges keyed by file path."""
+    base_path = Path(base_dir or os.getcwd())
+    changed: dict[str, list[tuple[int, int]]] = {}
+    current_file: str | None = None
+
+    for raw_line in diff_text.splitlines():
+        if raw_line.startswith("+++ "):
+            candidate = raw_line[4:].strip()
+            if candidate == "/dev/null":
+                current_file = None
+                continue
+            if candidate.startswith("b/"):
+                candidate = candidate[2:]
+            resolved = _normalize_path(str((base_path / candidate).resolve()))
+            current_file = resolved
+            changed.setdefault(current_file, [])
+            continue
+
+        if not current_file or not raw_line.startswith("@@"):
+            continue
+
+        match = re.search(r"\+(\d+)(?:,(\d+))?", raw_line)
+        if not match:
+            continue
+        start = int(match.group(1))
+        count = int(match.group(2) or "1")
+        if count <= 0:
+            continue
+        changed[current_file].append((start, start + count - 1))
+
+    return {path: ranges for path, ranges in changed.items() if ranges}
+
+
+def _line_in_changed_ranges(
+    filepath: str, line: int, changed_ranges: dict[str, list[tuple[int, int]]] | None
+) -> bool:
+    if not changed_ranges:
+        return True
+    ranges = changed_ranges.get(_normalize_path(filepath))
+    if not ranges:
+        return False
+    return any(start <= line <= end for start, end in ranges)
+
+
+def _cache_key(filepath: str, *, lang: str, review_scope: str, profile: str) -> str:
+    """Build a cache key that keeps scan modes isolated from each other."""
+    return f"{_normalize_path(filepath)}|lang={lang}|scope={review_scope}|profile={profile}"
+
+
+def _find_rule_with_autofix(issue: dict[str, Any], profile: str) -> Any | None:
+    rule_ids = [part.strip() for part in str(issue.get("rule_id", "")).split(",")]
+    is_python = str(issue.get("file", "")).endswith(".py") or issue.get("file") == "<stdin>"
+    rules = _get_python_rules_for_profile(profile) if is_python else _get_local_csharp_rules(profile)
+    for rule_id in rule_ids:
+        for rule in rules:
+            if getattr(rule, "id", "") == rule_id and getattr(rule, "auto_fix", None):
+                return rule
+    return None
+
+
+def _detect_newline(content: str) -> str:
+    if "\r\n" in content:
+        return "\r\n"
+    return "\n"
+
+
+def _python_import_present(lines: list[str], import_stmt: str) -> bool:
+    if import_stmt == "import ast":
+        return any(
+            re.match(r"^\s*(import\s+ast\b|from\s+ast\s+import\b)", line)
+            for line in lines
+        )
+    if import_stmt == "import math":
+        return any(
+            re.match(r"^\s*(import\s+math\b|from\s+math\s+import\b)", line)
+            for line in lines
+        )
+    if import_stmt == "from pathlib import Path":
+        return any(re.match(r"^\s*from\s+pathlib\s+import\s+.*\bPath\b", line) for line in lines)
+    return import_stmt in lines
+
+
+def _python_import_insertion_index(lines: list[str]) -> int:
+    idx = 0
+    if idx < len(lines) and lines[idx].startswith("#!"):
+        idx += 1
+    if idx < len(lines) and re.match(r"^#.*coding[:=]\s*[-\w.]+", lines[idx]):
+        idx += 1
+    if idx < len(lines):
+        stripped = lines[idx].lstrip()
+        if stripped.startswith(('"""', "'''")):
+            quote = stripped[:3]
+            idx += 1
+            while idx < len(lines):
+                if quote in lines[idx]:
+                    idx += 1
+                    break
+                idx += 1
+    last_import = idx
+    while last_import < len(lines) and (
+        not lines[last_import].strip()
+        or re.match(r"^\s*(from\s+\S+\s+import|import\s+\S+)", lines[last_import])
+    ):
+        last_import += 1
+    return last_import
+
+
+def _apply_text_edits(
+    lines: list[str], edits: list[dict[str, Any]]
+) -> list[str]:
+    updated = list(lines)
+    for edit in sorted(edits, key=lambda entry: (int(entry["start"]), int(entry["end"])), reverse=True):
+        replacement = [str(line) for line in edit.get("replacement", [])]
+        updated[int(edit["start"]) : int(edit["end"])] = replacement
+    return updated
+
+
+def _build_fix_report(
+    issues: list[dict[str, Any]],
+    *,
+    profile: str,
+    apply: bool = False,
+) -> dict[str, Any]:
+    patches: list[dict[str, Any]] = []
+    by_file: dict[str, list[dict[str, Any]]] = {}
+    for issue in issues:
+        filepath = str(issue.get("file", ""))
+        if not filepath or filepath == "<stdin>":
+            continue
+        by_file.setdefault(filepath, []).append(issue)
+
+    for filepath, file_issues in sorted(by_file.items()):
+        path = Path(filepath)
+        if not path.exists():
+            continue
+        original = path.read_text(encoding="utf-8")
+        newline = _detect_newline(original)
+        lines = original.splitlines()
+        collected_edits: list[dict[str, Any]] = []
+        required_imports: set[str] = set()
+
+        for issue in sorted(file_issues, key=lambda entry: int(entry.get("line", 0))):
+            rule = _find_rule_with_autofix(issue, profile)
+            if not rule:
+                continue
+            line_idx = max(0, int(issue.get("line", 1)) - 1)
+            if line_idx >= len(lines):
+                continue
+            fix_result = rule.auto_fix(lines[line_idx], lines, line_idx)
+            if not fix_result:
+                continue
+            new_edits = list(fix_result.get("edits", []))
+            if any(
+                not (
+                    int(candidate["end"]) <= int(existing["start"])
+                    or int(candidate["start"]) >= int(existing["end"])
+                )
+                for candidate in new_edits
+                for existing in collected_edits
+            ):
+                continue
+            collected_edits.extend(new_edits)
+            required_imports.update(fix_result.get("imports", []))
+
+        if not collected_edits and not required_imports:
+            continue
+
+        missing_imports = [
+            import_stmt
+            for import_stmt in sorted(required_imports)
+            if not _python_import_present(lines, import_stmt)
+        ]
+        if missing_imports and filepath.endswith(".py"):
+            insert_at = _python_import_insertion_index(lines)
+            import_block = [*missing_imports]
+            if insert_at < len(lines) and lines[insert_at].strip():
+                import_block.append("")
+            collected_edits.append(
+                {"start": insert_at, "end": insert_at, "replacement": import_block}
+            )
+
+        if not collected_edits:
+            continue
+
+        updated_lines = _apply_text_edits(lines, collected_edits)
+        new_content = newline.join(updated_lines)
+        if original.endswith(("\n", "\r\n")):
+            new_content += newline
+        diff_text = "".join(
+            __import__("difflib").unified_diff(
+                original.splitlines(keepends=True),
+                new_content.splitlines(keepends=True),
+                fromfile=filepath,
+                tofile=filepath,
+            )
+        )
+        if not diff_text:
+            continue
+
+        backup_file = None
+        if apply:
+            backup_path = path.with_name(f"{path.name}.bak")
+            backup_path.write_text(original, encoding="utf-8")
+            path.write_text(new_content, encoding="utf-8")
+            backup_file = str(backup_path)
+
+        patches.append(
+            {
+                "file": filepath,
+                "rule_ids": sorted(
+                    {
+                        issue["rule_id"]
+                        for issue in file_issues
+                        if _find_rule_with_autofix(issue, profile)
+                    }
+                ),
+                "applied": apply,
+                "backup_file": backup_file,
+                "diff": diff_text,
+            }
+        )
+
+    return {"total_patches": len(patches), "patches": patches}
 
 
 def _find_solution_candidates(paths: list[str]) -> list[str]:
@@ -1957,6 +2368,8 @@ def scan_project(
     include_tests: bool = False,
     include_temp: bool = False,
     lang: str = "auto",
+    profile: str = "all",
+    changed_ranges: dict[str, list[tuple[int, int]]] | None = None,
     build_context: bool = True,
     compact: bool = False,
     max_findings: int = 0,
@@ -1982,6 +2395,9 @@ def scan_project(
 
     # 1. Collect files
     files = collect_files(paths, extensions)
+    if changed_ranges:
+        changed_file_set = set(changed_ranges)
+        files = [f for f in files if _normalize_path(f) in changed_file_set]
 
     # 2. Build cross-file context (Pass 1+2)
     # Lazy context building: Only build context for files with findings (40-60% reduction)
@@ -2014,7 +2430,7 @@ def scan_project(
 
     # Smart incremental scanning: Load cached findings for unchanged files (60-80% reduction)
     import hashlib
-    cache: dict[str, dict[str, list[dict]]] = {}  # filepath -> {hash: issues, timestamp}
+    cache: dict[str, dict[str, Any]] = {}  # filepath -> {hash, timestamp, issues}
 
     def _file_hash(filepath: str) -> str:
         """Calculate SHA256 hash of a file (chunked for large files)."""
@@ -2071,7 +2487,7 @@ def scan_project(
 
     # Check AST availability once
     _ast_ok = False
-    if review_scope in ("advisory", "strict"):
+    if review_scope in REVIEW_SCOPE_CHOICES:
         try:
             from veilbreakers_mcp._ast_analyzer import analyze_csharp, analyze_python, is_available as ast_available
             _ast_ok = ast_available()
@@ -2162,14 +2578,20 @@ def scan_project(
     for filepath in files:
         # Smart incremental: Check cache for unchanged files (60-80% reduction)
         file_hash = _file_hash(filepath)
-        if file_hash and filepath in cache and file_hash == cache.get(filepath, {}).get("hash", ""):
+        cache_key = _cache_key(
+            filepath, lang=lang, review_scope=review_scope, profile=profile
+        )
+        if file_hash and cache_key in cache and file_hash == cache.get(cache_key, {}).get("hash", ""):
             # File unchanged - use cached findings
-            cached_data = cache[filepath]
+            cached_data = cache[cache_key]
             if cached_data:
-                all_issues.extend(cached_data.get("issues", []))
+                all_issues.extend(
+                    _issue_from_dict(issue_dict)
+                    for issue_dict in cached_data.get("issues", [])
+                )
                 continue  # Skip scanning this file
         if filepath not in explicit_file_targets and not _should_scan_file(
-            filepath, lang, review_scope=review_scope,
+            filepath, lang, review_scope=review_scope, profile=profile,
             include_tests=include_tests, include_temp=include_temp,
         ):
             continue
@@ -2184,20 +2606,21 @@ def scan_project(
         # --- Layer 1: Regex rules ---
         regex_has_issue = False
         if detected_lang == "python":
-            for issue in scan_python_file(filepath, context, review_scope):
+            for issue in scan_python_file(filepath, context, review_scope, profile):
                 _merge(issue, source_tool="regex")
                 regex_has_issue = True
         elif detected_lang == "csharp":
-            for issue in scan_csharp_file(filepath, context, review_scope):
+            for issue in scan_csharp_file(filepath, context, review_scope, profile):
                 _merge(issue, source_tool="regex")
                 regex_has_issue = True
         # Track files with regex findings for tool chaining
         if regex_has_issue:
             files_with_regex_issues.add(filepath)
 
-        # --- Layer 2: tree-sitter AST (advisory+ only, same file bytes) ---
-        # Tool chaining: Only run AST on files with regex findings (30-50% reduction)
-        if _ast_ok and review_scope in ("advisory", "strict") and filepath in files_with_regex_issues:
+        # --- Layer 2: tree-sitter AST (all scopes, same file bytes) ---
+        # Run AST on every eligible file so structural bugs are not hidden behind
+        # a regex precondition.
+        if _ast_ok:
             try:
                 with open(filepath, "rb") as f:
                     src = f.read()
@@ -2212,7 +2635,8 @@ def scan_project(
                         rule_id=af.rule_id, severity=af.severity,
                         category="Bug", file=af.file, line=af.line,
                         description=af.description, fix=af.fix,
-                        confidence=af.confidence, layer=LAYER_SEMANTIC,
+                        confidence=af.confidence,
+                        layer=_ast_issue_layer(af.rule_id),
                     ), source_tool="ast")
                     ast_findings += 1
             except Exception:
@@ -2254,17 +2678,27 @@ def scan_project(
             python_file_set = set(python_files)
             csharp_file_set = set(csharp_files)
 
-            # Layer assignment: production scope elevates critical/high findings
-            # to hard_correctness so they survive scope filtering
-            _is_production = review_scope == "production"
-            def _tool_layer(tf) -> str:
-                """Map tool finding severity to appropriate layer."""
-                if _is_production:
-                    # In production, only critical/high findings from tools survive
-                    if tf.severity in ("CRITICAL", "HIGH"):
-                        return LAYER_HARD_CORRECTNESS
-                    return LAYER_SEMANTIC  # Still collected, not shown
-                return LAYER_SEMANTIC
+            def _classify_tool_finding(tf) -> tuple[str, str]:
+                """Return (layer, category) for an external-tool finding."""
+                rule_id = str(getattr(tf, "rule_id", "") or "").upper()
+                severity = str(getattr(tf, "severity", "") or "").upper()
+
+                if rule_id.startswith("RUFF-"):
+                    code = rule_id[5:]
+                    if code in _RUFF_HEURISTIC_CODES:
+                        return (LAYER_HEURISTIC, "Quality")
+                    if code in _RUFF_HARD_BUG_CODES or code.startswith("S") or code.startswith("B9"):
+                        if review_scope == "production" and severity in {"CRITICAL", "HIGH"}:
+                            return (LAYER_HARD_CORRECTNESS, "Bug")
+                        return (LAYER_SEMANTIC, "Bug")
+                    return (LAYER_SEMANTIC, "Quality")
+
+                if review_scope == "production":
+                    if severity in {"CRITICAL", "HIGH"}:
+                        return (LAYER_HARD_CORRECTNESS, "Bug")
+                    return (LAYER_SEMANTIC, "Bug")
+
+                return (LAYER_SEMANTIC, "Bug")
 
             # Context sharing: Generate context hints for cross-file analysis
             # This helps OpenGrep and other tools understand variable flow across files
@@ -2297,10 +2731,16 @@ rules:
                 except Exception:
                     context_rules_dir = ""
 
-            def _merge_tool_finding(tf, *, allowed_files: set[str], category: str, layer: str = LAYER_SEMANTIC, source_tool: str):
+            def _merge_tool_finding(tf, *, allowed_files: set[str], source_tool: str):
                 nonlocal tool_findings
                 normalized_file = _normalize_path(tf.file)
                 if normalized_file not in allowed_files:
+                    return
+                layer, category = _classify_tool_finding(tf)
+                # Gate: don't merge heuristic findings into advisory/production scans
+                # (prevents heuristic ruff noise from adopting a semantic layer via merge)
+                allowed = SCOPE_TO_LAYERS.get(review_scope, {LAYER_HARD_CORRECTNESS})
+                if layer not in allowed:
                     return
                 _merge(Issue(
                     rule_id=tf.rule_id,
@@ -2311,26 +2751,26 @@ rules:
                     description=tf.description,
                     fix=tf.fix,
                     layer=layer,
+                    profile=profile,
                 ), source_tool=source_tool)
                 tool_findings += 1
 
             # Python primary analyzer (runs in all scopes including production)
             if python_files and avail.get("ruff"):
                 for tf in run_ruff(python_files):
-                    _merge_tool_finding(tf, allowed_files=python_file_set, category="Quality",
-                                        layer=_tool_layer(tf), source_tool="ruff")
+                    _merge_tool_finding(tf, allowed_files=python_file_set, source_tool="ruff")
                 tools_used.append("ruff")
 
             # OpenGrep: advisory+ only (expensive, taint analysis)
             if review_scope in ("advisory", "strict") and python_files and avail.get("opengrep"):
                 for tf in run_opengrep(python_files, rules_dir=context_rules_dir):
-                    _merge_tool_finding(tf, allowed_files=python_file_set, category="Bug", source_tool="opengrep")
+                    _merge_tool_finding(tf, allowed_files=python_file_set, source_tool="opengrep")
                 tools_used.append("opengrep")
 
             # Python strict-only typing pass
             if review_scope == "strict" and python_files and avail.get("mypy"):
                 for tf in run_mypy(python_files):
-                    _merge_tool_finding(tf, allowed_files=python_file_set, category="Bug", source_tool="mypy")
+                    _merge_tool_finding(tf, allowed_files=python_file_set, source_tool="mypy")
                 tools_used.append("mypy")
 
             # C# primary analyzer (runs in all scopes including production)
@@ -2338,23 +2778,21 @@ rules:
             if csharp_files and avail.get("dotnet"):
                 for sln in _find_solution_candidates(paths)[:1]:
                     for tf in run_dotnet_analyzers(sln):
-                        _merge_tool_finding(tf, allowed_files=csharp_file_set, category="Bug",
-                                            layer=_tool_layer(tf), source_tool="dotnet-analyzers")
+                        _merge_tool_finding(tf, allowed_files=csharp_file_set, source_tool="dotnet-analyzers")
                     tools_used.append("dotnet-analyzers")
                     ran_csharp_primary = True
                     break
 
             if review_scope in ("advisory", "strict") and csharp_files and avail.get("opengrep"):
                 for tf in run_opengrep(csharp_files, rules_dir=context_rules_dir):
-                    _merge_tool_finding(tf, allowed_files=csharp_file_set, category="Bug", source_tool="opengrep")
+                    _merge_tool_finding(tf, allowed_files=csharp_file_set, source_tool="opengrep")
                 tools_used.append("opengrep")
 
             # C# structural fallback (runs in all scopes including production)
             if csharp_files and not ran_csharp_primary and avail.get("ast-grep"):
                 for filepath in csharp_files:
                     for tf in run_ast_grep(filepath, "csharp"):
-                        _merge_tool_finding(tf, allowed_files=csharp_file_set, category="Bug",
-                                            layer=_tool_layer(tf), source_tool="ast-grep")
+                        _merge_tool_finding(tf, allowed_files=csharp_file_set, source_tool="ast-grep")
                 tools_used.append("ast-grep")
 
             tools_used = list(dict.fromkeys(tools_used))
@@ -2363,26 +2801,35 @@ rules:
         # context_rules_dir_obj cleans up automatically when exiting context
 
     # Smart incremental: Store scan results in cache before returning
-    if cache:
-        for filepath in set(scannable_files):  # Cache only files we actually scanned
-            cache[filepath] = {
-                "hash": _file_hash(filepath),
-                "timestamp": __import__("time").time(),
-                "issues": [asdict(i) for i in all_issues if i.file == filepath],
-            }
+    for filepath in set(scannable_files):  # Cache only files we actually scanned
+        cache_key = _cache_key(
+            filepath, lang=lang, review_scope=review_scope, profile=profile
+        )
+        cache[cache_key] = {
+            "hash": _file_hash(filepath),
+            "timestamp": __import__("time").time(),
+            "issues": [asdict(i) for i in all_issues if i.file == filepath],
+        }
 
     # 6. Generate report
+    if changed_ranges:
+        all_issues = [
+            issue
+            for issue in all_issues
+            if _line_in_changed_ranges(issue.file, issue.line, changed_ranges)
+        ]
     report = generate_report(all_issues, review_scope, compact=compact,
                              max_findings=max_findings, summary_only=summary_only)
     report["files_scanned"] = len(scannable_files)
     report["files_collected"] = len(files)
+    report["scan_roots"] = [_normalize_path(str(Path(p).resolve())) for p in paths]
     report["context_available"] = context_available
     report["ast_findings"] = ast_findings
     report["tool_findings"] = tool_findings
     report["tools_used"] = tools_used
 
     # Smart incremental: Save cache before return
-    if cache:
+    if scannable_files or cache:
         _save_cache()
 
     return report
@@ -2539,15 +2986,6 @@ def _build_agent_brief(issues: list[Issue], scope: str, sev_counts: dict[str, in
 
     idx = 0
     for filepath, file_issues in by_file.items():
-        # Shorten path for display
-        short = filepath.replace("\\", "/")
-        if "/src/veilbreakers_mcp/" in short:
-            short = short.split("/src/veilbreakers_mcp/")[-1]
-        elif "/Assets/" in short:
-            short = short.split("/Assets/")[-1]
-        elif "/blender_addon/" in short:
-            short = "addon/" + short.split("/blender_addon/")[-1]
-
         for issue in file_issues:
             idx += 1
             icon = _SEV_ICON.get(issue.severity, "[?]")
@@ -2556,7 +2994,7 @@ def _build_agent_brief(issues: list[Issue], scope: str, sev_counts: dict[str, in
                 f"{icon} #{idx}  {issue.severity}  {issue.rule_id}  |  "
                 f"conf={issue.adjusted_confidence}% {conf_label}"
             )
-            lines.append(f"  {short}:{issue.line} — {issue.description}")
+            lines.append(f"  {_display_path(filepath)}:{issue.line} — {issue.description}")
             lines.append(f"  FIX: {issue.fix}")
             lines.append("")
 
@@ -2654,6 +3092,12 @@ Examples:
         help="Language: auto (both), py (Python), cs (C#)",
     )
     parser.add_argument(
+        "--profile",
+        default="general",
+        choices=list(PROFILE_CHOICES),
+        help="Rule profile: general, unity, blender, or all (default: general)",
+    )
+    parser.add_argument(
         "--include-tests",
         action="store_true",
         help="Include tests, fixtures, and testdata files in directory scans.",
@@ -2674,26 +3118,92 @@ Examples:
         default=0,
         help="Minimum confidence to report (0-100)",
     )
+    parser.add_argument(
+        "--compact",
+        action="store_true",
+        help="Emit compact JSON findings for agent consumption.",
+    )
+    parser.add_argument(
+        "--max-findings",
+        type=int,
+        default=0,
+        help="Limit returned findings to the highest-priority N entries.",
+    )
+    parser.add_argument(
+        "--summary-only",
+        action="store_true",
+        help="Emit counts only, without individual findings.",
+    )
+    parser.add_argument(
+        "--diff",
+        nargs="?",
+        const="-",
+        default=None,
+        help="Filter findings to changed lines from a unified diff file, or read the diff from stdin when used without a value.",
+    )
+    parser.add_argument(
+        "--stdin",
+        action="store_true",
+        help="Read source code from stdin instead of scanning files. Requires --lang py or --lang cs.",
+    )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Emit mechanical patch suggestions for rules that support auto-fix.",
+    )
+    parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply auto-fix patches in place and write .bak backups. Requires --fix.",
+    )
     args = parser.parse_args()
 
+    if args.apply and not args.fix:
+        print("Error: --apply requires --fix", file=sys.stderr)
+        sys.exit(2)
+    if args.apply and args.stdin:
+        print("Error: --apply is not supported with --stdin", file=sys.stderr)
+        sys.exit(2)
+
     target = Path(args.path)
-    if not target.exists():
+    if not args.stdin and not target.exists():
         print(f"Error: {args.path} does not exist", file=sys.stderr)
         sys.exit(2)
 
-    # Determine paths to scan
+    changed_ranges = None
     scan_paths = [str(target)] if target.is_file() else [str(target)]
+    if args.diff is not None:
+        if args.diff == "-":
+            diff_text = sys.stdin.read()
+        else:
+            diff_text = Path(args.diff).read_text(encoding="utf-8")
+        changed_ranges = _parse_unified_diff(diff_text, base_dir=os.getcwd())
+        if changed_ranges:
+            scan_paths = list(changed_ranges.keys())
 
     # Run scan
     try:
-        report = scan_project(
-            scan_paths,
-            review_scope=args.scope,
-            include_tests=args.include_tests,
-            include_temp=args.include_temp,
-            lang=args.lang,
-            build_context=not args.no_context,
-        )
+        if args.stdin:
+            if args.lang not in ("py", "cs"):
+                print("Error: --stdin requires --lang py or --lang cs", file=sys.stderr)
+                sys.exit(2)
+            report = _scan_stdin_content(
+                sys.stdin.read(),
+                lang=args.lang,
+                review_scope=args.scope,
+                profile=args.profile,
+            )
+        else:
+            report = scan_project(
+                scan_paths,
+                review_scope=args.scope,
+                include_tests=args.include_tests,
+                include_temp=args.include_temp,
+                lang=args.lang,
+                profile=args.profile,
+                changed_ranges=changed_ranges,
+                build_context=not args.no_context,
+            )
     except Exception as e:
         print(f"Scan error: {e}", file=sys.stderr)
         sys.exit(3)
@@ -2733,6 +3243,57 @@ Examples:
     report["semantic"] = layer_counts.get(LAYER_SEMANTIC, 0)
     report["heuristic"] = layer_counts.get(LAYER_HEURISTIC, 0)
 
+    sev_order = {"CRITICAL": 0, "HIGH": 1, "MEDIUM": 2, "LOW": 3}
+    filtered_issues = sorted(
+        filtered_issues,
+        key=lambda entry: (
+            sev_order.get(entry.get("severity", "LOW"), 9),
+            -int(entry.get("confidence", 0)),
+            str(entry.get("file", "")),
+            int(entry.get("line", 0)),
+        ),
+    )
+    if args.max_findings > 0:
+        filtered_issues = filtered_issues[: args.max_findings]
+
+    if args.summary_only:
+        report["issues"] = []
+    elif args.compact:
+        report["issues"] = [
+            {
+                "id": issue.get("rule_id", ""),
+                "s": str(issue.get("severity", ""))[:1],
+                "l": f"{Path(str(issue.get('file', ''))).name}:{issue.get('line', 0)}",
+                "d": issue.get("description", ""),
+                "f": str(issue.get("fix", ""))[:80],
+            }
+            for issue in filtered_issues
+        ]
+    else:
+        report["issues"] = filtered_issues
+
+    has_serious = any(i["severity"] in ("CRITICAL", "HIGH") for i in filtered_issues)
+
+    if args.fix:
+        fix_report = _build_fix_report(
+            filtered_issues,
+            profile=args.profile,
+            apply=args.apply,
+        )
+        report["patches"] = fix_report["patches"]
+        report["total_patches"] = fix_report["total_patches"]
+        report["issues"] = []
+        output = json.dumps(report, indent=2)
+        if args.output:
+            Path(args.output).write_text(output, encoding="utf-8")
+            print(
+                f"Report written to {args.output} ({fix_report['total_patches']} patches)",
+                file=sys.stderr,
+            )
+        else:
+            print(output)
+        sys.exit(0 if fix_report["total_patches"] else 1 if has_serious else 0)
+
     output = json.dumps(report, indent=2)
 
     if args.output:
@@ -2742,10 +3303,12 @@ Examples:
             file=sys.stderr,
         )
     else:
-        # Human-readable console output
-        _print_human_report(filtered_issues, report)
+        if args.compact or args.summary_only:
+            print(output)
+        else:
+            # Human-readable console output
+            _print_human_report(filtered_issues, report)
 
-    has_serious = any(i["severity"] in ("CRITICAL", "HIGH") for i in filtered_issues)
     sys.exit(1 if has_serious else 0)
 
 
@@ -2763,7 +3326,7 @@ def _print_human_report(issues: list[dict], report: dict) -> None:
         "Bug": "Correctness",
         "Performance": "Performance",
         "Quality": "Code Quality",
-        "Unity": "Unity",
+        "Framework": "Framework",
     }
 
     # Group by file
@@ -2776,13 +3339,10 @@ def _print_human_report(issues: list[dict], report: dict) -> None:
         by_file[issue["file"]].append(issue)
 
     file_num = 0
+    scan_roots = report.get("scan_roots", [])
     for filepath, file_issues in sorted(by_file.items()):
         file_num += 1
-        short = filepath.replace("\\", "/")
-        if "veilbreakers_mcp/" in short:
-            short = short.split("veilbreakers_mcp/")[-1]
-        elif "Assets/" in short:
-            short = short.split("Assets/")[-1]
+        short = _display_path(filepath, scan_roots)
         crit_count = sum(
             1 for i in file_issues if i["severity"] in ("CRITICAL", "HIGH")
         )
@@ -2842,3 +3402,4 @@ def _print_human_report(issues: list[dict], report: dict) -> None:
 
 if __name__ == "__main__":
     main()
+

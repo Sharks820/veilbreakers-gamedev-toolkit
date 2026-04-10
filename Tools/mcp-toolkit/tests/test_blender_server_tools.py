@@ -2,8 +2,9 @@
 
 Tests cover:
 - Module imports without error
-- MCP tool count is 15
-- Each compound tool is registered (including blender_environment, blender_worldbuilding)
+- MCP tool count matches the expected inventory
+- Each compound tool is registered (including blender_environment,
+  blender_worldbuilding, terrain_pipeline)
 """
 
 import pytest
@@ -25,10 +26,14 @@ class TestMCPToolCount:
     """Test that the correct number of tools are registered."""
 
     def test_tool_count(self):
-        """MCP server should have exactly 16 tools registered (15 original + blender_quality)."""
+        """MCP server should have exactly 17 tools registered.
+
+        Inventory: 15 original compound tools + ``blender_quality`` +
+        ``terrain_pipeline`` (Bundle A-O orchestrator, plan §31).
+        """
         tool_count = len(mcp._tool_manager._tools)
-        assert tool_count == 16, (
-            f"Expected 16 tools, got {tool_count}. "
+        assert tool_count == 17, (
+            f"Expected 17 tools, got {tool_count}. "
             f"Registered tools: {sorted(mcp._tool_manager._tools.keys())}"
         )
 
@@ -47,6 +52,10 @@ class TestNewToolsRegistered:
     def test_concept_art_registered(self):
         """concept_art tool is registered in the MCP server."""
         assert "concept_art" in mcp._tool_manager._tools
+
+    def test_terrain_pipeline_registered(self):
+        """terrain_pipeline tool exposes the Bundle A-O pass orchestrator."""
+        assert "terrain_pipeline" in mcp._tool_manager._tools
 
     def test_blender_rig_registered(self):
         """blender_rig tool is registered in the MCP server."""

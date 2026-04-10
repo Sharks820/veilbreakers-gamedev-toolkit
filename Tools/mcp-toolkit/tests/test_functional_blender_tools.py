@@ -60,14 +60,14 @@ def _get_source(func) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Tool 1: blender_scene (4 actions)
+# Tool 1: blender_scene (6 actions)
 # ---------------------------------------------------------------------------
 
 
 class TestTool1BlenderScene:
-    """blender_scene: inspect, clear, configure, list_objects."""
+    """blender_scene: inspect, clear, configure, list_objects, save_project, verify_project_save."""
 
-    EXPECTED_ACTIONS = {"inspect", "clear", "configure", "list_objects"}
+    EXPECTED_ACTIONS = {"inspect", "clear", "configure", "list_objects", "save_project", "verify_project_save"}
 
     def test_function_exists_and_is_async(self):
         assert asyncio.iscoroutinefunction(blender_scene)
@@ -94,6 +94,8 @@ class TestTool1BlenderScene:
             "clear": "clear_scene",
             "configure": "configure_scene",
             "list_objects": "list_objects",
+            "save_project": "save_project",
+            "verify_project_save": "verify_project_save",
         }
         for action, cmd_key in expected_commands.items():
             assert cmd_key in COMMAND_HANDLERS, (
@@ -585,6 +587,20 @@ class TestCommandHandlersCompleteness:
             "mesh_select", "mesh_edit", "mesh_boolean", "mesh_retopologize", "mesh_sculpt",
         ):
             assert key in COMMAND_HANDLERS
+
+    def test_terrain_handlers_present(self):
+        for key in (
+            "terrain_compute_chunks",
+            "terrain_chunk_lod",
+            "terrain_streaming_distances",
+            "terrain_export_chunks_metadata",
+            "terrain_validate_tile_seams",
+            "env_validate_tile_seams",
+            "env_generate_terrain_tile",
+            "env_generate_world_terrain",
+            "env_stitch_terrain_edges",
+        ):
+            assert key in COMMAND_HANDLERS, f"Missing terrain handler: {key}"
 
     def test_uv_handlers_present(self):
         for key in (

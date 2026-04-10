@@ -48,6 +48,7 @@ class Rule:
     reasoning: Optional[str] = None
     layer: str = "hard_correctness"
     requires_context: bool = False
+    auto_fix: Optional[Callable[..., Any]] = None
 
     def __post_init__(self):
         if self.confidence < 0:
@@ -111,11 +112,223 @@ def _in_string_literal(line: str) -> bool:
     return stripped.startswith(("'", '"', "b'", 'b"', "f'", 'f"', "r'", 'r"'))
 
 
+def _docstring_insertion_index(lines: list[str], start_idx: int) -> int:
+    """Return the first safe line index after an opening function docstring."""
+    if start_idx >= len(lines):
+        return start_idx
+    stripped = lines[start_idx].lstrip()
+    quote_match = re.match(r'^[rubfRUBF]*("""|\'\'\'|"|\')', stripped)
+    if not quote_match:
+        return start_idx
+    quote = quote_match.group(1)
+    if quote in ('"', "'"):
+        return start_idx + 1
+    if stripped.count(quote) >= 2 and stripped != quote:
+        return start_idx + 1
+    for idx in range(start_idx + 1, len(lines)):
+        if quote in lines[idx]:
+            return idx + 1
+    return start_idx
+
+
+def _autofix_eval(line: str, _all_lines: list[str], idx: int) -> dict[str, Any] | None:
+    if "ast.literal_eval" in line:
+        return None
+    replaced = re.sub(r"\beval\s*\(", "ast.literal_eval(", line, count=1)
+    if replaced == line:
+        return None
+    return {
+        "edits": [{"start": idx, "end": idx + 1, "replacement": [replaced]}],
+        "imports": ["import ast"],
+    }
+
+
+def _autofix_mutable_default(
+    line: str, all_lines: list[str], idx: int
+) -> dict[str, Any] | None:
+    match = re.search(
+        r"^(?P<indent>\s*)def\s+(?P<name>\w+)\s*\((?P<params>.*)\)\s*:\s*$", line
+    )
+    if not match:
+        return None
+    params = match.group("params")
+    default_match = re.search(
+        r"(?P<param>\w+)\s*=\s*(?P<default>\[\]|\{\}|set\(\))", params
+    )
+    if not default_match:
+        return None
+    if idx + 1 < len(all_lines):
+        next_line = all_lines[idx + 1].lstrip()
+        if re.match(r'^[rubfRUBF]*("""|\'\'\'|"|\')', next_line):
+            return None
+    param_name = default_match.group("param")
+    default_value = default_match.group("default")
+    new_params = (
+        params[: default_match.start()]
+        + f"{param_name}=None"
+        + params[default_match.end() :]
+    )
+    new_def_line = f"{match.group('indent')}def {match.group('name')}({new_params}):"
+    body_indent = f"{match.group('indent')}    "
+    insert_at = _docstring_insertion_index(all_lines, idx + 1)
+    return {
+        "edits": [
+            {"start": idx, "end": idx + 1, "replacement": [new_def_line]},
+            {
+                "start": insert_at,
+                "end": insert_at,
+                "replacement": [
+                    f"{body_indent}if {param_name} is None:",
+                    f"{body_indent}    {param_name} = {default_value}",
+                ],
+            },
+        ]
+    }
+
+
+def _autofix_none_comparison(
+    line: str, _all_lines: list[str], idx: int
+) -> dict[str, Any] | None:
+    replaced = re.sub(r"==\s*None\b", "is None", line)
+    replaced = re.sub(r"!=\s*None\b", "is not None", replaced)
+    if replaced == line:
+        return None
+    return {
+        "edits": [{"start": idx, "end": idx + 1, "replacement": [replaced]}]
+    }
+
+
+def _autofix_float_equality(
+    line: str, _all_lines: list[str], idx: int
+) -> dict[str, Any] | None:
+    stripped = line.strip()
+    comment = ""
+    if " #" in stripped:
+        stripped, comment = stripped.split(" #", 1)
+        comment = f"  #{comment}"
+    prefix = ""
+    suffix = ""
+    expr = stripped
+    for keyword in ("if ", "elif ", "while ", "return ", "assert "):
+        if expr.startswith(keyword):
+            prefix = keyword
+            expr = expr[len(keyword) :]
+            break
+    if expr.endswith(":"):
+        expr = expr[:-1].rstrip()
+        suffix = ":"
+    match = re.match(
+        r"(?P<left>.+?)\s*(?P<op>==|!=)\s*(?P<right>\d+\.\d+)\s*$", expr
+    )
+    if not match:
+        return None
+    left = match.group("left").strip()
+    right = match.group("right")
+    replacement_expr = f"math.isclose({left}, {right})"
+    if match.group("op") == "!=":
+        replacement_expr = f"not {replacement_expr}"
+    leading = line[: len(line) - len(line.lstrip())]
+    replaced = f"{leading}{prefix}{replacement_expr}{suffix}{comment}"
+    if replaced == line:
+        return None
+    return {
+        "edits": [{"start": idx, "end": idx + 1, "replacement": [replaced]}],
+        "imports": ["import math"],
+    }
+
+
+def _autofix_pathlib_join(
+    line: str, _all_lines: list[str], idx: int
+) -> dict[str, Any] | None:
+    match = re.search(r"os\.path\.join\((?P<args>[^()]*)\)", line)
+    if not match:
+        return None
+    args = [arg.strip() for arg in match.group("args").split(",") if arg.strip()]
+    if len(args) < 2:
+        return None
+    path_expr = " / ".join([f"Path({args[0]})", *args[1:]])
+    replaced = f"{line[: match.start()]}{path_expr}{line[match.end() :]}"
+    if replaced == line:
+        return None
+    return {
+        "edits": [{"start": idx, "end": idx + 1, "replacement": [replaced]}],
+        "imports": ["from pathlib import Path"],
+    }
+
+
 def _active_code(
     line: str, _all: list[str], _idx: int, _context: Optional[dict] = None
 ) -> bool:
     """Check if line is active code (not comment or string)."""
     return not _is_comment(line) and not _in_string_literal(line)
+
+
+def _has_blender_cleanup_in_scope(
+    line: str, all_lines: list[str], idx: int, _context: Optional[dict] = None
+) -> bool:
+    """Return True only when a Blender allocation still looks unprotected.
+
+    BLE-02 used to look only a few lines around the allocation, which caused
+    false positives when cleanup or protection lived later in the same function.
+    This guard scans the surrounding function body for a cleanup call or an
+    enclosing try/finally-style protection block before emitting a finding.
+    """
+    current_indent = len(line) - len(line.lstrip())
+
+    # Walk backward to find the current function boundary.
+    func_start = 0
+    for j in range(idx, -1, -1):
+        stripped = all_lines[j].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(all_lines[j]) - len(all_lines[j].lstrip())
+        if indent < current_indent and stripped.startswith(("def ", "async def ")):
+            func_start = j
+            break
+
+    func_indent = len(all_lines[func_start]) - len(all_lines[func_start].lstrip()) if func_start < len(all_lines) else 0
+
+    # Walk forward until the function ends.
+    func_end = len(all_lines)
+    for j in range(idx + 1, len(all_lines)):
+        stripped = all_lines[j].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(all_lines[j]) - len(all_lines[j].lstrip())
+        if indent <= func_indent and not stripped.startswith(("elif ", "else:", "except ", "finally:")):
+            func_end = j
+            break
+
+    cleanup_markers = (
+        ".remove(",
+        "remove(obj",
+        "remove(mesh",
+        "remove(mat",
+        "remove(material",
+        "remove(cliff_obj",
+        "remove(cliff_mesh",
+    )
+    for j in range(idx + 1, func_end):
+        candidate = all_lines[j]
+        stripped = candidate.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if any(marker in candidate for marker in cleanup_markers):
+            return False
+        if stripped.startswith("finally:"):
+            return False
+
+    # If the allocation already lives under a try block inside the same function,
+    # assume the surrounding control flow is intentionally managing cleanup.
+    for j in range(idx - 1, func_start - 1, -1):
+        stripped = all_lines[j].strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        indent = len(all_lines[j]) - len(all_lines[j].lstrip())
+        if indent < current_indent and stripped.startswith("try:"):
+            return False
+
+    return True
 
 
 def _match_is_in_string(line: str, match_pos: int) -> bool:
@@ -255,6 +468,188 @@ def _check_late_binding(
     return False
 
 
+def _check_discarded_assignment(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    """PY-COR-16 guard: `_name = func()` where _name is never referenced again.
+
+    Catches the terrain_caves.py:821 pattern where a function return value
+    that the caller must apply (delta, mask, patch) is silently discarded
+    because the author used an underscore prefix thinking it was "unused".
+    """
+    m = re.match(r"^(\s*)(_[a-zA-Z]\w*)\s*=\s*(\w+[\w.]*)\s*\(", line)
+    if not m:
+        return False
+    indent_str = m.group(1)
+    var_name = m.group(2)
+    # Bare `_ = ...` is explicit discard, accept it
+    if var_name == "_":
+        return False
+    # Module-level assignment (indent 0) — skip, this is a private module constant
+    # that is referenced by name elsewhere in the module.
+    if len(indent_str) == 0:
+        return False
+    # UPPER_SNAKE_CASE indicates a constant, not a discarded value
+    if var_name[1:].isupper() or re.match(r"_[A-Z][A-Z0-9_]*$", var_name):
+        return False
+    # Skip if the function name itself is clearly a side-effect setter
+    func_name = m.group(3).split(".")[-1]
+    side_effect_prefixes = ("set", "apply", "update", "mark", "register", "emit", "log", "print", "write", "save", "push", "append", "add_", "insert", "remove", "delete", "clear", "reset")
+    if func_name.lower().startswith(side_effect_prefixes):
+        return False
+    # Look ahead for ANY read of var_name in subsequent code.
+    # Nested helpers still count as a legitimate use, so don't stop at inner defs.
+    for j in range(idx + 1, min(len(all_lines), idx + 200)):
+        lookahead = all_lines[j]
+        stripped = lookahead.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        # Reference counts as read; assignment to same name does not
+        if re.search(rf"(?<![\.\w]){re.escape(var_name)}\b", lookahead):
+            # Exclude left-hand-side reassignment `_name = ...`
+            if re.match(rf"^\s*{re.escape(var_name)}\s*=\s*[^=]", lookahead):
+                continue
+            return False  # read found, not discarded
+    return True
+
+
+def _check_frozen_mutable_field(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    """PY-COR-17 guard: field line is inside a `@dataclass(frozen=True)` class.
+
+    Walks backward from the current line to find the enclosing class definition;
+    fires only if a `@dataclass(frozen=True)` decorator precedes it.
+    """
+    field_indent = len(line) - len(line.lstrip())
+    # Walk backward within the same indentation band
+    for j in range(idx - 1, max(0, idx - 80), -1):
+        prev = all_lines[j]
+        stripped = prev.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        prev_indent = len(prev) - len(prev.lstrip())
+        # Found a class header at an outer indent
+        if prev_indent < field_indent and stripped.startswith("class "):
+            # Scan the 1-4 lines above the class for a frozen=True decorator
+            for k in range(max(0, j - 4), j):
+                if re.search(r"@dataclass\s*\([^)]*frozen\s*=\s*True", all_lines[k]):
+                    return True
+            return False
+    return False
+
+
+def _check_validator_self_rollback(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    """PY-COR-18 guard: rollback() call is inside a function named validate_*.
+
+    Walks backward to find the enclosing `def validate_...(`. Validators should
+    report, not rollback; rollback is the orchestrator's decision.
+    """
+    call_indent = len(line) - len(line.lstrip())
+    for j in range(idx - 1, max(0, idx - 200), -1):
+        prev = all_lines[j]
+        stripped = prev.lstrip()
+        if not stripped:
+            continue
+        prev_indent = len(prev) - len(prev.lstrip())
+        if prev_indent < call_indent and stripped.startswith("def "):
+            m = re.match(r"def\s+(\w+)", stripped)
+            if m and m.group(1).startswith("validate"):
+                return True
+            return False
+    return False
+
+
+def _check_fallback_before_primary(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    """PY-COR-19 guard: fallback branch contains an early `return`, and the
+    enclosing function has more code after the block (implying that trailing
+    code is the *real* primary check, now unreachable when fallback is true).
+    """
+    if "fallback" not in line.lower():
+        return False
+    # Skip if `fallback` is just a local variable (RHS of assignment or function arg)
+    stripped_line = line.lstrip()
+    if re.match(r"(\w+\s*=\s*.*fallback|if\s+fallback\s*:)", stripped_line):
+        # `if fallback:` where fallback is a variable — not the bug pattern.
+        # The bug pattern is `if obj.xxx_fallback:` (attribute flag) or
+        # `if camera.basis_fallback:` (flag indicating fallback mode).
+        if re.match(r"if\s+\w+\s*:", stripped_line):
+            return False  # bare `if fallback:` — just a variable
+    if_indent = len(line) - len(line.lstrip())
+    # 0. Check if a peer-scope `return` already ran BEFORE this if-block
+    # (meaning primary already had its chance — this fallback is legitimately second).
+    for j in range(idx - 1, max(0, idx - 30), -1):
+        prev = all_lines[j]
+        ps = prev.lstrip()
+        if not ps or ps.startswith("#"):
+            continue
+        prev_indent = len(prev) - len(prev.lstrip())
+        if prev_indent < if_indent and ps.startswith("def "):
+            break
+        if prev_indent == if_indent and ps.startswith("return "):
+            return False  # primary already returned above — fallback is correctly second
+    # 1. Confirm the next non-empty line at indent > if_indent is a `return`
+    block_has_return = False
+    block_end = idx + 1
+    for j in range(idx + 1, min(len(all_lines), idx + 15)):
+        nxt = all_lines[j]
+        stripped = nxt.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        this_indent = len(nxt) - len(nxt.lstrip())
+        if this_indent <= if_indent:
+            block_end = j
+            break
+        if re.match(r"return\b", stripped):
+            block_has_return = True
+    if not block_has_return:
+        return False
+    # 2. Find enclosing def indent
+    fn_indent = -1
+    for j in range(idx - 1, max(0, idx - 200), -1):
+        prev = all_lines[j]
+        stripped = prev.lstrip()
+        if not stripped:
+            continue
+        prev_indent = len(prev) - len(prev.lstrip())
+        if prev_indent < if_indent and stripped.startswith("def "):
+            fn_indent = prev_indent
+            break
+    if fn_indent < 0:
+        return False
+    # 3. After the if-block, look for ANY further code at if_indent
+    # (same scope as the fallback) inside the same function.
+    for j in range(block_end, min(len(all_lines), idx + 200)):
+        nxt = all_lines[j]
+        stripped = nxt.lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        this_indent = len(nxt) - len(nxt.lstrip())
+        # Left the function entirely
+        if this_indent <= fn_indent:
+            return False
+        # Same-scope code (peer statements) found — fallback returned before primary
+        if this_indent == if_indent:
+            return True
+    return False
+
+
 def _check_broad_except_silent(
     line: str,
     all_lines: list[str],
@@ -265,8 +660,70 @@ def _check_broad_except_silent(
 
     Only fires when broad except silently swallows the exception without
     proper logging, error propagation, or deliberate fallback handling.
+
+    Suppression 1 (2026-04-09): enclosing function named _safe_*/_try_*/_probe_*
+    Suppression 2 (2026-04-09): trailing/adjacent intent comment (non-fatal, best-effort, etc.)
+    Suppression 3 (2026-04-09): fallback-flag pattern (ok = False; try; ok = True; except: pass)
+    Suppression 4 (2026-04-09): `continue` in for-loop best-effort pattern
     """
     except_indent = len(line) - len(line.lstrip())
+
+    # --- Suppression 1: sentinel-return function contracts ---
+    for j in range(idx - 1, max(0, idx - 200), -1):
+        prev = all_lines[j]
+        stripped = prev.lstrip()
+        if not stripped:
+            continue
+        prev_indent = len(prev) - len(prev.lstrip())
+        if prev_indent < except_indent and stripped.startswith("def "):
+            fn_m = re.match(r"def\s+(\w+)", stripped)
+            if fn_m:
+                fn_name = fn_m.group(1)
+                if fn_name.startswith(("_safe_", "_try_", "_probe_")) or fn_name.endswith("_or_none"):
+                    return False
+            break
+
+    # --- Suppression 2: intent comments on pass/continue/return lines ---
+    _intent_rx = re.compile(
+        r"#.*(non[- ]?fatal|best[- ]?effort|fallback|non[- ]?critical|optional|"
+        r"pragma:\s*no cover|intentional|fall[- ]?through|best effort|non.critical|"
+        r"enhancement is non|skip|ignore)",
+        re.IGNORECASE,
+    )
+    for j in range(idx, min(len(all_lines), idx + 6)):
+        if _intent_rx.search(all_lines[j]):
+            return False
+
+    # --- Suppression 3: fallback-flag pattern ---
+    # Look backward for `*_ok = False` within 8 lines before the `try:` for this except
+    try_line_idx = None
+    for j in range(idx - 1, max(0, idx - 30), -1):
+        stripped = all_lines[j].lstrip()
+        if stripped.startswith("try:") or stripped.startswith("try "):
+            try_line_idx = j
+            break
+    if try_line_idx is not None:
+        for j in range(max(0, try_line_idx - 8), try_line_idx):
+            if re.search(r"\w+_ok\s*=\s*False", all_lines[j]):
+                return False
+
+    # --- Suppression 4: continue in for-loop best-effort ---
+    for j in range(idx + 1, min(len(all_lines), idx + 6)):
+        stripped = all_lines[j].lstrip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        this_indent = len(all_lines[j]) - len(all_lines[j].lstrip())
+        if this_indent <= except_indent:
+            break
+        if stripped == "continue":
+            # Verify we're inside a for loop by walking backward
+            for k in range(idx - 1, max(0, idx - 40), -1):
+                for_stripped = all_lines[k].lstrip()
+                for_indent = len(all_lines[k]) - len(all_lines[k].lstrip())
+                if for_indent < except_indent and for_stripped.startswith(("for ", "while ")):
+                    return False
+            break
+
     # Look ahead in the except block for meaningful handling
     for j in range(idx + 1, min(len(all_lines), idx + 15)):
         line_j = all_lines[j]
@@ -457,6 +914,143 @@ def _check_regex_in_loop(
     return False
 
 
+def _check_path_traversal(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    if re.search(
+        r"Path\s*\([^)]*\)\.(name|suffix|stem|parent|parts|exists|is_file|is_dir)\b",
+        line,
+    ):
+        return False
+    if "__file__" in line or re.search(r"\bcwd\s*=", line):
+        return False
+    if not re.search(
+        r"(\bopen\s*\(|read_text\s*\(|write_text\s*\(|read_bytes\s*\(|write_bytes\s*\(|unlink\s*\(|mkdir\s*\(|rename\s*\(|replace\s*\(|os\.path\.join\s*\()",
+        line,
+    ):
+        return False
+    if not re.search(
+        r"\b(?:(?:user|request|input|param|query|upload|download|save|truth|history)[A-Za-z0-9_]*(?:path|file|filename|dir)?|file_path)\b",
+        line,
+        re.IGNORECASE,
+    ):
+        return False
+    window = "\n".join(all_lines[max(0, idx - 3) : min(len(all_lines), idx + 4)])
+    return not re.search(
+        r"(resolve\(|normpath\(|safe_join|Path\s*\([^)]*\)\.resolve)",
+        window,
+    )
+
+
+def _check_ssrf_request(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    if re.search(r'["\']https?://', line):
+        return False
+    if not re.search(r"\b(url|uri|endpoint|host)\b", line, re.IGNORECASE):
+        return False
+    window = "\n".join(all_lines[max(0, idx - 3) : min(len(all_lines), idx + 4)])
+    return not re.search(
+        r"(allowlist|whitelist|trusted_hosts|approved_hosts)",
+        window,
+        re.IGNORECASE,
+    )
+
+
+def _check_async_lock_await(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    if "await " not in line:
+        return False
+    await_indent = len(line) - len(line.lstrip())
+    for j in range(idx - 1, max(-1, idx - 8), -1):
+        candidate = all_lines[j]
+        if re.search(r"^\s*(async\s+with|with)\s+.*\b(?:lock|Lock)\b.*:", candidate):
+            lock_indent = len(candidate) - len(candidate.lstrip())
+            return lock_indent < await_indent
+    return False
+
+
+def _check_unlocked_global_mutation(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    match = re.search(r"^\s*global\s+(\w+)", line)
+    if not match:
+        return False
+    global_name = match.group(1)
+    window = "\n".join(all_lines[idx : min(len(all_lines), idx + 8)])
+    if re.search(r"(lock|Lock|RLock|threading\.)", window):
+        return False
+    return bool(
+        re.search(
+            rf"\b{re.escape(global_name)}(\s*\[[^\]]+\]\s*=|\.append\s*\(|\.extend\s*\(|\.update\s*\(|\.add\s*\()",
+            window,
+        )
+    )
+
+
+def _check_gather_without_error_collection(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    if "return_exceptions" in line:
+        return False
+    window = "\n".join(all_lines[max(0, idx - 3) : idx + 1])
+    return "try:" not in window
+
+
+def _check_popen_without_wait(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    assigned = re.search(r"(\w+)\s*=\s*subprocess\.Popen\s*\(", line)
+    if not assigned:
+        return True
+    proc_name = assigned.group(1)
+    window = "\n".join(all_lines[idx + 1 : min(len(all_lines), idx + 10)])
+    return not re.search(rf"\b{re.escape(proc_name)}\.(communicate|wait)\s*\(", window)
+
+
+def _check_optional_result_without_none_check(
+    line: str,
+    all_lines: list[str],
+    idx: int,
+    _context: Optional[dict] = None,
+) -> bool:
+    match = re.search(
+        r"^\s*(\w+)\s*=\s*[\w\.]*(find|get|lookup|resolve|maybe|optional|try)\w*\s*\(",
+        line,
+        re.IGNORECASE,
+    )
+    if not match:
+        return False
+    var_name = match.group(1)
+    for candidate in all_lines[idx + 1 : min(len(all_lines), idx + 6)]:
+        if re.search(rf"\bif\s+{re.escape(var_name)}\s+is\s+None\b", candidate):
+            return False
+        if re.search(rf"\bassert\s+{re.escape(var_name)}\s+is\s+not\s+None\b", candidate):
+            return False
+        if re.search(rf"\b{re.escape(var_name)}(\.|\[)", candidate):
+            return True
+    return False
+
+
 # =========================================================================
 #  Known patterns for AST analysis
 # =========================================================================
@@ -569,9 +1163,10 @@ def create_rules() -> list[Any]:
             description="eval() usage -- arbitrary code execution risk",
             fix="Replace with ast.literal_eval() or redesign.",
             pattern=re.compile(r"\beval\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"literal_eval"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"literal_eval"]),
             layer="hard_correctness",
             requires_context=False,
+            auto_fix=_autofix_eval,
         ),
         Rule(
             id="PY-SEC-02",
@@ -582,7 +1177,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(
                 r"(os\.system\s*\(|subprocess\.\w+\([^)]*shell\s*=\s*True)"
             ),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -593,7 +1188,7 @@ def create_rules() -> list[Any]:
             description="pickle.load on untrusted data -- arbitrary code execution",
             fix="Use json, msgpack, or safer format.",
             pattern=re.compile(r"pickle\.(load|loads)\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -604,7 +1199,7 @@ def create_rules() -> list[Any]:
             description="f-string in SQL/shell command -- injection risk",
             fix="For SQL: cursor.execute('SELECT * FROM t WHERE id = %s', (user_id,)). For shell: subprocess.run(['cmd', arg], shell=False).",
             pattern=re.compile(r'(execute|run|system|popen)\s*\(\s*f["\']'),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -617,10 +1212,11 @@ def create_rules() -> list[Any]:
             pattern=re.compile(r"\bexec\s*\("),
             anti_patterns=_compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"^\s*#",
                     r"^\s*\w+\s*=\s*",
                     r"def\s+\w+\s*\([^)]*exec",
+                    r"#\s*noqa",  # Author already triaged via ruff/flake8 suppression
                 ]
             ),
             layer="hard_correctness",
@@ -634,9 +1230,10 @@ def create_rules() -> list[Any]:
             description="Mutable default argument -- shared across calls",
             fix="Change 'def f(items=[])' to 'def f(items=None):', then 'items = items if items is not None else []' in the body.",
             pattern=re.compile(r"def\s+\w+\s*\([^)]*=\s*(\[\]|\{\}|set\(\))"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="hard_correctness",
             requires_context=False,
+            auto_fix=_autofix_mutable_default,
         ),
         Rule(
             id="PY-COR-02",
@@ -645,7 +1242,7 @@ def create_rules() -> list[Any]:
             description="Bare except: catches SystemExit, KeyboardInterrupt",
             fix="Replace 'except:' with 'except Exception:' at minimum, or 'except (ValueError, KeyError):' for specific types.",
             pattern=re.compile(r"^\s*except\s*:"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -658,7 +1255,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(r"(?<!\bwith\s)\bopen\s*\("),
             anti_patterns=_compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"^\s*#",
                     r"\bwith\b",
                     r"Image\.open",
@@ -680,7 +1277,7 @@ def create_rules() -> list[Any]:
                 r"^\s*(for|while)\b.*re\.(compile|match|search|findall|sub)\s*\("
             ),
             anti_patterns=_compile_anti(
-                [r"#\s*VB-IGNORE", r"re\.compile.*\n\s*(for|while)"]
+                [r"#\\s*(?:VB|REVIEW)-IGNORE", r"re\.compile.*\n\s*(for|while)"]
             ),
             layer="hard_correctness",
             requires_context=False,
@@ -698,10 +1295,11 @@ def create_rules() -> list[Any]:
             description="Comparing with None using == instead of 'is None'",
             fix="Use 'is None' or 'is not None'.",
             pattern=re.compile(r"[!=]=\s*None\b"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="semantic",
             requires_context=False,
             finding_type=FindingType.STRENGTHENING,
+            auto_fix=_autofix_none_comparison,
         ),
         Rule(
             id="PY-COR-05",
@@ -710,7 +1308,7 @@ def create_rules() -> list[Any]:
             description="datetime.now() without timezone -- ambiguous",
             fix="Use datetime.now(tz=timezone.utc).",
             pattern=re.compile(r"datetime\.now\s*\(\s*\)"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="semantic",
             requires_context=False,
             finding_type=FindingType.STRENGTHENING,
@@ -723,7 +1321,7 @@ def create_rules() -> list[Any]:
             description="dict.get() with mutable default -- mutated result is shared",
             fix="Use dict.get(key) with None check, then create mutable separately.",
             pattern=re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             guard=_check_mutable_get,
             layer="semantic",
             requires_context=False,
@@ -736,7 +1334,7 @@ def create_rules() -> list[Any]:
             description="Class with __del__ -- unpredictable GC, prevents ref cycle collection",
             fix="Use context managers or weakref.finalize.",
             pattern=re.compile(r"def\s+__del__\s*\(\s*self"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="semantic",
             requires_context=False,
             finding_type=FindingType.STRENGTHENING,
@@ -749,40 +1347,30 @@ def create_rules() -> list[Any]:
             description="Thread without daemon=True -- may prevent clean shutdown",
             fix="Set daemon=True or join before exit.",
             pattern=re.compile(r"Thread\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"daemon"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"daemon"]),
             layer="semantic",
             requires_context=False,
         ),
-        Rule(
-            id="PY-COR-09",
-            severity=Severity.LOW,
-            category=Category.Bug,
-            description="json.loads/load without error handling — crashes on malformed input",
-            fix="Wrap in try/except json.JSONDecodeError to handle corrupt JSON gracefully.",
-            pattern=re.compile(r"json\.loads?\s*\("),
-            anti_patterns=_compile_anti(
-                [
-                    r"#\s*VB-IGNORE",
-                    r"except.*JSON",
-                    r"\btry\s*:",
-                    r"\bexcept\b",
-                ]
-            ),
-            anti_radius=20,
-            layer="semantic",
-            requires_context=False,
-            confidence=68,
-        ),
+        # PY-COR-09: DELETED 2026-04-09 — 0% precision (7 findings, all FP).
+        # Every hit was a loader/parser function where raising on corrupt input
+        # is the correct behavior. Rule's premise ("wrap json.load in try/except")
+        # contradicts the codebase's correct error-surfacing style.
         Rule(
             id="PY-COR-10",
             severity=Severity.LOW,
             category=Category.Bug,
             description="Float equality comparison -- use math.isclose",
             fix="Use math.isclose(a, b) or abs(a - b) < epsilon.",
-            pattern=re.compile(r"(?<!\w)(==|!=)\s*\d+\.\d+"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            pattern=re.compile(r"(?<!\w)(==|!=)\s*(?!0\.0\b)\d+\.\d+"),
+            anti_patterns=_compile_anti([
+                r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#",
+                r"\bnp\.", r"\.astype\s*\(", r"asarray",
+                r"dtype\s*=",
+            ]),
             layer="semantic",
             requires_context=False,
+            reasoning="Exempt == 0.0/!= 0.0 (idiomatic zero-guard) and numpy array contexts (mask ops).",
+            auto_fix=_autofix_float_equality,
         ),
         Rule(
             id="PY-COR-11",
@@ -791,7 +1379,7 @@ def create_rules() -> list[Any]:
             description="Re-raising exception without chain -- loses traceback",
             fix="Use 'raise NewException (...) from original_exc' to preserve the traceback chain.",
             pattern=re.compile(r"raise\s+\w+\([^)]*\)\s*$"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"\bfrom\s+\w+"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"\bfrom\s+\w+"]),
             guard=lambda line, a, i, ctx=None: _is_inside_except(line, a, i, ctx),
             layer="semantic",
             requires_context=False,
@@ -808,7 +1396,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(r"except\s+Exception\s*(?:as|\s*:)"),
             anti_patterns=_compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"# broad catch intentional",
                     r"logger\.exception",
                     r"mcp\.tool",
@@ -846,7 +1434,7 @@ def create_rules() -> list[Any]:
                 r"^\s*(list|dict|set|str|int|float|bool|tuple|type|id|input|filter|map|zip|range|len|sum|min|max|any|all|sorted|reversed|hash|next|iter|open|print|format|bytes|object|super)\s*=\s*"
             ),
             anti_patterns=_compile_anti(
-                [r"#\s*VB-IGNORE", r"typing", r"import"]
+                [r"#\\s*(?:VB|REVIEW)-IGNORE", r"typing", r"import"]
             ),
             guard=_check_shadow_builtin,
             layer="semantic",
@@ -862,11 +1450,87 @@ def create_rules() -> list[Any]:
             description="Lambda in loop captures loop variable by reference -- late binding bug",
             fix="Capture with default arg: lambda x, i=i: ... or use functools.partial.",
             pattern=re.compile(r"for\s+(\w+)\s+in\b"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             guard=_check_late_binding,
             layer="semantic",
             requires_context=False,
             confidence=92,
+        ),
+        # PY-COR-16: Discarded assignment -- `_name = func()` where name is never read
+        # Catches terrain_caves.py:821 `_delta = carve_cave_volume(...)` class of bug:
+        # underscore-prefixed var assigned from a function call that returns data the
+        # caller is supposed to apply; the discard silently drops the delta.
+        Rule(
+            id="PY-COR-16",
+            severity=Severity.CRITICAL,
+            category=Category.Bug,
+            description="Discarded return value: underscore-prefixed variable assigned from function call but never read",
+            fix="If the return value is needed (delta, mask, array), remove the underscore prefix and apply it. If truly unused, use bare `_` or call the function as a statement.",
+            pattern=re.compile(
+                r"^\s*_[a-zA-Z]\w*\s*=\s*\w+[\w.]*\s*\("
+            ),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
+            guard=_check_discarded_assignment,
+            layer="semantic",
+            requires_context=False,
+            confidence=88,
+            reasoning="Terrain audit P0: pass_caves discarded carve_cave_volume delta, zero geometry output.",
+        ),
+        # PY-COR-17: Frozen dataclass with mutable default field
+        # Catches terrain_semantics.py:669,743 TerrainIntentState/HeroFeatureSpec crash
+        Rule(
+            id="PY-COR-17",
+            severity=Severity.CRITICAL,
+            category=Category.Bug,
+            description="Frozen dataclass with mutable collection field (Dict/List/Set) -- hash() raises TypeError",
+            fix="Use frozenset/tuple/Mapping, or remove frozen=True, or use default_factory=tuple with a conversion in __post_init__.",
+            pattern=re.compile(
+                r":\s*(Dict|List|Set|dict|list|set)\b[^=]*=\s*field\s*\("
+            ),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
+            guard=_check_frozen_mutable_field,
+            layer="semantic",
+            requires_context=False,
+            confidence=90,
+            reasoning="Terrain audit P0: frozen=True + Dict field crashes hash() at runtime the moment the instance enters a set.",
+        ),
+        # PY-COR-18: Self-rollback in validator
+        # Catches terrain_validation.py validate_* methods that call rollback on
+        # channels the pipeline itself produces, causing auto-rollback on every run.
+        Rule(
+            id="PY-COR-18",
+            severity=Severity.HIGH,
+            category=Category.Bug,
+            description="Validator method calls self.rollback()/state.rollback() on failure path -- may rollback producers' own output",
+            fix="Validators should report errors and return False/raise. Rollback is the orchestrator's decision, not the validator's.",
+            pattern=re.compile(
+                r"^\s*(self|state|ctx)\.rollback\s*\("
+            ),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
+            guard=_check_validator_self_rollback,
+            layer="semantic",
+            requires_context=False,
+            confidence=82,
+            reasoning="Terrain audit P0: validate_unity_export_ready auto-rolled-back every real pipeline run.",
+        ),
+        # PY-COR-19: Fallback branch returns before primary check
+        # Catches terrain_frustum is_in_frustum style bug where a fallback-ok path
+        # returns before the primary-ok path is evaluated.
+        Rule(
+            id="PY-COR-19",
+            severity=Severity.HIGH,
+            category=Category.Bug,
+            description="Fallback branch returns True/ok before primary check runs -- reverses intent",
+            fix="Reorder: primary check first, fallback only when primary is unavailable or inconclusive.",
+            pattern=re.compile(
+                r"^\s*if\s+[\w.()]*fallback[\w]*\s*:\s*(#.*)?$"
+            ),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
+            guard=_check_fallback_before_primary,
+            layer="semantic",
+            requires_context=False,
+            confidence=72,
+            reasoning="Terrain audit P0: is_in_frustum basis-fallback returned before forward-sign check.",
         ),
         # ---- PERFORMANCE ----
         Rule(
@@ -876,7 +1540,7 @@ def create_rules() -> list[Any]:
             description="re.match/search/findall without compile for repeated pattern",
             fix="Compile pattern once with re.compile() and reuse.",
             pattern=re.compile(r"re\.(match|search|findall|sub|split)\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"re\.compile"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"re\.compile"]),
             guard=_check_regex_in_loop,
             layer="semantic",
             requires_context=False,
@@ -890,7 +1554,7 @@ def create_rules() -> list[Any]:
             pattern=re.compile(r"\.read\s*\(\s*\)"),
             anti_patterns=_compile_anti(
                 [
-                    r"#\s*VB-IGNORE",
+                    r"#\\s*(?:VB|REVIEW)-IGNORE",
                     r"^\s*#",
                     r'"rb"',
                     r"BytesIO",
@@ -918,7 +1582,7 @@ def create_rules() -> list[Any]:
             description="Hardcoded file path -- not portable",
             fix="Use pathlib.Path or os.path.join with configurable base.",
             pattern=re.compile(r"""['"](?:/[a-z]+/|[A-Z]:\\\\)[^'"]{3,}['"]"""),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="heuristic",
             requires_context=False,
             finding_type=FindingType.STRENGTHENING,
@@ -931,7 +1595,7 @@ def create_rules() -> list[Any]:
             fix="Replace 'assert x > 0' with 'if x <= 0: raise ValueError(\"x must be positive\")'.",
             pattern=re.compile(r"^\s*assert\s+(?!.*#\s*nosec)"),
             anti_patterns=_compile_anti(
-                [r"#\s*VB-IGNORE", r"#\s*nosec", r"test_|_test\.py"]
+                [r"#\\s*(?:VB|REVIEW)-IGNORE", r"#\s*nosec", r"test_|_test\.py"]
             ),
             layer="heuristic",
             requires_context=False,
@@ -948,11 +1612,12 @@ def create_rules() -> list[Any]:
             pattern=re.compile(
                 r"os\.path\.(join|exists|isfile|isdir|basename|dirname|splitext)\s*\("
             ),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
             layer="heuristic",
             requires_context=False,
             confidence=72,
             finding_type=FindingType.STRENGTHENING,
+            auto_fix=_autofix_pathlib_join,
         ),
         Rule(
             id="PY-STY-02",
@@ -961,7 +1626,7 @@ def create_rules() -> list[Any]:
             description="Deeply nested function (3+ indent levels) — hard to test and maintain",
             fix="Extract inner function to module level or class method for better testability.",
             pattern=re.compile(r"^\s{12,}def\s+\w+\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer="heuristic",
             requires_context=False,
             confidence=85,
@@ -974,7 +1639,7 @@ def create_rules() -> list[Any]:
             description="Star import pollutes namespace — imported names are unknown to readers and tools",
             fix="Replace with explicit imports: from X import ClassA, func_b, CONST_C.",
             pattern=re.compile(r"from\s+\S+\s+import\s+\*"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer="heuristic",
             requires_context=False,
             confidence=92,
@@ -987,7 +1652,7 @@ def create_rules() -> list[Any]:
             description="Global variable mutation — makes function behavior depend on hidden state",
             fix="Pass the value as a function parameter, or encapsulate in a class with clear ownership.",
             pattern=re.compile(r"^\s+global\s+\w+"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
             layer="heuristic",
             requires_context=False,
             confidence=78,
@@ -1055,6 +1720,129 @@ def create_rules() -> list[Any]:
             finding_type=FindingType.STRENGTHENING,
             confidence=90,
         ),
+        # ---- GENERAL WEB / CONCURRENCY / RESOURCE RULES ----
+        Rule(
+            id="PY-SEC-08",
+            severity=Severity.HIGH,
+            category=Category.Security,
+            description="User-controlled path reaches filesystem operation without normalization",
+            fix="Resolve against a trusted base directory and reject paths that escape it.",
+            pattern=re.compile(
+                r"(\bopen\s*\(|Path\s*\([^)]*\)\.(read_text|write_text|read_bytes|write_bytes|open|unlink|mkdir|rename|replace)\s*\(|os\.path\.join\s*\()"
+            ),
+            anti_patterns=_compile_anti(
+                [r"#\\s*(?:VB|REVIEW)-IGNORE", r"resolve\(", r"normpath\(", r"__file__"]
+            ),
+            guard=_check_path_traversal,
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-SEC-09",
+            severity=Severity.HIGH,
+            category=Category.Security,
+            description="requests call uses a user-controlled URL/host -- possible SSRF",
+            fix="Allowlist destinations or resolve against a trusted service catalog before issuing the request.",
+            pattern=re.compile(r"requests\.(get|post|put|delete|request)\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r'["\']https?://']),
+            guard=_check_ssrf_request,
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-SEC-10",
+            severity=Severity.HIGH,
+            category=Category.Security,
+            description="render_template_string with dynamic input -- server-side template injection risk",
+            fix="Render a static template file and pass user data as context variables instead.",
+            pattern=re.compile(r"render_template_string\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r'["\']\s*\)']),
+            layer="hard_correctness",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-COR-20",
+            severity=Severity.HIGH,
+            category=Category.Bug,
+            description="await while holding a threading lock -- can deadlock or starve peers",
+            fix="Release the lock before awaiting, or switch to an asyncio-compatible lock.",
+            pattern=re.compile(r"\bawait\b"),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
+            guard=_check_async_lock_await,
+            layer="hard_correctness",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-COR-21",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="Function mutates shared global state without an obvious lock",
+            fix="Protect the shared mutable global with a lock or move the state behind a synchronized owner object.",
+            pattern=re.compile(r"^\s*global\s+\w+"),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
+            guard=_check_unlocked_global_mutation,
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-COR-22",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="asyncio.gather without return_exceptions or local error collection",
+            fix="Pass return_exceptions=True or wrap the gather call in explicit exception handling.",
+            pattern=re.compile(r"asyncio\.gather\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"return_exceptions\s*="]),
+            guard=_check_gather_without_error_collection,
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-PERF-04",
+            severity=Severity.LOW,
+            category=Category.Performance,
+            description="logger call uses f-string -- string is formatted even when the log level is disabled",
+            fix="Use lazy logger formatting: logger.error('value=%s', value).",
+            pattern=re.compile(r"logger\.(debug|info|warning|error|exception|critical)\s*\(\s*f[\"']"),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
+            layer="heuristic",
+            requires_context=False,
+            finding_type=FindingType.OPTIMIZATION,
+        ),
+        Rule(
+            id="PY-RES-08",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="subprocess.Popen result is never waited or communicated -- child process may leak",
+            fix="Call communicate()/wait() or use subprocess.run() when streaming is not required.",
+            pattern=re.compile(r"subprocess\.Popen\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"subprocess\.run\s*\("]),
+            guard=_check_popen_without_wait,
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-RES-09",
+            severity=Severity.MEDIUM,
+            category=Category.Bug,
+            description="requests call without timeout -- network hang can block the worker indefinitely",
+            fix="Pass an explicit timeout=(connect, read) or timeout=<seconds>.",
+            pattern=re.compile(r"requests\.(get|post|put|delete|request)\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"timeout\s*="]),
+            layer="semantic",
+            requires_context=False,
+        ),
+        Rule(
+            id="PY-COR-23",
+            severity=Severity.LOW,
+            category=Category.Bug,
+            description="Result from an Optional-style helper is dereferenced without a nearby None check",
+            fix="Check for None explicitly before dereferencing the result.",
+            pattern=re.compile(r"^\s*\w+\s*=\s*[\w\.]*(find|get|lookup|resolve|maybe|optional|try)\w*\s*\("),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
+            guard=_check_optional_result_without_none_check,
+            layer="heuristic",
+            requires_context=False,
+        ),
         # ==================================================================
         #  BLENDER-SPECIFIC RULES (Phase 6)
         # ==================================================================
@@ -1066,7 +1854,7 @@ def create_rules() -> list[Any]:
             fix="Wrap in try/finally with bpy.ops.ed.undo_push(message='action_name')",
             pattern=re.compile(r"bpy\.ops\.\w+\.\w+\s*\("),
             anti_patterns=_compile_anti([
-                r"#\s*VB-IGNORE",
+                r"#\\s*(?:VB|REVIEW)-IGNORE",
                 r"undo_push",
                 r"bpy\.ops\.ed\.undo",
                 r"def\s+handle_",  # Addon handler functions have MCP-level undo management
@@ -1082,8 +1870,14 @@ def create_rules() -> list[Any]:
             description="bpy.data.objects.new/meshes.new without cleanup on error path",
             fix="Use try/except/finally to ensure cleanup: bpy.data.objects.remove(obj) on error.",
             pattern=re.compile(r"bpy\.data\.(objects|meshes|materials)\.new\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"\.remove\s*\(", r"try:", r"finally:"]),
-            layer="semantic",  # Real resource leak if handler crashes mid-execution
+            anti_patterns=_compile_anti([
+                r"#\\s*(?:VB|REVIEW)-IGNORE", r"\.remove\s*\(", r"try:", r"finally:",
+                r"def\s+handle_",  # MCP handler dispatch-level cleanup
+                r"handlers/",  # Addon handler modules
+            ]),
+            anti_radius=50,  # Raised from 12: function-level cleanup is normal
+            guard=_has_blender_cleanup_in_scope,
+            layer="heuristic",  # Demoted 2026-04-09: 85% FP at semantic, ~15% precision
             requires_context=False,
         ),
         Rule(
@@ -1093,7 +1887,7 @@ def create_rules() -> list[Any]:
             description="Creating UV layer without checking if exists -- duplicate layers",
             fix="Check 'if not mesh.uv_layers:' before creating new UV layer.",
             pattern=re.compile(r"\.uv_layers\.new\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"if\s+not\s+.*uv_layers"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"if\s+not\s+.*uv_layers"]),
             layer="semantic",
             requires_context=False,
         ),
@@ -1104,8 +1898,8 @@ def create_rules() -> list[Any]:
             description="Accessing material.node_tree.nodes without use_nodes=True",
             fix="Set material.use_nodes = True before accessing node_tree.nodes.",
             pattern=re.compile(r"\.node_tree\.nodes"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"use_nodes\s*=\s*True"]),
-            anti_radius=30,  # Check wider radius for use_nodes setup
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"\.use_nodes"]),
+            anti_radius=30,  # Check wider radius for use_nodes setup/check
             layer="semantic",
             requires_context=False,
         ),
@@ -1116,7 +1910,7 @@ def create_rules() -> list[Any]:
             description="asyncio.create_task without await or tracking -- 'Task was never retrieved' warning",
             fix="Store task: 'task = asyncio.create_task(coro())' or await immediately.",
             pattern=re.compile(r"asyncio\.create_task\s*\("),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"=\s*asyncio\.create_task", r"await\s+asyncio\.create_task"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"=\s*asyncio\.create_task", r"await\s+asyncio\.create_task"]),
             layer="hard_correctness",
             requires_context=False,
         ),
@@ -1152,17 +1946,9 @@ def create_rules() -> list[Any]:
             requires_context=False,
         ),
 
-        # Division by zero guard with max() is fragile
-        Rule(
-            id="PY-RES-03",
-            severity=Severity.MEDIUM,
-            category=Category.Bug,
-            description="Division with max() guard -- verify zero/negative edge cases are handled",
-            fix="Add explicit check: if divisor <= 0: return default or raise ValueError",
-            pattern=re.compile(r"/\s*max\s*\(\s*\w+\s*,\s*[\d.]+\s*\)"),
-            layer="semantic",
-            requires_context=False,
-        ),
+        # PY-RES-03: DELETED 2026-04-09 — 100% FP rate (48 findings, all correct
+        # defensive max() zero-guards flagged as bugs). Rule contradicts the
+        # defensive-coding idiom it claims to promote.
 
         # Mutable default with truthy empty check
         Rule(
@@ -1184,7 +1970,7 @@ def create_rules() -> list[Any]:
             description="Empty exception handler silently swallows errors -- should log or rethrow",
             fix="Add logging: 'except Exception as exc: logger.warning(\"...\", exc)'",
             pattern=re.compile(r"except\s+Exception\s*:\s*pass"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"intentional", r"graceful"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"intentional", r"graceful"]),
             anti_radius=5,
             layer="semantic",
             requires_context=False,
@@ -1198,7 +1984,7 @@ def create_rules() -> list[Any]:
             description="Global variable mutation -- consider dependency injection or singleton pattern",
             fix="Use class-level state, dependency injection, or documented singleton pattern",
             pattern=re.compile(r"^\s*global\s+\w+"),
-            anti_patterns=_compile_anti([r"#\s*VB-IGNORE", r"singleton", r"cache"]),
+            anti_patterns=_compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"singleton", r"cache"]),
             anti_radius=10,
             layer="heuristic",
             requires_context=False,
@@ -1585,6 +2371,13 @@ PYTHON_GUARD_FUNCTIONS: dict[str, Callable] = {
     "_check_shadow_builtin": _check_shadow_builtin,
     "_check_concatenation_in_loop": _check_concatenation_in_loop,
     "_check_regex_in_loop": _check_regex_in_loop,
+    "_check_path_traversal": _check_path_traversal,
+    "_check_ssrf_request": _check_ssrf_request,
+    "_check_async_lock_await": _check_async_lock_await,
+    "_check_unlocked_global_mutation": _check_unlocked_global_mutation,
+    "_check_gather_without_error_collection": _check_gather_without_error_collection,
+    "_check_popen_without_wait": _check_popen_without_wait,
+    "_check_optional_result_without_none_check": _check_optional_result_without_none_check,
 }
 
 
@@ -1612,3 +2405,4 @@ __all__ = [
 
 # Create the rules list on module import
 RULES: list[Any] = create_rules()
+

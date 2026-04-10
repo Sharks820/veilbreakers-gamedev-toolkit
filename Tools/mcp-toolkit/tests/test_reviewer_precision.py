@@ -48,6 +48,54 @@ def test_py_exec_detected(tmp_path):
     assert any(i.rule_id == "PY-SEC-05" for i in issues)
 
 
+def test_py_requests_without_timeout_detected(tmp_path):
+    p = tmp_path / "bad.py"
+    p.write_text("import requests\nrequests.get(user_url)\n", encoding="utf-8")
+    issues = reviewer.scan_python_file(str(p), None, review_scope="advisory")
+    assert any(i.rule_id == "PY-RES-09" for i in issues)
+
+
+def test_py_path_traversal_detected(tmp_path):
+    p = tmp_path / "bad.py"
+    p.write_text("def load(user_path):\n    return open(user_path).read()\n", encoding="utf-8")
+    issues = reviewer.scan_python_file(str(p), None, review_scope="advisory")
+    assert any(i.rule_id == "PY-SEC-08" for i in issues)
+
+
+def test_py_logger_fstring_detected(tmp_path):
+    p = tmp_path / "bad.py"
+    p.write_text(
+        "import logging\nlogger = logging.getLogger(__name__)\nlogger.error(f'value={value}')\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert any(i.rule_id == "PY-PERF-04" for i in issues)
+
+
+def test_py_async_lock_await_detected(tmp_path):
+    p = tmp_path / "bad.py"
+    p.write_text(
+        "async def save(lock):\n"
+        "    with lock:\n"
+        "        await flush()\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="production")
+    assert any(i.rule_id == "PY-COR-20" for i in issues)
+
+
+def test_py_optional_result_without_none_check_detected(tmp_path):
+    p = tmp_path / "bad.py"
+    p.write_text(
+        "def demo(repo, user_id):\n"
+        "    user = repo.find_user(user_id)\n"
+        "    return user.name\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert any(i.rule_id == "PY-COR-23" for i in issues)
+
+
 def test_py_lambda_late_binding_detected(tmp_path):
     p = tmp_path / "bad.py"
     p.write_text(
@@ -60,6 +108,33 @@ def test_py_lambda_late_binding_detected(tmp_path):
     assert any(i.rule_id == "PY-COR-15" for i in issues)
 
 
+def test_py_discarded_assignment_reused_after_nested_def_not_flagged(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text(
+        "def demo(flag):\n"
+        "    _ast_ok = flag()\n"
+        "    def helper():\n"
+        "        return _ast_ok\n"
+        "    return helper()\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert not any(i.rule_id == "PY-COR-16" for i in issues)
+
+
+def test_py_discarded_assignment_reused_later_not_flagged(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text(
+        "def demo(flag):\n"
+        "    _late_value = flag()\n"
+        + "".join("    # spacer\n" for _ in range(130))
+        + "    return _late_value\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert not any(i.rule_id == "PY-COR-16" for i in issues)
+
+
 # =========================================================================
 # Python True Negatives — code that must NOT be flagged
 # =========================================================================
@@ -69,6 +144,52 @@ def test_py_literal_eval_not_flagged(tmp_path):
     p.write_text("import ast\nresult = ast.literal_eval(user_input)\n", encoding="utf-8")
     issues = reviewer.scan_python_file(str(p), None, review_scope="production")
     assert not any(i.rule_id == "PY-SEC-01" for i in issues)
+
+
+def test_py_requests_with_timeout_not_flagged(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text("import requests\nrequests.get(service_url, timeout=5)\n", encoding="utf-8")
+    issues = reviewer.scan_python_file(str(p), None, review_scope="advisory")
+    assert not any(i.rule_id == "PY-RES-09" for i in issues)
+
+
+def test_py_path_metadata_lookup_not_flagged_as_traversal(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text(
+        "from pathlib import Path\n"
+        "def demo(filepath):\n"
+        "    return Path(filepath).name\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert not any(i.rule_id == "PY-SEC-08" for i in issues)
+
+
+def test_py_urlopen_not_misclassified_as_path_traversal(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text(
+        "import urllib.request\n"
+        "def fetch(request):\n"
+        "    with urllib.request.urlopen(request, timeout=5) as response:\n"
+        "        return response.read()\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert not any(i.rule_id == "PY-SEC-08" for i in issues)
+
+
+def test_py_optional_result_with_none_check_not_flagged(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text(
+        "def demo(repo, user_id):\n"
+        "    user = repo.find_user(user_id)\n"
+        "    if user is None:\n"
+        "        return None\n"
+        "    return user.name\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert not any(i.rule_id == "PY-COR-23" for i in issues)
 
 
 def test_py_commented_eval_not_flagged(tmp_path):
@@ -179,6 +300,40 @@ def test_py_comprehension_for_not_flagged_late_binding(tmp_path):
     assert not any(i.rule_id == "PY-COR-15" for i in issues)
 
 
+def test_py_blender_allocation_with_late_cleanup_not_flagged(tmp_path):
+    p = tmp_path / "good.py"
+    p.write_text(
+        "def build_mesh(name):\n"
+        "    mesh = bpy.data.meshes.new(name)\n"
+        "    obj = bpy.data.objects.new(name, mesh)\n"
+        "    try:\n"
+        "        bpy.context.collection.objects.link(obj)\n"
+        "        return obj\n"
+        "    except Exception:\n"
+        "        bpy.data.objects.remove(obj)\n"
+        "        bpy.data.meshes.remove(mesh)\n"
+        "        raise\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_python_file(str(p), None, review_scope="advisory")
+    assert not any(i.rule_id == "BLE-02" for i in issues)
+
+
+def test_py_blender_allocation_without_cleanup_is_flagged(tmp_path):
+    p = tmp_path / "bad.py"
+    p.write_text(
+        "def build_mesh(name):\n"
+        "    mesh = bpy.data.meshes.new(name)\n"
+        "    obj = bpy.data.objects.new(name, mesh)\n"
+        "    bpy.context.collection.objects.link(obj)\n"
+        "    return obj\n",
+        encoding="utf-8",
+    )
+    # BLE-02 demoted to heuristic (2026-04-09: 85% FP in handlers); strict scope fires
+    issues = reviewer.scan_python_file(str(p), None, review_scope="strict")
+    assert any(i.rule_id == "BLE-02" for i in issues)
+
+
 # =========================================================================
 # C# True Positives — code that MUST be flagged
 # =========================================================================
@@ -241,6 +396,44 @@ def test_cs_find_in_update_detected(tmp_path):
     assert any(i.rule_id == "BUG-06" for i in issues)
 
 
+def test_cs_task_result_detected(tmp_path):
+    p = tmp_path / "Bad.cs"
+    p.write_text(
+        "using System.Threading.Tasks;\n"
+        "public class Bad {\n"
+        "    public void Run(Task<int> work) { var value = work.Result; }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_csharp_file(str(p), None, review_scope="production", profile="general")
+    assert any(i.rule_id == "CS-COR-06" for i in issues)
+
+
+def test_cs_where_count_detected(tmp_path):
+    p = tmp_path / "Bad.cs"
+    p.write_text(
+        "using System.Linq;\n"
+        "public class Bad {\n"
+        "    public int Run(int[] values) { return values.Where(v => v > 0).Count(); }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_csharp_file(str(p), None, review_scope="strict", profile="general")
+    assert any(i.rule_id == "CS-PERF-02" for i in issues)
+
+
+def test_cs_raw_sql_concat_detected(tmp_path):
+    p = tmp_path / "Bad.cs"
+    p.write_text(
+        "public class Bad {\n"
+        "    public void Run(DbContext db, string userId) { db.Users.FromSqlRaw(\"SELECT * FROM Users WHERE Id = \" + userId); }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_csharp_file(str(p), None, review_scope="production", profile="general")
+    assert any(i.rule_id == "CS-SEC-01" for i in issues)
+
+
 # =========================================================================
 # C# True Negatives — code that must NOT be flagged
 # =========================================================================
@@ -298,6 +491,19 @@ def test_cs_constructor_in_plain_class_not_flagged_unity01(tmp_path):
     )
     issues = reviewer.scan_csharp_file(str(p), None, review_scope="strict")
     assert not any(i.rule_id in ("UNITY-01", "UNITY-02") for i in issues)
+
+
+def test_cs_httpclient_factory_not_flagged(tmp_path):
+    p = tmp_path / "Good.cs"
+    p.write_text(
+        "public class Good {\n"
+        "    public Good(IHttpClientFactory factory) { _client = factory.CreateClient(); }\n"
+        "    private readonly HttpClient _client;\n"
+        "}\n",
+        encoding="utf-8",
+    )
+    issues = reviewer.scan_csharp_file(str(p), None, review_scope="strict", profile="general")
+    assert not any(i.rule_id == "CS-COR-01" for i in issues)
 
 
 # =========================================================================

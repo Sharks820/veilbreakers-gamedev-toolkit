@@ -13,13 +13,13 @@ ALLOWED_IMPORTS = frozenset({
     "bpy.data", "bpy.context", "bpy.ops", "bpy.types",
     "mathutils.Vector", "mathutils.Matrix", "mathutils.Euler",
     "mathutils.Quaternion", "mathutils.Color",
-    "os", "os.path", "pathlib", "io", "tempfile", "glob", "fnmatch",
+    "pathlib", "io", "tempfile", "glob", "fnmatch",
 })
 
 _ALLOWED_ROOTS = frozenset({m.split(".")[0] for m in ALLOWED_IMPORTS})
 
 BLOCKED_IMPORTS = frozenset({
-    "sys", "subprocess", "socket", "http", "urllib",
+    "os", "os.path", "sys", "subprocess", "socket", "http", "urllib",
     "shutil", "ctypes", "importlib",
     "pickle", "shelve",
     "__builtins__", "builtins", "code", "codeop",

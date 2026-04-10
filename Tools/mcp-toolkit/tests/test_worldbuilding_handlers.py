@@ -4,6 +4,7 @@ Tests _building_ops_to_mesh_spec conversion and handler return shapes
 without Blender.
 """
 
+import ast
 import math
 import pytest
 
@@ -367,6 +368,85 @@ class TestHandlerReturnShapes:
         assert result["watertight"] is True
         assert result["holes_filled"] == 0
         assert result["merged_vertices"] == 0
+
+
+class TestRoadPathMaterialization:
+    """Road paths should materialize as mesh segments, not curve objects."""
+
+    def test_materialize_road_path_meshes_uses_flat_segments(self, monkeypatch):
+        from types import SimpleNamespace
+        from blender_addon.handlers import worldbuilding
+
+        spec_calls: list[tuple[tuple[float, float, float], tuple[float, float, float], float]] = []
+        material_calls: list[str] = []
+        object_names: list[str] = []
+
+        def fake_flat_spec(start, end, width):
+            spec_calls.append((start, end, width))
+            return {"vertices": [start, end], "faces": [(0, 1)]}
+
+        def fake_mesh_from_spec(spec, name=None, parent=None, **kwargs):
+            object_names.append(name)
+            return SimpleNamespace(name=name, data=SimpleNamespace(materials=[]))
+
+        monkeypatch.setattr(worldbuilding, "_road_segment_mesh_spec_flat", fake_flat_spec)
+        monkeypatch.setattr(worldbuilding, "mesh_from_spec", fake_mesh_from_spec)
+        monkeypatch.setattr(
+            worldbuilding,
+            "_assign_procedural_material",
+            lambda obj, material_key: material_calls.append(material_key) or True,
+        )
+
+        created = worldbuilding._materialize_road_path_meshes(
+            "TestTown",
+            "road_0",
+            [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (2.0, 0.0, 0.0)],
+            2.0,
+            parent=None,
+            use_curbs=False,
+            material_key="dirt",
+        )
+
+        assert created == 2
+        assert len(spec_calls) == 2
+        assert object_names == ["TestTown_road_0_seg_0", "TestTown_road_0_seg_1"]
+        assert material_calls == ["dirt", "dirt"]
+
+    def test_materialize_road_path_meshes_can_use_curbs(self, monkeypatch):
+        from types import SimpleNamespace
+        from blender_addon.handlers import worldbuilding
+
+        spec_calls = []
+        material_calls: list[str] = []
+
+        def fake_curb_spec(start, end, width):
+            spec_calls.append((start, end, width))
+            return {"vertices": [start, end], "faces": [(0, 1)]}
+
+        def fake_mesh_from_spec(spec, name=None, parent=None, **kwargs):
+            return SimpleNamespace(name=name, data=SimpleNamespace(materials=[]))
+
+        monkeypatch.setattr(worldbuilding, "_road_segment_mesh_spec_with_curbs", fake_curb_spec)
+        monkeypatch.setattr(worldbuilding, "mesh_from_spec", fake_mesh_from_spec)
+        monkeypatch.setattr(
+            worldbuilding,
+            "_assign_procedural_material",
+            lambda obj, material_key: material_calls.append(material_key) or True,
+        )
+
+        created = worldbuilding._materialize_road_path_meshes(
+            "TestTown",
+            "road_1",
+            [(0.0, 0.0, 0.0), (2.0, 2.0, 0.0)],
+            4.0,
+            parent=None,
+            use_curbs=True,
+            material_key="cobblestone_floor",
+        )
+
+        assert created == 1
+        assert len(spec_calls) == 1
+        assert material_calls == ["cobblestone_floor"]
 
     def test_interior_result_keys(self):
         """_build_interior_result returns dict with expected keys."""
@@ -936,3 +1016,33 @@ class TestVBDungeonPresets:
             )
             assert dungeon.num_floors == 2, f"Preset '{name}' failed dungeon generation"
             assert dungeon.total_rooms > 0, f"Preset '{name}' produced dungeon with no rooms"
+
+
+# ---------------------------------------------------------------------------
+# Boss arena cap_fill regression test (GEN-04)
+# ---------------------------------------------------------------------------
+
+
+class TestBossArenaCapFillRegression:
+    """Verify boss arena uses correct bmesh.ops.create_circle API (cap_fill)."""
+
+    def test_boss_arena_uses_cap_fill_not_cap_ends(self):
+        """Every create_circle call uses cap_fill and never the cone-only cap_ends."""
+        import pathlib
+
+        wb_path = pathlib.Path(__file__).resolve().parent.parent / (
+            "blender_addon" / pathlib.Path("handlers") / "worldbuilding.py"
+        )
+        module = ast.parse(wb_path.read_text(encoding="utf-8"))
+        circle_calls = [
+            node
+            for node in ast.walk(module)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "create_circle"
+        ]
+        assert circle_calls, "worldbuilding.py should use create_circle"
+        for call in circle_calls:
+            keyword_names = {kw.arg for kw in call.keywords if kw.arg is not None}
+            assert "cap_fill" in keyword_names, "create_circle call missing cap_fill"
+            assert "cap_ends" not in keyword_names, "create_circle call wrongly uses cap_ends"

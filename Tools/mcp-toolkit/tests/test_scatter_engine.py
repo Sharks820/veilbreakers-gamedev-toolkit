@@ -332,6 +332,45 @@ class TestBiomeFilterPoints:
         )
         assert len(result) == 1, "Without moisture_map, moisture rules should be ignored"
 
+    def test_rectangular_terrain_uses_independent_width_and_depth(self):
+        """Rectangular terrain mapping should not reuse width for the Y axis."""
+        hmap = np.array(
+            [
+                [0.1, 0.2],
+                [0.8, 0.9],
+            ],
+            dtype=np.float64,
+        )
+        slope = np.full((2, 2), 10.0)
+        rules = [
+            {
+                "vegetation_type": "lowland",
+                "min_alt": 0.0,
+                "max_alt": 0.5,
+                "density": 1.0,
+                "scale_range": (0.8, 1.2),
+            },
+            {
+                "vegetation_type": "highland",
+                "min_alt": 0.6,
+                "max_alt": 1.0,
+                "density": 1.0,
+                "scale_range": (0.8, 1.2),
+            },
+        ]
+
+        result = biome_filter_points(
+            [(250.0, 150.0)],
+            hmap,
+            slope,
+            rules,
+            terrain_width=200.0,
+            terrain_depth=100.0,
+        )
+
+        assert len(result) == 1
+        assert result[0]["vegetation_type"] == "highland"
+
 
 # ===================================================================
 # Context-Aware Scatter
@@ -389,7 +428,7 @@ class TestContextScatter:
         buildings = [{"type": "tavern", "position": (5, 5), "footprint": (4, 4)}]
         result = context_scatter(buildings, area_size=80, seed=42)
 
-        generic_types = {"rock", "log", "mushroom", "bush", "barrel"}
+        generic_types = {"rock", "bush", "crate", "barrel", "lantern"}
         far_props = []
         for p in result:
             dx = p["position"][0] - 5

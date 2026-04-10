@@ -5,6 +5,7 @@ handler return dict structure via pure-logic extraction.
 """
 
 import struct
+from unittest.mock import patch
 
 import numpy as np
 import pytest
@@ -58,13 +59,6 @@ class TestValidateTerrainParams:
 
     def test_max_resolution_4096_passes(self):
         """Resolution 4096 (maximum) passes validation."""
-        from blender_addon.handlers.environment import _validate_terrain_params
-
-        result = _validate_terrain_params({"resolution": 4096})
-        assert result["resolution"] == 4096
-
-    def test_resolution_4096_passes(self):
-        """Resolution 4096 passes validation (4096+ support)."""
         from blender_addon.handlers.environment import _validate_terrain_params
 
         result = _validate_terrain_params({"resolution": 4096})
@@ -224,6 +218,106 @@ class TestExportHeightmapRaw:
         raw = _export_heightmap_raw(hmap, flip_vertical=True)
         assert len(raw) == 64 * 64 * 2
 
+    def test_shared_value_range_preserves_world_scale(self):
+        """A shared export range should avoid per-tile renormalization."""
+        from blender_addon.handlers.environment import _export_heightmap_raw
+
+        hmap = np.array([[10.0, 20.0]], dtype=np.float64)
+        raw = _export_heightmap_raw(
+            hmap,
+            flip_vertical=False,
+            value_range=(0.0, 40.0),
+        )
+        values = struct.unpack("<2H", raw)
+        assert 16383 <= values[0] <= 16384
+        assert 32767 <= values[1] <= 32768
+
+    def test_shared_value_range_clamps_outside_bounds(self):
+        """Shared export range should clamp values outside the provided range."""
+        from blender_addon.handlers.environment import _export_heightmap_raw
+
+        hmap = np.array([[-5.0, 50.0]], dtype=np.float64)
+        raw = _export_heightmap_raw(
+            hmap,
+            flip_vertical=False,
+            value_range=(0.0, 40.0),
+        )
+        values = struct.unpack("<2H", raw)
+        assert values[0] == 0
+        assert values[1] == 65535
+
+
+class TestExportSplatmapRaw:
+    """Test RAW splatmap export (pure logic, no file I/O)."""
+
+    def test_returns_bytes(self):
+        from blender_addon.handlers.environment import _export_splatmap_raw
+
+        splat = np.zeros((2, 2, 4), dtype=np.float64)
+        splat[:, :, 0] = 1.0
+        raw = _export_splatmap_raw(splat, flip_vertical=False)
+        assert isinstance(raw, bytes)
+        assert len(raw) == 2 * 2 * 4
+
+    def test_normalizes_channels(self):
+        from blender_addon.handlers.environment import _export_splatmap_raw
+
+        splat = np.array(
+            [
+                [[2.0, 1.0, 1.0, 0.0], [0.0, 0.0, 0.0, 0.0]],
+                [[0.25, 0.25, 0.25, 0.25], [1.0, 0.0, 0.0, 0.0]],
+            ]
+        )
+        raw = _export_splatmap_raw(splat, flip_vertical=False)
+        values = np.frombuffer(raw, dtype=np.uint8)
+        assert values.shape == (2 * 2 * 4,)
+        assert values.max() <= 255
+
+
+class TestWorldSplatmapWeights:
+    """World splatmap weighting should honor a shared height range."""
+
+    def test_shared_height_range_keeps_weights_stable(self):
+        from blender_addon.handlers.terrain_materials import compute_world_splatmap_weights
+
+        tile = np.array(
+            [
+                [0.0, 0.2],
+                [0.4, 0.6],
+            ],
+            dtype=np.float64,
+        )
+
+        local_weights = compute_world_splatmap_weights(
+            tile,
+            biome_name="thornwood_forest",
+        )
+        shared_weights = compute_world_splatmap_weights(
+            tile,
+            biome_name="thornwood_forest",
+            height_range=(0.0, 2.0),
+        )
+
+        assert not np.allclose(local_weights[0, 1], shared_weights[0, 1])
+
+    def test_larger_cell_size_keeps_same_height_delta_less_cliff_like(self):
+        from blender_addon.handlers.terrain_materials import compute_world_splatmap_weights
+
+        hmap = np.tile(np.linspace(0.0, 1.0, 5), (5, 1))
+        fine = compute_world_splatmap_weights(
+            hmap,
+            biome_name="thornwood_forest",
+            cell_size=1.0,
+        )
+        coarse = compute_world_splatmap_weights(
+            hmap,
+            biome_name="thornwood_forest",
+            cell_size=4.0,
+        )
+
+        assert coarse[2, 2][0] > fine[2, 2][0]
+        assert coarse[2, 2][1] < fine[2, 2][1]
+
 
 # ---------------------------------------------------------------------------
 # Handler return dict structure tests
@@ -266,6 +360,277 @@ class TestHandlerReturnDictKeys:
         assert arr.shape == (33 * 33,)
         assert arr.min() >= 0
         assert arr.max() <= 65535
+
+
+class TestWorldTerrainGeneration:
+    def test_world_terrain_wraps_tile_generation(self):
+        """handle_generate_world_terrain delegates to tiled generation for compatibility."""
+        from blender_addon.handlers import environment as env_mod
+
+        with patch.object(env_mod, "handle_generate_terrain_tile", return_value={"name": "X", "tile_x": 0, "tile_y": 0}):
+            result = env_mod.handle_generate_world_terrain({"name": "X"})
+
+        assert result["name"] == "X"
+        assert result["deprecated_command"] is True
+        assert result["compatibility_mode"] == "world_to_tile_wrapper"
+
+    def test_world_terrain_can_wrap_multiple_tiles(self):
+        from blender_addon.handlers import environment as env_mod
+
+        with patch.object(env_mod, "handle_generate_terrain_tile", side_effect=lambda params: {
+            "name": params["name"],
+            "tile_x": params["tile_x"],
+            "tile_y": params["tile_y"],
+        }):
+            result = env_mod.handle_generate_world_terrain({
+                "name": "World",
+                "tiles_x": 2,
+                "tiles_y": 2,
+            })
+
+        assert result["tile_count"] == 4
+        assert result["deprecated_command"] is True
+        assert {(tile["tile_x"], tile["tile_y"]) for tile in result["tiles"]} == {
+            (0, 0), (1, 0), (0, 1), (1, 1),
+        }
+
+    def test_multi_biome_world_uses_mesh_backed_scatter_helper(self):
+        from blender_addon.handlers import environment as env_mod
+
+        class _ColorDatum:
+            def __init__(self):
+                self.color = None
+
+        class _ColorAttr:
+            def __init__(self, count):
+                self.data = [_ColorDatum() for _ in range(count)]
+
+        class _ColorAttributes:
+            def __init__(self):
+                self._attrs = {}
+
+            def get(self, name):
+                return self._attrs.get(name)
+
+            def new(self, name, type, domain):
+                attr = _ColorAttr(4)
+                self._attrs[name] = attr
+                return attr
+
+            def remove(self, attr):
+                for key, value in list(self._attrs.items()):
+                    if value is attr:
+                        del self._attrs[key]
+
+        class _Mesh:
+            def __init__(self):
+                self.color_attributes = _ColorAttributes()
+                self.vertices = [object(), object(), object(), object()]
+
+        class _Obj:
+            def __init__(self):
+                self.data = _Mesh()
+
+        class _Spec:
+            def __init__(self):
+                self.biome_names = ["thornwood_forest", "corrupted_swamp"]
+                self.biome_ids = np.array([[0, 1], [1, 0]], dtype=np.int32)
+                self.corruption_map = np.array([[0.1, 0.2], [0.3, 0.4]], dtype=np.float64)
+                self.flatten_zones = [{"center": [0.0, 0.0], "radius": 10.0}]
+
+        fake_obj = _Obj()
+        scatter_calls = []
+
+        with patch.object(env_mod, "handle_generate_terrain", return_value={"vertex_count": 4}), \
+             patch.object(env_mod, "_compute_vertex_colors_for_biome_map", return_value=[(1.0, 0.0, 0.0, 1.0)] * 4), \
+             patch.object(env_mod.bpy.data.objects, "get", return_value=fake_obj), \
+             patch("blender_addon.handlers._biome_grammar.generate_world_map_spec", return_value=_Spec()), \
+             patch("blender_addon.handlers.terrain_materials.handle_create_biome_terrain", return_value={"status": "ok"}), \
+             patch("blender_addon.handlers.vegetation_system.scatter_biome_vegetation", side_effect=lambda params: scatter_calls.append(params) or {"instance_count": 3}):
+            result = env_mod.handle_generate_multi_biome_world(
+                {
+                    "name": "BiomeWorld",
+                    "width": 2,
+                    "height": 2,
+                    "world_size": 128.0,
+                    "scatter_vegetation": True,
+                    "seed": 7,
+                }
+            )
+
+        assert result["name"] == "BiomeWorld"
+        assert result["vegetation_count"] == 6
+        assert [call["biome_name"] for call in scatter_calls] == ["thornwood_forest", "corrupted_swamp"]
+
+
+class TestExportHeightRangeResolution:
+    def test_tiled_world_uses_shared_height_range(self):
+        from blender_addon.handlers.environment import _resolve_export_height_range
+
+        hmap = np.array([[10.0, 20.0], [30.0, 40.0]], dtype=np.float64)
+        result = _resolve_export_height_range(
+            {
+                "tiled_world": True,
+                "height_range": (0.0, 80.0),
+            },
+            hmap,
+        )
+
+        assert result == (0.0, 80.0)
+
+    def test_legacy_export_defaults_to_local_range(self):
+        from blender_addon.handlers.environment import _resolve_export_height_range
+
+        hmap = np.array([[10.0, 20.0], [30.0, 40.0]], dtype=np.float64)
+        result = _resolve_export_height_range({}, hmap)
+
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Tiled terrain parameter resolution
+# ---------------------------------------------------------------------------
+
+
+class TestResolveTerrainTileParams:
+    def test_defaults_compute_world_origin_and_center(self):
+        from blender_addon.handlers.environment import _resolve_terrain_tile_params
+
+        result = _resolve_terrain_tile_params({"tile_x": 1, "tile_y": 2})
+
+        assert result["tile_size"] == 256
+        assert result["resolution"] == 257
+        assert result["world_origin_x"] == 256.0
+        assert result["world_origin_y"] == 512.0
+        assert result["terrain_size"] == 256.0
+        assert result["object_location"] == (384.0, 640.0, 0.0)
+
+    def test_explicit_resolution_derives_tile_size(self):
+        from blender_addon.handlers.environment import _resolve_terrain_tile_params
+
+        result = _resolve_terrain_tile_params({
+            "tile_x": 3,
+            "tile_y": 4,
+            "resolution": 65,
+            "cell_size": 2.0,
+        })
+
+        assert result["tile_size"] == 64
+        assert result["resolution"] == 65
+        assert result["terrain_size"] == 128.0
+        assert result["world_origin_x"] == 384.0
+        assert result["world_origin_y"] == 512.0
+        assert result["object_location"] == (448.0, 576.0, 0.0)
+
+    def test_resolution_tile_size_mismatch_raises(self):
+        from blender_addon.handlers.environment import _resolve_terrain_tile_params
+
+        with pytest.raises(ValueError, match="resolution must equal tile_size"):
+            _resolve_terrain_tile_params({"tile_size": 64, "resolution": 63})
+
+
+class TestTerrainWorldCoordinateHelpers:
+    def test_grid_to_world_xy_respects_center_offset(self):
+        from blender_addon.handlers.environment import _terrain_grid_to_world_xy
+
+        start = _terrain_grid_to_world_xy(
+            0,
+            0,
+            rows=3,
+            cols=3,
+            terrain_size=100.0,
+            terrain_origin_x=150.0,
+            terrain_origin_y=200.0,
+        )
+        center = _terrain_grid_to_world_xy(
+            1,
+            1,
+            rows=3,
+            cols=3,
+            terrain_size=100.0,
+            terrain_origin_x=150.0,
+            terrain_origin_y=200.0,
+        )
+        end = _terrain_grid_to_world_xy(
+            2,
+            2,
+            rows=3,
+            cols=3,
+            terrain_size=100.0,
+            terrain_origin_x=150.0,
+            terrain_origin_y=200.0,
+        )
+
+        assert start == (100.0, 150.0)
+        assert center == (150.0, 200.0)
+        assert end == (200.0, 250.0)
+
+    def test_grid_to_world_xy_uses_rectangular_axes(self):
+        from blender_addon.handlers.environment import _terrain_grid_to_world_xy
+
+        start = _terrain_grid_to_world_xy(
+            0,
+            0,
+            rows=3,
+            cols=5,
+            terrain_width=200.0,
+            terrain_height=80.0,
+            terrain_origin_x=10.0,
+            terrain_origin_y=20.0,
+        )
+        center = _terrain_grid_to_world_xy(
+            1,
+            2,
+            rows=3,
+            cols=5,
+            terrain_width=200.0,
+            terrain_height=80.0,
+            terrain_origin_x=10.0,
+            terrain_origin_y=20.0,
+        )
+        end = _terrain_grid_to_world_xy(
+            2,
+            4,
+            rows=3,
+            cols=5,
+            terrain_width=200.0,
+            terrain_height=80.0,
+            terrain_origin_x=10.0,
+            terrain_origin_y=20.0,
+        )
+
+        assert start == (-90.0, -20.0)
+        assert center == (10.0, 20.0)
+        assert end == (110.0, 60.0)
+
+    def test_resolve_water_path_points_defaults_to_offset_terrain_center(self):
+        from blender_addon.handlers.environment import _resolve_water_path_points
+
+        path = _resolve_water_path_points(
+            path_points_raw=None,
+            terrain_origin_x=320.0,
+            terrain_origin_y=640.0,
+            fallback_depth=100.0,
+            water_level=3.0,
+        )
+
+        assert path == [
+            (320.0, 590.0, 3.0),
+            (320.0, 690.0, 3.0),
+        ]
+
+    def test_resolve_water_path_points_preserves_explicit_points(self):
+        from blender_addon.handlers.environment import _resolve_water_path_points
+
+        path = _resolve_water_path_points(
+            path_points_raw=[[1, 2, 3], [4, 5, 6]],
+            terrain_origin_x=320.0,
+            terrain_origin_y=640.0,
+            fallback_depth=100.0,
+            water_level=3.0,
+        )
+
+        assert path == [(1.0, 2.0, 3.0), (4.0, 5.0, 6.0)]
 
 
 # ---------------------------------------------------------------------------

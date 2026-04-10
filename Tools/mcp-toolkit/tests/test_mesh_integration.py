@@ -32,7 +32,7 @@ from blender_addon.handlers._dungeon_gen import (
 
 
 # -------------------------------------------------------------------------
-# Known unmapped furniture types (documented -- these fall back to cubes)
+# Known unmapped furniture types (documented and intentionally left unmapped)
 # -------------------------------------------------------------------------
 
 _UNMAPPED_FURNITURE_TYPES = {

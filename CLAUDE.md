@@ -11,7 +11,7 @@ Tools/mcp-toolkit/           # MCP server source
     unity_server.py          # 22 Unity compound tools
   blender_addon/             # Blender socket addon (handlers/)
   tests/                     # pytest suite
-.mcp.json                    # MCP server config (vb-blender, vb-unity)
+.mcp.json                    # MCP server config (vb-blender, vb-unity, vb-review)
 .planning/                   # Phase plans, research, state tracking
 ```
 
@@ -32,6 +32,8 @@ All tools use a **compound pattern**: one tool name per domain, `action` param s
 4. **Game readiness**: Run `blender_mesh` action=`game_check` before export. Run `unity_performance` action=`profile_scene` after setup.
 5. **Use seeds** for reproducible environment/worldbuilding generation.
 6. **Batch when possible**: `asset_pipeline` action=`batch_process`, `blender_animation` action=`batch_export`.
+7. **For terrain/world work, inspect the live Blender toolchain first.** Call `asset_pipeline` with `action="inspect_external_toolchain"` and prefer `agent_contract.workflow_presets.terrain_unity_ready_free` as the default free Unity-ready terrain workflow on this PC.
+8. **Do not infer addon availability from installed files alone.** Use the returned `agent_contract.selection`, `workflow_presets`, `warnings`, and `blender_runtime` fields as the source of truth for active Blender capabilities.
 
 ## Available MCP Tools & Plugins (USE THESE)
 
@@ -61,6 +63,7 @@ All agents (including GSD subagents) have access to these tools. **Prefer MCP to
 ### Game Development (VeilBreakers MCP)
 - **vb-blender** (16 tools): Direct Blender control via TCP. See `.claude/skills/vb-mcp-tools/SKILL.md`.
 - **vb-unity** (22 tools): Unity C# editor script generation. Always follow `next_steps`.
+- **vb-review** (4 tools): Multi-model code review via Gemini CLI plus OpenRouter. Use `review_consensus` for side-by-side reviewer runs and metrics.
 
 ### Tool Selection Priority
 1. **Context7** for library/framework questions (not raw web search)
@@ -70,6 +73,42 @@ All agents (including GSD subagents) have access to these tools. **Prefer MCP to
 5. **Web Search Prime** for current events / recent changes
 6. **zai tools** for any visual analysis, screenshots, diagrams
 7. **Grep/Glob/Read** for local codebase navigation (always available)
+
+## Quality Infrastructure
+
+The project has a 7-layer defense-in-depth system for terrain code quality:
+
+- **L0**: Contract YAML (`.planning/contracts/terrain.yaml`) — machine-readable source of truth
+- **L1**: Pre-flight briefer (`scripts/brief_agent.py`) — run before touching terrain_*.py
+- **L2**: AST lint (`scripts/quality_lint.py`) — detects stubs, orphan deltas, frozen-mutable, silent-swallow
+- **L3**: Contract tests (`tests/contract/`) — auto-generated from YAML
+- **L4**: Honesty lint (`scripts/honesty_lint.py`) — cross-checks plan claims against code
+- **L5**: Test substance lint (`scripts/test_substance_lint.py`) — classifies tests as REAL/SHALLOW/TAUTOLOGICAL
+- **L6**: Integration gate (`tests/integration/test_full_terrain_pipeline.py`) — end-to-end pipeline
+
+### Before Committing Terrain Code
+```bash
+cd Tools/mcp-toolkit
+python scripts/quality_lint.py blender_addon/handlers/  # Must be <=16 findings
+python -m pytest tests/ -q --tb=line                      # Must pass (20,900+)
+```
+
+### Before Touching terrain_*.py
+```bash
+python scripts/brief_agent.py  # Shows contract state, known bugs, sibling passes
+```
+
+### After Writing Tests
+```bash
+python scripts/test_substance_lint.py tests/  # real_ratio must be >= 0.50
+```
+
+### Code Reviewer
+```bash
+PYTHONPATH=src python src/veilbreakers_mcp/vb_code_reviewer.py <path> --scope advisory --profile general
+```
+
+Profiles: `general` (Python+C# core), `blender` (+ BLE rules), `unity` (+ Unity rules), `all` (everything).
 
 ## Planning Files
 

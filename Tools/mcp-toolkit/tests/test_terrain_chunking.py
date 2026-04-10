@@ -3,13 +3,16 @@
 import json
 
 import pytest
+import numpy as np
 
 from blender_addon.handlers.terrain_chunking import (
     compute_chunk_lod,
     compute_streaming_distances,
     compute_terrain_chunks,
     export_chunks_metadata,
+    validate_tile_seams,
 )
+from blender_addon.handlers._terrain_world import validate_tile_seams as validate_world_tile_seams
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +164,19 @@ class TestComputeTerrainChunks:
         meta = result["metadata"]
         assert meta["chunk_world_size"] == 128.0
 
+    def test_world_origin_is_preserved(self):
+        hmap = _make_heightmap(64, 64)
+        result = compute_terrain_chunks(
+            hmap,
+            chunk_size=64,
+            world_scale=2.0,
+            world_origin=(512.0, 256.0),
+        )
+        meta = result["metadata"]
+        assert meta["world_origin"] == (512.0, 256.0)
+        chunk = result["chunks"][0]
+        assert chunk["bounds"] == (512.0, 256.0, 640.0, 384.0)
+
 
 # ---------------------------------------------------------------------------
 # Metadata export
@@ -192,3 +208,83 @@ class TestExportMetadata:
         assert len(data["chunks"]) == 4
         grid_positions = [(c["grid_x"], c["grid_y"]) for c in data["chunks"]]
         assert (0, 0) in grid_positions
+
+    def test_export_preserves_world_origin(self):
+        hmap = _make_heightmap(64, 64)
+        result = compute_terrain_chunks(
+            hmap,
+            chunk_size=64,
+            world_origin=(1024.0, 2048.0),
+        )
+        json_str = export_chunks_metadata(result)
+        data = json.loads(json_str)
+        assert tuple(data["terrain_metadata"]["world_origin"]) == (1024.0, 2048.0)
+
+
+class TestValidateTileSeams:
+    def test_east_west_tiles_match(self):
+        left = [
+            [0.0, 1.0, 2.0],
+            [3.0, 4.0, 5.0],
+            [6.0, 7.0, 8.0],
+        ]
+        right = [
+            [2.0, 9.0, 10.0],
+            [5.0, 11.0, 12.0],
+            [8.0, 13.0, 14.0],
+        ]
+        result = validate_tile_seams(left, right, direction="east")
+        assert result["match"] is True
+        assert result["sample_count"] == 3
+
+    def test_north_south_tiles_mismatch(self):
+        top = [
+            [0.0, 1.0, 2.0],
+            [3.0, 4.0, 5.0],
+            [6.0, 7.0, 8.0],
+        ]
+        bottom = [
+            [6.5, 7.0, 8.0],
+            [9.0, 10.0, 11.0],
+            [12.0, 13.0, 14.0],
+        ]
+        result = validate_tile_seams(top, bottom, direction="south", tolerance=0.1)
+        assert result["match"] is False
+        assert result["max_delta"] == 0.5
+
+    def test_world_tile_validator_returns_region_summary_shape(self):
+        tiles = {
+            (0, 0): [[0.0, 1.0], [2.0, 3.0]],
+            (1, 0): [[1.0, 4.0], [3.0, 5.0]],
+        }
+        result = validate_world_tile_seams(tiles)
+        assert set(result.keys()) == {"seam_ok", "max_edge_delta", "issues", "tile_count", "channel_count"}
+        assert result["tile_count"] == 2
+
+    def test_multichannel_tiles_report_per_channel_deltas(self):
+        left = [
+            [[0.0, 10.0], [1.0, 11.0]],
+            [[2.0, 12.0], [3.0, 13.0]],
+        ]
+        right = [
+            [[1.0, 11.0], [4.0, 14.0]],
+            [[3.0, 13.2], [5.0, 15.2]],
+        ]
+
+        result = validate_tile_seams(left, right, direction="east", tolerance=0.1)
+
+        assert result["match"] is False
+        assert result["sample_count"] == 2
+        assert result["channel_count"] == 2
+        assert result["per_channel_max_delta"] == [0.0, 0.1999999999999993]
+
+    def test_world_validator_accepts_multichannel_tiles(self):
+        tiles = {
+            (0, 0): np.array([[[0.0, 0.1], [1.0, 1.1]], [[2.0, 2.1], [3.0, 3.1]]], dtype=np.float64),
+            (1, 0): np.array([[[1.0, 1.1], [4.0, 4.1]], [[3.0, 3.1], [5.0, 5.1]]], dtype=np.float64),
+        }
+
+        result = validate_world_tile_seams(tiles)
+
+        assert result["seam_ok"] is True
+        assert result["channel_count"] == 2

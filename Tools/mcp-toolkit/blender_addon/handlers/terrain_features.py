@@ -258,11 +258,15 @@ def generate_waterfall(
     num_steps: int = 3,
     has_cave_behind: bool = True,
     seed: int = 42,
+    facing_direction: tuple[float, float] = (0.0, -1.0),
 ) -> dict[str, Any]:
     """Generate step-down terrain with wet rock, splash zone, and hidden cave.
 
-    The waterfall faces along the -Y direction (water flows from +Y to -Y).
-    The cliff face is at Y=0, pool extends into -Y.
+    By default the waterfall faces along the -Y direction (water flows from
+    +Y to -Y), matching the legacy behavior. Pass ``facing_direction`` as a
+    2D vector in world XY to orient the waterfall along any horizontal
+    direction — the cliff face, ledges, pool, cave, and splash zone are all
+    rotated together so the water flows along the supplied vector.
 
     Parameters
     ----------
@@ -278,6 +282,10 @@ def generate_waterfall(
         Whether to include a cave behind the waterfall.
     seed : int
         Random seed.
+    facing_direction : tuple[float, float]
+        World-XY vector that water flows toward. Defaults to ``(0, -1)``
+        (−Y facing) for backward compatibility with legacy call sites.
+        The vector is normalized internally.
 
     Returns
     -------
@@ -418,6 +426,48 @@ def generate_waterfall(
             "entrance": (0.0, 0.5, cave_z),
         }
 
+    # --- Direction-aware rotation (Bundle C §8 acceptance criterion) -------
+    # The geometry above was built in the legacy local frame with water
+    # flowing toward -Y. If the caller supplied a different
+    # ``facing_direction`` we rotate every vertex and every metadata position
+    # (steps, pool, cave, splash_zone) around Z so the whole chain points
+    # along the requested vector. The legacy default (0, -1) resolves to
+    # the identity rotation, so existing call sites are unaffected.
+    dx, dy = float(facing_direction[0]), float(facing_direction[1])
+    length_sq = dx * dx + dy * dy
+    if length_sq < 1e-12:
+        # Degenerate direction — preserve legacy orientation rather than raise
+        cos_t, sin_t = 1.0, 0.0
+    else:
+        inv_len = 1.0 / math.sqrt(length_sq)
+        dx *= inv_len
+        dy *= inv_len
+        # Source frame: (0, -1). Target: (dx, dy). Rotation matrix that maps
+        # source → target is [[cos -sin][sin cos]] with:
+        #   cos_t = source · target   = -dy
+        #   sin_t = source × target_z =  dx
+        cos_t = -dy
+        sin_t = dx
+
+    if abs(cos_t - 1.0) > 1e-9 or abs(sin_t) > 1e-9:
+        def _rot_xy(p):
+            x0, y0 = float(p[0]), float(p[1])
+            z0 = float(p[2]) if len(p) > 2 else 0.0
+            return (
+                x0 * cos_t - y0 * sin_t,
+                x0 * sin_t + y0 * cos_t,
+                z0,
+            )
+
+        vertices = [_rot_xy(v) for v in vertices]
+        for step in steps:
+            step["position"] = _rot_xy(step["position"])
+        pool_info["center"] = _rot_xy(pool_info["center"])
+        splash_zone["center"] = _rot_xy(splash_zone["center"])
+        if cave_info is not None:
+            cave_info["position"] = _rot_xy(cave_info["position"])
+            cave_info["entrance"] = _rot_xy(cave_info["entrance"])
+
     return {
         "mesh": {
             "vertices": vertices,
@@ -434,6 +484,7 @@ def generate_waterfall(
             "width": width,
             "pool_radius": pool_radius,
         },
+        "facing_direction": (float(facing_direction[0]), float(facing_direction[1])),
         "vertex_count": len(vertices),
         "face_count": len(faces),
     }
