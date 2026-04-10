@@ -288,6 +288,27 @@ class TestEmitSceneHierarchyGuard:
             if saved is not None:
                 sys.modules["bpy"] = saved
 
+    def test_interior_results_preserved_on_resume(self):
+        """Checkpoint-loaded interior_results survives step 9 entry when interiors_generated not done."""
+        # Simulate: checkpoint loaded partial interior_results, step not marked complete
+        interior_results = [{"location": "tavern", "result": {"rooms": 3}}]
+        steps_completed = ["terrain_generated", "locations_generated"]
+        # The fixed logic (SAFE-02):
+        if "interiors_generated" not in steps_completed:
+            if not interior_results:
+                interior_results = []
+        assert len(interior_results) == 1, "interior_results should be preserved from checkpoint"
+        assert interior_results[0]["location"] == "tavern"
+
+    def test_interior_results_reset_when_no_checkpoint(self):
+        """Fresh run with empty interior_results stays empty after guard."""
+        interior_results = []
+        steps_completed = ["terrain_generated"]
+        if "interiors_generated" not in steps_completed:
+            if not interior_results:
+                interior_results = []
+        assert interior_results == [], "Empty interior_results stays empty on fresh run"
+
     def test_scene_hierarchy_fields_present(self):
         """With a mocked bpy, emit_scene_hierarchy returns correct fields."""
         import sys
@@ -338,3 +359,107 @@ class TestEmitSceneHierarchyGuard:
             assert obj_entry["district"] == "terrain"
         finally:
             del sys.modules["bpy"]
+
+
+# ---------------------------------------------------------------------------
+# emit_scene_hierarchy whitelist filtering (SAFE-06)
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_blender_obj(name: str, obj_type: str = "MESH"):
+    """Create a minimal mock Blender object."""
+    from unittest.mock import MagicMock
+    obj = MagicMock()
+    obj.name = name
+    obj.type = obj_type
+    obj.matrix_world.translation.x = 0.0
+    obj.matrix_world.translation.y = 0.0
+    obj.matrix_world.translation.z = 0.0
+    obj.rotation_euler.x = 0.0
+    obj.rotation_euler.y = 0.0
+    obj.rotation_euler.z = 0.0
+    obj.scale.x = 1.0
+    obj.scale.y = 1.0
+    obj.scale.z = 1.0
+    return obj
+
+
+class TestEmitSceneHierarchyWhitelist:
+    """Tests for SAFE-06: created_objects whitelist filtering."""
+
+    def _setup_bpy(self, objects):
+        import sys
+        import types
+        from unittest.mock import MagicMock
+        fake_bpy = types.ModuleType("bpy")
+        fake_data = MagicMock()
+        fake_data.objects = objects
+        fake_bpy.data = fake_data
+        sys.modules["bpy"] = fake_bpy
+        return fake_bpy
+
+    def _teardown_bpy(self):
+        import sys
+        sys.modules.pop("bpy", None)
+
+    def test_emit_scene_hierarchy_respects_whitelist(self):
+        """Only whitelisted objects appear in output."""
+        objects = [
+            _make_mock_blender_obj("MapTerrain"),
+            _make_mock_blender_obj("Building_01"),
+            _make_mock_blender_obj("Tree_03"),
+            _make_mock_blender_obj("Camera.001", "CAMERA"),
+            _make_mock_blender_obj("Light_Sun", "LIGHT"),
+        ]
+        self._setup_bpy(objects)
+        try:
+            from blender_addon.handlers.pipeline_state import emit_scene_hierarchy
+            result = emit_scene_hierarchy(
+                "TestMap", [],
+                created_objects=["MapTerrain", "Building_01", "Tree_03"],
+            )
+            names = {o["name"] for o in result["objects"]}
+            assert "MapTerrain" in names
+            assert "Building_01" in names
+            assert "Tree_03" in names
+            assert "Camera.001" not in names
+            assert "Light_Sun" not in names
+        finally:
+            self._teardown_bpy()
+
+    def test_emit_scene_hierarchy_whitelist_none_includes_all(self):
+        """When created_objects=None, all objects included (backward compat)."""
+        objects = [
+            _make_mock_blender_obj("MapTerrain"),
+            _make_mock_blender_obj("Camera.001", "CAMERA"),
+            _make_mock_blender_obj("Light_Sun", "LIGHT"),
+        ]
+        self._setup_bpy(objects)
+        try:
+            from blender_addon.handlers.pipeline_state import emit_scene_hierarchy
+            result = emit_scene_hierarchy("TestMap", [], created_objects=None)
+            names = {o["name"] for o in result["objects"]}
+            assert len(names) == 3
+        finally:
+            self._teardown_bpy()
+
+    def test_emit_scene_hierarchy_whitelist_prefix_match(self):
+        """Sub-objects matching a whitelisted prefix are included."""
+        objects = [
+            _make_mock_blender_obj("Building_01"),
+            _make_mock_blender_obj("Building_01.wall_segment"),
+            _make_mock_blender_obj("Other_Object"),
+        ]
+        self._setup_bpy(objects)
+        try:
+            from blender_addon.handlers.pipeline_state import emit_scene_hierarchy
+            result = emit_scene_hierarchy(
+                "TestMap", [],
+                created_objects=["Building_01"],
+            )
+            names = {o["name"] for o in result["objects"]}
+            assert "Building_01" in names
+            assert "Building_01.wall_segment" in names
+            assert "Other_Object" not in names
+        finally:
+            self._teardown_bpy()

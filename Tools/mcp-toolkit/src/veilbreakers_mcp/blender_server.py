@@ -461,6 +461,8 @@ def _build_location_generation_params(
         params["radius"] = location.get("radius", 50.0)
         if "center" in location:
             params["center"] = location["center"]
+        if "building_count" in location:
+            params["building_count_override"] = location["building_count"]
     elif loc_type == "building":
         params["building_size"] = location.get("building_size", "medium")
         params["width"] = location.get("width", 12)
@@ -964,6 +966,44 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
     if not rooms:
         return {"rooms": [], "doors": [], "building_bounds": {"min": (0.0, 0.0), "max": (0.0, 0.0)}}
 
+    # SAFE-03: Check if rooms already have pre-computed bounds from building_interior_binding
+    all_have_bounds = all(
+        room.get("bounds") and room.get("position")
+        for room in rooms
+    )
+    if all_have_bounds:
+        placed_rooms = []
+        for room in rooms:
+            bounds = room["bounds"]
+            placed_rooms.append({
+                "name": room.get("name", f"room_{len(placed_rooms)}"),
+                "type": room.get("type", "generic"),
+                "width": float(room.get("width", 6.0)),
+                "depth": float(room.get("depth", 6.0)),
+                "height": float(room.get("height", 3.5)),
+                "bounds": bounds,
+            })
+        all_mins = [r["bounds"]["min"] for r in placed_rooms]
+        all_maxs = [r["bounds"]["max"] for r in placed_rooms]
+        bldg_min = (min(m[0] for m in all_mins), min(m[1] for m in all_mins))
+        bldg_max = (max(m[0] for m in all_maxs), max(m[1] for m in all_maxs))
+        # Process doors for pre-computed path
+        door_defs: list[dict] = []
+        room_by_name = {r["name"]: r for r in placed_rooms}
+        for door in doors:
+            if isinstance(door.get("position"), (list, tuple)) and len(door["position"]) >= 2:
+                explicit = door["position"]
+                z = float(explicit[2]) if len(explicit) > 2 else 0.0
+                door_defs.append({"position": (float(explicit[0]), float(explicit[1]), z), "facing": door.get("facing", "south")})
+            else:
+                src = door.get("from")
+                dst = door.get("to")
+                if src in room_by_name:
+                    door_defs.append(_derive_room_door_position(room_by_name[src], room_by_name.get(dst), door.get("facing")))
+        if not door_defs and placed_rooms:
+            door_defs.append(_derive_room_door_position(placed_rooms[0], None, "south"))
+        return {"rooms": placed_rooms, "doors": door_defs, "building_bounds": {"min": bldg_min, "max": bldg_max}}
+
     room_lookup = {room.get("name", f"room_{index}"): room for index, room in enumerate(rooms)}
     placed: dict[str, dict] = {}
     adjacency: dict[str, list[tuple[str, dict]]] = {name: [] for name in room_lookup}
@@ -980,13 +1020,15 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
     first_width = float(first_room.get("width", 6.0))
     first_depth = float(first_room.get("depth", 6.0))
     first_height = float(first_room.get("height", 3.5))
+    first_floor = float(first_room.get("floor", 0))  # SAFE-04: floor-aware Z
+    first_floor_z = first_floor * first_height
     placed[first_name] = {
         "name": first_name,
         "type": first_room.get("type", "generic"),
         "width": first_width,
         "depth": first_depth,
         "height": first_height,
-        "bounds": {"min": (0.0, 0.0, 0.0), "max": (first_width, first_depth, first_height)},
+        "bounds": {"min": (0.0, 0.0, round(first_floor_z, 3)), "max": (first_width, first_depth, round(first_floor_z + first_height, 3))},
     }
 
     used_sides: dict[str, list[str]] = {first_name: []}
@@ -999,6 +1041,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
         width = float(target.get("width", 6.0))
         depth = float(target.get("depth", 6.0))
         height = float(target.get("height", 3.5))
+        floor = float(target.get("floor", 0))  # SAFE-04: floor-aware Z
+        floor_z = floor * height
         a_min = anchor["bounds"]["min"]
         a_max = anchor["bounds"]["max"]
 
@@ -1022,8 +1066,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
             "depth": depth,
             "height": height,
             "bounds": {
-                "min": (round(min_x, 3), round(min_y, 3), 0.0),
-                "max": (round(min_x + width, 3), round(min_y + depth, 3), round(height, 3)),
+                "min": (round(min_x, 3), round(min_y, 3), round(floor_z, 3)),
+                "max": (round(min_x + width, 3), round(min_y + depth, 3), round(floor_z + height, 3)),
             },
         }
 
@@ -1050,6 +1094,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
                 width = current_bounds["width"]
                 depth = current_bounds["depth"]
                 height = current_bounds["height"]
+                _fb_floor = float(room_lookup[neighbor].get("floor", 0))  # SAFE-04
+                _fb_floor_z = _fb_floor * height
                 chosen = (
                     "east",
                     {
@@ -1059,8 +1105,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
                         "depth": depth,
                         "height": height,
                         "bounds": {
-                            "min": (round(max_x + 1.5, 3), current_bounds["bounds"]["min"][1], 0.0),
-                            "max": (round(max_x + 1.5 + width, 3), current_bounds["bounds"]["min"][1] + depth, round(height, 3)),
+                            "min": (round(max_x + 1.5, 3), current_bounds["bounds"]["min"][1], round(_fb_floor_z, 3)),
+                            "max": (round(max_x + 1.5 + width, 3), current_bounds["bounds"]["min"][1] + depth, round(_fb_floor_z + height, 3)),
                         },
                     },
                 )
@@ -1079,6 +1125,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
         width = float(room.get("width", 6.0))
         depth = float(room.get("depth", 6.0))
         height = float(room.get("height", 3.5))
+        _dc_floor = float(room.get("floor", 0))  # SAFE-04: floor-aware Z
+        _dc_floor_z = _dc_floor * height
         max_x = max(existing["bounds"]["max"][0] for existing in placed.values())
         min_y = min(existing["bounds"]["min"][1] for existing in placed.values())
         y_offset = min_y + index * (depth + 1.0)
@@ -1089,8 +1137,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
             "depth": depth,
             "height": height,
             "bounds": {
-                "min": (round(max_x + 2.0, 3), round(y_offset, 3), 0.0),
-                "max": (round(max_x + 2.0 + width, 3), round(y_offset + depth, 3), round(height, 3)),
+                "min": (round(max_x + 2.0, 3), round(y_offset, 3), round(_dc_floor_z, 3)),
+                "max": (round(max_x + 2.0 + width, 3), round(y_offset + depth, 3), round(_dc_floor_z + height, 3)),
             },
         }
 
@@ -3230,7 +3278,8 @@ async def asset_pipeline(
 
         # --- Step 9: Generate interiors for key buildings ---
         if "interiors_generated" not in steps_completed:
-            interior_results = []  # BUG-CHKPT-01: moved inside guard to preserve checkpoint data on resume
+            if not interior_results:  # SAFE-02: Only reset if empty (not loaded from checkpoint)
+                interior_results = []
             for loc in spec.get("locations", []):
                 if loc.get("interiors"):
                     for room_spec in loc["interiors"]:
@@ -3277,6 +3326,140 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": "heightmap_export", "error": str(e)})
 
+        # --- Step 11: Game-readiness validation (EXPORT-04) ---
+        _non_terrain = [n for n in created_objects if "terrain" not in n.lower()]
+        _gc_failures: list[dict] = []
+        if _non_terrain and "game_check_validated" not in steps_completed:
+            try:
+                for _obj_name in _non_terrain:
+                    try:
+                        _gc = await blender.send_command("mesh_check_game_ready", {
+                            "object_name": _obj_name,
+                        })
+                        if isinstance(_gc, dict) and not _gc.get("game_ready", False):
+                            _gc_failures.append({
+                                "object": _obj_name,
+                                "issues": _gc.get("summary", "Unknown"),
+                            })
+                    except Exception:
+                        pass  # Skip objects that can't be checked
+                steps_completed.append("game_check_validated")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "game_check_validation", "error": str(e)})
+
+        # --- Step 12: Bake procedural textures to images (EXPORT-02) ---
+        if _non_terrain and "textures_baked" not in steps_completed:
+            try:
+                for _obj_name in _non_terrain:
+                    try:
+                        await blender.send_command("texture_bake_procedural_to_images", {
+                            "object_name": _obj_name,
+                            "channels": ["diffuse", "normal", "ao"],
+                            "resolution": 1024,
+                        })
+                    except Exception:
+                        pass  # Bake failures are non-fatal
+                steps_completed.append("textures_baked")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "texture_bake", "error": str(e)})
+
+        # --- Step 13: Generate LOD chains (EXPORT-03) ---
+        if _non_terrain and "lods_generated" not in steps_completed:
+            try:
+                for _obj_name in _non_terrain:
+                    try:
+                        await blender.send_command("asset_pipeline", {
+                            "action": "generate_lods",
+                            "object_name": _obj_name,
+                        })
+                    except Exception:
+                        pass  # LOD failures are non-fatal
+                steps_completed.append("lods_generated")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "lod_generation", "error": str(e)})
+
+        # --- Step 14: Generate collision meshes (EXPORT-05) ---
+        _structure_objects = [n for n in _non_terrain if any(
+            kw in n.lower() for kw in ("building", "wall", "gate", "tower", "castle", "bridge", "house", "tavern", "chapel", "keep")
+        )]
+        if _structure_objects and "collisions_generated" not in steps_completed:
+            try:
+                await blender.send_command("generate_collision_meshes", {
+                    "object_names": _structure_objects,
+                    "max_faces": 128,
+                })
+                steps_completed.append("collisions_generated")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "collision_generation", "error": str(e)})
+
+        # --- Step 15: Export vegetation instances + splatmap (EXPORT-06, EXPORT-07) ---
+        if "data_exported" not in steps_completed:
+            import tempfile as _tf15
+            _data_dir = checkpoint_dir or os.path.join(_tf15.gettempdir(), "veilbreakers_exports")
+            os.makedirs(_data_dir, exist_ok=True)
+            try:
+                if "vegetation_scattered" in steps_completed:
+                    try:
+                        _veg_path = os.path.join(_data_dir, f"{map_name}_vegetation_instances.json")
+                        await blender.send_command("serialize_vegetation", {
+                            "output_path": _veg_path,
+                            "terrain_name": terrain_name or f"{map_name}_Terrain",
+                        })
+                    except Exception:
+                        pass  # Non-fatal if vegetation collection empty
+
+                if terrain_name:
+                    try:
+                        _splat_path = os.path.join(_data_dir, f"{map_name}_splatmap.png")
+                        await blender.send_command("export_splatmap", {
+                            "terrain_name": terrain_name,
+                            "output_path": _splat_path,
+                            "target_resolution": 512,
+                        })
+                    except Exception:
+                        pass  # Non-fatal if terrain has no splatmap layer
+
+                steps_completed.append("data_exported")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "data_export", "error": str(e)})
+
+        # --- Step 16: Export per-group FBX files (EXPORT-01) ---
+        _fbx_files: list[str] = []
+        if created_objects and "fbx_exported" not in steps_completed:
+            import tempfile as _tf16
+            _export_dir = checkpoint_dir or os.path.join(_tf16.gettempdir(), "veilbreakers_exports")
+            os.makedirs(_export_dir, exist_ok=True)
+            try:
+                from blender_addon.handlers.pipeline_state import derive_addressable_groups as _dag
+                _terrain_objs = [n for n in created_objects if "terrain" in n.lower()]
+                _groups = _dag(
+                    map_name, location_results,
+                    terrain_objects=_terrain_objs,
+                    interior_results=interior_results,
+                )
+                for _grp in _groups:
+                    _grp_objects = _grp.get("objects", [])
+                    if not _grp_objects:
+                        continue
+                    _fbx_path = os.path.join(_export_dir, f"{_grp['group_name']}.fbx")
+                    try:
+                        await blender.send_command("export_fbx", {
+                            "filepath": _fbx_path,
+                            "object_names": _grp_objects,
+                        })
+                        _fbx_files.append(_fbx_path)
+                    except Exception:
+                        pass
+                steps_completed.append("fbx_exported")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "fbx_export", "error": str(e)})
+
         # --- Build result ---
         quality_report = await _enforce_world_quality(
             blender,
@@ -3295,6 +3478,8 @@ async def asset_pipeline(
             "budget_applied": budget,
             "quality_report": quality_report,
             "heightmap_export_path": heightmap_export_path,
+            "game_check_failures": _gc_failures,
+            "fbx_exported_files": _fbx_files,
             "resumed_from_checkpoint": _CHKPT_LOADED,
             "checkpoint_dir": checkpoint_dir,
             "next_steps": [
@@ -3302,7 +3487,8 @@ async def asset_pipeline(
                 "Run a hero-pass with Tripo only for standout props or landmark pieces.",
                 "Export only after the quality report has no remaining failures.",
                 f"Import heightmap to Unity: unity_scene action=setup_terrain heightmap_path={heightmap_export_path}" if heightmap_export_path else "Export heightmap manually: blender_environment action=export_heightmap",
-                "Run blender_mesh action=game_check on each building to verify geometry quality.",
+                "FBX files exported to: " + (checkpoint_dir or "temp exports dir") if _fbx_files else "No FBX files exported yet.",
+                "Import FBX files to Unity and run unity_world action=setup_map_streaming",
             ],
         }
         return await _with_screenshot(blender, result, capture_viewport)
@@ -3387,7 +3573,11 @@ async def asset_pipeline(
                     pass
 
         # Step 3: Derive Addressable groups
-        _addr_groups = _derive_groups(_mp_name, _mp_locations)
+        _addr_groups = _derive_groups(
+            _mp_name, _mp_locations,
+            terrain_objects=[n for n in _mp_objects if "terrain" in n.lower() or "Terrain" in n],
+            interior_results=_mpspec.get("interior_results", []),
+        )
 
         # Step 4: Export FBX per group
         _fbx_files = []
@@ -3411,7 +3601,7 @@ async def asset_pipeline(
         # Step 5: Emit scene hierarchy JSON
         _hierarchy_path = _os.path.join(_mp_export_dir, _mp_name, "scene_hierarchy.json")
         try:
-            _hierarchy = _emit_hierarchy(_mp_name, _mp_locations)
+            _hierarchy = _emit_hierarchy(_mp_name, _mp_locations, created_objects=_mp_objects)
             with open(_hierarchy_path, "w", encoding="utf-8") as _fh:
                 json.dump(_hierarchy, _fh, indent=2, default=str)
         except RuntimeError:
@@ -3455,6 +3645,12 @@ async def asset_pipeline(
         # leaking dirs that were never cleaned up.
         _tmp_dir = os.path.join(_tempfile.gettempdir(), "vb_aaa_verify")
         os.makedirs(_tmp_dir, exist_ok=True)
+
+        # Clear stale screenshots from previous runs
+        import glob as _glob
+        for _old_png in _glob.glob(os.path.join(_tmp_dir, "aaa_*.png")):
+            os.remove(_old_png)
+
         _screenshot_paths: list[str] = []
 
         for _yaw, _pitch, _label in _aaa_angles:

@@ -204,6 +204,9 @@ def get_remaining_steps(
 def derive_addressable_groups(
     map_name: str,
     location_results: list[dict],
+    *,
+    terrain_objects: list[str] | None = None,
+    interior_results: list[dict] | None = None,
 ) -> list[dict]:
     """Derive Unity Addressable groups from compose_map output.
 
@@ -215,6 +218,10 @@ def derive_addressable_groups(
         Name of the map for group naming.
     location_results : list of dict
         Location result dicts from compose_map.
+    terrain_objects : list of str, optional
+        Object names belonging to the terrain group.
+    interior_results : list of dict, optional
+        Interior result dicts with ``name`` keys for interior objects.
 
     Returns
     -------
@@ -226,7 +233,7 @@ def derive_addressable_groups(
             "group_name": f"{map_name}_terrain_base",
             "group_type": "terrain",
             "distance_tier": "near",
-            "objects": [],
+            "objects": list(terrain_objects) if terrain_objects else [],
         }
     ]
 
@@ -249,12 +256,15 @@ def derive_addressable_groups(
                     g["objects"].append(loc_name)
                     break
 
-    # Add interiors group if any interior results exist
+    # Add interiors group with objects from interior_results
+    _interior_objects = [
+        ir.get("name", "") for ir in (interior_results or []) if ir.get("name")
+    ]
     groups.append({
         "group_name": f"{map_name}_interiors",
         "group_type": "interior",
         "distance_tier": "far",
-        "objects": [],
+        "objects": _interior_objects,
     })
 
     return groups
@@ -268,6 +278,7 @@ def derive_addressable_groups(
 def emit_scene_hierarchy(
     map_name: str,
     location_results: list[dict],
+    created_objects: list[str] | None = None,
 ) -> dict:
     """Emit the current Blender scene hierarchy as a JSON-serialisable dict.
 
@@ -294,10 +305,18 @@ def emit_scene_hierarchy(
             "Call this function only from within a Blender session."
         )
 
+    whitelist = set(created_objects) if created_objects else None
+
     objects: list[dict] = []
     for obj in bpy.data.objects:
         if obj.type not in {"MESH", "EMPTY", "LIGHT", "CAMERA"}:
             continue
+
+        # SAFE-06: Filter to map-scoped objects only
+        if whitelist is not None:
+            if obj.name not in whitelist:
+                if not any(obj.name.startswith(wl_name) for wl_name in whitelist):
+                    continue
 
         # Determine district from location results
         district = ""
