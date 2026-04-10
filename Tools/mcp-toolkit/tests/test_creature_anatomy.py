@@ -16,27 +16,36 @@ rigging-ready meshes with proper topology for deformation:
 
 from __future__ import annotations
 
+import importlib.util
 import math
+from pathlib import Path
 
 import pytest
 
-from blender_addon.handlers.creature_anatomy import (
-    ALL_BRANDS,
-    ALL_SPECIES,
-    BRAND_ANATOMY_FEATURES,
-    FANTASY_CREATURE_TYPES,
-    PAW_TYPES,
-    QUADRUPED_PROPORTIONS,
-    SERPENT_HEAD_STYLES,
-    WING_TYPES,
-    generate_eyelid_topology,
-    generate_fantasy_creature,
-    generate_mouth_interior,
-    generate_paw,
-    generate_quadruped,
-    generate_serpent_body,
-    generate_wing,
+# Load creature_anatomy via importlib to avoid blender_addon __init__ (needs bpy)
+_HANDLERS_DIR = Path(__file__).resolve().parent.parent / "blender_addon" / "handlers"
+_spec = importlib.util.spec_from_file_location(
+    "creature_anatomy",
+    str(_HANDLERS_DIR / "creature_anatomy.py"),
 )
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+
+ALL_BRANDS = _mod.ALL_BRANDS
+ALL_SPECIES = _mod.ALL_SPECIES
+BRAND_ANATOMY_FEATURES = _mod.BRAND_ANATOMY_FEATURES
+FANTASY_CREATURE_TYPES = _mod.FANTASY_CREATURE_TYPES
+PAW_TYPES = _mod.PAW_TYPES
+QUADRUPED_PROPORTIONS = _mod.QUADRUPED_PROPORTIONS
+SERPENT_HEAD_STYLES = _mod.SERPENT_HEAD_STYLES
+WING_TYPES = _mod.WING_TYPES
+generate_eyelid_topology = _mod.generate_eyelid_topology
+generate_fantasy_creature = _mod.generate_fantasy_creature
+generate_mouth_interior = _mod.generate_mouth_interior
+generate_paw = _mod.generate_paw
+generate_quadruped = _mod.generate_quadruped
+generate_serpent_body = _mod.generate_serpent_body
+generate_wing = _mod.generate_wing
 
 
 # ---------------------------------------------------------------------------
@@ -865,3 +874,56 @@ class TestCreatureTupleToMeshSpec:
         assert "vertices" in spec and "faces" in spec
         assert "bones" in spec["metadata"]
         assert len(spec["metadata"]["bones"]) > 0
+
+
+# ---------------------------------------------------------------------------
+# AAA VERTEX-COUNT THRESHOLD TESTS (xfail until geometry overhaul)
+# ---------------------------------------------------------------------------
+
+
+class TestCreatureAAAThresholds:
+    """AAA vertex count thresholds for creatures."""
+
+    @pytest.mark.xfail(reason="GEOM-03: wolf needs 6000-10000 verts", strict=False)
+    def test_wolf_aaa_verts(self):
+        result = generate_quadruped(species="wolf")
+        assert len(result["vertices"]) >= 4000, (
+            f"Wolf has {len(result['vertices'])} verts, need >= 4000 for AAA"
+        )
+
+    @pytest.mark.xfail(reason="GEOM-03: bear needs 8000-12000 verts", strict=False)
+    def test_bear_aaa_verts(self):
+        result = generate_quadruped(species="bear")
+        assert len(result["vertices"]) >= 6000, (
+            f"Bear has {len(result['vertices'])} verts, need >= 6000 for AAA"
+        )
+
+    @pytest.mark.xfail(reason="GEOM-03: chimera needs 10000-15000 verts", strict=False)
+    def test_chimera_aaa_verts(self):
+        result = generate_fantasy_creature(base_type="chimera")
+        assert len(result["vertices"]) >= 8000, (
+            f"Chimera has {len(result['vertices'])} verts, need >= 8000 for AAA"
+        )
+
+
+# ---------------------------------------------------------------------------
+# QUADRUPED ORIENTATION TESTS
+# ---------------------------------------------------------------------------
+
+
+class TestQuadrupedOrientation:
+    """Quadrupeds must be Z-up (not upside-down)."""
+
+    def test_wolf_z_up_orientation(self):
+        result = generate_quadruped(species="wolf")
+        verts = result["vertices"]
+        zs = [v[2] for v in verts]
+        z_extent = max(zs) - min(zs)
+        assert z_extent > 0.3, (
+            f"Wolf Z extent {z_extent:.3f} too small -- may be flat/inverted"
+        )
+        # Feet should be near Z=0, body above
+        z_min = min(zs)
+        assert z_min >= -0.1, (
+            f"Wolf lowest point Z={z_min:.3f} -- should be near ground (>=-0.1)"
+        )

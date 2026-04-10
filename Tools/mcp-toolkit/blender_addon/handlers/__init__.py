@@ -130,6 +130,9 @@ from .texture import (
 )
 from .pipeline_lod import handle_generate_lods
 from .lod_pipeline import handle_generate_lods as handle_generate_lod_chain
+from .collision_generator import handle_generate_collision_meshes
+from .vegetation_serializer import handle_serialize_vegetation
+from .splatmap_exporter import handle_export_splatmap
 from .rigging import (
     handle_analyze_for_rigging,
     handle_apply_rig_template,
@@ -676,6 +679,22 @@ def _creature_tuple_to_meshspec(
         spec["metadata"]["bones"] = result[3]
 
     return spec
+
+
+def _wrap_creature_part_result(
+    result: "tuple | dict",
+    name: str,
+    category: str = "creature_part",
+) -> dict:
+    """Wrap creature part generator (verts, faces, groups) tuple into MeshSpec dict.
+
+    If *result* is already a dict (i.e. a full MeshSpec / CreatureMeshResult),
+    it is returned as-is.  Otherwise delegates to ``_creature_tuple_to_meshspec``
+    for the standard 3- or 4-element tuple format.
+    """
+    if isinstance(result, dict):
+        return result  # Already MeshSpec
+    return _creature_tuple_to_meshspec(result, name, category)
 
 
 # ---------------------------------------------------------------------------
@@ -1433,7 +1452,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     )),
     # AAA creature anatomy generators — wrap tuple output in MeshSpec adapter
     "creature_mouth_interior": lambda params: _build_quality_object(
-        _creature_tuple_to_meshspec(generate_mouth_interior(
+        _wrap_creature_part_result(generate_mouth_interior(
             mouth_width=params.get("mouth_width", 0.1),
             mouth_depth=params.get("mouth_depth", 0.12),
             jaw_length=params.get("jaw_length", 0.15),
@@ -1445,13 +1464,13 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
     ),
     "creature_eyelid_topology": lambda params: _build_quality_object(
-        _creature_tuple_to_meshspec(generate_eyelid_topology(
+        _wrap_creature_part_result(generate_eyelid_topology(
             eye_radius=params.get("eye_radius", 0.015),
             eye_position=tuple(params.get("eye_position", (0.0, 0.0, 0.0))),
         ), "eyelid_topology"),
     ),
     "creature_paw": lambda params: _build_quality_object(
-        _creature_tuple_to_meshspec(generate_paw(
+        _wrap_creature_part_result(generate_paw(
             paw_type=params.get("paw_type", "canine"),
             toe_count=params.get("toe_count", 4),
             include_pads=params.get("include_pads", True),
@@ -1462,7 +1481,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
     ),
     "creature_wing": lambda params: _build_quality_object(
-        _creature_tuple_to_meshspec(generate_wing(
+        _wrap_creature_part_result(generate_wing(
             wing_type=params.get("wing_type", "bat"),
             wingspan=params.get("wingspan", 2.0),
             include_membrane=params.get("include_membrane", True),
@@ -1471,7 +1490,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
     ),
     "creature_serpent_body": lambda params: _build_quality_object(
-        _creature_tuple_to_meshspec(generate_serpent_body(
+        _wrap_creature_part_result(generate_serpent_body(
             length=params.get("length", 3.0),
             max_radius=params.get("max_radius", 0.08),
             segment_count=params.get("segment_count", 40),
@@ -1698,8 +1717,14 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     ),
     # (d) Performance budget check — stub (no handler exists yet)
     "performance_budget_check": lambda params: {"status": "ok", "budget": "not_implemented"},
-    # (e) Render angle — alias to viewport screenshot
+    # (e) Render angle — real handler (not alias)
     "render_angle": handle_render_angle,
+    # (h) Collision mesh generation
+    "generate_collision_meshes": handle_generate_collision_meshes,
+    # (i) Vegetation instance serialization
+    "serialize_vegetation": handle_serialize_vegetation,
+    # (j) Splatmap export
+    "export_splatmap": handle_export_splatmap,
     # --- Naming mismatch aliases ---
     # (f) Server sends texture_mix_weathering_over_texture, handler registered as weathering_mix_over_texture
     "texture_mix_weathering_over_texture": handle_mix_weathering_over_texture,
