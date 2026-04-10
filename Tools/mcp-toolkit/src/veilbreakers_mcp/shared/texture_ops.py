@@ -31,6 +31,7 @@ try:
 
     _FAL_AVAILABLE = True
 except ImportError:
+    _fal = None  # type: ignore[assignment]
     _FAL_AVAILABLE = False
     logging.getLogger(__name__).warning("fal-client not installed; AI inpainting unavailable")
 
