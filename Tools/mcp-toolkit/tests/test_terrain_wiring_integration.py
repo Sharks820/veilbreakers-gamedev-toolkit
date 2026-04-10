@@ -457,3 +457,110 @@ def test_iteration_metrics_percentiles_and_summary():
 
     slow = IterationMetrics(total_duration_s=3.0)
     assert meets_speedup_target(baseline, slow, target=5.0) is False
+
+
+# ---------------------------------------------------------------------------
+# Fix #10 — cliff height scaling is physical, not dimensional nonsense
+# ---------------------------------------------------------------------------
+
+
+def test_detect_cliff_edges_height_scale_applies_to_z_and_height():
+    """height_scale multiplies both position[2] and cliff height.
+
+    The cluster raw Z range must be large enough that both the
+    ``height_scale=1.0`` baseline and the scaled variant clear the
+    2 m minimum floor — otherwise the floor hides the scaling ratio.
+    """
+    from blender_addon.handlers._terrain_depth import detect_cliff_edges
+
+    # Synthetic cliff with a 3.0-unit drop so the 2 m floor is never
+    # the dominant factor at either scale under test.
+    hm = np.full((32, 32), 3.0, dtype=np.float64)
+    hm[:, 16:] = 0.0
+
+    base = detect_cliff_edges(
+        hm,
+        slope_threshold_deg=5.0,
+        min_cluster_size=2,
+        terrain_size=100.0,
+        height_scale=1.0,
+    )
+    scaled = detect_cliff_edges(
+        hm,
+        slope_threshold_deg=5.0,
+        min_cluster_size=2,
+        terrain_size=100.0,
+        height_scale=20.0,
+    )
+    assert len(base) >= 1
+    assert len(scaled) == len(base)
+
+    for b, s in zip(base, scaled):
+        # Both position Z and cliff height scale linearly with height_scale.
+        assert s["position"][2] == pytest.approx(b["position"][2] * 20.0)
+        assert s["height"] == pytest.approx(b["height"] * 20.0)
+        # XY placement is independent of height_scale.
+        assert s["position"][0] == pytest.approx(b["position"][0])
+        assert s["position"][1] == pytest.approx(b["position"][1])
+
+
+def test_detect_cliff_edges_height_independent_of_terrain_footprint():
+    """The legacy formula scaled cliff height with terrain_width * 0.1.
+
+    That made a 5 m physical rock face become a 100 m cliff on a 200 m
+    terrain and a 50 m cliff on a 100 m terrain — pure dimensional
+    nonsense. The replacement uses the actual cluster Z range times
+    height_scale, so the reported cliff height must not change when the
+    horizontal footprint changes.
+
+    At a larger terrain footprint the cell spacing widens, so we must
+    compensate with a steeper raw drop to keep the slope angle above
+    the cliff threshold under the new spacing. We use a drop that is
+    large enough to keep both calls tripping the threshold.
+    """
+    from blender_addon.handlers._terrain_depth import detect_cliff_edges
+
+    # Drop of 30 units over the cliff column — enough to produce a
+    # steep slope at both 100 m and 800 m terrain footprints.
+    hm = np.full((32, 32), 30.0, dtype=np.float64)
+    hm[:, 16:] = 0.0
+
+    small = detect_cliff_edges(
+        hm,
+        slope_threshold_deg=5.0,
+        min_cluster_size=2,
+        terrain_size=100.0,
+        height_scale=10.0,
+    )
+    big = detect_cliff_edges(
+        hm,
+        slope_threshold_deg=5.0,
+        min_cluster_size=2,
+        terrain_size=800.0,
+        height_scale=10.0,
+    )
+    assert small and big
+    # The cluster Z span is identical in both calls (same heightmap,
+    # same height_scale); only the terrain footprint differs. Cliff
+    # height must therefore be identical up to the 2 m floor.
+    for s, b in zip(small, big):
+        assert s["height"] == pytest.approx(b["height"])
+
+
+def test_detect_cliff_edges_height_has_2m_floor():
+    """Very shallow clusters still get a sensible minimum height."""
+    from blender_addon.handlers._terrain_depth import detect_cliff_edges
+
+    hm = np.full((32, 32), 0.5, dtype=np.float64)
+    # Tiny 0.02 drop across a 3-cell column — realistic for erosion noise
+    hm[:, 16:19] = 0.48
+
+    placements = detect_cliff_edges(
+        hm,
+        slope_threshold_deg=1.0,
+        min_cluster_size=2,
+        terrain_size=100.0,
+        height_scale=1.0,
+    )
+    for p in placements:
+        assert p["height"] >= 2.0

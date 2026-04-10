@@ -858,6 +858,7 @@ def _create_terrain_mesh_from_heightmap(
             slope_threshold_deg=cliff_threshold_deg,
             min_cluster_size=4,
             terrain_size=terrain_size,
+            height_scale=height_scale,
         )
         for i, cp in enumerate(cliff_placements):
             cliff_mesh_spec = generate_cliff_face_mesh(
@@ -879,14 +880,32 @@ def _create_terrain_mesh_from_heightmap(
             cliff_bm.free()
 
             cliff_obj = bpy.data.objects.new(f"{name}_Cliff_{i}", cliff_mesh)
+            bpy.context.collection.objects.link(cliff_obj)
+            # --- Parent first, THEN set transform ---
+            # The legacy order (location → parent) silently offset cliffs
+            # on non-origin tiles: Blender's Python parent assignment
+            # does not auto-adjust matrix_parent_inverse, so a world-space
+            # location set before parenting was reinterpreted as local
+            # after parenting and the visual world position drifted by
+            # whatever the parent's world offset was. The fix is to
+            # establish the parent relationship first with
+            # ``matrix_parent_inverse`` forced to identity, then write the
+            # transform — which is now unambiguously terrain-local. The
+            # positions returned by ``detect_cliff_edges`` are already
+            # in terrain-local coordinates (grid-center mapped to
+            # [-tw/2, +tw/2]) and Z is already multiplied by
+            # ``height_scale`` inside ``detect_cliff_edges`` — no further
+            # scaling here.
+            cliff_obj.parent = obj
+            mpi = getattr(cliff_obj, "matrix_parent_inverse", None)
+            if mpi is not None and hasattr(mpi, "identity"):
+                mpi.identity()
             cliff_obj.location = (
                 cp["position"][0],
                 cp["position"][1],
-                cp["position"][2] * height_scale,
+                cp["position"][2],
             )
             cliff_obj.rotation_euler = tuple(cp["rotation"])
-            bpy.context.collection.objects.link(cliff_obj)
-            cliff_obj.parent = obj
 
     return {
         "object": obj,

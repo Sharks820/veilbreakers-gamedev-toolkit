@@ -521,6 +521,7 @@ def detect_cliff_edges(
     slope_threshold_deg: float = 60.0,
     min_cluster_size: int = 4,
     terrain_size: float | tuple[float, float] = 100.0,
+    height_scale: float = 1.0,
 ) -> list[dict[str, Any]]:
     """Find terrain regions where slope exceeds threshold for cliff overlay.
 
@@ -535,13 +536,21 @@ def detect_cliff_edges(
             a cliff placement (filters noise).
         terrain_size: World-space terrain extent. A scalar assumes a square
             terrain; a 2-item tuple is interpreted as ``(width, height)``.
+        height_scale: Multiplier that converts heightmap Z values into world
+            metres. For the canonical normalized ``[0, 1]`` heightmap this
+            is the terrain's vertical scale (e.g. ``20.0`` for a 20-metre
+            mountain). For heightmaps already stored in world units pass
+            ``1.0``. The returned ``height`` and ``position[2]`` fields are
+            always expressed in world metres using this factor.
 
     Returns:
         List of cliff placement dicts, each containing:
-          - position: [x, y, z] world-space center of the cliff region
+          - position: [x, y, z] world-space terrain-local position where
+            XY is centered on the terrain center and Z is the heightmap
+            value already multiplied by ``height_scale`` (metres).
           - rotation: [rx, ry, rz] Euler angles for cliff face orientation
-          - width: Estimated width of the cliff face
-          - height: Estimated vertical extent of the cliff
+          - width: Estimated width of the cliff face (metres)
+          - height: Estimated vertical extent of the cliff (metres)
           - cell_count: Number of steep cells in this cluster
     """
     from ._terrain_noise import compute_slope_map
@@ -614,10 +623,12 @@ def detect_cliff_edges(
         wx = (c_center / max(cols - 1, 1) - 0.5) * terrain_width
         wy = (r_center / max(rows - 1, 1) - 0.5) * terrain_height
 
-        # Height at center
+        # Height at center — apply height_scale so callers receive the
+        # actual world-metre Z coordinate rather than the raw heightmap
+        # value (which may be normalized [0,1] or already in metres).
         ri = int(np.clip(r_center, 0, rows - 1))
         ci = int(np.clip(c_center, 0, cols - 1))
-        wz = float(heightmap[ri, ci])
+        wz = float(heightmap[ri, ci]) * float(height_scale)
 
         # Gradient direction at center (for rotation)
         grad_x = float(dx[ri, ci])
@@ -628,15 +639,18 @@ def detect_cliff_edges(
         width_x = (c_max - c_min + 1) * col_spacing
         width_y = (r_max - r_min + 1) * row_spacing
         width = max(width_x, width_y)
-        height_range = float(
+        # Actual Z span of the cluster cells, converted into metres via
+        # the caller-supplied height_scale. This replaces the legacy
+        # ``height_range * max(terrain_width, terrain_height) * 0.1``
+        # formula that was dimensionally broken (plan §7.5 bug fix):
+        # the old expression scaled cliff height with terrain footprint
+        # rather than the actual vertical relief of the cluster, and it
+        # silently inflated once heightmaps were stored in world units.
+        raw_height_range = float(
             heightmap[cells[:, 0], cells[:, 1]].max()
             - heightmap[cells[:, 0], cells[:, 1]].min()
         )
-        # Minimum cliff height based on cell count
-        cliff_height = max(
-            height_range * max(terrain_width, terrain_height) * 0.1,
-            2.0,
-        )
+        cliff_height = max(raw_height_range * float(height_scale), 2.0)
 
         placements.append({
             "position": [wx, wy, wz],
