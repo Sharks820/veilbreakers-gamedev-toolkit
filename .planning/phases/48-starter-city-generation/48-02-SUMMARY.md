@@ -21,15 +21,17 @@ tech-stack:
   patterns: [send_blender TCP protocol with type/params, pure-bpy material assignment via bmesh]
 
 key-files:
-  created:
-    - Tools/mcp-toolkit/scripts/blender_client.py
+  created: []
+  modified: []
+
+artifacts:
+  outputs:
     - C:/tmp/vb_visual_test/48_terrain_overview.png
     - C:/tmp/vb_visual_test/48_terrain_river.png
     - C:/tmp/vb_visual_test/48_terrain_cliff.png
     - C:/tmp/vb_visual_test/48_terrain_FINAL.png
     - C:/tmp/vb_visual_test/48_terrain_aaa_scores.txt
     - C:/tmp/vb_visual_test/48_terrain_zai_verdict.txt
-  modified: []
 
 key-decisions:
   - "Used direct addon TCP commands (env_generate_terrain, env_carve_river, env_create_water, env_generate_road) instead of compose_map MCP pipeline"
