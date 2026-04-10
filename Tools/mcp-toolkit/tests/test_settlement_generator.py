@@ -125,6 +125,8 @@ class TestGenerateSettlement:
     def test_custom_radius(self):
         small = generate_settlement("outpost", seed=42, radius=20.0)
         large = generate_settlement("outpost", seed=42, radius=100.0)
+        assert small["buildings"]
+        assert large["buildings"]
         small_max_dist = max(_dist2d(b["position"], (0, 0)) for b in small["buildings"])
         large_max_dist = max(_dist2d(b["position"], (0, 0)) for b in large["buildings"])
         assert len(small["buildings"]) == len(large["buildings"])
@@ -993,6 +995,7 @@ class TestEdgeCases:
 
     def test_very_large_radius(self):
         result = generate_settlement("town", seed=42, radius=500.0)
+        assert result["buildings"]
         assert result["metadata"]["building_count"] == len(result["buildings"])
         assert max(_dist2d(b["position"], (0, 0)) for b in result["buildings"]) > 100.0
 
