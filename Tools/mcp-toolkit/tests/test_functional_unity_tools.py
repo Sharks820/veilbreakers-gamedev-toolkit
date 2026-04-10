@@ -1,4 +1,4 @@
-"""Functional test covering every Unity MCP tool and action (7 tools, 38 actions).
+"""Functional test covering every Unity MCP tool and action (7 tools, 39 actions).
 
 Since we cannot connect to a live Unity instance, this test verifies:
 1. Every tool function exists and is importable
@@ -12,17 +12,19 @@ Tools:
     2. unity_vfx      (10 actions)
     3. unity_audio    (10 actions)
     4. unity_ui       (5 actions)
-    5. unity_scene    (7 actions)
+    5. unity_scene    (8 actions)
     6. unity_gameplay (7 actions)
     7. unity_performance (5 actions)
 """
 
 from __future__ import annotations
 
+import json
 import os
 import struct
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -843,7 +845,7 @@ class TestUnityUI:
 
 
 # ---------------------------------------------------------------------------
-# Tool 5: unity_scene (7 actions)
+# Tool 5: unity_scene (8 actions)
 # ---------------------------------------------------------------------------
 
 from veilbreakers_mcp.shared.unity_templates.scene_templates import (
@@ -854,11 +856,12 @@ from veilbreakers_mcp.shared.unity_templates.scene_templates import (
     generate_navmesh_bake_script,
     generate_object_scatter_script,
     generate_terrain_setup_script,
+    generate_tiled_terrain_setup_script,
 )
 
 
 class TestUnityScene:
-    """Tool 5 -- unity_scene: 7 actions."""
+    """Tool 5 -- unity_scene: 8 actions."""
 
     # -- terrain --
 
@@ -884,6 +887,160 @@ class TestUnityScene:
         assert "2000" in cs
         assert "800" in cs
         assert "1025" in cs
+
+    def test_terrain_has_alphamap_path(self):
+        layers = [
+            {"texture_path": "Assets/Textures/grass.png", "tiling": 10.0},
+            {"texture_path": "Assets/Textures/rock.png", "tiling": 5.0},
+            {"texture_path": "Assets/Textures/dirt.png", "tiling": 8.0},
+            {"texture_path": "Assets/Textures/snow.png", "tiling": 12.0},
+        ]
+        cs = generate_terrain_setup_script(
+            heightmap_path="Assets/Heightmaps/test.raw",
+            splatmap_layers=layers,
+            alphamap_path="Assets/Heightmaps/test_alphamap.raw",
+        )
+        assert "test_alphamap.raw" in cs
+        assert "File.Exists(alphamapPath)" in cs
+
+    def test_tiled_terrain_returns_string(self):
+        cs = generate_tiled_terrain_setup_script(
+            tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}]
+        )
+        assert isinstance(cs, str)
+
+    def test_tiled_terrain_has_parent(self):
+        cs = generate_tiled_terrain_setup_script(
+            tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}],
+            parent_name="VB_TerrainRoot",
+        )
+        assert "VB_TerrainRoot" in cs
+        assert "Setup Tiled Terrain" in cs
+        assert "SetNeighbors" in cs
+        assert ".GetComponent<Terrain>()" in cs
+
+    @pytest.mark.asyncio
+    async def test_setup_tiled_terrain_action(self):
+        from veilbreakers_mcp.unity_tools import scene as scene_tool
+
+        with patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TiledTerrainSetup.cs"):
+            result = await scene_tool.unity_scene(
+                action="setup_tiled_terrain",
+                terrain_tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}],
+                terrain_size=[1000, 600, 1000],
+                terrain_resolution=513,
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "success"
+        assert data["action"] == "setup_tiled_terrain"
+        assert data["tile_count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_setup_tiled_terrain_action_forwards_parent_and_layers(self):
+        from veilbreakers_mcp.unity_tools import scene as scene_tool
+
+        tiles = [
+            {
+                "heightmap_path": "Assets/Heightmaps/tile_0.raw",
+                "alphamap_path": "Assets/Heightmaps/tile_0_alphamap.raw",
+                "grid_x": 0,
+                "grid_y": 0,
+                "position": [128.0, 0.0, 256.0],
+            }
+        ]
+        layers = [
+            {"texture_path": "Assets/Textures/grass.png", "tiling": 10.0},
+            {"texture_path": "Assets/Textures/rock.png", "tiling": 5.0},
+        ]
+
+        with patch.object(scene_tool, "generate_tiled_terrain_setup_script", return_value="// generated tiled terrain") as gen_mock, \
+             patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TiledTerrainSetup.cs"):
+            result = await scene_tool.unity_scene(
+                action="setup_tiled_terrain",
+                terrain_tiles=tiles,
+                terrain_size=[512, 200, 512],
+                terrain_resolution=257,
+                splatmap_layers=layers,
+                tile_parent_name="TerrainRoot_Custom",
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "success"
+        assert data["tile_count"] == 1
+        assert data["terrain_size"] == [512, 200, 512]
+        assert data["resolution"] == 257
+        gen_mock.assert_called_once_with(
+            tiles=tiles,
+            default_size=(512, 200, 512),
+            default_resolution=257,
+            splatmap_layers=layers,
+            parent_name="TerrainRoot_Custom",
+        )
+
+    @pytest.mark.asyncio
+    async def test_setup_tiled_terrain_action_uses_default_size_when_missing(self):
+        from veilbreakers_mcp.unity_tools import scene as scene_tool
+
+        tiles = [{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}]
+
+        with patch.object(scene_tool, "generate_tiled_terrain_setup_script", return_value="// generated tiled terrain") as gen_mock, \
+             patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TiledTerrainSetup.cs"):
+            result = await scene_tool.unity_scene(
+                action="setup_tiled_terrain",
+                terrain_tiles=tiles,
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "success"
+        assert data["terrain_size"] == [1000, 600, 1000]
+        gen_mock.assert_called_once_with(
+            tiles=tiles,
+            default_size=(1000, 600, 1000),
+            default_resolution=513,
+            splatmap_layers=None,
+            parent_name="VB_TerrainRoot",
+        )
+
+    @pytest.mark.asyncio
+    async def test_setup_tiled_terrain_action_write_error_returns_error(self):
+        from veilbreakers_mcp.unity_tools import scene as scene_tool
+
+        with patch.object(scene_tool, "_write_to_unity", side_effect=ValueError("unsafe path")):
+            result = await scene_tool.unity_scene(
+                action="setup_tiled_terrain",
+                terrain_tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}],
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "error"
+        assert data["action"] == "setup_tiled_terrain"
+        assert "unsafe path" in data["message"]
+
+    @pytest.mark.asyncio
+    async def test_setup_terrain_action_with_alphamap(self):
+        from veilbreakers_mcp.unity_tools import scene as scene_tool
+
+        layers = [
+            {"texture_path": "Assets/Textures/grass.png", "tiling": 10.0},
+            {"texture_path": "Assets/Textures/rock.png", "tiling": 5.0},
+            {"texture_path": "Assets/Textures/dirt.png", "tiling": 8.0},
+            {"texture_path": "Assets/Textures/snow.png", "tiling": 12.0},
+        ]
+
+        with patch.object(scene_tool, "_write_to_unity", return_value="/tmp/VeilBreakers_TerrainSetup.cs"):
+            result = await scene_tool.unity_scene(
+                action="setup_terrain",
+                heightmap_path="Assets/Heightmaps/test.raw",
+                alphamap_path="Assets/Heightmaps/test_alphamap.raw",
+                splatmap_layers=layers,
+                terrain_size=[1000, 600, 1000],
+                terrain_resolution=513,
+            )
+
+        data = json.loads(result)
+        assert data["status"] == "success"
+        assert data["action"] == "setup_terrain"
 
     # -- object scatter --
 
@@ -1576,6 +1733,7 @@ class TestAllImportsExist:
         from veilbreakers_mcp.shared.unity_templates import scene_templates
         fns = [
             "generate_terrain_setup_script",
+            "generate_tiled_terrain_setup_script",
             "generate_object_scatter_script",
             "generate_lighting_setup_script",
             "generate_navmesh_bake_script",

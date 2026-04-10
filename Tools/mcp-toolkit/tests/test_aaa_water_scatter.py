@@ -62,18 +62,45 @@ def _build_full_bpy_stubs():
     class _LoopLayerAccess:
         def __init__(self):
             self.float_color = _LayerGroup()
+            # environment.py's water spline builder also writes a UV layer
+            # via bm.loops.layers.uv.new("UVMap"); expose the same stubbed
+            # LayerGroup so the mock matches the real bmesh API surface.
+            self.uv = _LayerGroup()
 
     # --- bmesh vertex ---
 
+    class _LoopLayerCell:
+        """Per-loop per-layer cell that behaves like a tuple for color
+        reads and also exposes a mutable ``.uv`` attribute so the water
+        spline builder can do ``loop[uv_layer].uv = (u, v)``.
+        """
+
+        def __init__(self, initial=(0.0, 0.0, 0.0, 0.0)):
+            self._value = tuple(initial)
+            self.uv = (0.0, 0.0)
+
+        def __iter__(self):
+            return iter(self._value)
+
+        def __getitem__(self, idx):
+            return self._value[idx]
+
+        def __len__(self):
+            return len(self._value)
+
+        def __eq__(self, other):
+            return tuple(self._value) == tuple(other)
+
     class _Loop:
         def __init__(self):
-            self._colors = {}
+            self._cells = {}
 
         def __setitem__(self, layer, val):
-            self._colors[id(layer)] = tuple(val)
+            cell = self._cells.setdefault(id(layer), _LoopLayerCell())
+            cell._value = tuple(val)
 
         def __getitem__(self, layer):
-            return self._colors.get(id(layer), (0.0, 0.0, 0.0, 0.0))
+            return self._cells.setdefault(id(layer), _LoopLayerCell())
 
     class _Vert:
         def __init__(self, co):
@@ -198,17 +225,66 @@ def _build_full_bpy_stubs():
                     "Alpha": types.SimpleNamespace(default_value=1.0),
                     "IOR": types.SimpleNamespace(default_value=1.5),
                     "Transmission Weight": types.SimpleNamespace(default_value=0.0),
-                }
+                    "Specular IOR Level": types.SimpleNamespace(default_value=0.5),
+                    "Normal": types.SimpleNamespace(default_value=(0, 0, 0)),
+                },
+                outputs={"BSDF": types.SimpleNamespace()},
+                location=(0, 0),
             )
-            output_node = types.SimpleNamespace(inputs={})
+            output_node = types.SimpleNamespace(
+                inputs={"Surface": types.SimpleNamespace()},
+                outputs={},
+                location=(0, 0),
+            )
             nodes_store = {
                 "Principled BSDF": bsdf,
                 "Material Output": output_node,
             }
+            nodes_list = [bsdf, output_node]
+
+            def _nodes_get(n, _store=nodes_store):
+                return _store.get(n)
+
+            def _nodes_new(t, _list=nodes_list):
+                # Return type-appropriate stubs so handler key lookups work
+                if "Output" in t:
+                    node = types.SimpleNamespace(
+                        inputs={"Surface": types.SimpleNamespace()},
+                        outputs={},
+                        location=(0, 0),
+                    )
+                elif "Principled" in t:
+                    node = types.SimpleNamespace(
+                        inputs={
+                            "Base Color": types.SimpleNamespace(default_value=(0, 0, 0, 1)),
+                            "Roughness": types.SimpleNamespace(default_value=0.5),
+                            "Alpha": types.SimpleNamespace(default_value=1.0),
+                            "IOR": types.SimpleNamespace(default_value=1.5),
+                            "Transmission Weight": types.SimpleNamespace(default_value=0.0),
+                            "Specular IOR Level": types.SimpleNamespace(default_value=0.5),
+                            "Normal": types.SimpleNamespace(default_value=(0, 0, 0)),
+                        },
+                        outputs={"BSDF": types.SimpleNamespace()},
+                        location=(0, 0),
+                    )
+                else:
+                    node = types.SimpleNamespace(
+                        inputs={"Height": types.SimpleNamespace(), "Strength": types.SimpleNamespace(default_value=0.5), "Distance": types.SimpleNamespace(default_value=0.1), "Scale": types.SimpleNamespace(default_value=5.0), "Detail": types.SimpleNamespace(default_value=2.0), "Roughness": types.SimpleNamespace(default_value=0.5)},
+                        outputs={"Fac": types.SimpleNamespace(), "Normal": types.SimpleNamespace()},
+                        location=(0, 0),
+                    )
+                _list.append(node)
+                return node
+
+            def _nodes_clear(_store=nodes_store, _list=nodes_list):
+                _store.clear()
+                _list.clear()
+
             node_tree = types.SimpleNamespace(
                 nodes=types.SimpleNamespace(
-                    get=lambda n: nodes_store.get(n),
-                    new=lambda t: types.SimpleNamespace(inputs={}, outputs={}),
+                    get=_nodes_get,
+                    new=_nodes_new,
+                    clear=_nodes_clear,
                 ),
                 links=types.SimpleNamespace(new=lambda a, b: None),
             )

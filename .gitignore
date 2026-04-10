@@ -8,6 +8,8 @@ build/
 .eggs/
 *.egg
 .env
+.env.*
+pipeline.local.env
 .venv
 env/
 venv/
@@ -18,4 +20,23 @@ Thumbs.db
 *.blend2
 node_modules/
 .claude/worktrees/
+.claude/cache/
 Tools/mcp-toolkit/pytest-cache-files-*/
+Tools/mcp-toolkit/Temp/
+
+# One-time review / audit artifacts — never commit these
+review_reports/
+Tools/mcp-toolkit/reviewer_audit/
+Tools/cowork_bridge/output/
+
+# Test probe / generated 3D model artifacts
+*.glb
+# Allow exported GLB files in exports directories
+!**/exports/**/*.glb
+
+# IDE / editor caches
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

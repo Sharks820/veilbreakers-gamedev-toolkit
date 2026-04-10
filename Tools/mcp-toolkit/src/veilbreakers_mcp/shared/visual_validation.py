@@ -133,7 +133,13 @@ def analyze_render_image(filepath: str) -> dict:
     return result
 
 
-def aaa_verify_map(screenshot_paths: list[str], min_score: int = 60) -> dict:
+def aaa_verify_map(
+    screenshot_paths: list[str],
+    min_score: int = 60,
+    *,
+    required_angle_count: int | None = None,
+    angle_labels: list[str] | None = None,
+) -> dict:
     """Multi-angle AAA visual verification protocol.
 
     Scores each provided screenshot (one per camera angle, expect 10) against
@@ -156,8 +162,20 @@ def aaa_verify_map(screenshot_paths: list[str], min_score: int = 60) -> dict:
             failed_angles (list[int]): Indices of angles that scored below min_score
                 or had critical quality flags.
     """
+    if not screenshot_paths:
+        return {
+            "passed": False,
+            "total_score": 0.0,
+            "per_angle": [],
+            "failed_angles": [],
+            "missing_angles": angle_labels or [],
+            "issues": ["No screenshots supplied for AAA verification"],
+        }
+
     per_angle: list[dict] = []
     failed_angles: list[int] = []
+    issues: list[str] = []
+    missing_angles: list[str] = []
 
     for angle_id, path in enumerate(screenshot_paths):
         base_result = analyze_render_image(path)
@@ -209,15 +227,29 @@ def aaa_verify_map(screenshot_paths: list[str], min_score: int = 60) -> dict:
             "passed": angle_passed,
         })
 
-    total_score = (
-        sum(a["score"] for a in per_angle) / len(per_angle) if per_angle else 0.0
-    )
+    expected_count = required_angle_count if required_angle_count is not None else None
+    if expected_count is not None and len(screenshot_paths) < expected_count:
+        missing_count = expected_count - len(screenshot_paths)
+        if angle_labels:
+            missing_angles = angle_labels[len(screenshot_paths):expected_count]
+        else:
+            missing_angles = [
+                f"angle_{idx}" for idx in range(len(screenshot_paths), expected_count)
+            ]
+        issues.append(
+            f"Missing {missing_count} required screenshot angle(s)"
+        )
+        failed_angles.extend(range(len(screenshot_paths), expected_count))
+
+    total_score = sum(a["score"] for a in per_angle) / len(per_angle)
 
     return {
         "passed": len(failed_angles) == 0,
         "total_score": round(total_score, 3),
         "per_angle": per_angle,
-        "failed_angles": failed_angles,
+        "failed_angles": sorted(set(failed_angles)),
+        "missing_angles": missing_angles,
+        "issues": issues,
     }
 
 

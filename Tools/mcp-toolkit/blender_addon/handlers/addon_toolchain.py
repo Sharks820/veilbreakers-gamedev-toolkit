@@ -17,6 +17,9 @@ except ImportError:  # pragma: no cover - unit tests use pure helpers only
     bpy = None  # type: ignore[assignment]
     addon_utils = None  # type: ignore[assignment]
 
+RECOMMENDED_BLENDER_LINE = "4.5 LTS"
+EXPERIMENTAL_BLENDER_LINE_PREFIXES = ("5.0",)
+
 
 @dataclass(frozen=True)
 class ExternalAddonSpec:
@@ -76,6 +79,14 @@ EXTERNAL_ADDON_SPECS: tuple[ExternalAddonSpec, ...] = (
         role="Free environment scatter and geometry helper toolkit",
         stability="medium",
         install_hint="Install BagaPie from Blender Extensions.",
+    ),
+    ExternalAddonSpec(
+        name="openscatter",
+        modules=("OpenScatter", "openscatter"),
+        category="scatter",
+        role="Open scatter painting and ecosystem placement",
+        stability="medium",
+        install_hint="Install and enable OpenScatter.",
     ),
     ExternalAddonSpec(
         name="ucupaint",
@@ -180,6 +191,22 @@ EXTERNAL_ADDON_SPECS: tuple[ExternalAddonSpec, ...] = (
         role="Decals, trims, and surface breakup",
         stability="safe",
         install_hint="Install DECALmachine addon package.",
+    ),
+    ExternalAddonSpec(
+        name="tripo_bridge",
+        modules=("Tripo3d_Blender_Bridge", "tripo-3d-for-blender", "tripo_3d"),
+        category="asset_generation",
+        role="Remote Tripo asset generation bridge",
+        stability="medium",
+        install_hint="Install and authenticate a Tripo Blender bridge addon.",
+    ),
+    ExternalAddonSpec(
+        name="veilbreakers_mcp_bridge",
+        modules=("veilbreakers_mcp_bridge", "addon"),
+        category="bridge",
+        role="Local VeilBreakers MCP bridge for Blender automation",
+        stability="safe",
+        install_hint="Enable the local veilbreakers_mcp_bridge addon.",
     ),
     ExternalAddonSpec(
         name="uvpackmaster",
@@ -329,83 +356,87 @@ def compute_pipeline_selection(
     review_lighting: bool = True,
 ) -> dict[str, Any]:
     """Select the active worldbuilding stack from detected addon inventory."""
-    def _available(name: str) -> bool:
+    def _enabled(name: str) -> bool:
+        entry = inventory.get(name, {})
+        return bool(entry.get("enabled"))
+
+    def _installed(name: str) -> bool:
         entry = inventory.get(name, {})
         return bool(entry.get("installed"))
 
-    if prefer_external and _available("world_creator"):
+    if prefer_external and _enabled("world_creator"):
         terrain = "world_creator"
-    elif _available("terrain_mixer"):
+    elif _enabled("terrain_mixer"):
         terrain = "terrain_mixer"
     else:
         terrain = "native_terrain"
 
     terrain_helpers = [
         name for name in ("ant_landscape", "srtm_terrain_importer")
-        if _available(name)
+        if _enabled(name)
     ]
 
-    if prefer_external and _available("geo_scatter"):
+    if prefer_external and _enabled("geo_scatter"):
         scatter = "geo_scatter"
-    elif _available("bagapie"):
+    elif _enabled("bagapie"):
         scatter = "bagapie"
-    elif _available("secret_paint"):
+    elif _enabled("secret_paint"):
         scatter = "secret_paint"
+    elif _enabled("openscatter"):
+        scatter = "openscatter"
     else:
         scatter = "native_scatter"
 
-    if prefer_external and _available("botaniq"):
+    if prefer_external and _enabled("botaniq"):
         vegetation_assets = "botaniq"
     else:
         vegetation_assets = "procedural_vegetation"
 
-    if prefer_external and _available("archipack"):
+    if prefer_external and _enabled("archipack"):
         architecture = "archipack"
-    elif _available("hifi_builder"):
+    elif _enabled("hifi_builder"):
         architecture = "hifi_builder"
-    elif _available("archimesh"):
+    elif _enabled("archimesh"):
         architecture = "archimesh"
     else:
         architecture = "native_architecture"
 
-    if prefer_external and _available("decalmachine"):
+    if prefer_external and _enabled("decalmachine"):
         surface_detail = "decalmachine"
-    elif _available("ucupaint"):
+    elif _enabled("ucupaint"):
         surface_detail = "ucupaint"
     else:
         surface_detail = "native_surface_detail"
 
-    if prefer_external and _available("uvpackmaster"):
+    if prefer_external and _enabled("uvpackmaster"):
         uv = "uvpackmaster"
-    elif _available("univ"):
+    elif _enabled("univ"):
         uv = "univ"
-    elif _available("mio3_uv"):
+    elif _enabled("mio3_uv"):
         uv = "mio3_uv"
-    elif _available("rmkit_uv"):
+    elif _enabled("rmkit_uv"):
         uv = "rmkit_uv"
     else:
         uv = "native_uv"
 
-    if prefer_external and _available("lodgen"):
+    if prefer_external and _enabled("lodgen"):
         lod = "lodgen"
     else:
         lod = "native_lod"
 
-    if _available("bonsai"):
-        interior_authoring = "bonsai"
-    elif architecture in {"archipack", "hifi_builder", "archimesh"}:
+    if architecture in {"archipack", "hifi_builder", "archimesh"}:
         interior_authoring = architecture
     else:
         interior_authoring = "native_interiors"
 
-    if _available("wfc_3d_generator"):
+    if _enabled("wfc_3d_generator"):
         layout_variation = "wfc_3d_generator"
     else:
         layout_variation = "native_layout_variation"
 
     layout_helpers = [
         name for name in ("sverchok",)
-        if _available(name)
+        if _enabled(name)
     ]
 
     modeling_helpers = [
@@ -418,29 +449,39 @@ def compute_pipeline_selection(
             "looptools",
             "sverchok",
         )
-        if _available(name)
+        if _enabled(name)
     ]
 
     scatter_helpers = [
-        name for name in ("bagapie", "secret_paint")
-        if _available(name)
+        name for name in ("bagapie", "secret_paint", "openscatter")
+        if _enabled(name)
     ]
 
-    if _available("gamiflow"):
+    if _enabled("gamiflow"):
         export_packaging = "gamiflow"
-    elif _available("easymesh_batch_exporter"):
+    elif _enabled("easymesh_batch_exporter"):
         export_packaging = "easymesh_batch_exporter"
     else:
         export_packaging = "native_export_packaging"
 
     quality_helpers = [
         name for name in ("texel_density_checker", "textools")
-        if _available(name)
+        if _enabled(name)
     ]
 
     asset_sources = [
-        name for name in ("blenderkit",)
-        if _available(name)
+        name for name in ("blenderkit", "tripo_bridge")
+        if _enabled(name)
+    ]
+
+    automation_bridge = (
+        "veilbreakers_mcp_bridge" if _enabled("veilbreakers_mcp_bridge")
+        else "native_bridge"
+    )
+
+    disabled_but_installed = [
+        name for name in inventory.keys()
+        if _installed(name) and not _enabled(name)
     ]
 
     return {
@@ -460,6 +501,8 @@ def compute_pipeline_selection(
         "quality_helpers": quality_helpers,
         "modeling_helpers": modeling_helpers,
         "asset_sources": asset_sources,
+        "automation_bridge": automation_bridge,
+        "disabled_but_installed": sorted(disabled_but_installed),
         "lighting_preset": "forest_review" if review_lighting else "forest_transition",
     }
 
@@ -467,10 +510,16 @@ def compute_pipeline_selection(
 def build_agent_tool_contract(
     inventory: dict[str, dict[str, Any]],
     selection: dict[str, Any],
+    *,
+    blender_runtime: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build a compact agent-facing contract for using the active toolchain."""
     def _enabled(name: str) -> bool:
-        return bool(inventory.get(name, {}).get("enabled") or inventory.get(name, {}).get("installed"))
+        return bool(inventory.get(name, {}).get("enabled"))
+
+    def _present(name: str) -> bool:
+        entry = inventory.get(name, {})
+        return bool(entry.get("enabled") or entry.get("installed"))
 
     automation_targets = {
         "terrain_authoring": selection.get("terrain", "native_terrain"),
@@ -487,12 +536,13 @@ def build_agent_tool_contract(
         "export_packaging": selection.get("export_packaging", "native_export_packaging"),
         "quality_helpers": list(selection.get("quality_helpers", [])),
         "asset_sources": list(selection.get("asset_sources", [])),
+        "automation_bridge": selection.get("automation_bridge", "native_bridge"),
     }
 
     authoring_rules = [
         "Use Blender/DCC for final meshes, UVs, materials, and export prep.",
         "Use Unity for assembly, splines, terrain validation, gameplay spacing, and runtime checks.",
-        "Prefer WFC/Bonsai/Archimesh for non-repeating layouts and interior structure before falling back to procedural VB primitives.",
+        "Prefer WFC and stable architecture tools before falling back to procedural VB primitives.",
         "Use export packaging and texel-density helpers before considering an asset game-ready.",
     ]
 
@@ -505,6 +555,70 @@ def build_agent_tool_contract(
         "quality_gate": "viewport beauty checks + export/UV/LOD validation",
     }
 
+    workflow_presets = {
+        "terrain_unity_ready_free": {
+            "label": "Free AAA Terrain Unity-Ready",
+            "blender_runtime_target": RECOMMENDED_BLENDER_LINE,
+            "toolchain": {
+                "terrain_authoring": (
+                    "terrain_mixer"
+                    if _present("terrain_mixer")
+                    else selection.get("terrain", "native_terrain")
+                ),
+                "terrain_helpers": [
+                    name for name in ("ant_landscape", "srtm_terrain_importer")
+                    if _present(name)
+                ],
+                "scatter": (
+                    "bagapie"
+                    if _present("bagapie")
+                    else selection.get("scatter", "native_scatter")
+                ),
+                "scatter_helpers": [
+                    name for name in ("secret_paint",)
+                    if _present(name)
+                ],
+                "interiors": (
+                    "archimesh"
+                    if _present("archimesh")
+                    else selection.get("interiors", "native_interiors")
+                ),
+                "layout_variation": (
+                    "wfc_3d_generator"
+                    if _present("wfc_3d_generator")
+                    else selection.get("layout_variation", "native_layout_variation")
+                ),
+                "surface_detail": selection.get("surface_detail", "native_surface_detail"),
+                "uv": selection.get("uv", "native_uv"),
+                "export_packaging": (
+                    "gamiflow"
+                    if _present("gamiflow")
+                    else selection.get("export_packaging", "native_export_packaging")
+                ),
+                "quality_gate": [
+                    name for name in ("texel_density_checker",)
+                    if _present(name)
+                ],
+            },
+            "terrain_pass_sequence": [
+                "macro_world",
+                "structural_masks",
+                "erosion",
+                "navmesh",
+                "prepare_heightmap_raw_u16",
+                "validation_full",
+            ],
+            "composition_hints": {
+                "unity_export_opt_out": False,
+            },
+            "notes": [
+                "Use Terrain Mixer as the primary terrain edit layer.",
+                "Use Bagapie as the primary free scatter system.",
+                "Run prepare_heightmap_raw_u16 before validation_full for deterministic Unity readiness.",
+            ],
+        }
+    }
+
     warnings: list[str] = []
     if _enabled("sverchok"):
         warnings.append(
@@ -514,11 +628,27 @@ def build_agent_tool_contract(
         warnings.append(
             "BlenderKit is enabled, but it still requires account authentication before agents can rely on its online asset search."
         )
+    if _enabled("bonsai"):
+        warnings.append(
+            "Bonsai is enabled locally but intentionally excluded from the active contract due to automation instability."
+        )
+    disabled_but_installed = list(selection.get("disabled_but_installed", []))
+    if disabled_but_installed:
+        warnings.append(
+            "Installed but disabled addons are not part of the active contract: "
+            + ", ".join(disabled_but_installed[:12])
+        )
+    if not _enabled("veilbreakers_mcp_bridge"):
+        warnings.append(
+            "veilbreakers_mcp_bridge is not enabled, so Blender background automation should be treated as degraded."
+        )
 
     return {
         "automation_targets": automation_targets,
         "authoring_rules": authoring_rules,
         "entrypoints": entrypoints,
+        "workflow_presets": workflow_presets,
+        "blender_runtime": dict(blender_runtime or {}),
         "warnings": warnings,
     }
 
@@ -551,6 +681,47 @@ def _blender_module_sets() -> tuple[set[str], set[str]]:
     return installed, enabled
 
 
+def get_blender_runtime_info() -> dict[str, Any]:
+    """Return the current Blender runtime contract for agent decisions."""
+    if bpy is None:
+        return {
+            "available": False,
+            "recommended_line": RECOMMENDED_BLENDER_LINE,
+            "status": "unavailable",
+        }
+
+    version_tuple = tuple(int(v) for v in getattr(bpy.app, "version", (0, 0, 0)))
+    version_string = str(getattr(bpy.app, "version_string", ".".join(map(str, version_tuple))))
+    line = f"{version_tuple[0]}.{version_tuple[1]}"
+
+    if line == "4.5":
+        status = "recommended"
+    elif any(line.startswith(prefix) for prefix in EXPERIMENTAL_BLENDER_LINE_PREFIXES):
+        status = "experimental"
+    else:
+        status = "legacy"
+
+    warnings: list[str] = []
+    if status == "experimental":
+        warnings.append(
+            "Runtime is on Blender 5.0.x, which should stay in the experimental lane until addon stability is proven."
+        )
+    elif status == "legacy":
+        warnings.append(
+            f"Runtime is on Blender {line}; studio target should be {RECOMMENDED_BLENDER_LINE}."
+        )
+
+    return {
+        "available": True,
+        "version": list(version_tuple),
+        "version_string": version_string,
+        "line": line,
+        "recommended_line": RECOMMENDED_BLENDER_LINE,
+        "status": status,
+        "warnings": warnings,
+    }
+
+
 def handle_inspect_external_toolchain(params: dict[str, Any]) -> dict[str, Any]:
     """Inspect which recommended external addons are available in Blender."""
     if bpy is None:
@@ -562,16 +733,22 @@ def handle_inspect_external_toolchain(params: dict[str, Any]) -> dict[str, Any]:
         installed_modules=installed,
         enabled_modules=enabled,
     )
+    blender_runtime = get_blender_runtime_info()
     selection = compute_pipeline_selection(
         inventory,
         prefer_external=prefs["prefer_external"],
         review_lighting=prefs["review_lighting"],
     )
-    agent_contract = build_agent_tool_contract(inventory, selection)
+    agent_contract = build_agent_tool_contract(
+        inventory,
+        selection,
+        blender_runtime=blender_runtime,
+    )
     return {
         "status": "success",
         "result": {
             "project_label": prefs["project_label"],
+            "blender_runtime": blender_runtime,
             "available_addons": inventory,
             "selected_pipeline": selection,
             "agent_contract": agent_contract,
@@ -590,16 +767,22 @@ def handle_configure_external_toolchain(params: dict[str, Any]) -> dict[str, Any
         installed_modules=installed,
         enabled_modules=enabled,
     )
+    blender_runtime = get_blender_runtime_info()
     selection = compute_pipeline_selection(
         inventory,
         prefer_external=prefs["prefer_external"],
         review_lighting=prefs["review_lighting"],
     )
-    agent_contract = build_agent_tool_contract(inventory, selection)
+    agent_contract = build_agent_tool_contract(
+        inventory,
+        selection,
+        blender_runtime=blender_runtime,
+    )
 
     scene = bpy.context.scene
     scene["vb_external_toolchain"] = {
         "preferences": prefs,
+        "blender_runtime": blender_runtime,
         "inventory": inventory,
         "selection": selection,
         "agent_contract": agent_contract,
@@ -610,7 +793,7 @@ def handle_configure_external_toolchain(params: dict[str, Any]) -> dict[str, Any
         if not entry["installed"] and name in {
             "botaniq", "geo_scatter", "decalmachine",
             "uvpackmaster", "lodgen", "archipack", "world_creator",
-            "bonsai", "archimesh", "wfc_3d_generator", "hifi_builder",
+            "archimesh", "wfc_3d_generator", "hifi_builder",
             "secret_paint", "bagapie", "ucupaint", "rmkit", "rmkit_uv",
             "edgeflow", "univ", "mio3_uv", "terrain_mixer", "ant_landscape",
             "srtm_terrain_importer", "bool_tool", "looptools",
@@ -623,6 +806,7 @@ def handle_configure_external_toolchain(params: dict[str, Any]) -> dict[str, Any
     return {
         "status": "success",
         "result": {
+            "blender_runtime": blender_runtime,
             "selection": selection,
             "agent_contract": agent_contract,
             "missing_recommended_addons": missing,

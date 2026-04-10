@@ -6,13 +6,34 @@ feature placements (sea stacks, tide pools, docks, caves).
 
 All functions are pure and operate on plain Python data structures.
 Fully testable without Blender.
+
+Bundle I additions
+------------------
+Added pipeline-aware coastal geology helpers:
+    - ``compute_wave_energy``
+    - ``apply_coastal_erosion``
+    - ``detect_tidal_zones``
+    - ``pass_coastline``
+These populate ``stack.tidal`` and return height deltas for cliff retreat
+along the coastline where wave-energy is high.
 """
 
 from __future__ import annotations
 
 import math
 import random
-from typing import Any
+import time
+from typing import TYPE_CHECKING, Any, Optional
+
+import numpy as np
+
+if TYPE_CHECKING:
+    from .terrain_semantics import (
+        BBox,
+        PassResult,
+        TerrainMaskStack,
+        TerrainPipelineState,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -537,3 +558,171 @@ def generate_coastline(
         "face_count": len(mesh["faces"]),
         "feature_count": len(features),
     }
+
+
+# ---------------------------------------------------------------------------
+# Bundle I — coastal geology pass helpers
+# ---------------------------------------------------------------------------
+
+
+def compute_wave_energy(
+    stack: "TerrainMaskStack",
+    sea_level_m: float,
+    dominant_wave_dir_rad: float,
+) -> np.ndarray:
+    """Return a (H, W) float32 per-cell wave-energy field.
+
+    High where:
+        - elevation is near sea level (shoreline)
+        - the local shore faces the wave direction (exposed headland)
+        - slope is steep enough to deflect energy upward (cliff)
+
+    Zero over land far from sea and deep water far from shore.
+    """
+    if stack.height is None:
+        raise ValueError("compute_wave_energy requires stack.height")
+
+    h = np.asarray(stack.height, dtype=np.float64)
+    H, W = h.shape
+
+    # Distance-from-sea-level band: peaks at 0, decays over 5 m on either side
+    band = np.exp(-((h - sea_level_m) ** 2) / (2.0 * 5.0 * 5.0))
+
+    # Only cells above sea level receive shoreline wave impact
+    above = (h >= sea_level_m - 1.0).astype(np.float64)
+    energy = band * above
+
+    # Directional exposure: gradient facing into wave direction
+    gy, gx = np.gradient(h)
+    # Unit vector toward sea = -gradient (uphill points inland)
+    norm = np.sqrt(gx * gx + gy * gy) + 1e-9
+    sea_x = -gx / norm
+    sea_y = -gy / norm
+    wave_x = math.cos(dominant_wave_dir_rad)
+    wave_y = math.sin(dominant_wave_dir_rad)
+    # Negative dot product = shore faces incoming waves
+    facing = -(sea_x * wave_x + sea_y * wave_y)
+    facing = np.clip(facing, 0.0, 1.0)
+
+    energy = energy * (0.3 + 0.7 * facing)
+    return energy.astype(np.float32)
+
+
+def apply_coastal_erosion(
+    stack: "TerrainMaskStack",
+    sea_level_m: float,
+) -> np.ndarray:
+    """Return a height delta carving cliff-retreat at wave-energy hotspots.
+
+    Not applied in place. Call this after ``compute_wave_energy`` has
+    populated a local wave-energy array — we recompute it here so callers
+    don't need to pre-compute.
+    """
+    if stack.height is None:
+        raise ValueError("apply_coastal_erosion requires stack.height")
+    h = np.asarray(stack.height, dtype=np.float64)
+
+    hints_wave_dir = 0.0
+    energy = compute_wave_energy(stack, sea_level_m, hints_wave_dir).astype(
+        np.float64
+    )
+
+    # Only erode cells above sea level
+    above = (h > sea_level_m).astype(np.float64)
+    # Maximum cliff retreat: 3m per pass at highest energy
+    max_drop = 3.0
+    delta = -energy * above * max_drop
+
+    # Softer rock erodes more
+    if stack.rock_hardness is not None:
+        hardness = np.asarray(stack.rock_hardness, dtype=np.float64)
+        delta = delta * (1.0 - 0.7 * np.clip(hardness, 0.0, 1.0))
+
+    return delta
+
+
+def detect_tidal_zones(
+    stack: "TerrainMaskStack",
+    sea_level_m: float,
+    tidal_range_m: float,
+) -> np.ndarray:
+    """Populate ``stack.tidal`` (H, W) float32 in [0, 1].
+
+    1 in the intertidal band ``[sea_level - tidal_range/2, sea_level + tidal_range/2]``,
+    smooth taper to 0 outside.
+    """
+    if stack.height is None:
+        raise ValueError("detect_tidal_zones requires stack.height")
+    h = np.asarray(stack.height, dtype=np.float64)
+
+    half = max(0.1, tidal_range_m * 0.5)
+    diff = np.abs(h - sea_level_m)
+    in_band = (diff <= half).astype(np.float64)
+    # Smooth taper 1 cell-length outside the band
+    taper = np.clip(1.0 - (diff - half) / half, 0.0, 1.0)
+    tidal = np.maximum(in_band, taper * (1.0 - in_band))
+    tidal_f32 = tidal.astype(np.float32)
+
+    stack.set("tidal", tidal_f32, "coastline")
+    return tidal_f32
+
+
+def pass_coastline(
+    state: "TerrainPipelineState",
+    region: "Optional[BBox]",
+) -> "PassResult":
+    """Bundle I pass: compute coastal wave energy, tidal zone, and cliff retreat.
+
+    Consumes: height
+    Produces: tidal (mutates height)
+    """
+    from .terrain_semantics import PassResult as _PR
+
+    t0 = time.perf_counter()
+    stack = state.mask_stack
+    hints = dict(state.intent.composition_hints) if state.intent else {}
+
+    sea_level = float(hints.get("sea_level_m", 0.0))
+    tidal_range = float(hints.get("tidal_range_m", 2.0))
+    wave_dir = float(hints.get("dominant_wave_dir_rad", 0.0))
+    apply_retreat = bool(hints.get("coastal_erosion_enabled", False))
+
+    # Tidal zone
+    tidal = detect_tidal_zones(stack, sea_level, tidal_range)
+
+    # Wave energy (not persisted as a channel, only reported in metrics)
+    energy = compute_wave_energy(stack, sea_level, wave_dir)
+
+    retreat_mean = 0.0
+    if apply_retreat:
+        delta = apply_coastal_erosion(stack, sea_level)
+        h_new = np.asarray(stack.height, dtype=np.float64) + delta
+        stack.set("height", h_new, "coastline")
+        retreat_mean = float(np.abs(delta).mean())
+
+    return _PR(
+        pass_name="coastline",
+        status="ok",
+        duration_seconds=time.perf_counter() - t0,
+        consumed_channels=("height",),
+        produced_channels=("tidal",),
+        metrics={
+            "sea_level_m": sea_level,
+            "tidal_range_m": tidal_range,
+            "wave_energy_max": float(energy.max()),
+            "wave_energy_mean": float(energy.mean()),
+            "coastal_retreat_mean_m": retreat_mean,
+            "tidal_coverage_fraction": float((tidal > 0.5).mean()),
+        },
+        issues=[],
+    )
+
+
+__all__ = [
+    "generate_coastline",
+    "COASTLINE_STYLES",
+    "compute_wave_energy",
+    "apply_coastal_erosion",
+    "detect_tidal_zones",
+    "pass_coastline",
+]

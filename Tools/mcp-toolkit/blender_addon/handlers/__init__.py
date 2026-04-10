@@ -7,6 +7,8 @@ from .scene import (
     handle_clear_scene,
     handle_configure_scene,
     handle_list_objects,
+    handle_save_project,
+    handle_verify_project_save,
     handle_setup_world,
     handle_add_light,
     handle_add_camera,
@@ -26,6 +28,7 @@ from .objects import (
 )
 from .viewport import (
     handle_get_viewport_screenshot,
+    handle_render_angle,
     handle_render_contact_sheet,
     handle_set_shading,
     handle_navigate_camera,
@@ -127,6 +130,9 @@ from .texture import (
 )
 from .pipeline_lod import handle_generate_lods
 from .lod_pipeline import handle_generate_lods as handle_generate_lod_chain
+from .collision_generator import handle_generate_collision_meshes
+from .vegetation_serializer import handle_serialize_vegetation
+from .splatmap_exporter import handle_export_splatmap
 from .rigging import (
     handle_analyze_for_rigging,
     handle_apply_rig_template,
@@ -167,6 +173,11 @@ from .animation_export import (
 )
 from .environment import (
     handle_generate_terrain,
+    handle_generate_terrain_tile,
+    handle_generate_world_terrain,
+    handle_generate_waterfall,
+    handle_run_terrain_pass,
+    handle_stitch_terrain_edges,
     handle_paint_terrain,
     handle_carve_river,
     handle_generate_road,
@@ -234,9 +245,6 @@ from .terrain_materials import (
     handle_setup_terrain_biome,
     handle_create_biome_terrain,
 )
-from .vegetation_system import (
-    handle_scatter_biome_vegetation,
-)
 from .addon_toolchain import (
     handle_inspect_external_toolchain,
     handle_configure_external_toolchain,
@@ -255,6 +263,34 @@ from .terrain_features import (  # noqa: F401 -- terrain feature generators
     generate_waterfall,
     generate_cliff_face,
     generate_swamp_terrain,
+    generate_natural_arch,
+    generate_geyser,
+    generate_sinkhole,
+    generate_floating_rocks,
+    generate_ice_formation,
+    generate_lava_flow,
+)
+from ._terrain_depth import (  # noqa: F401 -- cave entrance mesh generator
+    generate_cave_entrance_mesh,
+)
+from .modular_building_kit import (  # noqa: F401 -- modular building kit (260 pieces)
+    generate_modular_piece,
+    assemble_building,
+    get_available_pieces,
+    STYLES as MODULAR_STYLES,
+)
+from .building_interior_binding import (  # noqa: F401 -- building-interior spatial binding
+    BUILDING_ROOM_MAP,
+    STYLE_MATERIAL_MAP,
+    get_interior_materials,
+    get_room_types_for_building,
+    align_rooms_to_building,
+    generate_door_metadata,
+    generate_interior_spec_from_building,
+)
+from .prop_density import (  # noqa: F401 -- prop density scatter system
+    ROOM_DENSITY_RULES,
+    compute_detail_prop_placements,
 )
 from .material_tiers import (  # noqa: F401 -- material tier system (EQ-040)
     METAL_TIERS,
@@ -588,6 +624,7 @@ from .terrain_chunking import (  # noqa: F401 -- Terrain chunking for streaming
     compute_chunk_lod,
     compute_streaming_distances,
     export_chunks_metadata,
+    validate_tile_seams,
 )
 from .texture_quality import (  # noqa: F401 -- AAA texture quality pipeline
     compute_smart_material_params,
@@ -606,28 +643,150 @@ from .texture_quality import (  # noqa: F401 -- AAA texture quality pipeline
 
 
 # ---------------------------------------------------------------------------
+# Creature tuple -> MeshSpec adapter
+# ---------------------------------------------------------------------------
+
+
+def _creature_tuple_to_meshspec(
+    result: tuple,
+    name: str,
+    category: str = "creature",
+) -> dict:
+    """Convert a creature generator's raw tuple into a MeshSpec dict.
+
+    Creature generators (mouth, eyelid, paw, wing, serpent) return:
+        (vertices, faces, vertex_groups)            — 3-element tuple
+        (vertices, faces, vertex_groups, bones)     — 4-element tuple
+
+    This adapter wraps them into the dict format expected by
+    _build_quality_object / mesh_from_spec.
+    """
+    verts = result[0]
+    faces = result[1]
+    groups_raw = result[2]
+    groups = groups_raw if isinstance(groups_raw, dict) else {}
+
+    spec: dict[str, Any] = {
+        "vertices": verts,
+        "faces": faces,
+        "vertex_groups": groups,
+        "metadata": {
+            "category": category,
+            "name": name,
+            "vertex_count": len(verts),
+            "poly_count": len(faces),
+        },
+    }
+
+    if len(result) > 3:
+        spec["metadata"]["bones"] = result[3]
+
+    return spec
+
+
+def _wrap_creature_part_result(
+    result: "tuple | dict",
+    name: str,
+    category: str = "creature_part",
+) -> dict:
+    """Wrap creature part generator (verts, faces, groups) tuple into MeshSpec dict.
+
+    If *result* is already a dict (i.e. a full MeshSpec / CreatureMeshResult),
+    it is returned as-is.  Otherwise delegates to ``_creature_tuple_to_meshspec``
+    for the standard 3- or 4-element tuple format.
+    """
+    if isinstance(result, dict):
+        return result  # Already MeshSpec
+    return _creature_tuple_to_meshspec(result, name, category)
+
+
+# ---------------------------------------------------------------------------
+# Default branch tips helper for standalone leaf card generation
+# ---------------------------------------------------------------------------
+
+
+def _default_branch_tips(
+    count: int = 20,
+    spread: float = 3.0,
+    height: float = 5.0,
+    seed: int = 42,
+) -> list[dict]:
+    """Generate synthetic branch tip positions for standalone leaf card use.
+
+    When vegetation_leaf_cards is called without branch_tips (e.g. as a
+    standalone handler test), this provides plausible tip positions so the
+    generator can produce geometry instead of returning 0 vertices.
+    """
+    import math as _math
+    import random as _random
+
+    rng = _random.Random(seed)
+    tips: list[dict] = []
+
+    for _ in range(count):
+        px = rng.gauss(0, spread)
+        py = rng.gauss(0, spread)
+        pz = rng.uniform(height * 0.4, height)
+
+        dx = rng.gauss(0, 0.3)
+        dy = rng.gauss(0, 0.3)
+        dz = rng.uniform(0.5, 1.0)
+        length = _math.sqrt(dx * dx + dy * dy + dz * dz)
+        if length > 1e-12:
+            dx, dy, dz = dx / length, dy / length, dz / length
+
+        radius = rng.uniform(0.02, 0.08)
+
+        tips.append({
+            "position": (px, py, pz),
+            "direction": (dx, dy, dz),
+            "radius": radius,
+        })
+
+    return tips
+
+
+# ---------------------------------------------------------------------------
 # Quality mesh builder — converts pure-logic MeshSpec into a Blender object
 # with empties, vertex groups, and returns a JSON-serializable result dict.
 # ---------------------------------------------------------------------------
 
-def _build_quality_object(spec: dict, position: tuple | None = None) -> dict:
+def _build_quality_object(
+    spec: dict,
+    position: tuple | None = None,
+    weathering_preset: str = "medium",
+) -> dict:
     """Build a Blender object from a MeshSpec dict.
 
     Creates the mesh via mesh_from_spec, attaches empties for attachment
-    points, assigns vertex groups, and returns a JSON-serializable summary.
+    points, assigns vertex groups, optionally applies weathering, and
+    returns a JSON-serializable summary.
+
+    Args:
+        spec: MeshSpec dict from a pure-logic generator.
+        position: World-space position (x, y, z).
+        weathering_preset: Weathering preset name ("light", "medium", "heavy",
+            "ancient", "corrupted") or "none" to skip. Default "medium".
     """
     import bpy
     import math
+    import logging
+
+    _logger = logging.getLogger(__name__)
 
     loc = tuple(position) if position else (0.0, 0.0, 0.0)
 
     # Detect if this is a weapon/vertically-oriented asset (blade along Y)
     # and rotate so blade points UP (Z axis) for game-ready orientation
     category = spec.get("metadata", {}).get("category", "")
+    vgroups = spec.get("vertex_groups", {})
     is_weapon = category == "weapon" or any(
-        k in spec.get("vertex_groups", {}) for k in ("blade", "shaft", "limb")
+        k in vgroups for k in ("blade", "shaft", "limb")
     )
-    rot = (-math.pi / 2, 0.0, 0.0) if is_weapon else (0.0, 0.0, 0.0)
+    is_shield = category == "armor" or any(
+        k in vgroups for k in ("boss", "grip_bar", "arm_strap")
+    )
+    rot = (-math.pi / 2, 0.0, 0.0) if (is_weapon or is_shield) else (0.0, 0.0, 0.0)
 
     obj = mesh_from_spec(spec, location=loc, rotation=rot)
 
@@ -640,6 +799,17 @@ def _build_quality_object(spec: dict, position: tuple | None = None) -> dict:
         poly.use_smooth = True
 
     obj_name = obj.name
+
+    # Apply weathering post-processing (MAT-07)
+    if weathering_preset and weathering_preset != "none":
+        try:
+            from .weathering import handle_apply_weathering
+            handle_apply_weathering({
+                "object_name": obj.name,
+                "weathering_preset": weathering_preset,
+            })
+        except Exception as e:
+            _logger.warning("Weathering failed for %s: %s", obj.name, e)
 
     # Create empties for attachment points
     empties_data = spec.get("empties", {})
@@ -676,6 +846,8 @@ def _build_quality_object(spec: dict, position: tuple | None = None) -> dict:
         result["style"] = meta["style"]
     if "components" in spec:
         result["components"] = spec["components"]
+    if weathering_preset and weathering_preset != "none":
+        result["weathering_preset"] = weathering_preset
 
     return result
 
@@ -687,6 +859,8 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "clear_scene": handle_clear_scene,
     "configure_scene": handle_configure_scene,
     "list_objects": handle_list_objects,
+    "save_project": handle_save_project,
+    "verify_project_save": handle_verify_project_save,
     # Scene/World settings
     "setup_world": handle_setup_world,
     "add_light": handle_add_light,
@@ -821,6 +995,10 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "anim_batch_export": handle_batch_export,
     # Environment operations
     "env_generate_terrain": handle_generate_terrain,
+    "env_generate_terrain_tile": handle_generate_terrain_tile,
+    "env_generate_world_terrain": handle_generate_world_terrain,  # DEPRECATED: use env_generate_terrain_tile per-tile workflow instead
+    "env_run_terrain_pass": handle_run_terrain_pass,
+    "env_stitch_terrain_edges": handle_stitch_terrain_edges,
     "env_paint_terrain": handle_paint_terrain,
     "env_carve_river": handle_carve_river,
     "env_generate_road": handle_generate_road,
@@ -936,7 +1114,6 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     "terrain_setup_biome": handle_setup_terrain_biome,
     "terrain_create_biome_material": handle_create_biome_terrain,
     # Per-biome vegetation quality system
-    "env_scatter_biome_vegetation": handle_scatter_biome_vegetation,
     # External addon/toolchain inspection
     "toolchain_inspect_external": handle_inspect_external_toolchain,
     "toolchain_configure_external": handle_configure_external_toolchain,
@@ -964,14 +1141,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         num_side_caves=params.get("num_side_caves", 3),
         seed=params.get("seed", 42),
     ),
-    "env_generate_waterfall": lambda params: generate_waterfall(
-        height=params.get("height", 10.0),
-        width=params.get("width", 3.0),
-        pool_radius=params.get("pool_radius", 4.0),
-        num_steps=params.get("num_steps", 3),
-        has_cave_behind=params.get("has_cave_behind", True),
-        seed=params.get("seed", 42),
-    ),
+    "env_generate_waterfall": handle_generate_waterfall,
     "env_generate_cliff_face": lambda params: generate_cliff_face(
         width=params.get("width", 20.0),
         height=params.get("height", 15.0),
@@ -985,6 +1155,60 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         water_level=params.get("water_level", 0.3),
         hummock_count=params.get("hummock_count", 12),
         island_count=params.get("island_count", 4),
+        seed=params.get("seed", 42),
+    ),
+    # Terrain features v2 -- 6 additional generators (dead-code wiring)
+    "env_generate_natural_arch": lambda params: generate_natural_arch(
+        span_width=params.get("span_width", 8.0),
+        arch_height=params.get("arch_height", 6.0),
+        thickness=params.get("thickness", 2.0),
+        roughness=params.get("roughness", 0.3),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_geyser": lambda params: generate_geyser(
+        pool_radius=params.get("pool_radius", 3.0),
+        pool_depth=params.get("pool_depth", 0.5),
+        vent_height=params.get("vent_height", 1.0),
+        mineral_rim_width=params.get("mineral_rim_width", 0.8),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_sinkhole": lambda params: generate_sinkhole(
+        radius=params.get("radius", 5.0),
+        depth=params.get("depth", 8.0),
+        wall_roughness=params.get("wall_roughness", 0.5),
+        has_bottom_cave=params.get("has_bottom_cave", True),
+        rubble_density=params.get("rubble_density", 0.3),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_floating_rocks": lambda params: generate_floating_rocks(
+        count=params.get("count", 5),
+        base_height=params.get("base_height", 4.0),
+        max_size=params.get("max_size", 3.0),
+        chain_links=params.get("chain_links", 2),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_ice_formation": lambda params: generate_ice_formation(
+        width=params.get("width", 6.0),
+        height=params.get("height", 4.0),
+        depth=params.get("depth", 3.0),
+        stalactite_count=params.get("stalactite_count", 8),
+        ice_wall=params.get("ice_wall", True),
+        seed=params.get("seed", 42),
+    ),
+    "env_generate_cave_entrance": lambda params: generate_cave_entrance_mesh(
+        width=params.get("width", 4.0),
+        height=params.get("height", 4.0),
+        depth=params.get("depth", 3.0),
+        arch_segments=params.get("arch_segments", 12),
+        terrain_edge_height=params.get("terrain_edge_height", 0.0),
+        style=params.get("style", "natural"),
+        seed=params.get("seed", 0),
+    ),
+    "env_generate_lava_flow": lambda params: generate_lava_flow(
+        length=params.get("length", 30.0),
+        width=params.get("width", 4.0),
+        edge_crust_width=params.get("edge_crust_width", 1.0),
+        flow_segments=params.get("flow_segments", 20),
         seed=params.get("seed", 42),
     ),
     # World map generation (pure logic -- returns world map spec)
@@ -1084,13 +1308,18 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         ),
     },
     # L-system vegetation pipeline
-    "vegetation_lsystem_tree": lambda params: generate_lsystem_tree(params),
-    "vegetation_leaf_cards": lambda params: generate_leaf_cards(
-        branch_tips=params.get("branch_tips", []),
+    "vegetation_lsystem_tree": lambda params: _build_quality_object(generate_lsystem_tree(params)),
+    "vegetation_leaf_cards": lambda params: _build_quality_object(generate_leaf_cards(
+        branch_tips=params.get("branch_tips") or _default_branch_tips(
+            count=params.get("tip_count", 20),
+            spread=params.get("spread", 3.0),
+            height=params.get("height", 5.0),
+            seed=params.get("seed", 42),
+        ),
         leaf_type=params.get("leaf_type", "broadleaf"),
         density=params.get("density", 0.8),
         seed=params.get("seed", 42),
-    ),
+    )),
     "vegetation_wind_colors": lambda params: bake_wind_vertex_colors(params),
     "vegetation_billboard": lambda params: generate_billboard_impostor(params),
     "vegetation_gpu_instancing": lambda params: prepare_gpu_instancing_export(params),
@@ -1233,42 +1462,55 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         edge_bevel=params.get("edge_bevel", 0.003),
         ornament_level=params.get("ornament_level", 2),
     )),
-    # AAA creature anatomy generators — build Blender objects from MeshSpec
-    "creature_mouth_interior": lambda params: _build_quality_object(generate_mouth_interior(
-        mouth_width=params.get("mouth_width", 0.1),
-        mouth_depth=params.get("mouth_depth", 0.12),
-        jaw_length=params.get("jaw_length", 0.15),
-        tooth_count=params.get("tooth_count", 20),
-        tooth_style=params.get("tooth_style", "carnivore"),
-        include_tongue=params.get("include_tongue", True),
+    # AAA creature anatomy generators — wrap tuple output in MeshSpec adapter
+    "creature_mouth_interior": lambda params: _build_quality_object(
+        _wrap_creature_part_result(generate_mouth_interior(
+            mouth_width=params.get("mouth_width", 0.1),
+            mouth_depth=params.get("mouth_depth", 0.12),
+            jaw_length=params.get("jaw_length", 0.15),
+            tooth_count=params.get("tooth_count", 20),
+            tooth_style=params.get("tooth_style", "carnivore"),
+            include_tongue=params.get("include_tongue", True),
+            position=tuple(params.get("position", (0.0, 0.0, 0.0))),
+        ), "mouth_interior"),
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
-    ), position=tuple(params.get("position", (0.0, 0.0, 0.0)))),
-    "creature_eyelid_topology": lambda params: _build_quality_object(generate_eyelid_topology(
-        eye_radius=params.get("eye_radius", 0.015),
-        eye_position=tuple(params.get("eye_position", (0.0, 0.0, 0.0))),
-    )),
-    "creature_paw": lambda params: _build_quality_object(generate_paw(
-        paw_type=params.get("paw_type", "canine"),
-        toe_count=params.get("toe_count", 4),
-        include_pads=params.get("include_pads", True),
-        include_claws=params.get("include_claws", True),
-        size=params.get("size", 1.0),
+    ),
+    "creature_eyelid_topology": lambda params: _build_quality_object(
+        _wrap_creature_part_result(generate_eyelid_topology(
+            eye_radius=params.get("eye_radius", 0.015),
+            eye_position=tuple(params.get("eye_position", (0.0, 0.0, 0.0))),
+        ), "eyelid_topology"),
+    ),
+    "creature_paw": lambda params: _build_quality_object(
+        _wrap_creature_part_result(generate_paw(
+            paw_type=params.get("paw_type", "canine"),
+            toe_count=params.get("toe_count", 4),
+            include_pads=params.get("include_pads", True),
+            include_claws=params.get("include_claws", True),
+            size=params.get("size", 1.0),
+            position=tuple(params.get("position", (0.0, 0.0, 0.0))),
+        ), "paw"),
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
-    ), position=tuple(params.get("position", (0.0, 0.0, 0.0)))),
-    "creature_wing": lambda params: _build_quality_object(generate_wing(
-        wing_type=params.get("wing_type", "bat"),
-        wingspan=params.get("wingspan", 2.0),
-        include_membrane=params.get("include_membrane", True),
+    ),
+    "creature_wing": lambda params: _build_quality_object(
+        _wrap_creature_part_result(generate_wing(
+            wing_type=params.get("wing_type", "bat"),
+            wingspan=params.get("wingspan", 2.0),
+            include_membrane=params.get("include_membrane", True),
+            position=tuple(params.get("position", (0.0, 0.0, 0.0))),
+        ), "wing"),
         position=tuple(params.get("position", (0.0, 0.0, 0.0))),
-    ), position=tuple(params.get("position", (0.0, 0.0, 0.0)))),
-    "creature_serpent_body": lambda params: _build_quality_object(generate_serpent_body(
-        length=params.get("length", 3.0),
-        max_radius=params.get("max_radius", 0.08),
-        segment_count=params.get("segment_count", 40),
-        head_style=params.get("head_style", "viper"),
-        include_hood=params.get("include_hood", False),
-        size=params.get("size", 1.0),
-    )),
+    ),
+    "creature_serpent_body": lambda params: _build_quality_object(
+        _wrap_creature_part_result(generate_serpent_body(
+            length=params.get("length", 3.0),
+            max_radius=params.get("max_radius", 0.08),
+            segment_count=params.get("segment_count", 40),
+            head_style=params.get("head_style", "viper"),
+            include_hood=params.get("include_hood", False),
+            size=params.get("size", 1.0),
+        ), "serpent_body"),
+    ),
     "creature_quadruped": lambda params: _build_quality_object(generate_quadruped(
         species=params.get("species", "wolf"),
         size=params.get("size", 1.0),
@@ -1441,6 +1683,19 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         overlap=params.get("overlap", 1),
         lod_levels=params.get("lod_levels", 4),
         world_scale=params.get("world_scale", 1.0),
+        world_origin=tuple(params["world_origin"]) if params.get("world_origin") is not None else None,
+    ),
+    "terrain_validate_tile_seams": lambda params: validate_tile_seams(
+        tile_a=params.get("tile_a", []),
+        tile_b=params.get("tile_b", []),
+        direction=params.get("direction", "east"),
+        tolerance=params.get("tolerance", 1e-6),
+    ),
+    "env_validate_tile_seams": lambda params: validate_tile_seams(
+        tile_a=params.get("tile_a", []),
+        tile_b=params.get("tile_b", []),
+        direction=params.get("direction", "east"),
+        tolerance=params.get("tolerance", 1e-6),
     ),
     "terrain_chunk_lod": lambda params: compute_chunk_lod(
         heightmap_chunk=params.get("heightmap_chunk", []),
@@ -1457,11 +1712,15 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     # --- Missing handler registrations (MCP wiring fixes) ---
     # (a) Multi-biome world generation
     "env_generate_multi_biome_world": handle_generate_multi_biome_world,
-    # (b) asset_pipeline dispatch — routes to pipeline_generate_lods for generate_lods action
+    # (b) asset_pipeline dispatch — routes actions to their pipeline handlers
     "asset_pipeline": lambda params: (
-        COMMAND_HANDLERS.get("pipeline_generate_lods", lambda p: {"error": "not found"})(params)
-        if params.get("action") == "generate_lods"
-        else {"error": f"Unknown asset_pipeline action: {params.get('action')}"}
+        {
+            "generate_lods": COMMAND_HANDLERS.get("pipeline_generate_lods", lambda p: {"error": "pipeline_generate_lods not found"}),
+            "generate_lod_chain": COMMAND_HANDLERS.get("pipeline_generate_lod_chain", lambda p: {"error": "pipeline_generate_lod_chain not found"}),
+        }.get(
+            params.get("action", ""),
+            lambda p: {"error": f"asset_pipeline action '{p.get('action')}' is handled by MCP server, not addon. Use blender_server.py routing."},
+        )(params)
     ),
     # (c) Auto LOD chain generation — wraps mesh_enhance.auto_generate_lod_chain
     "auto_generate_lod_chain": lambda params: _auto_generate_lod_chain(
@@ -1470,11 +1729,39 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
     ),
     # (d) Performance budget check — stub (no handler exists yet)
     "performance_budget_check": lambda params: {"status": "ok", "budget": "not_implemented"},
-    # (e) Render angle — alias to viewport screenshot
-    "render_angle": handle_get_viewport_screenshot,
+    # (e) Render angle — real handler (not alias)
+    "render_angle": handle_render_angle,
+    # (h) Collision mesh generation
+    "generate_collision_meshes": handle_generate_collision_meshes,
+    # (i) Vegetation instance serialization
+    "serialize_vegetation": handle_serialize_vegetation,
+    # (j) Splatmap export
+    "export_splatmap": handle_export_splatmap,
     # --- Naming mismatch aliases ---
     # (f) Server sends texture_mix_weathering_over_texture, handler registered as weathering_mix_over_texture
     "texture_mix_weathering_over_texture": handle_mix_weathering_over_texture,
     # (g) Server sends viewport_screenshot, handler registered as get_viewport_screenshot
     "viewport_screenshot": handle_get_viewport_screenshot,
 }
+
+
+# ---------------------------------------------------------------------------
+# Terrain pipeline master registrar (Bundles A–O)
+# ---------------------------------------------------------------------------
+# Must run at addon import time so the TerrainPassController.PASS_REGISTRY
+# is populated before any handler is dispatched. Without this call the entire
+# new terrain pipeline (86+ modules across 17 bundles) is dead code at
+# runtime — only tests can reach it. strict=False keeps a partial load
+# successful if a single bundle registrar is broken.
+try:
+    from .terrain_master_registrar import register_all_terrain_passes as _register_all_terrain_passes
+
+    LOADED_TERRAIN_BUNDLES = _register_all_terrain_passes(strict=False)
+except Exception as _terrain_registrar_exc:  # pragma: no cover - defensive
+    import logging as _terrain_logging
+
+    LOADED_TERRAIN_BUNDLES = []
+    _terrain_logging.getLogger(__name__).warning(
+        "Failed to register terrain pipeline bundles: %s",
+        _terrain_registrar_exc,
+    )

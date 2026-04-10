@@ -10,7 +10,7 @@ from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 from veilbreakers_mcp.shared.config import Settings
-from veilbreakers_mcp.shared.unity_client import UnityConnection
+from veilbreakers_mcp.shared.unity_client import UnityConnection, UnityCommandError
 
 STANDARD_NEXT_STEPS = [
     "Recompile: unity_editor action=recompile",
@@ -39,6 +39,40 @@ def _strip_registered_tool_titles(mcp_instance: FastMCP) -> None:
         parameters = getattr(tool, "parameters", None)
         if isinstance(parameters, (dict, list)):
             _strip_schema_titles(parameters)
+
+
+async def _try_bridge(command: str, params: dict | None = None, retries: int = 2) -> dict | None:
+    """Try to execute a command via the VBBridge TCP connection.
+
+    Returns the result dict on success, or None if the bridge is not
+    available (falls back to script generation).  Retries on transient
+    connection failures (e.g., bridge momentarily busy after play mode).
+    """
+    import asyncio
+
+    last_exc = None
+    for attempt in range(retries):
+        try:
+            conn = UnityConnection(timeout=30)
+            result = await conn.send_command(command, params or {})
+            return result
+        except UnityCommandError:
+            # Command-level error (not transient) -- don't retry
+            raise
+        except (ConnectionError, OSError, TimeoutError) as exc:
+            last_exc = exc
+            logger.debug(
+                "VBBridge attempt %d/%d for '%s' failed: %s",
+                attempt + 1, retries, command, exc,
+            )
+            if attempt < retries - 1:
+                await asyncio.sleep(0.5)
+        except Exception as exc:
+            logger.debug("VBBridge unexpected error for '%s': %s", command, exc)
+            return None
+
+    logger.debug("VBBridge unavailable for '%s' after %d attempts: %s", command, retries, last_exc)
+    return None
 
 
 async def _execute_menu_item(menu_path: str) -> dict | None:

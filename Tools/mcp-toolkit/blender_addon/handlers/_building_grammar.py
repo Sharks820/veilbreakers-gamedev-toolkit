@@ -32,7 +32,7 @@ from typing import Optional
 
 # AAA building quality generators (pure Python, no bpy)
 try:
-    from blender_addon.handlers.building_quality import (
+    from .building_quality import (
         generate_timber_frame,
         generate_chimney,
         generate_battlements,

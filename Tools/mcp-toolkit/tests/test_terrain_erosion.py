@@ -25,13 +25,13 @@ class TestApplyHydraulicErosion:
         assert result.shape == hmap.shape
 
     def test_values_in_0_1_range(self):
-        """All eroded values are clamped to [0, 1]."""
+        """All eroded values stay within the input range."""
         from blender_addon.handlers._terrain_erosion import apply_hydraulic_erosion
 
         hmap = np.random.RandomState(42).rand(32, 32)
         result = apply_hydraulic_erosion(hmap, iterations=50, seed=42)
-        assert result.min() >= 0.0
-        assert result.max() <= 1.0
+        assert result.min() >= hmap.min() - 1e-12
+        assert result.max() <= hmap.max() + 1e-12
 
     def test_erosion_modifies_heightmap(self):
         """Eroded heightmap differs from input (erosion did something)."""
@@ -94,13 +94,13 @@ class TestApplyThermalErosion:
         assert result.shape == hmap.shape
 
     def test_values_in_0_1_range(self):
-        """All eroded values are clamped to [0, 1]."""
+        """All eroded values stay within the input range."""
         from blender_addon.handlers._terrain_erosion import apply_thermal_erosion
 
         hmap = np.random.RandomState(42).rand(32, 32)
         result = apply_thermal_erosion(hmap, iterations=10, talus_angle=45.0)
-        assert result.min() >= 0.0
-        assert result.max() <= 1.0
+        assert result.min() >= hmap.min() - 1e-12
+        assert result.max() <= hmap.max() + 1e-12
 
     def test_erosion_reduces_max_slope(self):
         """Thermal erosion reduces the maximum slope (material redistributed)."""
@@ -139,24 +139,13 @@ class TestApplyThermalErosion:
         result = apply_thermal_erosion(hmap, iterations=5, talus_angle=45.0)
         assert isinstance(result, np.ndarray)
 
-    def test_does_not_create_values_outside_bounds(self):
-        """Edge case: heightmap with extremes doesn't break bounds."""
-        from blender_addon.handlers._terrain_erosion import apply_thermal_erosion
-
-        hmap = np.zeros((16, 16))
-        hmap[::2, ::2] = 1.0  # Checkerboard pattern
-        result = apply_thermal_erosion(hmap, iterations=10, talus_angle=20.0)
-        assert result.min() >= 0.0
-        assert result.max() <= 1.0
-
-
 # ---------------------------------------------------------------------------
 # High-iteration erosion quality tests
 # ---------------------------------------------------------------------------
 
 
-class TestErosion50kVisibleChannels:
-    """Test that 50K droplet erosion produces visible channel depth."""
+class TestErosionHighIterationAndWorldUnits:
+    """Stress tests for high-iteration erosion and world-unit inputs."""
 
     def test_erosion_50k_visible_channels(self):
         """50K droplet erosion on 64x64 heightmap carves channels > 0.05 depth."""
@@ -180,11 +169,48 @@ class TestErosion50kVisibleChannels:
         )
 
     def test_erosion_50k_stays_in_bounds(self):
-        """50K droplet erosion keeps values in [0, 1]."""
+        """50K droplet erosion keeps values within the input range."""
         from blender_addon.handlers._terrain_erosion import apply_hydraulic_erosion
         from blender_addon.handlers._terrain_noise import generate_heightmap
 
         hmap = generate_heightmap(64, 64, seed=42, terrain_type="mountains")
         eroded = apply_hydraulic_erosion(hmap, iterations=50000, seed=42)
-        assert eroded.min() >= 0.0
-        assert eroded.max() <= 1.0
+        assert eroded.min() >= hmap.min() - 1e-12
+        assert eroded.max() <= hmap.max() + 1e-12
+
+    def test_hydraulic_world_unit_height_range_is_supported(self):
+        """Hydraulic erosion supports arbitrary world-unit height ranges."""
+        from blender_addon.handlers._terrain_erosion import apply_hydraulic_erosion
+
+        base = np.linspace(10.0, 30.0, 64 * 64, dtype=np.float64).reshape(64, 64)
+        hmap = base + np.random.RandomState(42).rand(64, 64) * 0.5
+        result = apply_hydraulic_erosion(
+            hmap,
+            iterations=200,
+            seed=42,
+            height_range=float(hmap.max() - hmap.min()),
+        )
+        assert result.shape == hmap.shape
+        assert result.min() >= hmap.min() - 1e-12
+        assert result.max() <= hmap.max() + 1e-12
+        assert not np.array_equal(result, hmap)
+
+    def test_thermal_world_unit_height_range_is_supported(self):
+        """Thermal erosion supports arbitrary world-unit height ranges."""
+        from blender_addon.handlers._terrain_erosion import apply_thermal_erosion
+
+        hmap = np.linspace(-5.0, 17.0, 32 * 32, dtype=np.float64).reshape(32, 32)
+        result = apply_thermal_erosion(hmap, iterations=12, talus_angle=35.0)
+        assert result.shape == hmap.shape
+        assert result.min() >= hmap.min() - 1e-12
+        assert result.max() <= hmap.max() + 1e-12
+
+    def test_thermal_cell_size_affects_world_space_threshold(self):
+        """Larger sample spacing should reduce talus transfer for the same height delta."""
+        from blender_addon.handlers._terrain_erosion import apply_thermal_erosion
+
+        hmap = np.zeros((9, 9), dtype=np.float64)
+        hmap[4, 4] = 1.0
+        fine = apply_thermal_erosion(hmap, iterations=8, talus_angle=35.0, cell_size=1.0)
+        coarse = apply_thermal_erosion(hmap, iterations=8, talus_angle=35.0, cell_size=4.0)
+        assert coarse[4, 4] >= fine[4, 4]

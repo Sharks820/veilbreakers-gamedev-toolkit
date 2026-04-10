@@ -13,6 +13,7 @@ tuples. Calling ``gen_func(**kwargs)`` produces a valid MeshSpec dict.
 from __future__ import annotations
 
 import math
+from collections import deque
 from typing import Any, Callable
 
 # ---------------------------------------------------------------------------
@@ -288,10 +289,14 @@ VEGETATION_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any
     "tree_boundary": (_lsystem_tree_generator, {"tree_type": "birch", "iterations": 4, "leaf_type": "broadleaf", "canopy_style": "veil_boundary"}),
     "tree_blighted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine", "canopy_style": "veil_blighted"}),
     "tree_dead": (_lsystem_tree_generator, {"tree_type": "dead", "iterations": 4, "leaf_type": None, "canopy_style": "veil_blighted"}),
+    "dead_tree": (_lsystem_tree_generator, {"tree_type": "dead", "iterations": 4, "leaf_type": None, "canopy_style": "veil_blighted"}),
     "tree_twisted": (_lsystem_tree_generator, {"tree_type": "twisted", "iterations": 4, "leaf_type": "vine", "canopy_style": "veil_boundary"}),
     "pine_tree": (_lsystem_tree_generator, {"tree_type": "pine", "iterations": 4, "leaf_type": "needle", "canopy_style": "veil_healthy"}),
     "bush": (generate_shrub_mesh, {}),
     "shrub": (generate_shrub_mesh, {}),
+    "fern": (generate_shrub_mesh, {}),
+    "moss": (generate_grass_clump_mesh, {}),
+    "vine": (generate_root_mesh, {}),
     "grass": (generate_grass_clump_mesh, {}),
     "weed": (generate_grass_clump_mesh, {"blade_count": 9, "height": 0.5, "spread": 0.16, "width": 0.035}),
     "flower": (generate_mushroom_mesh, {"size": 0.28, "cap_style": "cluster"}),
@@ -301,6 +306,17 @@ VEGETATION_GENERATOR_MAP: dict[str, tuple[Callable[..., MeshSpec], dict[str, Any
     "mushroom": (generate_mushroom_mesh, {}),
     "mushroom_cluster": (generate_mushroom_mesh, {"cap_style": "cluster", "size": 0.34}),
     "root": (generate_root_mesh, {}),
+    "gravestone": (generate_gravestone_mesh, {}),
+    "crystal": (generate_corruption_crystal_mesh, {}),
+    "ember_plant": (generate_shrub_mesh, {}),
+    "frost_lichen": (generate_grass_clump_mesh, {}),
+    "tumbleweed": (generate_shrub_mesh, {}),
+    "dead_brush": (generate_shrub_mesh, {}),
+    "coastal_scrub": (generate_shrub_mesh, {}),
+    "sea_grass": (generate_grass_clump_mesh, {}),
+    "bioluminescent": (generate_mushroom_mesh, {}),
+    "surface_root": (generate_root_mesh, {}),
+    "mangrove_root": (generate_root_mesh, {}),
 }
 
 # ---------------------------------------------------------------------------
@@ -486,6 +502,8 @@ CATEGORY_MATERIAL_MAP: dict[str, str] = {
     "key_item": "polished_wood",
     # Combat items -- rusted iron
     "combat_item": "rusted_iron",
+    # Clothing -- fabric cloth for garments
+    "clothing": "burlap_cloth",
     # Forest animals -- fur base
     "forest_animal": "fur_base",
     # Mountain animals -- fur base
@@ -616,10 +634,10 @@ def post_boolean_cleanup(
     if clean_faces:
         visited = [False] * len(clean_faces)
         face_list = [list(f) for f in clean_faces]
-        queue = [0]
+        queue = deque([0])
         visited[0] = True
         while queue:
-            fi = queue.pop(0)
+            fi = queue.popleft()
             face = face_list[fi]
             n = len(face)
             for i in range(n):
@@ -837,6 +855,7 @@ def mesh_from_spec(
     parent: Any = None,
     smooth_shading: bool = True,
     auto_smooth_angle: float = 35.0,
+    weld_tolerance: float = 0.005,
 ) -> Any:
     """Convert a MeshSpec dict into a Blender mesh object.
 
@@ -864,6 +883,7 @@ def mesh_from_spec(
         parent: Blender object to set as parent.
         smooth_shading: Apply smooth shading to all faces (default True).
         auto_smooth_angle: Auto-smooth angle in degrees (default 35.0).
+        weld_tolerance: Distance threshold for vertex welding (default 0.005 = 5mm).
 
     Returns:
         bpy.types.Object when Blender is available, otherwise a dict
@@ -887,13 +907,12 @@ def mesh_from_spec(
 
     # Validate material_ids: must be in range [0, num_slots-1]
     if material_ids:
-        unique_slots = sorted(set(material_ids))
-        num_slots = len(unique_slots)
+        num_slots = len(set(material_ids))  # count of distinct slots declared
         for fi, mid in enumerate(material_ids):
             if mid < 0 or mid >= num_slots:
                 raise ValueError(
                     f"mesh_from_spec: material_id {mid} at face {fi} is out of range "
-                    f"[0, {num_slots - 1}] for {num_slots} unique slot(s) in material_ids"
+                    f"[0, {num_slots - 1}] for {num_slots} slot(s) in material_ids"
                 )
     else:
         num_slots = 1
@@ -914,16 +933,15 @@ def mesh_from_spec(
 
     # Add vertices with deduplication: weld coincident vertices from
     # generators that create disconnected components at the same positions
-    _WELD_TOLERANCE = 0.005  # 5mm — covers mortar gaps in stone generators
     _vert_dedup: dict[tuple[int, int, int], int] = {}
     bm_verts: list[Any] = []
     _remap: list[int] = []  # maps original index -> deduped index
     for v in verts:
         # Quantize to tolerance grid for fast lookup
         key = (
-            round(v[0] / _WELD_TOLERANCE),
-            round(v[1] / _WELD_TOLERANCE),
-            round(v[2] / _WELD_TOLERANCE),
+            round(v[0] / weld_tolerance),
+            round(v[1] / weld_tolerance),
+            round(v[2] / weld_tolerance),
         )
         if key in _vert_dedup:
             _remap.append(_vert_dedup[key])
@@ -1004,7 +1022,7 @@ def mesh_from_spec(
         # Auto-smooth: Blender 3.x has use_auto_smooth, 4.x uses sharp edges
         if hasattr(mesh_data, "use_auto_smooth"):
             mesh_data.use_auto_smooth = True
-            mesh_data.auto_smooth_angle = _math_radians(auto_smooth_angle)
+            mesh_data.auto_smooth_angle = math.radians(auto_smooth_angle)
 
     obj = bpy.data.objects.new(obj_name, mesh_data)
     obj.location = location
@@ -1024,28 +1042,27 @@ def mesh_from_spec(
     # Auto-assign procedural material based on generator category
     category = spec.get("metadata", {}).get("category", "")
     if category:
-        material_key = CATEGORY_MATERIAL_MAP.get(category)
-        if material_key:
+        material_type = CATEGORY_MATERIAL_MAP.get(category)
+        if material_type:
             try:
                 from .procedural_materials import (
                     create_procedural_material,
                     MATERIAL_LIBRARY,
                 )
-                if material_key in MATERIAL_LIBRARY:
-                    mat_name = f"{obj_name}_{material_key}"
-                    mat = create_procedural_material(mat_name, material_key)
+                if material_type in MATERIAL_LIBRARY:
+                    mat_name = f"{obj_name}_{material_type}"
+                    mat = create_procedural_material(mat_name, material_type)
                     if obj.data.materials:
                         obj.data.materials[0] = mat
                     else:
                         obj.data.materials.append(mat)
             except Exception:
-                # Graceful fallback: if procedural material creation fails,
-                # the object keeps its default material (no crash)
-                pass
+                import logging
+                logging.getLogger("veilbreakers.mesh_bridge").warning(
+                    "Material assignment failed (category=%s, type=%s)",
+                    category, material_type,
+                    exc_info=True,
+                )
 
     return obj
 
-
-def _math_radians(degrees: float) -> float:
-    """Convert degrees to radians (avoids importing math at module level)."""
-    return degrees * 3.141592653589793 / 180.0

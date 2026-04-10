@@ -637,7 +637,7 @@ def _summarize_mesh_quality(obj: object) -> dict:
     object_name = getattr(obj, "name", "<unknown>")
 
     try:
-        from blender_addon.handlers.mesh import _analyze_mesh
+        from .mesh import _analyze_mesh
 
         metrics = _analyze_mesh(obj)
     except Exception as exc:

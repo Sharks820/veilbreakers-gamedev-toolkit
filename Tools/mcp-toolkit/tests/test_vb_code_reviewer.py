@@ -4,6 +4,8 @@ from pathlib import Path
 
 from veilbreakers_mcp._context_engine import ContextEngine
 from veilbreakers_mcp import vb_code_reviewer as reviewer
+from veilbreakers_mcp._tool_runner import ToolFinding, _map_ruff_severity
+from veilbreakers_mcp._types import Category
 
 
 def test_reexport_import_is_not_flagged_unused(tmp_path):
@@ -155,3 +157,535 @@ def test_strengthening_noise_curation_keeps_bug_signal():
 
     assert sum(1 for issue in curated if issue["rule_id"] == "PY-STY-07") == 1
     assert any(issue["rule_id"] == "PY-COR-12" for issue in curated)
+
+
+def test_map_ruff_severity_demotes_style_noise_but_keeps_real_bugs():
+    assert _map_ruff_severity("F401") == "LOW"
+    assert _map_ruff_severity("E402") == "LOW"
+    assert _map_ruff_severity("F821") == "HIGH"
+    assert _map_ruff_severity("S603") == "HIGH"
+
+
+def test_production_scan_hides_style_only_ruff_findings(monkeypatch, tmp_path):
+    src_dir = tmp_path / "src" / "veilbreakers_mcp"
+    src_dir.mkdir(parents=True)
+    file_path = src_dir / "demo.py"
+    file_path.write_text("import os\n", encoding="utf-8")
+
+    from veilbreakers_mcp import _tool_runner as tool_runner
+
+    monkeypatch.setattr(
+        tool_runner,
+        "available_tools",
+        lambda: {"ruff": True, "opengrep": False, "mypy": False, "dotnet": False, "ast-grep": False},
+    )
+    monkeypatch.setattr(
+        tool_runner,
+        "run_ruff",
+        lambda files: [
+            ToolFinding(
+                tool="ruff",
+                rule_id="RUFF-F401",
+                file=str(file_path.resolve()),
+                line=1,
+                description="unused import",
+                severity="LOW",
+            )
+        ],
+    )
+
+    report = reviewer.scan_project([str(src_dir)], lang="py", review_scope="production", build_context=False)
+
+    assert report["total_issues"] == 0
+
+
+def test_production_scan_keeps_real_ruff_correctness_findings(monkeypatch, tmp_path):
+    src_dir = tmp_path / "src" / "veilbreakers_mcp"
+    src_dir.mkdir(parents=True)
+    file_path = src_dir / "demo.py"
+    file_path.write_text("value = missing_name\n", encoding="utf-8")
+
+    from veilbreakers_mcp import _tool_runner as tool_runner
+
+    monkeypatch.setattr(
+        tool_runner,
+        "available_tools",
+        lambda: {"ruff": True, "opengrep": False, "mypy": False, "dotnet": False, "ast-grep": False},
+    )
+    monkeypatch.setattr(
+        tool_runner,
+        "run_ruff",
+        lambda files: [
+            ToolFinding(
+                tool="ruff",
+                rule_id="RUFF-F821",
+                file=str(file_path.resolve()),
+                line=1,
+                description="undefined name `missing_name`",
+                severity="HIGH",
+            )
+        ],
+    )
+
+    report = reviewer.scan_project([str(src_dir)], lang="py", review_scope="production", build_context=False)
+
+    assert report["total_issues"] == 1
+    assert report["issues"][0]["rule_id"] == "RUFF-F821"
+
+
+def test_scan_project_runs_ast_on_regex_clean_csharp_file(monkeypatch, tmp_path):
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "Demo.cs"
+    file_path.write_text("public class Demo { }\n", encoding="utf-8")
+
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(reviewer, "CACHE_DIR", str(cache_dir))
+
+    from veilbreakers_mcp import _ast_analyzer as ast_analyzer
+    from veilbreakers_mcp import _tool_runner as tool_runner
+
+    monkeypatch.setattr(
+        tool_runner,
+        "available_tools",
+        lambda: {"ruff": False, "opengrep": False, "mypy": False, "dotnet": False, "ast-grep": False},
+    )
+    monkeypatch.setattr(ast_analyzer, "is_available", lambda: True)
+    monkeypatch.setattr(
+        ast_analyzer,
+        "analyze_csharp",
+        lambda filepath, _src: [
+            ast_analyzer.ASTFinding(
+                rule_id="AST-CS-03",
+                file=filepath,
+                line=1,
+                description="foreach mutation",
+                fix="Iterate over a copy",
+                severity="CRITICAL",
+                confidence=95,
+            )
+        ],
+    )
+    monkeypatch.setattr(ast_analyzer, "analyze_python", lambda _filepath, _src: [])
+
+    report = reviewer.scan_project(
+        [str(src_dir)],
+        lang="cs",
+        review_scope="strict",
+        profile="general",
+        build_context=False,
+    )
+
+    assert report["ast_findings"] == 1
+    assert any(issue["rule_id"] == "AST-CS-03" for issue in report["issues"])
+
+
+def test_production_scan_keeps_hard_ast_findings(monkeypatch, tmp_path):
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "Demo.cs"
+    file_path.write_text("public class Demo { }\n", encoding="utf-8")
+
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(reviewer, "CACHE_DIR", str(cache_dir))
+
+    from veilbreakers_mcp import _ast_analyzer as ast_analyzer
+    from veilbreakers_mcp import _tool_runner as tool_runner
+
+    monkeypatch.setattr(
+        tool_runner,
+        "available_tools",
+        lambda: {"ruff": False, "opengrep": False, "mypy": False, "dotnet": False, "ast-grep": False},
+    )
+    monkeypatch.setattr(ast_analyzer, "is_available", lambda: True)
+    monkeypatch.setattr(
+        ast_analyzer,
+        "analyze_csharp",
+        lambda filepath, _src: [
+            ast_analyzer.ASTFinding(
+                rule_id="AST-CS-04",
+                file=filepath,
+                line=1,
+                description="async void hazard",
+                fix="Use Task instead",
+                severity="HIGH",
+                confidence=88,
+            )
+        ],
+    )
+    monkeypatch.setattr(ast_analyzer, "analyze_python", lambda _filepath, _src: [])
+
+    report = reviewer.scan_project(
+        [str(src_dir)],
+        lang="cs",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+
+    assert report["ast_findings"] == 1
+    assert any(issue["rule_id"] == "AST-CS-04" for issue in report["issues"])
+
+
+def test_general_profile_treats_non_vb_python_files_as_production(tmp_path):
+    src_dir = tmp_path / "arbitrary_app"
+    src_dir.mkdir()
+    file_path = src_dir / "demo.py"
+    file_path.write_text("result = eval(user_input)\n", encoding="utf-8")
+
+    report = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+
+    assert any("PY-SEC-01" in issue["rule_id"] for issue in report["issues"])
+
+
+def test_general_profile_excludes_unity_only_csharp_rules(tmp_path):
+    csharp_path = tmp_path / "Runtime.cs"
+    csharp_path.write_text(
+        "using UnityEditor;\n"
+        "public class Demo { }\n",
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_csharp_file(
+        str(csharp_path), None, review_scope="production", profile="general"
+    )
+
+    assert not any(issue.rule_id == "BUILD-01" for issue in issues)
+
+
+def test_unity_profile_includes_unity_only_csharp_rules(tmp_path):
+    csharp_path = tmp_path / "Runtime.cs"
+    csharp_path.write_text(
+        "using UnityEditor;\n"
+        "public class Demo { }\n",
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_csharp_file(
+        str(csharp_path), None, review_scope="production", profile="unity"
+    )
+
+    assert any(issue.rule_id == "BUILD-01" for issue in issues)
+
+
+def test_blender_profile_retains_blender_python_rules(tmp_path):
+    python_path = tmp_path / "build_mesh.py"
+    python_path.write_text(
+        "def build_mesh(name):\n"
+        "    mesh = bpy.data.meshes.new(name)\n"
+        "    obj = bpy.data.objects.new(name, mesh)\n"
+        "    bpy.context.collection.objects.link(obj)\n"
+        "    return obj\n",
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_python_file(
+        str(python_path), None, review_scope="strict", profile="blender"
+    )
+
+    assert any(issue.rule_id == "BLE-02" for issue in issues)
+
+
+def test_review_ignore_alias_suppresses_python_rule(tmp_path):
+    file_path = tmp_path / "demo.py"
+    file_path.write_text(
+        "# REVIEW-IGNORE: PY-SEC-01\n"
+        "result = eval(user_input)\n",
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_python_file(str(file_path), None, review_scope="production")
+
+    assert not any(issue.rule_id == "PY-SEC-01" for issue in issues)
+
+
+def test_review_ignore_alias_suppresses_csharp_rule(tmp_path):
+    file_path = tmp_path / "demo.cs"
+    file_path.write_text(
+        "using UnityEditor; // REVIEW-IGNORE\n"
+        "public class Demo { }\n",
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_csharp_file(
+        str(file_path), None, review_scope="production", profile="unity"
+    )
+
+    assert not any(issue.rule_id == "BUILD-01" for issue in issues)
+
+
+def test_framework_category_name_replaces_unity_name():
+    assert Category.Framework.name == "Framework"
+
+
+def test_display_path_uses_scan_root_relative_path(tmp_path):
+    root = tmp_path / "repo"
+    target = root / "src" / "module" / "demo.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("pass\n", encoding="utf-8")
+
+    display = reviewer._display_path(str(target), [str(root)])
+
+    assert display == "src/module/demo.py"
+
+
+def test_parse_unified_diff_extracts_added_line_ranges(tmp_path):
+    diff_text = (
+        "diff --git a/src/demo.py b/src/demo.py\n"
+        "--- a/src/demo.py\n"
+        "+++ b/src/demo.py\n"
+        "@@ -1,1 +4,2 @@\n"
+        "+result = eval(user_input)\n"
+        "+print(result)\n"
+    )
+
+    changed = reviewer._parse_unified_diff(diff_text, base_dir=str(tmp_path))
+
+    expected = str((tmp_path / "src" / "demo.py").resolve()).replace("\\", "/")
+    assert changed == {expected: [(4, 5)]}
+
+
+def test_changed_ranges_filter_out_unchanged_findings(tmp_path):
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "demo.py"
+    file_path.write_text(
+        "result = eval(user_input)\n"
+        "print('safe')\n"
+        "exec(code_string)\n",
+        encoding="utf-8",
+    )
+
+    changed = {str(file_path.resolve()).replace("\\", "/"): [(1, 1)]}
+    report = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        changed_ranges=changed,
+        build_context=False,
+    )
+
+    assert report["total_issues"] == 1
+    assert "PY-SEC-01" in report["issues"][0]["rule_id"]
+
+
+def test_embedded_csharp_template_is_classified_as_csharp():
+    lines = [
+        'script = f"""',
+        "using UnityEngine;",
+        "public class Demo { void Run() { } }",
+        '"""',
+    ]
+
+    classified = reviewer._classify_embedded_language(lines)
+
+    assert classified == ["csharp", "csharp", "csharp", "csharp"]
+
+
+def test_embedded_csharp_template_does_not_trigger_python_rules(tmp_path):
+    file_path = tmp_path / "template.py"
+    file_path.write_text(
+        'script = f"""\n'
+        "using System;\n"
+        "public class Demo { void Run() { eval(code); } }\n"
+        '"""\n',
+        encoding="utf-8",
+    )
+
+    issues = reviewer.scan_python_file(
+        str(file_path), None, review_scope="production", profile="general"
+    )
+
+    assert not issues
+
+
+def test_scan_stdin_content_python():
+    report = reviewer._scan_stdin_content(
+        "result = eval(user_input)\n",
+        lang="py",
+        review_scope="production",
+        profile="general",
+    )
+
+    assert report["total_issues"] == 1
+    assert report["issues"][0]["file"] == "<stdin>"
+    assert "PY-SEC-01" in report["issues"][0]["rule_id"]
+
+
+def test_scan_stdin_content_csharp():
+    report = reviewer._scan_stdin_content(
+        "using System.Threading.Tasks;\n"
+        "public class Bad {\n"
+        "    public void Run(Task<int> work) {\n"
+        "        var value = work.Result;\n"
+        "    }\n"
+        "}\n",
+        lang="cs",
+        review_scope="production",
+        profile="general",
+    )
+
+    assert any("CS-COR-06" in issue["rule_id"] for issue in report["issues"])
+
+
+def test_fix_report_generates_eval_patch_with_import(tmp_path):
+    file_path = tmp_path / "demo.py"
+    file_path.write_text("result = eval(user_input)\n", encoding="utf-8")
+
+    report = reviewer.scan_project(
+        [str(file_path)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+    fix_report = reviewer._build_fix_report(report["issues"], profile="general")
+
+    assert fix_report["total_patches"] == 1
+    diff_text = fix_report["patches"][0]["diff"]
+    assert "+import ast" in diff_text
+    assert "+result = ast.literal_eval(user_input)" in diff_text
+
+
+def test_fix_apply_rewrites_file_and_creates_backup(tmp_path):
+    file_path = tmp_path / "demo.py"
+    file_path.write_text("value = thing == None\n", encoding="utf-8")
+
+    report = reviewer.scan_project(
+        [str(file_path)],
+        lang="py",
+        review_scope="advisory",
+        profile="general",
+        build_context=False,
+    )
+    fix_report = reviewer._build_fix_report(
+        report["issues"], profile="general", apply=True
+    )
+
+    assert fix_report["total_patches"] == 1
+    assert file_path.read_text(encoding="utf-8") == "value = thing is None\n"
+    backup_path = file_path.with_name("demo.py.bak")
+    assert backup_path.exists()
+    assert backup_path.read_text(encoding="utf-8") == "value = thing == None\n"
+
+
+def test_fix_report_handles_mutable_default_argument(tmp_path):
+    file_path = tmp_path / "demo.py"
+    file_path.write_text(
+        "def build(items=[]):\n"
+        "    items.append(1)\n"
+        "    return items\n",
+        encoding="utf-8",
+    )
+
+    report = reviewer.scan_project(
+        [str(file_path)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+    fix_report = reviewer._build_fix_report(report["issues"], profile="general")
+
+    assert fix_report["total_patches"] == 1
+    diff_text = fix_report["patches"][0]["diff"]
+    assert "+def build(items=None):" in diff_text
+    assert "+    if items is None:" in diff_text
+    assert "+        items = []" in diff_text
+
+
+def test_scan_project_persists_and_reuses_issue_cache(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(reviewer, "CACHE_DIR", str(cache_dir))
+
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "demo.py"
+    file_path.write_text("result = eval(user_input)\n", encoding="utf-8")
+
+    first = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+    cache_file = cache_dir / "reviewer_cache.json"
+
+    assert first["total_issues"] == 1
+    assert cache_file.exists()
+
+    second = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+
+    assert second["total_issues"] == 1
+    assert "PY-SEC-01" in second["issues"][0]["rule_id"]
+
+
+def test_fix_report_rewrites_csharp_where_count(tmp_path):
+    file_path = tmp_path / "Bad.cs"
+    file_path.write_text(
+        "using System.Linq;\n"
+        "public class Bad {\n"
+        "    public int Run(int[] values) { return values.Where(v => v > 0).Count(); }\n"
+        "}\n",
+        encoding="utf-8",
+    )
+
+    report = reviewer.scan_project(
+        [str(file_path)],
+        lang="cs",
+        review_scope="strict",
+        profile="general",
+        build_context=False,
+    )
+    fix_report = reviewer._build_fix_report(report["issues"], profile="general")
+
+    assert fix_report["total_patches"] == 1
+    assert ".Count(v => v > 0)" in fix_report["patches"][0]["diff"]
+
+
+def test_cache_keeps_production_and_strict_runs_isolated(monkeypatch, tmp_path):
+    cache_dir = tmp_path / "cache"
+    monkeypatch.setattr(reviewer, "CACHE_DIR", str(cache_dir))
+
+    src_dir = tmp_path / "src"
+    src_dir.mkdir()
+    file_path = src_dir / "demo.py"
+    file_path.write_text(
+        "import logging\n"
+        "logger = logging.getLogger(__name__)\n"
+        "value = 1\n"
+        "logger.error(f'value={value}')\n",
+        encoding="utf-8",
+    )
+
+    production = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="production",
+        profile="general",
+        build_context=False,
+    )
+    strict = reviewer.scan_project(
+        [str(src_dir)],
+        lang="py",
+        review_scope="strict",
+        profile="general",
+        build_context=False,
+    )
+
+    assert production["total_issues"] == 0
+    assert any(issue["rule_id"] == "PY-PERF-04" for issue in strict["issues"])

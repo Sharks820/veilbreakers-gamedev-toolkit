@@ -5,6 +5,7 @@ import math
 import os
 import re
 import threading
+from pathlib import Path
 from collections import deque
 from typing import Literal, Any
 
@@ -131,6 +132,8 @@ async def _with_screenshot(
                 except Exception as frame_err:
                     logger.debug("Auto-frame failed for %s: %s", object_name, frame_err)
             screenshot_bytes = await blender.capture_viewport_bytes()
+            # Reduce screenshot payload to prevent 20MB API limit hits
+            screenshot_bytes = resize_screenshot(screenshot_bytes, max_size=512)
             parts.append(Image(data=screenshot_bytes, format="png"))
         except (OSError, IOError, BlenderCommandError, ConnectionError) as e:
             parts.append(f"[Screenshot capture failed: {e}]")
@@ -169,7 +172,11 @@ def _estimate_location_radius(location: dict) -> float:
     return 14.0
 
 
-def _normalize_map_point(position: list[float] | tuple[float, ...], terrain_size: float) -> tuple[float, float]:
+def _normalize_map_point(
+    position: list[float] | tuple[float, ...],
+    terrain_size: float,
+    terrain_location: tuple[float, float] | None = None,
+) -> tuple[float, float]:
     """Normalize user map positions into centered Blender-world coordinates."""
     if len(position) < 2:
         raise ValueError("Map position must contain at least two coordinates.")
@@ -177,6 +184,7 @@ def _normalize_map_point(position: list[float] | tuple[float, ...], terrain_size
     x = float(position[0])
     y = float(position[1])
     half = terrain_size / 2.0
+    origin_x, origin_y = terrain_location or (0.0, 0.0)
 
     # Heuristic: shift from 0..size space to centered (-half..+half) space.
     # We only shift when BOTH coords are in [0, size] AND at least one exceeds
@@ -184,7 +192,7 @@ def _normalize_map_point(position: list[float] | tuple[float, ...], terrain_size
     # already in centered space (e.g. (60,60) on size=100 should stay put).
     threshold = terrain_size * 0.6
     if 0.0 <= x <= terrain_size and 0.0 <= y <= terrain_size and (x > threshold or y > threshold):
-        return (x - half, y - half)
+        return (x - half + origin_x, y - half + origin_y)
     return (x, y)
 
 
@@ -193,9 +201,14 @@ def _map_point_to_terrain_cell(
     *,
     terrain_size: float,
     resolution: int,
+    terrain_location: tuple[float, float] | None = None,
 ) -> tuple[int, int]:
     """Convert a world-space map point into a terrain heightmap cell."""
-    x, y = _normalize_map_point(position, terrain_size)
+    x, y = float(position[0]), float(position[1])
+    if terrain_location is not None:
+        x -= terrain_location[0]
+        y -= terrain_location[1]
+    x, y = _normalize_map_point((x, y), terrain_size)
     half = terrain_size / 2.0
     side = max(2, int(resolution))
     row = int(round(((y + half) / max(terrain_size, 1e-6)) * (side - 1)))
@@ -209,6 +222,8 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
     """Assign non-overlapping terrain anchors to compose_map locations."""
     terrain_cfg = map_spec.get("terrain", {})
     terrain_size = float(terrain_cfg.get("size", 200.0))
+    terrain_location = tuple(terrain_cfg.get("location", (0.0, 0.0)))[:2]
+    terrain_origin_x, terrain_origin_y = terrain_location
     half = terrain_size / 2.0
     locations = list(map_spec.get("locations", []))
     placements: list[dict] = []
@@ -231,10 +246,10 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
         for i in range(count):
             angle = (2.0 * math.pi * i / count) + (ring_idx * 0.31)
             candidate_points.append((
-                round(math.cos(angle) * radius_x, 3),
-                round(math.sin(angle) * radius_y, 3),
+                round(math.cos(angle) * radius_x + terrain_origin_x, 3),
+                round(math.sin(angle) * radius_y + terrain_origin_y, 3),
             ))
-    candidate_points.append((0.0, 0.0))
+    candidate_points.append((terrain_origin_x, terrain_origin_y))
 
     for index, location in enumerate(locations):
         radius = _estimate_location_radius(location)
@@ -242,7 +257,13 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
         anchor: tuple[float, float] | None = None
 
         if isinstance(requested, (list, tuple)) and len(requested) >= 2:
-            anchor = _normalize_map_point(requested, terrain_size)
+            if terrain_cfg.get("location") is not None:
+                # Explicit world-space anchor. The clamp block below still
+                # runs — it uses world-space bounds when terrain_cfg.location
+                # is set — so the caller cannot escape the terrain footprint.
+                anchor = (float(requested[0]), float(requested[1]))
+            else:
+                anchor = _normalize_map_point(requested, terrain_size)
 
         if anchor is None:
             for candidate in candidate_points:
@@ -276,9 +297,20 @@ def _plan_map_location_anchors(map_spec: dict) -> list[dict]:
                 0.0,
             )
 
+        if terrain_cfg.get("location") is not None:
+            min_x = terrain_origin_x - half + radius
+            max_x = terrain_origin_x + half - radius
+            min_y = terrain_origin_y - half + radius
+            max_y = terrain_origin_y + half - radius
+        else:
+            min_x = -half + radius
+            max_x = half - radius
+            min_y = -half + radius
+            max_y = half - radius
+
         clamped = (
-            max(-half + radius, min(half - radius, anchor[0])),
-            max(-half + radius, min(half - radius, anchor[1])),
+            max(min_x, min(max_x, anchor[0])),
+            max(min_y, min(max_y, anchor[1])),
         )
         placements.append({
             "name": location.get("name", f"Location_{index}"),
@@ -424,6 +456,13 @@ def _build_location_generation_params(
         params["floors"] = location.get("floors", 2)
     elif loc_type == "boss_arena":
         params["arena_type"] = location.get("arena_type", "circular")
+    elif loc_type == "settlement":
+        params["settlement_type"] = location.get("settlement_type", "town")
+        params["radius"] = location.get("radius", 50.0)
+        if "center" in location:
+            params["center"] = location["center"]
+        if "building_count" in location:
+            params["building_count_override"] = location["building_count"]
     elif loc_type == "building":
         params["building_size"] = location.get("building_size", "medium")
         params["width"] = location.get("width", 12)
@@ -793,6 +832,7 @@ async def _enforce_world_quality(
                     if isinstance(smart_code_result, dict):
                         code_str = smart_code_result.get("code", "")
                         if code_str:
+                            validate_code(code_str)
                             await blender.send_command("execute_code", {"code": code_str})
             except (OSError, ConnectionError, TimeoutError, ValueError, RuntimeError, BlenderCommandError):
                 pass
@@ -926,6 +966,44 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
     if not rooms:
         return {"rooms": [], "doors": [], "building_bounds": {"min": (0.0, 0.0), "max": (0.0, 0.0)}}
 
+    # SAFE-03: Check if rooms already have pre-computed bounds from building_interior_binding
+    all_have_bounds = all(
+        room.get("bounds") and room.get("position")
+        for room in rooms
+    )
+    if all_have_bounds:
+        placed_rooms = []
+        for room in rooms:
+            bounds = room["bounds"]
+            placed_rooms.append({
+                "name": room.get("name", f"room_{len(placed_rooms)}"),
+                "type": room.get("type", "generic"),
+                "width": float(room.get("width", 6.0)),
+                "depth": float(room.get("depth", 6.0)),
+                "height": float(room.get("height", 3.5)),
+                "bounds": bounds,
+            })
+        all_mins = [r["bounds"]["min"] for r in placed_rooms]
+        all_maxs = [r["bounds"]["max"] for r in placed_rooms]
+        bldg_min = (min(m[0] for m in all_mins), min(m[1] for m in all_mins))
+        bldg_max = (max(m[0] for m in all_maxs), max(m[1] for m in all_maxs))
+        # Process doors for pre-computed path
+        door_defs: list[dict] = []
+        room_by_name = {r["name"]: r for r in placed_rooms}
+        for door in doors:
+            if isinstance(door.get("position"), (list, tuple)) and len(door["position"]) >= 2:
+                explicit = door["position"]
+                z = float(explicit[2]) if len(explicit) > 2 else 0.0
+                door_defs.append({"position": (float(explicit[0]), float(explicit[1]), z), "facing": door.get("facing", "south")})
+            else:
+                src = door.get("from")
+                dst = door.get("to")
+                if src in room_by_name:
+                    door_defs.append(_derive_room_door_position(room_by_name[src], room_by_name.get(dst), door.get("facing")))
+        if not door_defs and placed_rooms:
+            door_defs.append(_derive_room_door_position(placed_rooms[0], None, "south"))
+        return {"rooms": placed_rooms, "doors": door_defs, "building_bounds": {"min": bldg_min, "max": bldg_max}}
+
     room_lookup = {room.get("name", f"room_{index}"): room for index, room in enumerate(rooms)}
     placed: dict[str, dict] = {}
     adjacency: dict[str, list[tuple[str, dict]]] = {name: [] for name in room_lookup}
@@ -942,13 +1020,15 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
     first_width = float(first_room.get("width", 6.0))
     first_depth = float(first_room.get("depth", 6.0))
     first_height = float(first_room.get("height", 3.5))
+    first_floor = float(first_room.get("floor", 0))  # SAFE-04: floor-aware Z
+    first_floor_z = first_floor * first_height
     placed[first_name] = {
         "name": first_name,
         "type": first_room.get("type", "generic"),
         "width": first_width,
         "depth": first_depth,
         "height": first_height,
-        "bounds": {"min": (0.0, 0.0, 0.0), "max": (first_width, first_depth, first_height)},
+        "bounds": {"min": (0.0, 0.0, round(first_floor_z, 3)), "max": (first_width, first_depth, round(first_floor_z + first_height, 3))},
     }
 
     used_sides: dict[str, list[str]] = {first_name: []}
@@ -961,6 +1041,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
         width = float(target.get("width", 6.0))
         depth = float(target.get("depth", 6.0))
         height = float(target.get("height", 3.5))
+        floor = float(target.get("floor", 0))  # SAFE-04: floor-aware Z
+        floor_z = floor * height
         a_min = anchor["bounds"]["min"]
         a_max = anchor["bounds"]["max"]
 
@@ -984,8 +1066,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
             "depth": depth,
             "height": height,
             "bounds": {
-                "min": (round(min_x, 3), round(min_y, 3), 0.0),
-                "max": (round(min_x + width, 3), round(min_y + depth, 3), round(height, 3)),
+                "min": (round(min_x, 3), round(min_y, 3), round(floor_z, 3)),
+                "max": (round(min_x + width, 3), round(min_y + depth, 3), round(floor_z + height, 3)),
             },
         }
 
@@ -1012,6 +1094,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
                 width = current_bounds["width"]
                 depth = current_bounds["depth"]
                 height = current_bounds["height"]
+                _fb_floor = float(room_lookup[neighbor].get("floor", 0))  # SAFE-04
+                _fb_floor_z = _fb_floor * height
                 chosen = (
                     "east",
                     {
@@ -1021,8 +1105,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
                         "depth": depth,
                         "height": height,
                         "bounds": {
-                            "min": (round(max_x + 1.5, 3), current_bounds["bounds"]["min"][1], 0.0),
-                            "max": (round(max_x + 1.5 + width, 3), current_bounds["bounds"]["min"][1] + depth, round(height, 3)),
+                            "min": (round(max_x + 1.5, 3), current_bounds["bounds"]["min"][1], round(_fb_floor_z, 3)),
+                            "max": (round(max_x + 1.5 + width, 3), current_bounds["bounds"]["min"][1] + depth, round(_fb_floor_z + height, 3)),
                         },
                     },
                 )
@@ -1041,6 +1125,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
         width = float(room.get("width", 6.0))
         depth = float(room.get("depth", 6.0))
         height = float(room.get("height", 3.5))
+        _dc_floor = float(room.get("floor", 0))  # SAFE-04: floor-aware Z
+        _dc_floor_z = _dc_floor * height
         max_x = max(existing["bounds"]["max"][0] for existing in placed.values())
         min_y = min(existing["bounds"]["min"][1] for existing in placed.values())
         y_offset = min_y + index * (depth + 1.0)
@@ -1051,8 +1137,8 @@ def _plan_interior_rooms(interior_spec: dict) -> dict:
             "depth": depth,
             "height": height,
             "bounds": {
-                "min": (round(max_x + 2.0, 3), round(y_offset, 3), 0.0),
-                "max": (round(max_x + 2.0 + width, 3), round(y_offset + depth, 3), round(height, 3)),
+                "min": (round(max_x + 2.0, 3), round(y_offset, 3), round(_dc_floor_z, 3)),
+                "max": (round(max_x + 2.0 + width, 3), round(y_offset + depth, 3), round(_dc_floor_z + height, 3)),
             },
         }
 
@@ -1109,9 +1195,11 @@ async def _sample_terrain_height(
     y: float,
 ) -> float:
     """Sample a terrain height in Blender via a safe raycast script."""
+    x, y = float(x), float(y)
+    if math.isnan(x) or math.isnan(y) or math.isinf(x) or math.isinf(y):
+        return 0.0
     # Validate terrain_name to prevent code injection
-    import re as _re
-    if not _re.match(r'^[A-Za-z0-9_\-. ]+$', terrain_name):
+    if not re.match(r'^[A-Za-z0-9_\-. ]+$', terrain_name):
         logger.warning("Invalid terrain_name rejected: %s", terrain_name)
         return 0.0
 
@@ -1164,10 +1252,17 @@ async def _position_generated_object(
 
 @mcp.tool()
 async def blender_scene(
-    action: Literal["inspect", "clear", "configure", "list_objects"],
+    action: Literal["inspect", "clear", "configure", "list_objects", "save_project", "verify_project_save"],
     render_engine: str | None = None,
     fps: int | None = None,
-    unit_scale: float | None = None
+    unit_scale: float | None = None,
+    filepath: str | None = None,
+    incremental: bool = False,
+    copy: bool = False,
+    compress: bool = True,
+    verify: bool = True,
+    compute_hash: bool = False,
+    expect_current_file: bool = False,
 ):
     """Manage Blender scene state."""
     blender = get_blender_connection()
@@ -1190,6 +1285,27 @@ async def blender_scene(
     elif action == "list_objects":
         result = await blender.send_command("list_objects")
         return json.dumps(result, indent=2, default=str)
+    elif action == "save_project":
+        params = {
+            "incremental": incremental,
+            "copy": copy,
+            "compress": compress,
+            "verify": verify,
+            "compute_hash": compute_hash,
+        }
+        if filepath is not None:
+            params["filepath"] = filepath
+        result = await blender.send_command("save_project", params)
+        return json.dumps(result, indent=2, default=str)
+    elif action == "verify_project_save":
+        params = {
+            "compute_hash": compute_hash,
+            "expect_current_file": expect_current_file,
+        }
+        if filepath is not None:
+            params["filepath"] = filepath
+        result = await blender.send_command("verify_project_save", params)
+        return json.dumps(result, indent=2, default=str)
     return "Unknown action"
 
 
@@ -1207,6 +1323,7 @@ async def blender_object(
     blender = get_blender_connection()
 
     if action == "list":
+        # Alias for blender_scene list_objects — kept for convenience
         result = await blender.send_command("list_objects")
         return json.dumps(result, indent=2, default=str)
 
@@ -2273,23 +2390,23 @@ async def asset_pipeline(
         }
         if _vb3d and asset_type and asset_type in _asset_dirs:
             resolved_dir = str(
-                __import__("pathlib").Path(_vb3d) / _asset_dirs[asset_type]
+                Path(_vb3d) / _asset_dirs[asset_type]
             )
             # Use name subfolder if provided
             if name:
                 resolved_dir = str(
-                    __import__("pathlib").Path(resolved_dir) / name
+                    Path(resolved_dir) / name
                 )
             output_dir = resolved_dir
         elif output_dir == "." and _vb3d:
             # Fallback: use a known location inside the Unity project
             # so models don't get lost in the MCP server's CWD
             output_dir = str(
-                __import__("pathlib").Path(_vb3d) / "Assets/Art/3D_Models/Tripo_Downloads"
+                Path(_vb3d) / "Assets/Art/3D_Models/Tripo_Downloads"
             )
             if name:
                 output_dir = str(
-                    __import__("pathlib").Path(output_dir) / name
+                    Path(output_dir) / name
                 )
         elif output_dir == ".":
             # Last resort: use temp dir with timestamp so models are findable
@@ -2297,7 +2414,7 @@ async def asset_pipeline(
             import time
             ts = time.strftime("%Y%m%d_%H%M%S")
             output_dir = str(
-                __import__("pathlib").Path(tempfile.gettempdir()) / f"tripo_models_{ts}"
+                Path(tempfile.gettempdir()) / f"tripo_models_{ts}"
             )
 
         # Prefer studio (uses subscription credits), fall back to API key
@@ -2307,7 +2424,7 @@ async def asset_pipeline(
 
         # STY-001: enforce dark fantasy style on all AI-generated assets
         _df_prefix = "dark fantasy medieval weathered Gothic, "
-        if not prompt.startswith(_df_prefix):
+        if prompt and not prompt.startswith(_df_prefix):
             prompt = _df_prefix + prompt
 
         if studio_cookie or studio_token:
@@ -2339,7 +2456,7 @@ async def asset_pipeline(
 
                         # Post-process GLB: extract textures, delight, validate, score
                         glb_out_dir = str(
-                            __import__("pathlib").Path(m["path"]).parent
+                            Path(m["path"]).parent
                             / f"variant_{i+1}_textures"
                         )
                         try:
@@ -2408,7 +2525,7 @@ async def asset_pipeline(
                 model_path = result.get("model_path") or result.get("pbr_model_path")
                 if model_path and result.get("status") == "success":
                     glb_out_dir = str(
-                        __import__("pathlib").Path(model_path).parent / "textures"
+                        Path(model_path).parent / "textures"
                     )
                     try:
                         post_result = await post_process_tripo_model(
@@ -2536,9 +2653,9 @@ async def asset_pipeline(
         # Set output dir for buildings
         _vb3d = settings.unity_project_path
         if _vb3d:
-            output_dir = str(__import__("pathlib").Path(_vb3d) / "Assets/Art/3D_Models/Buildings")
+            output_dir = str(Path(_vb3d) / "Assets/Art/3D_Models/Buildings")
             if name:
-                output_dir = str(__import__("pathlib").Path(output_dir) / name)
+                output_dir = str(Path(output_dir) / name)
 
         if studio_cookie or studio_token:
             from veilbreakers_mcp.shared.tripo_studio_client import TripoStudioClient
@@ -2647,9 +2764,10 @@ async def asset_pipeline(
 
         # Route to generate_3d with the prop prompt
         if studio_cookie or studio_token:
+            from veilbreakers_mcp.shared.tripo_studio_client import TripoStudioClient
             gen = TripoStudioClient(
                 session_cookie=studio_cookie or None,
-                jwt_token=studio_token or None,
+                session_token=studio_token or None,
             )
             try:
                 if image_path:
@@ -2766,6 +2884,7 @@ async def asset_pipeline(
         interior_results: list[dict] = []
         terrain_cfg = spec.get("terrain", {})
         terrain_size = float(terrain_cfg.get("size", 200.0))
+        terrain_location = tuple(terrain_cfg.get("location", (0.0, 0.0)))[:2]
         terrain_resolution = min(
             int(terrain_cfg.get("resolution", 256)),
             int(budget["terrain_resolution_cap"]),
@@ -2774,11 +2893,18 @@ async def asset_pipeline(
         # --- Checkpoint resume logic (Phase 37) ---
         _CHKPT_LOADED = False
         if checkpoint_dir:
-            from blender_addon.handlers.pipeline_state import (
-                load_pipeline_checkpoint as _load_chkpt,
-                validate_checkpoint_compatibility as _validate_chkpt,
-                delete_pipeline_checkpoint as _delete_chkpt,
-            )
+            try:
+                from blender_addon.handlers.pipeline_state import (
+                    load_pipeline_checkpoint as _load_chkpt,
+                    validate_checkpoint_compatibility as _validate_chkpt,
+                    delete_pipeline_checkpoint as _delete_chkpt,
+                )
+            except ImportError as _ps_err:
+                return json.dumps({
+                    "status": "error",
+                    "error": f"pipeline_state unavailable in MCP server process (bpy not installed): {_ps_err}",
+                    "hint": "Checkpoint/resume requires the Blender addon environment.",
+                })
             if force_restart:
                 _delete_chkpt(checkpoint_dir, map_name)
             elif resume:
@@ -2801,9 +2927,12 @@ async def asset_pipeline(
             """Persist current pipeline state to checkpoint file."""
             if not checkpoint_dir:
                 return
-            from blender_addon.handlers.pipeline_state import (
-                save_pipeline_checkpoint as _save_cp,
-            )
+            try:
+                from blender_addon.handlers.pipeline_state import (
+                    save_pipeline_checkpoint as _save_cp,
+                )
+            except ImportError:
+                return
             _save_cp(checkpoint_dir, {
                 "map_name": map_name,
                 "seed": map_seed,
@@ -2857,11 +2986,13 @@ async def asset_pipeline(
                         river.get("source", [10, 10]),
                         terrain_size=terrain_size,
                         resolution=terrain_resolution,
+                        terrain_location=terrain_location,
                     )
                     destination = _map_point_to_terrain_cell(
                         river.get("destination", [190, 190]),
                         terrain_size=terrain_size,
                         resolution=terrain_resolution,
+                        terrain_location=terrain_location,
                     )
                     await blender.send_command("env_carve_river", {
                         "terrain_name": terrain_name,
@@ -2901,6 +3032,7 @@ async def asset_pipeline(
                         waypoint,
                         terrain_size=terrain_size,
                         resolution=terrain_resolution,
+                        terrain_location=terrain_location,
                     ))
                     for waypoint in road.get("waypoints", [])
                     if isinstance(waypoint, (list, tuple)) and len(waypoint) >= 2
@@ -2929,7 +3061,7 @@ async def asset_pipeline(
             "ruins": "world_generate_ruins",
             "building": "world_generate_building",
             "boss_arena": "world_generate_boss_arena",
-            "settlement": "world_generate_town",
+            "settlement": "world_generate_settlement",
             "hearthvale": "world_generate_hearthvale",
             "interior": "world_generate_building",
         }
@@ -3146,7 +3278,8 @@ async def asset_pipeline(
 
         # --- Step 9: Generate interiors for key buildings ---
         if "interiors_generated" not in steps_completed:
-            interior_results = []  # BUG-CHKPT-01: moved inside guard to preserve checkpoint data on resume
+            if not interior_results:  # SAFE-02: Only reset if empty (not loaded from checkpoint)
+                interior_results = []
             for loc in spec.get("locations", []):
                 if loc.get("interiors"):
                     for room_spec in loc["interiors"]:
@@ -3193,6 +3326,140 @@ async def asset_pipeline(
             except Exception as e:
                 steps_failed.append({"step": "heightmap_export", "error": str(e)})
 
+        # --- Step 11: Game-readiness validation (EXPORT-04) ---
+        _non_terrain = [n for n in created_objects if "terrain" not in n.lower()]
+        _gc_failures: list[dict] = []
+        if _non_terrain and "game_check_validated" not in steps_completed:
+            try:
+                for _obj_name in _non_terrain:
+                    try:
+                        _gc = await blender.send_command("mesh_check_game_ready", {
+                            "object_name": _obj_name,
+                        })
+                        if isinstance(_gc, dict) and not _gc.get("game_ready", False):
+                            _gc_failures.append({
+                                "object": _obj_name,
+                                "issues": _gc.get("summary", "Unknown"),
+                            })
+                    except Exception:
+                        pass  # Skip objects that can't be checked
+                steps_completed.append("game_check_validated")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "game_check_validation", "error": str(e)})
+
+        # --- Step 12: Bake procedural textures to images (EXPORT-02) ---
+        if _non_terrain and "textures_baked" not in steps_completed:
+            try:
+                for _obj_name in _non_terrain:
+                    try:
+                        await blender.send_command("texture_bake_procedural_to_images", {
+                            "object_name": _obj_name,
+                            "channels": ["diffuse", "normal", "ao"],
+                            "resolution": 1024,
+                        })
+                    except Exception:
+                        pass  # Bake failures are non-fatal
+                steps_completed.append("textures_baked")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "texture_bake", "error": str(e)})
+
+        # --- Step 13: Generate LOD chains (EXPORT-03) ---
+        if _non_terrain and "lods_generated" not in steps_completed:
+            try:
+                for _obj_name in _non_terrain:
+                    try:
+                        await blender.send_command("asset_pipeline", {
+                            "action": "generate_lods",
+                            "object_name": _obj_name,
+                        })
+                    except Exception:
+                        pass  # LOD failures are non-fatal
+                steps_completed.append("lods_generated")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "lod_generation", "error": str(e)})
+
+        # --- Step 14: Generate collision meshes (EXPORT-05) ---
+        _structure_objects = [n for n in _non_terrain if any(
+            kw in n.lower() for kw in ("building", "wall", "gate", "tower", "castle", "bridge", "house", "tavern", "chapel", "keep")
+        )]
+        if _structure_objects and "collisions_generated" not in steps_completed:
+            try:
+                await blender.send_command("generate_collision_meshes", {
+                    "object_names": _structure_objects,
+                    "max_faces": 128,
+                })
+                steps_completed.append("collisions_generated")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "collision_generation", "error": str(e)})
+
+        # --- Step 15: Export vegetation instances + splatmap (EXPORT-06, EXPORT-07) ---
+        if "data_exported" not in steps_completed:
+            import tempfile as _tf15
+            _data_dir = checkpoint_dir or os.path.join(_tf15.gettempdir(), "veilbreakers_exports")
+            os.makedirs(_data_dir, exist_ok=True)
+            try:
+                if "vegetation_scattered" in steps_completed:
+                    try:
+                        _veg_path = os.path.join(_data_dir, f"{map_name}_vegetation_instances.json")
+                        await blender.send_command("serialize_vegetation", {
+                            "output_path": _veg_path,
+                            "terrain_name": terrain_name or f"{map_name}_Terrain",
+                        })
+                    except Exception:
+                        pass  # Non-fatal if vegetation collection empty
+
+                if terrain_name:
+                    try:
+                        _splat_path = os.path.join(_data_dir, f"{map_name}_splatmap.png")
+                        await blender.send_command("export_splatmap", {
+                            "terrain_name": terrain_name,
+                            "output_path": _splat_path,
+                            "target_resolution": 512,
+                        })
+                    except Exception:
+                        pass  # Non-fatal if terrain has no splatmap layer
+
+                steps_completed.append("data_exported")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "data_export", "error": str(e)})
+
+        # --- Step 16: Export per-group FBX files (EXPORT-01) ---
+        _fbx_files: list[str] = []
+        if created_objects and "fbx_exported" not in steps_completed:
+            import tempfile as _tf16
+            _export_dir = checkpoint_dir or os.path.join(_tf16.gettempdir(), "veilbreakers_exports")
+            os.makedirs(_export_dir, exist_ok=True)
+            try:
+                from blender_addon.handlers.pipeline_state import derive_addressable_groups as _dag
+                _terrain_objs = [n for n in created_objects if "terrain" in n.lower()]
+                _groups = _dag(
+                    map_name, location_results,
+                    terrain_objects=_terrain_objs,
+                    interior_results=interior_results,
+                )
+                for _grp in _groups:
+                    _grp_objects = _grp.get("objects", [])
+                    if not _grp_objects:
+                        continue
+                    _fbx_path = os.path.join(_export_dir, f"{_grp['group_name']}.fbx")
+                    try:
+                        await blender.send_command("export_fbx", {
+                            "filepath": _fbx_path,
+                            "object_names": _grp_objects,
+                        })
+                        _fbx_files.append(_fbx_path)
+                    except Exception:
+                        pass
+                steps_completed.append("fbx_exported")
+                _save_chkpt()
+            except Exception as e:
+                steps_failed.append({"step": "fbx_export", "error": str(e)})
+
         # --- Build result ---
         quality_report = await _enforce_world_quality(
             blender,
@@ -3211,6 +3478,8 @@ async def asset_pipeline(
             "budget_applied": budget,
             "quality_report": quality_report,
             "heightmap_export_path": heightmap_export_path,
+            "game_check_failures": _gc_failures,
+            "fbx_exported_files": _fbx_files,
             "resumed_from_checkpoint": _CHKPT_LOADED,
             "checkpoint_dir": checkpoint_dir,
             "next_steps": [
@@ -3218,7 +3487,8 @@ async def asset_pipeline(
                 "Run a hero-pass with Tripo only for standout props or landmark pieces.",
                 "Export only after the quality report has no remaining failures.",
                 f"Import heightmap to Unity: unity_scene action=setup_terrain heightmap_path={heightmap_export_path}" if heightmap_export_path else "Export heightmap manually: blender_environment action=export_heightmap",
-                "Run blender_mesh action=game_check on each building to verify geometry quality.",
+                "FBX files exported to: " + (checkpoint_dir or "temp exports dir") if _fbx_files else "No FBX files exported yet.",
+                "Import FBX files to Unity and run unity_world action=setup_map_streaming",
             ],
         }
         return await _with_screenshot(blender, result, capture_viewport)
@@ -3249,10 +3519,17 @@ async def asset_pipeline(
         _os.makedirs(_mp_export_dir, exist_ok=True)
         _os.makedirs(_os.path.join(_mp_export_dir, _mp_name), exist_ok=True)
 
-        from blender_addon.handlers.pipeline_state import (
-            derive_addressable_groups as _derive_groups,
-            emit_scene_hierarchy as _emit_hierarchy,
-        )
+        try:
+            from blender_addon.handlers.pipeline_state import (
+                derive_addressable_groups as _derive_groups,
+                emit_scene_hierarchy as _emit_hierarchy,
+            )
+        except ImportError as _ps_err:
+            return json.dumps({
+                "status": "error",
+                "error": f"pipeline_state unavailable in MCP server process (bpy not installed): {_ps_err}",
+                "hint": "generate_map_package requires the Blender addon environment.",
+            })
 
         # Step 1: Game-readiness check
         _game_failures = []
@@ -3296,7 +3573,11 @@ async def asset_pipeline(
                     pass
 
         # Step 3: Derive Addressable groups
-        _addr_groups = _derive_groups(_mp_name, _mp_locations)
+        _addr_groups = _derive_groups(
+            _mp_name, _mp_locations,
+            terrain_objects=[n for n in _mp_objects if "terrain" in n.lower() or "Terrain" in n],
+            interior_results=_mpspec.get("interior_results", []),
+        )
 
         # Step 4: Export FBX per group
         _fbx_files = []
@@ -3320,7 +3601,7 @@ async def asset_pipeline(
         # Step 5: Emit scene hierarchy JSON
         _hierarchy_path = _os.path.join(_mp_export_dir, _mp_name, "scene_hierarchy.json")
         try:
-            _hierarchy = _emit_hierarchy(_mp_name, _mp_locations)
+            _hierarchy = _emit_hierarchy(_mp_name, _mp_locations, created_objects=_mp_objects)
             with open(_hierarchy_path, "w", encoding="utf-8") as _fh:
                 json.dump(_hierarchy, _fh, indent=2, default=str)
         except RuntimeError:
@@ -3364,6 +3645,12 @@ async def asset_pipeline(
         # leaking dirs that were never cleaned up.
         _tmp_dir = os.path.join(_tempfile.gettempdir(), "vb_aaa_verify")
         os.makedirs(_tmp_dir, exist_ok=True)
+
+        # Clear stale screenshots from previous runs
+        import glob as _glob
+        for _old_png in _glob.glob(os.path.join(_tmp_dir, "aaa_*.png")):
+            os.remove(_old_png)
+
         _screenshot_paths: list[str] = []
 
         for _yaw, _pitch, _label in _aaa_angles:
@@ -3379,10 +3666,10 @@ async def asset_pipeline(
                     _vp_result = await blender.send_command("viewport_screenshot", {
                         "output_path": _ss_path,
                     })
+                _screenshot_paths.append(_ss_path)
             except Exception:
                 # If Blender command fails, skip this angle (path won't exist)
                 pass
-            _screenshot_paths.append(_ss_path)
 
         # Filter to only paths that actually exist
         _existing = [p for p in _screenshot_paths if os.path.isfile(p)]
@@ -3393,7 +3680,12 @@ async def asset_pipeline(
                 "hint": "Run Blender with the VeilBreakers addon and try again",
             })
 
-        _verify_result = aaa_verify_map(_existing, min_score=min_score)
+        _verify_result = aaa_verify_map(
+            _existing,
+            min_score=min_score,
+            required_angle_count=len(_aaa_angles),
+            angle_labels=[lbl for _, _, lbl in _aaa_angles],
+        )
 
         _baseline_result = None
         if capture_baseline:
@@ -3550,6 +3842,7 @@ async def asset_pipeline(
         room_plan = _plan_interior_rooms(spec)
         planned_rooms = room_plan["rooms"]
         planned_doors = room_plan["doors"]
+        # TODO: add checkpoint support (parity with compose_map)
         steps_completed = []
         steps_failed = []
 
@@ -4005,6 +4298,147 @@ async def asset_pipeline(
         return json.dumps(result, indent=2, default=str)
 
     return "Unknown action"
+
+
+# ---------------------------------------------------------------------------
+# Compound tool: terrain_pipeline (Bundle A-O orchestrator, plan §31)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def terrain_pipeline(
+    action: Literal[
+        "run_pass",
+        "run_pipeline",
+        "list_passes",
+        "list_bundles",
+        "rollback",
+        "list_checkpoints",
+    ],
+    # Core execution params
+    pass_name: str | None = None,
+    pipeline: list[str] | None = None,
+    tile_size: int = 64,
+    cell_size: float = 1.0,
+    seed: int = 0,
+    tile_x: int = 0,
+    tile_y: int = 0,
+    world_origin_x: float = 0.0,
+    world_origin_y: float = 0.0,
+    # Optional scoping + safety
+    region_bounds: dict | list | None = None,
+    region: dict | list | None = None,
+    protected_zones: list[dict] | None = None,
+    scene_read: dict | None = None,
+    checkpoint: bool = False,
+    enforce_protocol: bool = False,
+    out_of_view_ok: bool = True,
+    # Initial heightmap (optional)
+    height: list | None = None,
+    terrain_type: str = "mountains",
+    scale: float = 100.0,
+    erosion_profile: str = "temperate",
+    # Rollback
+    checkpoint_id: str | None = None,
+) -> str:
+    """AAA terrain pipeline orchestrator (Bundle A-O).
+
+    Actions:
+        * ``run_pass`` — Execute a single registered pass against the
+          ``TerrainPassController``. Supply ``pass_name``.
+        * ``run_pipeline`` — Execute an ordered list of passes. If
+          ``pipeline`` is omitted the default Bundle A sequence
+          (macro_world → structural_masks → erosion → validation_minimal)
+          runs.
+        * ``list_passes`` — Enumerate every pass currently registered
+          with the controller (each bundle registers its own).
+        * ``list_bundles`` — Report which Bundle A-O registrars loaded
+          successfully at addon startup.
+        * ``rollback`` — Restore the terrain mask stack to a previously
+          saved checkpoint; supply ``checkpoint_id``.
+        * ``list_checkpoints`` — Enumerate checkpoints currently stored
+          under ``.planning/terrain_checkpoints/``.
+
+    The tool is intentionally thin — it delegates to ``handle_run_terrain_pass``
+    (the ``env_run_terrain_pass`` command handler) which owns intent
+    construction, pass sequencing, and result serialization.
+    """
+    blender = get_blender_connection()
+
+    if action == "list_passes":
+        code = (
+            "from blender_addon.handlers.terrain_pipeline import TerrainPassController\n"
+            "names = sorted(TerrainPassController.PASS_REGISTRY.keys())\n"
+            "names"
+        )
+        result = await blender.send_command("execute_code", {"code": code})
+        return json.dumps({"passes": result}, indent=2, default=str)
+
+    if action == "list_bundles":
+        code = (
+            "from blender_addon.handlers import LOADED_TERRAIN_BUNDLES\n"
+            "list(LOADED_TERRAIN_BUNDLES)"
+        )
+        result = await blender.send_command("execute_code", {"code": code})
+        return json.dumps({"bundles": result}, indent=2, default=str)
+
+    if action == "list_checkpoints":
+        code = (
+            "from blender_addon.handlers.terrain_checkpoints import list_checkpoints\n"
+            "list_checkpoints()"
+        )
+        result = await blender.send_command("execute_code", {"code": code})
+        return json.dumps({"checkpoints": result}, indent=2, default=str)
+
+    if action == "rollback":
+        if not checkpoint_id:
+            return "ERROR: 'checkpoint_id' is required for rollback"
+        code = (
+            "from blender_addon.handlers.terrain_checkpoints import rollback_to\n"
+            f"rollback_to({checkpoint_id!r})"
+        )
+        result = await blender.send_command("execute_code", {"code": code})
+        return json.dumps(result, indent=2, default=str)
+
+    # run_pass / run_pipeline — build the handler params and dispatch via
+    # the already-registered "env_run_terrain_pass" command handler.
+    if action not in ("run_pass", "run_pipeline"):
+        return f"ERROR: unknown action '{action}'"
+
+    params: dict[str, Any] = {
+        "tile_size": int(tile_size),
+        "cell_size": float(cell_size),
+        "seed": int(seed),
+        "tile_x": int(tile_x),
+        "tile_y": int(tile_y),
+        "world_origin_x": float(world_origin_x),
+        "world_origin_y": float(world_origin_y),
+        "terrain_type": terrain_type,
+        "scale": float(scale),
+        "erosion_profile": erosion_profile,
+        "checkpoint": bool(checkpoint),
+        "enforce_protocol": bool(enforce_protocol),
+        "out_of_view_ok": bool(out_of_view_ok),
+    }
+    if region_bounds is not None:
+        params["region_bounds"] = region_bounds
+    if region is not None:
+        params["region"] = region
+    if protected_zones is not None:
+        params["protected_zones"] = protected_zones
+    if scene_read is not None:
+        params["scene_read"] = scene_read
+    if height is not None:
+        params["height"] = height
+
+    if action == "run_pass":
+        if not pass_name:
+            return "ERROR: 'pass_name' is required for run_pass"
+        params["pass_name"] = pass_name
+    else:  # run_pipeline
+        params["pipeline"] = pipeline  # None → default Bundle A sequence
+
+    result = await blender.send_command("env_run_terrain_pass", params)
+    return json.dumps(result, indent=2, default=str)
 
 
 # ---------------------------------------------------------------------------

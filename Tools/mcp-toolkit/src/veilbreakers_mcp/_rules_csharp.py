@@ -70,6 +70,7 @@ class Rule:
     not_inside_pattern: Optional[re.Pattern] = None
     fast_check: Optional[str] = None
     language: Language = Language.CSharp
+    auto_fix: Optional[Callable[..., Any]] = None
 
 
 # =============================================================================
@@ -618,6 +619,7 @@ def _create_rule(
     guard: Optional[Callable] = None,
     layer: str = "hard_correctness",
     flags: int = 0,
+    auto_fix: Optional[Callable[..., Any]] = None,
 ) -> Rule:
     """Helper to create a rule with auto-computed confidence/priority."""
     if confidence < 0:
@@ -660,6 +662,7 @@ def _create_rule(
         scope=scope,
         file_filter=file_filter,
         language=Language.CSharp,
+        auto_fix=auto_fix,
     )
 
 
@@ -677,7 +680,7 @@ RULES.append(
         r"GetComponent\s*<",
         scope="HotPath",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"(Awake|Start|OnEnable)\s*\(",
             r"private\s+\w+\s+_\w+\s*=\s*GetComponent",
             r"/Editor/",
@@ -695,7 +698,7 @@ RULES.append(
         "Cache Camera.main in a field during Start().",
         r"Camera\.main",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"_\w*(cam|camera)\w*\s*=\s*Camera\.main"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"_\w*(cam|camera)\w*\s*=\s*Camera\.main"],
     )
 )
 
@@ -709,7 +712,7 @@ RULES.append(
         "Cache the result in Start() or use a singleton/service locator pattern.",
         r"FindObjectOfType\s*[<(]",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -723,7 +726,7 @@ RULES.append(
         "Pre-allocate collections as fields and Clear() them in Update instead.",
         r"new\s+(List|Dictionary|HashSet|Queue|Stack|LinkedList)\s*<",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\.Clear\s*\(\s*\)"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\.Clear\s*\(\s*\)"],
     )
 )
 
@@ -737,7 +740,7 @@ RULES.append(
         "Use StringBuilder, string.Format, or interpolation cached outside the loop.",
         r'(?:"[^"]*"\s*\+\s*(?:"|\.ToString))|(?:\.ToString\s*\(\s*\)\s*\+\s*")',
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"const\s+string", r"StringBuilder"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"const\s+string", r"StringBuilder"],
     )
 )
 
@@ -751,7 +754,7 @@ RULES.append(
         "Cache the reference in Start() or Awake().",
         r"GameObject\.Find\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -767,7 +770,7 @@ RULES.append(
         scope="HotPath",
         flags=re.DOTALL,
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"var\s+\w+\s*=\s*transform\.(position|rotation)",
         ],
     )
@@ -805,7 +808,7 @@ RULES.append(
         r"=\s*GetComponent\s*<[^>]+>\s*\(\s*\)\s*;",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"if\s*\(\s*\w+\s*[!=]=\s*null",
             r"Debug\.(Log|Assert)",
             r"\?\.",
@@ -830,7 +833,7 @@ RULES.append(
         confidence=55,
         reasoning="'is null' is correct for plain C# objects, strings, interfaces, and generics. Only wrong when used on UnityEngine.Object subclasses where == null checks for destroyed objects.",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"System\.",
             r"struct\s",
             r"string\s",
@@ -853,7 +856,7 @@ RULES.append(
         "Use async Task/UniTask instead; only async void for event handlers.",
         r"async\s+void\s+(?!On[A-Z]|Start|Awake|Handle|Button_|Btn_)\w+\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"ICommand", r"EventHandler"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"ICommand", r"EventHandler"],
     )
 )
 
@@ -868,7 +871,7 @@ RULES.append(
         r"StartCoroutine\s*\(",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"=\s*StartCoroutine",
             r"StopCoroutine",
             r"StopAllCoroutines",
@@ -896,7 +899,7 @@ RULES.append(
         "Declare a WaitForSeconds field and reuse it.",
         r"yield\s+return\s+new\s+WaitForSeconds\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -913,7 +916,7 @@ RULES.append(
         finding_type=FindingType.STRENGTHENING,
         confidence=35,
         reasoning="Method presence alone cannot prove whether Rigidbody requirements are satisfied.",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         layer="semantic",
     )
 )
@@ -931,7 +934,7 @@ RULES.append(
         finding_type=FindingType.STRENGTHENING,
         confidence=40,
         reasoning="Unmasked raycasts are often intentional for broad queries.",
-        anti_patterns=[r"//\s*VB-IGNORE", r"(LayerMask|layerMask|layer)"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"(LayerMask|layerMask|layer)"],
         layer="semantic",
     )
 )
@@ -979,7 +982,7 @@ RULES.append(
         finding_type=FindingType.OPTIMIZATION,
         confidence=50,
         reasoning="Modern Unity (2021+) with .NET Standard 2.1 does not allocate enumerators for List<T> and arrays in foreach.",
-        anti_patterns=[r"//\s*VB-IGNORE", r"Span<", r"ReadOnlySpan<", r"_buffer|_temp|Buffer\b"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"Span<", r"ReadOnlySpan<", r"_buffer|_temp|Buffer\b"],
         layer="heuristic",  # Modern Unity (2021+/.NET Standard 2.1) doesn't allocate enumerators for List/Array
     )
 )
@@ -994,7 +997,7 @@ RULES.append(
         'Use #if UNITY_EDITOR or [Conditional("UNITY_EDITOR")] wrapper.',
         r"Debug\.(Log|LogWarning|LogError|LogException)\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"#if\s+UNITY_EDITOR", r"\[Conditional"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"#if\s+UNITY_EDITOR", r"\[Conditional"],
         layer="heuristic",
         finding_type=FindingType.STRENGTHENING,
         confidence=40,
@@ -1011,7 +1014,7 @@ RULES.append(
         "Cache the loaded resource or use Addressables.",
         r"Resources\.Load\s*[<(]",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"_\w+\s*=\s*Resources\.Load"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"_\w+\s*=\s*Resources\.Load"],
     )
 )
 
@@ -1025,7 +1028,7 @@ RULES.append(
         "Pass a parent transform as the second argument.",
         r"Instantiate\s*\(\s*[^,)]+\s*\)\s*;",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\.SetParent", r"\.transform\.parent"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\.SetParent", r"\.transform\.parent"],
     )
 )
 
@@ -1039,7 +1042,7 @@ RULES.append(
         "Move AddComponent to initialization or one-time event.",
         r"\.AddComponent\s*[<(]",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1054,7 +1057,7 @@ RULES.append(
         r"private\s+\w+\s+\w+\s*;",
         scope="ClassLevel",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"\[SerializeField\]",
             r"\[HideInInspector\]",
             r"static|const|readonly",
@@ -1079,7 +1082,7 @@ RULES.append(
         confidence=35,
         reasoning="Public serialized fields can be intentional data contracts.",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r":\s*ScriptableObject",
             r":\s*SOBase",
             r"\[System\.Serializable\]",
@@ -1098,7 +1101,7 @@ RULES.append(
         'Use gameObject.CompareTag("tag") instead.',
         r'\.tag\s*==\s*"[^"]+"',
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1112,7 +1115,7 @@ RULES.append(
         "Use (a - b).sqrMagnitude < threshold * threshold.",
         r"Vector\d\.Distance\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"sqrMagnitude"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"sqrMagnitude"],
     )
 )
 
@@ -1126,7 +1129,7 @@ RULES.append(
         "Replace LINQ with manual loops in hot paths.",
         r"\.\s*(Where|Select|OrderBy|GroupBy|Any|All|First|Last|Count|Sum|ToList|ToArray|ToDictionary|FirstOrDefault|LastOrDefault|Single|SingleOrDefault)\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"Mathf\.", r"Math\.", r"Vector\d\.", r"Quaternion\."],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"Mathf\.", r"Math\.", r"Vector\d\.", r"Quaternion\."],
     )
 )
 
@@ -1140,7 +1143,7 @@ RULES.append(
         "Declare static readonly int fields for animator hashes.",
         r"Animator\.StringToHash\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"static\s+readonly\s+int"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"static\s+readonly\s+int"],
     )
 )
 
@@ -1154,7 +1157,7 @@ RULES.append(
         "Use renderer.sharedMaterial or MaterialPropertyBlock.",
         r"\.\s*material\s*[\.=](?!s)",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"sharedMaterial", r"MaterialPropertyBlock"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"sharedMaterial", r"MaterialPropertyBlock"],
     )
 )
 
@@ -1171,7 +1174,7 @@ RULES.append(
         finding_type=FindingType.STRENGTHENING,
         confidence=30,
         reasoning="Regex can rarely prove the target expression is a UnityEngine.Object instance.",
-        anti_patterns=[r"//\s*VB-IGNORE", r"System\.\w+", r"string\?", r"int\?"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"System\.\w+", r"string\?", r"int\?"],
         guard=lambda line, all, i, ctx: (
             ctx[i] != LineContext.Comment
             and bool(
@@ -1195,7 +1198,7 @@ RULES.append(
         "Cache in Awake/Start. Traverses entire hierarchy.",
         r"GetComponent(InChildren|InParent)\s*[<(]",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"_\w+\s*=\s*GetComponent"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"_\w+\s*=\s*GetComponent"],
     )
 )
 
@@ -1209,7 +1212,7 @@ RULES.append(
         "Cache in Start() or use a registry pattern.",
         r"(FindWithTag|FindGameObjectsWithTag)\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1224,7 +1227,7 @@ RULES.append(
         r"\bDictionary\s*<",
         scope="ClassLevel",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"ISerializationCallbackReceiver",
             r"SerializationCallback",
             r"JsonConvert",
@@ -1248,7 +1251,7 @@ RULES.append(
         "Replace 'yield return 0' with 'yield return null' to avoid boxing allocation.",
         r"yield\s+return\s+0\s*;",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1262,7 +1265,7 @@ RULES.append(
         "Read input in Update(), store in a field, apply in FixedUpdate().",
         r"Input\.(GetKey|GetKeyDown|GetKeyUp|GetButton|GetButtonDown|GetButtonUp|GetMouseButton|GetMouseButtonDown)\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"void\s+Update"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"void\s+Update"],
         guard=lambda line, all, i, ctx: in_fixed_update(line, all, i, ctx),
     )
 )
@@ -1277,7 +1280,7 @@ RULES.append(
         "Remove .ConfigureAwait(false); Unity automatically returns to main thread.",
         r"\.ConfigureAwait\s*\(\s*false\s*\)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"#if\s+UNITY_EDITOR", r"/Editor/"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"#if\s+UNITY_EDITOR", r"/Editor/"],
     )
 )
 
@@ -1292,7 +1295,7 @@ RULES.append(
         r"new\s+Texture2D\s*\(",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"Destroy\s*\(",
             r"DestroyImmediate",
             r"Object\.Destroy",
@@ -1316,7 +1319,7 @@ RULES.append(
         r"new\s+RenderTexture\s*\(",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"\.Release\s*\(\)",
             r"ReleaseTemporary",
             r"Destroy\s*\(",
@@ -1338,7 +1341,7 @@ RULES.append(
         r"DontDestroyOnLoad\s*\(\s*this\s*\)",
         scope="AnyMethod",
         confidence=90,
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1355,7 +1358,7 @@ RULES.append(
         "Use generics or overloaded methods to avoid boxing.",
         r"\(\s*object\s*\)\s*\w+",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1369,7 +1372,7 @@ RULES.append(
         r"=>\s*\{?[^}]*\b(this|[a-z_]\w*)\b",
         scope="HotPath",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"static\s+(void|bool|int)",
             r"static\s*\(",
             r"static\s*\w+\s*=>",
@@ -1410,7 +1413,7 @@ RULES.append(
         "Use 'in' for readonly pass or 'ref' for mutable pass.",
         r"\(\s*(Matrix4x4|Bounds|RaycastHit|ContactPoint|NavMeshHit)\s+\w+\s*[,)]",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\bin\b", r"\bref\b"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\bin\b", r"\bref\b"],
     )
 )
 
@@ -1423,7 +1426,7 @@ RULES.append(
         "Set list.Capacity or use new List<T>(expectedSize).",
         r"new\s+List\s*<[^>]+>\s*\(\s*\)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"Capacity\s*="],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"Capacity\s*="],
         layer="heuristic",
         finding_type=FindingType.STRENGTHENING,
     )
@@ -1438,7 +1441,7 @@ RULES.append(
         "Use StringBuilder.AppendFormat or pre-allocated string ops.",
         r"[Ss]tring\.Format\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1451,7 +1454,7 @@ RULES.append(
         "Use GetPixels32()/SetPixels32() for bulk pixel ops.",
         r"\.(GetPixel|SetPixel)\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"GetPixels32|SetPixels32"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"GetPixels32|SetPixels32"],
     )
 )
 
@@ -1464,7 +1467,7 @@ RULES.append(
         "Cache mesh.vertices/normals/etc in a local array before the loop.",
         r"mesh\.(vertices|normals|uv|tangents|colors|triangles)\b",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"var\s+\w+\s*=\s*mesh\."],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"var\s+\w+\s*=\s*mesh\."],
     )
 )
 
@@ -1477,7 +1480,7 @@ RULES.append(
         "Always specify a maxDistance parameter.",
         r"Physics\d*\.(Raycast|SphereCast|CapsuleCast|BoxCast)\s*\(\s*[^,]+\s*,\s*[^,]+\s*\)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1490,7 +1493,7 @@ RULES.append(
         "Use x * x instead of Mathf.Pow(x, 2f).",
         r"Mathf\.Pow\s*\([^,]+,\s*2\.?0?f?\s*\)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1503,7 +1506,7 @@ RULES.append(
         "Cache Camera.main in Start().",
         r"Camera\.main\.Screen",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"_\w*(cam|camera)\s*="],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"_\w*(cam|camera)\s*="],
     )
 )
 
@@ -1516,7 +1519,7 @@ RULES.append(
         "Use spatial partitioning, break/continue, or reduce inner loop.",
         r"for\s*\([^)]+\)",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"break\s*;"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"break\s*;"],
         guard=lambda line, all, i, ctx: (
             ctx[i] == LineContext.HotPath
             and any(
@@ -1538,7 +1541,7 @@ RULES.append(
         "Pass false as second argument if world position preservation unneeded.",
         r"\.SetParent\s*\(\s*[^,)]+\s*\)\s*;",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         finding_type=FindingType.OPTIMIZATION,
         confidence=45,
         layer="heuristic",
@@ -1554,7 +1557,7 @@ RULES.append(
         "Set the collision LayerMask to only needed layers.",
         r"collisionModule\.(enabled\s*=\s*true|collidesWith)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"LayerMask"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"LayerMask"],
     )
 )
 
@@ -1567,7 +1570,7 @@ RULES.append(
         "Set the light's culling mask to limit shadow-casting layers.",
         r"\.shadows\s*=\s*LightShadows\.(Soft|Hard)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"cullingMask"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"cullingMask"],
     )
 )
 
@@ -1580,7 +1583,7 @@ RULES.append(
         "Set spatialBlend to 1 for 3D or remove rolloff settings.",
         r"spatialBlend\s*=\s*0",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         finding_type=FindingType.OPTIMIZATION,
         confidence=45,
         layer="heuristic",
@@ -1596,7 +1599,7 @@ RULES.append(
         "Reuse a NavMeshPath instance.",
         r"new\s+NavMeshPath\s*\(\s*\)",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"_\w+\s*=\s*new\s+NavMeshPath"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"_\w+\s*=\s*new\s+NavMeshPath"],
     )
 )
 
@@ -1609,7 +1612,7 @@ RULES.append(
         "Let Unity batch canvas updates naturally.",
         r"ForceUpdateCanvases\s*\(\s*\)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1622,7 +1625,7 @@ RULES.append(
         "Only rebuild when content changes, then disable LayoutGroup.",
         r"LayoutRebuilder\.ForceRebuildLayoutImmediate\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1635,7 +1638,7 @@ RULES.append(
         "Use CanvasGroup.alpha or disable MeshRenderer for frequent toggles.",
         r"\.SetActive\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"CanvasGroup"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"CanvasGroup"],
         guard=lambda line, all_lines, idx, ctx=None: (
             # Suppress for expression-bodied members (one-liner wrappers)
             not bool(re.search(
@@ -1656,7 +1659,7 @@ RULES.append(
         "Reduce camera count or use stacking with optimized clear flags.",
         r"new\s+.*Camera\b.*enabled\s*=\s*true|Camera\.allCameras",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         confidence=40,
     )
 )
@@ -1670,7 +1673,7 @@ RULES.append(
         "Replace RaycastAll with RaycastNonAlloc, OverlapSphere with OverlapSphereNonAlloc.",
         r"Physics\.(RaycastAll|SphereCastAll|CapsuleCastAll|BoxCastAll|OverlapSphere|OverlapBox|OverlapCapsule)\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"NonAlloc"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"NonAlloc"],
     )
 )
 
@@ -1683,7 +1686,7 @@ RULES.append(
         "Use renderer.GetPropertyBlock()/SetPropertyBlock().",
         r"\.\s*material\s*\.\s*Set(Color|Float|Int|Vector|Texture|Matrix)",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"MaterialPropertyBlock", r"sharedMaterial"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"MaterialPropertyBlock", r"sharedMaterial"],
     )
 )
 
@@ -1697,7 +1700,7 @@ RULES.append(
         r"\.(ToLower|ToUpper|ToLowerInvariant|ToUpperInvariant)\s*\(\s*\)\s*(==|!=|\.Equals|\.Contains|\.StartsWith)",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"StringComparison\.(Ordinal|InvariantCulture)IgnoreCase",
         ],
     )
@@ -1712,7 +1715,7 @@ RULES.append(
         "Use string.Contains(value, StringComparison.Ordinal) for culture-invariant comparison.",
         r'\.Contains\s*\(\s*"[^"]*"\s*\)',
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"StringComparison", r"Ordinal"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"StringComparison", r"Ordinal"],
         confidence=50,
         guard=lambda line, all_lines, idx, ctx=None: (
             # Suppress on collection.Contains("str") — only string.Contains needs StringComparison.
@@ -1736,7 +1739,7 @@ RULES.append(
         "Cache the child Transform reference in Start() or Awake().",
         r'\.Find\s*\(\s*"[^"]*"\s*\)',
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"_\w+\s*=\s*\w+\.Find"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"_\w+\s*=\s*\w+\.Find"],
     )
 )
 
@@ -1749,7 +1752,7 @@ RULES.append(
         "Call GetComponent<T>() once in Awake/Start and store the reference.",
         r"GetComponent\s*<(\w+)>\s*\(\s*\)",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1762,7 +1765,7 @@ RULES.append(
         "Use (flags & MyEnum.Value) != 0 instead of flags.HasFlag(MyEnum.Value).",
         r"\.HasFlag\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1775,7 +1778,7 @@ RULES.append(
         "Use an ObjectPool<T> or custom pool to recycle instances.",
         r"Instantiate\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"ObjectPool", r"pool\."],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"ObjectPool", r"pool\."],
     )
 )
 
@@ -1788,7 +1791,7 @@ RULES.append(
         "If you only need to read, pass IReadOnlyList<T> or use .AsReadOnly().",
         r"new\s+List\s*<[^>]+>\s*\(\s*\w+\s*\)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         confidence=45,
         layer="heuristic",
         finding_type=FindingType.STRENGTHENING,
@@ -1805,7 +1808,7 @@ RULES.append(
         r"GC\.Collect\s*\(",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"loading",
             r"Loading",
             r"SceneManager",
@@ -1823,7 +1826,7 @@ RULES.append(
         'Cache: static readonly int _PropID = Shader.PropertyToID("_PropName"); then use _PropID.',
         r"Shader\.PropertyToID\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"static\s+readonly\s+int", r"static\s+int"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"static\s+readonly\s+int", r"static\s+int"],
     )
 )
 
@@ -1841,7 +1844,7 @@ RULES.append(
         r"System\.IO\.(File|Directory)\.(Read|Write|Delete|Move|Copy|Create|Open|Append)",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"Application\.(dataPath|persistentDataPath|streamingAssetsPath)",
             r"/Editor/",
         ],
@@ -1857,7 +1860,7 @@ RULES.append(
         "Never pass user input to Process.Start; whitelist allowed commands.",
         r"Process\.Start\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"#if\s+UNITY_EDITOR"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"#if\s+UNITY_EDITOR"],
     )
 )
 
@@ -1870,7 +1873,7 @@ RULES.append(
         "Validate deserialized object fields and reject unexpected values.",
         r"JsonUtility\.FromJson\s*[<(]",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1897,7 +1900,7 @@ RULES.append(
         "Use HTTPS URLs for all network requests.",
         r'(?:http://|UnityWebRequest\.Get\s*\(\s*"http://)',
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"localhost", r"127\.0\.0\.1"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"localhost", r"127\.0\.0\.1"],
     )
 )
 
@@ -1910,7 +1913,7 @@ RULES.append(
         "Never compile user-provided code at runtime.",
         r"(CompileAssemblyFrom|CSharpCodeProvider|CodeDomProvider)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1950,7 +1953,7 @@ RULES.append(
         r"Resources\.Load\s*\(\s*\w+\s*\)",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"const\s+string",
             r"nameof\s*\(",
             r'Resources\.Load\s*\(\s*"',
@@ -1967,7 +1970,7 @@ RULES.append(
         "Validate and whitelist URLs.",
         r'Application\.OpenURL\s*\(\s*[^")\s]+',
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -1980,7 +1983,7 @@ RULES.append(
         "Avoid reflection on user-controlled type/method names. Whitelist allowed types.",
         r"(MethodInfo|Type)\.\w*Invoke\s*\(|(Type\.GetType|Assembly\.GetType)\s*\(\s*\w+",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"#if\s+UNITY_EDITOR"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"#if\s+UNITY_EDITOR"],
     )
 )
 
@@ -1993,7 +1996,7 @@ RULES.append(
         "Replace WWW with UnityWebRequest and implement certificate validation.",
         r"\bWWW\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -2006,7 +2009,7 @@ RULES.append(
         "Use conditional compilation or log level checks for sensitive data logging.",
         r'Debug\.Log\w*\s*\(\s*\$?"',
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"#if\s+(UNITY_EDITOR|DEBUG)"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"#if\s+(UNITY_EDITOR|DEBUG)"],
         layer="heuristic",
         finding_type=FindingType.STRENGTHENING,
         confidence=35,
@@ -2021,12 +2024,12 @@ RULES.append(
     _create_rule(
         "UNITY-01",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "MonoBehaviour constructor -- use Awake()/Start() instead",
         "Unity manages MonoBehaviour lifecycle; use Awake/Start.",
         r"\bpublic\s+\w+\s*\(\s*\)\s*\{",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"ScriptableObject", r"struct\s"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"ScriptableObject", r"struct\s"],
         guard=lambda line, all, i, ctx: any(
             "MonoBehaviour" in all[j] for j in range(max(0, i - 30), i)
         ),
@@ -2037,12 +2040,12 @@ RULES.append(
     _create_rule(
         "UNITY-02",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "ScriptableObject constructor -- use OnEnable or CreateInstance",
         "Use ScriptableObject.CreateInstance<T>() and OnEnable.",
         r"\bpublic\s+\w+\s*\(\s*\)\s*\{",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"MonoBehaviour"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"MonoBehaviour"],
         guard=lambda line, all, i, ctx: any(
             "ScriptableObject" in all[j] for j in range(max(0, i - 30), i)
         ),
@@ -2053,12 +2056,12 @@ RULES.append(
     _create_rule(
         "UNITY-03",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "Accessing .gameObject/.transform after Destroy(gameObject) -- use-after-destroy",
         "Add 'return;' after Destroy(gameObject) or null-check before accessing destroyed object's members.",
         r"\.(gameObject|transform)\b",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"if\s*\(\s*\w+\s*!=\s*null", r"return\s*;"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"if\s*\(\s*\w+\s*!=\s*null", r"return\s*;"],
         confidence=50,
         guard=lambda line, all, i, ctx: (
             ctx[i] != LineContext.Comment
@@ -2075,13 +2078,13 @@ RULES.append(
     _create_rule(
         "UNITY-04",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "DontDestroyOnLoad without singleton duplicate check",
         "Add: if (Instance != null) { Destroy(gameObject); return; }",
         r"DontDestroyOnLoad\s*\(",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"Instance\s*!=\s*null",
             r"_instance\s*!=\s*null",
             r"HasInstance",
@@ -2096,12 +2099,12 @@ RULES.append(
     _create_rule(
         "UNITY-05",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "GetComponent in Awake/Start without [RequireComponent]",
         "Add [RequireComponent(typeof(T))] to guarantee the component exists.",
         r"GetComponent\s*<(\w+)>\s*\(\s*\)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"TryGetComponent"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"TryGetComponent"],
         guard=_has_require_component_for,
         layer="semantic",
         finding_type=FindingType.BUG,
@@ -2112,12 +2115,12 @@ RULES.append(
     _create_rule(
         "UNITY-06",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "Invoke/InvokeRepeating with string method name",
         "Use Coroutines, async/await, or direct method references.",
         r'\.(Invoke|InvokeRepeating)\s*\(\s*"',
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -2125,12 +2128,12 @@ RULES.append(
     _create_rule(
         "UNITY-07",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "Scene loaded without additive mode may leak DontDestroyOnLoad objects",
         "Use LoadSceneMode.Additive or clean up persistent objects.",
         r"SceneManager\.LoadScene\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"Additive"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"Additive"],
         confidence=40,
         layer="heuristic",
         finding_type=FindingType.STRENGTHENING,
@@ -2141,12 +2144,12 @@ RULES.append(
     _create_rule(
         "UNITY-08",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "Event += without matching -= -- memory leak if subscriber outlives publisher",
         "Add -= unsubscribe in OnDisable() or OnDestroy().",
         r"\w+\.\w+\s*\+=\s*\w+\s*;",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\+=\s*\d", r'\+=\s*"'],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\+=\s*\d", r'\+=\s*"'],
         guard=_missing_event_teardown,
     )
 )
@@ -2155,12 +2158,12 @@ RULES.append(
     _create_rule(
         "UNITY-09",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "Editor-only API outside #if UNITY_EDITOR block",
         "Wrap EditorApplication/AssetDatabase/etc. in #if UNITY_EDITOR.",
         r"\b(EditorApplication|AssetDatabase|EditorUtility|PrefabUtility|SerializedObject|SerializedProperty)\.",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"#if\s+UNITY_EDITOR"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"#if\s+UNITY_EDITOR"],
         layer="hard_correctness",
         finding_type=FindingType.BUG,
     )
@@ -2170,12 +2173,12 @@ RULES.append(
     _create_rule(
         "UNITY-10",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "Serializing interface or abstract type -- Unity serializer cannot handle",
         "Use concrete type or ISerializationCallbackReceiver.",
         r"\[SerializeField\]\s*(private|protected|public)?\s*(I[A-Z]\w+|abstract\s+\w+)\s+\w+",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"SerializeReference"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"SerializeReference"],
     )
 )
 
@@ -2183,12 +2186,12 @@ RULES.append(
     _create_rule(
         "UNITY-11",
         Severity.LOW,
-        Category.Unity,
+        Category.Framework,
         "Large array in ScriptableObject -- consider Addressables",
         "Use Addressables or split data into smaller chunks.",
         r"\[\]\s+\w+\s*=\s*new\s+\w+\[(?:[5-9]\d{2,}|\d{4,})\]",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -2196,12 +2199,12 @@ RULES.append(
     _create_rule(
         "UNITY-12",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "Event subscription without teardown lifecycle -- likely missing unsubscribe path",
         "Add -= cleanup in OnDisable or OnDestroy, or make the teardown intent explicit.",
         r"\+=\s*\w+\s*;",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         guard=_missing_event_teardown,
         layer="semantic",
         finding_type=FindingType.STRENGTHENING,
@@ -2213,12 +2216,12 @@ RULES.append(
     _create_rule(
         "UNITY-13",
         Severity.LOW,
-        Category.Unity,
+        Category.Framework,
         "Awake execution order dependency without [DefaultExecutionOrder]",
         "Add [DefaultExecutionOrder(N)] to control initialization order.",
         r"void\s+Awake\s*\(\s*\)",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\[DefaultExecutionOrder"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\[DefaultExecutionOrder"],
         layer="heuristic",
         finding_type=FindingType.STRENGTHENING,
     )
@@ -2228,12 +2231,12 @@ RULES.append(
     _create_rule(
         "UNITY-14",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "Static field in MonoBehaviour -- shared across instances",
         "Use instance fields or a dedicated static manager.",
         r"static\s+(?!readonly|void|bool|int|float|string|event|Action|Func|delegate)\w+\s+\w+",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"Instance", r"Singleton", r"const\s"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"Instance", r"Singleton", r"const\s"],
         layer="heuristic",
         finding_type=FindingType.STRENGTHENING,
     )
@@ -2243,12 +2246,12 @@ RULES.append(
     _create_rule(
         "UNITY-15",
         Severity.LOW,
-        Category.Unity,
+        Category.Framework,
         "Singleton MonoBehaviour missing [DisallowMultipleComponent]",
         "Add [DisallowMultipleComponent].",
         r"static\s+\w+\s+Instance\s*[{;=]",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\[DisallowMultipleComponent"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\[DisallowMultipleComponent"],
     )
 )
 
@@ -2256,13 +2259,13 @@ RULES.append(
     _create_rule(
         "UNITY-16",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "GetComponent/Destroy in OnValidate -- fails during prefab import",
         "Wrap in #if UNITY_EDITOR and use EditorApplication.delayCall.",
         r"(GetComponent|Destroy|DestroyImmediate)\s*[<(]",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"EditorApplication\.delayCall",
             r"#if\s+UNITY_EDITOR",
         ],
@@ -2276,12 +2279,12 @@ RULES.append(
     _create_rule(
         "UNITY-17",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "OnGUI called every frame -- consider UI Toolkit",
         "For runtime UI prefer UI Toolkit or Canvas.",
         r"void\s+OnGUI\s*\(\s*\)",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"/Editor/"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"/Editor/"],
     )
 )
 
@@ -2289,12 +2292,12 @@ RULES.append(
     _create_rule(
         "UNITY-18",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "SendMessage/BroadcastMessage -- slow reflection, no compile-time safety",
         "Use direct method calls, C# events, or a message bus interface.",
         r"\b(SendMessage|BroadcastMessage|SendMessageUpwards)\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"/Editor/"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"/Editor/"],
     )
 )
 
@@ -2302,12 +2305,12 @@ RULES.append(
     _create_rule(
         "UNITY-19",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "Shader.Find() at runtime -- returns null if shader not in Always Included list",
         "Serialize shader references or load from Resources/Addressables.",
         r"Shader\.Find\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"/Editor/", r"#if\s+UNITY_EDITOR"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"/Editor/", r"#if\s+UNITY_EDITOR"],
     )
 )
 
@@ -2315,13 +2318,13 @@ RULES.append(
     _create_rule(
         "UNITY-20",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "Accessing .material creates an instance -- must Destroy() it manually",
         "Use .sharedMaterial for read, or track/destroy instanced materials.",
         r"(?<!\bshared)\bmaterial\s*\.\s*(color|mainTexture|shader|renderQueue)",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"sharedMaterial",
             r"MaterialPropertyBlock",
             r"Destroy\s*\(\s*\w*[Mm]at",
@@ -2334,12 +2337,12 @@ RULES.append(
     _create_rule(
         "UNITY-21",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "Rigidbody.MovePosition/MoveRotation outside FixedUpdate -- jerky movement",
         "Call Rigidbody.MovePosition only in FixedUpdate for smooth physics movement.",
         r"(MovePosition|MoveRotation)\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"FixedUpdate"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"FixedUpdate"],
         confidence=60,
     )
 )
@@ -2348,13 +2351,13 @@ RULES.append(
     _create_rule(
         "UNITY-23",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "TMP_Text.text assigned in Update -- allocates string every frame",
         "Cache the string or use TMP_Text.SetText() with zero-alloc overloads.",
         r"\.text\s*=\s*[^;]+;",
         scope="HotPath",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"SetText",
             r"(Start|Awake|OnEnable|Initialize|Init)\s*\(",
         ],
@@ -2365,12 +2368,12 @@ RULES.append(
     _create_rule(
         "UNITY-24",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "NavMeshAgent.SetDestination without IsOnNavMesh check -- may throw",
         "Check agent.isOnNavMesh before calling SetDestination.",
         r"\.SetDestination\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"isOnNavMesh", r"IsOnNavMesh"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"isOnNavMesh", r"IsOnNavMesh"],
     )
 )
 
@@ -2378,13 +2381,13 @@ RULES.append(
     _create_rule(
         "UNITY-25",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "ScriptableObject field modified at runtime -- shared across all references",
         "Clone the SO at runtime: Instantiate(mySO) or use a runtime data copy.",
         r"(?:_\w+SO|_\w+Data|_\w+Config)\s*\.\s*\w+\s*[+\-*/]?=",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"Instantiate",
             r"ScriptableObject\.CreateInstance",
         ],
@@ -2396,12 +2399,12 @@ RULES.append(
     _create_rule(
         "UNITY-27",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "MonoBehaviour with both Update and FixedUpdate -- potential input/physics confusion",
         "Ensure input is read in Update and physics applied in FixedUpdate. Don't mix.",
         r"void\s+Update\s*\(",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         guard=lambda line, all, i, ctx: any(
             re.search(r"void\s+FixedUpdate\s*\(", all[j])
             for j in range(len(all))
@@ -2416,13 +2419,13 @@ RULES.append(
     _create_rule(
         "UNITY-28",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "NativeArray/NativeContainer not Disposed -- leaks unmanaged memory",
         "Call .Dispose() in OnDestroy, use Allocator.Temp (auto-disposes at frame end), or wrap in using statement.",
         r"new\s+Native(Array|List|HashSet|HashMap|Queue|Stack|MultiHashMap)\s*<",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"\.Dispose\s*\(",
             r"using\s+var",
             r"using\s*\(",
@@ -2436,12 +2439,12 @@ RULES.append(
     _create_rule(
         "UNITY-31",
         Severity.CRITICAL,
-        Category.Unity,
+        Category.Framework,
         "Unity Object created in field initializer -- runs on loading thread, crashes in release builds",
         "Move to Awake() or Start(). Field initializers run on the loading thread where Unity APIs are unavailable.",
         r"=\s*new\s+(GameObject|Texture2D|Material|Mesh|RenderTexture|Sprite|ComputeBuffer)\s*\(",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\bvar\b", r"\bawait\b"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\bvar\b", r"\bawait\b"],
         # Only flag field initializers: must look like a field declaration (type + name = new ...)
         # NOT a local variable (var x = new ...) or method-body assignment
         guard=lambda line, all, i, ctx: (
@@ -2471,7 +2474,7 @@ RULES.append(
         "Break long methods into smaller, well-named helpers.",
         r"(void|int|float|bool|string|var|Task|IEnumerator)\s+\w+\s*\([^)]*\)\s*\{",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         guard=lambda line, all, i, ctx: body_length(all, i) > 50,
         layer="heuristic",
         finding_type=FindingType.STRENGTHENING,
@@ -2487,7 +2490,7 @@ RULES.append(
         "Use guard clauses, early returns, or extract nested logic.",
         r"^\s{20,}(if|for|while|foreach|switch)\b",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         layer="heuristic",
         finding_type=FindingType.STRENGTHENING,
     )
@@ -2503,7 +2506,7 @@ RULES.append(
         r"[=<>+\-*/]\s*(?<![.0-9])((?:[2-9]\d{2,}|\d{4,})(?:\.\d+)?f?)\s*[;,)\]}]",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"const\s",
             r"readonly\s",
             r"(Color|Vector|Rect|new\s+\w+\[)",
@@ -2523,7 +2526,7 @@ RULES.append(
         r"^\s+public\s+\S+\s+\w+\s*\([^)]*\)\s*\{?$",
         scope="ClassLevel",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"///",
             r"override\s+",
             r"^\s+public\s+\S+\s+\w+\s*\([^)]*\)\s*=>",
@@ -2543,7 +2546,7 @@ RULES.append(
         r"private\s+\w+\s+([A-Z]\w+)\s*[;=]",
         scope="ClassLevel",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"const\s",
             r"static\s",
             r"readonly\s",
@@ -2561,7 +2564,7 @@ RULES.append(
         "At minimum log the exception.",
         r"catch\s*(\([^)]*\))?\s*\{\s*\}",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"// intentionally empty"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"// intentionally empty"],
     )
 )
 
@@ -2586,7 +2589,7 @@ RULES.append(
         "Remove unused using statements. Use IDE 'Remove Unused Usings' command.",
         r"^using\s+\w+(\.\w+)*\s*;",
         scope="FileLevel",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         layer="heuristic",
         finding_type=FindingType.STRENGTHENING,
         confidence=30,
@@ -2602,7 +2605,7 @@ RULES.append(
         "Extract complex conditions into a descriptive bool variable.",
         r"if\s*\(.*?(&&|\|\|).*?(&&|\|\|).*?(&&|\|\|)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         layer="heuristic",
         finding_type=FindingType.STRENGTHENING,
     )
@@ -2617,7 +2620,7 @@ RULES.append(
         "Add a default case (even just throwing ArgumentOutOfRangeException).",
         r"switch\s*\([^)]+\)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\bdefault\s*:"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\bdefault\s*:"],
         # Only flag if no default case exists in the switch body
         guard=lambda line, all, i, ctx: not any(
             re.search(r"\bdefault\s*:", all[j])
@@ -2637,7 +2640,7 @@ RULES.append(
         "Mark custom exception classes as sealed.",
         r"class\s+\w+Exception\s*:",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"sealed\s"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"sealed\s"],
     )
 )
 
@@ -2650,7 +2653,7 @@ RULES.append(
         "Use Concurrent* or make readonly with immutable contents.",
         r"static\s+(List|Dictionary|HashSet|Queue|Stack)\s*<",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"readonly\s", r"Concurrent"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"readonly\s", r"Concurrent"],
     )
 )
 
@@ -2663,7 +2666,7 @@ RULES.append(
         "Use: private readonly object _lock = new object();",
         r"lock\s*\(\s*(this|typeof\s*\()",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -2676,7 +2679,7 @@ RULES.append(
         "Wrap in 'using' block or call Dispose() in finally/OnDestroy.",
         r"new\s+(StreamReader|StreamWriter|FileStream|BinaryReader|BinaryWriter|HttpClient|WebClient|MemoryStream|UnityWebRequest)\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"using\s+(var|\()", r"\.Dispose\s*\("],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"using\s+(var|\()", r"\.Dispose\s*\("],
     )
 )
 
@@ -2689,7 +2692,7 @@ RULES.append(
         "Remove null check on value types.",
         r"(int|float|double|bool|byte|char|long|short|Vector[234]|Quaternion|Color|Rect|Bounds)\s+\w+.*==\s*null",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\?"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\?"],
     )
 )
 
@@ -2702,7 +2705,7 @@ RULES.append(
         "Remove unreachable statements.",
         r"(return\s+[^;]+;|break\s*;|continue\s*;|throw\s+[^;]+;)\s*$",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"#(else|elif|endif)"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"#(else|elif|endif)"],
         # Guard: only flag if the NEXT non-empty, non-comment, non-brace line
         # exists within the same block (not } or case:)
         guard=lambda line, all, i, ctx: (
@@ -2732,7 +2735,7 @@ RULES.append(
         'Declare: static readonly int hashParam = Animator.StringToHash("Param"); then use the hash.',
         r'\.(SetTrigger|SetBool|SetFloat|SetInteger|GetBool|GetFloat|GetInteger|ResetTrigger)\s*\(\s*"[^"]+"',
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"StringToHash"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"StringToHash"],
     )
 )
 
@@ -2745,7 +2748,7 @@ RULES.append(
         "Implement an AudioPool or use a pooled AudioSource.PlayOneShot() instead.",
         r"AudioSource\.PlayClipAtPoint\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -2758,7 +2761,7 @@ RULES.append(
         "Split UI into static and dynamic Canvases. Use CanvasGroup.alpha for fading.",
         r"(rectTransform|RectTransform)\.(sizeDelta|anchoredPosition|localPosition|offsetMin|offsetMax)\s*=",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"CanvasGroup", r"DOTween", r"PrimeTween"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"CanvasGroup", r"DOTween", r"PrimeTween"],
     )
 )
 
@@ -2771,7 +2774,7 @@ RULES.append(
         "Store in local variable first: var main = ps.main; main.startSpeed = val;",
         r"(\w+\.)?(particleSystem|GetComponent\s*<\s*ParticleSystem\s*>\s*\(\s*\))\.main\.\w+\s*=",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"var\s+\w+\s*=.*\.main"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"var\s+\w+\s*=.*\.main"],
     )
 )
 
@@ -2784,7 +2787,7 @@ RULES.append(
         "Guard with: if (!ps.isPlaying) ps.Play();",
         r"\b[A-Za-z_]\w*\.Play\s*\(\s*\)",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"isPlaying", r"if\s*\("],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"isPlaying", r"if\s*\("],
         guard=_is_particle_system_play,
     )
 )
@@ -2799,7 +2802,7 @@ RULES.append(
         r"async\s+(Task|UniTask)\s+\w+\s*\([^)]*\)",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"CancellationToken",
             r"destroyCancellationToken",
             r"GetCancellationTokenOnDestroy",
@@ -2816,7 +2819,7 @@ RULES.append(
         "Use rb.AddForce(velocity, ForceMode.VelocityChange) for physics-correct velocity changes. Direct assignment is correct for teleporting/resetting.",
         r"\.\s*velocity\s*=\s*(?!Vector3\.zero)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"isKinematic", r"kinematic"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"isKinematic", r"kinematic"],
         confidence=40,
         finding_type=FindingType.STRENGTHENING,
         layer="heuristic",
@@ -2832,7 +2835,7 @@ RULES.append(
         "Use collection.Count (List) or array.Length directly -- O(1) vs O(n).",
         r"\.(Count|Any|All)\s*\(\s*\)",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\.Length\b", r"\.Count\b(?!\s*\()"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\.Length\b", r"\.Count\b(?!\s*\()"],
     )
 )
 
@@ -2845,7 +2848,7 @@ RULES.append(
         "Use: yield return request.SendWebRequest(); or await request.SendWebRequest();",
         r"\.SendWebRequest\s*\(\s*\)\s*;",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"yield\s+return", r"await\s"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"yield\s+return", r"await\s"],
     )
 )
 
@@ -2859,7 +2862,7 @@ RULES.append(
         r"\.SetTrigger\s*\(",
         scope="HotPath",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"GetCurrentAnimatorStateInfo",
             r"IsInTransition",
         ],
@@ -2879,7 +2882,7 @@ RULES.append(
         "Use StartCoroutine(MethodName()) with IEnumerator return value.",
         r'StartCoroutine\s*\(\s*"[^"]*"\)',
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
     )
 )
 
@@ -2892,7 +2895,7 @@ RULES.append(
         "Declare a WaitUntil/WaitWhile field and reuse it.",
         r"yield\s+return\s+new\s+Wait(Until|While)\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"_wait\w+\s*=\s*new\s+Wait(Until|While)"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"_wait\w+\s*=\s*new\s+Wait(Until|While)"],
     )
 )
 
@@ -2905,7 +2908,7 @@ RULES.append(
         "Use Mathf.Approximately(a, b) instead of a == b for floats.",
         r"(?<!\w)([a-zA-Z_]\w*)\s*==\s*(\d+\.?\d*f?|[a-zA-Z_]\w*)\s*[;)\]]",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"Mathf\.Approximately", r"\.Equals"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"Mathf\.Approximately", r"\.Equals"],
         guard=lambda line, all_lines, idx, ctx=None: (
             # Only fire when comparing float-like values (contain "." or common float field names)
             # Suppress comparisons that are clearly non-float (string, bool, int, enum, object refs)
@@ -2947,7 +2950,7 @@ RULES.append(
         "Specify ForceMode explicitly: ForceMode.Impulse for instant, ForceMode.VelocityChange for mass-independent.",
         r"\.AddForce\s*\([^)]*\)\s*;",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"ForceMode"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"ForceMode"],
         confidence=55,
     )
 )
@@ -2961,7 +2964,7 @@ RULES.append(
         "Add at least one yield return statement, or convert to a regular method.",
         r"IEnumerator\s+\w+\s*\([^)]*\)\s*\{",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"yield\s+return", r"yield\s+break"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"yield\s+return", r"yield\s+break"],
         anti_radius=30,
         confidence=60,
     )
@@ -2976,7 +2979,7 @@ RULES.append(
         "Use Destroy(gameObject) to remove the entire GameObject, or Destroy(component) intentionally.",
         r"Destroy\s*\(\s*(?:this|GetComponent)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"gameObject"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"gameObject"],
         confidence=55,
     )
 )
@@ -2991,7 +2994,7 @@ RULES.append(
         r"while\s*\(\s*true\s*\)\s*\{",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"yield\s+return",
             r"yield\s+break",
             r"break\s*;",
@@ -3013,7 +3016,7 @@ RULES.append(
         r"Sprite\.Create\s*\(",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"Destroy\s*\(",
             r"DestroyImmediate",
             r"Object\.Destroy",
@@ -3033,7 +3036,7 @@ RULES.append(
         r"animator\w*\.enabled\s*=\s*false",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"\.speed\s*=\s*0",
             r"OnDisable",
             r"OnDestroy",
@@ -3051,7 +3054,7 @@ RULES.append(
         r"await\s+",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"destroyCancellationToken",
             r"CancellationToken",
         ],
@@ -3068,7 +3071,7 @@ RULES.append(
         "Use transform.Rotate(delta) or accumulate in a Vector3 field, then apply: transform.rotation = Quaternion.Euler(accum);",
         r"\.eulerAngles\s*\+=",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"Quaternion\.Euler", r"Rotate\s*\("],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"Quaternion\.Euler", r"Rotate\s*\("],
         confidence=65,
     )
 )
@@ -3083,7 +3086,7 @@ RULES.append(
         r"\.downloadHandler\.(text|data|bytes)\b",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"\.result\s*[!=]=",
             r"\.isNetworkError",
             r"\.isHttpError",
@@ -3121,7 +3124,7 @@ RULES.append(
         r"\.(DOFade|DOScale|DOMove|DORotate|DOColor|DOLocalMove|DOAnchorPos|DOSizeDelta|DOPunchScale|DOShakePosition)\s*\(",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"\.DOKill\s*\(",
             r"\.Kill\s*\(",
             r"DOTween\.Kill",
@@ -3140,7 +3143,7 @@ RULES.append(
         "Use UniTask.RunOnThreadPool with SwitchToMainThread, or use coroutines.",
         r"Task\.Run\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"#if\s+UNITY_EDITOR", r"/Editor/"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"#if\s+UNITY_EDITOR", r"/Editor/"],
     )
 )
 
@@ -3154,7 +3157,7 @@ RULES.append(
         r"\.Remove\s*\(",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"\.ToList\s*\(\s*\)",
             r"for\s*\(\s*int",
             r"_iterationBuffer|_buffer|_toRemove|_pendingRemov",
@@ -3180,7 +3183,7 @@ RULES.append(
         r"^using\s+UnityEditor",
         scope="FileLevel",
         file_filter="Runtime",
-        anti_patterns=[r"//\s*VB-IGNORE", r"#if\s+UNITY_EDITOR", r"[/\\]Editor[/\\]", r"[/\\]Tests[/\\]"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"#if\s+UNITY_EDITOR", r"[/\\]Editor[/\\]", r"[/\\]Tests[/\\]"],
     )
 )
 
@@ -3198,7 +3201,7 @@ RULES.append(
         "Write the replacement first, verify success, then delete the old data.",
         r"(Delete|Remove)(Slot|Save|File)\w*\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"if\s*\(!?\s*\w+\)\s*(return|throw)"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"if\s*\(!?\s*\w+\)\s*(return|throw)"],
         confidence=80,
         guard=lambda line, all_lines, idx, ctx=None: (
             # Only fire if there's a write/save call nearby AFTER the delete (indicating
@@ -3221,7 +3224,7 @@ RULES.append(
         "Add a CancellationToken or timeout to prevent infinite await.",
         r"new\s+TaskCompletionSource",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"CancellationToken", r"CancelAfter", r"TimeSpan", r"timeout", r"Timer"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"CancellationToken", r"CancelAfter", r"TimeSpan", r"timeout", r"Timer"],
         anti_radius=30,
         confidence=78,
     )
@@ -3237,7 +3240,7 @@ RULES.append(
         "Check the return value: if (!await SaveAsync()) { /* handle failure */ }",
         r"await\s+\w+\.(Save|Write|Delete|Create|Load)Async\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"(bool|var|if)\s+\w+\s*=\s*await", r"if\s*\(\s*!?\s*await"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"(bool|var|if)\s+\w+\s*=\s*await", r"if\s*\(\s*!?\s*await"],
         confidence=72,
     )
 )
@@ -3252,7 +3255,7 @@ RULES.append(
         "Only update in-memory state after the write succeeds, or snapshot/restore on failure.",
         r"_current\w+\s*=\s*(?!null)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         guard=lambda line, all, i, ctx: any(
             re.search(r"(Save|Write|Flush|Persist)Async\s*\(", all[j])
             for j in range(i + 1, min(i + 10, len(all)))
@@ -3272,7 +3275,7 @@ RULES.append(
         "Return a new List<T>(buffer), accept a caller-provided list, or return IReadOnlyList<T>.",
         r"return\s+_\w*(buffer|Buffer|temp|Temp|cache|Cache|result|Result)\s*;",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"new\s+List", r"\.ToList\(\)", r"\.AsReadOnly\(\)", r"IReadOnly"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"new\s+List", r"\.ToList\(\)", r"\.AsReadOnly\(\)", r"IReadOnly"],
         confidence=72,
         layer="semantic",
     )
@@ -3288,7 +3291,7 @@ RULES.append(
         "Use Array.Empty<T>(), ReadOnlyCollection<T>, or ImmutableList<T> instead.",
         r"static\s+readonly\s+(List|Dictionary|HashSet|Queue|Stack|LinkedList|SortedList|SortedDictionary)<",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"ReadOnly", r"Immutable", r"Frozen"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"ReadOnly", r"Immutable", r"Frozen"],
         confidence=88,
         guard=lambda line, all_lines, idx, ctx=None: (
             # Only fire if the collection is actually mutated somewhere in the file.
@@ -3303,12 +3306,12 @@ RULES.append(
     _create_rule(
         "LIFECYCLE-01",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "Static field in MonoBehaviour without [RuntimeInitializeOnLoadMethod] reset -- stale across Editor play sessions",
         "Add [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)] static void ResetStatics() to clear static fields.",
         r"private\s+static\s+(?!readonly|const|event|Action|Func|delegate)\w+\s+_\w+",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"RuntimeInitializeOnLoadMethod", r"SubsystemRegistration"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"RuntimeInitializeOnLoadMethod", r"SubsystemRegistration"],
         anti_radius=50,
         confidence=65,
         layer="semantic",
@@ -3325,7 +3328,7 @@ RULES.append(
         "Store the material reference and call Destroy(material) in OnDestroy.",
         r"new\s+Material\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"Destroy\s*\(", r"DestroyImmediate", r"_\w+[Mm]at\w*\s*=", r"_dynamicMaterials", r"\.Add\s*\(\s*mat"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"Destroy\s*\(", r"DestroyImmediate", r"_\w+[Mm]at\w*\s*=", r"_dynamicMaterials", r"\.Add\s*\(\s*mat"],
         anti_radius=30,
         confidence=75,
     )
@@ -3341,7 +3344,7 @@ RULES.append(
         "Centralize screen effects in a single manager with priority queue for overlapping effects.",
         r"\.\s*(intensity|weight|blend)\s*\.\s*(value|Override)\s*=",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"_screenEffectManager", r"ScreenEffectQueue"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"_screenEffectManager", r"ScreenEffectQueue"],
         confidence=55,
         layer="semantic",
     )
@@ -3357,7 +3360,7 @@ RULES.append(
         "Return Task.FromException(ex) or set a failure flag the caller can check.",
         r"return\s+Task\.(CompletedTask|FromResult)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         guard=lambda line, all, i, ctx: any(
             re.search(r"\bcatch\b", all[j])
             for j in range(max(0, i - 10), i)
@@ -3834,7 +3837,7 @@ RULES.append(
         "Create new AudioMixerGroup or Volume profile per coroutine instance.",
         r"volumeProfile\.override\s*=\s*true",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"StartCoroutine\s*\(\s*nameof"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"StartCoroutine\s*\(\s*nameof"],
         layer="semantic",
     )
 )
@@ -3844,12 +3847,12 @@ RULES.append(
     _create_rule(
         "UNITY-32",
         Severity.LOW,
-        Category.Unity,
+        Category.Framework,
         "OnDrawGizmos without [HideInNormalInspector] -- clutters Inspector",
         "Add [HideInNormalInspector] above OnDrawGizmos method.",
         r"\bvoid\s+OnDrawGizmos\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"HideInNormalInspector"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"HideInNormalInspector"],
         layer="heuristic",
     )
 )
@@ -3864,7 +3867,7 @@ RULES.append(
         "Validate JSON schema before deserialization or use safe parser.",
         r"JsonUtility\.FromJson|JsonConvert\.DeserializeObject|JObject\.Parse",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"JToken\.Validate", r"Schema\.Validate"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"JToken\.Validate", r"Schema\.Validate"],
         layer="semantic",
     )
 )
@@ -3879,7 +3882,7 @@ RULES.append(
         "Use for-loop with manual filtering or pre-filtered collection.",
         r"\.Where\s*\([^)]+\)\.ToList\s*\(",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         layer="heuristic",
     )
 )
@@ -3899,7 +3902,7 @@ RULES.append(
         "Store AsyncOperationHandle and call Addressables.Release(handle) when done.",
         r"Addressables\.(LoadAssetAsync|InstantiateAsync)\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"AsyncOperationHandle", r"\.Release\s*\("],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"AsyncOperationHandle", r"\.Release\s*\("],
         layer="hard_correctness",
     )
 )
@@ -3914,7 +3917,7 @@ RULES.append(
         "Use Allocator.Persistent for fields, or Dispose TempJob arrays after use.",
         r"private\s+.*NativeArray<[^>]+>\s+\w+\s*=.*Allocator\.Temp",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"Allocator\.Persistent", r"Allocator\.TempJob"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"Allocator\.Persistent", r"Allocator\.TempJob"],
         layer="hard_correctness",
     )
 )
@@ -3929,7 +3932,7 @@ RULES.append(
         "Use FixedString, NativeText, or pre-convert outside job.",
         r"\.ToString\s*\(\)|string\s+\w+\s*=|\".*\"\s*\+",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"FixedString", "NativeText", "BurstCompile"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"FixedString", "NativeText", "BurstCompile"],
         guard=lambda line, all, i, ctx: any("IJob" in line or "BurstCompile" in line for line in all[max(0,i-10):i+1]),
         layer="semantic",
     )
@@ -3945,7 +3948,7 @@ RULES.append(
         "Use await or UniTask.RunOnThreadPool with proper context switching.",
         r"\.(Result|Wait)\s*\(\s*\)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"ConfigureAwait\(false\)", r"RunOnThreadPool"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"ConfigureAwait\(false\)", r"RunOnThreadPool"],
         layer="hard_correctness",
     )
 )
@@ -3960,7 +3963,7 @@ RULES.append(
         "ref structs must be stack-allocated only. Use struct or class instead.",
         r"(private|public|protected|internal)\s+.*\s+\w+\s*;\s*//.*ref|NativeArray<|Entity\s+",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"const\s+", r"static\s+readonly"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"const\s+", r"static\s+readonly"],
         guard=lambda line, all, i, ctx: any(stw in line for stw in ["NativeArray", "NativeContainer", "EntityRef", "EntityCommand"]),
         layer="semantic",
     )
@@ -3976,7 +3979,7 @@ RULES.append(
         "Chain JobHandles: JobHandle jh = job1.Schedule(); job2.Schedule(jh);",
         r"\.Schedule\s*\(\s*\)",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"JobHandle\s+\w+\s*=", r"\.Schedule\s*\([^)]+\)"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"JobHandle\s+\w+\s*=", r"\.Schedule\s*\([^)]+\)"],
         guard=lambda line, all, i, ctx: sum(1 for line in all[max(0,i-3):i+1] if ".Schedule(" in line) > 1,
         layer="semantic",
     )
@@ -3987,12 +3990,12 @@ RULES.append(
     _create_rule(
         "UNITY-33",
         Severity.HIGH,
-        Category.Unity,
+        Category.Framework,
         "Prefab referencing scene object -- breaks on instantiation",
         "Use events, interfaces, or runtime FindObjectOfType instead.",
         r"(public|private|protected|internal)\s+GameObject\s+\w+;\s*//.*scene",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"FindObjectOfType", "GetComponent", "SerializeField"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"FindObjectOfType", "GetComponent", "SerializeField"],
         layer="heuristic",
     )
 )
@@ -4007,7 +4010,7 @@ RULES.append(
         "Add CancellationToken ct = default parameter to async methods.",
         r"async\s+Task<[^>]*>\s+\w+\s*\([^)]*\)\s*{",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"CancellationToken", r"IProgress", r"await\s+Task\.CompletedTask"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"CancellationToken", r"IProgress", r"await\s+Task\.CompletedTask"],
         layer="semantic",
     )
 )
@@ -4017,12 +4020,12 @@ RULES.append(
     _create_rule(
         "INPUT-01",
         Severity.MEDIUM,
-        Category.Unity,
+        Category.Framework,
         "Input polling in Update instead of InputAction callbacks -- less responsive",
         "Use inputAction.performed += ctx => ... for better responsiveness and rebinding.",
         r"(Keyboard|Mouse|Gamepad|Input)\.current\.\w+\.wasPressedThisFrame",
         scope="HotPath",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\.performed\s*\+=", r"\.Invoke\s*\("],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\.performed\s*\+=", r"\.Invoke\s*\("],
         layer="heuristic",
     )
 )
@@ -4037,7 +4040,7 @@ RULES.append(
         "Use class for reference types, or use ref-only fields in struct.",
         r"struct\s+\w+\s*{[^}]*}(string|List<|Dictionary<|IEnumerable<|class\s+\w+)",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"readonly\s+struct", r"ref\s+struct"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"readonly\s+struct", r"ref\s+struct"],
         layer="semantic",
     )
 )
@@ -4054,7 +4057,7 @@ RULES.append(
         r"FindObjects(?:ByType|OfType)\s*[<(]",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"void\s+(Awake|Start|OnEnable)\s*\(",
             r"_cached|_instances|_all\w+",
         ],
@@ -4073,7 +4076,7 @@ RULES.append(
         r"new\s+ComputeBuffer\s*\(",
         scope="AnyMethod",
         anti_patterns=[
-            r"//\s*VB-IGNORE",
+            r"//\\s*(?:VB|REVIEW)-IGNORE",
             r"\.Release\s*\(",
             r"\.Dispose\s*\(",
             r"using\s*\(",
@@ -4092,7 +4095,7 @@ RULES.append(
         "Move [SerializeField] to a backing field, not a property.",
         r"\[SerializeField\]\s*(public|private|protected)\s+\w+\s+\w+\s*\{",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE"],
         layer="hard_correctness",
     )
 )
@@ -4107,7 +4110,7 @@ RULES.append(
         "Return Task.FromException(ex), throw, or set a failure flag.",
         r"catch\s*(\([^)]*\))?\s*\{[^}]*return\s+(null|default|0|false)\s*;",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"//\s*intentional"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"//\s*intentional"],
         layer="semantic",
         flags=re.DOTALL,
     )
@@ -4124,7 +4127,7 @@ RULES.append(
         "Use a lazy property or initialize in Awake/Start instead of static readonly.",
         r"static\s+(?:readonly\s+)?string\s+\w+\s*=\s*[^>]*Application\.persistentDataPath",
         scope="ClassLevel",
-        anti_patterns=[r"//\s*VB-IGNORE", r"\?\?="],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"\?\?="],
         layer="hard_correctness",
     )
 )
@@ -4139,7 +4142,7 @@ RULES.append(
         "Replace with Destroy(obj) at runtime. DestroyImmediate is only safe in Editor code.",
         r"DestroyImmediate\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"#if\s+UNITY_EDITOR", r"/Editor/"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"#if\s+UNITY_EDITOR", r"/Editor/"],
         layer="hard_correctness",
     )
 )
@@ -4154,7 +4157,7 @@ RULES.append(
         "Await the task, use UniTask.Forget() with error handling, or store in a field for cancellation.",
         r"_\s*=\s*\w+Async\s*\(",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"UniTask\.Forget", r"FireAndForget", r"ContinueWith"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"UniTask\.Forget", r"FireAndForget", r"ContinueWith"],
         layer="hard_correctness",
     )
 )
@@ -4169,7 +4172,7 @@ RULES.append(
         "Clamp fixedDeltaTime to a minimum value or skip the update when timeScale is 0.",
         r"Time\.fixedDeltaTime\s*=\s*.*Time\.timeScale",
         scope="AnyMethod",
-        anti_patterns=[r"//\s*VB-IGNORE", r"Mathf\.Max", r"Mathf\.Clamp"],
+        anti_patterns=[r"//\\s*(?:VB|REVIEW)-IGNORE", r"Mathf\.Max", r"Mathf\.Clamp"],
         layer="hard_correctness",
     )
 )
@@ -4521,3 +4524,4 @@ __all__ = [
     "FileFilter",
     "LineContext",
 ]
+

@@ -23,7 +23,7 @@ import re
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from veilbreakers_mcp._types import Category, FindingType, Severity
 
@@ -59,7 +59,7 @@ class Rule:
     pattern: re.Pattern
     anti_patterns: list[re.Pattern] = field(default_factory=list)
     anti_radius: int = 3
-    guard: Optional[object] = None  # callable(line, all_lines, idx) -> bool
+    guard: Optional[Callable[[str, list[str], int], bool]] = None
     finding_type: Optional[FindingType] = None
     confidence: int = -1
     priority: int = -1
@@ -354,45 +354,45 @@ RULES: list[Rule] = [
          "eval() usage -- arbitrary code execution risk",
          "Replace with ast.literal_eval() or redesign.",
          re.compile(r"\beval\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"literal_eval"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"literal_eval"])),
 
     Rule("PY-SEC-02", Severity.CRITICAL, Category.Security,
          "os.system() or subprocess with shell=True -- command injection",
          "Use subprocess.run() with list args and shell=False.",
          re.compile(r"(os\.system\s*\(|subprocess\.\w+\([^)]*shell\s*=\s*True)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"])),
 
     Rule("PY-SEC-03", Severity.CRITICAL, Category.Security,
          "pickle.load on untrusted data -- arbitrary code execution",
          "Use json, msgpack, or safer format.",
          re.compile(r"pickle\.(load|loads)\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"])),
 
     Rule("PY-SEC-04", Severity.HIGH, Category.Security,
          "f-string in SQL/shell command -- injection risk",
          "For SQL: cursor.execute('SELECT * FROM t WHERE id = %s', (user_id,)). For shell: subprocess.run(['cmd', arg], shell=False).",
          re.compile(r'(execute|run|system|popen)\s*\(\s*f["\']'),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"])),
 
     # PY-SEC-05: skip constant assignments and default parameters
     Rule("PY-SEC-05", Severity.HIGH, Category.Security,
          "exec() usage -- arbitrary code execution",
          "Replace with getattr(module, name)() for dynamic dispatch, or a dict mapping names to callables.",
          re.compile(r"\bexec\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"^\s*\w+\s*=\s*", r"def\s+\w+\s*\([^)]*exec"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"^\s*\w+\s*=\s*", r"def\s+\w+\s*\([^)]*exec"])),
 
     Rule("PY-SEC-06", Severity.MEDIUM, Category.Security,
          "Hardcoded file path -- not portable",
          "Use pathlib.Path or os.path.join with configurable base.",
          re.compile(r"""['"](?:/[a-z]+/|[A-Z]:\\\\)[^'"]{3,}['"]"""),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-SEC-07", Severity.HIGH, Category.Security,
          "assert for input validation -- stripped with -O",
          "Replace 'assert x > 0' with 'if x <= 0: raise ValueError(\"x must be positive\")'.",
          re.compile(r"^\s*assert\s+(?!.*#\s*nosec)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"#\s*nosec", r"test_|_test\.py"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"#\s*nosec", r"test_|_test\.py"]),
          confidence=65,
          reasoning="Cannot distinguish input validation from internal invariant checks."),
 
@@ -401,33 +401,33 @@ RULES: list[Rule] = [
          "Mutable default argument -- shared across calls",
          "Change 'def f(items=[])' to 'def f(items=None):', then 'items = items if items is not None else []' in the body.",
          re.compile(r"def\s+\w+\s*\([^)]*=\s*(\[\]|\{\}|set\(\))"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"])),
 
     Rule("PY-COR-02", Severity.HIGH, Category.Bug,
          "Bare except: catches SystemExit, KeyboardInterrupt",
          "Replace 'except:' with 'except Exception:' at minimum, or 'except (ValueError, KeyError):' for specific types.",
          re.compile(r"^\s*except\s*:"),
-         _compile_anti([r"#\s*VB-IGNORE"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"])),
 
     Rule("PY-COR-03", Severity.MEDIUM, Category.Bug,
          "Comparing with None using == instead of 'is None'",
          "Use 'is None' or 'is not None'.",
          re.compile(r"[!=]=\s*None\b"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          finding_type=FindingType.STRENGTHENING),
 
     Rule("PY-COR-04", Severity.MEDIUM, Category.Bug,
          "open() without context manager -- file may not close",
          "Use 'with open(...) as f:'.",
          re.compile(r"(?<!\bwith\s)\bopen\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"\bwith\b",
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"\bwith\b",
                         r"Image\.open", r"BytesIO", r"PIL"])),
 
     Rule("PY-COR-05", Severity.LOW, Category.Bug,
          "datetime.now() without timezone -- ambiguous",
          "Use datetime.now(tz=timezone.utc).",
          re.compile(r"datetime\.now\s*\(\s*\)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          finding_type=FindingType.STRENGTHENING),
 
     # PY-COR-06: only flag if result is mutated, not just read
@@ -435,7 +435,7 @@ RULES: list[Rule] = [
          "dict.get() with mutable default -- mutated result is shared",
          "Use dict.get(key) with None check, then create mutable separately.",
          re.compile(r"\.get\s*\([^)]*,\s*(\[\]|\{\}|set\(\))"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          guard=_check_mutable_get,
          confidence=88),
 
@@ -443,7 +443,7 @@ RULES: list[Rule] = [
          "Class with __del__ -- unpredictable GC, prevents ref cycle collection",
          "Use context managers or weakref.finalize.",
          re.compile(r"def\s+__del__\s*\(\s*self"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          finding_type=FindingType.STRENGTHENING,
          confidence=85),
 
@@ -451,13 +451,13 @@ RULES: list[Rule] = [
          "Thread without daemon=True -- may prevent clean shutdown",
          "Set daemon=True or join before exit.",
          re.compile(r"Thread\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"daemon"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"daemon"])),
 
     Rule("PY-COR-09", Severity.LOW, Category.Bug,
          "json.loads/load without error handling — crashes on malformed input",
          "Wrap in try/except json.JSONDecodeError to handle corrupt JSON gracefully.",
          re.compile(r"json\.loads?\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"except.*JSON",
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"except.*JSON",
                         r"\btry\s*:", r"\bexcept\b"]),
          confidence=68,
          anti_radius=10),
@@ -466,13 +466,13 @@ RULES: list[Rule] = [
          "Float equality comparison -- use math.isclose",
          "Use math.isclose(a, b) or abs(a - b) < epsilon.",
          re.compile(r"(?<!\w)(==|!=)\s*\d+\.\d+"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"])),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"])),
 
     Rule("PY-COR-11", Severity.MEDIUM, Category.Bug,
          "Re-raising exception without chain -- loses traceback",
          "Use 'raise NewException(...) from original_exc' to preserve the traceback chain.",
          re.compile(r"raise\s+\w+\([^)]*\)\s*$"),
-         _compile_anti([r"#\s*VB-IGNORE", r"\bfrom\s+\w+"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"\bfrom\s+\w+"]),
          guard=lambda line, a, i: _is_inside_except(line, a, i),
          finding_type=FindingType.STRENGTHENING,
          confidence=72),
@@ -481,7 +481,7 @@ RULES: list[Rule] = [
          "Exception type too broad -- catches bugs with expected errors",
          "Replace 'except Exception' with specific types: 'except (ValueError, KeyError, TypeError):' matching actual failure modes.",
          re.compile(r"except\s+Exception\s*(?:as|\s*:)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"# broad catch intentional",
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"# broad catch intentional",
                         r"logger\.exception", r"mcp\.tool", r"return\s+json\.dumps"]),
          anti_radius=10,
          guard=lambda line, a, i: not any(
@@ -502,7 +502,7 @@ RULES: list[Rule] = [
          "Variable shadows built-in name (list, dict, set, type, id, etc.) — may break code that needs the built-in later",
          "Rename: items instead of list, mapping instead of dict, obj_type instead of type, obj_id instead of id.",
          re.compile(r"^\s*(list|dict|set|str|int|float|bool|tuple|type|id|input|filter|map|zip|range|len|sum|min|max|any|all|sorted|reversed|hash|next|iter|open|print|format|bytes|object|super)\s*=\s*"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"typing", r"import"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"typing", r"import"]),
          guard=lambda line, a, i: (
              # Skip keyword arguments (line ends with , or ) — inside function call)
              not line.rstrip().endswith(",")
@@ -513,13 +513,13 @@ RULES: list[Rule] = [
          confidence=72),
 
     # PY-COR-15: Late binding closure in loop
-    # Anti-patterns suppress only VB-IGNORE / comments; comprehension detection
+    # Anti-patterns suppress REVIEW-IGNORE/VB-IGNORE comments; comprehension detection
     # lives in the guard (_check_late_binding) to avoid radius-based over-suppression.
     Rule("PY-COR-15", Severity.HIGH, Category.Bug,
          "Lambda in loop captures loop variable by reference -- late binding bug",
          "Capture with default arg: lambda x, i=i: ... or use functools.partial.",
          re.compile(r"for\s+(\w+)\s+in\b"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          guard=lambda line, a, i: _check_late_binding(line, a, i),
          confidence=92),
 
@@ -528,7 +528,7 @@ RULES: list[Rule] = [
          "String concatenation in loop -- O(n^2)",
          "Collect parts in list, ''.join(parts) after loop.",
          re.compile(r"\w+\s*\+=\s*['\"]"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#",
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#",
                         r"\bstring\b", r"\bvar\b", r"\bint\b",
                         r"\.Count\b", r"\.Length\b", r"//\s"]),
          guard=lambda line, a, i: any(
@@ -540,7 +540,7 @@ RULES: list[Rule] = [
          "re.match/search/findall without compile for repeated pattern",
          "Compile pattern once with re.compile() and reuse.",
          re.compile(r"re\.(match|search|findall|sub|split)\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r"re\.compile"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r"re\.compile"]),
          guard=lambda line, a, i: any(
              re.search(r"^\s*(for|while)\b", a[j])
              for j in range(max(0, i - 5), i))),
@@ -549,7 +549,7 @@ RULES: list[Rule] = [
          "Large file .read() without chunking -- may exhaust memory",
          "Use chunked reading: for line in file, or file.read(chunk_size).",
          re.compile(r"\.read\s*\(\s*\)"),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#", r'"rb"', r"BytesIO",
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#", r'"rb"', r"BytesIO",
                         r"img_bytes", r"image_data", r"base64",
                         r'encoding="utf-8"', r"\.read_text\s*\("]),
          confidence=55,
@@ -560,7 +560,7 @@ RULES: list[Rule] = [
          "os.path usage — consider pathlib.Path for cleaner path handling",
          "Replace os.path.join(a, b) with Path(a) / b. pathlib is more readable and handles cross-platform paths.",
          re.compile(r"os\.path\.(join|exists|isfile|isdir|basename|dirname|splitext)\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE", r"^\s*#"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE", r"^\s*#"]),
          confidence=72,
          finding_type=FindingType.STRENGTHENING),
 
@@ -568,7 +568,7 @@ RULES: list[Rule] = [
          "Deeply nested function (3+ indent levels) — hard to test and maintain",
          "Extract inner function to module level or class method for better testability.",
          re.compile(r"^\s{12,}def\s+\w+\s*\("),
-         _compile_anti([r"#\s*VB-IGNORE"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
          confidence=85,
          finding_type=FindingType.STRENGTHENING),
 
@@ -576,7 +576,7 @@ RULES: list[Rule] = [
          "Star import pollutes namespace — imported names are unknown to readers and tools",
          "Replace with explicit imports: from X import ClassA, func_b, CONST_C.",
          re.compile(r"from\s+\S+\s+import\s+\*"),
-         _compile_anti([r"#\s*VB-IGNORE"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
          confidence=92,
          finding_type=FindingType.STRENGTHENING),
 
@@ -584,7 +584,7 @@ RULES: list[Rule] = [
          "Global variable mutation — makes function behavior depend on hidden state",
          "Pass the value as a function parameter, or encapsulate in a class with clear ownership.",
          re.compile(r"^\s+global\s+\w+"),
-         _compile_anti([r"#\s*VB-IGNORE"]),
+         _compile_anti([r"#\\s*(?:VB|REVIEW)-IGNORE"]),
          confidence=78,
          finding_type=FindingType.STRENGTHENING),
 
@@ -686,7 +686,7 @@ def _ast_analyze(filepath: str, source: str, *, review_scope: str = "production"
                     if isinstance(t, ast.Name) and t.id == "__all__":
                         if isinstance(n.value, (ast.List, ast.Tuple)):
                             for elt in n.value.elts:
-                                if isinstance(elt, ast.Constant):
+                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
                                     all_names_list.add(elt.value)
 
     if _should_emit_rule("PY-STY-08", review_scope=review_scope) and not is_test_file and not is_init_module:
@@ -890,7 +890,7 @@ def scan_file(filepath: str, *, review_scope: str = "production") -> list[Issue]
 
     # Build suppressed set
     suppressed: set[str] = set()
-    ignore_rx = re.compile(r"#\s*VB-IGNORE:\s*([\w,-]+)")
+    ignore_rx = re.compile(r"#\\s*(?:VB|REVIEW)-IGNORE:\s*([\w,-]+)")
     for line in lines:
         m = ignore_rx.search(line)
         if m:
@@ -906,7 +906,7 @@ def scan_file(filepath: str, *, review_scope: str = "production") -> list[Issue]
         if "SENTINEL" in rule.pattern.pattern:
             continue
         for i, line in enumerate(lines):
-            if "VB-IGNORE" in line:
+            if "VB-IGNORE" in line or "REVIEW-IGNORE" in line:
                 continue
             if _is_comment(line) or in_tq[i]:
                 continue
@@ -1124,3 +1124,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+

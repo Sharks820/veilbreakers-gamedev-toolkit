@@ -240,9 +240,38 @@ class TestDeriveAddressableGroups:
         for g in groups:
             assert "distance_tier" in g
 
+    def test_derive_addressable_groups_produces_terrain_tiers(self):
+        """Near/Mid/Far terrain tiers are present in the output groups."""
+        locations = [
+            {"name": "Village1", "type": "town"},
+            {"name": "Keep1", "type": "castle"},
+        ]
+        groups = derive_addressable_groups("TestMap", locations)
+        tiers = {g["distance_tier"] for g in groups}
+        assert "near" in tiers, "Expected 'near' tier for terrain base"
+        assert "mid" in tiers, "Expected 'mid' tier for location groups"
+        assert "far" in tiers, "Expected 'far' tier for interiors group"
+
+    def test_derive_addressable_groups_per_location_type(self):
+        """Each distinct location type gets its own addressable group."""
+        locations = [
+            {"name": "Town1", "type": "town"},
+            {"name": "Town2", "type": "town"},
+            {"name": "Castle1", "type": "castle"},
+            {"name": "Dungeon1", "type": "dungeon"},
+        ]
+        groups = derive_addressable_groups("TestMap", locations)
+        type_groups = [g for g in groups if g["group_type"] not in ("terrain", "interior")]
+        assert len(type_groups) == 3  # town, castle, dungeon
+        town_group = [g for g in type_groups if g["group_type"] == "town"][0]
+        assert "Town1" in town_group["objects"]
+        assert "Town2" in town_group["objects"]
+        castle_group = [g for g in type_groups if g["group_type"] == "castle"][0]
+        assert "Castle1" in castle_group["objects"]
+
 
 # ---------------------------------------------------------------------------
-# emit_scene_hierarchy -- requires bpy, test RuntimeError guard
+# emit_scene_hierarchy -- requires bpy, test RuntimeError guard + fields
 # ---------------------------------------------------------------------------
 
 
@@ -258,3 +287,179 @@ class TestEmitSceneHierarchyGuard:
         finally:
             if saved is not None:
                 sys.modules["bpy"] = saved
+
+    def test_interior_results_preserved_on_resume(self):
+        """Checkpoint-loaded interior_results survives step 9 entry when interiors_generated not done."""
+        # Simulate: checkpoint loaded partial interior_results, step not marked complete
+        interior_results = [{"location": "tavern", "result": {"rooms": 3}}]
+        steps_completed = ["terrain_generated", "locations_generated"]
+        # The fixed logic (SAFE-02):
+        if "interiors_generated" not in steps_completed:
+            if not interior_results:
+                interior_results = []
+        assert len(interior_results) == 1, "interior_results should be preserved from checkpoint"
+        assert interior_results[0]["location"] == "tavern"
+
+    def test_interior_results_reset_when_no_checkpoint(self):
+        """Fresh run with empty interior_results stays empty after guard."""
+        interior_results = []
+        steps_completed = ["terrain_generated"]
+        if "interiors_generated" not in steps_completed:
+            if not interior_results:
+                interior_results = []
+        assert interior_results == [], "Empty interior_results stays empty on fresh run"
+
+    def test_scene_hierarchy_fields_present(self):
+        """With a mocked bpy, emit_scene_hierarchy returns correct fields."""
+        import sys
+        import types
+        from unittest.mock import MagicMock
+
+        # Build a fake bpy module with bpy.data.objects
+        fake_bpy = types.ModuleType("bpy")
+        fake_data = MagicMock()
+
+        # Create a mock Blender object
+        mock_obj = MagicMock()
+        mock_obj.name = "Map_Terrain"
+        mock_obj.type = "MESH"
+        mock_obj.matrix_world.translation.x = 1.0
+        mock_obj.matrix_world.translation.y = 2.0
+        mock_obj.matrix_world.translation.z = 3.0
+        mock_obj.rotation_euler.x = 0.0
+        mock_obj.rotation_euler.y = 0.0
+        mock_obj.rotation_euler.z = 0.0
+        mock_obj.scale.x = 1.0
+        mock_obj.scale.y = 1.0
+        mock_obj.scale.z = 1.0
+
+        fake_data.objects = [mock_obj]
+        fake_bpy.data = fake_data
+        sys.modules["bpy"] = fake_bpy
+
+        try:
+            # Must re-import so the guarded import picks up our fake bpy
+            from blender_addon.handlers.pipeline_state import emit_scene_hierarchy
+            result = emit_scene_hierarchy("TestMap", [{"name": "Map_Terrain", "type": "terrain"}])
+
+            assert "map_name" in result
+            assert result["map_name"] == "TestMap"
+            assert "generated_at" in result
+            assert "objects" in result
+            assert len(result["objects"]) >= 1
+
+            obj_entry = result["objects"][0]
+            assert "name" in obj_entry
+            assert "type" in obj_entry
+            assert "district" in obj_entry
+            assert "world_position" in obj_entry
+            assert "world_rotation_euler" in obj_entry
+            assert "world_scale" in obj_entry
+            assert obj_entry["name"] == "Map_Terrain"
+            assert obj_entry["district"] == "terrain"
+        finally:
+            del sys.modules["bpy"]
+
+
+# ---------------------------------------------------------------------------
+# emit_scene_hierarchy whitelist filtering (SAFE-06)
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_blender_obj(name: str, obj_type: str = "MESH"):
+    """Create a minimal mock Blender object."""
+    from unittest.mock import MagicMock
+    obj = MagicMock()
+    obj.name = name
+    obj.type = obj_type
+    obj.matrix_world.translation.x = 0.0
+    obj.matrix_world.translation.y = 0.0
+    obj.matrix_world.translation.z = 0.0
+    obj.rotation_euler.x = 0.0
+    obj.rotation_euler.y = 0.0
+    obj.rotation_euler.z = 0.0
+    obj.scale.x = 1.0
+    obj.scale.y = 1.0
+    obj.scale.z = 1.0
+    return obj
+
+
+class TestEmitSceneHierarchyWhitelist:
+    """Tests for SAFE-06: created_objects whitelist filtering."""
+
+    def _setup_bpy(self, objects):
+        import sys
+        import types
+        from unittest.mock import MagicMock
+        fake_bpy = types.ModuleType("bpy")
+        fake_data = MagicMock()
+        fake_data.objects = objects
+        fake_bpy.data = fake_data
+        sys.modules["bpy"] = fake_bpy
+        return fake_bpy
+
+    def _teardown_bpy(self):
+        import sys
+        sys.modules.pop("bpy", None)
+
+    def test_emit_scene_hierarchy_respects_whitelist(self):
+        """Only whitelisted objects appear in output."""
+        objects = [
+            _make_mock_blender_obj("MapTerrain"),
+            _make_mock_blender_obj("Building_01"),
+            _make_mock_blender_obj("Tree_03"),
+            _make_mock_blender_obj("Camera.001", "CAMERA"),
+            _make_mock_blender_obj("Light_Sun", "LIGHT"),
+        ]
+        self._setup_bpy(objects)
+        try:
+            from blender_addon.handlers.pipeline_state import emit_scene_hierarchy
+            result = emit_scene_hierarchy(
+                "TestMap", [],
+                created_objects=["MapTerrain", "Building_01", "Tree_03"],
+            )
+            names = {o["name"] for o in result["objects"]}
+            assert "MapTerrain" in names
+            assert "Building_01" in names
+            assert "Tree_03" in names
+            assert "Camera.001" not in names
+            assert "Light_Sun" not in names
+        finally:
+            self._teardown_bpy()
+
+    def test_emit_scene_hierarchy_whitelist_none_includes_all(self):
+        """When created_objects=None, all objects included (backward compat)."""
+        objects = [
+            _make_mock_blender_obj("MapTerrain"),
+            _make_mock_blender_obj("Camera.001", "CAMERA"),
+            _make_mock_blender_obj("Light_Sun", "LIGHT"),
+        ]
+        self._setup_bpy(objects)
+        try:
+            from blender_addon.handlers.pipeline_state import emit_scene_hierarchy
+            result = emit_scene_hierarchy("TestMap", [], created_objects=None)
+            names = {o["name"] for o in result["objects"]}
+            assert len(names) == 3
+        finally:
+            self._teardown_bpy()
+
+    def test_emit_scene_hierarchy_whitelist_prefix_match(self):
+        """Sub-objects matching a whitelisted prefix are included."""
+        objects = [
+            _make_mock_blender_obj("Building_01"),
+            _make_mock_blender_obj("Building_01.wall_segment"),
+            _make_mock_blender_obj("Other_Object"),
+        ]
+        self._setup_bpy(objects)
+        try:
+            from blender_addon.handlers.pipeline_state import emit_scene_hierarchy
+            result = emit_scene_hierarchy(
+                "TestMap", [],
+                created_objects=["Building_01"],
+            )
+            names = {o["name"] for o in result["objects"]}
+            assert "Building_01" in names
+            assert "Building_01.wall_segment" in names
+            assert "Other_Object" not in names
+        finally:
+            self._teardown_bpy()

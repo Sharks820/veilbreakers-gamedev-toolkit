@@ -10,6 +10,11 @@ This project now treats **Stable Fast 3D** as the default local image-to-3D gene
 
 ## Blender stack
 
+Target studio runtime:
+
+- `Blender 4.5 LTS` for production and agent automation
+- `Blender 5.0.x` only for sandbox validation and feature trials until addon stability is proven on this machine
+
 Core Blender stack:
 
 - `Geometry Nodes`
@@ -18,7 +23,6 @@ Core Blender stack:
 - `A.N.T. Landscape`
 - `SRTM Terrain Importer`
 - `Archimesh`
-- `Bonsai`
 - `WFC 3D Generator`
 - `Bagapie`
 - `Secret Paint`
@@ -42,6 +46,7 @@ Core Blender stack:
 Optional / experimental on this Blender build:
 
 - `Sverchok`
+- the entire `Blender 5.0.x` runtime line for automated/background tool use on this PC
 
 ## Environment
 
@@ -82,11 +87,19 @@ asset_pipeline action=configure_external_toolchain
 
 These actions now return and persist an `agent_contract` that tells the AI:
 
+- which Blender runtime line is active and whether it is recommended or experimental
 - which terrain stack is active
 - which interior/architecture stack is active
 - which layout variation tools are available
 - which UV, LOD, export, and QA helpers are available
 - which caveats exist, such as experimental or auth-gated add-ons
+
+The preferred preset for terrain work on this PC is:
+
+- `agent_contract.workflow_presets.terrain_unity_ready_free`
+  - `terrain_mixer -> ant_landscape/srtm helpers -> bagapie -> gamiflow -> prepare_heightmap_raw_u16 -> validation_full`
+
+Agents and Claude should use that preset as the default free AAA terrain workflow instead of improvising the stack.
 
 ## Notes
 
@@ -96,4 +109,5 @@ These actions now return and persist an `agent_contract` that tells the AI:
 - Use a dedicated Python 3.12 virtual environment for SF3D. Do not point it at your global Python 3.13/3.14 installs.
 - SPAR3D is not enabled by default here until its repo, dependencies, and practical VRAM behavior are validated on this machine.
 - Tripo remains useful for character generation and remote fallback when the local path is unavailable.
+- Agents should treat `Blender 4.5 LTS` as the default studio target even if a newer Blender is installed locally.
 - Blender remains the primary final-asset authoring tool. Unity should be used for assembly, terrain validation, splines, gameplay spacing, and runtime validation rather than final mesh authoring.

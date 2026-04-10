@@ -31,6 +31,7 @@ from ._dungeon_gen import (
     generate_cave_map,
     generate_town_layout,
 )
+from ._shared_utils import safe_place_object
 
 logger = logging.getLogger(__name__)
 
@@ -490,7 +491,8 @@ def handle_generate_town(params: dict) -> dict:
 
         building_obj = bpy.data.objects.get(structure_name)
         if building_obj is not None:
-            building_obj.location = (bx, by, 0.0)
+            _placement = safe_place_object(bx, by, terrain_name=params.get("terrain_name"))
+            building_obj.location = _placement if _placement is not None else (bx, by, 0.02)
             # Vary rotation for visual interest (face road)
             import random as _rng_town
             _rng_town.seed(seed + i)
@@ -513,7 +515,8 @@ def handle_generate_town(params: dict) -> dict:
         lm_obj = bpy.data.objects.get(lm_name)
         if lm_obj is not None:
             lx, ly = landmark["position"]
-            lm_obj.location = (lx * cell_size, ly * cell_size, 0.0)
+            _lm_place = safe_place_object(lx * cell_size, ly * cell_size, terrain_name=params.get("terrain_name"))
+            lm_obj.location = _lm_place if _lm_place is not None else (lx * cell_size, ly * cell_size, 0.02)
             lm_obj.rotation_euler = (0.0, 0.0, 0.0)
             lm_obj.parent = parent
             structure_count += 1
@@ -615,44 +618,13 @@ def handle_generate_hearthvale(params: dict) -> dict:
             if _generate_location_building(name, building_dict, seed, i, None, parent):
                 buildings_created += 1
         except Exception:
-            # Fallback: create a simple box if the AAA generator fails
-            import bmesh
-            bld_name = f"{name}_{bld_type}_{i}"
-            bx, by = bld.get("position", (0.0, 0.0))
-            elevation = bld.get("elevation", 0.0)
-            mesh = bpy.data.meshes.new(f"{bld_name}_mesh")
-            obj = bpy.data.objects.new(bld_name, mesh)
-            obj.location = (bx, by, elevation)
-            obj.rotation_euler = (0.0, 0.0, bld.get("rotation", 0.0))
-            obj.parent = parent
-            bpy.context.collection.objects.link(obj)
-            bm = bmesh.new()
-            try:
-                hw, hd = fp[0] / 2.0, fp[1] / 2.0
-                # WORLD-005: use configurable floor_height (default 3.5 m)
-                floor_height = float(params.get("floor_height", 3.5))
-                wh = floor_height * bld.get("floors", 1)
-                vs = [
-                    bm.verts.new((-hw, -hd, 0.0)),
-                    bm.verts.new((hw, -hd, 0.0)),
-                    bm.verts.new((hw, hd, 0.0)),
-                    bm.verts.new((-hw, hd, 0.0)),
-                    bm.verts.new((-hw, -hd, wh)),
-                    bm.verts.new((hw, -hd, wh)),
-                    bm.verts.new((hw, hd, wh)),
-                    bm.verts.new((-hw, hd, wh)),
-                ]
-                for face_verts in [
-                    [vs[0], vs[1], vs[2], vs[3]], [vs[4], vs[5], vs[6], vs[7]],
-                    [vs[0], vs[1], vs[5], vs[4]], [vs[2], vs[3], vs[7], vs[6]],
-                    [vs[0], vs[3], vs[7], vs[4]], [vs[1], vs[2], vs[6], vs[5]],
-                ]:
-                    bm.faces.new(face_verts)
-                bm.to_mesh(mesh)
-                buildings_created += 1
-            finally:
-                # WORLD-007: always free bmesh even on exception
-                bm.free()
+            logger.exception(
+                "Failed to materialize building %s[%d] in %s; skipping item",
+                bld_type,
+                i,
+                name,
+            )
+            continue
 
     # Materialize perimeter walls using AAA stone wall generator
     from .building_quality import generate_stone_wall, generate_archway
@@ -665,6 +637,8 @@ def handle_generate_hearthvale(params: dict) -> dict:
         elem_name = f"{name}_perimeter_{elem_type}_{i}"
         ex, ey = elem.get("position", (0.0, 0.0))
         rot_z = elem.get("rotation", 0.0)
+        _perim_loc = safe_place_object(ex, ey, terrain_name=params.get("terrain_name"))
+        _perim_loc = _perim_loc if _perim_loc is not None else (ex, ey, 0.02)
 
         try:
             if elem.get("is_gate"):
@@ -675,7 +649,7 @@ def handle_generate_hearthvale(params: dict) -> dict:
                     seed=seed + 3000 + i,
                 )
                 obj = mesh_from_spec(gate_spec, name=elem_name,
-                                     location=(ex, ey, 0.0),
+                                     location=_perim_loc,
                                      rotation=(0.0, 0.0, rot_z),
                                      parent=parent)
                 if not isinstance(obj, dict):
@@ -687,7 +661,7 @@ def handle_generate_hearthvale(params: dict) -> dict:
                     block_style="ashlar", seed=seed + 3000 + i,
                 )
                 obj = mesh_from_spec(tower_spec, name=elem_name,
-                                     location=(ex, ey, 0.0),
+                                     location=_perim_loc,
                                      rotation=(0.0, 0.0, rot_z),
                                      parent=parent)
                 if not isinstance(obj, dict):
@@ -700,37 +674,20 @@ def handle_generate_hearthvale(params: dict) -> dict:
                     seed=seed + 3000 + i,
                 )
                 obj = mesh_from_spec(wall_spec, name=elem_name,
-                                     location=(ex, ey, 0.0),
+                                     location=_perim_loc,
                                      rotation=(0.0, 0.0, rot_z),
                                      parent=parent)
                 if not isinstance(obj, dict):
                     _assign_procedural_material(obj, "rough_stone_wall")
             perimeter_created += 1
         except Exception:
-            # Fallback: simple box if stone generator fails
-            import bmesh
-            mesh = bpy.data.meshes.new(f"{elem_name}_mesh")
-            obj = bpy.data.objects.new(elem_name, mesh)
-            obj.location = (ex, ey, 0.0)
-            obj.rotation_euler = (0.0, 0.0, rot_z)
-            obj.parent = parent
-            bpy.context.collection.objects.link(obj)
-            bm = bmesh.new()
-            if elem.get("is_gate"):
-                hw, hd, wh = 3.0, 1.0, 5.5
-            elif elem.get("is_tower"):
-                hw, hd, wh = 2.5, 2.5, 7.0
-            else:
-                hw, hd, wh = 3.0, 0.8, 5.5
-            vs = [bm.verts.new(v) for v in [
-                (-hw, -hd, 0), (hw, -hd, 0), (hw, hd, 0), (-hw, hd, 0),
-                (-hw, -hd, wh), (hw, -hd, wh), (hw, hd, wh), (-hw, hd, wh),
-            ]]
-            for fi in [(0,1,2,3),(4,5,6,7),(0,1,5,4),(2,3,7,6),(0,3,7,4),(1,2,6,5)]:
-                bm.faces.new([vs[j] for j in fi])
-            bm.to_mesh(mesh)
-            bm.free()
-            perimeter_created += 1
+            logger.exception(
+                "Failed to materialize perimeter %s[%d] in %s; skipping item",
+                elem_type,
+                i,
+                name,
+            )
+            continue
 
     return {
         "status": "success",

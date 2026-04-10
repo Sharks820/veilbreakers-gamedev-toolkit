@@ -1,0 +1,11 @@
+{
+  "name": "hero_shot",
+  "extends": "production",
+  "erosion_iterations": 24,
+  "erosion_strategy": "hydraulic_thermal",
+  "checkpoint_retention": 8,
+  "erosion_margin_cells": 16,
+  "splatmap_bit_depth": 16,
+  "heightmap_bit_depth": 32,
+  "shadow_clipmap_bit_depth": 16
+}
