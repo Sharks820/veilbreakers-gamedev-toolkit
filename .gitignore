@@ -31,6 +31,7 @@ Tools/cowork_bridge/output/
 
 # Test probe / generated 3D model artifacts
 *.glb
+# Allow exported GLB files in exports directories
 !**/exports/**/*.glb
 
 # IDE / editor caches
