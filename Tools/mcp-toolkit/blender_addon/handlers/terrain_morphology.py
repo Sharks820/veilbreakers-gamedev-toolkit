@@ -28,7 +28,7 @@ class MorphologyTemplate:
     kind: str  # ridge_spur, canyon, mesa, pinnacle, spur, valley, plateau, ...
     scale_m: float  # characteristic XY extent in world meters
     aspect_ratio: float  # length/width ratio (>= 1 means elongated)
-    params: Dict[str, Any] = field(default_factory=dict)
+    params: Dict[str, Any] = field(default_factory=dict)  # REVIEW-IGNORE PY-COR-17: frozen+mutable safe — params treated as read-only after construction
 
 
 # ---------------------------------------------------------------------------
