@@ -74,6 +74,42 @@ All agents (including GSD subagents) have access to these tools. **Prefer MCP to
 6. **zai tools** for any visual analysis, screenshots, diagrams
 7. **Grep/Glob/Read** for local codebase navigation (always available)
 
+## Quality Infrastructure
+
+The project has a 7-layer defense-in-depth system for terrain code quality:
+
+- **L0**: Contract YAML (`.planning/contracts/terrain.yaml`) — machine-readable source of truth
+- **L1**: Pre-flight briefer (`scripts/brief_agent.py`) — run before touching terrain_*.py
+- **L2**: AST lint (`scripts/quality_lint.py`) — detects stubs, orphan deltas, frozen-mutable, silent-swallow
+- **L3**: Contract tests (`tests/contract/`) — auto-generated from YAML
+- **L4**: Honesty lint (`scripts/honesty_lint.py`) — cross-checks plan claims against code
+- **L5**: Test substance lint (`scripts/test_substance_lint.py`) — classifies tests as REAL/SHALLOW/TAUTOLOGICAL
+- **L6**: Integration gate (`tests/integration/test_full_terrain_pipeline.py`) — end-to-end pipeline
+
+### Before Committing Terrain Code
+```bash
+cd Tools/mcp-toolkit
+python scripts/quality_lint.py blender_addon/handlers/  # Must be <=16 findings
+python -m pytest tests/ -q --tb=line                      # Must pass (20,900+)
+```
+
+### Before Touching terrain_*.py
+```bash
+python scripts/brief_agent.py  # Shows contract state, known bugs, sibling passes
+```
+
+### After Writing Tests
+```bash
+python scripts/test_substance_lint.py tests/  # real_ratio must be >= 0.50
+```
+
+### Code Reviewer
+```bash
+PYTHONPATH=src python src/veilbreakers_mcp/vb_code_reviewer.py <path> --scope advisory --profile general
+```
+
+Profiles: `general` (Python+C# core), `blender` (+ BLE rules), `unity` (+ Unity rules), `all` (everything).
+
 ## Planning Files
 
 Phase plans are in `.planning/phases/`. Current project state is in `.planning/STATE.md`. Requirements in `.planning/REQUIREMENTS.md`. Roadmap in `.planning/ROADMAP.md`.
