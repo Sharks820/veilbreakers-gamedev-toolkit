@@ -608,7 +608,7 @@ class TestBehaviorTree:
                 seen_class = True
             if seen_class and stripped.startswith("using ") and "=" in stripped:
                 misplaced_aliases.append(stripped)
-        assert not misplaced_aliases
+        assert not misplaced_aliases, f"Found misplaced aliases: {misplaced_aliases}"
 
 
 # ---------------------------------------------------------------------------
