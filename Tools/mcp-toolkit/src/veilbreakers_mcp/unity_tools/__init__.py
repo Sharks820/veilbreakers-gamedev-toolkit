@@ -33,6 +33,7 @@ from veilbreakers_mcp.unity_tools import world  # noqa: F401
 from veilbreakers_mcp.unity_tools import ux  # noqa: F401
 from veilbreakers_mcp.unity_tools import qa  # noqa: F401
 from veilbreakers_mcp.unity_tools import build  # noqa: F401
+from veilbreakers_mcp.unity_tools import gameobject  # noqa: F401
 
 _strip_registered_tool_titles(mcp)
 
