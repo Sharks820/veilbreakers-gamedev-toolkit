@@ -1056,11 +1056,12 @@ def mesh_from_spec(
                         obj.data.materials[0] = mat
                     else:
                         obj.data.materials.append(mat)
-            except Exception as e:
+            except Exception:
                 import logging
                 logging.getLogger("veilbreakers.mesh_bridge").warning(
-                    "Material assignment failed (category=%s, type=%s): %s",
-                    category, material_type, e,
+                    "Material assignment failed (category=%s, type=%s)",
+                    category, material_type,
+                    exc_info=True,
                 )
 
     return obj
