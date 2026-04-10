@@ -1042,16 +1042,16 @@ def mesh_from_spec(
     # Auto-assign procedural material based on generator category
     category = spec.get("metadata", {}).get("category", "")
     if category:
-        material_key = CATEGORY_MATERIAL_MAP.get(category)
-        if material_key:
+        material_type = CATEGORY_MATERIAL_MAP.get(category)
+        if material_type:
             try:
                 from .procedural_materials import (
                     create_procedural_material,
                     MATERIAL_LIBRARY,
                 )
-                if material_key in MATERIAL_LIBRARY:
-                    mat_name = f"{obj_name}_{material_key}"
-                    mat = create_procedural_material(mat_name, material_key)
+                if material_type in MATERIAL_LIBRARY:
+                    mat_name = f"{obj_name}_{material_type}"
+                    mat = create_procedural_material(mat_name, material_type)
                     if obj.data.materials:
                         obj.data.materials[0] = mat
                     else:
@@ -1059,8 +1059,8 @@ def mesh_from_spec(
             except Exception as e:
                 import logging
                 logging.getLogger("veilbreakers.mesh_bridge").warning(
-                    "Material assignment failed (category=%s, key=%s): %s",
-                    category, material_key, e,
+                    "Material assignment failed (category=%s, type=%s): %s",
+                    category, material_type, e,
                 )
 
     return obj

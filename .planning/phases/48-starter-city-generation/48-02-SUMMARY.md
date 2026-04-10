@@ -135,7 +135,7 @@ completed: 2026-04-04
 **Total deviations:** 3 auto-fixed (1 bug workaround, 2 blocking parameter fixes)
 
 ## Known Limitations (Generator-Level)
-- Water is 4-vert flat quad (env_create_water limitation, not Phase 48 issue)
+- Water was a 4-vert flat quad during this execution (env_create_water called without path_points, pre-39-02 code state); current handler (post-39-02 upgrade) produces a multi-vertex spline mesh even without path_points -- pass path_points for river-following shaped water
 - Roads carved into heightmap, not separate geometry (env_generate_road limitation)
 - Material assignment is per-face, not smooth height-blend shader
 - Terrain size parameter does not map 1:1 to world units (-50 to 50 for size=250)
