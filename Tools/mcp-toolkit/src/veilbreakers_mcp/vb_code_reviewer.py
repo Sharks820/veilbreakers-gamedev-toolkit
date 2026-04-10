@@ -493,6 +493,24 @@ def _issue_from_dict(data: dict[str, Any]) -> Issue:
     return issue
 
 
+_AST_HARD_RULE_IDS = frozenset({
+    "AST-CS-03",
+    "AST-CS-04",
+})
+
+
+def _ast_issue_layer(rule_id: str) -> str:
+    """Map AST findings to reviewer layers.
+
+    Structural C# runtime hazards stay in the production gate. Lower-confidence
+    structural hygiene findings remain semantic so strict/advisory can surface
+    them without polluting ship-blocking output.
+    """
+    if rule_id in _AST_HARD_RULE_IDS:
+        return LAYER_HARD_CORRECTNESS
+    return LAYER_SEMANTIC
+
+
 # =========================================================================
 # HELPER FUNCTIONS
 # =========================================================================
@@ -2412,7 +2430,7 @@ def scan_project(
 
     # Smart incremental scanning: Load cached findings for unchanged files (60-80% reduction)
     import hashlib
-    cache: dict[str, dict[str, list[dict]]] = {}  # filepath -> {hash: issues, timestamp}
+    cache: dict[str, dict[str, Any]] = {}  # filepath -> {hash, timestamp, issues}
 
     def _file_hash(filepath: str) -> str:
         """Calculate SHA256 hash of a file (chunked for large files)."""
@@ -2469,7 +2487,7 @@ def scan_project(
 
     # Check AST availability once
     _ast_ok = False
-    if review_scope in ("advisory", "strict"):
+    if review_scope in REVIEW_SCOPE_CHOICES:
         try:
             from veilbreakers_mcp._ast_analyzer import analyze_csharp, analyze_python, is_available as ast_available
             _ast_ok = ast_available()
@@ -2599,9 +2617,10 @@ def scan_project(
         if regex_has_issue:
             files_with_regex_issues.add(filepath)
 
-        # --- Layer 2: tree-sitter AST (advisory+ only, same file bytes) ---
-        # Tool chaining: Only run AST on files with regex findings (30-50% reduction)
-        if _ast_ok and review_scope in ("advisory", "strict") and filepath in files_with_regex_issues:
+        # --- Layer 2: tree-sitter AST (all scopes, same file bytes) ---
+        # Run AST on every eligible file so structural bugs are not hidden behind
+        # a regex precondition.
+        if _ast_ok:
             try:
                 with open(filepath, "rb") as f:
                     src = f.read()
@@ -2616,7 +2635,8 @@ def scan_project(
                         rule_id=af.rule_id, severity=af.severity,
                         category="Bug", file=af.file, line=af.line,
                         description=af.description, fix=af.fix,
-                        confidence=af.confidence, layer=LAYER_SEMANTIC,
+                        confidence=af.confidence,
+                        layer=_ast_issue_layer(af.rule_id),
                     ), source_tool="ast")
                     ast_findings += 1
             except Exception:
