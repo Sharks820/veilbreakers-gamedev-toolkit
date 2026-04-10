@@ -1059,8 +1059,8 @@ def mesh_from_spec(
             except Exception as e:
                 import logging
                 logging.getLogger("veilbreakers.mesh_bridge").warning(
-                    "Material assignment failed for %s (category=%s, key=%s): %s",
-                    obj_name, category, material_key, e,
+                    "Material assignment failed (category=%s, key=%s): %s",
+                    category, material_key, e,
                 )
 
     return obj
