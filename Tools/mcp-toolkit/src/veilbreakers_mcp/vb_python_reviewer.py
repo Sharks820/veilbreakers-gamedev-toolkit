@@ -23,7 +23,7 @@ import re
 import sys
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 
 from veilbreakers_mcp._types import Category, FindingType, Severity
 
@@ -59,7 +59,7 @@ class Rule:
     pattern: re.Pattern
     anti_patterns: list[re.Pattern] = field(default_factory=list)
     anti_radius: int = 3
-    guard: Optional[object] = None  # callable(line, all_lines, idx) -> bool
+    guard: Optional[Callable[[str, list[str], int], bool]] = None
     finding_type: Optional[FindingType] = None
     confidence: int = -1
     priority: int = -1
@@ -686,7 +686,7 @@ def _ast_analyze(filepath: str, source: str, *, review_scope: str = "production"
                     if isinstance(t, ast.Name) and t.id == "__all__":
                         if isinstance(n.value, (ast.List, ast.Tuple)):
                             for elt in n.value.elts:
-                                if isinstance(elt, ast.Constant):
+                                if isinstance(elt, ast.Constant) and isinstance(elt.value, str):
                                     all_names_list.add(elt.value)
 
     if _should_emit_rule("PY-STY-08", review_scope=review_scope) and not is_test_file and not is_init_module:
