@@ -364,7 +364,7 @@ def main() -> int:
     real_ratio = len(real) / total if total > 0 else 0.0
 
     # Report
-    print(f"\n=== L5 Test Substance Audit ===")
+    print("\n=== L5 Test Substance Audit ===")
     print(f"Files scanned: {len(test_files)}")
     print(f"Tests found:   {total}")
     print(f"  REAL:         {len(real):>4}  ({len(real)/total*100:.0f}%)")
