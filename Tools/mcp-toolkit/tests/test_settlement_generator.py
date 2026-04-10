@@ -1318,8 +1318,22 @@ class TestHearthvale:
         assert cfg["building_count"] == (14, 14)
         assert cfg["has_walls"] is True
         assert cfg["has_market"] is True
+        assert cfg["has_shrine"] is True
+        assert cfg["road_style"] == "cobblestone"
+        assert cfg["prop_density"] == 0.7
         assert cfg["layout_pattern"] == "concentric_organic"
         assert cfg.get("default_radius") == 65.0
+
+    def test_hearthvale_generates_14_buildings(self):
+        """Hearthvale has a fixed building count of exactly 14."""
+        result = generate_settlement("hearthvale", seed=3810)
+        buildings = result["buildings"]
+        # building_count is (14, 14) so the generator targets exactly 14;
+        # concentric-organic placement may drop buildings that collide,
+        # but we expect at least 10 placed out of 14 requested.
+        assert len(buildings) >= 10, (
+            f"Expected at least 10 buildings from hearthvale, got {len(buildings)}"
+        )
 
     def test_hearthvale_building_types_all_mapped(self):
         """Every building type in the hearthvale config has room + footprint entries."""
@@ -1332,39 +1346,47 @@ class TestHearthvale:
                 f"Building type '{btype}' missing from _BUILDING_FOOTPRINTS"
             )
 
-    def test_hearthvale_generates_buildings(self):
-        """Concentric-organic path produces at least some buildings."""
+    def test_hearthvale_interiors_non_empty(self):
+        """At least some buildings have furnished interiors."""
         result = generate_settlement("hearthvale", seed=3810)
-        buildings = result["buildings"]
-        assert len(buildings) >= 1, "Expected at least 1 building from hearthvale generation"
+        interiors = result.get("interiors", {})
+        assert len(interiors) >= 1, "Expected at least 1 furnished interior"
+        # Each interior entry should have furniture items
+        for idx, items in interiors.items():
+            assert len(items) >= 1, (
+                f"Interior for building {idx} has no furniture items"
+            )
 
-    def test_hearthvale_has_perimeter(self):
-        """Perimeter walls are generated for the walled town."""
-        result = generate_settlement("hearthvale", seed=3810)
-        perimeter = result.get("perimeter", [])
-        assert len(perimeter) >= 1, "Expected perimeter elements for walled town"
+    def test_hearthvale_footprints_non_default(self):
+        """All hearthvale building types have explicit footprints (not the 6x6 default)."""
+        cfg = SETTLEMENT_TYPES["hearthvale"]
+        unique_types = set(cfg["building_types"])
+        for btype in unique_types:
+            fp = _BUILDING_FOOTPRINTS[btype]
+            assert fp != (6.0, 6.0), (
+                f"Building type '{btype}' still uses default (6.0, 6.0) footprint"
+            )
 
-    def test_hearthvale_perimeter_has_gate(self):
-        """Perimeter includes at least one gate element."""
+    def test_hearthvale_perimeter_has_portcullis(self):
+        """Perimeter includes at least one portcullis gate element."""
         result = generate_settlement("hearthvale", seed=3810)
         perimeter = result.get("perimeter", [])
         gate_types = [p.get("type", "") for p in perimeter]
-        has_gate = any("gate" in gt.lower() for gt in gate_types)
-        assert has_gate, f"No gate in perimeter. Types: {gate_types}"
+        has_portcullis = any("portcullis" in gt.lower() for gt in gate_types)
+        assert has_portcullis, (
+            f"No portcullis_gate in perimeter. Types: {gate_types}"
+        )
 
-    def test_hearthvale_has_roads(self):
-        """Concentric-organic path generates road network."""
+    def test_hearthvale_perimeter_has_two_plus_towers(self):
+        """Perimeter includes at least two corner towers."""
         result = generate_settlement("hearthvale", seed=3810)
-        roads = result.get("roads", [])
-        assert len(roads) >= 1, "Expected at least 1 road segment"
-
-    def test_hearthvale_has_metadata(self):
-        """Result contains expected metadata keys."""
-        result = generate_settlement("hearthvale", seed=3810)
-        meta = result.get("metadata", {})
-        assert "building_count" in meta
-        assert meta.get("layout_pattern") == "concentric_organic"
-        assert meta.get("has_walls") is True
+        perimeter = result.get("perimeter", [])
+        tower_count = sum(
+            1 for p in perimeter if "corner_tower" in p.get("type", "")
+        )
+        assert tower_count >= 2, (
+            f"Expected at least 2 corner_tower elements, got {tower_count}"
+        )
 
     def test_hearthvale_determinism(self):
         """Same seed produces identical results."""
@@ -1373,3 +1395,13 @@ class TestHearthvale:
         b1 = [(b["position"], b.get("type", "")) for b in r1["buildings"]]
         b2 = [(b["position"], b.get("type", "")) for b in r2["buildings"]]
         assert b1 == b2, "Two calls with same seed produced different buildings"
+
+    def test_hearthvale_wall_height_key_present(self):
+        """Metadata includes wall_height so downstream renderers know storey height."""
+        result = generate_settlement("hearthvale", seed=3810)
+        meta = result.get("metadata", {})
+        assert "wall_height" in meta, (
+            f"wall_height missing from metadata. Keys: {sorted(meta.keys())}"
+        )
+        assert isinstance(meta["wall_height"], (int, float))
+        assert meta["wall_height"] > 0

@@ -2383,6 +2383,7 @@ def generate_concentric_districts(
     veil_pressure: float = 0.0,
     heightmap: Callable[[float, float], float] | None = None,
     wall_height: float = 3.5,
+    perimeter_props: list[str] | None = None,
 ) -> dict[str, Any]:
     """Generate a medieval town using concentric ring zoning + OBB lot subdivision.
 
@@ -2530,9 +2531,10 @@ def generate_concentric_districts(
         })
 
     # --- Step 5: Perimeter walls ---
+    effective_perimeter_props = perimeter_props or ["wall_segment", "gate_large", "corner_tower"]
     perimeter_config = {
         "has_walls": True,
-        "perimeter_props": ["wall_segment", "gate_large", "corner_tower"],
+        "perimeter_props": effective_perimeter_props,
     }
     perimeter = _generate_perimeter(rng, perimeter_config, center, radius)
 
@@ -2619,6 +2621,7 @@ def generate_concentric_districts(
         "veil_pressure": veil_pressure,
         "layout_pattern": "concentric_organic",
         "prop_manifest": prop_manifest,
+        "wall_height": wall_height,
     }
 
     return {
@@ -2714,6 +2717,7 @@ def generate_settlement(
             veil_pressure=veil_pressure,
             heightmap=heightmap,
             wall_height=wall_height,
+            perimeter_props=config.get("perimeter_props"),
         )
         return {
             "settlement_type": settlement_type,
@@ -3025,6 +3029,7 @@ def generate_settlement(
         "layout_pattern": effective_config.get("layout_pattern", "organic"),
         "layout_brief": layout_brief,
         "layout_profile": layout_profile,
+        "wall_height": wall_height,
     }
 
     return {
