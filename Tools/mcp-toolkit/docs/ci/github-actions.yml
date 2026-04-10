@@ -1,0 +1,20 @@
+name: Code Review
+
+on:
+  pull_request:
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e Tools/mcp-toolkit
+      - run: vb-review . --scope production --profile general --output reviewer-report.json
+      - run: python - <<'PY'
+          import json, sys
+          report = json.load(open("reviewer-report.json", "r", encoding="utf-8"))
+          sys.exit(1 if report["critical"] or report["high"] else 0)
+        shell: bash

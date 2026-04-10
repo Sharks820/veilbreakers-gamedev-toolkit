@@ -374,6 +374,7 @@ class Issue:
     # New fields for unified reviewer
     layer: str = LAYER_HARD_CORRECTNESS
     requires_context: bool = False
+    profile: str = "general"
     # Reliability-weighted confidence for final output
     adjusted_confidence: int = 75
 
@@ -1789,6 +1790,7 @@ def scan_python_file(
                     reasoning=rule.reasoning or "",
                     layer=rule.layer,
                     requires_context=rule.requires_context,
+                    profile=profile,
                 )
             )
 
@@ -1796,6 +1798,7 @@ def scan_python_file(
     ast_issues = _ast_analyze_python(filepath, content, review_scope)
     for issue in ast_issues:
         if issue.rule_id not in suppressed:
+            issue.profile = profile
             issues.append(issue)
 
     return issues
@@ -1937,6 +1940,7 @@ def scan_csharp_file(
                     reasoning=rule.reasoning or "",
                     layer=rule.layer,
                     requires_context=rule.requires_context,
+                    profile=profile,
                 )
             )
 
@@ -1978,6 +1982,7 @@ def scan_csharp_file(
                         priority=finding.get("priority", 75),
                         layer=LAYER_SEMANTIC,
                         requires_context=True,
+                        profile=profile,
                     )
                 )
 
@@ -2512,6 +2517,7 @@ rules:
                     description=tf.description,
                     fix=tf.fix,
                     layer=layer,
+                    profile=profile,
                 ), source_tool=source_tool)
                 tool_findings += 1
 
