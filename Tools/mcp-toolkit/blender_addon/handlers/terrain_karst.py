@@ -221,9 +221,46 @@ def pass_karst(
     )
 
 
+def get_sinkhole_specs(
+    stack: TerrainMaskStack,
+    *,
+    max_sinkholes: int = 5,
+    seed: int = 42,
+) -> list:
+    """Return MeshSpec dicts for sinkhole meshes at karst-detected sites.
+
+    Calls ``detect_karst_candidates`` to find sinkhole/cenote locations,
+    then ``generate_sinkhole`` from terrain_features to produce standalone
+    meshes for Blender placement.
+
+    Returns a list of dicts with ``mesh_spec`` and ``world_pos`` keys.
+    """
+    from .terrain_features import generate_sinkhole
+
+    features = detect_karst_candidates(stack)
+    sinkholes = [f for f in features if f.kind in ("sinkhole", "cenote")]
+    if not sinkholes:
+        return []
+
+    rng = np.random.default_rng(seed)
+    results = []
+    for f in sinkholes[:max_sinkholes]:
+        spec = generate_sinkhole(
+            radius=f.radius_m,
+            depth=f.radius_m * 1.2,
+            wall_roughness=rng.uniform(0.3, 0.7),
+            has_bottom_cave=f.kind == "cenote",
+            rubble_density=rng.uniform(0.2, 0.5),
+            seed=int(rng.integers(0, 2**31)),
+        )
+        results.append({"mesh_spec": spec, "world_pos": f.world_pos})
+    return results
+
+
 __all__ = [
     "KarstFeature",
     "detect_karst_candidates",
     "carve_karst_features",
     "pass_karst",
+    "get_sinkhole_specs",
 ]

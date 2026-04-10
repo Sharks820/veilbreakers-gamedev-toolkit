@@ -675,6 +675,72 @@ def register_water_variants_pass() -> None:
     )
 
 
+def get_geyser_specs(
+    stack: TerrainMaskStack,
+    *,
+    max_geysers: int = 4,
+    seed: int = 42,
+) -> list:
+    """Return MeshSpec dicts for geyser meshes at detected hot-spring sites.
+
+    Calls ``detect_hot_springs`` to find sites, then ``generate_geyser``
+    from terrain_features to produce standalone meshes for Blender placement.
+
+    Returns a list of dicts with ``mesh_spec`` and ``world_pos`` keys.
+    """
+    from .terrain_features import generate_geyser
+
+    springs = detect_hot_springs(stack)
+    if not springs:
+        return []
+
+    rng = np.random.default_rng(seed)
+    results = []
+    for hs in springs[:max_geysers]:
+        spec = generate_geyser(
+            pool_radius=rng.uniform(2.0, 5.0),
+            pool_depth=rng.uniform(0.3, 0.8),
+            vent_height=rng.uniform(0.5, 2.0),
+            mineral_rim_width=rng.uniform(0.5, 1.5),
+            seed=int(rng.integers(0, 2**31)),
+        )
+        results.append({"mesh_spec": spec, "world_pos": hs.world_pos})
+    return results
+
+
+def get_swamp_specs(
+    stack: TerrainMaskStack,
+    *,
+    max_swamps: int = 3,
+    seed: int = 42,
+) -> list:
+    """Return MeshSpec dicts for swamp terrain at detected wetland sites.
+
+    Calls ``detect_wetlands`` to find sites, then ``generate_swamp_terrain``
+    from terrain_features to produce standalone meshes for Blender placement.
+
+    Returns a list of dicts with ``mesh_spec`` and ``world_pos`` keys.
+    """
+    from .terrain_features import generate_swamp_terrain
+
+    wetlands = detect_wetlands(stack)
+    if not wetlands:
+        return []
+
+    rng = np.random.default_rng(seed)
+    results = []
+    for wl in wetlands[:max_swamps]:
+        spec = generate_swamp_terrain(
+            size=wl.radius_m * 2.0,
+            water_level=rng.uniform(0.2, 0.5),
+            hummock_count=int(rng.integers(6, 18)),
+            has_mangroves=bool(rng.random() > 0.5),
+            seed=int(rng.integers(0, 2**31)),
+        )
+        results.append({"mesh_spec": spec, "world_pos": wl.world_pos})
+    return results
+
+
 __all__ = [
     "BraidedChannels",
     "Estuary",
@@ -692,4 +758,6 @@ __all__ = [
     "apply_seasonal_water_state",
     "pass_water_variants",
     "register_water_variants_pass",
+    "get_geyser_specs",
+    "get_swamp_specs",
 ]

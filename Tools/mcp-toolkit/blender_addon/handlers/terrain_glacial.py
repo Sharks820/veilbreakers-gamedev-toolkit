@@ -257,9 +257,59 @@ def pass_glacial(
     )
 
 
+def get_ice_formation_specs(
+    stack: TerrainMaskStack,
+    *,
+    max_formations: int = 5,
+    seed: int = 42,
+) -> list:
+    """Return MeshSpec dicts for ice formations at high-altitude glacial sites.
+
+    Scans the snow_line_factor channel for cells with high snow coverage
+    and calls ``generate_ice_formation`` from terrain_features to produce
+    standalone meshes suitable for Blender placement.
+
+    Returns a list of dicts, each with keys ``mesh_spec`` and ``world_pos``.
+    """
+    from .terrain_features import generate_ice_formation
+
+    factor = stack.get("snow_line_factor")
+    if factor is None:
+        return []
+
+    rng = np.random.default_rng(seed)
+    h = np.asarray(stack.height, dtype=np.float64)
+    rows, cols = h.shape
+
+    # Find candidate cells with strong snow coverage
+    candidates = np.argwhere(np.asarray(factor) > 0.7)
+    if len(candidates) == 0:
+        return []
+
+    # Subsample to avoid excessive geometry
+    indices = rng.choice(len(candidates), size=min(max_formations, len(candidates)), replace=False)
+    results = []
+    for idx in indices:
+        r, c = int(candidates[idx][0]), int(candidates[idx][1])
+        wx = stack.world_origin_x + c * stack.cell_size
+        wy = stack.world_origin_y + r * stack.cell_size
+        wz = float(h[r, c])
+        spec = generate_ice_formation(
+            width=rng.uniform(3.0, 8.0),
+            height=rng.uniform(2.0, 6.0),
+            depth=rng.uniform(2.0, 5.0),
+            stalactite_count=int(rng.integers(4, 12)),
+            ice_wall=bool(rng.random() > 0.5),
+            seed=int(rng.integers(0, 2**31)),
+        )
+        results.append({"mesh_spec": spec, "world_pos": (wx, wy, wz)})
+    return results
+
+
 __all__ = [
     "carve_u_valley",
     "scatter_moraines",
     "compute_snow_line",
     "pass_glacial",
+    "get_ice_formation_specs",
 ]

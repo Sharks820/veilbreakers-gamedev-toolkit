@@ -906,6 +906,52 @@ def register_bundle_f_passes() -> None:
     )
 
 
+def get_cave_entrance_specs(
+    stack: "TerrainMaskStack",
+    *,
+    max_entrances: int = 4,
+    seed: int = 42,
+) -> list:
+    """Return MeshSpec dicts for cave entrance meshes at cave-candidate sites.
+
+    Reads the ``cave_candidate`` channel (produced by ``pass_caves``) to
+    locate entrance positions, then calls ``generate_cave_entrance_mesh``
+    from ``_terrain_depth`` to build standalone archway geometry.
+
+    Returns a list of dicts with ``mesh_spec`` and ``world_pos`` keys.
+    """
+    import numpy as _np
+    from ._terrain_depth import generate_cave_entrance_mesh
+
+    cc = stack.get("cave_candidate")
+    if cc is None:
+        return []
+
+    rng = _np.random.default_rng(seed)
+    candidates = _np.argwhere(_np.asarray(cc) > 0.5)
+    if len(candidates) == 0:
+        return []
+
+    indices = rng.choice(len(candidates), size=min(max_entrances, len(candidates)), replace=False)
+    results = []
+    for idx in indices:
+        r, c = int(candidates[idx][0]), int(candidates[idx][1])
+        wx = stack.world_origin_x + c * stack.cell_size
+        wy = stack.world_origin_y + r * stack.cell_size
+        wz = float(stack.height[r, c])
+        spec = generate_cave_entrance_mesh(
+            width=rng.uniform(3.0, 6.0),
+            height=rng.uniform(3.0, 5.0),
+            depth=rng.uniform(2.0, 4.0),
+            arch_segments=12,
+            terrain_edge_height=wz,
+            style="natural",
+            seed=int(rng.integers(0, 2**31)),
+        )
+        results.append({"mesh_spec": spec, "world_pos": (wx, wy, wz)})
+    return results
+
+
 __all__ = [
     "CaveArchetype",
     "CaveArchetypeSpec",
@@ -920,4 +966,5 @@ __all__ = [
     "validate_cave_entrance",
     "pass_caves",
     "register_bundle_f_passes",
+    "get_cave_entrance_specs",
 ]

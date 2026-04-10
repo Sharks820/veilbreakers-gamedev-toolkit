@@ -367,6 +367,7 @@ def _protected_mask(
 def pass_macro_world(
     state: TerrainPipelineState,
     region: Optional[BBox],
+    deterministic_seed_override: Optional[int] = None,
 ) -> PassResult:
     """Pass 1: generate or confirm the base height field on the mask stack.
 
@@ -414,6 +415,7 @@ def pass_macro_world(
 def pass_structural_masks(
     state: TerrainPipelineState,
     region: Optional[BBox],
+    deterministic_seed_override: Optional[int] = None,
 ) -> PassResult:
     """Pass 2: populate slope, curvature, concavity, convexity, ridge, basin, saliency."""
     t0 = time.perf_counter()
@@ -455,6 +457,7 @@ def pass_structural_masks(
 def pass_erosion(
     state: TerrainPipelineState,
     region: Optional[BBox],
+    deterministic_seed_override: Optional[int] = None,
 ) -> PassResult:
     """Pass 3: run hydraulic + thermal erosion, populate erosion masks.
 
@@ -472,13 +475,16 @@ def pass_erosion(
 
     # Use the protocol-mandated deterministic seed derivation so cross-tile
     # runs produce DIFFERENT erosion patterns under the same intent seed.
-    seed = derive_pass_seed(
-        intent.seed,
-        "erosion",
-        stack.tile_x,
-        stack.tile_y,
-        region,
-    )
+    if deterministic_seed_override is not None:
+        seed = deterministic_seed_override
+    else:
+        seed = derive_pass_seed(
+            intent.seed,
+            "erosion",
+            stack.tile_x,
+            stack.tile_y,
+            region,
+        )
     profile = intent.erosion_profile or "temperate"
 
     profile_params = {
@@ -587,6 +593,7 @@ def pass_erosion(
 def pass_validation_minimal(
     state: TerrainPipelineState,
     region: Optional[BBox],
+    deterministic_seed_override: Optional[int] = None,
 ) -> PassResult:
     """Pass 4: emit a minimal validation report over the mask stack.
 

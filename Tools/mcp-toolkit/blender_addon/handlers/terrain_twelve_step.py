@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
+import logging
+
 from ._terrain_world import (
     erode_world_heightmap,
     extract_tile,
@@ -29,6 +31,8 @@ from .terrain_world_math import (
     TileTransform,
     compute_erosion_params_for_world_range,
 )
+
+_log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -58,6 +62,116 @@ def _detect_cave_candidates_stub(world_hmap: np.ndarray) -> List[Tuple[int, int]
 
 def _detect_waterfall_lips_stub(world_hmap: np.ndarray) -> List[Tuple[int, int]]:
     return []
+
+
+def _generate_road_mesh_specs(
+    world_hmap: np.ndarray,
+    intent: TerrainIntentState,
+    tile_grid_x: int,
+    tile_grid_y: int,
+    cell_size: float,
+    seed: int,
+) -> List[Dict[str, Any]]:
+    """Step 10: generate road mesh specifications from the world heightmap.
+
+    Delegates to ``generate_road_path`` from ``_terrain_noise`` when waypoints
+    are available in the intent. Returns a list of mesh spec dicts describing
+    each road segment (vertices, width, graded heightmap patch).
+
+    If no waypoints are configured on the intent the function returns an empty
+    list and logs the skip.
+    """
+    from ._terrain_noise import generate_road_path
+
+    waypoints: List[Tuple[int, int]] = getattr(intent, "road_waypoints", None) or []
+    if len(waypoints) < 2:
+        _log.info(
+            "Step 10 skipped: fewer than 2 road waypoints on intent (got %d)",
+            len(waypoints),
+        )
+        return []
+
+    road_specs: List[Dict[str, Any]] = []
+    try:
+        path, graded_hmap = generate_road_path(
+            world_hmap,
+            waypoints,
+            width=max(3, int(3.0 / cell_size)),
+            grade_strength=0.8,
+            seed=seed,
+        )
+        road_specs.append({
+            "path": path,
+            "width_cells": max(3, int(3.0 / cell_size)),
+            "vertex_count": len(path),
+            "seed": seed,
+        })
+        _log.info("Step 10: generated road with %d vertices", len(path))
+    except Exception as exc:  # noqa: BLE001
+        _log.warning("Step 10: road generation failed: %s", exc)
+
+    return road_specs
+
+
+def _generate_water_body_specs(
+    world_hmap: np.ndarray,
+    world_flow: Dict[str, Any],
+    intent: TerrainIntentState,
+    cell_size: float,
+) -> List[Dict[str, Any]]:
+    """Step 11: generate water body specifications from flow accumulation.
+
+    Identifies cells with high flow accumulation (potential lake / river pools)
+    and returns mesh specs for flat water surfaces at the local height.
+
+    Returns an empty list when no significant accumulation basins are found.
+    """
+    water_specs: List[Dict[str, Any]] = []
+
+    # Extract flow accumulation from the world flow map
+    flow_acc_raw = world_flow.get("flow_accumulation")
+    if flow_acc_raw is None:
+        _log.info("Step 11 skipped: no flow_accumulation in world_flow")
+        return water_specs
+
+    flow_acc = np.asarray(flow_acc_raw, dtype=np.float64)
+    if flow_acc.size == 0:
+        _log.info("Step 11 skipped: empty flow_accumulation array")
+        return water_specs
+
+    max_acc = float(flow_acc.max())
+    if max_acc <= 0:
+        _log.info("Step 11 skipped: max flow accumulation is 0")
+        return water_specs
+
+    # Threshold: cells above 70% of max accumulation are water candidates
+    threshold = max_acc * 0.7
+    water_mask = flow_acc >= threshold
+    water_cell_count = int(water_mask.sum())
+
+    if water_cell_count == 0:
+        _log.info("Step 11: no cells above accumulation threshold (%.1f)", threshold)
+        return water_specs
+
+    # Compute average height of water cells for the surface plane
+    water_heights = world_hmap[water_mask]
+    surface_height = float(water_heights.mean())
+
+    water_specs.append({
+        "type": "accumulated_basin",
+        "cell_count": water_cell_count,
+        "surface_height": surface_height,
+        "threshold": threshold,
+        "max_accumulation": max_acc,
+        "cell_size": cell_size,
+    })
+    _log.info(
+        "Step 11: identified water body with %d cells at height %.2f",
+        water_cell_count,
+        surface_height,
+    )
+
+    return water_specs
 
 
 def run_twelve_step_world_terrain(
@@ -185,11 +299,13 @@ def run_twelve_step_world_terrain(
                 convention="object_origin_at_min_corner",
             )
 
-    # Step 10 — generate road meshes in world space (STUB)
-    sequence.append("10_generate_road_meshes_stub")
+    # Step 10 — generate road meshes in world space
+    sequence.append("10_generate_road_meshes")
+    road_specs = _generate_road_mesh_specs(world_eroded, intent, tile_grid_x, tile_grid_y, cell_size, seed)
 
-    # Step 11 — generate water bodies in world space (STUB)
-    sequence.append("11_generate_water_bodies_stub")
+    # Step 11 — generate water bodies in world space
+    sequence.append("11_generate_water_bodies")
+    water_specs = _generate_water_body_specs(world_eroded, world_flow, intent, cell_size)
 
     # Step 12 — validate tile seams (hard gate)
     sequence.append("12_validate_tile_seams")
@@ -205,6 +321,8 @@ def run_twelve_step_world_terrain(
         "cliff_candidates": cliff_candidates,
         "cave_candidates": cave_candidates,
         "waterfall_lip_candidates": waterfall_lip_candidates,
+        "road_specs": road_specs,
+        "water_specs": water_specs,
         "seam_report": seam_report,
         "sequence": sequence,
         "metadata": {
