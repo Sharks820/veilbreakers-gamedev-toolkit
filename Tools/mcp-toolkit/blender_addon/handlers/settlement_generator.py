@@ -2649,6 +2649,7 @@ def generate_settlement(
     wall_height: float = 3.0,
     layout_brief: str = "",
     veil_pressure: float = 0.0,
+    building_count_override: int | None = None,
 ) -> dict[str, Any]:
     """Generate a complete settlement layout.
 
@@ -2700,7 +2701,9 @@ def generate_settlement(
             f"Valid types: {sorted(SETTLEMENT_TYPES.keys())}"
         )
 
-    config = SETTLEMENT_TYPES[settlement_type]
+    config = dict(SETTLEMENT_TYPES[settlement_type])  # shallow copy to avoid mutating global
+    if building_count_override is not None:
+        config["building_count"] = (building_count_override, building_count_override)
 
     if seed is None:
         seed = random.Random().randint(0, 2**31)  # fresh OS-entropy instance; not global RNG
