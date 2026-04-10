@@ -91,6 +91,22 @@ class WaterfallChain:
     drop_segments: Tuple[float, ...] = field(default_factory=tuple)
 
 
+@dataclass
+class WaterfallVolumetricProfile:
+    """Volumetric mesh spec for a waterfall sheet.
+
+    Waterfalls MUST be 3D volumetric meshes (thick tapered prism, rounded front),
+    never flat planes. This profile defines the cross-section geometry.
+    """
+
+    thickness_top_m: float = 0.3
+    thickness_bottom_m: float = 0.8
+    front_curvature_segments: int = 6
+    min_verts_per_meter: int = 48
+    taper_exponent: float = 1.4
+    spray_offset_m: float = 0.15
+
+
 # ---------------------------------------------------------------------------
 # Helper math
 # ---------------------------------------------------------------------------
@@ -565,6 +581,54 @@ def validate_waterfall_system(
                     affected_feature=tag,
                     message="lip not above pool",
                 ))
+    return issues
+
+
+def validate_waterfall_volumetric(
+    chain: WaterfallChain,
+    profile: Optional[WaterfallVolumetricProfile] = None,
+) -> List[ValidationIssue]:
+    """Validate that a waterfall chain meets volumetric mesh requirements."""
+    if profile is None:
+        profile = WaterfallVolumetricProfile()
+    issues: List[ValidationIssue] = []
+
+    tag = chain.chain_id or "unknown_chain"
+
+    # Check vertex density: total_drop_m * min_verts_per_meter
+    expected_verts = int(chain.total_drop_m * profile.min_verts_per_meter)
+    if expected_verts < profile.min_verts_per_meter:
+        issues.append(ValidationIssue(
+            code="WATERFALL_LOW_VERT_DENSITY",
+            severity="soft",
+            affected_feature=tag,
+            message=(
+                f"Waterfall drop {chain.total_drop_m:.1f}m expects >= {expected_verts} verts "
+                f"(min {profile.min_verts_per_meter}/m), chain may look flat"
+            ),
+        ))
+
+    # Check thickness tapering is non-zero
+    if profile.thickness_top_m <= 0 or profile.thickness_bottom_m <= 0:
+        issues.append(ValidationIssue(
+            code="WATERFALL_ZERO_THICKNESS",
+            severity="hard",
+            affected_feature=tag,
+            message="Waterfall volumetric profile has zero thickness — will render as flat plane",
+        ))
+
+    # Check front curvature has enough segments for non-coplanar face
+    if profile.front_curvature_segments < 3:
+        issues.append(ValidationIssue(
+            code="WATERFALL_COPLANAR_FRONT",
+            severity="hard",
+            affected_feature=tag,
+            message=(
+                f"front_curvature_segments={profile.front_curvature_segments} < 3, "
+                "front face will be coplanar (flat)"
+            ),
+        ))
+
     return issues
 
 

@@ -20,6 +20,17 @@ from .terrain_semantics import ErosionStrategy
 
 
 # ---------------------------------------------------------------------------
+# Exceptions
+# ---------------------------------------------------------------------------
+
+
+class PresetLocked(Exception):
+    """Raised when trying to modify a locked quality profile."""
+
+    pass
+
+
+# ---------------------------------------------------------------------------
 # Profile dataclass
 # ---------------------------------------------------------------------------
 
@@ -43,6 +54,9 @@ class TerrainQualityProfile:
     heightmap_bit_depth: int = 16
     shadow_clipmap_bit_depth: int = 8
     extends: Optional[str] = None
+    lock_preset: bool = False
+    save_every_n_operations: int = 0
+    checkpoint_naming: str = "terrain_{nn}_{pass}_{hash}"
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +167,11 @@ def _merge_with_parent(
             child.shadow_clipmap_bit_depth, parent.shadow_clipmap_bit_depth
         ),
         extends=child.extends,
+        lock_preset=child.lock_preset or parent.lock_preset,
+        save_every_n_operations=max(
+            child.save_every_n_operations, parent.save_every_n_operations
+        ),
+        checkpoint_naming=child.checkpoint_naming,
     )
 
 
@@ -229,7 +248,27 @@ def write_profile_jsons(root: Path) -> List[Path]:
     return written
 
 
+# ---------------------------------------------------------------------------
+# Lock / unlock helpers
+# ---------------------------------------------------------------------------
+
+
+def lock_preset(profile: TerrainQualityProfile) -> TerrainQualityProfile:
+    """Return a copy of the profile with lock_preset=True."""
+    from dataclasses import replace
+
+    return replace(profile, lock_preset=True)
+
+
+def unlock_preset(profile: TerrainQualityProfile) -> TerrainQualityProfile:
+    """Return a copy with lock_preset=False."""
+    from dataclasses import replace
+
+    return replace(profile, lock_preset=False)
+
+
 __all__ = [
+    "PresetLocked",
     "TerrainQualityProfile",
     "PREVIEW_PROFILE",
     "PRODUCTION_PROFILE",
@@ -238,4 +277,6 @@ __all__ = [
     "load_quality_profile",
     "list_quality_profiles",
     "write_profile_jsons",
+    "lock_preset",
+    "unlock_preset",
 ]

@@ -49,6 +49,9 @@ class ErosionMasks:
     wetness: np.ndarray             # accumulated droplet water-step contact
     drainage: np.ndarray            # log1p of droplet pass-through count
     bank_instability: np.ndarray    # curvature magnitude where wetness > 0
+    # Addendum 1 D.1 — sediment accumulation & pool deepening
+    sediment_accumulation_at_base: np.ndarray = field(default=None)  # type: ignore[assignment]
+    pool_deepening_delta: np.ndarray = field(default=None)           # type: ignore[assignment]
     metrics: dict = field(default_factory=dict)
 
 
@@ -263,6 +266,28 @@ def apply_hydraulic_erosion_masks(
     max_wet = float(wetness.max()) if wetness.size else 0.0
     wetness_norm = wetness / max_wet if max_wet > 0.0 else wetness
 
+    # Addendum 1 D.1 — derive sediment accumulation and pool deepening
+    # sediment_accumulation_at_base: deposition concentrated at slope bases.
+    # Approximated as deposition weighted by inverse slope (flat areas at
+    # the foot of slopes collect more sediment).
+    padded_h = np.pad(result, 1, mode="edge")
+    grad_x = padded_h[1:-1, 2:] - padded_h[1:-1, :-2]
+    grad_y = padded_h[2:, 1:-1] - padded_h[:-2, 1:-1]
+    slope_mag = np.sqrt(grad_x ** 2 + grad_y ** 2)
+    inv_slope = 1.0 / (1.0 + slope_mag)
+    sediment_accumulation_at_base = deposition_amount * inv_slope
+
+    # pool_deepening_delta: height lowered where water pools (high wetness,
+    # low drainage = stagnant). Computed as the difference between original
+    # and eroded height, masked to cells with above-median wetness.
+    height_delta = h_in - result  # positive where material was removed
+    if wetness_norm.size > 0:
+        wet_median = float(np.median(wetness_norm))
+    else:
+        wet_median = 0.0
+    pool_mask = wetness_norm > max(wet_median, 0.01)
+    pool_deepening_delta = np.where(pool_mask, np.maximum(height_delta, 0.0), 0.0)
+
     return ErosionMasks(
         height=result,
         erosion_amount=erosion_amount,
@@ -270,6 +295,8 @@ def apply_hydraulic_erosion_masks(
         wetness=wetness_norm,
         drainage=drainage,
         bank_instability=bank_instability,
+        sediment_accumulation_at_base=sediment_accumulation_at_base,
+        pool_deepening_delta=pool_deepening_delta,
         metrics={
             "iterations": int(iterations),
             "source_min": source_min,
@@ -278,6 +305,8 @@ def apply_hydraulic_erosion_masks(
             "max_wetness": max_wet,
             "total_erosion": float(erosion_amount.sum()),
             "total_deposition": float(deposition_amount.sum()),
+            "total_sediment_at_base": float(sediment_accumulation_at_base.sum()),
+            "total_pool_deepening": float(pool_deepening_delta.sum()),
         },
     )
 

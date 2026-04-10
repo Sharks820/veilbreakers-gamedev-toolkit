@@ -586,6 +586,146 @@ def validate_unity_export_ready(
 
 
 # ---------------------------------------------------------------------------
+# Semantic readability checks (Addendum 1 D.14)
+# ---------------------------------------------------------------------------
+
+
+def check_cliff_silhouette_readability(
+    stack: TerrainMaskStack,
+) -> List[ValidationIssue]:
+    """Check that cliff candidates have readable silhouettes (area > threshold)."""
+    issues: List[ValidationIssue] = []
+    cliff = stack.get("cliff_candidate")
+    if cliff is None:
+        return issues
+    cliff_arr = np.asarray(cliff, dtype=np.float32)
+    cliff_area = float(np.sum(cliff_arr > 0.5))
+    total_area = float(cliff_arr.size)
+    if total_area > 0 and cliff_area / total_area < 0.005:
+        issues.append(
+            ValidationIssue(
+                severity="warning",
+                category="readability",
+                message=(
+                    f"Cliff silhouette covers only {cliff_area / total_area:.1%} "
+                    f"of terrain — may be invisible"
+                ),
+                hard=False,
+            )
+        )
+    return issues
+
+
+def check_waterfall_chain_completeness(
+    stack: TerrainMaskStack,
+) -> List[ValidationIssue]:
+    """Check that waterfall lip candidates have corresponding foam/mist channels."""
+    issues: List[ValidationIssue] = []
+    lips = stack.get("waterfall_lip_candidate")
+    if lips is None:
+        return issues
+    lip_arr = np.asarray(lips)
+    if np.any(lip_arr > 0):
+        foam = stack.get("foam")
+        mist = stack.get("mist")
+        if foam is None or not np.any(np.asarray(foam) > 0):
+            issues.append(
+                ValidationIssue(
+                    severity="warning",
+                    category="readability",
+                    message="Waterfall lips detected but no foam channel populated",
+                    hard=False,
+                )
+            )
+        if mist is None or not np.any(np.asarray(mist) > 0):
+            issues.append(
+                ValidationIssue(
+                    severity="warning",
+                    category="readability",
+                    message="Waterfall lips detected but no mist channel populated",
+                    hard=False,
+                )
+            )
+    return issues
+
+
+def check_cave_framing_presence(
+    stack: TerrainMaskStack,
+) -> List[ValidationIssue]:
+    """Check that cave candidates have height deltas (not discarded)."""
+    issues: List[ValidationIssue] = []
+    cave = stack.get("cave_candidate")
+    if cave is None:
+        return issues
+    cave_arr = np.asarray(cave)
+    if np.any(cave_arr > 0):
+        delta = stack.get("cave_height_delta")
+        if delta is None or not np.any(np.asarray(delta) != 0):
+            issues.append(
+                ValidationIssue(
+                    severity="error",
+                    category="readability",
+                    message=(
+                        "Cave candidates exist but cave_height_delta channel "
+                        "is empty — deltas were discarded"
+                    ),
+                    hard=True,
+                )
+            )
+    return issues
+
+
+def check_focal_composition(
+    stack: TerrainMaskStack,
+) -> List[ValidationIssue]:
+    """Check that terrain has adequate focal composition (not uniform flat)."""
+    issues: List[ValidationIssue] = []
+    h = np.asarray(stack.height, dtype=np.float64)
+    height_range = float(h.max() - h.min())
+    if height_range < 1.0:
+        issues.append(
+            ValidationIssue(
+                severity="warning",
+                category="readability",
+                message=(
+                    f"Height range is only {height_range:.2f}m — terrain is "
+                    f"essentially flat, lacks focal interest"
+                ),
+                hard=False,
+            )
+        )
+    slope = stack.get("slope")
+    if slope is not None:
+        slope_arr = np.asarray(slope, dtype=np.float32)
+        steep_ratio = float(np.sum(slope_arr > 30.0)) / max(slope_arr.size, 1)
+        if steep_ratio < 0.01:
+            issues.append(
+                ValidationIssue(
+                    severity="warning",
+                    category="readability",
+                    message=(
+                        f"Only {steep_ratio:.1%} of terrain is steep (>30°) — "
+                        f"lacks dramatic features"
+                    ),
+                    hard=False,
+                )
+            )
+    return issues
+
+
+def run_readability_audit(
+    stack: TerrainMaskStack,
+) -> List[ValidationIssue]:
+    """Run all 4 semantic readability checks as hard gates."""
+    issues: List[ValidationIssue] = []
+    issues.extend(check_cliff_silhouette_readability(stack))
+    issues.extend(check_waterfall_chain_completeness(stack))
+    issues.extend(check_cave_framing_presence(stack))
+    issues.extend(check_focal_composition(stack))
+    return issues
+
+
+# ---------------------------------------------------------------------------
 # Suite
 # ---------------------------------------------------------------------------
 
@@ -755,4 +895,9 @@ __all__ = [
     "bind_active_controller",
     "protected_zone_hash",
     "DEFAULT_VALIDATORS",
+    "check_cliff_silhouette_readability",
+    "check_waterfall_chain_completeness",
+    "check_cave_framing_presence",
+    "check_focal_composition",
+    "run_readability_audit",
 ]

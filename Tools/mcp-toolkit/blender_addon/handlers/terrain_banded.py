@@ -174,6 +174,67 @@ def _normalize_band(arr: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
+# Addendum 1 D.7 — Anisotropic breakup & anti-grain smoothing
+# ---------------------------------------------------------------------------
+
+
+def compute_anisotropic_breakup(
+    band: np.ndarray,
+    strength: float = 0.3,
+    angle_deg: float = 45.0,
+    seed: int = 0,
+) -> np.ndarray:
+    """Apply directional noise breakup to a height band.
+
+    Stretches noise along a dominant direction to simulate wind/water
+    erosion patterns. Strength 0 = no breakup, 1 = maximum distortion.
+    """
+    if strength <= 0 or band.size == 0:
+        return band
+    rows, cols = band.shape
+    rng = np.random.default_rng(seed)
+    angle_rad = np.radians(angle_deg)
+    # Create directional noise field
+    noise = rng.standard_normal((rows, cols)).astype(np.float64)
+    # Apply directional blur via rolling
+    shift_r = max(1, int(rows * 0.02 * strength))
+    shift_c = max(1, int(cols * 0.02 * strength))
+    cos_a, sin_a = np.cos(angle_rad), np.sin(angle_rad)
+    stretched = np.roll(noise, int(shift_r * cos_a), axis=0)
+    stretched = np.roll(stretched, int(shift_c * sin_a), axis=1)
+    # Blend with original
+    result = band + stretched * strength * float(np.std(band)) * 0.1
+    return result
+
+
+def apply_anti_grain_smoothing(
+    band: np.ndarray,
+    strength: float = 0.5,
+) -> np.ndarray:
+    """Remove high-frequency grain artifacts from a height band.
+
+    Uses a gentle box filter to smooth sub-cell noise without losing
+    macro features. Strength 0 = no smoothing, 1 = maximum.
+    """
+    if strength <= 0 or band.size == 0:
+        return band
+    kernel_size = max(1, int(1 + strength * 2))
+    if kernel_size < 2:
+        return band
+    try:
+        from scipy.ndimage import uniform_filter
+        return uniform_filter(band.astype(np.float64), size=kernel_size).astype(band.dtype)
+    except ImportError:
+        # Pure numpy fallback: simple averaging
+        padded = np.pad(band.astype(np.float64), kernel_size // 2, mode='reflect')
+        result = np.zeros_like(band, dtype=np.float64)
+        for dr in range(kernel_size):
+            for dc in range(kernel_size):
+                result += padded[dr:dr + band.shape[0], dc:dc + band.shape[1]]
+        return (result / (kernel_size * kernel_size)).astype(band.dtype)
+
+
+# ---------------------------------------------------------------------------
 # Band generators
 # ---------------------------------------------------------------------------
 
@@ -344,6 +405,8 @@ def generate_banded_heightmap(
     seed: int = 0,
     biome: str = "dark_fantasy_default",
     vertical_scale_m: float = 120.0,
+    anisotropic_breakup_strength: float = 0.0,
+    anti_grain_smoothing: float = 0.0,
 ) -> BandedHeightmap:
     """Generate a banded heightmap with separable frequency bands.
 
@@ -367,6 +430,12 @@ def generate_banded_heightmap(
         strata frequency.
     vertical_scale_m : float
         World-meter multiplier applied to the blended composite.
+    anisotropic_breakup_strength : float
+        Directional noise breakup applied to each band before compositing.
+        0.0 = disabled (default), up to 1.0 = maximum distortion.
+    anti_grain_smoothing : float
+        Box-filter smoothing applied to each band before compositing.
+        0.0 = disabled (default), up to 1.0 = maximum smoothing.
 
     Returns
     -------
@@ -403,6 +472,25 @@ def generate_banded_heightmap(
         world_origin_x=world_origin_x, world_origin_y=world_origin_y,
         cell_size=cell_size, scale=scale, seed=seed,
     )
+
+    # Addendum 1 D.7: apply anisotropic breakup and anti-grain smoothing
+    # to every composable band (not warp — it is informational only).
+    if anisotropic_breakup_strength > 0:
+        band_seed_base = seed & 0xFFFFFFFF
+        macro = compute_anisotropic_breakup(
+            macro, strength=anisotropic_breakup_strength, seed=band_seed_base)
+        meso = compute_anisotropic_breakup(
+            meso, strength=anisotropic_breakup_strength, seed=band_seed_base + 1)
+        micro = compute_anisotropic_breakup(
+            micro, strength=anisotropic_breakup_strength, seed=band_seed_base + 2)
+        strata = compute_anisotropic_breakup(
+            strata, strength=anisotropic_breakup_strength, seed=band_seed_base + 3)
+
+    if anti_grain_smoothing > 0:
+        macro = apply_anti_grain_smoothing(macro, strength=anti_grain_smoothing)
+        meso = apply_anti_grain_smoothing(meso, strength=anti_grain_smoothing)
+        micro = apply_anti_grain_smoothing(micro, strength=anti_grain_smoothing)
+        strata = apply_anti_grain_smoothing(strata, strength=anti_grain_smoothing)
 
     weights = BAND_WEIGHTS[biome_key]
     bands = BandedHeightmap(
@@ -582,6 +670,8 @@ def register_bundle_g_passes() -> None:
 __all__ = [
     "BAND_WEIGHTS",
     "BandedHeightmap",
+    "compute_anisotropic_breakup",
+    "apply_anti_grain_smoothing",
     "generate_banded_heightmap",
     "compose_banded_heightmap",
     "pass_banded_macro",
