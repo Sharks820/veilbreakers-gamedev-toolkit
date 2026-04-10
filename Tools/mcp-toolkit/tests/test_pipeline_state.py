@@ -240,9 +240,38 @@ class TestDeriveAddressableGroups:
         for g in groups:
             assert "distance_tier" in g
 
+    def test_derive_addressable_groups_produces_terrain_tiers(self):
+        """Near/Mid/Far terrain tiers are present in the output groups."""
+        locations = [
+            {"name": "Village1", "type": "town"},
+            {"name": "Keep1", "type": "castle"},
+        ]
+        groups = derive_addressable_groups("TestMap", locations)
+        tiers = {g["distance_tier"] for g in groups}
+        assert "near" in tiers, "Expected 'near' tier for terrain base"
+        assert "mid" in tiers, "Expected 'mid' tier for location groups"
+        assert "far" in tiers, "Expected 'far' tier for interiors group"
+
+    def test_derive_addressable_groups_per_location_type(self):
+        """Each distinct location type gets its own addressable group."""
+        locations = [
+            {"name": "Town1", "type": "town"},
+            {"name": "Town2", "type": "town"},
+            {"name": "Castle1", "type": "castle"},
+            {"name": "Dungeon1", "type": "dungeon"},
+        ]
+        groups = derive_addressable_groups("TestMap", locations)
+        type_groups = [g for g in groups if g["group_type"] not in ("terrain", "interior")]
+        assert len(type_groups) == 3  # town, castle, dungeon
+        town_group = [g for g in type_groups if g["group_type"] == "town"][0]
+        assert "Town1" in town_group["objects"]
+        assert "Town2" in town_group["objects"]
+        castle_group = [g for g in type_groups if g["group_type"] == "castle"][0]
+        assert "Castle1" in castle_group["objects"]
+
 
 # ---------------------------------------------------------------------------
-# emit_scene_hierarchy -- requires bpy, test RuntimeError guard
+# emit_scene_hierarchy -- requires bpy, test RuntimeError guard + fields
 # ---------------------------------------------------------------------------
 
 
@@ -258,3 +287,54 @@ class TestEmitSceneHierarchyGuard:
         finally:
             if saved is not None:
                 sys.modules["bpy"] = saved
+
+    def test_scene_hierarchy_fields_present(self):
+        """With a mocked bpy, emit_scene_hierarchy returns correct fields."""
+        import sys
+        import types
+        from unittest.mock import MagicMock
+
+        # Build a fake bpy module with bpy.data.objects
+        fake_bpy = types.ModuleType("bpy")
+        fake_data = MagicMock()
+
+        # Create a mock Blender object
+        mock_obj = MagicMock()
+        mock_obj.name = "Map_Terrain"
+        mock_obj.type = "MESH"
+        mock_obj.matrix_world.translation.x = 1.0
+        mock_obj.matrix_world.translation.y = 2.0
+        mock_obj.matrix_world.translation.z = 3.0
+        mock_obj.rotation_euler.x = 0.0
+        mock_obj.rotation_euler.y = 0.0
+        mock_obj.rotation_euler.z = 0.0
+        mock_obj.scale.x = 1.0
+        mock_obj.scale.y = 1.0
+        mock_obj.scale.z = 1.0
+
+        fake_data.objects = [mock_obj]
+        fake_bpy.data = fake_data
+        sys.modules["bpy"] = fake_bpy
+
+        try:
+            # Must re-import so the guarded import picks up our fake bpy
+            from blender_addon.handlers.pipeline_state import emit_scene_hierarchy
+            result = emit_scene_hierarchy("TestMap", [{"name": "Map_Terrain", "type": "terrain"}])
+
+            assert "map_name" in result
+            assert result["map_name"] == "TestMap"
+            assert "generated_at" in result
+            assert "objects" in result
+            assert len(result["objects"]) >= 1
+
+            obj_entry = result["objects"][0]
+            assert "name" in obj_entry
+            assert "type" in obj_entry
+            assert "district" in obj_entry
+            assert "world_position" in obj_entry
+            assert "world_rotation_euler" in obj_entry
+            assert "world_scale" in obj_entry
+            assert obj_entry["name"] == "Map_Terrain"
+            assert obj_entry["district"] == "terrain"
+        finally:
+            del sys.modules["bpy"]

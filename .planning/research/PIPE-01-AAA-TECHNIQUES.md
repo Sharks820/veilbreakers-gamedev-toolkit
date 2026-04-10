@@ -1,8 +1,8 @@
 # PIPE-01: AAA Procedural Techniques Research
 
-**Date:** 2026-03-31
+**Date:** 2026-04-09 (updated)
 **Scope:** VeilBreakers procedural pipeline -- 7 core techniques for AAA-quality world generation
-**Audience:** Pipeline engineers working on v7.0 world composer phases
+**Audience:** Pipeline engineers working on terrain/world pipeline integration phases
 
 ---
 
@@ -20,9 +20,10 @@ CGA (Computer Generated Architecture) split grammars decompose a building mass m
 
 The file `Tools/mcp-toolkit/blender_addon/handlers/_building_grammar.py` contains a complete facade grammar system:
 
-- `FACADE_STYLE_RULES` (line 129): Per-style facade parameters (plinth, stringcourse, cornice, bay divisor, pilaster, opening frame dimensions, and boolean flags for balcony/awning/shutters/buttress).
-- `plan_modular_facade()` (line 244): Core split-grammar engine. Generates plinth bands, inter-floor stringcourses, top cornice, corner pilasters/quoins, rhythm pilasters at bay guide positions, opening surrounds with sills and lintels, buttresses (gothic/fortress), awnings (market/waterfront), balconies, and chimneys.
-- `evaluate_building_grammar()` (line 564): Full building shell generator applying foundation, walls, floor slabs, roof, windows, doors, and style-specific details as a `BuildingSpec` operation list.
+- `FACADE_STYLE_RULES`: Per-style facade parameters (plinth, stringcourse, cornice, bay divisor, pilaster, opening frame dimensions, and boolean flags for balcony/awning/shutters/buttress).
+- `plan_modular_facade()` (line 366): Core split-grammar engine. Generates plinth bands, inter-floor stringcourses, top cornice, corner pilasters/quoins, rhythm pilasters at bay guide positions, opening surrounds with sills and lintels, buttresses (gothic/fortress), awnings (market/waterfront), balconies, and chimneys.
+- `evaluate_building_grammar()` (line 686): Full building shell generator applying foundation, walls, floor slabs, roof, windows, doors, and style-specific details as a `BuildingSpec` operation list.
+- `_add_facade_box()` (line 335): Appends facade box modules with role, material, position, size, wall, and anchor parameters.
 - 5 architectural styles: `medieval`, `gothic`, `rustic`, `fortress`, `organic`.
 
 ### VeilBreakers Adaptation Notes
@@ -47,11 +48,12 @@ Wave Function Collapse is a constraint-solving algorithm inspired by quantum mec
 
 ### Current Implementation Status: **PARTIAL**
 
-WFC is referenced in MCP tool definitions but no core algorithm exists in the Blender handlers:
+WFC is referenced in MCP tool definitions and external addon integration but no core algorithm exists in the Blender handlers:
 
 - `blender_worldbuilding` tool has a `generate_wfc_dungeon` action declared in the MCP schema.
 - `unity_world` tool has a `create_wfc_dungeon` action that generates a Unity C# WFC dungeon script.
-- Neither the Blender addon handlers nor a dedicated `_wfc_solver.py` contain a WFC constraint solver implementation. The Unity side generates a script template but the actual WFC algorithm would run at Unity runtime, not in the pipeline.
+- `addon_toolchain.py` (line 52): Registers `wfc_3d_generator` as an external Blender addon for layout variation, with module detection and install hints. The toolchain prefers WFC when available (line 432-433, 587-588) and falls back to `native_layout_variation` otherwise.
+- Neither the Blender addon handlers nor a dedicated `_wfc_solver.py` contain a first-party WFC constraint solver. The WFC capability depends on the external `wfc_3d_generator` Blender extension being installed.
 
 ### VeilBreakers Adaptation Notes
 
@@ -113,8 +115,10 @@ Hydraulic erosion simulates the effect of water on terrain over geological time.
 
 `Tools/mcp-toolkit/blender_addon/handlers/_terrain_erosion.py` contains a complete erosion system:
 
-- `apply_hydraulic_erosion()` (line 23): Droplet-based hydraulic erosion with configurable iterations, inertia, sediment capacity, deposition rate, erosion rate, evaporation, min slope, brush radius, and max droplet lifetime. Uses bilinear interpolation for gradient computation and applies erosion/deposition within a configurable brush radius.
-- `apply_thermal_erosion()`: Talus-angle thermal weathering that slides material downhill when slope exceeds threshold.
+- `apply_hydraulic_erosion_masks()` (line 69): Full droplet-based hydraulic erosion returning erosion_amount, deposition_amount, wetness, drainage, bank_instability masks plus metrics. Configurable iterations, inertia, sediment capacity, deposition rate, erosion rate, evaporation, min slope, brush radius, max droplet lifetime, and hero_exclusion zones.
+- `apply_hydraulic_erosion()` (line 285): Legacy compat wrapper returning only the eroded heightmap ndarray with source-range clamping.
+- `apply_thermal_erosion_masks()` (line 378): Talus-angle thermal weathering returning full mask set.
+- `apply_thermal_erosion()` (line 465): Legacy compat wrapper for thermal erosion.
 - Both functions are pure-logic (numpy arrays in, numpy arrays out), fully testable without Blender.
 - Integrated into the terrain pipeline via `terrain_advanced.py` and `environment.py` handlers.
 
@@ -142,17 +146,19 @@ Poisson disk sampling generates random points with a guaranteed minimum distance
 
 Two independent Poisson disk implementations exist:
 
-1. **`_building_grammar.py` `_poisson_disk_scatter_2d()`** (line 2821): Bridson's algorithm for interior clutter placement. Used by `generate_clutter_layout()` to scatter 5-15 decorative props per room on furniture surfaces and floor areas with configurable density.
+1. **`_building_grammar.py` `_poisson_disk_scatter_2d()`** (line 3325): Bridson's algorithm for interior clutter placement. Used by `generate_clutter_layout()` (line 3414) to scatter 5-15 decorative props per room on furniture surfaces and floor areas with configurable density.
 
-2. **`_scatter_engine.py` `poisson_disk_sample()`** (line 26): Full Bridson's algorithm for environment scatter. Supports configurable minimum distance, seed, max points, and area size. Integrated with `context_scatter()` (line 305) which combines Poisson sampling with biome filtering and slope constraints.
+2. **`_scatter_engine.py` `poisson_disk_sample()`** (line 26): Full Bridson's algorithm for environment scatter. Supports configurable minimum distance, seed, max attempts, and area bounds. Uses spatial grid acceleration with cell_size = min_distance/sqrt(2). Integrated with `biome_filter_points()` (line 131) and `context_scatter()` (line 318) which combine Poisson sampling with biome filtering and slope constraints.
+
+3. **`prop_density.py` `_poisson_disk_2d()`** (line 316): Third independent implementation used for detail prop placement on furniture surfaces and room zones, integrated with `compute_detail_prop_placements()` (line 503).
 
 Additionally, `environment_scatter.py` and `vegetation_system.py` consume the scatter engine output for Blender object creation.
 
 ### VeilBreakers Adaptation Notes
 
-Both implementations are functional but duplicated. For v7.0:
+Three independent implementations are functional but duplicated. For pipeline integration:
 
-- **Consolidate**: The `_scatter_engine.py` version is more general-purpose and should be the single source. The `_building_grammar.py` version can import from it.
+- **Consolidate**: The `_scatter_engine.py` version is most general-purpose and should be the single source. Both `_building_grammar.py` and `prop_density.py` can import from it.
 - **Variable-density Poisson**: Upgrade to support a density map (numpy array) where minimum distance varies spatially. This enables dense vegetation near water, sparse on ridges.
 - **Multi-class scatter**: Generate points for multiple object types simultaneously with inter-type distance constraints (e.g., trees must be 3m from rocks, but rocks can be 1m from each other).
 
@@ -170,7 +176,7 @@ The straight skeleton of a polygon is computed by shrinking the polygon inward (
 
 ### Current Implementation Status: **PARTIAL**
 
-`Tools/mcp-toolkit/blender_addon/handlers/building_quality.py` contains `generate_roof()` (line 1140) which produces detailed roofs with individual tiles/shingles for 6 styles (gable, hip, gambrel, mansard, shed, conical_tower). However, this is not a straight skeleton algorithm:
+`Tools/mcp-toolkit/blender_addon/handlers/building_quality.py` contains `generate_roof()` (line 1239) which produces detailed roofs with individual tiles/shingles for 6 styles (gable, hip, gambrel, mansard, shed, conical_tower). However, this is not a straight skeleton algorithm:
 
 - Roofs are generated for **rectangular footprints only** with parametric pitch and style.
 - The building grammar (`_building_grammar.py`) also generates roofs via simple pitch calculations for rectangular shapes (gabled, pointed, flat, domed).
@@ -202,9 +208,10 @@ Domain warping feeds the output of one noise function into the input coordinates
 
 `Tools/mcp-toolkit/blender_addon/handlers/_terrain_noise.py` contains a complete domain warping implementation:
 
-- `domain_warp()` (line ~1144): Distorts 2D coordinates using noise-based domain warping with configurable `warp_strength` and `warp_scale` parameters.
-- `generate_heightmap()` (line ~310): Accepts `warp_strength` and `warp_scale` parameters. When `warp_strength > 0`, applies domain warping to the coordinate array before fBm noise evaluation, producing organic terrain features.
-- The function is numpy-vectorized for performance.
+- `domain_warp()` (line 1278): Distorts 2D coordinates using noise-based domain warping with configurable `warp_strength` and `warp_scale` parameters.
+- `domain_warp_array()` (line 1326): Vectorized numpy variant for batch coordinate warping -- same algorithm operating on arrays for performance.
+- `generate_heightmap()`: Accepts `warp_strength` and `warp_scale` parameters. When `warp_strength > 0`, calls `domain_warp_array()` on the coordinate grid before fBm noise evaluation (line 447-451).
+- Biome map generation also uses domain warping for organic Voronoi boundaries (line 1423).
 - Integrated into the full terrain pipeline via `environment.py` and `map_composer.py`.
 
 ### VeilBreakers Adaptation Notes
@@ -219,18 +226,18 @@ The domain warping system is production-ready. For v7.0 world composer:
 
 ## Summary Table
 
-| # | Technique | Status | Primary File | Key Function |
-|---|-----------|--------|-------------|-------------|
-| 1 | CGA Split Grammars | **IMPLEMENTED** | `_building_grammar.py` | `plan_modular_facade()` |
-| 2 | Wave Function Collapse | **PARTIAL** | MCP schema only (no solver) | `generate_wfc_dungeon` (declared) |
-| 3 | L-Systems (vegetation) | **IMPLEMENTED** | `vegetation_lsystem.py` | `expand_lsystem()`, `interpret_lsystem()` |
-| 3 | L-Systems (roads) | **PARTIAL** | `road_network.py` | MST only, no L-system growth |
-| 4 | Hydraulic Erosion | **IMPLEMENTED** | `_terrain_erosion.py` | `apply_hydraulic_erosion()` |
-| 5 | Poisson Disk Sampling | **IMPLEMENTED** | `_scatter_engine.py`, `_building_grammar.py` | `poisson_disk_sample()` (both) |
-| 6 | Straight Skeleton Roofs | **PARTIAL** | `building_quality.py` | `generate_roof()` (rectangular only) |
-| 7 | Domain Warping | **IMPLEMENTED** | `_terrain_noise.py` | `domain_warp()` |
+| # | Technique | Status | Primary File(s) | Key Function(s) |
+|---|-----------|--------|-----------------|-----------------|
+| 1 | CGA Split Grammars | **IMPLEMENTED** | `_building_grammar.py` | `plan_modular_facade()` (L366), `evaluate_building_grammar()` (L686) |
+| 2 | Wave Function Collapse | **PARTIAL** | `addon_toolchain.py` + MCP schema | External `wfc_3d_generator` addon; no first-party solver |
+| 3a | L-Systems (vegetation) | **IMPLEMENTED** | `vegetation_lsystem.py` | `expand_lsystem()` (L126), `interpret_lsystem()` (L246) |
+| 3b | L-Systems (roads) | **PARTIAL** | `road_network.py` | `compute_mst_edges()` (L86), `compute_road_network()` (L561) -- MST only |
+| 4 | Hydraulic Erosion | **IMPLEMENTED** | `_terrain_erosion.py` | `apply_hydraulic_erosion_masks()` (L69), `apply_thermal_erosion_masks()` (L378) |
+| 5 | Poisson Disk Sampling | **IMPLEMENTED** | `_scatter_engine.py`, `_building_grammar.py`, `prop_density.py` | `poisson_disk_sample()` (L26), `_poisson_disk_scatter_2d()` (L3325), `_poisson_disk_2d()` (L316) |
+| 6 | Straight Skeleton Roofs | **PARTIAL** | `building_quality.py` | `generate_roof()` (L1239) -- rectangular footprints only |
+| 7 | Domain Warping | **IMPLEMENTED** | `_terrain_noise.py` | `domain_warp()` (L1278), `domain_warp_array()` (L1326) |
 
-**Overall**: 4 of 7 techniques are fully implemented. WFC needs a new solver module. Road L-systems need a growth algorithm layered on the existing MST planner. Straight skeleton roofs need a computational geometry solver for arbitrary polygon footprints.
+**Overall**: 4 of 7 techniques are fully implemented with production-quality code. WFC depends on an external Blender addon with no first-party fallback solver. Road L-systems need a growth algorithm layered on the existing MST planner. Straight skeleton roofs need a computational geometry solver for arbitrary polygon footprints. Poisson disk sampling has 3 independent implementations that should be consolidated.
 
 ---
 
