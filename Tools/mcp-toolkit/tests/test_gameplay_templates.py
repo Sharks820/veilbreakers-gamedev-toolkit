@@ -6,8 +6,6 @@ All gameplay templates generate runtime MonoBehaviour or ScriptableObject
 scripts -- they must NEVER contain 'using UnityEditor;'.
 """
 
-import pytest
-
 from veilbreakers_mcp.shared.unity_templates.gameplay_templates import (
     generate_mob_controller_script,
     generate_aggro_system_script,
@@ -21,6 +19,10 @@ from veilbreakers_mcp.shared.unity_templates.gameplay_templates import (
     _validate_ability_params,
     _validate_projectile_params,
 )
+
+
+def assert_validation_error(result: str | None, expected_message: str):
+    assert result == expected_message
 
 
 # ---------------------------------------------------------------------------
@@ -51,8 +53,7 @@ class TestValidateMobParams:
             chase_speed=5.0,
             flee_health_pct=0.2,
         )
-        assert result is not None
-        assert isinstance(result, str)
+        assert_validation_error(result, "detection_range must be greater than attack_range")
 
     def test_detection_range_equal_to_attack_range(self):
         result = _validate_mob_params(
@@ -63,7 +64,7 @@ class TestValidateMobParams:
             chase_speed=5.0,
             flee_health_pct=0.2,
         )
-        assert result is not None
+        assert_validation_error(result, "detection_range must be greater than attack_range")
 
     def test_negative_speed(self):
         result = _validate_mob_params(
@@ -74,7 +75,7 @@ class TestValidateMobParams:
             chase_speed=5.0,
             flee_health_pct=0.2,
         )
-        assert result is not None
+        assert_validation_error(result, "patrol_speed must be > 0")
 
     def test_zero_speed(self):
         result = _validate_mob_params(
@@ -85,7 +86,7 @@ class TestValidateMobParams:
             chase_speed=5.0,
             flee_health_pct=0.2,
         )
-        assert result is not None
+        assert_validation_error(result, "patrol_speed must be > 0")
 
     def test_negative_detection_range(self):
         result = _validate_mob_params(
@@ -96,7 +97,7 @@ class TestValidateMobParams:
             chase_speed=5.0,
             flee_health_pct=0.2,
         )
-        assert result is not None
+        assert_validation_error(result, "detection_range must be > 0")
 
     def test_zero_leash_distance(self):
         result = _validate_mob_params(
@@ -107,7 +108,7 @@ class TestValidateMobParams:
             chase_speed=5.0,
             flee_health_pct=0.2,
         )
-        assert result is not None
+        assert_validation_error(result, "leash_distance must be > 0")
 
     def test_flee_health_pct_above_one(self):
         result = _validate_mob_params(
@@ -118,7 +119,7 @@ class TestValidateMobParams:
             chase_speed=5.0,
             flee_health_pct=1.5,
         )
-        assert result is not None
+        assert_validation_error(result, "flee_health_pct must be between 0 and 1")
 
     def test_flee_health_pct_negative(self):
         result = _validate_mob_params(
@@ -129,7 +130,7 @@ class TestValidateMobParams:
             chase_speed=5.0,
             flee_health_pct=-0.1,
         )
-        assert result is not None
+        assert_validation_error(result, "flee_health_pct must be between 0 and 1")
 
     def test_flee_health_pct_zero_is_valid(self):
         result = _validate_mob_params(
@@ -167,19 +168,19 @@ class TestValidateSpawnParams:
         result = _validate_spawn_params(
             max_count=0, respawn_timer=5.0, spawn_radius=15.0
         )
-        assert result is not None
+        assert_validation_error(result, "max_count must be > 0")
 
     def test_negative_max_count(self):
         result = _validate_spawn_params(
             max_count=-1, respawn_timer=5.0, spawn_radius=15.0
         )
-        assert result is not None
+        assert_validation_error(result, "max_count must be > 0")
 
     def test_negative_respawn_timer(self):
         result = _validate_spawn_params(
             max_count=10, respawn_timer=-1.0, spawn_radius=15.0
         )
-        assert result is not None
+        assert_validation_error(result, "respawn_timer must be >= 0")
 
     def test_zero_respawn_timer_is_valid(self):
         result = _validate_spawn_params(
@@ -191,13 +192,13 @@ class TestValidateSpawnParams:
         result = _validate_spawn_params(
             max_count=10, respawn_timer=5.0, spawn_radius=0.0
         )
-        assert result is not None
+        assert_validation_error(result, "spawn_radius must be > 0")
 
     def test_negative_spawn_radius(self):
         result = _validate_spawn_params(
             max_count=10, respawn_timer=5.0, spawn_radius=-5.0
         )
-        assert result is not None
+        assert_validation_error(result, "spawn_radius must be > 0")
 
 
 class TestValidateAbilityParams:
@@ -209,7 +210,7 @@ class TestValidateAbilityParams:
 
     def test_negative_cooldown(self):
         result = _validate_ability_params(cooldown=-1.0, damage=25.0)
-        assert result is not None
+        assert_validation_error(result, "cooldown must be >= 0")
 
     def test_zero_cooldown_is_valid(self):
         result = _validate_ability_params(cooldown=0.0, damage=25.0)
@@ -217,7 +218,7 @@ class TestValidateAbilityParams:
 
     def test_negative_damage(self):
         result = _validate_ability_params(cooldown=1.5, damage=-10.0)
-        assert result is not None
+        assert_validation_error(result, "damage must be >= 0")
 
     def test_zero_damage_is_valid(self):
         result = _validate_ability_params(cooldown=1.5, damage=0.0)
@@ -241,15 +242,18 @@ class TestValidateProjectileParams:
 
     def test_zero_velocity(self):
         result = _validate_projectile_params(velocity=0.0, trajectory="straight")
-        assert result is not None
+        assert_validation_error(result, "velocity must be > 0")
 
     def test_negative_velocity(self):
         result = _validate_projectile_params(velocity=-5.0, trajectory="straight")
-        assert result is not None
+        assert_validation_error(result, "velocity must be > 0")
 
     def test_invalid_trajectory(self):
         result = _validate_projectile_params(velocity=20.0, trajectory="zigzag")
-        assert result is not None
+        assert_validation_error(
+            result,
+            "trajectory must be one of: straight, arc, homing (got 'zigzag')",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -604,12 +608,14 @@ class TestBehaviorTree:
         # A 'using X = Y;' line after the first class definition is illegal
         lines = result.split("\n")
         seen_class = False
+        misplaced_aliases = []
         for line in lines:
             stripped = line.strip()
             if stripped.startswith("public class ") or stripped.startswith("public abstract class "):
                 seen_class = True
             if seen_class and stripped.startswith("using ") and "=" in stripped:
-                pytest.fail(f"Found misplaced using alias after class definition: {stripped}")
+                misplaced_aliases.append(stripped)
+        assert misplaced_aliases == []
 
 
 # ---------------------------------------------------------------------------

@@ -12,9 +12,6 @@ Tests cover:
 - audio_middleware_templates: adaptive music system
 """
 
-import pytest
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -58,10 +55,6 @@ from veilbreakers_mcp.shared.unity_templates.combat_feel_templates import (
 class TestHitstopSystem:
     """Tests for generate_hitstop_system_script."""
 
-    def test_returns_string(self):
-        result = generate_hitstop_system_script()
-        assert isinstance(result, str)
-
     def test_contains_time_timescale(self):
         result = generate_hitstop_system_script()
         assert "Time.timeScale" in result
@@ -81,10 +74,6 @@ class TestHitstopSystem:
 
 class TestInputBuffer:
     """Tests for generate_input_buffer_script."""
-
-    def test_returns_string(self):
-        result = generate_input_buffer_script()
-        assert isinstance(result, str)
 
     def test_contains_buffer_input(self):
         result = generate_input_buffer_script()
@@ -106,10 +95,6 @@ class TestInputBuffer:
 class TestCombatCamera:
     """Tests for generate_combat_camera_script."""
 
-    def test_returns_string(self):
-        result = generate_combat_camera_script()
-        assert isinstance(result, str)
-
     def test_contains_class_name(self):
         result = generate_combat_camera_script()
         assert "VB_CombatCamera" in result
@@ -126,10 +111,6 @@ class TestCombatCamera:
 class TestDamageFeedback:
     """Tests for generate_damage_feedback_script."""
 
-    def test_returns_string(self):
-        result = generate_damage_feedback_script()
-        assert isinstance(result, str)
-
     def test_contains_damage_severity(self):
         result = generate_damage_feedback_script()
         assert "DamageSeverity" in result
@@ -145,10 +126,6 @@ class TestDamageFeedback:
 
 class TestDodgeRoll:
     """Tests for generate_dodge_roll_script."""
-
-    def test_returns_string(self):
-        result = generate_dodge_roll_script()
-        assert isinstance(result, str)
 
     def test_contains_dodge_state(self):
         result = generate_dodge_roll_script()
@@ -169,10 +146,6 @@ class TestDodgeRoll:
 
 class TestAttackChain:
     """Tests for generate_attack_chain_script."""
-
-    def test_returns_string(self):
-        result = generate_attack_chain_script()
-        assert isinstance(result, str)
 
     def test_contains_combo_state(self):
         result = generate_attack_chain_script()
@@ -207,10 +180,6 @@ from veilbreakers_mcp.shared.unity_templates.gameplay_templates import (
 class TestTacticalAICoordinator:
     """Tests for generate_tactical_ai_coordinator_script."""
 
-    def test_returns_string(self):
-        result = generate_tactical_ai_coordinator_script("TestCoordinator")
-        assert isinstance(result, str)
-
     def test_contains_attack_token(self):
         result = generate_tactical_ai_coordinator_script("TestCoordinator")
         assert "AttackToken" in result
@@ -231,10 +200,6 @@ class TestTacticalAICoordinator:
 class TestBossPhaseController:
     """Tests for generate_boss_phase_controller_script."""
 
-    def test_returns_string(self):
-        result = generate_boss_phase_controller_script("TestBoss")
-        assert isinstance(result, str)
-
     def test_contains_on_phase_change(self):
         result = generate_boss_phase_controller_script("TestBoss")
         assert "OnPhaseChange" in result
@@ -254,10 +219,6 @@ class TestBossPhaseController:
 
 class TestPlayerCombatController:
     """Tests for generate_player_combat_controller_script."""
-
-    def test_returns_string(self):
-        result = generate_player_combat_controller_script()
-        assert isinstance(result, str)
 
     def test_contains_stamina(self):
         result = generate_player_combat_controller_script()
@@ -283,10 +244,6 @@ class TestPlayerCombatController:
 class TestMotionWarping:
     """Tests for generate_motion_warping_script."""
 
-    def test_returns_string(self):
-        result = generate_motion_warping_script("TestWarp")
-        assert isinstance(result, str)
-
     def test_contains_motion_warping(self):
         result = generate_motion_warping_script("TestWarp")
         assert "MotionWarping" in result
@@ -306,10 +263,6 @@ class TestMotionWarping:
 
 class TestAttackTelegraph:
     """Tests for generate_attack_telegraph_script."""
-
-    def test_returns_string(self):
-        result = generate_attack_telegraph_script("TestTelegraph")
-        assert isinstance(result, str)
 
     def test_contains_telegraph_type(self):
         result = generate_attack_telegraph_script("TestTelegraph")
@@ -342,10 +295,6 @@ from veilbreakers_mcp.shared.unity_templates.shader_templates import (
 class TestAnisotropicHairShader:
     """Tests for generate_anisotropic_hair_shader."""
 
-    def test_returns_string(self):
-        result = generate_anisotropic_hair_shader()
-        assert isinstance(result, str)
-
     def test_contains_kajiya_kay(self):
         result = generate_anisotropic_hair_shader()
         assert "KajiyaKay" in result
@@ -362,10 +311,6 @@ class TestAnisotropicHairShader:
 class TestTerrainBlendShader:
     """Tests for generate_terrain_blend_shader."""
 
-    def test_returns_string(self):
-        result = generate_terrain_blend_shader()
-        assert isinstance(result, str)
-
     def test_contains_height_blend(self):
         result = generate_terrain_blend_shader()
         assert "HeightBlend" in result
@@ -381,10 +326,6 @@ class TestTerrainBlendShader:
 
 class TestIceCrystalShader:
     """Tests for generate_ice_crystal_shader."""
-
-    def test_returns_string(self):
-        result = generate_ice_crystal_shader()
-        assert isinstance(result, str)
 
     def test_contains_refraction(self):
         result = generate_ice_crystal_shader()
@@ -412,10 +353,6 @@ from veilbreakers_mcp.shared.unity_templates.vfx_mastery_templates import (
 class TestVFXPool:
     """Tests for generate_vfx_pool_script."""
 
-    def test_returns_dict(self):
-        result = generate_vfx_pool_script()
-        assert isinstance(result, dict)
-
     def test_has_script_content(self):
         result = generate_vfx_pool_script()
         assert "script_content" in result
@@ -435,10 +372,6 @@ class TestVFXPool:
 
 class TestVFXLOD:
     """Tests for generate_vfx_lod_script."""
-
-    def test_returns_dict(self):
-        result = generate_vfx_lod_script()
-        assert isinstance(result, dict)
 
     def test_has_script_content(self):
         result = generate_vfx_lod_script()
@@ -470,10 +403,6 @@ from veilbreakers_mcp.shared.unity_templates.world_templates import (
 class TestWFCDungeon:
     """Tests for generate_wfc_dungeon_script."""
 
-    def test_returns_dict(self):
-        result = generate_wfc_dungeon_script()
-        assert isinstance(result, dict)
-
     def test_has_script_content(self):
         result = generate_wfc_dungeon_script()
         assert "script_content" in result
@@ -495,10 +424,10 @@ class TestInteriorStreaming:
         assert isinstance(result, tuple)
         assert len(result) == 2
 
-    def test_both_elements_are_strings(self):
-        result = generate_interior_streaming_script()
-        assert isinstance(result[0], str)
-        assert isinstance(result[1], str)
+    def test_tuple_order_maps_manager_then_trigger(self):
+        manager_cs, trigger_cs = generate_interior_streaming_script()
+        assert "public class InteriorStreamingManager" in manager_cs
+        assert "public class InteriorStreamingTrigger" in trigger_cs
 
     def test_brace_balance_manager(self):
         manager_cs, _ = generate_interior_streaming_script()
@@ -535,10 +464,11 @@ class TestLegendaryAffixSystem:
         assert isinstance(result, tuple)
         assert len(result) == 3
 
-    def test_all_elements_are_strings(self):
-        result = generate_legendary_affix_system_script()
-        for i, script in enumerate(result):
-            assert isinstance(script, str), f"Element {i} is not a string"
+    def test_tuple_contains_expected_affix_scripts(self):
+        affix_pool_cs, affix_roller_cs, affix_visualizer_cs = generate_legendary_affix_system_script()
+        assert "public class VB_AffixPool" in affix_pool_cs
+        assert "public static class AffixRoller" in affix_roller_cs
+        assert "public class VB_AffixVisualizer" in affix_visualizer_cs
 
     def test_brace_balance_all(self):
         result = generate_legendary_affix_system_script()
@@ -555,10 +485,6 @@ class TestLegendaryAffixSystem:
 
 class TestEquipmentVariantMatrix:
     """Tests for generate_equipment_variant_matrix_script."""
-
-    def test_returns_dict(self):
-        result = generate_equipment_variant_matrix_script()
-        assert isinstance(result, dict)
 
     def test_has_script_content(self):
         result = generate_equipment_variant_matrix_script()
@@ -586,10 +512,10 @@ class TestAdaptiveMusicSystem:
         assert isinstance(result, tuple)
         assert len(result) == 2
 
-    def test_both_elements_are_strings(self):
-        result = generate_adaptive_music_system_script()
-        assert isinstance(result[0], str)
-        assert isinstance(result[1], str)
+    def test_tuple_order_maps_manager_then_data(self):
+        manager_cs, music_data_so_cs = generate_adaptive_music_system_script()
+        assert "public class VeilBreakers_AdaptiveMusicManager" in manager_cs
+        assert "public class VeilBreakers_AdaptiveMusicData" in music_data_so_cs
 
     def test_brace_balance_both(self):
         result = generate_adaptive_music_system_script()
