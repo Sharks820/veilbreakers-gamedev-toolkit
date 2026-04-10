@@ -737,6 +737,118 @@ def generate_door(
             all_uvs.extend(_generate_planar_uvs(brace_v, "xy"))
             panel_indices.extend(range(bo, bo + len(brace_v)))
 
+        # --- DETAIL GEOMETRY: handle, hinge plates, iron studs, plank grooves ---
+
+        # Door handle (horizontal bar + backplate) on right side
+        handle_backplate_v, handle_backplate_f = _make_box(
+            half_w * 0.6, height * 0.5, half_t + 0.005,
+            0.025, 0.02, 0.004,
+        )
+        ho = len(all_parts_verts)
+        all_parts_verts.extend(handle_backplate_v)
+        for f in handle_backplate_f:
+            all_parts_faces.append(tuple(idx + ho for idx in f))
+        all_uvs.extend(_generate_planar_uvs(handle_backplate_v, "xy"))
+        panel_indices.extend(range(ho, ho + len(handle_backplate_v)))
+
+        # Handle bar (cylinder)
+        handle_bar_v, handle_bar_f = _make_cylinder(
+            half_w * 0.6, height * 0.48, half_t + 0.012,
+            0.008, 0.06, segments=6,
+        )
+        ho2 = len(all_parts_verts)
+        all_parts_verts.extend(handle_bar_v)
+        for f in handle_bar_f:
+            all_parts_faces.append(tuple(idx + ho2 for idx in f))
+        all_uvs.extend(_generate_planar_uvs(handle_bar_v, "xy"))
+        panel_indices.extend(range(ho2, ho2 + len(handle_bar_v)))
+
+        # Hinge plates (2 on left edge, front and back)
+        for hy_frac in [0.2, 0.8]:
+            hy = height * hy_frac
+            # Front hinge plate
+            hp_v, hp_f = _make_box(
+                -half_w + 0.02, hy, half_t + 0.004,
+                0.03, 0.015, 0.003,
+            )
+            hpo = len(all_parts_verts)
+            all_parts_verts.extend(hp_v)
+            for f in hp_f:
+                all_parts_faces.append(tuple(idx + hpo for idx in f))
+            all_uvs.extend(_generate_planar_uvs(hp_v, "xy"))
+            panel_indices.extend(range(hpo, hpo + len(hp_v)))
+
+            # Hinge pin (cylinder)
+            pin_v, pin_f = _make_cylinder(
+                -half_w, hy - 0.02, 0,
+                0.006, 0.07, segments=6,
+            )
+            pino = len(all_parts_verts)
+            all_parts_verts.extend(pin_v)
+            for f in pin_f:
+                all_parts_faces.append(tuple(idx + pino for idx in f))
+            all_uvs.extend(_generate_planar_uvs(pin_v, "xy"))
+            panel_indices.extend(range(pino, pino + len(pin_v)))
+
+        # Iron studs (decorative dots on door face, 3x4 grid)
+        stud_rows = 4
+        stud_cols = 3
+        for sr in range(stud_rows):
+            for sc in range(stud_cols):
+                sx = -half_w * 0.6 + sc * half_w * 0.6
+                sy = height * (sr + 1) / (stud_rows + 1)
+                stud_v, stud_f = _make_cylinder(
+                    sx, sy, half_t + 0.003,
+                    0.008, 0.005, segments=6,
+                )
+                sto = len(all_parts_verts)
+                all_parts_verts.extend(stud_v)
+                for f in stud_f:
+                    all_parts_faces.append(tuple(idx + sto for idx in f))
+                all_uvs.extend(_generate_planar_uvs(stud_v, "xy"))
+                panel_indices.extend(range(sto, sto + len(stud_v)))
+
+        # Back-face cross braces (diagonal reinforcement)
+        for brace_start_y, brace_end_y in [(height * 0.1, height * 0.9), (height * 0.9, height * 0.1)]:
+            brace_v, brace_f = _iron_strap(
+                -half_w * 0.8, brace_start_y, -half_t - 0.005,
+                half_w * 0.8, brace_end_y, -half_t - 0.005,
+                width=0.04, thickness=0.01,
+            )
+            bro = len(all_parts_verts)
+            all_parts_verts.extend(brace_v)
+            for f in brace_f:
+                all_parts_faces.append(tuple(idx + bro for idx in f))
+            all_uvs.extend(_generate_planar_uvs(brace_v, "xy"))
+            panel_indices.extend(range(bro, bro + len(brace_v)))
+
+        # Kick plate at bottom (iron strip)
+        kick_v, kick_f = _make_box(
+            0, 0.03, half_t + 0.004,
+            half_w * 0.95, 0.03, 0.003,
+        )
+        ko = len(all_parts_verts)
+        all_parts_verts.extend(kick_v)
+        for f in kick_f:
+            all_parts_faces.append(tuple(idx + ko for idx in f))
+        all_uvs.extend(_generate_planar_uvs(kick_v, "xy"))
+        panel_indices.extend(range(ko, ko + len(kick_v)))
+
+        # Horizontal plank grooves on door face (3-5 lines)
+        groove_count = max(3, int(height / 0.4))
+        for gi in range(groove_count):
+            gy = height * (gi + 1) / (groove_count + 1)
+            gv, gf = _make_box(
+                0, gy, half_t + 0.001,
+                half_w * 0.95, 0.002, 0.001,
+            )
+            go = len(all_parts_verts)
+            all_parts_verts.extend(gv)
+            for f in gf:
+                all_parts_faces.append(tuple(idx + go for idx in f))
+            all_uvs.extend(_generate_planar_uvs(gv, "xy"))
+            panel_indices.extend(range(go, go + len(gv)))
+
         # Hinges
         hinge_x = -half_w
         empties["hinge_top"] = (hinge_x, height * 0.85, 0.0)
@@ -1038,8 +1150,9 @@ def generate_chain(
     # Spacing: each link overlaps with the previous
     link_spacing = link_height * 0.85
 
-    seg = 12 if style == "iron" else 8
-    tube = 6 if style == "iron" else 4
+    # Optimized: seg=8, tube=4 for all styles (<=80 tris/link)
+    seg = 8
+    tube = 4
 
     vert_offset = 0
     for i in range(link_count):
@@ -1098,7 +1211,7 @@ def generate_flag(
     width: float = 1.5,
     height: float = 1.0,
     pole_height: float = 3.0,
-    subdivisions: int = 12,
+    subdivisions: int = 28,
     style: str = "banner",
 ) -> MeshSpec:
     """Generate cloth-sim-ready flag with pole.
@@ -1323,16 +1436,137 @@ def generate_chest(
     inner_f = [tuple(reversed(f)) for f in inner_f]
     base_parts.append((inner_v, inner_f))
 
-    # Plank detail on front (for wooden / iron_bound)
+    # Plank detail on front and back (for wooden / iron_bound)
     if style in ("wooden", "iron_bound"):
         plank_count = max(3, int(width / 0.12))
         for pi in range(plank_count):
             px = -hw + (pi + 0.5) * width / plank_count
+            # Front grooves
             groove_v, groove_f = _make_box(
                 px, base_h / 2, hd + 0.001,
                 0.002, base_h / 2 - 0.01, 0.001,
             )
             base_parts.append((groove_v, groove_f))
+            # Back grooves
+            groove_bv, groove_bf = _make_box(
+                px, base_h / 2, -hd - 0.001,
+                0.002, base_h / 2 - 0.01, 0.001,
+            )
+            base_parts.append((groove_bv, groove_bf))
+        # Side plank grooves
+        side_plank_count = max(2, int(depth / 0.12))
+        for pi in range(side_plank_count):
+            pz = -hd + (pi + 0.5) * depth / side_plank_count
+            # Left side
+            sg_lv, sg_lf = _make_box(
+                -hw - 0.001, base_h / 2, pz,
+                0.001, base_h / 2 - 0.01, 0.002,
+            )
+            base_parts.append((sg_lv, sg_lf))
+            # Right side
+            sg_rv, sg_rf = _make_box(
+                hw + 0.001, base_h / 2, pz,
+                0.001, base_h / 2 - 0.01, 0.002,
+            )
+            base_parts.append((sg_rv, sg_rf))
+
+    # --- IRON BANDING STRAPS (all styles) ---
+    strap_count = 3
+    strap_height = 0.015
+    strap_thickness = 0.004
+    for si in range(strap_count):
+        sy = base_h * (si + 1) / (strap_count + 1)
+        # Front strap
+        sv_f, sf_f = _make_box(0, sy, hd + 0.003,
+                                hw * 0.95, strap_height, strap_thickness)
+        base_parts.append((sv_f, sf_f))
+        # Back strap
+        sv_b, sf_b = _make_box(0, sy, -hd - 0.003,
+                                hw * 0.95, strap_height, strap_thickness)
+        base_parts.append((sv_b, sf_b))
+        # Left side strap
+        sv_l, sf_l = _make_box(-hw - 0.003, sy, 0,
+                                strap_thickness, strap_height, hd * 0.95)
+        base_parts.append((sv_l, sf_l))
+        # Right side strap
+        sv_r, sf_r = _make_box(hw + 0.003, sy, 0,
+                                strap_thickness, strap_height, hd * 0.95)
+        base_parts.append((sv_r, sf_r))
+
+    # --- CORNER REINFORCEMENT BRACKETS (L-shapes at 4 bottom corners) ---
+    bracket_size = 0.025
+    bracket_thickness = 0.003
+    for cx_s in [-1, 1]:
+        for cz_s in [-1, 1]:
+            # Vertical part
+            bv_v, bf_v = _make_box(
+                cx_s * (hw + bracket_thickness), base_h * 0.15, cz_s * (hd + bracket_thickness),
+                bracket_thickness, base_h * 0.15, bracket_thickness,
+            )
+            base_parts.append((bv_v, bf_v))
+            # Horizontal part
+            bv_h, bf_h = _make_box(
+                cx_s * (hw + bracket_thickness), 0.003, cz_s * (hd + bracket_thickness),
+                bracket_size, bracket_thickness, bracket_size,
+            )
+            base_parts.append((bv_h, bf_h))
+
+    # --- HINGE PLATES + PINS on back edge ---
+    for hy_frac in [0.25, 0.75]:
+        hy = base_h * hy_frac
+        # Hinge plate
+        hp_v, hp_f = _make_box(0, hy, -hd - 0.005,
+                                0.02, 0.015, 0.003)
+        base_parts.append((hp_v, hp_f))
+        # Hinge pin (cylinder along X axis, simulated as small box rotated)
+        pin_v, pin_f = _make_cylinder(0, hy - 0.005, -hd - 0.01,
+                                       0.005, 0.04, segments=6)
+        base_parts.append((pin_v, pin_f))
+
+    # --- LID PLANK GROOVES (front and back) ---
+    lid_groove_count = max(3, int(width / 0.12))
+    for pi in range(lid_groove_count):
+        px = -hw + (pi + 0.5) * width / lid_groove_count
+        lgv, lgf = _make_box(
+            px, base_h + lid_h * 0.5, hd + 0.002,
+            0.002, lid_h * 0.3, 0.001,
+        )
+        base_parts.append((lgv, lgf))
+        lgv2, lgf2 = _make_box(
+            px, base_h + lid_h * 0.5, -hd - 0.002,
+            0.002, lid_h * 0.3, 0.001,
+        )
+        base_parts.append((lgv2, lgf2))
+
+    # --- CORNER RIVETS (decorative studs at each strap intersection) ---
+    for si in range(strap_count):
+        sy = base_h * (si + 1) / (strap_count + 1)
+        for cx_s in [-1, 1]:
+            for cz_s in [-1, 1]:
+                rv, rf = _make_cylinder(
+                    cx_s * hw * 0.95, sy, cz_s * (hd + 0.005),
+                    0.006, 0.004, segments=6,
+                )
+                base_parts.append((rv, rf))
+
+    # --- BOTTOM FEET (4 small cylinders at corners) ---
+    for fx_s in [-1, 1]:
+        for fz_s in [-1, 1]:
+            foot_v, foot_f = _make_cylinder(
+                fx_s * (hw - 0.03), -0.015, fz_s * (hd - 0.03),
+                0.02, 0.015, segments=6,
+            )
+            base_parts.append((foot_v, foot_f))
+
+    # --- LID IRON STRAPS (2 straps across lid arc, front face) ---
+    for ls_frac in [0.35, 0.65]:
+        ls_y = base_h + lid_h * ls_frac
+        lsv, lsf = _make_box(0, ls_y, hd + 0.004,
+                               hw * 0.9, 0.01, 0.003)
+        base_parts.append((lsv, lsf))
+        lsv2, lsf2 = _make_box(0, ls_y, -hd - 0.004,
+                                 hw * 0.9, 0.01, 0.003)
+        base_parts.append((lsv2, lsf2))
 
     base_verts, base_faces = _merge_parts(*base_parts)
     base_indices = list(range(len(base_verts)))
@@ -1609,6 +1843,14 @@ def generate_chandelier(
                                   major_seg=12, minor_seg=4)
         parts.append((br_v, br_f))
 
+    # --- ORNAMENTAL SPHERES at arm/ring attachment points ---
+    for i in range(candle_count):
+        angle = 2.0 * math.pi * i / candle_count
+        ox = math.cos(angle) * ring_r * 0.95
+        oz = math.sin(angle) * ring_r * 0.95
+        ov, of = _make_sphere(ox, ring_y, oz, 0.015, rings=4, sectors=6)
+        parts.append((ov, of))
+
     # --- CANDLE HOLDERS + CANDLES ---
     candle_positions: list[tuple[float, float, float]] = []
     for i in range(candle_count):
@@ -1617,20 +1859,60 @@ def generate_chandelier(
         cz_pos = math.sin(angle) * ring_r
         cy_pos = ring_y
 
-        # Holder cup
-        cup_v, cup_f = _make_cylinder(cx_pos, cy_pos - 0.005, cz_pos,
-                                       0.02, 0.015, segments=6)
+        # Holder cup (deeper socket)
+        cup_v, cup_f = _make_cylinder(cx_pos, cy_pos - 0.008, cz_pos,
+                                       0.02, 0.02, segments=6)
         parts.append((cup_v, cup_f))
 
-        # Candle (slightly tapered cylinder)
+        # Socket rim (slightly wider ring)
+        rim_v, rim_f = _make_torus(cx_pos, cy_pos + 0.012, cz_pos,
+                                    0.018, 0.004, major_seg=8, minor_seg=4)
+        parts.append((rim_v, rim_f))
+
+        # Candle body
         candle_h = 0.08
-        candle_v, candle_f = _make_cylinder(cx_pos, cy_pos + 0.01, cz_pos,
+        candle_v, candle_f = _make_cylinder(cx_pos, cy_pos + 0.012, cz_pos,
                                              0.008, candle_h, segments=6)
         parts.append((candle_v, candle_f))
 
-        flame_pos = (cx_pos, cy_pos + 0.01 + candle_h + 0.01, cz_pos)
+        # Drip wax on socket (small displaced sphere)
+        drip_angle = angle + 0.3
+        drip_x = cx_pos + math.cos(drip_angle) * 0.012
+        drip_z = cz_pos + math.sin(drip_angle) * 0.012
+        drip_v, drip_f = _make_sphere(drip_x, cy_pos + 0.005, drip_z,
+                                       0.006, rings=3, sectors=4)
+        parts.append((drip_v, drip_f))
+
+        # Second drip on opposite side
+        drip2_x = cx_pos - math.cos(drip_angle) * 0.01
+        drip2_z = cz_pos - math.sin(drip_angle) * 0.01
+        drip2_v, drip2_f = _make_sphere(drip2_x, cy_pos + 0.003, drip2_z,
+                                         0.005, rings=3, sectors=4)
+        parts.append((drip2_v, drip2_f))
+
+        flame_pos = (cx_pos, cy_pos + 0.012 + candle_h + 0.01, cz_pos)
         candle_positions.append(flame_pos)
         empties[f"flame_{i}"] = flame_pos
+
+    # --- DECORATIVE HANGING PENDANTS (between candle positions) ---
+    for i in range(candle_count):
+        angle = 2.0 * math.pi * (i + 0.5) / candle_count
+        px = math.cos(angle) * ring_r * 0.8
+        pz = math.sin(angle) * ring_r * 0.8
+        # Small chain link
+        pchain_v, pchain_f = _make_torus(px, ring_y - 0.04, pz,
+                                          0.008, 0.002, major_seg=6, minor_seg=3)
+        parts.append((pchain_v, pchain_f))
+        # Pendant drop (sphere)
+        pdrop_v, pdrop_f = _make_sphere(px, ring_y - 0.06, pz,
+                                         0.01, rings=3, sectors=4)
+        parts.append((pdrop_v, pdrop_f))
+
+    # --- SECONDARY RING (decorative inner ring) ---
+    inner_ring_v, inner_ring_f = _make_torus(0, ring_y - 0.03, 0,
+                                              ring_r * 0.6, 0.008,
+                                              major_seg=candle_count * 2, minor_seg=4)
+    parts.append((inner_ring_v, inner_ring_f))
 
     # Merge everything
     final_verts, final_faces = _merge_parts(*parts)
@@ -1743,11 +2025,110 @@ def generate_drawbridge(
         rail_indices.extend(range(start_v, start_v + len(rail_v)))
         parts.append((rail_v, rail_f))
 
+    # --- HINGE MECHANISM at wall-side edge (z=0) ---
+    hinge_indices: list[int] = []
+    for hx_sign in [-1, 1]:
+        hx = hx_sign * (plank_hw - 0.1)
+        # Hinge axle (large cylinder)
+        axle_v, axle_f = _make_cylinder(
+            hx, -plank_thickness - 0.02, -0.02,
+            0.03, 0.08, segments=8,
+        )
+        start_v = sum(len(p[0]) for p in parts)
+        hinge_indices.extend(range(start_v, start_v + len(axle_v)))
+        parts.append((axle_v, axle_f))
+        # Hinge plate
+        hp_v, hp_f = _make_box(
+            hx, -plank_thickness / 2, -0.005,
+            0.05, plank_thickness / 2 + 0.01, 0.005,
+        )
+        start_v = sum(len(p[0]) for p in parts)
+        hinge_indices.extend(range(start_v, start_v + len(hp_v)))
+        parts.append((hp_v, hp_f))
+
+    # --- CHAIN ATTACHMENT RINGS at free end ---
+    for cx_sign in [-1, 1]:
+        cx_pos = cx_sign * (plank_hw - 0.15)
+        ring_v, ring_f = _make_torus(
+            cx_pos, 0.05, length - 0.05,
+            0.04, 0.008, major_seg=8, minor_seg=4,
+        )
+        start_v = sum(len(p[0]) for p in parts)
+        parts.append((ring_v, ring_f))
+
+    # --- IRON EDGE BANDING along both long edges ---
+    for side_sign in [-1, 1]:
+        edge_x = side_sign * plank_hw
+        # Long iron strip along bridge length
+        edge_v, edge_f = _make_box(
+            edge_x, -plank_thickness / 2, length / 2,
+            0.015, plank_thickness / 2 + 0.005, length / 2 - 0.02,
+        )
+        start_v = sum(len(p[0]) for p in parts)
+        parts.append((edge_v, edge_f))
+
+    # --- ADDITIONAL CROSS BEAMS for stiffness ---
+    extra_beam_count = 4
+    for ebi in range(extra_beam_count):
+        ebz = length * (ebi + 0.5) / extra_beam_count
+        eb_v, eb_f = _make_box(
+            0, -plank_thickness - beam_size - 0.02, ebz,
+            plank_hw * 0.8, beam_size * 0.4, beam_size * 0.4,
+        )
+        start_v = sum(len(p[0]) for p in parts)
+        beam_indices.extend(range(start_v, start_v + len(eb_v)))
+        parts.append((eb_v, eb_f))
+
+    # --- DIAGONAL BRACING underneath ---
+    for diag_z_start, diag_z_end in [(0.2, length * 0.4), (length * 0.6, length - 0.2)]:
+        dv, df = _iron_strap(
+            -plank_hw * 0.7, -plank_thickness - beam_size, diag_z_start,
+            plank_hw * 0.7, -plank_thickness - beam_size, diag_z_end,
+            width=0.03, thickness=0.015,
+        )
+        start_v = sum(len(p[0]) for p in parts)
+        beam_indices.extend(range(start_v, start_v + len(dv)))
+        parts.append((dv, df))
+
+    # --- LONGITUDINAL BEAMS (along bridge length, underneath) ---
+    for lx_frac in [-0.6, 0.0, 0.6]:
+        lx = plank_hw * lx_frac
+        lb_v, lb_f = _make_box(
+            lx, -plank_thickness - beam_size * 1.5, length / 2,
+            beam_size * 0.5, beam_size * 0.5, length / 2 - 0.05,
+        )
+        start_v = sum(len(p[0]) for p in parts)
+        beam_indices.extend(range(start_v, start_v + len(lb_v)))
+        parts.append((lb_v, lb_f))
+
+    # --- IRON NAIL HEADS on planks (cylinder dots) ---
+    nail_count_per_plank = 4
+    for pi in range(plank_count):
+        z_start = pi * (plank_depth + plank_gap)
+        z_center = z_start + plank_depth / 2.0
+        for ni in range(nail_count_per_plank):
+            nx = -plank_hw * 0.7 + ni * plank_hw * 0.47
+            nv, nf = _make_cylinder(nx, 0.001, z_center, 0.006, 0.003, segments=4)
+            start_v = sum(len(p[0]) for p in parts)
+            bridge_indices.extend(range(start_v, start_v + len(nv)))
+            parts.append((nv, nf))
+
+    # --- ADDITIONAL RAIL POSTS (intermediate) ---
+    for side in [-1, 1]:
+        rx = side * (plank_hw + 0.02)
+        for pz_frac in [0.25, 0.75]:
+            pz = length * pz_frac
+            rv, rf = _make_cylinder(rx, 0, pz, 0.02, rail_height * 0.9, segments=6)
+            start_v = sum(len(p[0]) for p in parts)
+            rail_indices.extend(range(start_v, start_v + len(rv)))
+            parts.append((rv, rf))
+
     final_verts, final_faces = _merge_parts(*parts)
 
     vertex_groups["bridge"] = bridge_indices
     vertex_groups["beams"] = beam_indices
     vertex_groups["rails"] = rail_indices
+    vertex_groups["hinges"] = hinge_indices
 
     # Hinges at wall-side edge (z=0)
     empties["hinge_left"] = (-plank_hw, 0, 0)
@@ -2022,22 +2403,70 @@ def generate_hanging_sign(
     b_offset = len(sign_v)
     bracket_indices = list(range(b_offset, b_offset + len(bracket_v)))
 
+    # --- SIGN BORDER FRAME (wooden strips around perimeter) ---
+    border_parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    border_w = 0.012
+    sign_cx = bracket_extend
+    sign_cy = sign_hang_y - height / 2
+    # Top border
+    bv_t, bf_t = _make_box(sign_cx, sign_hang_y + border_w / 2, 0,
+                             width / 2 + border_w, border_w / 2, sign_thickness / 2 + 0.002)
+    border_parts.append((bv_t, bf_t))
+    # Bottom border
+    bv_b, bf_b = _make_box(sign_cx, sign_hang_y - height - border_w / 2, 0,
+                             width / 2 + border_w, border_w / 2, sign_thickness / 2 + 0.002)
+    border_parts.append((bv_b, bf_b))
+    # Left border
+    bv_l, bf_l = _make_box(sign_cx - width / 2 - border_w / 2, sign_cy, 0,
+                             border_w / 2, height / 2, sign_thickness / 2 + 0.002)
+    border_parts.append((bv_l, bf_l))
+    # Right border
+    bv_r, bf_r = _make_box(sign_cx + width / 2 + border_w / 2, sign_cy, 0,
+                             border_w / 2, height / 2, sign_thickness / 2 + 0.002)
+    border_parts.append((bv_r, bf_r))
+
+    border_v, border_f = _merge_parts(*border_parts)
+    brd_offset = b_offset + len(bracket_v)
+
+    # --- CARVED LETTERING DEPTH (recessed rectangles on sign face) ---
+    carve_parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
+    carve_count = 4
+    for ci in range(carve_count):
+        cx_pos = sign_cx - width * 0.3 + ci * width * 0.2
+        cy_pos = sign_cy + 0.02
+        cv, cf = _make_box(cx_pos, cy_pos, sign_thickness / 2 + 0.002,
+                            width * 0.08, height * 0.12, 0.002)
+        carve_parts.append((cv, cf))
+
+    carve_v, carve_f = _merge_parts(*carve_parts) if carve_parts else ([], [])
+    crv_offset = brd_offset + len(border_v)
+
     # --- HANGING CHAINS (2 short chains connecting bracket to sign) ---
     chain_parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
     hook_r = 0.006
     for hx in [bracket_extend - width * 0.3, bracket_extend + width * 0.3]:
-        # Simple hook (small torus)
+        # Hook ring
         hv, hf = _make_torus(hx, sign_hang_y * 0.3, 0, 0.015, hook_r,
                               major_seg=6, minor_seg=4)
         chain_parts.append((hv, hf))
+        # Chain link connecting bracket to sign (3 small links each)
+        for li in range(3):
+            ly = sign_hang_y * 0.3 - (li + 1) * 0.025
+            lv, lf = _make_torus(hx, ly, 0, 0.01, 0.003,
+                                  major_seg=6, minor_seg=4)
+            chain_parts.append((lv, lf))
 
     chain_v, chain_f = _merge_parts(*chain_parts) if chain_parts else ([], [])
-    c_offset = b_offset + len(bracket_v)
+    c_offset = crv_offset + len(carve_v)
 
-    final_verts = sign_v + bracket_v + chain_v
+    final_verts = sign_v + bracket_v + border_v + carve_v + chain_v
     final_faces = sign_f[:]
     for f in bracket_f:
         final_faces.append(tuple(idx + b_offset for idx in f))
+    for f in border_f:
+        final_faces.append(tuple(idx + brd_offset for idx in f))
+    for f in carve_f:
+        final_faces.append(tuple(idx + crv_offset for idx in f))
     for f in chain_f:
         final_faces.append(tuple(idx + c_offset for idx in f))
 
@@ -2099,8 +2528,8 @@ def generate_windmill(
     tower_v: list[tuple[float, float, float]] = []
     tower_f: list[tuple[int, ...]] = []
 
-    # Stone course rings (multiple rings for texture detail)
-    ring_count = max(8, int(tower_height / 0.8))
+    # Stone course rings (more rings = more detail for stone texture)
+    ring_count = max(12, int(tower_height / 0.5))
     for ri in range(ring_count + 1):
         t = ri / ring_count
         ry = t * tower_height
@@ -2124,7 +2553,7 @@ def generate_windmill(
     parts.append((tower_v, tower_f))
     tower_vert_count = len(tower_v)
 
-    # --- WINDOW OPENINGS (small inset boxes on tower surface) ---
+    # --- WINDOW OPENINGS with shutters ---
     window_count = 3
     for wi in range(window_count):
         wy = tower_height * (0.25 + wi * 0.25)
@@ -2132,16 +2561,107 @@ def generate_windmill(
         r_at = base_r + (top_r - base_r) * (wy / tower_height)
         wx = math.cos(wa) * (r_at + 0.01)
         wz = math.sin(wa) * (r_at + 0.01)
+        # Window recess
         wv, wf = _make_box(wx, wy, wz, 0.2, 0.3, 0.05)
         parts.append((wv, wf))
+        # Window frame
+        frame_depth = 0.03
+        for fx, fy, fsx, fsy in [
+            (wx, wy + 0.3, 0.22, 0.015),   # top
+            (wx, wy - 0.3, 0.22, 0.015),   # bottom
+            (wx - 0.2, wy, 0.015, 0.3),     # left
+            (wx + 0.2, wy, 0.015, 0.3),     # right
+        ]:
+            fv, ff = _make_box(fx, fy, wz + frame_depth, fsx, fsy, 0.02)
+            parts.append((fv, ff))
+        # Shutters (angled open)
+        for shutter_side in [-1, 1]:
+            sh_x = wx + shutter_side * 0.22
+            sh_v, sh_f = _make_box(sh_x, wy, wz + 0.04, 0.08, 0.25, 0.01)
+            parts.append((sh_v, sh_f))
 
-    # --- HUB / AXLE ---
+    # --- DOOR AT BASE ---
+    door_angle_pos = math.pi  # back of tower
+    door_r = base_r + 0.02
+    door_cx = math.cos(door_angle_pos) * door_r
+    door_cz = math.sin(door_angle_pos) * door_r
+    door_h = 2.2
+    door_w = 0.8
+    # Door frame
+    for dfx, dfy, dsx, dsy in [
+        (door_cx, door_h / 2, 0.05, door_h / 2),           # left jamb approx
+        (door_cx, door_h, door_w / 2 + 0.05, 0.05),        # lintel
+    ]:
+        dfv, dff = _make_box(dfx, dfy, door_cz, dsx, dsy, 0.06)
+        parts.append((dfv, dff))
+    # Door panel
+    dp_v, dp_f = _make_box(door_cx, door_h / 2, door_cz + 0.03, door_w / 2 - 0.05, door_h / 2 - 0.05, 0.025)
+    parts.append((dp_v, dp_f))
+    # Door handle
+    dh_v, dh_f = _make_cylinder(door_cx + door_w * 0.3, door_h * 0.45, door_cz + 0.06, 0.01, 0.05, segments=6)
+    parts.append((dh_v, dh_f))
+
+    # --- HUB / AXLE (upgraded with mounting brackets) ---
     hub_v, hub_f = _make_cylinder(0, hub_y - hub_r, top_r + 0.1,
                                    hub_r, hub_r * 2, segments=8)
-    # The hub extends out from the tower front
-    # Rotate to face outward (along Z)
     hub_v = [(v[0], v[1], v[2]) for v in hub_v]
     parts.append((hub_v, hub_f))
+
+    # Hub mounting brackets (4 brackets at cardinal directions)
+    for mbi in range(4):
+        mb_angle = 2.0 * math.pi * mbi / 4
+        mb_x = math.cos(mb_angle) * hub_r * 1.3
+        mb_y = hub_y
+        mb_v, mb_f = _make_box(mb_x, mb_y, top_r + 0.1, 0.03, 0.04, 0.02)
+        parts.append((mb_v, mb_f))
+
+    # --- GEAR TEETH RING inside tower at hub height ---
+    gear_r = top_r * 0.7
+    gear_tooth_count = 10
+    for gti in range(gear_tooth_count):
+        gt_angle = 2.0 * math.pi * gti / gear_tooth_count
+        gt_x = math.cos(gt_angle) * gear_r
+        gt_z = math.sin(gt_angle) * gear_r
+        gt_v, gt_f = _make_box(gt_x, hub_y, gt_z, 0.04, 0.06, 0.03)
+        parts.append((gt_v, gt_f))
+    # Gear ring
+    gear_ring_v, gear_ring_f = _make_torus(0, hub_y, 0, gear_r, 0.02,
+                                            major_seg=gear_tooth_count * 2, minor_seg=4)
+    parts.append((gear_ring_v, gear_ring_f))
+
+    # --- ROOF CAP (conical top) ---
+    roof_segs = tower_seg
+    roof_v: list[tuple[float, float, float]] = []
+    roof_f: list[tuple[int, ...]] = []
+    roof_h = 1.5
+    roof_base_r = top_r + 0.2
+    for rsi in range(roof_segs):
+        ra = 2.0 * math.pi * rsi / roof_segs
+        roof_v.append((math.cos(ra) * roof_base_r, tower_height, math.sin(ra) * roof_base_r))
+    roof_v.append((0, tower_height + roof_h, 0))  # apex
+    for rsi in range(roof_segs):
+        rsi2 = (rsi + 1) % roof_segs
+        roof_f.append((rsi, rsi2, roof_segs))
+    roof_f.append(tuple(range(roof_segs - 1, -1, -1)))  # base cap
+    parts.append((roof_v, roof_f))
+
+    # --- BALCONY / PLATFORM at hub level ---
+    balcony_r = top_r + 0.5
+    balcony_h = 0.1
+    balcony_y = hub_y - 0.5
+    # Platform floor
+    bal_floor_v, bal_floor_f = _make_cylinder(
+        0, balcony_y, 0, balcony_r, balcony_h, segments=tower_seg,
+    )
+    parts.append((bal_floor_v, bal_floor_f))
+    # Railing posts
+    for rpi in range(8):
+        rp_angle = 2.0 * math.pi * rpi / 8
+        rp_x = math.cos(rp_angle) * (balcony_r - 0.05)
+        rp_z = math.sin(rp_angle) * (balcony_r - 0.05)
+        rp_v, rp_f = _make_cylinder(rp_x, balcony_y + balcony_h, rp_z,
+                                     0.02, 0.6, segments=4)
+        parts.append((rp_v, rp_f))
 
     empties["rotation_axis"] = (0, hub_y, top_r + 0.1 + hub_r)
 
@@ -2154,8 +2674,8 @@ def generate_windmill(
         # Blade frame (wooden lattice)
         frame_parts: list[tuple[list[tuple[float, float, float]], list[tuple[int, ...]]]] = []
 
-        # Main spar
-        spar_segs = 6
+        # Main spar (more segments for smoother blade)
+        spar_segs = 8
         for ssi in range(spar_segs):
             t0 = ssi / spar_segs
             t1 = (ssi + 1) / spar_segs
@@ -2175,7 +2695,7 @@ def generate_windmill(
             frame_parts.append((sv, sf))
 
         # Cross slats (perpendicular to spar)
-        slat_count = 4
+        slat_count = 6
         perp_x = -math.sin(angle)
         perp_y = math.cos(angle)
         for sli in range(slat_count):
@@ -2197,9 +2717,9 @@ def generate_windmill(
         blade_indices.extend(range(f_offset, f_offset + len(frame_v)))
         parts.append((frame_v, frame_f))
 
-        # --- CLOTH PANEL (grid topology for cloth sim) ---
-        cloth_rows = 6
-        cloth_cols = 4
+        # --- CLOTH PANEL (grid topology for cloth sim, higher density) ---
+        cloth_rows = 10
+        cloth_cols = 6
         cloth_v: list[tuple[float, float, float]] = []
         cloth_f: list[tuple[int, ...]] = []
 
