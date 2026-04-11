@@ -17,17 +17,18 @@ function Resolve-BlenderExe {
         return (Resolve-Path $RequestedPath).Path
     }
 
-    $candidates = @(
-        "$env:LOCALAPPDATA\Programs\blender-4.5.3-windows-x64\blender.exe",
-        "$env:LOCALAPPDATA\Programs\blender-4.5.2-windows-x64\blender.exe",
-        "$env:LOCALAPPDATA\Programs\blender-4.5.1-windows-x64\blender.exe",
-        "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe",
-        "C:\Program Files\Blender Foundation\Blender 4.4\blender.exe",
-        "C:\Program Files\Blender Foundation\Blender 5.0\blender.exe"
-    )
+    # Prefer newest Blender 4.5.x portable under %LOCALAPPDATA%\Programs (descending),
+    # then the standard Program Files install. 4.5 LTS is the supported line until 2027.
+    $portableGlob = Get-ChildItem -Path "$env:LOCALAPPDATA\Programs" -Directory -Filter "blender-4.5.*-windows-x64" -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        ForEach-Object { Join-Path $_.FullName "blender.exe" }
+
+    $candidates = @()
+    $candidates += $portableGlob
+    $candidates += "C:\Program Files\Blender Foundation\Blender 4.5\blender.exe"
 
     foreach ($candidate in $candidates) {
-        if (Test-Path $candidate) {
+        if ($candidate -and (Test-Path $candidate)) {
             return (Resolve-Path $candidate).Path
         }
     }
