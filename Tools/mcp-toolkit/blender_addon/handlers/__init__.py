@@ -172,6 +172,9 @@ from .animation_export import (
     handle_batch_export,
 )
 from .environment import (
+    handle_build_cave_entrance,
+    handle_build_cliff_face,
+    handle_build_waterfall,
     handle_generate_terrain,
     handle_generate_terrain_tile,
     handle_generate_world_terrain,
@@ -1142,6 +1145,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         seed=params.get("seed", 42),
     ),
     "env_generate_waterfall": handle_generate_waterfall,
+    "env_build_waterfall": handle_build_waterfall,
     "env_generate_cliff_face": lambda params: generate_cliff_face(
         width=params.get("width", 20.0),
         height=params.get("height", 15.0),
@@ -1150,6 +1154,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         has_ledge_path=params.get("has_ledge_path", True),
         seed=params.get("seed", 42),
     ),
+    "env_build_cliff_face": handle_build_cliff_face,
     "env_generate_swamp_terrain": lambda params: generate_swamp_terrain(
         size=params.get("size", 50.0),
         water_level=params.get("water_level", 0.3),
@@ -1204,6 +1209,7 @@ COMMAND_HANDLERS: dict[str, Callable[[dict[str, Any]], Any]] = {
         style=params.get("style", "natural"),
         seed=params.get("seed", 0),
     ),
+    "env_build_cave_entrance": handle_build_cave_entrance,
     "env_generate_lava_flow": lambda params: generate_lava_flow(
         length=params.get("length", 30.0),
         width=params.get("width", 4.0),

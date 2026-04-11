@@ -210,3 +210,79 @@ def test_handle_run_terrain_pass_skips_heightmap_injection_when_unity_export_opt
         "structural_masks",
         "validation_full",
     ]
+
+
+def test_handle_run_terrain_pass_preserves_scene_read_cave_candidates():
+    from blender_addon.handlers.environment import handle_run_terrain_pass
+    from blender_addon.handlers.terrain_pipeline import TerrainPassController
+
+    TerrainPassController.clear_registry()
+    try:
+        result = handle_run_terrain_pass(
+            {
+                "tile_size": 16,
+                "cell_size": 2.0,
+                "seed": 42,
+                "pass_name": "caves",
+                "scene_read": {
+                    "timestamp": 1.0,
+                    "major_landforms": ["mountain_pass", "cliff", "waterfall"],
+                    "focal_point": [16.0, 16.0, 10.0],
+                    "cave_candidates": [
+                        [12.0, 12.0, 8.0],
+                    ],
+                    "success_criteria": ["hero cave entrance present"],
+                    "reviewer": "pytest",
+                },
+            }
+        )
+    finally:
+        TerrainPassController.clear_registry()
+
+    assert result["results"][0]["pass_name"] == "caves"
+    assert result["results"][0]["metrics"]["cave_count"] >= 1
+
+
+def test_handle_run_terrain_pass_can_return_height():
+    from blender_addon.handlers.environment import handle_run_terrain_pass
+    from blender_addon.handlers.terrain_pipeline import TerrainPassController
+
+    TerrainPassController.clear_registry()
+    try:
+        result = handle_run_terrain_pass(
+            {
+                "tile_size": 16,
+                "cell_size": 2.0,
+                "seed": 7,
+                "pipeline": ["macro_world", "structural_masks"],
+                "return_height": True,
+            }
+        )
+    finally:
+        TerrainPassController.clear_registry()
+
+    assert isinstance(result["height"], list)
+    assert len(result["height"]) == 17
+    assert len(result["height"][0]) == 17
+
+
+def test_handle_run_terrain_pass_reports_shared_height_range():
+    from blender_addon.handlers.environment import handle_run_terrain_pass
+    from blender_addon.handlers.terrain_pipeline import TerrainPassController
+
+    TerrainPassController.clear_registry()
+    try:
+        result = handle_run_terrain_pass(
+            {
+                "tile_size": 16,
+                "cell_size": 2.0,
+                "seed": 11,
+                "terrain_type": "mountains",
+                "pipeline": ["macro_world", "structural_masks"],
+            }
+        )
+    finally:
+        TerrainPassController.clear_registry()
+
+    assert isinstance(result["shared_height_range"], list)
+    assert len(result["shared_height_range"]) == 2
