@@ -1189,10 +1189,10 @@ class TestInteriorLighting:
                 # color_temperature is an int (Kelvin); just check it's positive
                 assert light.get("color_temperature", 0) > 0
 
-    def test_light_type_is_point_or_spot(self):
+    def test_light_fixture_types_are_valid(self):
         result = generate_settlement("town", seed=42)
-        light_types = {light.get("light_type", "") for light in result["lights"]}
-        assert light_types.issubset(
+        fixture_types = {light.get("type", "") for light in result["lights"]}
+        assert fixture_types.issubset(
             {"torch_sconce", "chandelier_light", "candle", "brazier_light", "fireplace_light"}
         )
 
