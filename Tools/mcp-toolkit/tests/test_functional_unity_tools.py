@@ -22,8 +22,6 @@ from __future__ import annotations
 import json
 import os
 import struct
-import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -81,10 +79,6 @@ class TestUnityEditor:
 
     # -- exit_play_mode --
 
-    def test_exit_play_mode_returns_string(self):
-        cs = generate_play_mode_script(enter=False)
-        assert isinstance(cs, str)
-
     def test_exit_play_mode_has_editor_application(self):
         cs = generate_play_mode_script(enter=False)
         assert "EditorApplication.ExitPlaymode" in cs
@@ -94,10 +88,6 @@ class TestUnityEditor:
         assert "Exit Play Mode" in cs
 
     # -- screenshot --
-
-    def test_screenshot_returns_string(self):
-        cs = generate_screenshot_script()
-        assert isinstance(cs, str)
 
     def test_screenshot_has_screen_capture(self):
         cs = generate_screenshot_script()
@@ -118,10 +108,6 @@ class TestUnityEditor:
         assert "supersize" in str(exc_info.value).lower()
 
     # -- console_logs --
-
-    def test_console_logs_returns_string(self):
-        cs = generate_console_log_script()
-        assert isinstance(cs, str)
 
     def test_console_logs_has_log_message_received(self):
         cs = generate_console_log_script()
@@ -147,13 +133,6 @@ class TestUnityEditor:
         assert "filter_type" in str(exc_info.value).lower() or "invalid" in str(exc_info.value).lower()
 
     # -- gemini_review --
-
-    def test_gemini_review_returns_string(self):
-        cs = generate_gemini_review_script(
-            screenshot_path="Screenshots/test.png",
-            criteria=["lighting", "composition"],
-        )
-        assert isinstance(cs, str)
 
     def test_gemini_review_has_criteria(self):
         cs = generate_gemini_review_script(
@@ -270,10 +249,6 @@ class TestUnityVFX:
         assert "main.loop = true" in cs
 
     # -- post-processing --
-
-    def test_post_processing_returns_string(self):
-        cs = generate_post_processing_script()
-        assert isinstance(cs, str)
 
     def test_post_processing_has_volume(self):
         cs = generate_post_processing_script()
@@ -774,10 +749,6 @@ class TestUnityUI:
 
     def test_wcag_check_aa_large_text_threshold(self):
         # Large text has lower threshold (3.0 vs 4.5)
-        fg = (150, 150, 150)
-        bg = (255, 255, 255)
-        ratio = contrast_ratio(fg, bg)
-        # This particular combo: ratio ~= 1.98, fails both
         # Use a combo that passes 3.0 but fails 4.5
         fg2 = (100, 100, 100)
         bg2 = (255, 255, 255)
@@ -865,10 +836,6 @@ class TestUnityScene:
 
     # -- terrain --
 
-    def test_terrain_returns_string(self):
-        cs = generate_terrain_setup_script(heightmap_path="Assets/Heightmaps/test.raw")
-        assert isinstance(cs, str)
-
     def test_terrain_has_terrain_data(self):
         cs = generate_terrain_setup_script(heightmap_path="Assets/Heightmaps/test.raw")
         assert "TerrainData" in cs
@@ -902,12 +869,6 @@ class TestUnityScene:
         )
         assert "test_alphamap.raw" in cs
         assert "File.Exists(alphamapPath)" in cs
-
-    def test_tiled_terrain_returns_string(self):
-        cs = generate_tiled_terrain_setup_script(
-            tiles=[{"heightmap_path": "Assets/Heightmaps/tile_0.raw", "grid_x": 0, "grid_y": 0}]
-        )
-        assert isinstance(cs, str)
 
     def test_tiled_terrain_has_parent(self):
         cs = generate_tiled_terrain_setup_script(
@@ -1044,10 +1005,6 @@ class TestUnityScene:
 
     # -- object scatter --
 
-    def test_scatter_returns_string(self):
-        cs = generate_object_scatter_script(prefab_paths=["Assets/Prefabs/Tree.prefab"])
-        assert isinstance(cs, str)
-
     def test_scatter_has_instantiate(self):
         cs = generate_object_scatter_script(prefab_paths=["Assets/Prefabs/Tree.prefab"])
         assert "InstantiatePrefab" in cs
@@ -1063,10 +1020,6 @@ class TestUnityScene:
         assert "prefab" in str(exc_info.value).lower()
 
     # -- lighting --
-
-    def test_lighting_returns_string(self):
-        cs = generate_lighting_setup_script()
-        assert isinstance(cs, str)
 
     def test_lighting_has_render_settings(self):
         cs = generate_lighting_setup_script()
@@ -1091,10 +1044,6 @@ class TestUnityScene:
 
     # -- navmesh --
 
-    def test_navmesh_returns_string(self):
-        cs = generate_navmesh_bake_script()
-        assert isinstance(cs, str)
-
     def test_navmesh_has_surface(self):
         cs = generate_navmesh_bake_script()
         assert "NavMeshSurface" in cs
@@ -1117,17 +1066,6 @@ class TestUnityScene:
         assert "35" in cs
 
     # -- animator controller --
-
-    def test_animator_returns_string(self):
-        cs = generate_animator_controller_script(
-            name="MobAnimator",
-            states=[{"name": "Idle"}, {"name": "Walk"}, {"name": "Attack"}],
-            transitions=[
-                {"from_state": "Idle", "to_state": "Walk", "conditions": [], "has_exit_time": False},
-            ],
-            parameters=[{"name": "Speed", "type": "float"}],
-        )
-        assert isinstance(cs, str)
 
     def test_animator_has_controller(self):
         cs = generate_animator_controller_script(
@@ -1160,10 +1098,6 @@ class TestUnityScene:
 
     # -- avatar config --
 
-    def test_avatar_returns_string(self):
-        cs = generate_avatar_config_script(fbx_path="Assets/Models/Character.fbx")
-        assert isinstance(cs, str)
-
     def test_avatar_has_model_importer(self):
         cs = generate_avatar_config_script(fbx_path="Assets/Models/Character.fbx")
         assert "ModelImporter" in cs
@@ -1188,21 +1122,6 @@ class TestUnityScene:
         assert "SaveAndReimport" in cs
 
     # -- animation rigging --
-
-    def test_rigging_returns_string(self):
-        cs = generate_animation_rigging_script(
-            rig_name="ArmIK",
-            constraints=[
-                {
-                    "type": "two_bone_ik",
-                    "target_path": "IKTarget",
-                    "root_path": "UpperArm",
-                    "mid_path": "Forearm",
-                    "tip_path": "Hand",
-                },
-            ],
-        )
-        assert isinstance(cs, str)
 
     def test_rigging_has_rig_builder(self):
         cs = generate_animation_rigging_script(
@@ -1259,10 +1178,6 @@ class TestUnityGameplay:
 
     # -- mob controller --
 
-    def test_mob_controller_returns_string(self):
-        cs = generate_mob_controller_script(name="Skeleton")
-        assert isinstance(cs, str)
-
     def test_mob_controller_has_nav_mesh_agent(self):
         cs = generate_mob_controller_script(name="Skeleton")
         assert "NavMeshAgent" in cs
@@ -1283,10 +1198,6 @@ class TestUnityGameplay:
 
     # -- aggro system --
 
-    def test_aggro_system_returns_string(self):
-        cs = generate_aggro_system_script(name="ZombieAggro")
-        assert isinstance(cs, str)
-
     def test_aggro_system_has_overlap_sphere(self):
         cs = generate_aggro_system_script(name="ZombieAggro")
         assert "OverlapSphereNonAlloc" in cs
@@ -1303,10 +1214,6 @@ class TestUnityGameplay:
 
     # -- patrol route --
 
-    def test_patrol_returns_string(self):
-        cs = generate_patrol_route_script(name="GuardPatrol")
-        assert isinstance(cs, str)
-
     def test_patrol_has_set_destination(self):
         cs = generate_patrol_route_script(name="GuardPatrol")
         assert "SetDestination" in cs
@@ -1321,10 +1228,6 @@ class TestUnityGameplay:
         assert "dwellTime" in cs or "defaultDwellTime" in cs
 
     # -- spawn system --
-
-    def test_spawn_system_returns_string(self):
-        cs = generate_spawn_system_script(name="Arena")
-        assert isinstance(cs, str)
 
     def test_spawn_system_has_instantiate(self):
         cs = generate_spawn_system_script(name="Arena")
@@ -1344,10 +1247,6 @@ class TestUnityGameplay:
         assert "respawnTimer" in cs
 
     # -- behavior tree --
-
-    def test_behavior_tree_returns_string(self):
-        cs = generate_behavior_tree_script(name="MobAI")
-        assert isinstance(cs, str)
 
     def test_behavior_tree_has_bt_node(self):
         cs = generate_behavior_tree_script(name="MobAI")
@@ -1375,10 +1274,6 @@ class TestUnityGameplay:
 
     # -- combat ability --
 
-    def test_combat_ability_returns_string(self):
-        cs = generate_combat_ability_script(name="ShadowStrike")
-        assert isinstance(cs, str)
-
     def test_combat_ability_has_scriptable_object(self):
         cs = generate_combat_ability_script(name="ShadowStrike")
         assert "CombatAbility" in cs
@@ -1398,10 +1293,6 @@ class TestUnityGameplay:
         assert "damage = 50" in cs
 
     # -- projectile --
-
-    def test_projectile_returns_string(self):
-        cs = generate_projectile_script(name="Fireball")
-        assert isinstance(cs, str)
 
     def test_projectile_has_trajectory_enum(self):
         cs = generate_projectile_script(name="Fireball")
@@ -1458,10 +1349,6 @@ class TestUnityPerformance:
 
     # -- scene profiler --
 
-    def test_profiler_returns_string(self):
-        cs = generate_scene_profiler_script()
-        assert isinstance(cs, str)
-
     def test_profiler_has_frame_time(self):
         cs = generate_scene_profiler_script()
         assert "Time.unscaledDeltaTime" in cs or "deltaTime" in cs
@@ -1490,10 +1377,6 @@ class TestUnityPerformance:
 
     # -- LOD setup --
 
-    def test_lod_setup_returns_string(self):
-        cs = generate_lod_setup_script()
-        assert isinstance(cs, str)
-
     def test_lod_setup_has_lod_group(self):
         cs = generate_lod_setup_script()
         assert "LODGroup" in cs
@@ -1520,10 +1403,6 @@ class TestUnityPerformance:
 
     # -- lightmap bake --
 
-    def test_lightmap_bake_returns_string(self):
-        cs = generate_lightmap_bake_script()
-        assert isinstance(cs, str)
-
     def test_lightmap_bake_has_lightmapping(self):
         cs = generate_lightmap_bake_script()
         assert "Lightmapping" in cs
@@ -1539,10 +1418,6 @@ class TestUnityPerformance:
         assert "64" in cs
 
     # -- asset audit --
-
-    def test_asset_audit_returns_string(self):
-        cs = generate_asset_audit_script()
-        assert isinstance(cs, str)
 
     def test_asset_audit_has_find_assets(self):
         cs = generate_asset_audit_script()
@@ -1567,10 +1442,6 @@ class TestUnityPerformance:
         assert "1024" in cs
 
     # -- build automation --
-
-    def test_build_automation_returns_string(self):
-        cs = generate_build_automation_script()
-        assert isinstance(cs, str)
 
     def test_build_automation_has_build_pipeline(self):
         cs = generate_build_automation_script()

@@ -125,9 +125,12 @@ class TestGenerateSettlement:
     def test_custom_radius(self):
         small = generate_settlement("outpost", seed=42, radius=20.0)
         large = generate_settlement("outpost", seed=42, radius=100.0)
-        # Both should have buildings, but larger radius should spread them more
         assert len(small["buildings"]) > 0
         assert len(large["buildings"]) > 0
+        small_max_dist = max(_dist2d(b["position"], (0, 0)) for b in small["buildings"])
+        large_max_dist = max(_dist2d(b["position"], (0, 0)) for b in large["buildings"])
+        assert len(small["buildings"]) == len(large["buildings"])
+        assert large_max_dist > small_max_dist
 
     def test_metadata_counts_match(self):
         result = generate_settlement("town", seed=42)
@@ -142,9 +145,10 @@ class TestGenerateSettlement:
 
     def test_none_seed_generates(self):
         result = generate_settlement("village", seed=None)
-        assert result["seed"] is not None
         assert isinstance(result["seed"], int)
-        assert len(result["buildings"]) > 0
+        replay = generate_settlement("village", seed=result["seed"])
+        assert result["metadata"]["building_count"] == len(result["buildings"])
+        assert [b["position"] for b in replay["buildings"]] == [b["position"] for b in result["buildings"]]
 
     def test_layout_brief_is_deterministic(self):
         r1 = generate_settlement(
@@ -311,14 +315,16 @@ class TestPlaceBuildings:
         rng = random.Random(42)
         buildings = _place_buildings(rng, config, (0, 0), 50.0)
         shrine_buildings = [b for b in buildings if "shrine" in b["type"]]
-        assert len(shrine_buildings) >= 1
+        assert shrine_buildings
+        assert all("shrine_room" in b["room_functions"] for b in shrine_buildings)
 
     def test_market_placed_when_configured(self):
         config = SETTLEMENT_TYPES["town"]
         rng = random.Random(42)
         buildings = _place_buildings(rng, config, (0, 0), 50.0)
         market_buildings = [b for b in buildings if "market" in b["type"]]
-        assert len(market_buildings) >= 1
+        assert market_buildings
+        assert all("market" in b["room_functions"] for b in market_buildings)
 
     def test_no_shrine_when_not_configured(self):
         config = SETTLEMENT_TYPES["bandit_camp"]
@@ -359,7 +365,8 @@ class TestPlaceBuildings:
         rng = random.Random(42)
         buildings = _place_buildings(rng, config, (0, 0), 50.0)
         for bld in buildings:
-            assert isinstance(bld["room_functions"], list)
+            assert bld["room_functions"]
+            assert all(isinstance(room, str) and room for room in bld["room_functions"])
 
 
 class TestFoundationProfile:
@@ -473,7 +480,6 @@ class TestGenerateRoads:
         buildings = _place_buildings(rng, config, (0, 0), 50.0)
         roads = _generate_roads(buildings, (0, 0), "cobblestone")
         # Build adjacency from road endpoints matching building positions
-        positions = {b["position"] for b in buildings}
         non_main = [r for r in roads if not r.get("is_main_road") and not r.get("is_loop_road")]
         # MST should have N-1 edges for N buildings (loop-closure edges excluded)
         assert len(non_main) == len(buildings) - 1
@@ -495,7 +501,7 @@ class TestScatterProps:
         props = _scatter_settlement_props(
             rng, buildings, roads, config, 50.0
         )
-        assert len(props) > 0
+        assert {prop["source"] for prop in props}.issuperset({"road", "scatter"})
 
     def test_prop_has_required_keys(self):
         config = SETTLEMENT_TYPES["village"]
@@ -521,7 +527,8 @@ class TestScatterProps:
             rng, buildings, roads, config, 50.0
         )
         road_props = [p for p in props if p["source"] == "road"]
-        assert len(road_props) > 0
+        assert road_props
+        assert all(p["type"] for p in road_props)
 
     def test_building_adjacent_props_exist(self):
         config = SETTLEMENT_TYPES["town"]
@@ -536,7 +543,8 @@ class TestScatterProps:
             p for p in props
             if p["source"] in ("building_adjacent", "narrative_cluster")
         ]
-        assert len(adj_props) > 0
+        assert adj_props
+        assert all(p["type"] for p in adj_props)
 
     def test_no_road_props_for_none_style(self):
         config = SETTLEMENT_TYPES["bandit_camp"]
@@ -606,9 +614,8 @@ class TestFurnishInterior:
         rng = random.Random(42)
         bounds = {"min": (0.0, 0.0), "max": (8.0, 8.0)}
         result = _furnish_interior(rng, room_type, bounds)
-        assert isinstance(result, list)
-        # Should place at least some furniture for valid rooms
-        assert len(result) > 0
+        assert result
+        assert all(item["type"] in ROOM_FURNISHINGS[room_type] for item in result)
 
     def test_furniture_has_required_keys(self):
         rng = random.Random(42)
@@ -648,8 +655,7 @@ class TestFurnishInterior:
         rng = random.Random(42)
         bounds = {"min": (0.0, 0.0), "max": (0.5, 0.5)}
         result = _furnish_interior(rng, "bedroom", bounds)
-        # Should not crash, may place nothing due to size constraints
-        assert isinstance(result, list)
+        assert result == []
 
     def test_unknown_room_type_uses_fallback(self):
         rng = random.Random(42)
@@ -731,8 +737,7 @@ class TestBuildingVariation:
         rng = random.Random(42)
         building = {"type": "x", "position": (0, 0), "unique_seed": 42}
         result = _apply_building_variation(rng, building)
-        for p in result["variation"]["prop_additions"]:
-            assert isinstance(p, str)
+        assert result["variation"]["prop_additions"] == ["cobweb"]
 
     def test_deterministic_variation(self):
         building = {"type": "x", "position": (0, 0), "unique_seed": 42}
@@ -759,14 +764,15 @@ class TestGeneratePerimeter:
         rng = random.Random(42)
         config = SETTLEMENT_TYPES["town"]
         result = _generate_perimeter(rng, config, (0, 0), 50.0)
-        assert len(result) > 0
+        assert result
+        assert all(elem["type"] in {"wall_segment", "gate", "watchtower"} for elem in result)
 
     def test_has_gate(self):
         rng = random.Random(42)
         config = SETTLEMENT_TYPES["castle"]
         result = _generate_perimeter(rng, config, (0, 0), 50.0)
         gates = [e for e in result if e.get("is_gate")]
-        assert len(gates) >= 1
+        assert 1 <= len(gates) <= 2
 
     def test_perimeter_elements_have_keys(self):
         rng = random.Random(42)
@@ -801,7 +807,7 @@ class TestGeneratePerimeter:
         result = _generate_perimeter(rng, config, (0, 0), 50.0)
         towers = [e for e in result if e.get("is_tower")]
         # Castle has corner_tower in perimeter_props, so towers should appear
-        assert len(towers) >= 1
+        assert len(towers) == 4
 
 
 # =========================================================================
@@ -817,7 +823,8 @@ class TestVillage:
     def test_has_shrine(self):
         result = generate_settlement("village", seed=42)
         shrine = [b for b in result["buildings"] if "shrine" in b["type"]]
-        assert len(shrine) >= 1
+        assert shrine
+        assert shrine[0]["room_functions"] == ["shrine_room"]
 
     def test_building_count_range(self):
         result = generate_settlement("village", seed=42)
@@ -829,12 +836,14 @@ class TestVillage:
 class TestTown:
     def test_has_walls(self):
         result = generate_settlement("town", seed=42)
-        assert len(result["perimeter"]) > 0
+        assert result["perimeter"]
+        assert any(elem.get("is_gate") for elem in result["perimeter"])
 
     def test_has_market(self):
         result = generate_settlement("town", seed=42)
         market = [b for b in result["buildings"] if "market" in b["type"]]
-        assert len(market) >= 1
+        assert market
+        assert all(b["room_functions"] == ["market"] for b in market)
 
     def test_cobblestone_roads(self):
         result = generate_settlement("town", seed=42)
@@ -861,7 +870,8 @@ class TestBanditCamp:
 class TestCastle:
     def test_has_walls(self):
         result = generate_settlement("castle", seed=42)
-        assert len(result["perimeter"]) > 0
+        assert result["perimeter"]
+        assert any(elem.get("is_tower") for elem in result["perimeter"])
 
     def test_concentric_layout(self):
         result = generate_settlement("castle", seed=42)
@@ -871,7 +881,8 @@ class TestCastle:
 class TestOutpost:
     def test_has_walls(self):
         result = generate_settlement("outpost", seed=42)
-        assert len(result["perimeter"]) > 0
+        assert result["perimeter"]
+        assert any(elem.get("is_gate") for elem in result["perimeter"])
 
     def test_small_building_count(self):
         result = generate_settlement("outpost", seed=42)
@@ -932,7 +943,8 @@ class TestInteriorsIntegration:
 
     def test_interiors_populated(self):
         result = generate_settlement("town", seed=42)
-        assert len(result["interiors"]) > 0
+        assert result["interiors"]
+        assert result["metadata"]["furnished_building_count"] == len(result["interiors"])
 
     def test_interior_keys_are_building_indices(self):
         result = generate_settlement("village", seed=42)
@@ -978,13 +990,14 @@ class TestEdgeCases:
     def test_very_small_radius(self):
         """Small radius may prevent placing all buildings, should not crash."""
         result = generate_settlement("village", seed=42, radius=5.0)
-        assert isinstance(result["buildings"], list)
-        # At least one building should be placed
-        assert len(result["buildings"]) >= 1
+        assert result["metadata"]["building_count"] == len(result["buildings"])
+        assert all(_dist2d(b["position"], (0, 0)) <= 5.0 for b in result["buildings"])
 
     def test_very_large_radius(self):
         result = generate_settlement("town", seed=42, radius=500.0)
-        assert len(result["buildings"]) > 0
+        assert result["buildings"]
+        assert result["metadata"]["building_count"] == len(result["buildings"])
+        assert max(_dist2d(b["position"], (0, 0)) for b in result["buildings"]) > 100.0
 
     def test_many_seeds_no_crash(self):
         """Generate 20 settlements with different seeds, none should crash."""
@@ -1005,7 +1018,9 @@ class TestEdgeCases:
     def test_zero_radius_does_not_crash(self):
         """Zero radius is degenerate but should not raise."""
         result = generate_settlement("outpost", seed=42, radius=0.0)
-        assert isinstance(result, dict)
+        assert result["buildings"]
+        assert result["metadata"]["building_count"] == len(result["buildings"])
+        assert all(building["position"] == result["center"] for building in result["buildings"])
 
 
 # =========================================================================
@@ -1059,14 +1074,18 @@ class TestHeightmapSupport:
         assert _sample_heightmap(None, 10.0, 20.0) == 0.0
 
     def test_sample_heightmap_callable(self):
-        hm = lambda x, y: x + y
+        def hm(x, y):
+            return x + y
+
         assert _sample_heightmap(hm, 3.0, 4.0) == 7.0
 
     def test_compute_foundation_height_none(self):
         assert _compute_foundation_height(None, (0, 0), (6, 6)) == 0.0
 
     def test_compute_foundation_height_slope(self):
-        hm = lambda x, y: x * 1.0
+        def hm(x, y):
+            return x * 1.0
+
         # Building at (10, 0) with footprint (4, 4)
         # Corners: x = 8, 12 -> heights 8, 12
         fh = _compute_foundation_height(hm, (10, 0), (4, 4))
@@ -1084,17 +1103,11 @@ class TestMultiFloorFurnishing:
     def test_single_floor_still_works(self):
         """Buildings without 'floors' key default to 1 floor."""
         result = generate_settlement("village", seed=42)
-        # Should produce furniture as before
-        assert len(result["interiors"]) > 0
+        assert result["interiors"]
+        assert all(item["floor"] == 0 for furnishings in result["interiors"].values() for item in furnishings)
 
     def test_multi_floor_produces_more_furniture(self):
         """Buildings with multiple floors should have more furniture."""
-        # Generate baseline single-floor settlement
-        r1 = generate_settlement("village", seed=42)
-        single_total = sum(len(v) for v in r1["interiors"].values())
-
-        # Now manually set a building to have multiple floors and regenerate
-        # We test this by directly calling _furnish_interior for multiple floors
         rng = random.Random(42)
         bounds = {"min": (0.0, 0.0), "max": (8.0, 8.0)}
         floor0 = _furnish_interior(rng, "bedroom", bounds)
@@ -1102,9 +1115,9 @@ class TestMultiFloorFurnishing:
         rng2 = random.Random(1042)
         floor1 = _furnish_interior(rng2, "bedroom", bounds)
 
-        # Each floor should produce furniture independently
-        assert len(floor0) > 0
-        assert len(floor1) > 0
+        combined_total = len(floor0) + len(floor1)
+        assert combined_total > len(floor0)
+        assert [item["type"] for item in floor0] == [item["type"] for item in floor1]
 
     def test_floor_tag_on_furniture(self):
         """Furniture items should have a 'floor' tag."""
@@ -1128,7 +1141,8 @@ class TestInteriorLighting:
     def test_lights_generated(self):
         """Settlement should have lights in interiors."""
         result = generate_settlement("town", seed=42)
-        assert len(result["lights"]) > 0
+        assert result["lights"]
+        assert result["metadata"]["light_count"] == len(result["lights"])
 
     def test_light_has_required_keys(self):
         """Each light should have position, intensity, type, and building_index."""
@@ -1176,14 +1190,12 @@ class TestInteriorLighting:
                 # color_temperature is an int (Kelvin); just check it's positive
                 assert light.get("color_temperature", 0) > 0
 
-    def test_light_type_is_point_or_spot(self):
+    def test_light_fixture_types_are_valid(self):
         result = generate_settlement("town", seed=42)
-        for light in result["lights"]:
-            # generate_lighting_layout stores the fixture name in light_type
-            # (e.g. "torch_sconce"); _place_interior_lights stores "point"/"spot".
-            # Both are valid; ensure the field is a non-empty string.
-            assert isinstance(light.get("light_type", ""), str)
-            assert len(light.get("light_type", "")) > 0
+        fixture_types = {light.get("type", "") for light in result["lights"]}
+        assert fixture_types.issubset(
+            {"torch_sconce", "chandelier_light", "candle", "brazier_light", "fireplace_light"}
+        )
 
     def test_metadata_includes_light_count(self):
         result = generate_settlement("town", seed=42)
@@ -1395,12 +1407,10 @@ class TestHearthvale:
         """At least some buildings have furnished interiors."""
         result = generate_settlement("hearthvale", seed=3810)
         interiors = result.get("interiors", {})
-        assert len(interiors) >= 1, "Expected at least 1 furnished interior"
-        # Each interior entry should have furniture items
+        assert interiors, "Expected at least 1 furnished interior"
+        assert len(interiors) >= result["metadata"]["building_count"] // 2
         for idx, items in interiors.items():
-            assert len(items) >= 1, (
-                f"Interior for building {idx} has no furniture items"
-            )
+            assert items, f"Interior for building {idx} has no furniture items"
 
     def test_hearthvale_footprints_non_default(self):
         """All hearthvale building types have explicit footprints (not the 6x6 default)."""

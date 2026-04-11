@@ -1459,12 +1459,16 @@ class TestRegistry:
 class TestCrossCutting:
     """Tests that span multiple categories."""
 
-    def test_all_generators_return_dicts(self):
-        """Every generator returns a dict."""
+    def test_registry_metadata_matches_registration(self):
+        """Registry entries preserve category metadata for downstream wiring."""
         for category, generators in GENERATORS.items():
             for name, func in generators.items():
                 result = func()
-                assert isinstance(result, dict), f"{category}/{name} did not return dict"
+                metadata = result["metadata"]
+                assert metadata["category"] == category, (
+                    f"{category}/{name} returned metadata category {metadata.get('category')!r}"
+                )
+                assert metadata["name"], f"{category}/{name} returned an empty metadata name"
 
     def test_no_nan_vertices(self):
         """No generator should produce NaN or inf vertices."""
