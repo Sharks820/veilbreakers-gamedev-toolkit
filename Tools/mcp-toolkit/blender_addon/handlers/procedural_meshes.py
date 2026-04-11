@@ -10487,7 +10487,7 @@ def generate_door_mesh(
     verts, faces = _merge_meshes(*parts)
     verts, faces = _enhance_mesh_detail(verts, faces, min_vertex_count=500)
     return _make_result(f"Door_{style}", verts, faces,
-                        style=style, category="door_window")
+                        style=style, category="door")
 
 
 def generate_window_mesh(
