@@ -903,7 +903,7 @@ def _resolve_building_openings(
                 "world_bottom": item["floor_base_z"] + item["bottom"],
             })
 
-    resolved.sort(key=lambda item: (item["wall_index"], item["floor"], item["center"]))
+    resolved.sort(key=lambda opening: (opening["wall_index"], opening["floor"], opening["center"]))
     return resolved
 
 
