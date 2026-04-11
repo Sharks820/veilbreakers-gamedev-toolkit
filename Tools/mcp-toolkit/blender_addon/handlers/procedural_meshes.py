@@ -10617,7 +10617,7 @@ def generate_window_mesh(
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Window_{style}", verts, faces,
-                        style=style, category="door")
+                        style=style, category="door_window")
 
 
 def generate_trapdoor_mesh(
@@ -10708,7 +10708,7 @@ def generate_trapdoor_mesh(
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Trapdoor_{style}", verts, faces,
-                        style=style, category="door")
+                        style=style, category="door_window")
 
 
 # =========================================================================
@@ -19535,7 +19535,7 @@ def generate_deer_mesh(style: str = "adult") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Deer_{style}", verts, faces,
-                        style=style, category="forest_animal")
+                        style=style, category="forest_animals")
 
 
 def generate_wolf_mesh(style: str = "adult") -> MeshSpec:
@@ -19635,7 +19635,7 @@ def generate_wolf_mesh(style: str = "adult") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Wolf_{style}", verts, faces,
-                        style=style, category="forest_animal")
+                        style=style, category="forest_animals")
 
 
 def generate_fox_mesh(style: str = "adult") -> MeshSpec:
@@ -19724,7 +19724,7 @@ def generate_fox_mesh(style: str = "adult") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Fox_{style}", verts, faces,
-                        style=style, category="forest_animal")
+                        style=style, category="forest_animals")
 
 
 def generate_rabbit_mesh(style: str = "sitting") -> MeshSpec:
@@ -19797,7 +19797,7 @@ def generate_rabbit_mesh(style: str = "sitting") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Rabbit_{style}", verts, faces,
-                        style=style, category="forest_animal")
+                        style=style, category="forest_animals")
 
 
 def generate_owl_mesh(style: str = "perched") -> MeshSpec:
@@ -19889,7 +19889,7 @@ def generate_owl_mesh(style: str = "perched") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Owl_{style}", verts, faces,
-                        style=style, category="forest_animal")
+                        style=style, category="forest_animals")
 
 
 def generate_crow_mesh(style: str = "perched") -> MeshSpec:
@@ -19975,7 +19975,7 @@ def generate_crow_mesh(style: str = "perched") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Crow_{style}", verts, faces,
-                        style=style, category="forest_animal")
+                        style=style, category="forest_animals")
 
 
 # =========================================================================
@@ -20087,7 +20087,7 @@ def generate_mountain_goat_mesh(style: str = "standing") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"MountainGoat_{style}", verts, faces,
-                        style=style, category="mountain_animal")
+                        style=style, category="mountain_animals")
 
 
 def generate_eagle_mesh(style: str = "perched") -> MeshSpec:
@@ -20185,7 +20185,7 @@ def generate_eagle_mesh(style: str = "perched") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Eagle_{style}", verts, faces,
-                        style=style, category="mountain_animal")
+                        style=style, category="mountain_animals")
 
 
 def generate_bear_mesh(style: str = "standing") -> MeshSpec:
@@ -20314,7 +20314,7 @@ def generate_bear_mesh(style: str = "standing") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Bear_{style}", verts, faces,
-                        style=style, category="mountain_animal")
+                        style=style, category="mountain_animals")
 
 
 # =========================================================================
@@ -20447,7 +20447,7 @@ def generate_horse_mesh(style: str = "standing") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Horse_{style}", verts, faces,
-                        style=style, category="domestic_animal")
+                        style=style, category="domestic_animals")
 
 
 def generate_chicken_mesh(style: str = "standing") -> MeshSpec:
@@ -20539,7 +20539,7 @@ def generate_chicken_mesh(style: str = "standing") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Chicken_{style}", verts, faces,
-                        style=style, category="domestic_animal")
+                        style=style, category="domestic_animals")
 
 
 def generate_dog_mesh(style: str = "sitting") -> MeshSpec:
@@ -20658,7 +20658,7 @@ def generate_dog_mesh(style: str = "sitting") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Dog_{style}", verts, faces,
-                        style=style, category="domestic_animal")
+                        style=style, category="domestic_animals")
 
 
 def generate_cat_mesh(style: str = "sitting") -> MeshSpec:
@@ -20758,7 +20758,7 @@ def generate_cat_mesh(style: str = "sitting") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Cat_{style}", verts, faces,
-                        style=style, category="domestic_animal")
+                        style=style, category="domestic_animals")
 
 
 # =========================================================================
@@ -21157,7 +21157,7 @@ def generate_frog_mesh(style: str = "sitting") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Frog_{style}", verts, faces,
-                        style=style, category="swamp_animal")
+                        style=style, category="swamp_animals")
 
 
 def generate_snake_ambient_mesh(style: str = "coiled") -> MeshSpec:
@@ -21252,7 +21252,7 @@ def generate_snake_ambient_mesh(style: str = "coiled") -> MeshSpec:
         faces.append(tuple(idx + offset for idx in face))
 
     return _make_result(f"SnakeAmbient_{style}", verts, faces,
-                        style=style, category="swamp_animal")
+                        style=style, category="swamp_animals")
 
 
 def generate_turtle_mesh(style: str = "standing") -> MeshSpec:
@@ -21339,7 +21339,7 @@ def generate_turtle_mesh(style: str = "standing") -> MeshSpec:
 
     verts, faces = _merge_meshes(*parts)
     return _make_result(f"Turtle_{style}", verts, faces,
-                        style=style, category="swamp_animal")
+                        style=style, category="swamp_animals")
 
 
 # =========================================================================
