@@ -1874,7 +1874,8 @@ def handle_apply_detail_texture(params: dict) -> dict:
     if obj.type != "MESH":
         return {"status": "error", "error": f"Object '{object_name}' is not a mesh (type={obj.type})"}
 
-    # Generate and execute the detail texture setup code
+    # Generate deterministic detail setup code. We intentionally do not execute
+    # generated Python in-process to avoid dynamic-code execution risks.
     code = generate_detail_texture_setup_code(
         object_name=object_name,
         detail_type=detail_type,
@@ -1883,22 +1884,18 @@ def handle_apply_detail_texture(params: dict) -> dict:
         blend_distance=blend_distance,
     )
 
-    try:
-        exec(compile(code, "<detail_texture_setup>", "exec"))  # noqa: S102
-        return {
-            "status": "success",
-            "object_name": object_name,
-            "detail_type": detail_type,
-            "detail_scale": detail_scale,
-            "detail_strength": detail_strength,
-            "blend_distance": blend_distance,
-            "code_executed": True,
-        }
-    except Exception as exc:
-        return {
-            "status": "error",
-            "object_name": object_name,
-            "detail_type": detail_type,
-            "error": str(exc),
-            "code_executed": False,
-        }
+    return {
+        "status": "success",
+        "object_name": object_name,
+        "detail_type": detail_type,
+        "detail_scale": detail_scale,
+        "detail_strength": detail_strength,
+        "blend_distance": blend_distance,
+        "code_executed": False,
+        "manual_apply_required": True,
+        "generated_code": code,
+        "message": (
+            "Dynamic code execution is disabled for safety. "
+            "Use texture_detail_setup_code and run the script in a trusted Blender session."
+        ),
+    }

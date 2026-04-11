@@ -3842,9 +3842,49 @@ async def asset_pipeline(
         room_plan = _plan_interior_rooms(spec)
         planned_rooms = room_plan["rooms"]
         planned_doors = room_plan["doors"]
-        # TODO: add checkpoint support (parity with compose_map)
         steps_completed = []
         steps_failed = []
+        _INTERIOR_CHKPT_LOADED = False
+
+        if checkpoint_dir:
+            from veilbreakers_mcp.shared.pipeline_checkpoints import (
+                load_pipeline_checkpoint as _load_chkpt,
+                validate_checkpoint_compatibility as _validate_chkpt,
+                delete_pipeline_checkpoint as _delete_chkpt,
+            )
+
+            if force_restart:
+                _delete_chkpt(checkpoint_dir, int_name)
+            ckpt = _load_chkpt(checkpoint_dir, int_name)
+            if ckpt:
+                compat = _validate_chkpt(ckpt, expected_schema=1, expected_version="1.0")
+                if not compat.get("compatible", False):
+                    return json.dumps({
+                        "error": "Incompatible checkpoint found for this interior pipeline.",
+                        "checkpoint_compatibility": compat,
+                        "hint": "Set force_restart=True to discard the incompatible checkpoint.",
+                    }, indent=2)
+                steps_completed = ckpt.get("steps_completed", [])
+                steps_failed = ckpt.get("steps_failed", [])
+                _INTERIOR_CHKPT_LOADED = True
+
+        def _save_interior_chkpt() -> None:
+            if not checkpoint_dir:
+                return
+            from veilbreakers_mcp.shared.pipeline_checkpoints import (
+                save_pipeline_checkpoint as _save_cp,
+            )
+            _save_cp(checkpoint_dir, {
+                "pipeline_name": int_name,
+                "schema_version": 1,
+                "pipeline_version": "1.0",
+                "steps_completed": steps_completed,
+                "steps_failed": steps_failed,
+                "metadata": {
+                    "pipeline_action": "compose_interior",
+                    "interior_name": int_name,
+                },
+            })
 
         # --- Step 1: Generate linked interior (room shells + door triggers + occlusion) ---
         rooms = spec.get("rooms", [])
@@ -3867,12 +3907,17 @@ async def asset_pipeline(
             steps_completed.append("linked_interior_created")
         except Exception as e:
             steps_failed.append({"step": "linked_interior", "error": str(e)})
+        _save_interior_chkpt()
 
         # --- Step 2: Generate each room with detailed geometry ---
         room_results = []
         room_bounds_by_name = {room["name"]: room for room in planned_rooms}
+        completed_rooms = {s for s in steps_completed if s.startswith("room_")}
         for i, room in enumerate(rooms):
             try:
+                room_key = f"room_{room.get('name', i)}"
+                if room_key in completed_rooms:
+                    continue
                 room_name = room.get("name", f"Room_{i}")
                 await blender.send_command("world_generate_interior", {
                     "name": f"{int_name}_{room_name}",
@@ -3893,7 +3938,7 @@ async def asset_pipeline(
                         (origin[0], origin[1], floor_z),
                     )
                     steps_completed.append(f"room_positioned_{room_name}")
-                steps_completed.append(f"room_{room.get('name', i)}")
+                steps_completed.append(room_key)
                 room_results.append({
                     "name": room_name,
                     "type": room.get("type", "generic"),
@@ -3901,6 +3946,7 @@ async def asset_pipeline(
                 })
             except Exception as e:
                 steps_failed.append({"step": f"room_{room.get('name', i)}", "error": str(e)})
+        _save_interior_chkpt()
 
         # --- Step 2b: Enhance interior geometry (AAA quality) ---
         for room_res in room_results:
@@ -3915,6 +3961,7 @@ async def asset_pipeline(
             except Exception:
                 # Enhancement is non-critical for interior; continue
                 pass
+        _save_interior_chkpt()
 
         # --- Step 3: Add storytelling/narrative props to each room ---
         if spec.get("storytelling_density", 0) > 0:
@@ -3931,6 +3978,7 @@ async def asset_pipeline(
                     steps_completed.append(f"props_{room.get('name')}")
                 except Exception as e:
                     steps_failed.append({"step": f"props_{room.get('name')}", "error": str(e)})
+            _save_interior_chkpt()
 
         # --- Step 3b: Prop quality validation ---
         prop_quality_results = []
@@ -3961,6 +4009,7 @@ async def asset_pipeline(
                     steps_completed.append(f"prop_quality_{room_name}")
             except Exception as pq_err:
                 logger.debug("Prop quality check skipped for %s: %s", room_obj_name, pq_err)
+        _save_interior_chkpt()
 
         # --- Build Tripo prop generation queue ---
         tripo_queue = []
@@ -3997,6 +4046,8 @@ async def asset_pipeline(
             "prop_quality": prop_quality_results,
             "tripo_prop_queue": tripo_queue[:20] if tripo_queue else [],
             "tripo_props_remaining": max(0, len(tripo_queue) - 20),
+            "resumed_from_checkpoint": _INTERIOR_CHKPT_LOADED,
+            "checkpoint_dir": checkpoint_dir,
             "next_steps": [
                 "--- ENHANCE VISUALS (auto-applied: architecture profile SubD + bevel + smooth shading) ---",
                 "1. Review interior: blender_viewport action=contact_sheet object_name=<room>",

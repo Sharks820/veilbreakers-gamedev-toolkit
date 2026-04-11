@@ -60,7 +60,8 @@ REQUIRED_MESH_ATTRIBUTES: Tuple[str, ...] = (
     "cliff_mask",
     "protected_zone_id",
 )
-assert len(REQUIRED_MESH_ATTRIBUTES) == 6, "§33 requires exactly 6 mesh attrs"
+if len(REQUIRED_MESH_ATTRIBUTES) != 6:
+    raise RuntimeError("§33 requires exactly 6 mesh attrs")
 
 
 # Addendum 1 §33 — every exported terrain mesh must carry these 6 named
@@ -73,7 +74,8 @@ REQUIRED_VERTEX_ATTRIBUTES: Tuple[str, ...] = (
     "color",
     "uv1",  # lightmap UVs
 )
-assert len(REQUIRED_VERTEX_ATTRIBUTES) == 6, "§33 addendum requires exactly 6 vertex attrs"
+if len(REQUIRED_VERTEX_ATTRIBUTES) != 6:
+    raise RuntimeError("§33 addendum requires exactly 6 vertex attrs")
 
 
 def validate_mesh_attributes_present(

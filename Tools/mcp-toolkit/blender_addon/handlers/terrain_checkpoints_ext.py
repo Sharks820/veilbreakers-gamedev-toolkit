@@ -155,7 +155,7 @@ def enforce_retention_policy(
     if len(files) <= keep:
         return []
 
-    files.sort(key=lambda p: p.stat().st_mtime)
+    files.sort(key=lambda path: path.stat().st_mtime)
     to_delete = files[: len(files) - keep]
     deleted: List[Path] = []
     for p in to_delete:
