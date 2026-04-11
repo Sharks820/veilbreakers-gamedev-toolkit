@@ -498,8 +498,8 @@ class TestAnimalCrossCutting:
         meta = result["metadata"]
         assert "category" in meta, f"{name}: missing 'category' in metadata"
         valid_categories = {
-            "forest_animal", "mountain_animal", "domestic_animal",
-            "vermin", "swamp_animal",
+            "forest_animals", "mountain_animals", "domestic_animals",
+            "vermin", "swamp_animals",
         }
         assert meta["category"] in valid_categories, (
             f"{name}: category '{meta['category']}' not in {valid_categories}"
