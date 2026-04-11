@@ -50,8 +50,10 @@ from ._terrain_world import (
 # They remain available in _terrain_world for direct import if needed.
 from .terrain_chunking import validate_tile_seams
 from .terrain_materials import compute_world_splatmap_weights
-from .terrain_features import generate_waterfall
+from .terrain_features import generate_cliff_face, generate_waterfall
 from ._water_network import WaterNetwork
+from ._mesh_bridge import mesh_from_spec
+from ._terrain_depth import generate_cave_entrance_mesh
 
 
 # ---------------------------------------------------------------------------
@@ -85,6 +87,18 @@ def _detect_grid_dims(bm) -> tuple[int, int]:
     # Fallback: assume square
     side = max(2, int(math.sqrt(len(bm.verts))))
     return side, side
+
+
+def _coerce_xyz(value: Any, *, default: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> tuple[float, float, float]:
+    """Return a defensive XYZ tuple from list/tuple-like input."""
+    if value is None:
+        return default
+    if isinstance(value, (list, tuple)):
+        if len(value) == 2:
+            return (float(value[0]), float(value[1]), default[2])
+        if len(value) >= 3:
+            return (float(value[0]), float(value[1]), float(value[2]))
+    raise ValueError(f"Expected XYZ list/tuple, got {value!r}")
 
 
 # ---------------------------------------------------------------------------
@@ -938,6 +952,8 @@ def handle_generate_terrain(params: dict) -> dict:
         octaves, persistence, lacunarity: Override preset values.
         erosion (str, default "none"): none|hydraulic|thermal|both.
         erosion_iterations (int, default 5000): Erosion iteration count.
+        location (list|tuple, optional): World-space placement for the terrain object.
+        heightmap (2D array, optional): Pre-authored terrain heightfield.
 
     Returns dict with: name, vertex_count, terrain_type, resolution,
         height_scale, erosion_applied, and optionally biome_preset
@@ -993,32 +1009,42 @@ def handle_generate_terrain(params: dict) -> dict:
     # Domain warp params (organic terrain features)
     warp_strength = params.get("warp_strength", 0.4)  # default organic
     warp_scale = params.get("warp_scale", 0.5)
+    object_location = _coerce_xyz(params.get("location"))
+    custom_heightmap = params.get("heightmap")
 
-    # Generate heightmap
-    heightmap = generate_heightmap(
-        width=resolution,
-        height=resolution,
-        scale=scale,
-        octaves=validated["octaves"],
-        persistence=validated["persistence"],
-        lacunarity=validated["lacunarity"],
-        seed=seed,
-        terrain_type=terrain_type,
-        warp_strength=warp_strength,
-        warp_scale=warp_scale,
-    )
-
-    # Apply erosion
-    erosion_applied = False
-    if erosion in ("hydraulic", "both") or erosion in ("thermal", "both"):
-        erosion_result = erode_world_heightmap(
-            heightmap,
-            hydraulic_iterations=erosion_iters if erosion in ("hydraulic", "both") else 0,
-            thermal_iterations=max(erosion_iters // 50, 5) if erosion in ("thermal", "both") else 0,
+    if custom_heightmap is not None:
+        heightmap = np.asarray(custom_heightmap, dtype=np.float64)
+        if heightmap.ndim != 2:
+            raise ValueError("heightmap must be a 2D array")
+        erosion_applied = False
+        authoring_path = "provided_heightmap"
+    else:
+        # Generate heightmap
+        heightmap = generate_heightmap(
+            width=resolution,
+            height=resolution,
+            scale=scale,
+            octaves=validated["octaves"],
+            persistence=validated["persistence"],
+            lacunarity=validated["lacunarity"],
             seed=seed,
+            terrain_type=terrain_type,
+            warp_strength=warp_strength,
+            warp_scale=warp_scale,
         )
-        heightmap = erosion_result["heightmap"]
-        erosion_applied = True
+
+        # Apply erosion
+        erosion_applied = False
+        if erosion in ("hydraulic", "both") or erosion in ("thermal", "both"):
+            erosion_result = erode_world_heightmap(
+                heightmap,
+                hydraulic_iterations=erosion_iters if erosion in ("hydraulic", "both") else 0,
+                thermal_iterations=max(erosion_iters // 50, 5) if erosion in ("thermal", "both") else 0,
+                seed=seed,
+            )
+            heightmap = erosion_result["heightmap"]
+            erosion_applied = True
+        authoring_path = "noise_generated"
 
     # Apply flatten zones for building foundations (MESH-05)
     flatten_zones = params.get("flatten_zones", None)
@@ -1048,7 +1074,7 @@ def handle_generate_terrain(params: dict) -> dict:
         height_scale=height_scale,
         seed=seed,
         terrain_type=terrain_type,
-        object_location=(0.0, 0.0, 0.0),
+        object_location=object_location,
         cliff_overlays_enabled=params.get("cliff_overlays", True),
         cliff_threshold_deg=params.get("cliff_threshold_deg", 60.0),
     )
@@ -1063,6 +1089,8 @@ def handle_generate_terrain(params: dict) -> dict:
         "cliff_overlays": terrain_result["cliff_overlays"],
         "flatten_zones_applied": len(flatten_zones) if flatten_zones else 0,
         "has_moisture_map": moisture_map is not None,
+        "authoring_path": authoring_path,
+        "object_location": terrain_result["object_location"],
     }
     if biome_preset is not None:
         result["biome_preset"] = biome_name
@@ -1338,10 +1366,12 @@ def handle_run_terrain_pass(params: dict) -> dict:
     from .terrain_semantics import (
         BBox,
         ProtectedZoneSpec,
+        HeroFeatureRef,
         TerrainIntentState,
         TerrainMaskStack,
         TerrainPipelineState,
         TerrainSceneRead,
+        WaterfallChainRef,
     )
 
     requested_pipeline = params.get("pipeline")
@@ -1424,14 +1454,40 @@ def handle_run_terrain_pass(params: dict) -> dict:
     scene_read_raw = params.get("scene_read")
     scene_read: Optional[TerrainSceneRead] = None
     if scene_read_raw is not None:
+        hero_features_present = tuple(
+            HeroFeatureRef(
+                feature_id=str(item.get("feature_id", f"hero_feature_{i}")),
+                feature_kind=str(item.get("feature_kind", "unknown")),
+                world_position=tuple(item.get("world_position", (0.0, 0.0, 0.0))),
+                blender_object_name=(
+                    str(item["blender_object_name"])
+                    if item.get("blender_object_name") is not None
+                    else None
+                ),
+            )
+            for i, item in enumerate(scene_read_raw.get("hero_features_present", ()) or ())
+        )
+        waterfall_chains = tuple(
+            WaterfallChainRef(
+                chain_id=str(item.get("chain_id", f"waterfall_chain_{i}")),
+                lip_position=tuple(item.get("lip_position", (0.0, 0.0, 0.0))),
+                pool_position=tuple(item.get("pool_position", (0.0, 0.0, 0.0))),
+                drop_height=float(item.get("drop_height", 0.0)),
+            )
+            for i, item in enumerate(scene_read_raw.get("waterfall_chains", ()) or ())
+        )
+        cave_candidates = tuple(
+            tuple(candidate)
+            for candidate in (scene_read_raw.get("cave_candidates", ()) or ())
+        )
         scene_read = TerrainSceneRead(
             timestamp=float(scene_read_raw.get("timestamp", 0.0)),
             major_landforms=tuple(scene_read_raw.get("major_landforms", ()) or ()),
             focal_point=tuple(scene_read_raw.get("focal_point", (0.0, 0.0, 0.0))),
-            hero_features_present=tuple(),
+            hero_features_present=hero_features_present,
             hero_features_missing=tuple(scene_read_raw.get("hero_features_missing", ()) or ()),
-            waterfall_chains=tuple(),
-            cave_candidates=tuple(),
+            waterfall_chains=waterfall_chains,
+            cave_candidates=cave_candidates,
             protected_zones_in_region=tuple(z.zone_id for z in protected_zones),
             edit_scope=region or region_bounds,
             success_criteria=tuple(scene_read_raw.get("success_criteria", ()) or ()),
@@ -1567,6 +1623,16 @@ def handle_run_terrain_pass(params: dict) -> dict:
             ],
         }
 
+    shared_height_range = _resolve_height_range(
+        params,
+        mask_stack.height,
+        allow_local_fallback=False,
+    )
+    if shared_height_range is None:
+        shared_height_range = _estimate_tile_height_range(
+            str(params.get("terrain_type", "mountains"))
+        )
+
     return {
         "ok": all(r.status == "ok" for r in results),
         "results": [_serialize(r) for r in results],
@@ -1574,7 +1640,93 @@ def handle_run_terrain_pass(params: dict) -> dict:
         "populated_channels": sorted(mask_stack.populated_by_pass.keys()),
         "tile_x": tile_x,
         "tile_y": tile_y,
+        "shared_height_range": [shared_height_range[0], shared_height_range[1]],
+        "height": mask_stack.height.tolist() if bool(params.get("return_height", False)) else None,
     }
+
+
+def _build_feature_object(
+    *,
+    spec: dict,
+    name: str,
+    position: tuple[float, float, float],
+    metadata: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Instantiate a mesh spec as a Blender object and return a serializable summary."""
+    obj = mesh_from_spec(spec, name=name, location=position)
+    if isinstance(obj, dict):
+        result = {
+            "name": name,
+            "position": position,
+            "vertex_count": obj.get("vertex_count", len(spec.get("vertices", ()))),
+            "face_count": obj.get("face_count", len(spec.get("faces", ()))),
+            "object_summary": obj,
+        }
+    else:
+        result = {
+            "name": obj.name,
+            "position": tuple(obj.location),
+            "vertex_count": len(obj.data.vertices),
+            "face_count": len(obj.data.polygons),
+        }
+    if metadata:
+        result.update(metadata)
+    return result
+
+
+def handle_build_cliff_face(params: dict) -> dict:
+    """Create a cliff-face hero mesh object from the terrain feature generator."""
+    name = str(params.get("name", "CliffFace"))
+    position = _coerce_xyz(params.get("position"))
+    feature = generate_cliff_face(
+        width=float(params.get("width", 20.0)),
+        height=float(params.get("height", 15.0)),
+        overhang=float(params.get("overhang", 3.0)),
+        num_cave_entrances=int(params.get("num_cave_entrances", 2)),
+        has_ledge_path=bool(params.get("has_ledge_path", True)),
+        seed=int(params.get("seed", 42)),
+    )
+    mesh_spec = dict(feature["mesh"])
+    mesh_spec["material_ids"] = list(feature.get("material_indices", ()))
+    return _build_feature_object(
+        spec=mesh_spec,
+        name=name,
+        position=position,
+        metadata={
+            "feature_type": "cliff_face",
+            "cave_entrances": feature.get("cave_entrances", []),
+            "ledge_path": feature.get("ledge_path"),
+            "dimensions": feature.get("dimensions", {}),
+        },
+    )
+
+
+def handle_build_cave_entrance(params: dict) -> dict:
+    """Create a cave entrance hero mesh object."""
+    name = str(params.get("name", "CaveEntrance"))
+    position = _coerce_xyz(params.get("position"))
+    spec = generate_cave_entrance_mesh(
+        width=float(params.get("width", 4.0)),
+        height=float(params.get("height", 4.0)),
+        depth=float(params.get("depth", 3.0)),
+        arch_segments=int(params.get("arch_segments", 12)),
+        terrain_edge_height=float(params.get("terrain_edge_height", 0.0)),
+        style=str(params.get("style", "natural")),
+        seed=int(params.get("seed", 0)),
+    )
+    return _build_feature_object(
+        spec=spec,
+        name=name,
+        position=position,
+        metadata={
+            "feature_type": "cave_entrance",
+            "dimensions": {
+                "width": float(params.get("width", 4.0)),
+                "height": float(params.get("height", 4.0)),
+                "depth": float(params.get("depth", 3.0)),
+            },
+        },
+    )
 
 
 def handle_generate_waterfall(params: dict) -> dict:
@@ -1643,6 +1795,29 @@ def handle_generate_waterfall(params: dict) -> dict:
         "context; this call used legacy geometry fallback."
     )
     return legacy
+
+
+def handle_build_waterfall(params: dict) -> dict:
+    """Create a waterfall hero mesh object from hydrologic or legacy context."""
+    name = str(params.get("name", "Waterfall"))
+    position = _coerce_xyz(params.get("position"))
+    feature = handle_generate_waterfall(params)
+    mesh_spec = dict(feature["mesh"])
+    mesh_spec["material_ids"] = list(feature.get("material_indices", ()))
+    return _build_feature_object(
+        spec=mesh_spec,
+        name=name,
+        position=position,
+        metadata={
+            "feature_type": "waterfall",
+            "authoring_path": feature.get("authoring_path"),
+            "warning": feature.get("warning"),
+            "dimensions": feature.get("dimensions", {}),
+            "pool": feature.get("pool"),
+            "splash_zone": feature.get("splash_zone"),
+            "cave": feature.get("cave"),
+        },
+    )
 
 
 def handle_stitch_terrain_edges(params: dict) -> dict:

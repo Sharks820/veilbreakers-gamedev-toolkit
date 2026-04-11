@@ -339,6 +339,227 @@ class TestConceptArtDispatch:
 
 
 # ---------------------------------------------------------------------------
+# terrain_pipeline / blender_environment / asset_pipeline dispatch
+# ---------------------------------------------------------------------------
+
+
+class TestTerrainPipelineDispatch:
+    @pytest.mark.asyncio
+    async def test_run_pipeline_forwards_return_height(self):
+        mock_conn = _make_mock_connection()
+        with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
+            from veilbreakers_mcp.blender_server import terrain_pipeline
+
+            await terrain_pipeline(
+                action="run_pipeline",
+                pipeline=["macro_world", "structural_masks"],
+                return_height=True,
+            )
+
+            mock_conn.send_command.assert_any_call(
+                "env_run_terrain_pass",
+                {
+                    "tile_size": 64,
+                    "cell_size": 1.0,
+                    "seed": 0,
+                    "tile_x": 0,
+                    "tile_y": 0,
+                    "world_origin_x": 0.0,
+                    "world_origin_y": 0.0,
+                    "terrain_type": "mountains",
+                    "scale": 100.0,
+                    "erosion_profile": "temperate",
+                    "checkpoint": False,
+                    "enforce_protocol": False,
+                    "out_of_view_ok": True,
+                    "return_height": True,
+                    "pipeline": ["macro_world", "structural_masks"],
+                },
+            )
+
+
+class TestBlenderEnvironmentDispatch:
+    @pytest.mark.asyncio
+    async def test_generate_terrain_forwards_location_and_heightmap(self):
+        mock_conn = _make_mock_connection()
+        with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
+            from veilbreakers_mcp.blender_server import blender_environment
+
+            await blender_environment(
+                action="generate_terrain",
+                name="HeroTerrain",
+                terrain_type="mountains",
+                resolution=65,
+                scale=128.0,
+                height_scale=1.0,
+                location=[10.0, 20.0, 3.0],
+                heightmap=[[0.0, 1.0], [1.0, 0.0]],
+                capture_viewport=False,
+            )
+
+            mock_conn.send_command.assert_any_call(
+                "env_generate_terrain",
+                {
+                    "name": "HeroTerrain",
+                    "terrain_type": "mountains",
+                    "resolution": 65,
+                    "height_scale": 1.0,
+                    "scale": 128.0,
+                    "location": [10.0, 20.0, 3.0],
+                    "heightmap": [[0.0, 1.0], [1.0, 0.0]],
+                },
+            )
+
+    @pytest.mark.asyncio
+    async def test_build_cliff_face_dispatches(self):
+        mock_conn = _make_mock_connection()
+        with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
+            from veilbreakers_mcp.blender_server import blender_environment
+
+            await blender_environment(
+                action="build_cliff_face",
+                name="HeroCliff",
+                position=[0.0, 1.0, 2.0],
+                width=24.0,
+                height=18.0,
+                overhang=6.0,
+                num_cave_entrances=1,
+                has_ledge_path=True,
+                seed=123,
+                capture_viewport=False,
+            )
+
+            mock_conn.send_command.assert_any_call(
+                "env_build_cliff_face",
+                {
+                    "name": "HeroCliff",
+                    "position": [0.0, 1.0, 2.0],
+                    "width": 24.0,
+                    "height": 18.0,
+                    "overhang": 6.0,
+                    "num_cave_entrances": 1,
+                    "has_ledge_path": True,
+                    "seed": 123,
+                },
+            )
+
+
+class TestAssetPipelineDispatch:
+    @pytest.mark.asyncio
+    async def test_compose_terrain_node_requires_spec(self):
+        mock_conn = _make_mock_connection()
+        with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
+            from veilbreakers_mcp.blender_server import asset_pipeline
+
+            result = await asset_pipeline(action="compose_terrain_node")
+            assert "terrain_node_spec is required" in result
+
+    @pytest.mark.asyncio
+    async def test_compose_terrain_node_dispatches_authoring_sequence(self):
+        mock_conn = _make_mock_connection()
+
+        async def _dispatch(cmd, params=None):
+            if cmd == "toolchain_inspect_external":
+                return {"agent_contract": {"selection": "terrain_unity_ready_free"}}
+            if cmd == "env_run_terrain_pass":
+                return {
+                    "ok": True,
+                    "results": [],
+                    "populated_channels": ["cliff_candidate", "cave_candidate", "waterfall_lip_candidate"],
+                    "shared_height_range": [-120.0, 320.0],
+                    "height": [[0.0, 0.0], [0.0, 0.0]],
+                }
+            if cmd == "env_validate_tile_seams":
+                return {"seam_ok": True, "max_edge_delta": 0.0, "issues": []}
+            if cmd == "env_generate_terrain":
+                return {"name": params["name"], "object_location": params.get("location", [0.0, 0.0, 0.0])}
+            if cmd.startswith("env_build_"):
+                return {"name": params["name"]}
+            if cmd == "env_export_heightmap":
+                return {"filepath": params["filepath"]}
+            return {"name": params.get("name", cmd) if isinstance(params, dict) else cmd}
+
+        mock_conn.send_command = AsyncMock(side_effect=_dispatch)
+
+        with patch("veilbreakers_mcp.blender_server.get_blender_connection", return_value=mock_conn):
+            from veilbreakers_mcp.blender_server import asset_pipeline
+
+            result = await asset_pipeline(
+                action="compose_terrain_node",
+                terrain_node_spec={
+                    "name": "Riftpass_01",
+                    "seed": 42,
+                    "terrain": {
+                        "preset": "mountains",
+                        "size": 128.0,
+                        "resolution": 65,
+                        "location": [12.0, 24.0, 0.0],
+                    },
+                    "scene_read": {
+                        "major_landforms": ["mountain_pass", "cliff", "waterfall", "river", "basin", "cave"],
+                        "focal_point": [8.0, 6.0, 12.0],
+                        "hero_features_missing": ["cliffside_cave", "volumetric_waterfall", "readable_pass"],
+                        "cave_candidates": [[7.0, 5.0, 10.0]],
+                        "waterfall_chains": [{"lip_position": [6.0, -2.0, 16.0], "pool_position": [6.0, -10.0, 4.0], "drop_height": 12.0}],
+                        "success_criteria": ["readable cliff"],
+                        "reviewer": "pytest",
+                    },
+                },
+                capture_viewport=False,
+            )
+
+            payload = json.loads(result)
+            assert payload["status"] == "success"
+            assert payload["tile_contract"]["world_origin_x"] == 0.0
+            assert payload["tile_contract"]["world_origin_y"] == 0.0
+            assert payload["tile_contract"]["object_center"] == [64.0, 64.0, 0.0]
+            assert payload["seam_report"]["seam_ok"] is True
+
+            dispatched = [call.args[0] for call in mock_conn.send_command.call_args_list]
+            assert "toolchain_inspect_external" in dispatched
+            assert "clear_scene" in dispatched
+            assert "env_run_terrain_pass" in dispatched
+            assert "env_validate_tile_seams" in dispatched
+            assert "env_generate_terrain" in dispatched
+            assert "env_build_cliff_face" in dispatched
+            assert "env_build_cave_entrance" in dispatched
+            assert "env_build_waterfall" in dispatched
+            assert "env_export_heightmap" in dispatched
+
+            export_call = next(
+                call for call in mock_conn.send_command.call_args_list
+                if call.args[0] == "env_export_heightmap"
+            )
+            assert export_call.args[1]["tiled_world"] is True
+            assert export_call.args[1]["use_global_height_range"] is True
+            assert export_call.args[1]["height_range"] == [-120.0, 320.0]
+
+            terrain_call = next(
+                call for call in mock_conn.send_command.call_args_list
+                if call.args[0] == "env_generate_terrain"
+            )
+            assert terrain_call.args[1]["location"] == [64.0, 64.0, 0.0]
+
+    def test_compose_map_redirect_notice_flags_hero_terrain_specs(self):
+        from veilbreakers_mcp.blender_server import _compose_map_redirect_notice
+
+        notice = _compose_map_redirect_notice(
+            {
+                "name": "Riftpass",
+                "terrain": {
+                    "preset": "mountains",
+                    "description": "cliffside cave with waterfall through a mountain pass",
+                },
+                "water": {"rivers": [{"source": [0, 0], "destination": [10, 10]}]},
+                "locations": [{"type": "cave", "name": "Hero Cave"}],
+            }
+        )
+
+        assert notice["workflow_scope"] == "generic_map"
+        assert notice["recommended_action"] == "compose_terrain_node"
+
+
+# ---------------------------------------------------------------------------
 # Verify all tool functions exist and are callable
 # ---------------------------------------------------------------------------
 
