@@ -14,6 +14,10 @@ ALLOWED_IMPORTS = frozenset({
     "mathutils.Vector", "mathutils.Matrix", "mathutils.Euler",
     "mathutils.Quaternion", "mathutils.Color",
     "pathlib", "io", "tempfile", "glob", "fnmatch",
+    # First-party addon modules — required for MCP compound tools that
+    # query controller/registry state (e.g. terrain_pipeline list_passes,
+    # list_bundles, list_checkpoints, rollback).
+    "blender_addon", "blender_addon.handlers",
 })
 
 _ALLOWED_ROOTS = frozenset({m.split(".")[0] for m in ALLOWED_IMPORTS})
