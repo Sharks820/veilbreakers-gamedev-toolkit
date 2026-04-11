@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import logging
 import math
+from operator import itemgetter
 
 import bpy
 from mathutils import Euler
@@ -309,7 +310,7 @@ def _enforce_weight_limit_pure(
             continue
 
         # Sort descending by weight, keep top N
-        sorted_w = sorted(vw, key=lambda t: t[1], reverse=True)
+        sorted_w = sorted(vw, key=itemgetter(1), reverse=True)
         kept = sorted_w[:max_influences]
         total = sum(w for _, w in kept)
         if total > 0:
