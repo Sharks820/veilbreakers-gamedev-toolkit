@@ -1885,7 +1885,7 @@ def handle_apply_detail_texture(params: dict) -> dict:
     )
 
     return {
-        "status": "success",
+        "status": "code_generated",
         "object_name": object_name,
         "detail_type": detail_type,
         "detail_scale": detail_scale,
