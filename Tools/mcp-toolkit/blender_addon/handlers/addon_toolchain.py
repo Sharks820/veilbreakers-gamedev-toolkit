@@ -724,10 +724,42 @@ def get_blender_runtime_info() -> dict[str, Any]:
 
 def handle_inspect_external_toolchain(params: dict[str, Any]) -> dict[str, Any]:
     """Inspect which recommended external addons are available in Blender."""
-    if bpy is None:
-        return {"status": "error", "error": "bpy unavailable"}
-
     prefs = normalize_toolchain_preferences(params)
+    if bpy is None:
+        inventory = compute_addon_inventory(installed_modules=set(), enabled_modules=set())
+        blender_runtime = {
+            "available": False,
+            "version": None,
+            "version_string": "bpy unavailable",
+            "line": "unknown",
+            "recommended_line": RECOMMENDED_BLENDER_LINE,
+            "status": "unavailable",
+            "warnings": [
+                "bpy unavailable; using deterministic headless fallback contract.",
+            ],
+        }
+        selection = compute_pipeline_selection(
+            inventory,
+            prefer_external=prefs["prefer_external"],
+            review_lighting=prefs["review_lighting"],
+        )
+        agent_contract = build_agent_tool_contract(
+            inventory,
+            selection,
+            blender_runtime=blender_runtime,
+        )
+        return {
+            "status": "success",
+            "result": {
+                "project_label": prefs["project_label"],
+                "blender_runtime": blender_runtime,
+                "available_addons": inventory,
+                "selected_pipeline": selection,
+                "agent_contract": agent_contract,
+                "headless_fallback": True,
+            },
+        }
+
     installed, enabled = _blender_module_sets()
     inventory = compute_addon_inventory(
         installed_modules=installed,

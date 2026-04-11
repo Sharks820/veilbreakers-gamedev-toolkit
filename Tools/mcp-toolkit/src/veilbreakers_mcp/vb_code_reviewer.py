@@ -738,15 +738,20 @@ def _check_late_binding(line: str, all_lines: list[str], idx: int) -> bool:
     if open_paren > 0 and re.search(r"\bfor\s+\w+\s+in\b", after):
         if ")" in after:
             return False
-    for j in range(idx + 1, min(len(all_lines), idx + 8)):
-        lam = re.search(r"lambda\b([^:]*?):", all_lines[j])
+    lookahead_idx = idx + 1
+    lookahead_stop = min(len(all_lines), idx + 8)
+    while lookahead_idx < lookahead_stop:
+        lam = re.search(r"lambda\b([^:]*?):", all_lines[lookahead_idx])
         if not lam:
+            lookahead_idx += 1
             continue
-        if not re.search(rf"\b{re.escape(loop_var)}\b", all_lines[j]):
+        if not re.search(rf"\b{re.escape(loop_var)}\b", all_lines[lookahead_idx]):
+            lookahead_idx += 1
             continue
         if re.search(
             rf"\b{re.escape(loop_var)}\s*=\s*{re.escape(loop_var)}\b", lam.group(1)
         ):
+            lookahead_idx += 1
             continue
         return True
     return False
