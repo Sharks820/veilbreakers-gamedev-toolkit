@@ -12,6 +12,7 @@ Patterns detected:
   L2-04  SILENT-SWALLOW      except Exception: pass (no comment)
   L2-05  BARE-EXCEPT         except: (no type specified)
   L2-06  CUBE-FALLBACK       Function returns a default box/cube geometry
+  L2-07  HEIGHT-WRITER       stack.set("height",...) outside integrator
 """
 
 from __future__ import annotations
@@ -272,6 +273,45 @@ def check_cube_fallback(func: ast.FunctionDef, filepath: str) -> List[Finding]:
 
 
 # ---------------------------------------------------------------------------
+# L2-07: HEIGHT-WRITER — stack.set("height", ...) outside integrator
+# ---------------------------------------------------------------------------
+
+# Basename of the ONE file allowed to write height directly
+_HEIGHT_WRITER_EXEMPT = "terrain_delta_integrator.py"
+
+
+def check_height_writer(tree: ast.AST, filepath: str) -> List[Finding]:
+    """L2-07: Detect stack.set("height", ...) outside the integrator."""
+    basename = os.path.basename(filepath)
+    if basename == _HEIGHT_WRITER_EXEMPT:
+        return []
+
+    findings: List[Finding] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        # Match *.set("height", ...)
+        func = node.func
+        if not isinstance(func, ast.Attribute):
+            continue
+        if func.attr != "set":
+            continue
+        # First positional arg must be the string "height"
+        if not node.args:
+            continue
+        first_arg = node.args[0]
+        if isinstance(first_arg, ast.Constant) and first_arg.value == "height":
+            findings.append(Finding(
+                file=filepath,
+                line=node.lineno,
+                pattern_id="L2-07",
+                pattern_name="HEIGHT-WRITER",
+                message=f'Direct `stack.set("height", ...)` — use a *_delta channel instead',
+            ))
+    return findings
+
+
+# ---------------------------------------------------------------------------
 # File scanner
 # ---------------------------------------------------------------------------
 
@@ -295,6 +335,7 @@ def scan_file(filepath: str) -> List[Finding]:
     # Tree-level checks
     findings.extend(check_silent_swallow(tree, filepath, source_lines))
     findings.extend(check_bare_except(tree, filepath))
+    findings.extend(check_height_writer(tree, filepath))
 
     # Walk top-level and nested
     for node in ast.walk(tree):
