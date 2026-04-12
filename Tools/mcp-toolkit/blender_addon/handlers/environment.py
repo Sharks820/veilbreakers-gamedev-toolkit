@@ -1064,7 +1064,7 @@ def handle_generate_terrain(params: dict) -> dict:
         seed=seed,
         terrain_type=terrain_type,
         object_location=(0.0, 0.0, 0.0),
-        cliff_overlays_enabled=params.get("cliff_overlays", True),
+        cliff_overlays_enabled=_parse_bool(params.get("cliff_overlays", True)),
         cliff_threshold_deg=params.get("cliff_threshold_deg", 60.0),
     )
 
@@ -1118,11 +1118,11 @@ def handle_generate_terrain_tile(params: dict) -> dict:
     warp_scale = float(params.get("warp_scale", 0.5))
     world_center_x = params.get("world_center_x")
     world_center_y = params.get("world_center_y")
-    cliff_overlays_enabled = bool(params.get("cliff_overlays", True))
+    cliff_overlays_enabled = _parse_bool(params.get("cliff_overlays", True))
     cliff_threshold = float(params.get("cliff_threshold_deg", 60.0))
     erosion_margin = max(0, int(params.get("erosion_margin", 0)))
     biome_name = params.get("biome_name", params.get("terrain_type", "thornwood_forest"))
-    export_splatmaps = bool(params.get("export_splatmaps", True))
+    export_splatmaps = _parse_bool(params.get("export_splatmaps", True))
     export_root = Path(
         params.get("export_dir")
         or params.get("output_dir")
@@ -1501,14 +1501,14 @@ def handle_run_terrain_pass(params: dict) -> dict:
     # Every production mutation handler MUST route through ProtocolGate.
     # Callers that cannot attach a full scene/vantage (unit tests, CLI dev
     # runs) opt out via ``enforce_protocol=False`` in params.
-    if bool(params.get("enforce_protocol", False)):
+    if _parse_bool(params.get("enforce_protocol", False)):
         from .terrain_protocol import ProtocolGate, ProtocolViolation
 
         try:
             ProtocolGate.rule_1_observe_before_calculate(state)
             ProtocolGate.rule_2_sync_to_user_viewport(
                 state,
-                out_of_view_ok=bool(params.get("out_of_view_ok", True)),
+                out_of_view_ok=_parse_bool(params.get("out_of_view_ok", True)),
             )
             ProtocolGate.rule_3_lock_reference_empties(state)
             ProtocolGate.rule_4_real_geometry_not_vertex_tricks(params)
@@ -1516,7 +1516,7 @@ def handle_run_terrain_pass(params: dict) -> dict:
                 state,
                 cells_affected=int(params.get("cells_affected", 0)),
                 objects_affected=int(params.get("objects_affected", 0)),
-                bulk_edit=bool(params.get("bulk_edit", True)),
+                bulk_edit=_parse_bool(params.get("bulk_edit", True)),
             )
             ProtocolGate.rule_6_surface_vs_interior_classification(params)
             ProtocolGate.rule_7_plugin_usage(params)
@@ -1533,7 +1533,7 @@ def handle_run_terrain_pass(params: dict) -> dict:
     pipeline = params.get("pipeline")
 
     composition_hints = params.get("composition_hints") or {}
-    unity_export_opt_out = bool(composition_hints.get("unity_export_opt_out", False))
+    unity_export_opt_out = _parse_bool(composition_hints.get("unity_export_opt_out", False))
 
     if pipeline is None and pass_name is None:
         pipeline = ["macro_world", "structural_masks", "validation_minimal"]
@@ -1658,7 +1658,7 @@ def handle_generate_waterfall(params: dict) -> dict:
             width=max(float(chosen["width"]), 1.0),
             pool_radius=max(float(params.get("pool_radius", chosen["width"] * 1.5)), 1.0),
             num_steps=int(params.get("num_steps", 3)),
-            has_cave_behind=bool(params.get("has_cave_behind", True)),
+            has_cave_behind=_parse_bool(params.get("has_cave_behind", True)),
             seed=int(params.get("seed", 42)),
         )
         fallback["authoring_path"] = "water_network_derived"
@@ -2142,7 +2142,7 @@ def handle_create_water(params: dict) -> dict:
     material_name = params.get("material_name", "Water_Material")
     path_points_raw = params.get("path_points")
     cross_sections = max(8, min(16, int(params.get("cross_sections", 12))))
-    preview_fast = bool(params.get("preview_fast", True))
+    preview_fast = _parse_bool(params.get("preview_fast", True))
 
     # If terrain specified, use its Z for water level snapping
     terrain_origin_x = 0.0
