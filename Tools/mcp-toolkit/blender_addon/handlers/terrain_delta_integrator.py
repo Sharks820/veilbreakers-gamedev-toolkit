@@ -38,6 +38,11 @@ _DELTA_CHANNELS: Tuple[str, ...] = (
     "cave_height_delta",
     "strat_erosion_delta",
     "pool_deepening_delta",
+    # Phase 52 — Bundle I delta conversion
+    "coastline_delta",
+    "karst_delta",
+    "wind_erosion_delta",
+    "glacial_delta",
 )
 
 
