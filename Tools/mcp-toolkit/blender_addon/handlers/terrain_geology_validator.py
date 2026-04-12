@@ -279,6 +279,17 @@ def register_bundle_i_passes() -> None:
     )
     TerrainPassController.register_pass(
         PassDefinition(
+            name="differential_erosion",
+            func=_strat.pass_differential_erosion,
+            requires_channels=("height", "rock_hardness"),
+            produces_channels=("strat_erosion_delta",),
+            seed_namespace="differential_erosion",
+            requires_scene_read=False,
+            description="Bundle I: differential erosion delta from rock hardness",
+        )
+    )
+    TerrainPassController.register_pass(
+        PassDefinition(
             name="glacial",
             func=_glacial.pass_glacial,
             requires_channels=("height",),
