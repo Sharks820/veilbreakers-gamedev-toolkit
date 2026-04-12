@@ -27,9 +27,12 @@ re-composable bands + a domain-warp field:
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any, Dict, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 import numpy as np
 
@@ -615,11 +618,13 @@ def pass_banded_macro(state, region):  # type: ignore[no-untyped-def]
         try:
             state.banded_cache = {}  # type: ignore[attr-defined]
         except Exception:
-            pass
+            # State object may be frozen or read-only; cache is optional.
+            logger.debug("Cannot init banded_cache on state", exc_info=True)
     try:
         state.banded_cache[side_effect_token] = bands  # type: ignore[attr-defined]
     except Exception:
-        pass
+        # Cache write is best-effort; downstream reads fall back gracefully.
+        logger.debug("Cannot store bands in banded_cache", exc_info=True)
 
     return PassResult(
         pass_name="banded_macro",

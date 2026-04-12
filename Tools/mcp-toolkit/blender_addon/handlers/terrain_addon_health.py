@@ -10,9 +10,12 @@ See Addendum 1.A.5.
 from __future__ import annotations
 
 import ast
+import logging
 import re
 from pathlib import Path
 from typing import Optional, Sequence, Tuple
+
+logger = logging.getLogger(__name__)
 
 TERRAIN_ADDON_MIN_VERSION: Tuple[int, int, int] = (1, 0, 0)
 
@@ -46,6 +49,7 @@ def _read_bl_info_version() -> Optional[Tuple[int, ...]]:
     try:
         tree = ast.parse(p.read_text(encoding="utf-8"), filename=str(p))
     except Exception:
+        logger.debug("Failed to parse addon __init__.py for bl_info", exc_info=True)
         return None
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign):
@@ -126,6 +130,7 @@ def detect_stale_addon() -> bool:
     try:
         from .. import __init__ as _live  # type: ignore
     except Exception:
+        logger.debug("Cannot import live addon for staleness check", exc_info=True)
         return False
     live_version = None
     live_bl = getattr(_live, "bl_info", None)
@@ -145,7 +150,8 @@ def force_addon_reload() -> None:
 
         importlib.reload(_live)
     except Exception:
-        pass
+        # Reload is best-effort; headless environments may not have bpy.
+        logger.debug("Addon reload failed (expected in headless mode)", exc_info=True)
 
 
 __all__ = [
