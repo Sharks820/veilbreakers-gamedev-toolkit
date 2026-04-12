@@ -1444,5 +1444,381 @@
         "adjusted_confidence": 64
       }
     ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_production_scan_hides_sty0/src/veilbreakers_mcp/demo.py|lang=py|scope=production|profile=all": {
+    "hash": "5f1b71acfd24996dd9047200a31b0f0c41f3720782d164a7a257bc2e4e828cab",
+    "timestamp": 1776022215.8222947,
+    "issues": []
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_production_scan_keeps_rea0/src/veilbreakers_mcp/demo.py|lang=py|scope=production|profile=all": {
+    "hash": "37b4634dc58025aa2b6edfdb5af2bdeb30e71c80488eb9a2ae64e58e49a0adf5",
+    "timestamp": 1776022215.8385885,
+    "issues": [
+      {
+        "rule_id": "RUFF-F821",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_production_scan_keeps_rea0/src/veilbreakers_mcp/demo.py",
+        "line": 1,
+        "description": "undefined name `missing_name`",
+        "fix": "",
+        "matched_text": "",
+        "finding_type": "BUG",
+        "confidence": 75,
+        "priority": 50,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "all",
+        "adjusted_confidence": 67
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_general_profile_treats_no0/arbitrary_app/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "4115b110628613eea2d6781287d130bd659cb2ad626fdd52a2a03943a60c009c",
+    "timestamp": 1776022215.9328058,
+    "issues": [
+      {
+        "rule_id": "PY-SEC-01,RUFF-F821",
+        "severity": "CRITICAL",
+        "category": "Security",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_general_profile_treats_no0/arbitrary_app/demo.py",
+        "line": 1,
+        "description": "eval() usage -- arbitrary code execution risk [+ruff]",
+        "fix": "Replace with ast.literal_eval() or redesign.",
+        "matched_text": "result = eval(user_input)",
+        "finding_type": "BUG",
+        "confidence": 99,
+        "priority": 95,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_changed_ranges_filter_out0/src/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "1956ad8df1729d80e598aebb359e3242fb12e69da524564501897953ba33adf9",
+    "timestamp": 1776022216.0419724,
+    "issues": [
+      {
+        "rule_id": "PY-SEC-01,RUFF-F821",
+        "severity": "CRITICAL",
+        "category": "Security",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_changed_ranges_filter_out0/src/demo.py",
+        "line": 1,
+        "description": "eval() usage -- arbitrary code execution risk [+ruff]",
+        "fix": "Replace with ast.literal_eval() or redesign.",
+        "matched_text": "result = eval(user_input)",
+        "finding_type": "BUG",
+        "confidence": 99,
+        "priority": 95,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      },
+      {
+        "rule_id": "RUFF-F821",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_changed_ranges_filter_out0/src/demo.py",
+        "line": 3,
+        "description": "Undefined name `code_string`",
+        "fix": "",
+        "matched_text": "",
+        "finding_type": "BUG",
+        "confidence": 75,
+        "priority": 50,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 67
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_fix_report_generates_eval0/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "4115b110628613eea2d6781287d130bd659cb2ad626fdd52a2a03943a60c009c",
+    "timestamp": 1776022216.1301868,
+    "issues": [
+      {
+        "rule_id": "PY-SEC-01,RUFF-F821",
+        "severity": "CRITICAL",
+        "category": "Security",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_fix_report_generates_eval0/demo.py",
+        "line": 1,
+        "description": "eval() usage -- arbitrary code execution risk [+ruff]",
+        "fix": "Replace with ast.literal_eval() or redesign.",
+        "matched_text": "result = eval(user_input)",
+        "finding_type": "BUG",
+        "confidence": 99,
+        "priority": 95,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_fix_apply_rewrites_file_a0/demo.py|lang=py|scope=advisory|profile=general": {
+    "hash": "1185897f5c8fe320ef382cf83956f235fdbdc880d5fb477a575e544a94a6a493",
+    "timestamp": 1776022219.987273,
+    "issues": [
+      {
+        "rule_id": "PY-COR-03,RUFF-F821,RUFF-E711",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_fix_apply_rewrites_file_a0/demo.py",
+        "line": 1,
+        "description": "Comparing with None using == instead of 'is None' [+ruff] [+ruff]",
+        "fix": "Use 'is None' or 'is not None'.",
+        "matched_text": "value = thing == None",
+        "finding_type": "STRENGTHENING",
+        "confidence": 99,
+        "priority": 50,
+        "reasoning": "[3 tools agree]",
+        "layer": "semantic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_fix_report_handles_mutabl0/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "13ae2cd77875ac4aa8a36edcce2e04354d52379aabbb5a98938b63bd109989e0",
+    "timestamp": 1776022220.0643,
+    "issues": [
+      {
+        "rule_id": "PY-COR-01",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_fix_report_handles_mutabl0/demo.py",
+        "line": 1,
+        "description": "Mutable default argument -- shared across calls",
+        "fix": "Change 'def f(items=[])' to 'def f(items=None):', then 'items = items if items is not None else []' in the body.",
+        "matched_text": "def build(items=[]):",
+        "finding_type": "BUG",
+        "confidence": 85,
+        "priority": 75,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 78
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_fix_report_rewrites_cshar0/Bad.cs|lang=cs|scope=strict|profile=general": {
+    "hash": "7d4347752c12e10d317a24a1e3f34e2a827155a84ac5f001df554d35732153ca",
+    "timestamp": 1776022223.6859999,
+    "issues": [
+      {
+        "rule_id": "QUAL-08",
+        "severity": "LOW",
+        "category": "Quality",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_fix_report_rewrites_cshar0/Bad.cs",
+        "line": 1,
+        "description": "Unused using directive -- verify with IDE",
+        "fix": "Remove unused using statements. Use IDE 'Remove Unused Usings' command.",
+        "matched_text": "using System.Linq;",
+        "finding_type": "STRENGTHENING",
+        "confidence": 30,
+        "priority": 20,
+        "reasoning": "",
+        "layer": "heuristic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 27
+      },
+      {
+        "rule_id": "CS-PERF-02",
+        "severity": "LOW",
+        "category": "Performance",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6646/test_fix_report_rewrites_cshar0/Bad.cs",
+        "line": 3,
+        "description": "Where(...).Count() enumerates twice",
+        "fix": "Use Count(predicate) instead of Where(...).Count().",
+        "matched_text": "public int Run(int[] values) { return values.Where(v => v > 0).Count(); }",
+        "finding_type": "OPTIMIZATION",
+        "confidence": 70,
+        "priority": 20,
+        "reasoning": "",
+        "layer": "heuristic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 64
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_production_scan_hides_sty0/src/veilbreakers_mcp/demo.py|lang=py|scope=production|profile=all": {
+    "hash": "5f1b71acfd24996dd9047200a31b0f0c41f3720782d164a7a257bc2e4e828cab",
+    "timestamp": 1776022508.5536141,
+    "issues": []
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_production_scan_keeps_rea0/src/veilbreakers_mcp/demo.py|lang=py|scope=production|profile=all": {
+    "hash": "37b4634dc58025aa2b6edfdb5af2bdeb30e71c80488eb9a2ae64e58e49a0adf5",
+    "timestamp": 1776022508.5696368,
+    "issues": [
+      {
+        "rule_id": "RUFF-F821",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_production_scan_keeps_rea0/src/veilbreakers_mcp/demo.py",
+        "line": 1,
+        "description": "undefined name `missing_name`",
+        "fix": "",
+        "matched_text": "",
+        "finding_type": "BUG",
+        "confidence": 75,
+        "priority": 50,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "all",
+        "adjusted_confidence": 67
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_general_profile_treats_no0/arbitrary_app/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "4115b110628613eea2d6781287d130bd659cb2ad626fdd52a2a03943a60c009c",
+    "timestamp": 1776022508.6627064,
+    "issues": [
+      {
+        "rule_id": "PY-SEC-01,RUFF-F821",
+        "severity": "CRITICAL",
+        "category": "Security",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_general_profile_treats_no0/arbitrary_app/demo.py",
+        "line": 1,
+        "description": "eval() usage -- arbitrary code execution risk [+ruff]",
+        "fix": "Replace with ast.literal_eval() or redesign.",
+        "matched_text": "result = eval(user_input)",
+        "finding_type": "BUG",
+        "confidence": 99,
+        "priority": 95,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_fix_report_generates_eval0/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "4115b110628613eea2d6781287d130bd659cb2ad626fdd52a2a03943a60c009c",
+    "timestamp": 1776022508.8573573,
+    "issues": [
+      {
+        "rule_id": "PY-SEC-01,RUFF-F821",
+        "severity": "CRITICAL",
+        "category": "Security",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_fix_report_generates_eval0/demo.py",
+        "line": 1,
+        "description": "eval() usage -- arbitrary code execution risk [+ruff]",
+        "fix": "Replace with ast.literal_eval() or redesign.",
+        "matched_text": "result = eval(user_input)",
+        "finding_type": "BUG",
+        "confidence": 99,
+        "priority": 95,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_fix_apply_rewrites_file_a0/demo.py|lang=py|scope=advisory|profile=general": {
+    "hash": "1185897f5c8fe320ef382cf83956f235fdbdc880d5fb477a575e544a94a6a493",
+    "timestamp": 1776022513.5631702,
+    "issues": [
+      {
+        "rule_id": "PY-COR-03,RUFF-F821,RUFF-E711",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_fix_apply_rewrites_file_a0/demo.py",
+        "line": 1,
+        "description": "Comparing with None using == instead of 'is None' [+ruff] [+ruff]",
+        "fix": "Use 'is None' or 'is not None'.",
+        "matched_text": "value = thing == None",
+        "finding_type": "STRENGTHENING",
+        "confidence": 99,
+        "priority": 50,
+        "reasoning": "[3 tools agree]",
+        "layer": "semantic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 99
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_fix_report_handles_mutabl0/demo.py|lang=py|scope=production|profile=general": {
+    "hash": "13ae2cd77875ac4aa8a36edcce2e04354d52379aabbb5a98938b63bd109989e0",
+    "timestamp": 1776022513.6425886,
+    "issues": [
+      {
+        "rule_id": "PY-COR-01",
+        "severity": "HIGH",
+        "category": "Bug",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_fix_report_handles_mutabl0/demo.py",
+        "line": 1,
+        "description": "Mutable default argument -- shared across calls",
+        "fix": "Change 'def f(items=[])' to 'def f(items=None):', then 'items = items if items is not None else []' in the body.",
+        "matched_text": "def build(items=[]):",
+        "finding_type": "BUG",
+        "confidence": 85,
+        "priority": 75,
+        "reasoning": "",
+        "layer": "hard_correctness",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 78
+      }
+    ]
+  },
+  "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_fix_report_rewrites_cshar0/Bad.cs|lang=cs|scope=strict|profile=general": {
+    "hash": "7d4347752c12e10d317a24a1e3f34e2a827155a84ac5f001df554d35732153ca",
+    "timestamp": 1776022517.5261867,
+    "issues": [
+      {
+        "rule_id": "QUAL-08",
+        "severity": "LOW",
+        "category": "Quality",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_fix_report_rewrites_cshar0/Bad.cs",
+        "line": 1,
+        "description": "Unused using directive -- verify with IDE",
+        "fix": "Remove unused using statements. Use IDE 'Remove Unused Usings' command.",
+        "matched_text": "using System.Linq;",
+        "finding_type": "STRENGTHENING",
+        "confidence": 30,
+        "priority": 20,
+        "reasoning": "",
+        "layer": "heuristic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 27
+      },
+      {
+        "rule_id": "CS-PERF-02",
+        "severity": "LOW",
+        "category": "Performance",
+        "file": "C:/Users/Conner/AppData/Local/Temp/pytest-of-Conner/pytest-6647/test_fix_report_rewrites_cshar0/Bad.cs",
+        "line": 3,
+        "description": "Where(...).Count() enumerates twice",
+        "fix": "Use Count(predicate) instead of Where(...).Count().",
+        "matched_text": "public int Run(int[] values) { return values.Where(v => v > 0).Count(); }",
+        "finding_type": "OPTIMIZATION",
+        "confidence": 70,
+        "priority": 20,
+        "reasoning": "",
+        "layer": "heuristic",
+        "requires_context": false,
+        "profile": "general",
+        "adjusted_confidence": 64
+      }
+    ]
   }
 }

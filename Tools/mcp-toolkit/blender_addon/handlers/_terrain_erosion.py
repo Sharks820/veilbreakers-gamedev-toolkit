@@ -52,6 +52,7 @@ class ErosionMasks:
     # Addendum 1 D.1 — sediment accumulation & pool deepening
     sediment_accumulation_at_base: np.ndarray = field(default=None)  # type: ignore[assignment]
     pool_deepening_delta: np.ndarray = field(default=None)           # type: ignore[assignment]
+    ridge_map: Optional[np.ndarray] = None  # analytical erosion ridge map (-1 crease, +1 ridge)
     metrics: dict = field(default_factory=dict)
 
 
