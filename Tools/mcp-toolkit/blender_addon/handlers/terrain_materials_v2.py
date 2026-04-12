@@ -364,6 +364,180 @@ def register_bundle_b_material_passes() -> None:
     )
 
 
+# ---------------------------------------------------------------------------
+# DAG-to-Blender bridge — apply splatmap weights to mesh vertex colors
+# ---------------------------------------------------------------------------
+
+
+def dag_weights_to_rgba(
+    weights: np.ndarray,
+    rules: Optional[MaterialRuleSet] = None,
+) -> np.ndarray:
+    """Convert (H, W, L) DAG splatmap weights to (H, W, 4) RGBA for Blender.
+
+    Maps L-channel weights to the 4-channel splatmap used by the Blender
+    terrain material shader:
+        R = ground channel weight
+        G = scree + partial cliff (slope proxy)
+        B = cliff channel weight
+        A = wet_rock + snow (special proxy)
+
+    Unknown channel IDs are distributed evenly across R/G/B.
+
+    Args:
+        weights: (H, W, L) float32 splatmap weights from v2 engine.
+        rules: MaterialRuleSet defining channel IDs. If None, uses default.
+
+    Returns:
+        (H, W, 4) float32 RGBA array, normalized to sum=1 per cell.
+    """
+    if rules is None:
+        rules = default_dark_fantasy_rules()
+
+    w = np.asarray(weights, dtype=np.float32)
+    H, W, L = w.shape
+    rgba = np.zeros((H, W, 4), dtype=np.float32)
+
+    # Map each channel to RGBA based on its ID
+    channel_map = {
+        "ground": 0,   # R
+        "scree": 1,    # G (slope proxy)
+        "cliff": 2,    # B
+        "wet_rock": 3,  # A (special)
+        "snow": 3,      # A (special)
+    }
+
+    for idx, ch in enumerate(rules.channels):
+        rgba_idx = channel_map.get(ch.channel_id)
+        if rgba_idx is not None:
+            rgba[:, :, rgba_idx] += w[:, :, idx]
+        else:
+            # Unknown channel — distribute to ground (R)
+            rgba[:, :, 0] += w[:, :, idx]
+
+    # Normalize
+    total = rgba.sum(axis=2, keepdims=True)
+    total = np.where(total < 1e-9, 1.0, total)
+    rgba /= total
+
+    return rgba
+
+
+def apply_dag_splatmap_to_mesh(
+    stack_or_weights: "np.ndarray | TerrainMaskStack",
+    object_name: str,
+    *,
+    rules: Optional[MaterialRuleSet] = None,
+    biome_name: str = "thornwood_forest",
+    vcol_layer_name: str = "VB_TerrainSplatmap",
+) -> dict:
+    """Apply DAG splatmap weights from the mask stack to a Blender mesh.
+
+    Bridges the terrain pipeline DAG output to Blender's vertex color system
+    and creates/assigns the biome terrain material. This is the missing link
+    between ``pass_materials`` (which writes to the mask stack) and the
+    Blender scene.
+
+    Args:
+        stack_or_weights: Either a TerrainMaskStack (reads "splatmap_weights_layer")
+            or a raw (H, W, L) numpy array of weights.
+        object_name: Blender object name to apply to.
+        rules: MaterialRuleSet for channel mapping. Default = dark fantasy 5-channel.
+        biome_name: Biome for material creation.
+        vcol_layer_name: Vertex color attribute name.
+
+    Returns:
+        Dict with status, channel coverage stats.
+
+    Raises:
+        RuntimeError: If bpy is not available.
+        KeyError: If stack has no splatmap_weights_layer.
+    """
+    try:
+        import bpy
+    except ImportError:
+        raise RuntimeError("apply_dag_splatmap_to_mesh requires Blender (bpy)")
+
+    # Extract weights
+    if isinstance(stack_or_weights, np.ndarray):
+        raw_weights = stack_or_weights
+    else:
+        # It's a TerrainMaskStack
+        raw_weights = stack_or_weights.get("splatmap_weights_layer")
+        if raw_weights is None:
+            raise KeyError(
+                "No 'splatmap_weights_layer' on mask stack. "
+                "Run pass_materials first."
+            )
+        raw_weights = np.asarray(raw_weights, dtype=np.float32)
+
+    # Convert to RGBA
+    rgba = dag_weights_to_rgba(raw_weights, rules)
+
+    # Get Blender object
+    obj = bpy.data.objects.get(object_name)
+    if obj is None:
+        raise ValueError(f"Object '{object_name}' not found")
+    if obj.type != "MESH":
+        raise ValueError(f"Object '{object_name}' is not a mesh")
+    mesh = obj.data
+
+    # Create/get vertex color layer
+    if vcol_layer_name not in mesh.color_attributes:
+        mesh.color_attributes.new(
+            name=vcol_layer_name, type="FLOAT_COLOR", domain="CORNER"
+        )
+    vcol = mesh.color_attributes[vcol_layer_name]
+
+    # Map vertex positions to grid cells and write vertex colors
+    H, W = rgba.shape[:2]
+    verts = mesh.vertices
+    if len(verts) == 0:
+        return {"status": "success", "vertices_painted": 0}
+
+    # Build bounding box for vertex -> grid mapping
+    xs = [v.co.x for v in verts]
+    ys = [v.co.y for v in verts]
+    x_min, x_max = min(xs), max(xs)
+    y_min, y_max = min(ys), max(ys)
+    x_range = max(x_max - x_min, 1e-9)
+    y_range = max(y_max - y_min, 1e-9)
+
+    # Pre-compute per-vertex RGBA from grid
+    vert_colors = []
+    for v in verts:
+        u = (v.co.x - x_min) / x_range
+        v_coord = (v.co.y - y_min) / y_range
+        ri = int(max(0, min(H - 1, v_coord * (H - 1))))
+        ci = int(max(0, min(W - 1, u * (W - 1))))
+        vert_colors.append(tuple(float(x) for x in rgba[ri, ci]))
+
+    # Write per-loop vertex colors
+    for poly in mesh.polygons:
+        for li in poly.loop_indices:
+            vi = mesh.loops[li].vertex_index
+            vcol.data[li].color = vert_colors[vi]
+
+    mesh.update()
+
+    # Create and assign terrain material
+    from .terrain_materials import create_biome_terrain_material
+    create_biome_terrain_material(biome_name, object_name)
+
+    # Coverage stats
+    per_channel = rgba.mean(axis=(0, 1))
+    return {
+        "status": "success",
+        "object_name": object_name,
+        "vertices_painted": len(verts),
+        "grid_shape": (H, W),
+        "coverage_R_ground": float(per_channel[0]),
+        "coverage_G_slope": float(per_channel[1]),
+        "coverage_B_cliff": float(per_channel[2]),
+        "coverage_A_special": float(per_channel[3]),
+    }
+
+
 __all__ = [
     "MaterialChannel",
     "MaterialRuleSet",
@@ -371,4 +545,6 @@ __all__ = [
     "compute_slope_material_weights",
     "pass_materials",
     "register_bundle_b_material_passes",
+    "dag_weights_to_rgba",
+    "apply_dag_splatmap_to_mesh",
 ]
