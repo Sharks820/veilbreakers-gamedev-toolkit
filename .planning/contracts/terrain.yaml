@@ -19,7 +19,7 @@ metadata:
   total_passes: 31
   total_stubs: 0
   dead_code_exporters: 6
-  note: "Regenerated from registrar source code. Bundles A-O only (registered). P/Q/R moved to unregistered reference section."
+  note: "Regenerated from registrar source code. Bundles A-O only. P/Q/R moved to unregistered section."
 
 # ===========================================================================
 # Bundle A — Foundation (4 passes, all REAL)
