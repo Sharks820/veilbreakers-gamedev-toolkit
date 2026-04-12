@@ -283,10 +283,69 @@ def get_natural_arch_specs(
     return results
 
 
+# ---------------------------------------------------------------------------
+# Curvature-weighted wetness (F119)
+# ---------------------------------------------------------------------------
+
+
+def compute_curvature_weighted_wetness(
+    height: np.ndarray,
+    moisture: np.ndarray,
+    *,
+    cell_size: float = 1.0,
+    curvature_weight: float = 0.5,
+) -> np.ndarray:
+    """Combine moisture map with terrain curvature for realistic wetness.
+
+    Concave areas (negative curvature / basins) accumulate more moisture,
+    convex areas (ridges) shed it. This produces a wetness map that is more
+    physically plausible than raw flow-accumulation alone.
+
+    Parameters
+    ----------
+    height : (R, C) float array
+        Heightmap.
+    moisture : (R, C) float array
+        Base moisture / flow-accumulation map in [0, 1].
+    cell_size : float
+        Grid spacing in world units.
+    curvature_weight : float
+        Blending factor for curvature contribution [0, 1].
+
+    Returns
+    -------
+    (R, C) float array in [0, 1] — curvature-weighted wetness.
+    """
+    h = np.asarray(height, dtype=np.float64)
+    m = np.asarray(moisture, dtype=np.float64)
+    rows, cols = h.shape
+
+    if rows < 3 or cols < 3:
+        return m.copy()
+
+    # Discrete Laplacian as curvature proxy (positive = concave / basin)
+    lap = np.zeros_like(h)
+    lap[1:-1, 1:-1] = (
+        h[2:, 1:-1] + h[:-2, 1:-1] + h[1:-1, 2:] + h[1:-1, :-2]
+        - 4.0 * h[1:-1, 1:-1]
+    ) / (cell_size * cell_size)
+
+    # Normalize curvature to [-1, 1]
+    abs_max = max(float(np.abs(lap).max()), 1e-12)
+    curv_norm = lap / abs_max
+
+    # Positive curvature (basins) adds wetness, negative (ridges) reduces it
+    cw = float(np.clip(curvature_weight, 0.0, 1.0))
+    wetness = (1.0 - cw) * m + cw * np.clip(m + curv_norm * 0.5, 0.0, 1.0)
+    wetness = np.clip(wetness, 0.0, 1.0)
+    return wetness
+
+
 __all__ = [
     "MorphologyTemplate",
     "DEFAULT_TEMPLATES",
     "apply_morphology_template",
     "list_templates_for_biome",
     "get_natural_arch_specs",
+    "compute_curvature_weighted_wetness",
 ]
