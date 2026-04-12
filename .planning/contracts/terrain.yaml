@@ -11,14 +11,15 @@
 # Validation: scripts/honesty_lint.py cross-checks this against real code.
 
 metadata:
-  version: "1.0"
-  generated: "2026-04-09"
+  version: "1.1"
+  generated: "2026-04-12"
   registrar: "blender_addon/handlers/terrain_master_registrar.py"
-  total_bundles: 18
+  total_bundles: 15
   registered_bundles: 15
   total_passes: 31
   total_stubs: 0
   dead_code_exporters: 6
+  note: "Regenerated from registrar source code. Bundles A-O only (registered). P/Q/R moved to unregistered reference section."
 
 # ===========================================================================
 # Bundle A — Foundation (4 passes, all REAL)
@@ -380,46 +381,6 @@ bundle_o:
       dead_helpers: ["detect_disturbance_patches", "place_clearings", "place_fallen_logs", "apply_edge_effects", "apply_cultivated_zones", "apply_allelopathic_exclusion"]
 
 # ===========================================================================
-# Bundle P — DEM Import (utility, not registered)
-# ===========================================================================
-bundle_p:
-  name: "DEM Import"
-  description: "Import real-world elevation data from various formats"
-  registrar_entry: null
-  status: "broken"
-  passes: []
-  utility_modules:
-    - { file: "terrain_dem_import.py", purpose: "Import DEM tiles" }
-  known_bugs:
-    - "P0-014: only reads .npy; silently returns synthetic noise on .tif/.hgt/.img"
-
-# ===========================================================================
-# Bundle Q — Runtime Data (utility, not registered)
-# ===========================================================================
-bundle_q:
-  name: "Runtime Data"
-  description: "Checkpoints extension, golden snapshots, telemetry dashboard"
-  registrar_entry: null
-  status: "utility"
-  passes: []
-  utility_modules:
-    - { file: "terrain_checkpoints_ext.py", purpose: "Extended checkpoint save/restore" }
-    - { file: "terrain_golden_snapshots.py", purpose: "Golden reference snapshots for regression testing" }
-    - { file: "terrain_telemetry_dashboard.py", purpose: "Performance telemetry collection" }
-
-# ===========================================================================
-# Bundle R — World Math (utility, not registered)
-# ===========================================================================
-bundle_r:
-  name: "World Math"
-  description: "World-space coordinate math, unit conversions, spatial queries"
-  registrar_entry: null
-  status: "complete"
-  passes: []
-  utility_modules:
-    - { file: "terrain_world_math.py", purpose: "World-unit coordinate transforms, height conversions" }
-
-# ===========================================================================
 # Cross-cutting known bugs (affect multiple bundles)
 # ===========================================================================
 cross_cutting_bugs:
@@ -444,3 +405,20 @@ dead_code_exporters:
   - { func: "scatter_moraines", file: "terrain_glacial.py:122", owner: "bundle_i" }
   - { func: "export_navmesh_json", file: "terrain_navmesh_export.py", owner: "bundle_j" }
   - { func: "auto_sculpt_around_feature", file: "terrain_saliency.py:124", owner: "bundle_h" }
+
+# ===========================================================================
+# UNREGISTERED (on disk, not in registrar — for reference only)
+# ===========================================================================
+# These modules exist on disk but are NOT registered in terrain_master_registrar.py.
+# They are excluded from total_bundles count. Phase 9 cleanup scope.
+#
+# Bundle H unwired libraries (F853):
+#   - terrain_morphology.py (236 LOC) — MorphologyTemplate + 30 landform templates, no pass function
+#   - terrain_hierarchy.py (173 LOC) — FeatureTier classification + budget enforcement, no pass function
+#   - terrain_rhythm.py (193 LOC) — Feature spacing analysis + Lloyd relaxation, no pass function
+#   - terrain_negative_space.py (297 LOC) — Quiet zone ratio + saliency peak detection, no pass function
+#
+# Utility bundles (no registrar entry, no passes):
+#   - Bundle P (terrain_dem_import.py) — DEM import, broken (P0-014: only reads .npy)
+#   - Bundle Q (terrain_checkpoints_ext.py, terrain_golden_snapshots.py, terrain_telemetry_dashboard.py) — runtime data utilities
+#   - Bundle R (terrain_world_math.py) — world-space coordinate math
