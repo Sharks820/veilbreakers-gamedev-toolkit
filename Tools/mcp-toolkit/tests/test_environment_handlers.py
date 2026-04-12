@@ -303,7 +303,12 @@ class TestWorldSplatmapWeights:
     def test_larger_cell_size_keeps_same_height_delta_less_cliff_like(self):
         from blender_addon.handlers.terrain_materials import compute_world_splatmap_weights
 
-        hmap = np.tile(np.linspace(0.0, 1.0, 5), (5, 1))
+        # Use a moderate heightmap so slopes land in the transition zone between
+        # ground and slope channels. A gentle linspace(0,1) is entirely within
+        # the ground zone for both cell sizes after smoothstep transitions.
+        # linspace(0,5) gives ~51 deg at cell_size=1 (slope) vs ~17 deg at
+        # cell_size=4 (ground), ensuring a clear weight difference.
+        hmap = np.tile(np.linspace(0.0, 5.0, 5), (5, 1))
         fine = compute_world_splatmap_weights(
             hmap,
             biome_name="thornwood_forest",
@@ -315,6 +320,7 @@ class TestWorldSplatmapWeights:
             cell_size=4.0,
         )
 
+        # Coarser cell size = lower computed slope = more ground (R), less slope (G)
         assert coarse[2, 2][0] > fine[2, 2][0]
         assert coarse[2, 2][1] < fine[2, 2][1]
 
