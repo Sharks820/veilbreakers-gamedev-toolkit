@@ -191,6 +191,8 @@ def register_bundle_h_rhythm() -> None:
     Called by ``terrain_master_registrar`` to verify the module is importable
     and its symbols are reachable at startup.
     """
+    # Verify core symbols are reachable (import-time smoke test).
+    _ = analyze_feature_rhythm  # noqa: F841
 
 
 __all__ = [
