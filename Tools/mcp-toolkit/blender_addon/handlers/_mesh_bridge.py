@@ -960,8 +960,11 @@ def mesh_from_spec(
             if len(set(remapped)) < 3:
                 continue
             bm.faces.new([bm_verts[i] for i in remapped])
-        except (ValueError, IndexError):
-            pass  # skip duplicate or degenerate faces
+        except (ValueError, IndexError) as exc:
+            import logging
+            logging.getLogger("veilbreakers.mesh_bridge").debug(
+                "Skipped degenerate/duplicate face %s: %s", face_indices, exc,
+            )
 
     # Process edge annotations from MeshSpec
     if sharp_edges or crease_edges:

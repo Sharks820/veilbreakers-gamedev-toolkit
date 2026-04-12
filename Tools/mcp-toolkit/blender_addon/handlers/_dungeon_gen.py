@@ -1160,12 +1160,18 @@ _GENERIC_ROOM_PROPS = ("crate", "barrel", "skull_pile")
 def generate_dungeon_prop_placements(
     layout: DungeonLayout,
     seed: int = 0,
+    cell_size: float = 2.0,
+    floor_z: float = 0.0,
 ) -> list[dict]:
     """Generate prop placement data for a dungeon layout.
 
     Pure-logic function -- returns placement dicts, not Blender objects.
     The caller (worldbuilding handler) consumes these and creates geometry
     via DUNGEON_PROP_MAP + mesh_from_spec.
+
+    Grid coordinates are converted to **Blender world-space** (Z-up):
+    world_x = grid_x * cell_size, world_y = grid_y * cell_size,
+    world_z = floor_z.
 
     Placement rules by room type:
     - Corridors: torch_sconce every 4-6 cells along walls (alternating sides)
@@ -1178,6 +1184,8 @@ def generate_dungeon_prop_placements(
     Args:
         layout: DungeonLayout with rooms, corridors, doors, grid.
         seed: Random seed for deterministic output.
+        cell_size: World-space size of each grid cell (metres).
+        floor_z: Z height of the floor in Blender world-space (Z-up).
 
     Returns:
         List of dicts: ``{"type": str, "position": (x, y, z),
@@ -1185,6 +1193,10 @@ def generate_dungeon_prop_placements(
     """
     rng = random.Random(seed)
     props: list[dict] = []
+
+    def _world(gx: int | float, gy: int | float, z_off: float = 0.0) -> tuple[float, float, float]:
+        """Convert grid (gx, gy) to Blender world-space (X, Y, Z-up)."""
+        return (float(gx) * cell_size, float(gy) * cell_size, floor_z + z_off)
 
     # --- Room-based props ---
     for room in layout.rooms:
@@ -1195,7 +1207,7 @@ def generate_dungeon_prop_placements(
             # Altar at center
             props.append({
                 "type": "altar",
-                "position": (cx, cy, 0),
+                "position": _world(cx, cy),
                 "rotation": 0.0,
                 "room_type": rt,
             })
@@ -1206,7 +1218,7 @@ def generate_dungeon_prop_placements(
                 py = room.y + dy
                 props.append({
                     "type": "pillar",
-                    "position": (px, py, 0),
+                    "position": _world(px, py),
                     "rotation": 0.0,
                     "room_type": rt,
                 })
@@ -1215,18 +1227,18 @@ def generate_dungeon_prop_placements(
             # Chest at center
             props.append({
                 "type": "chest",
-                "position": (cx, cy, 0),
+                "position": _world(cx, cy),
                 "rotation": 0.0,
                 "room_type": rt,
             })
-            # Torch sconce at corners
+            # Torch sconce at corners — mounted on wall, slight Z offset
             for dx, dy in [(0, 0), (room.width - 1, 0),
                            (0, room.height - 1), (room.width - 1, room.height - 1)]:
                 px = room.x + dx
                 py = room.y + dy
                 props.append({
                     "type": "torch_sconce",
-                    "position": (px, py, 0),
+                    "position": _world(px, py, 1.8),
                     "rotation": 0.0,
                     "room_type": rt,
                 })
@@ -1235,13 +1247,13 @@ def generate_dungeon_prop_placements(
             # Secret room: chest at center + skull_pile for atmosphere
             props.append({
                 "type": "chest",
-                "position": (cx, cy, 0),
+                "position": _world(cx, cy),
                 "rotation": 0.0,
                 "room_type": rt,
             })
             props.append({
                 "type": "skull_pile",
-                "position": (room.x + 1, room.y + 1, 0),
+                "position": _world(room.x + 1, room.y + 1),
                 "rotation": rng.uniform(0, 2 * math.pi),
                 "room_type": rt,
             })
@@ -1256,7 +1268,7 @@ def generate_dungeon_prop_placements(
                 rotation = rng.uniform(0, 2 * math.pi)
                 props.append({
                     "type": prop_type,
-                    "position": (px, py, 0),
+                    "position": _world(px, py),
                     "rotation": rotation,
                     "room_type": rt,
                 })
@@ -1275,14 +1287,14 @@ def generate_dungeon_prop_placements(
         for y in range(lo_y, hi_y + 1):
             cells.append((x2, y))
 
-        # Place torch every 4-6 cells, alternating sides
+        # Place torch every 4-6 cells, alternating sides — wall-mount height
         spacing = rng.randint(4, 6)
         side = 1
         for i in range(0, len(cells), spacing):
             cx_t, cy_t = cells[i]
             props.append({
                 "type": "torch_sconce",
-                "position": (cx_t, cy_t, 0),
+                "position": _world(cx_t, cy_t, 1.8),
                 "rotation": side * math.pi / 2,
                 "room_type": "corridor",
             })
@@ -1293,7 +1305,7 @@ def generate_dungeon_prop_placements(
         if rng.random() < 0.3:
             props.append({
                 "type": "archway",
-                "position": (dx, dy, 0),
+                "position": _world(dx, dy),
                 "rotation": 0.0,
                 "room_type": "doorway",
             })
