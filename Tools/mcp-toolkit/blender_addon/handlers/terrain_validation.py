@@ -730,6 +730,45 @@ def run_readability_audit(
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Bundle H validator adapters — wire hierarchy/rhythm/negative_space into suite
+# ---------------------------------------------------------------------------
+
+
+def _validate_negative_space_adapter(
+    stack: TerrainMaskStack,
+    intent: TerrainIntentState,
+) -> List[ValidationIssue]:
+    """Adapter: forward to terrain_negative_space.validate_negative_space.
+
+    Skipped when saliency_macro is not yet populated (pre-saliency passes).
+    """
+    if stack.saliency_macro is None:
+        return []
+    from .terrain_negative_space import validate_negative_space
+
+    return validate_negative_space(stack)
+
+
+def _validate_feature_rhythm_adapter(
+    stack: TerrainMaskStack,
+    intent: TerrainIntentState,
+) -> List[ValidationIssue]:
+    """Adapter: extract hero feature positions from intent and validate rhythm."""
+    from .terrain_rhythm import validate_rhythm
+
+    features = getattr(intent, "hero_features", None) or []
+    if not features:
+        return []
+    region = BBox(
+        min_x=float(stack.world_origin_x),
+        min_y=float(stack.world_origin_y),
+        max_x=float(stack.world_origin_x + stack.height.shape[1] * stack.cell_size),
+        max_y=float(stack.world_origin_y + stack.height.shape[0] * stack.cell_size),
+    )
+    return validate_rhythm(features, region)
+
+
 # Canonical validator registry. Each entry is (name, callable).
 DEFAULT_VALIDATORS: Tuple[
     Tuple[str, Callable[[TerrainMaskStack, TerrainIntentState], List[ValidationIssue]]],
@@ -745,6 +784,8 @@ DEFAULT_VALIDATORS: Tuple[
     ("validate_material_coverage", validate_material_coverage),
     ("validate_channel_dtypes", validate_channel_dtypes),
     ("validate_unity_export_ready", validate_unity_export_ready),
+    ("validate_negative_space", _validate_negative_space_adapter),
+    ("validate_feature_rhythm", _validate_feature_rhythm_adapter),
 )
 
 

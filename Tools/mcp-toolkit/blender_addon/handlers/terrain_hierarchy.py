@@ -163,10 +163,19 @@ def enforce_feature_budget(
     return filtered[:hard_cap]
 
 
+def register_bundle_h_hierarchy() -> None:
+    """No-op registrar — hierarchy is a utility module, not a pipeline pass.
+
+    Called by ``terrain_master_registrar`` to verify the module is importable
+    and its symbols are reachable at startup.
+    """
+
+
 __all__ = [
     "FeatureTier",
     "FeatureBudget",
     "DEFAULT_BUDGETS",
     "classify_feature_tier",
     "enforce_feature_budget",
+    "register_bundle_h_hierarchy",
 ]

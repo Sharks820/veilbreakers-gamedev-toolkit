@@ -282,6 +282,14 @@ def validate_negative_space(
     return issues
 
 
+def register_bundle_h_negative_space() -> None:
+    """No-op registrar — negative_space is a validator module, not a pipeline pass.
+
+    Called by ``terrain_master_registrar`` to verify the module is importable
+    and its symbols are reachable at startup.
+    """
+
+
 __all__ = [
     "QUIET_THRESHOLD",
     "BUSY_THRESHOLD",
@@ -293,4 +301,5 @@ __all__ = [
     "find_saliency_peaks",
     "enforce_quiet_zone",
     "validate_negative_space",
+    "register_bundle_h_negative_space",
 ]
