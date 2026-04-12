@@ -1063,7 +1063,9 @@ def handle_generate_terrain(params: dict) -> dict:
         from .terrain_advanced import flatten_multiple_zones
         heightmap = flatten_multiple_zones(heightmap, flatten_zones)
 
-    terrain_size = scale
+    # F142: Separate world-size from noise scale. terrain_size controls the
+    # physical extent of the mesh; scale controls noise frequency.
+    terrain_size = float(params.get("terrain_size", scale))
     terrain_result = _create_terrain_mesh_from_heightmap(
         name=name,
         heightmap=heightmap,
@@ -1161,20 +1163,15 @@ def handle_generate_terrain_tile(params: dict) -> dict:
         world_center_y=world_center_y,
     )
 
+    # F148: single erode_world_heightmap call for "both" (was double-eroding)
     erosion_applied = False
-    if erosion in ("hydraulic", "both"):
+    _hydraulic = erosion_iters if erosion in ("hydraulic", "both") else 0
+    _thermal = max(erosion_iters // 50, 5) if erosion in ("thermal", "both") else 0
+    if _hydraulic > 0 or _thermal > 0:
         heightmap = erode_world_heightmap(
             heightmap,
-            hydraulic_iterations=erosion_iters,
-            thermal_iterations=0,
-            seed=seed,
-        )["heightmap"]
-        erosion_applied = True
-    if erosion in ("thermal", "both"):
-        heightmap = erode_world_heightmap(
-            heightmap,
-            hydraulic_iterations=0,
-            thermal_iterations=max(erosion_iters // 50, 5),
+            hydraulic_iterations=_hydraulic,
+            thermal_iterations=_thermal,
             seed=seed,
         )["heightmap"]
         erosion_applied = True
@@ -1185,6 +1182,20 @@ def handle_generate_terrain_tile(params: dict) -> dict:
             erosion_margin : erosion_margin + tile_size + 1,
         ]
 
+    # F143/F144: Compute moisture BEFORE flatten_zones (preserve drainage signal)
+    # and unconditionally (not just when export_splatmaps).
+    from .terrain_advanced import compute_flow_map
+    moisture_map = None
+    flow_result = compute_flow_map(heightmap)
+    flow_acc = np.asarray(flow_result["flow_accumulation"], dtype=np.float64)
+    log_flow = np.log1p(flow_acc)
+    fa_max = float(log_flow.max())
+    if fa_max > 0:
+        moisture_map = log_flow / fa_max
+    else:
+        moisture_map = np.zeros_like(heightmap)
+
+    # Apply flatten zones AFTER moisture (F143)
     flatten_zones = params.get("flatten_zones", None)
     if flatten_zones:
         from .terrain_advanced import flatten_multiple_zones
@@ -1192,8 +1203,6 @@ def handle_generate_terrain_tile(params: dict) -> dict:
 
     # Ask _resolve_height_range without local fallback; fall back to the
     # per-terrain-type estimator only when no explicit range was supplied.
-    # This is clean "single source of truth" for range resolution and fixes
-    # the duplicate key-presence check (Gemini consensus finding).
     height_range = _resolve_height_range(
         params, heightmap, allow_local_fallback=False
     )
@@ -1204,20 +1213,8 @@ def handle_generate_terrain_tile(params: dict) -> dict:
             persistence=persistence,
         )
 
-    moisture_map = None
     splatmap = None
     if export_splatmaps:
-        from .terrain_advanced import compute_flow_map
-
-        flow_result = compute_flow_map(heightmap)
-        flow_acc = np.asarray(flow_result["flow_accumulation"], dtype=np.float64)
-        log_flow = np.log1p(flow_acc)
-        fa_max = float(log_flow.max())
-        if fa_max > 0:
-            moisture_map = log_flow / fa_max
-        else:
-            moisture_map = np.zeros_like(heightmap)
-
         splatmap = compute_world_splatmap_weights(
             heightmap,
             biome_name=biome_name,
@@ -1379,7 +1376,18 @@ def handle_run_terrain_pass(params: dict) -> dict:
         if pass_name not in TerrainPassController.PASS_REGISTRY
     ]
     if missing_passes or not TerrainPassController.PASS_REGISTRY:
-        register_all_terrain_passes(strict=False)
+        # F151: capture and log return value so skipped bundles are visible
+        loaded_bundles = register_all_terrain_passes(strict=False)
+        still_missing = [
+            p for p in requested_passes
+            if p not in TerrainPassController.PASS_REGISTRY
+        ]
+        if still_missing:
+            logger.warning(
+                "Terrain passes still missing after registration "
+                "(loaded bundles: %s): %s",
+                loaded_bundles, still_missing,
+            )
 
     tile_size = int(params.get("tile_size", 64))
     cell_size = float(params.get("cell_size", 1.0))
