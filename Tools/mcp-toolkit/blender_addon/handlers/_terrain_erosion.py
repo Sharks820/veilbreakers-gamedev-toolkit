@@ -52,8 +52,6 @@ class ErosionMasks:
     # Addendum 1 D.1 — sediment accumulation & pool deepening
     sediment_accumulation_at_base: np.ndarray = field(default=None)  # type: ignore[assignment]
     pool_deepening_delta: np.ndarray = field(default=None)           # type: ignore[assignment]
-    # Analytical erosion ridge map (-1 creases, +1 ridges)
-    ridge_map: Optional[np.ndarray] = field(default=None)
     metrics: dict = field(default_factory=dict)
 
 
@@ -244,9 +242,8 @@ def apply_hydraulic_erosion_masks(
                         cols,
                     )
 
-            # F277 fix: negate h_diff so going downhill (h_diff < 0) increases speed
             normalized_h_diff = h_diff / max(input_range, 1e-12)
-            speed = math.sqrt(max(speed * speed - normalized_h_diff, 0.01))
+            speed = math.sqrt(max(speed * speed + normalized_h_diff, 0.01))
             water *= (1 - evaporation)
 
             px = new_px
@@ -513,52 +510,7 @@ def apply_thermal_erosion(
     return np.clip(masks.height, source_min, source_max)
 
 
-# ---------------------------------------------------------------------------
-# Analytical erosion dataclasses (Phase 50)
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class ErosionConfig:
-    """Configuration for the analytical erosion filter (runevision/lpmitchell port).
-
-    All 12 fields map to the reference C# ErosionConfig struct.
-    Per-biome overrides are supported by lerping two configs at boundaries.
-    """
-
-    strength: float = 0.5
-    gully_weight: float = 1.0
-    detail: float = 0.5
-    rounding: float = 0.0
-    onset: float = 0.0
-    assumed_slope: float = 0.0
-    normalization: float = 0.4
-    fade_amplitude: float = 0.6
-    exit_slope_threshold: float = 0.0075
-    cell_scale: float = 1.0
-    octave_count: int = 4
-    frequency: float = 1.0
-
-
-@dataclass
-class AnalyticalErosionResult:
-    """Output of the analytical erosion filter.
-
-    All array fields share the heightmap shape (H, W).
-    ridge_map: -1 on creases (rivers), +1 on ridges.
-    gradient_x/gradient_z: analytical partial derivatives of height.
-    """
-
-    height_delta: np.ndarray      # per-point height offset from erosion
-    ridge_map: np.ndarray          # -1 creases, +1 ridges
-    gradient_x: np.ndarray         # analytical dh/dx
-    gradient_z: np.ndarray         # analytical dh/dz
-    metrics: dict = field(default_factory=dict)
-
-
 __all__ = [
-    "AnalyticalErosionResult",
-    "ErosionConfig",
     "ErosionMasks",
     "ThermalErosionMasks",
     "apply_hydraulic_erosion",

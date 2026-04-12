@@ -45,26 +45,11 @@ from typing import Callable, List
 def _safe_import_registrar(module_path: str, attr: str) -> Callable[[], None] | None:
     """Return a callable bundle registrar, or None if the module is missing.
 
-    Tries the absolute ``blender_addon.handlers.X`` path first (works when
-    running from PYTHONPATH-style installs / pytest). Falls back to a
-    relative import inside the current package — this is what makes the
-    registrar work inside Blender when the addon ships under a different
-    package name (e.g. ``veilbreakers_mcp_bridge.handlers``).
+    This lets the master registrar degrade gracefully if a bundle is being
+    rebuilt in a worktree or selectively disabled — the rest still loads.
     """
     try:
         module = __import__(module_path, fromlist=[attr])
-        fn = getattr(module, attr, None)
-        if callable(fn):
-            return fn
-    except Exception:
-        pass
-
-    # Fallback: import the bundle module as a sibling of this package.
-    short_name = module_path.rsplit(".", 1)[-1]
-    try:
-        import importlib
-
-        module = importlib.import_module(f".{short_name}", package=__package__)
         fn = getattr(module, attr, None)
         return fn if callable(fn) else None
     except Exception:

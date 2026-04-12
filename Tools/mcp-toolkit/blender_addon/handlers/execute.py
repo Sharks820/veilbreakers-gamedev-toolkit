@@ -135,14 +135,6 @@ def _build_exec_globals() -> dict:
         "random": _make_module_proxy(random),
         "json": _make_module_proxy(json_module),
     }
-    # First-party addon modules — imported lazily so the sandbox does not
-    # take a hard dependency on addon wiring during unit tests.
-    try:
-        import blender_addon  # type: ignore[import-untyped]
-        import blender_addon.handlers  # type: ignore[import-untyped]
-        sandbox_modules["blender_addon"] = blender_addon
-    except Exception:
-        pass  # addon not loaded (e.g. unit-test environment)
 
     def _restricted_import(name, globals=None, locals=None, fromlist=(), level=0):
         """Import hook that only resolves pre-approved sandbox modules.

@@ -11,15 +11,14 @@
 # Validation: scripts/honesty_lint.py cross-checks this against real code.
 
 metadata:
-  version: "1.1"
-  generated: "2026-04-12"
+  version: "1.0"
+  generated: "2026-04-09"
   registrar: "blender_addon/handlers/terrain_master_registrar.py"
-  total_bundles: 15
+  total_bundles: 18
   registered_bundles: 15
   total_passes: 31
   total_stubs: 0
   dead_code_exporters: 6
-  note: "Regenerated from registrar source code. Bundles A-O only. P/Q/R moved to unregistered section."
 
 # ===========================================================================
 # Bundle A — Foundation (4 passes, all REAL)
@@ -381,6 +380,46 @@ bundle_o:
       dead_helpers: ["detect_disturbance_patches", "place_clearings", "place_fallen_logs", "apply_edge_effects", "apply_cultivated_zones", "apply_allelopathic_exclusion"]
 
 # ===========================================================================
+# Bundle P — DEM Import (utility, not registered)
+# ===========================================================================
+bundle_p:
+  name: "DEM Import"
+  description: "Import real-world elevation data from various formats"
+  registrar_entry: null
+  status: "broken"
+  passes: []
+  utility_modules:
+    - { file: "terrain_dem_import.py", purpose: "Import DEM tiles" }
+  known_bugs:
+    - "P0-014: only reads .npy; silently returns synthetic noise on .tif/.hgt/.img"
+
+# ===========================================================================
+# Bundle Q — Runtime Data (utility, not registered)
+# ===========================================================================
+bundle_q:
+  name: "Runtime Data"
+  description: "Checkpoints extension, golden snapshots, telemetry dashboard"
+  registrar_entry: null
+  status: "utility"
+  passes: []
+  utility_modules:
+    - { file: "terrain_checkpoints_ext.py", purpose: "Extended checkpoint save/restore" }
+    - { file: "terrain_golden_snapshots.py", purpose: "Golden reference snapshots for regression testing" }
+    - { file: "terrain_telemetry_dashboard.py", purpose: "Performance telemetry collection" }
+
+# ===========================================================================
+# Bundle R — World Math (utility, not registered)
+# ===========================================================================
+bundle_r:
+  name: "World Math"
+  description: "World-space coordinate math, unit conversions, spatial queries"
+  registrar_entry: null
+  status: "complete"
+  passes: []
+  utility_modules:
+    - { file: "terrain_world_math.py", purpose: "World-unit coordinate transforms, height conversions" }
+
+# ===========================================================================
 # Cross-cutting known bugs (affect multiple bundles)
 # ===========================================================================
 cross_cutting_bugs:
@@ -405,109 +444,3 @@ dead_code_exporters:
   - { func: "scatter_moraines", file: "terrain_glacial.py:122", owner: "bundle_i" }
   - { func: "export_navmesh_json", file: "terrain_navmesh_export.py", owner: "bundle_j" }
   - { func: "auto_sculpt_around_feature", file: "terrain_saliency.py:124", owner: "bundle_h" }
-
-# ===========================================================================
-# UNREGISTERED (on disk, not in registrar — for reference only)
-# ===========================================================================
-# These modules exist on disk but are NOT registered in terrain_master_registrar.py.
-# They are excluded from total_bundles count. Phase 9 cleanup scope.
-#
-# Bundle H unwired libraries (F853):
-#   - terrain_morphology.py (236 LOC) — MorphologyTemplate + 30 landform templates, no pass function
-#   - terrain_hierarchy.py (173 LOC) — FeatureTier classification + budget enforcement, no pass function
-#   - terrain_rhythm.py (193 LOC) — Feature spacing analysis + Lloyd relaxation, no pass function
-#   - terrain_negative_space.py (297 LOC) — Quiet zone ratio + saliency peak detection, no pass function
-#
-# Utility bundles (no registrar entry, no passes):
-#   - Bundle P (terrain_dem_import.py) — DEM import, broken (P0-014: only reads .npy)
-#   - Bundle Q (terrain_checkpoints_ext.py, terrain_golden_snapshots.py, terrain_telemetry_dashboard.py) — runtime data utilities
-#   - Bundle R (terrain_world_math.py) — world-space coordinate math
-
-# ===========================================================================
-# Analytical Erosion Config — per-biome ErosionConfig (Phase 50)
-# ===========================================================================
-# Each biome gets its own ErosionConfig. At biome boundaries, configs are
-# lerped (linear interpolation of all 12 fields) weighted by the biome
-# blend mask. This produces smooth transitions between erosion styles.
-#
-# Fields: strength, gully_weight, detail, rounding, onset, assumed_slope,
-#         normalization, fade_amplitude, exit_slope_threshold, cell_scale,
-#         octave_count, frequency
-#
-# exit_slope_threshold default: 0.0075 (erosion fades below this slope)
-erosion_configs:
-  temperate_forest:
-    strength: 0.5
-    gully_weight: 1.0
-    detail: 0.5
-    rounding: 0.1
-    onset: 0.0
-    assumed_slope: 0.0
-    normalization: 0.4
-    fade_amplitude: 0.6
-    exit_slope_threshold: 0.0075
-    cell_scale: 1.0
-    octave_count: 4
-    frequency: 1.0
-
-  alpine:
-    strength: 0.7
-    gully_weight: 1.5
-    detail: 0.6
-    rounding: 0.0
-    onset: 0.02
-    assumed_slope: 0.05
-    normalization: 0.4
-    fade_amplitude: 0.7
-    exit_slope_threshold: 0.005
-    cell_scale: 0.8
-    octave_count: 5
-    frequency: 1.2
-
-  arid_desert:
-    strength: 0.3
-    gully_weight: 0.5
-    detail: 0.3
-    rounding: 0.3
-    onset: 0.0
-    assumed_slope: 0.02
-    normalization: 0.4
-    fade_amplitude: 0.5
-    exit_slope_threshold: 0.01
-    cell_scale: 1.5
-    octave_count: 3
-    frequency: 0.8
-
-  dark_swamp:
-    strength: 0.4
-    gully_weight: 0.8
-    detail: 0.4
-    rounding: 0.2
-    onset: 0.0
-    assumed_slope: 0.01
-    normalization: 0.4
-    fade_amplitude: 0.4
-    exit_slope_threshold: 0.015
-    cell_scale: 1.2
-    octave_count: 3
-    frequency: 0.9
-
-  volcanic:
-    strength: 0.8
-    gully_weight: 2.0
-    detail: 0.7
-    rounding: 0.0
-    onset: 0.05
-    assumed_slope: 0.1
-    normalization: 0.4
-    fade_amplitude: 0.8
-    exit_slope_threshold: 0.003
-    cell_scale: 0.6
-    octave_count: 5
-    frequency: 1.5
-
-# Lerp behavior at biome boundaries:
-# For two adjacent biomes A and B with blend weight t (0=pure A, 1=pure B):
-#   config.field = A.field * (1-t) + B.field * t
-# This applies to ALL 12 float fields. octave_count is rounded to nearest int.
-# The blend mask comes from the biome splatmap channel on the terrain mask stack.

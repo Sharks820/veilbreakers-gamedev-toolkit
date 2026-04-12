@@ -164,21 +164,27 @@ def _make_noise_generator(seed: int) -> _PermTableNoise:
 class _OpenSimplexWrapper(_PermTableNoise):
     """Wrap the real opensimplex library with vectorized noise support.
 
-    F805 fix: Both ``noise2()`` and ``noise2_array()`` now use the same
-    permutation-table Perlin implementation so that scalar and array
-    evaluations produce identical results for the same coordinates.
+    The scalar ``noise2()`` delegates to the real opensimplex for exact
+    compatibility with existing tests that check specific values.
+    The vectorized ``noise2_array()`` uses the parent class's numpy-native
+    Perlin implementation (permutation table), which is 50-200x faster
+    than calling opensimplex.noise2 per-pixel via np.vectorize.
 
-    The real opensimplex library is kept as ``_os`` for potential future
-    use but is NOT used for evaluation — consistency trumps algorithm choice.
+    The heightmap output values will differ slightly from pure-opensimplex
+    (different noise algorithm), but all terrain-shaping properties
+    (determinism, range, distribution) are preserved.
     """
 
     def __init__(self, seed: int = 0) -> None:
         super().__init__(seed)
         self._os = _RealOpenSimplex(seed=seed)  # type: ignore[misc]
 
-    # F805 fix: noise2() now inherits from _PermTableNoise (same as noise2_array)
-    # instead of delegating to opensimplex which uses a different algorithm.
-    # This ensures noise2(x,y) == noise2_array([x],[y])[0] always.
+    def noise2(self, x: float, y: float) -> float:
+        """Scalar evaluation using the real opensimplex library."""
+        return self._os.noise2(x, y)
+
+    # noise2_array() intentionally NOT overridden: inherits the fast
+    # numpy-vectorized Perlin implementation from _PermTableNoise.
 
 
 # Legacy alias so that any code importing ``OpenSimplex`` from this module
@@ -916,10 +922,232 @@ def generate_road_path(
 
 
 # ---------------------------------------------------------------------------
-# NOTE: hydraulic_erosion (particle-based) DELETED — F863
-# Dead duplicate of _terrain_erosion.apply_hydraulic_erosion.
-# Use the analytical erosion filter (terrain_erosion_filter.py) instead.
+# Hydraulic erosion (particle-based)
 # ---------------------------------------------------------------------------
+
+def hydraulic_erosion(
+    heightmap: np.ndarray,
+    iterations: int = 50000,
+    erosion_rate: float = 0.01,
+    deposition_rate: float = 0.01,
+    evaporation_rate: float = 0.02,
+    min_slope: float = 0.0001,
+    seed: int = 0,
+    max_particle_steps: int = 64,
+    inertia: float = 0.3,
+    gravity: float = 4.0,
+    initial_water: float = 1.0,
+    initial_speed: float = 1.0,
+    sediment_capacity_factor: float = 4.0,
+    min_sediment_capacity: float = 0.01,
+) -> np.ndarray:
+    """Particle-based hydraulic erosion on a 2D heightmap.
+
+    Drops *iterations* water particles at random positions on the heightmap.
+    Each particle flows downhill under gravity, eroding the terrain where it
+    moves fast and depositing sediment where it slows down or evaporates.
+
+    The algorithm follows the approach described by Hans Theobald Beyer (2015)
+    and commonly used in game terrain generation:
+
+      1. Drop a particle at a random position with initial water and speed.
+      2. At each step compute the bilinear gradient at the particle's position.
+      3. Update direction using inertia-weighted blend of old direction and
+         gradient.
+      4. Move the particle by one cell in the new direction.
+      5. Compute height difference (delta_h) between old and new position.
+         - If going uphill (delta_h > 0): deposit min(sediment, delta_h) to
+           fill the pit and stop the particle.
+         - If going downhill (delta_h < 0): compute sediment capacity from
+           speed, water volume and slope.  If carrying more sediment than
+           capacity, deposit excess.  Otherwise, erode terrain up to the
+           difference between capacity and current sediment.
+      6. Update speed from height difference and gravity.
+      7. Evaporate a fraction of the water.
+      8. Kill the particle when water drops below a threshold, speed is zero,
+         or max steps reached.
+
+    Parameters
+    ----------
+    heightmap : np.ndarray
+        2D array of terrain heights.  Modified **in-place** is NOT done;
+        a copy is returned.
+    iterations : int
+        Number of water particles to simulate.
+    erosion_rate : float
+        Fraction of terrain removed per step (0-1).
+    deposition_rate : float
+        Fraction of excess sediment deposited per step (0-1).
+    evaporation_rate : float
+        Fraction of water evaporated per step (0-1).
+    min_slope : float
+        Minimum slope used for sediment capacity (avoids division by zero).
+    seed : int
+        Random seed for reproducibility.
+    max_particle_steps : int
+        Maximum lifetime of each particle in simulation steps.
+    inertia : float
+        How much the particle's previous direction influences the new one
+        (0 = pure gradient, 1 = pure inertia).
+    gravity : float
+        Gravitational acceleration factor for speed computation.
+    initial_water : float
+        Starting water volume per particle.
+    initial_speed : float
+        Starting speed per particle.
+    sediment_capacity_factor : float
+        Multiplier for sediment capacity from slope * speed * water.
+    min_sediment_capacity : float
+        Floor for sediment capacity (prevents zero-carry on flat terrain).
+
+    Returns
+    -------
+    np.ndarray
+        Eroded heightmap (same shape as input).
+    """
+    hmap = heightmap.astype(np.float64).copy()
+    rows, cols = hmap.shape
+
+    if rows < 3 or cols < 3:
+        return hmap
+
+    rng = np.random.RandomState(seed & 0x7FFFFFFF)
+
+    # Pre-generate random start positions (batch for speed)
+    start_x = rng.uniform(1.0, cols - 2.0, size=iterations)
+    start_y = rng.uniform(1.0, rows - 2.0, size=iterations)
+
+    for i in range(iterations):
+        px = start_x[i]
+        py = start_y[i]
+        dir_x = 0.0
+        dir_y = 0.0
+        speed = initial_speed
+        water = initial_water
+        sediment = 0.0
+
+        for _ in range(max_particle_steps):
+            # Integer cell and fractional offset
+            cx = int(px)
+            cy = int(py)
+
+            if cx < 1 or cx >= cols - 2 or cy < 1 or cy >= rows - 2:
+                break
+
+            fx = px - cx
+            fy = py - cy
+
+            # Bilinear interpolation of height at current position
+            h00 = hmap[cy, cx]
+            h10 = hmap[cy, cx + 1]
+            h01 = hmap[cy + 1, cx]
+            h11 = hmap[cy + 1, cx + 1]
+
+            old_h = (
+                h00 * (1 - fx) * (1 - fy)
+                + h10 * fx * (1 - fy)
+                + h01 * (1 - fx) * fy
+                + h11 * fx * fy
+            )
+
+            # Compute gradient via finite differences of bilinear surface
+            grad_x = (h10 - h00) * (1 - fy) + (h11 - h01) * fy
+            grad_y = (h01 - h00) * (1 - fx) + (h11 - h10) * fx
+
+            # Update direction with inertia
+            dir_x = dir_x * inertia - grad_x * (1 - inertia)
+            dir_y = dir_y * inertia - grad_y * (1 - inertia)
+
+            # Normalize direction
+            dir_len = math.sqrt(dir_x * dir_x + dir_y * dir_y)
+            if dir_len < 1e-10:
+                # Random direction if gradient is zero
+                angle = rng.uniform(0, 2 * math.pi)
+                dir_x = math.cos(angle)
+                dir_y = math.sin(angle)
+            else:
+                dir_x /= dir_len
+                dir_y /= dir_len
+
+            # Move particle
+            new_px = px + dir_x
+            new_py = py + dir_y
+
+            # Check bounds
+            ncx = int(new_px)
+            ncy = int(new_py)
+            if ncx < 1 or ncx >= cols - 2 or ncy < 1 or ncy >= rows - 2:
+                break
+
+            nfx = new_px - ncx
+            nfy = new_py - ncy
+
+            # Height at new position (bilinear)
+            nh00 = hmap[ncy, ncx]
+            nh10 = hmap[ncy, ncx + 1]
+            nh01 = hmap[ncy + 1, ncx]
+            nh11 = hmap[ncy + 1, ncx + 1]
+
+            new_h = (
+                nh00 * (1 - nfx) * (1 - nfy)
+                + nh10 * nfx * (1 - nfy)
+                + nh01 * (1 - nfx) * nfy
+                + nh11 * nfx * nfy
+            )
+
+            delta_h = new_h - old_h
+
+            # Sediment capacity based on slope, speed, and water volume
+            slope = max(abs(delta_h), min_slope)
+            capacity = max(
+                min_sediment_capacity,
+                slope * speed * water * sediment_capacity_factor,
+            )
+
+            if delta_h > 0:
+                # Going uphill: deposit sediment to fill the pit
+                deposit = min(sediment, delta_h)
+                sediment -= deposit
+                # Distribute deposit to the 4 surrounding cells (bilinear weights)
+                hmap[cy, cx] += deposit * (1 - fx) * (1 - fy)
+                hmap[cy, cx + 1] += deposit * fx * (1 - fy)
+                hmap[cy + 1, cx] += deposit * (1 - fx) * fy
+                hmap[cy + 1, cx + 1] += deposit * fx * fy
+            elif sediment > capacity:
+                # Carrying too much sediment: deposit excess
+                deposit = (sediment - capacity) * deposition_rate
+                sediment -= deposit
+                hmap[cy, cx] += deposit * (1 - fx) * (1 - fy)
+                hmap[cy, cx + 1] += deposit * fx * (1 - fy)
+                hmap[cy + 1, cx] += deposit * (1 - fx) * fy
+                hmap[cy + 1, cx + 1] += deposit * fx * fy
+            else:
+                # Erode terrain: pick up sediment
+                erode = min(
+                    (capacity - sediment) * erosion_rate,
+                    -delta_h,  # don't erode more than height difference
+                )
+                sediment += erode
+                hmap[cy, cx] -= erode * (1 - fx) * (1 - fy)
+                hmap[cy, cx + 1] -= erode * fx * (1 - fy)
+                hmap[cy + 1, cx] -= erode * (1 - fx) * fy
+                hmap[cy + 1, cx + 1] -= erode * fx * fy
+
+            # Update speed: v = sqrt(v^2 + delta_h * gravity)
+            speed_sq = speed * speed + delta_h * gravity
+            speed = math.sqrt(max(0.0, speed_sq))
+
+            # Evaporate water
+            water *= (1 - evaporation_rate)
+
+            # Move to new position
+            px = new_px
+            py = new_py
+
+            if water < 0.001:
+                break
+
+    return hmap
 
 
 # ---------------------------------------------------------------------------

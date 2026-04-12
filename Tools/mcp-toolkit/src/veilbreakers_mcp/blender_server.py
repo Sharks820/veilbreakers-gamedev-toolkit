@@ -64,7 +64,7 @@ Most mutations return viewport screenshots for visual verification.
 ## Key Tools
 - **blender_execute**: Direct Blender Python (bpy/bmesh/mathutils). Use for anything not covered by other tools.
 - **blender_quality**: 32 AAA procedural generators — weapons (sword/axe/mace/bow/shield/staff), armor (pauldron/chestplate/gauntlet), creatures, riggable props (door/chain/flag/chest), clothing, vegetation, materials.
-- **asset_pipeline**: Full orchestration — compose_map for generic maps/settlements, compose_terrain_node for authored hero terrain nodes (cliffs/caves/waterfalls/mountain passes), compose_interior (rooms→doors→props), generate_3d (Tripo AI), import_and_process (import + full pipeline).
+- **asset_pipeline**: Full orchestration — compose_map (terrain→water→roads→locations→vegetation), compose_interior (rooms→doors→props), generate_3d (Tripo AI), import_and_process (import + full pipeline).
 - **blender_worldbuilding**: Procedural dungeons, caves, towns, castles, ruins, boss arenas, multi-floor dungeons.
 - **blender_viewport**: ALWAYS use action=contact_sheet after creating/modifying objects for visual QA.
 
@@ -724,311 +724,6 @@ def _normalize_vegetation_rules(veg_cfg: dict, biome_name: str = "") -> list[dic
         if normalized:
             return normalized
     return _default_vegetation_rules_for_biome(biome_name, density)
-
-
-def _compose_map_redirect_notice(spec: dict | None) -> dict[str, Any]:
-    """Return generic-map scope guidance and hero-terrain redirect hints."""
-    generic_notice = (
-        "compose_map is a generic map/settlement orchestrator. "
-        "For authored hero terrain nodes with cliffs, caves, waterfalls, "
-        "mountain passes, or traversal-critical setpieces, use "
-        "asset_pipeline action=compose_terrain_node."
-    )
-    if not isinstance(spec, dict):
-        return {
-            "workflow_scope": "generic_map",
-            "recommended_action": None,
-            "warnings": [generic_notice],
-        }
-
-    terrain_cfg = spec.get("terrain", {}) or {}
-    locations = spec.get("locations", []) or []
-    water_cfg = spec.get("water", {}) or {}
-    text_blob = " ".join(
-        str(value).lower()
-        for value in (
-            spec.get("name", ""),
-            spec.get("biome", ""),
-            terrain_cfg.get("preset", ""),
-            terrain_cfg.get("theme", ""),
-            terrain_cfg.get("description", ""),
-        )
-    )
-    hero_keywords = ("mountain", "mountain_pass", "cliff", "waterfall", "cave", "ravine", "gorge", "overhang")
-    keyword_hit = any(keyword in text_blob for keyword in hero_keywords)
-    loc_types = {str(loc.get("type", "")).lower() for loc in locations if isinstance(loc, dict)}
-    structural_loc_hit = bool({"cave", "boss_arena"} & loc_types)
-    explicit_hero_signals = any(
-        key in spec
-        for key in ("scene_read", "hero_features", "terrain_node", "waterfall_chains", "cave_candidates")
-    ) or any(
-        key in terrain_cfg
-        for key in ("hero_features", "terrain_passes", "cave_candidates", "waterfall_chains")
-    )
-    hydrology_hit = bool(water_cfg.get("rivers")) and (
-        "mountains" in text_blob or "canyon" in text_blob or "cliff" in text_blob
-    )
-    likely_hero_terrain = explicit_hero_signals or (keyword_hit and (structural_loc_hit or hydrology_hit))
-
-    warnings = [generic_notice]
-    if likely_hero_terrain:
-        warnings.append(
-            "This spec looks like an authored hero terrain node. "
-            "compose_map will run, but compose_terrain_node is the preferred path."
-        )
-
-    return {
-        "workflow_scope": "generic_map",
-        "recommended_action": "compose_terrain_node" if likely_hero_terrain else None,
-        "warnings": warnings,
-    }
-
-
-def _coerce_xy_pair(value: Any, default: tuple[float, float] = (0.0, 0.0)) -> tuple[float, float]:
-    if isinstance(value, (list, tuple)) and len(value) >= 2:
-        return float(value[0]), float(value[1])
-    return default
-
-
-def _coerce_xyz_triplet(
-    value: Any,
-    default: tuple[float, float, float] = (0.0, 0.0, 0.0),
-) -> tuple[float, float, float]:
-    if isinstance(value, (list, tuple)) and len(value) >= 3:
-        return float(value[0]), float(value[1]), float(value[2])
-    if isinstance(value, (list, tuple)) and len(value) == 2:
-        return float(value[0]), float(value[1]), float(default[2])
-    return default
-
-
-def _resolve_terrain_node_tile_contract(
-    spec: dict,
-    terrain_cfg: dict,
-) -> tuple[dict[str, Any], list[str]]:
-    """Resolve a deterministic tile-grid contract for authored terrain nodes."""
-    warnings: list[str] = []
-    tile_x = int(spec.get("tile_x", 0))
-    tile_y = int(spec.get("tile_y", 0))
-    resolution = int(terrain_cfg.get("resolution", 257))
-    tile_size = int(spec.get("tile_size", resolution - 1))
-    if resolution != tile_size + 1:
-        raise ValueError(
-            "compose_terrain_node requires terrain.resolution == tile_size + 1 "
-            "so adjacent nodes share identical edge samples."
-        )
-
-    requested_world_size = float(terrain_cfg.get("size", float(tile_size)))
-    explicit_cell_size = spec.get("cell_size")
-    if explicit_cell_size is None:
-        cell_size = requested_world_size / max(tile_size, 1)
-        terrain_world_size = requested_world_size
-    else:
-        cell_size = float(explicit_cell_size)
-        terrain_world_size = float(tile_size * cell_size)
-        if not math.isclose(requested_world_size, terrain_world_size, rel_tol=1e-6, abs_tol=1e-6):
-            warnings.append(
-                "terrain.size did not match tile_size * cell_size; compose_terrain_node "
-                f"is using the tile-contract world size {terrain_world_size:.3f}."
-            )
-    if cell_size <= 0:
-        raise ValueError("compose_terrain_node requires cell_size > 0")
-
-    grid_origin_x, grid_origin_y = _coerce_xy_pair(
-        spec.get("grid_origin", terrain_cfg.get("grid_origin", (0.0, 0.0)))
-    )
-    legacy_location = _coerce_xyz_triplet(
-        terrain_cfg.get("location", (terrain_world_size / 2.0, terrain_world_size / 2.0, 0.0))
-    )
-    world_origin_x = float(grid_origin_x + tile_x * terrain_world_size)
-    world_origin_y = float(grid_origin_y + tile_y * terrain_world_size)
-    object_center = [
-        float(world_origin_x + terrain_world_size / 2.0),
-        float(world_origin_y + terrain_world_size / 2.0),
-        float(legacy_location[2]),
-    ]
-    if not math.isclose(legacy_location[0], object_center[0], rel_tol=1e-6, abs_tol=1e-6) or not math.isclose(
-        legacy_location[1], object_center[1], rel_tol=1e-6, abs_tol=1e-6
-    ):
-        warnings.append(
-            "terrain.location XY is ignored for compose_terrain_node. "
-            "Mesh placement is derived from grid_origin + tile coordinates so nodes mesh cleanly."
-        )
-
-    seam_guard_cells = int(spec.get("seam_guard_cells", max(4, min(16, tile_size // 8 or 4))))
-    seam_guard_cells = max(1, min(seam_guard_cells, max(1, tile_size // 4)))
-    seam_guard_world = float(seam_guard_cells * cell_size)
-    if seam_guard_world * 2.0 >= terrain_world_size:
-        raise ValueError("seam_guard_cells is too large for the tile size")
-
-    return (
-        {
-            "tile_x": tile_x,
-            "tile_y": tile_y,
-            "tile_size": tile_size,
-            "resolution": resolution,
-            "cell_size": cell_size,
-            "terrain_world_size": terrain_world_size,
-            "grid_origin": [float(grid_origin_x), float(grid_origin_y)],
-            "world_origin_x": world_origin_x,
-            "world_origin_y": world_origin_y,
-            "object_center": object_center,
-            "seam_guard_cells": seam_guard_cells,
-            "seam_guard_world": seam_guard_world,
-            "strict_tile_contract": bool(spec.get("strict_tile_contract", True)),
-            "scene_read_space": str(spec.get("scene_read_space", "auto")),
-        },
-        warnings,
-    )
-
-
-def _build_tile_edge_protected_zones(contract: dict[str, Any]) -> list[dict[str, Any]]:
-    """Reserve a border band so hero passes do not damage shared seams."""
-    ox = float(contract["world_origin_x"])
-    oy = float(contract["world_origin_y"])
-    size = float(contract["terrain_world_size"])
-    guard = float(contract["seam_guard_world"])
-    max_x = ox + size
-    max_y = oy + size
-    return [
-        {
-            "zone_id": "seam_guard_west",
-            "kind": "seam_guard",
-            "description": "Preserve west edge continuity for adjacent node meshing.",
-            "bounds": {"min_x": ox, "min_y": oy, "max_x": ox + guard, "max_y": max_y},
-        },
-        {
-            "zone_id": "seam_guard_east",
-            "kind": "seam_guard",
-            "description": "Preserve east edge continuity for adjacent node meshing.",
-            "bounds": {"min_x": max_x - guard, "min_y": oy, "max_x": max_x, "max_y": max_y},
-        },
-        {
-            "zone_id": "seam_guard_south",
-            "kind": "seam_guard",
-            "description": "Preserve south edge continuity for adjacent node meshing.",
-            "bounds": {"min_x": ox, "min_y": oy, "max_x": max_x, "max_y": oy + guard},
-        },
-        {
-            "zone_id": "seam_guard_north",
-            "kind": "seam_guard",
-            "description": "Preserve north edge continuity for adjacent node meshing.",
-            "bounds": {"min_x": ox, "min_y": max_y - guard, "max_x": max_x, "max_y": max_y},
-        },
-    ]
-
-
-def _resolve_scene_read_point_world(
-    value: Any,
-    contract: dict[str, Any],
-) -> list[float] | None:
-    if not isinstance(value, (list, tuple)) or len(value) < 2:
-        return None
-    seq = list(value)
-    x_val = float(seq[0])
-    y_val = float(seq[1])
-    z_val = float(seq[2]) if len(seq) >= 3 else 0.0
-    origin_x = float(contract["world_origin_x"])
-    origin_y = float(contract["world_origin_y"])
-    center_x = float(contract["object_center"][0])
-    center_y = float(contract["object_center"][1])
-    world_size = float(contract["terrain_world_size"])
-    half = world_size * 0.5
-    scene_read_space = str(contract.get("scene_read_space", "auto")).lower()
-
-    is_world = (
-        origin_x <= x_val <= origin_x + world_size
-        and origin_y <= y_val <= origin_y + world_size
-    )
-    if scene_read_space == "world":
-        return [x_val, y_val, z_val]
-    if scene_read_space == "tile_local":
-        return [origin_x + x_val, origin_y + y_val, z_val]
-    if scene_read_space == "local_centered":
-        return [center_x + x_val, center_y + y_val, z_val]
-    if -half <= x_val <= half and -half <= y_val <= half:
-        return [center_x + x_val, center_y + y_val, z_val]
-    if is_world:
-        return [x_val, y_val, z_val]
-    if 0.0 <= x_val <= world_size and 0.0 <= y_val <= world_size:
-        return [origin_x + x_val, origin_y + y_val, z_val]
-    return [x_val, y_val, z_val]
-
-
-def _prepare_scene_read_for_tile(
-    scene_read: dict[str, Any],
-    contract: dict[str, Any],
-) -> tuple[dict[str, Any], list[str]]:
-    """Normalize scene-read anchors into seam-safe world-space positions."""
-    warnings: list[str] = []
-    prepared = dict(scene_read)
-    min_x = float(contract["world_origin_x"] + contract["seam_guard_world"])
-    min_y = float(contract["world_origin_y"] + contract["seam_guard_world"])
-    max_x = float(contract["world_origin_x"] + contract["terrain_world_size"] - contract["seam_guard_world"])
-    max_y = float(contract["world_origin_y"] + contract["terrain_world_size"] - contract["seam_guard_world"])
-
-    def _clamp_point(value: Any, label: str) -> list[float] | None:
-        point = _resolve_scene_read_point_world(value, contract)
-        if point is None:
-            return None
-        clamped_x = min(max(point[0], min_x), max_x)
-        clamped_y = min(max(point[1], min_y), max_y)
-        if not math.isclose(point[0], clamped_x, rel_tol=1e-6, abs_tol=1e-6) or not math.isclose(
-            point[1], clamped_y, rel_tol=1e-6, abs_tol=1e-6
-        ):
-            warnings.append(
-                f"{label} was moved inside the seam guard band so adjacent nodes keep shared edges intact."
-            )
-        return [clamped_x, clamped_y, point[2]]
-
-    focal_point = _clamp_point(prepared.get("focal_point"), "scene_read.focal_point")
-    if focal_point is not None:
-        prepared["focal_point"] = focal_point
-
-    cave_candidates = []
-    for idx, candidate in enumerate(prepared.get("cave_candidates", []) or []):
-        clamped = _clamp_point(candidate, f"scene_read.cave_candidates[{idx}]")
-        if clamped is not None:
-            cave_candidates.append(clamped)
-    if cave_candidates:
-        prepared["cave_candidates"] = cave_candidates
-
-    hero_present = []
-    for idx, feature in enumerate(prepared.get("hero_features_present", []) or []):
-        if not isinstance(feature, dict):
-            continue
-        feature_copy = dict(feature)
-        clamped = _clamp_point(feature_copy.get("world_position"), f"scene_read.hero_features_present[{idx}]")
-        if clamped is not None:
-            feature_copy["world_position"] = clamped
-        hero_present.append(feature_copy)
-    if hero_present:
-        prepared["hero_features_present"] = hero_present
-
-    waterfall_chains = []
-    for idx, chain in enumerate(prepared.get("waterfall_chains", []) or []):
-        if not isinstance(chain, dict):
-            continue
-        chain_copy = dict(chain)
-        lip = _clamp_point(chain_copy.get("lip_position"), f"scene_read.waterfall_chains[{idx}].lip_position")
-        pool = _clamp_point(chain_copy.get("pool_position"), f"scene_read.waterfall_chains[{idx}].pool_position")
-        if lip is not None:
-            chain_copy["lip_position"] = lip
-        if pool is not None:
-            chain_copy["pool_position"] = pool
-        waterfall_chains.append(chain_copy)
-    if waterfall_chains:
-        prepared["waterfall_chains"] = waterfall_chains
-
-    prepared["tile_contract"] = {
-        "tile_x": contract["tile_x"],
-        "tile_y": contract["tile_y"],
-        "grid_origin": contract["grid_origin"],
-        "world_origin_x": contract["world_origin_x"],
-        "world_origin_y": contract["world_origin_y"],
-        "terrain_world_size": contract["terrain_world_size"],
-        "seam_guard_world": contract["seam_guard_world"],
-    }
-    return prepared, warnings
 
 
 def _lighting_preset_for_biome(biome_name: str) -> str:
@@ -2574,7 +2269,7 @@ async def blender_texture(
 async def asset_pipeline(
     action: Literal[
         "generate_3d", "generate_building", "generate_terrain_mesh",
-        "compose_map", "compose_terrain_node", "compose_interior",
+        "compose_map", "compose_interior",
         "cleanup", "generate_lods", "validate_export",
         "tag_metadata", "batch_process", "catalog_query", "catalog_add",
         "inspect_external_toolchain", "configure_external_toolchain",
@@ -2646,7 +2341,6 @@ async def asset_pipeline(
     terrain_seed: int = 42,
     # compose_map params -- full map orchestration
     map_spec: dict | None = None,
-    terrain_node_spec: dict | None = None,
     # compose_interior params -- interior room orchestration
     interior_spec: dict | None = None,
     # full_pipeline / generate_and_process params
@@ -2676,7 +2370,7 @@ async def asset_pipeline(
     baseline_dir: str | None = None,
     current_screenshots: list[str] | None = None,
 ):
-    """Asset pipeline -- 3D generation, terrain/map composition, interior building, processing, LODs, catalog, equipment. Use compose_map for generic full maps, compose_terrain_node for authored hero terrain nodes, compose_interior for walkable interiors, generate_building for Tripo-powered architecture, and generate_terrain_mesh for procedural terrain."""
+    """Asset pipeline -- 3D generation, map composition, interior building, processing, LODs, catalog, equipment. Use compose_map to build full maps (terrain+water+roads+locations+vegetation+atmosphere). Use compose_interior for walkable interiors (room shells+doors+furniture+props). Use generate_building for Tripo-powered architecture. Use generate_terrain_mesh for procedural terrain."""
     blender = get_blender_connection()
 
     if action == "generate_3d":
@@ -3153,420 +2847,6 @@ async def asset_pipeline(
             ]
         return await _with_screenshot(blender, result, capture_viewport)
 
-    elif action == "compose_terrain_node":
-        if not terrain_node_spec:
-            return json.dumps({
-                "error": "terrain_node_spec is required",
-                "example": {
-                    "name": "Riftpass_01",
-                    "seed": 42,
-                    "terrain": {
-                        "preset": "mountains",
-                        "size": 256.0,
-                        "resolution": 257,
-                        "location": [0.0, 0.0, 0.0],
-                    },
-                    "scene_read": {
-                        "major_landforms": ["mountain_pass", "cliff", "waterfall", "river", "basin", "cave"],
-                        "focal_point": [0.0, 0.0, 18.0],
-                        "hero_features_missing": ["cliffside_cave", "volumetric_waterfall", "readable_pass"],
-                        "cave_candidates": [[12.0, 4.0, 10.0]],
-                        "waterfall_chains": [{"lip_position": [8.0, -10.0, 22.0], "pool_position": [8.0, -20.0, 6.0], "drop_height": 16.0}],
-                        "success_criteria": ["readable cliff", "traversable cave", "believable waterfall"],
-                        "reviewer": "claude",
-                    },
-                },
-            }, indent=2)
-
-        spec = terrain_node_spec
-        node_name = str(spec.get("name", "TerrainNode"))
-        node_seed = int(spec.get("seed", terrain_seed))
-        terrain_cfg = spec.get("terrain", {}) or {}
-        terrain_name = str(terrain_cfg.get("name", f"{node_name}_Terrain"))
-        terrain_type = str(terrain_cfg.get("preset", terrain_cfg.get("terrain_type", "mountains")))
-        terrain_resolution_local = int(terrain_cfg.get("resolution", 257))
-        tile_contract, tile_contract_warnings = _resolve_terrain_node_tile_contract(spec, terrain_cfg)
-        terrain_size_local = float(tile_contract["terrain_world_size"])
-        tile_size_local = int(tile_contract["tile_size"])
-        cell_size_local = float(tile_contract["cell_size"])
-        terrain_location_xyz = list(tile_contract["object_center"])
-        terrain_location_xy = terrain_location_xyz[:2]
-        seam_protected_zones = _build_tile_edge_protected_zones(tile_contract)
-        pass_pipeline = list(spec.get("pipeline") or [
-            "macro_world",
-            "structural_masks",
-            "erosion",
-            "cliffs",
-            "caves",
-            "waterfalls",
-            "materials_v2",
-            "scatter_intelligent",
-            "navmesh",
-            "validation_full",
-        ])
-        focal_point = (spec.get("scene_read") or {}).get(
-            "focal_point",
-            [0.0, 0.0, terrain_cfg.get("height_scale", 20.0) * 0.5],
-        )
-        scene_read_input = spec.get("scene_read") or {
-            "timestamp": 0.0,
-            "major_landforms": ["mountain_pass", "cliff", "waterfall", "river", "basin", "cave"],
-            "focal_point": focal_point,
-            "hero_features_missing": ["cliffside_cave", "volumetric_waterfall", "readable_pass"],
-            "cave_candidates": [[focal_point[0], focal_point[1], focal_point[2]]],
-            "waterfall_chains": [{
-                "chain_id": "waterfall_chain_0",
-                "lip_position": [focal_point[0], focal_point[1] - 12.0, focal_point[2] + 8.0],
-                "pool_position": [focal_point[0], focal_point[1] - 24.0, max(0.0, focal_point[2] - 4.0)],
-                "drop_height": 12.0,
-            }],
-            "success_criteria": [
-                "readable cliff",
-                "traversable cave",
-                "believable waterfall",
-                "non-grainy terrain",
-            ],
-            "reviewer": "claude",
-        }
-        scene_read, scene_read_warnings = _prepare_scene_read_for_tile(scene_read_input, tile_contract)
-        workflow_warnings = tile_contract_warnings + scene_read_warnings
-
-        toolchain = await blender.send_command("toolchain_inspect_external", {
-            "prefer_external": prefer_external,
-            "review_lighting": review_lighting,
-            "project_label": "VeilBreakers",
-        })
-
-        created_objects: list[str] = []
-        hero_features_built: list[dict[str, Any]] = []
-        steps_completed: list[str] = []
-
-        await blender.send_command("clear_scene", {})
-        steps_completed.append("scene_cleared")
-
-        pipeline_result = await blender.send_command("env_run_terrain_pass", {
-            "tile_size": tile_size_local,
-            "cell_size": cell_size_local,
-            "seed": node_seed,
-            "tile_x": int(tile_contract["tile_x"]),
-            "tile_y": int(tile_contract["tile_y"]),
-            "world_origin_x": float(tile_contract["world_origin_x"]),
-            "world_origin_y": float(tile_contract["world_origin_y"]),
-            "terrain_type": terrain_type,
-            "scale": terrain_size_local,
-            "erosion_profile": str(spec.get("erosion_profile", "temperate")),
-            "scene_read": scene_read,
-            "protected_zones": seam_protected_zones,
-            "pipeline": pass_pipeline,
-            "checkpoint": bool(spec.get("checkpoint", True)),
-            "return_height": True,
-        })
-        steps_completed.append("terrain_pipeline_run")
-
-        if not isinstance(pipeline_result, dict) or not pipeline_result.get("ok"):
-            return json.dumps({
-                "status": "error",
-                "step": "terrain_pipeline",
-                "toolchain": toolchain,
-                "pipeline_result": pipeline_result,
-                "tile_contract": tile_contract,
-            }, indent=2, default=str)
-
-        solved_height = pipeline_result.get("height")
-        if not solved_height:
-            return json.dumps({
-                "status": "error",
-                "step": "terrain_pipeline_height_missing",
-                "toolchain": toolchain,
-                "pipeline_result": pipeline_result,
-                "tile_contract": tile_contract,
-            }, indent=2, default=str)
-
-        seam_validation_pipeline = [
-            pass_name for pass_name in pass_pipeline
-            if pass_name not in {
-                "materials_v2",
-                "scatter_intelligent",
-                "navmesh",
-                "validation_full",
-                "prepare_heightmap_raw_u16",
-            }
-        ] or ["macro_world", "structural_masks", "erosion", "cliffs", "caves", "waterfalls"]
-
-        seam_report = {
-            "validated": False,
-            "seam_ok": None,
-            "checks": [],
-        }
-
-        if bool(spec.get("verify_adjacent_seams", True)):
-            preview_specs = [
-                ("east", 1, 0, "east", False),
-                ("west", -1, 0, "east", True),
-                ("south", 0, 1, "south", False),
-                ("north", 0, -1, "south", True),
-            ]
-            seam_checks: list[dict[str, Any]] = []
-
-            def _neighbor_contract(dx: int, dy: int) -> dict[str, Any]:
-                neighbor = dict(tile_contract)
-                neighbor["tile_x"] = int(tile_contract["tile_x"] + dx)
-                neighbor["tile_y"] = int(tile_contract["tile_y"] + dy)
-                neighbor["world_origin_x"] = float(tile_contract["world_origin_x"] + dx * terrain_size_local)
-                neighbor["world_origin_y"] = float(tile_contract["world_origin_y"] + dy * terrain_size_local)
-                neighbor["object_center"] = [
-                    float(neighbor["world_origin_x"] + terrain_size_local / 2.0),
-                    float(neighbor["world_origin_y"] + terrain_size_local / 2.0),
-                    float(tile_contract["object_center"][2]),
-                ]
-                return neighbor
-
-            for label, dx, dy, direction, flip in preview_specs:
-                preview_contract = _neighbor_contract(dx, dy)
-                preview_scene_read, _ = _prepare_scene_read_for_tile(scene_read_input, preview_contract)
-                preview_result = await blender.send_command("env_run_terrain_pass", {
-                    "tile_size": tile_size_local,
-                    "cell_size": cell_size_local,
-                    "seed": node_seed,
-                    "tile_x": int(preview_contract["tile_x"]),
-                    "tile_y": int(preview_contract["tile_y"]),
-                    "world_origin_x": float(preview_contract["world_origin_x"]),
-                    "world_origin_y": float(preview_contract["world_origin_y"]),
-                    "terrain_type": terrain_type,
-                    "scale": terrain_size_local,
-                    "erosion_profile": str(spec.get("erosion_profile", "temperate")),
-                    "scene_read": preview_scene_read,
-                    "protected_zones": _build_tile_edge_protected_zones(preview_contract),
-                    "pipeline": seam_validation_pipeline,
-                    "checkpoint": False,
-                    "return_height": True,
-                })
-                neighbor_height = preview_result.get("height") if isinstance(preview_result, dict) else None
-                if not isinstance(preview_result, dict) or not preview_result.get("ok") or not neighbor_height:
-                    seam_checks.append({
-                        "direction": label,
-                        "tile_x": preview_contract["tile_x"],
-                        "tile_y": preview_contract["tile_y"],
-                        "seam_ok": False,
-                        "error": "neighbor_preview_failed",
-                        "preview_result": preview_result,
-                    })
-                    continue
-
-                validation = await blender.send_command("env_validate_tile_seams", {
-                    "tile_a": neighbor_height if flip else solved_height,
-                    "tile_b": solved_height if flip else neighbor_height,
-                    "direction": direction,
-                    "tolerance": float(spec.get("seam_tolerance", 1e-6)),
-                })
-                seam_checks.append({
-                    "direction": label,
-                    "tile_x": preview_contract["tile_x"],
-                    "tile_y": preview_contract["tile_y"],
-                    "seam_ok": bool(validation.get("seam_ok")) if isinstance(validation, dict) else False,
-                    "validation": validation,
-                })
-
-            seam_report = {
-                "validated": True,
-                "seam_ok": all(check.get("seam_ok", False) for check in seam_checks),
-                "checks": seam_checks,
-                "seam_validation_pipeline": seam_validation_pipeline,
-                "shared_edge_policy": "world_space_sampling + seam_guard_protected_zones + shared_export_height_range",
-            }
-            if not seam_report["seam_ok"]:
-                workflow_warnings.append(
-                    "Adjacent preview seam validation reported a mismatch. Review edge-safe hero feature placement before export."
-                )
-
-        terrain_result = await blender.send_command("env_generate_terrain", {
-            "name": terrain_name,
-            "terrain_type": terrain_type,
-            "resolution": len(solved_height),
-            "heightmap": solved_height,
-            "height_scale": float(terrain_cfg.get("mesh_height_scale", 1.0)),
-            "scale": terrain_size_local,
-            "seed": node_seed,
-            "erosion": "none",
-            "location": terrain_location_xyz,
-            "cliff_overlays": bool(terrain_cfg.get("cliff_overlays", True)),
-            "cliff_threshold_deg": float(terrain_cfg.get("cliff_threshold_deg", 60.0)),
-        })
-        created_objects.append(terrain_name)
-        steps_completed.append("terrain_mesh_created")
-
-        def _hero_xyz(value, default_xy_offset=(0.0, 0.0), default_z=None):
-            if isinstance(value, (list, tuple)) and len(value) >= 3:
-                return [float(value[0]), float(value[1]), float(value[2])]
-            if isinstance(value, (list, tuple)) and len(value) == 2:
-                z = terrain_location_xyz[2] if default_z is None else float(default_z)
-                return [float(value[0]), float(value[1]), z]
-            z = terrain_location_xyz[2] if default_z is None else float(default_z)
-            return [
-                float(focal_point[0] + default_xy_offset[0]),
-                float(focal_point[1] + default_xy_offset[1]),
-                z,
-            ]
-
-        hero_cfg = spec.get("hero_features", {}) or {}
-        cliff_anchor = _hero_xyz(hero_cfg.get("cliff_position", scene_read.get("focal_point")), default_z=focal_point[2])
-        cliff_build = await blender.send_command("env_build_cliff_face", {
-            "name": f"{node_name}_HeroCliff",
-            "position": cliff_anchor,
-            "width": float(hero_cfg.get("cliff_width", 36.0)),
-            "height": float(hero_cfg.get("cliff_height", 26.0)),
-            "overhang": float(hero_cfg.get("cliff_overhang", 6.0)),
-            "num_cave_entrances": int(hero_cfg.get("secondary_cave_entrances", 1)),
-            "has_ledge_path": bool(hero_cfg.get("has_ledge_path", True)),
-            "seed": node_seed + 101,
-        })
-        hero_features_built.append(cliff_build)
-        created_objects.append(cliff_build.get("name", f"{node_name}_HeroCliff"))
-
-        cave_candidates = scene_read.get("cave_candidates", []) or []
-        cave_anchor = _hero_xyz(cave_candidates[0] if cave_candidates else hero_cfg.get("cave_position"), default_xy_offset=(4.0, 0.0), default_z=focal_point[2] * 0.6)
-        cave_build = await blender.send_command("env_build_cave_entrance", {
-            "name": f"{node_name}_HeroCaveEntrance",
-            "position": cave_anchor,
-            "width": float(hero_cfg.get("cave_width", 6.0)),
-            "height": float(hero_cfg.get("cave_height", 5.0)),
-            "depth": float(hero_cfg.get("cave_depth", 8.0)),
-            "arch_segments": int(hero_cfg.get("cave_arch_segments", 16)),
-            "terrain_edge_height": 0.0,
-            "style": str(hero_cfg.get("cave_style", "natural")),
-            "seed": node_seed + 202,
-        })
-        hero_features_built.append(cave_build)
-        created_objects.append(cave_build.get("name", f"{node_name}_HeroCaveEntrance"))
-
-        waterfall_chains = scene_read.get("waterfall_chains", []) or []
-        waterfall_anchor = _hero_xyz(
-            waterfall_chains[0].get("lip_position") if waterfall_chains and isinstance(waterfall_chains[0], dict) else hero_cfg.get("waterfall_position"),
-            default_xy_offset=(0.0, -12.0),
-            default_z=focal_point[2] + 6.0,
-        )
-        waterfall_build = await blender.send_command("env_build_waterfall", {
-            "name": f"{node_name}_HeroWaterfall",
-            "position": waterfall_anchor,
-            "heightmap": solved_height,
-            "tile_size": tile_size_local,
-            "cell_size": cell_size_local,
-            "tile_x": int(tile_contract["tile_x"]),
-            "tile_y": int(tile_contract["tile_y"]),
-            "world_origin_x": float(tile_contract["world_origin_x"]),
-            "world_origin_y": float(tile_contract["world_origin_y"]),
-            "width": float(hero_cfg.get("waterfall_width", 4.0)),
-            "pool_radius": float(hero_cfg.get("waterfall_pool_radius", 6.0)),
-            "num_steps": int(hero_cfg.get("waterfall_steps", 3)),
-            "has_cave_behind": bool(hero_cfg.get("waterfall_has_cave_behind", False)),
-            "seed": node_seed + 303,
-        })
-        hero_features_built.append(waterfall_build)
-        created_objects.append(waterfall_build.get("name", f"{node_name}_HeroWaterfall"))
-        steps_completed.append("hero_features_built")
-
-        water_cfg = spec.get("water", {}) or {}
-        for i, river in enumerate(water_cfg.get("rivers", [])):
-            source = _map_point_to_terrain_cell(
-                river.get("source", [10, 10]),
-                terrain_size=terrain_size_local,
-                resolution=terrain_resolution_local,
-                terrain_location=tuple(terrain_location_xy),
-            )
-            destination = _map_point_to_terrain_cell(
-                river.get("destination", [terrain_size_local - 10, terrain_size_local - 10]),
-                terrain_size=terrain_size_local,
-                resolution=terrain_resolution_local,
-                terrain_location=tuple(terrain_location_xy),
-            )
-            await blender.send_command("env_carve_river", {
-                "terrain_name": terrain_name,
-                "source": list(source),
-                "destination": list(destination),
-                "width": river.get("width", 5),
-                "depth": river.get("depth", 2.0),
-                "seed": node_seed + 400 + i,
-            })
-        if water_cfg.get("water_level") is not None:
-            water_result = await blender.send_command("env_create_water", {
-                "name": f"{node_name}_Water",
-                "water_level": water_cfg["water_level"],
-                "terrain_name": terrain_name,
-                "width": water_cfg.get("width"),
-                "depth": water_cfg.get("depth"),
-            })
-            created_objects.append(water_result.get("name", f"{node_name}_Water") if isinstance(water_result, dict) else f"{node_name}_Water")
-        steps_completed.append("water_authored")
-
-        biome = spec.get("biome")
-        if biome:
-            await blender.send_command("env_paint_terrain", {
-                "name": terrain_name,
-                "height_scale": float(terrain_cfg.get("mesh_height_scale", 1.0)),
-            })
-            await blender.send_command("terrain_create_biome_material", {
-                "biome_name": biome,
-                "object_name": terrain_name,
-            })
-            steps_completed.append("terrain_painted")
-
-        vegetation = spec.get("vegetation", {}) or {}
-        if vegetation.get("rules"):
-            await blender.send_command("env_scatter_vegetation", {
-                "terrain_name": terrain_name,
-                "rules": vegetation.get("rules"),
-                "min_distance": vegetation.get("min_distance", 4.0),
-                "max_instances": vegetation.get("max_instances", 500),
-                "seed": node_seed + 500,
-            })
-            steps_completed.append("vegetation_scattered")
-
-        export_cfg = spec.get("export", {}) or {}
-        heightmap_export_path = export_cfg.get("filepath")
-        if not heightmap_export_path:
-            import os as _os_hm
-            import tempfile as _tempfile
-            heightmap_export_path = _os_hm.path.join(
-                _tempfile.gettempdir(),
-                "veilbreakers_exports",
-                f"{node_name}_heightmap.raw",
-            )
-        shared_height_range = (
-            export_cfg.get("height_range")
-            or terrain_cfg.get("height_range")
-            or pipeline_result.get("shared_height_range")
-        )
-        export_result = await blender.send_command("env_export_heightmap", {
-            "terrain_name": terrain_name,
-            "filepath": heightmap_export_path,
-            "unity_compat": True,
-            "flip_vertical": True,
-            "tiled_world": True,
-            "use_global_height_range": True,
-            "height_range": shared_height_range,
-        })
-        steps_completed.append("heightmap_exported")
-
-        return json.dumps({
-            "status": "success" if seam_report.get("seam_ok", True) else "partial",
-            "node_name": node_name,
-            "toolchain": toolchain,
-            "tile_contract": tile_contract,
-            "workflow_warnings": workflow_warnings,
-            "terrain_result": terrain_result,
-            "terrain_pipeline": pipeline_result,
-            "seam_report": seam_report,
-            "hero_features_built": hero_features_built,
-            "created_objects": created_objects,
-            "export": export_result,
-            "steps_completed": steps_completed,
-            "recommended_next_steps": [
-                "Run blender_viewport action=contact_sheet for hero-feature QA",
-                f"Run blender_mesh action=game_check object_name={terrain_name}",
-                "Use asset_pipeline action=aaa_verify for screenshot-based validation",
-            ],
-        }, indent=2, default=str)
-
     elif action == "compose_map":
         # Full map composition pipeline: terrain → water → roads → locations → vegetation → props
         if not map_spec:
@@ -3593,7 +2873,6 @@ async def asset_pipeline(
             }, indent=2)
 
         spec = map_spec
-        compose_notice = _compose_map_redirect_notice(spec)
         map_name = spec.get("name", "Map")
         map_seed = spec.get("seed", 42)
         budget = _resolve_map_generation_budget(spec)
@@ -3685,11 +2964,6 @@ async def asset_pipeline(
                     "resolution": terrain_resolution,
                     "height_scale": terrain_cfg.get("height_scale", 20.0),
                     "scale": terrain_size,
-                    "location": [
-                        float(terrain_location[0]),
-                        float(terrain_location[1]),
-                        float(terrain_cfg.get("location_z", 0.0)),
-                    ],
                     "seed": map_seed,
                     "erosion": "hydraulic" if terrain_cfg.get("erosion", True) else "none",
                     "erosion_iterations": terrain_cfg.get("erosion_iterations", 5000),
@@ -4196,9 +3470,6 @@ async def asset_pipeline(
         result = {
             "status": "success" if not steps_failed and not quality_report["failures"] else "partial",
             "map_name": map_name,
-            "workflow_scope": compose_notice["workflow_scope"],
-            "recommended_action": compose_notice["recommended_action"],
-            "workflow_warnings": compose_notice["warnings"],
             "steps_completed": steps_completed,
             "steps_failed": steps_failed,
             "objects_created": created_objects,
@@ -4213,7 +3484,6 @@ async def asset_pipeline(
             "checkpoint_dir": checkpoint_dir,
             "next_steps": [
                 "Review the generated map in Blender viewport (use contact_sheet for thorough review).",
-                "If this map is actually a hero terrain node, switch to asset_pipeline action=compose_terrain_node.",
                 "Run a hero-pass with Tripo only for standout props or landmark pieces.",
                 "Export only after the quality report has no remaining failures.",
                 f"Import heightmap to Unity: unity_scene action=setup_terrain heightmap_path={heightmap_export_path}" if heightmap_export_path else "Export heightmap manually: blender_environment action=export_heightmap",
@@ -4573,7 +3843,6 @@ async def asset_pipeline(
         room_plan = _plan_interior_rooms(spec)
         planned_rooms = room_plan["rooms"]
         planned_doors = room_plan["doors"]
-        # TODO: add checkpoint support (parity with compose_map)
         steps_completed = []
         steps_failed = []
         room_results: list = []
@@ -5136,7 +4405,6 @@ async def terrain_pipeline(
     region: dict | list | None = None,
     protected_zones: list[dict] | None = None,
     scene_read: dict | None = None,
-    return_height: bool = False,
     checkpoint: bool = False,
     enforce_protocol: bool = False,
     out_of_view_ok: bool = True,
@@ -5226,7 +4494,6 @@ async def terrain_pipeline(
         "checkpoint": bool(checkpoint),
         "enforce_protocol": bool(enforce_protocol),
         "out_of_view_ok": bool(out_of_view_ok),
-        "return_height": bool(return_height),
     }
     if region_bounds is not None:
         params["region_bounds"] = region_bounds
@@ -5745,12 +5012,6 @@ async def blender_environment(
         "export_heightmap",
         "scatter_vegetation",
         "scatter_props",
-        "generate_waterfall",
-        "generate_cliff_face",
-        "generate_cave_entrance",
-        "build_waterfall",
-        "build_cliff_face",
-        "build_cave_entrance",
         "create_breakable",
         "add_storytelling_props",
         "sculpt_terrain",
@@ -5760,7 +5021,6 @@ async def blender_environment(
     name: str | None = None,
     terrain_name: str | None = None,
     seed: int | None = None,
-    location: list[float] | None = None,
     # generate_terrain params
     terrain_type: str | None = None,
     resolution: int | None = None,
@@ -5778,31 +5038,10 @@ async def blender_environment(
     destination: list[int] | None = None,
     # road / water / river params
     width: float | None = None,
-    height: float | None = None,
     depth: float | None = None,
-    length: float | None = None,
     waypoints: list[list[int]] | None = None,
     grade_strength: float | None = None,
     water_level: float | None = None,
-    overhang: float | None = None,
-    num_cave_entrances: int | None = None,
-    has_ledge_path: bool | None = None,
-    pool_radius: float | None = None,
-    num_steps: int | None = None,
-    has_cave_behind: bool | None = None,
-    arch_segments: int | None = None,
-    terrain_edge_height: float | None = None,
-    style: str | None = None,
-    facing_direction: list[float] | None = None,
-    tile_size: int | None = None,
-    cell_size: float | None = None,
-    tile_x: int | None = None,
-    tile_y: int | None = None,
-    world_origin_x: float | None = None,
-    world_origin_y: float | None = None,
-    min_drainage_area: float | None = None,
-    river_threshold: float | None = None,
-    lake_min_area: float | None = None,
     # export_heightmap params
     filepath: str | None = None,
     # scatter_vegetation params
@@ -5866,10 +5105,6 @@ async def blender_environment(
             params["persistence"] = persistence
         if lacunarity is not None:
             params["lacunarity"] = lacunarity
-        if location is not None:
-            params["location"] = location
-        if heightmap is not None:
-            params["heightmap"] = heightmap
         result = await blender.send_command("env_generate_terrain", params)
         return await _with_screenshot(blender, result, capture_viewport)
 
@@ -5966,96 +5201,6 @@ async def blender_environment(
         if seed is not None:
             params["seed"] = seed
         result = await blender.send_command("env_scatter_props", params)
-        return await _with_screenshot(blender, result, capture_viewport)
-
-    elif action in ("generate_waterfall", "build_waterfall"):
-        params = {}
-        if name is not None:
-            params["name"] = name
-        if position is not None:
-            params["position"] = position
-        if height is not None:
-            params["height"] = height
-        if width is not None:
-            params["width"] = width
-        if pool_radius is not None:
-            params["pool_radius"] = pool_radius
-        if num_steps is not None:
-            params["num_steps"] = num_steps
-        if has_cave_behind is not None:
-            params["has_cave_behind"] = has_cave_behind
-        if seed is not None:
-            params["seed"] = seed
-        if facing_direction is not None:
-            params["facing_direction"] = facing_direction
-        if heightmap is not None:
-            params["heightmap"] = heightmap
-        if tile_size is not None:
-            params["tile_size"] = tile_size
-        if cell_size is not None:
-            params["cell_size"] = cell_size
-        if tile_x is not None:
-            params["tile_x"] = tile_x
-        if tile_y is not None:
-            params["tile_y"] = tile_y
-        if world_origin_x is not None:
-            params["world_origin_x"] = world_origin_x
-        if world_origin_y is not None:
-            params["world_origin_y"] = world_origin_y
-        if min_drainage_area is not None:
-            params["min_drainage_area"] = min_drainage_area
-        if river_threshold is not None:
-            params["river_threshold"] = river_threshold
-        if lake_min_area is not None:
-            params["lake_min_area"] = lake_min_area
-        command = "env_build_waterfall" if action == "build_waterfall" else "env_generate_waterfall"
-        result = await blender.send_command(command, params)
-        return await _with_screenshot(blender, result, capture_viewport)
-
-    elif action in ("generate_cliff_face", "build_cliff_face"):
-        params = {}
-        if name is not None:
-            params["name"] = name
-        if position is not None:
-            params["position"] = position
-        if width is not None:
-            params["width"] = width
-        if height is not None:
-            params["height"] = height
-        if overhang is not None:
-            params["overhang"] = overhang
-        if num_cave_entrances is not None:
-            params["num_cave_entrances"] = num_cave_entrances
-        if has_ledge_path is not None:
-            params["has_ledge_path"] = has_ledge_path
-        if seed is not None:
-            params["seed"] = seed
-        command = "env_build_cliff_face" if action == "build_cliff_face" else "env_generate_cliff_face"
-        result = await blender.send_command(command, params)
-        return await _with_screenshot(blender, result, capture_viewport)
-
-    elif action in ("generate_cave_entrance", "build_cave_entrance"):
-        params = {}
-        if name is not None:
-            params["name"] = name
-        if position is not None:
-            params["position"] = position
-        if width is not None:
-            params["width"] = width
-        if height is not None:
-            params["height"] = height
-        if depth is not None:
-            params["depth"] = depth
-        if arch_segments is not None:
-            params["arch_segments"] = arch_segments
-        if terrain_edge_height is not None:
-            params["terrain_edge_height"] = terrain_edge_height
-        if style is not None:
-            params["style"] = style
-        if seed is not None:
-            params["seed"] = seed
-        command = "env_build_cave_entrance" if action == "build_cave_entrance" else "env_generate_cave_entrance"
-        result = await blender.send_command(command, params)
         return await _with_screenshot(blender, result, capture_viewport)
 
     elif action == "create_breakable":

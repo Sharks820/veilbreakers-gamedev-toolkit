@@ -242,7 +242,6 @@ class TerrainMaskStack:
     talus: Optional[np.ndarray] = None
     drainage: Optional[np.ndarray] = None
     bank_instability: Optional[np.ndarray] = None
-    ridge_map: Optional[np.ndarray] = None  # analytical erosion: -1 creases, +1 ridges
 
     # Water masks (Pass 5)
     flow_direction: Optional[np.ndarray] = None
@@ -276,6 +275,11 @@ class TerrainMaskStack:
     # Bundle A supplements (Addendum 1.B.1 erosion mask preservation)
     sediment_accumulation_at_base: Optional[np.ndarray] = None
     pool_deepening_delta: Optional[np.ndarray] = None
+
+    # Delta integrator channels (Phase 51)
+    strat_erosion_delta: Optional[np.ndarray] = None
+    sediment_height: Optional[np.ndarray] = None
+    bedrock_height: Optional[np.ndarray] = None
 
     # -- Unity integratable channels (AAA round-trip contract) --
     # Per-layer splatmap weights (Unity Terrain Layer alphamaps). Shape (H, W, L).
@@ -340,7 +344,6 @@ class TerrainMaskStack:
             "talus",
             "drainage",
             "bank_instability",
-            "ridge_map",
             "flow_direction",
             "flow_accumulation",
             "water_surface",
@@ -363,6 +366,10 @@ class TerrainMaskStack:
             # Bundle A supplements (Addendum 1.B.1)
             "sediment_accumulation_at_base",
             "pool_deepening_delta",
+            # Delta integrator channels (Phase 51)
+            "strat_erosion_delta",
+            "sediment_height",
+            "bedrock_height",
             # Unity-ready channels
             "splatmap_weights_layer",
             "heightmap_raw_u16",

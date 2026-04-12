@@ -23,7 +23,6 @@ from typing import Any, Optional
 import numpy as np
 
 from ._terrain_erosion import (
-    ErosionConfig,
     apply_hydraulic_erosion,
     apply_hydraulic_erosion_masks,
     apply_thermal_erosion,
@@ -31,7 +30,6 @@ from ._terrain_erosion import (
 )
 from ._terrain_noise import generate_heightmap
 from .terrain_advanced import compute_flow_map
-from .terrain_erosion_filter import apply_analytical_erosion
 from .terrain_semantics import (
     BBox,
     PassResult,
@@ -461,12 +459,7 @@ def pass_erosion(
     region: Optional[BBox],
     deterministic_seed_override: Optional[int] = None,
 ) -> PassResult:
-    """Pass 3: run analytical erosion + thermal erosion, populate erosion masks.
-
-    Phase 50 upgrade: now uses the analytical erosion filter (PhacelleNoise +
-    ErosionFilter) as the primary erosion pass. Thermal erosion runs as a
-    complementary secondary pass. The analytical filter produces ridge_map
-    and gradient channels in addition to height_delta.
+    """Pass 3: run hydraulic + thermal erosion, populate erosion masks.
 
     Respects protected zones via a hero_exclusion mask derived from the
     intent's protected_zones list. Supports region scoping — only cells
@@ -494,19 +487,11 @@ def pass_erosion(
         )
     profile = intent.erosion_profile or "temperate"
 
-    # Build ErosionConfig from profile
-    profile_configs = {
-        "temperate": ErosionConfig(strength=0.5, gully_weight=1.0, octave_count=4),
-        "arid": ErosionConfig(strength=0.3, gully_weight=0.5, octave_count=3),
-        "alpine": ErosionConfig(strength=0.7, gully_weight=1.5, octave_count=5),
-    }
-    erosion_cfg = profile_configs.get(profile, ErosionConfig())
-
     profile_params = {
-        "temperate": dict(talus_angle=40.0),
-        "arid": dict(talus_angle=45.0),
-        "alpine": dict(talus_angle=35.0),
-    }.get(profile, dict(talus_angle=40.0))
+        "temperate": dict(iterations=400, talus_angle=40.0),
+        "arid": dict(iterations=200, talus_angle=45.0),
+        "alpine": dict(iterations=600, talus_angle=35.0),
+    }.get(profile, dict(iterations=400, talus_angle=40.0))
 
     h_before = stack.height.copy()
 
@@ -517,33 +502,14 @@ def pass_erosion(
     else:
         combined_exclusion = protected
 
-    # --- Analytical erosion filter (primary) ---
-    analytical = apply_analytical_erosion(
-        h_before,
-        config=erosion_cfg,
-        seed=seed,
-        cell_size=stack.cell_size,
-        world_origin_x=float(stack.world_origin_x),
-        world_origin_z=float(stack.world_origin_y),
-    )
-
-    # Apply height delta from analytical filter
-    analytically_eroded = h_before + analytical.height_delta
-
-    # Zero out analytical erosion in protected zones
-    if combined_exclusion is not None and combined_exclusion.any():
-        analytically_eroded = np.where(combined_exclusion, h_before, analytically_eroded)
-
-    # --- Hydraulic erosion (secondary, for wetness/drainage channels) ---
     hero_arg = combined_exclusion if combined_exclusion.any() else None
+
     hydro = apply_hydraulic_erosion_masks(
-        analytically_eroded,
-        iterations=200,  # Reduced — analytical filter does the heavy lifting now
-        seed=seed + 1,
+        h_before,
+        iterations=profile_params["iterations"],
+        seed=seed,
         hero_exclusion=hero_arg,
     )
-
-    # --- Thermal erosion (complementary) ---
     thermal = apply_thermal_erosion_masks(
         hydro.height,
         iterations=6,
@@ -572,7 +538,6 @@ def pass_erosion(
         drainage_out = _scope(hydro.drainage)
         bank_instability_out = _scope(hydro.bank_instability)
         talus_out = _scope(thermal.talus)
-        ridge_map_out = _scope(analytical.ridge_map)
     else:
         erosion_amount_out = hydro.erosion_amount
         deposition_amount_out = hydro.deposition_amount
@@ -580,7 +545,6 @@ def pass_erosion(
         drainage_out = hydro.drainage
         bank_instability_out = hydro.bank_instability
         talus_out = thermal.talus
-        ridge_map_out = analytical.ridge_map
 
     # Enforce protected zones: revert those cells to the pre-pass snapshot
     if protected.any():
@@ -591,7 +555,6 @@ def pass_erosion(
         drainage_out = np.where(protected, 0.0, drainage_out)
         bank_instability_out = np.where(protected, 0.0, bank_instability_out)
         talus_out = np.where(protected, 0.0, talus_out)
-        ridge_map_out = np.where(protected, 0.0, ridge_map_out)
 
     stack.set("height", new_height, "erosion")
     stack.set("erosion_amount", erosion_amount_out, "erosion")
@@ -600,7 +563,6 @@ def pass_erosion(
     stack.set("drainage", drainage_out, "erosion")
     stack.set("bank_instability", bank_instability_out, "erosion")
     stack.set("talus", talus_out, "erosion")
-    stack.set("ridge_map", ridge_map_out, "erosion")
 
     return PassResult(
         pass_name="erosion",
@@ -614,20 +576,14 @@ def pass_erosion(
             "drainage",
             "bank_instability",
             "talus",
-            "ridge_map",
         ),
         metrics={
             "profile": profile,
-            "analytical_octaves": erosion_cfg.octave_count,
-            "analytical_strength": erosion_cfg.strength,
-            "hydraulic_iterations": 200,
+            "hydraulic_iterations": profile_params["iterations"],
             "thermal_iterations": 6,
             "total_erosion": float(erosion_amount_out.sum()),
             "total_deposition": float(deposition_amount_out.sum()),
             "total_talus": float(talus_out.sum()),
-            "ridge_map_min": float(ridge_map_out.min()),
-            "ridge_map_max": float(ridge_map_out.max()),
-            "height_delta_mean": float(analytical.height_delta.mean()),
             "protected_cells": int(protected.sum()),
             "region_scoped": region is not None,
         },

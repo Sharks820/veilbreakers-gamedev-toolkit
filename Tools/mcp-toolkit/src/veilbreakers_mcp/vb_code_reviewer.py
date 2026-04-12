@@ -3407,4 +3407,3 @@ def _print_human_report(issues: list[dict], report: dict) -> None:
 
 if __name__ == "__main__":
     main()
-
